@@ -29,9 +29,9 @@ export type WebTestCatalogEntry = Readonly<{
 }>;
 
 /**
- * The focused foundation tests have explicit risk classification. The other
- * migrated checks are registered below by execution boundary; they keep their
- * original assertions and isolation until each can be split by behavior.
+ * Tests are selected by execution boundary and by the product risks they guard.
+ * Migrated checks retain their original isolation while the largest files are
+ * split into named behavior scenarios.
  */
 const foundationTests = [
   {
@@ -178,6 +178,25 @@ const manualTests = [
   'browser/browser-port', 'browser/extension-popup', 'integration/local-book',
 ] as const;
 
+const durabilityTests = new Set<string>([
+  'database/account-deletion', 'database/intake-delivery', 'database/library-cloud',
+  'database/model-request-state', 'browser/sqlite-opfs-benchmark',
+  'browser/web-bootstrap-budget', 'integration/known-continuation',
+  'integration/learning-registry', 'integration/local-book',
+  'integration/local-learning-runtime', 'integration/media-library',
+  'integration/model-turn', 'integration/package-learning',
+  'integration/personal-learning', 'integration/storage-capability',
+  'integration/web-intake',
+]);
+const convergenceTests = new Set<string>([
+  'database/library-cloud', 'browser/web-bootstrap-budget',
+]);
+const scaleTests = new Set<string>([
+  'database/database-budget', 'browser/sqlite-opfs-benchmark',
+  'browser/web-bootstrap-budget', 'integration/content-agent',
+  'quality/web-idle-work',
+]);
+
 const migrated: readonly MigratedTest[] = [
   ...fastBeforeMemory.map((path) => ({path, suite: 'fast' as const})),
   ...fastWithMemory.map((path) => ({
@@ -195,15 +214,30 @@ const migrated: readonly MigratedTest[] = [
   })),
 ];
 
+const migratedPaths = new Set(migrated.map((entry) => entry.path));
+for (const [risk, paths] of [
+  ['durability', durabilityTests],
+  ['convergence', convergenceTests],
+  ['scale', scaleTests],
+] as const) {
+  for (const path of paths) {
+    if (!migratedPaths.has(path)) throw new Error(`Unknown ${risk} test path: ${path}`);
+  }
+}
+
 const migratedEntry = ({path, suite, memoryLibrary, env}: MigratedTest): WebTestCatalogEntry => {
   const kind = path.startsWith('contracts/') ? 'contract' : path.startsWith('quality/') ? 'quality' : 'integration';
   const environment = suite === 'browser' || path.startsWith('browser/') ? 'chromium' : suite === 'database' ? 'postgres' : 'node';
   const extension = path.startsWith('release/') ? 'mjs' : 'mts';
+  const risks: WebTestRisk[] = ['local-correctness'];
+  if (durabilityTests.has(path)) risks.push('durability');
+  if (convergenceTests.has(path)) risks.push('convergence');
+  if (scaleTests.has(path)) risks.push('scale');
   return {
     id: path.split('/').at(-1)!,
     file: `tests/web/${path}.test.${extension}`,
     kind,
-    risks: [],
+    risks,
     environment,
     suite,
     ...(memoryLibrary ? {memoryLibrary} : {}),

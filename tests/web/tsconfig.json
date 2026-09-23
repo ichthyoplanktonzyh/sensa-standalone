@@ -8,7 +8,7 @@
     "skipLibCheck": true,
     "verbatimModuleSyntax": true,
     "allowImportingTsExtensions": true,
-    "types": ["node"]
+    "types": ["node", "vite/client"]
   },
   "files": [
     "catalog.mts",
@@ -21,6 +21,9 @@
     "contracts/content-supply-authority.test.mts",
     "contracts/learner-projection-boundary.test.mts",
     "contracts/learning-system-boundary.test.mts",
-    "integration/library-cloud-convergence.test.mts"
+    "integration/library-cloud-convergence.test.mts",
+    "integration/learning-authority.test.mts",
+    "integration/package-learning.test.mts",
+    "database/library-cloud.test.mts"
   ]
 }

@@ -137,6 +137,8 @@ for (const field of ['id', 'file'] as const) {
   if (new Set(values).size !== values.length) throw new Error(`Duplicate Web test catalog ${field}.`);
 }
 const cataloguedFiles = new Set(catalog.map((entry) => entry.file));
+const unclassified = catalog.filter((entry) => entry.risks.length === 0);
+if (unclassified.length !== 0) throw new Error(`Tests missing risk tags: ${unclassified.map((entry) => entry.id).join(', ')}`);
 const uncataloguedFiles = testFiles(resolve(repositoryRoot, 'tests/web')).filter((file) => !cataloguedFiles.has(file));
 if (uncataloguedFiles.length !== 0) throw new Error(`Uncatalogued Web tests: ${uncataloguedFiles.join(', ')}`);
 if (selected.length === 0) {

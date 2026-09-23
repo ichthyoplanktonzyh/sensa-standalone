@@ -4,6 +4,7 @@ import {LearningPolicyProfileRegistry,learningPolicyProfileRegistry} from '../..
 import {assembleLightweightInitialPresentation} from '../../../apps/web/src/experience/learningRuntime/lightweightInitialPresentation.ts';
 import {LIGHTWEIGHT_EXPERIENCE_RECALL_STEP,LIGHTWEIGHT_EXPRESSION_REVEAL_STEP,localLightweightPhase} from '../../../apps/web/src/learning/runtime/lightweightInitialProtocol.ts';
 import assert from 'node:assert/strict';
+import test from 'node:test';
 import {canonicalJsonDigest,stableUuid} from '@sensa/learning-kernel';
 import {defaultSensaLanguageRoute,librarySyncTables,sensaPinnedLanguageContext,sensaInitialLearningCompletionSchema,sensaSchedulingHandoffSchema,sensaMemoryOutcomeSnapshotSchema,sensaSchedulingDecisionSchema,sensaRelearningCompletionSchema,type SensaFormalPinnedLanguageContext} from '@sensa/contracts/sensa';
 import {provisionLightweightInitialContent} from '../../../apps/web/src/contentSupply/provisioning/lightweightInitialContent.ts';
@@ -19,6 +20,7 @@ import {addLanguageRoute,setActiveLanguageRoute} from '../../../apps/web/src/dat
 import {personalContentSystem} from '../../../apps/web/src/personalContent/system/index.ts';
 import {applyLocalProtocolTransition} from '../../../apps/web/src/data/library/learningSettlement.ts';
 import {libraryBackupTables} from '../../../apps/web/src/data/library/backupPolicy.ts';
+test('package learning preserves admission, settlement and Book update contracts',async(t)=>{
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined});
 assert(librarySyncTables.includes('packageInstallations'));assert.equal((librarySyncTables as readonly string[]).includes('packageCache'),false,'public artifact caches must be outside the Cloud Checkpoint contract');
 assert(libraryBackupTables.includes('packageInstallations'));assert.equal((libraryBackupTables as readonly string[]).includes('packageCache'),false,'public artifact caches must be outside encrypted account backups');
@@ -47,12 +49,19 @@ const bytes=new TextEncoder().encode(JSON.stringify(bundle));
 const descriptor={id:bundle.id,version:'1',title:bundle.title,description:'fixture',entryCount:1,byteLength:bytes.length,sha256:await sha256(bytes),url:'https://fixture.invalid/package.json'};
 const realFetch=globalThis.fetch;globalThis.fetch=async()=>new Response(bytes);
 try{
+ let pack!:Awaited<ReturnType<typeof downloadPackage>>;
+ let targetId:string|undefined;
+ let target!:Awaited<ReturnType<typeof readLearning>>['targets'][number];
+ let japaneseMaterialContent!:typeof entry.content;
+ let japaneseContext!:SensaFormalPinnedLanguageContext;
+ const at='2026-09-10T08:00:00.000Z';
+ await t.test('download and installation reject bad artifacts while cache recovery stays local',async()=>{
  const cancelled=new AbortController();cancelled.abort();await assert.rejects(downloadPackage(descriptor,cancelled.signal,()=>{}));
  globalThis.fetch=async()=>new Response(bytes.slice(0,bytes.length-1));await assert.rejects(downloadPackage(descriptor,new AbortController().signal,()=>{}));globalThis.fetch=async()=>new Response(bytes);
  await assert.rejects(downloadPackage({...descriptor,sha256:'0'.repeat(64)},new AbortController().signal,()=>{}));
  assert.equal((await readLibrary(tx=>tx.all('packageCache'))).length,0);
  assert.equal((await readLibrary(tx=>tx.all('packageInstallations'))).length,0);
- const pack=await downloadPackage(descriptor,new AbortController().signal,()=>{});
+ pack=await downloadPackage(descriptor,new AbortController().signal,()=>{});
  assert.equal((await readLearning()).targets.length,0);
  assert.equal((await contentSupplySystem.read({kind:'workspace'})).packages.length,1);
  assert.equal('packages' in await learningSystem.read({kind:'workspace',languageContext}),false,'Learning workspace must not own installed Content Supply artifacts');
@@ -62,9 +71,11 @@ try{
  const revisionBeforeCache=await readLibrary(readLocalLibraryRevision);await writeLibraryCache(async tx=>tx.clear('packageCache'));assert.equal(await readLibrary(readLocalLibraryRevision),revisionBeforeCache,'clearing a reproducible package cache must not create learner content');
  assert.deepEqual(await rehydratePackageInstallations([descriptor]),{ready:[pack.key],blocked:[],failed:[]});assert.equal((await readLibrary(tx=>tx.all('packageCache'))).length,1);assert.equal(await readLibrary(readLocalLibraryRevision),revisionBeforeCache,'rehydrating published bytes must not create learner content');
  await assert.rejects(installPackage(new TextEncoder().encode(JSON.stringify({...bundle,title:'changed'}))));
- const [targetId]=await enrollPackage(id(),pack.key,languageContext);await enrollPackage(id(),pack.key,languageContext);
+ });
+ await t.test('enrollment and runtime plugins cannot forge outcomes or mutate a Run',async()=>{
+ [targetId]=await enrollPackage(id(),pack.key,languageContext);await enrollPackage(id(),pack.key,languageContext);
  assert.equal((await readLearning()).targets.length,1);
- const target=(await readLearning()).targets[0]!;
+ target=(await readLearning()).targets[0]!;
  const homeBeforeStart=await readHomeLearningProjection(languageContext.languageRouteId);
     assert.equal(homeBeforeStart.readyInitialCount,1);assert.equal(homeBeforeStart.activeRunId,null);assert.equal(homeBeforeStart.dailyLimit,null);
     assert(!('targets' in homeBeforeStart),'the home projection must not transfer Learning Target aggregates or material');
@@ -83,7 +94,7 @@ try{
  const copiedTarget=localExecutableTarget(structuredClone(target),structuredClone(target.curriculumMemberships[0]!)),protocolRunId=id(),commitment={commitmentId:id(),revision:1,assignmentId:copiedTarget.policyAssignment.assignmentId,assignmentRevision:copiedTarget.policyAssignment.revision,profileId:variant.profileId,profileVersion:variant.profileVersion,committedByProtocolRunId:protocolRunId,committedAt:'2026-09-10T08:00:00.000Z'};
  let copiedRun:any={id:id(),targetId:target.id,targetIds:[target.id],participants:{[target.id]:{protocolRunId,curriculumMembershipId:copiedTarget.curriculumMembership.id,languageContext,startReason:{kind:'initial_learning_ready',selectionReason:'requested_target',triggerAt:'2026-09-10T08:00:00.000Z',triggerMemoryRevision:0},outcomePermissions:localProtocolOutcomePermissions('initial_learning',variant.protocols.initial_learning),material:copiedTarget.material,presentedMaterials:{},policyCommitment:commitment,resolvedPlan:{resolvedLearningPlanRevisionId:id(),revision:1,learningTargetId:target.id,retentionTargetId:target.retentionId,purpose:'initial_learning',profileId:variant.profileId,profileVersion:variant.profileVersion,protocolBinding:variant.protocols.initial_learning,contentDemands:variant.protocols.initial_learning.contentDemands,learningMaterializationIds:[copiedTarget.material.snapshot.learningMaterializationId],readiness:'ready',resolvedAt:'2026-09-10T08:00:00.000Z'},progress:createLocalProtocolProgress(protocolRunId,variant.protocols.initial_learning),memoryRevision:0,dueAt:null,evidenceIds:[]}},targetCompletions:{},languageContext,purpose:'initial_learning',policyProfileId:variant.profileId,policyProfileVersion:variant.profileVersion,protocolVersion:variant.protocols.initial_learning.localProtocolVersion,protocolBinding:variant.protocols.initial_learning,protocolState:{adapterId:'lightweight',value:null},schedulingPolicyId:variant.lifecycle.schedulingPolicyId,schedulingPolicy:variant.lifecycle.schedulingPolicy,learnerVisibleClaimBoundary:variant.lifecycle.learnerVisibleClaimBoundary,ordinal:1,revision:1,lifecycleEvents:[],startedAt:'2026-09-10T08:00:00.000Z',completedAt:null};
  copiedRun.protocolState=engine.initialize(copiedTarget,pack,'initial_learning',copiedRun);
- const immutableRun=structuredClone(copiedRun),malicious={...engine,unsafeTransition:(_target:any,working:any)=>{working.policyProfileVersion='mutated-by-plugin';return {protocolEffects:[],evaluation:null,settlement:null};}};
+ const immutableRun=structuredClone(copiedRun),malicious={...engine,unsafeTransition:(_target:any,working:any)=>{working.policyProfileVersion='mutated-by-plugin';return {protocolEffects:[],evaluation:null,settlement:null,sessionCompletion:null};}};
  assert.throws(()=>executeLocalProtocolTransition({execution:malicious,target:copiedTarget,run:copiedRun,resource:pack,action:{kind:'reveal'},at:copiedRun.startedAt}));
  assert.deepEqual(copiedRun,immutableRun,'a rejected plugin mutation cannot touch live Run state');
  const forgedCompletion={...engine,unsafeTransition:(_target:any,working:any)=>{working.targetCompletions[target.id]={at:working.startedAt,kind:'forged'};return {protocolEffects:[],evaluation:null,settlement:null,sessionCompletion:null};}};
@@ -115,11 +126,13 @@ try{
  assert.equal(copiedTarget.memoryRevision,0,'protocol adapters cannot write scheduler state');
 
  for(const definition of [LIGHTWEIGHT_EXPERIENCE_RECALL_STEP,LIGHTWEIGHT_EXPRESSION_REVEAL_STEP]){
-  const presentation=assembleLightweightInitialPresentation({protocolStepInstanceId:id(),protocolRunId:id(),retentionTargetId:target.retentionId,ordinal:1,definition,materialBindings:copiedTarget.material.content.resources.filter(r=>definition.materialRequirements.some(m=>m.materialRoleKey===r.materialRoleKey)).map(r=>({materialRoleKey:r.materialRoleKey,resourceKey:r.resourceKey,learningMaterializationId:copiedTarget.material.snapshot.learningMaterializationId}))},copiedTarget.material);
+  const presentation=assembleLightweightInitialPresentation({protocolStepInstanceId:id(),protocolRunId:id(),retentionTargetId:target.retentionId,ordinal:1,definition,materialization:copiedTarget.material,materialBindings:copiedTarget.material.content.resources.filter(r=>definition.materialRequirements.some(m=>m.materialRoleKey===r.materialRoleKey)).map(r=>({materialRoleKey:r.materialRoleKey,resourceKey:r.resourceKey,learningMaterializationId:copiedTarget.material.snapshot.learningMaterializationId}))},copiedTarget.material);
   if(presentation.kind==='expression_reveal')assert.equal(presentation.slots.expressionPrimary.surface,'borrow');else assert(!JSON.stringify(presentation).includes('borrow'));
  }
+ });
+ await t.test('initial completion, review and relearning settle only replayable outcomes',async()=>{
  globalThis.fetch=async()=>{throw Error('Offline');};
- const at='2026-09-10T08:00:00.000Z';await assert.rejects(startLearning(id(),targetId!,languageContext,20,at));await confirmLearningQuantity(id(),languageContext,20);let run=await startLearning(id(),targetId!,languageContext,20,at);
+ await assert.rejects(startLearning(id(),targetId!,languageContext,20,at));await confirmLearningQuantity(id(),languageContext,20);let run=await startLearning(id(),targetId!,languageContext,20,at);
  const homeRunning=await readHomeLearningProjection(languageContext.languageRouteId);assert.equal(homeRunning.dailyLimit,20);assert.equal(homeRunning.activeRunId,run.id);
  const committedTarget=(await readLearning()).targets.find(item=>item.id===targetId)!;
  assert(committedTarget.committedPolicy);assert.equal(committedTarget.committedPolicy.assignmentId,committedTarget.policyAssignment.assignmentId);
@@ -174,6 +187,8 @@ try{
  const relearningRetention=(await readLearning()).events.find(event=>event.id===relearningRating)!.detail.transition.retention;
  assert.equal(relearningRetention?.kind,'relearning_completion');if(relearningRetention?.kind!=='relearning_completion')throw Error('missing relearning completion');sensaRelearningCompletionSchema.parse(relearningRetention.completion);
  await finishLearning(id(),run.id);
+ });
+ await t.test('signout and language changes preserve pinned materials and Retention identity',async()=>{
  // Daily admission and explicit sign-out remain enforced while fetch is unavailable.
  const extra={...bundle,id:id(),entries:[{...entry,senseVersionId:id(),bindingVersionId:id()}]};
  const extraPack=await installPackage(new TextEncoder().encode(JSON.stringify(extra)));const [extraId]=await enrollPackage(id(),extraPack.key,languageContext);
@@ -189,7 +204,7 @@ try{
  cue.contentPayload={scene:'',senseFocus:'临时使用并归还',images:[{id:id(),name:'context.jpg',dataUrl:'data:image/jpeg;base64,/9j/2Q=='}],html:'<button data-action="toggle" data-target="cue">Hint</button><p id="cue" hidden>Imagine this moment.</p>'};cue.contentDigest=canonicalJsonDigest(cue.contentPayload);
  const richPack=await installPackage(new TextEncoder().encode(JSON.stringify(rich)));const [richId]=await enrollPackage(id(),richPack.key,languageContext);const richTarget=(await readLearning()).targets.find(t=>t.id===richId)!,richMembership=richTarget.curriculumMemberships[0]!;
  const definition=LIGHTWEIGHT_EXPERIENCE_RECALL_STEP;
- const richPresentation=assembleLightweightInitialPresentation({protocolStepInstanceId:id(),protocolRunId:id(),retentionTargetId:richTarget.retentionId,ordinal:1,definition,materialBindings:richMembership.material.content.resources.filter(r=>definition.materialRequirements.some(m=>m.materialRoleKey===r.materialRoleKey)).map(r=>({materialRoleKey:r.materialRoleKey,resourceKey:r.resourceKey,learningMaterializationId:richMembership.material.snapshot.learningMaterializationId}))},richMembership.material);
+ const richPresentation=assembleLightweightInitialPresentation({protocolStepInstanceId:id(),protocolRunId:id(),retentionTargetId:richTarget.retentionId,ordinal:1,definition,materialization:richMembership.material,materialBindings:richMembership.material.content.resources.filter(r=>definition.materialRequirements.some(m=>m.materialRoleKey===r.materialRoleKey)).map(r=>({materialRoleKey:r.materialRoleKey,resourceKey:r.resourceKey,learningMaterializationId:richMembership.material.snapshot.learningMaterializationId}))},richMembership.material);
  assert.equal(richPresentation.kind,'experience_recall');if(richPresentation.kind==='experience_recall'){assert.equal(richPresentation.slots.experienceSketch.images?.length,1);assert(richPresentation.slots.experienceSketch.html?.includes('data-action'));}
  // A Session pins its Route context. Changing this surface's active selection
  // affects the next journey, never the material already running.
@@ -224,8 +239,9 @@ try{
  // It gains another Membership and rendering; Retention identity is not split.
  const japaneseMaterial=provisionLightweightInitialContent(withBindingFixture({learnerUserId:identity.learnerId,learningTargetId:id(),senseId:entry.senseId,senseVersionId:entry.senseVersionId,senseExpressionBindingId:entry.bindingId,resolvedLearningPlanRevisionId:'fixture-ja-v1',expressionSourceVersion:'fixture-ja-v1',senseSourceVersion:'fixture-ja-v1',expression:{surface:'borrow',languageTag:'en',expressionKind:'word'},sense:{meaning:'一時的に借りて、後で返す。',supportLanguageTag:'ja'},originExperience:{source:'other_authoritative_source',sourceVersion:'fixture-ja-v1',personalAnchorUseGrantId:null,experience:{scene:'同僚から傘を借り、翌日に返す。',senseFocus:'一時的に借りる',featureLabels:[]}},referenceFacts:[],requestedAt:new Date().toISOString()}));
  assert.equal(japaneseMaterial.status,'ready');if(japaneseMaterial.status!=='ready')throw Error();
- const japaneseRoute=await addLanguageRoute(id(),'en','ja'),japaneseContext=sensaPinnedLanguageContext(japaneseRoute);
- const japaneseBundle={...bundle,id:id(),title:'English through Japanese',supportLanguage:'ja',entries:[{...entry,meaning:'一時的に借りて、後で返す。',content:japaneseMaterial.materialization.content}]};
+ japaneseMaterialContent=japaneseMaterial.materialization.content;
+ const japaneseRoute=await addLanguageRoute(id(),'en','ja');japaneseContext=sensaPinnedLanguageContext(japaneseRoute);
+ const japaneseBundle={...bundle,id:id(),title:'English through Japanese',supportLanguage:'ja',entries:[{...entry,meaning:'一時的に借りて、後で返す。',content:japaneseMaterialContent}]};
  const japanesePack=await installPackage(new TextEncoder().encode(JSON.stringify(japaneseBundle)));
  const targetCount=(await readLearning()).targets.length;
  const [sameTargetId]=await enrollPackage(id(),japanesePack.key,japaneseContext);
@@ -235,6 +251,9 @@ try{
  assert.deepEqual(shared.curriculumMemberships.map(item=>item.languageContext.supportLanguageTag).sort(),['ja','zh-CN']);
  assert.equal(localCurriculumMeaning(shared.curriculumMemberships.find(item=>item.languageContext.supportLanguageTag==='ja')!),'一時的に借りて、後で返す。');
  assert.equal(shared.retentionId,target.retentionId,'both Route memberships share Retention identity');
+
+ });
+ await t.test('Book updates retain progress, pin open Sessions and continue atomically',async()=>{
 
  // A downloaded Book Version is applied explicitly. Stable target identities
  // retain progress, removed members leave future planning, and an open Session
@@ -255,7 +274,7 @@ try{
  assert.equal(retainedTarget.retentionId,beforeUpdate.retentionId);assert.equal(retainedTarget.memoryRevision,beforeUpdate.memoryRevision);assert.equal(currentMembership.packageKey,secondInstalled.key);assert.equal(currentMembership.provenance.bookVersionId,secondBookVersion);assert.equal(beforeMembership.status,'active');assert.equal(retainedTarget.curriculumMemberships.find(item=>item.id===beforeMembership.id)?.status,'superseded');
  assert.equal(localCurriculumMembershipForContext(removedTarget,languageContext),undefined,'a removed member leaves future planning without deleting its target or history');assert(localCurriculumMembershipForContext(addedTarget,languageContext));
  const stillOpen=(await readLearning()).runs.find(item=>item.id===updateRun.id)!;assert.equal(stillOpen.participants[retainedId!]!.curriculumMembershipId,beforeMembership.id);assert.equal(stillOpen.participants[retainedId!]!.material.snapshot.provenance.bookVersionId,firstBookVersion);assert.equal(currentMembership.material.snapshot.provenance.bookVersionId,secondBookVersion);
- const japaneseRelease={...secondRelease,supportLanguage:'ja',entries:[{...secondRelease.entries[0]!,meaning:'一時的に借りて、後で返す。',content:japaneseMaterial.materialization.content}]};const japaneseBookInstalled=await installPackage(new TextEncoder().encode(JSON.stringify(japaneseRelease)));
+ const japaneseRelease={...secondRelease,supportLanguage:'ja',entries:[{...secondRelease.entries[0]!,meaning:'一時的に借りて、後で返す。',content:japaneseMaterialContent}]};const japaneseBookInstalled=await installPackage(new TextEncoder().encode(JSON.stringify(japaneseRelease)));
  assert.notEqual(japaneseBookInstalled.key,secondInstalled.key,'the same Book Version can install separate exact language-pair Bundles');await enrollPackage(id(),japaneseBookInstalled.key,japaneseContext);const multilingualTarget=(await readLearning()).targets.find(item=>item.id===retainedId!)!;assert(localCurriculumMembershipForContext(multilingualTarget,languageContext));assert(localCurriculumMembershipForContext(multilingualTarget,japaneseContext));
 
  // Continuing a learning journey must never publish the empty active-Run state
@@ -270,5 +289,6 @@ try{
  await Promise.all(snapshotReads);stopObserving();
  assert.deepEqual(activeSnapshots,[continuedRun.id],'the next-word transition published an empty active Run and exposed the unavailable fallback');
 
- console.log('PASS: verified download/import, immutable Book updates, explicit enrollment, progress preservation, removed-member planning, open-Session pinning, declared-mastery interruption/resume, local learning/replay and rollback; memory storage Adapter, no browser/model calls.');
+ });
 }finally{globalThis.fetch=realFetch;}
+});

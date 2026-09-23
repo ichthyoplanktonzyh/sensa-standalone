@@ -1,5 +1,6 @@
 /** Real Chromium local library + Hono + disposable Postgres. No model calls or real accounts. */
 import assert from 'node:assert/strict';
+import test from 'node:test';
 import {createHash} from 'node:crypto';
 import {libraryCloudPackageFixture} from '../../../scripts/support/libraryCloudPackageFixture.mts';
 import {expect} from '@playwright/test';
@@ -7,12 +8,14 @@ import {purgeExpiredLibraryCloudBlocks} from '../../../apps/api/src/sensa/librar
 import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec.ts';
 import {librarySyncBlockChars,librarySyncBlockStoreBatch} from '../../../packages/contracts/src/sensa/librarySync.ts';
 import {createLibraryCloudBrowserFixture} from '../../../tests/web/support/libraryCloudBrowserFixture.mts';
-const fixture=await createLibraryCloudBrowserFixture();
-const {browser,origin,pool}=fixture;
-try{
+test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres', async(t)=>{
+ const fixture=await createLibraryCloudBrowserFixture();
+ const {browser,origin,pool}=fixture;
+ try{
  const primary=await fixture.createAccount('first'),secondary=await fixture.createAccount('second');
  const accountId=primary.accountId,otherId=secondary.accountId;
  const a=await fixture.createClient(primary);const b=await fixture.createClient(primary);const other=await fixture.createClient(secondary);
+ await t.test('account isolation, local caches, legacy heads and mid-sync writes',async()=>{
  const draft=await a.evaluate(async()=>{const c=(window as any).core;return c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'My raincoat',images:[{id:crypto.randomUUID(),name:'raincoat.jpg',dataUrl:document.createElement('canvas').toDataURL('image/jpeg')}]});});
  await a.evaluate(()=>(window as any).sync());
  await b.evaluate(()=>(window as any).sync());assert.deepEqual(await b.evaluate(()=>(window as any).core.listDrafts()),[draft]);
@@ -47,6 +50,10 @@ try{
  // A local write arriving after the sync snapshot is captured is fenced, then retried safely.
  await a.evaluate(()=>{const w=window as any,original=w.request;let once=true;w.request=async(path:string,body?:unknown)=>{const result=await original(path,body);if(path==='/head'&&once){once=false;await w.core.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Written during sync'});}return result;};});
  await assert.rejects(a.evaluate(()=>(window as any).sync()),/library_sync_local_changed/);await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());assert((await b.evaluate(()=>(window as any).core.listDrafts())).some((d:any)=>d.text==='Written during sync'));
+ });
+ const {bytes,descriptor}=await libraryCloudPackageFixture();
+ let progress='';
+ await t.test('canonical Intake and exact package installation facts restore without artifact bytes',async()=>{
  // Canonical v3 Intake -> Personal Semantic World -> generated resources.
  await a.evaluate(async()=>{
   const c=(window as any).core,id=()=>crypto.randomUUID(),library=await c.openLibrary();
@@ -63,13 +70,15 @@ try{
   if((await c.personalLearningSnapshot())[0].status!=='ready')throw Error('personal resources not ready');
  });
  // Actual learning resources (including audio), runtime records and schedule restore/replay.
- const {bytes,descriptor}=await libraryCloudPackageFixture();
- const progress=await a.evaluate(async({bytes,descriptor})=>{const c=(window as any).core,languageContext=(await c.languageRoutesSnapshot()).context;const pack=await c.installPackage(new Uint8Array(bytes),descriptor),ids=await c.enrollPackage(crypto.randomUUID(),pack.key,languageContext);for(const id of ids)await c.selectLocalLearningPolicy(crypto.randomUUID(),id,languageContext,'interleaved_four_stage');await c.confirmLearningQuantity(crypto.randomUUID(),languageContext,20);let run=await c.startLearning(crypto.randomUUID(),ids[0],languageContext,20,'2026-09-11T04:00:00.000Z');let steps=0;while(!run.completedAt&&steps++<60){const session=c.fourStageQueue(run).getCurrentSession();let response:any;if(session.phase==='feedback')response={kind:'continue'};else if(['meaning_choice','sound_choice'].includes(session.presentation)){const target=(await c.readLearning()).targets.find((t:any)=>t.id===session.targetId),executable=c.localExecutableTargetForParticipant(target,run.participants[target.id]);const content=c.fourStageContent(executable,pack);response={kind:'choice',optionId:content.recognitionAssessment.options.find((o:any)=>o.isCorrect).id};}else response={kind:'self_report',known:true};run=await c.actLearning(crypto.randomUUID(),run.id,run.revision,{kind:'protocol',response},'2026-09-11T04:00:00.000Z');}if(!run.completedAt)throw Error('runtime incomplete');await c.finishLearning(crypto.randomUUID(),run.id);const learning=await c.readLearning();return JSON.stringify({...learning,packages:[]});},{bytes,descriptor});
+ progress=await a.evaluate(async({bytes,descriptor})=>{const c=(window as any).core,languageContext=(await c.languageRoutesSnapshot()).context;const pack=await c.installPackage(new Uint8Array(bytes),descriptor),ids=await c.enrollPackage(crypto.randomUUID(),pack.key,languageContext);for(const id of ids)await c.selectLocalLearningPolicy(crypto.randomUUID(),id,languageContext,'interleaved_four_stage');await c.confirmLearningQuantity(crypto.randomUUID(),languageContext,20);let run=await c.startLearning(crypto.randomUUID(),ids[0],languageContext,20,'2026-09-11T04:00:00.000Z');let steps=0;while(!run.completedAt&&steps++<60){const session=c.fourStageQueue(run).getCurrentSession();let response:any;if(session.phase==='feedback')response={kind:'continue'};else if(['meaning_choice','sound_choice'].includes(session.presentation)){const target=(await c.readLearning()).targets.find((t:any)=>t.id===session.targetId),executable=c.localExecutableTargetForParticipant(target,run.participants[target.id]);const content=c.fourStageContent(executable,pack);response={kind:'choice',optionId:content.recognitionAssessment.options.find((o:any)=>o.isCorrect).id};}else response={kind:'self_report',known:true};run=await c.actLearning(crypto.randomUUID(),run.id,run.revision,{kind:'protocol',response},'2026-09-11T04:00:00.000Z');}if(!run.completedAt)throw Error('runtime incomplete');await c.finishLearning(crypto.randomUUID(),run.id);const learning=await c.readLearning();return JSON.stringify({...learning,packages:[]});},{bytes,descriptor});
  await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());
  assert.equal((await b.evaluate(()=>(window as any).core.installedPackages())).length,0,'published package bytes must not arrive in a Cloud Checkpoint');
  assert.equal((await b.evaluate(()=>(window as any).core.packageInstallations())).length,1,'the exact package installation fact must synchronize');
  await b.evaluate(async({bytes,descriptor})=>{const c=(window as any).core,original=window.fetch;window.fetch=async()=>new Response(new Uint8Array(bytes));try{const result=await c.rehydratePackageInstallations([descriptor]);if(result.ready.length!==1)throw Error(JSON.stringify(result));}finally{window.fetch=original;}},{bytes,descriptor});
  assert.deepEqual(JSON.parse(await b.evaluate(async()=>{const learning=await (window as any).core.readLearning();return JSON.stringify({...learning,packages:[]});})),JSON.parse(progress));
+ });
+ let reconciledProgress='';
+ await t.test('concurrent Reviews retain both Runs and converge on one projection',async()=>{
  // Both browsers now complete a due Review for the same synchronized Target
  // without seeing the other branch. The later branch owns the projection, while
  // both Runs and all Events remain durable history.
@@ -78,8 +87,10 @@ try{
  for(const [page,at] of [[a,'2030-09-21T09:00:00.000Z'],[b,'2030-09-21T09:05:00.000Z']] as const)branchRuns.push(await page.evaluate(async({targetId,at})=>{const c=(window as any).core,languageContext=(await c.languageRoutesSnapshot()).context,pack=(await c.installedPackages())[0];let run=await c.startLearning(crypto.randomUUID(),targetId,languageContext,20,at),steps=0;while(!run.completedAt&&steps++<60){const session=c.fourStageQueue(run).getCurrentSession();let response:any;if(session.phase==='feedback')response={kind:'continue'};else if(session.mode==='review'||session.mode==='relearning')response={kind:'review',answer:'known'};else if(['meaning_choice','sound_choice'].includes(session.presentation)){const target=(await c.readLearning()).targets.find((candidate:any)=>candidate.id===session.targetId),executable=c.localExecutableTargetForParticipant(target,run.participants[target.id]),content=c.fourStageContent(executable,pack);response={kind:'choice',optionId:content.recognitionAssessment.options.find((option:any)=>option.isCorrect).id};}else response={kind:'self_report',known:true};run=await c.actLearning(crypto.randomUUID(),run.id,run.revision,{kind:'protocol',response},at);}if(!run.completedAt)throw Error('concurrent runtime incomplete');await c.finishLearning(crypto.randomUUID(),run.id);return run.id;},{targetId:concurrentTargetId,at}));
  await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());await a.evaluate(()=>(window as any).sync());
  for(const page of [a,b]){const reconciled=await page.evaluate(async()=>{const c=(window as any).core;return {state:await c.readCloudSync(),learning:JSON.stringify(await c.readLearning()),decisions:await c.readLibrary((tx:any)=>tx.entries('learningReconciliations')),runs:await c.readLibrary((tx:any)=>tx.entries('learningRuns'))};});assert.equal(reconciled.state.status,'synced');assert(reconciled.decisions.length>0,'concurrent learning must persist a reconciliation decision');assert(branchRuns.every(runId=>reconciled.runs.some((row:any)=>row.key===runId)),'both concurrent Runs must remain in history');}
- const reconciledProgress=await a.evaluate(async()=>JSON.stringify(await (window as any).core.readLearning()));
+ reconciledProgress=await a.evaluate(async()=>JSON.stringify(await (window as any).core.readLearning()));
  assert.equal(reconciledProgress,await b.evaluate(async()=>JSON.stringify(await (window as any).core.readLearning())),'reconciled learning projections must converge');
+ });
+ await t.test('fresh restore, backup, private bytes and signout preserve their contracts',async()=>{
  // New context (fresh local DB) obtains a complete usable library and media.
  const fresh=await fixture.createClient(primary);
  // A new Web bundle may briefly meet the previous API during a rolling release.
@@ -97,9 +108,12 @@ try{
  assert(!checkpointBlocks.some(r=>r.data.includes(Buffer.from('synthetic-sync-audio:').toString('base64'))),'public package audio bytes stay outside learner Cloud Checkpoints');
  // Signout fences synchronization and cloud metadata never enters exported backups.
  await b.evaluate(async()=>{const c=(window as any).core;await c.command({id:crypto.randomUUID(),kind:'service.signout',input:{}},async(tx:any)=>tx.put('meta','signed-out',true));});await assert.rejects(b.evaluate(()=>(window as any).sync()),/authentication_required/);
+ });
  // Optional formal UI integration, with real Supabase SDK and synthetic Auth HTTP only.
- if(process.env.SENSA_LOCAL_WEB_URL){
-  const webOrigin=process.env.SENSA_LOCAL_WEB_URL;if(new URL(webOrigin).hostname!=='127.0.0.1')throw Error('Use isolated loopback Web');
+ const localWebOrigin=process.env.SENSA_LOCAL_WEB_URL;
+ if(localWebOrigin){
+  await t.test('formal account UI stays mounted across same-session auth events',async()=>{
+  const webOrigin=localWebOrigin;if(new URL(webOrigin).hostname!=='127.0.0.1')throw Error('Use isolated loopback Web');
   const ctx=await browser.newContext(),ui=await ctx.newPage();let accountInitializations=0;const errors:string[]=[];ui.on('pageerror',e=>errors.push(e.message));
   const token=[{}, {sub:primary.subject,exp:Math.floor(Date.now()/1000)+3600},'fixture'].map(x=>Buffer.from(JSON.stringify(x)).toString('base64url')).join('.');
   await ctx.route('**/*',async route=>{
@@ -126,7 +140,9 @@ try{
   console.log('PASS: repeated Supabase same-session SIGNED_IN events preserve the mounted app and do not restart account initialization.');
   await ui.screenshot({path:'/tmp/sensa-account-cloud-sync.png',fullPage:true});await ui.locator('select:visible').first().selectOption('en');await expect(ui.getByRole('heading',{name:'Account sync',exact:true})).toBeVisible();await expect(ui.getByRole('button',{name:'Sync now',exact:true})).toBeEnabled();await ui.setViewportSize({width:390,height:844});assert(await ui.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await ui.screenshot({path:'/tmp/sensa-account-cloud-sync-en.png',fullPage:true});assert.deepEqual(errors,[]);
   console.log('PASS: formal AccountExperience login restores cloud library and original Profile shows sync status');await ctx.close();
+  });
  }
+ await t.test('block leases, immutable history and account deletion survive repacking',async()=>{
  // Repacking published history into different block sizes is a transport detail, not a rewrite.
  const stored=new Map<string,string>();
  const refresh=async()=>{const rows=(await pool.query('SELECT hash,data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1',[accountId])).rows;stored.clear();for(const row of rows)stored.set(row.hash,row.data);};
@@ -186,6 +202,6 @@ try{
  const deletion=await post('account/deletion',{operationId:crypto.randomUUID(),confirmation:'delete-account'});assert.equal(deletion.status,200);
  for(const table of ['library_cloud','library_cloud_blocks','library_cloud_commits','library_cloud_snapshot_leases','library_cloud_block_refs'])assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.'+table+' WHERE account_id=$1',[accountId])).rows[0].n,0);
  assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud WHERE account_id=$1',[otherId])).rows[0].n,1);
- console.log('PASS: Checkpoint v5 synchronizes normalized learner facts and exact package installation references without copying public artifact bytes, preserves immutable learning history and reconciliation decisions, and isolates account deletion');
- console.log('PASS: real browser + Postgres Checkpoint, public package rehydration, private media restore, account isolation, backup and signout');
-}finally{await fixture.close();}
+ });
+ }finally{await fixture.close();}
+});

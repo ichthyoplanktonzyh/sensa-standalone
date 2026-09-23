@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import test from 'node:test';
 import {indexedDB} from 'fake-indexeddb';
 import {defaultSensaLanguageRoute,sensaPinnedLanguageContext} from '@sensa/contracts/sensa';
 
@@ -21,21 +22,32 @@ import {
   readLocalLibraryRevision,
 } from '../../../apps/web/src/data/library/store.ts';
 
-Object.assign(globalThis,{indexedDB,window:new EventTarget(),BroadcastChannel:undefined});
-const id=()=>crypto.randomUUID();
-const context=sensaPinnedLanguageContext(defaultSensaLanguageRoute);
+test('Learning authority admits only replayable local transitions', async (t) => {
+  Object.assign(globalThis,{indexedDB,window:new EventTarget(),BroadcastChannel:undefined});
+  const id=()=>crypto.randomUUID();
+  const context=sensaPinnedLanguageContext(defaultSensaLanguageRoute);
 
-await openLibrary();
-await command({id:id(),kind:'fixture.owner',input:{}},async tx=>{
-  tx.put('meta','service-owner',{subject:id(),accountId:id()});
-});
-const fixture=await libraryCloudPackageFixture();
-const pack=await installPackage(new Uint8Array(fixture.bytes),fixture.descriptor);
-const [targetId]=await enrollPackage(id(),pack.key,context);
-await confirmLearningQuantity(id(),context,20);
-const run=await startLearning(id(),targetId!,context,20,'2026-09-20T08:00:00.000Z');
-const revision=await readLibrary(readLocalLibraryRevision);
+  await openLibrary();
+  await command({id:id(),kind:'fixture.owner',input:{}},async tx=>{
+    tx.put('meta','service-owner',{subject:id(),accountId:id()});
+  });
+  const fixture=await libraryCloudPackageFixture();
+  const pack=await installPackage(new Uint8Array(fixture.bytes),fixture.descriptor);
+  const [targetId]=await enrollPackage(id(),pack.key,context);
+  await confirmLearningQuantity(id(),context,20);
+  const run=await startLearning(id(),targetId!,context,20,'2026-09-20T08:00:00.000Z');
+  const revision=await readLibrary(readLocalLibraryRevision);
 
+  const assertUnchanged=async()=>{
+    const state=await readLearning();
+    assert.equal(state.runs.length,1);
+    assert.equal(state.runs[0]!.revision,run.revision);
+    assert.equal(state.targets[0]!.memoryRevision,0);
+    assert.equal(state.events.length,0);
+    assert.equal(await readLibrary(readLocalLibraryRevision),revision,'rejected transitions never reach SQLite');
+  };
+
+await t.test('physical deletion cannot erase append-only Run history', async()=>{
 await assert.rejects(
   learningCommand({id:id(),kind:'fixture.delete-run',input:{runId:run.id}},async tx=>{
     tx.delete('learningRuns',run.id);
@@ -43,7 +55,10 @@ await assert.rejects(
   LearningSystemInvariantError,
   'local commands cannot physically delete append-only Run history',
 );
+await assertUnchanged();
+});
 
+await t.test('scheduler projections cannot be manufactured without a Learning Event', async()=>{
 await assert.rejects(
   learningCommand({id:id(),kind:'learning.act',input:{runId:run.id,at:run.startedAt,action:{kind:'forged'}}},async tx=>{
     const target=(await tx.get<LocalLearningTarget>('learningTargets',targetId!))!;
@@ -53,7 +68,10 @@ await assert.rejects(
   LearningSystemInvariantError,
   'a command cannot manufacture a scheduler projection without a Learning Event',
 );
+await assertUnchanged();
+});
 
+await t.test('Run revisions require a replayable Event or lifecycle fact', async()=>{
 await assert.rejects(
   learningCommand({id:id(),kind:'learning.start',input:{targetId,at:run.startedAt}},async tx=>{
     const saved=(await tx.get<LocalLearningRun>('learningRuns',run.id))!;
@@ -63,7 +81,10 @@ await assert.rejects(
   LearningSystemInvariantError,
   'a Run revision cannot advance without a replayable Event or lifecycle fact',
 );
+await assertUnchanged();
+});
 
+await t.test('orphan Events cannot be appended without their Run transition', async()=>{
 const forgedEventId=id();
 await assert.rejects(
   learningCommand({id:forgedEventId,kind:'learning.act',input:{runId:run.id,at:run.startedAt,action:{kind:'forged'}}},async tx=>{
@@ -79,12 +100,6 @@ await assert.rejects(
   LearningSystemInvariantError,
   'an Event cannot be appended without its exact Run transition',
 );
-
-const state=await readLearning();
-assert.equal(state.runs.length,1);
-assert.equal(state.runs[0]!.revision,run.revision);
-assert.equal(state.targets[0]!.memoryRevision,0);
-assert.equal(state.events.length,0);
-assert.equal(await readLibrary(readLocalLibraryRevision),revision,'rejected transitions never reach SQLite');
-
-console.log('PASS: the local Learning System authority admits a real Run and rolls back physical deletion, manufactured projections, unexplained Run revisions and orphan Events.');
+await assertUnchanged();
+});
+});

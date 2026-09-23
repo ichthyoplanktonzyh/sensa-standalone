@@ -357,7 +357,7 @@ npm run check
 
 `npm run check` 中的快速测试由统一目录运行。Foundation 已按两个正交维度明确分类：
 `contract | integration | quality` 表示验证机制，`local-correctness | durability | convergence | scale`
-表示产品风险。其他旧检查已迁入按边界组织的测试目录，保留原有断言与运行隔离；风险标签会在后续拆分断言时逐项补齐。可以单独列出或按维度运行：
+表示产品风险。旧检查已迁入按边界组织的测试目录，保留原有断言与运行隔离；所有目录项均带风险标签，关键的大文件再逐步拆为具名场景。可以单独列出或按维度运行：
 
 ```sh
 npm run test:web:foundation -- --list

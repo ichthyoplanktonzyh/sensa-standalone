@@ -26,8 +26,9 @@ const entries=release.packages.map((p:any)=>{
  const result=provisionLightweightInitialContent(withBindingFixture({learnerUserId:owner,learningTargetId:stableUuid('sensa:assurance:summary:'+key),senseId,senseVersionId,senseExpressionBindingId:bindingId,resolvedLearningPlanRevisionId:'assurance-summary-v1',expressionSourceVersion:version,senseSourceVersion:version,expression:{surface:lexeme.lemma,languageTag:'en',expressionKind:'word'},sense:{meaning:p.sense.guideLabelL1,supportLanguageTag:'zh-CN'},originExperience:{source:'other_authoritative_source',sourceVersion:version,personalAnchorUseGrantId:null,experience:{scene,senseFocus:p.sense.guideLabelL1,featureLabels:[]}},referenceFacts:[],requestedAt:'2026-09-11T00:00:00Z'}));
  if(result.status!=='ready')throw Error('Invalid overview');return {senseId,senseVersionId,bindingId,bindingVersionId,assurancePackageKey:key,expression:lexeme.lemma,meaning:p.sense.guideLabelL1,content:result.materialization.content};
 });
-const pack=validatePackage({format:'sensa-learning-package-v1',id:packageId,version,title:'Borrow & lend · 高保证学习',targetLanguage:'en',supportLanguage:'zh-CN',entries,assurance:{release,audio}});
+const title='Borrow & lend · 高保证学习';
+const pack=validatePackage({format:'sensa-learning-package-v1',id:packageId,version,title,targetLanguage:'en',supportLanguage:'zh-CN',entries,assurance:{release,audio}});
 const bytes=Buffer.from(JSON.stringify(pack));
-const descriptor={id:packageId,version,title:pack.title,description:'Synthetic cloud-sync fixture',entryCount:entries.length,byteLength:bytes.length,sha256:await sha256(bytes),url:'https://fixture.invalid/sync-package.json'};
+const descriptor={id:packageId,version,title,description:'Synthetic cloud-sync fixture',entryCount:entries.length,byteLength:bytes.length,sha256:await sha256(bytes),url:'https://fixture.invalid/sync-package.json'};
 return {bytes:Array.from(bytes),descriptor};
 }
