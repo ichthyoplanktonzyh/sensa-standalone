@@ -1,5 +1,6 @@
 import {
   sensaRuntimeLearningReleaseSchema,
+  sensaLanguageForDeclaredTag,
   type SensaRuntimeExperiencePresentation,
   type SensaRuntimeInteractionPayload,
   type SensaRuntimeLearningPackage,
@@ -203,7 +204,10 @@ function projectPackage(
     ipa: pronunciation.ipa,
     audioUrl: mediaUrl(release, pronunciation.mediaKey),
   }));
-  const primaryPronunciation = pronunciations.find((item) => item.accentLocale === 'en-US') ?? pronunciations[0];
+  const targetLanguage=sensaLanguageForDeclaredTag(pkg.identity.targetLanguage);
+  const targetPrimary=targetLanguage?.speechLocale.split('-')[0];
+  const primaryPronunciation=pronunciations.find(item=>item.accentLocale===targetLanguage?.speechLocale)
+    ??pronunciations.find(item=>targetPrimary&&item.accentLocale.split('-')[0]===targetPrimary);
   if (!primaryPronunciation) throw new Error(`Package ${pkg.identity.packageKey} has no pronunciation.`);
   const learningExamples = pkg.examples
     .filter((example) => example.visibility === 'learning_only')
@@ -557,24 +561,27 @@ export function installLearningRelease(input: unknown): LearningCatalog {
     getPackage: (packageId: string) => packageById.get(packageId) ?? null,
     getPackageBySense: (senseId: string) => packageBySense.get(senseId) ?? null,
     resolveMediaUrl: (mediaKey: string | null | undefined) => mediaUrl(release, mediaKey),
-    resolvePronunciationAudioUrl: (lemma: string, accentLocale = 'en-US') => {
-      const normalizedLemma = lemma.trim().toLocaleLowerCase();
+    resolvePronunciationAudioUrl: (lemma: string, accentLocale?: string) => {
+      const targetLocale=sensaLanguageForDeclaredTag(release.release.targetLanguage)?.speechLocale??release.release.targetLanguage;
+      const normalizedLemma = lemma.trim().toLocaleLowerCase(targetLocale);
       const lexeme = release.lexemes.find((candidate) =>
-        candidate.lemma.toLocaleLowerCase() === normalizedLemma);
+        candidate.lemma.toLocaleLowerCase(targetLocale) === normalizedLemma);
       if (!lexeme) return null;
+      const targetPrimary=sensaLanguageForDeclaredTag(release.release.targetLanguage)?.speechLocale.split('-')[0];
       const pronunciation = lexeme.pronunciations.find((candidate) =>
-        candidate.accentLocale === accentLocale)
-        ?? lexeme.pronunciations[0];
+        accentLocale!==undefined&&candidate.accentLocale === accentLocale)
+        ?? lexeme.pronunciations.find(candidate=>targetPrimary&&candidate.accentLocale.split('-')[0]===targetPrimary);
       return pronunciation ? mediaUrl(release, pronunciation.mediaKey) : null;
     },
-    resolveExampleAudioUrl: (textL2: string, accentLocale = 'en-US') => {
+    resolveExampleAudioUrl: (textL2: string, accentLocale?: string) => {
+      const targetPrimary=sensaLanguageForDeclaredTag(release.release.targetLanguage)?.speechLocale.split('-')[0];
       for (const pkg of release.packages) {
         const example = pkg.examples.find((candidate) => candidate.textL2 === textL2);
         if (!example) continue;
         const audioRenders = example.renders.filter((render) =>
           render.kind === 'static_audio' && render.accentLocale === accentLocale);
         const render = audioRenders[0]
-          ?? example.renders.find((candidate) => candidate.kind === 'static_audio');
+          ?? example.renders.find((candidate) => candidate.kind === 'static_audio'&&targetPrimary&&candidate.accentLocale.split('-')[0]===targetPrimary);
         return render?.kind === 'static_audio'
           ? mediaUrl(release, render.mediaKey)
           : null;

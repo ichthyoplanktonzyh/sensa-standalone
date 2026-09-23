@@ -318,7 +318,7 @@
     "bindingStep": "连接表达",
     "recallStep": "回想意思",
     "revealStep": "核对表达",
-    "recallPrompt": "你会怎样用英语表达这个意思？",
+    "recallPrompt": "你会怎样用目标语言表达这个意思？",
     "context": "场景",
     "packageScene": "学习包场景",
     "myScene": "我的场景",

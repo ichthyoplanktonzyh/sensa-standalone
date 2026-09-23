@@ -20,7 +20,7 @@ import {build} from 'esbuild';
 import vm from 'node:vm';
 import {IDBFactory} from 'fake-indexeddb';
 import {
-  readingRequestSchema,readingTestRequestSchema,readingModelsRequestSchema,
+  readingRequestSchema,readingTestRequestSchema,readingModelsRequestSchema,semanticLookupInputSchema,
   sensaReadingGlossaryLimits,sensaReadingGlossarySchema,
 } from '@sensa/contracts/sensa';
 
@@ -140,7 +140,8 @@ const lookup={id:crypto.randomUUID(),snapshot:{sentence:'She took her time.',lan
 lookupHandler.message({accountId,pageUrl,input:lookup});
 await new Promise(resolve=>setTimeout(resolve,50));
 const lookupBody=sent.find(entry=>entry.url==='/sensa/semantic/lookups/stream')!.body;
-assert.deepEqual(lookupBody,lookup,'a lookup body is the capture it was given, with nothing added');
-console.log('PASS: every reading the extension sends carries the pinned Route context and learner glossary on both paths, the two connection requests carry only their own question, a lookup body is left exactly as the page built it, and each body is one the service’s own schema accepts.');
+assert.deepEqual(lookupBody,{...lookup,languages:{supportLanguageTag:'zh-CN',targetLanguageTag:'en',languageRouteId:defaultRoute.id,languageRouteRevision:1}},'a lookup carries the extension’s selected Route rather than assuming an English/Chinese pair at the API');
+assert.equal(semanticLookupInputSchema.safeParse(lookupBody).success,true,'the semantic lookup body matches the API contract');
+console.log('PASS: readings and semantic lookups carry the pinned Route context, readings carry the learner glossary, and connection questions carry only their own request.');
 
 });

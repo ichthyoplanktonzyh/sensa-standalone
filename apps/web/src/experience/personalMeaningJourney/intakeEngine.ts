@@ -73,8 +73,8 @@ export interface FastTrackOutcome {
 const truncateWithEllipsis = (text: string, max: number): string =>
   text.length > max ? `${text.slice(0, max)}…` : text;
 
-const normalizedForm = (surfaceForm: string): string =>
-  surfaceForm.trim().toLocaleLowerCase();
+const normalizedForm = (surfaceForm: string, languageTag: string): string =>
+  surfaceForm.trim().toLocaleLowerCase(languageTag);
 
 const hasCompleteExpression = (payload: SensaIntakePayload): boolean => {
   const expression = payload.expression;
@@ -322,7 +322,7 @@ export const executeFastTrack = (
     expressionType,
     languageTag,
     surfaceForm: expression.surfaceForm.trim(),
-    normalizedForm: normalizedForm(expression.surfaceForm),
+    normalizedForm: normalizedForm(expression.surfaceForm, languageTag),
     contextAnchorRevisionId: semanticAnchorRevisionId,
     occurrence: occurrence.locator,
     provenanceKind,

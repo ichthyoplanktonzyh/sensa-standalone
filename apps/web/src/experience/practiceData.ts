@@ -78,10 +78,7 @@ export const RUNTIME_PRACTICE_SENSES: PracticeSenseItem[] = BUNDLED_LEARNING_PAC
     word: pkg.content.lemma,
     syllable: pkg.content.syllables ?? pkg.content.lemma,
     phonetic: pkg.content.ipa,
-    pronunciationAudioUrl: (
-      pkg.content.pronunciations.find((pronunciation) => pronunciation.accentLocale === 'en-US')
-      ?? pkg.content.pronunciations[0]
-    )?.audioUrl ?? null,
+    pronunciationAudioUrl: pkg.content.pronunciations.find(pronunciation=>pronunciation.accentLocale===pkg.content.accentLocale)?.audioUrl ?? null,
     pos: pkg.content.partOfSpeech,
     meaning: pkg.content.guideLabelL1,
     example: {

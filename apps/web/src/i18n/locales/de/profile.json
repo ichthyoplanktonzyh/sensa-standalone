@@ -35,6 +35,12 @@
     "sameLanguageNote": "Ziel- und Unterstützungssprache dürfen identisch sein, zum Beispiel bei einer Immersionsroute.",
     "archiveLabel": "Route für {{language}} archivieren", "pauseLabel": "Route für {{language}} pausieren", "resumeLabel": "Route für {{language}} fortsetzen",
     "archived": "Archivierte Routen", "restore": "Wiederherstellen", "saved": "Sprachrouten gespeichert."
+  ,
+    "availabilityInstalled": "{{count}} lokal installierte Lernpakete passen genau zu dieser Route",
+    "availabilityNoInstalled": "Noch keine lokal installierten Lernpakete passen zu dieser Route",
+    "availabilityPersonalReady": "Die für persönliche Inhalte benötigte Stimme ist eingerichtet; die Ressourcen müssen noch vorbereitet werden",
+    "availabilityPersonalUnavailable": "Die für persönliche Inhalte benötigte Stimme ist noch nicht eingerichtet",
+    "availabilityNote": "Eine Route erstellen zu können bedeutet nicht, dass die Lernressourcen bereitstehen"
   },
   "libraryBackup": {
     "title": "Sicherung & Wiederherstellung", "intro": "Sichern Sie Ihre lokalen Inhalte und Ihren Lernfortschritt, um sie in einem anderen Browser wiederherzustellen.",

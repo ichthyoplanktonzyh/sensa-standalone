@@ -235,8 +235,8 @@ const createJourneyDraft = (state: JourneyState): JourneyState => ({
   commandReceipts: [...state.commandReceipts],
 });
 
-const normalizedForm = (surfaceForm: string): string =>
-  surfaceForm.trim().toLocaleLowerCase();
+const normalizedForm = (surfaceForm: string, languageTag: string): string =>
+  surfaceForm.trim().toLocaleLowerCase(languageTag);
 
 const contextProvenanceKind = (
   context: SensaIntakeContext | null | undefined,
@@ -933,7 +933,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
         expressionType: 'phrase',
         languageTag: languages.supportLanguageTag,
         surfaceForm: familiarSurface,
-        normalizedForm: normalizedForm(familiarSurface),
+        normalizedForm: normalizedForm(familiarSurface, languages.supportLanguageTag),
         contextAnchorRevisionId: null,
         occurrence: null,
         provenanceKind: 'learner_authored',
@@ -995,7 +995,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
         expressionType: capturedExpression.expressionTypeHint ?? 'word',
         languageTag: capturedExpression.languageTag,
         surfaceForm: capturedExpression.surfaceForm,
-        normalizedForm: normalizedForm(capturedExpression.surfaceForm),
+        normalizedForm: normalizedForm(capturedExpression.surfaceForm, capturedExpression.languageTag),
         contextAnchorRevisionId: blockAnchors[0].anchorRevisionId,
         occurrence: capturedExpression.occurrence.locator,
         provenanceKind: sourceKind,
@@ -1606,7 +1606,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
     const provenanceKind: PersonalProvenanceKind = unchangedCandidate
       ? candidate.provenanceKind ?? 'llm_suggested'
       : 'learner_authored';
-    const form = normalizedForm(input.surfaceForm);
+    const form = normalizedForm(input.surfaceForm, input.languageTag);
     const existingExpression = pinned
       ? state.registry.expressions.find((expression) => expression.expressionId === pinned.expressionId)
       : state.registry.expressions.find((expression) =>
@@ -2023,7 +2023,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
       expressionId: semantic.expressionId,
       versionNumber: semantic.expressionVersionNumber,
       surfaceForm: target.expression.trim(),
-      normalizedForm: normalizedForm(target.expression),
+      normalizedForm: normalizedForm(target.expression, target.targetLanguageTag),
       structure: structuredClone(semantic.expressionStructure),
       provenance: semanticProvenance,
       createdAt: source.publishedAt,

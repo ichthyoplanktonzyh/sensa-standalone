@@ -318,7 +318,7 @@
     "bindingStep": "Conectar la expresión",
     "recallStep": "Recordar el significado",
     "revealStep": "Comprobar la expresión",
-    "recallPrompt": "¿Cómo expresarías esto en inglés?",
+    "recallPrompt": "¿Cómo expresarías esto en el idioma de destino?",
     "context": "Contexto",
     "packageScene": "Contexto del paquete",
     "myScene": "Mi escena",

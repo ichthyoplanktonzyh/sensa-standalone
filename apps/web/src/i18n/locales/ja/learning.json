@@ -318,7 +318,7 @@
     "bindingStep": "表現をつなぐ",
     "recallStep": "意味を想起",
     "revealStep": "表現を確認",
-    "recallPrompt": "これを英語でどのように表現しますか？",
+    "recallPrompt": "これを目標言語でどのように表現しますか？",
     "context": "文脈",
     "packageScene": "パッケージの場面",
     "myScene": "私の場面",

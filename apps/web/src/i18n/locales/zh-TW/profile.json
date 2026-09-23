@@ -71,7 +71,12 @@
     "resumeLabel": "恢復「{{language}}」路線",
     "archived": "已歸檔路線",
     "restore": "恢復",
-    "saved": "語言路線已儲存。"
+    "saved": "語言路線已儲存。",
+    "availabilityInstalled": "已有 {{count}} 個與此路線精確相符的本機學習包",
+    "availabilityNoInstalled": "本機尚無與此路線相符的學習包",
+    "availabilityPersonalReady": "個人內容所需語音已設定；實際資源仍需準備",
+    "availabilityPersonalUnavailable": "個人內容所需語音尚未設定",
+    "availabilityNote": "可建立路線不代表學習資源已就緒"
   },
   "libraryBackup": {
     "title": "本機庫備份與恢復",

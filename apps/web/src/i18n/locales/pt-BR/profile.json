@@ -66,7 +66,12 @@
     "resumeLabel": "Retomar a rota {{language}}",
     "archived": "Rotas arquivadas",
     "restore": "Restaurar",
-    "saved": "Rotas de aprendizagem salvas."
+    "saved": "Rotas de aprendizagem salvas.",
+    "availabilityInstalled": "{{count}} pacotes de aprendizagem instalados localmente correspondem exatamente a esta rota",
+    "availabilityNoInstalled": "Ainda não há pacotes de aprendizagem instalados localmente que correspondam a esta rota",
+    "availabilityPersonalReady": "A voz necessária para o conteúdo pessoal está configurada; os recursos ainda precisam ser preparados",
+    "availabilityPersonalUnavailable": "A voz necessária para o conteúdo pessoal ainda não está configurada",
+    "availabilityNote": "Poder criar uma rota não significa que os recursos de aprendizagem estejam prontos"
   },
   "libraryBackup": {
     "title": "Backup e restauração",

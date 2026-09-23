@@ -298,7 +298,7 @@ export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
       let failureReason='provider_unavailable';
       try{
         const connection=options.semanticResolver?null:await transaction(async db=>activeMeaningConnection(db,await account(db,identity,false,false,clock())));
-        result=await (options.semanticResolver??semanticResolverFor(connection!,options.readingCompletion))(input.snapshot,started.view.focus,onExplanation);
+        result=await (options.semanticResolver??semanticResolverFor(connection!,options.readingCompletion))(input.snapshot,input.languages,started.view.focus,onExplanation);
       }catch(error){
         failureReason=error instanceof ConsumerError?error.code:error instanceof z.ZodError||error instanceof SyntaxError?'model_invalid_response':'provider_unavailable';
       }

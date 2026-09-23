@@ -176,6 +176,7 @@ class AudioService {
         if (this.currentAudio === audio) {
           this.currentAudio = null;
         }
+        if (!speechLocale) { finish(); return; }
         // Keep the same Promise open while the fallback voice finishes.
         void this.startSpeechSynthesis(fallbackText, type, options, speechLocale).then(finish);
       };
@@ -231,8 +232,8 @@ class AudioService {
   private startSpeechSynthesis(
     text: string,
     type: 'us' | 'uk',
-    options: AudioPlaybackOptions = {},
-    speechLocale = 'en-US',
+    options: AudioPlaybackOptions,
+    speechLocale: string,
   ): Promise<void> {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return Promise.resolve();
 

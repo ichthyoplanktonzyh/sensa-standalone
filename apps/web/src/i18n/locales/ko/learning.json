@@ -318,7 +318,7 @@
     "bindingStep": "표현 연결하기",
     "recallStep": "의미 떠올리기",
     "revealStep": "표현 확인하기",
-    "recallPrompt": "이 의미를 영어로 어떻게 표현할까요?",
+    "recallPrompt": "이 의미를 목표 언어로 어떻게 표현할까요?",
     "context": "맥락",
     "packageScene": "패키지 맥락",
     "myScene": "내 장면",

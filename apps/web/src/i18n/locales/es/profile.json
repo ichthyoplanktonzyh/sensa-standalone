@@ -73,7 +73,12 @@
     "resumeLabel": "Reanudar la ruta de {{language}}",
     "archived": "Rutas archivadas",
     "restore": "Restaurar",
-    "saved": "Rutas de idiomas guardadas."
+    "saved": "Rutas de idiomas guardadas.",
+    "availabilityInstalled": "{{count}} paquetes de aprendizaje instalados localmente coinciden exactamente con esta ruta",
+    "availabilityNoInstalled": "Aún no hay paquetes de aprendizaje instalados localmente que coincidan con esta ruta",
+    "availabilityPersonalReady": "La voz necesaria para el contenido personal está configurada; aún hay que preparar los recursos",
+    "availabilityPersonalUnavailable": "La voz necesaria para el contenido personal aún no está configurada",
+    "availabilityNote": "Poder crear una ruta no significa que los recursos de aprendizaje estén listos"
   },
   "libraryBackup": {
     "title": "Copia de seguridad y restauración",

@@ -71,7 +71,12 @@
     "resumeLabel": "{{language}} 경로 다시 시작",
     "archived": "보관된 경로",
     "restore": "복원",
-    "saved": "언어 경로를 저장했습니다."
+    "saved": "언어 경로를 저장했습니다.",
+    "availabilityInstalled": "이 경로와 정확히 일치하는 학습 패키지 {{count}}개가 이 기기에 설치되어 있습니다",
+    "availabilityNoInstalled": "이 경로와 일치하는 학습 패키지가 아직 이 기기에 없습니다",
+    "availabilityPersonalReady": "개인 콘텐츠에 필요한 음성이 설정되었습니다. 실제 리소스는 준비가 필요합니다",
+    "availabilityPersonalUnavailable": "개인 콘텐츠에 필요한 음성이 아직 설정되지 않았습니다",
+    "availabilityNote": "경로를 만들 수 있어도 학습 리소스가 준비된 것은 아닙니다"
   },
   "libraryBackup": {
     "title": "백업 및 복원",

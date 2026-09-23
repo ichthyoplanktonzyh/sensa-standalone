@@ -39,6 +39,15 @@ export type WebTestCatalogEntry = Readonly<{
  */
 const foundationTests = [
   {
+    id: 'learning-language-matrix',
+    file: 'tests/web/integration/learning-language-matrix.test.mts',
+    kind: 'integration',
+    risks: ['local-correctness'],
+    environment: 'node',
+    suite: 'foundation',
+    runner: 'vitest',
+  },
+  {
     id: 'learning-system-boundary',
     file: 'tests/web/contracts/learning-system-boundary.test.mts',
     kind: 'contract',

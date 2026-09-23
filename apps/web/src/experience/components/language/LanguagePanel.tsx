@@ -11,7 +11,7 @@ import {
 import i18n from '../../../i18n';
 import {interfaceLanguageDisplayName} from '../../../i18n/languageDisplayName';
 import {resolveInterfaceLocale} from '../../../i18n/localeRegistry';
-import {useLanguageRoutes} from '../../library/useLanguageRoutes';
+import {useLanguageRoutes, type LanguageRouteAvailability} from '../../library/useLanguageRoutes';
 import {SensaOverlayLayout} from '../../ui/SensaComponents';
 import {runtimePrimary} from '../learning/RuntimeFrame';
 
@@ -32,6 +32,7 @@ export function languageSummary(collection:SensaLanguageRouteCollection,activeRo
 interface Props {
   collection:SensaLanguageRouteCollection;
   activeRoute:SensaLanguageLearningRoute;
+  availabilityFor:(targetLanguageTag:string,supportLanguageTag:string)=>LanguageRouteAvailability|undefined;
   busy:boolean;
   notice:string;
   onAdd:(targetLanguageTag:string,supportLanguageTag:string)=>void;
@@ -44,7 +45,7 @@ interface Props {
   onClose:()=>void;
 }
 
-export function LanguagePanel({collection,activeRoute,busy,notice,onAdd,onUpdateSupport,onArchive,onPause,onResume,onRestore,onSetActive,onClose}:Props){
+export function LanguagePanel({collection,activeRoute,availabilityFor,busy,notice,onAdd,onUpdateSupport,onArchive,onPause,onResume,onRestore,onSetActive,onClose}:Props){
   const {t,i18n}=useTranslation();
   const [pendingTarget,setPendingTarget]=useState('');
   const [pendingSupport,setPendingSupport]=useState(activeRoute.defaultSupportLanguageTag);
@@ -54,6 +55,7 @@ export function LanguagePanel({collection,activeRoute,busy,notice,onAdd,onUpdate
   const visible=collection.routes.filter(route=>route.status!=='archived');
   const archived=collection.routes.filter(route=>route.status==='archived');
   const activeCount=collection.routes.filter(route=>route.status==='active').length;
+  const pendingAvailability=pendingTarget&&pendingSupport?availabilityFor(pendingTarget,pendingSupport):undefined;
   useEffect(()=>{
     const escape=(event:KeyboardEvent)=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();onClose();}};
     document.addEventListener('keydown',escape,true);
@@ -68,9 +70,10 @@ export function LanguagePanel({collection,activeRoute,busy,notice,onAdd,onUpdate
         <section>
           <h3 className="text-sm font-medium">{t('languages.routes')}</h3>
           <p className="mt-2 text-xs leading-6 text-fg-tertiary">{t('languages.routesNote')}</p>
+          <p className="mt-1 text-xs leading-5 text-fg-tertiary">{t('languages.availabilityNote')}</p>
           <div role="radiogroup" aria-label={t('languages.routes')} className="mt-4 space-y-3">
             {visible.map(route=>{
-              const target=languageNames(route.targetLanguageTag,locale),active=route.id===activeRoute.id;
+              const target=languageNames(route.targetLanguageTag,locale),active=route.id===activeRoute.id,routeAvailability=availabilityFor(route.targetLanguageTag,route.defaultSupportLanguageTag);
               return <article key={route.id} className="rounded-card border border-border-subtle bg-surface-panel p-4">
                 <div className="flex min-h-11 items-center gap-3">
                   <button type="button" role="radio" aria-checked={active} disabled={busy||active||route.status!=='active'} onClick={()=>onSetActive(route.id)} className="flex min-w-0 flex-1 items-center gap-3 text-left text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
@@ -90,6 +93,12 @@ export function LanguagePanel({collection,activeRoute,busy,notice,onAdd,onUpdate
                     {supportLanguages.map(language=><option key={language.tag} value={language.tag}>{language.endonym} · {interfaceLanguageDisplayName(language.tag,locale)}</option>)}
                   </select>
                 </label>
+                {routeAvailability&&<div className="mt-3 space-y-1 text-xs leading-5 text-fg-tertiary" aria-live="polite">
+                  <p>{routeAvailability.installedPackageCount>0
+                    ?t('languages.availabilityInstalled',{count:routeAvailability.installedPackageCount})
+                    :t('languages.availabilityNoInstalled')}</p>
+                  <p>{t(routeAvailability.personalVoiceConfigured?'languages.availabilityPersonalReady':'languages.availabilityPersonalUnavailable')}</p>
+                </div>}
               </article>;
             })}
           </div>
@@ -107,6 +116,12 @@ export function LanguagePanel({collection,activeRoute,busy,notice,onAdd,onUpdate
             <button type="button" disabled={busy||!pendingTarget||!pendingSupport} onClick={()=>{onAdd(pendingTarget,pendingSupport);setPendingTarget('');}} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-control border border-border-strong bg-surface-panel px-4 text-sm text-action-primary hover:bg-surface-selected focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-40"><Plus size={16}/>{t('languages.addAction')}</button>
           </div>
           <p className="mt-2 text-xs leading-6 text-fg-tertiary">{t('languages.sameLanguageNote')}</p>
+          {pendingAvailability&&<div className="mt-2 space-y-1 text-xs leading-5 text-fg-tertiary" aria-live="polite">
+            <p>{pendingAvailability.installedPackageCount>0
+              ?t('languages.availabilityInstalled',{count:pendingAvailability.installedPackageCount})
+              :t('languages.availabilityNoInstalled')}</p>
+            <p>{t(pendingAvailability.personalVoiceConfigured?'languages.availabilityPersonalReady':'languages.availabilityPersonalUnavailable')}</p>
+          </div>}
         </section>
         {archived.length>0&&<section className="border-t border-border-subtle pt-6">
           <h3 className="text-sm font-medium">{t('languages.archived')}</h3>
@@ -120,5 +135,5 @@ export function LanguagePanel({collection,activeRoute,busy,notice,onAdd,onUpdate
 
 export function LanguagePanelHost({onClose}:{onClose:()=>void}){
   const language=useLanguageRoutes();
-  return <LanguagePanel collection={language.collection} activeRoute={language.activeRoute} busy={language.busy} notice={language.notice} onAdd={(target,support)=>void language.addRoute(target,support)} onUpdateSupport={(id,support)=>void language.updateSupport(id,support)} onArchive={id=>void language.setStatus(id,'archived')} onPause={id=>void language.setStatus(id,'paused')} onResume={id=>void language.setStatus(id,'active')} onRestore={id=>void language.setStatus(id,'active')} onSetActive={id=>void language.setActive(id)} onClose={onClose}/>;
+  return <LanguagePanel collection={language.collection} activeRoute={language.activeRoute} availabilityFor={language.availabilityFor} busy={language.busy} notice={language.notice} onAdd={(target,support)=>void language.addRoute(target,support)} onUpdateSupport={(id,support)=>void language.updateSupport(id,support)} onArchive={id=>void language.setStatus(id,'archived')} onPause={id=>void language.setStatus(id,'paused')} onResume={id=>void language.setStatus(id,'active')} onRestore={id=>void language.setStatus(id,'active')} onSetActive={id=>void language.setActive(id)} onClose={onClose}/>;
 }

@@ -34,15 +34,18 @@ export function tokenizeSentence(sentenceHtml: string): {
   let currentPlainOffset = 0;
   let tokenCounter = 0;
 
-  // 2. 对每个 segment 按照单词和非单词（标点/空格）进行细分
-  // 英文词元模式：支持带连字符或缩写的词，如 "We'll", "state-of-the-art"
-  const wordOrPunctRegex = /([a-zA-Z0-9]+(?:['’][a-zA-Z0-9]+)?|[^\w\s]+|\s+)/g;
+  // 2. Segment words in the source script while retaining punctuation and
+  // whitespace as tokens, so offsets still address the original sentence.
+  const segmenter = typeof Intl.Segmenter === 'function'
+    ? new Intl.Segmenter(undefined, {granularity: 'word'})
+    : null;
+  const fallbackTokens = /([\p{L}\p{M}\p{N}]+(?:['’][\p{L}\p{M}\p{N}]+)?|[^\p{L}\p{M}\p{N}\s]+|\s+)/gu;
 
   for (const seg of segments) {
-    let subMatch: RegExpExecArray | null;
-    while ((subMatch = wordOrPunctRegex.exec(seg.text)) !== null) {
-      const rawText = subMatch[0];
-      const isWord = /^[a-zA-Z0-9]+(?:['’][a-zA-Z0-9]+)?$/.test(rawText);
+    const parts = segmenter
+      ? Array.from(segmenter.segment(seg.text), part => ({text: part.segment, isWord: part.isWordLike === true}))
+      : Array.from(seg.text.matchAll(fallbackTokens), match => ({text: match[0], isWord: /^[\p{L}\p{M}\p{N}]/u.test(match[0])}));
+    for (const {text: rawText, isWord} of parts) {
       const cleanWord = isWord ? rawText.replace(/['’]/g, "'") : '';
 
       const charStart = currentPlainOffset;

@@ -326,7 +326,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
    return queued;
   });
  }
- if(message.kind==='lookup'&&sender.tab){const snapshot=captureSnapshotSchema.parse(message.snapshot);const readingModes=await modes();const store=await load(),a=store.active?store.accounts[store.active]:null;if(!a||message.accountId!==await activeScope()||readingModes[sender.tab!.id!]?.accountId!==await activeScope())throw new Error('authentication_required');if(snapshot.source.url!==await currentPageUrl(sender))throw new Error('source_mismatch');const result=await apiRequest('/sensa/semantic/lookups',{id:message.lookupId,snapshot},a.token);await rememberLookup(sender,message.lookupId,snapshot,result,message.accountId);return result;}
+ if(message.kind==='lookup'&&sender.tab){const snapshot=captureSnapshotSchema.parse(message.snapshot);const readingModes=await modes();const store=await load(),a=store.active?store.accounts[store.active]:null;if(!a||message.accountId!==await activeScope()||readingModes[sender.tab!.id!]?.accountId!==await activeScope())throw new Error('authentication_required');if(snapshot.source.url!==await currentPageUrl(sender))throw new Error('source_mismatch');const languages=await readingLanguageContext();const result=await apiRequest('/sensa/semantic/lookups',{id:message.lookupId,snapshot,languages},a.token);await rememberLookup(sender,message.lookupId,snapshot,result,message.accountId);return result;}
  if(['open-inbox','save-status'].includes(message.kind)&&sender.tab){
   const store=await load(),a=store.active?store.accounts[store.active]:null,mode=(await modes())[sender.tab.id!];
   if(!a||message.accountId!==a.accountId||mode?.accountId!==a.accountId)throw new Error('account_mismatch');
@@ -383,7 +383,7 @@ chrome.runtime.onConnect?.addListener(port=>{
    if(meaning&&captureSnapshotSchema.parse(message.input?.snapshot).source.url!==message.pageUrl)throw new Error('source_mismatch');
    // A lookup stream carries a capture; a reading stream is a reading request and
    // is completed here, the same way the plain path completes one.
-   const body=meaning?message.input:await readingInput(message.input);
+   const body=meaning?{...message.input,languages:await readingLanguageContext()}:await readingInput(message.input);
    const response=await serviceFetch(apiUrl+(meaning?'/sensa/semantic/lookups/stream':'/sensa/reading/stream'),{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+a!.token},body:JSON.stringify(body),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(45000)])});
    if(!response.ok){const data=await response.json();throw new Error(data.code??'provider_unavailable');}
    if(!response.body)throw new Error('provider_invalid_response');

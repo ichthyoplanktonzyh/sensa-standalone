@@ -125,9 +125,9 @@ export function sensaLanguageForIso6393(code: string): SensaLanguage | undefined
  *
  * A declaration carries subtags the catalog does not: `en-US` is the English
  * entry and `zh-Hans` is Simplified Chinese, so an exact tag is tried first and
- * the primary subtag second. Nothing is inferred from a region the catalog has
- * no entry for: `pt-PT` places on Portuguese because the catalog carries
- * Portuguese, while `yue` places on nothing and stays undetermined.
+ * the primary subtag second. Traditional Chinese is kept undetermined because
+ * the catalog only has Simplified Chinese. `pt-PT` places on Portuguese because
+ * the catalog carries Portuguese, while `yue` places on nothing.
  */
 export function sensaLanguageForDeclaredTag(tag: string): SensaLanguage | undefined {
   const canonical=sensaCanonicalLanguageTag(tag);
@@ -135,7 +135,9 @@ export function sensaLanguageForDeclaredTag(tag: string): SensaLanguage | undefi
   const normalized = canonical.toLowerCase();
   const exact = sensaLanguages.find(language => language.tag.toLowerCase() === normalized);
   if (exact) return exact;
-  const primary = normalized.split('-')[0]!;
+  const subtags = normalized.split('-');
+  if (subtags[0] === 'zh' && subtags.some(subtag => ['hant', 'tw', 'hk', 'mo'].includes(subtag))) return undefined;
+  const primary = subtags[0]!;
   return sensaLanguages.find(language => language.tag.toLowerCase().split('-')[0] === primary);
 }
 

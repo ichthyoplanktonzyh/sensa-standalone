@@ -318,7 +318,7 @@
     "bindingStep": "Ausdruck verknüpfen",
     "recallStep": "Bedeutung abrufen",
     "revealStep": "Ausdruck prüfen",
-    "recallPrompt": "Wie würden Sie das auf Englisch ausdrücken?",
+    "recallPrompt": "Wie würden Sie das in der Zielsprache ausdrücken?",
     "context": "Kontext",
     "packageScene": "Szene aus dem Paket",
     "myScene": "Meine Szene",

@@ -9,15 +9,21 @@ import { ExperienceRenderer } from './ExperienceRenderer';
 
 type RecallMode = 'independent' | 'first_letter' | 'choice' | 'result';
 
-function normalizeForm(value: string): string {
-  return value.trim().toLocaleLowerCase();
+function normalizeForm(value: string, locale: string): string {
+  return value.trim().toLocaleLowerCase(locale);
 }
 
-function createFirstLetterMask(form: string): string {
-  return form
-    .split('')
-    .map((character, index) => (
-      index === 0 || !/[a-z]/i.test(character) ? character : '_'
+function splitGraphemes(form: string, locale: string): string[] {
+  return typeof Intl.Segmenter === 'function'
+    ? Array.from(new Intl.Segmenter(locale, {granularity: 'grapheme'}).segment(form), (part) => part.segment)
+    : Array.from(form);
+}
+
+export function createFirstCharacterMask(form: string, locale: string): string {
+  const graphemes = splitGraphemes(form, locale);
+  return graphemes
+    .map((grapheme, index) => (
+      index === 0 || !/[\p{L}\p{N}]/u.test(grapheme) ? grapheme : '_'
     ))
     .join(' ');
 }
@@ -69,8 +75,8 @@ export function SensaRecallCard({
   }, [mode]);
 
   const acceptedForms = useMemo(
-    () => new Set(recall.acceptedForms.map(normalizeForm)),
-    [recall.acceptedForms],
+    () => new Set(recall.acceptedForms.map((form) => normalizeForm(form, content.accentLocale))),
+    [recall.acceptedForms, content.accentLocale],
   );
   const selectedChoice = useMemo(
     () => recall.choiceOptions.find((option) => option.id === selectedChoiceId) ?? null,
@@ -106,7 +112,7 @@ export function SensaRecallCard({
     event.preventDefault();
     if (!answer.trim()) return;
     if (execution) { execution.submit(answer); return; }
-    const normalizedAnswer = normalizeForm(answer);
+    const normalizedAnswer = normalizeForm(answer, content.accentLocale);
     if (isRetention) {
       onViewChange();
       onComplete(
@@ -232,8 +238,8 @@ export function SensaRecallCard({
           )}
           <label htmlFor="sensa-meaning-to-form-answer">{cardText('writeTheEnglishExpression')}</label>
           {mode === 'first_letter' && (
-            <div className="mt-4 font-language text-2xl tracking-widest text-action-primary" aria-label={cardText('firstLetter',{letter:recall.primaryForm[0]})}>
-              {createFirstLetterMask(recall.primaryForm)}
+            <div className="mt-4 font-language text-2xl tracking-widest text-action-primary" aria-label={cardText('firstLetter',{letter:splitGraphemes(recall.primaryForm, content.accentLocale)[0] ?? ''})}>
+              {createFirstCharacterMask(recall.primaryForm, content.accentLocale)}
             </div>
           )}
           <div className="relative mt-3">
@@ -247,7 +253,7 @@ export function SensaRecallCard({
               autoCapitalize="none"
               enterKeyHint="done"
               spellCheck={false}
-              placeholder="English"
+              placeholder=""
               onChange={(event) => setAnswer(event.currentTarget.value)}
             />
             {answer && (

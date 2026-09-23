@@ -108,7 +108,7 @@ export function transitionAssurance(t:LocalExecutableLearningTarget,run:LocalLea
   if(!view.resource||state.feedback)throw new Error('localFlow.stepChanged');const r=view.resource;
   const answer=response.kind==='skip'?'':response.value;
   if(response.kind==='try_recall'&&r.kind!=='meaning_to_form_recall')throw new Error('localFlow.stepChanged');
-  const correct=r.kind==='meaning_to_form_recall'?(state.mode==='choice'?r.choiceOptions.some(o=>o.id===answer&&o.isTarget):r.acceptedForms.some(f=>f.trim().toLocaleLowerCase()===answer.toLocaleLowerCase())):r.kind==='novel_context_transfer'?r.scenario.options.some(o=>o.id===answer&&o.isCorrect):r.options.some(o=>o.id===answer&&o.isCorrect);
+  const correct=r.kind==='meaning_to_form_recall'?(state.mode==='choice'?r.choiceOptions.some(o=>o.id===answer&&o.isTarget):r.acceptedForms.some(f=>f.trim().toLocaleLowerCase(view.content.accentLocale)===answer.toLocaleLowerCase(view.content.accentLocale))):r.kind==='novel_context_transfer'?r.scenario.options.some(o=>o.id===answer&&o.isCorrect):r.options.some(o=>o.id===answer&&o.isCorrect);
   if(response.kind==='try_recall'&&!correct&&queue instanceof LearnQueue&&state.mode!=='choice'){
    state.mode=state.mode==='independent'?'first_letter':'choice';
    // This response only reveals progressively stronger support. The learner has

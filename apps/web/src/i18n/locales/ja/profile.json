@@ -71,7 +71,12 @@
     "resumeLabel": "「{{language}}」ルートを再開",
     "archived": "アーカイブ済みのルート",
     "restore": "復元",
-    "saved": "言語ルートを保存しました。"
+    "saved": "言語ルートを保存しました。",
+    "availabilityInstalled": "このルートに正確に一致する学習パッケージが端末に {{count}} 件インストール済みです",
+    "availabilityNoInstalled": "このルートに一致する学習パッケージはまだ端末にありません",
+    "availabilityPersonalReady": "個人用コンテンツに必要な音声は設定済みです。実際のリソースはこれから準備します",
+    "availabilityPersonalUnavailable": "個人用コンテンツに必要な音声はまだ設定されていません",
+    "availabilityNote": "ルートを作成できても、学習リソースが利用可能とは限りません"
   },
   "libraryBackup": {
     "title": "バックアップと復元",

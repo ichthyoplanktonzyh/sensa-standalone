@@ -83,7 +83,7 @@ function SensaBoundaryAssessment({
   );
 
   const lookupToken = (token: SentenceToken, tokenIdx: number) => {
-    if (token.cleanWord.toLocaleLowerCase() === content.lemma.toLocaleLowerCase()) {
+    if (token.cleanWord.toLocaleLowerCase(content.accentLocale) === content.lemma.toLocaleLowerCase(content.accentLocale)) {
       toast(cardText('submitYourAnswerBeforeOpeningThisWordS'));
       return;
     }

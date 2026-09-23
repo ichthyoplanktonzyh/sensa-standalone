@@ -60,7 +60,12 @@
     "resumeLabel": "Reprendre le parcours {{language}}",
     "archived": "Parcours archivés",
     "restore": "Restaurer",
-    "saved": "Parcours linguistiques enregistrés."
+    "saved": "Parcours linguistiques enregistrés.",
+    "availabilityInstalled": "{{count}} paquets d’apprentissage installés localement correspondent exactement à ce parcours",
+    "availabilityNoInstalled": "Aucun paquet d’apprentissage installé localement ne correspond encore à ce parcours",
+    "availabilityPersonalReady": "La voix nécessaire au contenu personnel est configurée ; les ressources doivent encore être préparées",
+    "availabilityPersonalUnavailable": "La voix nécessaire au contenu personnel n’est pas encore configurée",
+    "availabilityNote": "La création d’un parcours ne signifie pas que les ressources d’apprentissage sont prêtes"
   },
   "libraryBackup": {
     "title": "Sauvegarde et restauration",

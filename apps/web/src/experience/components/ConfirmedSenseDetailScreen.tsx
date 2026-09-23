@@ -1,5 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { uiText } from '../../i18n/uiText';
+import {interfaceLanguageDisplayName} from '../../i18n/languageDisplayName';
+import {resolveInterfaceLocale} from '../../i18n/localeRegistry';
 /**
  * Read-only endpoint for Meaning Formation.
  *
@@ -57,9 +59,6 @@ const expressionTypeLabels = {
   get sentence() { return uiText('sentence'); },
   get utterance_strategy() { return uiText('expressionStrategy'); },
 } as const;
-
-const languageLabel = (languageTag: string): string =>
-  languageTag === 'en' ? uiText('english') : languageTag;
 
 const shortId = (id: string): string => id.split('-')[0].toUpperCase();
 
@@ -155,6 +154,8 @@ const SenseSpec = ({
 );
 
 const BindingSummary = ({ alignment }: { alignment: JourneyAlignmentView }) => {
+  const {i18n}=useTranslation();
+  const locale=resolveInterfaceLocale(i18n.resolvedLanguage??i18n.language);
   const hasBindings = alignment.confirmedBindings.length > 0;
   return (
     <section className={`rounded-card border bg-surface-panel p-5 shadow-raised ${hasBindings ? 'border-border-strong' : 'border-border-subtle'}`} aria-labelledby="csd-binding-heading">
@@ -171,7 +172,7 @@ const BindingSummary = ({ alignment }: { alignment: JourneyAlignmentView }) => {
             <li className="rounded-control border border-border-subtle bg-accent-soft p-4" key={binding.bindingVersionId}>
               <div className="flex flex-wrap items-baseline gap-2">
                 <strong className="font-language text-lg text-fg-primary">{binding.surfaceForm}</strong>
-                <span className="text-metadata text-fg-secondary">{expressionTypeLabels[binding.expressionType]} · {languageLabel(binding.languageTag)}</span>
+                <span className="text-metadata text-fg-secondary">{expressionTypeLabels[binding.expressionType]} · {interfaceLanguageDisplayName(binding.languageTag,locale)}</span>
               </div>
               <small className="mt-2 block text-metadata text-fg-secondary">{relationLabels[binding.relation]} · {coverageLabels[binding.semanticCoverage]}</small>
             </li>

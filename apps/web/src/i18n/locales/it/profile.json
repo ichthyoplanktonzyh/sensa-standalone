@@ -73,7 +73,12 @@
     "resumeLabel": "Riprendi il percorso {{language}}",
     "archived": "Percorsi archiviati",
     "restore": "Ripristina",
-    "saved": "Percorsi linguistici salvati."
+    "saved": "Percorsi linguistici salvati.",
+    "availabilityInstalled": "{{count}} pacchetti di apprendimento installati in locale corrispondono esattamente a questo percorso",
+    "availabilityNoInstalled": "Nessun pacchetto di apprendimento installato in locale corrisponde ancora a questo percorso",
+    "availabilityPersonalReady": "La voce necessaria per i contenuti personali è configurata; le risorse devono ancora essere preparate",
+    "availabilityPersonalUnavailable": "La voce necessaria per i contenuti personali non è ancora configurata",
+    "availabilityNote": "La possibilità di creare un percorso non significa che le risorse di apprendimento siano pronte"
   },
   "libraryBackup": {
     "title": "Backup e ripristino",

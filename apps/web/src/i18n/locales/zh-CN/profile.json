@@ -71,7 +71,12 @@
     "resumeLabel": "恢复「{{language}}」路线",
     "archived": "已归档路线",
     "restore": "恢复",
-    "saved": "语言路线已保存。"
+    "saved": "语言路线已保存。",
+    "availabilityInstalled": "已有 {{count}} 个与此路线精确匹配的本机学习包",
+    "availabilityNoInstalled": "本机尚无与此路线匹配的学习包",
+    "availabilityPersonalReady": "个人内容所需语音已配置；实际资源仍需准备",
+    "availabilityPersonalUnavailable": "个人内容所需语音尚未配置",
+    "availabilityNote": "可创建路线不代表学习资源已就绪"
   },
   "libraryBackup": {
     "title": "本机库备份与恢复",

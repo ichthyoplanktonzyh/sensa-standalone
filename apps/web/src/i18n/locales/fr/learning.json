@@ -318,7 +318,7 @@
     "bindingStep": "Relier l’expression",
     "recallStep": "Retrouver le sens",
     "revealStep": "Vérifier l’expression",
-    "recallPrompt": "Comment exprimeriez-vous cela en anglais ?",
+    "recallPrompt": "Comment exprimeriez-vous cela dans la langue cible ?",
     "context": "Contexte",
     "packageScene": "Contexte du parcours",
     "myScene": "Ma scène",

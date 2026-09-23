@@ -1,19 +1,10 @@
 import {clientSpeechInputSchema,type ClientSpeechInput,type ClientSpeechMaterial,type ClientSpeechProvider} from './provider';
+import {edgeVoiceByLanguage} from './edgeVoiceCatalog';
 
 const TRUSTED_CLIENT_TOKEN='6A5AA1D4EAFF4E9FB37E23D68491D6F4';
 const EDGE_VERSION='143.0.3650.75';
 const EDGE_TTS_URL='wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1';
 const MAX_AUDIO_BYTES=2_000_000;
-const voiceByLanguage=new Map<string,{voice:string;locale:string}>([
- ['en',{voice:'en-US-JennyNeural',locale:'en-US'}],
- ['en-US',{voice:'en-US-JennyNeural',locale:'en-US'}],
- ['en-GB',{voice:'en-GB-SoniaNeural',locale:'en-GB'}],
- ['zh',{voice:'zh-CN-XiaoxiaoNeural',locale:'zh-CN'}],
- ['zh-CN',{voice:'zh-CN-XiaoxiaoNeural',locale:'zh-CN'}],
- ['zh-Hans',{voice:'zh-CN-XiaoxiaoNeural',locale:'zh-CN'}],
- ['ja',{voice:'ja-JP-NanamiNeural',locale:'ja-JP'}],
- ['ja-JP',{voice:'ja-JP-NanamiNeural',locale:'ja-JP'}],
-] as const);
 
 type SocketFactory=(url:string)=>WebSocket;
 type EdgeTtsDependencies=Readonly<{socket?:SocketFactory;clock?:()=>Date;randomId?:()=>string}>;
@@ -58,7 +49,7 @@ function dataUrl(chunks:readonly Uint8Array[],size:number){
 }
 
 async function synthesizeEdge(input:ClientSpeechInput,signal:AbortSignal,dependencies:EdgeTtsDependencies):Promise<ClientSpeechMaterial>{
- const selection=voiceByLanguage.get(input.languageTag);
+ const selection=edgeVoiceByLanguage.get(input.languageTag);
  if(!selection)throw Error('speech_language_unavailable');
  const randomId=dependencies.randomId??(()=>crypto.randomUUID());
  const now=dependencies.clock?.()??new Date();

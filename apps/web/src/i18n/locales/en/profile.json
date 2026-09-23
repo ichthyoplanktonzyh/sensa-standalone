@@ -72,7 +72,12 @@
     "resumeLabel": "Resume the {{language}} route",
     "archived": "Archived routes",
     "restore": "Restore",
-    "saved": "Language routes saved."
+    "saved": "Language routes saved.",
+    "availabilityInstalled": "{{count}} installed local learning packages match this route exactly",
+    "availabilityNoInstalled": "No installed local learning packages match this route yet",
+    "availabilityPersonalReady": "The voice needed for personal content is configured; resources still need to be prepared",
+    "availabilityPersonalUnavailable": "The voice needed for personal content is not configured yet",
+    "availabilityNote": "Being able to create a route does not mean its learning resources are ready"
   },
   "libraryBackup": {
     "title": "Backup & restore",

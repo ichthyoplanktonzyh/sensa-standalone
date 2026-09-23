@@ -318,7 +318,7 @@
     "bindingStep": "İfadeyi bağla",
     "recallStep": "Anlamı hatırla",
     "revealStep": "İfadeyi kontrol et",
-    "recallPrompt": "Bunu İngilizcede nasıl ifade ederdiniz?",
+    "recallPrompt": "Bunu hedef dilde nasıl ifade ederdiniz?",
     "context": "Bağlam",
     "packageScene": "Paket bağlamı",
     "myScene": "Sahnem",

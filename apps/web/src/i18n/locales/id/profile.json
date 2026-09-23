@@ -71,7 +71,12 @@
     "resumeLabel": "Lanjutkan rute {{language}}",
     "archived": "Rute yang diarsipkan",
     "restore": "Pulihkan",
-    "saved": "Rute bahasa disimpan."
+    "saved": "Rute bahasa disimpan.",
+    "availabilityInstalled": "{{count}} paket belajar yang terpasang di perangkat ini cocok persis dengan rute ini",
+    "availabilityNoInstalled": "Belum ada paket belajar yang terpasang di perangkat ini dan cocok dengan rute ini",
+    "availabilityPersonalReady": "Suara yang diperlukan untuk konten pribadi sudah dikonfigurasi; sumber dayanya masih perlu disiapkan",
+    "availabilityPersonalUnavailable": "Suara yang diperlukan untuk konten pribadi belum dikonfigurasi",
+    "availabilityNote": "Rute yang bisa dibuat belum tentu memiliki sumber belajar yang siap"
   },
   "libraryBackup": {
     "title": "Cadangkan & pulihkan",

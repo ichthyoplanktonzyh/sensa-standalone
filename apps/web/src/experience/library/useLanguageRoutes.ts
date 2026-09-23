@@ -3,6 +3,7 @@ import {useEffect,useRef,useState} from 'react';
 import {
   defaultSensaLanguageRoute,
   defaultSensaLanguageRouteCollection,
+  sensaLanguageForRole,
   sensaPinnedLanguageContext,
   type SensaLanguageLearningRoute,
   type SensaLanguageRouteCollection,
@@ -23,13 +24,24 @@ type Snapshot={
   collection:SensaLanguageRouteCollection;
   activeRoute:SensaLanguageLearningRoute;
   context:SensaFormalPinnedLanguageContext;
+  packageCounts:Record<string,number>;
+  speechConfiguredLanguages:string[];
+  availabilityLoaded:boolean;
   saved:boolean;
+};
+
+export type LanguageRouteAvailability={
+  installedPackageCount:number;
+  personalVoiceConfigured:boolean;
 };
 
 const defaultSnapshot:Snapshot={
   collection:defaultSensaLanguageRouteCollection,
   activeRoute:defaultSensaLanguageRoute,
   context:sensaPinnedLanguageContext(defaultSensaLanguageRoute),
+  packageCounts:{},
+  speechConfiguredLanguages:[],
+  availabilityLoaded:false,
   saved:false,
 };
 
@@ -40,13 +52,34 @@ export function useLanguageRoutes(){
   const [state,setState]=useState<Snapshot|null>(null);
   const [notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
   const mounted=useRef(true);
-  const refresh=async()=>{const next=await languageRoutesSnapshot();if(mounted.current)setState(next);};
+  const refreshGeneration=useRef(0);
+  const refresh=async()=>{
+    const generation=++refreshGeneration.current;
+    const [next,supplyModule,speechApi]=await Promise.all([
+      languageRoutesSnapshot(),
+      import('../../contentSupply/system/contentSupplySystem'),
+      import('../../data/library/speech/edgeVoiceCatalog'),
+    ]);
+    const {packages}=await supplyModule.contentSupplySystem.read({kind:'workspace'});
+    const packageCounts:Record<string,number>={};
+    for(const {bundle} of packages){
+      const key=JSON.stringify([bundle.targetLanguage,bundle.supportLanguage]);
+      packageCounts[key]=(packageCounts[key]??0)+1;
+    }
+    const speechConfiguredLanguages=sensaLanguageForRole('target').map(({tag})=>tag).filter(tag=>speechApi.defaultClientSpeechConfiguredFor(tag));
+    if(mounted.current&&generation===refreshGeneration.current)setState({...next,packageCounts,speechConfiguredLanguages,availabilityLoaded:true});
+  };
   useEffect(()=>{
+    let active=true;
     mounted.current=true;
-    const read=()=>void refresh().catch(()=>setNotice(localFlowText('languageReadFailed')));
+    const read=()=>void refresh().catch(()=>{if(active&&mounted.current)setNotice(localFlowText('languageReadFailed'));});
     read();
     const stop=observeLibrary(read,['settings','meta']);
-    return()=>{mounted.current=false;stop();};
+    let stopSupply:(()=>void)|null=null;
+    void import('../../contentSupply/system/contentSupplySystem').then(({contentSupplySystem})=>{
+      if(active&&mounted.current)stopSupply=contentSupplySystem.subscribe({kind:'workspace'},read);
+    }).catch(()=>{if(active&&mounted.current)setNotice(localFlowText('languageReadFailed'));});
+    return()=>{active=false;mounted.current=false;stop();stopSupply?.();};
   },[]);
   const perform=async<T,>(work:()=>Promise<T>)=>{
     setBusy(true);setNotice('');
@@ -55,8 +88,13 @@ export function useLanguageRoutes(){
     finally{setBusy(false);}
   };
   const snapshot=state??defaultSnapshot;
+  const availabilityFor=(targetLanguageTag:string,supportLanguageTag:string):LanguageRouteAvailability|undefined=>snapshot.availabilityLoaded?{
+    installedPackageCount:snapshot.packageCounts[JSON.stringify([targetLanguageTag,supportLanguageTag])]??0,
+    personalVoiceConfigured:snapshot.speechConfiguredLanguages.includes(targetLanguageTag),
+  }:undefined;
   return {
     ...snapshot,
+    availabilityFor,
     busy,
     notice:localFlowNotice(notice),
     refresh,

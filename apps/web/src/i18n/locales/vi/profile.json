@@ -71,7 +71,12 @@
     "resumeLabel": "Tiếp tục lộ trình {{language}}",
     "archived": "Lộ trình đã lưu trữ",
     "restore": "Khôi phục",
-    "saved": "Đã lưu lộ trình ngôn ngữ."
+    "saved": "Đã lưu lộ trình ngôn ngữ.",
+    "availabilityInstalled": "Có {{count}} gói học tập được cài trên thiết bị khớp chính xác với lộ trình này",
+    "availabilityNoInstalled": "Chưa có gói học tập nào được cài trên thiết bị khớp với lộ trình này",
+    "availabilityPersonalReady": "Giọng đọc cần cho nội dung cá nhân đã được cấu hình; tài nguyên thực tế vẫn cần chuẩn bị",
+    "availabilityPersonalUnavailable": "Giọng đọc cần cho nội dung cá nhân chưa được cấu hình",
+    "availabilityNote": "Tạo được lộ trình không có nghĩa là tài nguyên học tập đã sẵn sàng"
   },
   "libraryBackup": {
     "title": "Sao lưu và khôi phục",
