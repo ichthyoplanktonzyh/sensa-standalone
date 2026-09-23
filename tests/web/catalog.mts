@@ -9,8 +9,10 @@ export const webTestRisks = [
 ] as const;
 export type WebTestRisk = (typeof webTestRisks)[number];
 
-export const webTestEnvironments = ['node', 'built-web-artifact'] as const;
+export const webTestEnvironments = ['node', 'built-web-artifact', 'browser-postgres'] as const;
 export type WebTestEnvironment = (typeof webTestEnvironments)[number];
+
+export const defaultWebTestEnvironments = ['node', 'built-web-artifact'] as const satisfies readonly WebTestEnvironment[];
 
 export type WebTestCatalogEntry = Readonly<{
   id: string;
@@ -33,7 +35,6 @@ export const webTestCatalog = [
     kind: 'contract',
     risks: ['local-correctness'],
     environment: 'node',
-    legacyEntrypoint: 'scripts/sensaLearningSystemBoundarySmoke.mts',
   },
   {
     id: 'content-supply-authority',
@@ -41,7 +42,6 @@ export const webTestCatalog = [
     kind: 'contract',
     risks: ['local-correctness'],
     environment: 'node',
-    legacyEntrypoint: 'scripts/sensaContentSupplyAuthoritySmoke.mts',
   },
   {
     id: 'learner-projection-boundary',
@@ -49,7 +49,6 @@ export const webTestCatalog = [
     kind: 'contract',
     risks: ['local-correctness'],
     environment: 'node',
-    legacyEntrypoint: 'scripts/sensaLearnerProjectionBoundarySmoke.mts',
   },
   {
     id: 'library-convergence-world',
@@ -57,6 +56,13 @@ export const webTestCatalog = [
     kind: 'integration',
     risks: ['local-correctness', 'durability', 'convergence'],
     environment: 'node',
+  },
+  {
+    id: 'library-cloud-convergence',
+    file: 'tests/web/integration/library-cloud-convergence.test.mts',
+    kind: 'integration',
+    risks: ['local-correctness', 'durability', 'convergence'],
+    environment: 'browser-postgres',
   },
   {
     id: 'personal-semantic-world-merge',

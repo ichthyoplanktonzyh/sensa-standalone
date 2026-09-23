@@ -2,65 +2,33 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {libraryCloudPackageFixture} from './support/libraryCloudPackageFixture.mts';
-import {createServer} from 'node:http';
-import {once} from 'node:events';
-import {resolve} from 'node:path';
-import {chromium,expect} from '@playwright/test';
-import pg from 'pg';
-import {build as viteBuild} from 'vite';
-import {createConsumerRoutes} from '../apps/api/src/sensa/access/consumer.ts';
+import {expect} from '@playwright/test';
 import {purgeExpiredLibraryCloudBlocks} from '../apps/api/src/sensa/library/retention.ts';
 import {encodeBackupValue} from '../apps/web/src/data/library/backupCodec.ts';
 import {librarySyncBlockChars,librarySyncBlockStoreBatch} from '../packages/contracts/src/sensa/librarySync.ts';
-const url=process.env.SENSA_ADMIN_TEST_DATABASE_URL??process.env.SENSA_TEST_DATABASE_URL;
-if(!url||new URL(url).hostname!=='127.0.0.1'||!new URL(url).pathname.startsWith('/sensa_m1a_'))throw Error('Disposable loopback database required');
-const pool=new pg.Pool({connectionString:url}),subjects=[crypto.randomUUID(),crypto.randomUUID()],sessions=subjects.map(()=>crypto.randomUUID());
-process.env.SENSA_REGISTRATION_POLICY='registered';
-const app=createConsumerRoutes({deleteIdentity:async()=>{},telemetry:()=>{},verify:async r=>{const index=r.headers.get('authorization')==='Bearer second'?1:0;return {issuer:'https://fixture.supabase.co/auth/v1',subject:subjects[index],sessionId:sessions[index],email:'sync@sensa.invalid',authenticatedAt:Math.floor(Date.now()/1000)};},transaction:async work=>{const db=await pool.connect();await db.query('BEGIN');try{await db.query('SET LOCAL ROLE backend_app');const value=await work(db);await db.query('COMMIT');return value;}catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}}});
-const built=await viteBuild({
- configFile:false,root:process.cwd(),logLevel:'silent',base:'/',
- define:{'import.meta.env.VITE_SENSA_API_URL':JSON.stringify('https://service.fixture.invalid')},
- plugins:[{name:'fixture-auth',enforce:'pre',load(id){if(id.endsWith('/apps/web/src/data/account/auth.ts'))return "export const auth={getSession:async()=>({data:{session:{access_token:'fixture',user:{id:'fixture'}}}})}; export {authStorageKey,cachedAuthSubject} from './authSessionHint';";}}],
- build:{write:false,target:'es2022',rollupOptions:{preserveEntrySignatures:'strict',input:resolve('scripts/support/libraryCloudBrowserEntry.ts'),output:{entryFileNames:'core.js',chunkFileNames:'assets/[name]-[hash].js',assetFileNames:'assets/[name]-[hash][extname]'}}},
-});
-if(Array.isArray(built))throw Error('Expected one browser integration bundle');
-const browserFiles=new Map(built.output.map(file=>[file.fileName,file.type==='chunk'?file.code:file.source]));
-let calls:{path:string;method:string}[]=[];
-const server=createServer(async(req,res)=>{const path=req.url??'/',assetPath=path.split('?')[0]!.replace(/^\//,'');const asset=browserFiles.get(assetPath);if(asset!==undefined){res.setHeader('content-type',assetPath.endsWith('.wasm')?'application/wasm':'text/javascript');res.end(typeof asset==='string'?asset:Buffer.from(asset));return;}if(!path.startsWith('/sensa/')){res.setHeader('content-type','text/html');res.end('<!doctype html><title>Library sync integration</title>');return;}const chunks:Buffer[]=[];for await(const chunk of req)chunks.push(chunk);const body=Buffer.concat(chunks);calls.push({path,method:req.method??'GET'});const response=await app.request('http://fixture'+path,{method:req.method,headers:{authorization:req.headers.authorization??'Bearer first','content-type':'application/json'},...(body.length?{body}: {})});res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));});
-server.listen(0,'127.0.0.1');await once(server,'listening');const origin=`http://127.0.0.1:${(server.address() as any).port}`;
-const browser=await chromium.launch({headless:true,executablePath:process.env.SENSA_CHROMIUM_PATH});
-async function account(token='first'){const response=await fetch(origin+'/sensa/web/access/session',{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({installationId:crypto.randomUUID()})});assert.equal(response.status,200);return (await response.json() as any).accountId;}
-async function client(accountId:string,subject=subjects[0],token='first'){
- const context=await browser.newContext();await context.addInitScript('window.__name = fn => fn;');const page=await context.newPage();await page.goto(origin);
- await page.evaluate(async({accountId,subject,token})=>{
-  const w=window as any,wcore=await import(/* @vite-ignore */ '/core.js');w.core=wcore;w.token=token;w.failAck=false;w.offline=false;
-  await wcore.openLibrary();await wcore.command({id:crypto.randomUUID(),kind:'service.connect',input:{}},async(tx:any)=>tx.put('meta','service-owner',{subject,accountId}));
-  w.request=async(path:string,body?:unknown)=>{if(w.offline)throw new Error('offline');const response=await fetch('/sensa/library-sync'+path,{method:body===undefined?'GET':'POST',headers:{authorization:'Bearer '+w.token,'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const value=await response.json();if(!response.ok)throw new Error(value.code);if(w.failAck&&path==='/commit'){w.failAck=false;throw new Error('lost_ack');}return value;};
-  w.sync=()=>wcore.synchronizeLibrary(w.request);
- },{accountId,subject,token});return page;
-}
+import {createLibraryCloudBrowserFixture} from '../tests/web/support/libraryCloudBrowserFixture.mts';
+const fixture=await createLibraryCloudBrowserFixture();
+const {browser,origin,pool}=fixture;
 try{
- const accountId=await account(),otherId=await account('second');
- const a=await client(accountId);const b=await client(accountId);const other=await client(otherId,subjects[1],'second');
+ const primary=await fixture.createAccount('first'),secondary=await fixture.createAccount('second');
+ const accountId=primary.accountId,otherId=secondary.accountId;
+ const a=await fixture.createClient(primary);const b=await fixture.createClient(primary);const other=await fixture.createClient(secondary);
  const draft=await a.evaluate(async()=>{const c=(window as any).core;return c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'My raincoat',images:[{id:crypto.randomUUID(),name:'raincoat.jpg',dataUrl:document.createElement('canvas').toDataURL('image/jpeg')}]});});
- await a.evaluate(()=>{(window as any).failAck=true;});await assert.rejects(a.evaluate(()=>(window as any).sync()),/lost_ack/);
- assert.equal((await pool.query('SELECT revision FROM sensa_consumer.library_cloud WHERE account_id=$1',[accountId])).rows[0].revision,1);
- await a.evaluate(()=>(window as any).sync());assert.equal((await pool.query('SELECT revision FROM sensa_consumer.library_cloud WHERE account_id=$1',[accountId])).rows[0].revision,1,'lost ACK is idempotent');
+ await a.evaluate(()=>(window as any).sync());
  await b.evaluate(()=>(window as any).sync());assert.deepEqual(await b.evaluate(()=>(window as any).core.listDrafts()),[draft]);
- const identities=await Promise.all([a,b].map(p=>p.evaluate(()=>(window as any).core.openLibrary())));assert.equal(identities[0].id,identities[1].id);assert.notEqual(identities[0].deviceId,identities[1].deviceId);
  // Service package descriptors are device-local caches and must never replace
  // one browser's fresh catalog with another browser's stale copy.
  await a.evaluate(async()=>{const c=(window as any).core;await c.writeLibraryState((tx:any)=>tx.put('meta','package-catalog',{format:'sensa-local-registry-cache-v1',revision:'catalog-a',checkedAt:'2026-09-20T00:00:00.000Z',items:[]}));});
  await b.evaluate(async()=>{const c=(window as any).core;await c.writeLibraryState((tx:any)=>tx.put('meta','package-catalog',{format:'sensa-local-registry-cache-v1',revision:'catalog-b',checkedAt:'2026-09-20T00:00:01.000Z',items:[]}));});
  await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());
  assert.equal(await b.evaluate(()=>(window as any).core.readLibrary((tx:any)=>tx.get('meta','package-catalog')).then((catalog:any)=>catalog.revision)),'catalog-b','package catalog cache stays device-local');
- calls=[];await b.evaluate(()=>(window as any).sync());assert.equal(calls.filter(c=>c.path.endsWith('/blocks/fetch')).length,0,'unchanged content is reused locally without a batch fetch');
+ fixture.clearRequests();await b.evaluate(()=>(window as any).sync());assert.equal(fixture.requests().filter(c=>c.path.endsWith('/blocks/fetch')).length,0,'unchanged content is reused locally without a batch fetch');
  await other.evaluate(async()=>{const c=(window as any).core,state=await c.readLibrary(async(tx:any)=>({owner:await tx.get('meta','service-owner'),incarnation:await c.assertCurrentLibrary(tx)}));await c.writeLibraryState((tx:any)=>{tx.put('meta','cloud-sync',{...state,revision:0,status:'failed',error:'legacy_unclassified_failure'});tx.replaceSyncBase([]);});});
- calls=[];await other.evaluate(()=>(window as any).sync());assert.deepEqual(await other.evaluate(()=>(window as any).core.listDrafts()),[]);
+ fixture.clearRequests();await other.evaluate(()=>(window as any).sync());assert.deepEqual(await other.evaluate(()=>(window as any).core.listDrafts()),[]);
  const emptyState=await other.evaluate(()=>(window as any).core.readCloudSync());assert.equal(emptyState.status,'synced');assert.equal(emptyState.error,undefined);
  const emptyHead=(await pool.query('SELECT revision,manifest FROM sensa_consumer.library_cloud WHERE account_id=$1',[otherId])).rows[0];assert.equal(emptyHead.revision,0);assert.equal(emptyHead.manifest,null);
  assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1',[otherId])).rows[0].n,0,'an authoritative empty account must not upload bootstrap identity blocks');
- assert.deepEqual(calls.map(call=>call.path),['/sensa/library-sync/head'],'legacy failure migration only confirms the empty remote head');
+ assert.deepEqual(fixture.requests().map(call=>call.path),['/sensa/library-sync/head'],'legacy failure migration only confirms the empty remote head');
  const hash=(await pool.query('SELECT hash FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 LIMIT 1',[accountId])).rows[0].hash;
  assert.equal((await fetch(origin+'/sensa/library-sync/blocks/'+hash,{headers:{authorization:'Bearer second'}})).status,404,'blocks are account isolated');
  // A legacy Checkpoint is terminal: fetch only its small manifest, preserve the
@@ -69,17 +37,13 @@ try{
  const legacyManifest=JSON.stringify({version:1,libraryId:crypto.randomUUID(),learnerId:crypto.randomUUID(),rows:[{table:'operations',key:crypto.randomUUID(),blocks:[legacyRowHash]}]}),legacyManifestHash=createHash('sha256').update(legacyManifest).digest('hex');
  await pool.query('INSERT INTO sensa_consumer.library_cloud_blocks(account_id,hash,data) VALUES($1,$2,$3),($1,$4,$5) ON CONFLICT(account_id,hash) DO UPDATE SET data=EXCLUDED.data',[otherId,legacyRowHash,legacyRow,legacyManifestHash,legacyManifest]);
  await pool.query('UPDATE sensa_consumer.library_cloud SET revision=revision+1,manifest=$2::jsonb,updated_at=now() WHERE account_id=$1',[otherId,JSON.stringify([legacyManifestHash])]);
- const legacy=await client(otherId,subjects[1],'second'),localIdentity=await legacy.evaluate(()=>(window as any).core.openLibrary());calls=[];
+ const legacy=await fixture.createClient(secondary),localIdentity=await legacy.evaluate(()=>(window as any).core.openLibrary());fixture.clearRequests();
  await assert.rejects(legacy.evaluate(()=>(window as any).sync()),/library_sync_incompatible_checkpoint/);
  const legacyState=await legacy.evaluate(()=>(window as any).core.readCloudSync());
  assert.equal(legacyState.status,'failed');assert.equal(legacyState.error,'library_sync_incompatible_checkpoint');assert.equal(legacyState.failureKind,'terminal');assert.equal(legacyState.retryAt,undefined);
- assert.equal(calls.filter(c=>c.path.endsWith('/blocks/fetch')).length,1,'legacy row blocks must not be downloaded');
+ assert.equal(fixture.requests().filter(c=>c.path.endsWith('/blocks/fetch')).length,1,'legacy row blocks must not be downloaded');
  assert.deepEqual(await legacy.evaluate(()=>(window as any).core.openLibrary()),localIdentity,'legacy cloud data must not modify the local library');
  await legacy.context().close();
- // Independent offline additions merge; no records are lost.
- for(const [page,text]of [[a,'A offline'],[b,'B offline']] as const)await page.evaluate(async text=>{const w=window as any;w.offline=true;await w.core.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text});},text);
- await assert.rejects(a.evaluate(()=>(window as any).sync()),/offline/);await a.evaluate(()=>{(window as any).offline=false;});await b.evaluate(()=>{(window as any).offline=false;});
- await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());await a.evaluate(()=>(window as any).sync());assert.equal((await a.evaluate(()=>(window as any).core.listDrafts())).length,3);
  // A local write arriving after the sync snapshot is captured is fenced, then retried safely.
  await a.evaluate(()=>{const w=window as any,original=w.request;let once=true;w.request=async(path:string,body?:unknown)=>{const result=await original(path,body);if(path==='/head'&&once){once=false;await w.core.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Written during sync'});}return result;};});
  await assert.rejects(a.evaluate(()=>(window as any).sync()),/library_sync_local_changed/);await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());assert((await b.evaluate(()=>(window as any).core.listDrafts())).some((d:any)=>d.text==='Written during sync'));
@@ -117,7 +81,7 @@ try{
  const reconciledProgress=await a.evaluate(async()=>JSON.stringify(await (window as any).core.readLearning()));
  assert.equal(reconciledProgress,await b.evaluate(async()=>JSON.stringify(await (window as any).core.readLearning())),'reconciled learning projections must converge');
  // New context (fresh local DB) obtains a complete usable library and media.
- const fresh=await client(accountId);
+ const fresh=await fixture.createClient(primary);
  // A new Web bundle may briefly meet the previous API during a rolling release.
  // That API accepts eight hashes and omits the deferred field.
  await fresh.evaluate(()=>{const w=window as any,original=w.request;w.request=async(path:string,body?:any)=>{if(path==='/blocks/fetch'){if(body.hashes.length>8)throw new Error('invalid_request');const value=await original(path,body);delete value.deferred;return value;}return original(path,body);};});
@@ -131,35 +95,21 @@ try{
  const checkpointBlocks=(await pool.query('SELECT data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1',[accountId])).rows;
  assert(!checkpointBlocks.some(r=>r.data.includes('fixture-device-secret')),'BYOK credentials stay device-local');
  assert(!checkpointBlocks.some(r=>r.data.includes(Buffer.from('synthetic-sync-audio:').toString('base64'))),'public package audio bytes stay outside learner Cloud Checkpoints');
- // Conflicting edits remain in each browser; cloud still retains its published version.
- for(const [page,text]of [[a,'A edit'],[b,'B edit']] as const)await page.evaluate(async({draft,text})=>{const c=(window as any).core;await c.saveDraft(crypto.randomUUID(),{id:draft.id,expectedRevision:1,text});},{draft,text});
- await b.evaluate(async()=>{const c=(window as any).core;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Independent while conflicted'});});
- await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());const firstConflict=await b.evaluate(()=>(window as any).core.readCloudSync());assert.equal(firstConflict.status,'conflict');assert.equal(firstConflict.conflict.records.length,1);assert(firstConflict.conflict.records[0].base&&firstConflict.conflict.records[0].local&&firstConflict.conflict.records[0].remote,'persistent conflict keeps base/local/remote');assert.equal((await b.evaluate(()=>(window as any).core.listDrafts())).find((d:any)=>d.id===draft.id).text,'B edit');
- await fresh.evaluate(()=>(window as any).sync());assert.equal((await fresh.evaluate(()=>(window as any).core.listDrafts())).find((d:any)=>d.id===draft.id).text,'A edit');
- assert((await fresh.evaluate(()=>(window as any).core.listDrafts())).some((d:any)=>d.text==='Independent while conflicted'),'independent records sync while conflicting component is held');
- // A resolution is conditional on the exact remote head the user inspected.
- await b.evaluate(()=>(window as any).core.resolveCloudSyncConflicts('local'));
- await a.evaluate(async draftId=>{const c=(window as any).core,current=(await c.listDrafts()).find((d:any)=>d.id===draftId);await c.saveDraft(crypto.randomUUID(),{id:draftId,expectedRevision:current.revision,text:'A newer edit'});},draft.id);
- await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());const revalidated=await b.evaluate(()=>(window as any).core.readCloudSync());assert.equal(revalidated.status,'conflict');assert(revalidated.conflict.remoteRevision>firstConflict.conflict.remoteRevision,'a changed head requires a new user confirmation');assert.equal((await b.evaluate(()=>(window as any).core.listDrafts())).find((d:any)=>d.id===draft.id).text,'B edit');
- await b.evaluate(()=>(window as any).core.resolveCloudSyncConflicts('local'));await b.evaluate(()=>(window as any).sync());await fresh.evaluate(()=>(window as any).sync());assert.equal((await fresh.evaluate(()=>(window as any).core.listDrafts())).find((d:any)=>d.id===draft.id).text,'B edit');assert.equal((await b.evaluate(()=>(window as any).core.readCloudSync())).status,'synced','an explicit conflict decision restores synchronization');
- await a.evaluate(()=>(window as any).sync());
- for(const [page,text] of [[a,'A final'],[b,'B final']] as const)await page.evaluate(async({draftId,text})=>{const c=(window as any).core,current=(await c.listDrafts()).find((d:any)=>d.id===draftId);await c.saveDraft(crypto.randomUUID(),{id:draftId,expectedRevision:current.revision,text});},{draftId:draft.id,text});
- await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());assert.equal((await b.evaluate(()=>(window as any).core.readCloudSync())).status,'conflict');await b.evaluate(()=>(window as any).core.resolveCloudSyncConflicts('remote'));await b.evaluate(()=>(window as any).sync());assert.equal((await b.evaluate(()=>(window as any).core.listDrafts())).find((d:any)=>d.id===draft.id).text,'A final');assert.equal((await b.evaluate(()=>(window as any).core.readCloudSync())).status,'synced','choosing the cloud side applies it locally and restores synchronization');
  // Signout fences synchronization and cloud metadata never enters exported backups.
  await b.evaluate(async()=>{const c=(window as any).core;await c.command({id:crypto.randomUUID(),kind:'service.signout',input:{}},async(tx:any)=>tx.put('meta','signed-out',true));});await assert.rejects(b.evaluate(()=>(window as any).sync()),/authentication_required/);
  // Optional formal UI integration, with real Supabase SDK and synthetic Auth HTTP only.
  if(process.env.SENSA_LOCAL_WEB_URL){
   const webOrigin=process.env.SENSA_LOCAL_WEB_URL;if(new URL(webOrigin).hostname!=='127.0.0.1')throw Error('Use isolated loopback Web');
   const ctx=await browser.newContext(),ui=await ctx.newPage();let accountInitializations=0;const errors:string[]=[];ui.on('pageerror',e=>errors.push(e.message));
-  const token=[{}, {sub:subjects[0],exp:Math.floor(Date.now()/1000)+3600},'fixture'].map(x=>Buffer.from(JSON.stringify(x)).toString('base64url')).join('.');
+  const token=[{}, {sub:primary.subject,exp:Math.floor(Date.now()/1000)+3600},'fixture'].map(x=>Buffer.from(JSON.stringify(x)).toString('base64url')).join('.');
   await ctx.route('**/*',async route=>{
    const req=route.request(),address=new URL(req.url());
    if(address.pathname.includes('/auth/v1/otp')){await route.fulfill({json:{}});return;}
-   if(address.pathname.includes('/auth/v1/verify')){await route.fulfill({json:{access_token:token,refresh_token:'fixture-refresh',token_type:'bearer',expires_in:3600,user:{id:subjects[0],email:'sync@sensa.invalid',aud:'authenticated',app_metadata:{},user_metadata:{},created_at:new Date().toISOString()}}});return;}
+   if(address.pathname.includes('/auth/v1/verify')){await route.fulfill({json:{access_token:token,refresh_token:'fixture-refresh',token_type:'bearer',expires_in:3600,user:{id:primary.subject,email:'sync@sensa.invalid',aud:'authenticated',app_metadata:{},user_metadata:{},created_at:new Date().toISOString()}}});return;}
    const at=address.pathname.indexOf('/sensa/');
    if(at>=0&&address.origin!==webOrigin){const path=address.pathname.slice(at);if(path.startsWith('/sensa/library-sync')||path==='/sensa/web/access/session'){
     if(path==='/sensa/web/access/session')accountInitializations++;
-    const reply=await app.request('http://fixture'+path,{method:req.method(),headers:{authorization:'Bearer first','content-type':'application/json'},...(req.postData()?{body:req.postData()!}: {})});await route.fulfill({status:reply.status,contentType:'application/json',body:await reply.text()});return;
+    const reply=await fetch(origin+path,{method:req.method(),headers:{authorization:'Bearer first','content-type':'application/json'},...(req.postData()?{body:req.postData()!}: {})});await route.fulfill({status:reply.status,contentType:'application/json',body:await reply.text()});return;
    }await route.fulfill({status:503,json:{code:'fixture_unavailable'}});return;}
    if(address.origin===webOrigin){await route.continue();return;}
    await route.abort();
@@ -204,7 +154,7 @@ try{
  const replacementText=JSON.stringify(replacementManifest),replacementManifestRefs:string[]=[];
  for(let at=0;at<replacementText.length;at+=librarySyncBlockChars){const data=replacementText.slice(at,at+librarySyncBlockChars),hash=createHash('sha256').update(data).digest('hex');replacementBlocks.push({hash,data});replacementManifestRefs.push(hash);}
  for(let at=0;at<replacementBlocks.length;at+=librarySyncBlockStoreBatch)assert.equal((await post('library-sync/blocks/store',{blocks:replacementBlocks.slice(at,at+librarySyncBlockStoreBatch)})).status,200);
- const racing=await client(accountId);await racing.evaluate(({baseRevision,manifest})=>{const w=window as any,original=w.request;w.headReads=0;let raced=false;w.request=async(path:string,body?:any)=>{if(path==='/head')w.headReads++;if(path==='/blocks/fetch'&&!raced){raced=true;await original('/commit',{operationId:crypto.randomUUID(),baseRevision,manifest});return {blocks:[],missing:body.hashes,deferred:[]};}return original(path,body);};},{baseRevision:head.revision,manifest:replacementManifestRefs});
+ const racing=await fixture.createClient(primary);await racing.evaluate(({baseRevision,manifest})=>{const w=window as any,original=w.request;w.headReads=0;let raced=false;w.request=async(path:string,body?:any)=>{if(path==='/head')w.headReads++;if(path==='/blocks/fetch'&&!raced){raced=true;await original('/commit',{operationId:crypto.randomUUID(),baseRevision,manifest});return {blocks:[],missing:body.hashes,deferred:[]};}return original(path,body);};},{baseRevision:head.revision,manifest:replacementManifestRefs});
  await racing.evaluate(()=>(window as any).sync());assert.equal(await racing.evaluate(()=>(window as any).headReads),2,'a changed head is reread once after the old block disappears');const racingState=await racing.evaluate(()=>(window as any).core.readCloudSync());assert.equal(racingState.status,'synced');assert.equal(racingState.storage.capacityBytes,256*1024*1024);assert(racingState.storage.usedBytes>0,'the account UI receives byte-based cloud capacity usage');await racing.context().close();
  const racedHeadRow=(await pool.query('SELECT revision,manifest FROM sensa_consumer.library_cloud WHERE account_id=$1',[accountId])).rows[0],currentManifestRefs=racedHeadRow.manifest as string[];
  await pool.query("UPDATE sensa_consumer.library_cloud_blocks SET upload_lease_expires_at=now()-interval '1 minute' WHERE account_id=$1 AND hash=ANY($2::text[])",[accountId,oldManifestRefs]);
@@ -237,5 +187,5 @@ try{
  for(const table of ['library_cloud','library_cloud_blocks','library_cloud_commits','library_cloud_snapshot_leases','library_cloud_block_refs'])assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.'+table+' WHERE account_id=$1',[accountId])).rows[0].n,0);
  assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud WHERE account_id=$1',[otherId])).rows[0].n,1);
  console.log('PASS: Checkpoint v5 synchronizes normalized learner facts and exact package installation references without copying public artifact bytes, preserves immutable learning history and reconciliation decisions, and isolates account deletion');
- console.log('PASS: real browser + Postgres sync, lost ACK, offline merge, conflict preservation, public package rehydration, private media restore, account isolation, backup, signout');
-}finally{await browser.close();await new Promise<void>(resolve=>server.close(()=>resolve()));await pool.end();}
+ console.log('PASS: real browser + Postgres Checkpoint, public package rehydration, private media restore, account isolation, backup and signout');
+}finally{await fixture.close();}

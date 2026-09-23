@@ -364,17 +364,23 @@ npm run test:web:foundation -- --list
 npm run test:web:foundation -- --kind=contract
 npm run test:web:foundation -- --risk=convergence
 npm run test:web:foundation -- --environment=built-web-artifact
+SENSA_TEST_DATABASE_URL=postgresql://... npm run test:web:db
 ```
 
 `built-web-artifact` 选择器读取生产构建产物，单独运行前先执行 `npm run build`；`npm run check` 已按此顺序执行。
+`browser-postgres` 使用真实 Chromium、OPFS、本地 Hono 路由和一次性 PostgreSQL，只在显式选择或 `npm run test:db`
+时运行，不进入无数据库依赖的默认结构化基线。
 
 `tests/web/catalog.mts` 是迁移期间的可执行分类入口。已收编的旧检查仍可从原 `scripts/sensa*Smoke.*` 路径单独运行，
 但 `test:fast` 不重复执行它们；原生结构化测试没有旧入口。后续只有在不改变验证语义时才把旧断言移动到所属模块附近。
+断言完成原生迁移并通过对应验证后，必须在同一改动中删除旧脚本和 catalog 的 `legacyEntrypoint`，不长期维护双轨测试。
 
 `tests/web/support/libraryConvergenceWorld.mts` 通过一个小型测试 Interface 封装每台设备的 confirmed base、当前
 本地快照、云端发布、领域 Replica Module 合并与冲突分区。场景只提交领域有效快照、指定同步顺序，并可在确定时点
 注入 offline 或 lost-ack；它用于快速证明重试、幂等、显式冲突和最终收敛语义。该 Node Module 不证明网络传输、
 SQLite/OPFS、Service Worker 或 PostgreSQL 实现，这些仍由真实 Chromium 与隔离数据库测试负责。
+`tests/web/support/realLibraryConvergenceWorld.mts` 是后一类测试的浏览器驱动；它只通过真实保存、同步、冲突解决
+和可观察快照 Interface 操作系统，不直接修改 OPFS 或云端记录。
 
 Web 启动、账号恢复和空闲网络预算：
 

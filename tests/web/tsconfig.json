@@ -13,7 +13,14 @@
   "files": [
     "catalog.mts",
     "run.mts",
+    "support/sourceTree.mts",
+    "support/libraryCloudBrowserFixture.mts",
     "support/libraryConvergenceWorld.mts",
-    "convergence/library-convergence-world.test.mts"
+    "support/realLibraryConvergenceWorld.mts",
+    "convergence/library-convergence-world.test.mts",
+    "contracts/content-supply-authority.test.mts",
+    "contracts/learner-projection-boundary.test.mts",
+    "contracts/learning-system-boundary.test.mts",
+    "integration/library-cloud-convergence.test.mts"
   ]
 }

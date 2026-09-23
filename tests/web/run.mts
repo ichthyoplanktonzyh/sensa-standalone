@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  defaultWebTestEnvironments,
   webTestCatalog,
   webTestEnvironments,
   webTestKinds,
@@ -79,7 +80,11 @@ const selectedTests = (filters: Filters): readonly WebTestCatalogEntry[] => {
   return catalog.filter((entry) => (
     (filters.kind === undefined || entry.kind === filters.kind)
     && (filters.risk === undefined || entry.risks.includes(filters.risk))
-    && (filters.environment === undefined || entry.environment === filters.environment)
+    && (
+      filters.environment === undefined
+        ? defaultWebTestEnvironments.includes(entry.environment as (typeof defaultWebTestEnvironments)[number])
+        : entry.environment === filters.environment
+    )
   ));
 };
 

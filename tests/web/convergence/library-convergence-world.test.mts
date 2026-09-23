@@ -20,6 +20,18 @@ const note = (key: string, body: string, revision = 1): LibraryReplicaEntry => (
   }),
 });
 
+const sharedIdentity = (): LibraryReplicaEntry => ({
+  table: 'meta',
+  key: 'identity',
+  value: encodeBackupValue({
+    id: '10000000-0000-4000-8000-000000000001',
+    learnerId: '10000000-0000-4000-8000-000000000002',
+    deviceId: '10000000-0000-4000-8000-000000000003',
+    createdAt: '2026-09-23T00:00:00.000Z',
+    schemaVersion: 2,
+  }),
+});
+
 const upsert = (
   entries: readonly LibraryReplicaEntry[],
   replacement: LibraryReplicaEntry,
@@ -29,18 +41,25 @@ const upsert = (
 ];
 
 const bodies = (entries: readonly LibraryReplicaEntry[]): Record<string, string> => Object.fromEntries(
-  entries.map((entry) => [entry.key, (decodeBackupValue(entry.value) as { body: string }).body]),
+  entries
+    .filter((entry) => entry.table === 'annotations')
+    .map((entry) => [entry.key, (decodeBackupValue(entry.value) as { body: string }).body]),
 );
 
 test('[integration][durability][convergence] offline devices retry a lost acknowledgement and converge independent writes', () => {
-  const world = createLibraryConvergenceWorld({ base: [], deviceIds: ['device-a', 'device-b'] });
+  const base = [sharedIdentity()];
+  const world = createLibraryConvergenceWorld({ base, deviceIds: ['device-a', 'device-b'] });
   world.update('device-a', (entries) => upsert(entries, note('note-a', 'written on A')));
   world.update('device-b', (entries) => upsert(entries, note('note-b', 'written on B')));
 
   assert.equal(world.sync('device-a', { fault: 'lost-ack' }).status, 'lost-ack');
   let state = world.snapshot();
   assert.deepEqual(bodies(state.cloud), { 'note-a': 'written on A' }, 'the cloud committed before the acknowledgement was lost');
-  assert.deepEqual(state.devices['device-a']!.confirmedBase, [], 'the sender cannot confirm a response it never received');
+  assert.deepEqual(
+    state.devices['device-a']!.confirmedBase,
+    base,
+    'the sender cannot confirm a response it never received',
+  );
 
   assert.equal(world.sync('device-a').status, 'synced', 'retrying the same local state is idempotent');
   assert.equal(world.sync('device-b', { fault: 'offline' }).status, 'offline');
@@ -59,7 +78,10 @@ test('[integration][durability][convergence] offline devices retry a lost acknow
 
 test('[integration][local-correctness][convergence] explicit conflicts retain both branches while independent records converge', () => {
   const shared = note('shared', 'base');
-  const world = createLibraryConvergenceWorld({ base: [shared], deviceIds: ['device-a', 'device-b'] });
+  const world = createLibraryConvergenceWorld({
+    base: [sharedIdentity(), shared],
+    deviceIds: ['device-a', 'device-b'],
+  });
   world.update('device-a', (entries) => upsert(upsert(entries, note('shared', 'A edit', 2)), note('note-a', 'A addition')));
   world.update('device-b', (entries) => upsert(upsert(entries, note('shared', 'B edit', 2)), note('note-b', 'B addition')));
 
