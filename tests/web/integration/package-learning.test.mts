@@ -4,7 +4,7 @@ import {LearningPolicyProfileRegistry,learningPolicyProfileRegistry} from '../..
 import {assembleLightweightInitialPresentation} from '../../../apps/web/src/experience/learningRuntime/lightweightInitialPresentation.ts';
 import {LIGHTWEIGHT_EXPERIENCE_RECALL_STEP,LIGHTWEIGHT_EXPRESSION_REVEAL_STEP,localLightweightPhase} from '../../../apps/web/src/learning/runtime/lightweightInitialProtocol.ts';
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import {afterAll,test} from 'vitest';
 import {canonicalJsonDigest,stableUuid} from '@sensa/learning-kernel';
 import {defaultSensaLanguageRoute,librarySyncTables,sensaPinnedLanguageContext,sensaInitialLearningCompletionSchema,sensaSchedulingHandoffSchema,sensaMemoryOutcomeSnapshotSchema,sensaSchedulingDecisionSchema,sensaRelearningCompletionSchema,type SensaFormalPinnedLanguageContext} from '@sensa/contracts/sensa';
 import {provisionLightweightInitialContent} from '../../../apps/web/src/contentSupply/provisioning/lightweightInitialContent.ts';
@@ -20,7 +20,6 @@ import {addLanguageRoute,setActiveLanguageRoute} from '../../../apps/web/src/dat
 import {personalContentSystem} from '../../../apps/web/src/personalContent/system/index.ts';
 import {applyLocalProtocolTransition} from '../../../apps/web/src/data/library/learningSettlement.ts';
 import {libraryBackupTables} from '../../../apps/web/src/data/library/backupPolicy.ts';
-test('package learning preserves admission, settlement and Book update contracts',async(t)=>{
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined});
 assert(librarySyncTables.includes('packageInstallations'));assert.equal((librarySyncTables as readonly string[]).includes('packageCache'),false,'public artifact caches must be outside the Cloud Checkpoint contract');
 assert(libraryBackupTables.includes('packageInstallations'));assert.equal((libraryBackupTables as readonly string[]).includes('packageCache'),false,'public artifact caches must be outside encrypted account backups');
@@ -48,14 +47,13 @@ const bundle={format:'sensa-learning-package-v1',id:id(),version:'1',title:'åˆæ
 const bytes=new TextEncoder().encode(JSON.stringify(bundle));
 const descriptor={id:bundle.id,version:'1',title:bundle.title,description:'fixture',entryCount:1,byteLength:bytes.length,sha256:await sha256(bytes),url:'https://fixture.invalid/package.json'};
 const realFetch=globalThis.fetch;globalThis.fetch=async()=>new Response(bytes);
-try{
  let pack!:Awaited<ReturnType<typeof downloadPackage>>;
  let targetId:string|undefined;
  let target!:Awaited<ReturnType<typeof readLearning>>['targets'][number];
  let japaneseMaterialContent!:typeof entry.content;
  let japaneseContext!:SensaFormalPinnedLanguageContext;
  const at='2026-09-10T08:00:00.000Z';
- await t.test('download and installation reject bad artifacts while cache recovery stays local',async()=>{
+ test('download and installation reject bad artifacts while cache recovery stays local',async()=>{
  const cancelled=new AbortController();cancelled.abort();await assert.rejects(downloadPackage(descriptor,cancelled.signal,()=>{}));
  globalThis.fetch=async()=>new Response(bytes.slice(0,bytes.length-1));await assert.rejects(downloadPackage(descriptor,new AbortController().signal,()=>{}));globalThis.fetch=async()=>new Response(bytes);
  await assert.rejects(downloadPackage({...descriptor,sha256:'0'.repeat(64)},new AbortController().signal,()=>{}));
@@ -72,7 +70,7 @@ try{
  assert.deepEqual(await rehydratePackageInstallations([descriptor]),{ready:[pack.key],blocked:[],failed:[]});assert.equal((await readLibrary(tx=>tx.all('packageCache'))).length,1);assert.equal(await readLibrary(readLocalLibraryRevision),revisionBeforeCache,'rehydrating published bytes must not create learner content');
  await assert.rejects(installPackage(new TextEncoder().encode(JSON.stringify({...bundle,title:'changed'}))));
  });
- await t.test('enrollment and runtime plugins cannot forge outcomes or mutate a Run',async()=>{
+ test('enrollment and runtime plugins cannot forge outcomes or mutate a Run',async()=>{
  [targetId]=await enrollPackage(id(),pack.key,languageContext);await enrollPackage(id(),pack.key,languageContext);
  assert.equal((await readLearning()).targets.length,1);
  target=(await readLearning()).targets[0]!;
@@ -130,7 +128,7 @@ try{
   if(presentation.kind==='expression_reveal')assert.equal(presentation.slots.expressionPrimary.surface,'borrow');else assert(!JSON.stringify(presentation).includes('borrow'));
  }
  });
- await t.test('initial completion, review and relearning settle only replayable outcomes',async()=>{
+ test('initial completion, review and relearning settle only replayable outcomes',async()=>{
  globalThis.fetch=async()=>{throw Error('Offline');};
  await assert.rejects(startLearning(id(),targetId!,languageContext,20,at));await confirmLearningQuantity(id(),languageContext,20);let run=await startLearning(id(),targetId!,languageContext,20,at);
  const homeRunning=await readHomeLearningProjection(languageContext.languageRouteId);assert.equal(homeRunning.dailyLimit,20);assert.equal(homeRunning.activeRunId,run.id);
@@ -188,7 +186,7 @@ try{
  assert.equal(relearningRetention?.kind,'relearning_completion');if(relearningRetention?.kind!=='relearning_completion')throw Error('missing relearning completion');sensaRelearningCompletionSchema.parse(relearningRetention.completion);
  await finishLearning(id(),run.id);
  });
- await t.test('signout and language changes preserve pinned materials and Retention identity',async()=>{
+ test('signout and language changes preserve pinned materials and Retention identity',async()=>{
  // Daily admission and explicit sign-out remain enforced while fetch is unavailable.
  const extra={...bundle,id:id(),entries:[{...entry,senseVersionId:id(),bindingVersionId:id()}]};
  const extraPack=await installPackage(new TextEncoder().encode(JSON.stringify(extra)));const [extraId]=await enrollPackage(id(),extraPack.key,languageContext);
@@ -253,7 +251,7 @@ try{
  assert.equal(shared.retentionId,target.retentionId,'both Route memberships share Retention identity');
 
  });
- await t.test('Book updates retain progress, pin open Sessions and continue atomically',async()=>{
+ test('Book updates retain progress, pin open Sessions and continue atomically',async()=>{
 
  // A downloaded Book Version is applied explicitly. Stable target identities
  // retain progress, removed members leave future planning, and an open Session
@@ -290,5 +288,4 @@ try{
  assert.deepEqual(activeSnapshots,[continuedRun.id],'the next-word transition published an empty active Run and exposed the unavailable fallback');
 
  });
-}finally{globalThis.fetch=realFetch;}
-});
+afterAll(()=>{globalThis.fetch=realFetch;});

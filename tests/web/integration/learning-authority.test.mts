@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import {test} from 'vitest';
 import {indexedDB} from 'fake-indexeddb';
 import {defaultSensaLanguageRoute,sensaPinnedLanguageContext} from '@sensa/contracts/sensa';
 
@@ -22,7 +22,6 @@ import {
   readLocalLibraryRevision,
 } from '../../../apps/web/src/data/library/store.ts';
 
-test('Learning authority admits only replayable local transitions', async (t) => {
   Object.assign(globalThis,{indexedDB,window:new EventTarget(),BroadcastChannel:undefined});
   const id=()=>crypto.randomUUID();
   const context=sensaPinnedLanguageContext(defaultSensaLanguageRoute);
@@ -47,7 +46,7 @@ test('Learning authority admits only replayable local transitions', async (t) =>
     assert.equal(await readLibrary(readLocalLibraryRevision),revision,'rejected transitions never reach SQLite');
   };
 
-await t.test('physical deletion cannot erase append-only Run history', async()=>{
+test('physical deletion cannot erase append-only Run history', async()=>{
 await assert.rejects(
   learningCommand({id:id(),kind:'fixture.delete-run',input:{runId:run.id}},async tx=>{
     tx.delete('learningRuns',run.id);
@@ -58,7 +57,7 @@ await assert.rejects(
 await assertUnchanged();
 });
 
-await t.test('scheduler projections cannot be manufactured without a Learning Event', async()=>{
+test('scheduler projections cannot be manufactured without a Learning Event', async()=>{
 await assert.rejects(
   learningCommand({id:id(),kind:'learning.act',input:{runId:run.id,at:run.startedAt,action:{kind:'forged'}}},async tx=>{
     const target=(await tx.get<LocalLearningTarget>('learningTargets',targetId!))!;
@@ -71,7 +70,7 @@ await assert.rejects(
 await assertUnchanged();
 });
 
-await t.test('Run revisions require a replayable Event or lifecycle fact', async()=>{
+test('Run revisions require a replayable Event or lifecycle fact', async()=>{
 await assert.rejects(
   learningCommand({id:id(),kind:'learning.start',input:{targetId,at:run.startedAt}},async tx=>{
     const saved=(await tx.get<LocalLearningRun>('learningRuns',run.id))!;
@@ -84,7 +83,7 @@ await assert.rejects(
 await assertUnchanged();
 });
 
-await t.test('orphan Events cannot be appended without their Run transition', async()=>{
+test('orphan Events cannot be appended without their Run transition', async()=>{
 const forgedEventId=id();
 await assert.rejects(
   learningCommand({id:forgedEventId,kind:'learning.act',input:{runId:run.id,at:run.startedAt,action:{kind:'forged'}}},async tx=>{
@@ -101,5 +100,4 @@ await assert.rejects(
   'an Event cannot be appended without its exact Run transition',
 );
 await assertUnchanged();
-});
 });

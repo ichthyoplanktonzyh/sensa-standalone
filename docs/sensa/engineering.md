@@ -573,6 +573,6 @@ Agent 不得更换 Expression/Sense、制造来源或调用学习结算事务。
 最终统一校验并发布材料快照，不把草稿或可选资源缺失写成学习成果。
 
 `tests/web/integration/content-agent.test.mts` 默认只使用假模型／工具，覆盖并发、修复、恢复和原图保留，纳入 `npm run check`。
-人工授权后可显式执行 `node --import tsx tests/web/integration/content-agent.test.mts --live-deepseek`，
+人工授权后可显式设置 `SENSA_TEST_LIVE_DEEPSEEK=true` 运行 `npm run test:fast -- --id=content-agent`，
 通过本地托管服务调用配置模型。该模式使用测试场景和既有缓存声音，不改用户学习数据；
 结果写入被 Git 忽略的 `.sensa-local/agent-live-smoke.json`。真实模式不进入常规验证。

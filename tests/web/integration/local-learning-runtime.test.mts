@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import {test} from 'vitest';
 import { indexedDB } from 'fake-indexeddb';
 import { libraryCloudPackageFixture } from '../../../scripts/support/libraryCloudPackageFixture.mts';
 import { openLibrary, command } from '../../../apps/web/src/data/library/store.ts';
@@ -35,7 +35,7 @@ const schedulerTarget=id(),schedulerStart=new Date('2026-09-01T00:00:00.000Z');
 const initialized=initializeRetentionMemory(schedulerTarget,lightweightSchedulingPolicy,schedulerStart);
 const beforeDue=new Date(schedulerStart.getTime()+60_000);
 const memory={retentionTargetId:schedulerTarget,revision:initialized.resultingMemoryRevision,dueAt:initialized.schedule.dueAt,schedule:{...initialized.schedule,cardId:schedulerTarget}};
-await test('independent Relearning cannot impersonate an early due Review',()=>{
+test('independent Relearning cannot impersonate an early due Review',()=>{
 assert.throws(()=>scheduleMemoryOutcome({memory,trigger:{kind:'due_review',memoryRevision:1,dueAt:initialized.schedule.dueAt},outcome:{grade:'good'},occurredAt:beforeDue},lightweightSchedulingPolicy),'a due Review cannot run before its due trigger');
 const independent= scheduleMemoryOutcome({memory,trigger:{kind:'independent_relearning_evaluation',memoryRevision:1,evaluationId:id()},outcome:{grade:'good'},occurredAt:beforeDue},lightweightSchedulingPolicy);
 assert.equal(independent.resultingMemoryRevision,2,'an explicitly eligible independent Relearning evaluation advances Memory without impersonating a due Review');
@@ -89,7 +89,7 @@ await selectLocalLearningPolicy(id(),assuranceTargetId,languageContext,'high_ass
 let run=await startLearning(id(),assuranceTargetId,languageContext,20,'2026-09-11T04:00:00.000Z');
 let state!:Awaited<ReturnType<typeof readLearning>>;
 let target!:Awaited<ReturnType<typeof readLearning>>['targets'][number];
-await test('assurance initial learning creates formal evidence and a scheduling handoff',async()=>{
+test('assurance initial learning creates formal evidence and a scheduling handoff',async()=>{
 run=await driveAssurance(run,'2026-09-11T04:00:00.000Z');
 await finishLearning(id(),run.id);
 state=await readLearning();target=state.targets.find(item=>item.id===assuranceTargetId)!;
@@ -111,7 +111,8 @@ if(assuranceCompletion.kind!=='initial_learning_completion')throw new Error('mis
 assert.deepEqual(new Set(assuranceCompletion.handoff.evidenceIds),new Set(assuranceEvidenceIds),'Scheduling Handoff references accumulated Evidence instead of a UI claim');
 });
 
-await test('assurance due Review emits one memory outcome and schedules Relearning',async()=>{
+let assuranceReviewRevision: number;
+test('assurance due Review emits one memory outcome and schedules Relearning',async()=>{
 run=await startLearning(id(),assuranceTargetId,languageContext,20,target.memory!.dueAt.toISOString());
 assert.equal(run.purpose,'retention_review');
 run=await driveAssurance(run,target.memory!.dueAt.toISOString(),true);
@@ -121,10 +122,10 @@ assert.equal(target.memoryRevision,2);
 assert(target.relearnAt);
 assert(target.relearningState);
 assert.equal(state.events.filter(event=>event.runId===run.id&&event.detail.transition.retention?.kind==='memory_outcome').length,1);
+assuranceReviewRevision=target.memoryRevision;
 });
 
-const assuranceReviewRevision=target.memoryRevision;
-await test('assurance Relearning clears its state without updating FSRS',async()=>{
+test('assurance Relearning clears its state without updating FSRS',async()=>{
 run=await startLearning(id(),assuranceTargetId,languageContext,20,target.relearnAt!);
 assert.equal(run.purpose,'relearning');
 run=await driveAssurance(run,target.relearnAt!);
@@ -159,7 +160,8 @@ async function driveFourStage(initial:LocalLearningRun,at:string,reviewAnswer:'k
   return current;
 }
 
-await test('four-stage initial learning and due Review create distinct retention facts',async()=>{
+let fourStageReviewRevision: number;
+test('four-stage initial learning and due Review create distinct retention facts',async()=>{
 run=await startLearning(id(),fourStageTargetId,languageContext,20,'2026-09-12T04:00:00.000Z');
 run=await driveFourStage(run,'2026-09-12T04:00:00.000Z');
 await finishLearning(id(),run.id);
@@ -173,10 +175,10 @@ state=await readLearning();target=state.targets.find(item=>item.id===fourStageTa
 assert.equal(target.memoryRevision,2);
 assert(target.relearnAt);
 assert.equal(state.events.filter(event=>event.runId===run.id&&event.detail.transition.retention?.kind==='memory_outcome').length,1);
+fourStageReviewRevision=target.memoryRevision;
 });
 
-const fourStageReviewRevision=target.memoryRevision;
-await test('four-stage Relearning completes without another FSRS update',async()=>{
+test('four-stage Relearning completes without another FSRS update',async()=>{
 run=await startLearning(id(),fourStageTargetId,languageContext,20,target.relearnAt!);
 assert.equal(run.purpose,'relearning');
 run=await driveFourStage(run,target.relearnAt!);

@@ -1,6 +1,6 @@
 /** Real queue and receiver code, in-memory storage adapter. No browser/network/model. */
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import {test} from 'vitest';
 import {indexedDB} from 'fake-indexeddb';
 import {canonicalConsumerJson,sensaBridgeRequestChannel,sensaBrowserIntakeDeliverySchema,sensaBrowserIntakeReceiptSchema} from '@sensa/contracts/sensa';
 import {createHash} from 'node:crypto';
@@ -31,6 +31,11 @@ const clientId=crypto.randomUUID();
 const browserResolution={resolverKind:'language_model' as const,provider:'fixture',model:'fixture',policyVersion:'fixture-v1',sourceReferenceIds:['browser-lookup-fixture']};
 const delivery=(operationId:string,proposalValue:typeof proposal|null,snapshotValue=snapshot)=>sensaBrowserIntakeDeliverySchema.parse({contractVersion:'sensa-browser-intake-delivery-v1',libraryId:library.id,clientId,intake:browserCaptureToIntake(operationId,snapshotValue,proposalValue,proposalValue?browserResolution:null)});
 const request=delivery(crypto.randomUUID(),null);
+// These named checks share the same synthetic extension state and run in file order.
+let listener:any;
+let session:Record<string,unknown>;
+let exchangeCalls=0;
+const opened:string[]=[],activated:number[]=[],reloaded:number[]=[];
 await test('Intake queue deduplicates, isolates accounts and acknowledges only matching receipts',async()=>{
 await queueWeb(accountId,request);await queueWeb(accountId,request);
 assert.equal((await webStatus(accountId)).pending,1);
@@ -65,16 +70,15 @@ assert.equal((await receiveWebIntake(accountId,fast)).result.route,'fast_track')
 const acceptedButIncomplete={...fast,intake:{...fast.intake,operationId:crypto.randomUUID(),sense:null}};
 assert.equal((await receiveWebIntake(accountId,acceptedButIncomplete)).result.route,'inbox','acceptance does not bypass a missing semantic fact');
 assert.throws(()=>browserCaptureToIntake(crypto.randomUUID(),{...snapshot,expression:{text:'wrong',start:4,end:8}},proposal,browserResolution));
-});
-// Run the actual background boundary with Chrome API substitutes, not a browser.
-let listener:any;
+// Install the real background boundary only after the queue scenario has settled.
 storage.sensa={version:1,active:accountId,accounts:{[accountId]:{accountId,installationId:request.clientId,webLibraryId:library.id,token:'fixture-extension-token',queue:[],recent:[],savedOperations:{}}}};
-const session:Record<string,unknown>={modes:{1:{accountId}}};
+session={modes:{1:{accountId}}};
 const noopEvent={addListener:()=>{}};
-let exchangeCalls=0;const opened:string[]=[],activated:number[]=[],reloaded:number[]=[];
 const chromeMock={identity:{getRedirectURL:()=> 'https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.chromiumapp.org/sensa'},storage:{local:{...(globalThis as any).chrome.storage.local,setAccessLevel:async()=>{}},session:{get:async(key:string)=>structuredClone({[key]:session[key]}),set:async(value:unknown)=>Object.assign(session,structuredClone(value))}},runtime:{id:'fixture',getURL:(path:string)=>'chrome-extension://fixture/'+path,onMessage:{addListener:(fn:unknown)=>{listener=fn;}}},tabs:{get:async(id:number)=>({id,url:snapshot.source.url}),query:async(query:{url?:string})=>query.url?[{id:20,url:'http://127.0.0.1:3000/profile',active:true}]:[{id:1,url:snapshot.source.url}],create:async({url}:{url:string})=>{opened.push(url);return {id:20};},update:async(id:number,input:{url?:string;active?:boolean})=>{assert.equal(id,20);if(input.url)opened.push(input.url);if(input.active)activated.push(id);return {id,...input};},reload:async(id:number)=>{reloaded.push(id);},onUpdated:noopEvent,onRemoved:noopEvent,sendMessage:async()=>{}},alarms:{create:()=>{},onAlarm:noopEvent}};
 const bundle=await build({entryPoints:['apps/browser-extension/src/background.ts'],bundle:true,write:false,format:'iife',platform:'browser',define:{SENSA_WEB_URL:JSON.stringify('http://127.0.0.1:3000'),SENSA_API_URL:JSON.stringify('http://127.0.0.1:4319')}});
 vm.runInNewContext(bundle.outputFiles[0]!.text,{chrome:chromeMock,crypto,btoa,URL,TextEncoder,TextDecoder,AbortSignal,setTimeout,clearTimeout,console,fetch:async(url:string,init:RequestInit)=>{assert.equal(url,'http://127.0.0.1:4319/sensa/extension/exchange');const body=JSON.parse(String(init.body));assert.equal(body.code,'fixture-code');if((session as any).expectedChallenge){assert.equal(Buffer.from(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(body.verifier))).toString('base64url'),(session as any).expectedChallenge);delete (session as any).expectedChallenge;}else assert.equal(body.verifier,(session as any).expectedVerifier);exchangeCalls++;return {ok:true,json:async()=>({accountId,token:'fixture-renewed-token',expiresAt:new Date(Date.now()+86400000).toISOString()})};}});
+});
+// Run the actual background boundary with Chrome API substitutes, not a browser.
 /** A Web message as the page actually sends one: the bridge's envelope is part of
  * the protocol, so this smoke speaks it rather than assuming the handlers are
  * reachable without it. Extension-internal messages carry no channel and are
