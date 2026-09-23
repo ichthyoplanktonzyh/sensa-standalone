@@ -47,6 +47,14 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Enforce App Shell boot and account restore budget
         run: npm run test:browser
+      - name: Upload synthetic Playwright Test failure evidence
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sensa-playwright-failure
+          path: .tmp/playwright-results/
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Validate release configuration and telemetry guards
         run: |
           node --import tsx tests/web/run.mts --suite=fast --id=release-candidate

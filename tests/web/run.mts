@@ -9,11 +9,13 @@ import {
   webTestEnvironments,
   webTestKinds,
   webTestRisks,
+  webTestRunners,
   webTestSuites,
   type WebTestCatalogEntry,
   type WebTestEnvironment,
   type WebTestKind,
   type WebTestRisk,
+  type WebTestRunner,
   type WebTestSuite,
 } from './catalog.mts';
 
@@ -22,6 +24,7 @@ type Filters = Readonly<{
   risk?: WebTestRisk;
   environment?: WebTestEnvironment;
   suite?: WebTestSuite;
+  runner?: WebTestRunner;
   id?: string;
   list: boolean;
 }>;
@@ -48,6 +51,7 @@ const parseFilters = (arguments_: readonly string[]): Filters => {
   let risk: string | undefined;
   let environment: string | undefined;
   let suite: string | undefined;
+  let runner: string | undefined;
   let id: string | undefined;
   let list = false;
 
@@ -76,6 +80,11 @@ const parseFilters = (arguments_: readonly string[]): Filters => {
       suite = parsedSuite;
       continue;
     }
+    const parsedRunner = option(argument, 'runner');
+    if (parsedRunner !== undefined) {
+      runner = parsedRunner;
+      continue;
+    }
     const parsedId = option(argument, 'id');
     if (parsedId !== undefined) {
       id = parsedId;
@@ -89,6 +98,7 @@ const parseFilters = (arguments_: readonly string[]): Filters => {
     risk: allowed('risk', risk, webTestRisks),
     environment: allowed('environment', environment, webTestEnvironments),
     suite: allowed('suite', suite, webTestSuites),
+    runner: allowed('runner', runner, webTestRunners),
     id,
     list,
   };
@@ -97,6 +107,7 @@ const parseFilters = (arguments_: readonly string[]): Filters => {
 const selectedTests = (filters: Filters): readonly WebTestCatalogEntry[] => {
   return catalog.filter((entry) => (
     (filters.kind === undefined || entry.kind === filters.kind)
+    && (filters.runner === undefined || (entry.runner ?? 'node') === filters.runner)
     && (filters.risk === undefined || entry.risks.includes(filters.risk))
     && (filters.id === undefined || entry.id === filters.id)
     && (
@@ -118,6 +129,7 @@ const formatEntry = (entry: WebTestCatalogEntry): string => [
   `risks=${entry.risks.join(',')}`,
   `environment=${entry.environment}`,
   `suite=${entry.suite}`,
+  `runner=${entry.runner ?? 'node'}`,
   `file=${entry.file}`,
 ].join(' | ');
 
@@ -129,7 +141,7 @@ const testFiles = (directory: string, relativeDirectory = 'tests/web'): string[]
   const path = join(directory, entry.name);
   const relativePath = `${relativeDirectory}/${entry.name}`;
   if (entry.isDirectory()) return testFiles(path, relativePath);
-  return /\.test\.(?:mts|mjs)$/u.test(entry.name) ? [relativePath] : [];
+  return /\.(?:test\.(?:mts|mjs|ts|tsx)|spec\.ts)$/u.test(entry.name) ? [relativePath] : [];
 });
 
 for (const field of ['id', 'file'] as const) {
@@ -137,6 +149,15 @@ for (const field of ['id', 'file'] as const) {
   if (new Set(values).size !== values.length) throw new Error(`Duplicate Web test catalog ${field}.`);
 }
 const cataloguedFiles = new Set(catalog.map((entry) => entry.file));
+const wrongRunner = catalog.filter((entry) => {
+  const runner = entry.runner ?? 'node';
+  if (runner === 'vitest') return !/\.test\.tsx?$/u.test(entry.file) || entry.environment !== 'node';
+  if (runner === 'playwright') return !entry.file.endsWith('.spec.ts') || entry.environment !== 'chromium';
+  return !/\.test\.(?:mts|mjs)$/u.test(entry.file);
+});
+if (wrongRunner.length !== 0) {
+  throw new Error(`Tests assigned to an incompatible runner: ${wrongRunner.map((entry) => entry.id).join(', ')}`);
+}
 const unclassified = catalog.filter((entry) => entry.risks.length === 0);
 if (unclassified.length !== 0) throw new Error(`Tests missing risk tags: ${unclassified.map((entry) => entry.id).join(', ')}`);
 const wrongCiBoundary = catalog.filter((entry) => {
@@ -172,9 +193,13 @@ if (filters.list) {
 } else {
   for (const entry of selected) {
     console.log(`\n[${entry.suite}] ${entry.id}`);
-    const result = spawnSync(process.execPath, [
-      '--import', 'tsx', '--test', '--test-reporter=spec', entry.file,
-    ], {
+    const runner = entry.runner ?? 'node';
+    const args = runner === 'vitest'
+      ? [resolve(repositoryRoot, 'node_modules/vitest/vitest.mjs'), 'run', '--config', 'vitest.config.ts', entry.file]
+      : runner === 'playwright'
+        ? [resolve(repositoryRoot, 'node_modules/@playwright/test/cli.js'), 'test', '--config', 'playwright.config.ts', entry.file]
+        : ['--import', 'tsx', '--test', '--test-reporter=spec', entry.file];
+    const result = spawnSync(process.execPath, args, {
       cwd: repositoryRoot,
       env: {
         ...process.env,

@@ -14,6 +14,8 @@
   "files": [
     "catalog.mts",
     "run.mts",
+    "../../vitest.config.ts",
+    "../../playwright.config.ts",
     "support/sourceTree.mts",
     "support/libraryCloudBrowserFixture.mts",
     "support/libraryConvergenceWorld.mts",
@@ -24,6 +26,7 @@
     "contracts/learning-system-boundary.test.mts",
     "integration/library-cloud-convergence.test.mts",
     "integration/learning-authority.test.mts",
+    "unit/home-readiness.test.ts",
     "integration/package-learning.test.mts",
     "database/library-cloud.test.mts",
     "integration/library-transaction-and-replay.test.mts",
@@ -32,6 +35,7 @@
     "integration/web-intake.test.mts",
     "integration/local-learning-runtime.test.mts",
     "browser/web-bootstrap-budget.test.mts",
-    "browser/skin-surface.test.mts"
+    "browser/skin-surface.test.mts",
+    "browser/resource-presentation.spec.ts"
   ]
 }

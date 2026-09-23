@@ -1,5 +1,8 @@
-export const webTestKinds = ['contract', 'integration', 'quality'] as const;
+export const webTestKinds = ['unit', 'contract', 'integration', 'quality'] as const;
 export type WebTestKind = (typeof webTestKinds)[number];
+
+export const webTestRunners = ['node', 'vitest', 'playwright'] as const;
+export type WebTestRunner = (typeof webTestRunners)[number];
 
 export const webTestRisks = [
   'local-correctness',
@@ -24,6 +27,7 @@ export type WebTestCatalogEntry = Readonly<{
   risks: readonly WebTestRisk[];
   environment: WebTestEnvironment;
   suite: WebTestSuite;
+  runner?: WebTestRunner;
   memoryLibrary?: boolean;
   env?: Readonly<Record<string, string>>;
 }>;
@@ -152,7 +156,7 @@ const fastWithMemory = [
   'quality/model-management', 'integration/semantic-agent-loop', 'integration/local-model-opt-in',
   'release/release-candidate', 'release/supabase-auth-config', 'quality/source-syntax',
   'integration/telemetry', 'integration/browser-reliability', 'integration/storage-capability',
-  'integration/model-budget', 'integration/home-readiness', 'quality/web-idle-work',
+  'integration/model-budget', 'quality/web-idle-work',
   'integration/package-learning', 'integration/local-learning-runtime', 'integration/media-library',
   'integration/learning-scene-bridge', 'integration/personal-learning', 'integration/language-route',
   'integration/language-journey', 'integration/reading-language', 'integration/reading-glossary',
@@ -165,7 +169,7 @@ const fastWithMemory = [
 ] as const;
 
 const browserTests = [
-  'browser/skin-surface', 'browser/resource-presentation', 'browser/reference-presentation',
+  'browser/skin-surface', 'browser/reference-presentation',
   'browser/sqlite-opfs-benchmark', 'browser/web-bootstrap-budget',
 ] as const;
 
@@ -248,4 +252,23 @@ const migratedEntry = ({path, suite, memoryLibrary, env}: MigratedTest): WebTest
 export const webTestCatalog: readonly WebTestCatalogEntry[] = [
   ...foundationTests,
   ...migrated.map(migratedEntry),
+  {
+    id: 'home-readiness',
+    file: 'tests/web/unit/home-readiness.test.ts',
+    kind: 'unit',
+    risks: ['local-correctness'],
+    environment: 'node',
+    suite: 'fast',
+    runner: 'vitest',
+    memoryLibrary: true,
+  },
+  {
+    id: 'resource-presentation',
+    file: 'tests/web/browser/resource-presentation.spec.ts',
+    kind: 'integration',
+    risks: ['local-correctness'],
+    environment: 'chromium',
+    suite: 'browser',
+    runner: 'playwright',
+  },
 ];

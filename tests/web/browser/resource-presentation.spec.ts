@@ -1,9 +1,19 @@
 /** Real card and detail renderers; loopback page and synthetic resources only. */
-import assert from 'node:assert/strict';
-import {createServer} from 'node:http';
+import {createServer, type Server} from 'node:http';
 import {build} from 'esbuild';
-import {chromium,expect} from '@playwright/test';
-const compiled=await build({stdin:{resolveDir:process.cwd(),loader:'tsx',contents:`
+import {expect, test} from '@playwright/test';
+
+let server: Server;
+let port: number;
+
+test.setTimeout(60_000);
+
+test.beforeAll(async () => {
+  const compiled = await build({
+    stdin: {
+      resolveDir: process.cwd(),
+      loader: 'tsx',
+      contents: `
 import React from 'react';
 import {createRoot} from 'react-dom/client';
 import i18n from './apps/web/src/i18n';
@@ -25,28 +35,50 @@ const recall=assembleLightweightInitialPresentation(step(LIGHTWEIGHT_EXPERIENCE_
 if(JSON.stringify(recall).includes('Sourced optional'))throw Error('pre-reveal resource leakage');
 await i18n.changeLanguage('en');
 createRoot(document.getElementById('root')!).render(<><ExpressionRevealCard active presentation={reveal} onRate={()=>{}} onOpenDictionary={()=>{}} lookupDictionary={async()=>null} toast={()=>{}}/><div id="resource-details"><LearningResourceDetails material={material}/></div></>);
-`},bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env':'{}'}});
-const code=compiled.outputFiles[0]!.text;
-const server=createServer((req,res)=>{res.setHeader('content-type',req.url==='/bundle.js'?'text/javascript':'text/html');res.end(req.url==='/bundle.js'?code:'<!doctype html><html><body><div id="root"></div><script type="module" src="/bundle.js"></script></body></html>');});
-await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
-const address=server.address() as {port:number};
-const browser=await chromium.launch({headless:true,executablePath:process.env.SENSA_CHROMIUM_PATH});
-try{
- const page=await browser.newPage();const errors:string[]=[];
- page.on('pageerror',error=>errors.push(error.message));
- await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
- await page.goto(`http://127.0.0.1:${address.port}`);
- const card=page.locator('.sensa-expression-reveal');
- await expect(card.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
- await expect(card.getByText('May asked to borrow an umbrella.',{exact:true})).toBeVisible();
- await expect(card.getByText('Sourced optional explanation fixture')).not.toBeVisible();
- await card.locator('summary').filter({hasText:'Etymology'}).click();
- await expect(card.getByText('Sourced optional explanation fixture')).toBeVisible();
- await expect(card.getByRole('link',{name:'https://fixture.invalid/entry'})).toHaveAttribute('href','https://fixture.invalid/entry');
- const details=page.locator('#resource-details');await details.locator('summary').click();
- await expect(details.getByText('borrow something from someone',{exact:true})).toBeVisible();
- await expect(details.getByText('Compare the receiver and the giver.',{exact:true})).toBeVisible();
- await expect(details.getByText('Sourced optional explanation fixture')).toBeVisible();
- assert.deepEqual(errors,[]);
- console.log('PASS: real reveal card shows same-scene expression, optional etymology stays collapsed, details share complete fields/source rendering, recall excludes supplementary facts. Chromium, no external calls.');
-}finally{await browser.close();await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
+`,
+    },
+    bundle: true,
+    write: false,
+    format: 'esm',
+    platform: 'browser',
+    define: {'import.meta.env': '{}'},
+  });
+
+  const code = compiled.outputFiles[0]!.text;
+  server = createServer((request, response) => {
+    response.setHeader('content-type', request.url === '/bundle.js' ? 'text/javascript' : 'text/html');
+    response.end(request.url === '/bundle.js'
+      ? code
+      : '<!doctype html><html><body><div id="root"></div><script type="module" src="/bundle.js"></script></body></html>');
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  port = (server.address() as {port: number}).port;
+});
+
+test.afterAll(async () => {
+  if (server) await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+});
+
+test('reveal keeps etymology optional while details share complete source fields', async ({page}) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.route('**/*', (route) => new URL(route.request().url()).hostname === '127.0.0.1'
+    ? route.continue()
+    : route.abort());
+  await page.goto(`http://127.0.0.1:${port}`);
+
+  const card = page.locator('.sensa-expression-reveal');
+  await expect(card.getByRole('heading', {name: 'borrow', exact: true})).toBeVisible();
+  await expect(card.getByText('May asked to borrow an umbrella.', {exact: true})).toBeVisible();
+  await expect(card.getByText('Sourced optional explanation fixture')).not.toBeVisible();
+  await card.locator('summary').filter({hasText: 'Etymology'}).click();
+  await expect(card.getByText('Sourced optional explanation fixture')).toBeVisible();
+  await expect(card.getByRole('link', {name: 'https://fixture.invalid/entry'})).toHaveAttribute('href', 'https://fixture.invalid/entry');
+
+  const details = page.locator('#resource-details');
+  await details.locator('summary').click();
+  await expect(details.getByText('borrow something from someone', {exact: true})).toBeVisible();
+  await expect(details.getByText('Compare the receiver and the giver.', {exact: true})).toBeVisible();
+  await expect(details.getByText('Sourced optional explanation fixture')).toBeVisible();
+  expect(errors).toEqual([]);
+});
