@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 /** The Reference dictionary boundary under the learner's own language pair.
  *
  * A dictionary lookup is about one target language. This exercises the real
@@ -15,6 +16,8 @@ import {mkdtemp,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
+
+test("reference-language", async () => {
 
 const compiled=await build({
   stdin:{
@@ -219,3 +222,5 @@ try{
   globalThis.fetch=realFetch;
   await rm(temp,{recursive:true,force:true});
 }
+
+});

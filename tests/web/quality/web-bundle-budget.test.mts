@@ -1,8 +1,11 @@
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import {parse} from '@babel/parser';
 import {gzipSync} from 'node:zlib';
 import {readdir,readFile} from 'node:fs/promises';
 import {basename,resolve} from 'node:path';
+
+test("web-bundle-budget", async () => {
 
 /**
  * Regression ceilings for the actual static ESM dependency graph. Looking at
@@ -128,3 +131,5 @@ for(const resourceFile of deferredResourceFiles)assert(!indexClosure.has(resourc
 assert(runtimeChunkGzip<=budgets.runtimeChunkGzip,`${runtimeFile} gzip ${runtimeChunkGzip} exceeds ${budgets.runtimeChunkGzip}`);
 assert(runtimeIncrementalGzip<=budgets.runtimeIncrementalGzip,`deferred Runtime incremental static closure gzip ${runtimeIncrementalGzip} exceeds ${budgets.runtimeIncrementalGzip}`);
 console.log(`PASS: Web bundle regression ceilings (${summary}).`);
+
+});

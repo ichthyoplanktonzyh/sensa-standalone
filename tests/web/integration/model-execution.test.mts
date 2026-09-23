@@ -1,8 +1,11 @@
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import {completeReading} from '../../../apps/api/src/sensa/reading/service.ts';
 import {explanationPreview} from '../../../apps/api/src/sensa/personal/explanationPreview.ts';
 import {ModelExecutionQueue,ModelExecutionError} from '../../../packages/contracts/src/sensa/modelExecution.ts';
 import {executeModel,modelQueue} from '../../../packages/model-runtime/src/index.ts';
+
+test("model-execution", async () => {
 const queue=new ModelExecutionQueue({maxConcurrent:2,perProvider:1,timeoutMs:1000});
 const order:string[]=[],release:(()=>void)[]=[];const job=(id:string,provider:string,purpose:'teacher'|'content',signal=new AbortController().signal,schedulingKey?:string)=>queue.run({id,provider,model:'fixture',purpose,execution:'device',schedulingKey},signal,async()=>{order.push(id);await new Promise<void>(r=>release.push(r));return id;});
 const a=job('a','one','content'),b=job('b','one','content'),c=job('c','two','content');
@@ -33,3 +36,5 @@ try{
  assert(modelQueue.snapshot().length>0);assert(modelQueue.snapshot().every(r=>r.execution==='service'));
  console.log('PASS: shared scheduler per-provider/global bounds, queued cancellation; real Genkit flow and compatible adapter with image/tool conversion, token/trace metadata, bounded provider retry, declared execution place, no private payload in activity. Synthetic fetch only.');
 }finally{globalThis.fetch=original;}
+
+});

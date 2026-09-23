@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 /** Which reading a learner does not need done for them.
  *
  * The reading surfaces are built on one question — "does this learner already
@@ -15,6 +16,8 @@ import {build} from 'esbuild';
 import vm from 'node:vm';
 import {franc} from 'franc';
 import {sensaLanguageRolesForTag} from '@sensa/contracts/sensa';
+
+test("reading-skip", async () => {
 
 const routeContext=(supportLanguageTag:string,targetLanguageTag:string)=>({supportLanguageTag,targetLanguageTag,languageRouteId:'00000000-0000-4000-8000-000000000099',languageRouteRevision:1});
 const routeCollection=(supportLanguageTag:string,targetLanguageTag:string)=>({revision:1,routes:[{id:routeContext(supportLanguageTag,targetLanguageTag).languageRouteId,revision:1,targetLanguageTag,defaultSupportLanguageTag:supportLanguageTag,status:'active'}]});
@@ -103,3 +106,5 @@ assert.deepEqual(sensaLanguageRolesForTag('es',{supportLanguageTag:'zh-CN',targe
 assert.deepEqual(declaredCaptureLanguage(page('zh-Hans-CN')),{language:'zh-Hans-CN',languageSource:'declared',languageConfidence:1},'a declaration keeps its exact canonical tag');
 
 console.log('PASS: reading skips only exact Support-Language observations, preserves unsupported detector answers and confidence, keeps exact declared tags, permits same-language Target/Support, and never withholds a translation when the answer is uncertain.');
+
+});

@@ -1,5 +1,8 @@
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import {reportOperationalIncident} from '../../../scripts/release/reportOperationalIncident.mjs';
+
+test("incident-delivery", async () => {
 
 let issue=null;const requests=[];
 const fetchImpl=async(url,init={})=>{
@@ -16,3 +19,5 @@ assert.deepEqual(await reportOperationalIncident({...common,status:'failure',run
 assert.deepEqual(await reportOperationalIncident({...common,status:'success',runId:'12347'},{fetchImpl,now:()=>new Date('2026-09-21T03:00:00Z')}),{action:'resolved',number:17});
 const emitted=JSON.stringify(requests);assert(!emitted.includes('learner@example.com'));assert(!emitted.includes('secret-value'));assert(requests.some(request=>request.method==='PATCH'));
 console.log('PASS: operational failures create/update one durable GitHub incident and a healthy run records recovery and closes it.');
+
+});

@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {
@@ -5,6 +6,8 @@ import {
   MAX_SCENE_IMAGE_SOURCE_BYTES,
   selectSceneImageFiles,
 } from '../../../apps/web/src/experience/components/useSceneImageInput.ts';
+
+test("scene-image-input", async () => {
 
 const fakeFile = (type: string, size: number): File => ({type, size} as File);
 
@@ -49,3 +52,5 @@ assert(
 );
 
 console.log('PASS: scene image entry points share limits, drag, paste, multi-select and camera behavior.');
+
+});

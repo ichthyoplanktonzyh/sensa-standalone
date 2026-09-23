@@ -1,5 +1,8 @@
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import {createStreamAuthorizationGate} from '../../../apps/api/src/sensa/access/streamAuthorization.ts';
+
+test("stream-authorization", async () => {
 
 let now=1_000,calls=0;
 const gate=createStreamAuthorizationGate(async()=>{calls++;},{intervalMs:2_000,now:()=>now});
@@ -26,3 +29,5 @@ await assert.rejects(
   /access_revoked/u,
 );
 console.log('PASS: streaming output shares a lock-free, two-second revocation budget instead of authorizing every text fragment.');
+
+});

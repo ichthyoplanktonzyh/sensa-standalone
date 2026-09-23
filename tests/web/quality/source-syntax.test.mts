@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 /** Every executable test and maintenance script in this repository still parses.
  *
  * Some checks need browser, database or release fixtures, so a syntax failure
@@ -11,6 +12,8 @@
  */
 import {readdir,readFile} from 'node:fs/promises';
 import {transform} from 'esbuild';
+
+test("source-syntax", async () => {
 
 const files:string[]=[];
 async function walk(directory:string){
@@ -34,3 +37,5 @@ for(const file of files.sort()){
   checked++;
 }
 console.log(`PASS: all ${checked} scripts and Web tests parse, including checks requiring Chromium, a database or a release candidate. Transpiled, not executed, and no network.`);
+
+});

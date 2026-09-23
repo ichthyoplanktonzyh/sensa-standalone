@@ -1,9 +1,12 @@
+import {test} from 'vitest';
 /** Scope -> production -> admission -> presentation, without browser/provider calls. */
 import assert from 'node:assert/strict';
 import {resolveRevealResourcePlan,REVEAL_RESOURCE_CATEGORIES,sensaLightweightInitialMaterializationContentSchema,generationResourceContracts,makeRequest,makeBundle,SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND} from '@sensa/contracts/sensa';
 import {provisionLightweightInitialContent} from '../../../apps/web/src/contentSupply/provisioning/lightweightInitialContent.ts';
 import {syntheticSound,withBindingFixture} from '../../../scripts/support/lightweightMaterialFixture.mts';
 import {prepareLearningResourceFacts} from '../../../apps/api/src/sensa/resources/supplements.ts';
+
+test("reveal-resources", async () => {
 const id=()=>crypto.randomUUID(),now=new Date();
 assert.equal(REVEAL_RESOURCE_CATEGORIES.length,8);
 const category=(plan:any,key:string)=>plan.categories.find((c:any)=>c.category===key);
@@ -44,3 +47,5 @@ const request=await makeRequest({id:id(),learner_user_id:id(),learning_target_id
 assert(!generationResourceContracts(request).some(r=>r.role==='language_structure'));
 await assert.rejects(makeBundle(request,{cue:{resources:[{role:'language_structure',payload:{expressionKind:'sentence',expressionTypeLabel:null,partOfSpeech:null,usagePattern:'invented'}}]},provider:'fixture',model:'fixture'},now),/undeclared/);
 console.log('PASS: eight-category matrix, all six expression kinds, shared preparation/admission, missing vs excluded, source acquisition, forged plan and out-of-scope model output rejection. No browser/model/TTS.');
+
+});

@@ -1,6 +1,9 @@
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {resolveEdgeSwipeBack} from '../../../apps/web/src/experience/ui/EdgeSwipeBack.tsx';
+
+test("mobile-interaction", async () => {
 
 const width=390;
 assert.deepEqual(
@@ -47,3 +50,5 @@ assert.match(gesture,/navigator\.vibrate\(8\)/u);
 assert.equal(JSON.parse(manifest).display,'standalone');
 
 console.log('PASS: installed coarse-pointer PWA navigation gets a thresholded, velocity-aware edge return with optional haptics; browser gestures, vertical scroll, zoom and learning outcomes remain untouched.');
+
+});

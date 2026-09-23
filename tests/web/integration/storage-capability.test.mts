@@ -1,5 +1,8 @@
+import {test} from 'vitest';
 /** Production browsers must never turn a missing persistence capability into a successful memory library. */
 import assert from 'node:assert/strict';
+
+test("storage-capability", async () => {
 
 delete process.env.SENSA_TEST_MEMORY_LIBRARY;
 Object.defineProperty(globalThis,'document',{value:{},configurable:true});
@@ -31,3 +34,5 @@ setNavigator({storage:{estimate:async()=>({usage:undefined,quota:undefined})}});
 assert.equal(await persistence.readLocalStorageBudget(),null,'an unavailable browser estimate is not presented as zero usage');
 
 console.log('PASS: missing Worker, OPFS, Web Locks or BroadcastChannel refuses the local library instead of reporting volatile saves.');
+
+});

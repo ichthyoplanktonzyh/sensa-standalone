@@ -1,7 +1,10 @@
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {candidateRoots,validateReleaseEnvironment,prepareCandidate} from '../../../scripts/release/releaseCandidate.mjs';
 import {extensionBuildConfig} from '../../../apps/browser-extension/buildConfig.mjs';
+
+test("release-candidate", async () => {
 const workerConfig=JSON.parse(await readFile(new URL('../../../wrangler.jsonc',import.meta.url),'utf8'));
 assert.equal(workerConfig.name,'sensa-standalone');
 assert.equal(workerConfig.assets.directory,'./apps/web/dist');
@@ -59,3 +62,5 @@ try{
  await writeFile(join(web,'assets/app.js'),'// stale local build');await assert.rejects(prepareCandidate(releaseEnv,root),/rebuild/);
  console.log('PASS: isolated candidate manifest, hashes, secret-free report and stale SHA/build rejection; no deployment.');
 }finally{await rm(root,{recursive:true,force:true});}
+
+});

@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 /** A voice is chosen by the language of the text, never by anything else.
  *
  * The panel used to ask for an English voice whatever the learner was reading,
@@ -9,6 +10,8 @@
  * honoured where it can pronounce the language and ignored where it cannot.
  */
 import assert from 'node:assert/strict';
+
+test("extension-speech", async () => {
 
 interface FakeVoice {name: string; lang: string; localService: boolean}
 const voice = (name: string, lang: string, localService = true): FakeVoice => ({name, lang, localService});
@@ -126,3 +129,5 @@ assert.equal(cancels, 2, 'one cancel cleared what came before, and stopping canc
 assert.equal(ended, 0, 'the caller stopped it, so it is not also reported as finished');
 
 console.log('PASS: reading aloud speaks in the language of the text and nothing else — locale from the catalog, an unplaceable language refused instead of guessed, installed voices only, the full locale preferred over the bare subtag, the learner\'s rate clamped, and every failure named so the surface can say which one it was. Stand-in synthesizer; no sound, no network.');
+
+});

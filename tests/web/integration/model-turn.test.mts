@@ -1,9 +1,12 @@
+import {test} from 'vitest';
 /** In-process Web model route checks. Synthetic provider only; no database or network. */
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {canonicalConsumerJson} from '@sensa/contracts/sensa';
 import {createModelTurnRoutes} from '../../../apps/api/src/sensa/models/turn.ts';
 import {ConsumerError} from '../../../apps/api/src/sensa/access/auth.ts';
+
+test("model-turn", async () => {
 
 const base={id:crypto.randomUUID(),name:'Teacher',enabled:true,baseUrl:'https://example.invalid',model:'fixture',apiKey:'fixture'};
 const connections:{[purpose:string]:typeof base}={teacher:base,reference:{...base,id:crypto.randomUUID(),name:'Reference'}};
@@ -101,3 +104,5 @@ const lostTurn={...teacher,id:crypto.randomUUID()},lostBody=JSON.stringify({...l
 assert.equal((await lostApp.request('/turn',{method:'POST',headers:{'content-type':'application/json'},body:lostBody})).status,401);
 const recovered=await lostApp.request('/turn',{method:'POST',headers:{'content-type':'application/json'},body:lostBody});assert.equal(recovered.status,200);assert.equal(lostCompletions,1);assert.equal((await recovered.json() as any).response.answer,'saved-before-response');
 console.log('PASS: pre-execution queue/cancel failures release reservations; upstream rejection consumes a known terminal state; timeout remains unknown; a lost HTTP response replays the saved result without a second model call.');
+
+});

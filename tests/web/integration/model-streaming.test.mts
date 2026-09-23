@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 /** Pure streaming protocol checks. No browser, network, database, or model calls. */
 import assert from 'node:assert/strict';
 import {
@@ -5,6 +6,8 @@ import {
   readManagedModelStream,
   readOpenAiModelStream,
 } from '../../../apps/web/src/data/library/modelStreaming.ts';
+
+test("model-streaming", async () => {
 
 const byteStream=(chunks:string[])=>new ReadableStream<Uint8Array>({
   start(controller){for(const chunk of chunks)controller.enqueue(new TextEncoder().encode(chunk));controller.close();},
@@ -46,3 +49,5 @@ const toolResult=await readOpenAiModelStream(byteStream([toolSse]),'fixture',()=
 assert.deepEqual(toolResult.choices[0].message.tool_calls,[{id:'call-1',type:'function',function:{name:'lookup_meanings',arguments:'{"query":"hello"}'}}]);
 
 console.log('PASS: managed NDJSON and learner-owned OpenAI SSE streams reassemble bounded final responses, tool calls remain intact, and only a safely decoded top-level reply prefix reaches the UI. No network/model calls.');
+
+});

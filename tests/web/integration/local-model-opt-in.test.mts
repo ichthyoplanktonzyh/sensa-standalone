@@ -1,9 +1,12 @@
+import {test} from 'vitest';
 /** Pure local-preview model opt-in boundary checks. No files, network, or model calls. */
 import assert from 'node:assert/strict';
 import {
   LOCAL_MODEL_ENV_KEYS,
   resolveLocalModelEnvironment,
 } from '../../../scripts/local/sensaLocalModelEnvironment.mjs';
+
+test("local-model-opt-in", async () => {
 
 assert.deepEqual(
   resolveLocalModelEnvironment({ enabled: false, sources: [{ DEEPSEEK_API_KEY: 'must-not-pass' }] }),
@@ -42,3 +45,5 @@ assert.throws(
 );
 
 console.log('PASS: local model calls stay disabled by default; explicit opt-in forwards only allowlisted server-side model configuration. No files/network/model calls.');
+
+});

@@ -1,6 +1,9 @@
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import { readdir, readFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
+
+test("content-supply-system-boundary", async () => {
 
 const sourceRoot = 'apps/web/src';
 const contentSupplySystemDirectory = join(sourceRoot, 'contentSupply/system/');
@@ -88,3 +91,5 @@ for (const recoveryFile of [
 }
 
 console.log('PASS: Content Supply owns Published, On-demand and Hybrid provisioning behind one deep interface.');
+
+});

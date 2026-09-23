@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 /** The learner's rule about one site, and where it can be written from.
  *
  * Reading mode is turned on per tab, but the wish "not here" is about the site:
@@ -12,6 +13,8 @@ import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 import vm from 'node:vm';
 import {readingPreferences,readingSiteHost,readingSiteOf,saveReadingPreferences} from '../../../apps/browser-extension/src/preferences.ts';
+
+test("reading-site", async () => {
 
 // ── the rule itself ─────────────────────────────────────────────────────────
 assert.equal(readingSiteHost('Example.COM '),'example.com','a rule is stored the way a hostname is written');
@@ -127,3 +130,5 @@ assert.equal(injected.length,before+1,'lifting the rule lets the site be read ag
 await call({kind:'reading-site',enabled:false},contentSender);
 assert.deepEqual((await readingPreferences()).disabledSites,[host],'the settings page reads back the rule the page wrote');
 console.log('PASS: a site rule is written by the background from the tab’s own hostname, normalised and deduplicated, applied to the tab the learner is on, refused by the toolbar button it would contradict, liftable from the popup, never injected into again — and the settings page and the page’s own switch save it through the same writer.');
+
+});

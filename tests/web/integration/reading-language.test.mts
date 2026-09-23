@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 /**
  * The reading service runs in the learner's own two languages.
  *
@@ -15,6 +16,8 @@ import assert from 'node:assert/strict';
 import {readingAssignmentsSchema,readingFeatures,readingRequestSchema} from '@sensa/contracts/sensa';
 import {readingSystemPrompt} from '../../../apps/api/src/sensa/reading/service.ts';
 import {contentHash} from '../../../apps/api/src/sensa/shared/contentHash.ts';
+
+test("reading-language", async () => {
 
 // Every feature the reading service offers needs two things: a key in the
 // assignment map, so a learner can point it at a connection, and a place in the
@@ -127,3 +130,5 @@ assert.notEqual(await contentHash(englishPair),await contentHash(spanishPair),'t
 assert.equal(await contentHash(englishPair),await contentHash({...englishPair}),'the same request must digest the same');
 
 console.log('PASS: the reading service builds every prompt from its pinned context, keeps third-language input observational, scopes glossary entries to the concrete direction, supports immersion, refuses unnameable tags, and digests the context. Pure prompt and schema; no provider call.');
+
+});

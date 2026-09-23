@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import {createConsumerRoutes} from '../../../apps/api/src/sensa/access/consumer.ts';
 import {ConsumerError} from '../../../apps/api/src/sensa/access/auth.ts';
@@ -5,6 +6,8 @@ import type {ServiceRequestRecord} from '../../../apps/api/src/sensa/access/tele
 import {sensaCorsOptions} from '../../../apps/api/src/sensa/access/cors.ts';
 import {Hono} from 'hono';
 import {cors} from 'hono/cors';
+
+test("telemetry", async () => {
 const records:ServiceRequestRecord[]=[];
 const privateText='private-email-and-key-do-not-log';
 const app=createConsumerRoutes({telemetry:r=>records.push(r),verify:async()=>{throw new ConsumerError(401,'authentication_required');}});
@@ -22,3 +25,5 @@ const corsApp=new Hono();corsApp.use('*',cors(sensaCorsOptions(['https://sensa.e
 const preflight=await corsApp.request('/sensa/packages',{method:'OPTIONS',headers:{origin:'https://sensa.example','access-control-request-method':'GET','access-control-request-headers':'authorization,if-none-match'}});
 assert.equal(preflight.status,204);assert.match(preflight.headers.get('access-control-allow-headers')??'',/(?:^|,)if-none-match(?:,|$)/u);
 console.log('PASS: correlated response/request metadata, no token/query/error payload logging, 401/503 attribution, non-fatal telemetry sink and conditional package refresh CORS.');
+
+});

@@ -151,7 +151,7 @@ for (const field of ['id', 'file'] as const) {
 const cataloguedFiles = new Set(catalog.map((entry) => entry.file));
 const wrongRunner = catalog.filter((entry) => {
   const runner = entry.runner ?? 'node';
-  if (runner === 'vitest') return !/\.test\.tsx?$/u.test(entry.file) || entry.environment !== 'node';
+  if (runner === 'vitest') return !/\.test\.(?:ts|tsx|mts|mjs)$/u.test(entry.file) || !['node', 'built-web-artifact', 'postgres'].includes(entry.environment);
   if (runner === 'playwright') return !entry.file.endsWith('.spec.ts') || entry.environment !== 'chromium';
   return !/\.test\.(?:mts|mjs)$/u.test(entry.file);
 });

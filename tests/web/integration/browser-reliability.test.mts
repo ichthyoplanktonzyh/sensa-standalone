@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 import assert from "node:assert/strict";
 import { Window } from "happy-dom";
 import {
@@ -19,6 +20,8 @@ import {
   screenInstanceKey,
   shellScreenHost,
 } from "../../../apps/web/src/experience/router/screenRegistry.ts";
+
+test("browser-reliability", async () => {
 
 const privateText = "learner-text-and-secret-must-never-leave-the-browser";
 const window = new Window({ url: "https://sensa.test/study/learning-library?meaningId=private" });
@@ -127,3 +130,5 @@ assert.deepEqual(
 assert.equal(screenInstanceKey('s-personal-meaning',{}),'s-personal-meaning:new');
 assert.equal(screenInstanceKey('s-content-sense',{senseId:'sense'}),'s-content-sense:sense');
 console.log("PASS: browser errors are deduplicated and redacted, the API contract is strict/non-fatal, and shell routes round-trip while unknown paths are rejected.");
+
+});

@@ -1,9 +1,12 @@
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 import {mkdtemp,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
+
+test("speech-provider", async () => {
 
 const compiled=await build({
  stdin:{resolveDir:process.cwd(),contents:`export * from './apps/web/src/data/library/spokenResource'; export * from './apps/web/src/data/library/speech/defaultProvider'; export * from './apps/web/src/data/library/speech/edgeTtsClientProvider';`},
@@ -67,3 +70,5 @@ try{
  Object.assign(globalThis,{WebSocket:original});
  await rm(temp,{recursive:true,force:true});
 }
+
+});

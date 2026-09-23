@@ -1,6 +1,9 @@
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {candidateCsp} from '../../../scripts/release/releaseCandidate.mjs';
+
+test("youglish-isolation", async () => {
 
 const hook=await readFile(new URL('../../../apps/web/src/experience/useYouglishWidget.ts',import.meta.url),'utf8');
 assert.match(hook,/https:\/\/youglish\.com\/public\/emb\/widget\.js/u);
@@ -14,3 +17,5 @@ const productionCsp=candidateCsp();
 assert.match(productionCsp,/script-src 'self' 'wasm-unsafe-eval' https:\/\/youglish\.com;/u);
 assert.match(productionCsp,/frame-src 'self' https:\/\/youglish\.com;/u);
 console.log('PASS: the official YouGlish Widget mounts lazily in its product surface without a second deployment origin or startup request.');
+
+});

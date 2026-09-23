@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 /** Language identities, contextual roles, learner-owned Routes, and one
  * surface-scoped Active Route Selection. Fake IndexedDB; no network. */
 import assert from 'node:assert/strict';
@@ -27,6 +28,8 @@ import {
   sensaPinnedLanguageContextSchema,
   sensaResolveLanguageSupport,
 } from '@sensa/contracts/sensa';
+
+test("language-route", async () => {
 
 const tags=sensaLanguages.map(language=>language.tag);
 assert.equal(new Set(tags).size,tags.length,'language tags must be distinct');
@@ -121,3 +124,5 @@ try{
   await assert.rejects(()=>language.addLanguageRoute(op(),'yue','en'),/localFlow\.unknownTargetLanguage/u);
   console.log('PASS: absolute canonical Language Tags, contextual roles including same-language Target/Support, versioned learner-owned Routes, device-scoped Active Route Selection, archival repair and pinned contexts.');
 }finally{await rm(root,{recursive:true,force:true});}
+
+});

@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 /** Canonical Personal Semantic World → Add-to-Learning → runtime smoke. */
 import assert from 'node:assert/strict';
 import {
@@ -14,6 +15,8 @@ import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
+
+test("personal-learning", async () => {
 
 const compiled=await build({stdin:{contents:[
   ...['store','providers','personalLearning','learning','packages','language','speech/defaultProvider'].map(name=>`export * from './apps/web/src/data/library/${name}';`),
@@ -129,3 +132,5 @@ try{
   globalThis.fetch=realFetch;
   await rm(temp,{recursive:true,force:true});
 }
+
+});

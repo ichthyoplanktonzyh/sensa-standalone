@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 /** What the learner is asked to learn, and what the daily limit is the limit of.
  *
  * Queue membership and the daily-new allowance belong to a Language Route;
@@ -8,6 +9,8 @@ import {advanceInterleavedLearningRetries,resolveLearningQueue,selectInterleaved
 import {resolvePracticeScopeCatalog, CURRENT_STUDY_SCOPE_ID, PERSONAL_SEMANTIC_WORLD_SCOPE_ID,type PracticeStudyTarget} from '../../../apps/web/src/experience/practiceScope.ts';
 import type { LocalLearningTarget } from '../../../apps/web/src/data/library/learning.ts';
 import type {PersonalMeaningLearningSource} from '../../../apps/web/src/contentSupply/provisioning/contracts.ts';
+
+test("action-language", async () => {
 
 const at=(hours:number)=>new Date(2026,8,20,hours).toISOString();
 const clock=new Date(2026,8,20,21).getTime();
@@ -98,3 +101,5 @@ assert.equal(studyFor('en').currentScope.targets.length,1,'an English learner ke
 assert.equal(studyFor('es').currentScope.targets.length,0,'another language is not offered that English Learning Target');
 
 console.log('PASS: the queue and Study Plan allowance follow the active Language Route, while Free Practice follows its Target Language and shared Target progress is preserved.');
+
+});

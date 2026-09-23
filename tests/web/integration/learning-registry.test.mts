@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 import {syntheticSound} from '../../../scripts/support/lightweightMaterialFixture.mts';
 /** Immutable Book release and Registry build/read smoke. No network or publication. */
 import assert from 'node:assert/strict';
@@ -9,6 +10,8 @@ import {spawnSync} from 'node:child_process';
 import {bookReleaseBundleSchema,bookReleaseDescriptorSchema,learningContentRegistrySchema,maxPublishedBookReleaseBytes} from '@sensa/contracts/sensa';
 import {clearLearningContentRegistryCache,readLearningContentRegistry} from '../../../apps/api/src/sensa/access/learningContentRegistry.ts';
 import {createAuthoredMediaPackager} from '../../../scripts/release/authoredMedia.mts';
+
+test("learning-registry", async () => {
 
 const digest=(bytes:Uint8Array|string)=>createHash('sha256').update(bytes).digest('hex');
 const root=await mkdtemp(join(tmpdir(),'sensa-learning-registry-'));
@@ -61,3 +64,5 @@ try{
  await assert.rejects(readLearningContentRegistry({SENSA_PACKAGE_REGISTRY_URL:'http://content.example.test/registry.json'} as NodeJS.ProcessEnv),/Invalid learning content registry URL/);
  console.log('PASS: deterministic immutable Book release, content-addressed artifact, Registry uniqueness/digest, safe remote read and immutable cache; no network/publication.');
 }finally{clearLearningContentRegistryCache();globalThis.fetch=realFetch;await rm(root,{recursive:true,force:true});}
+
+});

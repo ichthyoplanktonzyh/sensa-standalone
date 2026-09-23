@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 
 import {decodeBackupValue,encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec.ts';
@@ -13,6 +14,8 @@ import {
   planLibraryReplicaApply,
   replicaEntryId,
 } from '../../../apps/web/src/data/library/replication/libraryReplica.ts';
+
+test("learning-reconciliation", async () => {
 
 type Entry={table:string;key:string;value:unknown};
 const ids={
@@ -115,3 +118,5 @@ assert.deepEqual([...validated.historyOnlyEventIds],[ids.localEvent]);
 assert.throws(()=>validateLearningReconciliationRows({...rows,learningReconciliations:[{key:decisionRow.key,value:{...decision,selectedEventId:ids.localEvent}}]}),/libraryBackup\.errors\.inconsistent/u);
 
 console.log('PASS: domain Replica Modules own normalization, deletion and explicit conflict dependencies; learner prose stays opaque while concurrent Learning histories reconcile deterministically.');
+
+});

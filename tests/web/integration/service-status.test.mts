@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 /** In-process Hono route and real provider selection; synthetic SQL adapter, no browser or network. */
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -5,6 +6,8 @@ import {createConsumerRoutes} from '../../../apps/api/src/sensa/access/consumer.
 import {ConsumerError} from '../../../apps/api/src/sensa/access/auth.ts';
 import {serviceStatusSchema} from '../../../packages/contracts/src/sensa/serviceStatus.ts';
 import {clearLearningContentRegistryCache} from '../../../apps/api/src/sensa/access/learningContentRegistry.ts';
+
+test("service-status", async () => {
 const ids={a:crypto.randomUUID(),b:crypto.randomUUID()};let active=ids.a;let revoked=false;const calls:string[]=[];
 const saved={provider:process.env.SENSA_SEMANTIC_PROVIDER,key:process.env.DEEPSEEK_API_KEY,catalog:process.env.SENSA_PACKAGE_CATALOG_JSON,registry:process.env.SENSA_PACKAGE_REGISTRY_URL,unlimited:process.env.SENSA_UNLIMITED_MODEL_USAGE};
 const app=createConsumerRoutes({clock:()=>new Date('2026-09-10T12:00:00Z'),verify:async req=>{if(!req.headers.has('authorization'))throw new ConsumerError(401,'authentication_required');active=req.headers.get('authorization')==='Bearer a'?ids.a:ids.b;return {issuer:'fixture',subject:active,sessionId:active,email:null};},transaction:async work=>work({query:async(sql:string,args:unknown[])=>{
@@ -39,3 +42,5 @@ try{
  const before=calls.length;assert.equal((await app.request('/sensa/service/status')).status,401);assert.equal(calls.length,before);
  console.log('PASS: real service route, per-account rolling counters, default provider without BYOK, unavailable/revoked/unauthenticated, no secret disclosure or writes. Synthetic SQL; no browser/network.');
 }finally{clearLearningContentRegistryCache();for(const [name,value] of [['SENSA_SEMANTIC_PROVIDER',saved.provider],['DEEPSEEK_API_KEY',saved.key],['SENSA_PACKAGE_CATALOG_JSON',saved.catalog],['SENSA_PACKAGE_REGISTRY_URL',saved.registry],['SENSA_UNLIMITED_MODEL_USAGE',saved.unlimited]]){if(value===undefined)delete process.env[name!];else process.env[name!]=value;}}
+
+});

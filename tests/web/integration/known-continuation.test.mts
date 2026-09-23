@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
@@ -8,6 +9,8 @@ import {indexedDB} from 'fake-indexeddb';
 import {defaultSensaLanguageRoute,sensaPinnedLanguageContext} from '@sensa/contracts/sensa';
 import {provisionLightweightInitialContent} from '../../../apps/web/src/contentSupply/provisioning/lightweightInitialContent.ts';
 import {withBindingFixture} from '../../../scripts/support/lightweightMaterialFixture.mts';
+
+test("known-continuation", async () => {
 const compiled=await build({stdin:{contents:[
  ...['store','learning','packages','backupValidation'].map(name=>`export * from './apps/web/src/data/library/${name}';`),
  "export {learningSystem} from './apps/web/src/learning/system';",
@@ -49,3 +52,5 @@ try{
  assert.deepEqual(before.runs.find((r:any)=>r.id===pinned.id),pinned);
  console.log('PASS: resource-plan backup restore; declared-known advances queue without completion/evidence. No browser, model or TTS calls.');
 }finally{await rm(temp,{recursive:true,force:true});}
+
+});

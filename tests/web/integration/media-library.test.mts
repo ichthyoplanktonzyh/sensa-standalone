@@ -1,5 +1,8 @@
+import {test} from 'vitest';
 /** Personal media is a first-class Library row, not a localStorage sidecar. */
 import assert from 'node:assert/strict';
+
+test("media-library", async () => {
 
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined});
 
@@ -42,3 +45,5 @@ assert.equal(await readLibrary(async tx=>(await tx.entries('semanticInbox')).len
 await assert.rejects(removeMedia(atomicMedia.mediaId),/仍被个人意义引用/,'committed media cannot be removed while a semantic row references it');
 
 console.log('PASS: personal media previews from staging, commits atomically with its semantic reference, rejects dangling references and cannot be deleted while referenced.');
+
+});

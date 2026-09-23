@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import { execFile, spawn, spawnSync } from 'node:child_process';
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
@@ -8,6 +9,8 @@ import { promisify } from 'node:util';
 
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
+
+test("agent-mcp", async () => {
 
 const operationId = crypto.randomUUID();
 const queuedAt = '2026-09-19T08:00:00.000Z';
@@ -254,3 +257,5 @@ fs.writeFileSync(process.env.CODEX_ARGS, JSON.stringify(process.argv.slice(2)));
   await new Promise<void>((resolveClose, reject) => server.close((error) => error ? reject(error) : resolveClose()));
   await rm(temporaryDirectory, { recursive: true, force: true });
 }
+
+});

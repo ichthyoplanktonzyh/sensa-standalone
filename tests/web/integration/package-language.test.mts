@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 import {withBindingFixture} from '../../../scripts/support/lightweightMaterialFixture.mts';
 /** The languages a Curriculum membership carries into provisioning.
  *
@@ -17,6 +18,8 @@ import {mkdtemp,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
+
+test("package-language", async () => {
 
 const compiled=await build({
   stdin:{
@@ -85,3 +88,5 @@ try{
 }finally{
   await rm(temp,{recursive:true,force:true});
 }
+
+});

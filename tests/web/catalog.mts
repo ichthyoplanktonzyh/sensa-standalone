@@ -85,6 +85,7 @@ const foundationTests = [
     risks: ['local-correctness', 'convergence'],
     environment: 'node',
     suite: 'foundation',
+    runner: 'vitest',
   },
   {
     id: 'learning-authority',
@@ -102,6 +103,7 @@ const foundationTests = [
     risks: ['local-correctness', 'convergence'],
     environment: 'node',
     suite: 'foundation',
+    runner: 'vitest',
   },
   {
     id: 'library-transaction-and-replay',
@@ -119,6 +121,7 @@ const foundationTests = [
     risks: ['local-correctness', 'durability'],
     environment: 'node',
     suite: 'foundation',
+    runner: 'vitest',
     memoryLibrary: true,
   },
   {
@@ -128,6 +131,7 @@ const foundationTests = [
     risks: ['durability'],
     environment: 'built-web-artifact',
     suite: 'foundation',
+    runner: 'vitest',
   },
   {
     id: 'web-bundle-budget',
@@ -136,6 +140,7 @@ const foundationTests = [
     risks: ['scale'],
     environment: 'built-web-artifact',
     suite: 'foundation',
+    runner: 'vitest',
   },
 ] as const satisfies readonly WebTestCatalogEntry[];
 
@@ -200,6 +205,13 @@ const scaleTests = new Set<string>([
   'browser/web-bootstrap-budget', 'integration/content-agent',
   'quality/web-idle-work',
 ]);
+const legacyFastNodeTests = new Set<string>([
+  'integration/content-agent',
+  'integration/package-learning',
+  'integration/local-learning-runtime',
+  'integration/web-intake',
+  'quality/appearance',
+]);
 
 const migrated: readonly MigratedTest[] = [
   ...fastBeforeMemory.map((path) => ({path, suite: 'fast' as const})),
@@ -244,6 +256,7 @@ const migratedEntry = ({path, suite, memoryLibrary, env}: MigratedTest): WebTest
     risks,
     environment,
     suite,
+    ...(suite === 'fast' && !legacyFastNodeTests.has(path) ? {runner: 'vitest' as const} : {}),
     ...(memoryLibrary ? {memoryLibrary} : {}),
     ...(env ? {env} : {}),
   };

@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 /** What the learner wrote, and what the service is actually asked.
  *
  * A glossary is learner state: it is written in the local library, published to
@@ -22,6 +23,8 @@ import {
   readingRequestSchema,readingTestRequestSchema,readingModelsRequestSchema,
   sensaReadingGlossaryLimits,sensaReadingGlossarySchema,
 } from '@sensa/contracts/sensa';
+
+test("reading-glossary", async () => {
 
 // ── the library: what the learner wrote ──────────────────────────────────────
 const root=await mkdtemp(join(tmpdir(),'sensa-glossary-'));
@@ -139,3 +142,5 @@ await new Promise(resolve=>setTimeout(resolve,50));
 const lookupBody=sent.find(entry=>entry.url==='/sensa/semantic/lookups/stream')!.body;
 assert.deepEqual(lookupBody,lookup,'a lookup body is the capture it was given, with nothing added');
 console.log('PASS: every reading the extension sends carries the pinned Route context and learner glossary on both paths, the two connection requests carry only their own question, a lookup body is left exactly as the page built it, and each body is one the service’s own schema accepts.');
+
+});

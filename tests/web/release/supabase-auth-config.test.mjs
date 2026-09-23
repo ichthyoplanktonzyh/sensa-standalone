@@ -1,5 +1,8 @@
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import {authRedirectConfigMatches,desiredAuthRedirectConfig,reconcileSupabaseAuth} from '../../../scripts/release/supabaseAuthConfig.mjs';
+
+test("supabase-auth-config", async () => {
 
 const environment={SUPABASE_PROJECT_REF:'abcdefghijklmnopqrst',SENSA_WEB_ORIGIN:'https://sensa.example.com',SUPABASE_ACCESS_TOKEN:'fixture-token'};
 const desired=desiredAuthRedirectConfig(environment);
@@ -22,3 +25,5 @@ calls.length=0;
 await reconcileSupabaseAuth({mode:'check',environment,fetchImpl});
 assert.deepEqual(calls.map(call=>call.method),['GET']);
 console.log('PASS: production Auth redirect config validates, patches only Site URL/allow list and verifies convergence.');
+
+});

@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 /** The bridge between a Sensa Web page and the extension, run end to end.
  *
  * The protocol used to be written down three times — the isolated-world
@@ -20,6 +21,8 @@ import {
   sensaBridgeRequestChannel,sensaBridgeRequestSchema,sensaBridgeResponseChannel,sensaBridgeResponseSchemas,sensaBridgeValue,
   type SensaBridgeKind,type SensaBridgePayload,
 } from '@sensa/contracts/sensa';
+
+test("bridge-contract", async () => {
 
 const web='http://127.0.0.1:3000';
 const otherWeb='http://127.0.0.1:3001';
@@ -241,3 +244,5 @@ assert.equal(narrowSends,0,'and it never reaches the extension');
 sendToNarrowPage(request('web-intake-pull'));
 assert.equal(narrowSends,1,'a kind the injected list does have is forwarded');
 console.log('PASS: one declaration is read by all three ends — the payload and answer maps cover the kinds exactly, the schema accepts what a caller builds and refuses fields it does not have, and the forwarder\'s allowlist is the injected contract rather than a copy.');
+
+});

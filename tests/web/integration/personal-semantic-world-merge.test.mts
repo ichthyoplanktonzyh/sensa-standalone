@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 
 import {decodeBackupValue,encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec.ts';
@@ -5,6 +6,8 @@ import {mergeLibraryReplicas,planLibraryReplicaApply,replicaEntryId} from '../..
 import {assertPersonalSemanticWorldState,assertPersonalSemanticWorldTransition,PersonalSemanticWorldInvariantError} from '../../../apps/web/src/experience/personalMeaningJourney/authority.ts';
 import {emptyJourneyState} from '../../../apps/web/src/experience/personalMeaningJourney/store.ts';
 import {MemoryJourneyRepository} from '../../../apps/web/src/experience/personalMeaningJourney/repository.ts';
+
+test("personal-semantic-world-merge", async () => {
 
 type Entry={table:any;key:string;value:unknown};
 const PSW='sensa-personal-semantic-world-v3';
@@ -100,3 +103,5 @@ const rewrittenV1=registry('senseVersions',senseVersionOne,{contractVersion:'sen
 assert.deepEqual(merge([senseHead,senseV1],[senseHead,rewrittenV1],[senseHead,senseV1]).conflicts,[replicaEntryId(senseV1 as any)],'an existing Registry version is immutable');
 
 console.log('PASS: one Personal Semantic World authority validates local commits and replicas, preserves immutable revisions, converges valid tombstones, blocks resurrection and rejects Registry mutations or revision collisions.');
+
+});

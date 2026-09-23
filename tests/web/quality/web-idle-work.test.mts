@@ -1,8 +1,11 @@
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {nextLearningQueueChangeAt} from '../../../apps/web/src/learning/system/learningPlanning.ts';
 import {nextPersonalLearningLeaseExpiry} from '../../../apps/web/src/experience/library/preparationSchedule.ts';
 import {automaticCloudSyncRetryAt,blocksAutomaticCloudSync,cloudSyncFailurePolicy,cloudSyncRetryDelaysMs} from '../../../apps/web/src/data/library/cloudSyncPolicy.ts';
+
+test("web-idle-work", async () => {
 
 const routeId='route-fixture';
 const now=Date.parse('2026-09-19T04:00:00.000Z');
@@ -56,3 +59,5 @@ assert(!shell.includes('MutationObserver'),'WebShell must not infer route owners
 assert(screenHost.includes('outgoing: ScreenEntry | null'),'ScreenHost must bound retained DOM to current plus one outgoing screen');
 
 console.log('PASS: idle work is event-driven, Home is lightweight, heavy Runtime stays deferred, and ScreenHost owns a bounded route lifecycle without DOM observation.');
+
+});

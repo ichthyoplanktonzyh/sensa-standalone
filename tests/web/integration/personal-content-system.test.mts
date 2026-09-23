@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -5,6 +6,8 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 import { IDBFactory } from 'fake-indexeddb';
+
+test("personal-content-system", async () => {
 
 const root = await mkdtemp(join(tmpdir(), 'sensa-personal-content-'));
 const outfile = join(root, 'bundle.mjs');
@@ -114,3 +117,5 @@ try {
 } finally {
   await rm(root, { recursive: true, force: true });
 }
+
+});

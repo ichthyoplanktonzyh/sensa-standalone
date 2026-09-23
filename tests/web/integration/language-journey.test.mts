@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 /**
  * Intake preserves absolute language facts without consulting the learner's
  * currently selected Route. Route selection belongs to Add-to-Learning, not to
@@ -13,6 +14,8 @@ import {createJourneyGateway,createJourneyModules} from '../../../apps/web/src/e
 import {createSeededClock} from '../../../apps/web/src/experience/personalMeaningJourney/ports.ts';
 import {MemoryJourneyRepository} from '../../../apps/web/src/experience/personalMeaningJourney/repository.ts';
 import type {CommandLanguages} from '../../../apps/web/src/experience/personalMeaningJourney/ports.ts';
+
+test("language-journey", async () => {
 
 const localAuthority={verify:(request:any)=>request.mode==='learner_direct'?{mode:'learner_direct',actorId:'sensa-local-learner'}:{mode:'delegated_agent',actorId:request.actorId,basis:request.basis,authorizationReference:request.authorizationReference}};
 
@@ -164,3 +167,5 @@ const supplied=await raceGateway.completeClarificationDraft({operationId:crypto.
 assert.equal(raceGateway.getLearningSources(supplied.personalMeaningId)[0]?.context.text,suppliedContext.textSegment,'clarification must supply and preserve a formerly missing Context');
 
 console.log('PASS: Intake preserves absolute language tags, ignores the active learning Route, accepts canonical/observed expression forms, and mechanically routes missing facts. Pure engine and in-memory store; no browser, network or model.');
+
+});

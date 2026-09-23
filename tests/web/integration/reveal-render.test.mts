@@ -1,7 +1,10 @@
+import {test} from 'vitest';
 import {build} from 'esbuild';
 import {writeFile,unlink} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
 import {resolve} from 'node:path';
+
+test("reveal-render", async () => {
 const compiled=await build({stdin:{resolveDir:process.cwd(),loader:'tsx',contents:`
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
@@ -37,3 +40,5 @@ console.log('PASS: real reveal component renders ready categories and hides miss
 `},bundle:true,write:false,format:'esm',platform:'node',packages:'external',define:{'import.meta.env':'{}'}});
 const file=resolve('.sensa-reveal-render-smoke.mjs');
 try{await writeFile(file,compiled.outputFiles[0].text);await import(pathToFileURL(file).href);}finally{await unlink(file);}
+
+});

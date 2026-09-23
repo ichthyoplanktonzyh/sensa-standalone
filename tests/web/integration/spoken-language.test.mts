@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 /** What the learner actually hears, in the language they are learning.
  *
  * Two providers speak for the learner: the device speech synthesizer and the
@@ -15,6 +16,8 @@ import {mkdtemp,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
+
+test("spoken-language", async () => {
 
 const compiled=await build({
   stdin:{
@@ -155,3 +158,5 @@ try{
 }finally{
   await rm(temp,{recursive:true,force:true});
 }
+
+});

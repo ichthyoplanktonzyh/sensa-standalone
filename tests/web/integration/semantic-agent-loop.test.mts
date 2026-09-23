@@ -1,6 +1,9 @@
+import {test} from 'vitest';
 /** Static boundary smoke for the native clarification Agent. No browser/network/model calls. */
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
+
+test("semantic-agent-loop", async () => {
 
 const runner=await readFile('apps/web/src/experience/personalMeaningJourney/realSemanticAgent.ts','utf8');
 const contract=await readFile('apps/web/src/experience/personalMeaningJourney/semanticAgent.ts','utf8');
@@ -49,3 +52,5 @@ assert(
 assert(app.includes('onConversationCreated={openPersonalMeaning}'));
 
 console.log('PASS: native Sensa entry and Inbox clarification share one natural teacher loop whose structured clarity assessment is final output; only semantic-world lookup is a tool, with no consolidate mode or model/paid calls.');
+
+});

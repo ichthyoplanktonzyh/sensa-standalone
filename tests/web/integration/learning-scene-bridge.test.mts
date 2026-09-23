@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 /**
  * A learner-owned scene can cross from an immutable published Learning Target
  * into the Personal Semantic World without reconstructing its Sense or
@@ -9,6 +10,8 @@ import {createJourneyGateway} from '../../../apps/web/src/experience/personalMea
 import {createSeededClock} from '../../../apps/web/src/experience/personalMeaningJourney/ports.ts';
 import {MemoryJourneyRepository} from '../../../apps/web/src/experience/personalMeaningJourney/repository.ts';
 import type {PublishedLearningSceneAcceptanceInput} from '../../../apps/web/src/experience/personalMeaningJourney/types.ts';
+
+test("learning-scene-bridge", async () => {
 
 const id=()=>crypto.randomUUID();
 const repository=new MemoryJourneyRepository();
@@ -78,3 +81,5 @@ detail=gateway.getDetail(accepted.personalMeaningId)!;
 assert.equal(detail.materialBlocks.find(block=>block.kind==='text')?.bodyText,second.scene.body);
 
 console.log('PASS: a published Learning Target accepts one learner scene into the exact pinned Sense/Expression/Binding, replays safely, and updates the same Personal Meaning only after explicit re-acceptance.');
+
+});

@@ -1,7 +1,10 @@
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {runInNewContext} from 'node:vm';
 import {offlineBrandFiles} from '../../../apps/web/offlineShell.ts';
+
+test("offline-shell-artifact", async () => {
 const listeners=new Map<string,(event:any)=>void>();
 const stores=new Map<string,Map<string,Response>>([
  ['sensa-shell-core-ancient',new Map([['/assets/ancient.js',new Response('ancient')]])],
@@ -56,3 +59,5 @@ assert.equal(await (await dispatch(failedOptional))!.text(),'network','the repai
 for(const path of ['/sensa/packages','/sensa/web/access/session','/sensa/models','https://catalog.test/package.json'])assert.equal(dispatch(path),undefined);
 assert.equal(dispatch('/index.html','cors','POST'),undefined);
 console.log('PASS: required shell install, lazy optional cache, isolated optional failure, runtime repair, offline deep-link fallback, version cleanup and private-response exclusion.');
+
+});

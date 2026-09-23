@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 /** What a reading surface shows when the learner's material spans languages.
  *
  * Two rules decide every reading surface, so they live in one module and are
@@ -9,6 +10,8 @@ import assert from 'node:assert/strict';
 import {inLanguageScope, languagesPresent, meaningLanguageTags, resolveLanguageScope} from '../../../apps/web/src/experience/library/languageScope.ts';
 import {projectLearningStatistics} from '../../../apps/web/src/experience/learningJourney/learningStatistics.ts';
 import type {LearningRecordView} from '../../../apps/web/src/experience/learningJourney/learningHistory.ts';
+
+test("language-scope", async () => {
 
 const record=(recordId:string,languageTag:string,kind:LearningRecordView['kind'],occurredAt:string):LearningRecordView=>
   ({recordId,targetId:'target-'+recordId,expression:'expression-'+recordId,languageTag,occurredAt,kind,label:kind,detail:''});
@@ -68,3 +71,5 @@ for(const scope of languages){
 assert.equal(resolveLanguageScope(null,languages,'fr'),'all');
 
 console.log('PASS: a reading surface follows the learner\u2019s language choice, never renders a present language as empty, and counts each language from its own records instead of merging them.');
+
+});

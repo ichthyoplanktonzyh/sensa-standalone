@@ -1,6 +1,9 @@
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import { buildSupportDiagnostics } from '../../../apps/web/src/support/supportDiagnosticsSchema.ts';
 import { parseSupportUrl } from '../../../apps/web/src/support/supportUrl.ts';
+
+test("support-diagnostics", async () => {
 
 const privateValues = ['learner@example.com', 'secret-token', 'https://private.example/path', 'record-private-id', 'private learning sentence'];
 const report = buildSupportDiagnostics({
@@ -36,3 +39,5 @@ assert.equal(parseSupportUrl('mailto:support@example.com'), 'mailto:support@exam
 assert.equal(parseSupportUrl('https://support.example.com/request?product=sensa'), 'https://support.example.com/request?product=sensa');
 for (const unsafe of ['', 'mailto:no-at-sign', 'http://support.example.com', 'https://localhost/help', 'https://user:pass@support.example.com', 'https://support.example.com/#token']) assert.equal(parseSupportUrl(unsafe), null);
 console.log('PASS: support diagnostics expose only the fixed state/count schema and support links reject unsafe release targets.');
+
+});

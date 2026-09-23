@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 /** Free Practice source resolution: real Learning Targets, complete Personal
  * Meanings, capability-aware Activities, and detached Session snapshots. */
 import assert from 'node:assert/strict';
@@ -10,6 +11,8 @@ import {
   type PracticeStudyTarget,
 } from '../../../apps/web/src/experience/practiceScope.ts';
 import { resolvePracticeActivities } from '../../../apps/web/src/experience/practiceInventory.ts';
+
+test("practice-scope", async () => {
 
 const studyTarget: PracticeStudyTarget = {
   target: {
@@ -141,3 +144,5 @@ assert.equal(snapshot.targets[0]?.sense.label, '暂时取得并预期归还', 'a
 assert.equal(snapshot.snapshotId, 'practice-snapshot-1');
 
 console.log('PASS: Free Practice resolves real learning and semantic-world targets, checks capabilities, and pins detached Session scope snapshots.');
+
+});

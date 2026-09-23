@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 /** Model management has exactly one entrance per runtime.
  *
  * This is a static, offline check: it reads source files and asserts that no surface
@@ -9,6 +10,8 @@ import {readFile,readdir} from 'node:fs/promises';
 import {join,relative,resolve} from 'node:path';
 import {modelPurposeSchema} from '../../../packages/contracts/src/sensa/modelExecution.ts';
 import {modelAssignmentFeatures} from '../../../packages/contracts/src/sensa/consumer/reading.ts';
+
+test("model-management", async () => {
 
 const root=process.cwd();
 const surfaces=['apps/web/src','apps/browser-extension/src','packages/model-runtime/src'];
@@ -64,3 +67,5 @@ check(!assignable.includes('probe'),'probe is an internal purpose and is never a
 
 if(failures.length){for(const failure of failures)console.error(failure);throw new Error(`${failures.length} model boundary violation(s)`);}
 console.log(`PASS: no provider endpoint outside the two executors, one scheduler per runtime, declared execution place on all ${submissions.length} submissions, reference resolution inside the boundary, assignable purposes match the contract. ${files.length} source files read; no network.`);
+
+});

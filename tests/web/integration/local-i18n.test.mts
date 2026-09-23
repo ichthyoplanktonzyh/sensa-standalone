@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 /** Locale resources are data: registry, directories, namespaces, message keys,
  * interpolation variables, and runtime switching must stay in lockstep. */
 import assert from 'node:assert/strict';
@@ -5,6 +6,8 @@ import {readFile,readdir} from 'node:fs/promises';
 import {parse} from '@babel/parser';
 import {translationNamespaces} from '../../../apps/web/src/i18n/namespaces.ts';
 import {defaultInterfaceLocale,interfaceLocaleRegistry,interfaceLocales,resolveInterfaceLocale} from '../../../apps/web/src/i18n/localeRegistry.ts';
+
+test("local-i18n", async () => {
 
 type Messages=Record<string,unknown>;
 const localeRoot='apps/web/src/i18n/locales';
@@ -129,3 +132,5 @@ for(const file of files){
 }
 
 console.log(`PASS: ${interfaceLocales.length} locales × ${translationNamespaces.length} namespaces have matching keys and placeholders; runtime switching, persisted notices, direction, and ${files.length} Web files passed.`);
+
+});

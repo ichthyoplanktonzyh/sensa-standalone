@@ -1,3 +1,4 @@
+import {test} from 'vitest';
 /** Backup is an explicit recovery-point contract, not an implemented cloud adapter. */
 import assert from 'node:assert/strict';
 
@@ -5,6 +6,8 @@ import {
   sensaAccountBackupContractVersion,
   sensaAccountBackupRecoveryPointSchema,
 } from '../../../packages/contracts/src/sensa/accountBackup.ts';
+
+test("account-backup-contract", async () => {
 
 const recoveryPoint={
   manifest:{
@@ -40,3 +43,5 @@ assert.throws(
 );
 
 console.log('PASS: the cloud-backup seam names an immutable, non-empty, account-assisted recovery point only after storage verification; no backup adapter is invoked.');
+
+});

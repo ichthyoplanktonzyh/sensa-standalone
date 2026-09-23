@@ -1,9 +1,12 @@
+import {test} from 'vitest';
 /** Real generation/admission seams, synthetic sources only; no model or network calls. */
 import assert from 'node:assert/strict';
 import {canonicalJsonDigest} from '@sensa/learning-kernel';
 import {SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND,LEARNING_RESOURCE_DEFINITIONS,LIGHTWEIGHT_RESOURCE_PROFILE,makeRequest,makeBundle,validateBundle,generationResourceContracts,sensaLightweightInitialMaterializationContentSchema,lightweightStepRequirements} from '@sensa/contracts/sensa';
 import {syntheticSound,withBindingFixture} from '../../../scripts/support/lightweightMaterialFixture.mts';
 import {provisionLightweightInitialContent} from '../../../apps/web/src/contentSupply/provisioning/lightweightInitialContent.ts';
+
+test("resource-contracts", async () => {
 const id=()=>crypto.randomUUID(),now=new Date('2026-09-20T00:00:00Z');
 const fixed={targetLanguageTag:'en',supportLanguageTag:'zh-CN',senseId:id(),senseVersionId:id(),bindingId:id(),bindingVersionId:id(),planRevision:'test-v1',expression:'borrow',expressionKind:'word',meaning:'暂时取得物品并准备归还。',prototype:'向朋友借一把伞，稍后归还。',demand:SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND,pronunciation:syntheticSound('borrow','en')};
 const request=await makeRequest({id:id(),learner_user_id:id(),learning_target_id:id(),fixed_input:fixed},id(),now);
@@ -94,3 +97,5 @@ if(ready.status==='ready'){
  assert.equal(LEARNING_RESOURCE_DEFINITIONS.etymology.schema.safeParse(etymology.contentPayload).success,true);
 }
 console.log('PASS: core resource coverage, sourced optional extension, unknown/model-authored fact rejection, exact sound language, scene binding/span, disclosure and independent rejection. No paid calls.');
+
+});
