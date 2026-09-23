@@ -49,9 +49,9 @@ jobs:
         run: npm run test:browser
       - name: Validate release configuration and telemetry guards
         run: |
-          node scripts/sensaReleaseCandidateSmoke.mjs
-          node --import tsx scripts/sensaTelemetrySmoke.mts
-          node --import tsx scripts/sensaModelBudgetSmoke.mts
+          node --import tsx tests/web/run.mts --suite=fast --id=release-candidate
+          node --import tsx tests/web/run.mts --suite=fast --id=telemetry
+          node --import tsx tests/web/run.mts --suite=fast --id=model-budget
       - name: Prepare fixed release candidate
         run: node scripts/release/releaseCandidate.mjs
       - name: Validate Cloudflare bundle without deployment

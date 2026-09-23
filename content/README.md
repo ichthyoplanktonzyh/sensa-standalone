@@ -74,7 +74,7 @@ Build one Registry candidate without publishing anything:
 npm run build -w @sensa/learning-kernel
 npm run build -w @sensa/contracts
 node --import tsx scripts/release/buildStarterPackage.mts
-node --import tsx scripts/sensaLearningRegistrySmoke.mts
+node --import tsx tests/web/run.mts --suite=fast --id=learning-registry
 ```
 
 The builder writes content-addressed Book Release Bundles and one immutable

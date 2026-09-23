@@ -55,7 +55,7 @@ Semantic World/Media 边界拥有。`apps/web/src/learnerSemanticProjection/syst
 Web Shell 只挂载首页、当前 URL sheet 栈和已打开的覆盖层；退出栈的页面必须卸载其 effect。非首页页面、
 账号云同步、远程 Intake 与扩展接收器按需加载，不能重新并入同步启动图。`WebShell` 只观察 viewport
 直属 screen root 的增删和 active 变化，不观察整棵页面子树。生产构建后的 JavaScript gzip 上限
-由 `scripts/sensaWebBundleBudgetSmoke.mts` 按静态 ESM 依赖闭包固定，并纳入 `test:fast`；它分别约束入口、
+由 `tests/web/quality/web-bundle-budget.test.mts` 按静态 ESM 依赖闭包固定，并纳入 `test:fast`；它分别约束入口、
 App Shell、轻量首页、完整学习工作区和 Learning Runtime 的增量闭包，不能只统计入口与命名 chunk 而漏掉同步共享依赖。
 首页只读取 Learning System 已解析的 compact Home projection，不取得 Target、Run、Curriculum 或 Package
 事实；Package/Personal 完整控制器在相关 URL sheet 打开后加载。正式 Learning Runtime renderer 在进入 Run
@@ -213,11 +213,11 @@ Point manifest、摘要、大小、library/learner/schema identity 与 `account_
 模式；仓库目前没有 backup route、store、scheduler 或 restore workflow。现有 account sync 仍是收敛服务，
 不得在代码或 UI 中当作已实现备份。
 
-Web 页面与扩展之间的桥也只声明一次：`packages/contracts/src/sensa/consumer/extension.ts` 同时声明握手（授权、交换、凭据）、页面请求/应答和不含内容的 Intake-ready 通知。Web 应用按它构造请求并校验应答，`apps/browser-extension/src/background.ts` 在分发前解析每条桥消息——未声明的 kind 或字段一律拒绝，不再静默丢弃；页面侧的 `webBridge.ts` 是每个 Sensa 页面都会加载的内容脚本，因此不带 schema，它的频道名、id 上限与 kind 白名单由 `apps/browser-extension/build.mjs` 在构建时从同一份声明注入。扩展完成持久化后主动通知已打开的 Web 页面，页面再通过完整 pull/ack 合同取数据；空闲页不轮询扩展，恢复焦点和可见性作为丢失通知的兜底。授权这一轮同样共用：API 路由与 Web 前置校验读同一组 schema。Web 页面在后台自动续接普通连接；插件中的显式登录则使用 Chrome Identity Web Auth Flow 打开带 PKCE challenge 的短时入口。已有 Web Session 自动签发一次性 code；没有 Session 才显示登录，登录完成后继续原请求。verifier 和最终扩展 credential 始终只在扩展后台，另一账号或资料库的队列不会随连接迁移。`scripts/sensaBridgeContractSmoke.mts` 在快速测试里把真实 forwarder 与真实 background 装进同一台假浏览器，逐 kind 走一遍。
+Web 页面与扩展之间的桥也只声明一次：`packages/contracts/src/sensa/consumer/extension.ts` 同时声明握手（授权、交换、凭据）、页面请求/应答和不含内容的 Intake-ready 通知。Web 应用按它构造请求并校验应答，`apps/browser-extension/src/background.ts` 在分发前解析每条桥消息——未声明的 kind 或字段一律拒绝，不再静默丢弃；页面侧的 `webBridge.ts` 是每个 Sensa 页面都会加载的内容脚本，因此不带 schema，它的频道名、id 上限与 kind 白名单由 `apps/browser-extension/build.mjs` 在构建时从同一份声明注入。扩展完成持久化后主动通知已打开的 Web 页面，页面再通过完整 pull/ack 合同取数据；空闲页不轮询扩展，恢复焦点和可见性作为丢失通知的兜底。授权这一轮同样共用：API 路由与 Web 前置校验读同一组 schema。Web 页面在后台自动续接普通连接；插件中的显式登录则使用 Chrome Identity Web Auth Flow 打开带 PKCE challenge 的短时入口。已有 Web Session 自动签发一次性 code；没有 Session 才显示登录，登录完成后继续原请求。verifier 和最终扩展 credential 始终只在扩展后台，另一账号或资料库的队列不会随连接迁移。`tests/web/contracts/bridge-contract.test.mts` 在快速测试里把真实 forwarder 与真实 background 装进同一台假浏览器，逐 kind 走一遍。
 
 ## 模型与内容边界
 
-所有模型需求都经过同一个模型管理边界：每个用途（澄清 `teacher`、材料 `content`、审核 `review`、词义判定 `reference`、网页阅读 `reading`）都要声明用途与执行位置，再交给该位置的执行器。执行器只有两个，一个进程一个：设备侧 `apps/web/src/data/library/transport.ts` 与 `modelExecution.ts`，服务侧 `packages/model-runtime` 的 Genkit flow。这两处之外，任何代码都不得命名模型端点或引入提供方 SDK；`scripts/sensaModelManagementSmoke.mts` 在快速测试中做静态检查。
+所有模型需求都经过同一个模型管理边界：每个用途（澄清 `teacher`、材料 `content`、审核 `review`、词义判定 `reference`、网页阅读 `reading`）都要声明用途与执行位置，再交给该位置的执行器。执行器只有两个，一个进程一个：设备侧 `apps/web/src/data/library/transport.ts` 与 `modelExecution.ts`，服务侧 `packages/model-runtime` 的 Genkit flow。这两处之外，任何代码都不得命名模型端点或引入提供方 SDK；`tests/web/quality/model-management.test.mts` 在快速测试中做静态检查。
 
 Sensa 原生澄清由 `apps/web/src/experience/personalMeaningJourney/realSemanticAgent.ts` 在设备侧编排有界
 教师 loop。每个用户回合可多次经过同一个 `teacher` 模型执行边界；模型最终输出同时包含面向用户的自然
@@ -231,7 +231,7 @@ purpose 唯一允许的工具是读取本机已有意义，用于必要的复用
 释放可见前缀，完整响应仍必须通过最终 schema 校验才会写入会话。工具参数、清晰度和候选不会作为流式 UI 暴露。
 阅读与语义流在开始和最终提交时仍执行完整账号事务；流中撤权探测使用无账号行锁的轻量查询，并以两秒门控合并高频文本增量，避免每约 100 ms 对账号行执行 `FOR UPDATE`。撤销会终止后续输出，门控间隔由无网络 smoke 固定。
 
-提供方只有两种：Sensa 服务与用户自填的连接。用户连接按保存位置决定执行位置。存在本机库 `providers` 表的连接在本页执行，密钥只保留在页面内存，不进个人库同步，请求由这台设备直接发出。存在账号侧的连接由部署密钥加密保管、在服务端执行；账号级连接登记处是 `db/migrations/0021_sensa_browser_reading.sql` 的 `reading_settings` 表，扩展与 Web 共用同一份，因此一个密钥只需配置一次。两种位置只差两点：本机连接可使用任意 HTTPS 地址与本机 HTTP 服务，但需要对方允许跨域，且不计入服务端用量；账号连接受部署白名单限制（`SENSA_READING_ALLOWED_ORIGINS`），并计入服务端用量。用途指派每次只属于一个登记处，切换用途即清除另一处。阅读的用途内部再按功能指派（划词、网页、字幕、阅读动作、句中意义、输入翻译）：每个功能一个指派键，`scripts/sensaReadingLanguageSmoke.mts` 在快速测试里保证功能清单与指派表、与阅读路由接受的请求枚举三者一致。
+提供方只有两种：Sensa 服务与用户自填的连接。用户连接按保存位置决定执行位置。存在本机库 `providers` 表的连接在本页执行，密钥只保留在页面内存，不进个人库同步，请求由这台设备直接发出。存在账号侧的连接由部署密钥加密保管、在服务端执行；账号级连接登记处是 `db/migrations/0021_sensa_browser_reading.sql` 的 `reading_settings` 表，扩展与 Web 共用同一份，因此一个密钥只需配置一次。两种位置只差两点：本机连接可使用任意 HTTPS 地址与本机 HTTP 服务，但需要对方允许跨域，且不计入服务端用量；账号连接受部署白名单限制（`SENSA_READING_ALLOWED_ORIGINS`），并计入服务端用量。用途指派每次只属于一个登记处，切换用途即清除另一处。阅读的用途内部再按功能指派（划词、网页、字幕、阅读动作、句中意义、输入翻译）：每个功能一个指派键，`tests/web/integration/reading-language.test.mts` 在快速测试里保证功能清单与指派表、与阅读路由接受的请求枚举三者一致。
 
 `reference` 用途默认由 Sensa 服务承担并使用独立预算池，上限 `SENSA_REFERENCE_DAILY_LIMIT`（默认
 300）；`teacher`、`content`/`review` 的默认上限为 30。托管模型请求统一记录在短期
@@ -256,7 +256,7 @@ YouGlish 使用官方 Widget 直接嵌入真实语境聆听页面；提供方脚
 
 模型输出只是候选。语义接受、学习资源校验、加入学习和运行时结算仍由对应应用与领域模块完成。常规测试使用替身，不调用付费模型或 TTS。
 
-阅读请求由扩展的 background 在一个地方补齐学习者状态（语对与术语表），流式端口与普通消息共用这一步；模型连接测试与模型列表只带各自的问题。服务端的阅读、测试与列表三个入口只接受合同里声明的那三种请求体，`scripts/sensaReadingGlossarySmoke.mts` 在快速测试里逐个核对扩展实际发出的 body。
+阅读请求由扩展的 background 在一个地方补齐学习者状态（语对与术语表），流式端口与普通消息共用这一步；模型连接测试与模型列表只带各自的问题。服务端的阅读、测试与列表三个入口只接受合同里声明的那三种请求体，`tests/web/integration/reading-glossary.test.mts` 在快速测试里逐个核对扩展实际发出的 body。
 
 内容制作的命令、安全边界和无成本检查由 [`content/README.md`](../../content/README.md) 维护。生成数据、发布 JSON 和运行媒体不提交 Git。
 
@@ -355,15 +355,17 @@ SENSA_TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55432/sensa_m1a
 npm run check
 ```
 
-`npm run check` 中的快速测试先运行结构化 Web 基线，再运行尚未迁移的旧检查。结构化基线使用两个正交维度：
+`npm run check` 中的快速测试由统一目录运行。Foundation 已按两个正交维度明确分类：
 `contract | integration | quality` 表示验证机制，`local-correctness | durability | convergence | scale`
-表示产品风险；`Smoke` 只表示一个发布或运行集合，不再作为测试类型。结构化基线可以单独列出或按维度运行：
+表示产品风险。其他旧检查已迁入按边界组织的测试目录，保留原有断言与运行隔离；风险标签会在后续拆分断言时逐项补齐。可以单独列出或按维度运行：
 
 ```sh
 npm run test:web:foundation -- --list
 npm run test:web:foundation -- --kind=contract
 npm run test:web:foundation -- --risk=convergence
 npm run test:web:foundation -- --environment=built-web-artifact
+npm run test:fast -- --list
+npm run test:fast -- --suite=fast --id=learning-registry
 SENSA_TEST_DATABASE_URL=postgresql://... npm run test:web:db
 ```
 
@@ -371,9 +373,9 @@ SENSA_TEST_DATABASE_URL=postgresql://... npm run test:web:db
 `browser-postgres` 使用真实 Chromium、OPFS、本地 Hono 路由和一次性 PostgreSQL，只在显式选择或 `npm run test:db`
 时运行，不进入无数据库依赖的默认结构化基线。
 
-`tests/web/catalog.mts` 是迁移期间的可执行分类入口。已收编的旧检查仍可从原 `scripts/sensa*Smoke.*` 路径单独运行，
-但 `test:fast` 不重复执行它们；原生结构化测试没有旧入口。后续只有在不改变验证语义时才把旧断言移动到所属模块附近。
-断言完成原生迁移并通过对应验证后，必须在同一改动中删除旧脚本和 catalog 的 `legacyEntrypoint`，不长期维护双轨测试。
+`tests/web/catalog.mts` 是唯一的 Web 测试执行目录：`fast`、`browser`、`database`、`manual` 和
+`foundation` 各按所需环境独立运行，单项可用 `--suite=... --id=...` 选择。旧的 `scripts/sensa*Smoke.*`
+入口和导入包装层已删除；原有断言现在直接属于 `tests/web` 下对应边界。后续按行为拆细时应维持既有验证语义。
 
 `tests/web/support/libraryConvergenceWorld.mts` 通过一个小型测试 Interface 封装每台设备的 confirmed base、当前
 本地快照、云端发布、领域 Replica Module 合并与冲突分区。场景只提交领域有效快照、指定同步顺序，并可在确定时点
@@ -407,15 +409,15 @@ npm run test:db
 
 ```sh
 npm run build -w @sensa/browser-extension
-node --import tsx scripts/sensaBrowserPortSmoke.mts
-node --import tsx scripts/sensaExtensionPopupSmoke.mts
+node --import tsx tests/web/run.mts --suite=manual --id=browser-port
+node --import tsx tests/web/run.mts --suite=manual --id=extension-popup
 ```
 
 脚本成功只能证明它覆盖的边界；真实账号、真实 Provider、浏览器商店和生产环境需要各自的验收证据。
 
 ## CI 与生产发布
 
-`.github/workflows/sensa-consumer-check.yml` 在 pull request 和 `main` push 时运行 `Sensa CI`。它执行静态检查、构建、结构化 Web 基线、尚未迁移的快速检查以及 PostgreSQL/API 集成。
+`.github/workflows/sensa-consumer-check.yml` 在 pull request 和 `main` push 时运行 `Sensa CI`。它执行静态检查、构建、Web 快速测试、浏览器检查以及 PostgreSQL/API 集成。
 
 应用的日常生产发布只有一个入口：`.github/workflows/sensa-web-deploy.yml`。发布流程：
 
@@ -504,9 +506,9 @@ Python `content/tools/spoken_resource.py` 只属于离线 Book 制作管线。�
 可通过 `SENSA_TTS_PYTHON` 指定装有 `content/requirements.txt` 依赖的 Python。
 
 `python3 content/tools/smoke_spoken_resource.py` 验证 provider 替换、缓存隔离、损坏检测与外部调用门控；
-`scripts/sensaSpeechProviderSmoke.mts` 验证 provider 替换、默认 Edge wire adapter、输入身份和已保存音频
+`tests/web/integration/speech-provider.test.mts` 验证 provider 替换、默认 Edge wire adapter、输入身份和已保存音频
 合同；以上不调用真实服务。
-完成本地构建后，`node --import tsx scripts/sensaLocalBookSmoke.mts` 在隔离内存库中验证实际包的
+完成本地构建后，`node --import tsx tests/web/integration/local-book.test.mts` 在隔离内存库中验证实际包的
 安装、学习结算与复习，完全禁用网络。真实浏览器存储、交互、声音听感由人工验收。
 
 
@@ -531,9 +533,9 @@ Python `content/tools/spoken_resource.py` 只属于离线 Book 制作管线。�
 历史资源追加的 provenance 读取和备份校验保留，已有材料及学习记录不被重写。
 新资源由新材料／学习包版本交付，本地 v7 包通过用户主动应用更新进入已有学习目标。
 
-`sensaRevealResourcesSmoke.mts` 验证类型矩阵、来源准备、范围约束和材料计划校验；
-`sensaRevealRenderSmoke.mts` 在 Node 中渲染真实卡片，验证有资料才显示对应区域；
-`sensaKnownContinuationSmoke.mts` 验证备份与声明已会后继续队列。它们不操控浏览器、
+`tests/web/integration/reveal-resources.test.mts` 验证类型矩阵、来源准备、范围约束和材料计划校验；
+`tests/web/integration/reveal-render.test.mts` 在 Node 中渲染真实卡片，验证有资料才显示对应区域；
+`tests/web/integration/known-continuation.test.mts` 验证备份与声明已会后继续队列。它们不操控浏览器、
 不调用模型或 TTS。实际声音与浏览器交互仍由人工验收。
 
 ### Web 学习资源 Agent 与后台任务
@@ -560,7 +562,7 @@ Agent 不得更换 Expression/Sense、制造来源或调用学习结算事务。
 过期执行仍受 task lease、账号、模型配置及来源版本校验约束，旧结果不能发布到新任务。
 最终统一校验并发布材料快照，不把草稿或可选资源缺失写成学习成果。
 
-`sensaContentAgentSmoke.mts` 默认只使用假模型／工具，覆盖并发、修复、恢复和原图保留，纳入 `npm run check`。
-人工授权后可显式执行 `node --import tsx scripts/sensaContentAgentSmoke.mts --live-deepseek`，
+`tests/web/integration/content-agent.test.mts` 默认只使用假模型／工具，覆盖并发、修复、恢复和原图保留，纳入 `npm run check`。
+人工授权后可显式执行 `node --import tsx tests/web/integration/content-agent.test.mts --live-deepseek`，
 通过本地托管服务调用配置模型。该模式使用测试场景和既有缓存声音，不改用户学习数据；
 结果写入被 Git 忽略的 `.sensa-local/agent-live-smoke.json`。真实模式不进入常规验证。

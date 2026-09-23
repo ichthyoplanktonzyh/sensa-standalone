@@ -90,7 +90,7 @@ jobs:
           npm run build -w @sensa/learning-kernel
           npm run build -w @sensa/contracts
           node --import tsx scripts/release/buildStarterPackage.mts
-          node --import tsx scripts/sensaLearningRegistrySmoke.mts
+          node --import tsx tests/web/run.mts --suite=fast --id=learning-registry
       - name: Upload releases, verify public bytes, and prepare promotion
         env:
           SENSA_CONTENT_PUBLISH: 'true'

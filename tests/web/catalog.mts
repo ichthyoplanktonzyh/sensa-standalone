@@ -9,8 +9,11 @@ export const webTestRisks = [
 ] as const;
 export type WebTestRisk = (typeof webTestRisks)[number];
 
-export const webTestEnvironments = ['node', 'built-web-artifact', 'browser-postgres'] as const;
+export const webTestEnvironments = ['node', 'built-web-artifact', 'chromium', 'postgres', 'browser-postgres'] as const;
 export type WebTestEnvironment = (typeof webTestEnvironments)[number];
+
+export const webTestSuites = ['foundation', 'fast', 'browser', 'database', 'manual'] as const;
+export type WebTestSuite = (typeof webTestSuites)[number];
 
 export const defaultWebTestEnvironments = ['node', 'built-web-artifact'] as const satisfies readonly WebTestEnvironment[];
 
@@ -20,21 +23,24 @@ export type WebTestCatalogEntry = Readonly<{
   kind: WebTestKind;
   risks: readonly WebTestRisk[];
   environment: WebTestEnvironment;
-  legacyEntrypoint?: string;
+  suite: WebTestSuite;
+  memoryLibrary?: boolean;
+  env?: Readonly<Record<string, string>>;
 }>;
 
 /**
- * The migration baseline. A catalog entry classifies what a check proves;
- * legacy entry points remain the implementation until their assertions move
- * beside the owning module without changing meaning.
+ * The focused foundation tests have explicit risk classification. The other
+ * migrated checks are registered below by execution boundary; they keep their
+ * original assertions and isolation until each can be split by behavior.
  */
-export const webTestCatalog = [
+const foundationTests = [
   {
     id: 'learning-system-boundary',
     file: 'tests/web/contracts/learning-system-boundary.test.mts',
     kind: 'contract',
     risks: ['local-correctness'],
     environment: 'node',
+    suite: 'foundation',
   },
   {
     id: 'content-supply-authority',
@@ -42,6 +48,7 @@ export const webTestCatalog = [
     kind: 'contract',
     risks: ['local-correctness'],
     environment: 'node',
+    suite: 'foundation',
   },
   {
     id: 'learner-projection-boundary',
@@ -49,6 +56,7 @@ export const webTestCatalog = [
     kind: 'contract',
     risks: ['local-correctness'],
     environment: 'node',
+    suite: 'foundation',
   },
   {
     id: 'library-convergence-world',
@@ -56,6 +64,7 @@ export const webTestCatalog = [
     kind: 'integration',
     risks: ['local-correctness', 'durability', 'convergence'],
     environment: 'node',
+    suite: 'foundation',
   },
   {
     id: 'library-cloud-convergence',
@@ -63,6 +72,7 @@ export const webTestCatalog = [
     kind: 'integration',
     risks: ['local-correctness', 'durability', 'convergence'],
     environment: 'browser-postgres',
+    suite: 'database',
   },
   {
     id: 'personal-semantic-world-merge',
@@ -70,7 +80,7 @@ export const webTestCatalog = [
     kind: 'integration',
     risks: ['local-correctness', 'convergence'],
     environment: 'node',
-    legacyEntrypoint: 'scripts/sensaPersonalSemanticWorldMergeSmoke.mts',
+    suite: 'foundation',
   },
   {
     id: 'learning-authority',
@@ -78,7 +88,8 @@ export const webTestCatalog = [
     kind: 'integration',
     risks: ['local-correctness', 'durability'],
     environment: 'node',
-    legacyEntrypoint: 'scripts/sensaLearningAuthoritySmoke.mts',
+    suite: 'foundation',
+    memoryLibrary: true,
   },
   {
     id: 'learning-reconciliation',
@@ -86,7 +97,7 @@ export const webTestCatalog = [
     kind: 'integration',
     risks: ['local-correctness', 'convergence'],
     environment: 'node',
-    legacyEntrypoint: 'scripts/sensaLearningReconciliationSmoke.mts',
+    suite: 'foundation',
   },
   {
     id: 'library-transaction-and-replay',
@@ -94,7 +105,8 @@ export const webTestCatalog = [
     kind: 'integration',
     risks: ['local-correctness', 'durability'],
     environment: 'node',
-    legacyEntrypoint: 'scripts/sensaLibraryUpgradeSmoke.mts',
+    suite: 'foundation',
+    memoryLibrary: true,
   },
   {
     id: 'personal-content-system',
@@ -102,7 +114,8 @@ export const webTestCatalog = [
     kind: 'integration',
     risks: ['local-correctness', 'durability'],
     environment: 'node',
-    legacyEntrypoint: 'scripts/sensaPersonalContentSystemSmoke.mts',
+    suite: 'foundation',
+    memoryLibrary: true,
   },
   {
     id: 'offline-shell-artifact',
@@ -110,7 +123,7 @@ export const webTestCatalog = [
     kind: 'integration',
     risks: ['durability'],
     environment: 'built-web-artifact',
-    legacyEntrypoint: 'scripts/sensaOfflineShellSmoke.mts',
+    suite: 'foundation',
   },
   {
     id: 'web-bundle-budget',
@@ -118,6 +131,87 @@ export const webTestCatalog = [
     kind: 'quality',
     risks: ['scale'],
     environment: 'built-web-artifact',
-    legacyEntrypoint: 'scripts/sensaWebBundleBudgetSmoke.mts',
+    suite: 'foundation',
   },
 ] as const satisfies readonly WebTestCatalogEntry[];
+
+type MigratedTest = Readonly<{path: string; suite: WebTestSuite; memoryLibrary?: boolean; env?: Readonly<Record<string, string>>}>;
+
+const fastBeforeMemory = [
+  'integration/support-diagnostics',
+  'contracts/stream-authorization',
+  'quality/content-supply-system-boundary',
+  'release/incident-delivery',
+] as const;
+
+const fastWithMemory = [
+  'integration/content-agent', 'integration/reveal-resources', 'integration/reveal-render',
+  'integration/known-continuation', 'integration/speech-provider', 'quality/youglish-isolation',
+  'contracts/resource-contracts', 'integration/learning-registry', 'integration/service-status',
+  'integration/model-turn', 'integration/model-streaming', 'integration/model-execution',
+  'quality/model-management', 'integration/semantic-agent-loop', 'integration/local-model-opt-in',
+  'release/release-candidate', 'release/supabase-auth-config', 'quality/source-syntax',
+  'integration/telemetry', 'integration/browser-reliability', 'integration/storage-capability',
+  'integration/model-budget', 'integration/home-readiness', 'quality/web-idle-work',
+  'integration/package-learning', 'integration/local-learning-runtime', 'integration/media-library',
+  'integration/learning-scene-bridge', 'integration/personal-learning', 'integration/language-route',
+  'integration/language-journey', 'integration/reading-language', 'integration/reading-glossary',
+  'integration/reading-skip', 'integration/extension-speech', 'integration/reading-site',
+  'integration/reference-language', 'integration/spoken-language', 'integration/package-language',
+  'integration/language-scope', 'integration/practice-scope', 'integration/action-language',
+  'contracts/bridge-contract', 'integration/agent-mcp', 'integration/web-intake',
+  'contracts/account-backup-contract', 'integration/scene-image-input', 'quality/appearance',
+  'quality/mobile-interaction', 'integration/local-i18n',
+] as const;
+
+const browserTests = [
+  'browser/skin-surface', 'browser/resource-presentation', 'browser/reference-presentation',
+  'browser/sqlite-opfs-benchmark', 'browser/web-bootstrap-budget',
+] as const;
+
+const databaseTests = [
+  'database/database-budget', 'database/account-deletion', 'database/model-request-state',
+  'database/intake-delivery', 'database/library-cloud',
+] as const;
+
+const manualTests = [
+  'browser/browser-port', 'browser/extension-popup', 'integration/local-book',
+] as const;
+
+const migrated: readonly MigratedTest[] = [
+  ...fastBeforeMemory.map((path) => ({path, suite: 'fast' as const})),
+  ...fastWithMemory.map((path) => ({
+    path,
+    suite: 'fast' as const,
+    memoryLibrary: true,
+    ...(path === 'integration/model-execution' ? {env: {GENKIT_ENV: 'prod'}} : {}),
+  })),
+  ...browserTests.map((path) => ({path, suite: 'browser' as const})),
+  ...databaseTests.map((path) => ({path, suite: 'database' as const})),
+  ...manualTests.map((path) => ({
+    path,
+    suite: 'manual' as const,
+    ...(path === 'integration/local-book' ? {memoryLibrary: true} : {}),
+  })),
+];
+
+const migratedEntry = ({path, suite, memoryLibrary, env}: MigratedTest): WebTestCatalogEntry => {
+  const kind = path.startsWith('contracts/') ? 'contract' : path.startsWith('quality/') ? 'quality' : 'integration';
+  const environment = suite === 'browser' || path.startsWith('browser/') ? 'chromium' : suite === 'database' ? 'postgres' : 'node';
+  const extension = path.startsWith('release/') ? 'mjs' : 'mts';
+  return {
+    id: path.split('/').at(-1)!,
+    file: `tests/web/${path}.test.${extension}`,
+    kind,
+    risks: [],
+    environment,
+    suite,
+    ...(memoryLibrary ? {memoryLibrary} : {}),
+    ...(env ? {env} : {}),
+  };
+};
+
+export const webTestCatalog: readonly WebTestCatalogEntry[] = [
+  ...foundationTests,
+  ...migrated.map(migratedEntry),
+];
