@@ -13,7 +13,7 @@ import {readLibrary} from './store';
 /** Public exchange metadata retained with a locally installed `.sensa` artifact.
  * Media bytes remain in the compiled Runtime content and are reconstructed on export. */
 export type PortablePackageOrigin={
- format:'sensa-portable-installation-origin-v1';
+ format:'sensa-portable-installation-origin-v2';
  manifest:SensaPortableLightweightPackage;
  packageDigest:string;
  archiveDigest:string;

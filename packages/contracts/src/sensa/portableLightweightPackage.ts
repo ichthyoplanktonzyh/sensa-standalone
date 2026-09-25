@@ -2,9 +2,15 @@ import {z} from "zod";
 
 import {sensaLanguageTagSchema} from "./language.js";
 import {sensaLightweightExpressionKindSchema} from "./learningResourceDefinitions.js";
+import {
+  sensaExpressionBindingRelationSchema,
+  sensaExpressionTypeSchema,
+  sensaSemanticCoverageSchema,
+  sensaSenseSemanticSpecSchema,
+} from "./semanticRegistry.js";
 
 export const sensaPortableLightweightPackageFormat =
-  "sensa-portable-lightweight-package-v1" as const;
+  "sensa-portable-lightweight-package-v2" as const;
 
 const nonEmpty = z.string().trim().min(1);
 const boundedText = (maximum: number) => nonEmpty.max(maximum);
@@ -34,8 +40,35 @@ export const sensaPortableLightweightMediaSchema = z.object({
   }).strict().optional(),
 }).strict();
 
-export const sensaPortableLightweightPackageSchema = z.object({
-  format: z.literal(sensaPortableLightweightPackageFormat),
+export const sensaPortableLightweightSemanticDeclarationSchema = z.object({
+  contractVersion: z.literal("sensa-portable-semantic-declaration-v1"),
+  sense: z.object({
+    senseId: z.string().uuid(),
+    senseVersionId: z.string().uuid(),
+    senseKey: boundedText(500),
+    versionNumber: positiveInteger,
+    semanticPolicyVersion: boundedText(500),
+    semanticSpec: sensaSenseSemanticSpecSchema,
+  }).strict(),
+  expression: z.object({
+    expressionId: z.string().uuid(),
+    expressionVersionId: z.string().uuid(),
+    versionNumber: positiveInteger,
+    expressionType: sensaExpressionTypeSchema,
+    structure: z.record(z.string(), z.unknown()),
+  }).strict(),
+  binding: z.object({
+    senseExpressionBindingId: z.string().uuid(),
+    bindingVersionId: z.string().uuid(),
+    versionNumber: positiveInteger,
+    relation: sensaExpressionBindingRelationSchema,
+    semanticCoverage: sensaSemanticCoverageSchema,
+    registerLabel: nullableBoundedText(500),
+    usageConstraints: z.array(boundedText(2_000)).max(100),
+  }).strict(),
+}).strict();
+
+const portableLightweightPackageShape = {
   metadata: z.object({
     packageId: z.string().uuid(),
     version: positiveInteger,
@@ -118,10 +151,19 @@ export const sensaPortableLightweightPackageSchema = z.object({
     }).strict(),
   }).strict(),
   media: z.array(sensaPortableLightweightMediaSchema).max(64),
+};
+
+export const sensaPortableLightweightPackageSchema = z.object({
+  format: z.literal(sensaPortableLightweightPackageFormat),
+  ...portableLightweightPackageShape,
+  semanticDeclaration: sensaPortableLightweightSemanticDeclarationSchema.optional(),
 }).strict();
 
 export type SensaPortableLightweightMedia = z.infer<
   typeof sensaPortableLightweightMediaSchema
+>;
+export type SensaPortableLightweightSemanticDeclaration = z.infer<
+  typeof sensaPortableLightweightSemanticDeclarationSchema
 >;
 export type SensaPortableLightweightPackage = z.infer<
   typeof sensaPortableLightweightPackageSchema

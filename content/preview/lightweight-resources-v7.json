@@ -1,6 +1,9 @@
 {
   "title": "日常经验：从场景绑定表达",
   "description": "三个用于本地验收的轻量学习包。第一张卡建立经验，第二张卡依次完成意义、声音、形式、场景回指和用法迁移。",
+  "publisher": {"namespace": "sensa.official", "name": "Sensa Official"},
+  "author": {"name": "Sensa Official"},
+  "license": {"name": "All rights reserved"},
   "bookKey": "daily-exchanges",
   "versionNumber": 7,
   "publishedAt": "2026-09-20T13:00:00Z",
@@ -10,6 +13,7 @@
   "entries": [
     {
       "key": "fragile-physical-object",
+      "packageVersion": 1,
       "senseVersion": 1,
       "bindingVersion": 1,
       "expression": "fragile",
@@ -84,6 +88,7 @@
     },
     {
       "key": "sustain-process-continuation",
+      "packageVersion": 1,
       "senseVersion": 1,
       "bindingVersion": 1,
       "expression": "sustain",
@@ -159,6 +164,7 @@
     },
     {
       "key": "borrow-receiver-perspective",
+      "packageVersion": 1,
       "senseVersion": 1,
       "bindingVersion": 1,
       "expression": "borrow",

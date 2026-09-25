@@ -67,7 +67,7 @@ domain definition of Example.
 No scene-domain or construction diversity quota is enforced. Those fields remain
 descriptive metadata required by the current V2 wire shape.
 
-## Transitional Web Book release delivery
+## Web Book release delivery migration
 
 The current Web release adapter still compiles the small reviewed sources in `content/authored/`
 into the older immutable Book Bundle JSON consumed by the existing Catalog installer. This is a
@@ -95,6 +95,26 @@ in `content/authored/`; that directory keeps one current source for each stable 
 exact language pair, while Git history retains prior authored versions. A bounded custom
 build may override the list with comma-separated `SENSA_BOOK_RELEASE_SOURCES` paths.
 
+The replacement producer is `scripts/release/buildPortableBookRegistry.mts`. It requires
+the authored source to declare its publisher, author and license, plus a positive
+`packageVersion` for every member. It emits one independently valid Portable v2 `.sensa`
+per Sense, one content-addressed Book Version Manifest that orders those packages, and
+`release-candidate/portable-catalog.json`, whose Registry attests both the publisher
+namespace and the exact Manifest/package digests:
+
+```sh
+npm run build -w @sensa/content-validator
+node --import tsx scripts/release/buildPortableBookRegistry.mts
+node --import tsx tests/web/run.mts --suite=fast --id=portable-learning-registry
+```
+
+`scripts/release/publishPortableLearningRegistry.mjs` implements the immutable upload
+order Package → Manifest → Registry and verifies the public bytes at every step. The
+protected workflow currently builds and preserves this replacement candidate but still
+promotes the old Registry, because the Catalog consumer has not yet moved to Portable
+installation. The switch happens once that consumer migration is complete; this staging
+does not add a second public Portable format.
+
 Authored audio and images use the same content-addressed release seam. A source
 stores only `{ "sha256": "…", "mimeType": "audio/mpeg" }` or
 `{ "sha256": "…", "mimeType": "image/jpeg" }`; approved bytes live outside Git
@@ -121,9 +141,10 @@ owner-selected release asset, verifies its whole-file digest, then sets
 rejects missing or unused bytes.
 
 Production publication is only through the protected
-`sensa-learning-content-publish.yml` workflow: it uploads and verifies every Bundle,
-publishes the Registry last, and then promotes the API's public Registry URL. It makes no
-model or TTS calls and never overwrites an existing object.
+`sensa-learning-content-publish.yml` workflow. Until the Catalog migration, it uploads and
+verifies every old Bundle, publishes that Registry last, and then promotes the API's public
+Registry URL; it also builds and tests the replacement Portable candidate without
+promoting it. It makes no model or TTS calls and never overwrites an existing object.
 
 ## Layout
 

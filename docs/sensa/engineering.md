@@ -461,9 +461,12 @@ tag 与完整 SHA-256。工作流先校验整个媒体包，构建器再校验�
 不符或摘要不符都会终止发布。
 
 这段 Book Bundle JSON 是当前过渡交付 adapter，不是新的公共内容合同。领域边界已经固定为：每个
-Published Lightweight member 必须成为可独立验证的 `.sensa`，Book Version Manifest 只组织这些制品；
-在官方 builder、Registry descriptor 与 Catalog installer 完成迁移前，现有发布 workflow 保持上述真实
-行为，不能把尚未实现的统一通路宣称为已上线。
+Published Lightweight member 必须成为可独立验证的 `.sensa`，Book Version Manifest 只组织这些制品。
+官方 producer 已由 `buildPortableBookRegistry.mts` 实现：每个 authored member 产生一个 Portable v2
+Package，Manifest 固定顺序和 package digest，Registry v2 对 publisher namespace、Manifest digest 和
+member semantic declaration 作精确证明；`publishPortableLearningRegistry.mjs` 按 Package → Manifest →
+Registry 的顺序上传并逐层校验公开 bytes。受保护 workflow 已构建、测试并保存这个 replacement candidate，
+但在 Catalog installer 迁移完成前仍只提升旧 Registry 指针，不能把未接入消费端的新通路宣称为已上线。
 
 ```sh
 gh workflow run sensa-learning-content-publish.yml \
@@ -535,11 +538,17 @@ Portable 的 `preview/install/export_portable_package`，两者在安装后才�
 authority，裸 Book/legacy Package JSON 不再作为新的公开导入入口。旧安装事实和 learner progress 必须
 继续可读，迁移不能删除、重写或静默重新加入用户内容。
 
-迁移不能只把旧 Bundle 改扩展名。当前 Portable v1 固定一个 Sense/Route，并足以运行 Lightweight；当前
-官方 Book entry 还携带可由 Registry 信任的稳定 Sense/Binding semantic snapshot，用于跨 Book/Route 复用
-identity 和从“我的场景”建立 Personal Meaning。统一后的公开 `.sensa` 合同必须能携带这类可选声明，且
-只有 Registry 对精确 artifact digest 的 attestation 才能赋予 Sensa Official 权威；外部文件自报相同 ID
-不得冒充官方事实。Book 排序与 membership 继续留在 Manifest，不塞回单 Sense Package。
+迁移不能只把旧 Bundle 改扩展名。Portable v2 固定一个 Sense/Route，并以可选 `semanticDeclaration`
+携带官方 Book entry 所需的稳定 Sense/Binding semantic snapshot，用于跨 Book/Route 复用 identity 和从
+“我的场景”建立 Personal Meaning。只有 Registry 对精确 artifact digest 的 attestation 才能赋予声明
+Sensa Official 权威；本地文件导入继续使用 Package-local identity，不能凭相同 ID 冒充官方事实。Book
+排序与 membership 继续留在 Manifest，不塞回单 Sense Package。当前没有用户或已发布 Portable 制品，
+因此 v2 直接取代 v1，validator 不保留双格式读取分支。
+
+官方分发 producer 已完成同一边界的输出：`.sensa` 是唯一成员制品，Book Version Manifest 只保存有序
+membership 与精确 digest，Registry v2 只发布并证明 Manifest。Catalog 当前尚未读取这一 Registry，所以下一
+阶段必须让 Catalog 下载复用 Portable preview/install authority，再切换受保护发布 workflow 的 Registry
+pointer，最后删除旧 Book Bundle producer/consumer；在此之前新 candidate 只参与构建和验证。
 
 `python3 content/tools/smoke_spoken_resource.py` 验证 provider 替换、缓存隔离、损坏检测与外部调用门控；
 `tests/web/integration/speech-provider.test.mts` 验证 provider 替换、默认 Edge wire adapter、输入身份和已保存音频

@@ -322,7 +322,7 @@ Sensa Official 的作者稿、数据库、Target Core、Support Overlay、提示
 工具和内部结构；最终文件必须通过同一公共 Runtime 准入校验。Official 内容可以另行通过更严格质量门禁，
 但不能拥有绕过 `.sensa` 的 Runtime 私有入口。
 
-`.sensa` v1 是一个单文件 ZIP 归档，内部是公开的 `package.json` 合同与 `media/<sha256>` 原始媒体，固定
+`.sensa` v2 是一个单文件 ZIP 归档，内部是公开的 `package.json` 合同与 `media/<sha256>` 原始媒体，固定
 一个 Sense、目标表达和精确 Target/Support Language pair。清单不接受任意媒体路径，媒体文件由摘要寻址；
 裸 JSON 与目录只属于作者工作区，不是第二种正式交换格式。归档不携带 learner progress、调度、Evidence、
 Materialization、官方 review status 或可执行代码。Portable 文件是 untrusted transport candidate；导入
@@ -339,17 +339,17 @@ Portable identity 使用 `packageId + positive integer version`。相同 identit
 fact 不改写，尚未操作的当前 Step 可以显式刷新，后续 Step 读取新版。identity 改变则建立新的 Learning
 Target，旧 Target 默认保留。Portable 作者自己的 `senseId` 用来稳定编译本地 Sense/Binding identity；若
 作者实际改变 Sense 或目标表达语义，应使用新的 identity，而不是借版本号悄悄复用 learner progress。
-Package 只是分发载体，Portable v1 不把永久 Package Version 历史或历史内容回放定义为产品合同，也不提供
+Package 只是分发载体，Portable v2 不把永久 Package Version 历史或历史内容回放定义为产品合同，也不提供
 静默课程降级。
 
 公共准入门禁只检查 Runtime 可执行性、必需角色、引用、媒体、大小、摘要和目标 span 等确定性事实。
 经验提示不泄露目标表达、语言自然度、文化边界与编辑质量属于生产者或策展者的质量策略，不属于外部
 作者的通用准入条件。信任级别由实际导入来源、签名或 Registry 赋予，不能由文件自报。
 
-为完成官方 Catalog 迁移，Portable 合同的下一兼容版本必须允许 `.sensa` 携带可选的 stable
-Sense/Binding semantic snapshot，使同一官方 target 能跨 Book/Route 复用，并支持从 Personal Learning
-Scene 建立 Personal Meaning。字段存在本身不产生语义权威；只有 Registry 对精确 artifact digest 与
-publisher namespace 的 attestation 才能使其作为 Sensa Official fact 使用。普通作者省略这些字段仍可
+Portable v2 允许 `.sensa` 携带可选的 stable Sense/Binding semantic declaration，使同一经认证的官方
+target 能跨 Book/Route 复用，并支持从 Personal Learning Scene 建立 Personal Meaning。字段存在本身不
+产生语义权威；本地文件导入继续使用 Package-local identity。只有 Registry 对精确 artifact digest 与
+publisher namespace 的 attestation 才能使声明作为 Sensa Official fact 使用。普通作者省略这些字段仍可
 得到完整 Lightweight Runtime；自报官方 identity 只能作为 untrusted provenance 保存。
 
 Portable 合同的当前字段与命令见

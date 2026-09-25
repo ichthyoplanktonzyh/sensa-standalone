@@ -273,7 +273,7 @@ export async function installPortablePackage(
       bundle,
       installedAt:new Date().toISOString(),
       portableOrigin:{
-        format:'sensa-portable-installation-origin-v1',
+        format:'sensa-portable-installation-origin-v2',
         manifest:canonical.package,
         packageDigest:canonical.packageDigest,
         archiveDigest:canonical.archiveDigest,

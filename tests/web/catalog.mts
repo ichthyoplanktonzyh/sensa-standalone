@@ -174,6 +174,7 @@ const fastWithMemory = [
   'integration/content-agent', 'integration/reveal-resources', 'integration/reveal-render',
   'integration/known-continuation', 'integration/speech-provider', 'quality/youglish-isolation',
   'contracts/resource-contracts', 'integration/learning-registry', 'integration/service-status',
+  'integration/portable-learning-registry',
   'integration/model-turn', 'integration/model-streaming', 'integration/model-execution',
   'quality/model-management', 'integration/semantic-agent-loop', 'integration/semantic-teacher-contract', 'integration/semantic-teacher-flow', 'integration/local-model-opt-in',
   'release/release-candidate', 'release/supabase-auth-config', 'quality/source-syntax',

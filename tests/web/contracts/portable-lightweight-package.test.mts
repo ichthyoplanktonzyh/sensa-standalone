@@ -17,7 +17,7 @@ const zipTimestamp = new Date(1980, 0, 1, 0, 0, 0);
 
 function validManifest(): SensaPortableLightweightPackage {
   return {
-    format: "sensa-portable-lightweight-package-v1",
+    format: "sensa-portable-lightweight-package-v2",
     metadata: {
       packageId: "82415cab-85fe-4e1d-936e-7d2b4ff83cb7",
       version: 1,
@@ -56,6 +56,51 @@ function validManifest(): SensaPortableLightweightPackage {
       sha256: audioDigest,
       sizeBytes: audioBytes.byteLength,
     }],
+  };
+}
+
+function semanticDeclaration(): NonNullable<
+  SensaPortableLightweightPackage["semanticDeclaration"]
+> {
+  return {
+    contractVersion: "sensa-portable-semantic-declaration-v1",
+    sense: {
+      senseId: "e2a2e33e-c0f0-4554-a3e1-1b09311e1d90",
+      senseVersionId: "b3e9d456-1a87-4d84-ac10-c9fd0dbc822a",
+      senseKey: "water-drinking",
+      versionNumber: 1,
+      semanticPolicyVersion: "fixture-editorial-v1",
+      semanticSpec: {
+        schemaVersion: "sensa-sense-semantic-spec-v1",
+        coreMeaningFocus: "Water considered as something people drink.",
+        prototypeScenes: [{
+          summary: "A person drinks water after exercise.",
+          participantRoles: ["drinker", "water"],
+          states: ["thirsty", "drinking"],
+          directionOrCausality: "Drinking water relieves thirst.",
+        }],
+        includedCases: ["a glass of drinking water"],
+        excludedCases: ["a municipal water supply"],
+        neighborContrasts: [],
+        openQuestions: [],
+      },
+    },
+    expression: {
+      expressionId: "7be22e77-c9f8-46d5-9094-1a332785301e",
+      expressionVersionId: "dcbecb7e-7471-4eb4-a475-4f36ade07f38",
+      versionNumber: 1,
+      expressionType: "word",
+      structure: {},
+    },
+    binding: {
+      senseExpressionBindingId: "ae4840c5-b0ec-4caf-859c-c21764342160",
+      bindingVersionId: "82ecabfd-b967-4608-be45-f73bdf3f3c67",
+      versionNumber: 1,
+      relation: "realizes",
+      semanticCoverage: "exact",
+      registerLabel: null,
+      usageConstraints: [],
+    },
   };
 }
 
@@ -103,6 +148,37 @@ test("portable package admits creator-chosen teaching text", () => {
   );
   const result = validateSensaPortableLightweightPackage(archive);
   assert.equal(result.status, "satisfied");
+});
+
+test("portable package preserves an optional untrusted semantic declaration", () => {
+  const manifest = validManifest();
+  manifest.semanticDeclaration = semanticDeclaration();
+  const archive = createSensaPortableLightweightPackage(
+    manifest,
+    new Map([["water-pronunciation", audioBytes]]),
+  );
+  const result = validateSensaPortableLightweightPackage(archive);
+  assert.equal(result.status, "satisfied");
+  assert.deepEqual(result.package?.semanticDeclaration, semanticDeclaration());
+});
+
+test("portable package rejects a semantic declaration for a different expression type", () => {
+  const manifest = validManifest();
+  manifest.semanticDeclaration = semanticDeclaration();
+  manifest.semanticDeclaration.expression.expressionType = "phrase";
+  const result = validateSensaPortableLightweightPackage(rawArchiveForManifest(manifest));
+  assert.equal(result.status, "invalid");
+  assert(result.issues.some((issue) => issue.code === "semantic.expression_type_mismatch"));
+});
+
+test("portable package rejects the obsolete v1 format", () => {
+  const manifest = {...validManifest(), format: "sensa-portable-lightweight-package-v1"};
+  const result = validateSensaPortableLightweightPackage(rawArchive(
+    manifest,
+    {[`media/${audioDigest}`]: audioBytes},
+  ));
+  assert.equal(result.status, "invalid");
+  assert(result.issues.some((issue) => issue.code === "schema.invalid"));
 });
 
 test("portable package rejects changed media bytes", () => {

@@ -30,7 +30,7 @@ const media=new Map<string,Uint8Array>([['pronunciation',audioBytes]]);
 const languageContext=sensaPinnedLanguageContext(defaultSensaLanguageRoute);
 
 const manifest=():SensaPortableLightweightPackage=>({
-  format:'sensa-portable-lightweight-package-v1',
+  format:'sensa-portable-lightweight-package-v2',
   metadata:{
     packageId:'28d3301b-c5f7-4f52-8328-b7c5ec2bdc7b',
     version:1,
@@ -54,6 +54,34 @@ const manifest=():SensaPortableLightweightPackage=>({
   },
   media:[{mediaId:'pronunciation',kind:'audio',mimeType:'audio/x-fixture',sha256:audioDigest,sizeBytes:audioBytes.byteLength}],
 });
+
+const declaredManifest=():SensaPortableLightweightPackage=>{
+  const value=manifest();
+  value.metadata.packageId='da52c793-bf9f-40cc-bdf2-1849302a34c5';
+  value.metadata.title='Portable water fixture with a semantic declaration';
+  value.semanticDeclaration={
+    contractVersion:'sensa-portable-semantic-declaration-v1',
+    sense:{
+      senseId:'e2a2e33e-c0f0-4554-a3e1-1b09311e1d90',
+      senseVersionId:'b3e9d456-1a87-4d84-ac10-c9fd0dbc822a',
+      senseKey:'water-drinking',
+      versionNumber:1,
+      semanticPolicyVersion:'fixture-editorial-v1',
+      semanticSpec:{
+        schemaVersion:'sensa-sense-semantic-spec-v1',
+        coreMeaningFocus:'Water considered as something people drink.',
+        prototypeScenes:[{summary:'A person drinks water after exercise.',participantRoles:['drinker','water'],states:['thirsty','drinking'],directionOrCausality:'Drinking water relieves thirst.'}],
+        includedCases:['a glass of drinking water'],
+        excludedCases:['a municipal water supply'],
+        neighborContrasts:[],
+        openQuestions:[],
+      },
+    },
+    expression:{expressionId:'7be22e77-c9f8-46d5-9094-1a332785301e',expressionVersionId:'dcbecb7e-7471-4eb4-a475-4f36ade07f38',versionNumber:1,expressionType:'word',structure:{}},
+    binding:{senseExpressionBindingId:'ae4840c5-b0ec-4caf-859c-c21764342160',bindingVersionId:'82ecabfd-b967-4608-be45-f73bdf3f3c67',versionNumber:1,relation:'realizes',semanticCoverage:'exact',registerLabel:null,usageConstraints:[]},
+  };
+  return value;
+};
 
 const bytes=createSensaPortableLightweightPackage(manifest(),media);
 
@@ -87,6 +115,19 @@ test('preview is read-only and explicit install preserves the portable origin',a
   const idempotent=await contentSupplySystem.execute({kind:'install_portable_package',bytes,expectedArchiveDigest:again.archiveDigest});
   assert.equal(idempotent.installedAt,installed.installedAt);
   assert.equal(await readLibrary(tx=>tx.count('packageCache')),before.packages+1);
+});
+
+test('a local semantic declaration is preserved but cannot claim official identity',async()=>{
+  const claimed=declaredManifest();
+  const claimedBytes=createSensaPortableLightweightPackage(claimed,media);
+  const preview=await contentSupplySystem.execute({kind:'preview_portable_package',bytes:claimedBytes});
+  const installed=await contentSupplySystem.execute({kind:'install_portable_package',bytes:claimedBytes,expectedArchiveDigest:preview.archiveDigest});
+  const entry=installed.bundle.entries[0]!;
+  assert.deepEqual(installed.portableOrigin?.manifest.semanticDeclaration,claimed.semanticDeclaration);
+  assert.notEqual(entry.senseId,claimed.semanticDeclaration!.sense.senseId);
+  assert.notEqual(entry.senseVersionId,claimed.semanticDeclaration!.sense.senseVersionId);
+  assert.notEqual(entry.bindingId,claimed.semanticDeclaration!.binding.senseExpressionBindingId);
+  assert.notEqual(entry.bindingVersionId,claimed.semanticDeclaration!.binding.bindingVersionId);
 });
 
 test('same package identity cannot silently replace different content',async()=>{

@@ -83,6 +83,7 @@ if (result.status !== "satisfied" || result.package === null) {
     route: result.package.route,
     senseId: result.package.sense.senseId,
     targetExpression: result.package.targetExpression.text,
+    semanticDeclaration: result.package.semanticDeclaration ?? null,
     mediaCount: result.package.media.length,
     mediaBytes: result.mediaBytes,
     archiveDigest: result.archiveDigest,

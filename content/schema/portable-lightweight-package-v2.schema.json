@@ -1,13 +1,13 @@
 {
-  "$id": "https://sensa.example/schema/portable-lightweight-package-v1.json",
-  "title": "Sensa Portable Lightweight Package v1",
+  "$id": "https://sensa.example/schema/portable-lightweight-package-v2.json",
+  "title": "Sensa Portable Lightweight Package v2",
   "description": "Public package.json manifest for a .sensa archive. Raw media uses content-addressed archive entries; authoring workflow is out of scope.",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
     "format": {
       "type": "string",
-      "const": "sensa-portable-lightweight-package-v1"
+      "const": "sensa-portable-lightweight-package-v2"
     },
     "metadata": {
       "type": "object",
@@ -629,6 +629,284 @@
         ],
         "additionalProperties": false
       }
+    },
+    "semanticDeclaration": {
+      "type": "object",
+      "properties": {
+        "contractVersion": {
+          "type": "string",
+          "const": "sensa-portable-semantic-declaration-v1"
+        },
+        "sense": {
+          "type": "object",
+          "properties": {
+            "senseId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "senseVersionId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "senseKey": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            "versionNumber": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "semanticPolicyVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            "semanticSpec": {
+              "type": "object",
+              "properties": {
+                "schemaVersion": {
+                  "type": "string",
+                  "const": "sensa-sense-semantic-spec-v1"
+                },
+                "coreMeaningFocus": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "prototypeScenes": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "summary": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "participantRoles": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "states": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "directionOrCausality": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "summary",
+                      "participantRoles",
+                      "states",
+                      "directionOrCausality"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "includedCases": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "excludedCases": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "neighborContrasts": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "label": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "distinction": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "label",
+                      "distinction"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "openQuestions": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "required": [
+                "schemaVersion",
+                "coreMeaningFocus",
+                "prototypeScenes",
+                "includedCases",
+                "excludedCases",
+                "neighborContrasts",
+                "openQuestions"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "senseId",
+            "senseVersionId",
+            "senseKey",
+            "versionNumber",
+            "semanticPolicyVersion",
+            "semanticSpec"
+          ],
+          "additionalProperties": false
+        },
+        "expression": {
+          "type": "object",
+          "properties": {
+            "expressionId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "expressionVersionId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "versionNumber": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "expressionType": {
+              "type": "string",
+              "enum": [
+                "word",
+                "phrase",
+                "construction",
+                "sentence",
+                "utterance_strategy"
+              ]
+            },
+            "structure": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "required": [
+            "expressionId",
+            "expressionVersionId",
+            "versionNumber",
+            "expressionType",
+            "structure"
+          ],
+          "additionalProperties": false
+        },
+        "binding": {
+          "type": "object",
+          "properties": {
+            "senseExpressionBindingId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "bindingVersionId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "versionNumber": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "relation": {
+              "type": "string",
+              "enum": [
+                "realizes",
+                "approximates",
+                "evokes"
+              ]
+            },
+            "semanticCoverage": {
+              "type": "string",
+              "enum": [
+                "exact",
+                "broader",
+                "narrower",
+                "overlapping"
+              ]
+            },
+            "registerLabel": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "usageConstraints": {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            }
+          },
+          "required": [
+            "senseExpressionBindingId",
+            "bindingVersionId",
+            "versionNumber",
+            "relation",
+            "semanticCoverage",
+            "registerLabel",
+            "usageConstraints"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contractVersion",
+        "sense",
+        "expression",
+        "binding"
+      ],
+      "additionalProperties": false
     }
   },
   "required": [

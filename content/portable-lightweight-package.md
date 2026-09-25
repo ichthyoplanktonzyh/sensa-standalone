@@ -1,4 +1,4 @@
-# Portable Lightweight Package v1
+# Portable Lightweight Package v2
 
 Portable Lightweight Package 是所有可分发轻量学习内容与 Sensa Runtime 之间的公开接口，包括 Sensa
 Official 策展内容、外部作者内容，以及 learner 明确选择导出的个人生成内容。生产者可以使用任意编辑器、
@@ -32,7 +32,7 @@ Web 内容生成 Agent 的普通成功产物是 learner-private On-demand Materi
 
 规范由以下实现共同定义：
 
-- [`portable-lightweight-package-v1.schema.json`](schema/portable-lightweight-package-v1.schema.json)：供外部工具使用的 JSON Schema；
+- [`portable-lightweight-package-v2.schema.json`](schema/portable-lightweight-package-v2.schema.json)：供外部工具使用的 JSON Schema；
 - `sensaPortableLightweightPackageSchema`：Sensa 使用的可执行合同；
 - `validateSensaPortableLightweightPackage`：不访问网络、数据库、模型或 TTS 的公共准入校验器。
 
@@ -52,13 +52,14 @@ npm run sensa:package-schema
 - 目标表达、表达类型及可选合法变体；
 - Lightweight 的六项核心资源；
 - 适用时提供的可选资源；
+- 可选的 `semanticDeclaration`，声明稳定 Sense、Expression 与 Binding identity 及其版本化语义事实；
 - 被资源引用的媒体清单；媒体字节随归档携带。
 
 普通生产者的 Sense ID 不要求来自 IDS，也不要求进入 Sensa 的官方 Semantic Registry。导入流程负责保留
-原始 Package identity 和来源；不能冒充已有官方 Sense 或通过自报字段获得官方信任。为支持官方 Catalog
-迁移，Portable 合同的下一兼容版本可以携带稳定 Sense/Binding semantic snapshot，但其权威性来自 Registry
-对精确 artifact digest 的 attestation，而不是字段名字本身。当前 v1 尚未公开这组可选 attested semantic
-字段；迁移时必须在同一 `.sensa` 公共合同中增加，不能继续依赖 Runtime 私有 Bundle。
+原始 Package identity 和来源；不能冒充已有官方 Sense 或通过自报字段获得官方信任。v2 的
+`semanticDeclaration` 可以携带稳定 Sense/Binding semantic snapshot，但本地文件导入始终把它作为
+untrusted declaration 保存，并继续使用 Package-local identity。只有 Registry 对精确 artifact digest 与
+publisher namespace 的 attestation 才能使声明成为 Sensa Official fact。
 
 六项核心资源是：
 
@@ -71,7 +72,7 @@ npm run sensa:package-schema
 
 经验资源可以是文字、图片或两者组合。图片不规定尺寸、比例、艺术风格或具体文件格式；公共校验只
 要求媒体字节非空、声明为图片 MIME、摘要正确且引用存在。图片格式、尺寸、比例和风格均不作限制。
-HTML 和自定义卡面不属于 v1。
+HTML 和自定义卡面不属于 v2。
 
 ## 公共校验与官方校验
 
@@ -82,7 +83,8 @@ HTML 和自定义卡面不属于 v1。
 - ZIP 路径、条目数量、展开大小和 `package.json` 大小；
 - 媒体引用、媒体种类、原始字节、声明大小和 SHA-256；
 - 发音所读 surface 与目标表达绑定；
-- 例句 target span 位于文本内且非空。
+- 例句 target span 位于文本内且非空；
+- 提供 `semanticDeclaration` 时，其 expression type 与目标表达类型一致。
 
 公共校验**不检查经验提示是否泄露目标表达**，也不裁决语言是否自然、例句是否优秀或教学方法是否
 符合 Sensa Official 的生产偏好。作者可以自由决定怎样教。官方内容另行运行更严格的生产与发布门禁；
@@ -101,7 +103,7 @@ npm run sensa:package -- inspect path/to/package.sensa
 
 ## 字段审计结果
 
-| 现有内部字段或约定 | Portable v1 处理 |
+| 现有内部字段或约定 | Portable v2 处理 |
 | --- | --- |
 | Target Core / Support Overlay / Core digest | 不公开、不携带 |
 | IDS Sense ID | 可使用，但不强制；作者可用自己的 ID |
@@ -135,7 +137,7 @@ npm run sensa:package -- inspect path/to/package.sensa
 
 Portable Package 是分发与导入载体，不是 learner 长期学习身份，也不要求产品把每个旧版本永久建模为
 可回放课程。长期身份属于 Learning Target，学习状态与当前 Material 分离；本机安装缓存的清理策略不属于
-Portable v1 的公共合同。
+Portable v2 的公共合同。
 
 尚未包含 Creator UI、复制后可视化编辑、自定义卡面和公共目录。这些能力继续建立在 `.sensa` 合同上，
 不能要求外部作者采用 Sensa Official 的 Core/Overlay 生产结构。`.sensa` 本身不是 Learning

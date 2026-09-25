@@ -8,7 +8,7 @@ import {sha256} from "@sensa/learning-kernel";
 import {strToU8, unzipSync, zipSync, type Zippable} from "fflate";
 
 export const sensaPortableLightweightPackageValidatorVersion =
-  "sensa-portable-lightweight-package-validator-v1" as const;
+  "sensa-portable-lightweight-package-validator-v2" as const;
 export const sensaPortableLightweightPackageMaximumArchiveBytes = 64 * 1024 * 1024;
 export const sensaPortableLightweightPackageMaximumMediaBytes = 50 * 1024 * 1024;
 export const sensaPortableLightweightPackageMaximumManifestBytes = 1024 * 1024;
@@ -228,6 +228,20 @@ function validateManifest(
       "resources.sceneRealization",
       "Scene target span must select non-empty text inside the example.",
     );
+  }
+
+  if (value.semanticDeclaration !== undefined) {
+    const declaredType = value.semanticDeclaration.expression.expressionType;
+    const expectedType = value.targetExpression.expressionKind === "utterance"
+      ? "utterance_strategy"
+      : value.targetExpression.expressionKind;
+    if (expectedType === "unspecified" || declaredType !== expectedType) {
+      issues.add(
+        "semantic.expression_type_mismatch",
+        "semanticDeclaration.expression.expressionType",
+        "Semantic expressionType must match the target expression kind.",
+      );
+    }
   }
 
   return mediaBytes;
