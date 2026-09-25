@@ -9,7 +9,8 @@ import {z} from 'zod';
 import {readLibrary} from './store';
 
 /** Public exchange metadata retained with a locally installed `.sensa` artifact.
- * Media bytes remain in the compiled Runtime content and are reconstructed on export. */
+ * Callers see complete Runtime data URLs; SQLite transparently deduplicates the
+ * underlying media bytes, and export reconstructs the same public artifact. */
 export type PortablePublicationAttestation={
  format:'sensa-portable-publication-attestation-v1';
  publisher:SensaBookVersionManifest['publisher'];

@@ -3,6 +3,10 @@ import {canonicalConsumerJson} from '@sensa/contracts/sensa/canonical-json';
 
 import { decodeBackupValue, encodeBackupValue } from "./backupCodec";
 import { sqliteRecordAdapter } from "./sqliteAdapter";
+import type {
+  PortableMediaStorageDiagnostics,
+  PortablePackageMediaWrite,
+} from './portableMediaCache';
 import {
   type HomeLearningStorageProjection,
   sqliteLibraryFile,
@@ -88,14 +92,18 @@ export class LibraryTransaction {
     if (pending?.has(key)) return clone(pending.get(key) as T);
     if (this.clears.has(table) || this.deletes.get(table)?.has(key)) return undefined;
     const encoded = await storageCall(() => this.adapter.get(table, key));
-    return encoded === null ? undefined : clone(decode(encoded) as T);
+    if(encoded===null)return undefined;
+    return clone(await this.decodeStored<T>(table,encoded));
   }
 
   async entries(table: Table): Promise<Array<{ key: string; value: any }>> {
     const values = new Map<string, unknown>();
     if (!this.clears.has(table)) {
       for (const row of await storageCall(() => this.adapter.entries(table))) {
-        if (!this.deletes.get(table)?.has(row.key)) values.set(row.key, decode(row.encodedValue));
+        if (!this.deletes.get(table)?.has(row.key))values.set(
+          row.key,
+          await this.decodeStored(table,row.encodedValue),
+        );
       }
     }
     for (const [key, value] of this.puts.get(table) ?? []) values.set(key, value);
@@ -114,12 +122,14 @@ export class LibraryTransaction {
     const changes: SqliteRecordChange[] = await storageCall(
       () => this.adapter.changesSince(contentRevision, tables),
     );
-    return changes.map((change) => ({
+    return Promise.all(changes.map(async(change) => ({
       table: change.table as Tables[number],
       key: change.key,
-      value: change.encodedValue === null ? null : clone(decode(change.encodedValue)),
+      value: change.encodedValue === null
+        ?null
+        :clone(await this.decodeStored(change.table,change.encodedValue)),
       contentRevision: change.contentRevision,
-    }));
+    })));
   }
 
   async syncBaseEntries<Tables extends readonly Table[]>(keys?: readonly {
@@ -343,11 +353,13 @@ export class LibraryTransaction {
         const beforeEncoded = await storageCall(() => this.adapter.get(table, key));
         const after = await this.get(table, key);
         const afterEncoded = after === undefined ? null : encode(after);
-        if (beforeEncoded === afterEncoded) continue;
+        const before=beforeEncoded===null?null:await this.decodeStored(table,beforeEncoded);
+        const comparableBefore=before===null?null:encode(before);
+        if (comparableBefore === afterEncoded) continue;
         changes.push({
           table: table as Tables[number],
           key,
-          before: beforeEncoded === null ? null : clone(decode(beforeEncoded)),
+          before: before===null?null:clone(before),
           after: after === undefined ? null : clone(after),
         });
       }
@@ -357,13 +369,27 @@ export class LibraryTransaction {
     ));
   }
 
-  mutation(): SqliteMutation {
+  async mutation():Promise<SqliteMutation>{
+    const portablePackages:PortablePackageMediaWrite[]=[];
+    const puts:SqliteMutation['puts']=[];
+    const portablePuts=this.puts.get('packageCache');
+    const externalize=portablePuts?.size
+      ?(await import('./portableMediaCache')).externalizePortablePackageCache
+      :null;
+    for(const [table,values] of this.puts)for(const [key,value] of values){
+      if(table!=='packageCache')puts.push({table,key,encodedValue:encode(value)});
+      else{
+        const externalized=externalize!(key,value);
+        portablePackages.push(externalized.write);
+        puts.push({table,key,encodedValue:encode(externalized.storedValue)});
+      }
+    }
     return {
       clears: [...this.clears],
       deletes: [...this.deletes].flatMap(([table, keys]) =>
         [...keys].map((key) => ({ table, key }))),
-      puts: [...this.puts].flatMap(([table, values]) =>
-        [...values].map(([key, value]) => ({ table, key, encodedValue: encode(value) }))),
+      puts,
+      ...(portablePackages.length?{portablePackages}:{}),
       ...(this.syncBaseReplacement === undefined
         ? {}
         : { syncBaseReplacement: this.syncBaseReplacement }),
@@ -372,6 +398,14 @@ export class LibraryTransaction {
 
   private hasPendingChanges(table: Table): boolean {
     return this.clears.has(table) || this.deletes.has(table) || this.puts.has(table);
+  }
+
+  private async decodeStored<T>(table:Table,encoded:string):Promise<T>{
+    const value=decode(encoded);
+    return (table==='packageCache'
+      ?await import('./portableMediaCache').then(({hydratePortablePackageCache})=>
+        hydratePortablePackageCache(value,digest=>storageCall(()=>this.adapter.portableMedia(digest))))
+      :value) as T;
   }
 
   private assertWritable(): void {
@@ -424,7 +458,7 @@ async function transaction<T>(
         contentRevision = revision + 1;
         library.put("meta", localLibraryRevisionKey, contentRevision);
       }
-      const mutation = library.mutation();
+      const mutation = await library.mutation();
       mutation.contentRevision = contentRevision;
       await storageCall(() => adapter.commit(mutation));
       if (kind === "state") window.dispatchEvent(new Event("sensa-sync-state-changed"));
@@ -582,4 +616,9 @@ export function observeCloudSyncState(listener: () => void): () => void {
 export async function readLibraryStorageDiagnostics(): Promise<SqliteStorageDiagnostics> {
   const adapter = await storageCall(sqliteRecordAdapter, 'localFlow.storageOpen');
   return storageCall(() => adapter.diagnostics());
+}
+
+export async function readPortableMediaStorageDiagnostics():Promise<PortableMediaStorageDiagnostics>{
+  const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');
+  return storageCall(()=>adapter.portableMediaDiagnostics());
 }

@@ -150,6 +150,20 @@ test("portable package admits creator-chosen teaching text", () => {
   assert.equal(result.status, "satisfied");
 });
 
+test("portable package carries declarative experience HTML and an optional translation", () => {
+  const manifest=validManifest();
+  manifest.resources.experienceRecallCue={
+    senseFocus:'饮用水',
+    html:'<section><button>杯子</button><span>口渴</span></section>',
+  };
+  delete manifest.resources.sceneRealization.translation;
+  const archive=createSensaPortableLightweightPackage(
+    manifest,
+    new Map([["water-pronunciation",audioBytes]]),
+  );
+  assert.equal(validateSensaPortableLightweightPackage(archive).status,'satisfied');
+});
+
 test("portable package preserves an optional untrusted semantic declaration", () => {
   const manifest = validManifest();
   manifest.semanticDeclaration = semanticDeclaration();

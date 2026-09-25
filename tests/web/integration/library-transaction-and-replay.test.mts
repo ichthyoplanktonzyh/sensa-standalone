@@ -1,5 +1,6 @@
 /** SQLite storage kernel: typed values, transactions and operation replay. */
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {afterAll,test} from 'vitest';
 
 Object.assign(globalThis, { window: new EventTarget(), BroadcastChannel: undefined });
@@ -82,7 +83,7 @@ await store.readLibrary(async (tx) => {
 const diagnostics = await store.readLibraryStorageDiagnostics();
 assert.deepEqual(
   { engine: diagnostics.engine, persistence: diagnostics.persistence, schemaVersion: diagnostics.schemaVersion },
-  { engine: 'memory-adapter', persistence: 'memory', schemaVersion: 10 },
+  { engine: 'memory-adapter', persistence: 'memory', schemaVersion: 11 },
 );
 });
 
@@ -94,19 +95,33 @@ const [{ default: sqlite3InitModule }, { SqliteRecordDatabase, sqliteHomeLearnin
 ]);
 const sqlite3 = await sqlite3InitModule();
 test('unsupported physical schemas preserve owner data', () => {
-for (const version of [9, 11]) {
+for (const version of [9, 12]) {
   const incompatibleRaw = new sqlite3.oo1.DB(':memory:', 'c');
   incompatibleRaw.exec(`CREATE TABLE owner_fixture(value TEXT); INSERT INTO owner_fixture VALUES('preserve-me'); PRAGMA user_version=${version}`);
   const incompatibleDatabase = new SqliteRecordDatabase(sqlite3, incompatibleRaw, 'memory');
   assert.throws(
     () => incompatibleDatabase.initialize(),
-    version < 10 ? /sqlite_schema_legacy:9/u : /sqlite_schema_future:11/u,
+    version < 10 ? /sqlite_schema_legacy:9/u : /sqlite_schema_future:12/u,
     'unsupported physical schemas must stop instead of opening an empty replacement',
   );
   const preserved = incompatibleRaw.exec({ sql: 'SELECT value FROM owner_fixture', rowMode: 0, returnValue: 'resultRows' }) as unknown[];
   assert.deepEqual(preserved, ['preserve-me'], 'a failed version check must leave the original database intact');
   incompatibleDatabase.close();
 }
+});
+test('schema 10 migrates in place and preserves owner tables',()=>{
+  const migratedRaw=new sqlite3.oo1.DB(':memory:','c');
+  migratedRaw.exec(`CREATE TABLE owner_fixture(value TEXT);
+                    INSERT INTO owner_fixture VALUES('preserve-me');
+                    PRAGMA user_version=10`);
+  const migrated=new SqliteRecordDatabase(sqlite3,migratedRaw,'memory');
+  assert.equal(migrated.initialize().schemaVersion,11);
+  const preserved=migratedRaw.exec({
+    sql:'SELECT value FROM owner_fixture',rowMode:0,returnValue:'resultRows',
+  }) as unknown[];
+  assert.deepEqual(preserved,['preserve-me']);
+  assert.equal(migrated.portableMediaDiagnostics().blobCount,0);
+  migrated.close();
 });
 test('SQLite initialization maintains query planner statistics', () => {
 const optimizerRawDatabase = new sqlite3.oo1.DB(':memory:', 'c');
@@ -371,5 +386,33 @@ database.commit({
 assert.equal(database.count('learningTargets'), 1);
 assert.deepEqual(database.homeLearningProjection('route-a').targets, []);
 assert.match(database.diagnostics().sqliteVersion, /^3\./u);
+});
+test('portable media rows deduplicate by digest and collect after the last package reference',()=>{
+  const bytes=new TextEncoder().encode('shared portable sqlite media');
+  const digest=createHash('sha256').update(bytes).digest('hex');
+  const portable=(packageKey:string)=>({
+    packageKey,
+    media:[{mediaId:'pronunciation',sha256:digest,mimeType:'audio/mpeg',kind:'audio' as const,sizeBytes:bytes.byteLength,bytes}],
+  });
+  database.commit({
+    clears:[],deletes:[],
+    puts:[
+      {table:'packageCache',key:'portable-a',encodedValue:'{}'},
+      {table:'packageCache',key:'portable-b',encodedValue:'{}'},
+    ],
+    portablePackages:[portable('portable-a'),portable('portable-b')],
+  });
+  assert.deepEqual(database.portableMediaDiagnostics(),{
+    blobCount:1,totalBytes:bytes.byteLength,referenceCount:2,
+  });
+  assert.deepEqual(database.portableMedia(digest)?.bytes,bytes);
+  database.commit({clears:[],deletes:[{table:'packageCache',key:'portable-a'}],puts:[]});
+  assert.deepEqual(database.portableMediaDiagnostics(),{
+    blobCount:1,totalBytes:bytes.byteLength,referenceCount:1,
+  });
+  database.commit({clears:[],deletes:[{table:'packageCache',key:'portable-b'}],puts:[]});
+  assert.deepEqual(database.portableMediaDiagnostics(),{
+    blobCount:0,totalBytes:0,referenceCount:0,
+  });
 });
 afterAll(()=>database.close());

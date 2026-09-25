@@ -60,5 +60,6 @@ export function usePersonalLearning(){
   update:(taskId:string,source:PersonalMeaningLearningSource,useContext:boolean)=>perform(async()=>{await contentSupplySystem.execute({kind:'revise_provisioning',operationId:crypto.randomUUID(),taskId,source,languageContext,useContext});await refresh();await prepare(taskId,source);}),
   prepare:(id:string)=>perform(()=>prepare(id)),
   stop:(taskId:string)=>{backgroundPreparation.cancel(taskId);void contentSupplySystem.execute({kind:'stop_provisioning',operationId:crypto.randomUUID(),taskId}).catch(()=>setNotice(localFlowText('preparationPreserved')));},
+  exportPackage:(taskId:string)=>perform(()=>contentSupplySystem.execute({kind:'export_personal_portable_package',taskId})),
  };
 }

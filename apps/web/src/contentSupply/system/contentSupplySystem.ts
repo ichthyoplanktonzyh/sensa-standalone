@@ -55,6 +55,7 @@ export type ContentSupplyCommand =
       signal?: AbortSignal;
     }>
   | Readonly<{ kind: 'export_portable_package'; packageKey: string }>
+  | Readonly<{ kind: 'export_personal_portable_package'; taskId: string }>
   | Readonly<{
       kind: 'prepare_materialization';
       taskId: string;
@@ -81,6 +82,7 @@ export type ContentSupplyCommandResult<Command extends ContentSupplyCommand> =
       : Command['kind'] extends 'install_catalog_item' ? readonly InstalledPackage[]
         : Command['kind'] extends 'preview_portable_package' ? PortablePackagePreview
           : Command['kind'] extends 'export_portable_package' ? PortablePackageExport
+            : Command['kind'] extends 'export_personal_portable_package' ? PortablePackageExport
             : Command['kind'] extends 'prepare_materialization' ? void
               : Command['kind'] extends 'stop_provisioning' ? boolean
                 : Command['kind'] extends 'revise_provisioning' ? ContentProvisioningTask

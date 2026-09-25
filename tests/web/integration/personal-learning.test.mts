@@ -2,6 +2,10 @@ import {test} from 'vitest';
 /** Canonical Personal Semantic World → Add-to-Learning → runtime smoke. */
 import assert from 'node:assert/strict';
 import {
+  readSensaPortableLightweightPackage,
+  validateSensaPortableLightweightPackage,
+} from '@sensa/content-validator/portable-lightweight';
+import {
   SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND,
   generationSystem,
   independentReviewSystem,
@@ -21,6 +25,8 @@ test("personal-learning", async () => {
 const compiled=await build({stdin:{contents:[
   ...['store','providers','personalLearning','learning','language','speech/defaultProvider'].map(name=>`export * from './apps/web/src/data/library/${name}';`),
   `export * from './apps/web/src/experience/personalMeaningJourney/gateway';`,
+  `export * from './apps/web/src/contentSupply/portable/personalPortablePackage';`,
+  `export * from './apps/web/src/contentSupply/portable/portablePackage';`,
 ].join('\n'),resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env':JSON.stringify({VITE_SENSA_API_URL:'https://speech.fixture.invalid'})},plugins:[{name:'fixture-auth',setup(build){build.onLoad({filter:/[/\\]account[/\\]auth\.ts$/},()=>({contents:"export const auth={getSession:async()=>({data:{session:{access_token:'fixture',user:{id:'fixture'}}}})}; export {authStorageKey,cachedAuthSubject} from './authSessionHint';",loader:'ts'}));}}]});
 Object.assign(globalThis,{indexedDB,window:new EventTarget(),location:{origin:'http://127.0.0.1:9998'},BroadcastChannel:undefined});
 const temp=await mkdtemp(join(tmpdir(),'sensa-personal-'));
@@ -99,6 +105,22 @@ try{
   const learning=await api.readLearning();assert.equal(learning.targets.length,1);
   assert.equal(learning.targets[0].identity.senseVersionId,slowSource.reference.senseVersionId);
   assert.equal(learning.targets[0].identity.bindingVersionId,slowSource.reference.bindingVersionId);
+
+  const firstExport=await api.exportPersonalPortablePackage(task.id);
+  const secondExport=await api.exportPersonalPortablePackage(task.id);
+  assert.match(firstExport.fileName,/\.sensa$/u);
+  assert.deepEqual(firstExport.bytes,secondExport.bytes,'unchanged admitted material exports deterministically');
+  assert.equal(validateSensaPortableLightweightPackage(firstExport.bytes).status,'satisfied');
+  const personalPackage=readSensaPortableLightweightPackage(firstExport.bytes);
+  assert.equal(personalPackage.package.metadata.version,1);
+  assert.equal(personalPackage.package.route.targetLanguage,'en');
+  assert.equal(personalPackage.package.route.supportLanguage,'zh-CN');
+  assert.equal(personalPackage.package.targetExpression.text,'borrow');
+  assert.equal(personalPackage.package.resources.sceneRealization.example,'May asked to borrow an umbrella.');
+  assert.equal(personalPackage.package.media.length,1,'the generated TTS pronunciation is carried by .sensa');
+  assert.equal(personalPackage.package.semanticDeclaration,undefined,'private export does not claim registry authority');
+  const reinstalled=await api.installPortablePackage(firstExport.bytes,personalPackage.archiveDigest);
+  assert.equal(reinstalled.content.entries[0].expression,'borrow','the personal .sensa re-enters through the public import path');
 
   await api.confirmLearningQuantity(id(),languageContext,20);
   let run=await api.startLearning(id(),task.targetId,languageContext,20);

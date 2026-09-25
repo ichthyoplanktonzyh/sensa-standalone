@@ -201,6 +201,11 @@
               "minLength": 1,
               "maxLength": 4000
             },
+            "html": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 48000
+            },
             "images": {
               "maxItems": 4,
               "type": "array",
@@ -324,9 +329,16 @@
               "maxLength": 8000
             },
             "translation": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 8000
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 8000
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "targetStart": {
               "type": "integer",
@@ -345,7 +357,6 @@
           },
           "required": [
             "example",
-            "translation",
             "targetStart",
             "targetEnd"
           ],

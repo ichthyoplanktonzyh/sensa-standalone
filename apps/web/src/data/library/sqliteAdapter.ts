@@ -1,5 +1,7 @@
 import type {
   HomeLearningStorageProjection,
+  PortableMediaBlob,
+  PortableMediaStorageDiagnostics,
   SqliteLibraryTable,
   SqliteMutation,
   SqliteRecordChange,
@@ -28,6 +30,8 @@ export interface SqliteRecordAdapter {
   countContentAttemptsSince(taskId: string, createdAfter: string): Promise<number>;
   learningTargetIdsForBookUpgrade(languageRouteId: string, targetLanguageTag: string, supportLanguageTag: string, bookId: string, nextBookVersionId: string): Promise<string[]>;
   isMediaReferenced(mediaId: string): Promise<boolean>;
+  portableMedia(sha256:string):Promise<PortableMediaBlob|null>;
+  portableMediaDiagnostics():Promise<PortableMediaStorageDiagnostics>;
   commit(mutation: SqliteMutation): Promise<void>;
   diagnostics(): Promise<SqliteStorageDiagnostics>;
 }
@@ -128,6 +132,14 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
     return this.send({ kind: 'isMediaReferenced', mediaId }) as Promise<boolean>;
   }
 
+  portableMedia(sha256:string):Promise<PortableMediaBlob|null>{
+    return this.send({kind:'portableMedia',sha256}) as Promise<PortableMediaBlob|null>;
+  }
+
+  portableMediaDiagnostics():Promise<PortableMediaStorageDiagnostics>{
+    return this.send({kind:'portableMediaDiagnostics'}) as Promise<PortableMediaStorageDiagnostics>;
+  }
+
   async commit(mutation: SqliteMutation): Promise<void> {
     await this.send({ kind: "commit", mutation });
   }
@@ -150,6 +162,8 @@ class MemoryRecordAdapter implements SqliteRecordAdapter {
   private records = new Map<string, string>();
   private changes = new Map<string, SqliteRecordChange>();
   private syncBase = new Map<string, SqliteSyncBaseEntry>();
+  private portableMediaBlobs=new Map<string,PortableMediaBlob>();
+  private portableMediaReferences=new Map<string,string>();
 
   async get(table: SqliteLibraryTable, key: string): Promise<string | null> {
     return this.records.get(`${table}\u0000${key}`) ?? null;
@@ -281,6 +295,19 @@ class MemoryRecordAdapter implements SqliteRecordAdapter {
     ).payload?.context?.mediaReferenceIds?.includes(mediaId));
   }
 
+  async portableMedia(sha256:string):Promise<PortableMediaBlob|null>{
+    const blob=this.portableMediaBlobs.get(sha256);
+    return blob?{...blob,bytes:new Uint8Array(blob.bytes)}:null;
+  }
+
+  async portableMediaDiagnostics():Promise<PortableMediaStorageDiagnostics>{
+    return {
+      blobCount:this.portableMediaBlobs.size,
+      totalBytes:[...this.portableMediaBlobs.values()].reduce((total,blob)=>total+blob.sizeBytes,0),
+      referenceCount:this.portableMediaReferences.size,
+    };
+  }
+
   async commit(mutation: SqliteMutation): Promise<void> {
     const next = new Map(this.records);
     const nextChanges = new Map(this.changes);
@@ -290,6 +317,10 @@ class MemoryRecordAdapter implements SqliteRecordAdapter {
         `${entry.table}\u0000${entry.key}`,
         { ...entry, blockRefs: [...entry.blockRefs] },
       ]));
+    const nextPortableMedia=new Map([...this.portableMediaBlobs].map(([digest,blob])=>[
+      digest,{...blob,bytes:new Uint8Array(blob.bytes)},
+    ]));
+    const nextPortableReferences=new Map(this.portableMediaReferences);
     const remember = (table: SqliteLibraryTable, key: string, encodedValue: string | null) => {
       if (mutation.contentRevision === undefined) return;
       nextChanges.set(`${table}\u0000${key}`, {
@@ -305,10 +336,29 @@ class MemoryRecordAdapter implements SqliteRecordAdapter {
         next.delete(key);
         remember(table, key.slice(prefix.length), null);
       }
+      if(table==='packageCache')nextPortableReferences.clear();
     }
     for (const item of mutation.deletes) {
       next.delete(`${item.table}\u0000${item.key}`);
       remember(item.table, item.key, null);
+      if(item.table==='packageCache'){
+        const prefix=`${item.key}\u0000`;
+        for(const key of nextPortableReferences.keys())if(key.startsWith(prefix))nextPortableReferences.delete(key);
+      }
+    }
+    for(const portable of mutation.portablePackages??[]){
+      const prefix=`${portable.packageKey}\u0000`;
+      for(const key of nextPortableReferences.keys())if(key.startsWith(prefix))nextPortableReferences.delete(key);
+      for(const media of portable.media){
+        const existing=nextPortableMedia.get(media.sha256);
+        if(existing&&existing.sizeBytes!==media.sizeBytes)throw new Error('portable_media_digest_collision');
+        nextPortableMedia.set(media.sha256,{
+          sha256:media.sha256,
+          sizeBytes:media.sizeBytes,
+          bytes:new Uint8Array(media.bytes),
+        });
+        nextPortableReferences.set(`${portable.packageKey}\u0000${media.mediaId}`,media.sha256);
+      }
     }
     for (const item of mutation.puts) {
       next.set(`${item.table}\u0000${item.key}`, item.encodedValue);
@@ -317,6 +367,10 @@ class MemoryRecordAdapter implements SqliteRecordAdapter {
     this.records = next;
     this.changes = nextChanges;
     this.syncBase = nextSyncBase;
+    const referenced=new Set(nextPortableReferences.values());
+    for(const digest of nextPortableMedia.keys())if(!referenced.has(digest))nextPortableMedia.delete(digest);
+    this.portableMediaBlobs=nextPortableMedia;
+    this.portableMediaReferences=nextPortableReferences;
   }
 
   async diagnostics(): Promise<SqliteStorageDiagnostics> {

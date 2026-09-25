@@ -1,14 +1,19 @@
 /** Internal protocol between the local-library module and its SQLite Worker. */
 
 import type {HomeLearningStorageProjection} from './homeLearningRecords';
+import type {
+  PortableMediaBlob,
+  PortableMediaStorageDiagnostics,
+  PortablePackageMediaWrite,
+} from './portableMediaCache';
 
 export const sqliteLibraryFile = "/sensa-local-library-v10.sqlite3";
 export const sqlitePoolDirectory = "/sensa-local-library-v10";
 /** First supported production-user baseline; prototype formats stay unsupported. */
 export const sqliteLibraryBaselineVersion = 10;
-export const sqliteLibrarySchemaVersion = 10;
+export const sqliteLibrarySchemaVersion = 11;
 /** Cross-tab RPC changes must bump this before adding or changing messages. */
-export const sqliteCoordinatorProtocolVersion = 5;
+export const sqliteCoordinatorProtocolVersion = 6;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -46,6 +51,8 @@ export type SqliteMutation = {
   clears: SqliteLibraryTable[];
   deletes: Array<{ table: SqliteLibraryTable; key: string }>;
   puts: Array<{ table: SqliteLibraryTable; key: string; encodedValue: string }>;
+  /** Private, content-addressed storage writes for Portable Package media. */
+  portablePackages?:PortablePackageMediaWrite[];
   /** Atomic replacement of the last server-confirmed checkpoint baseline. */
   syncBaseReplacement?: SqliteSyncBaseEntry[];
 };
@@ -78,6 +85,8 @@ export type SqliteWorkerRequest =
   | { id: number; kind: "countContentAttemptsSince"; taskId: string; createdAfter: string }
   | { id: number; kind: "learningTargetIdsForBookUpgrade"; languageRouteId: string; targetLanguageTag: string; supportLanguageTag: string; bookId: string; nextBookVersionId: string }
   | { id: number; kind: "isMediaReferenced"; mediaId: string }
+  | { id: number; kind: "portableMedia"; sha256: string }
+  | { id: number; kind: "portableMediaDiagnostics" }
   | { id: number; kind: "commit"; mutation: SqliteMutation }
   | { id: number; kind: "diagnostics" };
 
@@ -104,6 +113,25 @@ export type SqliteStorageDiagnostics = {
 };
 
 const quotedTables = sqliteLibraryTables.map((value) => `'${value}'`).join(",");
+
+export const sqlitePortableMediaSchema=`
+CREATE TABLE IF NOT EXISTS sensa_portable_media(
+  sha256 TEXT NOT NULL PRIMARY KEY CHECK(length(sha256)=64),
+  size_bytes INTEGER NOT NULL CHECK(size_bytes>0),
+  bytes BLOB NOT NULL CHECK(length(bytes)=size_bytes)
+) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS sensa_portable_package_media(
+  package_key TEXT NOT NULL,
+  media_id TEXT NOT NULL,
+  sha256 TEXT NOT NULL,
+  mime_type TEXT NOT NULL,
+  media_kind TEXT NOT NULL CHECK(media_kind IN ('audio','image')),
+  PRIMARY KEY(package_key,media_id),
+  FOREIGN KEY(sha256) REFERENCES sensa_portable_media(sha256) ON DELETE RESTRICT
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS sensa_portable_package_media_digest
+  ON sensa_portable_package_media(sha256);
+`;
 
 /**
  * Existing callers address logical records by table/key. SQLite owns their
@@ -200,5 +228,8 @@ CREATE TABLE IF NOT EXISTS sensa_media_references(
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS sensa_media_references_owner
   ON sensa_media_references(owner_table,owner_key);
+${sqlitePortableMediaSchema}
 PRAGMA user_version=${sqliteLibrarySchemaVersion};
 `;
+
+export type {PortableMediaBlob,PortableMediaStorageDiagnostics};

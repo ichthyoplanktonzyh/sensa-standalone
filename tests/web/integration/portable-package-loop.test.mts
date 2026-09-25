@@ -14,7 +14,13 @@ import {sha256} from '@sensa/learning-kernel';
 
 import {contentSupplySystem} from '../../../apps/web/src/contentSupply/system/index.ts';
 import {learningSystem} from '../../../apps/web/src/learning/system/index.ts';
-import {command,openLibrary,readLibrary} from '../../../apps/web/src/data/library/store.ts';
+import {
+  command,
+  openLibrary,
+  readLibrary,
+  readPortableMediaStorageDiagnostics,
+  writeLibraryCache,
+} from '../../../apps/web/src/data/library/store.ts';
 import {localCurriculumMembershipForContext} from '../../../apps/web/src/learning/runtime/localCurriculum.ts';
 import type {LocalLearningRun,LocalLearningTarget} from '../../../apps/web/src/learning/runtime/localProtocol.ts';
 
@@ -255,4 +261,66 @@ test('an update with a new semantic identity creates a fresh Target without dele
     /localFlow\.packageVersionChanged/u,
     'an older installed release must not replace the active newer curriculum version',
   );
+});
+
+test('installed Portable media is content-addressed, shared, and garbage-collected',async()=>{
+  const before=await readPortableMediaStorageDiagnostics();
+  const uniqueBytes=new TextEncoder().encode('ID3 unique portable cache fixture');
+  const uniqueDigest=sha256(uniqueBytes);
+  const temporary=manifest();
+  temporary.metadata.packageId='f2386798-d8c2-4ec0-9c4d-5f1fa936d80e';
+  temporary.metadata.title='Temporary portable cache fixture';
+  temporary.media=[{
+    mediaId:'pronunciation',
+    kind:'audio',
+    mimeType:'audio/x-fixture',
+    sha256:uniqueDigest,
+    sizeBytes:uniqueBytes.byteLength,
+  }];
+  const temporaryBytes=createSensaPortableLightweightPackage(
+    temporary,
+    new Map([['pronunciation',uniqueBytes]]),
+  );
+  const secondTemporary=structuredClone(temporary);
+  secondTemporary.metadata.packageId='93f796b5-a36a-4f66-a1e3-d1027bd35a92';
+  secondTemporary.metadata.title='Second temporary portable cache fixture';
+  const secondTemporaryBytes=createSensaPortableLightweightPackage(
+    secondTemporary,
+    new Map([['pronunciation',uniqueBytes]]),
+  );
+  const preview=await contentSupplySystem.execute({kind:'preview_portable_package',bytes:temporaryBytes});
+  const installed=await contentSupplySystem.execute({
+    kind:'install_portable_package',
+    bytes:temporaryBytes,
+    expectedArchiveDigest:preview.archiveDigest,
+  });
+  const secondPreview=await contentSupplySystem.execute({
+    kind:'preview_portable_package',
+    bytes:secondTemporaryBytes,
+  });
+  const secondInstalled=await contentSupplySystem.execute({
+    kind:'install_portable_package',
+    bytes:secondTemporaryBytes,
+    expectedArchiveDigest:secondPreview.archiveDigest,
+  });
+  const stored=await readPortableMediaStorageDiagnostics();
+  assert.deepEqual(stored,{
+    blobCount:before.blobCount+1,
+    totalBytes:before.totalBytes+uniqueBytes.byteLength,
+    referenceCount:before.referenceCount+2,
+  });
+  const roundTrip=await contentSupplySystem.execute({
+    kind:'export_portable_package',
+    packageKey:installed.key,
+  });
+  assert.deepEqual(roundTrip.bytes,temporaryBytes,'hydration must stay transparent to export');
+
+  await writeLibraryCache(async tx=>tx.delete('packageCache',installed.key));
+  assert.deepEqual(await readPortableMediaStorageDiagnostics(),{
+    blobCount:before.blobCount+1,
+    totalBytes:before.totalBytes+uniqueBytes.byteLength,
+    referenceCount:before.referenceCount+1,
+  });
+  await writeLibraryCache(async tx=>tx.delete('packageCache',secondInstalled.key));
+  assert.deepEqual(await readPortableMediaStorageDiagnostics(),before);
 });

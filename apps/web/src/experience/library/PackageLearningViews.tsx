@@ -13,6 +13,7 @@ import type {LearningTargetProjection} from '../../learning/system';
 import type {usePackageLearning} from './usePackageLearning';
 import {LearningSetupFrame,setupButton,setupPrimary} from '../components/learning/LearningSetupFrame';
 import {useScreenState} from '../ui/ScreenHost';
+import {downloadPortablePackage} from './portableDownload';
 type Controller=ReturnType<typeof usePackageLearning>;
 export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boolean;c:Controller;onBack:()=>void;onLearning:()=>void;onTarget:(id:string)=>void}){
  useTranslation();
@@ -155,7 +156,7 @@ export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boole
      <button className={setupPrimary+' w-full sm:w-auto'} disabled={c.busy||c.catalogBusy||(!installed.length&&!descriptor)} onClick={()=>{if(item.updateDownloaded&&installed.length)enrollInstalled();else if(item.updateAvailable&&descriptor){setDownloadKey(item.key);void c.download(descriptor).finally(()=>setDownloadKey(null));}else if(item.enrolled)onLearning();else if(installed.length)enrollInstalled();else if(descriptor){setDownloadKey(item.key);void c.download(descriptor).finally(()=>setDownloadKey(null));}}}>
       {item.enrolled?<ArrowRight size={18}/>:item.updateAvailable&&!item.updateDownloaded?<Download size={18}/>:item.updateDownloaded||installed.length?<Check size={18}/>:<Download size={18}/>}{localFlowText(c.busy?'processing':item.updateDownloaded?'applyPackageUpdate':item.updateAvailable?'downloadPackageUpdate':item.enrolled?'packageGoLearning':installed.length?'enroll':'downloadPackage')}
      </button>
-     {installed.length===1&&<button className={setupButton+' w-full sm:w-auto'} disabled={c.busy} onClick={()=>void c.exportPackage(installed[0]!.key).then(result=>{if(!result)return;const url=URL.createObjectURL(new Blob([result.bytes.slice().buffer],{type:'application/vnd.sensa.package+zip'}));const anchor=document.createElement('a');anchor.href=url;anchor.download=result.fileName;anchor.click();URL.revokeObjectURL(url);})}><Download size={18}/>{localFlowText('downloadPackage')}</button>}
+     {installed.length===1&&<button className={setupButton+' w-full sm:w-auto'} disabled={c.busy} onClick={()=>void c.exportPackage(installed[0]!.key).then(result=>{if(result)downloadPortablePackage(result);})}><Download size={18}/>{localFlowText('downloadPackage')}</button>}
     </>}
    </section>
    <section aria-label={localFlowText('packageContents')}>

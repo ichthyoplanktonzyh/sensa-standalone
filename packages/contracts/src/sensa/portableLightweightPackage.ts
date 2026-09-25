@@ -8,6 +8,7 @@ import {
   sensaSemanticCoverageSchema,
   sensaSenseSemanticSpecSchema,
 } from "./semanticRegistry.js";
+import {sensaInteractiveHtmlSchema} from './richExperience.js';
 
 export const sensaPortableLightweightPackageFormat =
   "sensa-portable-lightweight-package-v2" as const;
@@ -106,13 +107,14 @@ const portableLightweightPackageShape = {
     experienceRecallCue: z.object({
       text: z.string().trim().max(8_000).optional(),
       senseFocus: boundedText(4_000),
+      html:sensaInteractiveHtmlSchema.optional(),
       images: z.array(z.object({
         mediaId,
         altText: boundedText(2_000),
       }).strict()).max(4).optional(),
     }).strict().refine(
-      (cue) => (cue.text?.length ?? 0) > 0 || (cue.images?.length ?? 0) > 0,
-      "Experience recall content requires text or an image",
+      (cue) => (cue.text?.length ?? 0) > 0 || (cue.images?.length ?? 0) > 0 || !!cue.html,
+      "Experience recall content requires text, an image or declarative HTML",
     ),
     senseConfirmation: textResource,
     pronunciation: z.object({
@@ -126,7 +128,7 @@ const portableLightweightPackageShape = {
     sceneBridge: textResource,
     sceneRealization: z.object({
       example: boundedText(8_000),
-      translation: boundedText(8_000),
+      translation: nullableBoundedText(8_000).optional(),
       targetStart: z.number().int().nonnegative(),
       targetEnd: positiveInteger,
       audioMediaId: mediaId.optional(),

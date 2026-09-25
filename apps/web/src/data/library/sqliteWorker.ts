@@ -61,6 +61,8 @@ const message = async (request: SqliteWorkerRequest): Promise<unknown> => {
       request.nextBookVersionId,
     );
     case "isMediaReferenced": return db.isMediaReferenced(request.mediaId);
+    case "portableMedia": return db.portableMedia(request.sha256);
+    case "portableMediaDiagnostics": return db.portableMediaDiagnostics();
     case "commit": db.commit(request.mutation); return null;
     case "diagnostics": return db.diagnostics();
   }

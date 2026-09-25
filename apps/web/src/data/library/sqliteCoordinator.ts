@@ -1,5 +1,7 @@
 import type {
   HomeLearningStorageProjection,
+  PortableMediaBlob,
+  PortableMediaStorageDiagnostics,
   SqliteLibraryTable,
   SqliteMutation,
   SqliteRecordChange,
@@ -30,6 +32,8 @@ export interface CoordinatedSqliteBackend {
   countContentAttemptsSince(taskId: string, createdAfter: string): Promise<number>;
   learningTargetIdsForBookUpgrade(languageRouteId: string, targetLanguageTag: string, supportLanguageTag: string, bookId: string, nextBookVersionId: string): Promise<string[]>;
   isMediaReferenced(mediaId: string): Promise<boolean>;
+  portableMedia(sha256:string):Promise<PortableMediaBlob|null>;
+  portableMediaDiagnostics():Promise<PortableMediaStorageDiagnostics>;
   commit(mutation: SqliteMutation): Promise<void>;
   diagnostics(): Promise<SqliteStorageDiagnostics>;
 }
@@ -145,6 +149,14 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
 
   isMediaReferenced(mediaId: string): Promise<boolean> {
     return this.call({ kind: 'isMediaReferenced', mediaId }) as Promise<boolean>;
+  }
+
+  portableMedia(sha256:string):Promise<PortableMediaBlob|null>{
+    return this.call({kind:'portableMedia',sha256}) as Promise<PortableMediaBlob|null>;
+  }
+
+  portableMediaDiagnostics():Promise<PortableMediaStorageDiagnostics>{
+    return this.call({kind:'portableMediaDiagnostics'}) as Promise<PortableMediaStorageDiagnostics>;
   }
 
   async commit(mutation: SqliteMutation): Promise<void> {
@@ -361,6 +373,8 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
         input.nextBookVersionId,
       );
       case 'isMediaReferenced': return backend.isMediaReferenced(input.mediaId);
+      case 'portableMedia': return backend.portableMedia(input.sha256);
+      case 'portableMediaDiagnostics': return backend.portableMediaDiagnostics();
       case 'commit': return backend.commit(input.mutation);
       case 'diagnostics': return backend.diagnostics();
     }

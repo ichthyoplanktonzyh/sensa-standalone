@@ -9,10 +9,13 @@ import {
 import type {LocalLearningRun,LocalLearningTarget} from '../../learning/runtime/localProtocol';
 import {
   sqliteLibrarySchema,
+  sqlitePortableMediaSchema,
   sqliteLibraryBaselineVersion,
   sqliteLibrarySchemaVersion,
   type SqliteLibraryTable,
   type SqliteMutation,
+  type PortableMediaBlob,
+  type PortableMediaStorageDiagnostics,
   type SqliteRecordChange,
   type SqliteSyncBaseEntry,
   type SqliteStorageDiagnostics,
@@ -76,7 +79,19 @@ export class SqliteRecordDatabase {
     // New databases are created at the supported baseline. Future forward
     // migrations belong here as ordered, transactional version steps; older
     // prototype formats are intentionally not imported.
-    if (before === 0) this.database.exec(sqliteLibrarySchema);
+    if(before===0)this.database.exec(sqliteLibrarySchema);
+    else if(before===10){
+      this.database.exec('BEGIN IMMEDIATE');
+      try{
+        this.database.exec(sqlitePortableMediaSchema);
+        this.database.exec(`PRAGMA user_version=${sqliteLibrarySchemaVersion}`);
+        this.database.exec('COMMIT');
+      }catch(error){
+        try{this.database.exec('ROLLBACK');}catch{/* Preserve the migration failure. */}
+        throw error;
+      }
+      this.database.exec(sqliteLibrarySchema);
+    }
     else if (before !== sqliteLibrarySchemaVersion) {
       throw new Error(`sqlite_schema_migration_missing:${before}`);
     } else this.database.exec(sqliteLibrarySchema);
@@ -308,11 +323,47 @@ export class SqliteRecordDatabase {
     return Number(rows[0] ?? 0) === 1;
   }
 
+  portableMedia(sha256: string): PortableMediaBlob|null {
+    const rows=this.database.exec({
+      sql:'SELECT size_bytes,bytes FROM sensa_portable_media WHERE sha256=?',
+      bind:[sha256],
+      rowMode:'object',
+      returnValue:'resultRows',
+    }) as Array<Record<string,unknown>>;
+    if(!rows.length)return null;
+    const row=rows[0]!;
+    const raw=row.bytes;
+    const bytes=raw instanceof Uint8Array
+      ?new Uint8Array(raw)
+      :raw instanceof ArrayBuffer
+        ?new Uint8Array(raw)
+        :new Uint8Array(raw as ArrayLike<number>);
+    return {sha256,sizeBytes:Number(row.size_bytes),bytes};
+  }
+
+  portableMediaDiagnostics():PortableMediaStorageDiagnostics{
+    const rows=this.database.exec({
+      sql:`SELECT
+            (SELECT COUNT(*) FROM sensa_portable_media) AS blob_count,
+            (SELECT COALESCE(SUM(size_bytes),0) FROM sensa_portable_media) AS total_bytes,
+            (SELECT COUNT(*) FROM sensa_portable_package_media) AS reference_count`,
+      rowMode:'object',
+      returnValue:'resultRows',
+    }) as Array<Record<string,unknown>>;
+    const row=rows[0]??{};
+    return {
+      blobCount:Number(row.blob_count??0),
+      totalBytes:Number(row.total_bytes??0),
+      referenceCount:Number(row.reference_count??0),
+    };
+  }
+
   commit(mutation: SqliteMutation): void {
     if (
       !mutation.clears.length
       && !mutation.deletes.length
       && !mutation.puts.length
+      && !mutation.portablePackages?.length
       && mutation.syncBaseReplacement === undefined
     ) return;
     if (Date.now() >= this.nextOptimizeAt) {
@@ -344,6 +395,7 @@ export class SqliteRecordDatabase {
           });
         }
         this.database.exec({ sql: "DELETE FROM sensa_records WHERE table_name=?", bind: [table] });
+        if(table==='packageCache')this.database.exec('DELETE FROM sensa_portable_package_media');
         if (table === 'learningTargets') this.database.exec('DELETE FROM sensa_learning_targets');
         if (table === 'learningRuns') this.database.exec('DELETE FROM sensa_learning_runs');
         if (table === 'contentAttempts') this.database.exec('DELETE FROM sensa_content_attempts');
@@ -367,6 +419,10 @@ export class SqliteRecordDatabase {
           sql: "DELETE FROM sensa_records WHERE table_name=? AND record_key=?",
           bind: [item.table, item.key],
         });
+        if(item.table==='packageCache')this.database.exec({
+          sql:'DELETE FROM sensa_portable_package_media WHERE package_key=?',
+          bind:[item.key],
+        });
         if (item.table === 'learningTargets') {
           this.database.exec({
             sql: 'DELETE FROM sensa_learning_targets WHERE record_key=?',
@@ -389,6 +445,32 @@ export class SqliteRecordDatabase {
           this.database.exec({
             sql: 'DELETE FROM sensa_media_references WHERE owner_table=? AND owner_key=?',
             bind: [item.table, item.key],
+          });
+        }
+      }
+      for(const portable of mutation.portablePackages??[]){
+        this.database.exec({
+          sql:'DELETE FROM sensa_portable_package_media WHERE package_key=?',
+          bind:[portable.packageKey],
+        });
+        for(const media of portable.media){
+          this.database.exec({
+            sql:`INSERT INTO sensa_portable_media(sha256,size_bytes,bytes) VALUES(?,?,?)
+                  ON CONFLICT(sha256) DO NOTHING`,
+            bind:[media.sha256,media.sizeBytes,media.bytes],
+          });
+          const existing=this.database.exec({
+            sql:'SELECT size_bytes FROM sensa_portable_media WHERE sha256=?',
+            bind:[media.sha256],
+            rowMode:0,
+            returnValue:'resultRows',
+          }) as unknown[];
+          if(Number(existing[0]??0)!==media.sizeBytes)throw new Error('portable_media_digest_collision');
+          this.database.exec({
+            sql:`INSERT INTO sensa_portable_package_media(
+                   package_key,media_id,sha256,mime_type,media_kind
+                 ) VALUES(?,?,?,?,?)`,
+            bind:[portable.packageKey,media.mediaId,media.sha256,media.mimeType,media.kind],
           });
         }
       }
@@ -425,6 +507,15 @@ export class SqliteRecordDatabase {
           this.replaceMediaReferences(item.table, item.key, item.encodedValue);
         }
       }
+      if(
+        mutation.clears.includes('packageCache')
+        ||mutation.deletes.some(item=>item.table==='packageCache')
+        ||(mutation.portablePackages?.length??0)>0
+      )this.database.exec(`DELETE FROM sensa_portable_media
+                            WHERE NOT EXISTS(
+                              SELECT 1 FROM sensa_portable_package_media AS reference
+                              WHERE reference.sha256=sensa_portable_media.sha256
+                            )`);
       this.database.exec("COMMIT");
     } catch (error) {
       try { this.database.exec("ROLLBACK"); } catch { /* Preserve the original failure. */ }

@@ -148,6 +148,10 @@ export const executeContentSupplyCommand = async (command: ContentSupplyCommand)
       const {exportPortablePackage}=await import('../portable/portablePackage');
       return exportPortablePackage(command.packageKey);
     }
+    case 'export_personal_portable_package': {
+      const {exportPersonalPortablePackage}=await import('../portable/personalPortablePackage');
+      return exportPersonalPortablePackage(command.taskId);
+    }
     case 'prepare_materialization': {
       const {
         personalLearningControlSnapshot,

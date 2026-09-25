@@ -68,11 +68,12 @@ publisher namespace 的 attestation 才能使声明成为 Sensa Official fact。
 3. `senseConfirmation`；
 4. `pronunciation`，并引用已保存的真实音频字节；
 5. `sceneBridge`；
-6. `sceneRealization`，包含支持语言翻译和目标表达在例句中的明确 span。
+6. `sceneRealization`，包含目标表达在例句中的明确 span；支持语言译文适用时提供。
 
-经验资源可以是文字、图片或两者组合。图片不规定尺寸、比例、艺术风格或具体文件格式；公共校验只
+经验资源可以是文字、图片、安全的离线声明式 HTML，或这些形式的组合。图片不规定尺寸、比例、艺术风格或具体文件格式；公共校验只
 要求媒体字节非空、声明为图片 MIME、摘要正确且引用存在。图片格式、尺寸、比例和风格均不作限制。
-HTML 和自定义卡面不属于 v2。
+声明式 HTML 只允许合同列出的元素，不允许脚本、事件处理器、外部地址或样式注入；任意 HTML 和
+自定义卡面不属于 v2。
 
 ## 公共校验与官方校验
 
@@ -124,12 +125,19 @@ npm run sensa:package -- inspect path/to/package.sensa
 2. 用户明确确认后才安装，安装本身不加入学习、不创建 Learning Target，也不产生进度；
 3. 匹配当前 Target/Support Language Route 时，用户可以再明确加入学习，并直接复用正式 Lightweight Runtime；
 4. 已安装的 Portable Package 可以重新下载为字节确定的 `.sensa`，媒体和公开清单保持可重建；
+   安装缓存按媒体 SHA-256 只保存一份原始字节，不同 Package 可以共享；最后一个引用删除后自动回收，
+   这一内部去重不会改变 Runtime 读取到的资源或重新导出的 `.sensa`；
 5. 重复安装相同制品幂等；相同 `packageId + version` 出现不同公开内容时拒绝覆盖，作者必须发布新版本；
 6. 更高版本安装后只成为待应用更新，不自动改变课程；用户明确“应用更新”后，稳定的 Sense/Binding
    identity 继续使用原 Learning Target、Retention Target 和进度，并把新版材料作为当前材料；已经发生
    操作的 Step 保留当时材料，当前尚未操作的 Step 立即刷新，后续 Step 也使用新版；新 identity 创建新
    Target，旧 Target 不因新版缺少它而自动删除；
 7. 产品界面只提供向更高版本更新，不以重新加入旧文件的方式静默回退课程版本。
+
+Web 内容生成 Agent 已通过相同入口完成首次导出：用户明确下载一份已经通过校验并提交的个人学习材料时，
+Web 从当前个人 Curriculum Membership 组装 Portable v2，携带所需媒体并再次通过公共打包校验。一个个人
+学习任务使用稳定 `packageId`，材料修订使用递增版本；生成对话、Provider 设置、上下文授权、学习进度与
+官方身份都不会进入文件。导出的文件可以直接从普通 `.sensa` 导入入口重新安装。
 
 导入时会把 Portable 合同编译为内部 Runtime material roles，但这是 Sensa 的消费实现，不成为外部作者
 必须理解或采用的第二套制作合同。原始清单、公开 identity、摘要和媒体来源随安装记录保留；导出仍回到

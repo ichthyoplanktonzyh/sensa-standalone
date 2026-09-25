@@ -135,6 +135,7 @@ const compileContent=(archive:SensaPortableLightweightPackageArchive)=>{
       name:image.altText.slice(0,200),
       dataUrl:dataUrl(archive,image.mediaId),
     }))}:{}),
+    ...(cue.html?{html:cue.html}:{}),
   });
   value.resources.optional.recallSupport?.forEach((item,index)=>add('recall_support',{text:item.text},index));
   add('target_expression',{
@@ -172,7 +173,7 @@ const compileContent=(archive:SensaPortableLightweightPackageArchive)=>{
   const realization=value.resources.sceneRealization;
   add('scene_realization',{
     example:realization.example,
-    translation:realization.translation,
+    ...(realization.translation!==undefined?{translation:realization.translation}:{}),
     targetStart:realization.targetStart,
     targetEnd:realization.targetEnd,
     ...(realization.audioMediaId?{audioUrl:dataUrl(archive,realization.audioMediaId)}:{}),
