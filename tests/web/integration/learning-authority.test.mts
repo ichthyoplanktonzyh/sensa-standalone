@@ -14,7 +14,7 @@ import {
   type LocalLearningRun,
   type LocalLearningTarget,
 } from '../../../apps/web/src/data/library/learning.ts';
-import {installPackage} from '../../../apps/web/src/data/library/packages.ts';
+import {contentSupplySystem} from '../../../apps/web/src/contentSupply/system/index.ts';
 import {
   command,
   openLibrary,
@@ -31,7 +31,11 @@ import {
     tx.put('meta','service-owner',{subject:id(),accountId:id()});
   });
   const fixture=await libraryCloudPackageFixture();
-  const pack=await installPackage(new Uint8Array(fixture.bytes),fixture.descriptor);
+  const pack=await contentSupplySystem.execute({
+    kind:'install_portable_package',
+    bytes:fixture.bytes,
+    expectedArchiveDigest:fixture.archiveDigest,
+  });
   const [targetId]=await enrollPackage(id(),pack.key,context);
   await confirmLearningQuantity(id(),context,20);
   const run=await startLearning(id(),targetId!,context,20,'2026-09-20T08:00:00.000Z');

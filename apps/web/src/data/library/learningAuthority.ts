@@ -63,9 +63,8 @@ export function assertLearningSystemState(input:LearningSystemStateInput){
    if(membership.sourceKind==='sense_learning_package'){
     if(!membership.packageKey||membership.id!==stableUuid(`local-curriculum-membership:${target.id}:${context.languageRouteId}:sense_learning_package:${membership.packageKey}`))fail();
     const installation=packageInstallationSchema.parse(requireRow('packageInstallations',membership.packageKey));if(installation.artifact.targetLanguage!==context.targetLanguageTag||installation.artifact.supportLanguage!==context.supportLanguageTag)fail();
-    if(installation.artifact.kind==='book_release'&&(membership.provenance?.bookId!==installation.artifact.bookId||membership.provenance?.bookVersionId!==installation.artifact.bookVersionId))fail();
-    const pack=maps.packageCache.get(membership.packageKey),entry=pack?.bundle.entries.find((candidate:any)=>candidate.senseVersionId===provenance.senseVersionId&&candidate.bindingVersionId===provenance.bindingVersionId);
-    if(pack&&(!entry||pack.bundle.targetLanguage!==context.targetLanguageTag||pack.bundle.supportLanguage!==context.supportLanguageTag||!backupEqual(entry.content,baseContentBeforeSupplement(membership.material,context.supportLanguageTag))||entry.assurancePackageKey!==membership.assurancePackageKey))fail();
+    const pack=maps.packageCache.get(membership.packageKey),entry=pack?.content.entries.find((candidate:any)=>candidate.senseVersionId===provenance.senseVersionId&&candidate.bindingVersionId===provenance.bindingVersionId);
+    if(pack&&(!entry||pack.content.targetLanguage!==context.targetLanguageTag||pack.content.supportLanguage!==context.supportLanguageTag||!backupEqual(entry.content,baseContentBeforeSupplement(membership.material,context.supportLanguageTag))||entry.assurancePackageKey!==membership.assurancePackageKey))fail();
    }else if(membership.sourceKind==='personal_meaning_alignment'){
     const source=membership.provenance as any,task=rows.personalLearning.find(({value:candidate})=>candidate.targetId===target.id&&candidate.curriculumMembershipId===membership.id)?.value;
     if(membership.packageKey!==null||membership.assurancePackageKey!==undefined||!task||source?.personalMeaningId!==task.source.personalMeaningId||source?.alignmentId!==task.source.personalMeaningAlignmentId||source?.personalMeaningRevisionId!==task.source.personalMeaningRevisionId||source?.alignmentBasisReferenceId!==task.source.alignmentBasisReferenceId||membership.id!==stableUuid(`local-curriculum-membership:${target.id}:${context.languageRouteId}:personal_meaning_alignment:${source.alignmentId}`))fail();
@@ -136,7 +135,7 @@ export function assertLearningSystemState(input:LearningSystemStateInput){
     validateLightweightInitialMaterialization(material);const materialProvenance=material.snapshot.provenance as any;
     if(material.snapshot.learningTargetId!==id||material.snapshot.learnerUserId!==identity.learnerId||material.snapshot.protocolPurpose!==saved.purpose||materialProvenance.senseId!==target.identity.senseId||materialProvenance.senseVersionId!==target.identity.senseVersionId||materialProvenance.bindingId!==target.identity.senseExpressionBindingId||materialProvenance.bindingVersionId!==target.identity.bindingVersionId)fail();
     if(membership.sourceKind==='sense_learning_package'){
-     const materialPackageKey=z.string().min(1).parse(materialProvenance.packageKey??membership.packageKey),pack=requireRow('packageCache',materialPackageKey),entry=pack.bundle.entries.find((candidate:any)=>candidate.senseVersionId===materialProvenance.senseVersionId&&candidate.bindingVersionId===materialProvenance.bindingVersionId);
+     const materialPackageKey=z.string().min(1).parse(materialProvenance.packageKey??membership.packageKey),pack=requireRow('packageCache',materialPackageKey),entry=pack.content.entries.find((candidate:any)=>candidate.senseVersionId===materialProvenance.senseVersionId&&candidate.bindingVersionId===materialProvenance.bindingVersionId);
      if(!entry||!backupEqual(entry.content,baseContentBeforeSupplement(material,participant.languageContext.supportLanguageTag)))fail();
     }else{
      const attempt=requireRow('contentAttempts',materialProvenance.attemptId);if(attempt.status!=='ready'||!backupEqual(attempt.validation?.content,baseContentBeforeSupplement(material,participant.languageContext.supportLanguageTag)))fail();
@@ -282,8 +281,8 @@ async function validateTransitionTarget(
    if(installation.artifact.targetLanguage!==context.targetLanguageTag||installation.artifact.supportLanguage!==context.supportLanguageTag)reject('Published Curriculum languages are inconsistent.');
    const pack=await input.read('packageCache',packageKey) as any;
    if(pack){
-    const entry=pack.bundle.entries.find((candidate:any)=>candidate.senseVersionId===provenance.senseVersionId&&candidate.bindingVersionId===provenance.bindingVersionId);
-    if(!entry||pack.bundle.targetLanguage!==context.targetLanguageTag||pack.bundle.supportLanguage!==context.supportLanguageTag||!backupEqual(entry.content,baseContentBeforeSupplement(membership.material,context.supportLanguageTag))||entry.assurancePackageKey!==membership.assurancePackageKey)reject('Published Curriculum material is inconsistent.');
+    const entry=pack.content.entries.find((candidate:any)=>candidate.senseVersionId===provenance.senseVersionId&&candidate.bindingVersionId===provenance.bindingVersionId);
+    if(!entry||pack.content.targetLanguage!==context.targetLanguageTag||pack.content.supportLanguage!==context.supportLanguageTag||!backupEqual(entry.content,baseContentBeforeSupplement(membership.material,context.supportLanguageTag))||entry.assurancePackageKey!==membership.assurancePackageKey)reject('Published Curriculum material is inconsistent.');
    }
   }else if(membership.sourceKind==='personal_meaning_alignment'){
    const attempt=requireFact(await input.read('contentAttempts',provenance.attemptId) as any,'Personal material attempt is missing.');

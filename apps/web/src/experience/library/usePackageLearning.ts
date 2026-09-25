@@ -147,9 +147,9 @@ export function usePackageLearning(entryOpen:boolean){
     if(file.size>64*1024*1024)throw new Error('localFlow.packageTooLarge');
     return contentSupplySystem.execute({kind:'install_portable_package',bytes:new Uint8Array(await file.arrayBuffer()),expectedArchiveDigest});
    });
-   if(installed)setNotice(installed.bundle.targetLanguage!==languageContext.targetLanguageTag
+   if(installed)setNotice(installed.content.targetLanguage!==languageContext.targetLanguageTag
     ?'localFlow.routeLanguageMismatch'
-    :installed.bundle.supportLanguage!==languageContext.supportLanguageTag
+    :installed.content.supportLanguage!==languageContext.supportLanguageTag
       ?'localFlow.routeSupportMismatch'
       :'localFlow.packageSaved');
    return installed;

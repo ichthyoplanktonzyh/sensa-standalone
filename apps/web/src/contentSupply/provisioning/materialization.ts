@@ -1,9 +1,5 @@
 import {
   LIGHTWEIGHT_INITIAL_MATERIALIZATION_SCHEMA_VERSION,
-  learningBundleBookId,
-  learningBundleBookVersionId,
-  learningBundleContentReleaseId,
-  learningBundleVersionLabel,
   sensaLearningConnectionContractVersion,
   sensaLearningMaterializationSnapshotSchema,
 } from '@sensa/contracts/sensa';
@@ -17,7 +13,7 @@ import {
   type LightweightInitialLearningMaterialization,
 } from './lightweightInitialContent';
 
-type PublishedEntry = InstalledPackage['bundle']['entries'][number];
+type PublishedEntry = InstalledPackage['content']['entries'][number];
 
 /** Content Supply is the only production owner that assembles immutable materializations. */
 export function materializePublishedEntry(input: {
@@ -29,6 +25,7 @@ export function materializePublishedEntry(input: {
   createdAt: string;
 }): LocalLearningMaterialization {
   const { installedPackage: pack, entry } = input;
+  const packageManifest=pack.portableOrigin.manifest;
   const content = structuredClone(entry.content);
   const snapshot = sensaLearningMaterializationSnapshotSchema.parse({
     contractVersion: sensaLearningConnectionContractVersion,
@@ -46,10 +43,10 @@ export function materializePublishedEntry(input: {
     validatorVersion: 'sensa-web-package-v1',
     provenance: {
       packageKey: input.packageKey,
-      bookId: learningBundleBookId(pack.bundle),
-      bookVersionId: learningBundleBookVersionId(pack.bundle),
-      contentReleaseId: learningBundleContentReleaseId(pack.bundle),
-      packageVersion: learningBundleVersionLabel(pack.bundle),
+      bookId: packageManifest.metadata.packageId,
+      bookVersionId: null,
+      contentReleaseId: null,
+      packageVersion: String(packageManifest.metadata.version),
       packageDigest: pack.digest,
       senseId: entry.senseId,
       senseVersionId: entry.senseVersionId,

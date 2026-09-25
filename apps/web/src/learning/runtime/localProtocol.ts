@@ -1,5 +1,5 @@
 import type {
-  LearningPackageBundle,
+  InstalledLearningContent,
   SensaFormalPinnedLanguageContext,
   SensaLearningMaterializationSnapshot,
   SensaLightweightInitialMaterializationContent,
@@ -233,7 +233,7 @@ export const localRunOpenPlanningInterruption = (
 export interface LocalLearningResource {
   key: string;
   digest: string;
-  bundle: LearningPackageBundle;
+  content: InstalledLearningContent;
   installedAt: string;
 }
 

@@ -189,15 +189,15 @@ test("official portable Registry fixes per-Sense packages behind one Book Manife
     assert.equal(progress.at(0),0);
     assert.equal(progress.at(-1),1);
     for(const pack of installed){
-      const declaration=pack.portableOrigin?.manifest.semanticDeclaration;
-      const entry=pack.bundle.entries[0]!;
+      const declaration=pack.portableOrigin.manifest.semanticDeclaration;
+      const entry=pack.content.entries[0]!;
       assert(declaration);
       assert.equal(entry.senseId,declaration.sense.senseId);
       assert.equal(entry.senseVersionId,declaration.sense.senseVersionId);
       assert.equal(entry.bindingId,declaration.binding.senseExpressionBindingId);
       assert.equal(entry.bindingVersionId,declaration.binding.bindingVersionId);
       assert.equal(entry.semantic?.senseKey,declaration.sense.senseKey);
-      assert.equal(pack.portableOrigin?.publications[0]?.manifestSha256,descriptor.sha256);
+      assert.equal(pack.portableOrigin.publications[0]?.manifestSha256,descriptor.sha256);
     }
     const installedKeys=installed.map(pack=>pack.key).sort();
     await writeLibraryCache(async tx=>{

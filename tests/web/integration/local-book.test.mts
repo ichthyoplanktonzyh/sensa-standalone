@@ -59,7 +59,7 @@ test('prepared Portable Book installs and completes offline through due review',
           memberCount:manifest.members.length,
           member,
         });
-        const entry=pack.bundle.entries[0]!;
+        const entry=pack.content.entries[0]!;
         assert(entry.semantic,'Registry-attested members retain official semantic facts');
         const targetIds=await enrollPackage(id(),pack.key,context,descriptor.sha256);
         for(const target of targetIds){

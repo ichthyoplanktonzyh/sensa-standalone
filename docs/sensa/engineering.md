@@ -97,7 +97,7 @@ Content Attempt 查询投影。首页只读取当前 Route 的 Target、该 Rout
 Package key；运行恢复、策略锁定和生成频控通过领域索引查询，不遍历或解析无关 JSON。数据库打开及有写入
 的长连接周期内使用 `PRAGMA optimize` 维护查询规划统计。Book 版本替换和媒体引用完整性检查同样通过事务内
 关系投影完成。承载大 JSON 的逻辑 record 与 Target 投影使用普通 rowid 表，紧凑关系投影使用
-`WITHOUT ROWID`；物理 schema v10 使用新的 OPFS 文件，并在内容事务中维护记录级 revision 与删除 tombstone，供账号同步只读取上次收敛后变化的记录。云端确认的逐记录基线和 block refs 保存在内部 `sensa_sync_base` 表；未变化记录不再重新编码、分块或下载。`packageInstallations` 保存可跨设备复制的精确 artifact identity、语言方向、长度和 digest；完整 Published artifact（当前包括过渡 Book Bundle，统一后为 `.sensa`）与内嵌公共媒体只进入设备本地 `packageCache`，缓存写入不增加个人内容 revision。恢复后由 Content Supply 使用本机目录解析并校验精确 digest；解析或下载失败时 Learning Target 保留但 readiness 为 blocked。状态只保存小型幂等 commit receipt，不重复保存整库或待发布记录。`npm run benchmark:cloud-sync` 在真实 Chromium OPFS 上执行 1k/10k 完整同步路径，并固定单记录变化只上传记录块与受影响的 manifest 分片。因当前无用户库数据，不迁移或读取 v9 文件。
+`WITHOUT ROWID`；物理 schema v10 使用新的 OPFS 文件，并在内容事务中维护记录级 revision 与删除 tombstone，供账号同步只读取上次收敛后变化的记录。云端确认的逐记录基线和 block refs 保存在内部 `sensa_sync_base` 表；未变化记录不再重新编码、分块或下载。`packageInstallations` 保存可跨设备复制的精确 `.sensa` identity、语言方向、长度和 digest；完整 Portable artifact 与编译后的设备 Runtime content 只进入本地 `packageCache`，缓存写入不增加个人内容 revision。恢复后由 Content Supply 使用 Registry/Manifest 位置重新取得并校验精确 digest；解析或下载失败时 Learning Target 保留但 readiness 为 blocked。状态只保存小型幂等 commit receipt，不重复保存整库或待发布记录。`npm run benchmark:cloud-sync` 在真实 Chromium OPFS 上执行 1k/10k 完整同步路径，并固定单记录变化只上传记录块与受影响的 manifest 分片。因当前无用户库数据，不迁移或读取 v9 文件。
 v10 同时是首个真实用户基线：打开版本低于 v10 或高于当前版本的文件会停止并保留原库，不创建空库冒充
 首次访问；后续 schema 只能按顺序增加事务迁移与固定旧版夹具。跨标签页协调协议独立版本化，版本不一致
 时旧/新页面不交换记录，并要求用户关闭其他标签页。Service Worker 安装新 shell 后等待用户确认再接管，
@@ -544,8 +544,9 @@ Sensa Official 权威；本地文件导入继续使用 Package-local identity，
 
 官方分发与 Catalog 已完成同一边界的闭环：`.sensa` 是唯一成员制品，Book Version Manifest 只保存有序
 membership 与精确 digest，Registry v2 只发布并证明 Manifest；安装事实仅同步精确 artifact identity，完整
-制品仍是可重新获取的本机缓存。旧 Book Bundle builder、publisher、consumer contract 与内部测试夹具已不在
-正式路径中，留待下一阶段删除。
+制品仍是可重新获取的本机缓存。旧 Book Bundle builder、publisher、consumer contract、JSON 导入命令与
+对应测试夹具已经删除；设备 Runtime content 只能由通过 Portable validator 的 `.sensa` 编译产生，不能作为
+第二种外部包格式直接导入。
 
 `python3 content/tools/smoke_spoken_resource.py` 验证 provider 替换、缓存隔离、损坏检测与外部调用门控；
 `tests/web/integration/speech-provider.test.mts` 验证 provider 替换、默认 Edge wire adapter、输入身份和已保存音频

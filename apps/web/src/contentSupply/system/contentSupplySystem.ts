@@ -12,7 +12,6 @@ import type {
   PortablePackageExport,
   PortablePackagePreview,
 } from '../portable/portablePackage';
-import { packageKey } from '../../data/library/packageRecords';
 import { observeLibrary, type Table } from '../../data/library/store';
 
 export type ContentSupplyPackage = InstalledPackage;
@@ -48,7 +47,6 @@ export type ContentSupplyCommand =
       signal: AbortSignal;
       onProgress?: (fraction: number) => void;
     }>
-  | Readonly<{ kind: 'import_package'; bytes: Uint8Array; signal?: AbortSignal }>
   | Readonly<{ kind: 'preview_portable_package'; bytes: Uint8Array }>
   | Readonly<{
       kind: 'install_portable_package';
@@ -120,7 +118,6 @@ const queryTables = {
   provisioning_tasks: ['personalLearning'],
 } as const satisfies Record<ContentSupplyQuery['kind'], readonly Table[]>;
 
-export const contentSupplyArtifactKey = packageKey;
 export type {PortablePackageExport,PortablePackagePreview};
 
 export const contentSupplySystem: ContentSupplySystem = {

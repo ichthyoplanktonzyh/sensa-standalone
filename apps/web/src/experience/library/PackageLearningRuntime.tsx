@@ -1,7 +1,6 @@
 import {RuntimeFrame,runtimePrimary} from '../components/learning/RuntimeFrame';
 import {useEffect,useMemo,useState} from 'react';
 import {useTranslation} from 'react-i18next';
-import {learningBundleBookId,learningBundleBookVersionId,learningBundleContentReleaseId,learningBundleTitle} from '@sensa/contracts/sensa';
 
 import {InterleavedFourStageRuntimeScreen} from '../components/learning/InterleavedFourStageRuntimeScreen';
 import {InterleavedFourStageReviewScreen} from '../components/learning/InterleavedFourStageReviewScreen';
@@ -112,18 +111,11 @@ function LightweightPackageRuntime({active,runtime,c,host,onExit,onFinish}:{acti
  const scene=personalContentSystem.read({kind:'learning_scene',learningTargetId:target.targetId,languageRouteId:target.languageContext.languageRouteId});
  const sceneRevision=scene?currentPersonalLearningSceneRevision(scene):null;
  const pack=target.packageKey?c.packages.find(candidate=>candidate.key===target.packageKey):undefined;
- const bookBundle=pack?.bundle.format==='sensa-book-release-bundle-v1'?pack.bundle:null;
- const entry=pack?.bundle.entries.find(candidate=>candidate.senseVersionId===target.identity.senseVersionId&&candidate.bindingVersionId===target.identity.bindingVersionId);
+ const entry=pack?.content.entries.find(candidate=>candidate.senseVersionId===target.identity.senseVersionId&&candidate.bindingVersionId===target.identity.bindingVersionId);
  const publication=target.publicationManifestSha256
-  ?pack?.portableOrigin?.publications.find(candidate=>candidate.manifestSha256===target.publicationManifestSha256)
-  :[...(pack?.portableOrigin?.publications??[])].sort((left,right)=>right.book.versionNumber-left.book.versionNumber)[0];
- const publishedSource=bookBundle?{
-  bookId:learningBundleBookId(bookBundle),
-  bookVersionId:learningBundleBookVersionId(bookBundle)!,
-  contentReleaseId:learningBundleContentReleaseId(bookBundle)!,
-  publishedAt:bookBundle.publishedAt,
-  title:learningBundleTitle(bookBundle),
- }:publication?{
+  ?pack?.portableOrigin.publications.find(candidate=>candidate.manifestSha256===target.publicationManifestSha256)
+  :[...(pack?.portableOrigin.publications??[])].sort((left,right)=>right.book.versionNumber-left.book.versionNumber)[0];
+ const publishedSource=publication?{
   bookId:publication.book.bookId,
   bookVersionId:publication.book.bookVersionId,
   contentReleaseId:publication.contentRelease.contentReleaseId,

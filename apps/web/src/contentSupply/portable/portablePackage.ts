@@ -3,9 +3,9 @@ import {
   LIGHTWEIGHT_INITIAL_CONTENT_DEMAND_VERSION,
   SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND,
   canonicalConsumerJson,
-  learningPackageSchema,
+  installedLearningContentSchema,
   sensaLightweightInitialMaterializationContentSchema,
-  type LearningPackageBundle,
+  type InstalledLearningContent,
   type SensaLightweightInitialMaterialRole,
   type SensaPortableLightweightPackage,
 } from '@sensa/contracts/sensa';
@@ -28,7 +28,7 @@ import {
   type PortablePublicationAttestation,
 } from '../../data/library/packageRecords';
 import {openLibrary,readLibrary} from '../../data/library/store';
-import {validatePackage} from '../../data/library/packages';
+import {validateInstalledLearningContent} from './installedLearningContent';
 
 export type PortablePackagePreviewStatus=
   |'new'
@@ -72,13 +72,13 @@ const previewStatus=(
 ):PortablePackagePreviewStatus=>{
   const exact=installed.find(item=>item.key===portableKey(archive.package));
   if(exact){
-    return exact.portableOrigin?.packageDigest===archive.packageDigest
+    return exact.portableOrigin.packageDigest===archive.packageDigest
       ?'installed'
       :'version_conflict';
   }
   const versions=installed
-    .filter(item=>item.portableOrigin?.manifest.metadata.packageId===archive.package.metadata.packageId)
-    .map(item=>item.portableOrigin!.manifest.metadata.version);
+    .filter(item=>item.portableOrigin.manifest.metadata.packageId===archive.package.metadata.packageId)
+    .map(item=>item.portableOrigin.manifest.metadata.version);
   if(versions.some(version=>version>archive.package.metadata.version))return 'older_version';
   if(versions.some(version=>version<archive.package.metadata.version))return 'update_available';
   return 'new';
@@ -217,10 +217,10 @@ const compileContent=(archive:SensaPortableLightweightPackageArchive)=>{
   });
 };
 
-const compileBundle=(
+const compileInstalledContent=(
   archive:SensaPortableLightweightPackageArchive,
   publication?:PortablePublicationAttestation,
-):LearningPackageBundle=>{
+):InstalledLearningContent=>{
   const value=archive.package;
   const declaration=publication?value.semanticDeclaration:undefined;
   if(publication&&!declaration)return invalidPortablePackage(
@@ -228,11 +228,8 @@ const compileBundle=(
   );
   const senseSeed=`${value.metadata.packageId}:${value.sense.senseId}`;
   const bindingSeed=`${senseSeed}:${value.route.targetLanguage}:${value.targetExpression.expressionKind}:${value.targetExpression.text}:${value.targetExpression.spokenForm??''}`;
-  return learningPackageSchema.parse({
-    format:'sensa-learning-package-v1',
-    id:value.metadata.packageId,
-    version:String(value.metadata.version),
-    title:value.metadata.title,
+  return installedLearningContentSchema.parse({
+    format:'sensa-installed-learning-content-v1',
     targetLanguage:value.route.targetLanguage,
     supportLanguage:value.route.supportLanguage,
     entries:[{
@@ -289,7 +286,7 @@ const installPortablePackageWithAttestation=async(
     canonicalBytes=createSensaPortableLightweightPackage(input.package,input.mediaById);
     canonical=readSensaPortableLightweightPackage(canonicalBytes);
   }catch(cause){return invalidPortablePackage(cause);}
-  const bundle=validatePackage(compileBundle(canonical,publication));
+  const content=validateInstalledLearningContent(compileInstalledContent(canonical,publication));
   const installation=portablePackageInstallationFor(
     canonical.package,
     canonical.archiveDigest,
@@ -304,19 +301,19 @@ const installPortablePackageWithAttestation=async(
     const prior=await tx.get<PackageInstallation>('packageInstallations',installation.key);
     if(prior&&canonicalConsumerJson(packageInstallationSchema.parse(prior))!==canonicalConsumerJson(installation))throw new Error('localFlow.packageVersionChanged');
     if(old&&(
-      old.portableOrigin?.packageDigest!==canonical.packageDigest
-      ||canonicalConsumerJson(old.bundle)!==canonicalConsumerJson(bundle)
+      old.portableOrigin.packageDigest!==canonical.packageDigest
+      ||canonicalConsumerJson(old.content)!==canonicalConsumerJson(content)
     ))throw new Error('localFlow.packageVersionChanged');
     const publications=publication
-      ?[...(old?.portableOrigin?.publications??[]).filter(item=>item.manifestSha256!==publication.manifestSha256),publication]
-      :old?.portableOrigin?.publications??[];
+      ?[...(old?.portableOrigin.publications??[]).filter(item=>item.manifestSha256!==publication.manifestSha256),publication]
+      :old?.portableOrigin.publications??[];
     installed=old?{
       ...old,
       portableOrigin:{...old.portableOrigin!,publications},
     }:{
       key:portablePackageKey(canonical.package.metadata.packageId,canonical.package.metadata.version),
       digest:canonical.archiveDigest,
-      bundle,
+      content,
       installedAt:new Date().toISOString(),
       portableOrigin:{
         format:'sensa-portable-installation-origin-v2',
@@ -364,14 +361,13 @@ const base64ToBytes=(value:string):Uint8Array=>{
 };
 
 const material=(pack:InstalledPackage,role:string,ordinal=0):Record<string,unknown>=>{
-  const resource=pack.bundle.entries[0]?.content.resources.find(item=>item.materialRoleKey===role&&item.ordinal===ordinal);
+  const resource=pack.content.entries[0]?.content.resources.find(item=>item.materialRoleKey===role&&item.ordinal===ordinal);
   if(!resource)return invalidPortablePackage(new Error(`Missing installed resource: ${role}:${ordinal}`));
   return resource.contentPayload;
 };
 
 const reconstructMedia=(pack:InstalledPackage):ReadonlyMap<string,Uint8Array>=>{
-  const manifest=pack.portableOrigin?.manifest;
-  if(!manifest)return invalidPortablePackage(new Error('Installed package has no portable origin'));
+  const manifest=pack.portableOrigin.manifest;
   const urls=new Map<string,string>();
   const assign=(mediaId:string|undefined,url:unknown)=>{
     if(!mediaId)return;

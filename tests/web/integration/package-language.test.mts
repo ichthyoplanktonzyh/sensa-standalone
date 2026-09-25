@@ -11,7 +11,7 @@ import {withBindingFixture} from '../../../scripts/support/lightweightMaterialFi
  */
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {learningPackageSchema} from '@sensa/contracts/sensa';
+import {installedLearningContentSchema} from '@sensa/contracts/sensa';
 import {indexedDB} from 'fake-indexeddb';
 import {build} from 'esbuild';
 import {mkdtemp,rm,writeFile} from 'node:fs/promises';
@@ -56,16 +56,16 @@ try{
   }));
   assert.equal(material.status,'ready');
   const entry={senseId:id(),senseVersionId:id(),bindingId:id(),bindingVersionId:id(),expression:'tomarse su tiempo',meaning:'从容地花时间做一件事。',content:material.materialization.content};
-  const pack=(over:Record<string,unknown>={})=>({format:'sensa-learning-package-v1',id:id(),version:'1',title:'合成西语验证包',targetLanguage:'es',supportLanguage:'zh-CN',entries:[entry],...over});
+  const pack=(over:Record<string,unknown>={})=>({format:'sensa-installed-learning-content-v1',targetLanguage:'es',supportLanguage:'zh-CN',entries:[entry],...over});
 
   // A package says which languages its own text is in; the two roles may be
   // filled by the same absolute language.
-  const spanish=learningPackageSchema.safeParse(pack());
+  const spanish=installedLearningContentSchema.safeParse(pack());
   assert.equal(spanish.success,true,JSON.stringify(spanish.error?.issues));
   assert.equal((spanish.data as {targetLanguage:string}).targetLanguage,'es');
-  const equal=learningPackageSchema.safeParse(pack({supportLanguage:'es'}));
+  const equal=installedLearningContentSchema.safeParse(pack({supportLanguage:'es'}));
   assert.equal(equal.success,true,'an immersion package may use one language for Target and Support');
-  assert.equal(learningPackageSchema.safeParse(pack({targetLanguage:'   '})).success,false,'a blank language tag is not a language');
+  assert.equal(installedLearningContentSchema.safeParse(pack({targetLanguage:'   '})).success,false,'a blank language tag is not a language');
 
   // The authored starter resource names its own languages, so the release
   // builder reads data instead of asserting English.

@@ -17,12 +17,12 @@ export * from "./learningContent.js";
 export * from "./lightweightLearningContent.js";
 export * from "./portableLightweightPackage.js";
 export * from "./portableLearningDistribution.js";
+export * from './installedLearningContent.js';
 export * from './canonicalJson.js';
 export * from './serviceStatus.js';
 export * from './consumer/intake.js';
 export * from './consumer/semantic.js';
 export * from './consumer/reading.js';
-export * from './consumer/learningPackage.js';
 export * from './consumer/extension.js';
 export * from './contentExecution.js';
 

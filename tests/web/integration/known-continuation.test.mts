@@ -7,13 +7,13 @@ import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {indexedDB} from 'fake-indexeddb';
 import {defaultSensaLanguageRoute,sensaPinnedLanguageContext} from '@sensa/contracts/sensa';
-import {provisionLightweightInitialContent} from '../../../apps/web/src/contentSupply/provisioning/lightweightInitialContent.ts';
-import {withBindingFixture} from '../../../scripts/support/lightweightMaterialFixture.mts';
+import {portablePackageFixture} from '../../../scripts/support/portablePackageFixture.mts';
 
 test("known-continuation", async () => {
 const compiled=await build({stdin:{contents:[
- ...['store','learning','packages','backupValidation'].map(name=>`export * from './apps/web/src/data/library/${name}';`),
+ ...['store','learning','backupValidation'].map(name=>`export * from './apps/web/src/data/library/${name}';`),
  "export {learningSystem} from './apps/web/src/learning/system';",
+ "export {contentSupplySystem} from './apps/web/src/contentSupply/system';",
  "export * from './apps/web/src/contentSupply/provisioning/hybridMaterialization';",
 ].join('\n'),resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env':'{}'}});
 Object.assign(globalThis,{indexedDB,window:new EventTarget(),location:{origin:'http://127.0.0.1:9998'},BroadcastChannel:undefined});
@@ -21,17 +21,15 @@ const temp=await mkdtemp(join(tmpdir(),'sensa-supplement-'));
 try{
  await writeFile(join(temp,'core.mjs'),compiled.outputFiles[0]!.text);
  const api=await import(pathToFileURL(join(temp,'core.mjs')).href),id=()=>crypto.randomUUID();
- const owner=await api.openLibrary(),account=id(),context=sensaPinnedLanguageContext(defaultSensaLanguageRoute),signal=new AbortController().signal;
+ await api.openLibrary();const account=id(),context=sensaPinnedLanguageContext(defaultSensaLanguageRoute);
  await api.command({id:id(),kind:'fixture.owner',input:{}},async(tx:any)=>tx.put('meta','service-owner',{subject:account,accountId:account}));
- const entries=['fragile','sustain','borrow'].map(expression=>{
-  const senseId=id(),senseVersionId=id(),bindingId=id(),bindingVersionId=id();
-  const prepared=provisionLightweightInitialContent(withBindingFixture({learnerUserId:owner.learnerId,learningTargetId:id(),senseId,senseVersionId,senseExpressionBindingId:bindingId,resolvedLearningPlanRevisionId:'fixture',expressionSourceVersion:'1',senseSourceVersion:'1',expression:{surface:expression,languageTag:'en',expressionKind:'word'},sense:{meaning:'固定测试义项',supportLanguageTag:'zh-CN'},originExperience:{source:'other_authoritative_source',sourceVersion:'1',personalAnchorUseGrantId:null,experience:{scene:'一个具体的测试场景。',senseFocus:'固定含义',featureLabels:[]}},referenceFacts:[],requestedAt:new Date().toISOString()}));
-  assert.equal(prepared.status,'ready');if(prepared.status!=='ready')throw Error();
-  return {senseId,senseVersionId,bindingId,bindingVersionId,expression,meaning:'固定测试义项',content:prepared.materialization.content};
- });
- const bundle={format:'sensa-learning-package-v1',id:id(),version:'1',title:'Supplement fixture',targetLanguage:'en',supportLanguage:'zh-CN',entries};
- const pack=await api.installPackage(new TextEncoder().encode(JSON.stringify(bundle)));
- const ids=await api.enrollPackage(id(),pack.key,context);await api.confirmLearningQuantity(id(),context,20);
+ const ids:string[]=[];
+ for(const expression of ['fragile','sustain','borrow']){
+  const fixture=portablePackageFixture({packageId:id(),expression,meaning:'固定测试义项',scene:'一个具体的测试场景。'});
+  const pack=await api.contentSupplySystem.execute({kind:'install_portable_package',bytes:fixture.bytes,expectedArchiveDigest:fixture.archiveDigest});
+  ids.push(...await api.enrollPackage(id(),pack.key,context));
+ }
+ await api.confirmLearningQuantity(id(),context,20);
  const [targetId]=ids;
  let run=await api.startLearning(id(),targetId,context,20);
  const before=await api.readLearning(),target=before.targets.find((t:any)=>t.id===targetId),membership=target.curriculumMemberships[0],pinned=structuredClone(run);

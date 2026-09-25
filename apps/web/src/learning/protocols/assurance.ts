@@ -34,8 +34,8 @@ import {initialCompletionContractOf,orchestrationRegistry} from '../runtime/orch
 import {localRunBinding,localTargetPolicy} from '../runtime/localRuntimeBindings';
 import {learningPolicyProfileRegistry} from '../runtime/policyProfiles';
 export function assuranceContent(pack:LocalLearningResource,key:string){
- if(!pack.bundle.assurance)throw new Error('localFlow.resourceInvalid');
- const {release,audio}=pack.bundle.assurance;
+ if(!pack.content.assurance)throw new Error('localFlow.resourceInvalid');
+ const {release,audio}=pack.content.assurance;
  const replacements=new Map(release.media.map(m=>['/golden-audio/'+m.sha256.slice(7)+'.mp3',audio[m.mediaKey]]));
  const replace=(v:unknown):any=>typeof v==='string'?(replacements.get(v)??v):Array.isArray(v)?v.map(replace):v&&typeof v==='object'?Object.fromEntries(Object.entries(v).map(([k,x])=>[k,replace(x)])):v;
  const template=installLearningRelease(release).getPackage(key);if(!template)throw new Error('localFlow.resourceInvalid');

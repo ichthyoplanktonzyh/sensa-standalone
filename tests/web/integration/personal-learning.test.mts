@@ -19,7 +19,7 @@ import {pathToFileURL} from 'node:url';
 test("personal-learning", async () => {
 
 const compiled=await build({stdin:{contents:[
-  ...['store','providers','personalLearning','learning','packages','language','speech/defaultProvider'].map(name=>`export * from './apps/web/src/data/library/${name}';`),
+  ...['store','providers','personalLearning','learning','language','speech/defaultProvider'].map(name=>`export * from './apps/web/src/data/library/${name}';`),
   `export * from './apps/web/src/experience/personalMeaningJourney/gateway';`,
 ].join('\n'),resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env':JSON.stringify({VITE_SENSA_API_URL:'https://speech.fixture.invalid'})},plugins:[{name:'fixture-auth',setup(build){build.onLoad({filter:/[/\\]account[/\\]auth\.ts$/},()=>({contents:"export const auth={getSession:async()=>({data:{session:{access_token:'fixture',user:{id:'fixture'}}}})}; export {authStorageKey,cachedAuthSubject} from './authSessionHint';",loader:'ts'}));}}]});
 Object.assign(globalThis,{indexedDB,window:new EventTarget(),location:{origin:'http://127.0.0.1:9998'},BroadcastChannel:undefined});

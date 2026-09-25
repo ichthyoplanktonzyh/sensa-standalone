@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
 import {test} from 'vitest';
 import { indexedDB } from 'fake-indexeddb';
-import { libraryCloudPackageFixture } from '../../../scripts/support/libraryCloudPackageFixture.mts';
-import { openLibrary, command } from '../../../apps/web/src/data/library/store.ts';
-import { installPackage } from '../../../apps/web/src/data/library/packages.ts';
+import {portablePackageFixture} from '../../../scripts/support/portablePackageFixture.mts';
+import {openLibrary,command,writeLibraryCache} from '../../../apps/web/src/data/library/store.ts';
+import {contentSupplySystem} from '../../../apps/web/src/contentSupply/system/index.ts';
+import {validateInstalledLearningContent} from '../../../apps/web/src/contentSupply/portable/installedLearningContent.ts';
 import {
   actLearning,
   confirmLearningQuantity,
@@ -19,8 +21,9 @@ import {
   fourStageContent,
   fourStageQueue,
 } from '../../../apps/web/src/learning/protocols/fourStage.ts';
-import {lightweightSchedulingPolicy,initializeRetentionMemory,scheduleMemoryOutcome} from '@sensa/learning-kernel';
+import {canonicalJsonDigest,lightweightSchedulingPolicy,initializeRetentionMemory,scheduleMemoryOutcome,sha256,stableUuid} from '@sensa/learning-kernel';
 import {defaultSensaLanguageRoute,sensaPinnedLanguageContext} from '@sensa/contracts/sensa';
+import {validateRuntimeLearningRelease} from '@sensa/content-validator/runtime';
 import {localExecutableTargetForParticipant} from '../../../apps/web/src/learning/runtime/localCurriculum.ts';
 
 Object.assign(globalThis, {
@@ -45,10 +48,61 @@ await command({id:id(),kind:'fixture.owner',input:{}},async tx=>{
   tx.put('meta','service-owner',{subject:id()});
 });
 
-const fixture = await libraryCloudPackageFixture();
-const pack = await installPackage(new Uint8Array(fixture.bytes), fixture.descriptor);
-const targetIds = await enrollPackage(id(), pack.key,languageContext);
+const assurancePortable=async(word:'borrow'|'lend')=>{
+  const release=JSON.parse(await readFile(
+    new URL('../../../apps/web/src/learning/content/releases/golden-learning-release-v1.json',import.meta.url),
+    'utf8',
+  ));
+  const audio:Record<string,string>={};
+  for(const media of release.media){
+    const bytes=new TextEncoder().encode(`synthetic-assurance-audio:${media.mediaKey}`);
+    const digest=sha256(bytes);
+    media.sha256='sha256:'+digest;
+    media.uri='content://sha256/'+digest;
+    audio[media.mediaKey]=`data:audio/mpeg;base64,${Buffer.from(bytes).toString('base64')}`;
+  }
+  release.release={
+    ...release.release,
+    releaseKey:`sensa.assurance-test.${word}`,
+    sourceDigest:'sha256:'+canonicalJsonDigest({
+      packages:release.packages,
+      media:release.media,
+      lexemes:release.lexemes,
+      relations:release.relations,
+    }),
+  };
+  assert.deepEqual(validateRuntimeLearningRelease(release).issues,[]);
+  const definition=release.packages.find((candidate:any)=>candidate.identity.lexemeKey===word)!;
+  const lexeme=release.lexemes.find((candidate:any)=>candidate.lexemeKey===word)!;
+  const fixture=portablePackageFixture({
+    packageId:stableUuid(`sensa:${word}-runtime-portable`),
+    expression:lexeme.lemma,
+    meaning:definition.sense.guideLabelL1,
+    scene:definition.experience.recap.bodyL1,
+  });
+  let installed=await contentSupplySystem.execute({
+    kind:'install_portable_package',
+    bytes:fixture.bytes,
+    expectedArchiveDigest:fixture.archiveDigest,
+  });
+  const content=structuredClone(installed.content);
+  content.entries[0]!.assurancePackageKey=definition.identity.packageKey;
+  content.assurance={release,audio};
+  installed={...installed,content:validateInstalledLearningContent(content)};
+  await writeLibraryCache(async tx=>tx.put('packageCache',installed.key,installed));
+  return installed;
+};
+
+const pack=await assurancePortable('borrow');
+const fourStagePack=await assurancePortable('lend');
+const targetIds=[
+  ...await enrollPackage(id(),pack.key,languageContext),
+  ...await enrollPackage(id(),fourStagePack.key,languageContext),
+];
 assert.equal(targetIds.length, 2);
+assert((await readLearning()).targets.every(
+  candidate=>candidate.curriculumMemberships[0]?.assurancePackageKey,
+));
 await confirmLearningQuantity(id(),languageContext,20);
 
 async function act(run:LocalLearningRun, response:unknown, at:string) {
@@ -150,7 +204,7 @@ async function driveFourStage(initial:LocalLearningRun,at:string,reviewAnswer:'k
     else if('presentation' in session){
       if(session.presentation==='meaning_choice'||session.presentation==='sound_choice'){
         const currentTarget=(await readLearning()).targets.find(item=>item.id===session.targetId)!;
-        const content=fourStageContent(localExecutableTargetForParticipant(currentTarget,run.participants[currentTarget.id]!),pack);
+        const content=fourStageContent(localExecutableTargetForParticipant(currentTarget,current.participants[currentTarget.id]!),fourStagePack);
         response={kind:'choice',optionId:content.recognitionAssessment.options.find(option=>option.isCorrect)!.id};
       }else response={kind:'self_report',known:true};
     }else response={kind:'review',answer:session.mode==='review'?reviewAnswer:'known'};

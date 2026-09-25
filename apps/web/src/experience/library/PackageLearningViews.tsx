@@ -7,7 +7,6 @@ import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import i18n from '../../i18n/index';
 import {useState,useRef,useEffect} from 'react';
 import {ArrowRight,BookOpen,Search,RefreshCw,Upload,Check,Download} from 'lucide-react';
-import {learningBundleBookId,learningBundleTitle,learningBundleDescription} from '@sensa/contracts/sensa';
 import {LearningTargetDetailScreen} from '../components/learning/LearningTargetDetailScreen';
 import type {PortablePackagePreview} from '../../contentSupply/system';
 import type {LearningTargetProjection} from '../../learning/system';
@@ -21,15 +20,15 @@ export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boole
  const importInput=useRef<HTMLInputElement>(null),heading=useRef<HTMLHeadingElement>(null);
  useEffect(()=>{if(!active){setSelected(null);setImportCandidate(null);}},[active]);
  useEffect(()=>{if(active)heading.current?.focus({preventScroll:true});},[selected,active]);
- const enrolledFor=(p:Controller['packages'][number])=>p.bundle.entries.map(e=>c.targets.find(t=>e.senseVersionId===t.identity.senseVersionId&&e.bindingVersionId===t.identity.bindingVersionId&&t.packageKey===p.key));
+ const enrolledFor=(p:Controller['packages'][number])=>p.content.entries.map(e=>c.targets.find(t=>e.senseVersionId===t.identity.senseVersionId&&e.bindingVersionId===t.identity.bindingVersionId&&t.packageKey===p.key));
  const packageEnrolled=(p:Controller['packages'][number])=>enrolledFor(p).every(Boolean);
  const routeDescriptor=(descriptor:Controller['catalog'][number])=>descriptor.route.targetLanguage===c.languageContext.targetLanguageTag&&descriptor.route.supportLanguage===c.languageContext.supportLanguageTag;
- const routePackage=(pack:Controller['packages'][number])=>pack.bundle.targetLanguage===c.languageContext.targetLanguageTag&&pack.bundle.supportLanguage===c.languageContext.supportLanguageTag;
+ const routePackage=(pack:Controller['packages'][number])=>pack.content.targetLanguage===c.languageContext.targetLanguageTag&&pack.content.supportLanguage===c.languageContext.supportLanguageTag;
  const routePackages=c.packages.filter(routePackage);
  const officialItems=c.catalog.filter(routeDescriptor).map(descriptor=>{
   const releases=new Map<string,{version:number;memberCount:number;packages:Controller['packages']}>();
   for(const pack of routePackages){
-   for(const publication of pack.portableOrigin?.publications??[]){
+   for(const publication of pack.portableOrigin.publications){
     if(publication.book.bookId!==descriptor.book.bookId)continue;
     const group=releases.get(publication.manifestSha256)??{version:publication.book.versionNumber,memberCount:publication.memberCount,packages:[]};
     if(!group.packages.some(candidate=>candidate.key===pack.key))group.packages.push(pack);
@@ -56,9 +55,9 @@ export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boole
   };
  });
  const catalogBookIds=new Set(officialItems.map(item=>item.key));
- const orphanGroups=new Map<string,Map<string,{publication:NonNullable<Controller['packages'][number]['portableOrigin']>['publications'][number];packages:Controller['packages']}>>();
+ const orphanGroups=new Map<string,Map<string,{publication:Controller['packages'][number]['portableOrigin']['publications'][number];packages:Controller['packages']}>>();
  for(const pack of routePackages){
-  for(const publication of pack.portableOrigin?.publications??[]){
+  for(const publication of pack.portableOrigin.publications){
    if(catalogBookIds.has(publication.book.bookId))continue;
    const releases=orphanGroups.get(publication.book.bookId)??new Map();
    const group=releases.get(publication.manifestSha256)??{publication,packages:[]};
@@ -84,13 +83,13 @@ export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boole
   }]:[];
  });
  const localItems=routePackages.filter(pack=>
-  !(pack.portableOrigin?.publications.length)
-  &&!catalogBookIds.has(learningBundleBookId(pack.bundle)),
+  !pack.portableOrigin.publications.length
+  &&!catalogBookIds.has(pack.portableOrigin.manifest.metadata.packageId),
  ).map(pack=>({
-  key:learningBundleBookId(pack.bundle),
-  title:pack.portableOrigin?.manifest.metadata.title??learningBundleTitle(pack.bundle),
-  description:pack.portableOrigin?.manifest.metadata.description??learningBundleDescription(pack.bundle),
-  count:pack.bundle.entries.length,
+  key:pack.portableOrigin.manifest.metadata.packageId,
+  title:pack.portableOrigin.manifest.metadata.title,
+  description:pack.portableOrigin.manifest.metadata.description,
+  count:pack.content.entries.length,
   descriptor:undefined,
   installed:[pack],
   updateAvailable:false,
@@ -99,7 +98,7 @@ export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boole
  }));
  const items=[...officialItems,...orphanItems,...localItems];
  const item=selected?items.find(candidate=>candidate.key===selected):undefined,installed=item?.installed??[],descriptor=item?.descriptor;
- const installedEntries=installed.flatMap(pack=>pack.bundle.entries.map((entry,index)=>({pack,entry,enrolled:enrolledFor(pack)[index]})));
+ const installedEntries=installed.flatMap(pack=>pack.content.entries.map((entry,index)=>({pack,entry,enrolled:enrolledFor(pack)[index]})));
  const normalized=query.trim().toLocaleLowerCase();
  const results=items.filter(p=>[p.title,p.description].join(' ').toLocaleLowerCase().includes(normalized));
  const stateLabel=(p:typeof items[number])=>localFlowText(p.updateDownloaded?'packageUpdateDownloaded':p.updateAvailable?'packageUpdateAvailable':p.enrolled?'enrolled':p.installed.length?'downloaded':'packageNotDownloaded');
@@ -134,7 +133,7 @@ export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boole
     <p className="text-sm leading-6 text-fg-secondary">{localFlowText('importPackageHint')}</p>
     <div className="flex flex-wrap gap-3">
      <button className={setupButton} disabled={c.busy} onClick={()=>setImportCandidate(null)}>{localFlowText('cancel')}</button>
-     <button className={setupPrimary} disabled={c.busy||importCandidate.preview.status==='version_conflict'} onClick={()=>void c.installImport(importCandidate.file,importCandidate.preview.archiveDigest).then(pack=>{if(!pack)return;setImportCandidate(null);if(pack.bundle.targetLanguage===c.languageContext.targetLanguageTag&&pack.bundle.supportLanguage===c.languageContext.supportLanguageTag)setSelected(learningBundleBookId(pack.bundle));})}><Upload size={18}/>{localFlowText(c.busy?'processing':'importPackage')}</button>
+     <button className={setupPrimary} disabled={c.busy||importCandidate.preview.status==='version_conflict'} onClick={()=>void c.installImport(importCandidate.file,importCandidate.preview.archiveDigest).then(pack=>{if(!pack)return;setImportCandidate(null);if(pack.content.targetLanguage===c.languageContext.targetLanguageTag&&pack.content.supportLanguage===c.languageContext.supportLanguageTag)setSelected(pack.portableOrigin.manifest.metadata.packageId);})}><Upload size={18}/>{localFlowText(c.busy?'processing':'importPackage')}</button>
     </div>
    </section>
   </>:item?<>
@@ -152,11 +151,11 @@ export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boole
      <progress aria-label={localFlowText('downloadPackage')} max={100} value={c.progress} className="h-2 w-full accent-action-primary"/>
      <button className={setupButton} onClick={c.cancelDownload}>{localFlowText('cancelDownload')}</button>
     </>:<>
-     <p className="text-sm leading-6 text-fg-secondary">{localFlowText(item.updateDownloaded?'packageUpdateDownloadedHint':item.updateAvailable?'packageUpdateHint':item.enrolled?'packageReadyHint':installed[0]?.bundle.assurance?'assuranceMethodHint':installed.length?'packageJoinHint':'packageDownloadHint')}</p>
+     <p className="text-sm leading-6 text-fg-secondary">{localFlowText(item.updateDownloaded?'packageUpdateDownloadedHint':item.updateAvailable?'packageUpdateHint':item.enrolled?'packageReadyHint':installed[0]?.content.assurance?'assuranceMethodHint':installed.length?'packageJoinHint':'packageDownloadHint')}</p>
      <button className={setupPrimary+' w-full sm:w-auto'} disabled={c.busy||c.catalogBusy||(!installed.length&&!descriptor)} onClick={()=>{if(item.updateDownloaded&&installed.length)enrollInstalled();else if(item.updateAvailable&&descriptor){setDownloadKey(item.key);void c.download(descriptor).finally(()=>setDownloadKey(null));}else if(item.enrolled)onLearning();else if(installed.length)enrollInstalled();else if(descriptor){setDownloadKey(item.key);void c.download(descriptor).finally(()=>setDownloadKey(null));}}}>
       {item.enrolled?<ArrowRight size={18}/>:item.updateAvailable&&!item.updateDownloaded?<Download size={18}/>:item.updateDownloaded||installed.length?<Check size={18}/>:<Download size={18}/>}{localFlowText(c.busy?'processing':item.updateDownloaded?'applyPackageUpdate':item.updateAvailable?'downloadPackageUpdate':item.enrolled?'packageGoLearning':installed.length?'enroll':'downloadPackage')}
      </button>
-     {installed.length===1&&installed[0]?.portableOrigin&&<button className={setupButton+' w-full sm:w-auto'} disabled={c.busy} onClick={()=>void c.exportPackage(installed[0]!.key).then(result=>{if(!result)return;const url=URL.createObjectURL(new Blob([result.bytes.slice().buffer],{type:'application/vnd.sensa.package+zip'}));const anchor=document.createElement('a');anchor.href=url;anchor.download=result.fileName;anchor.click();URL.revokeObjectURL(url);})}><Download size={18}/>{localFlowText('downloadPackage')}</button>}
+     {installed.length===1&&<button className={setupButton+' w-full sm:w-auto'} disabled={c.busy} onClick={()=>void c.exportPackage(installed[0]!.key).then(result=>{if(!result)return;const url=URL.createObjectURL(new Blob([result.bytes.slice().buffer],{type:'application/vnd.sensa.package+zip'}));const anchor=document.createElement('a');anchor.href=url;anchor.download=result.fileName;anchor.click();URL.revokeObjectURL(url);})}><Download size={18}/>{localFlowText('downloadPackage')}</button>}
     </>}
    </section>
    <section aria-label={localFlowText('packageContents')}>

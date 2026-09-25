@@ -62,8 +62,8 @@ export function useLanguageRoutes(){
     ]);
     const {packages}=await supplyModule.contentSupplySystem.read({kind:'workspace'});
     const packageCounts:Record<string,number>={};
-    for(const {bundle} of packages){
-      const key=JSON.stringify([bundle.targetLanguage,bundle.supportLanguage]);
+    for(const {content} of packages){
+      const key=JSON.stringify([content.targetLanguage,content.supportLanguage]);
       packageCounts[key]=(packageCounts[key]??0)+1;
     }
     const speechConfiguredLanguages=sensaLanguageForRole('target').map(({tag})=>tag).filter(tag=>speechApi.defaultClientSpeechConfiguredFor(tag));

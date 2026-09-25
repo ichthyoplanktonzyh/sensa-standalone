@@ -1,10 +1,14 @@
-import {sensaContentGenerationRequestSchema,sensaMaterialCandidateBundleSchema} from '@sensa/contracts/sensa';
+import {
+  sensaContentGenerationRequestSchema,
+  sensaMaterialCandidateBundleSchema,
+  sensaPortableLightweightPackageSchema,
+} from '@sensa/contracts/sensa';
 import {stableUuid} from '@sensa/learning-kernel';
 import {z} from 'zod';
 
 import type {BackupRows} from '../backupValidation';
-import {packageInstallationSchema,packageKey} from '../packageRecords';
-import {validatePackage} from '../packages';
+import {packageInstallationSchema,portablePackageKey} from '../packageRecords';
+import {validateInstalledLearningContent} from '../../../contentSupply/portable/installedLearningContent';
 import type {LibraryIdentity,Table} from '../store';
 
 type RequireRow=(table:Table,id:string)=>any;
@@ -20,7 +24,19 @@ export function validateContentSupplyReplica(input:{
 }){
  const {rows,identity,requireRow,requirePersonalSource,validateLanguageContext,fail}=input;
  for(const {key,value:i} of rows.packageInstallations){const installation=packageInstallationSchema.parse(i);if(key!==installation.key)fail();}
- for(const {key,value:p} of rows.packageCache){validatePackage(p.bundle);if(key!==p.key||key!==packageKey(p.bundle))fail();z.string().regex(/^[a-f0-9]{64}$/u).parse(p.digest);const installation=packageInstallationSchema.parse(requireRow('packageInstallations',key));if(installation.artifact.digest!==p.digest)fail();}
+ for(const {key,value:p} of rows.packageCache){
+  validateInstalledLearningContent(p.content);
+  const manifest=sensaPortableLightweightPackageSchema.parse(p.portableOrigin.manifest);
+  if(key!==p.key||key!==portablePackageKey(manifest.metadata.packageId,manifest.metadata.version))fail();
+  z.string().regex(/^[a-f0-9]{64}$/u).parse(p.digest);
+  const installation=packageInstallationSchema.parse(requireRow('packageInstallations',key));
+  if(
+   installation.artifact.digest!==p.digest
+   ||installation.artifact.packageDigest!==p.portableOrigin.packageDigest
+   ||installation.artifact.targetLanguage!==p.content.targetLanguage
+   ||installation.artifact.supportLanguage!==p.content.supportLanguage
+  )fail();
+ }
  for(const {value:task} of rows.personalLearning){
   requirePersonalSource(task.source);
   const context=validateLanguageContext(task.languageContext),sourceKey=`${task.source.personalMeaningAlignmentId}:${task.source.bindingVersionId}`;
@@ -37,4 +53,3 @@ export function validateContentSupplyReplica(input:{
   if(attempt.resumedFrom)requireRow('contentAttempts',attempt.resumedFrom);
  }
 }
-

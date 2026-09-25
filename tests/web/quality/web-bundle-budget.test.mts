@@ -83,7 +83,8 @@ const workspaceResourcesFile=findOne(/^workspaceResources-[^.]+\.js$/u,'workspac
 const runtimeFile=findOne(/^PackageLearningRuntime-[^.]+\.js$/u,'learning Runtime');
 const accountFile=findOne(/^AccountExperience-[^.]+\.js$/u,'account experience');
 const storeFile=findOne(/^store-[^.]+\.js$/u,'local library store');
-const packagesFile=findOne(/^packages-[^.]+\.js$/u,'package installer');
+const portablePackageFile=findOne(/^portablePackage-[^.]+\.js$/u,'Portable Package installer');
+const installedContentFile=findOne(/^installedLearningContent-[^.]+\.js$/u,'installed content validator');
 const lemmaFile=findOne(/^resolveClickedLemma-[^.]+\.js$/u,'clicked-lemma resolver');
 const deferredResourceFiles=[
  findOne(/^contentResources-[^.]+\.js$/u,'content translations'),
@@ -125,7 +126,9 @@ assert(!appClosure.has(runtimeFile),`${runtimeFile} must not enter the authentic
 assert(!workspaceLoadedClosure.has(runtimeFile),`${runtimeFile} must not enter the full workspace static closure`);
 assert(!indexClosure.has(accountFile),`${accountFile} must remain behind the explicit account boundary`);
 assert(!indexClosure.has(storeFile),`${storeFile} must not initialize SQLite for the signed-out Landing`);
-assert(!indexClosure.has(packagesFile)&&!appClosure.has(packagesFile)&&!homeInteractiveClosure.has(packagesFile)&&!workspaceLoadedClosure.has(packagesFile),`${packagesFile} and its validator must load only for package installation`);
+for(const installerFile of [portablePackageFile,installedContentFile]){
+ assert(!indexClosure.has(installerFile)&&!appClosure.has(installerFile)&&!homeInteractiveClosure.has(installerFile)&&!workspaceLoadedClosure.has(installerFile),`${installerFile} must load only for Portable Package installation`);
+}
 assert(!indexClosure.has(lemmaFile)&&!appClosure.has(lemmaFile)&&!homeInteractiveClosure.has(lemmaFile)&&!workspaceLoadedClosure.has(lemmaFile),`${lemmaFile} and compromise must load only after a dictionary interaction`);
 for(const resourceFile of deferredResourceFiles)assert(!indexClosure.has(resourceFile)&&!appClosure.has(resourceFile)&&!homeInteractiveClosure.has(resourceFile),`${resourceFile} must stay paired with its lazy feature surface`);
 assert(runtimeChunkGzip<=budgets.runtimeChunkGzip,`${runtimeFile} gzip ${runtimeChunkGzip} exceeds ${budgets.runtimeChunkGzip}`);

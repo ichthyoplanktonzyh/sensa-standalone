@@ -136,10 +136,6 @@ export const executeContentSupplyCommand = async (command: ContentSupplyCommand)
         fraction=>command.onProgress?.(fraction),
       );
     }
-    case 'import_package': {
-      const { installPackage } = await import('../../data/library/packages');
-      return installPackage(command.bytes, undefined, command.signal);
-    }
     case 'preview_portable_package': {
       const {previewPortablePackage}=await import('../portable/portablePackage');
       return previewPortablePackage(command.bytes);

@@ -105,9 +105,9 @@ test('preview is read-only and explicit install preserves the portable origin',a
     bytes,
     expectedArchiveDigest:preview.archiveDigest,
   });
-  assert.equal(installed.portableOrigin?.packageDigest,preview.packageDigest);
+  assert.equal(installed.portableOrigin.packageDigest,preview.packageDigest);
   assert.equal((await readLibrary(tx=>tx.count('learningTargets'))),before.targets,'install must not enroll content');
-  const cue=installed.bundle.entries[0]!.content.resources.find(item=>item.materialRoleKey==='experience_recall_cue');
+  const cue=installed.content.entries[0]!.content.resources.find(item=>item.materialRoleKey==='experience_recall_cue');
   assert.match(String(cue?.contentPayload.scene),/water/u,'public admission must not apply Sensa Official editorial rules');
 
   const again=await contentSupplySystem.execute({kind:'preview_portable_package',bytes});
@@ -122,8 +122,8 @@ test('a local semantic declaration is preserved but cannot claim official identi
   const claimedBytes=createSensaPortableLightweightPackage(claimed,media);
   const preview=await contentSupplySystem.execute({kind:'preview_portable_package',bytes:claimedBytes});
   const installed=await contentSupplySystem.execute({kind:'install_portable_package',bytes:claimedBytes,expectedArchiveDigest:preview.archiveDigest});
-  const entry=installed.bundle.entries[0]!;
-  assert.deepEqual(installed.portableOrigin?.manifest.semanticDeclaration,claimed.semanticDeclaration);
+  const entry=installed.content.entries[0]!;
+  assert.deepEqual(installed.portableOrigin.manifest.semanticDeclaration,claimed.semanticDeclaration);
   assert.notEqual(entry.senseId,claimed.semanticDeclaration!.sense.senseId);
   assert.notEqual(entry.senseVersionId,claimed.semanticDeclaration!.sense.senseVersionId);
   assert.notEqual(entry.bindingId,claimed.semanticDeclaration!.binding.senseExpressionBindingId);
@@ -145,7 +145,7 @@ test('same package identity cannot silently replace different content',async()=>
 
 test('installed content re-exports deterministically and runs through Lightweight learning',async()=>{
   const workspace=await contentSupplySystem.read({kind:'workspace'});
-  const installed=workspace.packages.find(item=>item.portableOrigin?.manifest.metadata.packageId===manifest().metadata.packageId)!;
+  const installed=workspace.packages.find(item=>item.portableOrigin.manifest.metadata.packageId===manifest().metadata.packageId)!;
   const exported=await contentSupplySystem.execute({kind:'export_portable_package',packageKey:installed.key});
   assert.match(exported.fileName,/\.sensa$/u);
   assert.deepEqual(exported.bytes,bytes);
@@ -249,7 +249,7 @@ test('an update with a new semantic identity creates a fresh Target without dele
   assert.equal(prior.startedAt,oldTarget.startedAt,'the prior Target and its progress remain learner-owned');
 
   const workspace=await contentSupplySystem.read({kind:'workspace'});
-  const priorRelease=workspace.packages.find(item=>item.portableOrigin?.manifest.metadata.version===2)!;
+  const priorRelease=workspace.packages.find(item=>item.portableOrigin.manifest.metadata.version===2)!;
   await assert.rejects(
     learningSystem.execute({kind:'enroll_package',operationId:crypto.randomUUID(),packageKey:priorRelease.key,languageContext}),
     /localFlow\.packageVersionChanged/u,
