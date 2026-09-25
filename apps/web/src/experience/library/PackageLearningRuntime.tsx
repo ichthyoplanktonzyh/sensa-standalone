@@ -113,18 +113,32 @@ function LightweightPackageRuntime({active,runtime,c,host,onExit,onFinish}:{acti
  const sceneRevision=scene?currentPersonalLearningSceneRevision(scene):null;
  const pack=target.packageKey?c.packages.find(candidate=>candidate.key===target.packageKey):undefined;
  const bookBundle=pack?.bundle.format==='sensa-book-release-bundle-v1'?pack.bundle:null;
- const entry=bookBundle?.entries.find(candidate=>candidate.senseVersionId===target.identity.senseVersionId&&candidate.bindingVersionId===target.identity.bindingVersionId);
- const canAccept=!!scene&&!!sceneRevision&&!!pack&&!!bookBundle&&!!entry;
+ const entry=pack?.bundle.entries.find(candidate=>candidate.senseVersionId===target.identity.senseVersionId&&candidate.bindingVersionId===target.identity.bindingVersionId);
+ const publication=target.publicationManifestSha256
+  ?pack?.portableOrigin?.publications.find(candidate=>candidate.manifestSha256===target.publicationManifestSha256)
+  :[...(pack?.portableOrigin?.publications??[])].sort((left,right)=>right.book.versionNumber-left.book.versionNumber)[0];
+ const publishedSource=bookBundle?{
+  bookId:learningBundleBookId(bookBundle),
+  bookVersionId:learningBundleBookVersionId(bookBundle)!,
+  contentReleaseId:learningBundleContentReleaseId(bookBundle)!,
+  publishedAt:bookBundle.publishedAt,
+  title:learningBundleTitle(bookBundle),
+ }:publication?{
+  bookId:publication.book.bookId,
+  bookVersionId:publication.book.bookVersionId,
+  contentReleaseId:publication.contentRelease.contentReleaseId,
+  publishedAt:publication.publishedAt,
+  title:publication.book.title,
+ }:null;
+ const canAccept=!!scene&&!!sceneRevision&&!!pack&&!!publishedSource&&!!entry?.semantic;
  const worldState=!canAccept?null:savingWorld?'saving':scene.acceptedRevisionId===sceneRevision.revisionId?'saved':scene.acceptedPersonalMeaningId?'update':'available';
  const openPersonalScene=()=>host.openSceneEditor(content,undefined,{learningTargetId:target.targetId,languageRouteId:target.languageContext.languageRouteId,curriculumMembershipId:target.curriculumMembershipId,senseId:target.identity.senseId,senseVersionId:target.identity.senseVersionId,bindingVersionId:target.identity.bindingVersionId});
  const acceptPersonalScene=async()=>{
-  if(!canAccept||!scene||!sceneRevision||!pack||!bookBundle||!entry)return;
-  const bookVersionId=learningBundleBookVersionId(bookBundle),contentReleaseId=learningBundleContentReleaseId(bookBundle);
-  if(!bookVersionId||!contentReleaseId)return;
+  if(!canAccept||!scene||!sceneRevision||!pack||!publishedSource||!entry?.semantic)return;
   setSavingWorld(true);
   try{
    const operationIds=learningSceneSemanticOperationIds(sceneRevision.revisionId);
-   const result=await journeyGateway.acceptPublishedLearningScene({operationId:operationIds.accept,existingPersonalMeaningId:scene.acceptedPersonalMeaningId,source:{packageKey:pack.key,bookId:learningBundleBookId(bookBundle),bookVersionId,contentReleaseId,publishedAt:bookBundle.publishedAt,title:learningBundleTitle(bookBundle)},target:{learningTargetId:target.targetId,curriculumMembershipId:target.curriculumMembershipId,senseId:target.identity.senseId,senseVersionId:target.identity.senseVersionId,bindingId:target.identity.bindingId,bindingVersionId:target.identity.bindingVersionId,expression:target.presentation.expression,targetLanguageTag:target.presentation.targetLanguageTag},semantic:entry.semantic,scene:{...sceneRevision,sceneId:scene.sceneId}});
+   const result=await journeyGateway.acceptPublishedLearningScene({operationId:operationIds.accept,existingPersonalMeaningId:scene.acceptedPersonalMeaningId,source:{packageKey:pack.key,...publishedSource},target:{learningTargetId:target.targetId,curriculumMembershipId:target.curriculumMembershipId,senseId:target.identity.senseId,senseVersionId:target.identity.senseVersionId,bindingId:target.identity.bindingId,bindingVersionId:target.identity.bindingVersionId,expression:target.presentation.expression,targetLanguageTag:target.presentation.targetLanguageTag},semantic:entry.semantic,scene:{...sceneRevision,sceneId:scene.sceneId}});
    await personalContentSystem.execute({kind:'mark_learning_scene_accepted',operationId:operationIds.link,sceneId:scene.sceneId,revisionId:sceneRevision.revisionId,personalMeaningId:result.personalMeaningId});
    host.toast(i18n.t('runtime.semanticWorldSaved'));
   }catch{host.toast(i18n.t('runtime.semanticWorldSaveFailed'));}

@@ -18,6 +18,13 @@ import {
 
 import {createAuthoredMediaPackager} from "../../../scripts/release/authoredMedia.mts";
 import {syntheticSound} from "../../../scripts/support/lightweightMaterialFixture.mts";
+import {contentSupplySystem} from "../../../apps/web/src/contentSupply/system/index.ts";
+import {
+  command,
+  openLibrary,
+  readLibrary,
+  writeLibraryCache,
+} from "../../../apps/web/src/data/library/store.ts";
 
 const digest = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
 
@@ -30,6 +37,7 @@ test("official portable Registry fixes per-Sense packages behind one Book Manife
   const mediaRoot = join(root, "media");
   const mediaPackPath = join(root, "authored-media-pack.json");
   const base = "https://content.example.test/releases/";
+  const realFetch = globalThis.fetch;
   try {
     const source = JSON.parse(await readFile("content/authored/web-starter.json", "utf8"));
     const sourcePath = join(root, "synthetic-source.json");
@@ -129,6 +137,8 @@ test("official portable Registry fixes per-Sense packages behind one Book Manife
     assert.equal(manifest.semanticAttestation.publisherNamespace, descriptor.publisher.namespace);
     assert.equal(manifest.members.length, 3);
 
+    const delivered = new Map<string, Uint8Array>([[descriptor.url, manifestBytes]]);
+
     for (const member of manifest.members) {
       const packageRelative = [
         "packages",
@@ -137,6 +147,7 @@ test("official portable Registry fixes per-Sense packages behind one Book Manife
         `${member.archiveSha256}.sensa`,
       ].join("/");
       const packageBytes = await readFile(join(releases, packageRelative));
+      delivered.set(member.url, packageBytes);
       const archive = readSensaPortableLightweightPackage(packageBytes);
       assert.equal(member.url, new URL(packageRelative, base).href);
       assert.equal(member.byteLength, packageBytes.byteLength);
@@ -148,6 +159,63 @@ test("official portable Registry fixes per-Sense packages behind one Book Manife
       assert.equal(archive.package.route.targetLanguage, manifest.route.targetLanguage);
       assert.equal(archive.package.route.supportLanguage, manifest.route.supportLanguage);
     }
+
+    Object.assign(globalThis,{
+      window:new EventTarget(),
+      location:new URL("https://sensa.local/"),
+      BroadcastChannel:undefined,
+    });
+    globalThis.fetch=async input=>{
+      const bytes=delivered.get(String(input));
+      return bytes
+        ?new Response(bytes,{headers:{"content-length":String(bytes.byteLength)}})
+        :new Response(null,{status:404});
+    };
+    await openLibrary();
+    await command({id:crypto.randomUUID(),kind:"fixture.owner",input:{}},async tx=>{
+      tx.put("meta","service-owner",{
+        subject:crypto.randomUUID(),
+        accountId:crypto.randomUUID(),
+      });
+    });
+    const progress:number[]=[];
+    const installed=await contentSupplySystem.execute({
+      kind:"install_catalog_item",
+      descriptor,
+      signal:new AbortController().signal,
+      onProgress:value=>progress.push(value),
+    });
+    assert.equal(installed.length,manifest.members.length);
+    assert.equal(progress.at(0),0);
+    assert.equal(progress.at(-1),1);
+    for(const pack of installed){
+      const declaration=pack.portableOrigin?.manifest.semanticDeclaration;
+      const entry=pack.bundle.entries[0]!;
+      assert(declaration);
+      assert.equal(entry.senseId,declaration.sense.senseId);
+      assert.equal(entry.senseVersionId,declaration.sense.senseVersionId);
+      assert.equal(entry.bindingId,declaration.binding.senseExpressionBindingId);
+      assert.equal(entry.bindingVersionId,declaration.binding.bindingVersionId);
+      assert.equal(entry.semantic?.senseKey,declaration.sense.senseKey);
+      assert.equal(pack.portableOrigin?.publications[0]?.manifestSha256,descriptor.sha256);
+    }
+    const installedKeys=installed.map(pack=>pack.key).sort();
+    await writeLibraryCache(async tx=>{
+      tx.clear("packageCache");
+      tx.put("meta","package-catalog",{
+        format:"sensa-local-registry-cache-v2",
+        items:[descriptor],
+        revision:registry.revision,
+        checkedAt:new Date().toISOString(),
+      });
+    });
+    assert.equal(await readLibrary(tx=>tx.count("packageCache")),0);
+    assert.deepEqual(await contentSupplySystem.execute({kind:"rehydrate"}),{
+      ready:installedKeys,
+      blocked:[],
+      failed:[],
+    });
+    assert.equal(await readLibrary(tx=>tx.count("packageCache")),manifest.members.length);
 
     assert.equal(
       sensaBookVersionManifestDescriptorSchema.parse({
@@ -182,6 +250,7 @@ test("official portable Registry fixes per-Sense packages behind one Book Manife
       assert.deepEqual(await readFile(join(repeatReleases, relative)), await readFile(join(releases, relative)));
     }
   } finally {
+    globalThis.fetch=realFetch;
     await rm(root, {recursive: true, force: true});
   }
 });

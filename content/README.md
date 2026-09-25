@@ -67,13 +67,11 @@ domain definition of Example.
 No scene-domain or construction diversity quota is enforced. Those fields remain
 descriptive metadata required by the current V2 wire shape.
 
-## Web Book release delivery migration
+## Portable Book release delivery
 
-The current Web release adapter still compiles the small reviewed sources in `content/authored/`
-into the older immutable Book Bundle JSON consumed by the existing Catalog installer. This is a
-transition boundary, not the desired public exchange contract: the next delivery adapter must
-emit one independently valid `.sensa` per Lightweight member and a Book Version Manifest that
-orders and references those artifacts. Each source names a stable `bookKey`, positive `versionNumber`, publication
+The official producer emits one independently valid `.sensa` per Lightweight member and a
+Book Version Manifest that orders and references those artifacts. Each source names a stable
+`bookKey`, positive `versionNumber`, publication
 time, learner-facing change summary, exact Target/Support languages, and a separate
 `senseVersion` and `bindingVersion` for every entry. Raising the Book version alone does
 not change a Learning Target: semantic or primary-expression identity changes must be
@@ -84,36 +82,24 @@ Build one Registry candidate without publishing anything:
 ```sh
 npm run build -w @sensa/learning-kernel
 npm run build -w @sensa/contracts
-node --import tsx scripts/release/buildStarterPackage.mts
-node --import tsx tests/web/run.mts --suite=fast --id=learning-registry
-```
-
-The transitional builder writes content-addressed Book Release Bundles and one
-immutable `release-candidate/catalog.json` Registry snapshot. Generated bundles and
-Registry files remain ignored build artifacts. By default it includes every JSON source
-in `content/authored/`; that directory keeps one current source for each stable Book and
-exact language pair, while Git history retains prior authored versions. A bounded custom
-build may override the list with comma-separated `SENSA_BOOK_RELEASE_SOURCES` paths.
-
-The replacement producer is `scripts/release/buildPortableBookRegistry.mts`. It requires
-the authored source to declare its publisher, author and license, plus a positive
-`packageVersion` for every member. It emits one independently valid Portable v2 `.sensa`
-per Sense, one content-addressed Book Version Manifest that orders those packages, and
-`release-candidate/portable-catalog.json`, whose Registry attests both the publisher
-namespace and the exact Manifest/package digests:
-
-```sh
 npm run build -w @sensa/content-validator
 node --import tsx scripts/release/buildPortableBookRegistry.mts
+node --import tsx tests/web/run.mts --suite=fast --id=learning-registry
 node --import tsx tests/web/run.mts --suite=fast --id=portable-learning-registry
 ```
 
+The builder requires the authored source to declare its publisher, author and license,
+plus a positive `packageVersion` for every member. It writes content-addressed packages,
+Book Version Manifests and `release-candidate/portable-catalog.json`. Generated release
+files remain ignored build artifacts. By default it includes every JSON source in
+`content/authored/`; a bounded custom build may override the list with comma-separated
+`SENSA_BOOK_RELEASE_SOURCES` paths.
+
 `scripts/release/publishPortableLearningRegistry.mjs` implements the immutable upload
 order Package → Manifest → Registry and verifies the public bytes at every step. The
-protected workflow currently builds and preserves this replacement candidate but still
-promotes the old Registry, because the Catalog consumer has not yet moved to Portable
-installation. The switch happens once that consumer migration is complete; this staging
-does not add a second public Portable format.
+protected workflow promotes this Registry only after all referenced Manifest and Package
+bytes are public and verified. The Web Catalog validates the same hierarchy and sends every
+member through the Portable installation authority.
 
 Authored audio and images use the same content-addressed release seam. A source
 stores only `{ "sha256": "…", "mimeType": "audio/mpeg" }` or
@@ -122,7 +108,7 @@ under `content/data/media/audio/<sha256>.mp3` and
 `content/data/media/images/<sha256>.jpg`. Set `SENSA_AUTHORED_MEDIA_ROOT` to an
 equivalent sealed media directory when building elsewhere. The release builder
 verifies the digest, MIME signature and size before embedding the bytes as a
-Data URL in the immutable Book Bundle. It never fetches arbitrary media or calls
+raw media inside the immutable `.sensa`. It never fetches arbitrary media or calls
 a generation provider. Missing or changed media fails the build. Scene images
 are capped by the saved-image contract and remain attached to the materialized
 experience recall cue.
@@ -141,10 +127,9 @@ owner-selected release asset, verifies its whole-file digest, then sets
 rejects missing or unused bytes.
 
 Production publication is only through the protected
-`sensa-learning-content-publish.yml` workflow. Until the Catalog migration, it uploads and
-verifies every old Bundle, publishes that Registry last, and then promotes the API's public
-Registry URL; it also builds and tests the replacement Portable candidate without
-promoting it. It makes no model or TTS calls and never overwrites an existing object.
+`sensa-learning-content-publish.yml` workflow. It uploads and verifies every `.sensa`, then
+its Book Manifest, publishes the Registry last, and promotes the API's public Registry URL.
+It makes no model or TTS calls and never overwrites an existing object.
 
 ## Layout
 

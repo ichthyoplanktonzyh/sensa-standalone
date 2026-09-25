@@ -1,7 +1,8 @@
 import {
-  learningPackageCatalogSchema,
-  learningPackageDescriptorSchema,
-  type LearningPackageDescriptor,
+  canonicalConsumerJson,
+  sensaBookVersionManifestDescriptorSchema,
+  sensaPortableLearningContentRegistrySchema,
+  type SensaBookVersionManifestDescriptor,
 } from '@sensa/contracts/sensa';
 
 import { openLibrary, readLibrary, writeLibraryCache } from '../../data/library/store';
@@ -14,33 +15,35 @@ import type {
 } from './contentSupplySystem';
 
 type CatalogCache = Readonly<{
-  format: 'sensa-local-registry-cache-v1';
-  items: readonly LearningPackageDescriptor[];
+  format: 'sensa-local-registry-cache-v2';
+  items: readonly SensaBookVersionManifestDescriptor[];
   revision: string | null;
   checkedAt: string | null;
 }>;
 
 const emptyCatalog: CatalogCache = {
-  format: 'sensa-local-registry-cache-v1',
+  format: 'sensa-local-registry-cache-v2',
   items: [],
   revision: null,
   checkedAt: null,
 };
 
-const parseCatalogItems = (raw: readonly unknown[]): readonly LearningPackageDescriptor[] | null => {
-  const parsed = raw.map((item) => learningPackageDescriptorSchema.safeParse(item));
+const browserSha256=async(value:string)=>Array.from(new Uint8Array(
+  await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value)),
+),byte=>byte.toString(16).padStart(2,'0')).join('');
+
+const parseCatalogItems = (
+  raw: readonly unknown[],
+): readonly SensaBookVersionManifestDescriptor[] | null => {
+  const parsed = raw.map((item) => sensaBookVersionManifestDescriptorSchema.safeParse(item));
   return parsed.every((item) => item.success) ? parsed.map((item) => item.data) : null;
 };
 
 const parseCatalogCache = (raw: unknown): CatalogCache => {
-  if (Array.isArray(raw)) {
-    const items = parseCatalogItems(raw);
-    return items ? { ...emptyCatalog, items } : emptyCatalog;
-  }
   if (!raw || typeof raw !== 'object') return emptyCatalog;
   const candidate = raw as Record<string, unknown>;
   if (
-    candidate.format !== 'sensa-local-registry-cache-v1'
+    candidate.format !== 'sensa-local-registry-cache-v2'
     || !Array.isArray(candidate.items)
     || !(candidate.revision === null || typeof candidate.revision === 'string')
     || !(candidate.checkedAt === null || typeof candidate.checkedAt === 'string')
@@ -49,7 +52,7 @@ const parseCatalogCache = (raw: unknown): CatalogCache => {
   if (!items) return emptyCatalog;
   const checkedAt = candidate.checkedAt;
   return {
-    format: 'sensa-local-registry-cache-v1',
+    format: 'sensa-local-registry-cache-v2',
     items,
     revision: candidate.revision,
     checkedAt: checkedAt && Number.isFinite(Date.parse(checkedAt)) ? checkedAt : null,
@@ -84,20 +87,29 @@ const refreshCatalog = async (
   const { fetchContentCatalog } = await import('./contentCatalogClient');
   const response = await fetchContentCatalog(cache.revision, signal);
   const parsed = response.kind === 'loaded'
-    ? learningPackageCatalogSchema.parse(response.value)
+    ? sensaPortableLearningContentRegistrySchema.parse(response.value)
     : null;
+  if(parsed){
+    const {revision,...snapshot}=parsed;
+    if(await browserSha256(canonicalConsumerJson(snapshot))!==revision){
+      throw new Error('localFlow.catalogMismatch');
+    }
+  }
   const items = parsed?.items ?? cache.items;
-  const revision = parsed && 'format' in parsed ? parsed.revision : cache.revision;
+  const revision = parsed?.revision ?? cache.revision;
   await writeLibraryCache(async (tx) => {
     tx.put('meta', 'package-catalog', {
-      format: 'sensa-local-registry-cache-v1',
+      format: 'sensa-local-registry-cache-v2',
       items,
       revision,
       checkedAt: new Date().toISOString(),
     } satisfies CatalogCache);
   });
-  const { rehydratePackageInstallations } = await import('../../data/library/packages');
-  await rehydratePackageInstallations(items, signal ?? AbortSignal.timeout(120_000));
+  const { rehydratePublishedPortableInstallations } = await import('../portable/portableCatalog');
+  await rehydratePublishedPortableInstallations(
+    items,
+    signal ?? AbortSignal.timeout(120_000),
+  );
   return { items, status: response.kind === 'not_modified' ? 'current' : 'updated' };
 };
 
@@ -105,16 +117,24 @@ export const executeContentSupplyCommand = async (command: ContentSupplyCommand)
   await openLibrary();
   switch (command.kind) {
     case 'rehydrate': {
-      const { rehydratePackageInstallations } = await import('../../data/library/packages');
-      return rehydratePackageInstallations(undefined, command.signal);
+      const cache=await readLibrary(
+        tx=>tx.get<unknown>('meta','package-catalog').then(parseCatalogCache),
+      );
+      const {rehydratePublishedPortableInstallations}=await import('../portable/portableCatalog');
+      return rehydratePublishedPortableInstallations(
+        cache.items,
+        command.signal??AbortSignal.timeout(120_000),
+      );
     }
     case 'refresh_catalog':
       return refreshCatalog(command.force, command.signal);
     case 'install_catalog_item': {
-      const { downloadPackage } = await import('../../data/library/packages');
-      return downloadPackage(command.descriptor, command.signal, (receivedBytes) => {
-        command.onProgress?.(Math.min(1, receivedBytes / command.descriptor.byteLength));
-      });
+      const {downloadPublishedBook}=await import('../portable/portableCatalog');
+      return downloadPublishedBook(
+        command.descriptor,
+        command.signal,
+        fraction=>command.onProgress?.(fraction),
+      );
     }
     case 'import_package': {
       const { installPackage } = await import('../../data/library/packages');

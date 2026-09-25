@@ -28,7 +28,12 @@ export const executeLearningCommand = async (command: LearningCommand): Promise<
   switch (command.kind) {
     case 'enroll_package': {
       const { enrollPackage } = await import('../../data/library/learning');
-      return enrollPackage(command.operationId, command.packageKey, command.languageContext);
+      return enrollPackage(
+        command.operationId,
+        command.packageKey,
+        command.languageContext,
+        command.publicationManifestSha256,
+      );
     }
     case 'confirm_quantity': {
       const { confirmLearningQuantity } = await import('../../data/library/learning');

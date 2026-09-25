@@ -13,7 +13,7 @@ export const publishedLearningSemanticFactsSchema=z.object({
  bindingVersionNumber:z.number().int().positive(),relation:sensaExpressionBindingRelationSchema,semanticCoverage:sensaSemanticCoverageSchema,registerLabel:label.nullable(),usageConstraints:z.array(label),
 }).strict();
 const entryBase={senseId:id,senseVersionId:id,bindingId:id,bindingVersionId:id,expression:label,assurancePackageKey:label.optional(),meaning:z.string().trim().min(1).max(8000),content:sensaLightweightInitialMaterializationContentSchema};
-const legacyEntrySchema=z.object(entryBase).strict();
+const legacyEntrySchema=z.object({...entryBase,semantic:publishedLearningSemanticFactsSchema.optional()}).strict();
 export const bookReleaseEntrySchema=z.object({...entryBase,semantic:publishedLearningSemanticFactsSchema}).strict();
 const assuranceSchema=z.object({release:sensaRuntimeLearningReleaseSchema,audio:z.record(z.string(),z.string().regex(/^data:audio\/mpeg;base64,[A-Za-z0-9+/]+={0,2}$/u))}).strict().optional();
 const uniqueTargets=(entries:ReadonlyArray<z.infer<typeof legacyEntrySchema>>,context:z.RefinementCtx)=>{

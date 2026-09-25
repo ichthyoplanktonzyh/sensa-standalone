@@ -8,6 +8,7 @@ export {
 } from '../provisioning/contracts';
 export type {
   ContentSupplyCatalogRefresh,
+  ContentSupplyCatalogItem,
   ContentSupplyCommand,
   ContentSupplyCommandResult,
   ContentProvisioningControl,

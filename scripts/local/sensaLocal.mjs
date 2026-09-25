@@ -205,7 +205,7 @@ async function cleanup() {
 
 async function buildLocalAssets(webOrigin) {
   const environment = localWebEnvironment(webOrigin);
-  checked(process.execPath, ['--import', 'tsx', 'scripts/release/buildStarterPackage.mts'], {
+  checked(process.execPath, ['--import', 'tsx', 'scripts/release/buildPortableBookRegistry.mts'], {
     env: {
       ...environment,
       SENSA_WEB_ORIGIN: webOrigin,
@@ -285,7 +285,7 @@ async function runLocal() {
   migrateDatabase();
   const webEnvironment = await buildLocalAssets(webOrigin);
   checked(process.execPath, ['scripts/prepareWebMedia.mjs'], { env: webEnvironment });
-  const catalog = readFileSync(join(root, 'release-candidate/catalog.json'), 'utf8');
+  const catalog = readFileSync(join(root, 'release-candidate/portable-catalog.json'), 'utf8');
   const service = start(process.execPath, ['--import', 'tsx', 'scripts/local/sensaLocalService.mts'], {
     env: {
       ...safeEnvironment(),

@@ -9,7 +9,7 @@ import {canonicalJsonDigest,stableUuid} from '@sensa/learning-kernel';
 import {defaultSensaLanguageRoute,librarySyncTables,sensaPinnedLanguageContext,sensaInitialLearningCompletionSchema,sensaSchedulingHandoffSchema,sensaMemoryOutcomeSnapshotSchema,sensaSchedulingDecisionSchema,sensaRelearningCompletionSchema,type SensaFormalPinnedLanguageContext} from '@sensa/contracts/sensa';
 import {provisionLightweightInitialContent} from '../../../apps/web/src/contentSupply/provisioning/lightweightInitialContent.ts';
 import {openLibrary,command,readLibrary,readLocalLibraryRevision,writeLibraryCache,observeLibrary,LibraryTransaction} from '../../../apps/web/src/data/library/store.ts';
-import {sha256} from '../../../apps/web/src/data/library/packages.ts';
+import {downloadPackage as downloadLegacyPackage,rehydratePackageInstallations as rehydrateLegacyPackageInstallations,sha256} from '../../../apps/web/src/data/library/packages.ts';
 import {contentSupplySystem} from '../../../apps/web/src/contentSupply/system/index.ts';
 import {learningSystem,type LearningAction} from '../../../apps/web/src/learning/system/index.ts';
 import {actLearning,confirmLearningQuantity,continueLearning,enrollPackage,finishLearning,readLearning,setLocalDeclaredMastery,startLearning} from '../../../apps/web/src/data/library/learning.ts';
@@ -25,19 +25,9 @@ assert(librarySyncTables.includes('packageInstallations'));assert.equal((library
 assert(libraryBackupTables.includes('packageInstallations'));assert.equal((libraryBackupTables as readonly string[]).includes('packageCache'),false,'public artifact caches must be outside encrypted account backups');
 const identity=await openLibrary();await command({id:crypto.randomUUID(),kind:'fixture.owner',input:{}},async tx=>{tx.put('meta','service-owner',{subject:crypto.randomUUID(),accountId:crypto.randomUUID()});});
 const id=()=>crypto.randomUUID();
-const installPackage=(bytes:Uint8Array,descriptor?:any,signal?:AbortSignal)=>descriptor
- ?contentSupplySystem.execute({kind:'install_catalog_item',descriptor,signal:signal??new AbortController().signal})
- :contentSupplySystem.execute({kind:'import_package',bytes,signal});
-const downloadPackage=(descriptor:any,signal:AbortSignal,progress:(bytes:number)=>void)=>contentSupplySystem.execute({kind:'install_catalog_item',descriptor,signal,onProgress:fraction=>progress(Math.round(fraction*descriptor.byteLength))});
-const rehydratePackageInstallations=(descriptors?:readonly any[])=>descriptors
- ?contentSupplySystem.execute({kind:'rehydrate'}).then(async result=>{
-   if(result.blocked.length){
-    await writeLibraryCache(async tx=>tx.put('meta','package-catalog',{format:'sensa-local-registry-cache-v1',items:descriptors,revision:null,checkedAt:null}));
-    return contentSupplySystem.execute({kind:'rehydrate'});
-   }
-   return result;
-  })
- :contentSupplySystem.execute({kind:'rehydrate'});
+const installPackage=(bytes:Uint8Array,_descriptor?:any,signal?:AbortSignal)=>contentSupplySystem.execute({kind:'import_package',bytes,signal});
+const downloadPackage=downloadLegacyPackage;
+const rehydratePackageInstallations=rehydrateLegacyPackageInstallations;
 const readHomeLearningProjection=(languageRouteId:string)=>learningSystem.read({kind:'home',languageRouteId});
 const languageContext=sensaPinnedLanguageContext(defaultSensaLanguageRoute);
 const result=provisionLightweightInitialContent(withBindingFixture({learnerUserId:identity.learnerId,learningTargetId:id(),senseId:id(),senseVersionId:id(),senseExpressionBindingId:id(),resolvedLearningPlanRevisionId:'fixture-v1',expressionSourceVersion:'fixture-v1',senseSourceVersion:'fixture-v1',expression:{surface:'borrow',languageTag:'en',expressionKind:'word'},sense:{meaning:'临时取得他人物品，并预期归还。',supportLanguageTag:'zh-CN'},originExperience:{source:'other_authoritative_source',sourceVersion:'fixture-v1',personalAnchorUseGrantId:null,experience:{scene:'下雨了，你向同事要一把伞，约好明天归还。',senseFocus:'临时取得他人的物品',featureLabels:[]}},referenceFacts:[],requestedAt:new Date().toISOString()}));

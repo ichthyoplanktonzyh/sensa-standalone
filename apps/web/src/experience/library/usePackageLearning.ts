@@ -1,9 +1,9 @@
 import {useTranslation} from 'react-i18next';
 import {useEffect,useRef,useState} from 'react';
-import type {LearningPackageDescriptor} from '@sensa/contracts/sensa';
 
 import {
  contentSupplySystem,
+ type ContentSupplyCatalogItem,
  type ContentSupplyPackage as InstalledPackage,
  type PortablePackagePreview,
 } from '../../contentSupply/system';
@@ -29,7 +29,7 @@ const emptyWorkspace:LearningWorkspaceProjection={
 export function usePackageLearning(entryOpen:boolean){
  useTranslation();
  const [packages,setPackages]=useState<InstalledPackage[]>([]);
- const [catalog,setCatalog]=useState<LearningPackageDescriptor[]>([]);
+ const [catalog,setCatalog]=useState<ContentSupplyCatalogItem[]>([]);
  const [workspace,setWorkspace]=useState<LearningWorkspaceProjection>(emptyWorkspace);
  const [notice,setNotice]=useState('');
  const [busy,setBusy]=useState(false);
@@ -132,7 +132,7 @@ export function usePackageLearning(entryOpen:boolean){
   dailyLimit:dailyLimit??undefined,
   notice:localFlowNotice(notice),busy,progress,loaded,catalogBusy,reloadCatalog,refresh,
   confirmQuantity:(n:number)=>perform(()=>learningSystem.execute({kind:'confirm_quantity',operationId:crypto.randomUUID(),languageContext,dailyLimit:n})),
-  download:(d:LearningPackageDescriptor)=>perform(async()=>{
+  download:(d:ContentSupplyCatalogItem)=>perform(async()=>{
    const c=new AbortController();transfer.current=c;
    try{setProgress(0);return await contentSupplySystem.execute({kind:'install_catalog_item',descriptor:d,signal:AbortSignal.any([c.signal,AbortSignal.timeout(120000)]),onProgress:n=>setProgress(Math.round(100*n))});}
    finally{if(transfer.current===c)transfer.current=null;}
@@ -156,7 +156,14 @@ export function usePackageLearning(entryOpen:boolean){
   },
   exportPackage:(packageKey:string)=>inspect(()=>contentSupplySystem.execute({kind:'export_portable_package',packageKey})),
   selectPolicy:(targetId:string,profileId:LearningPolicy)=>perform(()=>learningSystem.execute({kind:'select_policy',operationId:crypto.randomUUID(),targetId,languageContext,profileId})),
-  enroll:(packageKey:string)=>perform(()=>learningSystem.execute({kind:'enroll_package',operationId:crypto.randomUUID(),packageKey,languageContext})),
+  enroll:(packageKey:string,publicationManifestSha256?:string)=>perform(()=>learningSystem.execute({kind:'enroll_package',operationId:crypto.randomUUID(),packageKey,languageContext,publicationManifestSha256})),
+  enrollBook:(packageKeys:readonly string[],publicationManifestSha256:string)=>perform(async()=>{
+   const targetIds:string[]=[];
+   for(const packageKey of packageKeys){
+    targetIds.push(...await learningSystem.execute({kind:'enroll_package',operationId:crypto.randomUUID(),packageKey,languageContext,publicationManifestSha256}));
+   }
+   return targetIds;
+  }),
   start:(targetId:string,dailyLimit:number)=>perform(()=>learningSystem.execute({kind:'start',operationId:crypto.randomUUID(),targetId,languageContext,dailyLimit})),
   act:async(action:LearningAction)=>{
    if(!runtime||actInFlight.current)return null;

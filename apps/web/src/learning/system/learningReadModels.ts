@@ -87,6 +87,7 @@ export interface LearningTargetProjection {
   readonly curriculumMembershipId: string;
   readonly languageContext: SensaFormalPinnedLanguageContext;
   readonly packageKey: string | null;
+  readonly publicationManifestSha256: string | null;
   readonly assurancePackageKey: string | null;
   readonly material: LightweightInitialLearningMaterialization;
   readonly studyContent: RuntimeLearningContent | null;

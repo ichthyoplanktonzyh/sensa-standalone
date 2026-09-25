@@ -155,6 +155,9 @@ export const projectLearningTarget = (
     curriculumMembershipId: membership.id,
     languageContext: structuredClone(membership.languageContext),
     packageKey: membership.packageKey,
+    publicationManifestSha256:typeof membership.provenance.publicationManifestSha256==='string'
+      ?membership.provenance.publicationManifestSha256
+      :null,
     assurancePackageKey: membership.assurancePackageKey ?? null,
     material: structuredClone(material),
     studyContent: pack && membership.assurancePackageKey

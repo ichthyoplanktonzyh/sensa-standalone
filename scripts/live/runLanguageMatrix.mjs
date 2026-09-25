@@ -343,7 +343,7 @@ async function main() {
     env: { ...sanitizedEnvironment(), MIGRATION_DATABASE_URL: database.databaseUrl },
   });
 
-  const catalogPath = join(root, 'release-candidate/catalog.json');
+  const catalogPath = join(root, 'release-candidate/portable-catalog.json');
   const serviceEnvironment = {
     ...sanitizedEnvironment(),
     DATABASE_URL: database.databaseUrl,

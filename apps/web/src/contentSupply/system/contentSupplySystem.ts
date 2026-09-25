@@ -1,5 +1,5 @@
 import type {
-  LearningPackageDescriptor,
+  SensaBookVersionManifestDescriptor,
   SensaFormalPinnedLanguageContext,
 } from '@sensa/contracts/sensa';
 
@@ -16,9 +16,10 @@ import { packageKey } from '../../data/library/packageRecords';
 import { observeLibrary, type Table } from '../../data/library/store';
 
 export type ContentSupplyPackage = InstalledPackage;
+export type ContentSupplyCatalogItem = SensaBookVersionManifestDescriptor;
 
 export interface ContentSupplyWorkspace {
-  readonly catalog: readonly LearningPackageDescriptor[];
+  readonly catalog: readonly ContentSupplyCatalogItem[];
   readonly packages: readonly InstalledPackage[];
 }
 
@@ -29,7 +30,7 @@ export interface ContentSupplyRehydration {
 }
 
 export interface ContentSupplyCatalogRefresh {
-  readonly items: readonly LearningPackageDescriptor[];
+  readonly items: readonly ContentSupplyCatalogItem[];
   readonly status: 'cached' | 'current' | 'updated';
 }
 
@@ -43,7 +44,7 @@ export type ContentSupplyCommand =
   | Readonly<{ kind: 'refresh_catalog'; force?: boolean; signal?: AbortSignal }>
   | Readonly<{
       kind: 'install_catalog_item';
-      descriptor: LearningPackageDescriptor;
+      descriptor: ContentSupplyCatalogItem;
       signal: AbortSignal;
       onProgress?: (fraction: number) => void;
     }>
@@ -79,12 +80,13 @@ export type ContentSupplyCommand =
 export type ContentSupplyCommandResult<Command extends ContentSupplyCommand> =
   Command['kind'] extends 'rehydrate' ? ContentSupplyRehydration
     : Command['kind'] extends 'refresh_catalog' ? ContentSupplyCatalogRefresh
-      : Command['kind'] extends 'preview_portable_package' ? PortablePackagePreview
-        : Command['kind'] extends 'export_portable_package' ? PortablePackageExport
-          : Command['kind'] extends 'prepare_materialization' ? void
-            : Command['kind'] extends 'stop_provisioning' ? boolean
-              : Command['kind'] extends 'revise_provisioning' ? ContentProvisioningTask
-                : InstalledPackage;
+      : Command['kind'] extends 'install_catalog_item' ? readonly InstalledPackage[]
+        : Command['kind'] extends 'preview_portable_package' ? PortablePackagePreview
+          : Command['kind'] extends 'export_portable_package' ? PortablePackageExport
+            : Command['kind'] extends 'prepare_materialization' ? void
+              : Command['kind'] extends 'stop_provisioning' ? boolean
+                : Command['kind'] extends 'revise_provisioning' ? ContentProvisioningTask
+                  : InstalledPackage;
 
 export type ContentSupplyQuery =
   | Readonly<{ kind: 'workspace' }>

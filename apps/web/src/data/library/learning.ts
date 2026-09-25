@@ -128,12 +128,17 @@ const resolveRunPlan=(target:LocalLearningTarget,commitment:LocalCommittedLearni
  return {resolvedLearningPlanRevisionId:stableUuid(`local-resolved-plan:${target.id}:${commitment.commitmentId}:${commitment.revision}:${purpose}:${binding.protocolId}:${binding.protocolVersion}:${material.snapshot.learningMaterializationId}`),revision:1,learningTargetId:target.id,retentionTargetId:target.retentionId,purpose,profileId:profile.profileId,profileVersion:profile.profileVersion,protocolBinding:structuredClone(binding),contentDemands:structuredClone(binding.contentDemands),learningMaterializationIds:[material.snapshot.learningMaterializationId],readiness:'ready',resolvedAt:at};
 };
 
-export async function enrollPackage(operationId:string,key:string,languageContext:SensaFormalPinnedLanguageContext){return learningCommand({id:operationId,kind:'learning.enroll',input:{key,languageContext}},async tx=>{
+export async function enrollPackage(operationId:string,key:string,languageContext:SensaFormalPinnedLanguageContext,publicationManifestSha256?:string){return learningCommand({id:operationId,kind:'learning.enroll',input:{key,languageContext,...(publicationManifestSha256?{publicationManifestSha256}:{})}},async tx=>{
  const owner=await learningOwner(tx),context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);await requireLanguageRouteContext(tx,context);
  const pack=await tx.get<InstalledPackage>('packageCache',key);if(!pack)throw new Error('localFlow.downloadFirst');
  if(pack.bundle.targetLanguage!==context.targetLanguageTag)throw new Error('localFlow.routeLanguageMismatch');
  if(pack.bundle.supportLanguage!==context.supportLanguageTag)throw new Error('localFlow.routeSupportMismatch');
- const bookId=learningBundleBookId(pack.bundle),bookVersionId=learningBundleBookVersionId(pack.bundle),packageVersion=learningBundleVersionLabel(pack.bundle),contentReleaseId=learningBundleContentReleaseId(pack.bundle),now=new Date().toISOString();
+ const publications=pack.portableOrigin?.publications??[];
+ const publication=publicationManifestSha256
+  ?publications.find(candidate=>candidate.manifestSha256===publicationManifestSha256)
+  :[...publications].sort((left,right)=>right.book.versionNumber-left.book.versionNumber)[0];
+ if(publicationManifestSha256&&!publication)throw new Error('localFlow.catalogMismatch');
+ const bookId=publication?.book.bookId??learningBundleBookId(pack.bundle),bookVersionId=publication?.book.bookVersionId??learningBundleBookVersionId(pack.bundle),packageVersion=pack.portableOrigin?String(pack.portableOrigin.manifest.metadata.version):learningBundleVersionLabel(pack.bundle),contentReleaseId=publication?.contentRelease.contentReleaseId??learningBundleContentReleaseId(pack.bundle),now=new Date().toISOString();
  if(pack.portableOrigin){
   const familyId=pack.portableOrigin.manifest.metadata.packageId,requestedVersion=pack.portableOrigin.manifest.metadata.version;
   const latestVersion=Math.max(...(await tx.all<InstalledPackage>('packageCache')).flatMap(candidate=>candidate.portableOrigin?.manifest.metadata.packageId===familyId&&candidate.bundle.targetLanguage===pack.bundle.targetLanguage&&candidate.bundle.supportLanguage===pack.bundle.supportLanguage?[candidate.portableOrigin.manifest.metadata.version]:[]));
@@ -158,10 +163,10 @@ export async function enrollPackage(operationId:string,key:string,languageContex
   const material=materializePublishedEntry({learnerUserId:owner.learnerId,learningTargetId:id,packageKey:key,installedPackage:pack,entry:e,createdAt:now});
   const snapshot=material.snapshot;
   const profileId=e.assurancePackageKey?'high_assurance':'lightweight';
-  const source={kind:'sense_learning_package',bookId,bookVersionId,contentReleaseId,packageVersion,packageDigest:pack.digest};
+  const source={kind:'sense_learning_package',bookId,bookVersionId,contentReleaseId,packageVersion,packageDigest:pack.digest,...(publication?{publicationManifestSha256:publication.manifestSha256}:{})};
   const existing=await tx.get<LocalLearningTarget>('learningTargets',id);
   if(existing&&(existing.identity.learnerUserId!==owner.learnerId||existing.identity.senseVersionId!==e.senseVersionId||existing.identity.bindingVersionId!==e.bindingVersionId||existing.targetLanguageTag!==pack.bundle.targetLanguage||existing.expression!==e.expression))throw new Error('localFlow.invalidTarget');
-  const membership=curriculumMembership({operationId,targetId:id,sourceKey:key,languageContext:context,sourceKind:'sense_learning_package',provenance:source,packageKey:key,assurancePackageKey:e.assurancePackageKey,material,at:snapshot.createdAt});
+  const membership=curriculumMembership({operationId,targetId:id,sourceKey:publication?`${key}:${publication.manifestSha256}`:key,languageContext:context,sourceKind:'sense_learning_package',provenance:source,packageKey:key,assurancePackageKey:e.assurancePackageKey,material,at:snapshot.createdAt});
   if(existing){
    if(existing.curriculumMemberships.some(candidate=>candidate.id===membership.id))continue;
    tx.put('learningTargets',id,upsertLocalCurriculumMembership(existing,membership));

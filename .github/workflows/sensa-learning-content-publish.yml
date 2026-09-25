@@ -42,7 +42,7 @@ jobs:
       SENSA_WEB_ORIGIN: ${{ vars.SENSA_WEB_ORIGIN }}
       SENSA_PACKAGE_BUCKET: sensa-learning-content
       SENSA_PACKAGE_OUTPUT: .tmp/learning-content/releases
-      SENSA_PACKAGE_CATALOG: release-candidate/catalog.json
+      SENSA_PACKAGE_CATALOG: release-candidate/portable-catalog.json
       SENSA_PACKAGE_BASE_URL: ${{ vars.VITE_SUPABASE_URL }}/storage/v1/object/public/sensa-learning-content/releases/
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -90,9 +90,7 @@ jobs:
           npm run build -w @sensa/learning-kernel
           npm run build -w @sensa/contracts
           npm run build -w @sensa/content-validator
-          node --import tsx scripts/release/buildStarterPackage.mts
-          SENSA_PACKAGE_CATALOG_OUTPUT=release-candidate/portable-catalog.json \
-            node --import tsx scripts/release/buildPortableBookRegistry.mts
+          node --import tsx scripts/release/buildPortableBookRegistry.mts
           node --import tsx tests/web/run.mts --suite=fast --id=learning-registry
           node --import tsx tests/web/run.mts --suite=fast --id=portable-learning-registry
       - name: Upload releases, verify public bytes, and prepare promotion
@@ -100,7 +98,7 @@ jobs:
           SENSA_CONTENT_PUBLISH: 'true'
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           SENSA_REGISTRY_ENV_OUTPUT: ${{ runner.temp }}/sensa-learning-registry.env
-        run: node scripts/release/publishLearningRegistry.mjs
+        run: node scripts/release/publishPortableLearningRegistry.mjs
       - uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3.0.0
         with:
           version: 2.117.0
@@ -118,6 +116,5 @@ jobs:
           retention-days: 30
           if-no-files-found: warn
           path: |
-            release-candidate/catalog.json
             release-candidate/portable-catalog.json
-            release-candidate/learning-content-publication.json
+            release-candidate/portable-learning-content-publication.json

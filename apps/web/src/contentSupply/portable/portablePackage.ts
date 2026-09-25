@@ -20,11 +20,12 @@ import {canonicalJsonDigest,stableUuid} from '@sensa/learning-kernel';
 import {contentSupplyCommand} from '../../data/library/contentSupplyAdmission';
 import {learningOwner} from '../../data/library/libraryOwnership';
 import {
-  packageInstallationFor,
   packageInstallationSchema,
-  packageKey,
+  portablePackageInstallationFor,
+  portablePackageKey,
   type InstalledPackage,
   type PackageInstallation,
+  type PortablePublicationAttestation,
 } from '../../data/library/packageRecords';
 import {openLibrary,readLibrary} from '../../data/library/store';
 import {validatePackage} from '../../data/library/packages';
@@ -51,10 +52,10 @@ export type PortablePackageExport=Readonly<{
   bytes:Uint8Array;
 }>;
 
-const portableKey=(value:SensaPortableLightweightPackage)=>JSON.stringify([
+const portableKey=(value:SensaPortableLightweightPackage)=>portablePackageKey(
   value.metadata.packageId,
-  String(value.metadata.version),
-]);
+  value.metadata.version,
+);
 
 const invalidPortablePackage=(cause:unknown):never=>{
   throw new Error('localFlow.resourceInvalid',{cause});
@@ -216,8 +217,15 @@ const compileContent=(archive:SensaPortableLightweightPackageArchive)=>{
   });
 };
 
-const compileBundle=(archive:SensaPortableLightweightPackageArchive):LearningPackageBundle=>{
+const compileBundle=(
+  archive:SensaPortableLightweightPackageArchive,
+  publication?:PortablePublicationAttestation,
+):LearningPackageBundle=>{
   const value=archive.package;
+  const declaration=publication?value.semanticDeclaration:undefined;
+  if(publication&&!declaration)return invalidPortablePackage(
+    new Error('Published Portable Package has no semantic declaration'),
+  );
   const senseSeed=`${value.metadata.packageId}:${value.sense.senseId}`;
   const bindingSeed=`${senseSeed}:${value.route.targetLanguage}:${value.targetExpression.expressionKind}:${value.targetExpression.text}:${value.targetExpression.spokenForm??''}`;
   return learningPackageSchema.parse({
@@ -228,25 +236,52 @@ const compileBundle=(archive:SensaPortableLightweightPackageArchive):LearningPac
     targetLanguage:value.route.targetLanguage,
     supportLanguage:value.route.supportLanguage,
     entries:[{
-      senseId:stableUuid(`sensa-portable-sense:${senseSeed}`),
-      senseVersionId:stableUuid(`sensa-portable-sense-version:${senseSeed}`),
-      bindingId:stableUuid(`sensa-portable-binding:${bindingSeed}`),
-      bindingVersionId:stableUuid(`sensa-portable-binding-version:${bindingSeed}`),
+      senseId:declaration?.sense.senseId??stableUuid(`sensa-portable-sense:${senseSeed}`),
+      senseVersionId:declaration?.sense.senseVersionId??stableUuid(`sensa-portable-sense-version:${senseSeed}`),
+      bindingId:declaration?.binding.senseExpressionBindingId??stableUuid(`sensa-portable-binding:${bindingSeed}`),
+      bindingVersionId:declaration?.binding.bindingVersionId??stableUuid(`sensa-portable-binding-version:${bindingSeed}`),
       expression:value.targetExpression.text,
       meaning:value.resources.senseConfirmation.text,
       content:compileContent(archive),
+      ...(declaration?{semantic:{
+        senseKey:declaration.sense.senseKey,
+        senseVersionNumber:declaration.sense.versionNumber,
+        semanticPolicyVersion:declaration.sense.semanticPolicyVersion,
+        semanticSpec:declaration.sense.semanticSpec,
+        expressionId:declaration.expression.expressionId,
+        expressionVersionId:declaration.expression.expressionVersionId,
+        expressionType:declaration.expression.expressionType,
+        expressionVersionNumber:declaration.expression.versionNumber,
+        expressionStructure:declaration.expression.structure,
+        bindingVersionNumber:declaration.binding.versionNumber,
+        relation:declaration.binding.relation,
+        semanticCoverage:declaration.binding.semanticCoverage,
+        registerLabel:declaration.binding.registerLabel,
+        usageConstraints:declaration.binding.usageConstraints,
+      }}:{}),
     }],
   });
 };
 
-export async function installPortablePackage(
+const installPortablePackageWithAttestation=async(
   bytes:Uint8Array,
   expectedArchiveDigest:string,
   signal?:AbortSignal,
-):Promise<InstalledPackage>{
+  publication?:PortablePublicationAttestation,
+):Promise<InstalledPackage>=>{
   await openLibrary();
   const input=openPortable(bytes);
   if(input.archiveDigest!==expectedArchiveDigest)throw new Error('localFlow.packageVersionChanged');
+  if(publication&&(
+    publication.member.archiveSha256!==input.archiveDigest
+    ||publication.member.packageDigest!==input.packageDigest
+    ||publication.member.byteLength!==bytes.byteLength
+    ||publication.member.packageId!==input.package.metadata.packageId
+    ||publication.member.version!==input.package.metadata.version
+    ||publication.route.targetLanguage!==input.package.route.targetLanguage
+    ||publication.route.supportLanguage!==input.package.route.supportLanguage
+    ||input.package.semanticDeclaration===undefined
+  ))throw new Error('localFlow.catalogMismatch');
   if(signal?.aborted)throw new Error('localFlow.downloadCancelled');
   let canonicalBytes:Uint8Array;
   let canonical:SensaPortableLightweightPackageArchive;
@@ -254,8 +289,13 @@ export async function installPortablePackage(
     canonicalBytes=createSensaPortableLightweightPackage(input.package,input.mediaById);
     canonical=readSensaPortableLightweightPackage(canonicalBytes);
   }catch(cause){return invalidPortablePackage(cause);}
-  const bundle=validatePackage(compileBundle(canonical));
-  const installation=packageInstallationFor(bundle,canonical.archiveDigest,canonicalBytes.byteLength);
+  const bundle=validatePackage(compileBundle(canonical,publication));
+  const installation=portablePackageInstallationFor(
+    canonical.package,
+    canonical.archiveDigest,
+    canonical.packageDigest,
+    canonicalBytes.byteLength,
+  );
   let installed:InstalledPackage|undefined;
   await contentSupplyCommand({id:crypto.randomUUID(),kind:'package.install',input:{key:installation.key,digest:canonical.archiveDigest}},async tx=>{
     await learningOwner(tx);
@@ -267,8 +307,14 @@ export async function installPortablePackage(
       old.portableOrigin?.packageDigest!==canonical.packageDigest
       ||canonicalConsumerJson(old.bundle)!==canonicalConsumerJson(bundle)
     ))throw new Error('localFlow.packageVersionChanged');
-    installed=old??{
-      key:packageKey(bundle),
+    const publications=publication
+      ?[...(old?.portableOrigin?.publications??[]).filter(item=>item.manifestSha256!==publication.manifestSha256),publication]
+      :old?.portableOrigin?.publications??[];
+    installed=old?{
+      ...old,
+      portableOrigin:{...old.portableOrigin!,publications},
+    }:{
+      key:portablePackageKey(canonical.package.metadata.packageId,canonical.package.metadata.version),
       digest:canonical.archiveDigest,
       bundle,
       installedAt:new Date().toISOString(),
@@ -278,6 +324,7 @@ export async function installPortablePackage(
         packageDigest:canonical.packageDigest,
         archiveDigest:canonical.archiveDigest,
         validatorVersion:sensaPortableLightweightPackageValidatorVersion,
+        publications,
       },
     };
     tx.put('packageInstallations',installation.key,installation);
@@ -286,7 +333,28 @@ export async function installPortablePackage(
   });
   if(!installed)throw new Error('localFlow.storageWrite');
   return installed;
-}
+};
+
+export const installPortablePackage=(
+  bytes:Uint8Array,
+  expectedArchiveDigest:string,
+  signal?:AbortSignal,
+):Promise<InstalledPackage>=>installPortablePackageWithAttestation(
+  bytes,
+  expectedArchiveDigest,
+  signal,
+);
+
+export const installPublishedPortablePackage=(
+  bytes:Uint8Array,
+  publication:PortablePublicationAttestation,
+  signal?:AbortSignal,
+):Promise<InstalledPackage>=>installPortablePackageWithAttestation(
+  bytes,
+  publication.member.archiveSha256,
+  signal,
+  publication,
+);
 
 const base64ToBytes=(value:string):Uint8Array=>{
   const separator=value.indexOf(',');

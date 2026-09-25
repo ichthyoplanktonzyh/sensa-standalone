@@ -5,6 +5,7 @@ import {createHash} from 'node:crypto';
 import {createConsumerRoutes} from '../../../apps/api/src/sensa/access/consumer.ts';
 import {ConsumerError} from '../../../apps/api/src/sensa/access/auth.ts';
 import {serviceStatusSchema} from '../../../packages/contracts/src/sensa/serviceStatus.ts';
+import {canonicalConsumerJson} from '@sensa/contracts/sensa';
 import {clearLearningContentRegistryCache} from '../../../apps/api/src/sensa/access/learningContentRegistry.ts';
 
 test("service-status", async () => {
@@ -25,10 +26,8 @@ try{
  delete process.env.SENSA_PACKAGE_CATALOG_JSON;
  delete process.env.SENSA_PACKAGE_REGISTRY_URL;
  clearLearningContentRegistryCache();
- const empty=await app.request('/sensa/packages',{headers:{authorization:'Bearer a'}});assert.equal(empty.status,200);assert.deepEqual(await empty.json(),{items:[]});assert.equal(empty.headers.get('cache-control'),'no-store');
- const catalog={items:[{id:crypto.randomUUID(),version:'1',title:'Fixture',description:'Fixture',entryCount:1,byteLength:100,sha256:'a'.repeat(64),url:'https://fixture.invalid/package.json'}]};process.env.SENSA_PACKAGE_CATALOG_JSON=JSON.stringify(catalog);
- assert.deepEqual(await (await app.request('/sensa/packages',{headers:{authorization:'Bearer a'}})).json(),catalog);
- const bookId=crypto.randomUUID(),bookVersionId=crypto.randomUUID(),contentReleaseId=crypto.randomUUID(),snapshot={format:'sensa-learning-content-registry-v1' as const,publishedAt:'2026-09-10T00:00:00.000Z',items:[{format:'sensa-book-release-descriptor-v1' as const,book:{bookId,bookKey:'fixture',bookVersionId,versionNumber:2,title:'Fixture Book',description:'Fixture'},contentRelease:{contentReleaseId,versionNumber:2,schemaVersion:'sensa-consumer-content-v1'},targetLanguage:'en',supportLanguage:'zh-CN',publishedAt:'2026-09-10T00:00:00.000Z',changeSummary:'Second release',entryCount:1,byteLength:100,sha256:'c'.repeat(64),url:'https://fixture.invalid/releases/book.json'}]},revision=createHash('sha256').update(JSON.stringify(snapshot)).digest('hex'),registry={...snapshot,revision};
+ const empty=await app.request('/sensa/packages',{headers:{authorization:'Bearer a'}});assert.equal(empty.status,200);const emptyRegistry=await empty.json() as any;assert.equal(emptyRegistry.format,'sensa-learning-content-registry-v2');assert.deepEqual(emptyRegistry.items,[]);assert.equal(empty.headers.get('cache-control'),'private, max-age=300');
+ const bookId=crypto.randomUUID(),bookVersionId=crypto.randomUUID(),contentReleaseId=crypto.randomUUID(),snapshot={format:'sensa-learning-content-registry-v2' as const,publishedAt:'2026-09-10T00:00:00.000Z',items:[{format:'sensa-book-version-manifest-descriptor-v1' as const,publisher:{namespace:'sensa.official',name:'Sensa Official'},book:{bookId,bookKey:'fixture',bookVersionId,versionNumber:2,title:'Fixture Book',description:'Fixture'},contentRelease:{contentReleaseId,versionNumber:2,schemaVersion:'sensa-portable-lightweight-package-v2'},route:{targetLanguage:'en',supportLanguage:'zh-CN'},publishedAt:'2026-09-10T00:00:00.000Z',changeSummary:'Second release',memberCount:1,byteLength:100,sha256:'c'.repeat(64),url:'https://fixture.invalid/releases/book.json'}]},revision=createHash('sha256').update(canonicalConsumerJson(snapshot)).digest('hex'),registry={...snapshot,revision};
  process.env.SENSA_PACKAGE_CATALOG_JSON=JSON.stringify(registry);
  const current=await app.request('/sensa/packages',{headers:{authorization:'Bearer a'}});assert.equal(current.headers.get('etag'),`"${revision}"`);assert.equal(current.headers.get('cache-control'),'private, max-age=300');assert.deepEqual(await current.json(),registry);
  const unchanged=await app.request('/sensa/packages',{headers:{authorization:'Bearer a','if-none-match':`"${revision}"`}});assert.equal(unchanged.status,304);assert.equal(await unchanged.text(),'');

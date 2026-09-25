@@ -8,6 +8,7 @@ import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {indexedDB} from 'fake-indexeddb';
 import {makeRequest,validateBundle,SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND} from '@sensa/contracts/sensa';
+import {readSensaPortableLightweightPackage} from '@sensa/content-validator/portable-lightweight';
 import {syntheticSound} from '../../../scripts/support/lightweightMaterialFixture.mts';
 const live=process.env.SENSA_TEST_LIVE_DEEPSEEK==='true',base=live?'http://127.0.0.1:4319':'https://agent.fixture.invalid';
 const originalFetch=globalThis.fetch;
@@ -18,8 +19,17 @@ const temp=await mkdtemp(join(tmpdir(),'sensa-agent-'));await writeFile(join(tem
 const api=await import(pathToFileURL(join(temp,'core.mjs')).href),id=()=>crypto.randomUUID();
 await api.openLibrary();
 const provider=live?api.defaultSensaProvider:await api.saveProvider(id(),{id:id(),expectedRevision:0,name:'Fixture',kind:'compatible',endpoint:base,model:'fixture'},'test-key');
-let cachedSound=syntheticSound('borrow','en');
-if(live){const catalog=JSON.parse(await readFile('release-candidate/catalog.json','utf8'));const book=JSON.parse(await readFile('apps/web/public'+new URL(catalog.items[0].url).pathname,'utf8'));cachedSound=book.entries.find((e:any)=>e.expression==='borrow').content.resources.find((r:any)=>r.materialRoleKey==='pronunciation').contentPayload;}
+let cachedSound:any=syntheticSound('borrow','en');
+if(live){
+ const catalog=JSON.parse(await readFile('release-candidate/portable-catalog.json','utf8'));
+ const manifest=JSON.parse(await readFile('apps/web/public'+new URL(catalog.items[0].url).pathname,'utf8'));
+ for(const member of manifest.members){
+  const archive=readSensaPortableLightweightPackage(await readFile('apps/web/public'+new URL(member.url).pathname));
+  if(archive.package.targetExpression.text!=='borrow')continue;
+  const pronunciation=archive.package.resources.pronunciation,media=archive.package.media.find((item:any)=>item.mediaId===pronunciation.audioMediaId)!;
+  cachedSound={...pronunciation,languageTag:archive.package.route.targetLanguage,audioUrl:`data:${media.mimeType};base64,${Buffer.from(archive.mediaById.get(media.mediaId)!).toString('base64')}`};
+ }
+}
 const image={id:id(),name:'original.jpg',dataUrl:'data:image/jpeg;base64,/9j/2Q=='};
 const createRequest=async()=>{
  const request=await makeRequest({id:id(),learner_user_id:id(),learning_target_id:id(),fixed_input:{targetLanguageTag:'en',supportLanguageTag:'zh-CN',senseId:id(),senseVersionId:id(),bindingId:id(),bindingVersionId:id(),planRevision:'fixture',expression:'borrow',expressionKind:'word',meaning:'暂时取得他人物品并预期归还',prototype:'向同伴借伞，之后归还。',anchor:{sentence:'我向同伴借了一把伞，约好用完归还。',images:live?[]:[image],contextVersion:'fixture',grantId:id()},...(live?{pronunciation:cachedSound}:{}) ,demand:SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND}},id(),new Date());
