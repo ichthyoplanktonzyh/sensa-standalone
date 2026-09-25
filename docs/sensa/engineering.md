@@ -480,7 +480,10 @@ gh workflow run sensa-learning-content-publish.yml \
 该目录的 JSON source。Book/Content Release 升级不自动抬升后两者；只有语义或表达 Binding 身份
 真实变化时才增加对应版本。因此纯材料更新可以
 保留 Learning Target 与 Retention state。`SENSA_BOOK_RELEASE_SOURCES` 可用逗号列出一次 Registry
-发布包含的全部当前 Book release source；同一 Registry 不允许同一 Book 与精确语言方向出现两个版本。
+发布包含的全部当前 Book release source；`SENSA_BOOK_RELEASE_SOURCE_DIRECTORY` 可改为读取一个派生
+source 目录，二者不能同时设置。分批构建时，`SENSA_PACKAGE_EXISTING_CATALOG` 指向已经校验的 Registry
+候选，构建器逐字保留其中的 Manifest descriptor，并只合并本批新 Book；同一个 Book version 再次出现
+会失败，不能靠后写覆盖前写。同一 Registry 不允许同一 Book 与精确语言方向出现两个版本。
 
 所有生产部署都从 CI/CD 执行，不从本地 shell 调用 Provider 部署命令。迁移保持前向兼容；回滚 Web 版本时不能假设数据库也会回滚。
 

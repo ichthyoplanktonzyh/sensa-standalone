@@ -93,7 +93,12 @@ plus a positive `packageVersion` for every member. It writes content-addressed p
 Book Version Manifests and `release-candidate/portable-catalog.json`. Generated release
 files remain ignored build artifacts. By default it includes every JSON source in
 `content/authored/`; a bounded custom build may override the list with comma-separated
-`SENSA_BOOK_RELEASE_SOURCES` paths.
+`SENSA_BOOK_RELEASE_SOURCES` paths or point `SENSA_BOOK_RELEASE_SOURCE_DIRECTORY` at a
+directory of derived Book sources. Set `SENSA_PACKAGE_EXISTING_CATALOG` when a bounded
+batch must be merged into an already-built Registry candidate; existing descriptors are
+retained byte-for-byte, and a duplicate Book version is rejected. The existing catalog
+and output catalog may be the same local path because the old snapshot is read before the
+new one is written.
 
 `scripts/release/publishPortableLearningRegistry.mjs` implements the immutable upload
 order Package → Manifest → Registry and verifies the public bytes at every step. The

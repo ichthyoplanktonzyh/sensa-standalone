@@ -23,6 +23,23 @@ from content.tools.tts import inspect_mp3, synthesize  # noqa: E402
 
 VOICE_CONFIG = {
     "en": {"voice": "en-US-JennyNeural", "locale": "en-US", "rate": "+0%"},
+    "zh-CN": {"voice": "zh-CN-XiaoxiaoNeural", "locale": "zh-CN", "rate": "+0%"},
+    "ja": {"voice": "ja-JP-NanamiNeural", "locale": "ja-JP", "rate": "+0%"},
+    "ko": {"voice": "ko-KR-SunHiNeural", "locale": "ko-KR", "rate": "+0%"},
+    "es": {"voice": "es-ES-ElviraNeural", "locale": "es-ES", "rate": "+0%"},
+    "fr": {"voice": "fr-FR-DeniseNeural", "locale": "fr-FR", "rate": "+0%"},
+    "de": {"voice": "de-DE-KatjaNeural", "locale": "de-DE", "rate": "+0%"},
+    "ru": {"voice": "ru-RU-SvetlanaNeural", "locale": "ru-RU", "rate": "+0%"},
+    "it": {"voice": "it-IT-IsabellaNeural", "locale": "it-IT", "rate": "+0%"},
+    "pt": {"voice": "pt-BR-FranciscaNeural", "locale": "pt-BR", "rate": "+0%"},
+    "ar": {"voice": "ar-SA-ZariyahNeural", "locale": "ar-SA", "rate": "+0%"},
+    "hi": {"voice": "hi-IN-SwaraNeural", "locale": "hi-IN", "rate": "+0%"},
+    "th": {"voice": "th-TH-PremwadeeNeural", "locale": "th-TH", "rate": "+0%"},
+    "vi": {"voice": "vi-VN-HoaiMyNeural", "locale": "vi-VN", "rate": "+0%"},
+    "id": {"voice": "id-ID-GadisNeural", "locale": "id-ID", "rate": "+0%"},
+    "tr": {"voice": "tr-TR-EmelNeural", "locale": "tr-TR", "rate": "+0%"},
+    "nl": {"voice": "nl-NL-ColetteNeural", "locale": "nl-NL", "rate": "+0%"},
+    "pl": {"voice": "pl-PL-ZofiaNeural", "locale": "pl-PL", "rate": "+0%"},
 }
 
 

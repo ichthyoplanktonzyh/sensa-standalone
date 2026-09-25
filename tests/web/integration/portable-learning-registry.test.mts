@@ -8,6 +8,7 @@ import {spawnSync} from "node:child_process";
 import {test} from "vitest";
 
 import {readSensaPortableLightweightPackage} from "@sensa/content-validator/portable-lightweight";
+import {stableUuid} from "@sensa/learning-kernel";
 import {
   canonicalConsumerJson,
   maxBookVersionManifestBytes,
@@ -40,6 +41,8 @@ test("official portable Registry fixes per-Sense packages behind one Book Manife
   const realFetch = globalThis.fetch;
   try {
     const source = JSON.parse(await readFile("content/authored/web-starter.json", "utf8"));
+    source.entries[0].key = "ids:1-310";
+    source.entries[0].scene = `A public author may reveal ${source.entries[0].expression} in a cue.`;
     const sourcePath = join(root, "synthetic-source.json");
     const audioBytes = Buffer.from([0xff, 0xfb, 0x90, 0x64, 0, 0, 0, 0]);
     const audioSha256 = digest(audioBytes);
@@ -91,7 +94,12 @@ test("official portable Registry fixes per-Sense packages behind one Book Manife
     }
     await writeFile(sourcePath, JSON.stringify(source));
 
-    const runBuilder = (output: string, catalog: string) => spawnSync(
+    const runBuilder = (
+      output: string,
+      catalog: string,
+      selectedSource = sourcePath,
+      existingCatalog?: string,
+    ) => spawnSync(
       process.execPath,
       ["--import", "tsx", resolve("scripts/release/buildPortableBookRegistry.mts")],
       {
@@ -99,13 +107,14 @@ test("official portable Registry fixes per-Sense packages behind one Book Manife
         encoding: "utf8",
         env: {
           ...process.env,
-          SENSA_BOOK_RELEASE_SOURCES: sourcePath,
+          SENSA_BOOK_RELEASE_SOURCES: selectedSource,
           SENSA_AUTHORED_MEDIA_ROOT: join(root, "absent-media"),
           SENSA_AUTHORED_MEDIA_PACK: mediaPackPath,
           SENSA_PACKAGE_OUTPUT: output,
           SENSA_PACKAGE_CATALOG_OUTPUT: catalog,
           SENSA_PACKAGE_BASE_URL: base,
           SENSA_WEB_ORIGIN: "https://app.example.test",
+          ...(existingCatalog ? {SENSA_PACKAGE_EXISTING_CATALOG: existingCatalog} : {}),
         },
       },
     );
@@ -158,6 +167,20 @@ test("official portable Registry fixes per-Sense packages behind one Book Manife
       assert(archive.package.semanticDeclaration, "official members require a semantic declaration");
       assert.equal(archive.package.route.targetLanguage, manifest.route.targetLanguage);
       assert.equal(archive.package.route.supportLanguage, manifest.route.supportLanguage);
+      if (archive.package.semanticDeclaration?.sense.senseKey === "ids:1-310") {
+        const declaration = archive.package.semanticDeclaration;
+        const expressionId = stableUuid(
+          `sensa:expression:${source.targetLanguage}:${archive.package.targetExpression.text.toLocaleLowerCase()}`,
+        );
+        const bindingId = stableUuid(`sensa:ids:binding:ids:1-310:${expressionId}`);
+        assert.equal(declaration.sense.senseId, stableUuid("sensa:ids:sense:ids:1-310"));
+        assert.equal(declaration.expression.expressionId, expressionId);
+        assert.equal(declaration.binding.senseExpressionBindingId, bindingId);
+        assert.equal(
+          archive.package.metadata.packageId,
+          stableUuid(`sensa:official:ids-lightweight:ids:1-310:${source.targetLanguage}:${source.supportLanguage}`),
+        );
+      }
     }
 
     Object.assign(globalThis,{
@@ -249,6 +272,26 @@ test("official portable Registry fixes per-Sense packages behind one Book Manife
       ].join("/");
       assert.deepEqual(await readFile(join(repeatReleases, relative)), await readFile(join(releases, relative)));
     }
+
+    const nextSourcePath = join(root, "next-source.json");
+    await writeFile(nextSourcePath, JSON.stringify({
+      ...source,
+      bookKey: "portable-registry-next-book",
+      title: "Portable Registry Next Book",
+    }));
+    const mergedReleases = join(root, "merged-releases");
+    const mergedRegistryPath = join(root, "merged-catalog.json");
+    const merged = runBuilder(mergedReleases, mergedRegistryPath, nextSourcePath, registryPath);
+    assert.equal(merged.status, 0, merged.stderr || merged.stdout);
+    const mergedRegistry = sensaPortableLearningContentRegistrySchema.parse(
+      JSON.parse(await readFile(mergedRegistryPath, "utf8")),
+    );
+    assert.equal(mergedRegistry.items.length, 2);
+    assert.deepEqual(
+      mergedRegistry.items.find((item) => item.book.bookKey === descriptor.book.bookKey),
+      descriptor,
+      "an incremental release keeps the existing immutable descriptor unchanged",
+    );
   } finally {
     globalThis.fetch=realFetch;
     await rm(root, {recursive: true, force: true});

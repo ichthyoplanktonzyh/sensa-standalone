@@ -36,6 +36,21 @@ class EdgeSpeechProvider:
         'zh-Hans': ('zh-CN-XiaoxiaoNeural', 'zh-CN'),
         'ja': ('ja-JP-NanamiNeural', 'ja-JP'),
         'ja-JP': ('ja-JP-NanamiNeural', 'ja-JP'),
+        'ko': ('ko-KR-SunHiNeural', 'ko-KR'),
+        'es': ('es-ES-ElviraNeural', 'es-ES'),
+        'fr': ('fr-FR-DeniseNeural', 'fr-FR'),
+        'de': ('de-DE-KatjaNeural', 'de-DE'),
+        'ru': ('ru-RU-SvetlanaNeural', 'ru-RU'),
+        'it': ('it-IT-IsabellaNeural', 'it-IT'),
+        'pt': ('pt-BR-FranciscaNeural', 'pt-BR'),
+        'ar': ('ar-SA-ZariyahNeural', 'ar-SA'),
+        'hi': ('hi-IN-SwaraNeural', 'hi-IN'),
+        'th': ('th-TH-PremwadeeNeural', 'th-TH'),
+        'vi': ('vi-VN-HoaiMyNeural', 'vi-VN'),
+        'id': ('id-ID-GadisNeural', 'id-ID'),
+        'tr': ('tr-TR-EmelNeural', 'tr-TR'),
+        'nl': ('nl-NL-ColetteNeural', 'nl-NL'),
+        'pl': ('pl-PL-ZofiaNeural', 'pl-PL'),
     }
     def voice(self, language):
         if language not in self.voices:

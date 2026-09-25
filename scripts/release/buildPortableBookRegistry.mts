@@ -1,7 +1,7 @@
 /** Build immutable per-Sense `.sensa` artifacts, Book Version Manifests and one Registry. */
 import {createHash} from "node:crypto";
 import {mkdir, readFile, readdir, writeFile} from "node:fs/promises";
-import {dirname, resolve} from "node:path";
+import {dirname, join, resolve} from "node:path";
 
 import {
   canonicalConsumerJson,
@@ -21,7 +21,6 @@ import {
 } from "@sensa/content-validator/portable-lightweight";
 import {stableUuid} from "@sensa/learning-kernel";
 
-import {provisionLightweightInitialContent} from "../../apps/web/src/contentSupply/provisioning/lightweightInitialContent.ts";
 import {
   createAuthoredMediaPackager,
   type AuthoredMediaInput,
@@ -97,11 +96,16 @@ type PortableMedia = Readonly<{
 
 const sha256 = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
 const configuredSources = process.env.SENSA_BOOK_RELEASE_SOURCES?.trim();
+const configuredSourceDirectory = process.env.SENSA_BOOK_RELEASE_SOURCE_DIRECTORY?.trim();
+if (configuredSources && configuredSourceDirectory) {
+  throw new Error("Configure a source list or one source directory, not both");
+}
+const sourceDirectory = configuredSourceDirectory ?? "content/authored";
 const sourcePaths = configuredSources
   ? configuredSources.split(",").map((value) => value.trim()).filter(Boolean)
-  : (await readdir("content/authored", {withFileTypes: true}))
+  : (await readdir(sourceDirectory, {withFileTypes: true}))
     .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
-    .map((entry) => `content/authored/${entry.name}`);
+    .map((entry) => join(sourceDirectory, entry.name));
 if (sourcePaths.length === 0 || new Set(sourcePaths).size !== sourcePaths.length) {
   throw new Error("Explicit unique authored Book release sources required");
 }
@@ -163,9 +167,10 @@ const outputRoot = resolve(process.env.SENSA_PACKAGE_OUTPUT ?? "release-candidat
 const registryOutput = resolve(
   process.env.SENSA_PACKAGE_CATALOG_OUTPUT ?? "release-candidate/portable-catalog.json",
 );
-const owner = stableUuid("sensa:publisher");
 const descriptors = [];
 let totalMembers = 0;
+
+const idsSenseKeyPattern = /^ids:[A-Za-z0-9][A-Za-z0-9._-]*$/u;
 
 for (const path of [...sourcePaths].sort()) {
   const source = JSON.parse(await readFile(path, "utf8")) as Source;
@@ -207,26 +212,40 @@ for (const path of [...sourcePaths].sort()) {
     }
 
     const semanticSpec = sensaSenseSemanticSpecSchema.parse(entry.semanticSpec);
-    const senseId = stableUuid(`sensa:starter:sense:${entry.key}`);
-    const senseVersionId = stableUuid(
-      `sensa:starter:sense:${entry.key}:version:${entry.senseVersion}`,
-    );
     const expressionKey = `${source.targetLanguage}:${entry.expression.trim().toLocaleLowerCase()}`;
-    const expressionId = stableUuid(`sensa:starter:expression:${expressionKey}`);
-    const expressionVersionId = stableUuid(
-      `sensa:starter:expression:${expressionKey}:version:${entry.bindingVersion}`,
-    );
-    const bindingId = stableUuid(`sensa:starter:binding:${entry.key}`);
-    const bindingVersionId = stableUuid(
-      `sensa:starter:binding:${entry.key}:version:${entry.bindingVersion}`,
-    );
-    const packageId = stableUuid([
-      "sensa:official:portable",
-      source.bookKey,
-      entry.key,
-      source.targetLanguage,
-      source.supportLanguage,
-    ].join(":"));
+    const idsSense = idsSenseKeyPattern.test(entry.key);
+    const senseId = stableUuid(idsSense
+      ? `sensa:ids:sense:${entry.key}`
+      : `sensa:starter:sense:${entry.key}`);
+    const senseVersionId = stableUuid(idsSense
+      ? `sensa:ids:sense:${entry.key}:version:${entry.senseVersion}`
+      : `sensa:starter:sense:${entry.key}:version:${entry.senseVersion}`);
+    const expressionId = stableUuid(idsSense
+      ? `sensa:expression:${expressionKey}`
+      : `sensa:starter:expression:${expressionKey}`);
+    const expressionVersionId = stableUuid(idsSense
+      ? `sensa:expression:${expressionId}:version:${entry.bindingVersion}`
+      : `sensa:starter:expression:${expressionKey}:version:${entry.bindingVersion}`);
+    const bindingId = stableUuid(idsSense
+      ? `sensa:ids:binding:${entry.key}:${expressionId}`
+      : `sensa:starter:binding:${entry.key}`);
+    const bindingVersionId = stableUuid(idsSense
+      ? `sensa:ids:binding:${bindingId}:version:${entry.bindingVersion}`
+      : `sensa:starter:binding:${entry.key}:version:${entry.bindingVersion}`);
+    const packageId = stableUuid(idsSense
+      ? [
+        "sensa:official:ids-lightweight",
+        entry.key,
+        source.targetLanguage,
+        source.supportLanguage,
+      ].join(":")
+      : [
+        "sensa:official:portable",
+        source.bookKey,
+        entry.key,
+        source.targetLanguage,
+        source.supportLanguage,
+      ].join(":"));
     const expression = sensaLightweightExpressionSnapshotSchema.parse({
       surface: entry.expression,
       languageTag: source.targetLanguage,
@@ -263,73 +282,6 @@ for (const path of [...sourcePaths].sort()) {
     }));
     const referenceFacts = (entry.referenceFacts ?? []).map((fact) =>
       learningReferenceInputSchema.parse(fact));
-
-    const result = provisionLightweightInitialContent({
-      learnerUserId: owner,
-      learningTargetId: stableUuid(`sensa:starter:target:${entry.key}`),
-      senseId,
-      senseVersionId,
-      senseExpressionBindingId: bindingId,
-      resolvedLearningPlanRevisionId: `authored:${source.bookKey}:${source.versionNumber}`,
-      expressionSourceVersion: String(entry.bindingVersion),
-      senseSourceVersion: String(entry.senseVersion),
-      expression,
-      sense: {meaning: entry.meaning, supportLanguageTag: source.supportLanguage},
-      originExperience: {
-        source: "other_authoritative_source",
-        sourceVersion: String(source.versionNumber),
-        personalAnchorUseGrantId: null,
-        experience: {
-          scene: entry.scene,
-          senseFocus: entry.meaning,
-          featureLabels: entry.featureLabels ?? [],
-          ...(images.length ? {images: images.map((image, index) => ({
-            id: stableUuid(`sensa:authored-image:${entry.key}:${index}`),
-            name: image.name,
-            dataUrl: image.dataUrl,
-          }))} : {}),
-          sceneBridge: entry.sceneBridge,
-          sceneRealization: {
-            example: entry.sceneExample.example,
-            targetStart: entry.sceneExample.targetStart,
-            targetEnd: entry.sceneExample.targetEnd,
-            translation: entry.sceneExample.translation,
-            audioUrl: sceneAudioUrl,
-          },
-        },
-      },
-      referenceFacts: [
-        ...referenceFacts,
-        {
-          source: "pronunciation_lexicon" as const,
-          sourceVersion: `authored:${source.bookKey}:${source.versionNumber}:${entry.key}:pronunciation`,
-          fact: {
-            factKind: "pronunciation" as const,
-            surface: entry.spokenForm ?? entry.expression,
-            languageTag: source.targetLanguage,
-            audioUrl: pronunciationUrl,
-            phoneticNotation: entry.pronunciation.phoneticNotation,
-            accentLabel: entry.pronunciation.accentLabel,
-            source: entry.pronunciation.source,
-            method: entry.pronunciation.method,
-          },
-        },
-        ...(entry.languageStructure ? [{
-          source: "dictionary" as const,
-          sourceVersion: `authored:${source.bookKey}:${source.versionNumber}:${entry.key}:structure`,
-          fact: {factKind: "language_structure" as const, ...entry.languageStructure},
-        }] : []),
-        ...usageExamples.map((example, index) => ({
-          source: "other_authoritative_source" as const,
-          sourceVersion: `authored:${source.bookKey}:${source.versionNumber}:${entry.key}:example:${index}`,
-          fact: {factKind: "usage_example" as const, ...example},
-        })),
-      ],
-      requestedAt: source.publishedAt,
-    });
-    if (result.status !== "ready") {
-      throw new Error(`Authored resource failed material validation: ${entry.key} (${JSON.stringify(result.issues)})`);
-    }
 
     const portableMedia: PortableMedia[] = [
       dataUrlMedia(pronunciationUrl, "pronunciation", "audio", {source: entry.pronunciation.source}),
@@ -537,11 +489,29 @@ for (const path of [...sourcePaths].sort()) {
 }
 
 media.assertSealedPackFullyConsumed();
-const publishedAt = descriptors.map((item) => item.publishedAt).sort().at(-1)!;
+const existingCatalogPath = process.env.SENSA_PACKAGE_EXISTING_CATALOG?.trim();
+const existingDescriptors = existingCatalogPath
+  ? sensaPortableLearningContentRegistrySchema.parse(
+    JSON.parse(await readFile(resolve(existingCatalogPath), "utf8")),
+  ).items
+  : [];
+const descriptorKeys = new Set(existingDescriptors.map((item) =>
+  `${item.book.bookId}\0${item.book.bookVersionId}`));
+for (const descriptor of descriptors) {
+  const key = `${descriptor.book.bookId}\0${descriptor.book.bookVersionId}`;
+  if (descriptorKeys.has(key)) {
+    throw new Error(`Existing Registry already contains Book version ${descriptor.book.bookKey}/${descriptor.book.versionNumber}`);
+  }
+  descriptorKeys.add(key);
+}
+const items = [...existingDescriptors, ...descriptors].sort((left, right) =>
+  left.book.bookKey.localeCompare(right.book.bookKey)
+  || left.book.versionNumber - right.book.versionNumber);
+const publishedAt = items.map((item) => item.publishedAt).sort().at(-1)!;
 const registrySnapshot = {
   format: "sensa-learning-content-registry-v2" as const,
   publishedAt,
-  items: descriptors,
+  items,
 };
 const revision = sha256(canonicalConsumerJson(registrySnapshot));
 const registry = sensaPortableLearningContentRegistrySchema.parse({...registrySnapshot, revision});
@@ -549,6 +519,7 @@ await mkdir(dirname(registryOutput), {recursive: true});
 await writeFile(registryOutput, canonicalConsumerJson(registry));
 console.log(
   `Built ${descriptors.length} Book Version Manifest(s) with ${totalMembers} independent ` +
-    ".sensa member(s); Portable, semantic declaration, Manifest and Registry validation passed. " +
+    `.sensa member(s), retaining ${existingDescriptors.length} existing Book Version Manifest(s); ` +
+    "Portable, semantic declaration, Manifest and Registry validation passed. " +
     "No media generation, provider call, publication or user acceptance claimed.",
 );

@@ -42,6 +42,12 @@ with tempfile.TemporaryDirectory() as directory, patch.object(speech, 'inspect_m
     fake.model = 'v1'
     next(cache.glob('*.mp3')).write_bytes(b'corrupt')
     rejects(lambda: speech.prepare('borrow', 'en', cache, provider=fake))
-rejects(lambda: speech.EdgeSpeechProvider().voice('fr'))
+rejects(lambda: speech.EdgeSpeechProvider().voice('sw'))
+expected_languages = {
+    'zh-CN', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'ru', 'it', 'pt', 'ar',
+    'hi', 'th', 'vi', 'id', 'tr', 'nl', 'pl',
+}
+assert expected_languages <= speech.EdgeSpeechProvider.voices.keys()
 assert speech.EdgeSpeechProvider().voice('en')[1] == 'en-US'
-print('PASS: speech provider substitution, explicit external-call gate, cache reuse, model isolation, corruption and unsupported language; no network.')
+assert speech.EdgeSpeechProvider().voice('pt')[1] == 'pt-BR'
+print('PASS: speech provider substitution, explicit external-call gate, cache reuse, model isolation, all product languages, corruption and unsupported language; no network.')

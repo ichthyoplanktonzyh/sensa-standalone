@@ -19,7 +19,7 @@ Target Core、Support Overlay 和本文的 Luna 分工只服务 Sensa Official �
 生产遵循以下原则：
 
 1. **Sense 先行**：先确定常见概念或体验，再选择目标表达和学习资源。
-2. **单一作者完整交付**：同一个 Luna 负责一个 Sense 的文本、visual brief、TTS 和自检，避免重复理解上下文。
+2. **单一作者冻结内容意图**：同一个 Luna 负责一个 Sense 的文本、visual brief、TTS 朗读文本和自检；音频字节由统一工具在文本冻结后生成。
 3. **默认使用 Luna high**：常规生产不再配置专职审核 Luna；复杂边界才提高推理等级或触发额外复核。
 4. **机器校验不能省略**：模型能力替代不了 Schema、路径、引用、哈希和文件完整性检查。
 5. **一 Sense 一生产单元**：单个 Sense 可以独立生成、校验、失败、重试和冻结。
@@ -196,7 +196,7 @@ Target Core × Support Language
 - 判断并生成真正有价值的可选资源；
 - 只在必要时查询可靠语言资料；
 - 判断图片的潜在价值并留下必要的 visual brief；
-- 通过标准 Edge TTS 入口生成目标表达和目标例句声音；
+- 冻结目标表达和目标例句的 TTS 朗读文本，由标准 Edge TTS 入口生成声音；
 - 运行作者自检；
 - 根据确定性校验结果只修订失败的 Sense 或资源。
 
@@ -481,10 +481,22 @@ IDS 条目具有共同的比较入口，不表示 1,310 项都同等常用、都
 
 - 校准批次先使用少量 Sense，覆盖实体、动作、关系和跨语言边界。
 - 普通作者任务建议一个独立 Sense，或一组必须一起辨析的两个 Sense。
-- 同一作者完整生产 JSON、visual brief 与 TTS；图片在后续增强批次统一生成。
+- 同一作者完整生产 JSON、visual brief 与 TTS 朗读文本；统一工具生成音频，图片在后续增强批次统一生成。
 - 重要对照项交给同一作者，减少包之间的边界漂移。
 - 自动校验可以集中运行，但必须按单 Sense 返回结果。
 - 小批次稳定后逐步扩产，不因追求数量降低 Sense 一致性或媒体有效性。
+
+### 12.1 全路线小样矩阵
+
+当批次目的不是做深某条路线，而是让所有 Target/Support 组合先拥有相同的小组 Sense 时，可以按语言
+而不是按路线分工：每个 Luna 负责一种语言，为固定 Sense 集合写该语言的 Target Core 和 Support
+Overlay；确定性工具随后对 18 份语言贡献做笛卡尔组合。这样每种目标语言材料只生产一次，每种支持语言
+桥接也只生产一次，不需要为 324 条路线分别调用 Agent。
+
+矩阵批次使用 `content:route-foundation` 的三段式入口：先 `validate` 所有语言贡献，再在明确允许真实
+TTS 时执行 `prepare --allow-tts`，最后用 `expand` 生成逐路线 Book source。`expand` 只是派生过程，不能
+反向成为作者来源；正式交付仍由发布构建器把每个 Sense 编译成独立 `.sensa`，再用 Book Version
+Manifest 组织。新增派生 Book 可以通过构建器的 existing-catalog 增量边界并入已有 Registry 候选。
 
 ## 13. 非目标
 
