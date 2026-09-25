@@ -11,6 +11,7 @@ const references=(table:ReplicaRecordReference['table'],keys:unknown):ReplicaRec
 const materialDependencies=(material:unknown)=>{
  const provenance=record(record(material)?.snapshot)?.provenance;
  return [
+  ...reference('packageInstallations',record(provenance)?.packageKey),
   ...reference('contentAttempts',record(provenance)?.attemptId),
   ...reference('semanticMeanings',record(provenance)?.personalMeaningId),
  ];
@@ -53,7 +54,10 @@ export const learningReplica:DomainReplicaModule={
     ];
    }),
    ...(Array.isArray(fact.lifecycleEvents)?fact.lifecycleEvents.flatMap((event:unknown)=>{
-    const item=record(event);return item?.kind==='current_step_material_refreshed'?reference('contentAttempts',item.operationId):[];
+    const item=record(event);
+    if(item?.kind!=='current_step_material_refreshed')return [];
+    const participant=record(record(fact.participants)?.[item.targetId]),material=record(record(participant?.presentedMaterials)?.[item.stepId]),provenance=record(record(material?.snapshot)?.provenance);
+    return provenance?.packageKey?[]:reference('contentAttempts',item.operationId);
    }):[]),
   ];
   if(entry.table==='learningEvents')return [

@@ -15,6 +15,7 @@ export * from "./accountBackup.js";
 export * from "./learningConnection.js";
 export * from "./learningContent.js";
 export * from "./lightweightLearningContent.js";
+export * from "./portableLightweightPackage.js";
 export * from './canonicalJson.js';
 export * from './serviceStatus.js';
 export * from './consumer/intake.js';

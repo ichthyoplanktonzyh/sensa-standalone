@@ -8,6 +8,10 @@ import type {
   ContentProvisioningTask,
   PersonalMeaningLearningSource,
 } from '../provisioning/contracts';
+import type {
+  PortablePackageExport,
+  PortablePackagePreview,
+} from '../portable/portablePackage';
 import { packageKey } from '../../data/library/packageRecords';
 import { observeLibrary, type Table } from '../../data/library/store';
 
@@ -44,6 +48,14 @@ export type ContentSupplyCommand =
       onProgress?: (fraction: number) => void;
     }>
   | Readonly<{ kind: 'import_package'; bytes: Uint8Array; signal?: AbortSignal }>
+  | Readonly<{ kind: 'preview_portable_package'; bytes: Uint8Array }>
+  | Readonly<{
+      kind: 'install_portable_package';
+      bytes: Uint8Array;
+      expectedArchiveDigest: string;
+      signal?: AbortSignal;
+    }>
+  | Readonly<{ kind: 'export_portable_package'; packageKey: string }>
   | Readonly<{
       kind: 'prepare_materialization';
       taskId: string;
@@ -67,10 +79,12 @@ export type ContentSupplyCommand =
 export type ContentSupplyCommandResult<Command extends ContentSupplyCommand> =
   Command['kind'] extends 'rehydrate' ? ContentSupplyRehydration
     : Command['kind'] extends 'refresh_catalog' ? ContentSupplyCatalogRefresh
-      : Command['kind'] extends 'prepare_materialization' ? void
-        : Command['kind'] extends 'stop_provisioning' ? boolean
-          : Command['kind'] extends 'revise_provisioning' ? ContentProvisioningTask
-            : InstalledPackage;
+      : Command['kind'] extends 'preview_portable_package' ? PortablePackagePreview
+        : Command['kind'] extends 'export_portable_package' ? PortablePackageExport
+          : Command['kind'] extends 'prepare_materialization' ? void
+            : Command['kind'] extends 'stop_provisioning' ? boolean
+              : Command['kind'] extends 'revise_provisioning' ? ContentProvisioningTask
+                : InstalledPackage;
 
 export type ContentSupplyQuery =
   | Readonly<{ kind: 'workspace' }>
@@ -105,6 +119,7 @@ const queryTables = {
 } as const satisfies Record<ContentSupplyQuery['kind'], readonly Table[]>;
 
 export const contentSupplyArtifactKey = packageKey;
+export type {PortablePackageExport,PortablePackagePreview};
 
 export const contentSupplySystem: ContentSupplySystem = {
   execute: (async (command: ContentSupplyCommand) => {

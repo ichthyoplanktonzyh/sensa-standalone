@@ -3,9 +3,9 @@ import {test} from 'vitest';
 import {extractBusinessLanguageEvidence} from '../live/languageTraceEvidence';
 import {languageMatrixCases, languageSupportFixtures} from '../live/languageMatrixFixtures';
 
-test('the 306 routes have learner context and clarification in each support language', () => {
-  assert.equal(languageMatrixCases.length, 306);
-  assert.equal(new Set(languageMatrixCases.map(item => `${item.targetLanguageTag}--${item.supportLanguageTag}`)).size, 306);
+test('the 324 routes have learner context and clarification in each support language', () => {
+  assert.equal(languageMatrixCases.length, 324);
+  assert.equal(new Set(languageMatrixCases.map(item => `${item.targetLanguageTag}--${item.supportLanguageTag}`)).size, 324);
   assert.equal(Object.keys(languageSupportFixtures).length, 18);
   for (const item of languageMatrixCases) {
     assert(item.supportFixture.context.trim());

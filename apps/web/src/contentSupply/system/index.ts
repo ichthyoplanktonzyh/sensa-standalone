@@ -17,6 +17,8 @@ export type {
   ContentSupplyRehydration,
   ContentSupplySystem,
   ContentSupplyWorkspace,
+  PortablePackageExport,
+  PortablePackagePreview,
 } from './contentSupplySystem';
 export type {
   ContentProvisioningStatus,

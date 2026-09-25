@@ -7,7 +7,8 @@
     ".": "./dist/index.js",
     "./authoring": "./dist/authoringBundleValidator.js",
     "./authoring-draft-v2": "./dist/authoringDraftV2Validator.js",
-    "./runtime": "./dist/runtimeLearningReleaseValidator.js"
+    "./runtime": "./dist/runtimeLearningReleaseValidator.js",
+    "./portable-lightweight": "./dist/portableLightweightPackageValidator.js"
   },
   "types": "./dist/index.d.ts",
   "scripts": {
@@ -15,6 +16,7 @@
   },
   "dependencies": {
     "@sensa/contracts": "file:../contracts",
-    "@sensa/learning-kernel": "file:../learning-kernel"
+    "@sensa/learning-kernel": "file:../learning-kernel",
+    "fflate": "^0.8.3"
   }
 }

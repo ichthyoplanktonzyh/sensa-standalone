@@ -34,6 +34,7 @@ test("language-route", async () => {
 const tags=sensaLanguages.map(language=>language.tag);
 assert.equal(new Set(tags).size,tags.length,'language tags must be distinct');
 assert.equal(sensaLanguage('en')?.asTarget,true);
+assert.equal(sensaLanguage('zh-CN')?.asTarget,true);
 assert(sensaLanguageForRole('target').length>=10);
 assert.equal(sensaLanguageForRole('support').length,sensaLanguages.length);
 
@@ -117,10 +118,14 @@ try{
   await assert.rejects(()=>language.setLanguageRouteStatus(op(),defaultSensaLanguageRoute.id,'archived'),/localFlow\.lastLanguageRoute/u);
   await language.setLanguageRouteStatus(op(),spanish.id,'active');
 
+  const chinese=await language.addLanguageRoute(op(),'zh-CN','en');
+  assert.equal(chinese.targetLanguageTag,'zh-CN');
+  assert.equal(chinese.defaultSupportLanguageTag,'en');
+
   const retry=op();
   const french=await language.addLanguageRoute(retry,'fr','en');
   assert.deepEqual(await language.addLanguageRoute(retry,'fr','en'),french,'the command ledger makes retry idempotent');
-  assert.equal((await language.languageRoutesSnapshot()).collection.routes.length,3);
+  assert.equal((await language.languageRoutesSnapshot()).collection.routes.length,4);
   await assert.rejects(()=>language.addLanguageRoute(op(),'yue','en'),/localFlow\.unknownTargetLanguage/u);
   console.log('PASS: absolute canonical Language Tags, contextual roles including same-language Target/Support, versioned learner-owned Routes, device-scoped Active Route Selection, archival repair and pinned contexts.');
 }finally{await rm(root,{recursive:true,force:true});}

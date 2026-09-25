@@ -165,6 +165,7 @@ type MigratedTest = Readonly<{path: string; suite: WebTestSuite; memoryLibrary?:
 const fastBeforeMemory = [
   'integration/support-diagnostics',
   'contracts/stream-authorization',
+  'contracts/portable-lightweight-package',
   'quality/content-supply-system-boundary',
   'release/incident-delivery',
 ] as const;
@@ -181,7 +182,7 @@ const fastWithMemory = [
   'integration/agent-trace',
   'integration/live-matrix-summary',
   'integration/language-trace-evidence',
-  'integration/package-learning', 'integration/local-learning-runtime', 'integration/media-library',
+  'integration/package-learning', 'integration/portable-package-loop', 'integration/local-learning-runtime', 'integration/media-library',
   'integration/learning-scene-bridge', 'integration/personal-learning', 'integration/language-route',
   'integration/language-journey', 'integration/reading-language', 'integration/reading-glossary',
   'integration/reading-skip', 'integration/extension-speech', 'integration/reading-site',
@@ -218,7 +219,7 @@ const durabilityTests = new Set<string>([
   'browser/web-bootstrap-budget', 'integration/known-continuation',
   'integration/learning-registry', 'integration/local-book',
   'integration/local-learning-runtime', 'integration/media-library',
-  'integration/model-turn', 'integration/package-learning',
+  'integration/model-turn', 'integration/package-learning', 'integration/portable-package-loop',
   'integration/personal-learning', 'integration/storage-capability',
   'integration/web-intake',
 ]);

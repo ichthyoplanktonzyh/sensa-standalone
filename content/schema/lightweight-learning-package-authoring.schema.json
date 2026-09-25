@@ -1,0 +1,281 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sensa.example/schema/lightweight-learning-package-authoring-v2.json",
+  "title": "Sensa lightweight learning package authoring document",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "sense",
+    "route",
+    "target_core",
+    "support_overlay",
+    "visual",
+    "research_notes"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "sensa.lightweight-learning-package.authoring.v2"
+    },
+    "sense": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "idea", "target"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]*:[A-Za-z0-9][A-Za-z0-9._-]*$"},
+        "idea": {"type": "string", "minLength": 1},
+        "target": {"type": "string", "minLength": 1},
+        "avoid": {"type": "string", "minLength": 1}
+      }
+    },
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "support"],
+      "properties": {
+        "target": {"$ref": "#/$defs/languageTag"},
+        "support": {"$ref": "#/$defs/languageTag"}
+      }
+    },
+    "target_core": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_expression", "pronunciation", "scene_realization", "optional"],
+      "properties": {
+        "target_expression": {"$ref": "#/$defs/textResource"},
+        "pronunciation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ipa", "tts_text", "audio"],
+          "properties": {
+            "ipa": {"type": "string", "minLength": 1},
+            "tts_text": {"type": "string", "minLength": 1},
+            "audio": {"$ref": "#/$defs/audioResource"}
+          }
+        },
+        "scene_realization": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["example", "audio"],
+          "properties": {
+            "example": {"type": "string", "minLength": 1},
+            "audio": {"$ref": "#/$defs/audioResource"}
+          }
+        },
+        "optional": {"$ref": "#/$defs/optionalResources"}
+      }
+    },
+    "support_overlay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "experience_recall_cue",
+        "sense_confirmation",
+        "scene_bridge",
+        "scene_translation",
+        "optional"
+      ],
+      "properties": {
+        "experience_recall_cue": {"$ref": "#/$defs/textResource"},
+        "sense_confirmation": {"$ref": "#/$defs/textResource"},
+        "scene_bridge": {"$ref": "#/$defs/textResource"},
+        "scene_translation": {"$ref": "#/$defs/textResource"},
+        "optional": {"$ref": "#/$defs/optionalResources"}
+      }
+    },
+    "visual": {"$ref": "#/$defs/visualResource"},
+    "research_notes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["topic", "source", "url"],
+        "properties": {
+          "topic": {"type": "string", "minLength": 1},
+          "source": {"type": "string", "minLength": 1},
+          "url": {"type": "string", "format": "uri", "pattern": "^https://"}
+        }
+      }
+    },
+    "confidence_notes": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "languageTag": {
+      "type": "string",
+      "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$"
+    },
+    "textResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text"],
+      "properties": {
+        "text": {"type": "string", "minLength": 1}
+      }
+    },
+    "optionalResources": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "recall_support": {"$ref": "#/$defs/textResource"},
+        "language_structure": {"$ref": "#/$defs/textResource"},
+        "usage_guidance": {"$ref": "#/$defs/textResource"},
+        "boundary_contrast": {"$ref": "#/$defs/textResource"},
+        "word_formation": {"$ref": "#/$defs/textResource"},
+        "mnemonic": {"$ref": "#/$defs/textResource"},
+        "etymology": {"$ref": "#/$defs/textResource"}
+      }
+    },
+    "audioResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["pending", "ready"]},
+        "asset": {
+          "type": "string",
+          "pattern": "^assets/audio/[a-z0-9-]+\\.(?:expression|scene)\\.[A-Za-z0-9-]+\\.edge-tts\\.mp3$"
+        },
+        "provider": {"const": "microsoft-edge-tts"},
+        "voice": {"type": "string", "minLength": 1},
+        "locale": {"$ref": "#/$defs/languageTag"},
+        "rate": {"type": "string", "pattern": "^[+-][0-9]+%$"},
+        "mime_type": {"const": "audio/mp3"},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "source_text_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "duration_ms": {"type": "integer", "minimum": 1},
+        "size_bytes": {"type": "integer", "minimum": 1}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"const": "ready"}}},
+          "then": {
+            "required": [
+              "asset",
+              "provider",
+              "voice",
+              "locale",
+              "rate",
+              "mime_type",
+              "sha256",
+              "source_text_digest",
+              "duration_ms",
+              "size_bytes"
+            ]
+          }
+        },
+        {
+          "if": {"properties": {"status": {"const": "pending"}}},
+          "then": {
+            "not": {
+              "anyOf": [
+                {"required": ["asset"]},
+                {"required": ["sha256"]},
+                {"required": ["duration_ms"]}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "imageMedia": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "asset",
+        "method",
+        "provider",
+        "size_bytes",
+        "sha256"
+      ],
+      "properties": {
+        "asset": {
+          "type": "string",
+          "pattern": "^assets/images/[A-Za-z0-9._-]+$"
+        },
+        "method": {"enum": ["generated", "open_source"]},
+        "provider": {"type": "string", "minLength": 1},
+        "prompt_policy": {"type": "string", "minLength": 1},
+        "source_url": {"type": "string", "format": "uri"},
+        "license": {"type": "string", "minLength": 1},
+        "attribution": {"type": "string", "minLength": 1},
+        "mime_type": {"type": "string", "minLength": 1},
+        "width": {"type": "integer", "minimum": 1},
+        "height": {"type": "integer", "minimum": 1},
+        "size_bytes": {"type": "integer", "minimum": 1},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"method": {"const": "generated"}}},
+          "then": {"required": ["prompt_policy"]}
+        },
+        {
+          "if": {"properties": {"method": {"const": "open_source"}}},
+          "then": {"required": ["source_url", "license"]}
+        }
+      ]
+    },
+    "visualResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "status", "role", "purpose"],
+      "properties": {
+        "value": {"enum": ["high", "normal", "none"]},
+        "status": {"enum": ["ready", "deferred", "not_planned"]},
+        "role": {"enum": ["primary", "assisted", "none"]},
+        "purpose": {"const": "experience_recall_cue"},
+        "brief": {"type": "string", "minLength": 1},
+        "must_show": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "must_avoid": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "alt_text": {"type": "string", "minLength": 1},
+        "media": {"$ref": "#/$defs/imageMedia"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"value": {"enum": ["high", "normal"]}}},
+          "then": {
+            "properties": {
+              "status": {"enum": ["deferred", "ready"]},
+              "role": {"enum": ["primary", "assisted"]}
+            },
+            "required": ["brief", "must_show", "must_avoid", "alt_text"]
+          }
+        },
+        {
+          "if": {"properties": {"value": {"const": "none"}}},
+          "then": {
+            "properties": {
+              "status": {"const": "not_planned"},
+              "role": {"const": "none"}
+            },
+            "not": {"required": ["media"]}
+          }
+        },
+        {
+          "if": {"properties": {"status": {"const": "ready"}}},
+          "then": {"required": ["media"]}
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {"enum": ["deferred", "not_planned"]}
+            }
+          },
+          "then": {"not": {"required": ["media"]}}
+        }
+      ]
+    }
+  }
+}

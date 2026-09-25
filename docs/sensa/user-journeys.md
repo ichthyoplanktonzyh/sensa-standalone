@@ -107,8 +107,9 @@ Context、完整 Expression、Sense 或 acceptance 中任一事实时，内容�
    Materialization；运行时不直接消费可变化 draft。
 6. **相同学习连接保持同一长期身份。** 同一 learner × stable Sense × target binding 无论来自 Book、
    direct entry 或 Personal Meaning，都解析到同一 Retention Target；来源只保留 provenance。
-7. **运行时固定事实。** 一次运行开始时固定目标、路线、策略、协议、课程来源和材料；用户之后修改
-   当前设置不能改写已经发生的学习步骤、Evidence 或调度结果。
+7. **运行时固定事实。** 一次运行开始时固定目标、路线、策略、协议、课程来源和计划材料基线；用户之后
+   修改当前设置不能改写已经发生的学习步骤、Evidence 或调度结果。同一目标、语言方向和兼容内容来源内
+   显式发布或应用的材料新版，可以刷新尚未操作的当前步骤及后续步骤。
 8. **删除不跨边界级联。** 删除学习来源不删除 Personal Meaning；删除 Personal Meaning 不删除
    Learning Target、历史、Evidence、Retention 或 FSRS 状态。
 9. **传输状态不能冒充领域结果。** 插件/Agent 的 queued 只表示材料已进入持久队列；只有本地资料库

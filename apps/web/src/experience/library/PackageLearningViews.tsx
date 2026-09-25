@@ -10,6 +10,7 @@ import {ArrowRight,BookOpen,Search,RefreshCw,Upload,Check,Download} from 'lucide
 import {learningBundleBookId,learningBundleVersionNumber,learningBundleTitle,learningBundleDescription,learningDescriptorBookId,learningDescriptorVersionNumber,learningDescriptorTitle,learningDescriptorDescription} from '@sensa/contracts/sensa';
 import {LearningTargetDetailScreen} from '../components/learning/LearningTargetDetailScreen';
 import {contentSupplyArtifactKey} from '../../contentSupply/system';
+import type {PortablePackagePreview} from '../../contentSupply/system';
 import type {LearningTargetProjection} from '../../learning/system';
 import type {usePackageLearning} from './usePackageLearning';
 import {LearningSetupFrame,setupButton,setupPrimary} from '../components/learning/LearningSetupFrame';
@@ -17,9 +18,9 @@ import {useScreenState} from '../ui/ScreenHost';
 type Controller=ReturnType<typeof usePackageLearning>;
 export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boolean;c:Controller;onBack:()=>void;onLearning:()=>void;onTarget:(id:string)=>void}){
  useTranslation();
- const [selected,setSelected]=useState<string|null>(null),[query,setQuery]=useScreenState('learning-entry:query',''),[downloadKey,setDownloadKey]=useState<string|null>(null);
+ const [selected,setSelected]=useState<string|null>(null),[query,setQuery]=useScreenState('learning-entry:query',''),[downloadKey,setDownloadKey]=useState<string|null>(null),[importCandidate,setImportCandidate]=useState<{file:File;preview:PortablePackagePreview}|null>(null);
  const importInput=useRef<HTMLInputElement>(null),heading=useRef<HTMLHeadingElement>(null);
- useEffect(()=>{if(!active)setSelected(null);},[active]);
+ useEffect(()=>{if(!active){setSelected(null);setImportCandidate(null);}},[active]);
  useEffect(()=>{if(active)heading.current?.focus({preventScroll:true});},[selected,active]);
  const enrolledFor=(p:Controller['packages'][number])=>p.bundle.entries.map(e=>c.targets.find(t=>e.senseVersionId===t.identity.senseVersionId&&e.bindingVersionId===t.identity.bindingVersionId&&t.packageKey===p.key));
  const routeDescriptor=(descriptor:Controller['catalog'][number])=>!('format' in descriptor)||descriptor.targetLanguage===c.languageContext.targetLanguageTag&&descriptor.supportLanguage===c.languageContext.supportLanguageTag;
@@ -29,18 +30,48 @@ export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boole
   const descriptor=c.catalog.filter(candidate=>routeDescriptor(candidate)&&learningDescriptorBookId(candidate)===bookId).sort((left,right)=>learningDescriptorVersionNumber(right)-learningDescriptorVersionNumber(left))[0];
   const releases=c.packages.filter(pack=>routePackage(pack)&&learningBundleBookId(pack.bundle)===bookId).sort((left,right)=>learningBundleVersionNumber(right.bundle)-learningBundleVersionNumber(left.bundle));
   const exact=descriptor?releases.find(pack=>pack.key===contentSupplyArtifactKey(descriptor)):undefined,latestInstalled=releases[0],activeRelease=releases.find(pack=>enrolledFor(pack).every(Boolean));
-  const installed=exact??latestInstalled,baseline=activeRelease??latestInstalled,updateAvailable=!!descriptor&&!!baseline&&learningDescriptorVersionNumber(descriptor)>learningBundleVersionNumber(baseline.bundle),updateDownloaded=updateAvailable&&!!exact;
-  const enrolled=!!activeRelease&&(!descriptor||learningBundleVersionNumber(activeRelease.bundle)>=learningDescriptorVersionNumber(descriptor));
-  return {key:bookId,title:descriptor?learningDescriptorTitle(descriptor):learningBundleTitle(installed!.bundle),description:descriptor?learningDescriptorDescription(descriptor):learningBundleDescription(installed!.bundle),count:descriptor?.entryCount??installed!.bundle.entries.length,descriptor,installed,activeRelease,updateAvailable,updateDownloaded,enrolled};
+  const installed=exact??latestInstalled,baseline=activeRelease??latestInstalled;
+  const offeredVersion=descriptor?learningDescriptorVersionNumber(descriptor):latestInstalled?learningBundleVersionNumber(latestInstalled.bundle):null;
+  const updateAvailable=offeredVersion!==null&&!!baseline&&offeredVersion>learningBundleVersionNumber(baseline.bundle);
+  const updateDownloaded=updateAvailable&&!!installed&&learningBundleVersionNumber(installed.bundle)===offeredVersion;
+  const enrolled=!!activeRelease&&(offeredVersion===null||learningBundleVersionNumber(activeRelease.bundle)>=offeredVersion);
+  return {key:bookId,title:descriptor?learningDescriptorTitle(descriptor):learningBundleTitle(installed!.bundle),description:descriptor?learningDescriptorDescription(descriptor):installed?.portableOrigin?.manifest.metadata.description??learningBundleDescription(installed!.bundle),count:descriptor?.entryCount??installed!.bundle.entries.length,descriptor,installed,activeRelease,updateAvailable,updateDownloaded,enrolled};
  });
  const item=selected?items.find(candidate=>candidate.key===selected):undefined,installed=item?.installed,descriptor=item?.descriptor;
  const enrolled=installed?enrolledFor(installed):[];
  const normalized=query.trim().toLocaleLowerCase();
  const results=items.filter(p=>[p.title,p.description].join(' ').toLocaleLowerCase().includes(normalized));
  const stateLabel=(p:typeof items[number])=>localFlowText(p.updateDownloaded?'packageUpdateDownloaded':p.updateAvailable?'packageUpdateAvailable':p.enrolled?'enrolled':p.installed?'downloaded':'packageNotDownloaded');
+ const importStateLabel=(preview:PortablePackagePreview)=>preview.status==='installed'
+  ?localFlowText('downloaded')
+  :preview.status==='update_available'
+   ?localFlowText('packageUpdateAvailable')
+   :preview.status==='version_conflict'
+    ?localFlowNotice('localFlow.packageVersionChanged')
+    :localFlowText('packageNotDownloaded');
  const notice=c.notice&&<p role="status" className="rounded-xl border border-border-subtle bg-surface-subtle p-4 text-sm leading-6">{localFlowNotice(c.notice)}</p>;
- return <LearningSetupFrame key={selected??'catalog'} id="s-learning-entry" active={active} onBack={()=>selected?setSelected(null):onBack()} title={item?localFlowText('packageCatalogTitle'):undefined}>
-  {item?<>
+ return <LearningSetupFrame key={importCandidate?.preview.archiveDigest??selected??'catalog'} id="s-learning-entry" active={active} onBack={()=>importCandidate?setImportCandidate(null):selected?setSelected(null):onBack()} title={item||importCandidate?localFlowText('packageCatalogTitle'):undefined}>
+  {importCandidate?<>
+   <div className="mb-8 space-y-4">
+    <span className="inline-flex items-center gap-2 rounded-lg bg-accent-soft px-3 py-2 text-sm text-action-primary"><Upload size={16}/>{importStateLabel(importCandidate.preview)}</span>
+    <h2 ref={heading} tabIndex={-1} className="break-words text-3xl font-medium tracking-tight outline-none sm:text-4xl">{importCandidate.preview.package.metadata.title}</h2>
+    {importCandidate.preview.package.metadata.description&&<p className="max-w-xl text-sm leading-7 text-fg-secondary">{importCandidate.preview.package.metadata.description}</p>}
+    <p className="text-sm text-fg-secondary">{importCandidate.preview.package.route.targetLanguage} → {importCandidate.preview.package.route.supportLanguage}</p>
+   </div>
+   <section aria-label={localFlowText('packageContents')} className="mb-8 space-y-5 rounded-2xl border border-border-strong bg-surface-panel p-5 sm:p-6">
+    <div><p className="break-words text-xl font-medium">{importCandidate.preview.package.targetExpression.text}</p><p className="mt-2 text-sm leading-6 text-fg-secondary">{importCandidate.preview.package.sense.meaning}</p></div>
+    <p className="text-sm leading-6 text-fg-secondary">{importCandidate.preview.package.metadata.author.name} · {importCandidate.preview.package.metadata.license.name}</p>
+    <p className="text-sm leading-6 text-fg-secondary">{localFlowText('packageExpressionCount',{count:1})}</p>
+   </section>
+   <section aria-label={localFlowText('packageActions')} className="space-y-4 rounded-2xl border border-border-strong bg-surface-panel p-5 sm:p-6">
+    {notice}
+    <p className="text-sm leading-6 text-fg-secondary">{localFlowText('importPackageHint')}</p>
+    <div className="flex flex-wrap gap-3">
+     <button className={setupButton} disabled={c.busy} onClick={()=>setImportCandidate(null)}>{localFlowText('cancel')}</button>
+     <button className={setupPrimary} disabled={c.busy||importCandidate.preview.status==='version_conflict'} onClick={()=>void c.installImport(importCandidate.file,importCandidate.preview.archiveDigest).then(pack=>{if(!pack)return;setImportCandidate(null);if(pack.bundle.targetLanguage===c.languageContext.targetLanguageTag&&pack.bundle.supportLanguage===c.languageContext.supportLanguageTag)setSelected(learningBundleBookId(pack.bundle));})}><Upload size={18}/>{localFlowText(c.busy?'processing':'importPackage')}</button>
+    </div>
+   </section>
+  </>:item?<>
    <div className="mb-8 space-y-4">
     <span className="inline-flex items-center gap-2 rounded-lg bg-accent-soft px-3 py-2 text-sm text-action-primary">{item.enrolled?<Check size={16}/>:<BookOpen size={16}/>} {stateLabel(item)}</span>
     <h2 ref={heading} tabIndex={-1} className="break-words text-3xl font-medium tracking-tight outline-none sm:text-4xl">{item.title}</h2>
@@ -59,6 +90,7 @@ export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boole
      <button className={setupPrimary+' w-full sm:w-auto'} disabled={c.busy||c.catalogBusy||(!installed&&!descriptor)} onClick={()=>{if(item.updateDownloaded&&installed)void c.enroll(installed.key);else if(item.updateAvailable&&descriptor){setDownloadKey(item.key);void c.download(descriptor).finally(()=>setDownloadKey(null));}else if(item.enrolled)onLearning();else if(installed)void c.enroll(installed.key);else if(descriptor){setDownloadKey(item.key);void c.download(descriptor).finally(()=>setDownloadKey(null));}}}>
       {item.enrolled?<ArrowRight size={18}/>:item.updateAvailable&&!item.updateDownloaded?<Download size={18}/>:item.updateDownloaded||installed?<Check size={18}/>:<Download size={18}/>}{localFlowText(c.busy?'processing':item.updateDownloaded?'applyPackageUpdate':item.updateAvailable?'downloadPackageUpdate':item.enrolled?'packageGoLearning':installed?'enroll':'downloadPackage')}
      </button>
+     {installed?.portableOrigin&&<button className={setupButton+' w-full sm:w-auto'} disabled={c.busy} onClick={()=>void c.exportPackage(installed.key).then(result=>{if(!result)return;const url=URL.createObjectURL(new Blob([result.bytes.slice().buffer],{type:'application/vnd.sensa.package+zip'}));const anchor=document.createElement('a');anchor.href=url;anchor.download=result.fileName;anchor.click();URL.revokeObjectURL(url);})}><Download size={18}/>{localFlowText('downloadPackage')}</button>}
     </>}
    </section>
    <section aria-label={localFlowText('packageContents')}>
@@ -89,7 +121,7 @@ export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boole
    </button></li>)}</ul>
    {!results.length&&<div role="status" className="rounded-2xl border border-dashed border-border-strong px-6 py-12 text-center"><BookOpen size={32} className="mx-auto mb-4 text-fg-tertiary" aria-hidden="true"/><h3 className="text-lg font-medium">{localFlowText(c.catalogBusy&&!items.length?'packageLoading':query?'packageNoResults':'packageEmpty')}</h3></div>}
   </>}
-  <input ref={importInput} hidden tabIndex={-1} aria-label={localFlowText('importPackage')} type="file" accept="application/json,.json" disabled={c.busy} onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(file)void c.importFile(file).then(p=>{if(p)setSelected(learningBundleBookId(p.bundle));});}}/>
+  <input ref={importInput} hidden tabIndex={-1} aria-label={localFlowText('importPackage')} type="file" accept=".sensa,application/zip,application/octet-stream" disabled={c.busy} onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(file)void c.previewImport(file).then(preview=>{if(preview){setSelected(null);setImportCandidate({file,preview});}});}}/>
  </LearningSetupFrame>;
 }
 export function PackageTarget({active,target,c,onBack,onHome,onStart,onSource}:{active:boolean;target:LearningTargetProjection;c:Controller;onBack:()=>void;onHome:()=>void;onStart:()=>void;onSource?:()=>void}){

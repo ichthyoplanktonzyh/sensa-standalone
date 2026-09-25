@@ -141,9 +141,9 @@ export interface LocalLearningRunParticipant {
   languageContext:SensaFormalPinnedLanguageContext;
   startReason:LocalProtocolStartReason;
   outcomePermissions:LocalProtocolOutcomePermissions;
-  /** Material selected when the Run plan was resolved. It remains the plan's
-   * immutable baseline, while each presented Step records the compatible
-   * material revision the learner actually saw. */
+  /** Audit baseline selected when the Run plan was resolved. It does not freeze
+   * every later Step: each presented Step records the material actually used,
+   * and a not-yet-acted current Step may be explicitly refreshed. */
   material: LocalLearningMaterialization;
   presentedMaterials:Record<string,LocalLearningMaterialization>;
   policyCommitment:LocalCommittedLearningPolicy;

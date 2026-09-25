@@ -291,6 +291,40 @@ Language pair 下聚合这些 Package delivery snapshots 的传输制品，不�
 - 新增成员只在应用后进入未来 Introduction；删除成员只退出未来 Planning，旧 Bundle、membership、
   已开始学习与历史事实继续可重放；若 Sense 或 Binding 的语义身份变化，则创建新的 Learning Target。
 
+### 1.6 Portable Lightweight Package
+
+外部作者的生产接口是一个最终、可运行的 Portable Lightweight Package，不是 Sensa Official 的作者稿、
+数据库、Target Core、Support Overlay、提示词或生产编排。作者可以使用任意工具和内部结构；只要最终
+`.sensa` 文件通过公共准入校验，就可以由本人使用或私下分发。
+
+`.sensa` v1 是一个单文件 ZIP 归档，内部是公开的 `package.json` 合同与 `media/<sha256>` 原始媒体，固定
+一个 Sense、目标表达和精确 Target/Support Language pair。清单不接受任意媒体路径，媒体文件由摘要寻址；
+裸 JSON 与目录只属于作者工作区，不是第二种正式交换格式。归档不携带 learner progress、调度、Evidence、
+Materialization、官方 review status 或可执行代码。Portable 文件是 untrusted transport candidate；导入
+成功也不自动成为 Published Content 或 Sensa Official 内容，安装与加入学习仍是独立动作。
+
+本地消费遵循 `选择文件 → 只读预览 → 明确安装 → 明确加入学习 → Runtime`。预览不写 Library；安装只
+保存可执行内容和来源，不创建 Learning Target；Route 不匹配的包可以保存但不能在当前 Route 加入。
+安装后可从保留的公开清单和已冻结媒体确定性重建 `.sensa`，因此生产者的分发权不依赖中心目录。
+
+Portable identity 使用 `packageId + positive integer version`。相同 identity 与相同规范化内容重复导入
+幂等；相同 identity 出现不同公开内容时必须拒绝覆盖，生产者应递增 version。新版本只是可安装候选，
+不会自动改写当前材料、课程 membership、已开始 Run 或进度。learner 明确应用更高版本后，稳定 identity
+继续使用原 Learning Target、Retention Target 与进度，并将新版设为当前材料；已操作 Step 的 material
+fact 不改写，尚未操作的当前 Step 可以显式刷新，后续 Step 读取新版。identity 改变则建立新的 Learning
+Target，旧 Target 默认保留。Portable 作者自己的 `senseId` 用来稳定编译本地 Sense/Binding identity；若
+作者实际改变 Sense 或目标表达语义，应使用新的 identity，而不是借版本号悄悄复用 learner progress。
+Package 只是分发载体，Portable v1 不把永久 Package Version 历史或历史内容回放定义为产品合同，也不提供
+静默课程降级。
+
+公共准入门禁只检查 Runtime 可执行性、必需角色、引用、媒体、大小、摘要和目标 span 等确定性事实。
+经验提示不泄露目标表达、语言自然度、文化边界与编辑质量属于生产者或策展者的质量策略，不属于外部
+作者的通用准入条件。信任级别由实际导入来源、签名或 Registry 赋予，不能由文件自报。
+
+Portable 合同的当前字段与命令见
+[`content/portable-lightweight-package.md`](../../content/portable-lightweight-package.md)。官方 Core/Overlay
+流程必须最终编译到同一公共合同，不能为官方内容保留 Runtime 私有入口。
+
 ## 2. Lexeme 级共享资源
 
 同一 Lexeme 的多个 Sense 共享：
@@ -406,7 +440,7 @@ Note 变成 Reference Release 内容，reference-only meaning 也不会凭空获
 Experience Sketch 固定教学意图，而不是固定 UI payload。它至少说明：
 
 - learner 应形成的 minimum sufficient experience；
-- 情境中的关键角色、状态、变化或因果关系；
+- 对当前 Sense 真正必要的关系、感受、区别或其他经验要素；人物、物体、动作和状态都不是固定必填项；
 - learner 应该推断出的当前 Sense；
 - 初次 grounding 时必须隐藏的目标 form；
 - Render 必须表达和不得表达的内容约束。
@@ -417,10 +451,13 @@ delivery profile。LLM-assisted 内容分析可以根据 minimum sufficient expe
 Runtime 不能重新分析 Sense，只能按 Render Plan 从 Package 已批准且当前客户端可执行的 Render 中选择。
 更换 text/image/animation/interaction 不改变 Sketch identity、Sense facts 或 Required Capability。
 
-Text Experience Render 是完整的自然语言经验场景：它让 learner 在脑中进入具体情境，跟随角色、状态、
-变化或因果关系并形成目标推断。它不是对 Sketch 的说明、词典定义、图片 alt text、步骤摘要或 Experience
-Recap。文字既可以是内容分析选出的 preferred grounding path，也可以在非文字首选不可执行时承担
-approved fallback；这两种角色使用同一种 Text Experience Render 质量标准。
+Text Experience Render 是完整的自然语言经验场景：它让 learner 进入或重建一个具体经验，并由此形成
+目标推断。场景可以自然地使用人物、物体、动作、状态、关系、感受、时间或空间，但不要求机械地包含
+其中任何一类。它不是对 Sketch 的说明、词典定义、图片 alt text、步骤摘要或 Experience Recap。
+
+对于当前具有兼容 Support Language 的 Lightweight Delivery / Acquisition Profile，approved Text Experience
+Render 本身就是完整、可执行的经验路径。图片、动画和互动是同一 Experience Sketch 的可选替代呈现
+或增强资源；缺少或推迟这些资源，不会使学习包变成不完整或不可用。
 
 Acquisition Primitive 与 renderer kind 必须分开：Primitive 表达 `causal_sequence`、
 `spatial_relation`、`introspective_scenario` 等教学机制；renderer kind 表达 text、image、animation
@@ -437,6 +474,11 @@ Experience Render Plan 把每个 approved Render 分类为有序的 `preferred |
 一个 required Sketch 必须在当前 delivery profile 中至少拥有一条可执行呈现路径。客户端缺少首选
 renderer 时只能使用 Package 声明的 approved fallback 或诚实 unavailable，不能把 alt text、技术说明
 或运行时自由生成的描述冒充文字经验场景，也不能改写 Sketch。
+
+只有显式版本化，并明确声明不能或不应依赖 Support Language 文字的 Delivery / Acquisition Profile，
+才可以把非文字 Render 设为必要条件。“无支持语言学习”“低识字学习”或“儿童视觉学习”可以是未来
+此类 Profile 的候选，但它们不会自动成为当前 Profile 的要求或产品承诺。新的 Profile 必须明确声明
+能力要求与 fallback，不得静默收紧既有语言路线。
 
 ### 动态 Interaction Render 的协议方向（已接受，暂缓实施）
 
@@ -939,7 +981,8 @@ version。缺失资源必须如实报告，不能以运行时 fallback、自由�
 
 当前必需资源为经验回想内容、目标表达、含义确认、主要声音、经验绑定说明与同场景语言实现。
 回想提示、最小使用框架、补充例句与有来源的词源为可选。图片和 HTML 是经验内容的呈现形式，不是新增的
-必需角色；没有图片或互动的既有文字资源仍合法。
+必需角色；兼容 Support Language 的 approved Text Experience Render 本身可完整满足当前 Profile，
+没有图片或互动不构成资源缺失或降级。
 
 资源详情应展示实际保存和使用的完整材料，查看不是学习前置确认。用户提供的
 图片可以直接成为回忆线索；不要求生成模型重新生成图片。本阶段不加入图片中

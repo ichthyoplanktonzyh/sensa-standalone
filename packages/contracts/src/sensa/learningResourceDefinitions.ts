@@ -53,7 +53,7 @@ export const sensaSourcedExplanationSchema=z.object({explanation:nonEmpty,source
 export const sensaMnemonicSchema=z.object({text:nonEmpty,kind:z.literal('teaching_aid')}).strict();
 
 export const sensaLightweightPronunciationMaterialSchema = z.object({
-  audioUrl: z.string().regex(/^data:audio\/(?:mpeg|mp3|wav|ogg);base64,[A-Za-z0-9+/]+={0,2}$/u, 'Saved audio bytes are required'),
+  audioUrl: z.string().max(72*1024*1024).regex(/^data:audio\/[A-Za-z0-9.+-]+;base64,[A-Za-z0-9+/]+={0,2}$/u, 'Saved audio bytes are required'),
   surface: nonEmpty,
   languageTag: nonEmpty,
   source: nonEmpty,

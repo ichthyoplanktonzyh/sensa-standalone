@@ -1,6 +1,6 @@
 import {z} from 'zod';
 /** Offline, owned image bytes; never arbitrary external URLs. */
-export const sensaContextImageSchema=z.object({id:z.string().uuid(),name:z.string().max(200),dataUrl:z.string().max(256000).regex(/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/u)}).strict();
+export const sensaContextImageSchema=z.object({id:z.string().uuid(),name:z.string().max(200),dataUrl:z.string().max(72*1024*1024).regex(/^data:image\/[A-Za-z0-9.+-]+;base64,[A-Za-z0-9+/]+={0,2}$/u)}).strict();
 export const sensaContextImagesSchema=z.array(sensaContextImageSchema).max(4);
 export type SensaContextImage=z.infer<typeof sensaContextImageSchema>;
 /** HTML is declarative. The renderer supplies the click/drag state behavior. */

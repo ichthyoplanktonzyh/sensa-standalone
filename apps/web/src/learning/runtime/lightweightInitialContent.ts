@@ -531,7 +531,13 @@ const candidateFromDraft = (
 };
 
 const payloadStrings = (value: unknown): readonly string[] => {
-  if (typeof value === 'string') return [value];
+  if (typeof value === 'string') {
+    // Encoded media is opaque binary data. Scanning its base64 characters as
+    // learner-facing prose can randomly "find" a short target form and reject
+    // an otherwise valid recall cue; names and alt text remain ordinary fields
+    // and are still checked.
+    return /^data:[^;,]+;base64,/u.test(value) ? [] : [value];
+  }
   if (Array.isArray(value)) return value.flatMap(payloadStrings);
   if (value !== null && typeof value === 'object') {
     return Object.values(value).flatMap(payloadStrings);

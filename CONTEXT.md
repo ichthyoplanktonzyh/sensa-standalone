@@ -313,9 +313,12 @@ Sketch for a supported client. Multiple Renders may share one Sketch without
 changing its teaching intent.
 
 **Text Experience Render**:
-An approved natural-language scene that lets the learner mentally enact the
-roles, states, changes or causal relations in an Experience Sketch. It is a
-complete grounding path, not a definition, explanation, alt text or recap.
+An approved natural-language scene that lets the learner construct or re-enter
+the concrete experience specified by an Experience Sketch. It may use people,
+objects, actions, states, relations, perceptions or other natural means, but
+none is a required template element. It is a complete grounding path in its own
+right and does not depend on a companion image; it is not a definition,
+explanation, alt text or recap.
 
 **Experience Recap**:
 

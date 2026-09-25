@@ -2,7 +2,11 @@ import {useTranslation} from 'react-i18next';
 import {useEffect,useRef,useState} from 'react';
 import type {LearningPackageDescriptor} from '@sensa/contracts/sensa';
 
-import {contentSupplySystem,type ContentSupplyPackage as InstalledPackage} from '../../contentSupply/system';
+import {
+ contentSupplySystem,
+ type ContentSupplyPackage as InstalledPackage,
+ type PortablePackagePreview,
+} from '../../contentSupply/system';
 import {
  learningSystem,
  type LearningAction,
@@ -81,6 +85,12 @@ export function usePackageLearning(entryOpen:boolean){
   catch(e){setNotice(e instanceof Error&&e.message.startsWith('localFlow.')?e.message:localFlowText('retryOperation'));return null;}
   finally{setBusy(false);setProgress(null);}
  };
+ const inspect=async<T,>(work:()=>Promise<T>)=>{
+  setBusy(true);setNotice('');
+  try{return await work();}
+  catch(e){setNotice(e instanceof Error&&e.message.startsWith('localFlow.')?e.message:localFlowText('retryOperation'));return null;}
+  finally{setBusy(false);}
+ };
 
  const reloadCatalog=async(notify=false)=>{
   const gen=++generation.current;
@@ -128,10 +138,23 @@ export function usePackageLearning(entryOpen:boolean){
    finally{if(transfer.current===c)transfer.current=null;}
   }),
   cancelDownload:()=>transfer.current?.abort(),
-  importFile:(file:File)=>perform(async()=>{
+  previewImport:(file:File):Promise<PortablePackagePreview|null>=>inspect(async()=>{
    if(file.size>64*1024*1024)throw new Error('localFlow.packageTooLarge');
-   return contentSupplySystem.execute({kind:'import_package',bytes:new Uint8Array(await file.arrayBuffer())});
+   return contentSupplySystem.execute({kind:'preview_portable_package',bytes:new Uint8Array(await file.arrayBuffer())});
   }),
+  installImport:async(file:File,expectedArchiveDigest:string)=>{
+   const installed=await perform(async()=>{
+    if(file.size>64*1024*1024)throw new Error('localFlow.packageTooLarge');
+    return contentSupplySystem.execute({kind:'install_portable_package',bytes:new Uint8Array(await file.arrayBuffer()),expectedArchiveDigest});
+   });
+   if(installed)setNotice(installed.bundle.targetLanguage!==languageContext.targetLanguageTag
+    ?'localFlow.routeLanguageMismatch'
+    :installed.bundle.supportLanguage!==languageContext.supportLanguageTag
+      ?'localFlow.routeSupportMismatch'
+      :'localFlow.packageSaved');
+   return installed;
+  },
+  exportPackage:(packageKey:string)=>inspect(()=>contentSupplySystem.execute({kind:'export_portable_package',packageKey})),
   selectPolicy:(targetId:string,profileId:LearningPolicy)=>perform(()=>learningSystem.execute({kind:'select_policy',operationId:crypto.randomUUID(),targetId,languageContext,profileId})),
   enroll:(packageKey:string)=>perform(()=>learningSystem.execute({kind:'enroll_package',operationId:crypto.randomUUID(),packageKey,languageContext})),
   start:(targetId:string,dailyLimit:number)=>perform(()=>learningSystem.execute({kind:'start',operationId:crypto.randomUUID(),targetId,languageContext,dailyLimit})),

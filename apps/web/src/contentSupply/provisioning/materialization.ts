@@ -45,6 +45,7 @@ export function materializePublishedEntry(input: {
     validationStatus: 'validated',
     validatorVersion: 'sensa-web-package-v1',
     provenance: {
+      packageKey: input.packageKey,
       bookId: learningBundleBookId(pack.bundle),
       bookVersionId: learningBundleBookVersionId(pack.bundle),
       contentReleaseId: learningBundleContentReleaseId(pack.bundle),

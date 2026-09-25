@@ -1,0 +1,15 @@
+{
+  "name": "Key-2016-1310",
+  "description": "The 1,310-concept parameter catalog used by the Intercontinental Dictionary Series",
+  "file": "ids-key-2016-1310.csv",
+  "row_count": 1310,
+  "sha256": "5eee0676fbea15c7b0a25e52d321a31cc0f23cd6aab68aeb9e51c10be9b976ff",
+  "source_repository": "https://github.com/intercontinental-dictionary-series/ids",
+  "source_file": "cldf/parameters.csv",
+  "source_commit": "3428921944d66861a89e98caf61afab706fbcb1d",
+  "source_commit_date": "2023-03-06T15:31:45Z",
+  "source_catalog": "https://ids.clld.org",
+  "license": "CC-BY-4.0",
+  "license_url": "https://creativecommons.org/licenses/by/4.0/",
+  "citation": "Key, Mary Ritchie & Comrie, Bernard (eds.). 2023. The Intercontinental Dictionary Series. Leipzig: Max Planck Institute for Evolutionary Anthropology."
+}

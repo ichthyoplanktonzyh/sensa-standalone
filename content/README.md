@@ -5,6 +5,12 @@ Production is organized around an isolated `SensePackageBuild`, not a fixed Job 
 sequence. The domain resource model is
 [`../docs/sensa/sense-learning-resource-model.md`](../docs/sensa/sense-learning-resource-model.md).
 
+External creators do not use this repository's authoring pipeline. Their public seam is
+the single-file [Portable Lightweight Package](portable-lightweight-package.md): a `.sensa`
+ZIP archive containing the public `package.json` contract and content-addressed raw media.
+Core/Overlay splitting, prompts, provider choices, review stages and build storage are
+implementation details of Sensa Official production.
+
 ## Architecture
 
 ```text
@@ -127,6 +133,15 @@ data/        canonical senses.db, content-addressed MP3 objects and input wordli
 ## Command flow
 
 All commands run from the repository root.
+
+Validate or inspect an externally produced portable package without network, model or TTS
+calls:
+
+```sh
+npm run sensa:package -- pack path/to/authoring-directory path/to/package.sensa
+npm run sensa:package -- validate path/to/package.sensa
+npm run sensa:package -- inspect path/to/package.sensa
+```
 
 Create an isolated Build and load immutable facts without an external call:
 

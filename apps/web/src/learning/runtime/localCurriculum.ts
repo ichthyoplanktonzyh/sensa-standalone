@@ -68,7 +68,8 @@ export function localExecutableTargetForParticipant(
   return localExecutableTarget(target,{...membership,languageContext:participant.languageContext,material:presentedMaterial});
 }
 
-/** The immutable material revision bound when this Step was first made current. */
+/** Material currently bound to this Step. An explicit compatible refresh may
+ * replace it until the learner acts; the acted Step then keeps that revision. */
 export function localPresentedMaterial(
   participant:Pick<LocalLearningRunParticipant,'presentedMaterials'>,
   stepId:string,

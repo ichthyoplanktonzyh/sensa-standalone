@@ -608,6 +608,10 @@ Expression Reveal（instruction，显示 expression + Sense binding）
 
 Experience Recall 同时承担 grounding 与内部回想：必要呈现是经验速写与 Sense 线索，可选辅助资源
 只能进入声明过的 Presentation Slot，并且在 Reveal 前不得以任何形式泄露 target expression。
+当前 Lightweight 路线具有明确的 Support Language，因此兼容的 approved Text Experience Render 可以
+独立满足 Experience Recall。图片、动画和互动属于可选的 Presentation Slot；图片缺失或延期不应使目标
+被判定为未就绪，也不应触发空占位。任何不能依赖 Support Language 文字的学习方式，都必须作为单独、
+显式版本化的 Delivery / Acquisition Profile 被选择，不能由系统静默推断。
 Expression Reveal 必须覆盖目标形式、可感知声音、确切 Sense、经验连接与同场景表达；
 音标、使用框架、补充例句与词源按适用性和真实资源提供。协议和 renderer
 都不得假定 Expression 必然是单词。rating 是 Reveal 上的交互，不是第三个 Step；完成页是 Run

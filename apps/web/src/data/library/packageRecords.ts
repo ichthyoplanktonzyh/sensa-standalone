@@ -5,11 +5,21 @@ import {
  sensaLanguageTagSchema,
  type LearningPackageBundle,
  type LearningPackageDescriptor,
+ type SensaPortableLightweightPackage,
 } from '@sensa/contracts/sensa';
 import {z} from 'zod';
 import {readLibrary} from './store';
 
-export type InstalledPackage={key:string;digest:string;bundle:LearningPackageBundle;installedAt:string};
+/** Public exchange metadata retained with a locally installed `.sensa` artifact.
+ * Media bytes remain in the compiled Runtime content and are reconstructed on export. */
+export type PortablePackageOrigin={
+ format:'sensa-portable-installation-origin-v1';
+ manifest:SensaPortableLightweightPackage;
+ packageDigest:string;
+ archiveDigest:string;
+ validatorVersion:string;
+};
+export type InstalledPackage={key:string;digest:string;bundle:LearningPackageBundle;installedAt:string;portableOrigin?:PortablePackageOrigin};
 
 const digestSchema=z.string().regex(/^[a-f0-9]{64}$/u);
 const artifactBase={

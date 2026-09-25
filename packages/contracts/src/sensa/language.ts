@@ -92,7 +92,7 @@ export const sensaLexiconEdition = 'en' as const;
  * languages the product actually carries are enumerated here rather than
  * inferred from a request. */
 export const sensaLanguages: readonly SensaLanguage[] = [
-  {tag:'zh-CN', iso6393:'cmn', endonym:'中文（简体）', names:{'zh-CN':'中文（简体）', en:'Chinese (Simplified)'}, script:'Hans', direction:'ltr', speechLocale:'zh-CN', wiktionaryCode:'zh', ipa:false, asTarget:false},
+  {tag:'zh-CN', iso6393:'cmn', endonym:'中文（简体）', names:{'zh-CN':'中文（简体）', en:'Chinese (Simplified)'}, script:'Hans', direction:'ltr', speechLocale:'zh-CN', wiktionaryCode:'zh', ipa:false, asTarget:true},
   {tag:'en', iso6393:'eng', endonym:'English', names:{'zh-CN':'英语', en:'English'}, script:'Latn', direction:'ltr', speechLocale:'en-US', wiktionaryCode:'en', ipa:true, asTarget:true},
   {tag:'ja', iso6393:'jpn', endonym:'日本語', names:{'zh-CN':'日语', en:'Japanese'}, script:'Jpan', direction:'ltr', speechLocale:'ja-JP', wiktionaryCode:'ja', ipa:false, asTarget:true},
   {tag:'ko', iso6393:'kor', endonym:'한국어', names:{'zh-CN':'韩语', en:'Korean'}, script:'Kore', direction:'ltr', speechLocale:'ko-KR', wiktionaryCode:'ko', ipa:false, asTarget:true},

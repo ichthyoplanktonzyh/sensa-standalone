@@ -24,7 +24,7 @@ export function validatePackage(raw:unknown){
   for(const resource of entry.content.resources){
    if(resource.contentDigest!==canonicalJsonDigest(resource.contentPayload))throw new Error('localFlow.resourceInvalid');
    const audio=resource.contentPayload.audioUrl;
-   if(audio!=null&&(typeof audio!=='string'||!/^data:audio\/(?:mpeg|mp3|wav|ogg);base64,[A-Za-z0-9+/]+={0,2}$/u.test(audio)))throw new Error('localFlow.audioIncomplete');
+   if(audio!=null&&(typeof audio!=='string'||!/^data:audio\/[A-Za-z0-9.+-]+;base64,[A-Za-z0-9+/]+={0,2}$/u.test(audio)))throw new Error('localFlow.audioIncomplete');
   }
  }
  return bundle;

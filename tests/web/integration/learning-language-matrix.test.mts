@@ -112,9 +112,9 @@ test('learning-language-matrix', async () => {
 
   const targets = sensaLanguageForRole('target');
   const supportLanguages = sensaLanguageForRole('support');
-  assert.equal(targets.length, 17, 'route targets come from the full target-language catalog');
+  assert.equal(targets.length, 18, 'route targets come from the full language catalog');
   assert.equal(supportLanguages.length, 18, 'route support languages come from the full language catalog');
-  assert.equal(targets.length * supportLanguages.length, 306, 'the route model retains the 17 × 18 pair space');
+  assert.equal(targets.length * supportLanguages.length, 324, 'the route model retains the 18 × 18 pair space');
   for (const [index, target] of targets.entries()) {
     for (const support of supportLanguages) {
       const route = sensaLanguageLearningRouteSchema.parse({

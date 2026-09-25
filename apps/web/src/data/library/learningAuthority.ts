@@ -102,14 +102,23 @@ export function assertLearningSystemState(input:LearningSystemStateInput){
    uuid.parse(event.eventId);uuid.parse(event.operationId);timestamp.parse(event.at);if(lifecycleEventIds.has(event.eventId)||Date.parse(event.at)<Date.parse(saved.startedAt))fail();lifecycleEventIds.add(event.eventId);
    const operation=operationInput(event.operationId);
    if(event.kind==='interrupted_by_planning_override'){
-    if(openInterruption||event.overrideKind!=='declared_mastery'||!ids.includes(event.targetId)||operation&&(operation.kind!=='learning.declareMastery'||operation.input.targetId!==event.targetId||operation.input.active!==true||operation.input.at!==event.at))fail();
-    openInterruption=event;
+   if(openInterruption||event.overrideKind!=='declared_mastery'||!ids.includes(event.targetId)||operation&&(operation.kind!=='learning.declareMastery'||operation.input.targetId!==event.targetId||operation.input.active!==true||operation.input.at!==event.at))fail();
+   openInterruption=event;
    }else if(event.kind==='resumed_after_planning_override'){
     if(!openInterruption||event.interruptionEventId!==openInterruption.eventId||operation&&(operation.kind!=='learning.start'||operation.input.at!==event.at||!ids.includes(operation.input.targetId)))fail();
-    openInterruption=null;
+   openInterruption=null;
    }else if(event.kind==='current_step_material_refreshed'){
-    const participant=saved.participants[event.targetId]??fail(),target=requireRow('learningTargets',event.targetId),membership=target.curriculumMemberships.find((candidate:any)=>candidate.id===participant.curriculumMembershipId),attempt=requireRow('contentAttempts',event.operationId),task=requireRow('personalLearning',attempt.taskId),sourceMaterializationId=stableUuid(`sensa-personal-material:${event.operationId}`);
-    if(attempt.status!=='ready'||task.targetId!==event.targetId||membership?.sourceKind!=='personal_meaning_alignment'||!ids.includes(event.targetId)||!participant.presentedMaterials?.[event.stepId]||operation&&(operation.kind!=='personal.prepare'||attempt.taskId!==operation.input.id)||event.eventId!==stableUuid(`local-run-material-refresh:${saved.id}:${event.operationId}:${event.stepId}`)||event.materializationId!==stableUuid(`local-run-materialization:${participant.protocolRunId}:${sourceMaterializationId}`))fail();
+    const participant=saved.participants[event.targetId]??fail(),target=requireRow('learningTargets',event.targetId),presented=participant.presentedMaterials?.[event.stepId];
+    if(!ids.includes(event.targetId)||!presented||event.eventId!==stableUuid(`local-run-material-refresh:${saved.id}:${event.operationId}:${event.stepId}`))fail();
+    const presentedPackageKey=typeof presented.snapshot.provenance.packageKey==='string'?presented.snapshot.provenance.packageKey:null,portablePack=presentedPackageKey?maps.packageCache.get(presentedPackageKey):undefined;
+    if(portablePack?.portableOrigin){
+     const packageKey=presentedPackageKey!,refreshedMembership=target.curriculumMemberships.find((candidate:any)=>candidate.packageKey===packageKey&&candidate.languageContext.languageRouteId===participant.languageContext.languageRouteId);
+     const sourceMaterializationId=refreshedMembership?.material.snapshot.learningMaterializationId;
+     if(!sourceMaterializationId||operation&&(operation.kind!=='learning.enroll'||operation.input.key!==packageKey)||event.materializationId!==stableUuid(`local-run-materialization:${participant.protocolRunId}:${sourceMaterializationId}`))fail();
+    }else{
+     const membership=target.curriculumMemberships.find((candidate:any)=>candidate.id===participant.curriculumMembershipId),attempt=requireRow('contentAttempts',event.operationId),task=requireRow('personalLearning',attempt.taskId),sourceMaterializationId=stableUuid(`sensa-personal-material:${event.operationId}`);
+     if(attempt.status!=='ready'||task.targetId!==event.targetId||membership?.sourceKind!=='personal_meaning_alignment'||operation&&(operation.kind!=='personal.prepare'||attempt.taskId!==operation.input.id)||event.materializationId!==stableUuid(`local-run-materialization:${participant.protocolRunId}:${sourceMaterializationId}`))fail();
+    }
    }else fail();
   }
   if(localRunOpenPlanningInterruption(saved)?.eventId!==openInterruption?.eventId)fail();
@@ -127,7 +136,7 @@ export function assertLearningSystemState(input:LearningSystemStateInput){
     validateLightweightInitialMaterialization(material);const materialProvenance=material.snapshot.provenance as any;
     if(material.snapshot.learningTargetId!==id||material.snapshot.learnerUserId!==identity.learnerId||material.snapshot.protocolPurpose!==saved.purpose||materialProvenance.senseId!==target.identity.senseId||materialProvenance.senseVersionId!==target.identity.senseVersionId||materialProvenance.bindingId!==target.identity.senseExpressionBindingId||materialProvenance.bindingVersionId!==target.identity.bindingVersionId)fail();
     if(membership.sourceKind==='sense_learning_package'){
-     const membershipPackageKey=z.string().min(1).parse(membership.packageKey),pack=requireRow('packageCache',membershipPackageKey),entry=pack.bundle.entries.find((candidate:any)=>candidate.senseVersionId===materialProvenance.senseVersionId&&candidate.bindingVersionId===materialProvenance.bindingVersionId);
+     const materialPackageKey=z.string().min(1).parse(materialProvenance.packageKey??membership.packageKey),pack=requireRow('packageCache',materialPackageKey),entry=pack.bundle.entries.find((candidate:any)=>candidate.senseVersionId===materialProvenance.senseVersionId&&candidate.bindingVersionId===materialProvenance.bindingVersionId);
      if(!entry||!backupEqual(entry.content,baseContentBeforeSupplement(material,participant.languageContext.supportLanguageTag)))fail();
     }else{
      const attempt=requireRow('contentAttempts',materialProvenance.attemptId);if(attempt.status!=='ready'||!backupEqual(attempt.validation?.content,baseContentBeforeSupplement(material,participant.languageContext.supportLanguageTag)))fail();
@@ -446,7 +455,10 @@ async function assertLifecycleRunTransition(input:LearningSystemTransitionInput,
   if(event.operationId!==input.operation.id||!['learning.start','learning.continue'].includes(input.operation.kind)||!open||event.interruptionEventId!==open.eventId||event.at!==command.at||!backupEqual(before.participants,after.participants))reject('Learning Run resume is invalid.');
  }else if(event.kind==='current_step_material_refreshed'){
   const command=input.operation.input as any;
-  if(input.operation.kind!=='personal.progress'||event.operationId!==command.attemptId||event.eventId!==stableUuid(`local-run-material-refresh:${after.id}:${event.operationId}:${event.stepId}`)||event.materializationId!==after.participants[event.targetId]?.presentedMaterials[event.stepId]?.snapshot.learningMaterializationId)reject('Learning Run material refresh is invalid.');
+  const refreshed=after.participants[event.targetId]?.presentedMaterials[event.stepId];
+  const personal=input.operation.kind==='personal.progress'&&event.operationId===command.attemptId;
+  const portable=input.operation.kind==='learning.enroll'&&event.operationId===input.operation.id&&refreshed?.snapshot.provenance.packageKey===command.key;
+  if(!personal&&!portable||event.eventId!==stableUuid(`local-run-material-refresh:${after.id}:${event.operationId}:${event.stepId}`)||event.materializationId!==refreshed?.snapshot.learningMaterializationId)reject('Learning Run material refresh is invalid.');
   const normalized=structuredClone(after),previousMaterial=before.participants[event.targetId]?.presentedMaterials[event.stepId];
   if(!previousMaterial||!normalized.participants[event.targetId])reject('Learning Run material refresh has no prior Step material.');
   normalized.participants[event.targetId]!.presentedMaterials[event.stepId]=structuredClone(previousMaterial);

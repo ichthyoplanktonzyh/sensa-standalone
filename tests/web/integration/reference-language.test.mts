@@ -117,10 +117,10 @@ try{
   assert.equal(spanishResult.entry.pronunciations[0]?.accent,'es','a non-English recording is never relabelled as an English accent');
   assert.equal(spanishResult.entry.pronunciations[0]?.ipa,'/ˈola/','pronunciation evidence the provider returned is kept');
 
-  // The exact configured 17 targets each select their own Wiktionary group;
+  // The exact configured 18 targets each select their own Wiktionary group;
   // no target is inferred from the English fallback provider.
   const targets=sensaLanguages.filter(language=>language.asTarget);
-  assert.equal(targets.length,17);
+  assert.equal(targets.length,18);
   const supportLanguages=sensaLanguages;
   assert.equal(supportLanguages.length,18);
   for(const [index,language] of targets.entries()){
@@ -232,10 +232,9 @@ try{
   assert.equal(spanishLemma.lemma,'se tomó','the occurrence is kept as the learner clicked it');
   assert.equal(api.resolveLookupLemma('Took',sensaLanguage('en')).lemma,'take','an English occurrence still lemmatizes');
 
-  // A target language this release cannot place answers nothing at all.
+  // A language outside the catalog answers nothing at all.
   const beforeUnknown=requested.length;
   assert.equal(await api.lookupReference('hola',{languages:{supportLanguageTag:'zh-CN',targetLanguageTag:'xx-unknown'}}),null,'an unplaceable language cannot be answered in another language');
-  assert.equal(await api.lookupReference('hola',{languages:{supportLanguageTag:'zh-CN',targetLanguageTag:'zh-CN'}}),null,'a language that this release cannot teach as a Target Language reaches no provider');
   assert.equal(requested.length,beforeUnknown,'an unplaceable language reaches no provider');
 
   // With no explicit context the learner's active Route decides, which is what

@@ -4,7 +4,7 @@ import {readFile, readdir, writeFile} from 'node:fs/promises';
 import {join, resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
-const expectedCasesPerSuite = 306;
+const expectedCasesPerSuite = 324;
 const allowedSuites = ['business', 'web', 'extension'];
 const pairPattern = /^[a-zA-Z0-9-]{2,40}--[a-zA-Z0-9-]{2,40}$/u;
 const reviewStatuses = new Set(['pass', 'fail', 'blocked', 'uncertain']);

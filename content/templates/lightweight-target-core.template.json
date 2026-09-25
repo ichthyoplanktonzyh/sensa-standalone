@@ -1,0 +1,31 @@
+{
+  "schema_version": "sensa.lightweight-target-core.authoring.v1",
+  "sense_id": "ids:0-000",
+  "target_language": "en",
+  "target_core": {
+    "target_expression": {
+      "text": "target expression"
+    },
+    "pronunciation": {
+      "ipa": "/IPA/",
+      "tts_text": "target expression",
+      "audio": {
+        "status": "pending"
+      }
+    },
+    "scene_realization": {
+      "example": "Write one original, natural target-language example.",
+      "audio": {
+        "status": "pending"
+      }
+    },
+    "optional": {}
+  },
+  "visual_shared": {
+    "value": "normal",
+    "status": "deferred",
+    "role": "assisted",
+    "purpose": "experience_recall_cue"
+  },
+  "research_notes": []
+}

@@ -10,7 +10,7 @@ import {
 } from "./learningContent.js";
 
 export * from "./learningResourceDefinitions.js";
-import {sensaLightweightExpressionKindSchema,sensaLightweightExpressionSnapshotSchema,sensaLightweightSenseSnapshotSchema,sensaLightweightOriginExperienceSchema,sensaLightweightReferenceFactSchema,sensaLightweightTargetExpressionMaterialSchema,sensaLightweightExperienceRecallCueSchema,sensaLightweightRecallSupportSchema,LEARNING_RESOURCE_DEFINITIONS} from "./learningResourceDefinitions.js";
+import {sensaLightweightExpressionKindSchema,sensaLightweightExpressionSnapshotSchema,sensaLightweightSenseSnapshotSchema,sensaLightweightOriginExperienceSchema,sensaLightweightReferenceFactSchema,sensaLightweightTargetExpressionMaterialSchema,LEARNING_RESOURCE_DEFINITIONS} from "./learningResourceDefinitions.js";
 export type SensaLightweightInitialMaterialRole = keyof typeof LIGHTWEIGHT_RESOURCE_PROFILE;
 
 export const LIGHTWEIGHT_INITIAL_CONTENT_DEMAND_KEY =
@@ -164,12 +164,6 @@ export const SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND =
 
 export const lightweightInitialRolePayloadSchema = (role: SensaLightweightInitialMaterialRole): z.ZodType => LEARNING_RESOURCE_DEFINITIONS[role].schema;
 
-const normalizeDisclosureText = (value: string): string => value
-  .normalize("NFKC")
-  .trim()
-  .replace(/\s+/gu, " ")
-  .toLocaleLowerCase();
-
 /** Persisted payload validation does not rely on the generation request still being present. */
 export const sensaLightweightInitialMaterializationContentSchema =
   sensaLearningMaterializationContentSchema.superRefine((content, context) => {
@@ -267,31 +261,6 @@ export const sensaLightweightInitialMaterializationContentSchema =
           const start = payload.targetStart as number, end = payload.targetEnd as number;
           if (typeof payload.example !== 'string' || !Number.isInteger(start) || !Number.isInteger(end) || start < 0 || start >= end || end > payload.example.length || !(payload.example as string).slice(start,end).trim() || payload.experienceResourceKey !== 'experience_recall_cue:0') context.addIssue({code:'custom',path:['resources'],message:'Scene realization requires an in-bounds nonempty target span and experience binding. Word-form and Sense fidelity are language-content judgments, not string equality checks.'});
         }
-      }
-      const normalizedExpression = normalizeDisclosureText(targetExpression.data.surface);
-      const preRevealTexts = content.resources.flatMap((resource) => {
-        if (resource.materialRoleKey === "experience_recall_cue") {
-          const payload = sensaLightweightExperienceRecallCueSchema.safeParse(
-            resource.contentPayload,
-          );
-          return payload.success ? [payload.data.scene, payload.data.senseFocus, payload.data.html ?? ''] : [];
-        }
-        if (resource.materialRoleKey === "recall_support") {
-          const payload = sensaLightweightRecallSupportSchema.safeParse(resource.contentPayload);
-          return payload.success ? [payload.data.text] : [];
-        }
-        return [];
-      });
-      if (
-        normalizedExpression.length > 0
-        && preRevealTexts.some((value) =>
-          normalizeDisclosureText(value).includes(normalizedExpression))
-      ) {
-        context.addIssue({
-          code: "custom",
-          path: ["resources"],
-          message: "Pre-reveal Lightweight material discloses the target expression.",
-        });
       }
     }
   });

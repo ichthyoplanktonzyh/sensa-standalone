@@ -57,6 +57,20 @@ const browserContext =
 /** One natural, concrete, and lexically searchable expression for each target. */
 export const languageTargetFixtures: readonly LanguageTargetFixture[] = [
   {
+    targetLanguageTag: "zh-CN",
+    expression: "水",
+    sentence: "窗台上的罗勒需要水。",
+    semanticBaselineEnglish:
+      "The liquid that a basil plant absorbs through its roots to stay healthy.",
+    browserContext,
+    expectedLabels: {
+      targetLanguageTag: "zh-CN",
+      supportLanguageTag: "",
+      expression: "水",
+      senseEnglish,
+    },
+  },
+  {
     targetLanguageTag: "en",
     expression: "Water",
     sentence: "Water is essential for the basil on my windowsill.",

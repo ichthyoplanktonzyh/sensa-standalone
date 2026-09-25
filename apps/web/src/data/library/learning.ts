@@ -78,9 +78,9 @@ const materialForProtocolRun=(material:LocalLearningMaterialization,purpose:Loca
 const sameRunLanguagePair=(left:SensaFormalPinnedLanguageContext,right:SensaFormalPinnedLanguageContext)=>
  left.languageRouteId===right.languageRouteId&&left.targetLanguageTag===right.targetLanguageTag&&left.supportLanguageTag===right.supportLanguageTag;
 
-/** Bind the current Step to the newest compatible material. Once bound, normal
- * navigation leaves it untouched; an explicit personal-material publication
- * may replace the still-current, not-yet-acted Step and increments Run revision. */
+/** Bind the current Step to the newest compatible material. Once the learner
+ * acts, its presented material becomes history. Before that action, an explicit
+ * personal-material publication or Portable update may refresh the current Step. */
 async function bindCurrentStepMaterial(tx:LibraryTransaction,run:LocalLearningRun,at:string,replace=false,operationId?:string):Promise<boolean>{
  if(run.completedAt)return false;
  const execution=localExecutionForRun(run),targetId=localProtocolActiveTargetId(execution,run),participant=run.participants[targetId];
@@ -89,7 +89,12 @@ async function bindCurrentStepMaterial(tx:LibraryTransaction,run:LocalLearningRu
  const previous=participant.presentedMaterials[stepId];
  if(!replace&&previous)return false;
  const target=await tx.get<LocalLearningTarget>('learningTargets',targetId);if(!target)throw new Error('localFlow.enrollFirst');
- const membership=target.curriculumMemberships.find(candidate=>candidate.id===participant.curriculumMembershipId&&sameRunLanguagePair(candidate.languageContext,participant.languageContext));
+ const pinnedMembership=target.curriculumMemberships.find(candidate=>candidate.id===participant.curriculumMembershipId&&sameRunLanguagePair(candidate.languageContext,participant.languageContext));
+ const currentMembership=localCurriculumMembershipForContext(target,participant.languageContext);
+ const currentPack=currentMembership?.packageKey?await tx.get<InstalledPackage>('packageCache',currentMembership.packageKey):undefined;
+ // Book Releases keep their explicit enrollment semantics. Portable packages
+ // behave like an imported editable note: unfinished Steps use current material.
+ const membership=currentPack?.portableOrigin?currentMembership:pinnedMembership;
  const material=membership?materialForProtocolRun(replace?membership.material:materialForNextStep(participant.material,membership.material),run.purpose,participant.protocolRunId,at):structuredClone(participant.material);
  assertLocalTargetMaterialIdentity(target,material);validateLightweightInitialMaterialization(material);
  const executable=localExecutableTargetForParticipant(target,participant,material),pack=executable.packageKey?await tx.get<InstalledPackage>('packageCache',executable.packageKey):undefined;
@@ -129,6 +134,11 @@ export async function enrollPackage(operationId:string,key:string,languageContex
  if(pack.bundle.targetLanguage!==context.targetLanguageTag)throw new Error('localFlow.routeLanguageMismatch');
  if(pack.bundle.supportLanguage!==context.supportLanguageTag)throw new Error('localFlow.routeSupportMismatch');
  const bookId=learningBundleBookId(pack.bundle),bookVersionId=learningBundleBookVersionId(pack.bundle),packageVersion=learningBundleVersionLabel(pack.bundle),contentReleaseId=learningBundleContentReleaseId(pack.bundle),now=new Date().toISOString();
+ if(pack.portableOrigin){
+  const familyId=pack.portableOrigin.manifest.metadata.packageId,requestedVersion=pack.portableOrigin.manifest.metadata.version;
+  const latestVersion=Math.max(...(await tx.all<InstalledPackage>('packageCache')).flatMap(candidate=>candidate.portableOrigin?.manifest.metadata.packageId===familyId&&candidate.bundle.targetLanguage===pack.bundle.targetLanguage&&candidate.bundle.supportLanguage===pack.bundle.supportLanguage?[candidate.portableOrigin.manifest.metadata.version]:[]));
+  if(requestedVersion<latestVersion)throw new Error('localFlow.packageVersionChanged');
+ }
  if(bookVersionId){
   const supersededTargetIds=await tx.learningTargetIdsForBookUpgrade(context.languageRouteId,context.targetLanguageTag,context.supportLanguageTag,bookId,bookVersionId);
   for(const targetId of supersededTargetIds){
@@ -154,7 +164,9 @@ export async function enrollPackage(operationId:string,key:string,languageContex
   const membership=curriculumMembership({operationId,targetId:id,sourceKey:key,languageContext:context,sourceKind:'sense_learning_package',provenance:source,packageKey:key,assurancePackageKey:e.assurancePackageKey,material,at:snapshot.createdAt});
   if(existing){
    if(existing.curriculumMemberships.some(candidate=>candidate.id===membership.id))continue;
-   tx.put('learningTargets',id,upsertLocalCurriculumMembership(existing,membership));continue;
+   tx.put('learningTargets',id,upsertLocalCurriculumMembership(existing,membership));
+   if(pack.portableOrigin)await refreshCurrentStepsForMaterial(tx,id,now,operationId);
+   continue;
   }
   const target:LocalLearningTarget={id,retentionId:stableUuid(`sensa-retention:${id}`),identity:{learnerUserId:owner.learnerId,senseId:e.senseId,senseVersionId:e.senseVersionId,senseExpressionBindingId:e.bindingId,bindingVersionId:e.bindingVersionId,targetLanguageTag:pack.bundle.targetLanguage},curriculumMemberships:[membership],expression:e.expression,policyAssignment:createPolicyAssignment({operationId,targetId:id,profileId,scope:'curriculum_source',at:snapshot.createdAt,provenance:{bookId,bookVersionId,contentReleaseId,packageVersion}}),committedPolicy:null,planningOverrides:[],targetLanguageTag:pack.bundle.targetLanguage,introducedLanguageRouteId:null,createdAt:snapshot.createdAt,startedAt:null,completedAt:null,memory:null,memoryRevision:0,relearnAt:null,relearningState:null};
   tx.put('learningTargets',id,target);

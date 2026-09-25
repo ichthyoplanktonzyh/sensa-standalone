@@ -471,7 +471,9 @@ Pinned Language Context 固定 Route revision、Target Language 与 Support Lang
 再声明 Input Language 与 Output Language。阅读中的 target-language input 与 support-language explanation、
 反向写作中的 support-language prompt 与 target-language output 因而不会改变 Route 的方向。Session
 开始后的 Active Route Selection 或 Interface Locale 变化不能重绑 Session、Encounter 或已发生 Action
-的资源。只有上述同一 Membership 与固定语言方向内的材料新版，才能刷新尚未操作的 Step。
+的资源。只有同一 Learning Target、固定语言方向与兼容内容来源内显式发布或应用的材料新版，才能刷新
+尚未操作的 Step；这包括同一 Membership 的个人材料 revision，以及同一 Portable package family 的
+更高版本，但不包括普通设置变化或语义 identity 改变。
 
 ### `mixed`
 

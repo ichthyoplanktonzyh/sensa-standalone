@@ -514,6 +514,16 @@ Python `content/tools/spoken_resource.py` 只属于离线 Book 制作管线。�
 `123456`。个人学习声音仍由浏览器当前选择的客户端 provider 生成；省略 `--models` 时托管模型暂停。
 可通过 `SENSA_TTS_PYTHON` 指定装有 `content/requirements.txt` 依赖的 Python。
 
+Portable Lightweight Package 由 Content Supply System 的单一 interface 提供预览、安装和导出。UI 不读取
+ZIP 路径、不解析媒体，也不直接构造 Runtime content；内部 adapter 校验 `.sensa`、规范化归档、编译到
+现有 Lightweight material roles，并在一个 `package.install` transaction 中保存 installation fact 与本机
+cache。预览只读，导入不自动 enrollment。导出从保留的公开 manifest 与已冻结媒体重建确定性归档，并
+核对安装时的 package/archive digest。Portable update 不复用 Book Release 的 superseded membership 语义：
+Package 是导入载体，稳定 Target 保留进度并选择最新已应用材料，identity 改变则新增 Target 且不自动删除
+旧 Target。当前未操作 Step 通过受 Learning authority 校验的 material refresh lifecycle event 切到新版；
+已操作 Step 的 material fact 不改写。完整边界由
+`tests/web/integration/portable-package-loop.test.mts` 覆盖。
+
 `python3 content/tools/smoke_spoken_resource.py` 验证 provider 替换、缓存隔离、损坏检测与外部调用门控；
 `tests/web/integration/speech-provider.test.mts` 验证 provider 替换、默认 Edge wire adapter、输入身份和已保存音频
 合同；以上不调用真实服务。

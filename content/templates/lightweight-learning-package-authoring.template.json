@@ -1,0 +1,63 @@
+{
+  "schema_version": "sensa.lightweight-learning-package.authoring.v2",
+  "sense": {
+    "id": "ids:0-000",
+    "idea": "用支持语言简短描述这个共同概念或体验",
+    "target": "target expression",
+    "avoid": "仅在容易串义时说明不包含什么"
+  },
+  "route": {
+    "target": "en",
+    "support": "zh-CN"
+  },
+  "target_core": {
+    "target_expression": {
+      "text": "target expression"
+    },
+    "pronunciation": {
+      "ipa": "/IPA/",
+      "tts_text": "target expression",
+      "audio": {
+        "status": "pending"
+      }
+    },
+    "scene_realization": {
+      "example": "Write one original, natural target-language example.",
+      "audio": {
+        "status": "pending"
+      }
+    },
+    "optional": {}
+  },
+  "support_overlay": {
+    "experience_recall_cue": {
+      "text": "先用支持语言唤起经验，不泄露目标表达。"
+    },
+    "sense_confirmation": {
+      "text": "揭示后简短确认当前 Sense。"
+    },
+    "scene_bridge": {
+      "text": "说明目标表达为何适合刚才的经验。"
+    },
+    "scene_translation": {
+      "text": "目标语言原创例句的自然翻译。"
+    },
+    "optional": {}
+  },
+  "visual": {
+    "value": "normal",
+    "status": "deferred",
+    "role": "assisted",
+    "purpose": "experience_recall_cue",
+    "brief": "留下一句将来可以直接用于生成图片的说明。",
+    "must_show": [
+      "真正有助于识别当前 Sense 的主体或关系"
+    ],
+    "must_avoid": [
+      "文字、标签、水印、品牌和竞争性歧义"
+    ],
+    "alt_text": "描述图片将表达的经验；图片延后时不会进入 learner 内容。"
+  },
+  "research_notes": [],
+  "confidence_notes": []
+}

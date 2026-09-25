@@ -131,7 +131,8 @@ export function appendResourceSupplement(
   return material;
 }
 
-/** A newly admitted Hybrid supplement affects future Steps, never an already pinned Step. */
+/** Select material for a Step that has not been acted. A compatible publication
+ * may explicitly rebind the current Step before its first action. */
 export function materialForNextStep(
   current: LocalLearningMaterialization,
   published: LocalLearningMaterialization,

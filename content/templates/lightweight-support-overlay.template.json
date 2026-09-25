@@ -1,0 +1,35 @@
+{
+  "schema_version": "sensa.lightweight-support-overlay.authoring.v1",
+  "core_ref": {
+    "sense_id": "ids:0-000",
+    "target_language": "en",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "support_language": "zh-CN",
+  "sense_text": {
+    "idea": ""
+  },
+  "support_overlay": {
+    "experience_recall_cue": {
+      "text": ""
+    },
+    "sense_confirmation": {
+      "text": ""
+    },
+    "scene_bridge": {
+      "text": ""
+    },
+    "scene_translation": {
+      "text": ""
+    },
+    "optional": {}
+  },
+  "visual_text": {
+    "brief": "",
+    "must_show": [],
+    "must_avoid": [],
+    "alt_text": ""
+  },
+  "research_notes": [],
+  "confidence_notes": []
+}

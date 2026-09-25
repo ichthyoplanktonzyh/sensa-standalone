@@ -20,6 +20,12 @@ export const generationResourceContracts=(request:SensaContentGenerationRequest)
  return [{role:role.materialRoleKey,required:role.required,maxItems:role.maxItems,instruction:definition.instruction,schema:z.toJSONSchema(role.materialRoleKey==='experience_recall_cue'?cueSchema.omit({imageIds:true}):role.materialRoleKey==='scene_realization'?generatedSceneSchema:definition.schema,{unrepresentable:'any'})}];
 });
 const contractVersion='sensa-learning-content-v3' as const;
+const normalizedDisclosureText=(value:string)=>value.normalize('NFKC').trim().replace(/\s+/gu,' ').toLocaleLowerCase();
+const preRevealTexts=(role:string,payload:Record<string,unknown>):string[]=>{
+ if(role==='experience_recall_cue')return [payload.scene,payload.senseFocus,payload.html].filter((value):value is string=>typeof value==='string');
+ if(role==='recall_support')return typeof payload.text==='string'?[payload.text]:[];
+ return [];
+};
 
 /** The languages a request is about, read back out of the artifacts it froze.
  * A caller must not re-read the active Route: material for a sense belongs to
@@ -104,6 +110,10 @@ export async function validateBundle(request:SensaContentGenerationRequest,bundl
    pass=pass&&!!fact&&candidate.sourceArtifactIds.includes(fact.artifactId)&&canonicalConsumerJson(payload)===canonicalConsumerJson(expected)&&candidate.productionMethod!=='model_generation';
   }
   if(definition.generation==='model')pass=pass&&payload.audioUrl==null&&candidate.sourceArtifactIds.includes(sense.artifactId)&&(review===null||review.accepted);
+  if(role.validatorPolicies.some(policy=>policy.validatorPolicyId==='lightweight.pre-reveal-non-disclosure')){
+   const target=normalizedDisclosureText(String(expression.payload.surface??''));
+   pass=pass&&!!target&&!preRevealTexts(candidate.materialRoleKey,payload).some(text=>normalizedDisclosureText(text).includes(target));
+  }
   if(['scene_bridge','scene_realization'].includes(candidate.materialRoleKey))pass=pass&&!!cue&&candidate.sourceMaterialCandidateIds.includes(cue.materialCandidateId);
   if(candidate.materialRoleKey==='experience_recall_cue'&&payload.images){const originals=sensaContextImagesSchema.parse(request.contextArtifacts.find(a=>a.contextKind==='origin_experience')?.payload.images??[]);pass=pass&&sensaContextImagesSchema.parse(payload.images).every(image=>originals.some(original=>canonicalConsumerJson(original)===canonicalConsumerJson(image)));}
   validations.push({contractVersion,materialCandidateValidationId:crypto.randomUUID(),materialCandidateId:candidate.materialCandidateId,status:pass?'accepted':'rejected',validatorResults:role.validatorPolicies.map(p=>({...p,status:pass?'passed':'failed',issueCodes:pass?[]:['material_rejected']})),validatedAt:now.toISOString()});

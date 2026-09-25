@@ -120,6 +120,18 @@ export const executeContentSupplyCommand = async (command: ContentSupplyCommand)
       const { installPackage } = await import('../../data/library/packages');
       return installPackage(command.bytes, undefined, command.signal);
     }
+    case 'preview_portable_package': {
+      const {previewPortablePackage}=await import('../portable/portablePackage');
+      return previewPortablePackage(command.bytes);
+    }
+    case 'install_portable_package': {
+      const {installPortablePackage}=await import('../portable/portablePackage');
+      return installPortablePackage(command.bytes,command.expectedArchiveDigest,command.signal);
+    }
+    case 'export_portable_package': {
+      const {exportPortablePackage}=await import('../portable/portablePackage');
+      return exportPortablePackage(command.packageKey);
+    }
     case 'prepare_materialization': {
       const {
         personalLearningControlSnapshot,

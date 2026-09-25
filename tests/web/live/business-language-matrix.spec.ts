@@ -30,11 +30,11 @@ test.setTimeout(15 * 60 * 1000);
 // There is no visual assertion. Browser traces can retain model and learner text.
 test.use({trace: 'off', screenshot: 'off', locale: 'en-US'});
 
-if (limit !== undefined && (!/^\d+$/u.test(limit) || Number(limit) < 1 || Number(limit) > 306)) {
-  throw new Error('SENSA_LIVE_CASE_LIMIT must be an integer from 1 to 306.');
+if (limit !== undefined && (!/^\d+$/u.test(limit) || Number(limit) < 1 || Number(limit) > 324)) {
+  throw new Error('SENSA_LIVE_CASE_LIMIT must be an integer from 1 to 324.');
 }
-if (!Number.isInteger(startIndex) || startIndex < 0 || startIndex > 305) {
-  throw new Error('SENSA_LIVE_CASE_START must be an integer from 0 to 305.');
+if (!Number.isInteger(startIndex) || startIndex < 0 || startIndex > 323) {
+  throw new Error('SENSA_LIVE_CASE_START must be an integer from 0 to 323.');
 }
 const selected = languageMatrixCases
   .filter(item => !filter || `${item.targetLanguageTag}--${item.supportLanguageTag}` === filter)

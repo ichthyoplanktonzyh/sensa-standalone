@@ -61,15 +61,15 @@ function parseArguments(arguments_) {
     }
     else if (argument === '--start' || argument.startsWith('--start=')) {
       const value = argument === '--start' ? arguments_[++index] : argument.slice('--start='.length);
-      if (!/^\d+$/u.test(value ?? '') || Number(value) > 305) {
-        throw new Error('--start must be a zero-based integer from 0 to 305');
+      if (!/^\d+$/u.test(value ?? '') || Number(value) > 323) {
+        throw new Error('--start must be a zero-based integer from 0 to 323');
       }
       parsed.start = Number(value);
     }
     else if (argument === '--limit' || argument.startsWith('--limit=')) {
       const value = argument === '--limit' ? arguments_[++index] : argument.slice('--limit='.length);
-      if (!/^\d+$/u.test(value ?? '') || Number(value) < 1 || Number(value) > 306) {
-        throw new Error('--limit must be an integer from 1 to 306');
+      if (!/^\d+$/u.test(value ?? '') || Number(value) < 1 || Number(value) > 324) {
+        throw new Error('--limit must be an integer from 1 to 324');
       }
       parsed.limit = Number(value);
     } else if (argument === '--case' || argument.startsWith('--case=')) {
@@ -86,12 +86,12 @@ function parseArguments(arguments_) {
   if (parsed.caseKey && parsed.limit) throw new Error('Use either --case or --limit, not both');
   if (parsed.caseKey && parsed.start) throw new Error('--start cannot be combined with --case');
   if (parsed.start && parsed.limit === undefined) throw new Error('--start requires --limit');
-  if (parsed.start + (parsed.limit ?? 0) > 306) throw new Error('--start plus --limit exceeds the 306-pair matrix');
+  if (parsed.start + (parsed.limit ?? 0) > 324) throw new Error('--start plus --limit exceeds the 324-pair matrix');
   if (parsed.preflight && (parsed.webOnly || parsed.extensionOnly || parsed.start || parsed.limit || parsed.caseKey || parsed.dryRun)) {
     throw new Error('--preflight runs alone and does not accept suite or case selectors');
   }
   if ((parsed.webOnly || parsed.extensionOnly) && !parsed.caseKey && parsed.limit === undefined) {
-    throw new Error('UI smoke requires --case or --limit (up to 6); the 306-pair matrix uses the default business suite.');
+    throw new Error('UI smoke requires --case or --limit (up to 6); the 324-pair matrix uses the default business suite.');
   }
   if ((parsed.webOnly || parsed.extensionOnly) && parsed.limit !== undefined && parsed.limit > 6) {
     throw new Error('UI smoke accepts at most 6 language pairs.');
