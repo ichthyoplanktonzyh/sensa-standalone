@@ -1,7 +1,7 @@
 # Learning Package Content Production SOP
 
 > 状态：当前内容生产操作规范
-> 更新日期：2026-09-24
+> 更新日期：2026-09-25
 
 本文定义 Sensa 轻量学习包的生产约定，包括 Sense 选批、Luna 分工、文本与媒体生产、确定性校验、失败恢复，以及同一目标语言材料在多个支持语言之间的复用方式。
 
@@ -9,7 +9,8 @@
 
 Target Core、Support Overlay 和本文的 Luna 分工只服务 Sensa Official 内部生产，不是外部作者合同。
 外部作者只面对最终的 [Portable Lightweight Package](../../content/portable-lightweight-package.md)，可以用
-任意方法制作通过公共 Runtime 准入校验的 `.sensa` 文件。
+任意方法制作通过公共 Runtime 准入校验的 `.sensa` 文件；Sensa Official 的作者文件在发布前也必须编译
+到同一合同。Official 内容可以额外接受更严格的编辑和发布门禁，但不存在 Runtime 私有交付格式。
 
 ## 1. 生产目标与原则
 
@@ -333,7 +334,10 @@ voice、locale、rate 和格式由目标语言配置表决定，不由每个 Lun
 - 缺失或文本摘要不匹配的音频只补相应音频；
 - 已存在且校验通过的资源直接复用。
 
-每个 Sense 的 Core 和 Overlay 作者文件都通过后，工具重新生成批次索引并形成不可变候选。作者输出和批次候选都不是 Published Package 或 Learning Materialization；发布、安装和 Materialization 仍按正式 Content Supply 流程进行。
+每个 Sense 的 Core 和 Overlay 作者文件都通过后，工具重新生成批次索引并形成不可变候选。作者输出和
+批次候选都不是 Published Package 或 Learning Materialization；正式发布出口为每个 Sense 构建通过公共
+准入的 `.sensa`，再由 Book Version Manifest 组织有序集合。安装和 Materialization 仍按 Content Supply
+流程进行。
 
 ## 7. 断点续作与幂等
 

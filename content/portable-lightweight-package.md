@@ -1,8 +1,10 @@
 # Portable Lightweight Package v1
 
-Portable Lightweight Package 是外部作者与 Sensa 轻量学习 Runtime 之间的公开接口。作者可以使用任意
-编辑器、表格、脚本、Agent 或内部数据模型；Sensa 只接收最终的 `.sensa` 文件，不要求作者采用官方
-生产中的 Target Core、Support Overlay、Luna 分工或批次目录。
+Portable Lightweight Package 是所有可分发轻量学习内容与 Sensa Runtime 之间的公开接口，包括 Sensa
+Official 策展内容、外部作者内容，以及 learner 明确选择导出的个人生成内容。生产者可以使用任意编辑器、
+表格、脚本、Agent 或内部数据模型；Sensa 只在交换和安装边界接收最终的 `.sensa` 文件，不要求生产者采用
+官方生产中的 Target Core、Support Overlay、Luna 分工或批次目录。Official 身份、策展关系和质量等级由
+Registry provenance 或其他独立验证给出，不能由文件自报，也不改变公共 Runtime 准入合同。
 
 ## 文件形态
 
@@ -21,7 +23,12 @@ example.sensa
 因此普通用户仍然只分享一个 `.sensa` 文件，同时避免 Base64 的体积和解析开销。
 
 裸 `package.json` 和对应的 `media/` 目录只是一种作者工作区，可供编辑器、脚本或第三方工具使用；
-`.sensa` 是面向导入、私下分享和未来公共目录的唯一正式交换格式。
+`.sensa` 是面向导入、私下分享和公共目录的唯一正式 Lightweight 交换格式。Book Version Manifest 可以
+按顺序引用多份 `.sensa`，但不成为第二种可执行内容格式。
+
+Web 内容生成 Agent 的普通成功产物是 learner-private On-demand Materialization，不需要先打包再供当前
+学习使用。“我的场景”和其他 Personal Content revision 同样不自动进入 Package。只有用户明确执行导出
+或分享时，系统才从选定内容快照创建新的 `.sensa`；文件不携带原用户的进度、Evidence 或调度。
 
 规范由以下实现共同定义：
 
@@ -47,8 +54,11 @@ npm run sensa:package-schema
 - 适用时提供的可选资源；
 - 被资源引用的媒体清单；媒体字节随归档携带。
 
-外部 Sense ID 不要求来自 IDS，也不要求进入 Sensa 的官方 Semantic Registry。导入流程负责保留原始
-Package identity 和来源；不能冒充已有官方 Sense 或通过自报字段获得官方信任。
+普通生产者的 Sense ID 不要求来自 IDS，也不要求进入 Sensa 的官方 Semantic Registry。导入流程负责保留
+原始 Package identity 和来源；不能冒充已有官方 Sense 或通过自报字段获得官方信任。为支持官方 Catalog
+迁移，Portable 合同的下一兼容版本可以携带稳定 Sense/Binding semantic snapshot，但其权威性来自 Registry
+对精确 artifact digest 的 attestation，而不是字段名字本身。当前 v1 尚未公开这组可选 attested semantic
+字段；迁移时必须在同一 `.sensa` 公共合同中增加，不能继续依赖 Runtime 私有 Bundle。
 
 六项核心资源是：
 

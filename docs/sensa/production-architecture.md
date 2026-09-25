@@ -4,8 +4,8 @@
 
 [ADR 0003](../adr/0003-three-client-local-facts.md) 确认主应用均在本地执行学习，共享领域事实、版本与合并规则。事实与当前投影分离，保留固定评价/结算历史；学习历史保持可追溯；普通账号同步允许服务端读取业务数据，但服务端不重新执行学习协议或结算学习结果。
 
-> 状态：Canonical domain model  
-> 更新日期：2026-09-21
+> 状态：Canonical domain model
+> 更新日期：2026-09-25
 
 本文是 Sensa 领域对象、聚合边界和全局不变量的主入口。术语定义以
 [`../../CONTEXT.md`](../../CONTEXT.md) 为准；资源细节和运行行为分别由
@@ -88,7 +88,7 @@ Transition 与跨设备合并裁决。
 | 当前 progress、Memory、due projection/checkpoint | Learning System | 可随事实传输但必须验证 | 可随恢复点保存 | 不得覆盖历史；可从固定事实与算法版本重建/核对 |
 | learner-private / On-demand Materialization | Content Supply System | 是 | 是 | immutable digest、admission 与 source/derivation provenance |
 | Personal Anchor media、Practice Artifact 与其他 learner-owned media | 对应 learner-owned Module / Media | 是 | 是 | content-addressed bytes、引用完整性与明确删除语义 |
-| Published Bundle 与公共媒体字节 | Content Supply System | 否，只同步精确安装/应用 identity | 记录可恢复引用，不为每个账号复制公共字节 | 从保留的 immutable artifact 重新取得并校验 digest |
+| Published `.sensa`、Book Manifest 与公共媒体字节 | Content Supply System | 否，只同步精确安装/应用 identity | 记录可恢复引用，不为每个账号复制公共字节 | 从保留的 immutable artifact 重新取得并校验 digest |
 | Learner Preference | Preference Module | 是 | 是 | typed version 与显式 precedence |
 | Device Preference、Device Operation Ledger、纯读取缓存 | device/platform | 否 | 否 | 本机重建或丢弃 |
 
@@ -172,7 +172,7 @@ React Web 保持既有平台定位和迁移验证价值；不能把阶段性的 
                        │ 显式 Add-to-Learning bridge
                        ├──────────────────────────────────────────┐
                        │                                          ▼
-不可变 Registry → Book Release Bundle → 下载/安装 → 显式加入/应用更新 → Curriculum
+不可变 Registry → Book Version Manifest → `.sensa` 下载/安装 → 显式加入/应用更新 → Curriculum
 direct stable Sense + target binding ─────────────────────────────┘
                                                                   ↓
                                            Learning Target + Learning Policy
@@ -551,8 +551,14 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
   不能冒充学习内容；
 - Published Learning Content 通过 Sense Learning Package 固定 release、Sense Version、target binding、
   referenced form/profile 与资源；On-demand Learning Content 则针对已固定的 target 与 protocol 生成；
-- 无论来源是 published、on-demand 还是 hybrid，开始一次 protocol run 前都必须冻结为不可变的
-  Learning Materialization，并记录生成器/发布版本、输入 provenance 与校验结果；
+- 所有 Published Lightweight Content 都以 `.sensa` 跨越生产、分发与安装边界。Sensa Official、外部作者
+  与 learner 明确导出的内容共用公共 Runtime 准入合同；作者化方式、策展身份与质量等级不进入文件自报；
+- Web 内容生成 Agent 只在 On-demand Provisioning Task 内提交 Candidate，经独立准入后形成
+  learner-private Materialization。生成、个人场景保存或材料 revision 都不自动创建 `.sensa`，只有明确
+  导出/分享才进入 Portable Package 构建；
+- 无论来源是 published、on-demand 还是 hybrid，开始一次 protocol run 前都必须固定不可变材料基线，
+  每个 Step 再固定实际呈现的 Learning Materialization，并记录生成器/发布版本、输入 provenance 与
+  校验结果；兼容新版只能在该 Step 尚未操作时显式改绑；
 - 内容来源与 Learning Protocol 正交：同一 Published Package 可服务多个协议，同一协议也可消费
   Published 或 On-demand 内容，具体可执行性由版本化合同决定；
 - Learning Policy Profile 是 Protocol、Content Requirements、Evaluation/Evidence、Progression/Completion、
@@ -562,10 +568,11 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
 - Sense Relation 是同一 release 中经过审核的两个 Sense 之间的语义事实；
 - Semantic Field Version 用有限、可审核的 Senses 与 Relations 表达局部意义邻域，不决定课程顺序；
 - Content Release、Package 与 Book Version 发布后不原位修改。
-- Book Release Bundle 是一个 Book Version 在精确 Target/Support Language pair 下的传输制品，
-  可以聚合多个 Sense Learning Package snapshot，但不取代单目标 Package 的领域身份；
-- Learning Content Registry 只负责发现当前公开版本。Bundle 先按 digest 上传并验证，Registry
-  Revision 后发布并作为唯一可变发现指针的目标；Registry、Bundle 与对象路径本身都不可覆盖。
+- Book Version Manifest 在精确 Target/Support Language pair 下固定有序 membership 及其 `.sensa`
+  identity/version/digest/location；它组织 Portable Packages，但不是另一种可执行内容格式；
+- Learning Content Registry 只负责发现当前公开版本。Manifest 引用的 `.sensa` 先按 digest 上传并验证，
+  Registry Revision 后发布并作为唯一可变发现指针的目标；Registry、Manifest、Package artifact 与对象
+  路径本身都不可覆盖。
 
 ### Curriculum
 
@@ -949,7 +956,8 @@ command 或 deep Module interface 协作，不能让页面状态、传输记录�
    协调 Account、learner-owned stores 与 Replica invalidation；
 4. **Catalog Module**：读取已发布、已固定的 Book、Sense Learning Package、Semantic Field、
    Reference Release、Reference Sense、Sense Alignment 与 Lexical Enrichment；其分发适配器读取
-   immutable Learning Content Registry，验证并安装 Book Release Bundle，但不拥有 Enrollment 或进度；
+   immutable Learning Content Registry，验证 Book Version Manifest 并通过统一 Portable Package 入口
+   安装其 `.sensa` 成员，但不拥有 Enrollment 或进度；
 5. **Lexical Reference Module**：解析 Example + character span，读取 version-pinned Reference entry、
    Lexical Occurrence 与 Contextual Sense Resolution，并生成可重建搜索/详情读取模型；它不拥有
    learner progress，也不自由生成词典释义；
@@ -1068,14 +1076,15 @@ command 或 deep Module interface 协作，不能让页面状态、传输记录�
   Learner Sense Progress；它们只在新的 Study Scope Revision 中改变 Planning eligibility；
 - Study Scope 变更不能静默改变 active Session；Session/Encounter 必须保留用于计划它们的 Scope
   revision 与 Curriculum provenance；
-- Registry 更新发现、Book Release 下载与 Book Version 应用必须分离；后台检查不改变 Curriculum，
+- Registry 更新发现、Book Package 下载与 Book Version 应用必须分离；后台检查不改变 Curriculum，
   下载不等于加入学习，只有 learner 显式应用才产生新的 Study Scope。未改变 Sense/Binding identity
-  的成员保留 Retention state，删除成员只退出未来 Planning，旧 Session 和历史继续引用旧 release；
-- 可按 immutable version/digest 从 Content Supply 重新取得的 Published Bundle 与公共媒体字节是安装缓存，
+  的成员保留 Retention state，删除成员只退出未来 Planning，已开始 Run 不增删 participant；兼容材料更新
+  可以刷新尚未操作的当前 Step 和未来 Step，已经操作的 Step 保留实际材料；
+- 可按 immutable version/digest 从 Content Supply 重新取得的 Published `.sensa` 与公共媒体字节是安装缓存，
   不是 Personal Library Fact，不应通过日常账号 Cloud Checkpoint 为每个 learner 重复复制。账号同步只
   保存安装/应用状态、精确内容 identity/digest 和 learner-owned facts；私有或按需 Materialization 仍按
-  其 learner ownership 进入同步与备份。运行历史引用的旧 Published artifact 必须由 Content Supply
-  保持可寻址，不能依赖某台设备偶然留存的缓存；
+  其 learner ownership 进入同步与备份。已经操作的 Step 保存其实际 material fact；Portable/Manifest
+  不因此承担永久保存完整旧归档供历史重放的职责；
 - Semantic Field 是有限、版本化的内容邻域，不是 Book、学习路径或通用人类 ontology；
 - Personal Semantic World 只接纳具备真实 Context、located Expression、teaching-sufficient stable Sense/
   Binding 与有效 Semantic Acceptance 的完整 Personal Meaning；未闭合 Intake 留在 Inbox；
@@ -1143,8 +1152,8 @@ command 或 deep Module interface 协作，不能让页面状态、传输记录�
   Checkpoint 可选，Acquisition Gate 只是 Structured Acquisition 的高保证子类；
 - Learning Action Intent 与 Protocol Purpose 正交；只有合法 `assessment` Action 能进入正式评价，
   instruction、practice、feedback、repair 或视觉位置不能自行产生 Evidence；
-- Published 内容不可变，修订通过新 version/release 完成；On-demand 内容在一次 run 开始前必须
-  冻结为 Learning Materialization，response 发生后不得重新生成并替换题目、答案或评分依据；
+- Published 内容不可变，修订通过新 version/release 完成；On-demand 内容在使用前必须冻结为
+  Learning Materialization，Step response 发生后不得重新生成并替换该 Step 的题目、答案或评分依据；
 - Attempt、Observation 与 Evidence 是追加事实；正式评价沿 `Attempt → Observation → Evidence（若合格）
   → Transition Decision` 推进，Gate、Checkpoint credit、5D 与 FSRS 由本地 Learning Runtime 在同一权威事务中派生；
 - Progression Policy 只能产生内核声明的受约束 effects；Progress Reset 只使显式 scope 内当前 credit

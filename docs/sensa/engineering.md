@@ -97,7 +97,7 @@ Content Attempt 查询投影。首页只读取当前 Route 的 Target、该 Rout
 Package key；运行恢复、策略锁定和生成频控通过领域索引查询，不遍历或解析无关 JSON。数据库打开及有写入
 的长连接周期内使用 `PRAGMA optimize` 维护查询规划统计。Book 版本替换和媒体引用完整性检查同样通过事务内
 关系投影完成。承载大 JSON 的逻辑 record 与 Target 投影使用普通 rowid 表，紧凑关系投影使用
-`WITHOUT ROWID`；物理 schema v10 使用新的 OPFS 文件，并在内容事务中维护记录级 revision 与删除 tombstone，供账号同步只读取上次收敛后变化的记录。云端确认的逐记录基线和 block refs 保存在内部 `sensa_sync_base` 表；未变化记录不再重新编码、分块或下载。`packageInstallations` 保存可跨设备复制的精确 artifact identity、语言方向、长度和 digest；完整 Published Bundle 与内嵌公共媒体只进入设备本地 `packageCache`，缓存写入不增加个人内容 revision。恢复后由 Content Supply 使用本机目录解析并校验精确 digest；解析或下载失败时 Learning Target 保留但 readiness 为 blocked。状态只保存小型幂等 commit receipt，不重复保存整库或待发布记录。`npm run benchmark:cloud-sync` 在真实 Chromium OPFS 上执行 1k/10k 完整同步路径，并固定单记录变化只上传记录块与受影响的 manifest 分片。因当前无用户库数据，不迁移或读取 v9 文件。
+`WITHOUT ROWID`；物理 schema v10 使用新的 OPFS 文件，并在内容事务中维护记录级 revision 与删除 tombstone，供账号同步只读取上次收敛后变化的记录。云端确认的逐记录基线和 block refs 保存在内部 `sensa_sync_base` 表；未变化记录不再重新编码、分块或下载。`packageInstallations` 保存可跨设备复制的精确 artifact identity、语言方向、长度和 digest；完整 Published artifact（当前包括过渡 Book Bundle，统一后为 `.sensa`）与内嵌公共媒体只进入设备本地 `packageCache`，缓存写入不增加个人内容 revision。恢复后由 Content Supply 使用本机目录解析并校验精确 digest；解析或下载失败时 Learning Target 保留但 readiness 为 blocked。状态只保存小型幂等 commit receipt，不重复保存整库或待发布记录。`npm run benchmark:cloud-sync` 在真实 Chromium OPFS 上执行 1k/10k 完整同步路径，并固定单记录变化只上传记录块与受影响的 manifest 分片。因当前无用户库数据，不迁移或读取 v9 文件。
 v10 同时是首个真实用户基线：打开版本低于 v10 或高于当前版本的文件会停止并保留原库，不创建空库冒充
 首次访问；后续 schema 只能按顺序增加事务迁移与固定旧版夹具。跨标签页协调协议独立版本化，版本不一致
 时旧/新页面不交换记录，并要求用户关闭其他标签页。Service Worker 安装新 shell 后等待用户确认再接管，
@@ -124,7 +124,7 @@ FSRS 都由本地领域事务结算。Hono/Edge 不创建或推进学习 Run，�
 Evaluation 与 Transition 数据完成不可改写验证和重放。Remote Intake 重投可从 Draft 保存的 canonical
 Intake 重建本地结果，不需要同步完整命令输入或返回值。同一份 base64 媒体按内容边界切块，使重复引用
 复用摘要块。
-Published Bundle 与公共媒体字节不属于 Personal Library Fact：Checkpoint v5 和加密手动快照 v6 只记录
+Published artifact 与公共媒体字节不属于 Personal Library Fact：Checkpoint v5 和加密手动快照 v6 只记录
 `packageInstallations` 的精确可恢复引用，不承载 `packageCache`。learner-private / On-demand Materialization、
 Personal Anchor media 与 Practice Artifact 仍按各自 learner-owned 表进入同步和备份，不能被误判为公共缓存。
 Checkpoint 的 block/manifest 传输、CAS commit、重试和 baseline 由 Cloud Sync Coordinator 负责；记录的
@@ -460,6 +460,11 @@ content-addressed 路径并逐一校验公网 bytes，最后上传 immutable Reg
 tag 与完整 SHA-256。工作流先校验整个媒体包，构建器再校验并消费其中每个对象，遗漏、多余、MIME
 不符或摘要不符都会终止发布。
 
+这段 Book Bundle JSON 是当前过渡交付 adapter，不是新的公共内容合同。领域边界已经固定为：每个
+Published Lightweight member 必须成为可独立验证的 `.sensa`，Book Version Manifest 只组织这些制品；
+在官方 builder、Registry descriptor 与 Catalog installer 完成迁移前，现有发布 workflow 保持上述真实
+行为，不能把尚未实现的统一通路宣称为已上线。
+
 ```sh
 gh workflow run sensa-learning-content-publish.yml \
   -f release_sha=<FULL_MAIN_SHA> \
@@ -523,6 +528,18 @@ Package 是导入载体，稳定 Target 保留进度并选择最新已应用材�
 旧 Target。当前未操作 Step 通过受 Learning authority 校验的 material refresh lifecycle event 切到新版；
 已操作 Step 的 material fact 不改写。完整边界由
 `tests/web/integration/portable-package-loop.test.mts` 覆盖。
+
+当前 `ContentSupplySystem` 仍同时保留旧 Catalog/Book JSON 的 `install_catalog_item | import_package` 与
+Portable 的 `preview/install/export_portable_package`，两者在安装后才汇入相同 Materialization/Runtime。
+这是内容分发重构的明确迁移边界：官方发布改为 `.sensa` 后，Catalog 下载必须复用 Portable 准入与安装
+authority，裸 Book/legacy Package JSON 不再作为新的公开导入入口。旧安装事实和 learner progress 必须
+继续可读，迁移不能删除、重写或静默重新加入用户内容。
+
+迁移不能只把旧 Bundle 改扩展名。当前 Portable v1 固定一个 Sense/Route，并足以运行 Lightweight；当前
+官方 Book entry 还携带可由 Registry 信任的稳定 Sense/Binding semantic snapshot，用于跨 Book/Route 复用
+identity 和从“我的场景”建立 Personal Meaning。统一后的公开 `.sensa` 合同必须能携带这类可选声明，且
+只有 Registry 对精确 artifact digest 的 attestation 才能赋予 Sensa Official 权威；外部文件自报相同 ID
+不得冒充官方事实。Book 排序与 membership 继续留在 Manifest，不塞回单 Sense Package。
 
 `python3 content/tools/smoke_spoken_resource.py` 验证 provider 替换、缓存隔离、损坏检测与外部调用门控；
 `tests/web/integration/speech-provider.test.mts` 验证 provider 替换、默认 Edge wire adapter、输入身份和已保存音频

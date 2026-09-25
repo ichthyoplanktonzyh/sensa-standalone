@@ -1,7 +1,7 @@
 # Sensa Learning Runtime Model
 
-> 状态：Canonical runtime domain model  
-> 更新日期：2026-09-21
+> 状态：Canonical runtime domain model
+> 更新日期：2026-09-25
 
 本文定义 Content Provisioning、Learning Protocol Run、Protocol Step Instance、Unified Planning、Session、
 Encounter、Card Presentation、Observation/Evidence/Transition、Scheduling Handoff、FSRS、Lexical Reference、Preferences 与 Account/Data Control 的运行
@@ -472,8 +472,9 @@ Pinned Language Context 固定 Route revision、Target Language 与 Support Lang
 反向写作中的 support-language prompt 与 target-language output 因而不会改变 Route 的方向。Session
 开始后的 Active Route Selection 或 Interface Locale 变化不能重绑 Session、Encounter 或已发生 Action
 的资源。只有同一 Learning Target、固定语言方向与兼容内容来源内显式发布或应用的材料新版，才能刷新
-尚未操作的 Step；这包括同一 Membership 的个人材料 revision，以及同一 Portable package family 的
-更高版本，但不包括普通设置变化或语义 identity 改变。
+尚未操作的 Step；这包括同一 Membership 的个人材料 revision，以及通过本地导入或 Book Manifest
+应用的同一 Portable package family 更高版本，但不包括普通设置变化、Book membership 的增删或语义
+identity 改变。已经操作的 Step 始终保留其实际 material fact。
 
 ### `mixed`
 

@@ -207,6 +207,11 @@ One bounded, auditable execution of the Learning Content LLM Role and its approv
 tools for a single Content Provisioning Task. It ends when it submits one Material
 Candidate Bundle or fails, and has no authority after termination.
 
+This is the in-product Web content-generation Agent. It is not an authorized external
+Agent such as Codex submitting Semantic Intake through an Agent Connection. The former
+produces learner-private material inside Content Supply; the latter is an Intake Surface
+and does not gain content-publication authority.
+
 _Avoid_: Agent thread, generation chat
 
 **Content Demand**:
@@ -255,6 +260,16 @@ Material generated for one fixed Learning Target, Effective Learning Policy and
 purpose-specific Learning Protocol after the learner need is known. It must be
 validated and frozen before use and does not become published content merely because
 an LLM generated it successfully.
+
+**Portable Lightweight Package / `.sensa`**:
+The single-file public exchange artifact for one reusable Lightweight Sense Learning
+Package on one exact Target/Support Language Route. All reusable Lightweight content that
+crosses the distribution and installation boundary, including Sensa Official content,
+uses this contract. Authoring method and trust tier remain outside the file: official
+curation, external authorship and explicit learner export use the same runtime-admission
+shape, while Registry provenance can add a separately verified trust claim. On-demand
+material, Personal Learning Scenes and other learner-private revisions do not become
+`.sensa` merely because they were generated or saved; export is a separate explicit action.
 
 **Learning Materialization**:
 The immutable, protocol-ready content snapshot resolved from published,
@@ -412,24 +427,28 @@ is an ordered, immutable curriculum of selected Senses and their primary target
 bindings, fixed to a Content Release. The product may group and count them by
 Lexeme, but a Lexeme is not silently substituted for membership.
 
-**Book Release Bundle**:
-A transport artifact containing the validated delivery snapshots of the Sense
-Learning Packages in one immutable Book Version for one exact Target/Support
-Language pair. It may contain many targets but is not itself one Sense Learning
-Package, a learner curriculum or a progress identity.
+**Book Version Manifest**:
+The ordered, immutable membership and exact Portable Package references for one Book
+Version on one Target/Support Language Route. It carries Package identity, version,
+digest, location and ordering, but is not another executable learning-content format.
+A transport implementation may batch referenced bytes, but every Lightweight member
+remains independently valid as `.sensa`; batching cannot create a privileged official
+content contract.
 
 **Learning Content Registry / Registry Revision**:
 An immutable, content-addressed discovery snapshot listing the currently public
-Book Release for each stable Book and exact Target/Support Language pair. A new
-publication creates a new Revision after all referenced Bundles are readable;
-it never overwrites an earlier Registry or Bundle.
+Book Version Manifest for each stable Book and exact Target/Support Language pair. A new
+publication creates a new Revision after every referenced `.sensa` artifact is readable;
+it never overwrites an earlier Registry, Manifest or Package artifact.
 
-**Book Release Installation / Book Update Application**:
-Installation verifies and stores one immutable Book Release Bundle on a Device
-without changing Curriculum. Application is the learner's explicit acceptance
-of that Book Version for future Study Scope revisions. Applying a newer Version
-supersedes the older Version's future membership without deleting its Bundles,
-Learning Targets, Sessions, Evidence or Retention state.
+**Book Installation / Book Update Application**:
+Installation verifies a Book Version Manifest and its required Portable Packages on a
+Device without changing Curriculum. Application is the learner's explicit acceptance of
+that Book Version for future Study Scope revisions. Added or removed members affect future
+planning rather than changing the participant set of an already-started Run. For a stable
+Learning Target, an applied compatible material revision may refresh the current unacted
+Step and future Steps; an acted Step keeps the material it actually presented. Applying a
+newer Version never deletes prior Learning Targets, Sessions, Evidence or Retention state.
 
 **Sense Relation**:  
 A reviewed, versioned semantic relationship between two Senses, such as a real

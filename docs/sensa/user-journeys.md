@@ -129,18 +129,20 @@ Context、完整 Expression、Sense 或 acceptance 中任一事实时，内容�
     ↓
 固定 Book / Book Version / Content Release
     ↓
-生成并校验 Package delivery snapshots
+为每个 Lightweight member 生成并校验 `.sensa`
     ↓
-构建不可变 Book Release Bundle
+构建引用精确 Package identity/version/digest 的 Book Version Manifest
     ↓
-上传并公开验证全部 Bundle
+上传并公开验证全部 `.sensa` 与 Manifest
     ↓
 上传按 digest 寻址的 Registry Revision
     ↓
 提升服务端发现指针
 ```
 
-发布后的 Registry、Bundle 和对象路径不得原位覆盖。发布失败时，上一版 Registry 必须继续完整可用。
+发布后的 Registry、Manifest、`.sensa` 和对象路径不得原位覆盖。发布失败时，上一版 Registry 必须继续
+完整可用。Sensa Official 内容通过额外发布门禁和 Registry provenance 获得策展身份，但仍使用与本地
+导入、私人分享和外部作者相同的 Portable Runtime 准入合同。
 
 ### 5.3 用户主流程
 
@@ -149,7 +151,7 @@ Context、完整 Expression、Sense 或 acceptance 中任一事实时，内容�
     ↓ 发现与当前路线精确匹配的 Book
 Book 详情
     ↓ 用户点击下载
-本机安装
+验证 Book Version Manifest 并通过统一入口安装其 `.sensa` 成员
     ↓ 大小 / digest / 合同 / 语言方向 / 资源校验通过
 已下载
     ↓ 用户明确点击“加入学习”
@@ -168,7 +170,8 @@ Retention
 - **只下载完成**：资源已安装，但尚未加入学习，不产生目标、进度或调度。
 - **语言路线不匹配**：解释目标语言或支持语言不匹配，并引导用户切换路线；不得隐式回退或重标语言。
 - **应用新版**：必须由用户明确操作。新增条目只进入未来学习；删除条目只退出未来计划；身份未变的
-  目标保留进度、复习和历史；已经开始的运行继续固定旧材料。
+  目标保留进度、复习和历史；已经开始的运行不增删 participant，兼容材料更新可刷新尚未操作的当前
+  Step 和未来 Step，已经操作的 Step 保留实际材料。
 - **运行中断**：保留同一 Run、逐步材料和已提交动作，恢复时不得重新生成或跳过保存。
 
 ### 5.5 成功出口
@@ -238,6 +241,8 @@ Content Provisioning Task
 - target Language 必须与路线兼容；support Language 作为当前材料和运行上下文保存。
 - 是否允许内容生成使用个人 Context，由用户单独授权。未授权时仍可基于固定 Sense 和 Binding 生成。
 - 生成、审核或校验失败时保留可恢复状态；不得创建可开始的假目标或伪造 ready。
+- Web 内容生成 Agent 的成功出口是 learner-private Materialization，不是 Published Package。只有用户
+  另行选择导出/分享时，系统才从合格内容快照构建 `.sensa`，且不携带进度或调度。
 - 资源 ready 后，个人来源和学习包来源使用同一个学习运行时、Evidence 和 Retention 边界。
 
 ### 6.5 成功出口

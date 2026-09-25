@@ -1,10 +1,11 @@
 # Sense Learning Resource Model
 
-> 状态：Canonical resource model  
-> 更新日期：2026-09-21
+> 状态：Canonical resource model
+> 更新日期：2026-09-25
 
 本文定义 Sensa 如何通过 Published、On-demand 或 Hybrid 路径为一个固定 Learning Target 提供学习
-资源，以及这些资源如何在一次 Learning Protocol Run 前冻结为 Learning Materialization。它同时
+资源，以及这些资源如何先形成 Run 的不可变材料基线、再由每个 Step 固定实际呈现的 Learning
+Materialization。它同时
 定义 Sense Learning Package、Reference Lexicon、Lexical Enrichment 与 Semantic Field 如何引用已
 审核内容。资源不等于卡片：Protocol Step 按 material role 引用不可变内容并定义交互与结果资格，
 Card Presentation 只把当前 Step 阶段渲染给 learner。正式 Action 与 Practice Activity Definition 由版本化
@@ -26,16 +27,31 @@ Learning System；Package 可以声明内容能力和适用范围，但不能携
   后按需生成，适合个人语义世界中的长尾目标与轻量学习；
 - **Hybrid**：复用 published 语义/词形/例句等基础事实，再为本次 target 补充按需生成的教学材料。
 
+三个入口不能混为一条隐式发布链：
+
+```text
+官方策展 / 外部作者 ──▶ Portable Package ──▶ `.sensa` ──▶ 安装 ──▶ Published Materialization
+
+Web 内容生成 Agent ──▶ Candidate ──▶ 独立准入 ──▶ learner-private On-demand Materialization
+
+learner 明确导出 ──▶ 选定内容快照 ──▶ 新 Portable Package ──▶ `.sensa`
+```
+
+第一条统一可分发 Lightweight 内容，第二条服务当前 learner 而不自动发布，第三条是显式转换而不是
+On-demand 内容的自然副作用。三条路径在 Runtime 前都形成合格 Materialization，但来源 identity、信任
+与所有权保持不同。
+
 Learning Entry Provenance 是第三个正交维度。Book、direct stable-Sense 与 personal-first entry 都可以
 使用 Published、On-demand 或 Hybrid；来源本身不决定 Learning Policy。personal-first/长尾目标通常
 更适合用 On-demand 内容快速满足 Lightweight requirements，而 Structured/high-assurance 只有在
 required assessment、novelty、grader 与 runtime capabilities 均真实可用时才可 ready。这是 readiness
 判断，不是把 Personal Semantic World 永久绑定到 Lightweight。
 
-无论来源为何，Runtime 都不能直接消费仍可变化的 draft。开始前必须建立不可变 Learning
-Materialization，至少固定 target、Effective Learning Policy/plan revision、protocol/version、内容项与角色、答案/评分合同（如有）、source/
-generator/prompt-policy provenance、校验结果与 digest。learner 作答后不得重新生成并替换 prompt、
-答案或评分依据；内容更新只能创建新的 materialization。
+无论来源为何，Runtime 都不能直接消费仍可变化的 draft。Run 开始前必须建立不可变材料基线；当前尚未
+操作的 Step 可以在固定 Learning Target、Route 与兼容来源内显式改绑新的不可变 Materialization。每份
+Materialization 至少固定 target、Effective Learning Policy/plan revision、protocol/version、内容项与角色、
+答案/评分合同（如有）、source/generator/prompt-policy provenance、校验结果与 digest。learner 对 Step
+作答后不得重新生成并替换该 Step 的 prompt、答案或评分依据；内容更新只能创建新的 materialization。
 
 Materialization 只回答“本次 run 有哪些固定内容以及它们可承担什么角色”。Protocol Step 回答“这些
 角色如何被组织、何时交互、能产生什么结果以及下一步是什么”；Card Presentation 回答“当前阶段
@@ -273,29 +289,38 @@ Package 是以上版本化资源的不可变发布清单。它不拥有 learner 
 
 面向用户持续发布的是稳定 **Book** 的新 **Book Version**，不是覆盖同名 JSON，也不是把一本书
 误建模为一个 Sense Learning Package。一个 Book Version 固定有序 membership、primary target
-binding 与 Content Release；用于下载的 **Book Release Bundle** 只是在一个精确 Target/Support
-Language pair 下聚合这些 Package delivery snapshots 的传输制品，不创造新的学习身份。
+binding 与 Content Release。**Book Version Manifest** 在一个精确 Target/Support Language pair 下固定
+成员顺序以及每个 Portable Package 的 identity、version、digest 与位置；它只组织 `.sensa`，不是另一种
+可执行学习内容合同，也不创造新的学习身份。传输层可以批量取得这些字节，但不能因此让官方内容绕过
+Portable 公共合同。
 
 **Learning Content Registry** 是不可变、按 digest 寻址的发现快照。一次发布必须先上传并公开验证
-所有 Bundle，再上传引用它们的新 Registry Revision，最后才把服务端发现指针提升到该 Revision。
-已发布 Registry、Bundle 与对象路径都不能原位覆盖；失败时旧 Registry 继续完整可用。
+所有 Manifest 引用的 `.sensa`，再上传新的 Registry Revision，最后才把服务端发现指针提升到该
+Revision。已发布 Registry、Manifest、Package artifact 与对象路径都不能原位覆盖；失败时旧 Registry
+继续完整可用。Sensa Official、外部作者和私人分享采用同一 Portable Runtime 准入合同；Official 身份、
+策展关系和质量等级来自 Registry provenance 或其他独立验证，不由包内字段自报。
 
 发现、安装与加入课程是三个不同动作：
 
 - 客户端可低频后台检查 Registry，并立即展示本机缓存；发现新版不改变课程；
-- 下载只校验 digest、大小、合同和语言方向并保存不可变 Bundle，不创建 Learning Target 或进度；
+- 下载只校验 Manifest 及其 `.sensa` 的 digest、大小、合同和语言方向并保存安装候选，不创建 Learning
+  Target 或进度；
 - learner 显式“应用更新”后，新的 Book Version 才进入下一 Study Scope Revision；已开始 Session
-  继续固定旧 membership 与 materialization；
+  不增删 participant；
 - 新旧版本保持相同 Sense Version 与 Binding Version 的成员复用同一 Learning Target、Retention
-  Target、Evidence 和 FSRS state；纯材料修订通过新的 Content Release/materialization 表达；
-- 新增成员只在应用后进入未来 Introduction；删除成员只退出未来 Planning，旧 Bundle、membership、
-  已开始学习与历史事实继续可重放；若 Sense 或 Binding 的语义身份变化，则创建新的 Learning Target。
+  Target、Evidence 和 FSRS state；纯材料修订通过新的 Package version/materialization 表达。已经操作的
+  Step 保留其实际材料；当前尚未操作的 Step 可以显式刷新，后续 Step 读取已应用新版；
+- 新增成员只在应用后进入未来 Introduction；删除成员只退出未来 Planning，旧 membership、已经发生的
+  Step material fact 与学习历史继续可重放；若 Sense 或 Binding 的语义身份变化，则创建新的 Learning
+  Target。Portable/Manifest 是交付载体，不要求为历史回放永久保留每一份完整旧归档。
 
 ### 1.6 Portable Lightweight Package
 
-外部作者的生产接口是一个最终、可运行的 Portable Lightweight Package，不是 Sensa Official 的作者稿、
-数据库、Target Core、Support Overlay、提示词或生产编排。作者可以使用任意工具和内部结构；只要最终
-`.sensa` 文件通过公共准入校验，就可以由本人使用或私下分发。
+所有可分发的 **Published Lightweight Content** 都以最终、可运行的 Portable Lightweight Package 跨越
+生产与分发边界，包括 Sensa Official 策展内容、外部作者内容和 learner 明确导出的内容。`.sensa` 不暴露
+Sensa Official 的作者稿、数据库、Target Core、Support Overlay、提示词或生产编排。生产者可以使用任意
+工具和内部结构；最终文件必须通过同一公共 Runtime 准入校验。Official 内容可以另行通过更严格质量门禁，
+但不能拥有绕过 `.sensa` 的 Runtime 私有入口。
 
 `.sensa` v1 是一个单文件 ZIP 归档，内部是公开的 `package.json` 合同与 `media/<sha256>` 原始媒体，固定
 一个 Sense、目标表达和精确 Target/Support Language pair。清单不接受任意媒体路径，媒体文件由摘要寻址；
@@ -321,9 +346,21 @@ Package 只是分发载体，Portable v1 不把永久 Package Version 历史或�
 经验提示不泄露目标表达、语言自然度、文化边界与编辑质量属于生产者或策展者的质量策略，不属于外部
 作者的通用准入条件。信任级别由实际导入来源、签名或 Registry 赋予，不能由文件自报。
 
+为完成官方 Catalog 迁移，Portable 合同的下一兼容版本必须允许 `.sensa` 携带可选的 stable
+Sense/Binding semantic snapshot，使同一官方 target 能跨 Book/Route 复用，并支持从 Personal Learning
+Scene 建立 Personal Meaning。字段存在本身不产生语义权威；只有 Registry 对精确 artifact digest 与
+publisher namespace 的 attestation 才能使其作为 Sensa Official fact 使用。普通作者省略这些字段仍可
+得到完整 Lightweight Runtime；自报官方 identity 只能作为 untrusted provenance 保存。
+
 Portable 合同的当前字段与命令见
 [`content/portable-lightweight-package.md`](../../content/portable-lightweight-package.md)。官方 Core/Overlay
 流程必须最终编译到同一公共合同，不能为官方内容保留 Runtime 私有入口。
+
+Web 内容生成 Agent 属于 On-demand Provisioning：它为固定 learner、Learning Target、Route 与 Demand
+生成并发布 learner-private Materialization，不因生成成功而自动创建 Package。Personal Learning Scene
+同样保持 Personal Content revision。只有 learner 明确选择导出或分享时，系统才把一组符合 Portable
+合同的内容快照转换成新的 `.sensa`；导出不会反向把原 On-demand/Personal identity 改写为 Published
+Content，也不会携带学习进度。
 
 ## 2. Lexeme 级共享资源
 
@@ -677,12 +714,12 @@ Curriculum 可以先接纳 stable Learning Target 与合法 Learning Policy Assi
   自由生成内容都不能把 blocked target 冒充成 ready 学习；
 - 高保证 Learning Policy 缺少 required assessment/novelty/grader capability 时不得静默使用轻量内容；
   只有 learner 显式改变 Policy Assignment 后，才能按新 Profile 重新解析 plan；
-- Published Package/Content Release 或 Book Version 的升级不改变已经开始的 Session/Encounter，
-  下载新版也不产生课程效果，必须由 learner 显式应用并由下一 Scope Revision 接纳；Book 新旧版本
-  中保持相同 Sense/Binding Version 的成员沿用 Retention state，被删除成员只退出未来 Planning。
-  learner-owned Personal Membership 可以在固定 Learning Target、Route 与
-  Target/Support Language pair 内发布新的不可变 materialization，供尚未操作的当前或未来 Step 使用。
-  两种路径都必须保留此前 Curriculum provenance、已操作 Step 的 materialization 与学习事实。
+- Published Package/Content Release 或 Book Version 的下载不产生课程效果，必须由 learner 显式应用并由
+  下一 Scope Revision 接纳；Book 新旧版本中保持相同 Sense/Binding Version 的成员沿用 Retention state，
+  被删除成员只退出未来 Planning，已开始 Run 不增删 participant。应用后的兼容 Package material revision
+  与 learner-owned Personal Membership revision 都可以在固定 Learning Target、Route 与 Target/Support
+  Language pair 内供尚未操作的当前或未来 Step 使用。两种路径都必须保留此前 Curriculum provenance、
+  已操作 Step 的 materialization 与学习事实。
 
 Free Practice 可以复用 Expression form/pronunciation、Sense display facts、Experience、Study Example、
 Usage Pattern、Sense Relation、Personal Semantic Anchor 与已获准媒体，也可以通过获准 provider 在

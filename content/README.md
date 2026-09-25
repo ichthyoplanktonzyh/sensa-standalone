@@ -5,11 +5,13 @@ Production is organized around an isolated `SensePackageBuild`, not a fixed Job 
 sequence. The domain resource model is
 [`../docs/sensa/sense-learning-resource-model.md`](../docs/sensa/sense-learning-resource-model.md).
 
-External creators do not use this repository's authoring pipeline. Their public seam is
-the single-file [Portable Lightweight Package](portable-lightweight-package.md): a `.sensa`
-ZIP archive containing the public `package.json` contract and content-addressed raw media.
-Core/Overlay splitting, prompts, provider choices, review stages and build storage are
-implementation details of Sensa Official production.
+Creators do not need to use this repository's authoring pipeline. The distribution seam for
+all Published Lightweight Content, including Sensa Official releases, is the single-file
+[Portable Lightweight Package](portable-lightweight-package.md): a `.sensa` ZIP archive
+containing the public `package.json` contract and content-addressed raw media. Core/Overlay
+splitting, prompts, provider choices, review stages and build storage are implementation
+details of Sensa Official production. Official status comes from the Registry and protected
+publication evidence, never from a privileged runtime payload or a field the file can self-assert.
 
 ## Architecture
 
@@ -65,10 +67,13 @@ domain definition of Example.
 No scene-domain or construction diversity quota is enforced. Those fields remain
 descriptive metadata required by the current V2 wire shape.
 
-## Web Book release delivery
+## Transitional Web Book release delivery
 
-The small reviewed Web sources in `content/authored/` are explicit immutable Book
-releases. Each source names a stable `bookKey`, positive `versionNumber`, publication
+The current Web release adapter still compiles the small reviewed sources in `content/authored/`
+into the older immutable Book Bundle JSON consumed by the existing Catalog installer. This is a
+transition boundary, not the desired public exchange contract: the next delivery adapter must
+emit one independently valid `.sensa` per Lightweight member and a Book Version Manifest that
+orders and references those artifacts. Each source names a stable `bookKey`, positive `versionNumber`, publication
 time, learner-facing change summary, exact Target/Support languages, and a separate
 `senseVersion` and `bindingVersion` for every entry. Raising the Book version alone does
 not change a Learning Target: semantic or primary-expression identity changes must be
@@ -83,12 +88,12 @@ node --import tsx scripts/release/buildStarterPackage.mts
 node --import tsx tests/web/run.mts --suite=fast --id=learning-registry
 ```
 
-The builder writes content-addressed Book Release Bundles and one immutable
-`release-candidate/catalog.json` Registry snapshot. Generated bundles and Registry files
-remain ignored build artifacts. By default it includes every JSON source in
-`content/authored/`; that directory keeps one current source for each stable Book and exact
-language pair, while Git history retains prior authored versions. A bounded custom build may
-override the list with comma-separated `SENSA_BOOK_RELEASE_SOURCES` paths.
+The transitional builder writes content-addressed Book Release Bundles and one
+immutable `release-candidate/catalog.json` Registry snapshot. Generated bundles and
+Registry files remain ignored build artifacts. By default it includes every JSON source
+in `content/authored/`; that directory keeps one current source for each stable Book and
+exact language pair, while Git history retains prior authored versions. A bounded custom
+build may override the list with comma-separated `SENSA_BOOK_RELEASE_SOURCES` paths.
 
 Authored audio and images use the same content-addressed release seam. A source
 stores only `{ "sha256": "…", "mimeType": "audio/mpeg" }` or

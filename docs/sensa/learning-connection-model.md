@@ -1,7 +1,7 @@
 # Sensa 学习连接模型
 
 > 状态：Canonical domain model
-> 更新日期：2026-09-21
+> 更新日期：2026-09-25
 
 本文定义一个 confirmed Sense 与目标语言表达的连接如何取得内容、选择学习方式、形成不同强度的
 结果并交给长期调度。个人意义与 Sense 确认由
@@ -323,6 +323,11 @@ Published content 在 learner run 之前生产、验证并发布。生产者可�
 决定其身份的是发布时机、review status、provenance 和不可变 release，而不是作者是不是 AI。
 Sense Learning Package 是这种路径的可复用 bundle。
 
+对于 Lightweight，所有可分发 Package——包括 Sensa Official 策展内容、外部作者内容与 learner
+明确导出的内容——都通过 `.sensa` 跨越生产和安装边界。Book Version Manifest 只固定这些 Package 的
+有序 membership 与精确 artifact reference，不提供第二种可执行内容格式。Official 质量等级来自独立
+Registry provenance 和发布门禁，不由 Package 自报，也不改变 Runtime 公共准入合同。
+
 它适合：
 
 - 公共 Book 与高复用 Sense；
@@ -346,6 +351,9 @@ support-language access path、Protocol requirements、允许的历史与 learne
 
 生成成功不等于发布。On-demand output 在进入一次学习前必须完成适用于当前角色的 schema、target、
 language、safety、semantic-consistency 与 renderer validation，并冻结为 Learning Materialization。
+Web 内容生成 Agent 正是这条 learner-private Provisioning 路径的实现者之一：它不会因生成成功、保存
+Personal Learning Scene 或发布材料 revision 而自动生成 `.sensa`。只有 learner 明确发起导出/分享时，
+才从选定内容快照构建新的 Portable Package；该动作不携带进度，也不改写原 Materialization 的来源身份。
 
 ### Content Demand 与生成交接
 
