@@ -183,6 +183,7 @@ const fastWithMemory = [
   'integration/agent-trace',
   'integration/live-matrix-summary',
   'integration/language-trace-evidence',
+  'integration/guest-library',
   'integration/package-learning', 'integration/portable-package-loop', 'integration/local-learning-runtime', 'integration/media-library',
   'integration/learning-scene-bridge', 'integration/personal-learning', 'integration/language-route',
   'integration/language-journey', 'integration/reading-language', 'integration/reading-glossary',
@@ -223,6 +224,7 @@ const durabilityTests = new Set<string>([
   'integration/model-turn', 'integration/package-learning', 'integration/portable-package-loop',
   'integration/personal-learning', 'integration/storage-capability',
   'integration/web-intake',
+  'integration/guest-library',
 ]);
 const convergenceTests = new Set<string>([
   'database/library-cloud', 'browser/web-bootstrap-budget',

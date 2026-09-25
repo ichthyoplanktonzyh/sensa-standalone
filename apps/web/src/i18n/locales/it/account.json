@@ -52,7 +52,7 @@
       "logout": "Esci",
       "synced": "Sincronizzato",
       "cloudNote": "La cronologia di apprendimento viene salvata localmente per questo account e sincronizzata con il server.",
-      "localNote": "I contenuti e i progressi di apprendimento vengono prima salvati in questo browser. Prima di cancellare i dati del sito, verifica che la sincronizzazione dell'account sia terminata.",
+      "localNote": "I tuoi dati sono salvati in questo browser. Esporta un backup crittografato prima di cancellare i dati del sito e verifica la sincronizzazione se un account è collegato.",
       "controls": "Le opzioni per il backup crittografato e la gestione dei dati locali si trovano in Dispositivo e dati. Da qui, gli utenti che hanno effettuato l'accesso possono richiedere l'eliminazione dell'account.",
       "syncResults": "Controlla lo stato della sincronizzazione",
       "signout": "Esci",

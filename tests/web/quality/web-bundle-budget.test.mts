@@ -16,9 +16,9 @@ const budgets={
   appChunkGzip:24*1024,
   appClosureGzip:155*1024,
   homeChunkGzip:8*1024,
-  // Record-level sync journaling adds its Worker protocol to the signed-in
-  // storage path. Keep a sub-KiB margin around the current 203.1 KiB closure.
-  homeClosureGzip:204*1024,
+  // Guest-to-account preflight adds a small admission path to the interactive
+  // shell. Keep less than 1 KiB of headroom around the measured closure.
+  homeClosureGzip:205*1024,
   workspaceChunkGzip:25*1024,
   workspaceIncrementalGzip:300*1024,
   runtimeChunkGzip:40*1024,

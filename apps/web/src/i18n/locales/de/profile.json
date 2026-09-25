@@ -50,7 +50,7 @@
     "password": "Sicherungspasswort", "passwordHint": "Verwenden Sie mindestens 12 Zeichen. Bewahren Sie das Passwort auf: Es kann nicht wiederhergestellt werden.",
     "short": "Geben Sie noch {{count}} Zeichen ein.", "export": "Verschlüsselte Sicherung exportieren", "exporting": "Sicherung wird erstellt…", "check": "Sicherung prüfen", "checking": "Wird geprüft…",
     "restore": "In dieser leeren Bibliothek wiederherstellen", "restoring": "Wird wiederhergestellt…", "file": "Sicherungsdatei auswählen", "noFile": "Keine Datei ausgewählt",
-    "restoreHint": "Melden Sie sich zur Wiederherstellung in einer leeren Browserbibliothek beim ursprünglichen Konto an.",
+    "restoreHint": "Stellen Sie nur in einer leeren lokalen Bibliothek wieder her. Kontosicherungen erfordern außerdem das ursprüngliche Konto.",
     "exported": "Sicherung erstellt. Prüfen Sie, ob die heruntergeladene Datei gespeichert wurde.", "restored": "Bibliothek wiederhergestellt. Öffnen Sie die App erneut, um weiterzulernen.", "reopen": "App erneut öffnen",
     "account": "Konto: {{account}}", "date": "Erstellt: {{date}}",
     "summary": "Quellen: {{drafts}} · Bedeutungen: {{meanings}} · Pakete: {{packages}} · Lerneinträge: {{targets}} · Durchläufe: {{runs}} · Ereignisse: {{events}}",
@@ -63,8 +63,8 @@
       "authorization": "Anmelde- und Geräteberechtigungen können nicht aus einer Sicherung wiederhergestellt werden.", "recordKey": "Diese Bibliothek enthält nicht unterstützte Datensatzkennungen.",
       "rowLimit": "Diese Bibliothek überschreitet das Sicherungslimit von 200.000 Datensätzen. Behalten Sie Ihre vorhandenen Daten.",
       "sizeLimit": "Diese Bibliothek überschreitet das Sicherungslimit von 64 MiB. Behalten Sie Ihre vorhandenen Daten.",
-      "accountMismatch": "Diese Sicherung gehört zu einem anderen Konto. Melden Sie sich in einer leeren Browserbibliothek beim ursprünglichen Konto an.",
-      "occupied": "Diese Bibliothek enthält bereits Daten. Verwenden Sie ein neues Browserprofil und melden Sie sich beim ursprünglichen Konto an, um die Sicherung wiederherzustellen.",
+      "accountMismatch": "Das Konto der Sicherung passt nicht zu dieser lokalen Bibliothek. Verwenden Sie das ursprüngliche Konto oder eine nicht verbundene lokale Bibliothek.",
+      "occupied": "Diese lokale Bibliothek enthält Daten und kann nicht überschrieben werden. Verwenden Sie ein neues Browserprofil oder löschen Sie diese Bibliothek ausdrücklich.",
       "depth": "Die Sicherungsdaten sind zu tief verschachtelt.", "valueType": "Die Sicherung enthält einen nicht unterstützten Datentyp.", "format": "Das Format der Sicherungsdaten ist ungültig.",
       "fields": "Die Sicherung enthält doppelte oder ungültige Felder.", "inconsistent": "Sicherungsdatensätze sind unvollständig oder widersprüchlich. Es wurde nichts wiederhergestellt."
     }

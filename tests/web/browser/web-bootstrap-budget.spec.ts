@@ -285,6 +285,11 @@ try{
  const a=await pageContext(false);
  const created=await a.page.goto(origin,{waitUntil:'domcontentloaded'});
  assert(created?.ok(),'Web bundle did not serve');
+ await expect(a.page.locator('#landing-title')).toBeVisible({timeout:SHELL_BUDGET_MS});
+ await a.page.locator('.sensa-landing__primary-action').click();
+ await assertApplicationShell(a.page);
+ await a.page.reload({waitUntil:'domcontentloaded'});
+ await assertApplicationShell(a.page);
  await expect.poll(()=>a.page.evaluate(()=>!!window.__sensaBrowserSmoke),{timeout:SHELL_BUDGET_MS}).toBe(true);
  assert.deepEqual(
   await a.page.evaluate(()=>window.__sensaBrowserSmoke!.transactionConcurrency()),
@@ -345,6 +350,24 @@ try{
  await competing.close();
  log(`   durable account library: ${cloud.published} published blocks / ${Math.round(cloud.publishedBytes/1024)}KiB, revision ${cloud.revision}`);
  await a.context.close();
+
+ // A populated guest and a populated account cannot be linked implicitly. Keep
+ // both libraries intact and make the decision visible in the account panel.
+ const conflict=await pageContext(false);
+ await conflict.page.goto(origin,{waitUntil:'domcontentloaded'});
+ await conflict.page.locator('.sensa-landing__primary-action').click();
+ await assertApplicationShell(conflict.page);
+ assert.equal(await conflict.page.evaluate(()=>window.__sensaBrowserSmoke!.seedDrafts(1,0)),1);
+ const beforeConflictRevision=cloud.revision;
+ await conflict.page.evaluate(({key,value})=>localStorage.setItem(key,JSON.stringify(value)),{key:storageKey,value:session()});
+ await conflict.page.reload({waitUntil:'domcontentloaded'});
+ await assertApplicationShell(conflict.page);
+ await conflict.page.locator('[data-sensa-shell-utility-action]').click();
+ await expect(conflict.page.getByText('此账号已有云端资料，当前浏览器也有本机资料。',{exact:false}).first()).toBeVisible({timeout:30000});
+ assert.equal(await conflict.page.evaluate(()=>window.__sensaBrowserSmoke!.draftCount()),1,'guest content was replaced during account linking');
+ assert.equal(cloud.revision,beforeConflictRevision,'guest linking overwrote the account cloud library');
+ assert.deepEqual(conflict.errors,[],'the conflicting guest library emitted a browser error');
+ await conflict.context.close();
 
  // Clicking login in the extension is already an explicit authorization intent.
  // A Web session that exists must exchange it automatically after account admission;

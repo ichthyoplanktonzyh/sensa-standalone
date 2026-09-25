@@ -144,11 +144,11 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
       {props.status}
       {props.localLibrary&&offlineShell==='failed'&&<p role="status" className="mt-3 text-sm text-fg-secondary">{t('account.localWeb.offlineFailed')}</p>}
       <div hidden={page!=='security'}>
-      {!props.account&&<div className="mt-5 flex flex-wrap gap-3"><button className="min-h-11 rounded-control bg-surface-subtle px-5 text-sm" onClick={serviceAccount.login}>{serviceAccount.onlineService?t('account.localWeb.check'):t('account.localWeb.login')}</button>{serviceAccount.email&&<button className="min-h-11 rounded-control border border-border-subtle px-5 text-sm" onClick={()=>void serviceAccount.logout().catch(()=>{})}>{t('account.localWeb.logout')}</button>}</div>}
+      {!props.account&&<div className="mt-5 flex flex-wrap gap-3">{!serviceAccount.connectionConflict&&<button className="min-h-11 rounded-control bg-surface-subtle px-5 text-sm" onClick={serviceAccount.login}>{serviceAccount.onlineService?t('account.localWeb.check'):t('account.localWeb.login')}</button>}{(serviceAccount.email||serviceAccount.connectionConflict)&&<button className="min-h-11 rounded-control border border-border-subtle px-5 text-sm" onClick={()=>void serviceAccount.logout().catch(()=>{})}>{t('account.localWeb.logout')}</button>}</div>}
       {!props.account&&serviceAccount.notice&&<p role="status" className="mt-3 text-sm">{serviceAccount.notice}</p>}
 
       {props.account && <div className="mt-8 flex flex-wrap gap-3"><button className="min-h-11 rounded-control border border-border-subtle px-5 text-sm" disabled={props.account.busy || props.account.pending > 0} onClick={props.account.onLogout}>{t('account.localWeb.signout')}</button>{props.account.pending > 0 && <p className="w-full text-sm text-fg-secondary">{t('account.localWeb.pendingLogout')}</p>}</div>}
-      {props.localLibrary&&<div className="mt-12 border-t border-border-subtle pt-6"><button className={button+' border-feedback-danger text-feedback-danger'} onClick={serviceAccount.deleteAccount}>{t('localFlow.deleteTitle')}</button></div>}
+      {props.localLibrary&&serviceAccount.email&&<div className="mt-12 border-t border-border-subtle pt-6"><button className={button+' border-feedback-danger text-feedback-danger'} onClick={serviceAccount.deleteAccount}>{t('localFlow.deleteTitle')}</button></div>}
       </div>
       <div hidden={page!=='preferences'}>
         <section aria-labelledby="account-preferences">

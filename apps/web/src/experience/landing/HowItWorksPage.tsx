@@ -33,7 +33,7 @@ export default function HowItWorksPage({ signedIn = false, onEnter }: {
           <a className="sensa-landing__text-link" href="/welcome">{t("landing.story")}</a>
           <LanguageSwitch />
           <button className="sensa-landing__header-action" type="button" onClick={onEnter}>
-            {t(signedIn ? "landing.enter" : "landing.signIn")}
+            {t("landing.enter")}
           </button>
         </nav>
       </header>

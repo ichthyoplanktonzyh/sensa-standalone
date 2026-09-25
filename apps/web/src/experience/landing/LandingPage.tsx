@@ -37,7 +37,7 @@ export function LandingPage({ signedIn = false, onEnter }: LandingPageProps) {
           <a className="sensa-landing__text-link" href="/how-it-works">{t("landing.how")}</a>
           <LanguageSwitch />
           <button className="sensa-landing__header-action" type="button" onClick={onEnter}>
-            {t(signedIn ? "landing.enter" : "landing.signIn")}
+            {t("landing.enter")}
           </button>
         </nav>
       </header>

@@ -83,6 +83,10 @@ Origin Private File System。SQLite 在专用 Worker 中运行，使用不要求
 `opfs-sahpool` VFS。Web Lock 选出唯一数据库 owner；其他同源 Sensa 标签页通过 BroadcastChannel
 复用 owner 的记录接口，owner 关闭后由剩余页面重新选举，绝不打开竞争连接。跨页共享/排他事务锁覆盖
 完整 `LibraryTransaction`，因此多次读取到一次 commit 的 read/modify/write 序列不会在标签页之间交错。
+本机 `libraryId` 与 `learnerId` 在无账号时即建立；`service-owner` 只绑定在线账号，不是本机学习事务的
+准入条件。账号连接前读取云端 head：双方都有内容时保持本机库未绑定并停止自动同步；云端为空时连接
+已有本机库，空本机库则允许后台恢复原账号资料。加密手动快照的新 payload 可表示无账号库，并继续
+读取已有账号快照；恢复仍只允许在空库中进行，账号快照仍校验原账号。
 浏览器内不再叠加全局 Promise 队列：只读事务持有 shared Web Lock 并可并发，写事务持有 exclusive Web Lock；
 无 Web Locks 的测试 Adapter 才使用串行 fallback。
 UI 只通过本机事务修改数据，不直接执行 SQL，也不写派生学习结果。Node 测试使用相同事务接口的内存

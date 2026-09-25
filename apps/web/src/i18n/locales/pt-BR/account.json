@@ -52,7 +52,7 @@
       "logout": "Sair",
       "synced": "Sincronizado",
       "cloudNote": "O histórico de aprendizagem desta conta é salvo localmente e sincronizado com o servidor.",
-      "localNote": "O conteúdo e o progresso de aprendizagem são salvos primeiro neste navegador. Verifique se a sincronização da conta terminou antes de apagar os dados do site.",
+      "localNote": "Seus dados ficam neste navegador. Exporte um backup criptografado antes de apagar os dados do site e confira a sincronização se houver uma conta conectada.",
       "controls": "As opções de backup criptografado e de dados locais ficam em Dispositivo e dados. Usuários conectados podem solicitar a exclusão da conta aqui.",
       "syncResults": "Verificar status da sincronização",
       "signout": "Sair",

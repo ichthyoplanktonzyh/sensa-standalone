@@ -15,11 +15,16 @@ const unb64=(value:string)=>{if(!/^[A-Za-z0-9+/]*={0,2}$/u.test(value))throw new
 const passSchema=z.string().min(12).max(1024);
 async function keyFor(password:string,salt:Uint8Array){const base=await crypto.subtle.importKey('raw',new TextEncoder().encode(passSchema.parse(password)),{name:'PBKDF2'},false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',hash:'SHA-256',salt:salt as BufferSource,iterations:600000},base,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);}
 const rowSchema=z.object({key:z.string().min(1).max(2000),value:z.unknown()}).strict();
-const payloadSchema=z.object({format:z.literal('sensa-web-library-snapshot-v1'),librarySchema:z.literal(6),createdAt:z.string().datetime({offset:true}),owner:backupOwnerSchema,tables:z.record(z.string(),z.array(rowSchema))}).strict();
+const localBackupOwnerSchema=backupOwnerSchema.extend({accountId:z.string().uuid().optional()});
+const payloadBase={librarySchema:z.literal(6),createdAt:z.string().datetime({offset:true}),tables:z.record(z.string(),z.array(rowSchema))};
+const payloadSchema=z.discriminatedUnion('format',[
+ z.object({...payloadBase,format:z.literal('sensa-web-library-snapshot-v1'),owner:backupOwnerSchema}).strict(),
+ z.object({...payloadBase,format:z.literal('sensa-web-library-snapshot-v2'),owner:localBackupOwnerSchema.nullable()}).strict(),
+]);
 const envelopeSchema=z.object({format:z.literal('sensa-web-library-backup-v1'),kdf:z.literal('PBKDF2-SHA256'),iterations:z.literal(600000),cipher:z.literal('AES-256-GCM'),salt:z.string().max(24),iv:z.string().max(16),data:z.string().max(MAX_FILE)}).strict();
-export type BackupSummary={createdAt:string;account:string;libraryId:string;drafts:number;meanings:number;packages:number;targets:number;runs:number;events:number;preparations:number;interrupted:number};
+export type BackupSummary={createdAt:string;account:string|null;libraryId:string;drafts:number;meanings:number;packages:number;targets:number;runs:number;events:number;preparations:number;interrupted:number};
 export type BackupSizeEstimate={usedBytes:number;capacityBytes:number};
-function summary(payload:z.infer<typeof payloadSchema>,rows:BackupRows):BackupSummary{const identity=rows.meta.find(r=>r.key==='identity')!.value;return {createdAt:payload.createdAt,account:payload.owner.email??payload.owner.subject,libraryId:identity.id,drafts:rows.drafts.length,meanings:rows.meanings.length,packages:rows.packageInstallations.length,targets:rows.learningTargets.length,runs:rows.learningRuns.length,events:rows.learningEvents.length,preparations:rows.personalLearning.length,interrupted:rows.sessions.filter(r=>r.value.status==='inflight').length+rows.personalLearning.filter(r=>['generating','reviewing'].includes(r.value.status)).length};}
+function summary(payload:z.infer<typeof payloadSchema>,rows:BackupRows):BackupSummary{const identity=rows.meta.find(r=>r.key==='identity')!.value;return {createdAt:payload.createdAt,account:payload.owner?.email??payload.owner?.subject??null,libraryId:identity.id,drafts:rows.drafts.length,meanings:rows.meanings.length,packages:rows.packageInstallations.length,targets:rows.learningTargets.length,runs:rows.learningRuns.length,events:rows.learningEvents.length,preparations:rows.personalLearning.length,interrupted:rows.sessions.filter(r=>r.value.status==='inflight').length+rows.personalLearning.filter(r=>['generating','reviewing'].includes(r.value.status)).length};}
 async function decode(file:Uint8Array,password:string){
  if(file.byteLength>MAX_FILE)throw new Error('libraryBackup.errors.fileTooLarge');
  let payload:z.infer<typeof payloadSchema>;
@@ -31,11 +36,11 @@ async function decode(file:Uint8Array,password:string){
  validateBackupRows(rows);return {payload,rows,summary:summary(payload,rows)};
 }
 async function encodeCurrentLibrary(){
- const snapshot=await readLibrary(async tx=>{await learningOwner(tx);const owner=backupOwnerSchema.parse(await tx.get('meta','service-owner'));const rows=Object.fromEntries(libraryTables.map(table=>[table,[]])) as unknown as BackupRows;for(const table of libraryTables){rows[table]=(await tx.entries(table)).map(r=>{if(typeof r.key!=='string')throw new Error('libraryBackup.errors.recordKey');return {key:r.key,value:r.value};});}rows.meta=rows.meta.filter(r=>!localMeta.has(r.key));rows.operations=rows.operations.filter(r=>!serviceOperation(r.value));return {owner,rows};});
+ const snapshot=await readLibrary(async tx=>{await learningOwner(tx);const storedOwner=await tx.get('meta','service-owner');const owner=storedOwner?localBackupOwnerSchema.parse(storedOwner):null;const rows=Object.fromEntries(libraryTables.map(table=>[table,[]])) as unknown as BackupRows;for(const table of libraryTables){rows[table]=(await tx.entries(table)).map(r=>{if(typeof r.key!=='string')throw new Error('libraryBackup.errors.recordKey');return {key:r.key,value:r.value};});}rows.meta=rows.meta.filter(r=>!localMeta.has(r.key));rows.operations=rows.operations.filter(r=>!serviceOperation(r.value));return {owner,rows};});
  if(libraryBackupTables.reduce((count,table)=>count+snapshot.rows[table].length,0)>200000)throw new Error('libraryBackup.errors.rowLimit');
  validateBackupRows(snapshot.rows);
  const tables=Object.fromEntries(libraryBackupTables.map(t=>[t,snapshot.rows[t].map(r=>({key:r.key,value:encodeBackupValue(r.value)}))]));
- const payload=payloadSchema.parse({format:'sensa-web-library-snapshot-v1',librarySchema:6,createdAt:new Date().toISOString(),owner:snapshot.owner,tables});
+ const payload=payloadSchema.parse({format:'sensa-web-library-snapshot-v2',librarySchema:6,createdAt:new Date().toISOString(),owner:snapshot.owner,tables});
  const plaintext=new TextEncoder().encode(JSON.stringify(payload));if(plaintext.length>MAX_PLAIN)throw new Error('libraryBackup.errors.sizeLimit');
  return {payload,rows:snapshot.rows,plaintext};
 }
@@ -62,8 +67,9 @@ export async function restoreLibraryBackup(file:Uint8Array,password:string){
  const checked=await decode(file,password);
  const result=await restoreLibraryTransaction(async tx=>{
   await assertCurrentLibrary(tx);
-  const destination=await learningOwner(tx),owner=backupOwnerSchema.parse(await tx.get('meta','service-owner'));
-  if(owner.subject!==checked.payload.owner.subject||owner.accountId!==checked.payload.owner.accountId)throw new Error('libraryBackup.errors.accountMismatch');
+  const destination=await learningOwner(tx),storedOwner=await tx.get('meta','service-owner'),owner=storedOwner?localBackupOwnerSchema.parse(storedOwner):null;
+  const sourceOwner=checked.payload.owner;
+  if(owner?.subject!==sourceOwner?.subject||(owner?.accountId&&sourceOwner?.accountId&&owner.accountId!==sourceOwner.accountId))throw new Error('libraryBackup.errors.accountMismatch');
   // Recheck after decrypt/preview: another tab or Intake may have written meanwhile.
   if(!await emptyDestination(tx))throw new Error('libraryBackup.errors.occupied');
   const rows=checked.rows,source=rows.meta.find(r=>r.key==='identity')!.value as LibraryIdentity;

@@ -52,7 +52,7 @@
       "logout": "Sign out",
       "synced": "Synced",
       "cloudNote": "Learning history is saved locally for this account and synced with the server.",
-      "localNote": "Content and learning progress are saved in this browser first. Check that account sync has finished before clearing website data.",
+      "localNote": "Your data is saved in this browser. Export an encrypted backup before clearing site data, and check sync status if an account is connected.",
       "controls": "Encrypted backup and local data controls are under Device & data. Signed-in users can request account deletion here.",
       "syncResults": "Check sync status",
       "signout": "Sign out",

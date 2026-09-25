@@ -1,5 +1,6 @@
 /** Production local-library storage: SQLite WASM in an OPFS Worker. */
 import {canonicalConsumerJson} from '@sensa/contracts/sensa/canonical-json';
+import {markLocalLibraryPresent} from './localLibraryHint';
 
 import { decodeBackupValue, encodeBackupValue } from "./backupCodec";
 import { sqliteRecordAdapter } from "./sqliteAdapter";
@@ -561,7 +562,7 @@ export type LibraryIdentity = {
 };
 
 export async function openLibrary(): Promise<LibraryIdentity> {
-  return command({
+  const identity=await command({
     id: "00000000-0000-4000-8000-000000000001",
     kind: "library.create",
     input: {},
@@ -576,6 +577,8 @@ export async function openLibrary(): Promise<LibraryIdentity> {
     tx.put("meta", "identity", identity);
     return identity;
   });
+  markLocalLibraryPresent();
+  return identity;
 }
 
 export function observeLibrary(listener: () => void, tables?: readonly Table[]): () => void {

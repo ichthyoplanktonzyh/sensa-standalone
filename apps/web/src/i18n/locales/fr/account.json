@@ -52,7 +52,7 @@
       "logout": "Se déconnecter",
       "synced": "Synchronisé",
       "cloudNote": "L’historique d’apprentissage de ce compte est enregistré localement et synchronisé avec le serveur.",
-      "localNote": "Le contenu et la progression d’apprentissage sont d’abord enregistrés dans ce navigateur. Vérifiez que la synchronisation du compte est terminée avant d’effacer les données du site.",
+      "localNote": "Vos données sont enregistrées dans ce navigateur. Exportez une sauvegarde chiffrée avant d’effacer les données du site et vérifiez la synchronisation si un compte est connecté.",
       "controls": "Les commandes de sauvegarde chiffrée et de gestion des données locales se trouvent dans Appareil et données. Les utilisateurs connectés peuvent demander ici la suppression de leur compte.",
       "syncResults": "Vérifier l’état de la synchronisation",
       "signout": "Se déconnecter",

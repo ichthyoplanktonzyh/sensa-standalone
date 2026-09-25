@@ -6,6 +6,7 @@ export type AccountAccess={
  notice:string;
  email:string|null;
  onlineService:boolean;
+ connectionConflict:boolean;
  libraryAvailability:LibraryAvailability;
  login:()=>void;
  logout:()=>Promise<void>;
@@ -16,6 +17,7 @@ export const AccountContext=createContext<AccountAccess>({
  notice:'',
  email:null,
  onlineService:false,
+ connectionConflict:false,
  libraryAvailability:'restoring',
  login:()=>{},
  logout:async()=>{},
