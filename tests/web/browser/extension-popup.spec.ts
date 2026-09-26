@@ -1,12 +1,13 @@
 import {test,expect} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
+const extensionArtifact=process.env.SENSA_EXTENSION_TEST_DIR??'apps/browser-extension/dist';
 
 test.setTimeout(60_000);
 test.use({locale:'zh-CN'});
 test('extension popup actions and reading-site controls report their state',async({page})=>{
  await page.route('**/*',route=>route.abort());
- await page.setContent((await readFile('apps/browser-extension/dist/popup.html','utf8')).replace('<script src="popup.js"></script>',''));
+ await page.setContent((await readFile(extensionArtifact+'/popup.html','utf8')).replace('<script src="popup.js"></script>',''));
  await page.addScriptTag({content:'window.__name = (value) => value;'});
  await page.evaluate(()=>{
   const route={id:'fixture-route',revision:1,targetLanguageTag:'en',defaultSupportLanguageTag:'zh-CN',status:'active'};
@@ -17,12 +18,12 @@ test('extension popup actions and reading-site controls report their state',asyn
    return new Promise(resolve=>{fixture.finish=resolve;});
   }}}});
  });
- await page.addScriptTag({path:resolve('apps/browser-extension/dist/popup.js')});
+ await page.addScriptTag({path:resolve(extensionArtifact,'popup.js')});
  const status=page.getByRole('status');
  const complete=async(error?:string,account=true)=>page.evaluate(({error,account})=>{
   const fixture=(window as any).fixture;fixture.finish(error?{error}:fixture.status({accountId:account?'fixture-account':null,pending:0,errors:[],recent:[]}));
  },{error,account});
- await expect(status).toHaveText('正在检查账号…');await expect(page.locator('#login')).toBeDisabled();
+ await expect(status).toHaveText('正在检查本机状态…');await expect(page.locator('#login')).toBeDisabled();
  await complete();await expect(status).toContainText('已登录 Sensa');
  await expect(page.locator('#language-route')).toHaveValue('fixture-route');await expect(page.locator('#language-route')).toHaveAttribute('aria-label','当前阅读路线');
  await expect(page.getByRole('heading',{name:'最近保存'})).toBeVisible();
@@ -67,9 +68,9 @@ test('extension popup actions and reading-site controls report their state',asyn
  await page.screenshot({path:'/tmp/sensa-recent-many.png',fullPage:true});
  await page.locator('#disconnect').click();await complete(undefined,false);
  await expect(page.locator('#recent a')).toHaveCount(0);await expect(page.locator('#recent-count')).toHaveText('0 条');
- await expect(page.locator('#recent-empty')).toHaveText('登录后查看最近保存的内容。');
+ await expect(page.locator('#recent-empty')).toHaveText('暂无最近保存的内容。');
  await page.evaluate(()=>Object.defineProperty(navigator,'language',{value:'en',configurable:true}));
- await page.locator('#sync').click();await complete(undefined,false);await expect(status).toContainText('Not signed in to Sensa');await expect(page.locator('#recent-empty')).toHaveText('Sign in to see recently saved content.');
+ await page.locator('#sync').click();await complete(undefined,false);await expect(status).toContainText('Using locally');await expect(page.locator('#recent-empty')).toHaveText('No recently saved content.');
  // The switch that has to be reachable from a page the learner turned reading off
  // for: hidden where there is no site, and it states the rule in force in the
  // learner's language while its click applies the other one. Lifting a rule also

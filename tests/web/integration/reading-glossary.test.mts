@@ -65,9 +65,10 @@ const web='http://127.0.0.1:3000';
 const pageUrl=web+'/article';
 const accountId=crypto.randomUUID();
 const libraryId=crypto.randomUUID();
+const providerId=crypto.randomUUID();
 const defaultRoute={id:'00000000-0000-4000-8000-000000000001',revision:1,targetLanguageTag:'en',defaultSupportLanguageTag:'zh-CN',status:'active'};
 const stored={readingLanguageRoutes:{revision:1,routes:[defaultRoute]},readingActiveLanguageRouteId:defaultRoute.id,readingGlossary:[{inputLanguageTag:'en',outputLanguageTag:'zh-CN',term:'prompt',rendering:'提示词'}]};
-const storage:Record<string,unknown>={sensa:{version:1,active:accountId,accounts:{[accountId]:{accountId,installationId:crypto.randomUUID(),webLibraryId:libraryId,token:'fixture-token',queue:[],recent:[],savedOperations:{}}}}};
+const storage:Record<string,unknown>={sensa:{version:1,active:accountId,accounts:{[accountId]:{accountId,installationId:crypto.randomUUID(),webLibraryId:libraryId,token:'fixture-token',queue:[],recent:[],savedOperations:{}}}},sensaLocalModels:{revision:1,providers:[{id:providerId,name:'Fixture',baseUrl:'https://models.example.test/v1',model:'fixture-model',enabled:true,apiKey:'fixture-local-key'}],assignments:{selection:null,page:null,subtitles:null,action:null,meaning:null,writing:null}}};
 const session:Record<string,unknown>={modes:{1:{accountId}}};
 const sent:{url:string;body:unknown}[]=[];
 let messageListener:any=null,connectListener:any=null;
@@ -78,6 +79,7 @@ const chromeMock:any={
  tabs:{get:async(id:number)=>({id,url:pageUrl}),create:async()=>({id:20}),update:async(id:number)=>({id}),query:async()=>[],sendMessage:async()=>{},onUpdated:noopEvent,onRemoved:noopEvent},
  identity:{getRedirectURL:(path:string)=>'https://'+'a'.repeat(32)+'.chromiumapp.org/'+path},
  alarms:{create:()=>{},onAlarm:noopEvent},
+ permissions:{contains:async()=>true},
 };
 const bundle=await build({entryPoints:['apps/browser-extension/src/background.ts'],bundle:true,write:false,format:'iife',platform:'browser',define:{SENSA_WEB_URL:JSON.stringify(web),SENSA_API_URL:JSON.stringify(api)}});
 const responses:Record<string,unknown>={
@@ -86,9 +88,11 @@ const responses:Record<string,unknown>={
  '/sensa/reading/models':{data:[{id:'fixture-model'}]},
  '/sensa/semantic/lookups/stream':{},
 };
-vm.runInNewContext(bundle.outputFiles[0]!.text,{chrome:chromeMock,crypto,btoa,URL,TextEncoder,TextDecoder,AbortSignal,AbortController,setTimeout,clearTimeout,console,
+vm.runInNewContext(bundle.outputFiles[0]!.text,{chrome:chromeMock,crypto,btoa,URL,TextEncoder,TextDecoder,AbortSignal,AbortController,Response,setTimeout,clearTimeout,console,
  fetch:async(url:string,init:any)=>{const path=new URL(url).pathname;sent.push({url:path,body:init.body===undefined?undefined:JSON.parse(String(init.body))});
   if(path.endsWith('/stream'))return {ok:true,body:{getReader:()=>({read:async()=>({done:true}),cancel:async()=>{}})}};
+  if(path==='/v1/chat/completions')return Response.json({choices:[{message:{content:'ok'}}]});
+  if(path==='/v1/models')return Response.json({data:[{id:'fixture-model'}]});
   return {ok:true,json:async()=>responses[path]??{}};}});
 
 const fromPage=(input:unknown,sender:unknown={id:'fixture',url:pageUrl,tab:{id:1}})=>new Promise<any>(resolve=>messageListener({...input as object,accountId,pageUrl},sender,resolve));
@@ -122,15 +126,18 @@ assert.deepEqual((sent[2]!.body as any).languages,{supportLanguageTag:'zh-CN',ta
 assert.deepEqual((sent[2]!.body as any).glossary,[],'and with no glossary, because the learner has not written one');
 (stored as any).readingLanguageRoutes={revision:1,routes:[defaultRoute]};(stored as any).readingActiveLanguageRouteId=defaultRoute.id;(stored as any).readingGlossary=[{inputLanguageTag:'en',outputLanguageTag:'zh-CN',term:'prompt',rendering:'提示词'}];
 
-const test=await fromPage({kind:'reading-test',input:{id:crypto.randomUUID(),providerId:crypto.randomUUID()}},{id:'fixture',url:'chrome-extension://fixture/options.html'});
+const testInput={id:crypto.randomUUID(),providerId};
+assert.ok(readingTestRequestSchema.safeParse(testInput).success);
+const test=await fromPage({kind:'reading-test',input:testInput},{id:'fixture',url:'chrome-extension://fixture/options.html'});
 assert.equal(test.error,undefined);
-const models=await fromPage({kind:'reading-models',input:{providerId:crypto.randomUUID()}},{id:'fixture',url:'chrome-extension://fixture/options.html'});
+const modelsInput={providerId};
+assert.ok(readingModelsRequestSchema.safeParse(modelsInput).success);
+const models=await fromPage({kind:'reading-models',input:modelsInput},{id:'fixture',url:'chrome-extension://fixture/options.html'});
 assert.equal(models.error,undefined);
-const testBody=sent.find(entry=>entry.url==='/sensa/reading/test')!.body;
-const modelsBody=sent.find(entry=>entry.url==='/sensa/reading/models')!.body;
-assert.ok(readingTestRequestSchema.safeParse(testBody).success,'a model test is the connection question and nothing else');
-assert.ok(readingModelsRequestSchema.safeParse(modelsBody).success,'a model list is the connection question and nothing else');
-assert.equal('languages' in (testBody as object),false,'a connection question has no languages to speak of');
+const testBody=sent.find(entry=>entry.url==='/v1/chat/completions')!.body;
+assert.equal('languages' in (testBody as object),false,'a connection test sends no learner language state to the provider');
+assert.ok(sent.some(entry=>entry.url==='/v1/models'&&entry.body===undefined),'a model list is read directly from the permitted provider');
+assert.equal(sent.some(entry=>entry.url==='/sensa/reading/test'||entry.url==='/sensa/reading/models'),false,'local model credentials never travel through the Sensa API');
 
 // The other port on this channel is not a reading: a lookup streams a capture,
 // and completing it would be answering a question nobody asked.
@@ -142,6 +149,6 @@ await new Promise(resolve=>setTimeout(resolve,50));
 const lookupBody=sent.find(entry=>entry.url==='/sensa/semantic/lookups/stream')!.body;
 assert.deepEqual(lookupBody,{...lookup,languages:{supportLanguageTag:'zh-CN',targetLanguageTag:'en',languageRouteId:defaultRoute.id,languageRouteRevision:1}},'a lookup carries the extension’s selected Route rather than assuming an English/Chinese pair at the API');
 assert.equal(semanticLookupInputSchema.safeParse(lookupBody).success,true,'the semantic lookup body matches the API contract');
-console.log('PASS: readings and semantic lookups carry the pinned Route context, readings carry the learner glossary, and connection questions carry only their own request.');
+console.log('PASS: hosted readings and semantic lookups carry the pinned Route context, while local connection questions go only to the user-selected provider.');
 
 });

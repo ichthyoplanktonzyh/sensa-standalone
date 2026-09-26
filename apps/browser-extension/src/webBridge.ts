@@ -32,7 +32,7 @@ if(location.origin===new URL(webUrl).origin){
  // The background announces only that work exists. Learner content remains on
  // the typed pull/ack wire above and never appears in an unsolicited message.
  chrome.runtime.onMessage.addListener((message,sender)=>{
-  if(sender.id!==chrome.runtime.id||message?.kind!==SENSA_BRIDGE.notificationKind||typeof message.accountId!=='string')return;
+  if(sender.id!==chrome.runtime.id||message?.kind!==SENSA_BRIDGE.notificationKind||message.accountId!==null&&typeof message.accountId!=='string')return;
   window.postMessage({channel:SENSA_BRIDGE.notification,kind:SENSA_BRIDGE.notificationKind,accountId:message.accountId},location.origin);
  });
 }

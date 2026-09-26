@@ -72,7 +72,7 @@ export const sensaBridgeNotificationKind='intake-ready' as const;
 export const sensaBridgeNotificationSchema=z.object({
   channel:z.literal(sensaBridgeNotificationChannel),
   kind:z.literal(sensaBridgeNotificationKind),
-  accountId:z.string().uuid(),
+  accountId:z.string().uuid().nullable(),
 }).strict();
 /** The page's own request id, echoed back so several requests can be in flight
  * at once. Bounded because it is attacker-adjacent input: any page that loads
@@ -84,9 +84,11 @@ const requestId=z.string().min(1).max(sensaBridgeMaxRequestIdLength);
 const pageRequest={
   channel:z.literal(sensaBridgeRequestChannel),
   id:requestId,
-  accountId:z.string().uuid(),
+  accountId:z.string().uuid().nullable(),
 };
 const libraryRequest={...pageRequest,libraryId:z.string().uuid()};
+const accountRequest={...pageRequest,accountId:z.string().uuid()};
+const accountLibraryRequest={...libraryRequest,accountId:z.string().uuid()};
 
 /**
  * Every request a Web page may make of the extension.
@@ -104,15 +106,18 @@ export const sensaBridgeRequestSchema=z.discriminatedUnion('kind',[
    * idempotency receipt and stops handing that request over. */
   z.object({...libraryRequest,kind:z.literal('web-intake-ack'),receipt:sensaBrowserIntakeReceiptSchema}).strict(),
   /** Starts a connection for the tab that asked, if it has none. */
-  z.object({...libraryRequest,kind:z.literal('web-connect-prepare')}).strict(),
+  z.object({...accountLibraryRequest,kind:z.literal('web-connect-prepare')}).strict(),
   /** Hands back the redirect the extension's own page came home with. */
-  z.object({...libraryRequest,kind:z.literal('web-connect-complete'),receipt:z.object({redirectUri:z.string().url()}).strict()}).strict(),
+  z.object({...accountLibraryRequest,kind:z.literal('web-connect-complete'),receipt:z.object({redirectUri:z.string().url()}).strict()}).strict(),
   /** The learner's reconnect decision, including whether their unsent captures
    * are dropped. Required rather than defaulted: discarding a learner's captures
    * is a choice only the learner makes, so the request states it or is refused. */
-  z.object({...libraryRequest,kind:z.literal('web-connect-reset'),receipt:z.object({discardPending:z.boolean()}).strict()}).strict(),
+  z.object({...accountLibraryRequest,kind:z.literal('web-connect-reset'),receipt:z.object({discardPending:z.boolean()}).strict()}).strict(),
+  /** Connect the extension's local capture queue to this browser's Web library. */
+  z.object({...libraryRequest,accountId:z.null(),kind:z.literal('web-local-bind')}).strict(),
+  z.object({...libraryRequest,accountId:z.null(),kind:z.literal('web-local-reset'),receipt:z.object({discardPending:z.boolean()}).strict()}).strict(),
   /** The Web session ended, so the account's credentials and reading state go. */
-  z.object({...pageRequest,kind:z.literal('web-session-ended')}).strict(),
+  z.object({...accountRequest,kind:z.literal('web-session-ended')}).strict(),
   /** The learner-owned Routes. The extension keeps its own surface-scoped
    * Active Route Selection while Web remains the only Route editor. */
   z.object({...libraryRequest,kind:z.literal('web-language-routes'),routes:sensaLanguageRouteCollectionSchema}).strict(),
@@ -144,6 +149,8 @@ export const sensaBridgeResponseSchemas={
   }).strict(),
   'web-connect-complete':z.object({connected:z.literal(true)}).strict(),
   'web-connect-reset':z.object({reset:z.literal(true)}).strict(),
+  'web-local-bind':z.object({connected:z.literal(true)}).strict(),
+  'web-local-reset':z.object({reset:z.literal(true)}).strict(),
   'web-session-ended':z.object({disconnected:z.boolean()}).strict(),
   'web-language-routes':sensaFormalPinnedLanguageContextSchema,
   'web-reading-glossary':sensaReadingGlossarySchema,

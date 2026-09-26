@@ -10,7 +10,11 @@ npm run build -w @sensa/browser-extension
 
 生产扩展在 Chrome 开发者模式加载 `apps/browser-extension/dist`。重新构建后需要重新加载扩展，并刷新已经打开的 Sensa 页面。本机预览由 `npm run dev:sensa` 或 `npm run preview:sensa` 单独生成并加载 `apps/browser-extension/dist-local`，不会覆盖生产扩展。
 
-正式构建必须同时设置 `SENSA_EXTENSION_WEB_URL` 和 `SENSA_EXTENSION_API_URL`；非 loopback 地址必须使用 HTTPS。没有设置目标的仓库构建只把编译检查产物写入 `.tmp/browser-extension-build`，绝不改写可能已被 Chrome 加载的 `dist`。模型密钥不得进入扩展 bundle 或 storage，`dist/` 不提交 Git。
+正式构建必须同时设置 `SENSA_EXTENSION_WEB_URL` 和 `SENSA_EXTENSION_API_URL`；非 loopback 地址必须使用 HTTPS。没有设置目标的仓库构建只把编译检查产物写入 `.tmp/browser-extension-build`，绝不改写可能已被 Chrome 加载的 `dist`。`dist/` 不提交 Git。
+
+游客可直接开启阅读模式、朗读、设置站点规则并保存原文。扩展把游客采集保存在独立的本机队列；同一浏览器中的 Web 本机库通过页面桥领取并回执。账号队列保持独立，登录或退出不会自动迁移采集。无模型时解释和翻译会说明需要配置模型，原文仍可保存。
+
+自带的兼容模型在扩展设置页配置，使用前由 Chrome 为具体服务地址请求可选主机权限。API Key 只存于扩展的受信任本机存储，设置响应不回传密钥，页面脚本不能读取；调用直接从后台发往用户的模型服务。选择「Sensa 服务」则需要账号，沿用托管 AI 的服务端额度和账号连接。
 
 无付费交互检查：
 

@@ -11,10 +11,10 @@ const labels:Record<(typeof readingFeatures)[number],ReturnType<typeof t>>={sele
 document.documentElement.lang=extensionLanguage();
 for(const element of document.querySelectorAll<HTMLElement>('[data-i18n]'))element.textContent=t(element.dataset.i18n as Parameters<typeof t>[0]);
 const voiceSelect=document.getElementById('speech-voice')!;voiceSelect.setAttribute('aria-label',t('optionsSpeechVoice'));
-let current:(ReadingSettingsView & {accountId:string})|null=null;
+let current:ReadingSettingsView|null=null;
 let busy=false;
 function value(id:string){return (document.getElementById(id) as HTMLInputElement).value.trim();}
-async function message(kind:string,input?:unknown){const response=await chrome.runtime.sendMessage({kind,input,accountId:current?.accountId});if(response.error)throw new Error(response.error);return response.value;}
+async function message(kind:string,input?:unknown){const response=await chrome.runtime.sendMessage({kind,input});if(response.error)throw new Error(response.error);return response.value;}
 async function perform(work:()=>Promise<void>){if(busy)return;busy=true;document.querySelectorAll<HTMLButtonElement>('button').forEach(b=>b.disabled=true);try{await work();}catch(e){feedback.textContent=readingError(e);}finally{busy=false;document.querySelectorAll<HTMLButtonElement>('button').forEach(b=>b.disabled=false);}}
 function inputField(parent:Element,label:string,name:string,initial:string,type='text'){
   const wrap=document.createElement('label');wrap.textContent=label;const field=document.createElement('input');field.name=name;field.type=type;field.value=initial;field.autocomplete=type==='password'?'new-password':'off';wrap.append(field);parent.append(wrap);return field;
@@ -57,10 +57,12 @@ async function reload(){current=null;const result=await message('reading-setting
 document.getElementById('reload')!.onclick=()=>void perform(reload);
 document.getElementById('add')!.onclick=()=>addProvider();
 document.getElementById('save')!.onclick=()=>void perform(async()=>{
-  if(!current)throw new Error('authentication_required');
+  if(!current)throw new Error('settings_unavailable');
   const next={...defaultReadingAssignments};for(const feature of readingFeatures)next[feature]=(document.getElementById('feature-'+feature) as HTMLSelectElement).value||null;
   const input:ReadingSettingsInput={expectedRevision:current.revision,providers:draftProviders(),assignments:next};
-  const result=await message('reading-settings-save',input);current={...result,accountId:current.accountId};render();feedback.textContent=t('optionsModelSaved');
+  const origins=[...new Set(input.providers.filter(provider=>provider.enabled).map(provider=>new URL(provider.baseUrl).origin+'/*'))];
+  if(origins.length&&!await chrome.permissions.request({origins}))throw new Error('provider_permission_required');
+  const result=await message('reading-settings-save',input);current=result;render();feedback.textContent=t('optionsModelSaved');
 });
 document.getElementById('preferences')!.onclick=()=>void perform(async()=>{
   const disabledSites=value('disabled-sites').split(/\s+/u).filter(Boolean);
@@ -73,7 +75,7 @@ document.getElementById('preferences')!.onclick=()=>void perform(async()=>{
   feedback.textContent=t('optionsPrefsSaved');
 });
 document.getElementById('account')!.onclick=()=>void chrome.tabs.create({url:new URL('/profile',webUrl).toString()});
-async function serviceStatus(){const target=document.getElementById('service-status')!;try{const result=await message('service-status');target.textContent=result.authorized?t('optionsAccountConnected')+t(result.explanationAvailable?'optionsExplanationReady':'optionsExplanationUnavailable')+' '+t('optionsLastDay')+result.usage.map((u:{kind:string;used:number;limit:number})=>`${t(({reading:'optionsUsageReading',teacher:'optionsUsageTeacher',content:'optionsUsageContent'} as const)[u.kind as 'reading'|'teacher'|'content']??'optionsUsageReading')} ${u.used}/${u.limit}`).join('; '):t('optionsSignIn');}catch(e){target.textContent=readingError(e);}}
+async function serviceStatus(){const target=document.getElementById('service-status')!;try{const result=await message('service-status');target.textContent=result.authorized?t('optionsAccountConnected')+t(result.explanationAvailable?'optionsExplanationReady':'optionsExplanationUnavailable')+' '+t('optionsLastDay')+result.usage.map((u:{kind:string;used:number;limit:number})=>`${t(({reading:'optionsUsageReading',teacher:'optionsUsageTeacher',content:'optionsUsageContent'} as const)[u.kind as 'reading'|'teacher'|'content']??'optionsUsageReading')} ${u.used}/${u.limit}`).join('; '):t('optionsSignIn');}catch(e){target.textContent=e instanceof Error&&e.message==='authentication_required'?t('optionsSignIn'):readingError(e);}}
 document.getElementById('service-reload')!.onclick=()=>void serviceStatus();
 document.getElementById('advanced')!.addEventListener('toggle',()=>{if((document.getElementById('advanced') as HTMLDetailsElement).open&&!current)void perform(reload);});
 void serviceStatus();
@@ -93,4 +95,4 @@ function showVoices(selected=''){
   select.value=keep;
 }
 if(typeof speechSynthesis!=='undefined')speechSynthesis.addEventListener?.('voiceschanged',()=>showVoices());
-void perform(async()=>{const prefs=await readingPreferences();(document.getElementById('action-name') as HTMLInputElement).value=prefs.actionName;(document.getElementById('action-prompt') as HTMLTextAreaElement).value=prefs.actionPrompt;(document.getElementById('disabled-sites') as HTMLTextAreaElement).value=prefs.disabledSites.join('\n');(document.getElementById('speech-rate') as HTMLInputElement).value=String(prefs.speechRate);showVoices(prefs.speechVoice);feedback.textContent=t('optionsPrefsLoaded');});
+void perform(async()=>{await reload();const prefs=await readingPreferences();(document.getElementById('action-name') as HTMLInputElement).value=prefs.actionName;(document.getElementById('action-prompt') as HTMLTextAreaElement).value=prefs.actionPrompt;(document.getElementById('disabled-sites') as HTMLTextAreaElement).value=prefs.disabledSites.join('\n');(document.getElementById('speech-rate') as HTMLInputElement).value=String(prefs.speechRate);showVoices(prefs.speechVoice);feedback.textContent=t('optionsPrefsLoaded');});

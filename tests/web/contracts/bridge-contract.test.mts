@@ -73,7 +73,8 @@ const chromeMock:any={
       if(!backgroundListener)return reject(new Error('no listener'));
       backgroundListener(message,senderOverride??pageSender(),resolve);
     })},
-  tabs:{create:async()=>({id:20}),update:async(id:number)=>({id}),query:async()=>[],sendMessage:async()=>{},onUpdated:noopEvent,onRemoved:noopEvent},
+  tabs:{create:async()=>({id:20}),update:async(id:number)=>({id}),get:async()=>({id:7,url:web+'/article'}),query:async(options:any)=>options?.active?[{id:7,url:web+'/article',active:true}]:[],sendMessage:async()=>{},onUpdated:noopEvent,onRemoved:noopEvent},
+  scripting:{executeScript:async()=>[]},action:{setBadgeText:async()=>{},setTitle:async()=>{}},
   alarms:{create:()=>{},onAlarm:noopEvent},
 };
 const pageListeners:((event:unknown)=>void)[]=[];
@@ -200,6 +201,24 @@ assert.equal(sensaBridgeValue('web-session-ended',await fromPage({channel:sensaB
 assert.equal((storage.sensa as any).active,null,'sign-out drops the active connection');
 assert.equal(sensaBridgeValue('web-connect-reset',await fromPage(request('web-connect-reset',{receipt:{discardPending:false}}))).reset,true,'a reconnect is answered');
 assert.deepEqual(await pendingWeb(accountId,libraryId),[],'a reconnect keeps delivered receipts');
+const localRequest=(kind:string,body:Record<string,unknown>={})=>request(kind,{accountId:null,...body});
+assert.equal(sensaBridgeValue('web-local-bind',await fromPage(localRequest('web-local-bind'))).connected,true,'a guest Web library can bind without an account');
+const localOperationId=crypto.randomUUID();
+const popupSender={id:extensionId,url:'chrome-extension://'+extensionId+'/popup.html'};
+assert.equal((await raw({kind:'toggle'},popupSender)).value.accountId,null,'reading mode starts without a Sensa account');
+const localScope=storage.sensaExtensionLocalScope;
+assert.equal(typeof localScope,'string');
+assert.equal((await raw({kind:'reading-run',accountId:localScope,pageUrl:web+'/article',input:{feature:'selection',text:'suit'}},pageSender(web+'/article'))).error,'provider_not_configured','AI asks for a model while guest reading stays available');
+assert.equal((await raw({kind:'save',accountId:localScope,operationId:localOperationId,snapshot},pageSender(web+'/article'))).value.savedLocally,true,'a guest can save raw source without AI');
+const localPending=sensaBridgeValue('web-intake-pull',await fromPage(localRequest('web-intake-pull')));
+assert.equal(localPending.length,1,'a guest capture reaches the local Web library');
+assert.equal(localPending[0]?.intake.operationId,localOperationId);
+const localDigest=createHash('sha256').update(canonicalConsumerJson(localPending[0])).digest('hex');
+const localReceipt={...receipt,clientId:localPending[0]!.clientId,operationId:localOperationId,requestDigest:localDigest};
+assert.equal(sensaBridgeValue('web-intake-ack',await fromPage(localRequest('web-intake-ack',{receipt:localReceipt}))).acknowledged,true,'a guest receipt is durable');
+assert.deepEqual(sensaBridgeValue('web-intake-pull',await fromPage(localRequest('web-intake-pull'))),[],'an acknowledged guest capture is not delivered again');
+assert.equal((await fromPage(localRequest('web-local-bind',{libraryId:crypto.randomUUID()}))).error,'library_mismatch','another guest library requires explicit reconnect');
+assert.equal(sensaBridgeValue('web-local-reset',await fromPage(localRequest('web-local-reset',{libraryId:crypto.randomUUID(),receipt:{discardPending:false}}))).reset,true,'an explicit guest reconnect succeeds');
 console.log('PASS: every declared kind is served through the real forwarder and handler — published Route context and glossary, pull and acknowledgement, PKCE prepare and its refusals, account-scoped sign-out and reconnect — and each answer parses as the contracts describe it.');
 
 // ── phase 3: one declaration, read by all three ends ─────────────────────────
@@ -211,15 +230,17 @@ const payloads:{[K in SensaBridgeKind]:SensaBridgePayload<K>}={
   'web-connect-prepare':{},
   'web-connect-complete':{receipt:{redirectUri:'https://'+'a'.repeat(32)+'.chromiumapp.org/sensa'}},
   'web-connect-reset':{receipt:{discardPending:false}},
+  'web-local-bind':{},
+  'web-local-reset':{receipt:{discardPending:false}},
   'web-session-ended':{},
   'web-language-routes':{routes:routeCollection},
   'web-reading-glossary':{glossary:pairGlossary},
 };
 assert.deepEqual(Object.keys(payloads).sort(),[...sensaBridgeKinds].sort(),'every kind has exactly one payload shape, and no kind is missing one');
 assert.deepEqual(Object.keys(sensaBridgeResponseSchemas).sort(),[...sensaBridgeKinds].sort(),'every kind has exactly one declared answer');
-assert.equal(sensaBridgeKinds.length,8);
+assert.equal(sensaBridgeKinds.length,10);
 for(const kind of sensaBridgeKinds){
-  const built:Record<string,unknown>={channel:sensaBridgeRequestChannel,id:crypto.randomUUID(),kind,accountId,...payloads[kind] as Record<string,unknown>};
+  const built:Record<string,unknown>={channel:sensaBridgeRequestChannel,id:crypto.randomUUID(),kind,accountId:kind.startsWith('web-local-')?null:accountId,...payloads[kind] as Record<string,unknown>};
   if(kind!=='web-session-ended')built.libraryId=libraryId;
   assert.ok(sensaBridgeRequestSchema.safeParse(built).success,'the declaration accepts what a caller builds for '+kind);
 }

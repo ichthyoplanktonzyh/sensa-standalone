@@ -1,5 +1,5 @@
 import {test} from 'vitest';
-/** Model management has exactly one entrance per runtime.
+/** Model management has one provider entrance per runtime.
  *
  * This is a static, offline check: it reads source files and asserts that no surface
  * reaches a model provider around the model-management boundary. It costs nothing and
@@ -34,12 +34,12 @@ const where=(file:string,pattern:RegExp)=>[...(text.get(file)??'').matchAll(patt
 const lines=(file:string)=>((text.get(file)??'').split('\n'));
 const check=(condition:boolean,message:string)=>{if(!condition)failures.push(message);};
 
-// 1. A provider endpoint may be named only inside the two executors.
+// 1. A provider endpoint may be named only inside a runtime executor.
 for(const file of files){
  const body=text.get(file)!;
  const runtime=file.startsWith('packages/model-runtime/');
  check(!/:generateContent|generativelanguage\.googleapis\.com/u.test(body),`${file}: names a provider generation endpoint directly`);
- check(!/chat\/completions/u.test(body)||file==='apps/web/src/data/library/transport.ts',`${file}: builds a provider completion URL outside the device executor`);
+ check(!/chat\/completions/u.test(body)||['apps/web/src/data/library/transport.ts','apps/browser-extension/src/localModels.ts'].includes(file),`${file}: builds a provider completion URL outside a device executor`);
  check(runtime||!/from ['"](?:genkit|@genkit-ai\/compat-oai|openai)['"]/u.test(body),`${file}: imports a provider SDK outside the model runtime`);
 }
 
@@ -66,6 +66,6 @@ check(assignable.includes('reference'),'the reference purpose must be assignable
 check(!assignable.includes('probe'),'probe is an internal purpose and is never assignable');
 
 if(failures.length){for(const failure of failures)console.error(failure);throw new Error(`${failures.length} model boundary violation(s)`);}
-console.log(`PASS: no provider endpoint outside the two executors, one scheduler per runtime, declared execution place on all ${submissions.length} submissions, reference resolution inside the boundary, assignable purposes match the contract. ${files.length} source files read; no network.`);
+console.log(`PASS: no provider endpoint outside runtime executors, one scheduler per queued runtime, declared execution place on all ${submissions.length} submissions, reference resolution inside the boundary, assignable purposes match the contract. ${files.length} source files read; no network.`);
 
 });

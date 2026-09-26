@@ -3,11 +3,12 @@ import {resolve} from 'node:path';
 import {readFile} from 'node:fs/promises';
 import {readYoutubePlayer} from '../../../apps/browser-extension/src/youtubePlayer.ts';
 import {captureSnapshotSchema} from '@sensa/contracts/sensa';
+const extensionArtifact=process.env.SENSA_EXTENSION_TEST_DIR??'apps/browser-extension/dist';
 const cues={events:[{tStartMs:12500,dDurationMs:1000,segs:[{utf8:'She took'}]},{tStartMs:13500,dDurationMs:2000,segs:[{utf8:'her time.'}]},{tStartMs:18000,dDurationMs:4000,segs:[{utf8:'They looked up at the sky.'}]}]};
 let captionRequest:URL|null=null,emptyCaptions=false;
 test.setTimeout(180_000);
 test('extension reading and settings surfaces preserve real browser behavior',async({browser})=>{
- const page=await browser.newPage({viewport:{width:1200,height:850}});
+ const page=await browser.newPage({viewport:{width:1200,height:850},locale:'zh-CN'});
  let settingsPage:Page|undefined;
 try{
  await page.route('**/*',async route=>{
@@ -54,8 +55,8 @@ try{
      Object.defineProperty(window,'speechSynthesis',{configurable:true,value:{getVoices:()=>voices,addEventListener:()=>{},removeEventListener:()=>{},cancel:()=>{},speak:(utterance:any)=>{speechFixture.spoken.push({text:utterance.text,lang:utterance.lang,rate:Number(utterance.rate.toFixed(3)),voice:utterance.voice?.name??''});speechFixture.finishEnd=()=>utterance.onend?.();}}});
      document.querySelector('#paragraph a')?.addEventListener('click',e=>{e.preventDefault();fixture.clicks++;});
    });
-   await page.addScriptTag({path:resolve('apps/browser-extension/dist/content.js')});
-   await page.evaluate(()=>(window as any).fixture.receive({kind:'reading',enabled:true,accountId:'fixture-account'}));
+   await page.addScriptTag({path:resolve(extensionArtifact,'content.js')});
+   await page.evaluate(()=>(window as any).fixture.receive({kind:'reading',enabled:true,accountId:'fixture-local-scope'}));
  }
  await page.goto('https://example.com/article');await install();
  const readings=()=>page.evaluate(()=>(window as any).fixture.calls.filter((c:any)=>c.kind==='reading-run').length);
@@ -116,7 +117,7 @@ try{
  // and nothing is inserted until they say so. Reading mode is back on, because the
  // site rule the check above wrote turned it off for this tab, and the delay the
  // late-result check left switched on.
- await page.evaluate(()=>{const fixture=(window as any).fixture;fixture.delay=false;fixture.receive({kind:'reading',enabled:true,accountId:'fixture-account'});});
+ await page.evaluate(()=>{const fixture=(window as any).fixture;fixture.delay=false;fixture.receive({kind:'reading',enabled:true,accountId:'fixture-local-scope'});});
  // Reading the page aloud speaks each block in the language it is written in,
  // in document order, and highlights the one being read: the learner follows the
  // page rather than guessing where the voice is.
@@ -225,15 +226,15 @@ try{
  await page.evaluate(()=>{history.pushState({},'', '/watch?v=lmnopqrstuv');document.dispatchEvent(new Event('yt-navigate-start'));});
  await expect(page.getByLabel('当前原字幕',{exact:true})).toHaveCount(0);
  await page.evaluate(()=>(window as any).fixture.receive({kind:'reading',enabled:false}));await expect(page.locator('[data-sensa-ui]')).toHaveCount(0);
- settingsPage=await browser.newPage();const settingsHtml=(await readFile('apps/browser-extension/options.html','utf8')).replace('<script src="options.js"></script>','');
+ settingsPage=await browser.newPage({locale:'zh-CN'});const settingsHtml=(await readFile('apps/browser-extension/options.html','utf8')).replace('<script src="options.js"></script>','');
  await settingsPage.route('**/*',route=>route.request().url()==='https://example.com/settings'?route.fulfill({contentType:'text/html',body:settingsHtml}):route.abort());await settingsPage.goto('https://example.com/settings');
  await settingsPage.evaluate('window.__name=value=>value');
  await settingsPage.evaluate(()=>{
    // A voice and a rate this machine already has stored, so the page has to read
    // them back rather than show its defaults.
-   const fixture={local:{readingPreferences:{actionName:'用法辨析',actionPrompt:'解释用法。',disabledSites:['old.example.com'],speechRate:1.25,speechVoice:'Samantha'}} as Record<string,unknown>,lastInput:null as any,conflict:false,settings:{revision:0,providers:[] as any[],assignments:{selection:null,page:null,subtitles:null,action:null,meaning:null},configured:true,allowedOrigins:['https://api.deepseek.com'],accountId:'fixture-account'}};
-   Object.assign(window,{settingsFixture:fixture,chrome:{storage:{local:{get:async()=>fixture.local,set:async(value:any)=>Object.assign(fixture.local,value)}},runtime:{sendMessage:async(message:any)=>{
-     if(message.kind==='service-status')return {value:{authorized:true,explanationAvailable:true,usage:[{kind:'reading',used:0,limit:300}]}};
+   const fixture={local:{readingPreferences:{actionName:'用法辨析',actionPrompt:'解释用法。',disabledSites:['old.example.com'],speechRate:1.25,speechVoice:'Samantha'}} as Record<string,unknown>,lastInput:null as any,conflict:false,settings:{revision:0,providers:[] as any[],assignments:{selection:null,page:null,subtitles:null,action:null,meaning:null,writing:null},configured:true,allowedOrigins:['https://api.deepseek.com']}};
+   Object.assign(window,{settingsFixture:fixture,chrome:{permissions:{request:async()=>true},storage:{local:{get:async()=>fixture.local,set:async(value:any)=>Object.assign(fixture.local,value)}},runtime:{sendMessage:async(message:any)=>{
+     if(message.kind==='service-status')return {error:'authentication_required'};
      if(message.kind==='reading-settings')return {value:structuredClone(fixture.settings)};
      if(message.kind==='reading-settings-save'){
        if(fixture.conflict)return {error:'settings_conflict'};
@@ -244,11 +245,11 @@ try{
    }}}});
  });
  await settingsPage.evaluate(()=>{Object.defineProperty(window,'speechSynthesis',{configurable:true,value:{getVoices:()=>[{name:'Samantha',lang:'en-US',localService:true},{name:'Ting-Ting',lang:'zh-CN',localService:true}],addEventListener:()=>undefined,removeEventListener:()=>undefined,cancel:()=>undefined,speak:()=>undefined}});});
- await settingsPage.addScriptTag({path:resolve('apps/browser-extension/dist/options.js')});await expect(settingsPage.locator('#service-status')).toContainText('账号已连接');await expect(settingsPage.getByRole('button',{name:'添加连接',exact:true})).not.toBeVisible();await settingsPage.getByText('高级设置 · 自定义模型服务',{exact:true}).click();await expect(settingsPage.locator('#feedback')).toHaveText('模型设置已加载。');
+ await settingsPage.addScriptTag({path:resolve(extensionArtifact,'options.js')});await expect(settingsPage.locator('#service-status')).toContainText('本机功能及自带模型仍可使用');await expect(settingsPage.getByRole('button',{name:'添加连接',exact:true})).toBeVisible();await expect(settingsPage.locator('#feedback')).toContainText('阅读偏好已加载');
  await settingsPage.getByRole('button',{name:'添加连接',exact:true}).click();await settingsPage.getByLabel('API Key',{exact:true}).fill('fixture-secret-key');
  await settingsPage.getByLabel('模型标识',{exact:true}).fill('fixture-model');await settingsPage.getByLabel('划词翻译',{exact:true}).selectOption({label:'DeepSeek'});await settingsPage.getByRole('button',{name:'保存模型设置',exact:true}).click();
  await expect(settingsPage.getByLabel('API Key（已配置，留空保留）',{exact:true})).toHaveValue('');
- expect(JSON.stringify(await settingsPage.evaluate(()=>(window as any).settingsFixture.local))).not.toContain('fixture-secret-key');
+ expect(JSON.stringify(await settingsPage.evaluate(()=>(window as any).settingsFixture.settings))).not.toContain('fixture-secret-key');
  await settingsPage.getByRole('button',{name:'重新加载高级设置',exact:true}).click();await expect(settingsPage.getByLabel('模型标识',{exact:true})).toHaveValue('fixture-model');
  await settingsPage.getByRole('button',{name:'获取已保存连接的模型列表',exact:true}).click();await expect(settingsPage.locator('#feedback')).toContainText('已获取 2 个模型');
  await settingsPage.getByRole('button',{name:'测试已保存连接',exact:true}).click();await expect(settingsPage.locator('#feedback')).toContainText('连接成功');

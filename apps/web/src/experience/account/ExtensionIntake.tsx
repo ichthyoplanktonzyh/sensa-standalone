@@ -21,7 +21,7 @@ const digest = async (value: unknown): Promise<string> => Array.from(
  * answer read as the wrong shape, is a type error here rather than a request that
  * quietly does less than it says.
  */
-function bridge<K extends SensaBridgeKind>(kind:K,accountId:string,libraryId:string,signal:AbortSignal,payload:SensaBridgePayload<K>):Promise<SensaBridgeValue<K>>{
+function bridge<K extends SensaBridgeKind>(kind:K,accountId:string|null,libraryId:string,signal:AbortSignal,payload:SensaBridgePayload<K>):Promise<SensaBridgeValue<K>>{
  return new Promise((resolve,reject)=>{
   const id=crypto.randomUUID();
   // The whole answer goes to the contracts, which unwrap the envelope and throw
@@ -36,14 +36,15 @@ function bridge<K extends SensaBridgeKind>(kind:K,accountId:string,libraryId:str
  });
 }
 /** Receives only explicitly saved extension requests into the existing content screens. */
-export function ExtensionIntake({accountId,onlineService=false}:{accountId:string;onlineService?:boolean}){
+export function ExtensionIntake({accountId,onlineService=false}:{accountId:string|null;onlineService?:boolean}){
  useTranslation();
  const intake=useSemanticIntake();
  const [error,setError]=useState('');
  const [reconnectNeeded,setReconnectNeeded]=useState(false),[connecting,setConnecting]=useState(false),[attempt,setAttempt]=useState(0);
+ const [conflictScope,setConflictScope]=useState<'local'|'account'>('local');
  const reconnect=async(discardPending=false)=>{
   setConnecting(true);const controller=new AbortController();
-  try{await bridge('web-connect-reset',accountId,(await openLibrary()).id,controller.signal,{receipt:{discardPending}});setError('');setReconnectNeeded(false);setAttempt(n=>n+1);}
+  try{const libraryId=(await openLibrary()).id;if(conflictScope==='local')await bridge('web-local-reset',null,libraryId,controller.signal,{receipt:{discardPending}});else if(accountId)await bridge('web-connect-reset',accountId,libraryId,controller.signal,{receipt:{discardPending}});setError('');setReconnectNeeded(false);setAttempt(n=>n+1);}
   catch{setError(localFlowText('extensionReconnectFailed'));}
   finally{setConnecting(false);}
  };
@@ -51,42 +52,56 @@ export function ExtensionIntake({accountId,onlineService=false}:{accountId:strin
   const controller=new AbortController();let running=false;
   const receive=async()=>{
    if(running||controller.signal.aborted)return;running=true;
+   let stage:'local'|'account'='local';
    try{
     const library=await openLibrary();
-    if(onlineService){
+    await bridge('web-local-bind',null,library.id,controller.signal,{});
+    // Reading is a separate product surface. Publish the learner-owned Routes;
+    // the extension keeps its own device selection and cannot edit Route facts.
+    const {collection}=await languageRoutesSnapshot();
+    await bridge('web-language-routes',null,library.id,controller.signal,{routes:collection});
+    // The glossary the learner wrote is published the same way and for the same
+    // reason: it is their own words, the extension cannot read the library, and a
+    // reading prompt that named a stale copy would be using words they edited
+    // away.
+    const {glossary}=await readingGlossarySnapshot();
+    await bridge('web-reading-glossary',null,library.id,controller.signal,{glossary});
+    const deliver=async(scope:string|null):Promise<boolean>=>{
+     while(!controller.signal.aborted){
+      const requests=await bridge('web-intake-pull',scope,library.id,controller.signal,{});
+      if(requests.length===0)return true;
+      for(const request of requests){
+       if(controller.signal.aborted)return false;
+       let receipt;
+       try{
+        const {replayed:_replayed,...result}=await intake.submit(request.intake);
+        receipt={contractVersion:'sensa-browser-intake-delivery-v1' as const,libraryId:request.libraryId,clientId:request.clientId,operationId:request.intake.operationId,requestDigest:await digest(request),result,appliedAt:new Date().toISOString()};
+       }catch{if(!controller.signal.aborted){setReconnectNeeded(false);setError(localFlowText('intakeStorageFailed'));}return false;}
+       if(controller.signal.aborted)return false;
+       await bridge('web-intake-ack',scope,library.id,controller.signal,{receipt});
+      }
+      if(requests.length<10)return true;
+     }
+     return false;
+    };
+    if(!await deliver(null))return;
+    if(onlineService&&accountId){
+     stage='account';
      const connection=await bridge('web-connect-prepare',accountId,library.id,controller.signal,{});
      if(connection.paused)return;
      if(connection.authorization){
       const result=await authorizeExtensionConnection(connection.authorization,controller.signal);
       await bridge('web-connect-complete',accountId,library.id,controller.signal,{receipt:result});
      }
-    }
-    // Reading is a separate product surface. Publish the learner-owned Routes;
-    // the extension keeps its own device selection and cannot edit Route facts.
-    const {collection}=await languageRoutesSnapshot();
-    await bridge('web-language-routes',accountId,library.id,controller.signal,{routes:collection});
-    // The glossary the learner wrote is published the same way and for the same
-    // reason: it is their own words, the extension cannot read the library, and a
-    // reading prompt that named a stale copy would be using words they edited
-    // away.
-    const {glossary}=await readingGlossarySnapshot();
-    await bridge('web-reading-glossary',accountId,library.id,controller.signal,{glossary});
-    const requests=await bridge('web-intake-pull',accountId,library.id,controller.signal,{});
-    for(const request of requests){
-     if(controller.signal.aborted)return;
-     let receipt;
-     try{
-      const {replayed:_replayed,...result}=await intake.submit(request.intake);
-      receipt={contractVersion:'sensa-browser-intake-delivery-v1' as const,libraryId:request.libraryId,clientId:request.clientId,operationId:request.intake.operationId,requestDigest:await digest(request),result,appliedAt:new Date().toISOString()};
-     }catch{if(!controller.signal.aborted){setReconnectNeeded(false);setError(localFlowText('intakeStorageFailed'));}return;}
-     if(controller.signal.aborted)return;
-     await bridge('web-intake-ack',accountId,library.id,controller.signal,{receipt});
+     await bridge('web-language-routes',accountId,library.id,controller.signal,{routes:collection});
+     await bridge('web-reading-glossary',accountId,library.id,controller.signal,{glossary});
+     if(!await deliver(accountId))return;
     }
     setError('');setReconnectNeeded(false);
-   }catch(e){if(!controller.signal.aborted){const code=e instanceof Error?e.message:'';const mismatch=['account_mismatch','library_mismatch'].includes(code);if(mismatch){setReconnectNeeded(true);setError(code==='library_mismatch'?localFlowText('extensionLibraryMismatch'):localFlowText('extensionAccountMismatch'));}}}
+   }catch(e){if(!controller.signal.aborted){const code=e instanceof Error?e.message:'';const mismatch=['account_mismatch','library_mismatch'].includes(code);if(mismatch){setConflictScope(stage);setReconnectNeeded(true);setError(code==='library_mismatch'?localFlowText('extensionLibraryMismatch'):localFlowText('extensionAccountMismatch'));}}}
    finally{running=false;}
   };
-  const notification=(event:MessageEvent)=>{if(event.source!==window||event.origin!==location.origin)return;const parsed=sensaBridgeNotificationSchema.safeParse(event.data);if(parsed.success&&parsed.data.accountId===accountId)void receive();};
+  const notification=(event:MessageEvent)=>{if(event.source!==window||event.origin!==location.origin)return;const parsed=sensaBridgeNotificationSchema.safeParse(event.data);if(parsed.success&&(parsed.data.accountId===null||parsed.data.accountId===accountId))void receive();};
   const resume=()=>void receive();
   const visible=()=>{if(document.visibilityState==='visible')void receive();};
   void receive();
@@ -97,5 +112,5 @@ export function ExtensionIntake({accountId,onlineService=false}:{accountId:strin
   document.addEventListener('visibilitychange',visible);
   return()=>{controller.abort();stop();window.removeEventListener('message',notification);window.removeEventListener('focus',resume);window.removeEventListener('online',resume);document.removeEventListener('visibilitychange',visible);};
  },[accountId,onlineService,attempt,intake]);
- return error?<div role="status" className="fixed bottom-20 left-4 right-4 z-50 rounded-xl border border-feedback-warning bg-accent-soft p-3 text-sm"><p>{localFlowNotice(error)}</p>{reconnectNeeded&&onlineService&&<><button type="button" disabled={connecting} onClick={()=>void reconnect()} className="mt-2 rounded-lg border border-border-strong bg-surface-panel px-4 py-2 font-medium text-fg-primary disabled:opacity-50">{localFlowText(connecting?'extensionConnecting':'extensionReconnect')}</button><button type="button" hidden={error===localFlowText('extensionLibraryMismatch')} disabled={connecting} onClick={()=>void reconnect(true)} className="ml-2 mt-2 rounded-lg border border-feedback-danger bg-surface-panel px-4 py-2 font-medium text-feedback-danger disabled:opacity-50">{localFlowText('extensionDiscardReconnect')}</button></>}</div>:null;
+ return error?<div role="status" className="fixed bottom-20 left-4 right-4 z-50 rounded-xl border border-feedback-warning bg-accent-soft p-3 text-sm"><p>{localFlowNotice(error)}</p>{reconnectNeeded&&(conflictScope==='local'||onlineService)&&<><button type="button" disabled={connecting} onClick={()=>void reconnect()} className="mt-2 rounded-lg border border-border-strong bg-surface-panel px-4 py-2 font-medium text-fg-primary disabled:opacity-50">{localFlowText(connecting?'extensionConnecting':'extensionReconnect')}</button><button type="button" hidden={error===localFlowText('extensionLibraryMismatch')} disabled={connecting} onClick={()=>void reconnect(true)} className="ml-2 mt-2 rounded-lg border border-feedback-danger bg-surface-panel px-4 py-2 font-medium text-feedback-danger disabled:opacity-50">{localFlowText('extensionDiscardReconnect')}</button></>}</div>:null;
 }

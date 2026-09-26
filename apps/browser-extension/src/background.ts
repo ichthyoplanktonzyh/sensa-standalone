@@ -8,11 +8,14 @@ import {maxDetectableCharacters,minSkimmableCharacters} from './language';
 import {readYoutubePlayer} from './youtubePlayer';
 import {readingLanguageContext,readingLanguageRouteSnapshot,selectReadingLanguageRoute,readingPreferences,saveReadingPreferences,readingSiteOf,publishReadingLanguageRoutes,readingGlossary,publishReadingGlossary} from './preferences';
 import {t} from './i18n';
+import {localSettings,saveLocalSettings,localModels,testLocalModel,localConnectionFor,runLocalReading,runLocalLookup} from './localModels';
+import {bindLocalLibrary,resetLocalLibrary,queueLocalCapture,pendingLocal,acknowledgeLocal,localOperationStatus,localIntakeStatus} from './localIntake';
 type Mode={accountId:string};
 const accountSchema=z.object({expiresAt:z.string().datetime().optional(),webLibraryId:z.string().uuid().optional(),accountId:z.string().uuid(),installationId:z.string().uuid(),token:z.string().min(1),queue:z.array(z.unknown()).default([]),recent:z.array(z.unknown()).default([]),savedOperations:z.record(z.string(),z.unknown()).default({})}).passthrough();
 const storeSchema=z.object({version:z.literal(1).default(1),active:z.string().uuid().nullable(),accounts:z.record(z.string(),accountSchema)}).strict();
 type Store=z.infer<typeof storeSchema>;
 let serial:Promise<unknown>=Promise.resolve();
+const restrictedStorage=chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'});
 function locked<T>(work:()=>Promise<T>):Promise<T>{const next=serial.catch(()=>undefined).then(work);serial=next;return next;}
 async function load():Promise<Store>{
  const raw=(await chrome.storage.local.get('sensa')).sensa;if(!raw)return {version:1,active:null,accounts:{}};
@@ -123,7 +126,13 @@ async function loginThroughWeb(){
  await chrome.storage.session.set({sensaExplicitReconnect:{tabId:tab.id,expires:Date.now()+600000}});
  await chrome.tabs.update(tab.id,{url:new URL('/profile',webUrl).href});
 }
-async function activeScope(){return (await load()).active;}
+async function localScope(){
+ const key='sensaExtensionLocalScope',stored=(await chrome.storage.local.get(key))[key];
+ if(typeof stored==='string'&&z.string().uuid().safeParse(stored).success)return stored;
+ const id=crypto.randomUUID();await chrome.storage.local.set({[key]:id});return id;
+}
+/** A reading tab belongs to this installation even without a Sensa account. */
+async function activeScope(){return (await load()).active??await localScope();}
 
 /**
  * `MessageSender.url` identifies the document that opened the extension
@@ -186,10 +195,12 @@ async function serveWebBridge(request:SensaBridgeRequest,sender:chrome.runtime.M
  switch(request.kind){
   case 'web-connect-prepare':
   case 'web-connect-complete':return webConnect(request,sender);
+  case 'web-local-bind':return bindLocalLibrary(request.libraryId);
+  case 'web-local-reset':return resetLocalLibrary(request.libraryId,request.receipt.discardPending);
   // The Web application owns Route facts. The extension accepts the collection
   // while preserving its own surface-scoped selection when it remains valid.
-  case 'web-language-routes':return locked(()=>publishReadingLanguageRoutes(request.routes));
-  case 'web-reading-glossary':return locked(()=>publishReadingGlossary(request.glossary));
+  case 'web-language-routes':if(request.accountId===null)await bindLocalLibrary(request.libraryId);return locked(()=>publishReadingLanguageRoutes(request.routes));
+  case 'web-reading-glossary':if(request.accountId===null)await bindLocalLibrary(request.libraryId);return locked(()=>publishReadingGlossary(request.glossary));
   case 'web-session-ended':return locked(async()=>{
    const store=await load();
    if(!store.active||store.active!==request.accountId)return {disconnected:false};
@@ -208,6 +219,13 @@ async function serveWebBridge(request:SensaBridgeRequest,sender:chrome.runtime.M
   }
   case 'web-intake-pull':
   case 'web-intake-ack':{
+   if(request.accountId===null){
+    if(request.kind==='web-intake-ack'){
+     if(request.receipt.libraryId!==request.libraryId)throw new Error('library_mismatch');
+     return acknowledgeLocal(request.receipt);
+    }
+    return pendingLocal(request.libraryId,await localScope());
+   }
    const store=await load(),a=store.active?store.accounts[store.active]:null;
    if(!a)throw new Error('authentication_required');
    if(request.accountId!==a.accountId)throw new Error('account_mismatch');
@@ -219,7 +237,7 @@ async function serveWebBridge(request:SensaBridgeRequest,sender:chrome.runtime.M
   }
  }
 }
-async function notifyWebIntake(accountId:string){
+async function notifyWebIntake(accountId:string|null){
  const origin=new URL(webUrl).origin;
  const tabs=await chrome.tabs.query({url:origin+'/*'});
  await Promise.all(tabs.flatMap(tab=>tab.id===undefined?[]:[chrome.tabs.sendMessage(tab.id,{kind:sensaBridgeNotificationKind,accountId}).catch(()=>undefined)]));
@@ -228,7 +246,8 @@ async function status(){
  const store=await load(),a=store.active?store.accounts[store.active]:null;
  const [tab]=await chrome.tabs.query({active:true,currentWindow:true}),site=readingSiteOf(tab?.url);
  const rule=site?{site,disabled:(await readingPreferences()).disabledSites.includes(site)}:null;
- const base=a?{accountId:a.accountId,destination:'web-local',...await webStatus(a.accountId)}:{accountId:null,pending:0,errors:[],recent:[]};
+ const local=await localIntakeStatus(),account=a?await webStatus(a.accountId):null;
+ const base={accountId:a?.accountId??null,destination:'web-local',pending:local.pending+(account?.pending??0),errors:[...local.errors,...account?.errors??[]],recent:[...local.recent,...account?.recent??[]].slice(0,20)};
  const language=await readingLanguageRouteSnapshot();
  return {...base,rule,language};
 }
@@ -237,6 +256,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
  const isPopup=sender.url===chrome.runtime.getURL('popup.html');
  const isOptions=sender.url===chrome.runtime.getURL('options.html');
  const work=async()=>{
+ await restrictedStorage;
  // The Web page bridge is one protocol, declared once in the contracts. A
  // message announcing its channel is parsed here, before anything else is even
  // considered, so a kind, a field or a library binding the protocol does not
@@ -268,23 +288,28 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
 
  if(['reading-settings','reading-settings-save','reading-test','reading-models','reading-run','youtube-captions'].includes(message.kind)){
    const store=await load(),a=store.active?store.accounts[store.active]:null;
-   if(!a&&message.kind!=='youtube-captions')throw new Error('authentication_required');
    if(message.kind==='reading-run'||message.kind==='youtube-captions'){
      const mode=(await modes())[sender.tab?.id??-1];
      if(!sender.tab?.id||mode?.accountId!==await activeScope()||message.accountId!==await activeScope())throw new Error('account_mismatch');
      if(await currentPageUrl(sender)!==message.pageUrl)throw new Error('source_mismatch');
-   }else if(!isOptions||message.accountId&&message.accountId!==a!.accountId)throw new Error('unsupported_message');
+   }else if(!isOptions)throw new Error('unsupported_message');
    let result;
    if(message.kind==='youtube-captions'){
      if(typeof message.videoId!=='string'||!/^[a-zA-Z0-9_-]{11}$/u.test(message.videoId))throw new Error('invalid_request');
      result=(await chrome.scripting.executeScript({target:{tabId:sender.tab!.id!},world:'MAIN',func:readYoutubePlayer,args:[message.videoId]}))[0]?.result;
-   }else{
-     const path=message.kind==='reading-run'?'run':message.kind==='reading-test'?'test':message.kind==='reading-models'?'models':'settings';
-     const body=message.kind==='reading-settings'?undefined:message.kind==='reading-run'?await readingInput(message.input):message.input;
-     result=await apiRequest('/sensa/reading/'+path,body,a!.token);
+   }else if(message.kind==='reading-settings')result=await localSettings();
+   else if(message.kind==='reading-settings-save')result=await saveLocalSettings(message.input);
+   else if(message.kind==='reading-test')result=await testLocalModel(z.object({providerId:z.string().uuid()}).parse(message.input).providerId);
+   else if(message.kind==='reading-models')result=await localModels(z.object({providerId:z.string().uuid()}).parse(message.input).providerId);
+   else{
+     const body=await readingInput(message.input),feature=z.enum(['selection','page','subtitles','action','writing']).parse((body as Record<string,unknown>).feature);
+     const local=await localConnectionFor(feature);
+     if(local)result=await runLocalReading(local,body);
+     else if(a)result=await apiRequest('/sensa/reading/run',body,a.token);
+     else throw new Error('provider_not_configured');
    }
-   if(a&&(await load()).active!==a.accountId)throw new Error('account_mismatch');
-   return message.kind==='reading-settings'?{...result,accountId:a!.accountId}:result;
+   if((await activeScope())!==(a?.accountId??await localScope()))throw new Error('account_mismatch');
+   return result;
  }
  // The learner's rule for one site, from the page they are reading or from the
  // popup. The site is never taken from the message: it is the hostname of the tab
@@ -310,28 +335,28 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
  if(['save','accept'].includes(message.kind)&&sender.tab){
   return locked(async()=>{
    const store=await load(),a=store.active?store.accounts[store.active]:null,mode=(await modes())[sender.tab!.id!];
-   if(!a||a.accountId!==message.accountId||mode?.accountId!==a.accountId)throw new Error('account_mismatch');
-   if(!a.webLibraryId)throw new Error('web_reconnect_required');
+   const scope=await activeScope();
+   if(message.accountId!==scope||mode?.accountId!==scope)throw new Error('account_mismatch');
+   if(a&&!a.webLibraryId)throw new Error('web_reconnect_required');
    const pageUrl=await currentPageUrl(sender);
    let snapshot=message.snapshot,proposal=null,resolutionProvenance=null;
    if(message.kind==='accept'){
     const cached=(await chrome.storage.session.get('sensaLookups')).sensaLookups as Record<string,any>??{},item=cached[message.lookupId];
-    if(!item||item.scope!==a.accountId||item.tabId!==sender.tab!.id||item.pageUrl!==pageUrl)throw new Error('lookup_unavailable');
+    if(!item||item.scope!==scope||item.tabId!==sender.tab!.id||item.pageUrl!==pageUrl)throw new Error('lookup_unavailable');
     snapshot=item.snapshot;proposal=item.proposal;resolutionProvenance=item.resolutionProvenance;
    }
    snapshot=captureSnapshotSchema.parse(snapshot);if(snapshot.source.url!==pageUrl)throw new Error('source_mismatch');
-   const intake=browserCaptureToIntake(message.operationId,snapshot,proposal,resolutionProvenance);
-   const queued=await queueWeb(a.accountId,{contractVersion:'sensa-browser-intake-delivery-v1',libraryId:a.webLibraryId,clientId:a.installationId,intake});
-   await notifyWebIntake(a.accountId);
+   const queued=a?await queueWeb(a.accountId,{contractVersion:'sensa-browser-intake-delivery-v1',libraryId:a.webLibraryId!,clientId:a.installationId,intake:browserCaptureToIntake(message.operationId,snapshot,proposal,resolutionProvenance)}):await queueLocalCapture(message.operationId,snapshot,proposal,resolutionProvenance);
+   await notifyWebIntake(a?.accountId??null);
    return queued;
   });
  }
- if(message.kind==='lookup'&&sender.tab){const snapshot=captureSnapshotSchema.parse(message.snapshot);const readingModes=await modes();const store=await load(),a=store.active?store.accounts[store.active]:null;if(!a||message.accountId!==await activeScope()||readingModes[sender.tab!.id!]?.accountId!==await activeScope())throw new Error('authentication_required');if(snapshot.source.url!==await currentPageUrl(sender))throw new Error('source_mismatch');const languages=await readingLanguageContext();const result=await apiRequest('/sensa/semantic/lookups',{id:message.lookupId,snapshot,languages},a.token);await rememberLookup(sender,message.lookupId,snapshot,result,message.accountId);return result;}
+ if(message.kind==='lookup'&&sender.tab){const snapshot=captureSnapshotSchema.parse(message.snapshot);const readingModes=await modes();const store=await load(),a=store.active?store.accounts[store.active]:null;if(message.accountId!==await activeScope()||readingModes[sender.tab!.id!]?.accountId!==await activeScope())throw new Error('authentication_required');if(snapshot.source.url!==await currentPageUrl(sender))throw new Error('source_mismatch');const languages=await readingLanguageContext(),local=await localConnectionFor('meaning');const result=local?await runLocalLookup(local,message.lookupId,snapshot,languages):a?await apiRequest('/sensa/semantic/lookups',{id:message.lookupId,snapshot,languages},a.token):(()=>{throw new Error('provider_not_configured');})();await rememberLookup(sender,message.lookupId,snapshot,result,message.accountId);return result;}
  if(['open-inbox','save-status'].includes(message.kind)&&sender.tab){
   const store=await load(),a=store.active?store.accounts[store.active]:null,mode=(await modes())[sender.tab.id!];
-  if(!a||message.accountId!==a.accountId||mode?.accountId!==a.accountId)throw new Error('account_mismatch');
+  const scope=await activeScope();if(message.accountId!==scope||mode?.accountId!==scope)throw new Error('account_mismatch');
   const operationId=z.string().uuid().parse(message.operationId);
-  const result=await webOperationStatus(a.accountId,operationId);
+  const result=a?await webOperationStatus(a.accountId,operationId):await localOperationStatus(operationId);
   if(message.kind==='open-inbox')await openWebPath('/content?worldAction=inbox');
   return result;
  }
@@ -347,7 +372,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
  if(message.kind==='open-web')await openWebPath(webContentPath(message.path));
  if(message.kind==='disconnect')await locked(async()=>{const store=await load();store.active=null;await chrome.storage.local.set({sensaAutoConnectPaused:true});await chrome.storage.session.set({sensaWebConnect:null});await persist(store);await stopAllReading();});
  if(message.kind==='toggle'){
-  const scope=await activeScope();if(!scope)throw new Error('authentication_required');
+  const scope=await activeScope();
   const [tab]=await chrome.tabs.query({active:true,currentWindow:true});if(!tab.id||!tab.url||!/^https?:/u.test(tab.url))throw new Error('unsupported_page');
   // A rule the learner wrote is not a suggestion the toolbar can override: the
   // popup offers to lift it instead, so pressing this button either reads the
@@ -363,8 +388,6 @@ chrome.tabs.onUpdated.addListener((id,change)=>{if(change.status!=='complete')re
  // for an answer that never changes.
  const rule=readingSiteOf(change.url??'');if(rule&&(await readingPreferences()).disabledSites.includes(rule))return;try{await chrome.scripting.executeScript({target:{tabId:id},files:['content.js']});await chrome.tabs.sendMessage(id,{kind:'reading',enabled:true,accountId:readingModes[id].accountId,preferences:await readingPreferences()});await chrome.action.setBadgeText({tabId:id,text:''});}catch{await chrome.action.setBadgeText({tabId:id,text:t('backgroundContinue')});await chrome.action.setTitle({tabId:id,title:t('backgroundContinueHint')});}})().catch(()=>undefined);});
 chrome.tabs.onRemoved.addListener(id=>{void locked(async()=>{const readingModes=await modes();delete readingModes[id];await chrome.storage.session.set({modes:readingModes});}).catch(()=>undefined);});
-void chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'});
-
 // Credentials stay in this trusted background; pages receive only bounded text/result frames.
 chrome.runtime.onConnect?.addListener(port=>{
  if(!['sensa-reading-stream','sensa-lookup-stream'].includes(port.name))return;
@@ -375,16 +398,24 @@ chrome.runtime.onConnect?.addListener(port=>{
  port.onMessage.addListener(message=>{
   if(started)return;started=true;
   void(async()=>{
+   await restrictedStorage;
    if(sender?.id!==chrome.runtime.id||!sender.tab?.id)throw new Error('authentication_required');
    if(await currentPageUrl(sender)!==message.pageUrl)throw new Error('source_mismatch');
    const store=await load(),a=store.active?store.accounts[store.active]:null;
-   async function authorize(){const current=await load(),mode=(await modes())[sender!.tab!.id!];if(!a||current.active!==a.accountId||current.accounts[a.accountId]?.token!==a.token||mode?.accountId!==await activeScope()||message.accountId!==await activeScope())throw new Error('account_mismatch');}
+   async function authorize(){const current=await load(),mode=(await modes())[sender!.tab!.id!];if(a&&(current.active!==a.accountId||current.accounts[a.accountId]?.token!==a.token)||mode?.accountId!==await activeScope()||message.accountId!==await activeScope())throw new Error('account_mismatch');}
    await authorize();
    if(meaning&&captureSnapshotSchema.parse(message.input?.snapshot).source.url!==message.pageUrl)throw new Error('source_mismatch');
    // A lookup stream carries a capture; a reading stream is a reading request and
    // is completed here, the same way the plain path completes one.
    const body=meaning?{...message.input,languages:await readingLanguageContext()}:await readingInput(message.input);
-   const response=await serviceFetch(apiUrl+(meaning?'/sensa/semantic/lookups/stream':'/sensa/reading/stream'),{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+a!.token},body:JSON.stringify(body),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(45000)])});
+   const local=await localConnectionFor(meaning?'meaning':z.enum(['selection','page','subtitles','action','writing']).parse(body.feature));
+   if(local){
+    if(meaning){const result=await runLocalLookup(local,message.input.id,message.input.snapshot,body.languages,controller.signal);await authorize();await rememberLookup(sender!,message.input.id,message.input.snapshot,result,message.accountId);port.postMessage({type:'result',value:result});}
+    else{const result=await runLocalReading(local,body,controller.signal);await authorize();port.postMessage({type:'result',value:result});}
+    return;
+   }
+   if(!a)throw new Error('provider_not_configured');
+   const response=await serviceFetch(apiUrl+(meaning?'/sensa/semantic/lookups/stream':'/sensa/reading/stream'),{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+a.token},body:JSON.stringify(body),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(45000)])});
    if(!response.ok){const data=await response.json();throw new Error(data.code??'provider_unavailable');}
    if(!response.body)throw new Error('provider_invalid_response');
    const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='',bytes=0,finished=false;
