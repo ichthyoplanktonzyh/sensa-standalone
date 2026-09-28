@@ -7,19 +7,19 @@ import {spawnSync} from "node:child_process";
 
 import {test} from "vitest";
 
-import {readSensaPortableLightweightPackage} from "@sensa/content-validator/portable-lightweight";
+import {readSensaPortableBook} from "@sensa/content-validator/portable-book";
 import {stableUuid} from "@sensa/learning-kernel";
 import {
   canonicalConsumerJson,
-  maxBookVersionManifestBytes,
-  sensaBookVersionManifestDescriptorSchema,
-  sensaBookVersionManifestSchema,
+  maxPortableBookArchiveBytes,
+  sensaPortableBookDescriptorSchema,
   sensaPortableLearningContentRegistrySchema,
 } from "@sensa/contracts/sensa";
 
 import {createAuthoredMediaPackager} from "../../../scripts/release/authoredMedia.mts";
 import {syntheticSound} from "../../../scripts/support/lightweightMaterialFixture.mts";
 import {contentSupplySystem} from "../../../apps/web/src/contentSupply/system/index.ts";
+import {portablePackageInstallationFor} from "../../../apps/web/src/data/library/packageRecords.ts";
 import {
   command,
   openLibrary,
@@ -29,7 +29,7 @@ import {
 
 const digest = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
 
-test("official portable Registry fixes per-Sense packages behind one Book Manifest", async () => {
+test("official Registry delivers one atomic Book while preserving independent Sense packages", async () => {
   const root = await mkdtemp(join(tmpdir(), "sensa-portable-learning-registry-"));
   const releases = join(root, "releases");
   const registryPath = join(root, "catalog.json");
@@ -130,38 +130,24 @@ test("official portable Registry fixes per-Sense packages behind one Book Manife
     assert.equal(revision, digest(canonicalConsumerJson(snapshot)));
     const descriptor = registry.items[0]!;
     assert.equal(descriptor.publisher.namespace, "sensa.official");
-    const manifestRelative = [
+    const bookRelative = [
       "books",
       descriptor.book.bookId,
       descriptor.book.bookVersionId,
-      `${descriptor.sha256}.json`,
+      `${descriptor.sha256}.sensa-book`,
     ].join("/");
-    const manifestBytes = await readFile(join(releases, manifestRelative));
-    const manifest = sensaBookVersionManifestSchema.parse(
-      JSON.parse(manifestBytes.toString("utf8")),
-    );
-    assert.equal(descriptor.url, new URL(manifestRelative, base).href);
-    assert.equal(descriptor.byteLength, manifestBytes.byteLength);
-    assert.equal(descriptor.sha256, digest(manifestBytes));
+    const bookBytes = await readFile(join(releases, bookRelative));
+    const bookArchive = readSensaPortableBook(bookBytes);
+    const manifest = bookArchive.manifest;
+    assert.equal(descriptor.url, new URL(bookRelative, base).href);
+    assert.equal(descriptor.byteLength, bookBytes.byteLength);
+    assert.equal(descriptor.sha256, digest(bookBytes));
     assert.equal(manifest.semanticAttestation.publisherNamespace, descriptor.publisher.namespace);
     assert.equal(manifest.members.length, 3);
 
-    const delivered = new Map<string, Uint8Array>([[descriptor.url, manifestBytes]]);
+    const delivered = new Map<string, Uint8Array>([[descriptor.url, bookBytes]]);
 
-    for (const member of manifest.members) {
-      const packageRelative = [
-        "packages",
-        member.packageId,
-        String(member.version),
-        `${member.archiveSha256}.sensa`,
-      ].join("/");
-      const packageBytes = await readFile(join(releases, packageRelative));
-      delivered.set(member.url, packageBytes);
-      const archive = readSensaPortableLightweightPackage(packageBytes);
-      assert.equal(member.url, new URL(packageRelative, base).href);
-      assert.equal(member.byteLength, packageBytes.byteLength);
-      assert.equal(member.archiveSha256, archive.archiveDigest);
-      assert.equal(member.packageDigest, archive.packageDigest);
+    for (const {member,archive} of bookArchive.members) {
       assert.equal(archive.package.metadata.packageId, member.packageId);
       assert.equal(archive.package.metadata.version, member.version);
       assert(archive.package.semanticDeclaration, "official members require a semantic declaration");
@@ -201,6 +187,44 @@ test("official portable Registry fixes per-Sense packages behind one Book Manife
         accountId:crypto.randomUUID(),
       });
     });
+    const conflictingMember=bookArchive.members.at(-1)!;
+    const conflictingInstallation=portablePackageInstallationFor(
+      conflictingMember.archive.package,
+      "0".repeat(64),
+      conflictingMember.archive.packageDigest,
+      conflictingMember.bytes.byteLength,
+      descriptor.sha256,
+    );
+    await command({id:crypto.randomUUID(),kind:"fixture.conflict",input:{}},async tx=>{
+      tx.put("packageInstallations",conflictingInstallation.key,conflictingInstallation);
+    });
+    await assert.rejects(contentSupplySystem.execute({
+      kind:"install_catalog_item",
+      descriptor,
+      signal:new AbortController().signal,
+    }),/localFlow\.packageVersionChanged/u);
+    assert.equal(
+      await readLibrary(tx=>tx.count("packageCache")),
+      0,
+      "a conflict in the final member must roll back the complete Book installation",
+    );
+    await command({id:crypto.randomUUID(),kind:"fixture.cleanup",input:{}},async tx=>{
+      tx.delete("packageInstallations",conflictingInstallation.key);
+    });
+    const localMember=bookArchive.members[0]!;
+    const localInstallation=portablePackageInstallationFor(
+      localMember.archive.package,
+      localMember.archive.archiveDigest,
+      localMember.archive.packageDigest,
+      localMember.bytes.byteLength,
+    );
+    await command({id:crypto.randomUUID(),kind:"fixture.local-installation",input:{}},async tx=>{
+      tx.put("packageInstallations",localInstallation.key,localInstallation);
+    });
+    assert.equal(
+      (await readLibrary(tx=>tx.get<any>("packageInstallations",localInstallation.key)))?.artifact?.bookArchiveSha256,
+      undefined,
+    );
     const progress:number[]=[];
     const installed=await contentSupplySystem.execute({
       kind:"install_catalog_item",
@@ -220,13 +244,20 @@ test("official portable Registry fixes per-Sense packages behind one Book Manife
       assert.equal(entry.bindingId,declaration.binding.senseExpressionBindingId);
       assert.equal(entry.bindingVersionId,declaration.binding.bindingVersionId);
       assert.equal(entry.semantic?.senseKey,declaration.sense.senseKey);
-      assert.equal(pack.portableOrigin.publications[0]?.manifestSha256,descriptor.sha256);
+      assert.equal(pack.portableOrigin.publications[0]?.bookArchiveSha256,descriptor.sha256);
     }
+    const localInstallationKey=installed.find(pack=>
+      pack.portableOrigin.manifest.metadata.packageId===localMember.member.packageId)!.key;
+    assert.equal(
+      (await readLibrary(tx=>tx.get<any>("packageInstallations",localInstallationKey)))?.artifact?.bookArchiveSha256,
+      descriptor.sha256,
+      "an exact local import must gain a public recovery source without conflicting",
+    );
     const installedKeys=installed.map(pack=>pack.key).sort();
     await writeLibraryCache(async tx=>{
       tx.clear("packageCache");
       tx.put("meta","package-catalog",{
-        format:"sensa-local-registry-cache-v2",
+        format:"sensa-local-registry-cache-v3",
         items:[descriptor],
         revision:registry.revision,
         checkedAt:new Date().toISOString(),
@@ -241,15 +272,15 @@ test("official portable Registry fixes per-Sense packages behind one Book Manife
     assert.equal(await readLibrary(tx=>tx.count("packageCache")),manifest.members.length);
 
     assert.equal(
-      sensaBookVersionManifestDescriptorSchema.parse({
+      sensaPortableBookDescriptorSchema.parse({
         ...descriptor,
-        byteLength: maxBookVersionManifestBytes,
+        byteLength: maxPortableBookArchiveBytes,
       }).byteLength,
-      maxBookVersionManifestBytes,
+      maxPortableBookArchiveBytes,
     );
-    assert.throws(() => sensaBookVersionManifestDescriptorSchema.parse({
+    assert.throws(() => sensaPortableBookDescriptorSchema.parse({
       ...descriptor,
-      byteLength: maxBookVersionManifestBytes + 1,
+      byteLength: maxPortableBookArchiveBytes + 1,
     }), /Too big/u);
     assert.throws(() => sensaPortableLearningContentRegistrySchema.parse({
       ...registry,
@@ -263,15 +294,11 @@ test("official portable Registry fixes per-Sense packages behind one Book Manife
       registryBytes.toString("utf8"),
       "the same authored release must rebuild byte-for-byte",
     );
-    for (const member of manifest.members) {
-      const relative = [
-        "packages",
-        member.packageId,
-        String(member.version),
-        `${member.archiveSha256}.sensa`,
-      ].join("/");
-      assert.deepEqual(await readFile(join(repeatReleases, relative)), await readFile(join(releases, relative)));
-    }
+    assert.deepEqual(
+      await readFile(join(repeatReleases,bookRelative)),
+      bookBytes,
+      "the same authored Book must rebuild as the same archive bytes",
+    );
 
     const nextSourcePath = join(root, "next-source.json");
     await writeFile(nextSourcePath, JSON.stringify({

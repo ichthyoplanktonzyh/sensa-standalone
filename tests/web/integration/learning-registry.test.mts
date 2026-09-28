@@ -14,12 +14,12 @@ import {
 
 const digest=(value:Uint8Array|string)=>createHash('sha256').update(value).digest('hex');
 
-test('API serves and caches only the Portable Registry v2 contract',async()=>{
+test('API serves and caches only the direct Portable Book Registry v3 contract',async()=>{
   const snapshot={
-    format:'sensa-learning-content-registry-v2' as const,
+    format:'sensa-learning-content-registry-v3' as const,
     publishedAt:'2026-09-25T00:00:00.000Z',
     items:[{
-      format:'sensa-book-version-manifest-descriptor-v1' as const,
+      format:'sensa-portable-book-descriptor-v1' as const,
       publisher:{namespace:'sensa.official',name:'Sensa Official'},
       book:{
         bookId:crypto.randomUUID(),
@@ -40,7 +40,7 @@ test('API serves and caches only the Portable Registry v2 contract',async()=>{
       memberCount:3,
       byteLength:512,
       sha256:'a'.repeat(64),
-      url:'https://content.example.test/releases/books/fixture.json',
+      url:'https://content.example.test/releases/books/fixture.sensa-book',
     }],
   };
   const registry=sensaPortableLearningContentRegistrySchema.parse({

@@ -336,7 +336,7 @@ voice、locale、rate 和格式由目标语言配置表决定，不由每个 Lun
 
 每个 Sense 的 Core 和 Overlay 作者文件都通过后，工具重新生成批次索引并形成不可变候选。作者输出和
 批次候选都不是 Published Package 或 Learning Materialization；正式发布出口为每个 Sense 构建通过公共
-准入的 `.sensa`，再由 Book Version Manifest 组织有序集合。安装和 Materialization 仍按 Content Supply
+准入的 `.sensa`，再原样封装进带有 Book Manifest 的 `.sensa-book`。安装和 Materialization 仍按 Content Supply
 流程进行。
 
 ## 7. 断点续作与幂等
@@ -497,7 +497,7 @@ Overlay；确定性工具随后对 18 份语言贡献做笛卡尔组合。这样
 TTS 时执行 `prepare --allow-tts`，最后用 `expand` 生成逐路线 Book source。审核完成的 prepared 输入及其
 媒体摘要必须进入 `content/authored/route-foundation-v1/prepared.json`；逐路线 source 仍只是确定性派生物，
 不能反向成为作者来源。正式交付由受保护工作流展开全部 324 条路线，再由发布构建器把每个 Sense 编译成
-独立 `.sensa` 并用 Book Version Manifest 组织。
+独立 `.sensa` 并按 Book 封装为 `.sensa-book`。
 
 ## 13. 非目标
 

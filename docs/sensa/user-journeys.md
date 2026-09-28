@@ -131,16 +131,16 @@ Context、完整 Expression、Sense 或 acceptance 中任一事实时，内容�
     ↓
 为每个 Lightweight member 生成并校验 `.sensa`
     ↓
-构建引用精确 Package identity/version/digest 的 Book Version Manifest
+构建内嵌有序 Package identity/version Manifest 的 `.sensa-book`
     ↓
-上传并公开验证全部 `.sensa` 与 Manifest
+上传并公开验证全部 `.sensa-book`（包含逐成员 Portable 校验）
     ↓
 上传按 digest 寻址的 Registry Revision
     ↓
 提升服务端发现指针
 ```
 
-发布后的 Registry、Manifest、`.sensa` 和对象路径不得原位覆盖。发布失败时，上一版 Registry 必须继续
+发布后的 Registry、`.sensa-book`、`.sensa` 和对象路径不得原位覆盖。发布失败时，上一版 Registry 必须继续
 完整可用。Sensa Official 内容通过额外发布门禁和 Registry provenance 获得策展身份，但仍使用与本地
 导入、私人分享和外部作者相同的 Portable Runtime 准入合同。
 
@@ -151,7 +151,7 @@ Context、完整 Expression、Sense 或 acceptance 中任一事实时，内容�
     ↓ 发现与当前路线精确匹配的 Book
 Book 详情
     ↓ 用户点击下载
-验证 Book Version Manifest 并通过统一入口安装其 `.sensa` 成员
+下载并验证一个 `.sensa-book`，通过统一入口原子安装其 `.sensa` 成员
     ↓ 大小 / digest / 合同 / 语言方向 / 资源校验通过
 已下载
     ↓ 用户明确点击“加入学习”

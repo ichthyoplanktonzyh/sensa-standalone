@@ -21,6 +21,7 @@ import {contentSupplyCommand} from '../../data/library/contentSupplyAdmission';
 import {learningOwner} from '../../data/library/libraryOwnership';
 import {
   packageInstallationSchema,
+  mergePackageInstallationRecovery,
   portablePackageInstallationFor,
   portablePackageKey,
   type InstalledPackage,
@@ -261,26 +262,25 @@ const compileInstalledContent=(
   });
 };
 
-const installPortablePackageWithAttestation=async(
+type PreparedPortableInstallation=Readonly<{
+  canonical:SensaPortableLightweightPackageArchive;
+  content:InstalledLearningContent;
+  installation:PackageInstallation;
+  publication?:PortablePublicationAttestation;
+}>;
+
+const preparePortablePackage=(
   bytes:Uint8Array,
-  expectedArchiveDigest:string,
-  signal?:AbortSignal,
+  input:SensaPortableLightweightPackageArchive,
   publication?:PortablePublicationAttestation,
-):Promise<InstalledPackage>=>{
-  await openLibrary();
-  const input=openPortable(bytes);
-  if(input.archiveDigest!==expectedArchiveDigest)throw new Error('localFlow.packageVersionChanged');
+):PreparedPortableInstallation=>{
   if(publication&&(
-    publication.member.archiveSha256!==input.archiveDigest
-    ||publication.member.packageDigest!==input.packageDigest
-    ||publication.member.byteLength!==bytes.byteLength
-    ||publication.member.packageId!==input.package.metadata.packageId
+    publication.member.packageId!==input.package.metadata.packageId
     ||publication.member.version!==input.package.metadata.version
     ||publication.route.targetLanguage!==input.package.route.targetLanguage
     ||publication.route.supportLanguage!==input.package.route.supportLanguage
     ||input.package.semanticDeclaration===undefined
   ))throw new Error('localFlow.catalogMismatch');
-  if(signal?.aborted)throw new Error('localFlow.downloadCancelled');
   let canonicalBytes:Uint8Array;
   let canonical:SensaPortableLightweightPackageArchive;
   try{
@@ -293,43 +293,58 @@ const installPortablePackageWithAttestation=async(
     canonical.archiveDigest,
     canonical.packageDigest,
     canonicalBytes.byteLength,
+    publication?.bookArchiveSha256,
   );
-  let installed:InstalledPackage|undefined;
-  await contentSupplyCommand({id:crypto.randomUUID(),kind:'package.install',input:{key:installation.key,digest:canonical.archiveDigest}},async tx=>{
+  return {canonical,content,installation,...(publication?{publication}:{})};
+};
+
+const installPreparedPortablePackages=async(
+  prepared:readonly PreparedPortableInstallation[],
+  signal?:AbortSignal,
+):Promise<readonly InstalledPackage[]>=>{
+  await openLibrary();
+  if(signal?.aborted)throw new Error('localFlow.downloadCancelled');
+  const installed:InstalledPackage[]=[];
+  await contentSupplyCommand({id:crypto.randomUUID(),kind:'package.install',input:{count:prepared.length}},async tx=>{
     await learningOwner(tx);
-    if(signal?.aborted)throw new Error('localFlow.downloadCancelled');
-    const old=await tx.get<InstalledPackage>('packageCache',installation.key);
-    const prior=await tx.get<PackageInstallation>('packageInstallations',installation.key);
-    if(prior&&canonicalConsumerJson(packageInstallationSchema.parse(prior))!==canonicalConsumerJson(installation))throw new Error('localFlow.packageVersionChanged');
-    if(old&&(
-      old.portableOrigin.packageDigest!==canonical.packageDigest
-      ||canonicalConsumerJson(old.content)!==canonicalConsumerJson(content)
-    ))throw new Error('localFlow.packageVersionChanged');
-    const publications=publication
-      ?[...(old?.portableOrigin.publications??[]).filter(item=>item.manifestSha256!==publication.manifestSha256),publication]
-      :old?.portableOrigin.publications??[];
-    installed=old?{
-      ...old,
-      portableOrigin:{...old.portableOrigin!,publications},
-    }:{
-      key:portablePackageKey(canonical.package.metadata.packageId,canonical.package.metadata.version),
-      digest:canonical.archiveDigest,
-      content,
-      installedAt:new Date().toISOString(),
-      portableOrigin:{
-        format:'sensa-portable-installation-origin-v2',
-        manifest:canonical.package,
-        packageDigest:canonical.packageDigest,
-        archiveDigest:canonical.archiveDigest,
-        validatorVersion:sensaPortableLightweightPackageValidatorVersion,
-        publications,
-      },
-    };
-    tx.put('packageInstallations',installation.key,installation);
-    tx.put('packageCache',installation.key,installed);
-    return {key:installation.key,digest:canonical.archiveDigest};
+    for(const item of prepared){
+      if(signal?.aborted)throw new Error('localFlow.downloadCancelled');
+      const {canonical,content,installation,publication}=item;
+      const old=await tx.get<InstalledPackage>('packageCache',installation.key);
+      const priorRaw=await tx.get<PackageInstallation>('packageInstallations',installation.key);
+      const prior=priorRaw?packageInstallationSchema.parse(priorRaw):undefined;
+      const admittedInstallation=mergePackageInstallationRecovery(prior,installation);
+      if(!admittedInstallation)throw new Error('localFlow.packageVersionChanged');
+      if(old&&(
+        old.portableOrigin.packageDigest!==canonical.packageDigest
+        ||canonicalConsumerJson(old.content)!==canonicalConsumerJson(content)
+      ))throw new Error('localFlow.packageVersionChanged');
+      const publications=publication
+        ?[...(old?.portableOrigin.publications??[]).filter(item=>item.bookArchiveSha256!==publication.bookArchiveSha256),publication]
+        :old?.portableOrigin.publications??[];
+      const value:InstalledPackage=old?{
+        ...old,
+        portableOrigin:{...old.portableOrigin!,publications},
+      }:{
+        key:portablePackageKey(canonical.package.metadata.packageId,canonical.package.metadata.version),
+        digest:canonical.archiveDigest,
+        content,
+        installedAt:new Date().toISOString(),
+        portableOrigin:{
+          format:'sensa-portable-installation-origin-v2',
+          manifest:canonical.package,
+          packageDigest:canonical.packageDigest,
+          archiveDigest:canonical.archiveDigest,
+          validatorVersion:sensaPortableLightweightPackageValidatorVersion,
+          publications,
+        },
+      };
+      tx.put('packageInstallations',installation.key,admittedInstallation);
+      tx.put('packageCache',installation.key,value);
+      installed.push(value);
+    }
+    return {count:installed.length};
   });
-  if(!installed)throw new Error('localFlow.storageWrite');
   return installed;
 };
 
@@ -337,22 +352,27 @@ export const installPortablePackage=(
   bytes:Uint8Array,
   expectedArchiveDigest:string,
   signal?:AbortSignal,
-):Promise<InstalledPackage>=>installPortablePackageWithAttestation(
-  bytes,
-  expectedArchiveDigest,
-  signal,
-);
+):Promise<InstalledPackage>=>installPreparedPortablePackages([
+  (()=>{
+    const input=openPortable(bytes);
+    if(input.archiveDigest!==expectedArchiveDigest)throw new Error('localFlow.packageVersionChanged');
+    return preparePortablePackage(bytes,input);
+  })(),
+],signal).then(([installed])=>installed??invalidPortablePackage(new Error('Package was not installed')));
 
-export const installPublishedPortablePackage=(
-  bytes:Uint8Array,
-  publication:PortablePublicationAttestation,
+export const installPublishedPortableBookMembers=(
+  members:readonly Readonly<{
+    bytes:Uint8Array;
+    archive:SensaPortableLightweightPackageArchive;
+    publication:PortablePublicationAttestation;
+  }>[],
   signal?:AbortSignal,
-):Promise<InstalledPackage>=>installPortablePackageWithAttestation(
-  bytes,
-  publication.member.archiveSha256,
-  signal,
-  publication,
-);
+):Promise<readonly InstalledPackage[]>=>{
+  if(signal?.aborted)throw new Error('localFlow.downloadCancelled');
+  const prepared=members.map(({bytes,archive,publication})=>
+    preparePortablePackage(bytes,archive,publication));
+  return installPreparedPortablePackages(prepared,signal);
+};
 
 const base64ToBytes=(value:string):Uint8Array=>{
   const separator=value.indexOf(',');

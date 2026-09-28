@@ -37,7 +37,7 @@ async function remoteRegistry(url:URL):Promise<SensaPortableLearningContentRegis
 }
 
 const emptySnapshot={
- format:'sensa-learning-content-registry-v2' as const,
+ format:'sensa-learning-content-registry-v3' as const,
  publishedAt:'1970-01-01T00:00:00.000Z',
  items:[],
 };

@@ -56,7 +56,7 @@ export type LearningCommand =
       operationId: string;
       packageKey: string;
       languageContext: SensaFormalPinnedLanguageContext;
-      publicationManifestSha256?: string;
+      publicationArchiveSha256?: string;
     }>
   | Readonly<{
       kind: 'confirm_quantity';

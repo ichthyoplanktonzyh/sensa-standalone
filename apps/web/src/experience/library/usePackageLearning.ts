@@ -156,11 +156,11 @@ export function usePackageLearning(entryOpen:boolean){
   },
   exportPackage:(packageKey:string)=>inspect(()=>contentSupplySystem.execute({kind:'export_portable_package',packageKey})),
   selectPolicy:(targetId:string,profileId:LearningPolicy)=>perform(()=>learningSystem.execute({kind:'select_policy',operationId:crypto.randomUUID(),targetId,languageContext,profileId})),
-  enroll:(packageKey:string,publicationManifestSha256?:string)=>perform(()=>learningSystem.execute({kind:'enroll_package',operationId:crypto.randomUUID(),packageKey,languageContext,publicationManifestSha256})),
-  enrollBook:(packageKeys:readonly string[],publicationManifestSha256:string)=>perform(async()=>{
+  enroll:(packageKey:string,publicationArchiveSha256?:string)=>perform(()=>learningSystem.execute({kind:'enroll_package',operationId:crypto.randomUUID(),packageKey,languageContext,publicationArchiveSha256})),
+  enrollBook:(packageKeys:readonly string[],publicationArchiveSha256:string)=>perform(async()=>{
    const targetIds:string[]=[];
    for(const packageKey of packageKeys){
-    targetIds.push(...await learningSystem.execute({kind:'enroll_package',operationId:crypto.randomUUID(),packageKey,languageContext,publicationManifestSha256}));
+    targetIds.push(...await learningSystem.execute({kind:'enroll_package',operationId:crypto.randomUUID(),packageKey,languageContext,publicationArchiveSha256}));
    }
    return targetIds;
   }),

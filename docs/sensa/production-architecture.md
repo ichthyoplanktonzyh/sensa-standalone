@@ -88,7 +88,7 @@ Transition 与跨设备合并裁决。
 | 当前 progress、Memory、due projection/checkpoint | Learning System | 可随事实传输但必须验证 | 可随恢复点保存 | 不得覆盖历史；可从固定事实与算法版本重建/核对 |
 | learner-private / On-demand Materialization | Content Supply System | 是 | 是 | immutable digest、admission 与 source/derivation provenance |
 | Personal Anchor media、Practice Artifact 与其他 learner-owned media | 对应 learner-owned Module / Media | 是 | 是 | content-addressed bytes、引用完整性与明确删除语义 |
-| Published `.sensa`、Book Manifest 与公共媒体字节 | Content Supply System | 否，只同步精确安装/应用 identity | 记录可恢复引用，不为每个账号复制公共字节 | 从保留的 immutable artifact 重新取得并校验 digest |
+| Published `.sensa`、`.sensa-book` 与公共媒体字节 | Content Supply System | 否，只同步精确安装/应用 identity | 记录可恢复引用，不为每个账号复制公共字节 | 从保留的 immutable Book archive 重新取得并校验 digest |
 | Learner Preference | Preference Module | 是 | 是 | typed version 与显式 precedence |
 | Device Preference、Device Operation Ledger、纯读取缓存 | device/platform | 否 | 否 | 本机重建或丢弃 |
 
@@ -172,7 +172,7 @@ React Web 保持既有平台定位和迁移验证价值；不能把阶段性的 
                        │ 显式 Add-to-Learning bridge
                        ├──────────────────────────────────────────┐
                        │                                          ▼
-不可变 Registry → Book Version Manifest → `.sensa` 下载/安装 → 显式加入/应用更新 → Curriculum
+不可变 Registry → `.sensa-book` 下载/原子安装 → 显式加入/应用更新 → Curriculum
 direct stable Sense + target binding ─────────────────────────────┘
                                                                   ↓
                                            Learning Target + Learning Policy
@@ -568,10 +568,10 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
 - Sense Relation 是同一 release 中经过审核的两个 Sense 之间的语义事实；
 - Semantic Field Version 用有限、可审核的 Senses 与 Relations 表达局部意义邻域，不决定课程顺序；
 - Content Release、Package 与 Book Version 发布后不原位修改。
-- Book Version Manifest 在精确 Target/Support Language pair 下固定有序 membership 及其 `.sensa`
-  identity/version/digest/location；它组织 Portable Packages，但不是另一种可执行内容格式；
-- Learning Content Registry 只负责发现当前公开版本。Manifest 引用的 `.sensa` 先按 digest 上传并验证，
-  Registry Revision 后发布并作为唯一可变发现指针的目标；Registry、Manifest、Package artifact 与对象
+- `.sensa-book` 在精确 Target/Support Language pair 下固定并一次分发完整 Book Version；内嵌 Manifest
+  固定有序 membership 及其 `.sensa` identity/version，外层 digest 固定全部精确 bytes；
+- Learning Content Registry 只负责发现当前公开版本。Book archive 先按 digest 上传并验证，Registry
+  Revision 后发布并作为唯一可变发现指针的目标；Registry、Book archive、Package artifact 与对象
   路径本身都不可覆盖。
 
 ### Curriculum
@@ -956,8 +956,8 @@ command 或 deep Module interface 协作，不能让页面状态、传输记录�
    协调 Account、learner-owned stores 与 Replica invalidation；
 4. **Catalog Module**：读取已发布、已固定的 Book、Sense Learning Package、Semantic Field、
    Reference Release、Reference Sense、Sense Alignment 与 Lexical Enrichment；其分发适配器读取
-   immutable Learning Content Registry，验证 Book Version Manifest 并通过统一 Portable Package 入口
-   安装其 `.sensa` 成员，但不拥有 Enrollment 或进度；
+   immutable Learning Content Registry，验证一个 `.sensa-book` 并通过统一 Portable Package 入口
+   原子安装其 `.sensa` 成员，但不拥有 Enrollment 或进度；
 5. **Lexical Reference Module**：解析 Example + character span，读取 version-pinned Reference entry、
    Lexical Occurrence 与 Contextual Sense Resolution，并生成可重建搜索/详情读取模型；它不拥有
    learner progress，也不自由生成词典释义；
@@ -1080,10 +1080,10 @@ command 或 deep Module interface 协作，不能让页面状态、传输记录�
   下载不等于加入学习，只有 learner 显式应用才产生新的 Study Scope。未改变 Sense/Binding identity
   的成员保留 Retention state，删除成员只退出未来 Planning，已开始 Run 不增删 participant；兼容材料更新
   可以刷新尚未操作的当前 Step 和未来 Step，已经操作的 Step 保留实际材料；
-- 可按 immutable version/digest 从 Content Supply 重新取得的 Published `.sensa` 与公共媒体字节是安装缓存，
+- 可按 immutable version/digest 从 Content Supply 重新取得的 Published `.sensa-book`、`.sensa` 与公共媒体字节是安装缓存，
   不是 Personal Library Fact，不应通过日常账号 Cloud Checkpoint 为每个 learner 重复复制。账号同步只
   保存安装/应用状态、精确内容 identity/digest 和 learner-owned facts；私有或按需 Materialization 仍按
-  其 learner ownership 进入同步与备份。已经操作的 Step 保存其实际 material fact；Portable/Manifest
+  其 learner ownership 进入同步与备份。已经操作的 Step 保存其实际 material fact；Portable/Book archive
   不因此承担永久保存完整旧归档供历史重放的职责；
 - Semantic Field 是有限、版本化的内容邻域，不是 Book、学习路径或通用人类 ontology；
 - Personal Semantic World 只接纳具备真实 Context、located Expression、teaching-sufficient stable Sense/

@@ -1,13 +1,16 @@
 import {
   canonicalConsumerJson,
-  maxBookVersionManifestBytes,
-  maxPublishedPortablePackageBytes,
-  sensaBookVersionManifestDescriptorSchema,
-  sensaBookVersionManifestSchema,
-  type SensaBookVersionManifest,
-  type SensaBookVersionManifestDescriptor,
-  type SensaPublishedPortableArtifact,
+  maxPortableBookArchiveBytes,
+  sensaPortableBookDescriptorSchema,
+  type SensaPortableBookDescriptor,
+  type SensaPortableBookManifest,
+  type SensaPortableBookMember,
 } from '@sensa/contracts/sensa';
+import {
+  readSensaPortableBook,
+  type SensaPortableBookPackage,
+  type SensaPortableBookPackageMember,
+} from '@sensa/content-validator/portable-book';
 
 import {
   type InstalledPackage,
@@ -15,12 +18,7 @@ import {
   type PortablePublicationAttestation,
 } from '../../data/library/packageRecords';
 import {readLibrary,writeLibraryCache} from '../../data/library/store';
-import {installPublishedPortablePackage} from './portablePackage';
-
-const sha256=async(bytes:Uint8Array)=>Array.from(
-  new Uint8Array(await crypto.subtle.digest('SHA-256',bytes as BufferSource)),
-  value=>value.toString(16).padStart(2,'0'),
-).join('');
+import {installPublishedPortableBookMembers} from './portablePackage';
 
 const fetchExactBytes=async(
   url:string,
@@ -60,123 +58,106 @@ const fetchExactBytes=async(
   return bytes;
 };
 
-export const fetchPublishedBookManifest=async(
-  raw:SensaBookVersionManifestDescriptor,
-  signal:AbortSignal,
-):Promise<SensaBookVersionManifest>=>{
-  const descriptor=sensaBookVersionManifestDescriptorSchema.parse(raw);
-  const bytes=await fetchExactBytes(
-    descriptor.url,
-    descriptor.byteLength,
-    maxBookVersionManifestBytes,
-    signal,
-    ()=>{},
-  );
-  if(await sha256(bytes)!==descriptor.sha256)throw new Error('localFlow.catalogMismatch');
-  let manifest:SensaBookVersionManifest;
-  try{
-    manifest=sensaBookVersionManifestSchema.parse(JSON.parse(new TextDecoder(
-      'utf-8',
-      {fatal:true},
-    ).decode(bytes)));
-  }catch(cause){
-    throw new Error('localFlow.catalogMismatch',{cause});
-  }
-  const expected=sensaBookVersionManifestDescriptorSchema.parse({
-    format:'sensa-book-version-manifest-descriptor-v1',
-    publisher:manifest.publisher,
-    book:manifest.book,
-    contentRelease:manifest.contentRelease,
-    route:manifest.route,
-    publishedAt:manifest.publishedAt,
-    changeSummary:manifest.changeSummary,
-    memberCount:manifest.members.length,
-    byteLength:bytes.byteLength,
-    sha256:descriptor.sha256,
-    url:descriptor.url,
-  });
-  if(canonicalConsumerJson(expected)!==canonicalConsumerJson(descriptor)){
-    throw new Error('localFlow.catalogMismatch');
-  }
-  return manifest;
-};
-
-const attestationFor=(
-  manifest:SensaBookVersionManifest,
-  manifestSha256:string,
-  member:SensaPublishedPortableArtifact,
-):PortablePublicationAttestation=>({
-  format:'sensa-portable-publication-attestation-v1',
+const expectedDescriptor=(
+  manifest:SensaPortableBookManifest,
+  descriptor:SensaPortableBookDescriptor,
+):SensaPortableBookDescriptor=>sensaPortableBookDescriptorSchema.parse({
+  format:'sensa-portable-book-descriptor-v1',
   publisher:manifest.publisher,
   book:manifest.book,
   contentRelease:manifest.contentRelease,
   route:manifest.route,
   publishedAt:manifest.publishedAt,
   changeSummary:manifest.changeSummary,
-  manifestSha256,
+  memberCount:manifest.members.length,
+  byteLength:descriptor.byteLength,
+  sha256:descriptor.sha256,
+  url:descriptor.url,
+});
+
+/** Fetch and fully validate the single distributable unit represented by a Registry item. */
+export const fetchPublishedBook=async(
+  raw:SensaPortableBookDescriptor,
+  signal:AbortSignal,
+  progress:(received:number)=>void=()=>{},
+):Promise<SensaPortableBookPackage>=>{
+  const descriptor=sensaPortableBookDescriptorSchema.parse(raw);
+  const bytes=await fetchExactBytes(
+    descriptor.url,
+    descriptor.byteLength,
+    maxPortableBookArchiveBytes,
+    signal,
+    progress,
+  );
+  let archive:SensaPortableBookPackage;
+  try{archive=readSensaPortableBook(bytes);}
+  catch(cause){throw new Error('localFlow.catalogMismatch',{cause});}
+  if(archive.archiveDigest!==descriptor.sha256
+    ||canonicalConsumerJson(expectedDescriptor(archive.manifest,descriptor))!==canonicalConsumerJson(descriptor)){
+    throw new Error('localFlow.catalogMismatch');
+  }
+  return archive;
+};
+
+const attestationFor=(
+  manifest:SensaPortableBookManifest,
+  bookArchiveSha256:string,
+  member:SensaPortableBookMember,
+):PortablePublicationAttestation=>({
+  format:'sensa-portable-publication-attestation-v2',
+  publisher:manifest.publisher,
+  book:manifest.book,
+  contentRelease:manifest.contentRelease,
+  route:manifest.route,
+  publishedAt:manifest.publishedAt,
+  changeSummary:manifest.changeSummary,
+  bookArchiveSha256,
   memberCount:manifest.members.length,
   member,
 });
 
-const fetchPublishedMember=async(
-  manifest:SensaBookVersionManifest,
-  manifestSha256:string,
-  member:SensaPublishedPortableArtifact,
+const installBookMembers=(
+  archive:SensaPortableBookPackage,
+  members:readonly SensaPortableBookPackageMember[],
   signal:AbortSignal,
-  progress:(received:number)=>void,
-):Promise<InstalledPackage>=>{
-  const bytes=await fetchExactBytes(
-    member.url,
-    member.byteLength,
-    maxPublishedPortablePackageBytes,
-    signal,
-    progress,
-  );
-  if(await sha256(bytes)!==member.archiveSha256)throw new Error('localFlow.catalogMismatch');
-  return installPublishedPortablePackage(
+):Promise<readonly InstalledPackage[]>=>installPublishedPortableBookMembers(
+  members.map(({member,bytes,archive:memberArchive})=>({
     bytes,
-    attestationFor(manifest,manifestSha256,member),
-    signal,
-  );
-};
+    archive:memberArchive,
+    publication:attestationFor(archive.manifest,archive.archiveDigest,member),
+  })),
+  signal,
+);
 
 export const downloadPublishedBook=async(
-  descriptor:SensaBookVersionManifestDescriptor,
+  descriptor:SensaPortableBookDescriptor,
   signal:AbortSignal,
   onProgress:(fraction:number)=>void,
 ):Promise<readonly InstalledPackage[]>=>{
   onProgress(0);
-  const manifest=await fetchPublishedBookManifest(descriptor,signal);
-  const total=manifest.members.reduce((sum,member)=>sum+member.byteLength,0);
-  let completed=0;
-  const installed:InstalledPackage[]=[];
-  for(const member of manifest.members){
-    const base=completed;
-    installed.push(await fetchPublishedMember(
-      manifest,
-      descriptor.sha256,
-      member,
-      signal,
-      received=>onProgress(Math.min(1,(base+received)/total)),
-    ));
-    completed+=member.byteLength;
-  }
+  const archive=await fetchPublishedBook(
+    descriptor,
+    signal,
+    received=>onProgress(Math.min(1,received/descriptor.byteLength)),
+  );
+  const installed=await installBookMembers(archive,archive.members,signal);
   onProgress(1);
   return installed;
 };
 
 const installationMatchesMember=(
   installation:PackageInstallation,
-  manifest:SensaBookVersionManifest,
-  member:SensaPublishedPortableArtifact,
+  archive:SensaPortableBookPackage,
+  member:SensaPortableBookPackageMember,
 ):boolean=>installation.artifact.kind==='portable_package'
-  &&installation.artifact.packageId===member.packageId
-  &&installation.artifact.version===member.version
-  &&installation.artifact.digest===member.archiveSha256
-  &&installation.artifact.packageDigest===member.packageDigest
-  &&installation.artifact.byteLength===member.byteLength
-  &&installation.artifact.targetLanguage===manifest.route.targetLanguage
-  &&installation.artifact.supportLanguage===manifest.route.supportLanguage;
+  &&installation.artifact.bookArchiveSha256===archive.archiveDigest
+  &&installation.artifact.packageId===member.member.packageId
+  &&installation.artifact.version===member.member.version
+  &&installation.artifact.digest===member.archive.archiveDigest
+  &&installation.artifact.packageDigest===member.archive.packageDigest
+  &&installation.artifact.byteLength===member.bytes.byteLength
+  &&installation.artifact.targetLanguage===archive.manifest.route.targetLanguage
+  &&installation.artifact.supportLanguage===archive.manifest.route.supportLanguage;
 
 export type PortableRehydrationResult=Readonly<{
   ready:string[];
@@ -186,7 +167,7 @@ export type PortableRehydrationResult=Readonly<{
 
 /** Restore only artifacts already represented by synchronized installation facts. */
 export const rehydratePublishedPortableInstallations=async(
-  descriptors:readonly SensaBookVersionManifestDescriptor[],
+  descriptors:readonly SensaPortableBookDescriptor[],
   signal:AbortSignal=AbortSignal.timeout(120_000),
 ):Promise<PortableRehydrationResult>=>{
   const snapshot=await readLibrary(async tx=>({
@@ -206,39 +187,35 @@ export const rehydratePublishedPortableInstallations=async(
   const failed:string[]=[];
   const missing=snapshot.installations.filter(installation=>!cached.has(installation.key));
   if(!missing.length)return {ready:ready.sort(),blocked,failed};
-  const manifests:(Readonly<{
-    descriptor:SensaBookVersionManifestDescriptor;
-    manifest:SensaBookVersionManifest;
-  }>)[]=[];
-  let manifestUnavailable=false;
-  for(const descriptor of descriptors){
+
+  const groups=new Map<string,PackageInstallation[]>();
+  for(const installation of missing){
+    const digest=installation.artifact.bookArchiveSha256;
+    if(!digest){blocked.push(installation.key);continue;}
+    groups.set(digest,[...(groups.get(digest)??[]),installation]);
+  }
+  for(const [bookArchiveSha256,installations] of groups){
+    const descriptor=descriptors.find(item=>item.sha256===bookArchiveSha256);
+    if(!descriptor){blocked.push(...installations.map(item=>item.key));continue;}
     try{
-      manifests.push({descriptor,manifest:await fetchPublishedBookManifest(descriptor,signal)});
+      const archive=await fetchPublishedBook(descriptor,signal);
+      const selected:SensaPortableBookPackageMember[]=[];
+      for(const installation of installations){
+        const member=archive.members.find(candidate=>installationMatchesMember(
+          installation,
+          archive,
+          candidate,
+        ));
+        if(member)selected.push(member);
+        else blocked.push(installation.key);
+      }
+      if(selected.length){
+        const restored=await installBookMembers(archive,selected,signal);
+        ready.push(...restored.map(item=>item.key));
+      }
     }catch{
       if(signal.aborted)throw new Error('localFlow.downloadCancelled');
-      manifestUnavailable=true;
-    }
-  }
-  for(const installation of missing){
-    const located=manifests.flatMap(item=>item.manifest.members.map(member=>({
-      ...item,
-      member,
-    }))).find(item=>installationMatchesMember(installation,item.manifest,item.member));
-    if(!located){
-      (manifestUnavailable?failed:blocked).push(installation.key);
-      continue;
-    }
-    try{
-      await fetchPublishedMember(
-        located.manifest,
-        located.descriptor.sha256,
-        located.member,
-        signal,
-        ()=>{},
-      );
-      ready.push(installation.key);
-    }catch{
-      failed.push(installation.key);
+      failed.push(...installations.map(item=>item.key).filter(key=>!blocked.includes(key)));
     }
   }
   return {ready:ready.sort(),blocked:blocked.sort(),failed:failed.sort()};

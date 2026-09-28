@@ -101,7 +101,7 @@ Content Attempt 查询投影。首页只读取当前 Route 的 Target、该 Rout
 Package key；运行恢复、策略锁定和生成频控通过领域索引查询，不遍历或解析无关 JSON。数据库打开及有写入
 的长连接周期内使用 `PRAGMA optimize` 维护查询规划统计。Book 版本替换和媒体引用完整性检查同样通过事务内
 关系投影完成。承载大 JSON 的逻辑 record 与 Target 投影使用普通 rowid 表，紧凑关系投影使用
-`WITHOUT ROWID`；物理 schema v10 使用新的 OPFS 文件，并在内容事务中维护记录级 revision 与删除 tombstone，供账号同步只读取上次收敛后变化的记录。云端确认的逐记录基线和 block refs 保存在内部 `sensa_sync_base` 表；未变化记录不再重新编码、分块或下载。`packageInstallations` 保存可跨设备复制的精确 `.sensa` identity、语言方向、长度和 digest；完整 Portable artifact 与编译后的设备 Runtime content 只进入本地 `packageCache`，缓存写入不增加个人内容 revision。恢复后由 Content Supply 使用 Registry/Manifest 位置重新取得并校验精确 digest；解析或下载失败时 Learning Target 保留但 readiness 为 blocked。状态只保存小型幂等 commit receipt，不重复保存整库或待发布记录。`npm run benchmark:cloud-sync` 在真实 Chromium OPFS 上执行 1k/10k 完整同步路径，并固定单记录变化只上传记录块与受影响的 manifest 分片。因当前无用户库数据，不迁移或读取 v9 文件。
+`WITHOUT ROWID`；物理 schema v10 使用新的 OPFS 文件，并在内容事务中维护记录级 revision 与删除 tombstone，供账号同步只读取上次收敛后变化的记录。云端确认的逐记录基线和 block refs 保存在内部 `sensa_sync_base` 表；未变化记录不再重新编码、分块或下载。`packageInstallations` 保存可跨设备复制的精确 `.sensa` identity、语言方向、长度、digest 与来源 Book archive digest；完整 Portable artifact 与编译后的设备 Runtime content 只进入本地 `packageCache`，缓存写入不增加个人内容 revision。恢复后由 Content Supply 使用 Registry 中的 `.sensa-book` 位置一次重新取得，验证外层摘要及全部成员，再只恢复已有安装事实对应的缓存；解析或下载失败时 Learning Target 保留但 readiness 为 blocked。状态只保存小型幂等 commit receipt，不重复保存整库或待发布记录。`npm run benchmark:cloud-sync` 在真实 Chromium OPFS 上执行 1k/10k 完整同步路径，并固定单记录变化只上传记录块与受影响的 manifest 分片。因当前无用户库数据，不迁移或读取 v9 文件。
 v10 同时是首个真实用户基线：打开版本低于 v10 或高于当前版本的文件会停止并保留原库，不创建空库冒充
 首次访问；后续 schema 只能按顺序增加事务迁移与固定旧版夹具。跨标签页协调协议独立版本化，版本不一致
 时旧/新页面不交换记录，并要求用户关闭其他标签页。Service Worker 安装新 shell 后等待用户确认再接管，
@@ -455,8 +455,8 @@ gh workflow run sensa-web-deploy.yml \
 
 学习内容拥有独立于应用版本的发布入口 `.github/workflows/sensa-learning-content-publish.yml`。它接收
 一个完整且已通过 `main` CI 的 commit SHA，并要求当次 owner 授权；随后从 `content/authored/*.json`
-与仓库固定的路线基础输入重建正式 Book source，再构建每个 Sense 的不可变 `.sensa` 与 Book Version Manifest，执行无网络 Registry smoke，按 Package →
-Manifest → Registry 上传到 Supabase Storage 的 content-addressed 路径并逐一校验公网 bytes。只有以上步骤全部
+与仓库固定的路线基础输入重建正式 Book source，再构建每个 Sense 的不可变 `.sensa` 并原样封装成 `.sensa-book`，执行无网络 Registry smoke，按 Book archive →
+Registry 上传到 Supabase Storage 的 content-addressed 路径并逐一校验公网 bytes。只有以上步骤全部
 成功后，工作流才把 API 的 `SENSA_PACKAGE_REGISTRY_URL` 提升到新 Revision。它不重新部署 Web、
 不覆盖既有对象，也不把下载解释为 learner 已应用更新。音频与图片不进入 Git：operator 先用
 `scripts/release/buildAuthoredMediaPack.mts` 生成精确媒体包并以
@@ -464,11 +464,11 @@ Manifest → Registry 上传到 Supabase Storage 的 content-addressed 路径并
 tag 与完整 SHA-256。工作流先校验整个媒体包，构建器再校验并消费其中每个对象，遗漏、多余、MIME
 不符或摘要不符都会终止发布。
 
-每个 Published Lightweight member 都是可独立验证的 `.sensa`，Book Version Manifest 只组织这些制品。
-官方 producer 由 `buildPortableBookRegistry.mts` 实现：每个 authored member 产生一个 Portable v2
-Package，Manifest 固定顺序和 package digest，Registry v2 对 publisher namespace、Manifest digest 和
-member semantic declaration 作精确证明；`publishPortableLearningRegistry.mjs` 按 Package → Manifest →
-Registry 的顺序上传并逐层校验公开 bytes，受保护 workflow 只提升这条链产生的 Registry v2。
+每个 Published Lightweight member 都是可独立验证的 `.sensa`；`.sensa-book` 只提供完整 Book 的单次
+分发与原子安装。官方 producer 由 `buildPortableBookRegistry.mts` 实现：每个 authored member 产生一个
+Portable v2 Package，内嵌 Manifest 固定顺序和 identity/version，Book archive digest 固定所有成员的精确
+bytes，Registry v3 直接发布该 archive；`publishPortableLearningRegistry.mjs` 按 Book archive → Registry
+的顺序上传并验证公开 bytes，受保护 workflow 只提升这条链产生的 Registry v3。
 
 ```sh
 gh workflow run sensa-learning-content-publish.yml \
@@ -541,21 +541,22 @@ cache。预览只读，导入不自动 enrollment。导出从保留的公开 man
 已操作 Step 的 material fact 不改写。完整边界由
 `tests/web/integration/portable-package-loop.test.mts` 覆盖。
 
-`ContentSupplySystem` 的 Catalog 读取 Registry v2，先校验 Book Manifest，再逐一下载并校验其 `.sensa`
-成员；Catalog 与文件导入共用 Portable 准入、编译、安装和导出 authority。区别只在信任来源：Catalog
-路径可依据 Registry/Manifest 的精确 digest 采用官方 semantic declaration，本地文件只能形成 Package-local
+`ContentSupplySystem` 的 Catalog 读取 Registry v3，对一个 Book 只下载一个 `.sensa-book`，先校验外层
+digest 和内嵌 Manifest，再校验全部 `.sensa` 成员并用一个 transaction 原子安装；Catalog 与文件导入共用
+Portable 准入、编译、安装和导出 authority。区别只在信任来源：Catalog 路径可依据 Registry 对 Book
+archive 的精确 digest 采用官方 semantic declaration，本地文件只能形成 Package-local
 identity。UI 不解析 ZIP、Manifest 或媒体，也不能绕过 Content Supply 直接构造 Runtime content。
 
 迁移不能只把旧 Bundle 改扩展名。Portable v2 固定一个 Sense/Route，并以可选 `semanticDeclaration`
 携带官方 Book entry 所需的稳定 Sense/Binding semantic snapshot，用于跨 Book/Route 复用 identity 和从
 “我的场景”建立 Personal Meaning。只有 Registry 对精确 artifact digest 的 attestation 才能赋予声明
 Sensa Official 权威；本地文件导入继续使用 Package-local identity，不能凭相同 ID 冒充官方事实。Book
-排序与 membership 继续留在 Manifest，不塞回单 Sense Package。当前没有用户或已发布 Portable 制品，
+排序与 membership 继续留在 Book 内嵌 Manifest，不塞回单 Sense Package。当前没有用户或已发布 Portable 制品，
 因此 v2 直接取代 v1，validator 不保留双格式读取分支。
 
-官方分发与 Catalog 已完成同一边界的闭环：`.sensa` 是唯一成员制品，Book Version Manifest 只保存有序
-membership 与精确 digest，Registry v2 只发布并证明 Manifest；安装事实仅同步精确 artifact identity，完整
-制品仍是可重新获取的本机缓存。旧 Book Bundle builder、publisher、consumer contract、JSON 导入命令与
+官方分发与 Catalog 已完成同一边界的闭环：`.sensa` 是唯一成员制品，`.sensa-book` 原样封装有序
+membership，Registry v3 直接发布并证明整本 archive；安装事实仅同步精确 artifact identity 与来源 Book
+digest，完整制品仍是可重新获取的本机缓存。旧多请求 Manifest/member 分发、consumer contract 与
 对应测试夹具已经删除；设备 Runtime content 只能由通过 Portable validator 的 `.sensa` 编译产生，不能作为
 第二种外部包格式直接导入。
 

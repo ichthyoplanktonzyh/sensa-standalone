@@ -3,9 +3,13 @@ import {
   readSensaPortableLightweightPackage,
 } from '@sensa/content-validator/portable-lightweight';
 import {
-  canonicalConsumerJson,
-  sensaBookVersionManifestDescriptorSchema,
-  sensaBookVersionManifestSchema,
+  createSensaPortableBook,
+  portableBookMemberKey,
+  readSensaPortableBook,
+} from '@sensa/content-validator/portable-book';
+import {
+  sensaPortableBookDescriptorSchema,
+  sensaPortableBookManifestSchema,
   type SensaPortableLightweightPackage,
 } from '@sensa/contracts/sensa';
 import {sha256,stableUuid} from '@sensa/learning-kernel';
@@ -135,7 +139,6 @@ export const portablePackageFixture=(options:PortablePackageFixtureOptions={})=>
 export const portableBookDeliveryFixture=(options:PortablePackageFixtureOptions={})=>{
   const archive=portablePackageFixture(options);
   const base=options.baseUrl??'https://content.fixture.invalid/';
-  const packageUrl=new URL(`${archive.archiveDigest}.sensa`,base).href;
   const publishedAt='2026-09-25T00:00:00Z';
   const publisher={namespace:'sensa.test',name:'Sensa test publisher'};
   const book={
@@ -151,8 +154,8 @@ export const portableBookDeliveryFixture=(options:PortablePackageFixtureOptions=
     versionNumber:archive.package.metadata.version,
     schemaVersion:'sensa-portable-lightweight-package-v2',
   };
-  const manifest=sensaBookVersionManifestSchema.parse({
-    format:'sensa-book-version-manifest-v1',
+  const manifest=sensaPortableBookManifestSchema.parse({
+    format:'sensa-portable-book-v1',
     publisher,
     book,
     contentRelease,
@@ -160,24 +163,23 @@ export const portableBookDeliveryFixture=(options:PortablePackageFixtureOptions=
     publishedAt,
     changeSummary:'Synthetic test publication.',
     semanticAttestation:{
-      kind:'publisher-digest-attestation',
+      kind:'publisher-attestation',
       publisherNamespace:publisher.namespace,
       subject:'member-semantic-declarations',
     },
     members:[{
       packageId:archive.package.metadata.packageId,
       version:archive.package.metadata.version,
-      byteLength:archive.bytes.byteLength,
-      archiveSha256:archive.archiveDigest,
-      packageDigest:archive.packageDigest,
-      url:packageUrl,
     }],
   });
-  const manifestBytes=new TextEncoder().encode(canonicalConsumerJson(manifest));
-  const manifestSha256=sha256(manifestBytes);
-  const manifestUrl=new URL(`${manifestSha256}.json`,base).href;
-  const descriptor=sensaBookVersionManifestDescriptorSchema.parse({
-    format:'sensa-book-version-manifest-descriptor-v1',
+  const bookBytes=createSensaPortableBook(
+    manifest,
+    new Map([[portableBookMemberKey(manifest.members[0]!),archive.bytes]]),
+  );
+  const bookArchive=readSensaPortableBook(bookBytes);
+  const bookUrl=new URL(`${bookArchive.archiveDigest}.sensa-book`,base).href;
+  const descriptor=sensaPortableBookDescriptorSchema.parse({
+    format:'sensa-portable-book-descriptor-v1',
     publisher,
     book,
     contentRelease,
@@ -185,18 +187,18 @@ export const portableBookDeliveryFixture=(options:PortablePackageFixtureOptions=
     publishedAt,
     changeSummary:manifest.changeSummary,
     memberCount:1,
-    byteLength:manifestBytes.byteLength,
-    sha256:manifestSha256,
-    url:manifestUrl,
+    byteLength:bookBytes.byteLength,
+    sha256:bookArchive.archiveDigest,
+    url:bookUrl,
   });
   return {
     ...archive,
     descriptor,
     manifest,
-    manifestBytes,
+    bookBytes,
+    bookArchive,
     responses:new Map<string,Uint8Array>([
-      [manifestUrl,manifestBytes],
-      [packageUrl,archive.bytes],
+      [bookUrl,bookBytes],
     ]),
   };
 };

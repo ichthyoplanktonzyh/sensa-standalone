@@ -1,5 +1,5 @@
 import type {
-  SensaBookVersionManifestDescriptor,
+  SensaPortableBookDescriptor,
   SensaFormalPinnedLanguageContext,
 } from '@sensa/contracts/sensa';
 
@@ -15,7 +15,7 @@ import type {
 import { observeLibrary, type Table } from '../../data/library/store';
 
 export type ContentSupplyPackage = InstalledPackage;
-export type ContentSupplyCatalogItem = SensaBookVersionManifestDescriptor;
+export type ContentSupplyCatalogItem = SensaPortableBookDescriptor;
 
 export interface ContentSupplyWorkspace {
   readonly catalog: readonly ContentSupplyCatalogItem[];

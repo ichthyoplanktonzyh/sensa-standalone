@@ -1,14 +1,13 @@
-/** Publish immutable `.sensa` members, Book Manifests and the Registry snapshot in that order. */
+/** Publish immutable `.sensa-book` archives and then the Registry snapshot. */
 import {createHash} from "node:crypto";
 import {mkdir, readFile, writeFile} from "node:fs/promises";
 import {dirname, resolve} from "node:path";
 
 import {createClient} from "@supabase/supabase-js";
-import {readSensaPortableLightweightPackage} from "@sensa/content-validator/portable-lightweight";
+import {readSensaPortableBook} from "@sensa/content-validator/portable-book";
 import {
   canonicalConsumerJson,
-  sensaBookVersionManifestDescriptorSchema,
-  sensaBookVersionManifestSchema,
+  sensaPortableBookDescriptorSchema,
   sensaPortableLearningContentRegistrySchema,
 } from "@sensa/contracts/sensa";
 import {ensurePublicLearningContentBucket} from "./learningContentBucket.mjs";
@@ -110,25 +109,23 @@ async function publishInBatches(tasks, label, work) {
   }
 }
 
-const packageTasks = [];
-const manifestTasks = [];
+const bookTasks = [];
 for (const descriptor of registry.items) {
-  const manifestRelative = [
+  const bookRelative = [
     "books",
     descriptor.book.bookId,
     descriptor.book.bookVersionId,
-    `${descriptor.sha256}.json`,
+    `${descriptor.sha256}.sensa-book`,
   ].join("/");
-  const manifestBytes = await readFile(resolve(releaseRoot, manifestRelative));
-  if (manifestBytes.byteLength !== descriptor.byteLength
-    || sha256(manifestBytes) !== descriptor.sha256) {
-    throw new Error("Book Manifest bytes do not match the Registry descriptor");
+  const bookBytes = await readFile(resolve(releaseRoot, bookRelative));
+  if (bookBytes.byteLength !== descriptor.byteLength
+    || sha256(bookBytes) !== descriptor.sha256) {
+    throw new Error("Portable Book bytes do not match the Registry descriptor");
   }
-  const manifest = sensaBookVersionManifestSchema.parse(
-    JSON.parse(manifestBytes.toString("utf8")),
-  );
-  const expectedDescriptor = sensaBookVersionManifestDescriptorSchema.parse({
-    format: "sensa-book-version-manifest-descriptor-v1",
+  const archive = readSensaPortableBook(bookBytes);
+  const manifest = archive.manifest;
+  const expectedDescriptor = sensaPortableBookDescriptorSchema.parse({
+    format: "sensa-portable-book-descriptor-v1",
     publisher: manifest.publisher,
     book: manifest.book,
     contentRelease: manifest.contentRelease,
@@ -136,59 +133,26 @@ for (const descriptor of registry.items) {
     publishedAt: manifest.publishedAt,
     changeSummary: manifest.changeSummary,
     memberCount: manifest.members.length,
-    byteLength: manifestBytes.byteLength,
-    sha256: sha256(manifestBytes),
+    byteLength: bookBytes.byteLength,
+    sha256: archive.archiveDigest,
     url: descriptor.url,
   });
   if (canonicalConsumerJson(expectedDescriptor) !== canonicalConsumerJson(descriptor)) {
-    throw new Error("Book Manifest identity does not match the Registry descriptor");
+    throw new Error("Portable Book identity does not match the Registry descriptor");
   }
-
-  for (const member of manifest.members) {
-    const packageRelative = [
-      "packages",
-      member.packageId,
-      String(member.version),
-      `${member.archiveSha256}.sensa`,
-    ].join("/");
-    packageTasks.push({packageRelative, member, route: manifest.route});
-  }
-  manifestTasks.push({manifestRelative, manifestBytes, expectedUrl: descriptor.url});
+  bookTasks.push({bookRelative, bookBytes, memberCount: archive.members.length, expectedUrl: descriptor.url});
 }
 
-await publishInBatches(packageTasks, "Portable Packages", async ({packageRelative, member, route}) => {
-  const packageBytes = await readFile(resolve(releaseRoot, packageRelative));
-  if (packageBytes.byteLength !== member.byteLength
-    || sha256(packageBytes) !== member.archiveSha256) {
-    throw new Error("Portable Package bytes do not match the Book Manifest");
-  }
-  const archive = readSensaPortableLightweightPackage(packageBytes);
-  if (archive.packageDigest !== member.packageDigest
-    || archive.package.metadata.packageId !== member.packageId
-    || archive.package.metadata.version !== member.version
-    || archive.package.route.targetLanguage !== route.targetLanguage
-    || archive.package.route.supportLanguage !== route.supportLanguage
-    || archive.package.semanticDeclaration === undefined) {
-    throw new Error("Portable Package content does not satisfy the attested Book membership");
-  }
-  const packageUrl = await publishObject(
-    `releases/${packageRelative}`,
-    packageBytes,
-    "application/zip",
+await publishInBatches(bookTasks, "Portable Books", async ({bookRelative, bookBytes, expectedUrl}) => {
+  const bookUrl = await publishObject(
+    `releases/${bookRelative}`,
+    bookBytes,
+    "application/vnd.sensa.book+zip",
   );
-  if (packageUrl !== member.url) throw new Error("Portable Package URL does not match the publication target");
+  if (bookUrl !== expectedUrl) throw new Error("Portable Book URL does not match the publication target");
 });
 
-await publishInBatches(manifestTasks, "Book Manifests", async ({manifestRelative, manifestBytes, expectedUrl}) => {
-  const manifestUrl = await publishObject(
-    `releases/${manifestRelative}`,
-    manifestBytes,
-    "application/json",
-  );
-  if (manifestUrl !== expectedUrl) throw new Error("Book Manifest URL does not match the publication target");
-});
-
-const packageCount = packageTasks.length;
+const packageCount = bookTasks.reduce((total, task) => total + task.memberCount, 0);
 
 const registryObjectPath = `registries/${registry.revision}.json`;
 const registryUrl = await publishObject(registryObjectPath, registryBytes, "application/json");
@@ -202,7 +166,7 @@ await mkdir(dirname(envOutput), {recursive: true});
 await writeFile(envOutput, `SENSA_PACKAGE_REGISTRY_URL='${registryUrl}'\n`, {mode: 0o600});
 await mkdir(dirname(reportOutput), {recursive: true});
 await writeFile(reportOutput, `${JSON.stringify({
-  format: "sensa-portable-learning-content-publication-v1",
+  format: "sensa-portable-learning-content-publication-v2",
   projectRef,
   bucket,
   registryRevision: registry.revision,
@@ -211,11 +175,11 @@ await writeFile(reportOutput, `${JSON.stringify({
     publisherNamespace: item.publisher.namespace,
     bookId: item.book.bookId,
     bookVersionId: item.book.bookVersionId,
-    manifestSha256: item.sha256,
+    bookArchiveSha256: item.sha256,
   })),
   packageCount,
 }, null, 2)}\n`);
 console.log([
-  `Published and verified ${packageCount} immutable .sensa package(s) and`,
-  `${registry.items.length} Book Manifest(s); Registry ${registry.revision} is ready for promotion.`,
+  `Published and verified ${registry.items.length} immutable .sensa-book archive(s) containing`,
+  `${packageCount} atomic .sensa member(s); Registry ${registry.revision} is ready for promotion.`,
 ].join(" "));

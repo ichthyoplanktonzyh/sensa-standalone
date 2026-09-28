@@ -1,7 +1,7 @@
 /**
  * Package Center acceptance journey in the shipped Web application.
  *
- * This deliberately crosses the network, Book Manifest, `.sensa` admission,
+ * This deliberately crosses the network, `.sensa-book`, `.sensa` admission,
  * OPFS SQLite, Content Supply System and Learning System boundaries. The
  * fixture responses are chunked and omit Content-Length, matching compressed
  * production object delivery rather than an in-memory happy path.
@@ -127,7 +127,9 @@ test.beforeAll(async()=>{
         delivered.push(url.pathname);
         // Force chunked transfer so this acceptance path has no Content-Length.
         response.writeHead(200,{
-          'content-type':url.pathname.endsWith('.json')?'application/json':'application/octet-stream',
+          'content-type':url.pathname.endsWith('.sensa-book')
+            ?'application/vnd.sensa.book+zip'
+            :url.pathname.endsWith('.json')?'application/json':'application/octet-stream',
           'cache-control':'no-store','transfer-encoding':'chunked',
         });
         const middle=Math.max(1,Math.floor(bytes.byteLength/2));
@@ -162,7 +164,7 @@ test.beforeAll(async()=>{
     title:'English route essentials',
   });
   const snapshot={
-    format:'sensa-learning-content-registry-v2' as const,
+    format:'sensa-learning-content-registry-v3' as const,
     publishedAt:'2026-09-28T00:00:00Z',
     items:[delivery.descriptor],
   };
@@ -222,8 +224,12 @@ test('discovers, downloads and enrolls a Book with durable local state',async({p
   await expect(entry.getByText('已下载',{exact:true})).toBeVisible({timeout:15_000});
   await expect(entry.getByText('borrow',{exact:true})).toBeVisible();
   await expect(entry.getByRole('button',{name:'加入学习',exact:true})).toBeVisible();
-  assert.equal(delivered.filter(path=>path.endsWith('.json')).length,1,'Book Manifest was not downloaded exactly once');
-  assert.equal(delivered.filter(path=>path.endsWith('.sensa')).length,1,'portable member was not downloaded exactly once');
+  assert.equal(
+    delivered.filter(path=>path.endsWith('.sensa-book')).length,
+    1,
+    'the complete Book was not downloaded exactly once',
+  );
+  assert.equal(delivered.filter(path=>path.endsWith('.sensa')).length,0,'members must not require separate requests');
 
   await entry.getByRole('button',{name:'加入学习',exact:true}).click();
   await expect(entry.getByText('已加入学习',{exact:true})).toBeVisible({timeout:15_000});

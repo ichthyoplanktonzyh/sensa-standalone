@@ -32,7 +32,7 @@ export const executeLearningCommand = async (command: LearningCommand): Promise<
         command.operationId,
         command.packageKey,
         command.languageContext,
-        command.publicationManifestSha256,
+        command.publicationArchiveSha256,
       );
     }
     case 'confirm_quantity': {

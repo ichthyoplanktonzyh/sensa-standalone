@@ -324,8 +324,8 @@ Published content 在 learner run 之前生产、验证并发布。生产者可�
 Sense Learning Package 是这种路径的可复用 bundle。
 
 对于 Lightweight，所有可分发 Package——包括 Sensa Official 策展内容、外部作者内容与 learner
-明确导出的内容——都通过 `.sensa` 跨越生产和安装边界。Book Version Manifest 只固定这些 Package 的
-有序 membership 与精确 artifact reference，不提供第二种可执行内容格式。Official 质量等级来自独立
+明确导出的内容——都通过 `.sensa` 跨越 Package 边界；Book 分发使用 `.sensa-book`，其内嵌 Manifest 只固定
+有序 membership，并原样包含这些独立 `.sensa`，不提供第二种可执行内容格式。Official 质量等级来自独立
 Registry provenance 和发布门禁，不由 Package 自报，也不改变 Runtime 公共准入合同。
 
 它适合：

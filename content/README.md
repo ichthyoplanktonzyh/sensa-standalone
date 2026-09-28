@@ -69,8 +69,8 @@ descriptive metadata required by the current V2 wire shape.
 
 ## Portable Book release delivery
 
-The official producer emits one independently valid `.sensa` per Lightweight member and a
-Book Version Manifest that orders and references those artifacts. Each source names a stable
+The official producer emits one independently valid `.sensa` per Lightweight member and seals
+the ordered members plus an embedded Manifest into one `.sensa-book`. Each source names a stable
 `bookKey`, positive `versionNumber`, publication
 time, learner-facing change summary, exact Target/Support languages, and a separate
 `senseVersion` and `bindingVersion` for every entry. Raising the Book version alone does
@@ -89,8 +89,8 @@ node --import tsx tests/web/run.mts --suite=fast --id=portable-learning-registry
 ```
 
 The builder requires the authored source to declare its publisher, author and license,
-plus a positive `packageVersion` for every member. It writes content-addressed packages,
-Book Version Manifests and `release-candidate/portable-catalog.json`. Generated release
+plus a positive `packageVersion` for every member. It writes content-addressed `.sensa-book`
+archives and `release-candidate/portable-catalog.json`. Generated release
 files remain ignored build artifacts. By default it includes every JSON source in
 `content/authored/`; a bounded custom build may override the list with comma-separated
 `SENSA_BOOK_RELEASE_SOURCES` paths or point `SENSA_BOOK_RELEASE_SOURCE_DIRECTORY` at a
@@ -107,10 +107,10 @@ expands that file into all 18 × 18 route Book sources, adds the direct JSON Boo
 input; the expanded per-route files and release artifacts remain ignored outputs.
 
 `scripts/release/publishPortableLearningRegistry.mjs` implements the immutable upload
-order Package → Manifest → Registry and verifies the public bytes at every step. The
-protected workflow promotes this Registry only after all referenced Manifest and Package
-bytes are public and verified. The Web Catalog validates the same hierarchy and sends every
-member through the Portable installation authority.
+order Book archive → Registry and verifies the public bytes at every step. The protected
+workflow promotes this Registry only after all referenced `.sensa-book` bytes and all inner
+Portable members are verified. The Web Catalog validates the same archive and sends every
+member through one atomic Portable installation transaction.
 
 Authored audio and images use the same content-addressed release seam. A source
 stores only `{ "sha256": "…", "mimeType": "audio/mpeg" }` or
@@ -142,8 +142,8 @@ owner-selected release asset, verifies its whole-file digest, then sets
 rejects missing or unused bytes.
 
 Production publication is only through the protected
-`sensa-learning-content-publish.yml` workflow. It uploads and verifies every `.sensa`, then
-its Book Manifest, publishes the Registry last, and promotes the API's public Registry URL.
+`sensa-learning-content-publish.yml` workflow. It verifies every atomic `.sensa`, seals them
+into immutable `.sensa-book` archives, publishes the Registry last, and promotes the API's public Registry URL.
 It makes no model or TTS calls and never overwrites an existing object.
 
 ## Layout

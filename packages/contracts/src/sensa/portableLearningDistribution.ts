@@ -17,17 +17,8 @@ const deliveryUrl = z.url().refine((value) => {
       || (url.protocol === "http:" && ["localhost", "127.0.0.1"].includes(url.hostname)));
 }, "Safe HTTP(S) delivery URL required");
 
-export const maxPublishedPortablePackageBytes = 64 * 1024 * 1024;
-export const maxBookVersionManifestBytes = 1024 * 1024;
-
-export const sensaPublishedPortableArtifactSchema = z.object({
-  packageId: uuid,
-  version: positiveInteger,
-  byteLength: positiveInteger.max(maxPublishedPortablePackageBytes),
-  archiveSha256: digest,
-  packageDigest: digest,
-  url: deliveryUrl,
-}).strict();
+export const maxPortableBookArchiveBytes = 256 * 1024 * 1024;
+export const maxPortableBookManifestBytes = 1024 * 1024;
 
 const publisherSchema = z.object({
   namespace: publisherNamespace,
@@ -54,8 +45,15 @@ const routeSchema = z.object({
   supportLanguage: sensaLanguageTagSchema,
 }).strict();
 
-export const sensaBookVersionManifestSchema = z.object({
-  format: z.literal("sensa-book-version-manifest-v1"),
+/** One independently useful `.sensa` member carried by a `.sensa-book`. */
+export const sensaPortableBookMemberSchema = z.object({
+  packageId: uuid,
+  version: positiveInteger,
+}).strict();
+
+/** The identity document stored as `book.json` inside a `.sensa-book`. */
+export const sensaPortableBookManifestSchema = z.object({
+  format: z.literal("sensa-portable-book-v1"),
   publisher: publisherSchema,
   book: bookSchema,
   contentRelease: contentReleaseSchema,
@@ -63,11 +61,11 @@ export const sensaBookVersionManifestSchema = z.object({
   publishedAt: timestamp,
   changeSummary: z.string().trim().max(2_000),
   semanticAttestation: z.object({
-    kind: z.literal("publisher-digest-attestation"),
+    kind: z.literal("publisher-attestation"),
     publisherNamespace,
     subject: z.literal("member-semantic-declarations"),
   }).strict(),
-  members: z.array(sensaPublishedPortableArtifactSchema).min(1).max(1_000),
+  members: z.array(sensaPortableBookMemberSchema).min(1).max(1_000),
 }).strict().superRefine((manifest, context) => {
   if (manifest.semanticAttestation.publisherNamespace !== manifest.publisher.namespace) {
     context.addIssue({
@@ -82,8 +80,9 @@ export const sensaBookVersionManifestSchema = z.object({
   }
 });
 
-export const sensaBookVersionManifestDescriptorSchema = z.object({
-  format: z.literal("sensa-book-version-manifest-descriptor-v1"),
+/** Registry metadata for one directly downloadable `.sensa-book`. */
+export const sensaPortableBookDescriptorSchema = z.object({
+  format: z.literal("sensa-portable-book-descriptor-v1"),
   publisher: publisherSchema,
   book: bookSchema,
   contentRelease: contentReleaseSchema,
@@ -91,16 +90,16 @@ export const sensaBookVersionManifestDescriptorSchema = z.object({
   publishedAt: timestamp,
   changeSummary: z.string().trim().max(2_000),
   memberCount: positiveInteger.max(1_000),
-  byteLength: positiveInteger.max(maxBookVersionManifestBytes),
+  byteLength: positiveInteger.max(maxPortableBookArchiveBytes),
   sha256: digest,
   url: deliveryUrl,
 }).strict();
 
 export const sensaPortableLearningContentRegistrySchema = z.object({
-  format: z.literal("sensa-learning-content-registry-v2"),
+  format: z.literal("sensa-learning-content-registry-v3"),
   revision: digest,
   publishedAt: timestamp,
-  items: z.array(sensaBookVersionManifestDescriptorSchema).max(1_000),
+  items: z.array(sensaPortableBookDescriptorSchema).max(1_000),
 }).strict().superRefine((registry, context) => {
   const identities = registry.items.map((item) => [
     item.publisher.namespace,
@@ -117,15 +116,9 @@ export const sensaPortableLearningContentRegistrySchema = z.object({
   }
 });
 
-export type SensaPublishedPortableArtifact = z.infer<
-  typeof sensaPublishedPortableArtifactSchema
->;
-export type SensaBookVersionManifest = z.infer<
-  typeof sensaBookVersionManifestSchema
->;
-export type SensaBookVersionManifestDescriptor = z.infer<
-  typeof sensaBookVersionManifestDescriptorSchema
->;
+export type SensaPortableBookMember = z.infer<typeof sensaPortableBookMemberSchema>;
+export type SensaPortableBookManifest = z.infer<typeof sensaPortableBookManifestSchema>;
+export type SensaPortableBookDescriptor = z.infer<typeof sensaPortableBookDescriptorSchema>;
 export type SensaPortableLearningContentRegistry = z.infer<
   typeof sensaPortableLearningContentRegistrySchema
 >;

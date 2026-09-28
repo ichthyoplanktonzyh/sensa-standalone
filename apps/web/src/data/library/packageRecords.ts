@@ -1,9 +1,10 @@
 import {
+ canonicalConsumerJson,
  sensaLanguageTagSchema,
  type InstalledLearningContent,
- type SensaBookVersionManifest,
+ type SensaPortableBookManifest,
  type SensaPortableLightweightPackage,
- type SensaPublishedPortableArtifact,
+ type SensaPortableBookMember,
 } from '@sensa/contracts/sensa';
 import {z} from 'zod';
 import {readLibrary} from './store';
@@ -12,16 +13,16 @@ import {readLibrary} from './store';
  * Callers see complete Runtime data URLs; SQLite transparently deduplicates the
  * underlying media bytes, and export reconstructs the same public artifact. */
 export type PortablePublicationAttestation={
- format:'sensa-portable-publication-attestation-v1';
- publisher:SensaBookVersionManifest['publisher'];
- book:SensaBookVersionManifest['book'];
- contentRelease:SensaBookVersionManifest['contentRelease'];
- route:SensaBookVersionManifest['route'];
+ format:'sensa-portable-publication-attestation-v2';
+ publisher:SensaPortableBookManifest['publisher'];
+ book:SensaPortableBookManifest['book'];
+ contentRelease:SensaPortableBookManifest['contentRelease'];
+ route:SensaPortableBookManifest['route'];
  publishedAt:string;
  changeSummary:string;
- manifestSha256:string;
+ bookArchiveSha256:string;
  memberCount:number;
- member:SensaPublishedPortableArtifact;
+ member:SensaPortableBookMember;
 };
 export type PortablePackageOrigin={
  format:'sensa-portable-installation-origin-v2';
@@ -55,12 +56,41 @@ export const packageInstallationSchema=z.object({
   packageId:z.string().uuid(),
   version:z.number().int().positive(),
   packageDigest:digestSchema,
+  bookArchiveSha256:digestSchema.optional(),
  }).strict(),
 }).strict().superRefine((value,context)=>{
  const expected=JSON.stringify([value.artifact.packageId,String(value.artifact.version)]);
  if(value.key!==expected)context.addIssue({code:'custom',message:'Package installation key does not match artifact identity'});
 });
 export type PackageInstallation=z.infer<typeof packageInstallationSchema>;
+
+const installationCore=(value:PackageInstallation)=>{
+ const {bookArchiveSha256:discarded,...artifact}=value.artifact;
+ void discarded;
+ return {...value,artifact};
+};
+
+export const samePackageInstallationArtifact=(
+ left:PackageInstallation,
+ right:PackageInstallation,
+):boolean=>canonicalConsumerJson(installationCore(left))===canonicalConsumerJson(installationCore(right));
+
+/** Keep an existing recovery source, or enrich an exact local fact with its first public Book. */
+export const mergePackageInstallationRecovery=(
+ current:PackageInstallation|undefined,
+ requested:PackageInstallation,
+):PackageInstallation|null=>{
+ if(!current)return requested;
+ if(!samePackageInstallationArtifact(current,requested))return null;
+ const bookArchiveSha256=current.artifact.bookArchiveSha256??requested.artifact.bookArchiveSha256;
+ return packageInstallationSchema.parse({
+  ...requested,
+  artifact:{
+   ...requested.artifact,
+   ...(bookArchiveSha256?{bookArchiveSha256}:{}),
+  },
+ });
+};
 
 export const portablePackageKey=(packageId:string,version:number)=>JSON.stringify([
  packageId,
@@ -72,6 +102,7 @@ export const portablePackageInstallationFor=(
  archiveDigest:string,
  packageDigest:string,
  byteLength:number,
+ bookArchiveSha256?:string,
 ):PackageInstallation=>packageInstallationSchema.parse({
  format:'sensa-package-installation-v1',
  key:portablePackageKey(manifest.metadata.packageId,manifest.metadata.version),
@@ -80,6 +111,7 @@ export const portablePackageInstallationFor=(
   packageId:manifest.metadata.packageId,
   version:manifest.metadata.version,
   packageDigest,
+  ...(bookArchiveSha256?{bookArchiveSha256}:{}),
   targetLanguage:manifest.route.targetLanguage,
   supportLanguage:manifest.route.supportLanguage,
   digest:archiveDigest,

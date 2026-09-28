@@ -112,8 +112,8 @@ function LightweightPackageRuntime({active,runtime,c,host,onExit,onFinish}:{acti
  const sceneRevision=scene?currentPersonalLearningSceneRevision(scene):null;
  const pack=target.packageKey?c.packages.find(candidate=>candidate.key===target.packageKey):undefined;
  const entry=pack?.content.entries.find(candidate=>candidate.senseVersionId===target.identity.senseVersionId&&candidate.bindingVersionId===target.identity.bindingVersionId);
- const publication=target.publicationManifestSha256
-  ?pack?.portableOrigin.publications.find(candidate=>candidate.manifestSha256===target.publicationManifestSha256)
+ const publication=target.publicationArchiveSha256
+  ?pack?.portableOrigin.publications.find(candidate=>candidate.bookArchiveSha256===target.publicationArchiveSha256)
   :[...(pack?.portableOrigin.publications??[])].sort((left,right)=>right.book.versionNumber-left.book.versionNumber)[0];
  const publishedSource=publication?{
   bookId:publication.book.bookId,

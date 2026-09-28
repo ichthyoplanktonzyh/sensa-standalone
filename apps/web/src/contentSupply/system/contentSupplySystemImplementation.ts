@@ -1,8 +1,8 @@
 import {
   canonicalConsumerJson,
-  sensaBookVersionManifestDescriptorSchema,
+  sensaPortableBookDescriptorSchema,
   sensaPortableLearningContentRegistrySchema,
-  type SensaBookVersionManifestDescriptor,
+  type SensaPortableBookDescriptor,
 } from '@sensa/contracts/sensa';
 
 import { openLibrary, readLibrary, writeLibraryCache } from '../../data/library/store';
@@ -15,14 +15,14 @@ import type {
 } from './contentSupplySystem';
 
 type CatalogCache = Readonly<{
-  format: 'sensa-local-registry-cache-v2';
-  items: readonly SensaBookVersionManifestDescriptor[];
+  format: 'sensa-local-registry-cache-v3';
+  items: readonly SensaPortableBookDescriptor[];
   revision: string | null;
   checkedAt: string | null;
 }>;
 
 const emptyCatalog: CatalogCache = {
-  format: 'sensa-local-registry-cache-v2',
+  format: 'sensa-local-registry-cache-v3',
   items: [],
   revision: null,
   checkedAt: null,
@@ -34,8 +34,8 @@ const browserSha256=async(value:string)=>Array.from(new Uint8Array(
 
 const parseCatalogItems = (
   raw: readonly unknown[],
-): readonly SensaBookVersionManifestDescriptor[] | null => {
-  const parsed = raw.map((item) => sensaBookVersionManifestDescriptorSchema.safeParse(item));
+): readonly SensaPortableBookDescriptor[] | null => {
+  const parsed = raw.map((item) => sensaPortableBookDescriptorSchema.safeParse(item));
   return parsed.every((item) => item.success) ? parsed.map((item) => item.data) : null;
 };
 
@@ -43,7 +43,7 @@ const parseCatalogCache = (raw: unknown): CatalogCache => {
   if (!raw || typeof raw !== 'object') return emptyCatalog;
   const candidate = raw as Record<string, unknown>;
   if (
-    candidate.format !== 'sensa-local-registry-cache-v2'
+    candidate.format !== 'sensa-local-registry-cache-v3'
     || !Array.isArray(candidate.items)
     || !(candidate.revision === null || typeof candidate.revision === 'string')
     || !(candidate.checkedAt === null || typeof candidate.checkedAt === 'string')
@@ -52,7 +52,7 @@ const parseCatalogCache = (raw: unknown): CatalogCache => {
   if (!items) return emptyCatalog;
   const checkedAt = candidate.checkedAt;
   return {
-    format: 'sensa-local-registry-cache-v2',
+    format: 'sensa-local-registry-cache-v3',
     items,
     revision: candidate.revision,
     checkedAt: checkedAt && Number.isFinite(Date.parse(checkedAt)) ? checkedAt : null,
@@ -99,7 +99,7 @@ const refreshCatalog = async (
   const revision = parsed?.revision ?? cache.revision;
   await writeLibraryCache(async (tx) => {
     tx.put('meta', 'package-catalog', {
-      format: 'sensa-local-registry-cache-v2',
+      format: 'sensa-local-registry-cache-v3',
       items,
       revision,
       checkedAt: new Date().toISOString(),

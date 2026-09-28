@@ -289,22 +289,22 @@ Package 是以上版本化资源的不可变发布清单。它不拥有 learner 
 
 面向用户持续发布的是稳定 **Book** 的新 **Book Version**，不是覆盖同名 JSON，也不是把一本书
 误建模为一个 Sense Learning Package。一个 Book Version 固定有序 membership、primary target
-binding 与 Content Release。**Book Version Manifest** 在一个精确 Target/Support Language pair 下固定
-成员顺序以及每个 Portable Package 的 identity、version、digest 与位置；它只组织 `.sensa`，不是另一种
-可执行学习内容合同，也不创造新的学习身份。传输层可以批量取得这些字节，但不能因此让官方内容绕过
-Portable 公共合同。
+binding 与 Content Release。`.sensa-book` 在一个精确 Target/Support Language pair 下固定并一次分发
+完整 Book Version；其内嵌 Manifest 固定成员顺序及 Portable Package 的 identity/version，外层摘要固定
+整本书的精确字节。它原样包含各个独立 `.sensa`，不是另一种可执行学习内容合同，也不创造新的学习
+身份，官方内容仍不能绕过 Portable 公共合同。
 
 **Learning Content Registry** 是不可变、按 digest 寻址的发现快照。一次发布必须先上传并公开验证
-所有 Manifest 引用的 `.sensa`，再上传新的 Registry Revision，最后才把服务端发现指针提升到该
-Revision。已发布 Registry、Manifest、Package artifact 与对象路径都不能原位覆盖；失败时旧 Registry
+所有 `.sensa-book`，再上传新的 Registry Revision，最后才把服务端发现指针提升到该
+Revision。已发布 Registry、Book archive、Package artifact 与对象路径都不能原位覆盖；失败时旧 Registry
 继续完整可用。Sensa Official、外部作者和私人分享采用同一 Portable Runtime 准入合同；Official 身份、
 策展关系和质量等级来自 Registry provenance 或其他独立验证，不由包内字段自报。
 
 发现、安装与加入课程是三个不同动作：
 
 - 客户端可低频后台检查 Registry，并立即展示本机缓存；发现新版不改变课程；
-- 下载只校验 Manifest 及其 `.sensa` 的 digest、大小、合同和语言方向并保存安装候选，不创建 Learning
-  Target 或进度；
+- 下载校验 `.sensa-book` 的 digest、大小、Manifest、全部 `.sensa` 合同和语言方向，并原子保存安装
+  候选，不创建 Learning Target 或进度；
 - learner 显式“应用更新”后，新的 Book Version 才进入下一 Study Scope Revision；已开始 Session
   不增删 participant；
 - 新旧版本保持相同 Sense Version 与 Binding Version 的成员复用同一 Learning Target、Retention

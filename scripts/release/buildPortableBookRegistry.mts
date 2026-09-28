@@ -1,4 +1,4 @@
-/** Build immutable per-Sense `.sensa` artifacts, Book Version Manifests and one Registry. */
+/** Build immutable `.sensa-book` archives and one directly downloadable Registry. */
 import {createHash} from "node:crypto";
 import {mkdir, readFile, readdir, writeFile} from "node:fs/promises";
 import {dirname, join, resolve} from "node:path";
@@ -6,9 +6,9 @@ import {dirname, join, resolve} from "node:path";
 import {
   canonicalConsumerJson,
   learningReferenceInputSchema,
-  sensaBookVersionManifestDescriptorSchema,
-  sensaBookVersionManifestSchema,
   sensaLightweightExpressionSnapshotSchema,
+  sensaPortableBookDescriptorSchema,
+  sensaPortableBookManifestSchema,
   sensaPortableLearningContentRegistrySchema,
   sensaSenseSemanticSpecSchema,
   type SensaPortableLightweightMedia,
@@ -17,8 +17,12 @@ import {
 } from "@sensa/contracts/sensa";
 import {
   createSensaPortableLightweightPackage,
-  readSensaPortableLightweightPackage,
 } from "@sensa/content-validator/portable-lightweight";
+import {
+  createSensaPortableBook,
+  portableBookMemberKey,
+  readSensaPortableBook,
+} from "@sensa/content-validator/portable-book";
 import {stableUuid} from "@sensa/learning-kernel";
 
 import {
@@ -202,6 +206,7 @@ for (const path of [...sourcePaths].sort()) {
     `sensa:content-release:${source.bookKey}:version:${source.versionNumber}`,
   );
   const members = [];
+  const memberBytes = new Map<string, Uint8Array>();
 
   for (const entry of source.entries) {
     if (!Number.isInteger(entry.packageVersion) || entry.packageVersion < 1
@@ -418,28 +423,16 @@ for (const path of [...sourcePaths].sort()) {
       item.bytes,
     ]));
     const archiveBytes = createSensaPortableLightweightPackage(manifest, mediaById);
-    const archive = readSensaPortableLightweightPackage(archiveBytes);
-    const packageRelative = [
-      "packages",
-      packageId,
-      String(entry.packageVersion),
-      `${archive.archiveDigest}.sensa`,
-    ].join("/");
-    const packageOutput = resolve(outputRoot, packageRelative);
-    await mkdir(dirname(packageOutput), {recursive: true});
-    await writeFile(packageOutput, archiveBytes);
-    members.push({
+    const member = {
       packageId,
       version: entry.packageVersion,
-      byteLength: archiveBytes.byteLength,
-      archiveSha256: archive.archiveDigest,
-      packageDigest: archive.packageDigest,
-      url: new URL(packageRelative, base).href,
-    });
+    };
+    members.push(member);
+    memberBytes.set(portableBookMemberKey(member), archiveBytes);
   }
 
-  const bookManifest = sensaBookVersionManifestSchema.parse({
-    format: "sensa-book-version-manifest-v1",
+  const bookManifest = sensaPortableBookManifestSchema.parse({
+    format: "sensa-portable-book-v1",
     publisher: source.publisher,
     book: {
       bookId,
@@ -458,25 +451,25 @@ for (const path of [...sourcePaths].sort()) {
     publishedAt: source.publishedAt,
     changeSummary: source.changeSummary,
     semanticAttestation: {
-      kind: "publisher-digest-attestation",
+      kind: "publisher-attestation",
       publisherNamespace: source.publisher.namespace,
       subject: "member-semantic-declarations",
     },
     members,
   });
-  const manifestBytes = Buffer.from(canonicalConsumerJson(bookManifest));
-  const manifestDigest = sha256(manifestBytes);
-  const manifestRelative = [
+  const bookBytes = createSensaPortableBook(bookManifest, memberBytes);
+  const bookArchive = readSensaPortableBook(bookBytes);
+  const bookRelative = [
     "books",
     bookId,
     bookVersionId,
-    `${manifestDigest}.json`,
+    `${bookArchive.archiveDigest}.sensa-book`,
   ].join("/");
-  const manifestOutput = resolve(outputRoot, manifestRelative);
-  await mkdir(dirname(manifestOutput), {recursive: true});
-  await writeFile(manifestOutput, manifestBytes);
-  descriptors.push(sensaBookVersionManifestDescriptorSchema.parse({
-    format: "sensa-book-version-manifest-descriptor-v1",
+  const bookOutput = resolve(outputRoot, bookRelative);
+  await mkdir(dirname(bookOutput), {recursive: true});
+  await writeFile(bookOutput, bookBytes);
+  descriptors.push(sensaPortableBookDescriptorSchema.parse({
+    format: "sensa-portable-book-descriptor-v1",
     publisher: source.publisher,
     book: bookManifest.book,
     contentRelease: bookManifest.contentRelease,
@@ -484,9 +477,9 @@ for (const path of [...sourcePaths].sort()) {
     publishedAt: bookManifest.publishedAt,
     changeSummary: bookManifest.changeSummary,
     memberCount: bookManifest.members.length,
-    byteLength: manifestBytes.byteLength,
-    sha256: manifestDigest,
-    url: new URL(manifestRelative, base).href,
+    byteLength: bookBytes.byteLength,
+    sha256: bookArchive.archiveDigest,
+    url: new URL(bookRelative, base).href,
   }));
   totalMembers += members.length;
 }
@@ -512,7 +505,7 @@ const items = [...existingDescriptors, ...descriptors].sort((left, right) =>
   || left.book.versionNumber - right.book.versionNumber);
 const publishedAt = items.map((item) => item.publishedAt).sort().at(-1)!;
 const registrySnapshot = {
-  format: "sensa-learning-content-registry-v2" as const,
+  format: "sensa-learning-content-registry-v3" as const,
   publishedAt,
   items,
 };
@@ -521,8 +514,8 @@ const registry = sensaPortableLearningContentRegistrySchema.parse({...registrySn
 await mkdir(dirname(registryOutput), {recursive: true});
 await writeFile(registryOutput, canonicalConsumerJson(registry));
 console.log(
-  `Built ${descriptors.length} Book Version Manifest(s) with ${totalMembers} independent ` +
-    `.sensa member(s), retaining ${existingDescriptors.length} existing Book Version Manifest(s); ` +
-    "Portable, semantic declaration, Manifest and Registry validation passed. " +
+  `Built ${descriptors.length} .sensa-book archive(s) containing ${totalMembers} independent ` +
+    `.sensa member(s), retaining ${existingDescriptors.length} existing Book archive(s); ` +
+    "Portable, semantic declaration, Book and Registry validation passed. " +
     "No media generation, provider call, publication or user acceptance claimed.",
 );

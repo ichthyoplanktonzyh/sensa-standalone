@@ -7,7 +7,10 @@ import { stableUuid } from '@sensa/learning-kernel';
 import { z } from 'zod';
 
 import { backupEqual } from './backupCodec';
-import { packageInstallationSchema } from './packageRecords';
+import {
+  packageInstallationSchema,
+  samePackageInstallationArtifact,
+} from './packageRecords';
 import type {
   LibraryIdentity,
   LibraryRecordTransition,
@@ -60,7 +63,12 @@ export async function assertContentSupplyTransition(input: {
       const installation = packageInstallationSchema.parse(change.after);
       if (change.key !== installation.key) reject('Package installation identity changed.');
       if (change.before !== null && !backupEqual(change.before, change.after)) {
-        reject('An exact package installation fact is immutable.');
+        const before=packageInstallationSchema.parse(change.before);
+        if(!samePackageInstallationArtifact(before,installation)
+          ||before.artifact.bookArchiveSha256!==undefined
+          ||installation.artifact.bookArchiveSha256===undefined){
+          reject('An exact package installation fact is immutable.');
+        }
       }
       continue;
     }

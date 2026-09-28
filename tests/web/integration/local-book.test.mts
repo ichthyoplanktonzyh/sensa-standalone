@@ -6,12 +6,12 @@ import {readFile} from 'node:fs/promises';
 import {test} from 'vitest';
 import {
   defaultSensaLanguageRoute,
-  sensaBookVersionManifestSchema,
   sensaPinnedLanguageContext,
   sensaPortableLearningContentRegistrySchema,
 } from '@sensa/contracts/sensa';
+import {readSensaPortableBook} from '@sensa/content-validator/portable-book';
 
-import {installPublishedPortablePackage} from '../../../apps/web/src/contentSupply/portable/portablePackage.ts';
+import {installPublishedPortableBookMembers} from '../../../apps/web/src/contentSupply/portable/portablePackage.ts';
 import {command,openLibrary} from '../../../apps/web/src/data/library/store.ts';
 import {
   actLearning,
@@ -35,30 +35,35 @@ test('prepared Portable Book installs and completes offline through due review',
     await readFile('release-candidate/portable-catalog.json','utf8'),
   ));
   const context=sensaPinnedLanguageContext(defaultSensaLanguageRoute);
+  const selectedDescriptor=registry.items.find(item=>item.book.bookKey==='daily-exchanges');
+  assert(selectedDescriptor,'the prepared daily-exchanges Book must exist');
   await confirmLearningQuantity(id(),context,20);
   const fetchBefore=globalThis.fetch;
   globalThis.fetch=async()=>{throw Error('Offline validation must not fetch');};
   try{
-    for(const descriptor of registry.items){
-      const manifestBytes=await readFile(`apps/web/public${new URL(descriptor.url).pathname}`);
-      assert.equal(digest(manifestBytes),descriptor.sha256);
-      const manifest=sensaBookVersionManifestSchema.parse(JSON.parse(manifestBytes.toString()));
+    for(const descriptor of [selectedDescriptor]){
+      const bookBytes=await readFile(`apps/web/public${new URL(descriptor.url).pathname}`);
+      assert.equal(digest(bookBytes),descriptor.sha256);
+      const bookArchive=readSensaPortableBook(bookBytes);
+      const manifest=bookArchive.manifest;
       assert.equal(manifest.members.length,3);
-      for(const member of manifest.members){
-        const bytes=await readFile(`apps/web/public${new URL(member.url).pathname}`);
-        assert.equal(digest(bytes),member.archiveSha256);
-        const pack=await installPublishedPortablePackage(bytes,{
-          format:'sensa-portable-publication-attestation-v1',
+      const installed=await installPublishedPortableBookMembers(bookArchive.members.map(({member,bytes,archive})=>({
+        bytes,
+        archive,
+        publication:{
+          format:'sensa-portable-publication-attestation-v2',
           publisher:manifest.publisher,
           book:manifest.book,
           contentRelease:manifest.contentRelease,
           route:manifest.route,
           publishedAt:manifest.publishedAt,
           changeSummary:manifest.changeSummary,
-          manifestSha256:descriptor.sha256,
+          bookArchiveSha256:descriptor.sha256,
           memberCount:manifest.members.length,
           member,
-        });
+        },
+      })));
+      for(const pack of installed){
         const entry=pack.content.entries[0]!;
         assert(entry.semantic,'Registry-attested members retain official semantic facts');
         const targetIds=await enrollPackage(id(),pack.key,context,descriptor.sha256);

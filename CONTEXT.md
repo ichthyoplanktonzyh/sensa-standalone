@@ -427,23 +427,22 @@ is an ordered, immutable curriculum of selected Senses and their primary target
 bindings, fixed to a Content Release. The product may group and count them by
 Lexeme, but a Lexeme is not silently substituted for membership.
 
-**Book Version Manifest**:
-The ordered, immutable membership and exact Portable Package references for one Book
-Version on one Target/Support Language Route. It carries Package identity, version,
-digest, location and ordering, but is not another executable learning-content format.
-A transport implementation may batch referenced bytes, but every Lightweight member
-remains independently valid as `.sensa`; batching cannot create a privileged official
-content contract.
+**Portable Book / `.sensa-book`**:
+The immutable distribution and installation container for one Book Version on one
+Target/Support Language Route. Its embedded Book Manifest fixes ordered Package identity
+and version, while the outer archive digest fixes the exact bytes of the complete Book.
+Every member remains an independently valid `.sensa`; the container is not another
+executable learning-content contract and cannot create a privileged official format.
 
 **Learning Content Registry / Registry Revision**:
 An immutable, content-addressed discovery snapshot listing the currently public
-Book Version Manifest for each stable Book and exact Target/Support Language pair. A new
-publication creates a new Revision after every referenced `.sensa` artifact is readable;
-it never overwrites an earlier Registry, Manifest or Package artifact.
+`.sensa-book` for each stable Book and exact Target/Support Language pair. A new publication
+creates a new Revision after every referenced Book archive is readable; it never overwrites
+an earlier Registry, Book archive or Package artifact.
 
 **Book Installation / Book Update Application**:
-Installation verifies a Book Version Manifest and its required Portable Packages on a
-Device without changing Curriculum. Application is the learner's explicit acceptance of
+Installation verifies the complete `.sensa-book` and all of its Portable Package members,
+then commits them atomically on a Device without changing Curriculum. Application is the learner's explicit acceptance of
 that Book Version for future Study Scope revisions. Added or removed members affect future
 planning rather than changing the participant set of an already-started Run. For a stable
 Learning Target, an applied compatible material revision may refresh the current unacted

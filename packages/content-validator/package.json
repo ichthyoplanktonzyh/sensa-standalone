@@ -8,7 +8,8 @@
     "./authoring": "./dist/authoringBundleValidator.js",
     "./authoring-draft-v2": "./dist/authoringDraftV2Validator.js",
     "./runtime": "./dist/runtimeLearningReleaseValidator.js",
-    "./portable-lightweight": "./dist/portableLightweightPackageValidator.js"
+    "./portable-lightweight": "./dist/portableLightweightPackageValidator.js",
+    "./portable-book": "./dist/portableBookPackageValidator.js"
   },
   "types": "./dist/index.d.ts",
   "scripts": {

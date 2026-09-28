@@ -31,9 +31,9 @@ export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boole
   for(const pack of routePackages){
    for(const publication of pack.portableOrigin.publications){
     if(publication.book.bookId!==descriptor.book.bookId)continue;
-    const group=releases.get(publication.manifestSha256)??{version:publication.book.versionNumber,memberCount:publication.memberCount,packages:[]};
+    const group=releases.get(publication.bookArchiveSha256)??{version:publication.book.versionNumber,memberCount:publication.memberCount,packages:[]};
     if(!group.packages.some(candidate=>candidate.key===pack.key))group.packages.push(pack);
-    releases.set(publication.manifestSha256,group);
+    releases.set(publication.bookArchiveSha256,group);
    }
   }
   const complete=[...releases.entries()].filter(([,group])=>group.packages.length===group.memberCount);
@@ -61,9 +61,9 @@ export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boole
   for(const publication of pack.portableOrigin.publications){
    if(catalogBookIds.has(publication.book.bookId))continue;
    const releases=orphanGroups.get(publication.book.bookId)??new Map();
-   const group=releases.get(publication.manifestSha256)??{publication,packages:[]};
+   const group=releases.get(publication.bookArchiveSha256)??{publication,packages:[]};
    if(!group.packages.some((candidate:Controller['packages'][number])=>candidate.key===pack.key))group.packages.push(pack);
-   releases.set(publication.manifestSha256,group);
+   releases.set(publication.bookArchiveSha256,group);
    orphanGroups.set(publication.book.bookId,releases);
   }
  }
