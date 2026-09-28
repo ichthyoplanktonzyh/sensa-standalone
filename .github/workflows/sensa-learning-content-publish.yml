@@ -37,7 +37,6 @@ jobs:
       SENSA_MEDIA_RELEASE_TAG: ${{ inputs.media_release_tag }}
       SENSA_MEDIA_PACK_SHA256: ${{ inputs.media_pack_sha256 }}
       SENSA_AUTHORED_MEDIA_PACK: .tmp/authored-media-pack.json
-      SENSA_BOOK_RELEASE_SOURCE_DIRECTORY: .tmp/release-book-sources
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
       SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
       SENSA_WEB_ORIGIN: ${{ vars.SENSA_WEB_ORIGIN }}
@@ -91,9 +90,9 @@ jobs:
           npm run build -w @sensa/learning-kernel
           npm run build -w @sensa/contracts
           npm run build -w @sensa/content-validator
-          node --import tsx content/tools/route_foundation.mts expand content/authored/route-foundation-v1/prepared.json "$SENSA_BOOK_RELEASE_SOURCE_DIRECTORY"
-          cp content/authored/*.json "$SENSA_BOOK_RELEASE_SOURCE_DIRECTORY/"
-          node --import tsx scripts/release/buildPortableBookRegistry.mts
+          node --import tsx content/tools/route_foundation.mts expand content/authored/route-foundation-v1/prepared.json .tmp/release-book-sources
+          cp content/authored/*.json .tmp/release-book-sources/
+          SENSA_BOOK_RELEASE_SOURCE_DIRECTORY=.tmp/release-book-sources node --import tsx scripts/release/buildPortableBookRegistry.mts
           node --import tsx tests/web/run.mts --suite=fast --id=learning-registry
           node --import tsx tests/web/run.mts --suite=fast --id=portable-learning-registry
       - name: Upload releases, verify public bytes, and prepare promotion
