@@ -48,6 +48,10 @@ const bucket = safeSegment(
   process.env.SENSA_PACKAGE_BUCKET?.trim() || "sensa-learning-content",
   "SENSA_PACKAGE_BUCKET",
 );
+const publishConcurrency = Number(process.env.SENSA_CONTENT_UPLOAD_CONCURRENCY ?? "8");
+if (!Number.isInteger(publishConcurrency) || publishConcurrency < 1 || publishConcurrency > 16) {
+  throw new Error("SENSA_CONTENT_UPLOAD_CONCURRENCY must be an integer from 1 to 16");
+}
 const releaseRoot = resolve(
   process.env.SENSA_PACKAGE_OUTPUT ?? "release-candidate/learning-packages",
 );
@@ -109,7 +113,15 @@ async function publishObject(path, bytes, contentType) {
   return publicUrl;
 }
 
-let packageCount = 0;
+async function publishInBatches(tasks, label, work) {
+  for (let offset = 0; offset < tasks.length; offset += publishConcurrency) {
+    await Promise.all(tasks.slice(offset, offset + publishConcurrency).map(work));
+    console.log(`${label}: ${Math.min(offset + publishConcurrency, tasks.length)}/${tasks.length}`);
+  }
+}
+
+const packageTasks = [];
+const manifestTasks = [];
 for (const descriptor of registry.items) {
   const manifestRelative = [
     "books",
@@ -149,36 +161,44 @@ for (const descriptor of registry.items) {
       String(member.version),
       `${member.archiveSha256}.sensa`,
     ].join("/");
-    const packageBytes = await readFile(resolve(releaseRoot, packageRelative));
-    if (packageBytes.byteLength !== member.byteLength
-      || sha256(packageBytes) !== member.archiveSha256) {
-      throw new Error("Portable Package bytes do not match the Book Manifest");
-    }
-    const archive = readSensaPortableLightweightPackage(packageBytes);
-    if (archive.packageDigest !== member.packageDigest
-      || archive.package.metadata.packageId !== member.packageId
-      || archive.package.metadata.version !== member.version
-      || archive.package.route.targetLanguage !== manifest.route.targetLanguage
-      || archive.package.route.supportLanguage !== manifest.route.supportLanguage
-      || archive.package.semanticDeclaration === undefined) {
-      throw new Error("Portable Package content does not satisfy the attested Book membership");
-    }
-    const packageUrl = await publishObject(
-      `releases/${packageRelative}`,
-      packageBytes,
-      "application/zip",
-    );
-    if (packageUrl !== member.url) throw new Error("Portable Package URL does not match the publication target");
-    packageCount += 1;
+    packageTasks.push({packageRelative, member, route: manifest.route});
   }
+  manifestTasks.push({manifestRelative, manifestBytes, expectedUrl: descriptor.url});
+}
 
+await publishInBatches(packageTasks, "Portable Packages", async ({packageRelative, member, route}) => {
+  const packageBytes = await readFile(resolve(releaseRoot, packageRelative));
+  if (packageBytes.byteLength !== member.byteLength
+    || sha256(packageBytes) !== member.archiveSha256) {
+    throw new Error("Portable Package bytes do not match the Book Manifest");
+  }
+  const archive = readSensaPortableLightweightPackage(packageBytes);
+  if (archive.packageDigest !== member.packageDigest
+    || archive.package.metadata.packageId !== member.packageId
+    || archive.package.metadata.version !== member.version
+    || archive.package.route.targetLanguage !== route.targetLanguage
+    || archive.package.route.supportLanguage !== route.supportLanguage
+    || archive.package.semanticDeclaration === undefined) {
+    throw new Error("Portable Package content does not satisfy the attested Book membership");
+  }
+  const packageUrl = await publishObject(
+    `releases/${packageRelative}`,
+    packageBytes,
+    "application/zip",
+  );
+  if (packageUrl !== member.url) throw new Error("Portable Package URL does not match the publication target");
+});
+
+await publishInBatches(manifestTasks, "Book Manifests", async ({manifestRelative, manifestBytes, expectedUrl}) => {
   const manifestUrl = await publishObject(
     `releases/${manifestRelative}`,
     manifestBytes,
     "application/json",
   );
-  if (manifestUrl !== descriptor.url) throw new Error("Book Manifest URL does not match the publication target");
-}
+  if (manifestUrl !== expectedUrl) throw new Error("Book Manifest URL does not match the publication target");
+});
+
+const packageCount = packageTasks.length;
 
 const registryObjectPath = `registries/${registry.revision}.json`;
 const registryUrl = await publishObject(registryObjectPath, registryBytes, "application/json");

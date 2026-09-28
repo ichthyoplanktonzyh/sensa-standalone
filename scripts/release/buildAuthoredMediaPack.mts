@@ -5,7 +5,14 @@ import {dirname,resolve} from 'node:path';
 import {createAuthoredMediaPackager,type AuthoredMediaPackObject,type AuthoredMediaReference} from './authoredMedia.mts';
 
 const configuredSources=process.env.SENSA_BOOK_RELEASE_SOURCES?.trim();
-const sourcePaths=configuredSources?configuredSources.split(',').map(value=>value.trim()).filter(Boolean):(await readdir('content/authored',{withFileTypes:true})).filter(entry=>entry.isFile()&&entry.name.endsWith('.json')).map(entry=>'content/authored/'+entry.name);
+const configuredSourceDirectory=process.env.SENSA_BOOK_RELEASE_SOURCE_DIRECTORY?.trim();
+if(configuredSources&&configuredSourceDirectory)throw Error('Configure a source list or one source directory, not both');
+const sourceDirectory=configuredSourceDirectory??'content/authored';
+const sourcePaths=configuredSources
+ ?configuredSources.split(',').map(value=>value.trim()).filter(Boolean)
+ :(await readdir(sourceDirectory,{withFileTypes:true}))
+  .filter(entry=>entry.isFile()&&entry.name.endsWith('.json'))
+  .map(entry=>sourceDirectory+'/'+entry.name);
 if(!sourcePaths.length||new Set(sourcePaths).size!==sourcePaths.length)throw Error('Explicit unique authored Book release sources required');
 
 const references=new Map<string,AuthoredMediaReference>();

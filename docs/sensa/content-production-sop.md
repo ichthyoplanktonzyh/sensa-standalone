@@ -494,9 +494,10 @@ Overlay；确定性工具随后对 18 份语言贡献做笛卡尔组合。这样
 桥接也只生产一次，不需要为 324 条路线分别调用 Agent。
 
 矩阵批次使用 `content:route-foundation` 的三段式入口：先 `validate` 所有语言贡献，再在明确允许真实
-TTS 时执行 `prepare --allow-tts`，最后用 `expand` 生成逐路线 Book source。`expand` 只是派生过程，不能
-反向成为作者来源；正式交付仍由发布构建器把每个 Sense 编译成独立 `.sensa`，再用 Book Version
-Manifest 组织。新增派生 Book 可以通过构建器的 existing-catalog 增量边界并入已有 Registry 候选。
+TTS 时执行 `prepare --allow-tts`，最后用 `expand` 生成逐路线 Book source。审核完成的 prepared 输入及其
+媒体摘要必须进入 `content/authored/route-foundation-v1/prepared.json`；逐路线 source 仍只是确定性派生物，
+不能反向成为作者来源。正式交付由受保护工作流展开全部 324 条路线，再由发布构建器把每个 Sense 编译成
+独立 `.sensa` 并用 Book Version Manifest 组织。
 
 ## 13. 非目标
 

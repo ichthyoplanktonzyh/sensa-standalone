@@ -455,7 +455,7 @@ gh workflow run sensa-web-deploy.yml \
 
 学习内容拥有独立于应用版本的发布入口 `.github/workflows/sensa-learning-content-publish.yml`。它接收
 一个完整且已通过 `main` CI 的 commit SHA，并要求当次 owner 授权；随后从 `content/authored/*.json`
-构建每个 Sense 的不可变 `.sensa` 与 Book Version Manifest，执行无网络 Registry smoke，按 Package →
+与仓库固定的路线基础输入重建正式 Book source，再构建每个 Sense 的不可变 `.sensa` 与 Book Version Manifest，执行无网络 Registry smoke，按 Package →
 Manifest → Registry 上传到 Supabase Storage 的 content-addressed 路径并逐一校验公网 bytes。只有以上步骤全部
 成功后，工作流才把 API 的 `SENSA_PACKAGE_REGISTRY_URL` 提升到新 Revision。它不重新部署 Web、
 不覆盖既有对象，也不把下载解释为 learner 已应用更新。音频与图片不进入 Git：operator 先用
@@ -488,6 +488,10 @@ gh workflow run sensa-learning-content-publish.yml \
 source 目录，二者不能同时设置。分批构建时，`SENSA_PACKAGE_EXISTING_CATALOG` 指向已经校验的 Registry
 候选，构建器逐字保留其中的 Manifest descriptor，并只合并本批新 Book；同一个 Book version 再次出现
 会失败，不能靠后写覆盖前写。同一 Registry 不允许同一 Book 与精确语言方向出现两个版本。
+
+当前全路线基础的作者内容和媒体摘要固定在
+`content/authored/route-foundation-v1/prepared.json`。发布工作流确定性展开全部 18 × 18 条路线，并把
+直接 authored Book 一同放进一次 Registry 构建；二进制媒体仍只来自 owner 固定摘要的密封媒体包。
 
 所有生产部署都从 CI/CD 执行，不从本地 shell 调用 Provider 部署命令。迁移保持前向兼容；回滚 Web 版本时不能假设数据库也会回滚。
 

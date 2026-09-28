@@ -1,0 +1,1807 @@
+{
+  "format": "sensa-route-foundation-prepared-v1",
+  "contributions": [
+    {
+      "format": "sensa-route-foundation-language-contribution-v1",
+      "language": "ar",
+      "senses": [
+        {
+          "senseId": "ids:1-310",
+          "concept": "WATER",
+          "targetCore": {
+            "expression": "ماء",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "هل يمكنني الحصول على كوب من الماء، من فضلك؟",
+            "sceneOccurrence": "ماء",
+            "expressionAudio": {
+              "sha256": "187c1d223f3a139da5dcc9014818d89531452ca21b0cf6159f4b03dec799fb5c",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"ar\", \"locale\": \"ar-SA\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"187c1d223f3a139da5dcc9014818d89531452ca21b0cf6159f4b03dec799fb5c\", \"sizeBytes\": 11232, \"text\": \"ماء\", \"voice\": \"ar-SA-ZariyahNeural\"}",
+              "accentLabel": "ar-SA"
+            },
+            "sceneAudio": {
+              "sha256": "c30d0f0059b41ee215135dc93af8a3b6263bd6089d6a6d230d52edf4a147e336",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 4632, \"format\": \"mp3\", \"languageTag\": \"ar\", \"locale\": \"ar-SA\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"c30d0f0059b41ee215135dc93af8a3b6263bd6089d6a6d230d52edf4a147e336\", \"sizeBytes\": 27792, \"text\": \"هل يمكنني الحصول على كوب من الماء، من فضلك؟\", \"voice\": \"ar-SA-ZariyahNeural\"}",
+              "accentLabel": "ar-SA"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "السائل المعتاد الذي نشربه ونستخدمه في الطهي.",
+            "experienceRecallCue": "تخيّل أنك عدت من نزهة وعطشت، فملأت كأسًا من الصنبور.",
+            "senseConfirmation": "المقصود هو السائل العادي للشرب وإعداد الطعام، لا أي مشروب آخر.",
+            "sceneBridgeTemplate": "في هذا الموقف، يطلب المتحدث {expression} في كوب بأدب.",
+            "sceneTranslation": "هل يمكنني الحصول على كوب من الماء، من فضلك؟"
+          }
+        },
+        {
+          "senseId": "ids:5-130",
+          "concept": "DRINK",
+          "targetCore": {
+            "expression": "يشرب",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [
+              "أشرب"
+            ],
+            "sceneExample": "أريد أن أشرب قليلًا من الماء.",
+            "sceneOccurrence": "أشرب",
+            "expressionAudio": {
+              "sha256": "154d3e5bcb8ab13df02c5924de28cad1ed90f117b42c58c23b6879aaab9501d1",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"ar\", \"locale\": \"ar-SA\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"154d3e5bcb8ab13df02c5924de28cad1ed90f117b42c58c23b6879aaab9501d1\", \"sizeBytes\": 11232, \"text\": \"يشرب\", \"voice\": \"ar-SA-ZariyahNeural\"}",
+              "accentLabel": "ar-SA"
+            },
+            "sceneAudio": {
+              "sha256": "e92c62de58b478d8920404c44534464324f36fa7122ecc541b21183935542335",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 3216, \"format\": \"mp3\", \"languageTag\": \"ar\", \"locale\": \"ar-SA\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"e92c62de58b478d8920404c44534464324f36fa7122ecc541b21183935542335\", \"sizeBytes\": 19296, \"text\": \"أريد أن أشرب قليلًا من الماء.\", \"voice\": \"ar-SA-ZariyahNeural\"}",
+              "accentLabel": "ar-SA"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "إدخال سائل إلى الفم ثم ابتلاعه.",
+            "experienceRecallCue": "بعد الجري، ترفع زجاجة إلى فمك وتأخذ منها رشفة ثم تبتلعها.",
+            "senseConfirmation": "المعنى هنا هو تناول سائل وابتلاعه، لا مجرد حمل الكوب أو تذوقه.",
+            "sceneBridgeTemplate": "يعبّر {expression} هنا عن رغبة المتحدث في تناول بعض الماء.",
+            "sceneTranslation": "أريد أن أشرب قليلًا من الماء."
+          }
+        },
+        {
+          "senseId": "ids:11-620",
+          "concept": "BORROW",
+          "targetCore": {
+            "expression": "يستعير",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [
+              "أستعير"
+            ],
+            "sceneExample": "أحتاج أن أستعير كتابًا من صديقي.",
+            "sceneOccurrence": "أستعير",
+            "expressionAudio": {
+              "sha256": "a88305dc4c87ab7c61c2f6a15a8ec3392f2945e87d7fa3b37ebc7becefda3665",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"ar\", \"locale\": \"ar-SA\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"a88305dc4c87ab7c61c2f6a15a8ec3392f2945e87d7fa3b37ebc7becefda3665\", \"sizeBytes\": 11232, \"text\": \"يستعير\", \"voice\": \"ar-SA-ZariyahNeural\"}",
+              "accentLabel": "ar-SA"
+            },
+            "sceneAudio": {
+              "sha256": "0375ef6d0b5c1eebcbb4336561f89e41ea06d922be13ca41137debc5bfe9c90b",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 3624, \"format\": \"mp3\", \"languageTag\": \"ar\", \"locale\": \"ar-SA\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"0375ef6d0b5c1eebcbb4336561f89e41ea06d922be13ca41137debc5bfe9c90b\", \"sizeBytes\": 21744, \"text\": \"أحتاج أن أستعير كتابًا من صديقي.\", \"voice\": \"ar-SA-ZariyahNeural\"}",
+              "accentLabel": "ar-SA"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "أخذ شيء يملكه أو يتحكم فيه شخص آخر لاستخدامه مؤقتًا، مع توقع إعادته إليه.",
+            "experienceRecallCue": "تخيّل أنك نسيت كتابك قبل حصة، فطلبت من صديق أن يعطيك كتابه لتقرأه ثم تعيده إليه.",
+            "senseConfirmation": "المقصود أخذ كتاب من صديق للاستخدام المؤقت مع نية إرجاعه، لا الاحتفاظ به.",
+            "sceneBridgeTemplate": "توضح {expression} أن المتحدث سيستخدم كتاب صديقه مؤقتًا ثم يعيده.",
+            "sceneTranslation": "أحتاج أن أستعير كتابًا من صديقي."
+          }
+        }
+      ]
+    },
+    {
+      "format": "sensa-route-foundation-language-contribution-v1",
+      "language": "de",
+      "senses": [
+        {
+          "senseId": "ids:1-310",
+          "concept": "WATER",
+          "targetCore": {
+            "expression": "Wasser",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "Könnte ich bitte ein Glas Wasser bekommen?",
+            "sceneOccurrence": "Wasser",
+            "expressionAudio": {
+              "sha256": "719b09f79de5be37adc2f9b27c145aaa54e0273c9210db6b2af8434af5b5abf4",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"de\", \"locale\": \"de-DE\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"719b09f79de5be37adc2f9b27c145aaa54e0273c9210db6b2af8434af5b5abf4\", \"sizeBytes\": 11232, \"text\": \"Wasser\", \"voice\": \"de-DE-KatjaNeural\"}",
+              "accentLabel": "de-DE"
+            },
+            "sceneAudio": {
+              "sha256": "cfaabfe561f9c4d1489d8641e4a3552bf3264010748a8f3ec8796edb565671d0",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 3096, \"format\": \"mp3\", \"languageTag\": \"de\", \"locale\": \"de-DE\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"cfaabfe561f9c4d1489d8641e4a3552bf3264010748a8f3ec8796edb565671d0\", \"sizeBytes\": 18576, \"text\": \"Könnte ich bitte ein Glas Wasser bekommen?\", \"voice\": \"de-DE-KatjaNeural\"}",
+              "accentLabel": "de-DE"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Gewöhnliches Wasser, das man trinkt oder zum Kochen verwendet.",
+            "experienceRecallCue": "Nach einem langen Spaziergang ist dein Hals trocken; vor dir steht ein klares Getränk im Glas.",
+            "senseConfirmation": "Gemeint ist das gewöhnliche klare Getränk, das man auch zum Kochen verwendet.",
+            "sceneBridgeTemplate": "{expression} bezeichnet hier das, worum du höflich in einem Glas bittest.",
+            "sceneTranslation": "Könnte ich bitte ein Glas Wasser bekommen?"
+          }
+        },
+        {
+          "senseId": "ids:5-130",
+          "concept": "DRINK",
+          "targetCore": {
+            "expression": "trinken",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "Ich möchte etwas Wasser trinken.",
+            "sceneOccurrence": "trinken",
+            "expressionAudio": {
+              "sha256": "8ab9b9108adb1dee0d70fdb1ee83de70520af285c3e5b79fe43ec9be66868e8f",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"de\", \"locale\": \"de-DE\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"8ab9b9108adb1dee0d70fdb1ee83de70520af285c3e5b79fe43ec9be66868e8f\", \"sizeBytes\": 11232, \"text\": \"trinken\", \"voice\": \"de-DE-KatjaNeural\"}",
+              "accentLabel": "de-DE"
+            },
+            "sceneAudio": {
+              "sha256": "9f16e0ded21fc8d74bfb8eaf7a0816dd65a91c11366912cbf76aa1bfc027f803",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2928, \"format\": \"mp3\", \"languageTag\": \"de\", \"locale\": \"de-DE\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"9f16e0ded21fc8d74bfb8eaf7a0816dd65a91c11366912cbf76aa1bfc027f803\", \"sizeBytes\": 17568, \"text\": \"Ich möchte etwas Wasser trinken.\", \"voice\": \"de-DE-KatjaNeural\"}",
+              "accentLabel": "de-DE"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Flüssigkeit in den Mund nehmen und schlucken.",
+            "experienceRecallCue": "Nach einem Lauf ist dein Mund trocken; du hebst ein Glas an die Lippen und schluckst.",
+            "senseConfirmation": "Hier möchtest du etwas Wasser zu dir nehmen und schlucken.",
+            "sceneBridgeTemplate": "{expression} beschreibt hier, was du mit etwas Wasser vorhast.",
+            "sceneTranslation": "Ich möchte etwas Wasser trinken."
+          }
+        },
+        {
+          "senseId": "ids:11-620",
+          "concept": "BORROW",
+          "targetCore": {
+            "expression": "ausleihen",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "Ich brauche ein Buch, das ich mir von einem Freund ausleihen kann.",
+            "sceneOccurrence": "ausleihen",
+            "expressionAudio": {
+              "sha256": "a21aa3e5a223ae97fd2740d0b0354c7408324685ca1c7ba9608f0431ab024a30",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"de\", \"locale\": \"de-DE\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"a21aa3e5a223ae97fd2740d0b0354c7408324685ca1c7ba9608f0431ab024a30\", \"sizeBytes\": 11232, \"text\": \"ausleihen\", \"voice\": \"de-DE-KatjaNeural\"}",
+              "accentLabel": "de-DE"
+            },
+            "sceneAudio": {
+              "sha256": "cac602e47c389e551fb4aeb55877449cbedf8f7ba7a080f48522c7c1129660b8",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 4608, \"format\": \"mp3\", \"languageTag\": \"de\", \"locale\": \"de-DE\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"cac602e47c389e551fb4aeb55877449cbedf8f7ba7a080f48522c7c1129660b8\", \"sizeBytes\": 27648, \"text\": \"Ich brauche ein Buch, das ich mir von einem Freund ausleihen kann.\", \"voice\": \"de-DE-KatjaNeural\"}",
+              "accentLabel": "de-DE"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Etwas, das einer anderen Person gehört oder von ihr verwaltet wird, vorübergehend nutzen und anschließend zurückgeben.",
+            "experienceRecallCue": "Ein Freund besitzt ein Buch, das du ein paar Tage nutzen möchtest; danach bringst du es ihm zurück.",
+            "senseConfirmation": "Hier brauchst du ein Buch von einem Freund und möchtest es später zurückgeben.",
+            "sceneBridgeTemplate": "{expression} beschreibt, dass du das Buch eines Freundes vorübergehend nutzen und später zurückgeben möchtest.",
+            "sceneTranslation": "Ich brauche ein Buch, das ich mir von einem Freund ausleihen kann."
+          }
+        }
+      ]
+    },
+    {
+      "format": "sensa-route-foundation-language-contribution-v1",
+      "language": "en",
+      "senses": [
+        {
+          "senseId": "ids:1-310",
+          "concept": "WATER",
+          "targetCore": {
+            "expression": "water",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "Could I have a glass of water, please?",
+            "sceneOccurrence": "water",
+            "expressionAudio": {
+              "sha256": "031b6aaa9fa6b942cb2a0cdfc96856bbff6a3462a71b4bf32d08f0f41111d808",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"en\", \"locale\": \"en-US\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"031b6aaa9fa6b942cb2a0cdfc96856bbff6a3462a71b4bf32d08f0f41111d808\", \"sizeBytes\": 11232, \"text\": \"water\", \"voice\": \"en-US-JennyNeural\"}",
+              "accentLabel": "en-US"
+            },
+            "sceneAudio": {
+              "sha256": "7a7c8d2171505c925256e7a4cc32f8f618073a6a3d9e7a41ff0030cd16581284",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2952, \"format\": \"mp3\", \"languageTag\": \"en\", \"locale\": \"en-US\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"7a7c8d2171505c925256e7a4cc32f8f618073a6a3d9e7a41ff0030cd16581284\", \"sizeBytes\": 17712, \"text\": \"Could I have a glass of water, please?\", \"voice\": \"en-US-JennyNeural\"}",
+              "accentLabel": "en-US"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "The clear, everyday liquid people use at the table and in cooking.",
+            "experienceRecallCue": "After a long walk, your mouth feels dry and you reach for a clear glass.",
+            "senseConfirmation": "This is the ordinary kind you might ask to have poured into a glass or use in a meal.",
+            "sceneBridgeTemplate": "Here, {expression} is what you are politely asking to have served.",
+            "sceneTranslation": "Could I have a glass of water, please?"
+          }
+        },
+        {
+          "senseId": "ids:5-130",
+          "concept": "DRINK",
+          "targetCore": {
+            "expression": "drink",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "I want to drink some water.",
+            "sceneOccurrence": "drink",
+            "expressionAudio": {
+              "sha256": "39ccea8afb1e165b4b7f54e2e1dead6189ebb3f63181fb6837f5b7acbfd39413",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"en\", \"locale\": \"en-US\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"39ccea8afb1e165b4b7f54e2e1dead6189ebb3f63181fb6837f5b7acbfd39413\", \"sizeBytes\": 11232, \"text\": \"drink\", \"voice\": \"en-US-JennyNeural\"}",
+              "accentLabel": "en-US"
+            },
+            "sceneAudio": {
+              "sha256": "13259b5b0ffba058b4b04570106e2d797a0f0df272b1eea839b661d4cc9d5a36",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2304, \"format\": \"mp3\", \"languageTag\": \"en\", \"locale\": \"en-US\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"13259b5b0ffba058b4b04570106e2d797a0f0df272b1eea839b661d4cc9d5a36\", \"sizeBytes\": 13824, \"text\": \"I want to drink some water.\", \"voice\": \"en-US-JennyNeural\"}",
+              "accentLabel": "en-US"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Move liquid into your mouth and swallow it.",
+            "experienceRecallCue": "Picture a hot afternoon, a dry throat, and taking a few sips from a bottle.",
+            "senseConfirmation": "It is what happens when you take a liquid into your mouth and swallow.",
+            "sceneBridgeTemplate": "In this scene, {expression} is what you want to do with some water.",
+            "sceneTranslation": "I want to drink some water."
+          }
+        },
+        {
+          "senseId": "ids:11-620",
+          "concept": "BORROW",
+          "targetCore": {
+            "expression": "borrow",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "I need to borrow a book from my friend.",
+            "sceneOccurrence": "borrow",
+            "expressionAudio": {
+              "sha256": "f5bcbdbd1c333e4488922817f9b0ccafe526ef5a6b9ebebfeedf7d394a1eae81",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"en\", \"locale\": \"en-US\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"f5bcbdbd1c333e4488922817f9b0ccafe526ef5a6b9ebebfeedf7d394a1eae81\", \"sizeBytes\": 11232, \"text\": \"borrow\", \"voice\": \"en-US-JennyNeural\"}",
+              "accentLabel": "en-US"
+            },
+            "sceneAudio": {
+              "sha256": "0a88b0b67bd378943084870a59db558278bcfb37553a6427e3a855450aae68ba",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2856, \"format\": \"mp3\", \"languageTag\": \"en\", \"locale\": \"en-US\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"0a88b0b67bd378943084870a59db558278bcfb37553a6427e3a855450aae68ba\", \"sizeBytes\": 17136, \"text\": \"I need to borrow a book from my friend.\", \"voice\": \"en-US-JennyNeural\"}",
+              "accentLabel": "en-US"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Use something that belongs to someone else for a while, planning to give it back.",
+            "experienceRecallCue": "Before class, your notes are incomplete and a friend offers you a book to use until tomorrow.",
+            "senseConfirmation": "You get temporary use of another person's item, with the expectation that it will be returned.",
+            "sceneBridgeTemplate": "Here, {expression} describes asking your friend to let you use their book for a while.",
+            "sceneTranslation": "I need to borrow a book from my friend."
+          }
+        }
+      ]
+    },
+    {
+      "format": "sensa-route-foundation-language-contribution-v1",
+      "language": "es",
+      "senses": [
+        {
+          "senseId": "ids:1-310",
+          "concept": "WATER",
+          "targetCore": {
+            "expression": "agua",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "¿Me podría dar un vaso de agua, por favor?",
+            "sceneOccurrence": "agua",
+            "expressionAudio": {
+              "sha256": "5a5d48d694997befe005991ffeb2ca9fe85dfb549380e0e7eef9da06e37450f1",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"es\", \"locale\": \"es-ES\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"5a5d48d694997befe005991ffeb2ca9fe85dfb549380e0e7eef9da06e37450f1\", \"sizeBytes\": 11232, \"text\": \"agua\", \"voice\": \"es-ES-ElviraNeural\"}",
+              "accentLabel": "es-ES"
+            },
+            "sceneAudio": {
+              "sha256": "0f6fc0b5588d7c149b2612e5bc32ef3c6b7eff8854f12a2543b3914ec4f88734",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 3240, \"format\": \"mp3\", \"languageTag\": \"es\", \"locale\": \"es-ES\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"0f6fc0b5588d7c149b2612e5bc32ef3c6b7eff8854f12a2543b3914ec4f88734\", \"sizeBytes\": 19440, \"text\": \"¿Me podría dar un vaso de agua, por favor?\", \"voice\": \"es-ES-ElviraNeural\"}",
+              "accentLabel": "es-ES"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Agua de todos los días, para tomar o cocinar.",
+            "experienceRecallCue": "Después de caminar con calor, te sientas a la mesa y ves un vaso transparente junto al plato.",
+            "senseConfirmation": "En esta escena se pide con cortesía un vaso de la bebida habitual.",
+            "sceneBridgeTemplate": "En esta escena, {expression} es lo que se pide con cortesía para servir en un vaso.",
+            "sceneTranslation": "¿Me podría dar un vaso de agua, por favor?"
+          }
+        },
+        {
+          "senseId": "ids:5-130",
+          "concept": "DRINK",
+          "targetCore": {
+            "expression": "beber",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "Quiero beber un poco de agua.",
+            "sceneOccurrence": "beber",
+            "expressionAudio": {
+              "sha256": "2d74489200af68a5f9f5eeb57cd83a9cbe0a1965ece683edc9672fbe51000287",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"es\", \"locale\": \"es-ES\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"2d74489200af68a5f9f5eeb57cd83a9cbe0a1965ece683edc9672fbe51000287\", \"sizeBytes\": 11232, \"text\": \"beber\", \"voice\": \"es-ES-ElviraNeural\"}",
+              "accentLabel": "es-ES"
+            },
+            "sceneAudio": {
+              "sha256": "1365fbab8ac9346ccca3fbef3bd59fcb093fa0089647a24a1d332c5458e2244d",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2544, \"format\": \"mp3\", \"languageTag\": \"es\", \"locale\": \"es-ES\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"1365fbab8ac9346ccca3fbef3bd59fcb093fa0089647a24a1d332c5458e2244d\", \"sizeBytes\": 15264, \"text\": \"Quiero beber un poco de agua.\", \"voice\": \"es-ES-ElviraNeural\"}",
+              "accentLabel": "es-ES"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Tomar un líquido por la boca y pasarlo al tragar.",
+            "experienceRecallCue": "Después de correr, acercas la botella, das un sorbo y notas cómo tragas.",
+            "senseConfirmation": "Aquí alguien quiere tomar un poco de agua, no solo tener el vaso en la mano.",
+            "sceneBridgeTemplate": "{expression} describe lo que quieres hacer con un poco de agua.",
+            "sceneTranslation": "Quiero beber un poco de agua."
+          }
+        },
+        {
+          "senseId": "ids:11-620",
+          "concept": "BORROW",
+          "targetCore": {
+            "expression": "pedir prestado",
+            "expressionKind": "phrase",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "Necesito pedir prestado un libro a un amigo.",
+            "sceneOccurrence": "pedir prestado",
+            "expressionAudio": {
+              "sha256": "41950b9796469259c4852fb624b66268e088b7443390156e750a79b9c60d7e57",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1992, \"format\": \"mp3\", \"languageTag\": \"es\", \"locale\": \"es-ES\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"41950b9796469259c4852fb624b66268e088b7443390156e750a79b9c60d7e57\", \"sizeBytes\": 11952, \"text\": \"pedir prestado\", \"voice\": \"es-ES-ElviraNeural\"}",
+              "accentLabel": "es-ES"
+            },
+            "sceneAudio": {
+              "sha256": "d8d59bf31cfb0cfc1c48b017e4926e1408d5ec93e5232848e6c4a14265197445",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 3552, \"format\": \"mp3\", \"languageTag\": \"es\", \"locale\": \"es-ES\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"d8d59bf31cfb0cfc1c48b017e4926e1408d5ec93e5232848e6c4a14265197445\", \"sizeBytes\": 21312, \"text\": \"Necesito pedir prestado un libro a un amigo.\", \"voice\": \"es-ES-ElviraNeural\"}",
+              "accentLabel": "es-ES"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Usar por un tiempo algo que otra persona tiene, con la intención de devolvérselo.",
+            "experienceRecallCue": "Tu amiga tiene una novela que quieres leer; te la llevas a casa y planeas regresársela.",
+            "senseConfirmation": "La persona necesita que un amigo le deje un libro por un tiempo y piensa devolvérselo.",
+            "sceneBridgeTemplate": "{expression} sirve para decirle a un amigo que necesitas usar su libro y devolvérselo después.",
+            "sceneTranslation": "Necesito pedir prestado un libro a un amigo."
+          }
+        }
+      ]
+    },
+    {
+      "format": "sensa-route-foundation-language-contribution-v1",
+      "language": "fr",
+      "senses": [
+        {
+          "senseId": "ids:1-310",
+          "concept": "WATER",
+          "targetCore": {
+            "expression": "eau",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "Est-ce que je pourrais avoir un verre d’eau, s’il vous plaît ?",
+            "sceneOccurrence": "eau",
+            "expressionAudio": {
+              "sha256": "ab676a046357c53db23f4fbb02767d6d6885d8829cd2118d4f030501a99c8d24",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"fr\", \"locale\": \"fr-FR\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"ab676a046357c53db23f4fbb02767d6d6885d8829cd2118d4f030501a99c8d24\", \"sizeBytes\": 11232, \"text\": \"eau\", \"voice\": \"fr-FR-DeniseNeural\"}",
+              "accentLabel": "fr-FR"
+            },
+            "sceneAudio": {
+              "sha256": "ed329f8fd0363e569e0fcc98bf2dbac810fb0d975bce63304201fad542a8898f",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 3528, \"format\": \"mp3\", \"languageTag\": \"fr\", \"locale\": \"fr-FR\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"ed329f8fd0363e569e0fcc98bf2dbac810fb0d975bce63304201fad542a8898f\", \"sizeBytes\": 21168, \"text\": \"Est-ce que je pourrais avoir un verre d’eau, s’il vous plaît ?\", \"voice\": \"fr-FR-DeniseNeural\"}",
+              "accentLabel": "fr-FR"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Liquide ordinaire que l’on consomme et que l’on utilise pour cuisiner.",
+            "experienceRecallCue": "Après une marche, la gorge sèche, vous prenez un verre transparent et en avalez une gorgée.",
+            "senseConfirmation": "Il s’agit ici du liquide courant servi à boire ou utilisé en cuisine.",
+            "sceneBridgeTemplate": "{expression} est ce que vous demandez poliment dans cette situation.",
+            "sceneTranslation": "Est-ce que je pourrais avoir un verre d’eau, s’il vous plaît ?"
+          }
+        },
+        {
+          "senseId": "ids:5-130",
+          "concept": "DRINK",
+          "targetCore": {
+            "expression": "boire",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "J’ai envie de boire un peu d’eau.",
+            "sceneOccurrence": "boire",
+            "expressionAudio": {
+              "sha256": "cbd5e7687080d90aed1c4f8f99dff9a8b37a85e637928c82fa0a54c388530a99",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"fr\", \"locale\": \"fr-FR\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"cbd5e7687080d90aed1c4f8f99dff9a8b37a85e637928c82fa0a54c388530a99\", \"sizeBytes\": 11232, \"text\": \"boire\", \"voice\": \"fr-FR-DeniseNeural\"}",
+              "accentLabel": "fr-FR"
+            },
+            "sceneAudio": {
+              "sha256": "97a1a56d230058e3340d6223e7fa11bf5d7067a90b3f267a712e1bee47a280e6",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2448, \"format\": \"mp3\", \"languageTag\": \"fr\", \"locale\": \"fr-FR\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"97a1a56d230058e3340d6223e7fa11bf5d7067a90b3f267a712e1bee47a280e6\", \"sizeBytes\": 14688, \"text\": \"J’ai envie de boire un peu d’eau.\", \"voice\": \"fr-FR-DeniseNeural\"}",
+              "accentLabel": "fr-FR"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Faire passer un liquide dans la bouche puis l’avaler.",
+            "experienceRecallCue": "Vous portez une tasse à vos lèvres, prenez une gorgée, puis l’avalez.",
+            "senseConfirmation": "Le geste comprend l’entrée du liquide dans la bouche et le fait de l’avaler.",
+            "sceneBridgeTemplate": "{expression} décrit l’action que vous voulez faire avec un peu d’eau.",
+            "sceneTranslation": "J’ai envie de boire un peu d’eau."
+          }
+        },
+        {
+          "senseId": "ids:11-620",
+          "concept": "BORROW",
+          "targetCore": {
+            "expression": "emprunter",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "Est-ce que je pourrais t’emprunter ce livre ?",
+            "sceneOccurrence": "emprunter",
+            "expressionAudio": {
+              "sha256": "2aa3a94bdfafbe2fb84ee6b12cf82390ac088e88ee17a30d1b9f9ff164b9a8ee",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"fr\", \"locale\": \"fr-FR\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"2aa3a94bdfafbe2fb84ee6b12cf82390ac088e88ee17a30d1b9f9ff164b9a8ee\", \"sizeBytes\": 11232, \"text\": \"emprunter\", \"voice\": \"fr-FR-DeniseNeural\"}",
+              "accentLabel": "fr-FR"
+            },
+            "sceneAudio": {
+              "sha256": "c81b77055ea367672e0696c032eb357c3c758bbce3848e30e92f56c3374a745d",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2880, \"format\": \"mp3\", \"languageTag\": \"fr\", \"locale\": \"fr-FR\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"c81b77055ea367672e0696c032eb357c3c758bbce3848e30e92f56c3374a745d\", \"sizeBytes\": 17280, \"text\": \"Est-ce que je pourrais t’emprunter ce livre ?\", \"voice\": \"fr-FR-DeniseNeural\"}",
+              "accentLabel": "fr-FR"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Prendre provisoirement quelque chose qui appartient à quelqu’un, avec l’intention de le rendre.",
+            "experienceRecallCue": "Un ami vous tend un roman pour quelques jours, et vous comptez le lui rendre.",
+            "senseConfirmation": "La personne qui reçoit l’objet le garde un temps puis le rend.",
+            "sceneBridgeTemplate": "{expression} nomme ce que vous demandez à votre ami pour lire son livre puis le lui rendre.",
+            "sceneTranslation": "Est-ce que je pourrais t’emprunter ce livre ?"
+          }
+        }
+      ]
+    },
+    {
+      "format": "sensa-route-foundation-language-contribution-v1",
+      "language": "hi",
+      "senses": [
+        {
+          "senseId": "ids:1-310",
+          "concept": "WATER",
+          "targetCore": {
+            "expression": "पानी",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "क्या मुझे एक गिलास पानी मिल सकता है?",
+            "sceneOccurrence": "पानी",
+            "expressionAudio": {
+              "sha256": "cb693eac6f7396c096b0c5d4d61453604e88fca509d28e4670f865bc193e4442",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"hi\", \"locale\": \"hi-IN\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"cb693eac6f7396c096b0c5d4d61453604e88fca509d28e4670f865bc193e4442\", \"sizeBytes\": 11232, \"text\": \"पानी\", \"voice\": \"hi-IN-SwaraNeural\"}",
+              "accentLabel": "hi-IN"
+            },
+            "sceneAudio": {
+              "sha256": "8067d2cb250f0ed835f0c10b80f6866a0d64dd8135ab3704ba1cd7e63f606195",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 3552, \"format\": \"mp3\", \"languageTag\": \"hi\", \"locale\": \"hi-IN\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"8067d2cb250f0ed835f0c10b80f6866a0d64dd8135ab3704ba1cd7e63f606195\", \"sizeBytes\": 21312, \"text\": \"क्या मुझे एक गिलास पानी मिल सकता है?\", \"voice\": \"hi-IN-SwaraNeural\"}",
+              "accentLabel": "hi-IN"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "पीने और खाना बनाने में काम आने वाला साधारण जल।",
+            "experienceRecallCue": "धूप में चलने के बाद प्यास लगती है और आप ठंडे गिलास से एक घूँट लेते हैं।",
+            "senseConfirmation": "यहाँ मतलब वही साधारण तरल है जिसे लोग पीते हैं और भोजन बनाने में डालते हैं।",
+            "sceneBridgeTemplate": "{expression} इस स्थिति में विनम्रता से माँगी जा रही चीज़ है।",
+            "sceneTranslation": "क्या मुझे एक गिलास पानी मिल सकता है?"
+          }
+        },
+        {
+          "senseId": "ids:5-130",
+          "concept": "DRINK",
+          "targetCore": {
+            "expression": "पीना",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "मुझे थोड़ा पानी पीना है।",
+            "sceneOccurrence": "पीना",
+            "expressionAudio": {
+              "sha256": "09315627ec2dd5321b7b0027146f91572cbf2956e8466c659caa906555d4442b",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"hi\", \"locale\": \"hi-IN\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"09315627ec2dd5321b7b0027146f91572cbf2956e8466c659caa906555d4442b\", \"sizeBytes\": 11232, \"text\": \"पीना\", \"voice\": \"hi-IN-SwaraNeural\"}",
+              "accentLabel": "hi-IN"
+            },
+            "sceneAudio": {
+              "sha256": "2ac5fc9f3875ca9e4d2ae9009251429baaefdd66d7870d53d69a33d239e6d176",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2880, \"format\": \"mp3\", \"languageTag\": \"hi\", \"locale\": \"hi-IN\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"2ac5fc9f3875ca9e4d2ae9009251429baaefdd66d7870d53d69a33d239e6d176\", \"sizeBytes\": 17280, \"text\": \"मुझे थोड़ा पानी पीना है।\", \"voice\": \"hi-IN-SwaraNeural\"}",
+              "accentLabel": "hi-IN"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "किसी तरल को मुँह में लेकर निगलना।",
+            "experienceRecallCue": "खेलकर लौटने पर गला सूखा है; आप गिलास उठाकर एक घूँट भीतर लेते हैं।",
+            "senseConfirmation": "यहाँ बात पानी जैसे तरल को मुँह से भीतर लेने की क्रिया की है।",
+            "sceneBridgeTemplate": "{expression} यहाँ पानी की थोड़ी मात्रा लेने की इच्छा बताता है।",
+            "sceneTranslation": "मुझे थोड़ा पानी पीना है।"
+          }
+        },
+        {
+          "senseId": "ids:11-620",
+          "concept": "BORROW",
+          "targetCore": {
+            "expression": "उधार लेना",
+            "expressionKind": "phrase",
+            "spokenForm": null,
+            "acceptedForms": [
+              "उधार लेनी"
+            ],
+            "sceneExample": "मुझे अपने दोस्त से एक किताब उधार लेनी है।",
+            "sceneOccurrence": "उधार लेनी",
+            "expressionAudio": {
+              "sha256": "07c66572dca5da0beaaf9b82dbbeec1196fe077ccf9984dea9550e8c46f9aedc",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1968, \"format\": \"mp3\", \"languageTag\": \"hi\", \"locale\": \"hi-IN\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"07c66572dca5da0beaaf9b82dbbeec1196fe077ccf9984dea9550e8c46f9aedc\", \"sizeBytes\": 11808, \"text\": \"उधार लेना\", \"voice\": \"hi-IN-SwaraNeural\"}",
+              "accentLabel": "hi-IN"
+            },
+            "sceneAudio": {
+              "sha256": "248345663b2e5944a98666c0474c97b02322a60f3b4256c4d26e30e2198d3eb2",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 4248, \"format\": \"mp3\", \"languageTag\": \"hi\", \"locale\": \"hi-IN\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"248345663b2e5944a98666c0474c97b02322a60f3b4256c4d26e30e2198d3eb2\", \"sizeBytes\": 25488, \"text\": \"मुझे अपने दोस्त से एक किताब उधार लेनी है।\", \"voice\": \"hi-IN-SwaraNeural\"}",
+              "accentLabel": "hi-IN"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "किसी और की चीज़ को कुछ समय इस्तेमाल करके वापस करने के इरादे से लेना।",
+            "experienceRecallCue": "दोस्त की किताब से कुछ दिन पढ़ने के बाद उसे वापस करने का इरादा है।",
+            "senseConfirmation": "यहाँ किताब दोस्त की है; आप उसे कुछ समय के लिए लेकर बाद में लौटाएँगे।",
+            "sceneBridgeTemplate": "{expression} बताता है कि आपको दोस्त से किताब कुछ समय के लिए चाहिए।",
+            "sceneTranslation": "मुझे अपने दोस्त से एक किताब उधार लेनी है।"
+          }
+        }
+      ]
+    },
+    {
+      "format": "sensa-route-foundation-language-contribution-v1",
+      "language": "id",
+      "senses": [
+        {
+          "senseId": "ids:1-310",
+          "concept": "WATER",
+          "targetCore": {
+            "expression": "air",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "Boleh minta segelas air?",
+            "sceneOccurrence": "air",
+            "expressionAudio": {
+              "sha256": "411e254d353e1ac14fc91ec7fbdc826189b7c885f51ce0209e0348ac33f84490",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"id\", \"locale\": \"id-ID\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"411e254d353e1ac14fc91ec7fbdc826189b7c885f51ce0209e0348ac33f84490\", \"sizeBytes\": 11232, \"text\": \"air\", \"voice\": \"id-ID-GadisNeural\"}",
+              "accentLabel": "id-ID"
+            },
+            "sceneAudio": {
+              "sha256": "162daba13b9478fbe1c230e66e54cd8a8d9f936403a3da199641bc1bb72c291e",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2856, \"format\": \"mp3\", \"languageTag\": \"id\", \"locale\": \"id-ID\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"162daba13b9478fbe1c230e66e54cd8a8d9f936403a3da199641bc1bb72c291e\", \"sizeBytes\": 17136, \"text\": \"Boleh minta segelas air?\", \"voice\": \"id-ID-GadisNeural\"}",
+              "accentLabel": "id-ID"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Cairan biasa yang digunakan untuk minum dan memasak.",
+            "experienceRecallCue": "Bayangkan selesai berjalan jauh, tenggorokan terasa kering, dan ada gelas bening di meja.",
+            "senseConfirmation": "Yang dimaksud di sini adalah cairan biasa untuk diminum atau dipakai memasak.",
+            "sceneBridgeTemplate": "{expression} adalah yang diminta dengan sopan dalam adegan ini.",
+            "sceneTranslation": "Boleh minta segelas air?"
+          }
+        },
+        {
+          "senseId": "ids:5-130",
+          "concept": "DRINK",
+          "targetCore": {
+            "expression": "minum",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "Saya ingin minum sedikit air.",
+            "sceneOccurrence": "minum",
+            "expressionAudio": {
+              "sha256": "e36c4d7f7a3d1d5d95dbf8128027f6cadc26327b49a227a8165b9a8e5e533ef0",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"id\", \"locale\": \"id-ID\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"e36c4d7f7a3d1d5d95dbf8128027f6cadc26327b49a227a8165b9a8e5e533ef0\", \"sizeBytes\": 11232, \"text\": \"minum\", \"voice\": \"id-ID-GadisNeural\"}",
+              "accentLabel": "id-ID"
+            },
+            "sceneAudio": {
+              "sha256": "d67db3219b3731134a76145db52b39b83b71b3975a47dab708ee9133eeddfe71",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 3480, \"format\": \"mp3\", \"languageTag\": \"id\", \"locale\": \"id-ID\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"d67db3219b3731134a76145db52b39b83b71b3975a47dab708ee9133eeddfe71\", \"sizeBytes\": 20880, \"text\": \"Saya ingin minum sedikit air.\", \"voice\": \"id-ID-GadisNeural\"}",
+              "accentLabel": "id-ID"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Melakukan sesuatu saat cairan masuk ke mulut lalu tertelan.",
+            "experienceRecallCue": "Bayangkan setelah berlari, tenggorokan terasa kering dan segelas bening ada di depanmu.",
+            "senseConfirmation": "Yang dimaksud adalah tindakan menelan cairan yang masuk ke mulut.",
+            "sceneBridgeTemplate": "{expression} adalah tindakan yang ingin dilakukan tokoh dalam adegan ini.",
+            "sceneTranslation": "Saya ingin minum sedikit air."
+          }
+        },
+        {
+          "senseId": "ids:11-620",
+          "concept": "BORROW",
+          "targetCore": {
+            "expression": "meminjam",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "Aku perlu meminjam sebuah buku dari temanku.",
+            "sceneOccurrence": "meminjam",
+            "expressionAudio": {
+              "sha256": "77250dac044c6af43069d9f57629c9b8a21f04c9ef9dd06beb9c521bfe2b1bab",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1992, \"format\": \"mp3\", \"languageTag\": \"id\", \"locale\": \"id-ID\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"77250dac044c6af43069d9f57629c9b8a21f04c9ef9dd06beb9c521bfe2b1bab\", \"sizeBytes\": 11952, \"text\": \"meminjam\", \"voice\": \"id-ID-GadisNeural\"}",
+              "accentLabel": "id-ID"
+            },
+            "sceneAudio": {
+              "sha256": "8797268d9bfb97a6350599000ad9e1bf09f7032f852203f5d61579a97f7c7bf3",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 4320, \"format\": \"mp3\", \"languageTag\": \"id\", \"locale\": \"id-ID\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"8797268d9bfb97a6350599000ad9e1bf09f7032f852203f5d61579a97f7c7bf3\", \"sizeBytes\": 25920, \"text\": \"Aku perlu meminjam sebuah buku dari temanku.\", \"voice\": \"id-ID-GadisNeural\"}",
+              "accentLabel": "id-ID"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Menggunakan sementara barang milik orang lain dengan harapan akan mengembalikannya.",
+            "experienceRecallCue": "Bayangkan tugas belum selesai dan seorang teman punya buku yang kamu perlukan; setelah selesai, buku itu akan kamu kembalikan.",
+            "senseConfirmation": "Di sini, tokoh membutuhkan buku dari temannya untuk dipakai sementara lalu dikembalikan.",
+            "sceneBridgeTemplate": "{expression} menjelaskan tindakan tokoh terhadap buku milik temannya.",
+            "sceneTranslation": "Aku perlu meminjam sebuah buku dari temanku."
+          }
+        }
+      ]
+    },
+    {
+      "format": "sensa-route-foundation-language-contribution-v1",
+      "language": "it",
+      "senses": [
+        {
+          "senseId": "ids:1-310",
+          "concept": "WATER",
+          "targetCore": {
+            "expression": "acqua",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "Potrei avere un bicchiere d’acqua, per favore?",
+            "sceneOccurrence": "acqua",
+            "expressionAudio": {
+              "sha256": "e1dc5eee9b8fa5911ce3185118a5f45ca287ae661515318bf7463d41ceb56835",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"it\", \"locale\": \"it-IT\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"e1dc5eee9b8fa5911ce3185118a5f45ca287ae661515318bf7463d41ceb56835\", \"sizeBytes\": 11232, \"text\": \"acqua\", \"voice\": \"it-IT-IsabellaNeural\"}",
+              "accentLabel": "it-IT"
+            },
+            "sceneAudio": {
+              "sha256": "b3d81df56b5a49b5cd65f9eb19e0742703426e73a32253b94ba4798952ecf47f",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 3432, \"format\": \"mp3\", \"languageTag\": \"it\", \"locale\": \"it-IT\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"b3d81df56b5a49b5cd65f9eb19e0742703426e73a32253b94ba4798952ecf47f\", \"sizeBytes\": 20592, \"text\": \"Potrei avere un bicchiere d’acqua, per favore?\", \"voice\": \"it-IT-IsabellaNeural\"}",
+              "accentLabel": "it-IT"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Liquido comune da bere e da usare per cucinare.",
+            "experienceRecallCue": "Dopo una passeggiata hai sete; immagini un bicchiere trasparente riempito dal rubinetto, adatto anche a cucinare.",
+            "senseConfirmation": "Qui si parla del liquido semplice che si beve o si aggiunge ai piatti, non di una bevanda preparata.",
+            "sceneBridgeTemplate": "{expression} è ciò che chiedi con cortesia in questa situazione.",
+            "sceneTranslation": "Potrei avere un bicchiere d’acqua, per favore?"
+          }
+        },
+        {
+          "senseId": "ids:5-130",
+          "concept": "DRINK",
+          "targetCore": {
+            "expression": "bere",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "Vorrei bere un po’ d’acqua.",
+            "sceneOccurrence": "bere",
+            "expressionAudio": {
+              "sha256": "b80802a022fc74ab95293f7959cee6e5006eb509db3fba9c64a00942bcf8db19",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"it\", \"locale\": \"it-IT\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"b80802a022fc74ab95293f7959cee6e5006eb509db3fba9c64a00942bcf8db19\", \"sizeBytes\": 11232, \"text\": \"bere\", \"voice\": \"it-IT-IsabellaNeural\"}",
+              "accentLabel": "it-IT"
+            },
+            "sceneAudio": {
+              "sha256": "ed699021a751fc5ceac85ee33df5386a9bcfe6f292b19f0cc7b1778411f7c8b5",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2424, \"format\": \"mp3\", \"languageTag\": \"it\", \"locale\": \"it-IT\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"ed699021a751fc5ceac85ee33df5386a9bcfe6f292b19f0cc7b1778411f7c8b5\", \"sizeBytes\": 14544, \"text\": \"Vorrei bere un po’ d’acqua.\", \"voice\": \"it-IT-IsabellaNeural\"}",
+              "accentLabel": "it-IT"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Portare un liquido alla bocca e mandarlo giù.",
+            "experienceRecallCue": "Hai la bocca asciutta e immagini di portare alle labbra un bicchiere, poi di mandarne il contenuto giù.",
+            "senseConfirmation": "L’azione riguarda un liquido che entra in bocca e viene deglutito.",
+            "sceneBridgeTemplate": "{expression} descrive il gesto che vuoi fare con un po’ d’acqua.",
+            "sceneTranslation": "Vorrei bere un po’ d’acqua."
+          }
+        },
+        {
+          "senseId": "ids:11-620",
+          "concept": "BORROW",
+          "targetCore": {
+            "expression": "prendere in prestito",
+            "expressionKind": "phrase",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "Posso prendere in prestito un libro da te? Te lo riporto appena finito.",
+            "sceneOccurrence": "prendere in prestito",
+            "expressionAudio": {
+              "sha256": "d923732f80b0b8b6d6fd8f1aeae624febbadf1dcfc8e0d6c62e73855067b68a1",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2232, \"format\": \"mp3\", \"languageTag\": \"it\", \"locale\": \"it-IT\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"d923732f80b0b8b6d6fd8f1aeae624febbadf1dcfc8e0d6c62e73855067b68a1\", \"sizeBytes\": 13392, \"text\": \"prendere in prestito\", \"voice\": \"it-IT-IsabellaNeural\"}",
+              "accentLabel": "it-IT"
+            },
+            "sceneAudio": {
+              "sha256": "f99ae39b37c9143de1deece9856056b7518dd9a49790f7a66bb2c403449e7020",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 5592, \"format\": \"mp3\", \"languageTag\": \"it\", \"locale\": \"it-IT\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"f99ae39b37c9143de1deece9856056b7518dd9a49790f7a66bb2c403449e7020\", \"sizeBytes\": 33552, \"text\": \"Posso prendere in prestito un libro da te? Te lo riporto appena finito.\", \"voice\": \"it-IT-IsabellaNeural\"}",
+              "accentLabel": "it-IT"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Usare per un po’ un oggetto che appartiene a un’altra persona, con l’intenzione di restituirlo.",
+            "experienceRecallCue": "Ti serve un romanzo per il viaggio e un amico ne ha una copia; concordate che gliela ridarai dopo averla letta.",
+            "senseConfirmation": "L’oggetto resta di un’altra persona e va restituito dopo l’uso.",
+            "sceneBridgeTemplate": "{expression} è quello che chiedi a un amico per poter leggere il suo libro e poi restituirglielo.",
+            "sceneTranslation": "Posso prendere in prestito un libro da te? Te lo riporto appena finito."
+          }
+        }
+      ]
+    },
+    {
+      "format": "sensa-route-foundation-language-contribution-v1",
+      "language": "ja",
+      "senses": [
+        {
+          "senseId": "ids:1-310",
+          "concept": "WATER",
+          "targetCore": {
+            "expression": "水",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "水を一杯いただけますか。",
+            "sceneOccurrence": "水",
+            "expressionAudio": {
+              "sha256": "69b64c2b453b3254bdc8a3d318976ac51f237188e681460f48367d13e607f561",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"ja\", \"locale\": \"ja-JP\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"69b64c2b453b3254bdc8a3d318976ac51f237188e681460f48367d13e607f561\", \"sizeBytes\": 11232, \"text\": \"水\", \"voice\": \"ja-JP-NanamiNeural\"}",
+              "accentLabel": "ja-JP"
+            },
+            "sceneAudio": {
+              "sha256": "a4e671b238353af8b248fe6c154431d34c2d0041ce4925a48baa3ffd392754aa",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2856, \"format\": \"mp3\", \"languageTag\": \"ja\", \"locale\": \"ja-JP\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"a4e671b238353af8b248fe6c154431d34c2d0041ce4925a48baa3ffd392754aa\", \"sizeBytes\": 17136, \"text\": \"水を一杯いただけますか。\", \"voice\": \"ja-JP-NanamiNeural\"}",
+              "accentLabel": "ja-JP"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "飲んだり料理に使ったりする、ふつうの水。",
+            "experienceRecallCue": "運動のあとに喉が渇き、透明なコップを手に取って一口飲む場面を思い浮かべてください。",
+            "senseConfirmation": "ここでは、飲み物や料理に使う水を指します。",
+            "sceneBridgeTemplate": "{expression} は、この場面で丁寧に求めているものです。",
+            "sceneTranslation": "水を一杯いただけますか。"
+          }
+        },
+        {
+          "senseId": "ids:5-130",
+          "concept": "DRINK",
+          "targetCore": {
+            "expression": "飲む",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [
+              "飲みたい"
+            ],
+            "sceneExample": "少し水が飲みたいです。",
+            "sceneOccurrence": "飲みたい",
+            "expressionAudio": {
+              "sha256": "7850691db36e7f5e4ebe1940fe19891f37979929280188a5c303b9013c542f02",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"ja\", \"locale\": \"ja-JP\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"7850691db36e7f5e4ebe1940fe19891f37979929280188a5c303b9013c542f02\", \"sizeBytes\": 11232, \"text\": \"飲む\", \"voice\": \"ja-JP-NanamiNeural\"}",
+              "accentLabel": "ja-JP"
+            },
+            "sceneAudio": {
+              "sha256": "232a55bfd0c2e9d28587a8a86ae9cb6555d8df751f0eb3272b5c860f0efccd59",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2712, \"format\": \"mp3\", \"languageTag\": \"ja\", \"locale\": \"ja-JP\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"232a55bfd0c2e9d28587a8a86ae9cb6555d8df751f0eb3272b5c860f0efccd59\", \"sizeBytes\": 16272, \"text\": \"少し水が飲みたいです。\", \"voice\": \"ja-JP-NanamiNeural\"}",
+              "accentLabel": "ja-JP"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "液体を口に入れて、喉を通して飲み込むこと。",
+            "experienceRecallCue": "暑い日に喉が渇いて、冷たい飲み物を口にしたい場面を思い浮かべてください。",
+            "senseConfirmation": "ここでは、液体を口に含んで飲み込む動作を指します。",
+            "sceneBridgeTemplate": "{expression} は、喉の渇きをいやすために口にしたいことを表します。",
+            "sceneTranslation": "少し水が飲みたいです。"
+          }
+        },
+        {
+          "senseId": "ids:11-620",
+          "concept": "BORROW",
+          "targetCore": {
+            "expression": "借りる",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "友人から本を借りる必要があります。",
+            "sceneOccurrence": "借りる",
+            "expressionAudio": {
+              "sha256": "771391e3edc74b7b7a65e7f2da2ce46ed7168b531873e835e4fbaa471ddad7f8",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"ja\", \"locale\": \"ja-JP\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"771391e3edc74b7b7a65e7f2da2ce46ed7168b531873e835e4fbaa471ddad7f8\", \"sizeBytes\": 11232, \"text\": \"借りる\", \"voice\": \"ja-JP-NanamiNeural\"}",
+              "accentLabel": "ja-JP"
+            },
+            "sceneAudio": {
+              "sha256": "6311105369ed3de738b20658219293b2abd5b20b4ede691e31dca50762636582",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 3648, \"format\": \"mp3\", \"languageTag\": \"ja\", \"locale\": \"ja-JP\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"6311105369ed3de738b20658219293b2abd5b20b4ede691e31dca50762636582\", \"sizeBytes\": 21888, \"text\": \"友人から本を借りる必要があります。\", \"voice\": \"ja-JP-NanamiNeural\"}",
+              "accentLabel": "ja-JP"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "相手の持ち物を一時的に使い、あとで返すこと。",
+            "experienceRecallCue": "友人の本を一時的に使い、読み終えたら返す約束をする場面を思い浮かべてください。",
+            "senseConfirmation": "ここでは、友人の本を返す前提で一時的に使うことを指します。",
+            "sceneBridgeTemplate": "{expression} は、友人の本を一時的に使い、あとで返す必要がある場面を表します。",
+            "sceneTranslation": "友人から本を借りる必要があります。"
+          }
+        }
+      ]
+    },
+    {
+      "format": "sensa-route-foundation-language-contribution-v1",
+      "language": "ko",
+      "senses": [
+        {
+          "senseId": "ids:1-310",
+          "concept": "WATER",
+          "targetCore": {
+            "expression": "물",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "물 한 잔 주시겠어요?",
+            "sceneOccurrence": "물",
+            "expressionAudio": {
+              "sha256": "23ea10719c6d6d1269caf22b9d9680c31a1e68dc154587f42406e5cf0de094e7",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"ko\", \"locale\": \"ko-KR\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"23ea10719c6d6d1269caf22b9d9680c31a1e68dc154587f42406e5cf0de094e7\", \"sizeBytes\": 11232, \"text\": \"물\", \"voice\": \"ko-KR-SunHiNeural\"}",
+              "accentLabel": "ko-KR"
+            },
+            "sceneAudio": {
+              "sha256": "6fff0493fba740cd7249c40cce15811cbc10dce80ed18e03b02b155d108e6ccb",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2424, \"format\": \"mp3\", \"languageTag\": \"ko\", \"locale\": \"ko-KR\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"6fff0493fba740cd7249c40cce15811cbc10dce80ed18e03b02b155d108e6ccb\", \"sizeBytes\": 14544, \"text\": \"물 한 잔 주시겠어요?\", \"voice\": \"ko-KR-SunHiNeural\"}",
+              "accentLabel": "ko-KR"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "마시거나 음식을 만들 때 쓰는 흔한 맑은 액체예요.",
+            "experienceRecallCue": "식탁에서 투명한 잔에 따라 마시거나 냄비에 붓는 맑은 것을 떠올려 보세요.",
+            "senseConfirmation": "여기서는 마시거나 요리에 쓰는 보통의 물을 말해요.",
+            "sceneBridgeTemplate": "이 장면에서 ‘{expression}’은 정중하게 한 잔을 부탁하는 대상이에요.",
+            "sceneTranslation": "물 한 잔 주시겠어요?"
+          }
+        },
+        {
+          "senseId": "ids:5-130",
+          "concept": "DRINK",
+          "targetCore": {
+            "expression": "마시다",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [
+              "마시고 싶어요"
+            ],
+            "sceneExample": "물을 좀 마시고 싶어요.",
+            "sceneOccurrence": "마시고 싶어요",
+            "expressionAudio": {
+              "sha256": "ddac5d49f2fe6dab42d1e4e6c3d863e0165191fefe80c676294626e66d3d950e",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2064, \"format\": \"mp3\", \"languageTag\": \"ko\", \"locale\": \"ko-KR\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"ddac5d49f2fe6dab42d1e4e6c3d863e0165191fefe80c676294626e66d3d950e\", \"sizeBytes\": 12384, \"text\": \"마시다\", \"voice\": \"ko-KR-SunHiNeural\"}",
+              "accentLabel": "ko-KR"
+            },
+            "sceneAudio": {
+              "sha256": "877737a761855e9f894ed685bf19d197f23ab4b6fb28938f7ae1415402074881",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2544, \"format\": \"mp3\", \"languageTag\": \"ko\", \"locale\": \"ko-KR\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"877737a761855e9f894ed685bf19d197f23ab4b6fb28938f7ae1415402074881\", \"sizeBytes\": 15264, \"text\": \"물을 좀 마시고 싶어요.\", \"voice\": \"ko-KR-SunHiNeural\"}",
+              "accentLabel": "ko-KR"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "컵을 기울여 액체가 입안으로 들어가 목으로 넘어가게 하는 행동이에요.",
+            "experienceRecallCue": "달리기를 마치고 갈증이 나 컵을 입에 대는 순간을 떠올려 보세요.",
+            "senseConfirmation": "액체를 입에 넣어 삼키는 동작을 가리켜요.",
+            "sceneBridgeTemplate": "이 장면에서 ‘{expression}’은 물을 조금 마시고 싶다는 마음을 전해요.",
+            "sceneTranslation": "물을 좀 마시고 싶어요."
+          }
+        },
+        {
+          "senseId": "ids:11-620",
+          "concept": "BORROW",
+          "targetCore": {
+            "expression": "빌리다",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [
+              "빌려야 해요"
+            ],
+            "sceneExample": "친구에게 책을 빌려야 해요.",
+            "sceneOccurrence": "빌려야 해요",
+            "expressionAudio": {
+              "sha256": "b330d7b9888fdaebd8f5a2ceac7ea553889abe7a8aff07a5a728d8d061cbdf4f",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2088, \"format\": \"mp3\", \"languageTag\": \"ko\", \"locale\": \"ko-KR\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"b330d7b9888fdaebd8f5a2ceac7ea553889abe7a8aff07a5a728d8d061cbdf4f\", \"sizeBytes\": 12528, \"text\": \"빌리다\", \"voice\": \"ko-KR-SunHiNeural\"}",
+              "accentLabel": "ko-KR"
+            },
+            "sceneAudio": {
+              "sha256": "a1d454fa4238e21ed0345ac1b67d2eda9b1ac7fb6977d83a4c64f5775db746c6",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2928, \"format\": \"mp3\", \"languageTag\": \"ko\", \"locale\": \"ko-KR\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"a1d454fa4238e21ed0345ac1b67d2eda9b1ac7fb6977d83a4c64f5775db746c6\", \"sizeBytes\": 17568, \"text\": \"친구에게 책을 빌려야 해요.\", \"voice\": \"ko-KR-SunHiNeural\"}",
+              "accentLabel": "ko-KR"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "다른 사람의 것을 잠시 사용하고, 나중에 돌려주는 일이에요.",
+            "experienceRecallCue": "책을 다 읽고 주인에게 돌려주기로 하고 잠시 가져오는 장면을 떠올려 보세요.",
+            "senseConfirmation": "친구가 가진 책을 잠시 사용한 뒤 돌려주는 상황이에요.",
+            "sceneBridgeTemplate": "이 장면에서 ‘{expression}’은 친구의 책을 잠시 쓰고 돌려주려는 뜻을 전해요.",
+            "sceneTranslation": "친구에게 책을 빌려야 해요."
+          }
+        }
+      ]
+    },
+    {
+      "format": "sensa-route-foundation-language-contribution-v1",
+      "language": "nl",
+      "senses": [
+        {
+          "senseId": "ids:1-310",
+          "concept": "WATER",
+          "targetCore": {
+            "expression": "water",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "Mag ik een glas water, alstublieft?",
+            "sceneOccurrence": "water",
+            "expressionAudio": {
+              "sha256": "6b246910a6ade93f17c789e867a626d37937b1a8a186631e989391e1cb25ac67",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"nl\", \"locale\": \"nl-NL\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"6b246910a6ade93f17c789e867a626d37937b1a8a186631e989391e1cb25ac67\", \"sizeBytes\": 11232, \"text\": \"water\", \"voice\": \"nl-NL-ColetteNeural\"}",
+              "accentLabel": "nl-NL"
+            },
+            "sceneAudio": {
+              "sha256": "1501625c39ce47ac0bcf46884a0aca67472fb7149e8a54c5b60649e05acd6a25",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 3432, \"format\": \"mp3\", \"languageTag\": \"nl\", \"locale\": \"nl-NL\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"1501625c39ce47ac0bcf46884a0aca67472fb7149e8a54c5b60649e05acd6a25\", \"sizeBytes\": 20592, \"text\": \"Mag ik een glas water, alstublieft?\", \"voice\": \"nl-NL-ColetteNeural\"}",
+              "accentLabel": "nl-NL"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Gewone vloeistof die mensen drinken en bij het koken gebruiken.",
+            "experienceRecallCue": "Na een wandeling voelt je keel droog aan en pak je een helder glas van tafel.",
+            "senseConfirmation": "Het gaat om de gewone, heldere vloeistof voor drinken of koken.",
+            "sceneBridgeTemplate": "{expression} is wat je in deze situatie beleefd om een glas vraagt.",
+            "sceneTranslation": "Mag ik een glas water, alstublieft?"
+          }
+        },
+        {
+          "senseId": "ids:5-130",
+          "concept": "DRINK",
+          "targetCore": {
+            "expression": "drinken",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "Ik wil graag wat water drinken.",
+            "sceneOccurrence": "drinken",
+            "expressionAudio": {
+              "sha256": "c1b662a4153d7e996a6cad47e69462d654b085a447e0719360ff0b5ce939186f",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"nl\", \"locale\": \"nl-NL\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"c1b662a4153d7e996a6cad47e69462d654b085a447e0719360ff0b5ce939186f\", \"sizeBytes\": 11232, \"text\": \"drinken\", \"voice\": \"nl-NL-ColetteNeural\"}",
+              "accentLabel": "nl-NL"
+            },
+            "sceneAudio": {
+              "sha256": "f276bdf366a78e2418da5900340b7645bfa53e0a3bfed804776fb30abe88ca46",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2952, \"format\": \"mp3\", \"languageTag\": \"nl\", \"locale\": \"nl-NL\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"f276bdf366a78e2418da5900340b7645bfa53e0a3bfed804776fb30abe88ca46\", \"sizeBytes\": 17712, \"text\": \"Ik wil graag wat water drinken.\", \"voice\": \"nl-NL-ColetteNeural\"}",
+              "accentLabel": "nl-NL"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Vloeistof in je mond nemen en doorslikken.",
+            "experienceRecallCue": "Na een lange fietstocht voelt je keel droog; je kijkt naar een glas en verlangt naar een paar slokken.",
+            "senseConfirmation": "De vloeistof gaat je mond in en wordt daarna doorgeslikt.",
+            "sceneBridgeTemplate": "{expression} beschrijft hier wat je met een paar slokken wilt doen.",
+            "sceneTranslation": "Ik wil graag wat water drinken."
+          }
+        },
+        {
+          "senseId": "ids:11-620",
+          "concept": "BORROW",
+          "targetCore": {
+            "expression": "lenen",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "Mag ik dat boek even van je lenen?",
+            "sceneOccurrence": "lenen",
+            "expressionAudio": {
+              "sha256": "e08e0c9ce4a60f3c9eb7c2349e683086ad3132b0bcaaa57d0fb2d9e5694a350f",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"nl\", \"locale\": \"nl-NL\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"e08e0c9ce4a60f3c9eb7c2349e683086ad3132b0bcaaa57d0fb2d9e5694a350f\", \"sizeBytes\": 11232, \"text\": \"lenen\", \"voice\": \"nl-NL-ColetteNeural\"}",
+              "accentLabel": "nl-NL"
+            },
+            "sceneAudio": {
+              "sha256": "b4e7ed017563d3874ba6dd7710ccbe4174d9aeeba7f8cb3dc6a9d18fbfa78d32",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2976, \"format\": \"mp3\", \"languageTag\": \"nl\", \"locale\": \"nl-NL\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"b4e7ed017563d3874ba6dd7710ccbe4174d9aeeba7f8cb3dc6a9d18fbfa78d32\", \"sizeBytes\": 17856, \"text\": \"Mag ik dat boek even van je lenen?\", \"voice\": \"nl-NL-ColetteNeural\"}",
+              "accentLabel": "nl-NL"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Iets tijdelijk van iemand gebruiken en het daarna teruggeven.",
+            "experienceRecallCue": "Een vriend heeft een roman die je graag wilt lezen; je neemt die een tijdje mee en brengt hem later terug.",
+            "senseConfirmation": "Je gebruikt iets van iemand anders met de bedoeling het terug te geven.",
+            "sceneBridgeTemplate": "{expression} verwoordt hier je verzoek om het boek van een vriend mee te nemen en terug te geven.",
+            "sceneTranslation": "Mag ik dat boek even van je lenen?"
+          }
+        }
+      ]
+    },
+    {
+      "format": "sensa-route-foundation-language-contribution-v1",
+      "language": "pl",
+      "senses": [
+        {
+          "senseId": "ids:1-310",
+          "concept": "WATER",
+          "targetCore": {
+            "expression": "woda",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [
+              "wody"
+            ],
+            "sceneExample": "Czy mogę prosić o szklankę wody?",
+            "sceneOccurrence": "wody",
+            "expressionAudio": {
+              "sha256": "e0d16c24c9bd36adfa9e39d6fc93de4f391a271db86ef6a79c06075b26c50ab1",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"pl\", \"locale\": \"pl-PL\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"e0d16c24c9bd36adfa9e39d6fc93de4f391a271db86ef6a79c06075b26c50ab1\", \"sizeBytes\": 11232, \"text\": \"woda\", \"voice\": \"pl-PL-ZofiaNeural\"}",
+              "accentLabel": "pl-PL"
+            },
+            "sceneAudio": {
+              "sha256": "af683ce2c0185672eacc23156ef8fbf8f193e069150d80f6abad1dd1ce53b650",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2712, \"format\": \"mp3\", \"languageTag\": \"pl\", \"locale\": \"pl-PL\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"af683ce2c0185672eacc23156ef8fbf8f193e069150d80f6abad1dd1ce53b650\", \"sizeBytes\": 16272, \"text\": \"Czy mogę prosić o szklankę wody?\", \"voice\": \"pl-PL-ZofiaNeural\"}",
+              "accentLabel": "pl-PL"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Zwykły płyn używany do picia i gotowania.",
+            "experienceRecallCue": "Po długim spacerze sięgasz po przezroczystą szklankę, żeby ugasić pragnienie.",
+            "senseConfirmation": "Chodzi o zwykły płyn do picia i gotowania, nie o dowolny napój.",
+            "sceneBridgeTemplate": "{expression} to to, o co uprzejmie prosisz w tej sytuacji.",
+            "sceneTranslation": "Czy mogę prosić o szklankę wody?"
+          }
+        },
+        {
+          "senseId": "ids:5-130",
+          "concept": "DRINK",
+          "targetCore": {
+            "expression": "pić",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "Chcę pić trochę wody.",
+            "sceneOccurrence": "pić",
+            "expressionAudio": {
+              "sha256": "2f3affe060e205e9020e16f369a7cf15714168bc36894e6b1fd098eee58056ae",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"pl\", \"locale\": \"pl-PL\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"2f3affe060e205e9020e16f369a7cf15714168bc36894e6b1fd098eee58056ae\", \"sizeBytes\": 11232, \"text\": \"pić\", \"voice\": \"pl-PL-ZofiaNeural\"}",
+              "accentLabel": "pl-PL"
+            },
+            "sceneAudio": {
+              "sha256": "d95b06ee091d955311c21767e4d2d50431398e6022e9a183eed70ae05705d2fc",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2232, \"format\": \"mp3\", \"languageTag\": \"pl\", \"locale\": \"pl-PL\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"d95b06ee091d955311c21767e4d2d50431398e6022e9a183eed70ae05705d2fc\", \"sizeBytes\": 13392, \"text\": \"Chcę pić trochę wody.\", \"voice\": \"pl-PL-ZofiaNeural\"}",
+              "accentLabel": "pl-PL"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Przyjmować płyn do ust i go przełykać.",
+            "experienceRecallCue": "Po wysiłku bierzesz łyk z kubka, a potem go przełykasz.",
+            "senseConfirmation": "Tu chodzi o czynność przyjmowania płynu i przełykania go.",
+            "sceneBridgeTemplate": "{expression} opisuje czynność, którą chcesz wykonać w tej sytuacji.",
+            "sceneTranslation": "Chcę pić trochę wody."
+          }
+        },
+        {
+          "senseId": "ids:11-620",
+          "concept": "BORROW",
+          "targetCore": {
+            "expression": "pożyczyć",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "Czy mogę pożyczyć od ciebie książkę?",
+            "sceneOccurrence": "pożyczyć",
+            "expressionAudio": {
+              "sha256": "debc7ee7ed07fa5c8c5c8183add6cc351e9ef15bb062a412be79163647406dfb",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"pl\", \"locale\": \"pl-PL\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"debc7ee7ed07fa5c8c5c8183add6cc351e9ef15bb062a412be79163647406dfb\", \"sizeBytes\": 11232, \"text\": \"pożyczyć\", \"voice\": \"pl-PL-ZofiaNeural\"}",
+              "accentLabel": "pl-PL"
+            },
+            "sceneAudio": {
+              "sha256": "995e425fa2954bdc8756837c92dda3b8585dbbd402d3cafd584db57300cc9bb3",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2904, \"format\": \"mp3\", \"languageTag\": \"pl\", \"locale\": \"pl-PL\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"995e425fa2954bdc8756837c92dda3b8585dbbd402d3cafd584db57300cc9bb3\", \"sizeBytes\": 17424, \"text\": \"Czy mogę pożyczyć od ciebie książkę?\", \"voice\": \"pl-PL-ZofiaNeural\"}",
+              "accentLabel": "pl-PL"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Wziąć od kogoś coś do czasowego używania z zamiarem oddania.",
+            "experienceRecallCue": "Przed spotkaniem orientujesz się, że nie masz lektury; znajomy daje ci swój egzemplarz na kilka dni, a potem oddajesz go właścicielowi.",
+            "senseConfirmation": "Tu chodzi o czasowe używanie cudzej rzeczy z zamiarem zwrócenia jej właścicielowi.",
+            "sceneBridgeTemplate": "{expression} opisuje to, czego potrzebujesz od znajomego na pewien czas, z zamiarem oddania.",
+            "sceneTranslation": "Czy mogę pożyczyć od ciebie książkę?"
+          }
+        }
+      ]
+    },
+    {
+      "format": "sensa-route-foundation-language-contribution-v1",
+      "language": "pt",
+      "senses": [
+        {
+          "senseId": "ids:1-310",
+          "concept": "WATER",
+          "targetCore": {
+            "expression": "água",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "Você poderia me trazer um copo de água, por favor?",
+            "sceneOccurrence": "água",
+            "expressionAudio": {
+              "sha256": "8195bb9db109b3bdaf9568cd9aa26b7ddb2af8139f634ca3c649377a1e76bb81",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"pt\", \"locale\": \"pt-BR\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"8195bb9db109b3bdaf9568cd9aa26b7ddb2af8139f634ca3c649377a1e76bb81\", \"sizeBytes\": 11232, \"text\": \"água\", \"voice\": \"pt-BR-FranciscaNeural\"}",
+              "accentLabel": "pt-BR"
+            },
+            "sceneAudio": {
+              "sha256": "18176f52d1333f133a574a9742b3674473af6f8daba556c49afb512e592558f2",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 3720, \"format\": \"mp3\", \"languageTag\": \"pt\", \"locale\": \"pt-BR\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"18176f52d1333f133a574a9742b3674473af6f8daba556c49afb512e592558f2\", \"sizeBytes\": 22320, \"text\": \"Você poderia me trazer um copo de água, por favor?\", \"voice\": \"pt-BR-FranciscaNeural\"}",
+              "accentLabel": "pt-BR"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Líquido comum, sem sabor forte, usado para matar a sede e preparar comida.",
+            "experienceRecallCue": "Imagine um copo transparente ao lado do prato e alguém servindo um gole para acompanhar a refeição.",
+            "senseConfirmation": "É o líquido transparente que costuma ser servido para beber ou usado no preparo de alimentos.",
+            "sceneBridgeTemplate": "{expression} é o que você pede para receber em um copo, com educação.",
+            "sceneTranslation": "Você poderia me trazer um copo de água, por favor?"
+          }
+        },
+        {
+          "senseId": "ids:5-130",
+          "concept": "DRINK",
+          "targetCore": {
+            "expression": "beber",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "Quero beber um pouco de água.",
+            "sceneOccurrence": "beber",
+            "expressionAudio": {
+              "sha256": "b618a6c8bc5311e58223551194af209f522798b98031ac20c6744c4e202aff42",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"pt\", \"locale\": \"pt-BR\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"b618a6c8bc5311e58223551194af209f522798b98031ac20c6744c4e202aff42\", \"sizeBytes\": 11232, \"text\": \"beber\", \"voice\": \"pt-BR-FranciscaNeural\"}",
+              "accentLabel": "pt-BR"
+            },
+            "sceneAudio": {
+              "sha256": "45a0573bd6db11640136eabe9ba5e8969e6bbd85d10fb72684be36a32ac48af2",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2472, \"format\": \"mp3\", \"languageTag\": \"pt\", \"locale\": \"pt-BR\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"45a0573bd6db11640136eabe9ba5e8969e6bbd85d10fb72684be36a32ac48af2\", \"sizeBytes\": 14832, \"text\": \"Quero beber um pouco de água.\", \"voice\": \"pt-BR-FranciscaNeural\"}",
+              "accentLabel": "pt-BR"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Levar um líquido à boca e engolir.",
+            "experienceRecallCue": "Pense em um gole fresco depois de uma caminhada, com o líquido passando pela garganta.",
+            "senseConfirmation": "A ação é engolir um líquido, como um gole de água.",
+            "sceneBridgeTemplate": "{expression} descreve a ação de matar a sede com alguns goles.",
+            "sceneTranslation": "Quero beber um pouco de água."
+          }
+        },
+        {
+          "senseId": "ids:11-620",
+          "concept": "BORROW",
+          "targetCore": {
+            "expression": "pegar emprestado",
+            "expressionKind": "phrase",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "Preciso pegar emprestado um livro de um amigo.",
+            "sceneOccurrence": "pegar emprestado",
+            "expressionAudio": {
+              "sha256": "c4d935a301e38a0eadcf113fd81c860fc5d8f0353ccb14cb3532a98f06879373",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2064, \"format\": \"mp3\", \"languageTag\": \"pt\", \"locale\": \"pt-BR\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"c4d935a301e38a0eadcf113fd81c860fc5d8f0353ccb14cb3532a98f06879373\", \"sizeBytes\": 12384, \"text\": \"pegar emprestado\", \"voice\": \"pt-BR-FranciscaNeural\"}",
+              "accentLabel": "pt-BR"
+            },
+            "sceneAudio": {
+              "sha256": "a832a662f44cc7f7d6896482c768349f5c1ea8b3e53723befcb88d0c67bd8909",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 3480, \"format\": \"mp3\", \"languageTag\": \"pt\", \"locale\": \"pt-BR\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"a832a662f44cc7f7d6896482c768349f5c1ea8b3e53723befcb88d0c67bd8909\", \"sizeBytes\": 20880, \"text\": \"Preciso pegar emprestado um livro de um amigo.\", \"voice\": \"pt-BR-FranciscaNeural\"}",
+              "accentLabel": "pt-BR"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Usar por um tempo algo que pertence a outra pessoa, com a intenção de devolver.",
+            "experienceRecallCue": "Imagine um amigo entregando um romance, que você leva para casa e devolve depois de ler.",
+            "senseConfirmation": "Você recebe algo que está sob o cuidado de outra pessoa e combina de devolvê-lo.",
+            "sceneBridgeTemplate": "{expression} é o que você faz com o livro do amigo enquanto precisa dele, com a intenção de devolver.",
+            "sceneTranslation": "Preciso pegar emprestado um livro de um amigo."
+          }
+        }
+      ]
+    },
+    {
+      "format": "sensa-route-foundation-language-contribution-v1",
+      "language": "ru",
+      "senses": [
+        {
+          "senseId": "ids:1-310",
+          "concept": "WATER",
+          "targetCore": {
+            "expression": "вода",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [
+              "воды"
+            ],
+            "sceneExample": "Не могли бы вы принести мне стакан воды?",
+            "sceneOccurrence": "воды",
+            "expressionAudio": {
+              "sha256": "f4dc9b529d2c5891e10b720e3e42d27a14cb9f594f8fcf5eaef87ed452a97f51",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"ru\", \"locale\": \"ru-RU\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"f4dc9b529d2c5891e10b720e3e42d27a14cb9f594f8fcf5eaef87ed452a97f51\", \"sizeBytes\": 11232, \"text\": \"вода\", \"voice\": \"ru-RU-SvetlanaNeural\"}",
+              "accentLabel": "ru-RU"
+            },
+            "sceneAudio": {
+              "sha256": "a8cdcc9c81efb27ce635fb751e1ebac161fddbfadb24a607a71866961dc9a58e",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 3288, \"format\": \"mp3\", \"languageTag\": \"ru\", \"locale\": \"ru-RU\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"a8cdcc9c81efb27ce635fb751e1ebac161fddbfadb24a607a71866961dc9a58e\", \"sizeBytes\": 19728, \"text\": \"Не могли бы вы принести мне стакан воды?\", \"voice\": \"ru-RU-SvetlanaNeural\"}",
+              "accentLabel": "ru-RU"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Обычная прозрачная жидкость, которую используют для питья и приготовления еды.",
+            "experienceRecallCue": "После прогулки вы открываете кран и наполняете чистый стакан.",
+            "senseConfirmation": "Речь об обычной жидкости для питья или готовки.",
+            "sceneBridgeTemplate": "{expression} — то, о чём здесь вежливо просят налить один стакан.",
+            "sceneTranslation": "Не могли бы вы принести мне стакан воды?"
+          }
+        },
+        {
+          "senseId": "ids:5-130",
+          "concept": "DRINK",
+          "targetCore": {
+            "expression": "пить",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [
+              "выпить"
+            ],
+            "sceneExample": "Я хочу выпить немного воды.",
+            "sceneOccurrence": "выпить",
+            "expressionAudio": {
+              "sha256": "38d9fe3861c1d6fefff0f2415c0d721b6d61bf9d3e4eadc457cfb016fa36c795",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"ru\", \"locale\": \"ru-RU\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"38d9fe3861c1d6fefff0f2415c0d721b6d61bf9d3e4eadc457cfb016fa36c795\", \"sizeBytes\": 11232, \"text\": \"пить\", \"voice\": \"ru-RU-SvetlanaNeural\"}",
+              "accentLabel": "ru-RU"
+            },
+            "sceneAudio": {
+              "sha256": "7337a23897c0015a7d84eaebb4c767f31df0f56397dd5a648dc8eff05667b34b",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2856, \"format\": \"mp3\", \"languageTag\": \"ru\", \"locale\": \"ru-RU\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"7337a23897c0015a7d84eaebb4c767f31df0f56397dd5a648dc8eff05667b34b\", \"sizeBytes\": 17136, \"text\": \"Я хочу выпить немного воды.\", \"voice\": \"ru-RU-SvetlanaNeural\"}",
+              "accentLabel": "ru-RU"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Действие, при котором жидкость попадает в рот и её проглатывают.",
+            "experienceRecallCue": "После прогулки у вас пересохло во рту, и вы тянетесь к стакану.",
+            "senseConfirmation": "Здесь речь о том, чтобы сделать несколько глотков жидкости.",
+            "sceneBridgeTemplate": "Здесь {expression} передаёт желание сделать несколько глотков воды.",
+            "sceneTranslation": "Я хочу выпить немного воды."
+          }
+        },
+        {
+          "senseId": "ids:11-620",
+          "concept": "BORROW",
+          "targetCore": {
+            "expression": "одолжить",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "Мне нужно одолжить у друга книгу, чтобы прочитать и вернуть её.",
+            "sceneOccurrence": "одолжить",
+            "expressionAudio": {
+              "sha256": "2f3e1d7cacbfcfb1ddb64f9286ef9c1e5606407499513346057896d05f2bbfce",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"ru\", \"locale\": \"ru-RU\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"2f3e1d7cacbfcfb1ddb64f9286ef9c1e5606407499513346057896d05f2bbfce\", \"sizeBytes\": 11232, \"text\": \"одолжить\", \"voice\": \"ru-RU-SvetlanaNeural\"}",
+              "accentLabel": "ru-RU"
+            },
+            "sceneAudio": {
+              "sha256": "65994958ebcf102a2dee3d1e8b65eb7368f80c704d30311259d854f95cf0026c",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 4824, \"format\": \"mp3\", \"languageTag\": \"ru\", \"locale\": \"ru-RU\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"65994958ebcf102a2dee3d1e8b65eb7368f80c704d30311259d854f95cf0026c\", \"sizeBytes\": 28944, \"text\": \"Мне нужно одолжить у друга книгу, чтобы прочитать и вернуть её.\", \"voice\": \"ru-RU-SvetlanaNeural\"}",
+              "accentLabel": "ru-RU"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Временно пользоваться чужой вещью с намерением вернуть её владельцу.",
+            "experienceRecallCue": "Друг разрешает взять свою книгу домой, а вы обещаете вернуть её после чтения.",
+            "senseConfirmation": "Книга принадлежит другу, и вы берёте её на время с намерением вернуть.",
+            "sceneBridgeTemplate": "Здесь {expression} описывает просьбу взять книгу друга на время.",
+            "sceneTranslation": "Мне нужно одолжить у друга книгу."
+          }
+        }
+      ]
+    },
+    {
+      "format": "sensa-route-foundation-language-contribution-v1",
+      "language": "th",
+      "senses": [
+        {
+          "senseId": "ids:1-310",
+          "concept": "WATER",
+          "targetCore": {
+            "expression": "น้ำ",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "รบกวนขอน้ำเปล่าสักแก้วได้ไหม",
+            "sceneOccurrence": "น้ำ",
+            "expressionAudio": {
+              "sha256": "6adda1e4cb1ae380b1a62f71d75252216829f1c975ca85ca6d09871631c61f7e",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"th\", \"locale\": \"th-TH\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"6adda1e4cb1ae380b1a62f71d75252216829f1c975ca85ca6d09871631c61f7e\", \"sizeBytes\": 11232, \"text\": \"น้ำ\", \"voice\": \"th-TH-PremwadeeNeural\"}",
+              "accentLabel": "th-TH"
+            },
+            "sceneAudio": {
+              "sha256": "59778ba6c864d5371f4e2764684b61c478993e5ddf908af405584920a8c9a432",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 3000, \"format\": \"mp3\", \"languageTag\": \"th\", \"locale\": \"th-TH\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"59778ba6c864d5371f4e2764684b61c478993e5ddf908af405584920a8c9a432\", \"sizeBytes\": 18000, \"text\": \"รบกวนขอน้ำเปล่าสักแก้วได้ไหม\", \"voice\": \"th-TH-PremwadeeNeural\"}",
+              "accentLabel": "th-TH"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "สิ่งที่รินใส่แก้วเพื่อดื่ม หรือใช้หุงข้าวและทำกับข้าวในแต่ละวัน",
+            "experienceRecallCue": "หลังเดินกลางแดด คุณเห็นเหยือกใสกับแก้วสะอาดบนโต๊ะ และอยากเติมแก้วให้เต็ม",
+            "senseConfirmation": "ในฉากนี้ ผู้พูดขอของเหลวธรรมดาใส่แก้วเพื่อดื่ม ไม่ได้ขอชาหรือกาแฟ",
+            "sceneBridgeTemplate": "{expression} คือสิ่งที่ผู้พูดขอใส่แก้วในฉากนี้",
+            "sceneTranslation": "รบกวนขอน้ำเปล่าสักแก้วได้ไหม"
+          }
+        },
+        {
+          "senseId": "ids:5-130",
+          "concept": "DRINK",
+          "targetCore": {
+            "expression": "ดื่ม",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "อยากดื่มน้ำสักหน่อย",
+            "sceneOccurrence": "ดื่ม",
+            "expressionAudio": {
+              "sha256": "488ff42f9df3cde25948b1007c552fcd3bcf9822764025f5a9f7d5e3435668fe",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"th\", \"locale\": \"th-TH\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"488ff42f9df3cde25948b1007c552fcd3bcf9822764025f5a9f7d5e3435668fe\", \"sizeBytes\": 11232, \"text\": \"ดื่ม\", \"voice\": \"th-TH-PremwadeeNeural\"}",
+              "accentLabel": "th-TH"
+            },
+            "sceneAudio": {
+              "sha256": "aabf54c97481e7d598ca34b8140995dc30cafab6ab26cbd4ad01178c8f07a280",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2448, \"format\": \"mp3\", \"languageTag\": \"th\", \"locale\": \"th-TH\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"aabf54c97481e7d598ca34b8140995dc30cafab6ab26cbd4ad01178c8f07a280\", \"sizeBytes\": 14688, \"text\": \"อยากดื่มน้ำสักหน่อย\", \"voice\": \"th-TH-PremwadeeNeural\"}",
+              "accentLabel": "th-TH"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "การจิบน้ำหรือเครื่องดื่มแล้วกลืนลงคอ",
+            "experienceRecallCue": "หลังวิ่งขึ้นบันได คุณยกแก้วขึ้นแตะริมฝีปากแล้วกลืนของเหลวลงคอเพื่อให้หายคอแห้ง",
+            "senseConfirmation": "ในประโยคนี้ ผู้พูดอยากรับของเหลวเข้าปาก ไม่ได้แค่ถือแก้วไว้",
+            "sceneBridgeTemplate": "{expression} ใช้บอกว่าผู้พูดอยากรับของเหลวเข้าปากในฉากนี้",
+            "sceneTranslation": "อยากดื่มน้ำสักหน่อย"
+          }
+        },
+        {
+          "senseId": "ids:11-620",
+          "concept": "BORROW",
+          "targetCore": {
+            "expression": "ยืม",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "ฉันต้องขอยืมหนังสือจากเพื่อนสักเล่ม",
+            "sceneOccurrence": "ยืม",
+            "expressionAudio": {
+              "sha256": "95be9de2d6a41e16badbc74fa67af9b82f9f74d42991bb5c5c16e34cd0b4455a",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"th\", \"locale\": \"th-TH\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"95be9de2d6a41e16badbc74fa67af9b82f9f74d42991bb5c5c16e34cd0b4455a\", \"sizeBytes\": 11232, \"text\": \"ยืม\", \"voice\": \"th-TH-PremwadeeNeural\"}",
+              "accentLabel": "th-TH"
+            },
+            "sceneAudio": {
+              "sha256": "3f6091b8d8bacc5d280a4e4355e01bd3b43f60045a17bccc961581f6ba2e5ceb",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 3240, \"format\": \"mp3\", \"languageTag\": \"th\", \"locale\": \"th-TH\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"3f6091b8d8bacc5d280a4e4355e01bd3b43f60045a17bccc961581f6ba2e5ceb\", \"sizeBytes\": 19440, \"text\": \"ฉันต้องขอยืมหนังสือจากเพื่อนสักเล่ม\", \"voice\": \"th-TH-PremwadeeNeural\"}",
+              "accentLabel": "th-TH"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "ได้ใช้หนังสือของคนอื่นชั่วคราว โดยตั้งใจคืนให้เจ้าของ",
+            "experienceRecallCue": "พรุ่งนี้คุณต้องส่งรายงาน แต่หนังสือเล่มที่ต้องใช้อยู่กับเพื่อน ลองนึกถึงการส่งข้อความถามว่าเอามาอ่านสักสองวันได้ไหม",
+            "senseConfirmation": "ในฉากนี้ ผู้พูดต้องการใช้หนังสือของเพื่อน แล้วจะคืนหลังอ่านเสร็จ",
+            "sceneBridgeTemplate": "{expression} สื่อว่าขอใช้หนังสือของเพื่อนชั่วคราวแล้วจะคืนให้",
+            "sceneTranslation": "ฉันต้องขอยืมหนังสือจากเพื่อนสักเล่ม"
+          }
+        }
+      ]
+    },
+    {
+      "format": "sensa-route-foundation-language-contribution-v1",
+      "language": "tr",
+      "senses": [
+        {
+          "senseId": "ids:1-310",
+          "concept": "WATER",
+          "targetCore": {
+            "expression": "su",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "Bir bardak su alabilir miyim?",
+            "sceneOccurrence": "su",
+            "expressionAudio": {
+              "sha256": "78a4f72ed5576b444ff64899a4c73d117a76d8e16672c26e463ebd4a42f62d56",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"tr\", \"locale\": \"tr-TR\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"78a4f72ed5576b444ff64899a4c73d117a76d8e16672c26e463ebd4a42f62d56\", \"sizeBytes\": 11232, \"text\": \"su\", \"voice\": \"tr-TR-EmelNeural\"}",
+              "accentLabel": "tr-TR"
+            },
+            "sceneAudio": {
+              "sha256": "9248ccd8579e48a6ecd93f69fa52ac4500973ef1519e78582b06d585391fae77",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2736, \"format\": \"mp3\", \"languageTag\": \"tr\", \"locale\": \"tr-TR\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"9248ccd8579e48a6ecd93f69fa52ac4500973ef1519e78582b06d585391fae77\", \"sizeBytes\": 16416, \"text\": \"Bir bardak su alabilir miyim?\", \"voice\": \"tr-TR-EmelNeural\"}",
+              "accentLabel": "tr-TR"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "İçmekte ve yemek hazırlarken kullandığımız gündelik sıvı.",
+            "experienceRecallCue": "Yemek hazırlarken tencereye şeffaf bir sıvı eklediğiniz anı hatırlayın.",
+            "senseConfirmation": "Burada, içmekte ve yemek hazırlarken kullanılan sıradan sıvıdan söz ediyoruz.",
+            "sceneBridgeTemplate": "Bu cümlede {expression}, nazikçe istediğiniz şeyi belirtir.",
+            "sceneTranslation": "Bir bardak su alabilir miyim?"
+          }
+        },
+        {
+          "senseId": "ids:5-130",
+          "concept": "DRINK",
+          "targetCore": {
+            "expression": "içmek",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "Biraz su içmek istiyorum.",
+            "sceneOccurrence": "içmek",
+            "expressionAudio": {
+              "sha256": "af62d3aac066c565838120581703175c5706b50e3bcb196487db5cfa86d4d137",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"tr\", \"locale\": \"tr-TR\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"af62d3aac066c565838120581703175c5706b50e3bcb196487db5cfa86d4d137\", \"sizeBytes\": 11232, \"text\": \"içmek\", \"voice\": \"tr-TR-EmelNeural\"}",
+              "accentLabel": "tr-TR"
+            },
+            "sceneAudio": {
+              "sha256": "a2df90cff27596d17156277291b86980148d586896c170059c896e2c778684e2",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2760, \"format\": \"mp3\", \"languageTag\": \"tr\", \"locale\": \"tr-TR\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"a2df90cff27596d17156277291b86980148d586896c170059c896e2c778684e2\", \"sizeBytes\": 16560, \"text\": \"Biraz su içmek istiyorum.\", \"voice\": \"tr-TR-EmelNeural\"}",
+              "accentLabel": "tr-TR"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Bir yudum alıp sıvıyı boğazdan geçirmek.",
+            "experienceRecallCue": "Spor sonrası şişeyi kaldırıp birkaç yudum aldığınız anı gözünüzde canlandırın.",
+            "senseConfirmation": "Burada söz konusu olan, sıvıyı ağza alıp yutma eylemidir.",
+            "sceneBridgeTemplate": "Bu cümlede {expression}, biraz sıvı alma isteğini anlatır.",
+            "sceneTranslation": "Biraz su içmek istiyorum."
+          }
+        },
+        {
+          "senseId": "ids:11-620",
+          "concept": "BORROW",
+          "targetCore": {
+            "expression": "ödünç almak",
+            "expressionKind": "phrase",
+            "spokenForm": null,
+            "acceptedForms": [
+              "ödünç almam"
+            ],
+            "sceneExample": "Bir arkadaşımdan bir kitap ödünç almam gerekiyor.",
+            "sceneOccurrence": "ödünç almam",
+            "expressionAudio": {
+              "sha256": "a03dd82434290ba56826d3ae428fb2c25b2a62dd8ab3499450db28e1598cfb33",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2088, \"format\": \"mp3\", \"languageTag\": \"tr\", \"locale\": \"tr-TR\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"a03dd82434290ba56826d3ae428fb2c25b2a62dd8ab3499450db28e1598cfb33\", \"sizeBytes\": 12528, \"text\": \"ödünç almak\", \"voice\": \"tr-TR-EmelNeural\"}",
+              "accentLabel": "tr-TR"
+            },
+            "sceneAudio": {
+              "sha256": "7700f737f028f55792b7d1c050404d69d75f3d5ccbb69eac4fe6687d30f1866a",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 3984, \"format\": \"mp3\", \"languageTag\": \"tr\", \"locale\": \"tr-TR\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"7700f737f028f55792b7d1c050404d69d75f3d5ccbb69eac4fe6687d30f1866a\", \"sizeBytes\": 23904, \"text\": \"Bir arkadaşımdan bir kitap ödünç almam gerekiyor.\", \"voice\": \"tr-TR-EmelNeural\"}",
+              "accentLabel": "tr-TR"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Bir başkasının elindeki şeyi bir süre kullanmak için alıp sonra geri vermek.",
+            "experienceRecallCue": "Arkadaşınızın kitabını birkaç gün kullanıp sonra ona geri verdiğiniz bir durumu düşünün.",
+            "senseConfirmation": "Burada, arkadaşınızın kitabını bir süre kullanıp geri vermeniz gerekiyor.",
+            "sceneBridgeTemplate": "Bu sahnede {expression}, arkadaşınızın kitabını bir süre kullanma ihtiyacını anlatır.",
+            "sceneTranslation": "Bir arkadaşımdan bir kitap ödünç almam gerekiyor."
+          }
+        }
+      ]
+    },
+    {
+      "format": "sensa-route-foundation-language-contribution-v1",
+      "language": "vi",
+      "senses": [
+        {
+          "senseId": "ids:1-310",
+          "concept": "WATER",
+          "targetCore": {
+            "expression": "nước",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "Cho tôi xin một ly nước được không ạ?",
+            "sceneOccurrence": "nước",
+            "expressionAudio": {
+              "sha256": "b72bd2a76005009f2aced5aa20144b565b810197435f84a8f3a094268030b1bf",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"vi\", \"locale\": \"vi-VN\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"b72bd2a76005009f2aced5aa20144b565b810197435f84a8f3a094268030b1bf\", \"sizeBytes\": 11232, \"text\": \"nước\", \"voice\": \"vi-VN-HoaiMyNeural\"}",
+              "accentLabel": "vi-VN"
+            },
+            "sceneAudio": {
+              "sha256": "5a98d1d8fda307eb492af1370d0bef79171c3214e00827543a7effa03ed8f56d",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2880, \"format\": \"mp3\", \"languageTag\": \"vi\", \"locale\": \"vi-VN\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"5a98d1d8fda307eb492af1370d0bef79171c3214e00827543a7effa03ed8f56d\", \"sizeBytes\": 17280, \"text\": \"Cho tôi xin một ly nước được không ạ?\", \"voice\": \"vi-VN-HoaiMyNeural\"}",
+              "accentLabel": "vi-VN"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Thứ trong veo thường được rót vào ly để uống hoặc dùng nấu ăn.",
+            "experienceRecallCue": "Sau khi đi bộ dưới nắng, bạn thấy khát và nhấp một ngụm từ chiếc ly trong suốt.",
+            "senseConfirmation": "Ở đây, đó là thứ thường có trong ly để uống hoặc dùng khi nấu ăn.",
+            "sceneBridgeTemplate": "{expression} là thứ bạn đang lịch sự xin trong tình huống này.",
+            "sceneTranslation": "Cho tôi xin một ly nước được không ạ?"
+          }
+        },
+        {
+          "senseId": "ids:5-130",
+          "concept": "DRINK",
+          "targetCore": {
+            "expression": "uống",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "Tôi muốn uống một chút nước.",
+            "sceneOccurrence": "uống",
+            "expressionAudio": {
+              "sha256": "db1e9225bb1133000d77ca13396482c5c14fcc32649db756313997af06864e86",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"vi\", \"locale\": \"vi-VN\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"db1e9225bb1133000d77ca13396482c5c14fcc32649db756313997af06864e86\", \"sizeBytes\": 11232, \"text\": \"uống\", \"voice\": \"vi-VN-HoaiMyNeural\"}",
+              "accentLabel": "vi-VN"
+            },
+            "sceneAudio": {
+              "sha256": "40146634f27588e3bf35c90678bfd9b432f294c55d608c2206a2ba579b4127f8",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2352, \"format\": \"mp3\", \"languageTag\": \"vi\", \"locale\": \"vi-VN\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"40146634f27588e3bf35c90678bfd9b432f294c55d608c2206a2ba579b4127f8\", \"sizeBytes\": 14112, \"text\": \"Tôi muốn uống một chút nước.\", \"voice\": \"vi-VN-HoaiMyNeural\"}",
+              "accentLabel": "vi-VN"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Đưa một ngụm chất lỏng qua miệng rồi nuốt xuống.",
+            "experienceRecallCue": "Sau buổi đi bộ, bạn thấy khát và với tay lấy chiếc ly trên bàn.",
+            "senseConfirmation": "Ở đây, động từ này nói về việc đưa chất lỏng vào miệng và nuốt.",
+            "sceneBridgeTemplate": "{expression} diễn tả điều bạn muốn làm với một ít nước trong tình huống này.",
+            "sceneTranslation": "Tôi muốn uống một chút nước."
+          }
+        },
+        {
+          "senseId": "ids:11-620",
+          "concept": "BORROW",
+          "targetCore": {
+            "expression": "mượn",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "Mình cần mượn một cuốn sách từ một người bạn.",
+            "sceneOccurrence": "mượn",
+            "expressionAudio": {
+              "sha256": "5b97d4e2d5fa0a7a707ec2ba15567e1f4fc4f75bf88ce02e5fc829c6109c5456",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"vi\", \"locale\": \"vi-VN\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"5b97d4e2d5fa0a7a707ec2ba15567e1f4fc4f75bf88ce02e5fc829c6109c5456\", \"sizeBytes\": 11232, \"text\": \"mượn\", \"voice\": \"vi-VN-HoaiMyNeural\"}",
+              "accentLabel": "vi-VN"
+            },
+            "sceneAudio": {
+              "sha256": "2ad8bcb99c3e88285a96ca8b1abbfc1bfd24f549fdf09c1cb610d9194857e5ce",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 3216, \"format\": \"mp3\", \"languageTag\": \"vi\", \"locale\": \"vi-VN\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"2ad8bcb99c3e88285a96ca8b1abbfc1bfd24f549fdf09c1cb610d9194857e5ce\", \"sizeBytes\": 19296, \"text\": \"Mình cần mượn một cuốn sách từ một người bạn.\", \"voice\": \"vi-VN-HoaiMyNeural\"}",
+              "accentLabel": "vi-VN"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "Nhận một món đồ từ người khác để dùng tạm, với ý định gửi trả.",
+            "experienceRecallCue": "Bạn đang làm bài, còn người bạn ngồi cạnh có cuốn sách cần xem; bạn định hỏi họ để dùng một lúc rồi gửi trả.",
+            "senseConfirmation": "Ở đây, bạn nhận sách từ bạn mình để dùng tạm và sẽ trả lại.",
+            "sceneBridgeTemplate": "{expression} diễn tả việc bạn xin dùng sách của bạn mình một thời gian rồi trả lại.",
+            "sceneTranslation": "Mình cần mượn một cuốn sách từ một người bạn."
+          }
+        }
+      ]
+    },
+    {
+      "format": "sensa-route-foundation-language-contribution-v1",
+      "language": "zh-CN",
+      "senses": [
+        {
+          "senseId": "ids:1-310",
+          "concept": "WATER",
+          "targetCore": {
+            "expression": "水",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "可以给我一杯水吗？",
+            "sceneOccurrence": "水",
+            "expressionAudio": {
+              "sha256": "9b82e06cb31cb477942e6dfb0b5343a351eaf99095be3a422cb394a9c9fe5d28",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"zh-CN\", \"locale\": \"zh-CN\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"9b82e06cb31cb477942e6dfb0b5343a351eaf99095be3a422cb394a9c9fe5d28\", \"sizeBytes\": 11232, \"text\": \"水\", \"voice\": \"zh-CN-XiaoxiaoNeural\"}",
+              "accentLabel": "zh-CN"
+            },
+            "sceneAudio": {
+              "sha256": "c3a98c4a9f5ff0947b5b716a45cbfd173310811fa590388458e9feb4da88c5be",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2112, \"format\": \"mp3\", \"languageTag\": \"zh-CN\", \"locale\": \"zh-CN\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"c3a98c4a9f5ff0947b5b716a45cbfd173310811fa590388458e9feb4da88c5be\", \"sizeBytes\": 12672, \"text\": \"可以给我一杯水吗？\", \"voice\": \"zh-CN-XiaoxiaoNeural\"}",
+              "accentLabel": "zh-CN"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "日常用来解渴或准备食物的普通水。",
+            "experienceRecallCue": "走过一段路后有些口干，你拿起透明杯子里的液体润润喉咙。",
+            "senseConfirmation": "这里说的是平常饮用或做饭用的水。",
+            "sceneBridgeTemplate": "在这个场景里，{expression} 是你礼貌询问想要一杯什么。",
+            "sceneTranslation": "可以给我一杯水吗？"
+          }
+        },
+        {
+          "senseId": "ids:5-130",
+          "concept": "DRINK",
+          "targetCore": {
+            "expression": "喝",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "我想喝点水。",
+            "sceneOccurrence": "喝",
+            "expressionAudio": {
+              "sha256": "f883b2909ed44d7ace2a852cbf8eeca7a672733f89b06951926338c2770c464c",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"zh-CN\", \"locale\": \"zh-CN\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"f883b2909ed44d7ace2a852cbf8eeca7a672733f89b06951926338c2770c464c\", \"sizeBytes\": 11232, \"text\": \"喝\", \"voice\": \"zh-CN-XiaoxiaoNeural\"}",
+              "accentLabel": "zh-CN"
+            },
+            "sceneAudio": {
+              "sha256": "9bf1ba314a12eea28047ee53db6d43cad41aac269052dbde38d1ba6b01a94fb7",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"zh-CN\", \"locale\": \"zh-CN\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"9bf1ba314a12eea28047ee53db6d43cad41aac269052dbde38d1ba6b01a94fb7\", \"sizeBytes\": 11232, \"text\": \"我想喝点水。\", \"voice\": \"zh-CN-XiaoxiaoNeural\"}",
+              "accentLabel": "zh-CN"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "把液体送入口中并咽下去。",
+            "experienceRecallCue": "口渴时，你把杯里的液体送入口中，再咽下去。",
+            "senseConfirmation": "这里指用嘴摄入液体的动作。",
+            "sceneBridgeTemplate": "在这个场景里，{expression} 说明你想把水送入口中并咽下去。",
+            "sceneTranslation": "我想喝点水。"
+          }
+        },
+        {
+          "senseId": "ids:11-620",
+          "concept": "BORROW",
+          "targetCore": {
+            "expression": "借",
+            "expressionKind": "word",
+            "spokenForm": null,
+            "acceptedForms": [],
+            "sceneExample": "我想跟朋友借一本书。",
+            "sceneOccurrence": "借",
+            "expressionAudio": {
+              "sha256": "15d7527c9f34596282603ca34056c60ea4e7df79f6ca3cd12149362740df2a45",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 1872, \"format\": \"mp3\", \"languageTag\": \"zh-CN\", \"locale\": \"zh-CN\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"15d7527c9f34596282603ca34056c60ea4e7df79f6ca3cd12149362740df2a45\", \"sizeBytes\": 11232, \"text\": \"借\", \"voice\": \"zh-CN-XiaoxiaoNeural\"}",
+              "accentLabel": "zh-CN"
+            },
+            "sceneAudio": {
+              "sha256": "45c7df3c33a57b300d56b7fe8bd2f4fafa72957eed3c8b1fb6bcc8c4314172e1",
+              "mimeType": "audio/mpeg",
+              "source": "{\"durationMs\": 2352, \"format\": \"mp3\", \"languageTag\": \"zh-CN\", \"locale\": \"zh-CN\", \"model\": \"neural-v1\", \"provider\": \"microsoft-edge-tts\", \"rate\": \"+0%\", \"sha256\": \"45c7df3c33a57b300d56b7fe8bd2f4fafa72957eed3c8b1fb6bcc8c4314172e1\", \"sizeBytes\": 14112, \"text\": \"我想跟朋友借一本书。\", \"voice\": \"zh-CN-XiaoxiaoNeural\"}",
+              "accentLabel": "zh-CN"
+            }
+          },
+          "supportOverlay": {
+            "meaning": "暂时拿来使用由别人保管的东西，并打算之后归还。",
+            "experienceRecallCue": "朋友有一本你需要的书，你想带回去看一阵子，之后再还给对方。",
+            "senseConfirmation": "这里是从接收物品的一方来看，东西之后会还回去。",
+            "sceneBridgeTemplate": "在这个场景里，{expression} 表达你需要先从朋友那里拿到一本书来用。",
+            "sceneTranslation": "我想跟朋友借一本书。"
+          }
+        }
+      ]
+    }
+  ]
+}

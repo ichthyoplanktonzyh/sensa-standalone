@@ -169,6 +169,7 @@ const fastBeforeMemory = [
   'contracts/portable-lightweight-package',
   'quality/content-supply-system-boundary',
   'release/incident-delivery',
+  'integration/route-foundation-release',
 ] as const;
 
 const fastWithMemory = [

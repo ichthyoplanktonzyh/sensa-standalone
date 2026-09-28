@@ -106,7 +106,7 @@ export function usePackageLearning(entryOpen:boolean){
     if(notify)setNotice(localFlowText(result.status==='current'?'catalogCurrent':'catalogUpdated'));
     else setNotice(current=>current==='localFlow.audioIncomplete'?'':current);
    }
-  }catch{if(gen===generation.current&&notify)setNotice(localFlowText('catalogFailed'));}
+  }catch{if(gen===generation.current&&!request.signal.aborted)setNotice(localFlowText('catalogFailed'));}
   finally{
    if(catalogRequest.current===request)catalogRequest.current=null;
    if(gen===generation.current)setCatalogBusy(false);

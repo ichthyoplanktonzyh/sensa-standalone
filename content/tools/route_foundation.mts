@@ -315,7 +315,6 @@ async function expand(preparedArgument: string, outputArgument: string): Promise
   let memberCount = 0;
   for (const target of prepared.contributions) {
     for (const support of prepared.contributions) {
-      if (target.language === "en" && support.language !== "en") continue;
       const filename = `${target.language}--${support.language}.json`;
       expectedFiles.add(filename);
       const source = {
@@ -340,7 +339,7 @@ async function expand(preparedArgument: string, outputArgument: string): Promise
     .filter((entry) => entry.isFile() && extname(entry.name) === ".json" && !expectedFiles.has(entry.name))
     .map((entry) => entry.name);
   if (stale.length) throw new Error(`Derived source directory contains stale files: ${stale.join(",")}`);
-  console.log(JSON.stringify({status: "expanded", routeBookCount: expectedFiles.size, memberCount, reusedEnglishRouteCount: 17, output}, null, 2));
+  console.log(JSON.stringify({status: "expanded", routeBookCount: expectedFiles.size, memberCount, output}, null, 2));
 }
 
 const command = process.argv[2];

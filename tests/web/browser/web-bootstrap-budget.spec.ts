@@ -466,6 +466,7 @@ try{
  const meaningWarmMs=await measureSurface(`/personal-meaning?meaningId=${encodeURIComponent(meaningId)}`,'#s-personal-meaning');
  await returnHome();
  const learningColdMs=await measureSurface('/learning-entry','#s-learning-entry');
+ await expect(b.page.getByText('暂时无法更新目录。已下载内容可继续使用；可以联网后重试。',{exact:true})).toBeVisible({timeout:SHELL_BUDGET_MS});
  await returnHome();
  const learningWarmMs=await measureSurface('/learning-entry','#s-learning-entry');
  await returnHome();

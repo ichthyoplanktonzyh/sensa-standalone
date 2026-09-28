@@ -100,6 +100,12 @@ retained byte-for-byte, and a duplicate Book version is rejected. The existing c
 and output catalog may be the same local path because the old snapshot is read before the
 new one is written.
 
+The reviewed multilingual foundation is fixed at
+`content/authored/route-foundation-v1/prepared.json`. The protected publication workflow
+expands that file into all 18 × 18 route Book sources, adds the direct JSON Books from
+`content/authored/`, and builds one Registry. The prepared file is the reviewed authoring
+input; the expanded per-route files and release artifacts remain ignored outputs.
+
 `scripts/release/publishPortableLearningRegistry.mjs` implements the immutable upload
 order Package → Manifest → Registry and verifies the public bytes at every step. The
 protected workflow promotes this Registry only after all referenced Manifest and Package
@@ -122,7 +128,11 @@ For protected CI publication, seal the exact referenced objects into one ignored
 release input and record the printed SHA-256:
 
 ```sh
-node --import tsx scripts/release/buildAuthoredMediaPack.mts
+node --import tsx content/tools/route_foundation.mts \
+  expand content/authored/route-foundation-v1/prepared.json .tmp/release-book-sources
+cp content/authored/*.json .tmp/release-book-sources/
+SENSA_BOOK_RELEASE_SOURCE_DIRECTORY=.tmp/release-book-sources \
+  node --import tsx scripts/release/buildAuthoredMediaPack.mts
 ```
 
 The resulting `release-candidate/authored-media-pack.json` is uploaded as a
