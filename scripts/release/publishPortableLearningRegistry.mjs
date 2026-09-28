@@ -7,11 +7,11 @@ import {createClient} from "@supabase/supabase-js";
 import {readSensaPortableLightweightPackage} from "@sensa/content-validator/portable-lightweight";
 import {
   canonicalConsumerJson,
-  maxPublishedPortablePackageBytes,
   sensaBookVersionManifestDescriptorSchema,
   sensaBookVersionManifestSchema,
   sensaPortableLearningContentRegistrySchema,
 } from "@sensa/contracts/sensa";
+import {ensurePublicLearningContentBucket} from "./learningContentBucket.mjs";
 
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const required = (name) => {
@@ -70,26 +70,7 @@ if (sha256(canonicalConsumerJson(registrySnapshot)) !== revision) {
 const client = createClient(supabaseUrl.href, secret, {
   auth: {persistSession: false, autoRefreshToken: false, detectSessionInUrl: false},
 });
-let bucketResult = await client.storage.getBucket(bucket);
-if (bucketResult.error) {
-  const created = await client.storage.createBucket(bucket, {
-    public: true,
-    allowedMimeTypes: ["application/json", "application/zip"],
-    fileSizeLimit: maxPublishedPortablePackageBytes,
-  });
-  if (created.error) throw new Error("Learning content bucket is unavailable");
-} else {
-  const updated = await client.storage.updateBucket(bucket, {
-    public: true,
-    allowedMimeTypes: ["application/json", "application/zip"],
-    fileSizeLimit: maxPublishedPortablePackageBytes,
-  });
-  if (updated.error) throw new Error("Learning content bucket policy could not be updated");
-}
-bucketResult = await client.storage.getBucket(bucket);
-if (bucketResult.error || !bucketResult.data?.public) {
-  throw new Error("Learning content bucket must be public");
-}
+await ensurePublicLearningContentBucket(client.storage, bucket);
 
 const storage = client.storage.from(bucket);
 async function publishObject(path, bytes, contentType) {

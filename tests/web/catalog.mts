@@ -164,6 +164,7 @@ type MigratedTest = Readonly<{path: string; suite: WebTestSuite; memoryLibrary?:
 
 const fastBeforeMemory = [
   'integration/support-diagnostics',
+  'release/learning-content-bucket',
   'integration/semantic-session-persistence',
   'contracts/stream-authorization',
   'contracts/portable-lightweight-package',
