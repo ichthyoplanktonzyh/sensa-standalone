@@ -216,5 +216,26 @@
     "diagnosticsWorking": "진단 정보 준비 중…",
     "diagnosticsReady": "진단 파일을 다운로드했습니다.",
     "diagnosticsFailed": "진단 정보를 준비하지 못했습니다. 파일을 첨부하지 말고 지원팀에 문의하세요."
+  },
+  "dataControl": {
+    "persistenceTitle": "브라우저 저장 보호",
+    "persistenceIntro": "Sensa는 이 라이브러리를 이 기기에 저장합니다. 강화된 브라우저 보호는 자동 삭제 위험을 줄이지만 백업은 아니며 사이트 데이터를 지우면 유지되지 않습니다.",
+    "persistence_checking": "브라우저 보호 확인 중…",
+    "persistence_persistent": "이 기기에서 자동 저장 공간 정리로부터 보호됩니다.",
+    "persistence_best-effort": "최선형 브라우저 저장 공간입니다. 저장 공간이 부족하면 브라우저가 이 라이브러리를 삭제할 수 있습니다.",
+    "persistence_unsupported": "이 브라우저는 추가 저장 보호 요청 기능을 제공하지 않습니다.",
+    "persistence_unavailable": "저장 보호 상태를 일시적으로 확인할 수 없습니다.",
+    "persistenceRequest": "강화된 보호 요청",
+    "storageBudget": "이 사이트의 브라우저 예상치: {{quota}} MiB 중 {{used}} MiB 사용. 앱 파일도 포함될 수 있습니다.",
+    "storageBudgetWarning": "이 사이트가 브라우저 예상 저장 공간의 80% 넘게 사용했습니다: {{quota}} MiB 중 {{used}} MiB. 백업을 내보내고 기기 공간을 확보하세요.",
+    "clearTitle": "로컬 콘텐츠 삭제",
+    "clearIntro": "이 브라우저에서만 콘텐츠, 학습 진도 및 모델 설정을 삭제합니다. 계정은 삭제되지 않습니다. 콘텐츠를 보관하려면 위에서 백업을 내보내세요.",
+    "clearInspect": "로컬 콘텐츠 검토",
+    "clearSummary": "출처 {{drafts}}개, 의미 {{meanings}}개, 패키지 {{packages}}개, 학습 항목 {{targets}}개, 이벤트 {{events}}개를 삭제합니다.",
+    "clearPending": "완료되지 않은 준비 {{count}}건이 있습니다. 삭제 후에는 계속할 수 없습니다.",
+    "clearDiscardPending": "이 브라우저의 동기화되지 않은 계정 변경 {{count}}건을 폐기합니다. 클라우드 사본에는 추가되지 않습니다.",
+    "clearConfirm": "필요한 백업을 저장했으며 이 로컬 콘텐츠를 삭제하는 데 동의합니다.",
+    "clearAction": "로컬 콘텐츠 삭제",
+    "clearDone": "로컬 콘텐츠를 삭제했습니다. 앱을 다시 열어 빈 라이브러리를 사용하세요."
   }
 }

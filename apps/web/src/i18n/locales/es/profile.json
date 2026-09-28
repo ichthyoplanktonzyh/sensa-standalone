@@ -218,5 +218,26 @@
     "diagnosticsWorking": "Preparando el diagnóstico…",
     "diagnosticsReady": "Se descargó el archivo de diagnóstico.",
     "diagnosticsFailed": "No se pudo preparar el diagnóstico. Contacta con soporte sin adjuntar ningún archivo."
+  },
+  "dataControl": {
+    "persistenceTitle": "Protección del almacenamiento del navegador",
+    "persistenceIntro": "Sensa guarda esta biblioteca en este dispositivo. Una protección más estricta del navegador reduce el riesgo de que se elimine automáticamente, pero no es una copia de seguridad y no sobrevive al borrado de los datos del sitio.",
+    "persistence_checking": "Comprobando la protección del navegador…",
+    "persistence_persistent": "Protegido contra la eliminación automática del almacenamiento en este dispositivo.",
+    "persistence_best-effort": "Almacenamiento del navegador con protección básica. El navegador podría eliminar esta biblioteca si falta espacio.",
+    "persistence_unsupported": "Este navegador no permite solicitar protección adicional del almacenamiento.",
+    "persistence_unavailable": "El estado de protección del almacenamiento no está disponible temporalmente.",
+    "persistenceRequest": "Solicitar protección adicional",
+    "storageBudget": "Estimación del navegador para este sitio: {{used}} MiB de {{quota}} MiB usados. También puede incluir archivos de la aplicación.",
+    "storageBudgetWarning": "Este sitio ha usado más del 80 % del espacio estimado por el navegador: {{used}} MiB de {{quota}} MiB. Exporta una copia de seguridad y libera espacio en el dispositivo pronto.",
+    "clearTitle": "Borrar contenido local",
+    "clearIntro": "Borra solo en este navegador el contenido, el progreso de aprendizaje y la configuración de modelos. Tu cuenta no se elimina. Exporta una copia de seguridad arriba si quieres conservar este contenido.",
+    "clearInspect": "Revisar contenido local",
+    "clearSummary": "Esto eliminará {{drafts}} fuentes, {{meanings}} significados, {{packages}} paquetes, {{targets}} elementos de aprendizaje y {{events}} eventos.",
+    "clearPending": "Hay {{count}} preparaciones sin terminar. No podrán continuar después del borrado.",
+    "clearDiscardPending": "Descartar estos {{count}} cambios de cuenta sin sincronizar de este navegador. No se añadirán a la copia en la nube.",
+    "clearConfirm": "He guardado las copias de seguridad que necesito y confirmo el borrado de este contenido local.",
+    "clearAction": "Borrar contenido local",
+    "clearDone": "Se borró el contenido local. Vuelve a abrir la aplicación para usar la biblioteca vacía."
   }
 }

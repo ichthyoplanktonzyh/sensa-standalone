@@ -216,5 +216,26 @@
     "diagnosticsWorking": "診断を準備中…",
     "diagnosticsReady": "診断ファイルをダウンロードしました。",
     "diagnosticsFailed": "診断を準備できませんでした。添付なしでサポートに連絡できます。"
+  },
+  "dataControl": {
+    "persistenceTitle": "ブラウザーストレージの保護",
+    "persistenceIntro": "Sensaはこのライブラリを端末に保存します。より強いブラウザー保護は自動削除のリスクを下げますが、バックアップではなく、サイトデータの消去には耐えられません。",
+    "persistence_checking": "ブラウザーの保護状態を確認中…",
+    "persistence_persistent": "この端末では自動的なストレージ削除から保護されています。",
+    "persistence_best-effort": "ベストエフォートの保存です。空き容量が少ない場合、ブラウザーがライブラリを削除することがあります。",
+    "persistence_unsupported": "このブラウザーでは追加のストレージ保護を申請できません。",
+    "persistence_unavailable": "ストレージ保護の状態を一時的に確認できません。",
+    "persistenceRequest": "より強い保護を申請",
+    "storageBudget": "このサイトのブラウザー推定値：{{used}} MiB / {{quota}} MiB 使用。アプリファイルを含む場合があります。",
+    "storageBudgetWarning": "このサイトはブラウザー推定容量の80%を超えています：{{used}} MiB / {{quota}} MiB。早めにバックアップをエクスポートし、端末の空き容量を増やしてください。",
+    "clearTitle": "ローカルコンテンツを消去",
+    "clearIntro": "このブラウザーからのみ、コンテンツ、学習の進捗、モデル設定を消去します。アカウントは削除されません。保持したい場合は、上でバックアップをエクスポートしてください。",
+    "clearInspect": "ローカルコンテンツを確認",
+    "clearSummary": "{{drafts}}件のソース、{{meanings}}件の意味、{{packages}}件のパッケージ、{{targets}}件の学習項目、{{events}}件のイベントを削除します。",
+    "clearPending": "{{count}}件の未完了の準備があります。消去後は続行できません。",
+    "clearDiscardPending": "このブラウザにある未同期のアカウント変更{{count}}件を破棄します。クラウドのコピーには追加されません。",
+    "clearConfirm": "必要なバックアップを保存済みで、このローカルコンテンツの消去を確認します。",
+    "clearAction": "ローカルコンテンツを消去",
+    "clearDone": "ローカルコンテンツを消去しました。空のライブラリを使うにはアプリを開き直してください。"
   }
 }

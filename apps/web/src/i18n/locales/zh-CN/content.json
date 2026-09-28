@@ -360,5 +360,9 @@
     },
     "unavailable": "暂未开放",
     "note": "当前页面只确认信息架构，不会创建任何个人内容或学习记录。"
+  },
+  "sceneImageAttempt": {
+    "added": "已添加 {{name}}。",
+    "retry": "未能添加 {{name}}。请重新选择它进行重试。"
   }
 }

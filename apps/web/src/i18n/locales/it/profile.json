@@ -218,5 +218,26 @@
     "diagnosticsWorking": "Preparazione della diagnostica…",
     "diagnosticsReady": "File diagnostico scaricato.",
     "diagnosticsFailed": "Impossibile preparare la diagnostica. Contatta l'assistenza senza allegati."
+  },
+  "dataControl": {
+    "persistenceTitle": "Protezione dell'archiviazione del browser",
+    "persistenceIntro": "Sensa salva questa libreria su questo dispositivo. Una protezione più efficace riduce il rischio di eliminazione automatica da parte del browser, ma non è un backup e non sopravvive alla cancellazione dei dati del sito.",
+    "persistence_checking": "Verifica della protezione del browser…",
+    "persistence_persistent": "Protetto dall'eliminazione automatica dello spazio su questo dispositivo.",
+    "persistence_best-effort": "Archiviazione del browser con garanzie limitate. Il browser potrebbe eliminare questa libreria se lo spazio scarseggia.",
+    "persistence_unsupported": "Questo browser non offre una richiesta aggiuntiva di protezione dello spazio.",
+    "persistence_unavailable": "Lo stato della protezione dello spazio non è temporaneamente disponibile.",
+    "persistenceRequest": "Richiedi una protezione maggiore",
+    "storageBudget": "Stima del browser per questo sito: {{used}} MiB utilizzati su {{quota}} MiB. Potrebbe includere anche i file dell'app.",
+    "storageBudgetWarning": "Questo sito ha usato oltre l'80% dello spazio stimato dal browser: {{used}} MiB su {{quota}} MiB. Esporta un backup e libera spazio sul dispositivo al più presto.",
+    "clearTitle": "Cancella contenuti locali",
+    "clearIntro": "Cancella solo da questo browser i contenuti, i progressi di apprendimento e le impostazioni dei modelli. L'account non viene eliminato. Se vuoi conservare questi contenuti, esporta prima un backup qui sopra.",
+    "clearInspect": "Esamina i contenuti locali",
+    "clearSummary": "Verranno rimossi {{drafts}} fonti, {{meanings}} significati, {{packages}} pacchetti, {{targets}} elementi di apprendimento e {{events}} eventi.",
+    "clearPending": "Ci sono {{count}} preparazioni incomplete. Non potranno riprendere dopo la cancellazione.",
+    "clearDiscardPending": "Elimina da questo browser queste {{count}} modifiche dell’account non sincronizzate. Non verranno aggiunte alla copia cloud.",
+    "clearConfirm": "Ho salvato tutti i backup necessari e confermo la cancellazione di questi contenuti locali.",
+    "clearAction": "Cancella contenuti locali",
+    "clearDone": "Contenuti locali cancellati. Riapri l'app per usare la libreria vuota."
   }
 }

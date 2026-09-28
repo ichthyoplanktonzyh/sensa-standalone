@@ -360,5 +360,9 @@
     },
     "unavailable": "尚未提供",
     "note": "此頁目前僅展示規劃中的架構，不會建立個人內容或學習記錄。"
+  },
+  "sceneImageAttempt": {
+    "added": "已加入 {{name}}。",
+    "retry": "無法加入 {{name}}。請重新選取它再試一次。"
   }
 }

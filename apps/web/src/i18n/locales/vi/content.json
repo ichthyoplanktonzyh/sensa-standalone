@@ -360,5 +360,9 @@
     },
     "unavailable": "Chưa khả dụng",
     "note": "Trang này hiện chỉ hiển thị cấu trúc dự kiến. Trang không tạo nội dung cá nhân hoặc bản ghi học tập."
+  },
+  "sceneImageAttempt": {
+    "added": "Đã thêm {{name}}.",
+    "retry": "Không thể thêm {{name}}. Hãy chọn lại ảnh để thử lại."
   }
 }

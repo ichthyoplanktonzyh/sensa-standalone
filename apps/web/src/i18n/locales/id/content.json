@@ -360,5 +360,9 @@
     "saved-senses": "Makna tersimpan",
     "saved-examples": "Contoh tersimpan",
     "notes": "Catatan Saya"
+  },
+  "sceneImageAttempt": {
+    "added": "{{name}} berhasil ditambahkan.",
+    "retry": "{{name}} tidak dapat ditambahkan. Pilih lagi untuk mencoba ulang."
   }
 }

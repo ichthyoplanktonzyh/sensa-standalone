@@ -205,5 +205,26 @@
     "diagnosticsWorking": "Préparation des diagnostics…",
     "diagnosticsReady": "Fichier de diagnostic téléchargé.",
     "diagnosticsFailed": "Impossible de préparer les diagnostics. Contactez l’assistance sans pièce jointe."
+  },
+  "dataControl": {
+    "persistenceTitle": "Protection du stockage du navigateur",
+    "persistenceIntro": "Sensa enregistre cette bibliothèque sur cet appareil. Une protection renforcée du navigateur réduit le risque de suppression automatique, mais ne constitue pas une sauvegarde et ne résiste pas à l’effacement des données du site.",
+    "persistence_checking": "Vérification de la protection du navigateur…",
+    "persistence_persistent": "Protégé contre la suppression automatique du stockage sur cet appareil.",
+    "persistence_best-effort": "Stockage navigateur au mieux des possibilités. Le navigateur peut supprimer cette bibliothèque si l’espace vient à manquer.",
+    "persistence_unsupported": "Ce navigateur ne propose pas de demande supplémentaire de protection du stockage.",
+    "persistence_unavailable": "L’état de protection du stockage est temporairement indisponible.",
+    "persistenceRequest": "Demander une protection renforcée",
+    "storageBudget": "Estimation du navigateur pour ce site : {{used}} Mio sur {{quota}} Mio utilisés. Cela peut également inclure les fichiers de l’application.",
+    "storageBudgetWarning": "Ce site utilise plus de 80 % de l’espace estimé par le navigateur : {{used}} Mio sur {{quota}} Mio. Exportez une sauvegarde et libérez de l’espace sur l’appareil rapidement.",
+    "clearTitle": "Effacer le contenu local",
+    "clearIntro": "Effacez uniquement le contenu, la progression d’apprentissage et les paramètres de modèles de ce navigateur. Votre compte ne sera pas supprimé. Exportez une sauvegarde ci-dessus si vous souhaitez conserver ce contenu.",
+    "clearInspect": "Examiner le contenu local",
+    "clearSummary": "Cela supprimera {{drafts}} sources, {{meanings}} sens, {{packages}} parcours, {{targets}} éléments d’apprentissage et {{events}} événements.",
+    "clearPending": "{{count}} préparations inachevées ne pourront pas continuer après l’effacement.",
+    "clearDiscardPending": "Abandonner ces {{count}} modifications de compte non synchronisées dans ce navigateur. Elles ne seront pas ajoutées à la copie dans le cloud.",
+    "clearConfirm": "J’ai enregistré les sauvegardes nécessaires et confirme l’effacement de ce contenu local.",
+    "clearAction": "Effacer le contenu local",
+    "clearDone": "Contenu local effacé. Rouvrez l’application pour utiliser la bibliothèque vide."
   }
 }

@@ -217,5 +217,26 @@
     "diagnosticsWorking": "Preparing diagnostics…",
     "diagnosticsReady": "Diagnostic file downloaded.",
     "diagnosticsFailed": "Diagnostics could not be prepared. Contact support without an attachment."
+  },
+  "dataControl": {
+    "persistenceTitle": "Browser storage protection",
+    "persistenceIntro": "Sensa saves this library on this device. Stronger browser protection reduces automatic eviction risk, but it is not a backup and does not survive clearing site data.",
+    "persistence_checking": "Checking browser protection…",
+    "persistence_persistent": "Protected from automatic storage eviction on this device.",
+    "persistence_best-effort": "Best-effort browser storage. The browser may evict this library under storage pressure.",
+    "persistence_unsupported": "This browser does not expose an additional storage-protection request.",
+    "persistence_unavailable": "Storage protection status is temporarily unavailable.",
+    "persistenceRequest": "Request stronger protection",
+    "storageBudget": "Browser estimate for this site: {{used}} MiB of {{quota}} MiB used. This may also include app files.",
+    "storageBudgetWarning": "This site has used over 80% of its browser-estimated space: {{used}} MiB of {{quota}} MiB. Export a backup and free device space soon.",
+    "clearTitle": "Clear local content",
+    "clearIntro": "Clear content, learning progress and model settings from this browser only. Your account is not deleted. Export a backup above if you want to keep this content.",
+    "clearInspect": "Review local content",
+    "clearSummary": "This removes {{drafts}} sources, {{meanings}} meanings, {{packages}} packages, {{targets}} learning items and {{events}} events.",
+    "clearPending": "There are {{count}} unfinished preparations. They cannot continue after erasure.",
+    "clearDiscardPending": "Discard these {{count}} unsynced account changes from this browser. They will not be added to the cloud copy.",
+    "clearConfirm": "I have saved any backup I need and confirm erasing this local content.",
+    "clearAction": "Erase local content",
+    "clearDone": "Local content cleared. Reopen the app to use the empty library."
   }
 }

@@ -216,5 +216,26 @@
     "diagnosticsWorking": "Menyiapkan diagnostik…",
     "diagnosticsReady": "Berkas diagnostik diunduh.",
     "diagnosticsFailed": "Diagnostik tidak dapat disiapkan. Hubungi dukungan tanpa lampiran."
+  },
+  "dataControl": {
+    "persistenceTitle": "Perlindungan penyimpanan browser",
+    "persistenceIntro": "Sensa menyimpan pustaka ini di perangkat ini. Perlindungan browser yang lebih kuat mengurangi risiko penghapusan otomatis, tetapi bukan cadangan dan tidak bertahan setelah data situs dihapus.",
+    "persistence_checking": "Memeriksa perlindungan browser…",
+    "persistence_persistent": "Terlindung dari penghapusan penyimpanan otomatis di perangkat ini.",
+    "persistence_best-effort": "Penyimpanan browser dengan upaya terbaik. Browser dapat menghapus pustaka ini jika ruang penyimpanan menipis.",
+    "persistence_unsupported": "Browser ini tidak menyediakan permintaan perlindungan penyimpanan tambahan.",
+    "persistence_unavailable": "Status perlindungan penyimpanan sementara tidak tersedia.",
+    "persistenceRequest": "Minta perlindungan lebih kuat",
+    "storageBudget": "Perkiraan browser untuk situs ini: {{used}} MiB dari {{quota}} MiB digunakan. Ini mungkin termasuk berkas aplikasi.",
+    "storageBudgetWarning": "Situs ini telah memakai lebih dari 80% ruang berdasarkan perkiraan browser: {{used}} MiB dari {{quota}} MiB. Ekspor cadangan dan kosongkan ruang perangkat segera.",
+    "clearTitle": "Hapus konten lokal",
+    "clearIntro": "Hapus konten, progres belajar, dan pengaturan model hanya dari browser ini. Akun Anda tidak dihapus. Ekspor cadangan di atas jika ingin menyimpan konten ini.",
+    "clearInspect": "Tinjau konten lokal",
+    "clearSummary": "Ini akan menghapus {{drafts}} sumber, {{meanings}} makna, {{packages}} paket, {{targets}} item belajar, dan {{events}} peristiwa.",
+    "clearPending": "Ada {{count}} persiapan yang belum selesai. Persiapan tidak dapat dilanjutkan setelah penghapusan.",
+    "clearDiscardPending": "Buang {{count}} perubahan akun yang belum disinkronkan ini dari browser. Perubahan tersebut tidak akan ditambahkan ke salinan cloud.",
+    "clearConfirm": "Saya telah menyimpan cadangan yang diperlukan dan mengonfirmasi penghapusan konten lokal ini.",
+    "clearAction": "Hapus konten lokal",
+    "clearDone": "Konten lokal dihapus. Buka ulang aplikasi untuk menggunakan pustaka kosong."
   }
 }

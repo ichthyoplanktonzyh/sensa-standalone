@@ -1,4 +1,5 @@
-import {localFlowText} from '../../i18n/localFlowText';
+import '../../i18n/contentResources';
+import {useTranslation} from 'react-i18next';
 import type {SceneImageAttemptStatus as AttemptStatus} from './useSceneImageInput';
 
 interface SceneImageAttemptStatusProps {
@@ -10,6 +11,7 @@ export function SceneImageAttemptStatus({
   statuses,
   className = '',
 }: SceneImageAttemptStatusProps) {
+  const {t}=useTranslation();
   if (!statuses.some((status) => status.state === 'failed')) return null;
   return (
     <ul role="alert" className={className}>
@@ -18,10 +20,9 @@ export function SceneImageAttemptStatus({
           key={status.fileKey}
           className={status.state === 'failed' ? 'text-feedback-danger' : 'text-feedback-success'}
         >
-          {localFlowText(
-            status.state === 'added' ? 'sceneImageAdded' : 'sceneImageRetry',
-            {name: status.fileName},
-          )}
+          {t(`sceneImageAttempt.${status.state === 'added' ? 'added' : 'retry'}`,{
+            ns:'content',name:status.fileName,
+          })}
         </li>
       ))}
     </ul>

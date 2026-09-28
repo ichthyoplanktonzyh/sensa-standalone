@@ -216,5 +216,26 @@
     "diagnosticsWorking": "正在準備診斷…",
     "diagnosticsReady": "診斷檔案已下載。",
     "diagnosticsFailed": "無法生成診斷檔案；你仍可不帶附件聯絡支援。"
+  },
+  "dataControl": {
+    "persistenceTitle": "瀏覽器儲存保護",
+    "persistenceIntro": "Sensa 將本機庫儲存在這臺裝置上。更強的瀏覽器保護可降低自動清理風險，但它不是備份，清除站點資料後仍無法恢復。",
+    "persistence_checking": "正在檢查瀏覽器儲存保護…",
+    "persistence_persistent": "目前本機庫已獲得瀏覽器的自動清理保護。",
+    "persistence_best-effort": "目前是盡力保留儲存；裝置空間緊張時，瀏覽器仍可能清理本機庫。",
+    "persistence_unsupported": "目前瀏覽器不提供額外的儲存保護申請。",
+    "persistence_unavailable": "暫時無法讀取儲存保護狀態。",
+    "persistenceRequest": "申請更強保護",
+    "storageBudget": "瀏覽器為本站估算：已使用 {{used}} MiB / {{quota}} MiB。該數值也可能包含應用檔案。",
+    "storageBudgetWarning": "瀏覽器為本站提供的空間已使用超過 80%：{{used}} MiB / {{quota}} MiB。請儘快匯出備份並釋放裝置空間。",
+    "clearTitle": "清除本機資料",
+    "clearIntro": "僅清除這個瀏覽器中的資料、學習進度和模型設定，不刪除帳號。需要保留的內容請先在上方匯出備份。",
+    "clearInspect": "檢查要清除的資料",
+    "clearSummary": "將移除 {{drafts}} 份材料、{{meanings}} 個意思、{{packages}} 個學習包、{{targets}} 項學習內容和 {{events}} 條學習記錄。",
+    "clearPending": "還有 {{count}} 項未完成準備；清除後將無法繼續。",
+    "clearDiscardPending": "捨棄這個瀏覽器中的 {{count}} 項未同步帳號修改；它們不會寫入雲端副本。",
+    "clearConfirm": "我已儲存需要的備份，確認清除以上本機資料。",
+    "clearAction": "確認清除本機資料",
+    "clearDone": "本機資料已清除。重新開啟應用可開始使用空資料庫。"
   }
 }

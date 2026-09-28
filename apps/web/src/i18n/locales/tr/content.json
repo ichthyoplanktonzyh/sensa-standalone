@@ -360,5 +360,9 @@
     },
     "unavailable": "Henüz kullanılamıyor",
     "note": "Bu sayfa şu anda yalnızca planlanan yapıyı gösterir. Kişisel içerik veya öğrenme kaydı oluşturmaz."
+  },
+  "sceneImageAttempt": {
+    "added": "{{name}} eklendi.",
+    "retry": "{{name}} eklenemedi. Yeniden denemek için tekrar seçin."
   }
 }

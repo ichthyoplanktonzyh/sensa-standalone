@@ -360,5 +360,9 @@
     },
     "unavailable": "Noch nicht verfügbar",
     "note": "Diese Seite zeigt derzeit nur die geplante Struktur. Sie erstellt keine persönlichen Inhalte oder Lernaufzeichnungen."
+  },
+  "sceneImageAttempt": {
+    "added": "{{name}} wurde hinzugefügt.",
+    "retry": "{{name}} konnte nicht hinzugefügt werden. Wählen Sie die Datei erneut aus, um es noch einmal zu versuchen."
   }
 }

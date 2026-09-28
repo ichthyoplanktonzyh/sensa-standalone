@@ -360,5 +360,9 @@
     "saved-senses": "Significados guardados",
     "saved-examples": "Ejemplos guardados",
     "notes": "Mis notas"
+  },
+  "sceneImageAttempt": {
+    "added": "Se añadió {{name}}.",
+    "retry": "No se pudo añadir {{name}}. Vuelve a seleccionarlo para reintentar."
   }
 }

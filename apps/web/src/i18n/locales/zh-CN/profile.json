@@ -216,5 +216,26 @@
     "diagnosticsWorking": "正在准备诊断…",
     "diagnosticsReady": "诊断文件已下载。",
     "diagnosticsFailed": "无法生成诊断文件；你仍可不带附件联系支持。"
+  },
+  "dataControl": {
+    "persistenceTitle": "浏览器存储保护",
+    "persistenceIntro": "Sensa 将本机库保存在这台设备上。更强的浏览器保护可降低自动清理风险，但它不是备份，清除站点数据后仍无法恢复。",
+    "persistence_checking": "正在检查浏览器存储保护…",
+    "persistence_persistent": "当前本机库已获得浏览器的自动清理保护。",
+    "persistence_best-effort": "当前是尽力保留存储；设备空间紧张时，浏览器仍可能清理本机库。",
+    "persistence_unsupported": "当前浏览器不提供额外的存储保护申请。",
+    "persistence_unavailable": "暂时无法读取存储保护状态。",
+    "persistenceRequest": "申请更强保护",
+    "storageBudget": "浏览器为本站估算：已使用 {{used}} MiB / {{quota}} MiB。该数值也可能包含应用文件。",
+    "storageBudgetWarning": "浏览器为本站提供的空间已使用超过 80%：{{used}} MiB / {{quota}} MiB。请尽快导出备份并释放设备空间。",
+    "clearTitle": "清除本机资料",
+    "clearIntro": "仅清除这个浏览器中的资料、学习进度和模型设置，不删除账号。需要保留的内容请先在上方导出备份。",
+    "clearInspect": "检查要清除的资料",
+    "clearSummary": "将移除 {{drafts}} 份材料、{{meanings}} 个意思、{{packages}} 个学习包、{{targets}} 项学习内容和 {{events}} 条学习记录。",
+    "clearPending": "还有 {{count}} 项未完成准备；清除后将无法继续。",
+    "clearDiscardPending": "丢弃这个浏览器中的 {{count}} 项未同步账号修改；它们不会写入云端副本。",
+    "clearConfirm": "我已保存需要的备份，确认清除以上本机资料。",
+    "clearAction": "确认清除本机资料",
+    "clearDone": "本机资料已清除。重新打开应用可开始使用空资料库。"
   }
 }
