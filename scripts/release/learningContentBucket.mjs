@@ -9,19 +9,33 @@ const bucketError = (message, error) => {
  * content objects, not provider-wide storage policy.
  */
 export async function ensurePublicLearningContentBucket(storage, bucket) {
+  const requiredMimeTypes = ["application/json", "application/zip"];
   let result = await storage.getBucket(bucket);
   if (result.error) {
     const created = await storage.createBucket(bucket, {
       public: true,
-      allowedMimeTypes: ["application/json", "application/zip"],
+      allowedMimeTypes: requiredMimeTypes,
     });
     if (created.error) {
       throw bucketError("Learning content bucket is unavailable", created.error);
     }
-  } else if (!result.data?.public) {
-    const updated = await storage.updateBucket(bucket, {public: true});
+  } else {
+    const allowedMimeTypes = result.data?.allowed_mime_types;
+    const missingMimeTypes = Array.isArray(allowedMimeTypes)
+      ? requiredMimeTypes.filter((type) => !allowedMimeTypes.includes(type))
+      : [];
+    const update = {
+      public: true,
+      ...(missingMimeTypes.length > 0
+        ? {allowedMimeTypes: [...allowedMimeTypes, ...missingMimeTypes]}
+        : {}),
+    };
+    const needsUpdate = !result.data?.public || missingMimeTypes.length > 0;
+    const updated = needsUpdate
+      ? await storage.updateBucket(bucket, update)
+      : {error: null};
     if (updated.error) {
-      throw bucketError("Learning content bucket could not be made public", updated.error);
+      throw bucketError("Learning content bucket policy could not be prepared", updated.error);
     }
   }
 

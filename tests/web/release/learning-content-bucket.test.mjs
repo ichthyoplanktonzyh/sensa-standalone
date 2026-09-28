@@ -2,7 +2,12 @@ import {describe, expect, it, vi} from "vitest";
 
 import {ensurePublicLearningContentBucket} from "../../../scripts/release/learningContentBucket.mjs";
 
-const publicBucket = {id: "learning", name: "learning", public: true};
+const publicBucket = {
+  id: "learning",
+  name: "learning",
+  public: true,
+  allowed_mime_types: ["application/json", "application/zip"],
+};
 
 describe("learning content publication bucket", () => {
   it("reuses an existing public bucket without rewriting provider policy", async () => {
@@ -49,5 +54,28 @@ describe("learning content publication bucket", () => {
 
     expect(storage.updateBucket).toHaveBeenCalledWith("learning", {public: true});
     expect(storage.createBucket).not.toHaveBeenCalled();
+  });
+
+  it("extends a restricted legacy bucket without replacing its size policy", async () => {
+    const legacyBucket = {
+      ...publicBucket,
+      allowed_mime_types: ["application/json"],
+      file_size_limit: 50 * 1024 * 1024,
+    };
+    const storage = {
+      getBucket: vi.fn()
+        .mockResolvedValueOnce({data: legacyBucket, error: null})
+        .mockResolvedValueOnce({data: publicBucket, error: null}),
+      createBucket: vi.fn(),
+      updateBucket: vi.fn().mockResolvedValue({data: {}, error: null}),
+    };
+
+    await ensurePublicLearningContentBucket(storage, "learning");
+
+    expect(storage.updateBucket).toHaveBeenCalledWith("learning", {
+      public: true,
+      allowedMimeTypes: ["application/json", "application/zip"],
+    });
+    expect(storage.updateBucket.mock.calls[0][1]).not.toHaveProperty("fileSizeLimit");
   });
 });

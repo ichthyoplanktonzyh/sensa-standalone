@@ -23,13 +23,15 @@ const safeSegment = (value, name) => {
   if (!/^[a-z0-9][a-z0-9-]{1,62}$/u.test(value)) throw new Error(`${name} is invalid`);
   return value;
 };
-const fetchBytes = async (url) => {
+const fetchBytes = async (url, path) => {
   const response = await fetch(url, {
     cache: "no-store",
     redirect: "error",
     signal: AbortSignal.timeout(15_000),
   });
-  if (!response.ok) throw new Error("Published learning content is not readable");
+  if (!response.ok) {
+    throw new Error(`Published learning content is not readable at ${path} (${response.status})`);
+  }
   return Buffer.from(await response.arrayBuffer());
 };
 
@@ -81,13 +83,20 @@ async function publishObject(path, bytes, contentType) {
     upsert: false,
   });
   if (uploaded.error) {
-    const existing = await fetchBytes(publicUrl);
+    let existing;
+    try {
+      existing = await fetchBytes(publicUrl, path);
+    } catch (error) {
+      throw new Error(`Learning content upload failed at ${path}: ${uploaded.error.message}`, {
+        cause: error,
+      });
+    }
     if (sha256(existing) !== sha256(bytes)) {
       throw new Error("An immutable learning content path already has different bytes");
     }
     return publicUrl;
   }
-  const delivered = await fetchBytes(publicUrl);
+  const delivered = await fetchBytes(publicUrl, path);
   if (sha256(delivered) !== sha256(bytes)) {
     throw new Error("Uploaded learning content failed public digest verification");
   }
