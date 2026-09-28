@@ -164,6 +164,7 @@ type MigratedTest = Readonly<{path: string; suite: WebTestSuite; memoryLibrary?:
 
 const fastBeforeMemory = [
   'integration/support-diagnostics',
+  'integration/semantic-session-persistence',
   'contracts/stream-authorization',
   'contracts/portable-lightweight-package',
   'quality/content-supply-system-boundary',
@@ -183,7 +184,7 @@ const fastWithMemory = [
   'integration/agent-trace',
   'integration/live-matrix-summary',
   'integration/language-trace-evidence',
-  'integration/guest-library', 'integration/extension-local-models',
+  'integration/guest-library', 'integration/local-clear-sync', 'integration/backup-restore', 'integration/extension-local-models',
   'integration/package-learning', 'integration/portable-package-loop', 'integration/local-learning-runtime', 'integration/media-library',
   'integration/learning-scene-bridge', 'integration/personal-learning', 'integration/language-route',
   'integration/language-journey', 'integration/reading-language', 'integration/reading-glossary',
@@ -197,6 +198,8 @@ const fastWithMemory = [
 
 const browserTests = [
   'browser/skin-surface', 'browser/reference-presentation',
+  'browser/semantic-session-persistence-browser',
+  'browser/extension-storage-recovery',
   'browser/sqlite-opfs-benchmark', 'browser/web-bootstrap-budget',
 ] as const;
 
@@ -211,6 +214,8 @@ const manualTests = [
 
 const playwrightPaths = new Set<string>([
   'browser/skin-surface', 'browser/reference-presentation',
+  'browser/semantic-session-persistence-browser',
+  'browser/extension-storage-recovery',
   'browser/sqlite-opfs-benchmark', 'browser/web-bootstrap-budget',
   'browser/browser-port', 'browser/extension-popup', 'database/library-cloud',
 ]);
@@ -218,6 +223,8 @@ const playwrightPaths = new Set<string>([
 const durabilityTests = new Set<string>([
   'database/account-deletion', 'database/intake-delivery', 'database/library-cloud',
   'database/model-request-state', 'browser/sqlite-opfs-benchmark',
+  'browser/semantic-session-persistence-browser',
+  'browser/extension-storage-recovery',
   'browser/web-bootstrap-budget', 'integration/known-continuation',
   'integration/learning-registry', 'integration/local-book',
   'integration/local-learning-runtime', 'integration/media-library',

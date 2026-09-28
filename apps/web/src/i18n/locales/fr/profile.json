@@ -88,6 +88,7 @@
     "restoreHint": "Restaurez uniquement dans une bibliothèque locale vide. Les sauvegardes de compte nécessitent aussi le compte d’origine.",
     "exported": "Sauvegarde créée. Vérifiez que le fichier téléchargé a bien été enregistré.",
     "restored": "Bibliothèque restaurée. Rouvrez l’application pour continuer à apprendre.",
+    "restoredResourcesDeferred": "La bibliothèque a été restaurée, mais les ressources d’apprentissage locales n’ont pas pu être actualisées. Rouvrez l’application pour réessayer ; les données restaurées sont conservées.",
     "reopen": "Rouvrir l’application",
     "account": "Compte : {{account}}",
     "date": "Créée le : {{date}}",

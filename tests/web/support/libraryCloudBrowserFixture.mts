@@ -117,9 +117,12 @@ export async function createLibraryCloudBrowserFixture(providedBrowser?: Browser
       target: 'es2022',
       rollupOptions: {
         preserveEntrySignatures: 'strict',
-        input: resolve('scripts/support/libraryCloudBrowserEntry.ts'),
+        input: {
+          core: resolve('scripts/support/libraryCloudBrowserEntry.ts'),
+          'local-clear': resolve('scripts/support/localClearBrowserEntry.tsx'),
+        },
         output: {
-          entryFileNames: 'core.js',
+          entryFileNames: '[name].js',
           chunkFileNames: 'assets/[name]-[hash].js',
           assetFileNames: 'assets/[name]-[hash][extname]',
         },

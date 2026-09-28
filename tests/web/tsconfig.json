@@ -39,6 +39,7 @@
     "browser/reference-presentation.spec.ts",
     "browser/sqlite-opfs-benchmark.spec.ts",
     "browser/skin-surface.spec.ts",
+    "browser/extension-storage-recovery.spec.ts",
     "browser/browser-port.spec.ts",
     "browser/extension-popup.spec.ts",
     "live/languageMatrixFixtures.ts",

@@ -24,6 +24,7 @@ const payloadSchema=z.discriminatedUnion('format',[
 const envelopeSchema=z.object({format:z.literal('sensa-web-library-backup-v1'),kdf:z.literal('PBKDF2-SHA256'),iterations:z.literal(600000),cipher:z.literal('AES-256-GCM'),salt:z.string().max(24),iv:z.string().max(16),data:z.string().max(MAX_FILE)}).strict();
 export type BackupSummary={createdAt:string;account:string|null;libraryId:string;drafts:number;meanings:number;packages:number;targets:number;runs:number;events:number;preparations:number;interrupted:number};
 export type BackupSizeEstimate={usedBytes:number;capacityBytes:number};
+export type BackupRestoreResult={summary:BackupSummary;resourceRefresh:'complete'|'deferred'};
 function summary(payload:z.infer<typeof payloadSchema>,rows:BackupRows):BackupSummary{const identity=rows.meta.find(r=>r.key==='identity')!.value;return {createdAt:payload.createdAt,account:payload.owner?.email??payload.owner?.subject??null,libraryId:identity.id,drafts:rows.drafts.length,meanings:rows.meanings.length,packages:rows.packageInstallations.length,targets:rows.learningTargets.length,runs:rows.learningRuns.length,events:rows.learningEvents.length,preparations:rows.personalLearning.length,interrupted:rows.sessions.filter(r=>r.value.status==='inflight').length+rows.personalLearning.filter(r=>['generating','reviewing'].includes(r.value.status)).length};}
 async function decode(file:Uint8Array,password:string){
  if(file.byteLength>MAX_FILE)throw new Error('libraryBackup.errors.fileTooLarge');
@@ -53,6 +54,16 @@ export async function exportLibraryBackup(password:string){
  return {file,summary:summary(payload,rows)};
 }
 export async function inspectLibraryBackup(file:Uint8Array,password:string){return (await decode(file,password)).summary;}
+async function refreshRestoredLibrary():Promise<BackupRestoreResult['resourceRefresh']>{
+ let deferred=false;
+ try{clearAllCredentials();}catch{deferred=true;}
+ try{
+  const {contentSupplySystem}=await import('../../contentSupply/system/contentSupplySystem');
+  const result=await contentSupplySystem.execute({kind:'rehydrate'});
+  if(result.blocked.length>0||result.failed.length>0)deferred=true;
+ }catch{deferred=true;}
+ return deferred?'deferred':'complete';
+}
 async function emptyDestination(tx:LibraryTransaction){
  for(const table of libraryTables){const entries=await tx.entries(table);if(table==='packageCache')continue;if(table==='meta'){if(entries.some(r=>!localMeta.has(String(r.key))&&!['identity','package-catalog'].includes(String(r.key))))return false;}else if(table==='operations'){if(entries.some(r=>!serviceOperation(r.value)&&!['library.create','package.catalog'].includes(JSON.parse(r.value.input).kind)))return false;}else if(entries.length)return false;}
  return true;
@@ -84,5 +95,6 @@ export async function restoreLibraryBackup(file:Uint8Array,password:string){
   tx.put('meta','local-incarnation',crypto.randomUUID());
   tx.put('meta','backup-restored',{at:new Date().toISOString(),sourceCreatedAt:checked.payload.createdAt,libraryId:source.id});
   return checked.summary;
- });clearAllCredentials();const {contentSupplySystem}=await import('../../contentSupply/system/contentSupplySystem');await contentSupplySystem.execute({kind:'rehydrate'}).catch(()=>undefined);return result;
+ });
+ return {summary:result,resourceRefresh:await refreshRestoredLibrary()} satisfies BackupRestoreResult;
 }

@@ -12,6 +12,7 @@ export * from '../../apps/web/src/data/library/speech/defaultProvider';
 export * from '../../apps/web/src/data/library/backup';
 export * from '../../apps/web/src/data/library/backupValidation';
 export * from '../../apps/web/src/data/library/backupCodec';
+export * from '../../apps/web/src/data/library/dataControl';
 export * from '../../apps/web/src/experience/personalMeaningJourney/gateway';
 export * from '../../apps/web/src/learning/protocols/fourStage';
 export * from '../../apps/web/src/learning/runtime/localCurriculum';

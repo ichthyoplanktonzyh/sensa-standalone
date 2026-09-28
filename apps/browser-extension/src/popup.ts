@@ -26,6 +26,9 @@ async function act(kind:string){
   if(v.pending)status.textContent+='\n'+t('pending',{count:v.pending});
   if(success[kind])status.textContent=t(success[kind])+'\n'+status.textContent;
   if(v.errors.length)status.textContent+='\n'+v.errors.map(errorText).join('\n');
+  const recovery=document.getElementById('queue-recovery')!;
+  recovery.hidden=!(v.recoveryCount??0);
+  document.getElementById('queue-recovery-body')!.textContent=t('queueRecoveryBody',{count:v.recoveryCount??0});
   const recent=document.querySelector('#recent')!;recent.replaceChildren();
   for(const item of v.recent){const element=document.createElement('a');
    if(element instanceof HTMLAnchorElement){const url=new URL(v.destination==='web-local'?(item.status==='confirmed'?'/content/personal-meaning':'/content?worldAction=inbox'):webUrl,webUrl);url.searchParams.set(v.destination==='web-local'?'meaningId':('acceptanceId'in item||item.meaningId)?'meaning':'intake',item.meaningId??item.id);element.href=url.href;element.addEventListener('click',event=>{event.preventDefault();void chrome.runtime.sendMessage({kind:'open-web',path:url.pathname+url.search});});}
@@ -45,6 +48,26 @@ async function actRoute(routeId:string){
  finally{busy=false;buttons.forEach(button=>{button.disabled=false;});routeSelect.disabled=false;status.setAttribute('aria-busy','false');await act('status');}
 }
 for(const id of ['login','toggle','stop','sync','disconnect'])document.getElementById(id)!.addEventListener('click',()=>void act(id));
+document.getElementById('queue-recovery-export')!.addEventListener('click',()=>void (async()=>{
+ if(busy)return;busy=true;buttons.forEach(button=>{button.disabled=true;});routeSelect.disabled=true;
+ try{
+  const response=await chrome.runtime.sendMessage({kind:'queue-recovery-export'});if(response.error)throw new Error(response.error);
+  const blob=new Blob([JSON.stringify(response.value,null,2)+'\n'],{type:'application/json'}),url=URL.createObjectURL(blob),anchor=document.createElement('a');
+  anchor.href=url;anchor.download='sensa-extension-queue-recovery.json';anchor.click();setTimeout(()=>URL.revokeObjectURL(url),0);
+  status.textContent=t('queueRecoveryExported');
+ }catch(error){status.textContent=errorText(error);}
+ finally{busy=false;buttons.forEach(button=>{button.disabled=false;});routeSelect.disabled=false;}
+})());
+document.getElementById('queue-recovery-discard')!.addEventListener('click',()=>void (async()=>{
+ if(busy||!confirm(t('queueRecoveryDiscardConfirm')))return;
+ busy=true;buttons.forEach(button=>{button.disabled=true;});routeSelect.disabled=true;
+ try{
+  const response=await chrome.runtime.sendMessage({kind:'queue-recovery-discard'});if(response.error)throw new Error(response.error);
+  busy=false;buttons.forEach(button=>{button.disabled=false;});routeSelect.disabled=false;
+  await act('status');status.textContent=t('queueRecoveryDiscarded')+'\n'+status.textContent;
+ }catch(error){status.textContent=errorText(error);}
+ finally{busy=false;buttons.forEach(button=>{button.disabled=false;});routeSelect.disabled=false;}
+})());
 /**
  * The site switch: the one control that has to be reachable from a page the
  * learner has already turned reading off on. Its label states the rule that is in

@@ -12,7 +12,7 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  const fixture=await createLibraryCloudBrowserFixture(browser);
  const {origin,pool}=fixture;
  try{
- const primary=await fixture.createAccount('first'),secondary=await fixture.createAccount('second');
+ const primary=await fixture.createAccount('first'),secondary=await fixture.createAccount('second'),clearance=await fixture.createAccount('clearance');
  const accountId=primary.accountId,otherId=secondary.accountId;
  const a=await fixture.createClient(primary);const b=await fixture.createClient(primary);const other=await fixture.createClient(secondary);
  await test.step('account isolation, local caches, legacy heads and mid-sync writes',async()=>{
@@ -51,6 +51,46 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  await a.evaluate(()=>{const w=window as any,original=w.request;let once=true;w.request=async(path:string,body?:unknown)=>{const result=await original(path,body);if(path==='/head'&&once){once=false;await w.core.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Written during sync'});}return result;};});
  await assert.rejects(a.evaluate(()=>(window as any).sync()),/library_sync_local_changed/);await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());assert((await b.evaluate(()=>(window as any).core.listDrafts())).some((d:any)=>d.text==='Written during sync'));
  });
+ await test.step('local clearance checkpoints first and only explicit current discard leaves cloud untouched',async()=>{
+  const page=await fixture.createClient(clearance);
+  const initialIdentity=await page.evaluate(()=>(window as any).core.openLibrary());
+  await page.evaluate(()=>(window as any).sync());
+  await page.evaluate(async()=>{const c=(window as any).core;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'checkpoint before local clearance'});});
+  let preview=await page.evaluate(()=>(window as any).core.inspectLocalClear());
+  assert.equal(preview.pendingSync,1);assert.equal(preview.syncAttempt,'required');
+  await assert.rejects(page.evaluate((value)=>(window as any).core.clearLocalLibrary(value),preview),/localFlow\.clearSyncRequired/);
+  preview=await page.evaluate((value)=>(window as any).core.attemptLocalClearSync(value,()=>(window as any).sync()),preview);
+	  assert.equal(preview.pendingSync,0);assert.equal(preview.syncAttempt,'succeeded');
+
+	  const pendingId=await page.evaluate(async()=>{const c=(window as any).core,id=crypto.randomUUID();await c.saveDraft(crypto.randomUUID(),{id,expectedRevision:0,text:'preserve me when sync fails'});return id;});
+	  await page.evaluate(()=>{(window as any).offline=true;});
+	  await page.evaluate(async()=>{const path='/local-clear.js',ui=await import(/* @vite-ignore */ path);ui.mountLocalDataControl();});
+	  await page.getByRole('button',{name:'Review local content',exact:true}).click();
+	  await expect(page.getByText('1 pending changes',{exact:true})).toBeVisible();
+	  await page.getByLabel('I have saved any backup I need and confirm erasing this local content.').check();
+	  await expect(page.getByRole('button',{name:'Erase local content',exact:true})).toBeDisabled();
+	  await page.getByRole('button',{name:'Sync now',exact:true}).click();
+	  await expect(page.getByText('Sync did not finish. Your local data is still saved. Check the connection and retry.',{exact:true})).toBeVisible();
+	  assert((await page.evaluate(()=>(window as any).core.listDrafts())).some((draft:any)=>draft.id===pendingId),'failed pre-clear sync must preserve local OPFS data');
+	  await page.getByLabel(/Discard these 1 unsynced account change/).check();
+	  await page.evaluate(async()=>{const c=(window as any).core;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'newer than discard confirmation'});});
+	  await page.getByRole('button',{name:'Erase local content',exact:true}).click();
+	  await expect(page.getByText('The library changed. Check it again before confirming erasure.',{exact:true})).toBeVisible();
+	  assert((await page.evaluate(()=>(window as any).core.listDrafts())).some((draft:any)=>draft.id===pendingId),'a stale discard confirmation must not clear newer local data');
+	  await page.getByRole('button',{name:'Review local content',exact:true}).click();
+	  await expect(page.getByText('2 pending changes',{exact:true})).toBeVisible();
+	  await page.getByRole('button',{name:'Sync now',exact:true}).click();
+	  await page.getByLabel(/Discard these 2 unsynced account change/).check();
+	  await page.getByLabel('I have saved any backup I need and confirm erasing this local content.').check();
+	  const cloudBefore=(await pool.query('SELECT revision,manifest FROM sensa_consumer.library_cloud WHERE account_id=$1',[clearance.accountId])).rows[0];
+	  await page.getByRole('button',{name:'Erase local content',exact:true}).click();
+	  await expect(page.getByText('Local content cleared. Reopen the app to use the empty library.',{exact:true})).toBeVisible();
+  const after=await page.evaluate(async()=>{const c=(window as any).core;return {identity:await c.readLibrary((tx:any)=>tx.get('meta','identity')),owner:await c.readLibrary((tx:any)=>tx.get('meta','service-owner')),drafts:await c.listDrafts()};});
+  assert.notEqual(after.identity.id,initialIdentity.id);assert.deepEqual(after.owner,{subject:clearance.subject,accountId:clearance.accountId});assert.deepEqual(after.drafts,[]);
+  const cloudAfter=(await pool.query('SELECT revision,manifest FROM sensa_consumer.library_cloud WHERE account_id=$1',[clearance.accountId])).rows[0];
+  assert.deepEqual(cloudAfter,cloudBefore,'discarding pending local records must not create a cloud tombstone or rewrite the checkpoint');
+  await page.context().close();
+ });
  const delivery=await libraryCloudPackageFixture(),bytes=Array.from(delivery.bytes),manifestBytes=Array.from(delivery.manifestBytes),descriptor=delivery.descriptor,packageUrl=delivery.manifest.members[0]!.url;
  let progress='';
  await test.step('canonical Intake and exact package installation facts restore without artifact bytes',async()=>{
@@ -84,7 +124,7 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  // both Runs and all Events remain durable history.
  const concurrentTargetId=(JSON.parse(progress) as any).targets.find((target:any)=>target.curriculumMemberships.some((membership:any)=>membership.sourceKind==='sense_learning_package')).id;
  const branchRuns=[] as string[];
- for(const [page,at] of [[a,'2030-09-21T09:00:00.000Z'],[b,'2030-09-21T09:05:00.000Z']] as const)branchRuns.push(await page.evaluate(async({targetId,at})=>{const c=(window as any).core,languageContext=(await c.languageRoutesSnapshot()).context,pack=(await c.installedPackages())[0];let run=await c.startLearning(crypto.randomUUID(),targetId,languageContext,20,at),steps=0;while(!run.completedAt&&steps++<60){const session=c.fourStageQueue(run).getCurrentSession();let response:any;if(session.phase==='feedback')response={kind:'continue'};else if(session.mode==='review'||session.mode==='relearning')response={kind:'review',answer:'known'};else if(['meaning_choice','sound_choice'].includes(session.presentation)){const target=(await c.readLearning()).targets.find((candidate:any)=>candidate.id===session.targetId),executable=c.localExecutableTargetForParticipant(target,run.participants[target.id]),content=c.fourStageContent(executable,pack);response={kind:'choice',optionId:content.recognitionAssessment.options.find((option:any)=>option.isCorrect).id};}else response={kind:'self_report',known:true};run=await c.actLearning(crypto.randomUUID(),run.id,run.revision,{kind:'protocol',response},at);}if(!run.completedAt)throw Error('concurrent runtime incomplete');await c.finishLearning(crypto.randomUUID(),run.id);return run.id;},{targetId:concurrentTargetId,at}));
+ for(const [page,at] of [[a,'2030-09-21T09:00:00.000Z'],[b,'2030-09-21T09:05:00.000Z']] as const)branchRuns.push(await page.evaluate(async({targetId,at})=>{const c=(window as any).core,languageContext=(await c.languageRoutesSnapshot()).context,pack=(await c.installedPackages())[0];let run=await c.startLearning(crypto.randomUUID(),targetId,languageContext,20,at),steps=0;while(!run.completedAt&&steps++<60){let action:any;if(run.protocolState.adapterId==='lightweight')action=run.protocolState.value.phase==='recall'?{kind:'reveal'}:{kind:'rate',rating:'good'};else{const session=c.fourStageQueue(run).getCurrentSession();let response:any;if(session.phase==='feedback')response={kind:'continue'};else if(session.mode==='review'||session.mode==='relearning')response={kind:'review',answer:'known'};else if(['meaning_choice','sound_choice'].includes(session.presentation)){const target=(await c.readLearning()).targets.find((candidate:any)=>candidate.id===session.targetId),executable=c.localExecutableTargetForParticipant(target,run.participants[target.id]),content=c.fourStageContent(executable,pack);response={kind:'choice',optionId:content.recognitionAssessment.options.find((option:any)=>option.isCorrect).id};}else response={kind:'self_report',known:true};action={kind:'protocol',response};}run=await c.actLearning(crypto.randomUUID(),run.id,run.revision,action,at);}if(!run.completedAt)throw Error('concurrent runtime incomplete');await c.finishLearning(crypto.randomUUID(),run.id);return run.id;},{targetId:concurrentTargetId,at}));
  await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());await a.evaluate(()=>(window as any).sync());
  for(const page of [a,b]){const reconciled=await page.evaluate(async()=>{const c=(window as any).core;return {state:await c.readCloudSync(),learning:JSON.stringify(await c.readLearning()),decisions:await c.readLibrary((tx:any)=>tx.entries('learningReconciliations')),runs:await c.readLibrary((tx:any)=>tx.entries('learningRuns'))};});assert.equal(reconciled.state.status,'synced');assert(reconciled.decisions.length>0,'concurrent learning must persist a reconciliation decision');assert(branchRuns.every(runId=>reconciled.runs.some((row:any)=>row.key===runId)),'both concurrent Runs must remain in history');}
  reconciledProgress=await a.evaluate(async()=>JSON.stringify(await (window as any).core.readLearning()));

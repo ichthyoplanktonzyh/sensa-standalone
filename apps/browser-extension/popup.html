@@ -26,6 +26,8 @@
   #recent a:hover{background:#edf0f7}
   #recent-empty{padding:12px;margin:0;color:#68748d}
   small{display:block;color:#68748d}
+  .recovery{margin:12px 0;padding:12px;border:1px solid #b45309;border-radius:12px;background:#fff7ed}
+  .recovery h2{font-size:14px;margin:0 0 6px}.recovery p{white-space:normal;margin:0 0 8px}.recovery button{background:white}
   label{display:block;margin:0 0 10px;color:#68748d;font-size:12px}
   select{margin-top:4px;border:1px solid #bec5d5;border-radius:10px;background:white;font:14px system-ui}
 </style>
@@ -43,6 +45,12 @@
   <p id="recent-empty"></p>
 </section>
 <button id="sync" data-i18n="sync"></button>
+<section id="queue-recovery" class="recovery" aria-labelledby="queue-recovery-title" hidden>
+  <h2 id="queue-recovery-title" data-i18n="queueRecoveryHeading"></h2>
+  <p id="queue-recovery-body"></p>
+  <button id="queue-recovery-export" data-i18n="queueRecoveryExport"></button>
+  <button id="queue-recovery-discard" data-i18n="queueRecoveryDiscard"></button>
+</section>
 <details><summary data-i18n="advanced"></summary>
 <button id="stop" data-i18n="stop"></button>
 <button id="disconnect" data-i18n="disconnect"></button>

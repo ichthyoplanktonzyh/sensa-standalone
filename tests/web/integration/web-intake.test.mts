@@ -9,7 +9,7 @@ import vm from 'node:vm';
 Object.assign(globalThis,{indexedDB,window:new EventTarget(),BroadcastChannel:undefined});
 let storage:Record<string,unknown>={},failStorage=false;
 Object.assign(globalThis,{chrome:{storage:{local:{get:async(key:string)=>structuredClone({[key]:storage[key]}),set:async(value:Record<string,unknown>)=>{if(failStorage)throw new Error('disk full');Object.assign(storage,structuredClone(value));}}}}});
-const {queueWeb,pendingWeb,acknowledgeWeb,webStatus,webOperationStatus,discardPendingWeb}=await import('../../../apps/browser-extension/src/webDestination.ts');
+const {queueWeb,pendingWeb,acknowledgeWeb,webStatus,webOperationStatus,discardPendingWeb,exportWebQueueRecovery,discardWebQueueRecovery}=await import('../../../apps/browser-extension/src/webDestination.ts');
 const {browserCaptureToIntake}=await import('../../../apps/browser-extension/src/semanticIntakeAdapter.ts');
 const {createJourneyModules}=await import('../../../apps/web/src/experience/personalMeaningJourney/gateway.ts');
 const {createSeededClock}=await import('../../../apps/web/src/experience/personalMeaningJourney/ports.ts');
@@ -35,6 +35,7 @@ const request=delivery(crypto.randomUUID(),null);
 let listener:any;
 let session:Record<string,unknown>;
 let exchangeCalls=0;
+let receiptFixture:any;
 const opened:string[]=[],activated:number[]=[],reloaded:number[]=[];
 await test('Intake queue deduplicates, isolates accounts and acknowledges only matching receipts',async()=>{
 await queueWeb(accountId,request);await queueWeb(accountId,request);
@@ -46,6 +47,7 @@ assert.deepEqual(await pendingWeb(accountId,crypto.randomUUID()),[]);
 await assert.rejects(receiveWebIntake(other,request),/account_mismatch/);
 await assert.rejects(receiveWebIntake(accountId,{...request,libraryId:crypto.randomUUID()}),/library_mismatch/);
 const receipt=await receiveWebIntake(accountId,request);
+receiptFixture=receipt;
 assert.equal(receipt.result.route,'inbox');
 assert.equal(receipt.requestDigest,createHash('sha256').update(canonicalConsumerJson(request)).digest('hex'));
 assert.equal((await receiveWebIntake(accountId,request)).result.route,'inbox');
@@ -76,7 +78,7 @@ session={modes:{1:{accountId}}};
 const noopEvent={addListener:()=>{}};
 const chromeMock={identity:{getRedirectURL:()=> 'https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.chromiumapp.org/sensa'},storage:{local:{...(globalThis as any).chrome.storage.local,setAccessLevel:async()=>{}},session:{get:async(key:string)=>structuredClone({[key]:session[key]}),set:async(value:unknown)=>Object.assign(session,structuredClone(value))}},runtime:{id:'fixture',getURL:(path:string)=>'chrome-extension://fixture/'+path,onMessage:{addListener:(fn:unknown)=>{listener=fn;}}},tabs:{get:async(id:number)=>({id,url:snapshot.source.url}),query:async(query:{url?:string})=>query.url?[{id:20,url:'http://127.0.0.1:3000/profile',active:true}]:[{id:1,url:snapshot.source.url}],create:async({url}:{url:string})=>{opened.push(url);return {id:20};},update:async(id:number,input:{url?:string;active?:boolean})=>{assert.equal(id,20);if(input.url)opened.push(input.url);if(input.active)activated.push(id);return {id,...input};},reload:async(id:number)=>{reloaded.push(id);},onUpdated:noopEvent,onRemoved:noopEvent,sendMessage:async()=>{}},alarms:{create:()=>{},onAlarm:noopEvent}};
 const bundle=await build({entryPoints:['apps/browser-extension/src/background.ts'],bundle:true,write:false,format:'iife',platform:'browser',define:{SENSA_WEB_URL:JSON.stringify('http://127.0.0.1:3000'),SENSA_API_URL:JSON.stringify('http://127.0.0.1:4319')}});
-vm.runInNewContext(bundle.outputFiles[0]!.text,{chrome:chromeMock,crypto,btoa,URL,TextEncoder,TextDecoder,AbortSignal,setTimeout,clearTimeout,console,fetch:async(url:string,init:RequestInit)=>{assert.equal(url,'http://127.0.0.1:4319/sensa/extension/exchange');const body=JSON.parse(String(init.body));assert.equal(body.code,'fixture-code');if((session as any).expectedChallenge){assert.equal(Buffer.from(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(body.verifier))).toString('base64url'),(session as any).expectedChallenge);delete (session as any).expectedChallenge;}else assert.equal(body.verifier,(session as any).expectedVerifier);exchangeCalls++;return {ok:true,json:async()=>({accountId,token:'fixture-renewed-token',expiresAt:new Date(Date.now()+86400000).toISOString()})};}});
+vm.runInNewContext(bundle.outputFiles[0]!.text,{chrome:chromeMock,crypto,btoa,URL,TextEncoder,TextDecoder,AbortSignal,structuredClone,setTimeout,clearTimeout,console,fetch:async(url:string,init:RequestInit)=>{assert.equal(url,'http://127.0.0.1:4319/sensa/extension/exchange');const body=JSON.parse(String(init.body));assert.equal(body.code,'fixture-code');if((session as any).expectedChallenge){assert.equal(Buffer.from(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(body.verifier))).toString('base64url'),(session as any).expectedChallenge);delete (session as any).expectedChallenge;}else assert.equal(body.verifier,(session as any).expectedVerifier);exchangeCalls++;return {ok:true,json:async()=>({accountId,token:'fixture-renewed-token',expiresAt:new Date(Date.now()+86400000).toISOString()})};}});
 });
 // Run the actual background boundary with Chrome API substitutes, not a browser.
 /** A Web message as the page actually sends one: the bridge's envelope is part of
@@ -165,17 +167,22 @@ assert.equal(opened.at(-1),'http://127.0.0.1:3000/content?worldAction=inbox');
 assert.equal((await message({kind:'open-web',path:'/content?worldAction=inbox&meaningId='+another},loginSender)).error,undefined);
 assert.equal(opened.at(-1),'http://127.0.0.1:3000/content?worldAction=inbox&meaningId='+another);
 assert.equal((await message({kind:'open-web',path:'https://evil.invalid/content'},loginSender)).error,'unsupported_message');
-// The extension queue has no legacy compatibility contract. Records that cannot
-// satisfy the current Intake schema are removed without touching current items.
+// A legacy value that cannot satisfy the current Intake schema is retained and
+// made visible. New writes stop until the learner explicitly exports/discards it.
 const queueAfterLogin=structuredClone(storage.sensaWebIntake),opaqueRecord={legacy:'obsolete queue record'};
 storage.sensaWebIntake=[opaqueRecord];
 const currentCapture={...request,libraryId:newLibrary,intake:{...request.intake,operationId:crypto.randomUUID()}};
-await queueWeb(accountId,currentCapture);
+await assert.rejects(queueWeb(accountId,currentCapture),/web_queue_recovery_required/);
 const resilientStatus=(await message({kind:'status'},loginSender)).value;
-assert.equal(resilientStatus.accountId,accountId);assert.deepEqual(Array.from(resilientStatus.errors),[]);
-assert.equal((storage.sensaWebIntake as unknown[]).some(item=>JSON.stringify(item)===JSON.stringify(opaqueRecord)),false);
-assert.equal((await pendingWeb(accountId,newLibrary)).length,1);
-assert.equal(await discardPendingWeb(accountId),1);assert.deepEqual(storage.sensaWebIntake,[]);
+assert.equal(resilientStatus.accountId,accountId);assert.deepEqual(Array.from(resilientStatus.errors),['web_queue_recovery_required']);assert.equal(resilientStatus.recoveryCount,1);
+assert.deepEqual((storage.sensaWebIntake as any).quarantined[0].value,opaqueRecord);
+const directExport=await exportWebQueueRecovery();assert.deepEqual(directExport.records[0].value,opaqueRecord);
+const popupExport=(await message({kind:'queue-recovery-export'},loginSender)).value;assert.deepEqual(popupExport.records[0].value,opaqueRecord);
+assert.equal((await message({kind:'queue-recovery-discard'},loginSender)).value.recoveryCount,0);
+assert.deepEqual((storage.sensaWebIntake as any).quarantined,[]);
+await queueWeb(accountId,currentCapture);assert.equal((await pendingWeb(accountId,newLibrary)).length,1);
+assert.equal(await discardPendingWeb(accountId),1);assert.deepEqual(storage.sensaWebIntake,{version:2,pending:[],receipts:[],quarantined:[]});
+assert.deepEqual(await discardWebQueueRecovery(),{discarded:0});
 storage.sensaWebIntake=queueAfterLogin;
 // The explicit Web reconnect button is scoped to the requesting account, library and tab.
 await message({kind:'web-connect-reset',accountId,libraryId:library.id,receipt:{discardPending:false}},appSender);
@@ -199,4 +206,30 @@ assert.equal(await discardPendingWeb(accountId),1);
 assert.equal((await pendingWeb(accountId,library.id)).length,0);
 assert.equal((await pendingWeb(other,library.id)).length,1);
 assert.ok((await webStatus(accountId)).recent.length>0);
+});
+
+await test('account receipt history and the shared pending queue have enforced capacity bounds',async()=>{
+const previous=structuredClone(storage.sensaWebIntake);
+const stored=(owner:string,delivered:boolean)=>{
+ const item=delivery(crypto.randomUUID(),null),digest=createHash('sha256').update(canonicalConsumerJson(item)).digest('hex');
+ return {accountId:owner,request:item,digest,...(delivered?{receipt:{...receiptFixture,operationId:item.intake.operationId,libraryId:item.libraryId,clientId:item.clientId,requestDigest:digest,result:{...receiptFixture.result,intakeId:crypto.randomUUID()}}}:{})};
+};
+storage.sensaWebIntake=[...Array.from({length:270},()=>stored(accountId,true)),...Array.from({length:270},()=>stored(other,true))];
+assert.equal((await webStatus(accountId)).recent.length,20);
+const bounded=(storage.sensaWebIntake as any).receipts as any[];
+assert.equal(bounded.length,512,'the compact idempotency ledger is distinct from the 20-item recent UI');
+assert.equal(bounded.filter(entry=>entry.accountId===accountId).length,256,'one account cannot grow its receipt ledger without bound');
+assert.equal(bounded.filter(entry=>entry.accountId===other).length,256);
+const owners=Array.from({length:5},()=>crypto.randomUUID()),compact=owners.flatMap(owner=>Array.from({length:256},()=>{const entry=stored(owner,true);return {accountId:owner,digest:entry.digest,receipt:entry.receipt,expression:null};}));
+storage.sensaWebIntake={version:2,pending:[],receipts:compact,quarantined:[]};
+await webStatus(owners.at(-1)!);
+const globallyBounded=(storage.sensaWebIntake as any).receipts as any[];
+assert.equal(globallyBounded.length,1024,'switching accounts cannot make the compact receipt ledger grow without a global bound');
+assert(owners.every(owner=>globallyBounded.filter(entry=>entry.accountId===owner).length<=256));
+const pending=Array.from({length:100},(_,index)=>stored(index%2?accountId:other,false));
+storage.sensaWebIntake={version:2,pending,receipts:[],quarantined:[]};
+const beforeFull=structuredClone(storage.sensaWebIntake);
+await assert.rejects(queueWeb(accountId,delivery(crypto.randomUUID(),null)),/web_queue_full/);
+assert.deepEqual(storage.sensaWebIntake,beforeFull,'a rejected capture neither evicts nor rewrites either account queue');
+storage.sensaWebIntake=previous;
 });

@@ -100,6 +100,7 @@
     "restoreHint": "Restore into an empty local library. Account backups also require the original account.",
     "exported": "Backup created. Check that the downloaded file has been saved.",
     "restored": "Library restored. Reopen the app to continue learning.",
+    "restoredResourcesDeferred": "Library restored, but local learning resources could not be refreshed. Reopen the app to retry; your restored data is preserved.",
     "reopen": "Reopen app",
     "account": "Account: {{account}}",
     "date": "Created: {{date}}",

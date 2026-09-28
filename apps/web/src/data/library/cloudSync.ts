@@ -21,6 +21,13 @@ export type CloudSyncConflictChoice='local'|'remote';
 export type CloudSyncConflict={detectedAt:string;remoteRevision:number;remoteManifest:string[]|null;records:{id:string;base:Entry|null;local:Entry|null;remote:Entry|null}[];affectedRecordIds:string[]};
 export type CloudSyncState={owner:Owner;incarnation:string;revision:number;storage?:LibrarySyncHead['storage'];syncedLocalRevision?:number;pending?:{operationId:string;baseRevision:number;manifest:string[]};status:'pending'|'syncing'|'synced'|'offline'|'conflict'|'failed';conflicts?:string[];conflict?:CloudSyncConflict;resolution?:{choice:CloudSyncConflictChoice;expectedRemoteRevision:number};lastSyncedAt?:string;lastCheckedAt?:string;syncStartedAt?:string;error?:string;failureKind?:CloudSyncFailureKind;retryCount?:number;retryAt?:string};
 type State=CloudSyncState;
+export type PendingCloudSyncRecord={table:typeof librarySyncTables[number];key:string};
+export type PendingCloudSyncSnapshot={
+ accountLinked:boolean;
+ canSync:boolean;
+ localRevision:number;
+ records:PendingCloudSyncRecord[];
+};
 const STATE='cloud-sync';
 const equal=backupEqual;
 const entryId=replicaEntryId;
@@ -37,6 +44,11 @@ async function capture(tx:LibraryTransaction){
  base.sort((a,b)=>entryId(a).localeCompare(entryId(b)));
  if(state?.syncedLocalRevision!==undefined&&state.syncedLocalRevision<=localRevision){
   const current=new Map(base.map(row=>[entryId(row),row]));
+  // An authoritative empty remote stores an intentionally empty baseline so it
+  // does not publish device bootstrap metadata. Seed the local identity again
+  // when the first real learner record later makes a publication necessary.
+  const normalizedIdentity=normalizeLibraryReplicaEntry({table:'meta',key:'identity',value:identity},identity);
+  if(!current.has(entryId(normalizedIdentity)))current.set(entryId(normalizedIdentity),{...normalizedIdentity,value:encodeBackupValue(normalizedIdentity.value)});
   for(const change of await tx.changesSince(state.syncedLocalRevision,librarySyncTables)){
    const id=entryId(change);
    if(change.value===null||!isReplicatedLibraryEntry(change.table,change.key)){current.delete(id);continue;}
@@ -64,18 +76,38 @@ function conflictSnapshot(base:Entry[],local:Entry[],remote:Entry[],conflicts:st
  const byId=(entries:Entry[])=>new Map(entries.map(entry=>[entryId(entry),entry]));const b=byId(base),l=byId(local),r=byId(remote);
  return {detectedAt:new Date().toISOString(),remoteRevision:head.revision,remoteManifest:head.manifest,records:conflicts.map(id=>({id,base:b.get(id)??null,local:l.get(id)??null,remote:r.get(id)??null})),affectedRecordIds};
 }
-async function localDiffersFromBase(tx:LibraryTransaction,state:State,identity:LibraryIdentity){
- if(state.syncedLocalRevision===undefined)return true;
- const changes=(await tx.changesSince(state.syncedLocalRevision,librarySyncTables))
-  .filter(change=>isReplicatedLibraryEntry(change.table,change.key));
- if(!changes.length)return false;
+async function pendingCloudSyncRecords(tx:LibraryTransaction,state:State|undefined,identity:LibraryIdentity){
+ if(state?.syncedLocalRevision===undefined){
+  const records:PendingCloudSyncRecord[]=[];
+  for(const table of librarySyncTables)for(const row of await tx.entries(table)){
+   if(isReplicatedLibraryEntry(table,row.key)&&!(table==='meta'&&row.key==='identity'))records.push({table,key:row.key});
+  }
+  return records.sort((a,b)=>entryId(a).localeCompare(entryId(b)));
+ }
+ const latest=new Map<string,{table:typeof librarySyncTables[number];key:string;value:unknown|null}>();
+ for(const change of await tx.changesSince(state.syncedLocalRevision,librarySyncTables)){
+  if(isReplicatedLibraryEntry(change.table,change.key))latest.set(entryId(change),change);
+ }
+ if(!latest.size)return [];
+ const changes=[...latest.values()];
  const base=new Map((await tx.syncBaseEntries<typeof librarySyncTables>(changes.map(({table,key})=>({table,key}))))
   .map(row=>[entryId(row),row.value]));
- return changes.some(change=>{
+ return changes.filter(change=>{
   const current=change.value===null?undefined:encodeBackupValue(normalizeLibraryReplicaEntry({table:change.table,key:change.key,value:change.value},identity).value);
   return !equal(current,base.get(entryId(change)));
- });
+ }).map(({table,key})=>({table,key})).sort((a,b)=>entryId(a).localeCompare(entryId(b)));
 }
+/** Exact local records that differ from the last confirmed account checkpoint. */
+export async function inspectPendingCloudSync(tx:LibraryTransaction):Promise<PendingCloudSyncSnapshot>{
+ const [owner,signedOut,identity,state,localRevision]=await Promise.all([
+  tx.get<Owner>('meta','service-owner'),tx.get('meta','signed-out'),tx.get<LibraryIdentity>('meta','identity'),
+  tx.get<State>('meta',STATE),readLocalLibraryRevision(tx),
+ ]);
+ if(!owner?.accountId)return {accountLinked:false,canSync:false,localRevision,records:[]};
+ if(!identity)throw new Error('localFlow.storageOpen');
+ return {accountLinked:true,canSync:!signedOut,localRevision,records:await pendingCloudSyncRecords(tx,state,identity)};
+}
+async function localDiffersFromBase(tx:LibraryTransaction,state:State,identity:LibraryIdentity){return (await pendingCloudSyncRecords(tx,state,identity)).length>0;}
 export const readCloudSync=()=>readLibrary(async tx=>{const state=await tx.get<State>('meta',STATE);if(state?.status==='syncing'&&(!state.syncStartedAt||Date.now()-Date.parse(state.syncStartedAt)>120000))return {...state,status:'pending' as const,syncStartedAt:undefined};if(state?.status==='synced'&&!await tx.get('meta','signed-out')){const localRevision=await readLocalLibraryRevision(tx);if(localRevision!==state.syncedLocalRevision){const identity=await tx.get<LibraryIdentity>('meta','identity');if(!identity||await localDiffersFromBase(tx,state,identity))return {...state,status:'pending' as const};}}return state;});
 export async function resolveCloudSyncConflicts(choice:CloudSyncConflictChoice){
  await writeLibraryState(async tx=>{await assertCurrentLibrary(tx);if(await tx.get('meta','signed-out'))throw new Error('authentication_required');const state=await tx.get<State>('meta',STATE);if(state?.status!=='conflict'||!state.conflict)throw new Error('library_sync_no_conflict');tx.put('meta',STATE,{...state,status:'pending',resolution:{choice,expectedRemoteRevision:state.conflict.remoteRevision},error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});});

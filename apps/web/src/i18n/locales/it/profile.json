@@ -101,6 +101,7 @@
     "restoreHint": "Ripristina solo in una libreria locale vuota. I backup dell’account richiedono anche l’accesso all’account originale.",
     "exported": "Backup creato. Verifica che il file scaricato sia stato salvato.",
     "restored": "Libreria ripristinata. Riapri l'app per continuare a imparare.",
+    "restoredResourcesDeferred": "La libreria è stata ripristinata, ma non è stato possibile aggiornare le risorse di apprendimento locali. Riapri l'app per riprovare; i dati ripristinati sono conservati.",
     "reopen": "Riapri l'app",
     "account": "Account: {{account}}",
     "date": "Creato il: {{date}}",

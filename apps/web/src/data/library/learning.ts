@@ -163,7 +163,7 @@ export async function enrollPackage(operationId:string,key:string,languageContex
   const source={kind:'sense_learning_package',bookId,bookVersionId,contentReleaseId,packageVersion,packageDigest:pack.digest,...(publication?{publicationManifestSha256:publication.manifestSha256}:{})};
   const existing=await tx.get<LocalLearningTarget>('learningTargets',id);
   if(existing&&(existing.identity.learnerUserId!==owner.learnerId||existing.identity.senseVersionId!==e.senseVersionId||existing.identity.bindingVersionId!==e.bindingVersionId||existing.targetLanguageTag!==pack.content.targetLanguage||existing.expression!==e.expression))throw new Error('localFlow.invalidTarget');
-  const membership=curriculumMembership({operationId,targetId:id,sourceKey:publication?`${key}:${publication.manifestSha256}`:key,languageContext:context,sourceKind:'sense_learning_package',provenance:source,packageKey:key,assurancePackageKey:e.assurancePackageKey,material,at:snapshot.createdAt});
+  const membership=curriculumMembership({operationId,targetId:id,sourceKey:key,languageContext:context,sourceKind:'sense_learning_package',provenance:source,packageKey:key,assurancePackageKey:e.assurancePackageKey,material,at:snapshot.createdAt});
   if(existing){
    if(existing.curriculumMemberships.some(candidate=>candidate.id===membership.id))continue;
    tx.put('learningTargets',id,upsertLocalCurriculumMembership(existing,membership));

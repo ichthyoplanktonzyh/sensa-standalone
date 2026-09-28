@@ -99,6 +99,7 @@
     "restoreHint": "只能恢复到空的本机库；账号备份还需登录原账号。",
     "exported": "备份已生成，请确认下载文件已保存。",
     "restored": "本机库已完整恢复。重新打开应用后可继续学习。",
+    "restoredResourcesDeferred": "本机库已恢复，但本机学习资源未能刷新。请重新打开应用重试；已恢复的数据会保留。",
     "reopen": "重新打开应用",
     "account": "备份账号：{{account}}",
     "date": "备份时间：{{date}}",

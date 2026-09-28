@@ -1,4 +1,4 @@
-import {queueWeb,pendingWeb,acknowledgeWeb,webStatus,discardPendingWeb,webOperationStatus} from './webDestination';
+import {queueWeb,pendingWeb,acknowledgeWeb,webStatus,discardPendingWeb,webOperationStatus,exportWebQueueRecovery,discardWebQueueRecovery} from './webDestination';
 import {browserCaptureToIntake} from './semanticIntakeAdapter';
 import {z} from 'zod';
 import {captureSnapshotSchema,sensaLanguageForDeclaredTag,sensaLanguageForIso6393,sensaReadingGlossaryForPair,sensaBridgeNotificationKind,sensaBridgeRequestChannel,sensaBridgeRequestSchema,sensaExtensionCredentialSchema,type SensaBridgeRequest,type SensaBridgeRequestOf,type SensaExtensionAuthorization,type SensaExtensionExchange} from '@sensa/contracts/sensa';
@@ -246,8 +246,8 @@ async function status(){
  const store=await load(),a=store.active?store.accounts[store.active]:null;
  const [tab]=await chrome.tabs.query({active:true,currentWindow:true}),site=readingSiteOf(tab?.url);
  const rule=site?{site,disabled:(await readingPreferences()).disabledSites.includes(site)}:null;
- const local=await localIntakeStatus(),account=a?await webStatus(a.accountId):null;
- const base={accountId:a?.accountId??null,destination:'web-local',pending:local.pending+(account?.pending??0),errors:[...local.errors,...account?.errors??[]],recent:[...local.recent,...account?.recent??[]].slice(0,20)};
+ const local=await localIntakeStatus(),account=await webStatus(a?.accountId??null);
+ const base={accountId:a?.accountId??null,destination:'web-local',pending:local.pending+account.pending,errors:[...local.errors,...account.errors],recent:[...local.recent,...account.recent].slice(0,20),recoveryCount:account.recoveryCount};
  const language=await readingLanguageRouteSnapshot();
  return {...base,rule,language};
 }
@@ -361,6 +361,8 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
   return result;
  }
  if(!isPopup)throw new Error('unsupported_message');
+ if(message.kind==='queue-recovery-export')return exportWebQueueRecovery();
+ if(message.kind==='queue-recovery-discard')await discardWebQueueRecovery();
  if(message.kind==='status'){const [tab]=await chrome.tabs.query({active:true,currentWindow:true});const readingModes=await modes();if(tab?.id&&readingModes[tab.id]?.accountId===await activeScope()){try{await chrome.scripting.executeScript({target:{tabId:tab.id},files:['content.js']});await chrome.tabs.sendMessage(tab.id,{kind:'reading',enabled:true,accountId:readingModes[tab.id].accountId,preferences:await readingPreferences()});await chrome.action.setBadgeText({tabId:tab.id,text:''});}catch{/* Preserve intent until the user grants this page. */}}}
  if(message.kind==='select-language-route'){
   if(typeof message.routeId!=='string')throw new Error('unknown_language_route');

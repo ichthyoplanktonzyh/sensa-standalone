@@ -33,6 +33,7 @@ import {
   MAX_SCENE_IMAGES,
   useSceneImageInput,
 } from "./useSceneImageInput";
+import {SceneImageAttemptStatus} from './SceneImageAttemptStatus';
 
 export interface MaterialComposerPort {
   save: (input: {texts:string[]; familiarExpression:string; startingPoint:ClarificationStartingPoint|null}) => Promise<string>;
@@ -51,6 +52,7 @@ interface DraftBlock {
   bodyText: string;
   mediaId: string | null;
   previewUrl: string | null;
+  sourceFileKey?: string;
 }
 
 const textBlock = (): DraftBlock => ({
@@ -173,6 +175,7 @@ export const PersonalMeaningComposer = ({
     setStartingPoint(null);
     setError("");
     setBusy(false);
+    sceneImages.clearStatuses();
   };
 
   const updateBlock = (localId: string, bodyText: string) => {
@@ -186,49 +189,34 @@ export const PersonalMeaningComposer = ({
   const removeBlock = (localId: string) => {
     const target = blocks.find((block) => block.localId === localId);
     if (target?.mediaId) void removeMedia(target.mediaId).catch(() => setError(t("composer.imageError")));
+    sceneImages.forgetFile(target?.sourceFileKey);
     setBlocks((current) => {
       const next = current.filter((block) => block.localId !== localId);
       return next.length > 0 ? next : [textBlock()];
     });
   };
 
-  const addImageFiles = useCallback(async (files: File[]) => {
-    const additions: DraftBlock[] = [];
-    let failure: unknown = null;
-    for (const file of files) {
-      try {
-        const mediaId = newUuid();
-        const stored = await storeImageFile(
-          mediaId,
-          file,
-          new Date().toISOString(),
-        );
-        additions.push({
-          localId: newUuid(),
-          kind: "image",
-          bodyText: "",
-          mediaId,
-          previewUrl: stored.dataUrl,
-        });
-      } catch (cause) {
-        failure = cause;
-        break;
-      }
-    }
-    if (additions.length > 0) {
-      setBlocks((current) => [...current, ...additions]);
-    }
-    if (failure) throw failure;
+  const addImageFile = useCallback(async (file: File, sourceFileKey: string) => {
+    const mediaId = newUuid();
+    const stored = await storeImageFile(mediaId, file, new Date().toISOString());
+    setBlocks((current) => [...current, {
+      localId: newUuid(),
+      kind: 'image',
+      bodyText: '',
+      mediaId,
+      previewUrl: stored.dataUrl,
+      sourceFileKey,
+    }]);
   }, []);
 
   const sceneImages = useSceneImageInput({
     disabled: busy || Boolean(persistence),
     imageCount,
-    onAddFiles: addImageFiles,
+    onAddFile: addImageFile,
     onStart: () => setError(""),
     onRejected: () => setError("localFlow.sceneImageRequirements"),
-    onFailed: (cause) => setError(
-      cause instanceof MediaStoreFullError
+    onFailed: (failures) => setError(
+      failures.some(({cause}) => cause instanceof MediaStoreFullError)
         ? "localFlow.sceneStorageFull"
         : t("composer.imageError"),
     ),
@@ -468,6 +456,10 @@ export const PersonalMeaningComposer = ({
               {localFlowNotice(error)}
             </p>
           )}
+          <SceneImageAttemptStatus
+            statuses={sceneImages.statuses}
+            className="mt-3 space-y-1 text-sm"
+          />
         </div>,
         controls: <div className="flex gap-3">
           <button

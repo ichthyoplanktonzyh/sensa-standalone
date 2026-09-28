@@ -99,6 +99,7 @@
     "restoreHint": "Chỉ khôi phục vào thư viện cục bộ trống. Bản sao lưu tài khoản cũng cần đăng nhập vào tài khoản gốc.",
     "exported": "Đã tạo bản sao lưu. Kiểm tra xem tệp tải xuống đã được lưu chưa.",
     "restored": "Đã khôi phục thư viện. Mở lại ứng dụng để tiếp tục học.",
+    "restoredResourcesDeferred": "Thư viện đã được khôi phục nhưng chưa thể làm mới tài nguyên học tập cục bộ. Hãy mở lại ứng dụng để thử lại; dữ liệu đã khôi phục vẫn được giữ nguyên.",
     "reopen": "Mở lại ứng dụng",
     "account": "Tài khoản: {{account}}",
     "date": "Ngày tạo: {{date}}",

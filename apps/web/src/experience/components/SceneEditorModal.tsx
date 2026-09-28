@@ -16,6 +16,9 @@ import {
   MAX_SCENE_IMAGES,
   useSceneImageInput,
 } from './useSceneImageInput';
+import {SceneImageAttemptStatus} from './SceneImageAttemptStatus';
+
+type EditorImage = PersonalContentImage & {sourceFileKey?: string};
 
 interface SceneEditorModalProps {
   active: boolean;
@@ -83,7 +86,7 @@ export function SceneEditorModal({
 }: SceneEditorModalProps) {
   useTranslation();
   const [body, setBody] = useState('');
-  const [media, setMedia] = useState<PersonalContentImage[]>([]);
+  const [media, setMedia] = useState<EditorImage[]>([]);
   const [saving, setSaving] = useState(false);
   const [imageError, setImageError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -112,30 +115,23 @@ export function SceneEditorModal({
     return () => window.clearTimeout(focusTimer);
   }, [active, contextId, learningTarget, senseId]);
 
-  const addImageFiles = useCallback(async (files: File[]) => {
-    const additions: PersonalContentImage[] = [];
-    let failed = false;
-    for (const file of files) {
-      try {
-        additions.push(await compressSceneImage(file));
-      } catch {
-        failed = true;
-      }
-    }
-    if (additions.length > 0) {
-      setMedia((current) => [...current, ...additions].slice(0, MAX_SCENE_IMAGES));
-    }
-    if (failed) throw new Error(cardText('sceneImageFailed'));
+  const addImageFile = useCallback(async (file: File, sourceFileKey: string) => {
+    const image = await compressSceneImage(file);
+    setMedia((current) => [...current, {...image, sourceFileKey}].slice(0, MAX_SCENE_IMAGES));
   }, []);
 
   const sceneImages = useSceneImageInput({
     disabled: saving,
     imageCount: media.length,
-    onAddFiles: addImageFiles,
+    onAddFile: addImageFile,
     onStart: () => setImageError(''),
     onRejected: () => setImageError(localFlowText('sceneImageRequirements')),
     onFailed: () => setImageError(cardText('sceneImageFailed')),
   });
+
+  useEffect(() => {
+    sceneImages.clearStatuses();
+  }, [active, contextId, learningTarget?.learningTargetId, sceneImages.clearStatuses, senseId]);
 
   const unavailable = saving || sceneImages.processing;
 
@@ -149,13 +145,14 @@ export function SceneEditorModal({
     }
     setSaving(true);
     try {
+      const persistedMedia = media.map(({sourceFileKey: _sourceFileKey, ...item}) => item);
       if (learningTarget) {
         await personalContentSystem.execute({
           kind: 'save_learning_scene',
           operationId: crypto.randomUUID(),
           ...learningTarget,
           body,
-          media,
+          media: persistedMedia,
         });
       } else {
         await personalContentSystem.execute({
@@ -164,7 +161,7 @@ export function SceneEditorModal({
           senseId,
           contextId,
           body,
-          media,
+          media: persistedMedia,
         });
       }
       toast(cardText('sceneSaved'));
@@ -236,7 +233,10 @@ export function SceneEditorModal({
                     className="absolute right-5 top-5 grid size-11 place-items-center rounded-control border-0 bg-surface-raised text-fg-secondary shadow-raised focus-visible:outline-2 focus-visible:outline-focus"
                     type="button"
                     disabled={unavailable}
-                    onClick={() => setMedia((current) => current.filter((candidate) => candidate.mediaId !== item.mediaId))}
+                    onClick={() => {
+                      sceneImages.forgetFile(item.sourceFileKey);
+                      setMedia((current) => current.filter((candidate) => candidate.mediaId !== item.mediaId));
+                    }}
                     aria-label={cardText('sceneRemove',{name:item.fileName})}
                   >
                     <svg className={iconClass} aria-hidden="true"><use href="#i-close" /></svg>
@@ -282,6 +282,10 @@ export function SceneEditorModal({
             <span className="ml-auto text-metadata text-fg-tertiary">{body.length}/1000 · {cardText('sceneCount',{count:media.length,max:MAX_SCENE_IMAGES})}</span>
           </div>
           {imageError && <p className="mt-3 text-body-support text-feedback-danger" role="alert">{imageError}</p>}
+          <SceneImageAttemptStatus
+            statuses={sceneImages.statuses}
+            className="mt-3 space-y-1 text-body-support"
+          />
         </div>
 
         <input

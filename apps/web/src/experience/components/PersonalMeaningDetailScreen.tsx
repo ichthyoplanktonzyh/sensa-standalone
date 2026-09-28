@@ -46,10 +46,13 @@ import { createRealSemanticAgent } from '../personalMeaningJourney/realSemanticA
 import { beginAgentBusinessTrace } from '../../observability/agentTrace';
 import { languageRoutesSnapshot } from '../../data/library/language';
 import {
+  loadLatestSemanticAgentSession,
   loadSemanticAgentSession,
   newSemanticAgentSession,
   saveSemanticAgentSession,
+  type SemanticAgentSessionPersistenceIssue,
 } from '../personalMeaningJourney/semanticAgentSession';
+import {SemanticAgentSessionPersistenceNotice} from './SemanticAgentSessionPersistenceNotice';
 import {
   getMedia,
   MediaStoreFullError,
@@ -63,6 +66,7 @@ import {
   MAX_SCENE_IMAGES,
   useSceneImageInput,
 } from './useSceneImageInput';
+import {SceneImageAttemptStatus} from './SceneImageAttemptStatus';
 import type {
   AgentExpressionCandidate,
   AgentContextCandidate,
@@ -559,7 +563,7 @@ const NewMeaningConversationScreen = ({
       draftCreated = true;
       const session = newSemanticAgentSession(result.intakeId, newUuid());
       session.messages = [message('learner', body.trim(), mediaIds)];
-      saveSemanticAgentSession(session);
+      await saveSemanticAgentSession(session);
       onConversationCreated(result.intakeId);
     } catch (cause) {
       if (!draftCreated) await Promise.allSettled(mediaIds.map(removeMedia));
@@ -615,6 +619,7 @@ const PreviewPersonalMeaningDetailScreen = ({
   const streamFrameRef = useRef<number | null>(null);
   const streamTextRef = useRef('');
   const [session, setSession] = useState<SemanticAgentSession | null>(null);
+  const [sessionPersistenceIssue, setSessionPersistenceIssue] = useState<SemanticAgentSessionPersistenceIssue | null>(null);
   const [busy, setBusy] = useState(false);
   const [streamingAssistant, setStreamingAssistant] = useState('');
   const [error, setError] = useState('');
@@ -628,9 +633,16 @@ const PreviewPersonalMeaningDetailScreen = ({
   useEffect(() => {
     if (!personalMeaningId) {
       setSession(null);
+      setSessionPersistenceIssue(null);
       return;
     }
-    setSession(loadSemanticAgentSession(personalMeaningId, newUuid));
+    const loaded = loadSemanticAgentSession(personalMeaningId, newUuid);
+    setSession(loaded.session);
+    setSessionPersistenceIssue(
+      loaded.persistence === 'conflict'
+        ? 'conflict'
+        : loaded.persistence === 'tab-only' ? 'storage' : null,
+    );
     setPanelOpen(false);
     setReviewOpen(false);
     setEditingTrack(null);
@@ -639,9 +651,11 @@ const PreviewPersonalMeaningDetailScreen = ({
     setStreamingAssistant('');
   }, [personalMeaningId]);
 
-  const commit = useCallback((next: SemanticAgentSession) => {
-    saveSemanticAgentSession(next);
+  const commit = useCallback(async (next: SemanticAgentSession) => {
     setSession(next);
+    const result = await saveSemanticAgentSession(next);
+    setSessionPersistenceIssue(result.saved ? null : result.reason);
+    return result;
   }, []);
 
   // A pending structured turn must stop when its screen goes away.
@@ -727,7 +741,8 @@ const PreviewPersonalMeaningDetailScreen = ({
       : [...baseSession.messages];
     const languageContext=baseSession.languageContext??(await languageRoutesSnapshot()).context;
     const waiting = { ...baseSession, messages,languageContext };
-    commit(waiting);
+    const waitingPersistence = await commit(waiting);
+    if (!waitingPersistence.saved && waitingPersistence.reason === 'conflict') return;
     setBusy(true);
     setError('');
     streamTextRef.current = '';
@@ -760,7 +775,7 @@ const PreviewPersonalMeaningDetailScreen = ({
       if (controller.signal.aborted) {
         throw controller.signal.reason ?? new DOMException('Aborted', 'AbortError');
       }
-      commit({
+      await commit({
         ...waiting,
         messages: [...messages, message('assistant', result.assistantMessage)],
         workingSet: result.workingSet,
@@ -870,7 +885,7 @@ const PreviewPersonalMeaningDetailScreen = ({
           })),
         ],
       });
-      commit({
+      await commit({
         ...session,
         workingSet: {
           ...session.workingSet,
@@ -894,7 +909,7 @@ const PreviewPersonalMeaningDetailScreen = ({
 
   const editTrack = <T,>(track: WorkingSetTrack, value: T) => {
     if (!session) return;
-    commit({
+    void commit({
       ...session,
       workingSet: { ...session.workingSet, [track]: value },
       learnerEditedTracks: session.learnerEditedTracks.includes(track)
@@ -906,50 +921,53 @@ const PreviewPersonalMeaningDetailScreen = ({
   const materialImageCount = (detail?.materialBlocks ?? clarificationDraft?.materialBlocks ?? [])
     .filter((block) => block.kind === 'image').length;
 
-  const addImageFiles = useCallback(async (files: File[]) => {
-    if (!detail && !clarificationDraft) return;
-    let added = 0;
-    let failure: unknown = null;
-    for (const file of files) {
-      const mediaId = newUuid();
-      try {
-        await storeImageFile(mediaId, file, new Date().toISOString());
-        if (detail) {
-          await gateway.addMaterialBlock({
-            operationId: newUuid(),
-            personalMeaningId: detail.personalMeaningId,
-            block: { kind: 'image', personalMediaObjectId: mediaId },
-          });
-        } else {
-          await gateway.addClarificationMaterial(
-            newUuid(),
-            clarificationDraft!.intakeId,
-            { kind: 'image', personalMediaObjectId: mediaId },
-          );
-        }
-        added += 1;
-      } catch (cause) {
-        await removeMedia(mediaId).catch(() => undefined);
-        failure = cause;
-        break;
+  const addImageFile = useCallback(async (file: File) => {
+    const currentDetail = detail;
+    const currentDraft = clarificationDraft;
+    if (!currentDetail && !currentDraft) return;
+    const mediaId = newUuid();
+    try {
+      await storeImageFile(mediaId, file, new Date().toISOString());
+      if (currentDetail) {
+        await gateway.addMaterialBlock({
+          operationId: newUuid(),
+          personalMeaningId: currentDetail.personalMeaningId,
+          block: { kind: 'image', personalMediaObjectId: mediaId },
+        });
+      } else if (currentDraft) {
+        await gateway.addClarificationMaterial(
+          newUuid(),
+          currentDraft.intakeId,
+          { kind: 'image', personalMediaObjectId: mediaId },
+        );
       }
+    } catch (cause) {
+      await removeMedia(mediaId).catch(() => undefined);
+      throw cause;
     }
-    if (added > 0) toast(uiText('materialAddedForTheNextTurn'));
-    if (failure) throw failure;
-  }, [clarificationDraft, detail, gateway, toast]);
+  }, [clarificationDraft, detail, gateway]);
 
   const sceneImages = useSceneImageInput({
     disabled: busy,
     imageCount: materialImageCount,
-    onAddFiles: addImageFiles,
+    onAddFile: addImageFile,
     onStart: () => setImageError(''),
     onRejected: () => setImageError(localFlowText('sceneImageRequirements')),
-    onFailed: (cause) => setImageError(
-      cause instanceof MediaStoreFullError
+    onFailed: (failures) => setImageError(
+      failures.some(({cause}) => cause instanceof MediaStoreFullError)
         ? localFlowText('sceneStorageFull')
         : uiText('unableToAddThisImage'),
     ),
+    onComplete: ({statuses}) => {
+      if (statuses.some(({state}) => state === 'added')) {
+        toast(uiText('materialAddedForTheNextTurn'));
+      }
+    },
   });
+
+  useEffect(() => {
+    sceneImages.clearStatuses();
+  }, [personalMeaningId, sceneImages.clearStatuses]);
 
   const imageInputUnavailable = busy || sceneImages.processing;
 
@@ -1022,7 +1040,7 @@ const PreviewPersonalMeaningDetailScreen = ({
             personalMeaningId: detail!.personalMeaningId,
           });
       setReviewOpen(false);
-      commit({
+      await commit({
         ...session,
         outcome: {
           meaningFocusId: result.meaningFocusId,
@@ -1065,7 +1083,7 @@ const PreviewPersonalMeaningDetailScreen = ({
         relation: expression.relation,
         semanticCoverage: expression.semanticCoverage,
       });
-      commit({
+      await commit({
         ...session,
         outcome: { ...session.outcome!, expressionConfirmed: true },
       });
@@ -1217,6 +1235,10 @@ const PreviewPersonalMeaningDetailScreen = ({
             }}
           />
           {imageError && <p className="text-body-support text-feedback-danger" role="alert">{imageError}</p>}
+          <SceneImageAttemptStatus
+            statuses={sceneImages.statuses}
+            className="space-y-1 text-body-support"
+          />
         </section>
       )}
 
@@ -1489,7 +1511,22 @@ const PreviewPersonalMeaningDetailScreen = ({
     screenRef={screenRef}
     title={allConfirmed ? localFlowText('savedExpression') : undefined}
     showMaterialToggle={!allConfirmed}
-  >{body}</MeaningWorkspaceFrame>;
+  >
+    <SemanticAgentSessionPersistenceNotice
+      issue={sessionPersistenceIssue}
+      busy={busy}
+      onRetry={() => {
+        if (session) void commit(session);
+      }}
+      onLoadLatest={() => {
+        if (!personalMeaningId) return;
+        const loaded = loadLatestSemanticAgentSession(personalMeaningId, newUuid);
+        setSession(loaded.session);
+        setSessionPersistenceIssue(loaded.persistence === 'tab-only' ? 'storage' : null);
+      }}
+    />
+    {body}
+  </MeaningWorkspaceFrame>;
 };
 
 /** One existing workspace frame for both persisted and preview controllers. */

@@ -51,7 +51,7 @@
     "short": "Geben Sie noch {{count}} Zeichen ein.", "export": "Verschlüsselte Sicherung exportieren", "exporting": "Sicherung wird erstellt…", "check": "Sicherung prüfen", "checking": "Wird geprüft…",
     "restore": "In dieser leeren Bibliothek wiederherstellen", "restoring": "Wird wiederhergestellt…", "file": "Sicherungsdatei auswählen", "noFile": "Keine Datei ausgewählt",
     "restoreHint": "Stellen Sie nur in einer leeren lokalen Bibliothek wieder her. Kontosicherungen erfordern außerdem das ursprüngliche Konto.",
-    "exported": "Sicherung erstellt. Prüfen Sie, ob die heruntergeladene Datei gespeichert wurde.", "restored": "Bibliothek wiederhergestellt. Öffnen Sie die App erneut, um weiterzulernen.", "reopen": "App erneut öffnen",
+    "exported": "Sicherung erstellt. Prüfen Sie, ob die heruntergeladene Datei gespeichert wurde.", "restored": "Bibliothek wiederhergestellt. Öffnen Sie die App erneut, um weiterzulernen.", "restoredResourcesDeferred": "Die Bibliothek wurde wiederhergestellt, aber lokale Lernressourcen konnten nicht aktualisiert werden. Öffnen Sie die App erneut, um es noch einmal zu versuchen; die wiederhergestellten Daten bleiben erhalten.", "reopen": "App erneut öffnen",
     "account": "Konto: {{account}}", "date": "Erstellt: {{date}}",
     "summary": "Quellen: {{drafts}} · Bedeutungen: {{meanings}} · Pakete: {{packages}} · Lerneinträge: {{targets}} · Durchläufe: {{runs}} · Ereignisse: {{events}}",
     "interrupted": "{{count}} laufende Anfragen werden beendet. Wiederholen Sie sie nach der Wiederherstellung manuell.",

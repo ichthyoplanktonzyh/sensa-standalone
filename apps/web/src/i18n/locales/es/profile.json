@@ -101,6 +101,7 @@
     "restoreHint": "Restaura solo en una biblioteca local vacía. Las copias de cuenta también requieren iniciar sesión en la cuenta original.",
     "exported": "Copia creada. Comprueba que el archivo descargado se haya guardado.",
     "restored": "Biblioteca restaurada. Vuelve a abrir la aplicación para continuar aprendiendo.",
+    "restoredResourcesDeferred": "La biblioteca se restauró, pero no se pudieron actualizar los recursos de aprendizaje locales. Vuelve a abrir la aplicación para reintentarlo; los datos restaurados se conservan.",
     "reopen": "Volver a abrir la aplicación",
     "account": "Cuenta: {{account}}",
     "date": "Creada: {{date}}",

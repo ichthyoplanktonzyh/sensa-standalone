@@ -99,6 +99,7 @@
     "restoreHint": "Pulihkan hanya ke pustaka lokal yang kosong. Cadangan akun juga memerlukan masuk ke akun asal.",
     "exported": "Cadangan dibuat. Pastikan berkas yang diunduh sudah tersimpan.",
     "restored": "Pustaka dipulihkan. Buka kembali aplikasi untuk melanjutkan belajar.",
+    "restoredResourcesDeferred": "Pustaka telah dipulihkan, tetapi sumber belajar lokal tidak dapat disegarkan. Buka kembali aplikasi untuk mencoba lagi; data yang dipulihkan tetap tersimpan.",
     "reopen": "Buka ulang aplikasi",
     "account": "Akun: {{account}}",
     "date": "Dibuat: {{date}}",
