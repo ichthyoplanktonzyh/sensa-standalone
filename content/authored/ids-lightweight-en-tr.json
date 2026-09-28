@@ -1,0 +1,643 @@
+{
+  "publisher": {
+    "namespace": "sensa.official",
+    "name": "Sensa Official"
+  },
+  "author": {
+    "name": "Sensa Official"
+  },
+  "license": {
+    "name": "All rights reserved"
+  },
+  "bookKey": "ids-lightweight-en-tr",
+  "title": "IDS 轻量学习：英语 → tr",
+  "description": "以英语为目标语言、tr 为支持语言的常用共同概念学习包。",
+  "versionNumber": 1,
+  "publishedAt": "2026-09-25T00:00:00Z",
+  "changeSummary": "将既有轻量学习成品纳入可复现的官方 Book 发布源。",
+  "targetLanguage": "en",
+  "supportLanguage": "tr",
+  "entries": [
+    {
+      "key": "ids:1-310",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "water",
+      "meaning": "İçilen ve günlük yaşamda kullanılan berrak sıvı.",
+      "senseConfirmation": "Evet, susadığında içtiğin su.",
+      "scene": "Spor yaptıktan sonra boğazın kurur. Bardaktaki berrak, tatsız sıvıdan bir yudum alırsın.",
+      "sceneBridge": "İngilizce cümlede biri kibarca bir bardak water istiyor.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "c46300559ef4157b674db3a09f6ced69f23c00c11fc568fa30620b0724ec9693",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈwɔtɚ/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "Could I have a glass of water, please?",
+        "translation": "Bir bardak su alabilir miyim, lütfen?",
+        "audio": {
+          "sha256": "e75636fd06019a796dceba79092cc3a248cc2e93aa24008ef8749a612a675c97",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 24,
+        "targetEnd": 29
+      },
+      "images": [
+        {
+          "name": "Bir kişi spor sonrasında bir bardak berrak su içiyor.",
+          "media": {
+            "sha256": "491dca9d64f00212befd27d4081f42b506d79a63a8d5d8307b7f78c1376b5a63",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary: water pronunciation",
+          "url": "https://dictionary.cambridge.org/pronunciation/english/water"
+        },
+        {
+          "title": "Cambridge Dictionary: water",
+          "url": "https://dictionary.cambridge.org/dictionary/english/water"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "日常饮用或接触的水",
+        "prototypeScenes": [
+          {
+            "summary": "运动后喉咙发干，拿起杯子喝下一口清凉、没有味道的液体。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Could I have a glass of water, please?"
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:11-610",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "lend",
+      "meaning": "Kendine ait bir şeyi, geçici olarak kullanıp geri vermesi için başkasına vermek.",
+      "senseConfirmation": "Bir şeyi geçici olarak kullanması ve sonra sana geri vermesi için başkasına veriyorsun.",
+      "scene": "Maya şemsiyesini unutmuş. Ona kendi şemsiyeni veriyor ve yarın sana geri getirmesini kararlaştırıyorsunuz.",
+      "sceneBridge": "Sahnede şemsiyenin sahibi onu Maya'ya veriyor; eylemin bu yönü lend anlamına gelir.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "926a65138d42dd0306b14a79d82055b74f0436d89828acc275e52c9ae920b2c3",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/lɛnd/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "Lend bir şeyi başkasına ödünç vermek, borrow ise başkasından ödünç almaktır."
+      },
+      "sceneExample": {
+        "example": "Could you lend Maya your umbrella until tomorrow?",
+        "translation": "Şemsiyeni yarına kadar Maya'ya ödünç verir misin?",
+        "audio": {
+          "sha256": "37988b30cf1da873ad2316ce41b4344bd7d1503b8f31b7133262dbc178f843de",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 10,
+        "targetEnd": 14
+      },
+      "sources": [
+        {
+          "title": "Cambridge Dictionary",
+          "url": "https://dictionary.cambridge.org/us/pronunciation/english/lend"
+        },
+        {
+          "title": "Cambridge Dictionary",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/lend"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "把自己的东西暂时交给别人用，之后会收回",
+        "prototypeScenes": [
+          {
+            "summary": "朋友忘带伞，你把自己的伞交给他，约好明天还你。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Could you lend Maya your umbrella until tomorrow?"
+        ],
+        "excludedCases": [
+          "不是向别人借入"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:11-620",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "borrow",
+      "meaning": "Başkasına ait bir şeyi bir süre kullanmak üzere alıp sonra geri vermek.",
+      "senseConfirmation": "Burada eşyayı geçici olarak alan ve sonra geri veren sensin.",
+      "scene": "Evden çıkmak üzeresin ve telefonunun şarjı bitmek üzere. Ev arkadaşından şarj aletini ödünç alıp yarın sabah geri vermek üzere anlaşıyorsun.",
+      "sceneBridge": "Sahnede şarj aletini yarına kadar kullanmak üzere sen alıyorsun; eylemin bu yönü borrow anlamına gelir.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "91629278f734aaf6fe0406466cb452988db08900b34c4643b1039d06cc2e682f",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈbɑːr.oʊ/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "Borrow, bir şeyi başkasından ödünç almak; lend ise bir şeyi başkasına ödünç vermektir."
+      },
+      "sceneExample": {
+        "example": "Could I borrow your charger until tomorrow morning?",
+        "translation": "Şarj aletini yarın sabaha kadar ödünç alabilir miyim?",
+        "audio": {
+          "sha256": "09db415597e1b3704864407302e471f895e828675d203adc11131c17cafe79a4",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 8,
+        "targetEnd": 14
+      },
+      "sources": [
+        {
+          "title": "Cambridge Dictionary, borrow",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/borrow"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "暂时使用别人的东西，之后归还",
+        "prototypeScenes": [
+          {
+            "summary": "出门前发现手机没电，你先用室友的充电器，并答应明早还。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Could I borrow your charger until tomorrow morning?"
+        ],
+        "excludedCases": [
+          "lend"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:2-510",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "uncle",
+      "meaning": "Anne ya da babanın erkek kardeşi veya teyze ya da halanın eşi olan erkek akraba.",
+      "senseConfirmation": "İngilizcede bu akrabalık ilişkilerinin tümü, ailenin hangi tarafından olduğunu belirtmeden uncle sözcüğüyle anlatılabilir.",
+      "scene": "Anne babanın kuşağından bir erkek akrabanı düşün: Annenin ya da babanın erkek kardeşi olabilir veya teyzenin ya da halanın eşi olabilir.",
+      "sceneBridge": "Sahnede bu akraban sana pankek yapmayı öğretiyor; İngilizcede, akrabalığın hangi taraftan olduğu belirtilmeden uncle deniyor.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "f2a06aa9c9b3c1a7c7085b09fdbe240a225dce2d4c43e5e67d3bf69818511416",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈʌŋkəl/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "usagePattern": "Amca doğal bir çeviridir; ancak İngilizce uncle, annenin erkek kardeşi olan dayıyı ya da teyze veya halanın eşini de anlatabilir. Cümle tek başına akrabalığın hangi taraftan olduğunu belirtmez."
+      },
+      "sceneExample": {
+        "example": "My uncle is teaching me how to make pancakes.",
+        "translation": "Amcam bana pankek yapmayı öğretiyor.",
+        "audio": {
+          "sha256": "264c5f268ce2e0ef62d7941a40f9f5ce58374d66fa0c59b9ec45658990510046",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 3,
+        "targetEnd": 8
+      },
+      "sources": [
+        {
+          "title": "Cambridge Dictionary: uncle",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/uncle"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "父母同辈的男性亲属",
+        "prototypeScenes": [
+          {
+            "summary": "家里有位和爸爸妈妈同辈的男性亲属，孩子见到他会亲切地叫一声。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "My uncle is teaching me how to make pancakes."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-120",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "food",
+      "meaning": "İnsanların veya hayvanların beslenmek için yediği şeyler.",
+      "senseConfirmation": "Bu, beslenmek için yenilen şeydir.",
+      "scene": "Öğle vakti yenebilecek bir şeyi tabağına koyup sofraya oturursun.",
+      "sceneBridge": "İngilizce cümle, masanın üzerindeki yenebilir şeyin artık soğuduğunu söylüyor.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "c735ec02937b1c3210411e2661ede333c2c0247598728f4a3f74a4202bb0a9f0",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/fuːd/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The food on the table has gone cold.",
+        "translation": "Masadaki yemek soğumuş.",
+        "audio": {
+          "sha256": "4babe99cd374c1eab0cc1306b48b4cadef9474d24246b05169d992ff93a92a03",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 4,
+        "targetEnd": 8
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "人或动物吃下以获得营养的食物",
+        "prototypeScenes": [
+          {
+            "summary": "到了午饭时间，你把可以吃的东西盛到盘里，准备用餐。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The food on the table has gone cold."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-121",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "cooked",
+      "meaning": "Isı kullanılarak hazırlanmış, pişirilmiş yiyecek.",
+      "senseConfirmation": "Yiyecek ısıyla pişirilmiş ve artık hazır.",
+      "scene": "Yeni pişmiş havuç dilimlerini düşün: Biraz buhar çıkarıyorlar ve yumuşamışlar.",
+      "sceneBridge": "Havuçlar yumuşayana kadar pişirilmiş; bu yüzden sahnede cooked deniyor.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "111247276ee0b7666d66cbd6430050fdab26a8b0d4ede6f17aada7d1541702f6",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/kʊkt/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The carrots are cooked until tender.",
+        "translation": "Havuçlar yumuşayana kadar pişirilir.",
+        "audio": {
+          "sha256": "cecdf5c5db6b6ba7a3377123636b08165acfa4abe2d0770ce0f680e1bcb0ceb9",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 16,
+        "targetEnd": 22
+      },
+      "images": [
+        {
+          "name": "Hafifçe buharı tüten, yumuşak pişmiş havuç dilimleriyle dolu bir kâse.",
+          "media": {
+            "sha256": "4c93c1bef3273195c93ec0ccdd33b83e59d66ba4b223c64f4a70e7b49f956459",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "食物已经经过加热烹制",
+        "prototypeScenes": [
+          {
+            "summary": "想象一盘胡萝卜片刚从锅里盛出，带着热气，质地已经变软。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The carrots are cooked until tender."
+        ],
+        "excludedCases": [
+          "这里描述食物经过加热烹制后的状态，不只是切碎、清洗或调味。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-122",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "raw",
+      "meaning": "Pişirilmemiş yiyecek.",
+      "senseConfirmation": "Yiyecek pişirilmemiştir; burada kalitesi hakkında bir yargı yoktur.",
+      "scene": "Yıkanıp kesilmiş havuç çubuklarını düşün: Henüz pişmedikleri için diri ve kıtırdırlar.",
+      "sceneBridge": "Havuçlar kıtır dokusunu koruyor ve pişirilmemiş; bu yüzden sahnede raw kullanılıyor.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "2554ff844c0f704722272a7564ee836c7da5a67cfda9f91714c0c050413769d1",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/rɑː/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "We ate raw carrots with hummus.",
+        "translation": "Humusla çiğ havuç yedik.",
+        "audio": {
+          "sha256": "55a2d08f8583fbc2f7fd381eb833a590a8bdce3d31cd6496fc433d673a2b0f3f",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 7,
+        "targetEnd": 10
+      },
+      "images": [
+        {
+          "name": "Bir tabaktaki taze ve kıtır çiğ havuç çubukları.",
+          "media": {
+            "sha256": "1c06ae46d778e8410baafdfe895daf7e42687e25a0c256deb14dac5775a80f72",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "食物尚未经过烹制",
+        "prototypeScenes": [
+          {
+            "summary": "想象一盘清洗后切成条的胡萝卜，颜色鲜亮、质地清脆，还没有经过加热烹制。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "We ate raw carrots with hummus."
+        ],
+        "excludedCases": [
+          "这里指食物未烹制的状态，不是“粗糙”，也不表示食材本身品质差。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-130",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "drink",
+      "meaning": "Bir sıvıyı ağza alıp yutmak.",
+      "senseConfirmation": "Burada anlatılan şey, su ya da başka bir sıvıyı yutma eylemi.",
+      "scene": "Uzun bir yürüyüşten sonra susarsın. Şişeyi ağzına götürüp birkaç yudum alırsın.",
+      "sceneBridge": "Yürüyüşten sonra durup su içme eylemi İngilizce cümlede drink ile anlatılıyor.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "a6d4729847cf0c346414f3feb8cd5cf69bedc5a101997d63d5108f3845406747",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/drɪŋk/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "After the hike, we stopped to drink some water.",
+        "translation": "Doğa yürüyüşünden sonra biraz su içmek için durduk.",
+        "audio": {
+          "sha256": "630efdc62e14daa97a5e81a3a3dff9fce46ed5878ab9c7a3fbea2dc87f0770a5",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 30,
+        "targetEnd": 35
+      },
+      "images": [
+        {
+          "name": "Bir kişi yürüyüşten sonra şişesinden su içiyor.",
+          "media": {
+            "sha256": "1eaa3b941830b573cdedb1f529317f30b90fab080a6d2726f32787e1044da4a5",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary — drink pronunciation",
+          "url": "https://dictionary.cambridge.org/us/pronunciation/english/drink"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "通过喝的方式摄入液体",
+        "prototypeScenes": [
+          {
+            "summary": "刚运动完喉咙发干，你拿起水瓶喝了几口，感觉舒服了一些。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "After the hike, we stopped to drink some water."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-510",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "bread",
+      "meaning": "Undan yapılıp fırında pişirilen, somun veya dilim olarak yenebilen yiyecek.",
+      "senseConfirmation": "Bu, undan yapılıp pişirilen ekmektir.",
+      "scene": "Kahvaltıda, kahverengi kabuklu fırınlanmış bir somundan bir dilim kesersin.",
+      "sceneBridge": "İngilizce cümlede kadın bir dilimini kızartma makinesine koyuyor.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "9b4bc1d8e673f185426bff09fe136d63ca032db26f8fb260d5ed81aecfc63c85",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/bred/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "She put a slice of bread in the toaster.",
+        "translation": "Bir dilim ekmeği kızartma makinesine koydu.",
+        "audio": {
+          "sha256": "d72264958df0797b7c178cc068bd9981ba53ebe7ed77188e8a20ca7e3974b7cf",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 19,
+        "targetEnd": 24
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "用面粉烘烤成的面包",
+        "prototypeScenes": [
+          {
+            "summary": "早餐时，你切开一条用面粉烤成、表面有棕色外皮的主食。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "She put a slice of bread in the toaster."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:8-480",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "rice",
+      "meaning": "Pirinç bitkisinin yenebilen taneleri; çiğ veya pişmiş olarak düşünülebilir.",
+      "senseConfirmation": "İngilizce rice hem pirinç tanelerini hem de pişmiş hâlini anlatabilir.",
+      "scene": "Akşam yemeğinde kâsede sıcak, küçük beyaz taneler vardır. Kaşıkla alıp balığın yanında yersin.",
+      "sceneBridge": "Bu cümlede pişmiş hâli ızgara balığın yanında servis ediliyor.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "030e2950a187c04792c997f5e05ee830171759740e77c725c01984a4249e7610",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/raɪs/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "usagePattern": "Bu yemek sahnesinde Türkçede pilav doğal bir karşılıktır; rice sözcüğü yalnızca pilav yemeğiyle sınırlı değildir, çiğ pirinç için de kullanılır."
+      },
+      "sceneExample": {
+        "example": "We usually serve rice with grilled fish.",
+        "translation": "Izgara balığın yanında genellikle pilav servis ederiz.",
+        "audio": {
+          "sha256": "2d4f86deaa7ba2a3ceed43419afa9b9eafca2e8c213263e703aa31b6740a9e28",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 17,
+        "targetEnd": 21
+      },
+      "images": [
+        {
+          "name": "Yemek masasında sıcak, pişmiş beyaz pirinç dolu bir kâse.",
+          "media": {
+            "sha256": "8d56fd13c74861074df05b50c1ac28b3c84542c0e5472fe1d23fa1d77ceaacb9",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary — rice",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/rice"
+        },
+        {
+          "title": "Cambridge Dictionary — rice pronunciation",
+          "url": "https://dictionary.cambridge.org/us/pronunciation/english/rice"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "作为粮食或食物的稻米",
+        "prototypeScenes": [
+          {
+            "summary": "晚餐桌上有一碗热腾腾的白米饭，你舀起一勺，配着菜一起吃。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "We usually serve rice with grilled fish."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    }
+  ]
+}

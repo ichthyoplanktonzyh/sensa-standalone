@@ -165,6 +165,7 @@ type MigratedTest = Readonly<{path: string; suite: WebTestSuite; memoryLibrary?:
 const fastBeforeMemory = [
   'integration/support-diagnostics',
   'release/learning-content-bucket',
+  'integration/english-lightweight-release',
   'integration/semantic-session-persistence',
   'contracts/stream-authorization',
   'contracts/portable-lightweight-package',
@@ -200,6 +201,7 @@ const fastWithMemory = [
 
 const browserTests = [
   'browser/skin-surface', 'browser/reference-presentation',
+  'browser/package-center-journey',
   'browser/semantic-session-persistence-browser',
   'browser/extension-storage-recovery',
   'browser/sqlite-opfs-benchmark', 'browser/web-bootstrap-budget',
@@ -216,6 +218,7 @@ const manualTests = [
 
 const playwrightPaths = new Set<string>([
   'browser/skin-surface', 'browser/reference-presentation',
+  'browser/package-center-journey',
   'browser/semantic-session-persistence-browser',
   'browser/extension-storage-recovery',
   'browser/sqlite-opfs-benchmark', 'browser/web-bootstrap-budget',
@@ -226,6 +229,7 @@ const durabilityTests = new Set<string>([
   'database/account-deletion', 'database/intake-delivery', 'database/library-cloud',
   'database/model-request-state', 'browser/sqlite-opfs-benchmark',
   'browser/semantic-session-persistence-browser',
+  'browser/package-center-journey',
   'browser/extension-storage-recovery',
   'browser/web-bootstrap-budget', 'integration/known-continuation',
   'integration/learning-registry', 'integration/local-book',
@@ -234,6 +238,7 @@ const durabilityTests = new Set<string>([
   'integration/personal-learning', 'integration/storage-capability',
   'integration/web-intake',
   'integration/guest-library',
+  'integration/english-lightweight-release',
 ]);
 const convergenceTests = new Set<string>([
   'database/library-cloud', 'browser/web-bootstrap-budget',

@@ -1,0 +1,1014 @@
+{
+  "publisher": {
+    "namespace": "sensa.official",
+    "name": "Sensa Official"
+  },
+  "author": {
+    "name": "Sensa Official"
+  },
+  "license": {
+    "name": "All rights reserved"
+  },
+  "bookKey": "ids-lightweight-en-ja",
+  "title": "IDS 轻量学习：英语 → ja",
+  "description": "以英语为目标语言、ja 为支持语言的常用共同概念学习包。",
+  "versionNumber": 1,
+  "publishedAt": "2026-09-25T00:00:00Z",
+  "changeSummary": "将既有轻量学习成品纳入可复现的官方 Book 发布源。",
+  "targetLanguage": "en",
+  "supportLanguage": "ja",
+  "entries": [
+    {
+      "key": "ids:1-310",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "water",
+      "meaning": "日常的に飲んだり、料理に使ったりする水",
+      "senseConfirmation": "ここでは、飲み物や料理に使う水を指します。",
+      "scene": "運動のあとに喉が渇き、透明なコップの水を一口飲む場面を思い浮かべてください。",
+      "sceneBridge": "水を一杯ほしいと丁寧に頼んでいます。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "c46300559ef4157b674db3a09f6ced69f23c00c11fc568fa30620b0724ec9693",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈwɔtɚ/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "Could I have a glass of water, please?",
+        "translation": "水を一杯いただけますか？",
+        "audio": {
+          "sha256": "e75636fd06019a796dceba79092cc3a248cc2e93aa24008ef8749a612a675c97",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 24,
+        "targetEnd": 29
+      },
+      "images": [
+        {
+          "name": "ハイキングの休憩中に、人が透明なコップの水を飲んでいる。",
+          "media": {
+            "sha256": "491dca9d64f00212befd27d4081f42b506d79a63a8d5d8307b7f78c1376b5a63",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary: water pronunciation",
+          "url": "https://dictionary.cambridge.org/pronunciation/english/water"
+        },
+        {
+          "title": "Cambridge Dictionary: water",
+          "url": "https://dictionary.cambridge.org/dictionary/english/water"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "日常饮用或接触的水",
+        "prototypeScenes": [
+          {
+            "summary": "运动后喉咙发干，拿起杯子喝下一口清凉、没有味道的液体。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Could I have a glass of water, please?"
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:1-520",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "sun",
+      "meaning": "昼間、空で光と熱を放つ太陽",
+      "senseConfirmation": "ここでは、昼間に地上を照らし暖める太陽を指します。",
+      "scene": "朝、カーテンを開けると、空の明るい天体から光が部屋に差し込んでくる。",
+      "sceneBridge": "sun は太陽そのものを表します。例文では、その光が台所の窓から差し込んでいます。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "68b74b6b60f94ef7979db3b04b7f26a2cb33064e3a412d57ad9657bf63823d04",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/sʌn/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The sun shines through the kitchen window.",
+        "translation": "太陽の光が台所の窓から差し込んでいます。",
+        "audio": {
+          "sha256": "2f88858d6b3f2f3757d0862fa531c8257a3bc8f369041c9635700f30398a7886",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 4,
+        "targetEnd": 7
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "白天在天空发光发热的太阳",
+        "prototypeScenes": [
+          {
+            "summary": "清晨拉开窗帘，天空中那个明亮的圆盘逐渐升高，阳光照进房间。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The sun shines through the kitchen window."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:1-750",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "rain",
+      "meaning": "雲から地上へ落ちる雨",
+      "senseConfirmation": "ここでは、空から降ってくる雨を指します。地面の水たまりではありません。",
+      "scene": "外では空から水滴が降り続き、道がぬれていく。出かける前に傘を手に取る。",
+      "sceneBridge": "rain はここでは降水を表す名詞です。例文では雨粒が窓を打っています。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "9a52c0bd668657bd30f948636f7793a395fc8d889934c1b40ebb392df7a32af1",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/reɪn/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "この rain は名詞です。It rains の rains は動詞として使われています。"
+      },
+      "sceneExample": {
+        "example": "The rain tapped against the window.",
+        "translation": "雨が窓を軽くたたいています。",
+        "audio": {
+          "sha256": "fb26d661e84ab139c5cb3f573ac639a53b33fdebf173efb4c04b98771dd1e544",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 4,
+        "targetEnd": 8
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "从云中落下的雨水",
+        "prototypeScenes": [
+          {
+            "summary": "窗外不断有水滴从天空落下，路面渐渐变湿，你出门前拿起伞。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The rain tapped against the window."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:11-610",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "lend",
+      "meaning": "自分の持ち物を人に一時的に使わせ、あとで返してもらう",
+      "senseConfirmation": "lend は、自分の物を相手に一時的に使わせ、あとで返してもらうことです。",
+      "scene": "傘を持っていない友人に、自分の傘を明日まで貸す場面を思い浮かべてください。",
+      "sceneBridge": "マヤが使えるように自分の傘を渡し、明日までに返してもらうよう頼んでいます。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "926a65138d42dd0306b14a79d82055b74f0436d89828acc275e52c9ae920b2c3",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/lɛnd/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "usagePattern": "lend someone something、または lend something to someone の形で使えます。",
+        "contrastNote": "lend は相手に貸すこと、borrow は自分が借りることです。"
+      },
+      "sceneExample": {
+        "example": "Could you lend Maya your umbrella until tomorrow?",
+        "translation": "明日までマヤに傘を貸してくれる？",
+        "audio": {
+          "sha256": "37988b30cf1da873ad2316ce41b4344bd7d1503b8f31b7133262dbc178f843de",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 10,
+        "targetEnd": 14
+      },
+      "sources": [
+        {
+          "title": "Cambridge Dictionary",
+          "url": "https://dictionary.cambridge.org/us/pronunciation/english/lend"
+        },
+        {
+          "title": "Cambridge Dictionary",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/lend"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "把自己的东西暂时交给别人用，之后会收回",
+        "prototypeScenes": [
+          {
+            "summary": "朋友忘带伞，你把自己的伞交给他，约好明天还你。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Could you lend Maya your umbrella until tomorrow?"
+        ],
+        "excludedCases": [
+          "不是向别人借入"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:11-620",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "borrow",
+      "meaning": "人の持ち物を一時的に借りて使い、あとで返す",
+      "senseConfirmation": "borrow は、あとで返す約束で人の物を一時的に借りて使うことです。",
+      "scene": "明日の朝まで充電器を借りられたら助かる、という場面を思い浮かべてください。",
+      "sceneBridge": "充電器を使うために相手から借り、明日の朝に返すつもりで頼んでいます。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "91629278f734aaf6fe0406466cb452988db08900b34c4643b1039d06cc2e682f",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈbɑːr.oʊ/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "usagePattern": "borrow something from someone の形で「人から物を借りる」と言えます。",
+        "contrastNote": "borrow は自分が借りること、lend は相手に貸すことです。"
+      },
+      "sceneExample": {
+        "example": "Could I borrow your charger until tomorrow morning?",
+        "translation": "明日の朝まで、あなたの充電器を借りてもいい？",
+        "audio": {
+          "sha256": "09db415597e1b3704864407302e471f895e828675d203adc11131c17cafe79a4",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 8,
+        "targetEnd": 14
+      },
+      "sources": [
+        {
+          "title": "Cambridge Dictionary, borrow",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/borrow"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "暂时使用别人的东西，之后归还",
+        "prototypeScenes": [
+          {
+            "summary": "出门前发现手机没电，你先用室友的充电器，并答应明早还。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Could I borrow your charger until tomorrow morning?"
+        ],
+        "excludedCases": [
+          "lend"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:14-410",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "day",
+      "meaning": "朝から夕方まで日光がある昼間",
+      "senseConfirmation": "ここでは夜と対になる、日光のある昼間を指します。",
+      "scene": "空が明るくなってから日が暮れるまで、自然の光で通りの様子が見える。",
+      "sceneBridge": "day はここでは昼間を表します。例文では昼間なら山が見えると言っています。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "ba6c8548aa426af9459c62ae964097d6f41ff2f3480b37d6fc45b881c46c43bd",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/deɪ/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "この day は night と対になる明るい時間帯です。別の文脈では二十四時間の一日も表します。"
+      },
+      "sceneExample": {
+        "example": "You can see the mountain during the day.",
+        "translation": "昼間ならその山が見えます。",
+        "audio": {
+          "sha256": "ac9d83cd16702ef49f3c509f205479bc2d35019316e3a198a387e271563f50ed",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 36,
+        "targetEnd": 39
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "从早晨到傍晚有日光的白天",
+        "prototypeScenes": [
+          {
+            "summary": "天亮以后，你可以借自然光看清街道；直到傍晚天色再次暗下去。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "You can see the mountain during the day."
+        ],
+        "excludedCases": [
+          "这里不是二十四小时的一整天。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:14-420",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "night",
+      "meaning": "日が暮れてから夜明けまでの夜",
+      "senseConfirmation": "ここでは日没後から夜明けまでの夜を指します。",
+      "scene": "日が沈むと空が暗くなり、街灯がついて、人々が家へ帰って休み始める。",
+      "sceneBridge": "night は夜を表します。例文ではその通りが夜に静かだと言っています。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "5e5cac3908fd468149c4c880dd96becabc6a679353b6b1d2f3a3b92d73152898",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/naɪt/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The street is quiet at night.",
+        "translation": "その通りは夜になると静かです。",
+        "audio": {
+          "sha256": "0f47cc64a460c2c1730d99fa76ab495c6c7700a2fa5500d3c0f5e9b4b84d8822",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 23,
+        "targetEnd": 28
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "天黑后到天亮前的夜晚",
+        "prototypeScenes": [
+          {
+            "summary": "太阳落下后天空变暗，街灯亮起来，人们陆续回家休息。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The street is quiet at night."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:18-610",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "book",
+      "meaning": "紙のページを綴じた、読むための本",
+      "senseConfirmation": "ここでは、ページをめくって読める一冊の本を指します。",
+      "scene": "本棚から、綴じられた紙のページを持つものを一冊取り出し、ページをめくって読む。",
+      "sceneBridge": "book は本を表します。例文では彼女が本を棚に戻しています。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "4b97ae2465d457bb44e47900edd7413492c859a181bd893d8574ba5f8e280c00",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/bʊk/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "She put the book back on the shelf.",
+        "translation": "彼女はその本を棚に戻しました。",
+        "audio": {
+          "sha256": "11c9cfc572a977cb24ac7c22c559521cbf906f3f38ef7b3654d98f5bbc140921",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 12,
+        "targetEnd": 16
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "装订成册供人阅读的书",
+        "prototypeScenes": [
+          {
+            "summary": "你从书架抽出一件装订好的纸页，翻开后逐页阅读。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "She put the book back on the shelf."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:2-510",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "uncle",
+      "meaning": "親の兄弟、またはおばなど親族の配偶者にあたる男性",
+      "senseConfirmation": "英語の uncle は、親の兄弟のほか、おばなど親族の夫にも使う呼び名です。",
+      "scene": "親と同じ世代の男性の親族が、パンケーキの作り方を教えてくれる場面を思い浮かべてください。",
+      "sceneBridge": "話し手は自分のおじからパンケーキの作り方を教わっています。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "f2a06aa9c9b3c1a7c7085b09fdbe240a225dce2d4c43e5e67d3bf69818511416",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈʌŋkəl/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "usagePattern": "uncle だけでは父方か母方か、また日本語の「叔父」「伯父」のどちらかは分かりません。関係を明確にしたい場合は説明を添えます。"
+      },
+      "sceneExample": {
+        "example": "My uncle is teaching me how to make pancakes.",
+        "translation": "おじがパンケーキの作り方を教えてくれている。",
+        "audio": {
+          "sha256": "264c5f268ce2e0ef62d7941a40f9f5ce58374d66fa0c59b9ec45658990510046",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 3,
+        "targetEnd": 8
+      },
+      "sources": [
+        {
+          "title": "Cambridge Dictionary: uncle",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/uncle"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "父母同辈的男性亲属",
+        "prototypeScenes": [
+          {
+            "summary": "家里有位和爸爸妈妈同辈的男性亲属，孩子见到他会亲切地叫一声。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "My uncle is teaching me how to make pancakes."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:4-330",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "hand",
+      "meaning": "手首の先にあり、指で物をつかむ手",
+      "senseConfirmation": "ここでは、指があり、物をつかめる手を指します。",
+      "scene": "ドアノブをつかむとき、手首の先にある五本の指をノブに回して握る。",
+      "sceneBridge": "hand は手を表します。例文では片手でカップを持っています。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "d160bbbb46237140fdfaecf1cb46885c3761a105493fb55d08fa1e7313f7b9b6",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/hænd/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "She held the cup in one hand.",
+        "translation": "彼女は片手でカップを持っていました。",
+        "audio": {
+          "sha256": "d5e76d6af56ddb6c27514501bd2d2ac882139b257061868a783ddbb4bc472711",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 24,
+        "targetEnd": 28
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "手腕末端带手指的手",
+        "prototypeScenes": [
+          {
+            "summary": "你伸出手腕末端带有五根手指的部位，抓住门把手。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "She held the cup in one hand."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-120",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "food",
+      "meaning": "食べて栄養を得るための食べ物",
+      "senseConfirmation": "ここでは、食べて栄養を得られるものを指します。",
+      "scene": "昼食の時間になり、食べられるものを皿に盛って食卓に運ぶ。",
+      "sceneBridge": "food は食べ物を表します。例文では食卓にある食べ物が冷めています。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "c735ec02937b1c3210411e2661ede333c2c0247598728f4a3f74a4202bb0a9f0",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/fuːd/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The food on the table has gone cold.",
+        "translation": "テーブルの上の食べ物は冷めてしまいました。",
+        "audio": {
+          "sha256": "4babe99cd374c1eab0cc1306b48b4cadef9474d24246b05169d992ff93a92a03",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 4,
+        "targetEnd": 8
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "人或动物吃下以获得营养的食物",
+        "prototypeScenes": [
+          {
+            "summary": "到了午饭时间，你把可以吃的东西盛到盘里，准备用餐。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The food on the table has gone cold."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-121",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "cooked",
+      "meaning": "食べ物に火を通して、調理済みの状態にする",
+      "senseConfirmation": "cooked は、食べ物に火が通って調理済みであることを表します。",
+      "scene": "湯気の立つ、柔らかく煮えたにんじんを思い浮かべてください。",
+      "sceneBridge": "にんじんは加熱され、柔らかくなるまで調理されています。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "111247276ee0b7666d66cbd6430050fdab26a8b0d4ede6f17aada7d1541702f6",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/kʊkt/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The carrots are cooked until tender.",
+        "translation": "にんじんは柔らかくなるまで火を通します。",
+        "audio": {
+          "sha256": "cecdf5c5db6b6ba7a3377123636b08165acfa4abe2d0770ce0f680e1bcb0ceb9",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 16,
+        "targetEnd": 22
+      },
+      "images": [
+        {
+          "name": "少し湯気の立つ器に、柔らかく調理されたにんじんの輪切りが盛られている。",
+          "media": {
+            "sha256": "4c93c1bef3273195c93ec0ccdd33b83e59d66ba4b223c64f4a70e7b49f956459",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "食物已经经过加热烹制",
+        "prototypeScenes": [
+          {
+            "summary": "想象一盘胡萝卜片刚从锅里盛出，带着热气，质地已经变软。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The carrots are cooked until tender."
+        ],
+        "excludedCases": [
+          "这里描述食物经过加热烹制后的状态，不只是切碎、清洗或调味。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-122",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "raw",
+      "meaning": "食べ物がまだ加熱調理されていない状態",
+      "senseConfirmation": "raw は、食べ物がまだ調理されていない状態を表します。",
+      "scene": "洗って切っただけで、まだ火を通していない、歯ごたえのあるにんじんを思い浮かべてください。",
+      "sceneBridge": "にんじんは調理されておらず、生のままフムスと一緒に食べています。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "2554ff844c0f704722272a7564ee836c7da5a67cfda9f91714c0c050413769d1",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/rɑː/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "We ate raw carrots with hummus.",
+        "translation": "生のにんじんをフムスにつけて食べました。",
+        "audio": {
+          "sha256": "55a2d08f8583fbc2f7fd381eb833a590a8bdce3d31cd6496fc433d673a2b0f3f",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 7,
+        "targetEnd": 10
+      },
+      "images": [
+        {
+          "name": "洗って細長く切った生のにんじんが皿に並び、鮮やかで歯ごたえのありそうな様子。",
+          "media": {
+            "sha256": "1c06ae46d778e8410baafdfe895daf7e42687e25a0c256deb14dac5775a80f72",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "食物尚未经过烹制",
+        "prototypeScenes": [
+          {
+            "summary": "想象一盘清洗后切成条的胡萝卜，颜色鲜亮、质地清脆，还没有经过加热烹制。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "We ate raw carrots with hummus."
+        ],
+        "excludedCases": [
+          "这里指食物未烹制的状态，不是“粗糙”，也不表示食材本身品质差。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-130",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "drink",
+      "meaning": "水などの液体を口から飲む",
+      "senseConfirmation": "drink は、水などの液体を口から飲む動作です。",
+      "scene": "ハイキングを終えて喉が渇き、水を何口か飲んでほっとする場面を思い浮かべてください。",
+      "sceneBridge": "ハイキングのあと、立ち止まって水を飲んでいます。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "a6d4729847cf0c346414f3feb8cd5cf69bedc5a101997d63d5108f3845406747",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/drɪŋk/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "After the hike, we stopped to drink some water.",
+        "translation": "ハイキングのあと、私たちは立ち止まって水を飲みました。",
+        "audio": {
+          "sha256": "630efdc62e14daa97a5e81a3a3dff9fce46ed5878ab9c7a3fbea2dc87f0770a5",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 30,
+        "targetEnd": 35
+      },
+      "images": [
+        {
+          "name": "ハイキングのあと、屋外で水筒の水を飲む人。",
+          "media": {
+            "sha256": "1eaa3b941830b573cdedb1f529317f30b90fab080a6d2726f32787e1044da4a5",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary — drink pronunciation",
+          "url": "https://dictionary.cambridge.org/us/pronunciation/english/drink"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "通过喝的方式摄入液体",
+        "prototypeScenes": [
+          {
+            "summary": "刚运动完喉咙发干，你拿起水瓶喝了几口，感觉舒服了一些。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "After the hike, we stopped to drink some water."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-510",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "bread",
+      "meaning": "小麦粉などをこねて焼いたパン",
+      "senseConfirmation": "bread は、食べ物としてのパンを指します。",
+      "scene": "朝食の準備で、焼き色のついたパンを一枚切り分ける場面を思い浮かべてください。",
+      "sceneBridge": "彼女はパンを一枚、トースターに入れました。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "9b4bc1d8e673f185426bff09fe136d63ca032db26f8fb260d5ed81aecfc63c85",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/bred/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "She put a slice of bread in the toaster.",
+        "translation": "彼女はパンを一枚トースターに入れました。",
+        "audio": {
+          "sha256": "d72264958df0797b7c178cc068bd9981ba53ebe7ed77188e8a20ca7e3974b7cf",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 19,
+        "targetEnd": 24
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "用面粉烘烤成的面包",
+        "prototypeScenes": [
+          {
+            "summary": "早餐时，你切开一条用面粉烤成、表面有棕色外皮的主食。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "She put a slice of bread in the toaster."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:7-120",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "house",
+      "meaning": "人が住む一棟の家屋",
+      "senseConfirmation": "ここでは、人が住む建物としての一軒の家を指します。",
+      "scene": "通り沿いに、屋根と外壁と玄関のある一棟の建物があり、その中で家族が暮らしている。",
+      "sceneBridge": "house は建物としての家を表します。例文ではその家の玄関のドアが青いと言っています。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "e9e7eebac0cde55ab66b646c02437b654997ca4396619f6f7b87884c7b2d450d",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/haʊs/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "house は家屋という建物を指し、home は暮らしの場や帰属感に焦点が当たることがあります。"
+      },
+      "sceneExample": {
+        "example": "The house has a blue front door.",
+        "translation": "その家の玄関のドアは青いです。",
+        "audio": {
+          "sha256": "e1540781aece9c0a7b317f25de591988125293e2fef318d20ecfd4a3d032b000",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 4,
+        "targetEnd": 9
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "供人居住的独立房屋",
+        "prototypeScenes": [
+          {
+            "summary": "街边有一栋带屋顶、外墙和入口的建筑，一家人住在里面。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The house has a blue front door."
+        ],
+        "excludedCases": [
+          "这里聚焦建筑物本身，不是抽象的“家”。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:8-480",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "rice",
+      "meaning": "穀物としての米、または炊いた米飯",
+      "senseConfirmation": "英語の rice は、穀物の米にも、炊いたご飯にも使えます。",
+      "scene": "夕食の食卓で、湯気の立つご飯をすくい、焼き魚と一緒に食べる場面を思い浮かべてください。",
+      "sceneBridge": "焼き魚に添える主食として、ご飯を出す場面です。日本語では生の穀物を「米」、炊いたものを「ご飯」と呼び分けます。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "030e2950a187c04792c997f5e05ee830171759740e77c725c01984a4249e7610",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/raɪs/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "rice は米または炊いたご飯を指しますが、日本語の「ご飯」のように一食全体を指すわけではありません。"
+      },
+      "sceneExample": {
+        "example": "We usually serve rice with grilled fish.",
+        "translation": "焼き魚には、たいていご飯を添えます。",
+        "audio": {
+          "sha256": "2d4f86deaa7ba2a3ceed43419afa9b9eafca2e8c213263e703aa31b6740a9e28",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 17,
+        "targetEnd": 21
+      },
+      "images": [
+        {
+          "name": "食卓に茶碗の白いご飯があり、焼き魚と一緒に供されている。",
+          "media": {
+            "sha256": "8d56fd13c74861074df05b50c1ac28b3c84542c0e5472fe1d23fa1d77ceaacb9",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary — rice",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/rice"
+        },
+        {
+          "title": "Cambridge Dictionary — rice pronunciation",
+          "url": "https://dictionary.cambridge.org/us/pronunciation/english/rice"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "作为粮食或食物的稻米",
+        "prototypeScenes": [
+          {
+            "summary": "晚餐桌上有一碗热腾腾的白米饭，你舀起一勺，配着菜一起吃。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "We usually serve rice with grilled fish."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    }
+  ]
+}

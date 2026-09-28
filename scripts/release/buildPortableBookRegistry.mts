@@ -39,6 +39,7 @@ type SourceEntry = {
   acceptedForms?: string[];
   formParts?: {kind: "fixed" | "slot"; text: string; constraint?: string}[];
   meaning: string;
+  senseConfirmation?: string;
   scene: string;
   featureLabels?: string[];
   sceneBridge?: string;
@@ -71,6 +72,7 @@ type SourceEntry = {
     audioUrl?: string | null;
   }[];
   images?: {name: string; media: AuthoredMediaReference}[];
+  sources?: {title: string; url?: string}[];
   referenceFacts?: unknown[];
   semanticSpec: SensaSenseSemanticSpec;
 };
@@ -339,6 +341,7 @@ for (const path of [...sourcePaths].sort()) {
         createdAt: source.publishedAt,
         author: source.author,
         license: source.license,
+        ...(entry.sources?.length ? {sources: entry.sources} : {}),
       },
       route: {targetLanguage: source.targetLanguage, supportLanguage: source.supportLanguage},
       sense: {senseId: entry.key, meaning: entry.meaning},
@@ -357,7 +360,7 @@ for (const path of [...sourcePaths].sort()) {
             altText: image.name,
           }))} : {}),
         },
-        senseConfirmation: {text: entry.meaning},
+        senseConfirmation: {text: entry.senseConfirmation ?? entry.meaning},
         pronunciation: {
           surface: entry.spokenForm ?? entry.expression,
           audioMediaId: "pronunciation",

@@ -93,6 +93,7 @@ jobs:
           node --import tsx content/tools/route_foundation.mts expand content/authored/route-foundation-v1/prepared.json .tmp/release-book-sources
           cp content/authored/*.json .tmp/release-book-sources/
           SENSA_BOOK_RELEASE_SOURCE_DIRECTORY=.tmp/release-book-sources node --import tsx scripts/release/buildPortableBookRegistry.mts
+          node --import tsx content/tools/assert_english_lightweight_registry.mts release-candidate/portable-catalog.json
           node --import tsx tests/web/run.mts --suite=fast --id=learning-registry
           node --import tsx tests/web/run.mts --suite=fast --id=portable-learning-registry
       - name: Upload releases, verify public bytes, and prepare promotion

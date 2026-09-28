@@ -32,8 +32,11 @@ const fetchExactBytes=async(
   if(byteLength>maximumBytes)throw new Error('localFlow.packageTooLarge');
   const response=await fetch(url,{signal,redirect:'error',credentials:'omit'});
   if(!response.ok||!response.body)throw new Error('localFlow.downloadFailed');
-  const declared=Number(response.headers.get('content-length'));
-  if(Number.isFinite(declared)&&declared!==byteLength)throw new Error('localFlow.downloadSizeMismatch');
+  const contentLength=response.headers.get('content-length');
+  if(contentLength!==null){
+    const declared=Number(contentLength);
+    if(!Number.isInteger(declared)||declared!==byteLength)throw new Error('localFlow.downloadSizeMismatch');
+  }
   const reader=response.body.getReader();
   const parts:Uint8Array[]=[];
   let total=0;

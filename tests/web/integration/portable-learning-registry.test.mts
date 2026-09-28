@@ -191,7 +191,7 @@ test("official portable Registry fixes per-Sense packages behind one Book Manife
     globalThis.fetch=async input=>{
       const bytes=delivered.get(String(input));
       return bytes
-        ?new Response(bytes,{headers:{"content-length":String(bytes.byteLength)}})
+        ?new Response(bytes)
         :new Response(null,{status:404});
     };
     await openLibrary();

@@ -1,0 +1,638 @@
+{
+  "publisher": {
+    "namespace": "sensa.official",
+    "name": "Sensa Official"
+  },
+  "author": {
+    "name": "Sensa Official"
+  },
+  "license": {
+    "name": "All rights reserved"
+  },
+  "bookKey": "ids-lightweight-en-nl",
+  "title": "IDS 轻量学习：英语 → nl",
+  "description": "以英语为目标语言、nl 为支持语言的常用共同概念学习包。",
+  "versionNumber": 1,
+  "publishedAt": "2026-09-25T00:00:00Z",
+  "changeSummary": "将既有轻量学习成品纳入可复现的官方 Book 发布源。",
+  "targetLanguage": "en",
+  "supportLanguage": "nl",
+  "entries": [
+    {
+      "key": "ids:1-310",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "water",
+      "meaning": "Het heldere, vloeibare water dat mensen bijvoorbeeld drinken om hun dorst te lessen.",
+      "senseConfirmation": "Water is de vloeistof die je drinkt om je dorst te lessen.",
+      "scene": "Na het sporten heb je dorst. Je schenkt een koel, helder drankje in een glas en neemt een paar slokken.",
+      "sceneBridge": "In de scène vraag je om een glas water: water is de drank die je wilt hebben.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "c46300559ef4157b674db3a09f6ced69f23c00c11fc568fa30620b0724ec9693",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈwɔtɚ/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "Could I have a glass of water, please?",
+        "translation": "Mag ik alstublieft een glas water?",
+        "audio": {
+          "sha256": "e75636fd06019a796dceba79092cc3a248cc2e93aa24008ef8749a612a675c97",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 24,
+        "targetEnd": 29
+      },
+      "images": [
+        {
+          "name": "Na het sporten drinkt iemand water uit een glas.",
+          "media": {
+            "sha256": "491dca9d64f00212befd27d4081f42b506d79a63a8d5d8307b7f78c1376b5a63",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary: water pronunciation",
+          "url": "https://dictionary.cambridge.org/pronunciation/english/water"
+        },
+        {
+          "title": "Cambridge Dictionary: water",
+          "url": "https://dictionary.cambridge.org/dictionary/english/water"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "日常饮用或接触的水",
+        "prototypeScenes": [
+          {
+            "summary": "运动后喉咙发干，拿起杯子喝下一口清凉、没有味道的液体。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Could I have a glass of water, please?"
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:11-610",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "lend",
+      "meaning": "Iets van jezelf tijdelijk aan iemand anders geven, zodat diegene het kan gebruiken en teruggeven.",
+      "senseConfirmation": "Jij geeft iets tijdelijk aan iemand anders; die persoon gebruikt het en geeft het later aan jou terug.",
+      "scene": "Maya is haar paraplu vergeten. Je geeft haar die van jou mee en jullie spreken af dat ze hem morgen teruggeeft.",
+      "sceneBridge": "In de scène geef jij Maya jouw paraplu. Jij staat hem dus tijdelijk af; dat is de richting van lend.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "926a65138d42dd0306b14a79d82055b74f0436d89828acc275e52c9ae920b2c3",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/lɛnd/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "Lend is iets aan iemand uitlenen; borrow is iets van iemand lenen."
+      },
+      "sceneExample": {
+        "example": "Could you lend Maya your umbrella until tomorrow?",
+        "translation": "Kun je Maya je paraplu tot morgen uitlenen?",
+        "audio": {
+          "sha256": "37988b30cf1da873ad2316ce41b4344bd7d1503b8f31b7133262dbc178f843de",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 10,
+        "targetEnd": 14
+      },
+      "sources": [
+        {
+          "title": "Cambridge Dictionary",
+          "url": "https://dictionary.cambridge.org/us/pronunciation/english/lend"
+        },
+        {
+          "title": "Cambridge Dictionary",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/lend"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "把自己的东西暂时交给别人用，之后会收回",
+        "prototypeScenes": [
+          {
+            "summary": "朋友忘带伞，你把自己的伞交给他，约好明天还你。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Could you lend Maya your umbrella until tomorrow?"
+        ],
+        "excludedCases": [
+          "不是向别人借入"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:11-620",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "borrow",
+      "meaning": "Iets van iemand anders gebruiken en het daarna teruggeven.",
+      "senseConfirmation": "Je gebruikt tijdelijk iets dat van iemand anders is en geeft het later aan die persoon terug.",
+      "scene": "Je telefoon is bijna leeg en je vraagt je huisgenoot of je diens oplader tot morgenochtend mag gebruiken. Je spreekt af hem daarna terug te geven.",
+      "sceneBridge": "In de scène krijg jij de oplader om hem tot morgen te gebruiken. Jij ontvangt dus iets tijdelijks; dat is de richting van borrow.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "91629278f734aaf6fe0406466cb452988db08900b34c4643b1039d06cc2e682f",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈbɑːr.oʊ/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "Borrow is iets van iemand lenen; lend is iets aan iemand uitlenen."
+      },
+      "sceneExample": {
+        "example": "Could I borrow your charger until tomorrow morning?",
+        "translation": "Mag ik je oplader tot morgenochtend lenen?",
+        "audio": {
+          "sha256": "09db415597e1b3704864407302e471f895e828675d203adc11131c17cafe79a4",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 8,
+        "targetEnd": 14
+      },
+      "sources": [
+        {
+          "title": "Cambridge Dictionary, borrow",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/borrow"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "暂时使用别人的东西，之后归还",
+        "prototypeScenes": [
+          {
+            "summary": "出门前发现手机没电，你先用室友的充电器，并答应明早还。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Could I borrow your charger until tomorrow morning?"
+        ],
+        "excludedCases": [
+          "lend"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:2-510",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "uncle",
+      "meaning": "De broer van je vader of moeder, of de echtgenoot van een tante.",
+      "senseConfirmation": "Het Engelse woord uncle kan naar deze familieleden verwijzen en zegt niet of de band via je moeders- of vaderskant loopt.",
+      "scene": "Denk aan een man uit de generatie van je ouders: hij kan de broer van een van je ouders zijn of met een tante getrouwd zijn.",
+      "sceneBridge": "In de scène leert deze oom je pannenkoeken bakken. De Engelse zin noemt hem uncle zonder de precieze familieband te specificeren.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "f2a06aa9c9b3c1a7c7085b09fdbe240a225dce2d4c43e5e67d3bf69818511416",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈʌŋkəl/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "usagePattern": "Uncle maakt niet duidelijk of het om familie van moeders- of vaderskant gaat, of dat hij de partner van een tante is. Als dat belangrijk is, licht je de familieband apart toe."
+      },
+      "sceneExample": {
+        "example": "My uncle is teaching me how to make pancakes.",
+        "translation": "Mijn oom leert me pannenkoeken bakken.",
+        "audio": {
+          "sha256": "264c5f268ce2e0ef62d7941a40f9f5ce58374d66fa0c59b9ec45658990510046",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 3,
+        "targetEnd": 8
+      },
+      "sources": [
+        {
+          "title": "Cambridge Dictionary: uncle",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/uncle"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "父母同辈的男性亲属",
+        "prototypeScenes": [
+          {
+            "summary": "家里有位和爸爸妈妈同辈的男性亲属，孩子见到他会亲切地叫一声。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "My uncle is teaching me how to make pancakes."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-120",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "food",
+      "meaning": "Eetbare dingen die mensen of dieren eten om zich te voeden.",
+      "senseConfirmation": "Food betekent hier iets wat een mens of dier kan eten om zich te voeden.",
+      "scene": "Als het etenstijd is, schep je iets voedzaams op een bord om op te eten.",
+      "sceneBridge": "De voorbeeldzin gaat over het eten dat op tafel staat en inmiddels koud is geworden.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "c735ec02937b1c3210411e2661ede333c2c0247598728f4a3f74a4202bb0a9f0",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/fuːd/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The food on the table has gone cold.",
+        "translation": "Het eten op tafel is koud geworden.",
+        "audio": {
+          "sha256": "4babe99cd374c1eab0cc1306b48b4cadef9474d24246b05169d992ff93a92a03",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 4,
+        "targetEnd": 8
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "人或动物吃下以获得营养的食物",
+        "prototypeScenes": [
+          {
+            "summary": "到了午饭时间，你把可以吃的东西盛到盘里，准备用餐。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The food on the table has gone cold."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-121",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "cooked",
+      "meaning": "Voedsel dat door verhitting is bereid en gaar is.",
+      "senseConfirmation": "Het eten is verhit en daardoor gaar geworden. Alleen wassen, snijden of kruiden maakt iets nog niet cooked.",
+      "scene": "Denk aan wortelschijfjes die net lang genoeg zijn verhit: ze zijn zacht en gaar.",
+      "sceneBridge": "De wortels zijn verhit tot ze zacht en gaar zijn; daarom gebruikt de Engelse zin cooked.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "111247276ee0b7666d66cbd6430050fdab26a8b0d4ede6f17aada7d1541702f6",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/kʊkt/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The carrots are cooked until tender.",
+        "translation": "De wortels worden gekookt tot ze zacht zijn.",
+        "audio": {
+          "sha256": "cecdf5c5db6b6ba7a3377123636b08165acfa4abe2d0770ce0f680e1bcb0ceb9",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 16,
+        "targetEnd": 22
+      },
+      "images": [
+        {
+          "name": "Een kom met zachte, gare wortelschijfjes waar een beetje stoom vanaf komt.",
+          "media": {
+            "sha256": "4c93c1bef3273195c93ec0ccdd33b83e59d66ba4b223c64f4a70e7b49f956459",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "食物已经经过加热烹制",
+        "prototypeScenes": [
+          {
+            "summary": "想象一盘胡萝卜片刚从锅里盛出，带着热气，质地已经变软。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The carrots are cooked until tender."
+        ],
+        "excludedCases": [
+          "这里描述食物经过加热烹制后的状态，不只是切碎、清洗或调味。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-122",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "raw",
+      "meaning": "Voedsel dat niet is gekookt of op een andere manier verhit.",
+      "senseConfirmation": "Het eten is niet bereid door verhitting; raw zegt hier niets over de kwaliteit ervan.",
+      "scene": "Stel je gewassen en gesneden wortelstaafjes voor. Ze zijn nog stevig en knapperig omdat ze niet zijn verhit.",
+      "sceneBridge": "De wortels zijn niet gekookt en zijn nog knapperig; daarom beschrijft de Engelse zin ze als raw.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "2554ff844c0f704722272a7564ee836c7da5a67cfda9f91714c0c050413769d1",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/rɑː/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "We ate raw carrots with hummus.",
+        "translation": "We aten rauwe wortels met hummus.",
+        "audio": {
+          "sha256": "55a2d08f8583fbc2f7fd381eb833a590a8bdce3d31cd6496fc433d673a2b0f3f",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 7,
+        "targetEnd": 10
+      },
+      "images": [
+        {
+          "name": "Frisse, knapperige rauwe wortelstaafjes op een bord.",
+          "media": {
+            "sha256": "1c06ae46d778e8410baafdfe895daf7e42687e25a0c256deb14dac5775a80f72",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "食物尚未经过烹制",
+        "prototypeScenes": [
+          {
+            "summary": "想象一盘清洗后切成条的胡萝卜，颜色鲜亮、质地清脆，还没有经过加热烹制。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "We ate raw carrots with hummus."
+        ],
+        "excludedCases": [
+          "这里指食物未烹制的状态，不是“粗糙”，也不表示食材本身品质差。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-130",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "drink",
+      "meaning": "Vloeistof door de mond naar binnen nemen.",
+      "senseConfirmation": "Drinken is een vloeistof via je mond innemen; dat kan water of een andere drank zijn.",
+      "scene": "Na een lange wandeling heb je dorst. Je pakt een fles water en neemt een paar slokken.",
+      "sceneBridge": "Na de wandeling stoppen we om water te drinken; drink benoemt die handeling.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "a6d4729847cf0c346414f3feb8cd5cf69bedc5a101997d63d5108f3845406747",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/drɪŋk/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "After the hike, we stopped to drink some water.",
+        "translation": "Na de wandeling stopten we om wat water te drinken.",
+        "audio": {
+          "sha256": "630efdc62e14daa97a5e81a3a3dff9fce46ed5878ab9c7a3fbea2dc87f0770a5",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 30,
+        "targetEnd": 35
+      },
+      "images": [
+        {
+          "name": "Na een wandeling rust iemand buiten uit en drinkt water uit een fles.",
+          "media": {
+            "sha256": "1eaa3b941830b573cdedb1f529317f30b90fab080a6d2726f32787e1044da4a5",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary — drink pronunciation",
+          "url": "https://dictionary.cambridge.org/us/pronunciation/english/drink"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "通过喝的方式摄入液体",
+        "prototypeScenes": [
+          {
+            "summary": "刚运动完喉咙发干，你拿起水瓶喝了几口，感觉舒服了一些。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "After the hike, we stopped to drink some water."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-510",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "bread",
+      "meaning": "Een gebakken voedingsmiddel dat meestal met meel of bloem wordt gemaakt.",
+      "senseConfirmation": "Bread betekent brood: een gebakken voedingsmiddel dat meestal met meel of bloem wordt gemaakt.",
+      "scene": "Bij het ontbijt snijd je een snee van een vers brood en doe je die in de broodrooster.",
+      "sceneBridge": "De zin vertelt dat zij een snee brood in de broodrooster doet.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "9b4bc1d8e673f185426bff09fe136d63ca032db26f8fb260d5ed81aecfc63c85",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/bred/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "She put a slice of bread in the toaster.",
+        "translation": "Ze deed een snee brood in de broodrooster.",
+        "audio": {
+          "sha256": "d72264958df0797b7c178cc068bd9981ba53ebe7ed77188e8a20ca7e3974b7cf",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 19,
+        "targetEnd": 24
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "用面粉烘烤成的面包",
+        "prototypeScenes": [
+          {
+            "summary": "早餐时，你切开一条用面粉烤成、表面有棕色外皮的主食。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "She put a slice of bread in the toaster."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:8-480",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "rice",
+      "meaning": "Een graansoort waarvan de korrels als graan of na het koken worden gegeten.",
+      "senseConfirmation": "Rice kan zowel de rijstkorrel als gekookte rijst op je bord aanduiden.",
+      "scene": "Aan tafel schep je een portie gekookte rijst op bij de gegrilde vis.",
+      "sceneBridge": "Hier is rice de bereide rijst die meestal bij gegrilde vis wordt geserveerd.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "030e2950a187c04792c997f5e05ee830171759740e77c725c01984a4249e7610",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/raɪs/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "We usually serve rice with grilled fish.",
+        "translation": "We serveren meestal rijst bij gegrilde vis.",
+        "audio": {
+          "sha256": "2d4f86deaa7ba2a3ceed43419afa9b9eafca2e8c213263e703aa31b6740a9e28",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 17,
+        "targetEnd": 21
+      },
+      "images": [
+        {
+          "name": "Een kom gekookte witte rijst staat op tafel naast eenvoudig servies en een lepel.",
+          "media": {
+            "sha256": "8d56fd13c74861074df05b50c1ac28b3c84542c0e5472fe1d23fa1d77ceaacb9",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary — rice",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/rice"
+        },
+        {
+          "title": "Cambridge Dictionary — rice pronunciation",
+          "url": "https://dictionary.cambridge.org/us/pronunciation/english/rice"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "作为粮食或食物的稻米",
+        "prototypeScenes": [
+          {
+            "summary": "晚餐桌上有一碗热腾腾的白米饭，你舀起一勺，配着菜一起吃。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "We usually serve rice with grilled fish."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    }
+  ]
+}

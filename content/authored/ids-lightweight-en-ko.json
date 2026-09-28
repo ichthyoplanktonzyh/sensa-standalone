@@ -1,0 +1,643 @@
+{
+  "publisher": {
+    "namespace": "sensa.official",
+    "name": "Sensa Official"
+  },
+  "author": {
+    "name": "Sensa Official"
+  },
+  "license": {
+    "name": "All rights reserved"
+  },
+  "bookKey": "ids-lightweight-en-ko",
+  "title": "IDS 轻量学习：英语 → ko",
+  "description": "以英语为目标语言、ko 为支持语言的常用共同概念学习包。",
+  "versionNumber": 1,
+  "publishedAt": "2026-09-25T00:00:00Z",
+  "changeSummary": "将既有轻量学习成品纳入可复现的官方 Book 发布源。",
+  "targetLanguage": "en",
+  "supportLanguage": "ko",
+  "entries": [
+    {
+      "key": "ids:1-310",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "water",
+      "meaning": "사람이 마시거나 일상에서 사용하는 물.",
+      "senseConfirmation": "갈증을 풀려고 마시는 맑은 물이에요.",
+      "scene": "운동을 마친 뒤 목이 말라 투명한 컵을 들어요. 맛이나 색이 거의 없는 맑은 액체를 한 모금 마셔요.",
+      "sceneBridge": "정중하게 한 잔을 부탁하는 장면이고, 컵에 담긴 물이 바로 water예요.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "c46300559ef4157b674db3a09f6ced69f23c00c11fc568fa30620b0724ec9693",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈwɔtɚ/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "Could I have a glass of water, please?",
+        "translation": "물 한 잔 주시겠어요?",
+        "audio": {
+          "sha256": "e75636fd06019a796dceba79092cc3a248cc2e93aa24008ef8749a612a675c97",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 24,
+        "targetEnd": 29
+      },
+      "images": [
+        {
+          "name": "운동을 마친 사람이 투명한 컵에 담긴 물을 마신다.",
+          "media": {
+            "sha256": "491dca9d64f00212befd27d4081f42b506d79a63a8d5d8307b7f78c1376b5a63",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary: water pronunciation",
+          "url": "https://dictionary.cambridge.org/pronunciation/english/water"
+        },
+        {
+          "title": "Cambridge Dictionary: water",
+          "url": "https://dictionary.cambridge.org/dictionary/english/water"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "日常饮用或接触的水",
+        "prototypeScenes": [
+          {
+            "summary": "运动后喉咙发干，拿起杯子喝下一口清凉、没有味道的液体。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Could I have a glass of water, please?"
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:11-610",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "lend",
+      "meaning": "내가 가진 것을 다른 사람이 일정 기간 사용하도록 건네고, 나중에 돌려받다.",
+      "senseConfirmation": "내 물건을 다른 사람이 잠시 쓰도록 건네고, 사용한 뒤 돌려받는 상황이에요.",
+      "scene": "마야가 우산을 챙기지 못했어요. 비를 피할 수 있도록 내 우산을 빌려주고 내일 돌려받기로 한 상황을 떠올려 보세요.",
+      "sceneBridge": "우산을 가진 사람이 마야에게 우산을 건네는 쪽이에요. 내 물건을 다른 사람에게 주어 쓰게 하는 방향이라 lend를 써요.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "926a65138d42dd0306b14a79d82055b74f0436d89828acc275e52c9ae920b2c3",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/lɛnd/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "Lend는 내 것을 남에게 빌려주는 것이고, borrow는 남의 것을 내가 빌리는 것이에요."
+      },
+      "sceneExample": {
+        "example": "Could you lend Maya your umbrella until tomorrow?",
+        "translation": "마야에게 내일까지 우산을 빌려줄 수 있어?",
+        "audio": {
+          "sha256": "37988b30cf1da873ad2316ce41b4344bd7d1503b8f31b7133262dbc178f843de",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 10,
+        "targetEnd": 14
+      },
+      "sources": [
+        {
+          "title": "Cambridge Dictionary",
+          "url": "https://dictionary.cambridge.org/us/pronunciation/english/lend"
+        },
+        {
+          "title": "Cambridge Dictionary",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/lend"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "把自己的东西暂时交给别人用，之后会收回",
+        "prototypeScenes": [
+          {
+            "summary": "朋友忘带伞，你把自己的伞交给他，约好明天还你。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Could you lend Maya your umbrella until tomorrow?"
+        ],
+        "excludedCases": [
+          "不是向别人借入"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:11-620",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "borrow",
+      "meaning": "다른 사람이 가진 것을 일정 기간 사용한 뒤 돌려주다.",
+      "senseConfirmation": "다른 사람의 물건을 잠시 받아 사용하고, 나중에 그 사람에게 돌려주는 상황이에요.",
+      "scene": "내일 아침까지 쓸 충전기가 급히 필요해요. 같이 사는 사람에게 충전기를 빌리고 내일 돌려주기로 한 상황을 떠올려 보세요.",
+      "sceneBridge": "충전기를 가진 사람에게 내일까지 쓰도록 부탁하는 쪽이 나예요. 다른 사람에게서 받아 쓰는 방향이라 borrow를 써요.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "91629278f734aaf6fe0406466cb452988db08900b34c4643b1039d06cc2e682f",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈbɑːr.oʊ/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "Borrow는 내가 남의 것을 빌리는 것이고, lend는 내가 가진 것을 남에게 빌려주는 것이에요."
+      },
+      "sceneExample": {
+        "example": "Could I borrow your charger until tomorrow morning?",
+        "translation": "내일 아침까지 충전기 좀 빌려도 될까요?",
+        "audio": {
+          "sha256": "09db415597e1b3704864407302e471f895e828675d203adc11131c17cafe79a4",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 8,
+        "targetEnd": 14
+      },
+      "sources": [
+        {
+          "title": "Cambridge Dictionary, borrow",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/borrow"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "暂时使用别人的东西，之后归还",
+        "prototypeScenes": [
+          {
+            "summary": "出门前发现手机没电，你先用室友的充电器，并答应明早还。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Could I borrow your charger until tomorrow morning?"
+        ],
+        "excludedCases": [
+          "lend"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:2-510",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "uncle",
+      "meaning": "아버지나 어머니의 남자 형제 또는 고모·이모의 남편을 가리키는 영어 친족 호칭.",
+      "senseConfirmation": "영어 uncle은 부모님의 남자 형제와 고모·이모의 남편을 두루 가리킬 수 있어요. 어느 쪽 친척인지는 단어만으로 알 수 없어요.",
+      "scene": "부모님과 같은 세대인 남자 친척을 생각해 보세요. 부모님의 형제이거나 고모·이모의 남편일 수 있어요.",
+      "sceneBridge": "그 친척이 팬케이크 만드는 법을 가르쳐 주는 장면이에요. 영어 문장에서는 그가 부모님의 형제인지 고모·이모의 남편인지 밝히지 않아요.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "f2a06aa9c9b3c1a7c7085b09fdbe240a225dce2d4c43e5e67d3bf69818511416",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈʌŋkəl/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "usagePattern": "여기서는 자연스러운 번역을 위해 '삼촌'이라고 했지만, 영어 uncle은 아버지나 어머니의 남자 형제뿐 아니라 고모·이모의 남편도 가리킬 수 있어요. 한국어 친족 호칭은 관계와 가족 관습에 따라 큰아버지·작은아버지·외삼촌·고모부·이모부처럼 더 구체적일 수 있으므로, 원문만으로 하나를 확정할 수는 없어요."
+      },
+      "sceneExample": {
+        "example": "My uncle is teaching me how to make pancakes.",
+        "translation": "우리 삼촌이 팬케이크 만드는 법을 가르쳐 주고 있어요.",
+        "audio": {
+          "sha256": "264c5f268ce2e0ef62d7941a40f9f5ce58374d66fa0c59b9ec45658990510046",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 3,
+        "targetEnd": 8
+      },
+      "sources": [
+        {
+          "title": "Cambridge Dictionary: uncle",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/uncle"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "父母同辈的男性亲属",
+        "prototypeScenes": [
+          {
+            "summary": "家里有位和爸爸妈妈同辈的男性亲属，孩子见到他会亲切地叫一声。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "My uncle is teaching me how to make pancakes."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-120",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "food",
+      "meaning": "사람이나 동물이 먹어 영양을 얻는 것, 즉 음식.",
+      "senseConfirmation": "먹어서 영양을 얻는 음식이에요. 이 문장에서는 식탁 위에 놓인 음식 전체를 가리켜요.",
+      "scene": "점심때 식탁에 음식을 차려 놓았는데, 이야기를 나누느라 먹지 못해 음식이 식었어요.",
+      "sceneBridge": "식탁 위 음식이 차가워졌다고 말하고 있어요. 먹을 것을 가리키는 food가 여기 쓰였어요.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "c735ec02937b1c3210411e2661ede333c2c0247598728f4a3f74a4202bb0a9f0",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/fuːd/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The food on the table has gone cold.",
+        "translation": "식탁 위 음식이 식었어요.",
+        "audio": {
+          "sha256": "4babe99cd374c1eab0cc1306b48b4cadef9474d24246b05169d992ff93a92a03",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 4,
+        "targetEnd": 8
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "人或动物吃下以获得营养的食物",
+        "prototypeScenes": [
+          {
+            "summary": "到了午饭时间，你把可以吃的东西盛到盘里，准备用餐。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The food on the table has gone cold."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-121",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "cooked",
+      "meaning": "음식에 열을 가해 조리하여 먹을 수 있는 상태가 된.",
+      "senseConfirmation": "음식에 열을 가해 조리가 끝난 상태를 말해요.",
+      "scene": "갓 익힌 당근 조각을 떠올려 보세요. 김이 조금 나고 씹으면 부드러워요.",
+      "sceneBridge": "당근이 부드러워질 때까지 조리된 상태이므로, 여기서는 cooked를 써요.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "111247276ee0b7666d66cbd6430050fdab26a8b0d4ede6f17aada7d1541702f6",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/kʊkt/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The carrots are cooked until tender.",
+        "translation": "당근은 부드러워질 때까지 익혔어요.",
+        "audio": {
+          "sha256": "cecdf5c5db6b6ba7a3377123636b08165acfa4abe2d0770ce0f680e1bcb0ceb9",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 16,
+        "targetEnd": 22
+      },
+      "images": [
+        {
+          "name": "부드럽게 익은 당근 조각이 담긴 그릇에서 김이 조금 올라온다.",
+          "media": {
+            "sha256": "4c93c1bef3273195c93ec0ccdd33b83e59d66ba4b223c64f4a70e7b49f956459",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "食物已经经过加热烹制",
+        "prototypeScenes": [
+          {
+            "summary": "想象一盘胡萝卜片刚从锅里盛出，带着热气，质地已经变软。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The carrots are cooked until tender."
+        ],
+        "excludedCases": [
+          "这里描述食物经过加热烹制后的状态，不只是切碎、清洗或调味。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-122",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "raw",
+      "meaning": "음식에 열을 가해 조리하지 않은.",
+      "senseConfirmation": "이 음식은 아직 열을 가해 조리하지 않은 상태예요.",
+      "scene": "깨끗이 씻어 길게 자른 당근을 떠올려 보세요. 아직 조리하지 않아 단단하고 아삭해요.",
+      "sceneBridge": "당근은 조리하지 않아 아삭한 상태이므로, 여기서는 raw를 써요. 음식의 질을 평가하는 말은 아니에요.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "2554ff844c0f704722272a7564ee836c7da5a67cfda9f91714c0c050413769d1",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/rɑː/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "We ate raw carrots with hummus.",
+        "translation": "우리는 후무스와 생당근을 먹었어요.",
+        "audio": {
+          "sha256": "55a2d08f8583fbc2f7fd381eb833a590a8bdce3d31cd6496fc433d673a2b0f3f",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 7,
+        "targetEnd": 10
+      },
+      "images": [
+        {
+          "name": "신선하고 아삭해 보이는 생당근 막대가 접시에 놓여 있다.",
+          "media": {
+            "sha256": "1c06ae46d778e8410baafdfe895daf7e42687e25a0c256deb14dac5775a80f72",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "食物尚未经过烹制",
+        "prototypeScenes": [
+          {
+            "summary": "想象一盘清洗后切成条的胡萝卜，颜色鲜亮、质地清脆，还没有经过加热烹制。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "We ate raw carrots with hummus."
+        ],
+        "excludedCases": [
+          "这里指食物未烹制的状态，不是“粗糙”，也不表示食材本身品质差。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-130",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "drink",
+      "meaning": "물이나 다른 액체를 입으로 마셔 몸에 들이다.",
+      "senseConfirmation": "물이나 다른 액체를 입으로 마시는 동작이에요.",
+      "scene": "산책로를 오래 걸은 뒤 목이 말라요. 잠시 멈춰 물을 몇 모금 마시고 갈증을 달래는 모습을 떠올려 보세요.",
+      "sceneBridge": "하이킹을 마친 뒤 잠시 멈춰 물을 마시는 행동이므로 drink를 써요.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "a6d4729847cf0c346414f3feb8cd5cf69bedc5a101997d63d5108f3845406747",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/drɪŋk/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "After the hike, we stopped to drink some water.",
+        "translation": "하이킹을 마친 뒤 우리는 잠시 멈춰 물을 마셨어요.",
+        "audio": {
+          "sha256": "630efdc62e14daa97a5e81a3a3dff9fce46ed5878ab9c7a3fbea2dc87f0770a5",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 30,
+        "targetEnd": 35
+      },
+      "images": [
+        {
+          "name": "하이킹을 마친 사람이 야외에서 물병을 들어 물을 마신다.",
+          "media": {
+            "sha256": "1eaa3b941830b573cdedb1f529317f30b90fab080a6d2726f32787e1044da4a5",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary — drink pronunciation",
+          "url": "https://dictionary.cambridge.org/us/pronunciation/english/drink"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "通过喝的方式摄入液体",
+        "prototypeScenes": [
+          {
+            "summary": "刚运动完喉咙发干，你拿起水瓶喝了几口，感觉舒服了一些。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "After the hike, we stopped to drink some water."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-510",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "bread",
+      "meaning": "밀가루 반죽을 구워 만든 빵.",
+      "senseConfirmation": "밀가루 반죽을 구워 만든 빵이에요. 여기서는 토스터에 넣는 식빵 한 조각을 말해요.",
+      "scene": "아침 식사 때 식빵을 한 조각 꺼내 토스터에 넣어요. 살짝 구워 따뜻하게 먹으려는 순간을 떠올려 보세요.",
+      "sceneBridge": "그녀가 식빵 한 조각을 토스터에 넣는 장면이에요. 빵 한 조각을 가리키는 bread를 써요.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "9b4bc1d8e673f185426bff09fe136d63ca032db26f8fb260d5ed81aecfc63c85",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/bred/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "She put a slice of bread in the toaster.",
+        "translation": "그녀는 식빵 한 조각을 토스터에 넣었어요.",
+        "audio": {
+          "sha256": "d72264958df0797b7c178cc068bd9981ba53ebe7ed77188e8a20ca7e3974b7cf",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 19,
+        "targetEnd": 24
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "用面粉烘烤成的面包",
+        "prototypeScenes": [
+          {
+            "summary": "早餐时，你切开一条用面粉烤成、表面有棕色外皮的主食。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "She put a slice of bread in the toaster."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:8-480",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "rice",
+      "meaning": "곡물인 쌀 또는 밥으로 먹는 쌀을 가리키는 말.",
+      "senseConfirmation": "영어에서는 조리 전 쌀과 익힌 밥을 모두 rice라고 해요. 이 장면은 생선구이와 곁들여 내는 밥을 말해요.",
+      "scene": "저녁 식탁에 따뜻한 밥 한 그릇이 놓여 있어요. 생선구이와 밥을 함께 먹는 익숙한 식사를 떠올려 보세요.",
+      "sceneBridge": "영어 rice는 쌀과 밥을 모두 가리킬 수 있어요. 여기서는 구운 생선과 함께 내는 밥을 뜻해요.",
+      "pronunciation": {
+        "audio": {
+          "sha256": "030e2950a187c04792c997f5e05ee830171759740e77c725c01984a4249e7610",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/raɪs/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "한국어는 조리 전에는 쌀, 익힌 뒤에는 밥이라고 구별하지만 영어 rice는 둘 다 가리킬 수 있어요. 다만 rice 자체가 한 끼 식사 전체를 뜻하지는 않아요."
+      },
+      "sceneExample": {
+        "example": "We usually serve rice with grilled fish.",
+        "translation": "우리는 보통 구운 생선과 함께 밥을 내요.",
+        "audio": {
+          "sha256": "2d4f86deaa7ba2a3ceed43419afa9b9eafca2e8c213263e703aa31b6740a9e28",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 17,
+        "targetEnd": 21
+      },
+      "images": [
+        {
+          "name": "식탁 위 밥그릇 옆에 구운 생선이 차려져 있다.",
+          "media": {
+            "sha256": "8d56fd13c74861074df05b50c1ac28b3c84542c0e5472fe1d23fa1d77ceaacb9",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary — rice",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/rice"
+        },
+        {
+          "title": "Cambridge Dictionary — rice pronunciation",
+          "url": "https://dictionary.cambridge.org/us/pronunciation/english/rice"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "作为粮食或食物的稻米",
+        "prototypeScenes": [
+          {
+            "summary": "晚餐桌上有一碗热腾腾的白米饭，你舀起一勺，配着菜一起吃。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "We usually serve rice with grilled fish."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    }
+  ]
+}

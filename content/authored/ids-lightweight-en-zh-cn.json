@@ -1,0 +1,5901 @@
+{
+  "publisher": {
+    "namespace": "sensa.official",
+    "name": "Sensa Official"
+  },
+  "author": {
+    "name": "Sensa Official"
+  },
+  "license": {
+    "name": "All rights reserved"
+  },
+  "bookKey": "ids-lightweight-en-zh-cn",
+  "title": "IDS 轻量学习：英语 → zh-CN",
+  "description": "以英语为目标语言、zh-CN 为支持语言的常用共同概念学习包。",
+  "versionNumber": 1,
+  "publishedAt": "2026-09-25T00:00:00Z",
+  "changeSummary": "将既有轻量学习成品纳入可复现的官方 Book 发布源。",
+  "targetLanguage": "en",
+  "supportLanguage": "zh-CN",
+  "entries": [
+    {
+      "key": "ids:1-220",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "mountain",
+      "meaning": "明显高出周围地面的山",
+      "senseConfirmation": "这里指高大的山体。",
+      "scene": "远处的地面陡然升高，形成高大的山体，山顶有时被云遮住。",
+      "sceneBridge": "mountain 指高出周围地面的山；例句说山峰仍有积雪。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "e44162acf871fcd09d49ef22d3ca648a5254fa9ba9f446015a08f265a72a8488",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈmaʊntən/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The mountain still has snow on its peak.",
+        "translation": "那座山的山顶仍有积雪。",
+        "audio": {
+          "sha256": "e9911a2ac38f27d55082b9f0f281b90abd63cac91cfa99902a613d10fe327b0f",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 4,
+        "targetEnd": 12
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "明显高出周围地面的山",
+        "prototypeScenes": [
+          {
+            "summary": "远处的地面陡然升高，形成高大的山体，山顶有时被云遮住。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The mountain still has snow on its peak."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:1-310",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "water",
+      "meaning": "日常饮用或接触的水",
+      "senseConfirmation": "对，就是解渴时喝的水。",
+      "scene": "运动后喉咙发干，拿起杯子喝下一口清凉、没有味道的液体。",
+      "sceneBridge": "杯子里的水让你想到这个词：water。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "c46300559ef4157b674db3a09f6ced69f23c00c11fc568fa30620b0724ec9693",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈwɔtɚ/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "Could I have a glass of water, please?",
+        "translation": "请给我一杯水，好吗？",
+        "audio": {
+          "sha256": "e75636fd06019a796dceba79092cc3a248cc2e93aa24008ef8749a612a675c97",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 24,
+        "targetEnd": 29
+      },
+      "images": [
+        {
+          "name": "一个人运动后喝下一杯清水。",
+          "media": {
+            "sha256": "491dca9d64f00212befd27d4081f42b506d79a63a8d5d8307b7f78c1376b5a63",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary: water pronunciation",
+          "url": "https://dictionary.cambridge.org/pronunciation/english/water"
+        },
+        {
+          "title": "Cambridge Dictionary: water",
+          "url": "https://dictionary.cambridge.org/dictionary/english/water"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "日常饮用或接触的水",
+        "prototypeScenes": [
+          {
+            "summary": "运动后喉咙发干，拿起杯子喝下一口清凉、没有味道的液体。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Could I have a glass of water, please?"
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:1-360",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "river",
+      "meaning": "沿河道持续流动的河流",
+      "senseConfirmation": "这里指沿着河道流动的河流。",
+      "scene": "一条宽阔的水道从镇旁流过，水始终向下游移动。",
+      "sceneBridge": "river 指流经陆地的河流；例句说它穿过城镇。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "1615188248919a5f7c10280b810cecdaa1cbbc9ddbd5bddd8b6a99785e2778b7",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈrɪvər/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The river runs through the town.",
+        "translation": "这条河流穿过城镇。",
+        "audio": {
+          "sha256": "a2819d6145b806a3c02e851da488b02c242e70f8abdc7ff8673e734066d92146",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 4,
+        "targetEnd": 9
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "沿河道持续流动的河流",
+        "prototypeScenes": [
+          {
+            "summary": "一条宽阔的水道从镇旁流过，水始终向下游移动。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The river runs through the town."
+        ],
+        "excludedCases": [
+          "不泛指海、湖或池塘。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:1-520",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "sun",
+      "meaning": "白天在天空发光发热的太阳",
+      "senseConfirmation": "这里指白天照亮并温暖地面的太阳。",
+      "scene": "清晨拉开窗帘，天空中那个明亮的圆盘逐渐升高，阳光照进房间。",
+      "sceneBridge": "sun 指太阳本身；例句说它照在厨房窗户上。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "68b74b6b60f94ef7979db3b04b7f26a2cb33064e3a412d57ad9657bf63823d04",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/sʌn/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The sun shines through the kitchen window.",
+        "translation": "阳光透过厨房窗户照进来。",
+        "audio": {
+          "sha256": "2f88858d6b3f2f3757d0862fa531c8257a3bc8f369041c9635700f30398a7886",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 4,
+        "targetEnd": 7
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "白天在天空发光发热的太阳",
+        "prototypeScenes": [
+          {
+            "summary": "清晨拉开窗帘，天空中那个明亮的圆盘逐渐升高，阳光照进房间。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The sun shines through the kitchen window."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:1-530",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "moon",
+      "meaning": "夜晚常能看到的月亮",
+      "senseConfirmation": "这里指夜空中的月亮。",
+      "scene": "夜里抬头看天空，云间露出一个发着柔和光芒的圆形天体。",
+      "sceneBridge": "moon 指月亮；例句说它出现在屋顶上方。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "5aa49b5127d50333c7074cffd84b294f41a4889c511a93a9d91315c30d59eefe",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/muːn/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The moon appeared above the roof.",
+        "translation": "月亮出现在屋顶上方。",
+        "audio": {
+          "sha256": "7f40edd7c472787c8e25db4b906b122447764d3218f8af0732653cc87c628a08",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 4,
+        "targetEnd": 8
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "夜晚常能看到的月亮",
+        "prototypeScenes": [
+          {
+            "summary": "夜里抬头看天空，云间露出一个发着柔和光芒的圆形天体。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The moon appeared above the roof."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:1-720",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "wind",
+      "meaning": "流动的空气形成的风",
+      "senseConfirmation": "这里指能吹动树叶、让人感觉到的风。",
+      "scene": "走出门时，脸上感到空气在流动，树叶也向同一个方向摆动。",
+      "sceneBridge": "wind 指流动的空气；例句里它吹动了院子里的树。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "756a72a4fba73b6e1b476200a9ba82ed3260f80ff69de90ec8d64bf65838a6d5",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/wɪnd/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The wind moved the trees in the yard.",
+        "translation": "风吹动了院子里的树。",
+        "audio": {
+          "sha256": "f2bb04fef2faab3bdd6adbeea8c17e660a3a671b190803678632df24aef4cf50",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 4,
+        "targetEnd": 8
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "流动的空气形成的风",
+        "prototypeScenes": [
+          {
+            "summary": "走出门时，脸上感到空气在流动，树叶也向同一个方向摆动。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The wind moved the trees in the yard."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:1-730",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "cloud",
+      "meaning": "天空中可见的云",
+      "senseConfirmation": "这里指天空中的一朵云。",
+      "scene": "你抬头望向蓝天，一团白色的水汽形状缓缓飘过。",
+      "sceneBridge": "cloud 指天空中可见的云团；例句说它移到了太阳前方。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "d36ce136072bd7de7d8d914da72fe9ed9c7d747aec606ca5062133a42a3c505e",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/klaʊd/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "A cloud moved in front of the sun.",
+        "translation": "一朵云飘到太阳前面。",
+        "audio": {
+          "sha256": "cf08f3fac43edd315d3f41311cf3201115841c062c009f134678e480b6c4ab2e",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 2,
+        "targetEnd": 7
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "天空中可见的云",
+        "prototypeScenes": [
+          {
+            "summary": "你抬头望向蓝天，一团白色的水汽形状缓缓飘过。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "A cloud moved in front of the sun."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:1-750",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "rain",
+      "meaning": "从云中落下的雨水",
+      "senseConfirmation": "这里指从天空降下的雨，而不是地上的积水。",
+      "scene": "窗外不断有水滴从天空落下，路面渐渐变湿，你出门前拿起伞。",
+      "sceneBridge": "rain 在这里是表示降水的名词；例句说雨打在窗玻璃上。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "9a52c0bd668657bd30f948636f7793a395fc8d889934c1b40ebb392df7a32af1",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/reɪn/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "本包的 rain 是名词；It rains 中的 rains 是动词用法。"
+      },
+      "sceneExample": {
+        "example": "The rain tapped against the window.",
+        "translation": "雨点轻轻打在窗户上。",
+        "audio": {
+          "sha256": "fb26d661e84ab139c5cb3f573ac639a53b33fdebf173efb4c04b98771dd1e544",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 4,
+        "targetEnd": 8
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "从云中落下的雨水",
+        "prototypeScenes": [
+          {
+            "summary": "窗外不断有水滴从天空落下，路面渐渐变湿，你出门前拿起伞。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The rain tapped against the window."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:1-810",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "fire",
+      "meaning": "燃烧时出现的火焰",
+      "senseConfirmation": "这里指燃烧时可见并会放热的火。",
+      "scene": "木柴燃烧时发出光和热，橙色的焰苗不断跳动。",
+      "sceneBridge": "fire 指正在燃烧的火；例句说它让露营的人暖和起来。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "fabb24d639b683ab9e9761511648fe38db61019d558205b135cfd35d64f5fd90",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/faɪər/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The fire kept us warm at the campsite.",
+        "translation": "篝火让我们在营地暖和起来。",
+        "audio": {
+          "sha256": "af7aac4f316d05920ec3285e28f756de0367d5ad96e38581f15a111f964cc1a7",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 4,
+        "targetEnd": 8
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "燃烧时出现的火焰",
+        "prototypeScenes": [
+          {
+            "summary": "木柴燃烧时发出光和热，橙色的焰苗不断跳动。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The fire kept us warm at the campsite."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:10-210",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "rise",
+      "acceptedForms": [
+        "rose"
+      ],
+      "meaning": "物体从较低位置向较高位置移动；这里聚焦于物体自身上升的动作。",
+      "senseConfirmation": "这里说的是物体从较低处移动到较高处。",
+      "scene": "想象一个气球从手边慢慢升起，越过树梢。",
+      "sceneBridge": "气球的位置从低处变高；这个向上移动的动作可以用 rise 表达。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "9ef3892f96fda34dbf611d3751e43a01b988707f012885d890a5928a020ccbfc",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/raɪz/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "这里的 rise 表示主体自己向上移动。若某人把物体举高，通常用 raise：The child raised the flag."
+      },
+      "sceneExample": {
+        "example": "The balloon rose slowly above the trees.",
+        "translation": "气球慢慢升到树梢上方。",
+        "audio": {
+          "sha256": "2cef84c253955f5dda94d347b071ad0aebfb27d81a603f0d749c2cfc82538a62",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 12,
+        "targetEnd": 16
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "物体从较低位置向较高位置移动；这里聚焦于物体自身上升的动作。",
+        "prototypeScenes": [
+          {
+            "summary": "想象一个气球从手边慢慢升起，越过树梢。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The balloon rose slowly above the trees."
+        ],
+        "excludedCases": [
+          "不含价格或数量增加、起床等其他用法。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:10-230",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "fall",
+      "acceptedForms": [
+        "fell"
+      ],
+      "meaning": "物体失去支撑，或从较高位置向下移动；这里聚焦于物体落向地面的动作。",
+      "senseConfirmation": "这里说的是物体离开较高处并向下移动。",
+      "scene": "想象一片红叶从树枝上脱落，落到小路上。",
+      "sceneBridge": "红叶失去树枝的支撑后向下移动；这个动作可以用 fall 表达。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "d800a840c7e3c1683418c717f4dbc4fefae76adbeb3b26d51eaf138ec3a64ccc",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/fɔl/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "这里的 fall 是物体自己向下移动。若某人使物体掉下，通常用 drop：She dropped the keys."
+      },
+      "sceneExample": {
+        "example": "A red leaf fell from the branch and landed on the path.",
+        "translation": "一片红叶从树枝上落下，掉在小路上。",
+        "audio": {
+          "sha256": "c55fde7a85b2c0216cd863e8ce094dfa8f67e7754dc1fba3c0065689ec9a7d7c",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 11,
+        "targetEnd": 15
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "物体失去支撑，或从较高位置向下移动；这里聚焦于物体落向地面的动作。",
+        "prototypeScenes": [
+          {
+            "summary": "想象一片红叶从树枝上脱落，落到小路上。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "A red leaf fell from the branch and landed on the path."
+        ],
+        "excludedCases": [
+          "不含人物失去平衡而跌倒、季节“秋天”或数值下降等其他用法。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:10-250",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "throw",
+      "acceptedForms": [
+        "throws"
+      ],
+      "meaning": "用手使物体离开自己并向空中或别处飞去",
+      "senseConfirmation": "这是“扔、抛出”的动作：物体从手里出去，向外飞了一段距离。",
+      "scene": "想象你把球从手中送出去：球离开你的手，飞向院子另一边的人。",
+      "sceneBridge": "艾娃发力让球离手，球飞过院子去找她哥哥；throw 描述的正是把物体抛出去这一动作。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "f68209e6514aaed535c61f6deac17fd5dd008817244152a4d8f51fb274ae112c",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/θroʊ/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "Ava throws the ball across the yard to her brother.",
+        "translation": "艾娃把球扔过院子，朝她哥哥飞去。",
+        "audio": {
+          "sha256": "f9ab26a0afd740ae2db5cfa3d74791328d075bfb468e29dd9568189f3ab1ec0d",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 4,
+        "targetEnd": 10
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "用手使物体离开自己并向空中或别处飞去",
+        "prototypeScenes": [
+          {
+            "summary": "想象你把球从手中送出去：球离开你的手，飞向院子另一边的人。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Ava throws the ball across the yard to her brother."
+        ],
+        "excludedCases": [
+          "此处指把物体抛出的具体动作，不包括 throw a party 等其他用法"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:10-252",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "catch",
+      "acceptedForms": [
+        "catches"
+      ],
+      "meaning": "接住朝自己飞来或移动的球，使球停下并留在自己控制中",
+      "senseConfirmation": "这是“接住球”：球原本在移动，接的人把它拦下并控制在手中。",
+      "scene": "想象一只球朝你飞来，你伸出双手把它拦下并握稳，它没有继续飞走。",
+      "sceneBridge": "球朝利奥飞来时，他用双手拦住并稳稳接住；catch 突出接球者控制住移动中的球这一结果。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "1f4b7b87acb1999453786513d4f4d0062e7b7be0835954471359983252bb13a0",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/kætʃ/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "Leo catches the ball with both hands as it flies toward him.",
+        "translation": "球朝利奥飞来时，他用双手把球接住了。",
+        "audio": {
+          "sha256": "f208062fde0ca36ba23d728283053607a9a5ca6c47293f7ca80a356c6384f1e6",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 4,
+        "targetEnd": 11
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "接住朝自己飞来或移动的球，使球停下并留在自己控制中",
+        "prototypeScenes": [
+          {
+            "summary": "想象一只球朝你飞来，你伸出双手把它拦下并握稳，它没有继续飞走。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Leo catches the ball with both hands as it flies toward him."
+        ],
+        "excludedCases": [
+          "此处指接住球，不包括理解、染上疾病或抓捕等其他用法"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:10-450",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "walk",
+      "acceptedForms": [
+        "walked"
+      ],
+      "meaning": "以步行方式移动，通常始终有一只脚接触地面",
+      "senseConfirmation": "对，这里指以步行步态移动。",
+      "scene": "下班后，你沿着河边的小路从容前行，双脚交替迈步，通常总有一只脚踩在地上。",
+      "sceneBridge": "Maya 沿公园小路前进时保持从容的步行步态；walk 在这里说的就是这种双脚交替迈步的移动方式。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "4378a5f6b76f827698589209c57beb3ea2118fff332bad2902204ed82c3f4bc8",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/wɔk/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "After lunch, Maya walked along the park path at an easy pace.",
+        "translation": "午饭后，Maya 不紧不慢地沿着公园小路走。",
+        "audio": {
+          "sha256": "3a9331ec505bbb1395aa0ce3616d556adffc0b0aa60256fc3b7ea4f50155c4e5",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 18,
+        "targetEnd": 24
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "以步行方式移动，通常始终有一只脚接触地面",
+        "prototypeScenes": [
+          {
+            "summary": "下班后，你沿着河边的小路从容前行，双脚交替迈步，通常总有一只脚踩在地上。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "After lunch, Maya walked along the park path at an easy pace."
+        ],
+        "excludedCases": [
+          "聚焦身体以步行步态移动，不包括带着人或物移动等相关用法。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:10-460",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "run",
+      "acceptedForms": [
+        "ran"
+      ],
+      "meaning": "以比走路更快、带腾空阶段的步态移动",
+      "senseConfirmation": "对，这里指以跑步步态移动。",
+      "scene": "你看见队友快到终点，立刻加快脚步穿过操场；每一步之间，身体都会短暂离开地面，再由另一只脚落地支撑。",
+      "sceneBridge": "Leo 为了加入朋友而快速穿过草地，步态中有短暂腾空阶段；run 在这里指这种跑步移动。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "9308500fa0cc2ca49e54284095bcba75992833bfc09970de3ec4581a0a506ff3",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/rʌn/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "When he heard his name called, Leo ran across the field to join his friends.",
+        "translation": "听见有人叫自己的名字后，Leo 跑过草地去找朋友。",
+        "audio": {
+          "sha256": "4eda1c349c14aa324a4ba49ca9b87dd4b4622c4a70c116e0e4bdd954456954ed",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 35,
+        "targetEnd": 38
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "以比走路更快、带腾空阶段的步态移动",
+        "prototypeScenes": [
+          {
+            "summary": "你看见队友快到终点，立刻加快脚步穿过操场；每一步之间，身体都会短暂离开地面，再由另一只脚落地支撑。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "When he heard his name called, Leo ran across the field to join his friends."
+        ],
+        "excludedCases": [
+          "聚焦身体以跑步步态移动，不包括机器运行、经营或参选等其他用法。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:10-470",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "go",
+      "meaning": "离开说话者或当前参照点，向别处移动",
+      "senseConfirmation": "这个词表示离开说话者或当前谈话中的参照点，前往别处。",
+      "scene": "想象你在客厅和家人说话，厨房在另一头；你指向厨房，让对方从你身边出发去那里。",
+      "sceneBridge": "这里用 go，因为说话者让对方离开自己身边，前往厨房。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "5e1a6afb21ef5a893495a45168f01a4d06ae270609b2cd40492d2926f20ed948",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ɡoʊ/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "判断方向要看当前参照点：离开它去别处用 go；朝它移动用 come。"
+      },
+      "sceneExample": {
+        "example": "Go to the kitchen and get a glass of water.",
+        "translation": "去厨房拿一杯水。",
+        "audio": {
+          "sha256": "12a68681aeb1c63664711509b1d598d46707a46ca53abd37621ae402aea57da2",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 0,
+        "targetEnd": 2
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "离开说话者或当前参照点，向别处移动",
+        "prototypeScenes": [
+          {
+            "summary": "想象你在客厅和家人说话，厨房在另一头；你指向厨房，让对方从你身边出发去那里。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Go to the kitchen and get a glass of water."
+        ],
+        "excludedCases": [
+          "不表示朝说话者或当前参照点靠近"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:10-480",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "come",
+      "meaning": "朝说话者或当前参照点移动",
+      "senseConfirmation": "这个词表示朝说话者或当前谈话中的参照点移动。",
+      "scene": "想象你站在门口，朋友在院子另一边；你招手让他到你身边。",
+      "sceneBridge": "这里用 come，因为说话者把自己所在的位置当作目的地。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "287d47ff33a6a9f390afec1b5c59432000057b8cf0324969cb915b59f87b6883",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/kʌm/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "判断方向要看当前参照点：朝它移动用 come；离开它去别处用 go。"
+      },
+      "sceneExample": {
+        "example": "Come over and sit with me.",
+        "translation": "过来和我坐在一起吧。",
+        "audio": {
+          "sha256": "3136702671e144ccab340b0317f3e485ec0b99e98a18b77752e4a6f6c8bddb32",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 0,
+        "targetEnd": 4
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "朝说话者或当前参照点移动",
+        "prototypeScenes": [
+          {
+            "summary": "想象你站在门口，朋友在院子另一边；你招手让他到你身边。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Come over and sit with me."
+        ],
+        "excludedCases": [
+          "不表示离开说话者或当前参照点去别处"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:10-490",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "leave",
+      "acceptedForms": [
+        "left"
+      ],
+      "meaning": "从自己所在的地点离开",
+      "senseConfirmation": "你原先在屋里，现在已经从那里离开。",
+      "scene": "聚会结束，你穿上外套，从屋里走到门外。",
+      "sceneBridge": "回想自己走出聚会场所、去往别处的动作。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "5100cf911e208924039728a5c7b0302e1b17ffed6dfa2b9eb55d40b92808aa87",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/liːv/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "We left the café just before it started to rain.",
+        "translation": "我们刚好在开始下雨前离开了咖啡馆。",
+        "audio": {
+          "sha256": "0f801c9d64b453df6ee2c21a290ba4428c2ad53c0225dc52f8ad93069f857219",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 3,
+        "targetEnd": 7
+      },
+      "images": [
+        {
+          "name": "聚会结束后，一位客人穿上外套，从屋里走到了门外。",
+          "media": {
+            "sha256": "fbdb1f262c296cb66425ee299e3a0fc025525a98f9baa86418146ee98ae98fb9",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary",
+          "url": "https://dictionary.cambridge.org/us/pronunciation/english/leave"
+        },
+        {
+          "title": "Cambridge Dictionary",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/leave"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "从自己所在的地点离开",
+        "prototypeScenes": [
+          {
+            "summary": "聚会结束，你穿上外套，从屋里走到门外。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "We left the café just before it started to rain."
+        ],
+        "excludedCases": [
+          "此处指人离开地点，不指把东西留下或准许"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:10-570",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "enter",
+      "acceptedForms": [
+        "entered"
+      ],
+      "meaning": "从外部移动到内部",
+      "senseConfirmation": "这里表示从外面进入一个地方，到了它的内部。",
+      "scene": "推开房门，脚步从门外跨进房间里。",
+      "sceneBridge": "脚步越过门槛、从门外到了室内，就是从外到里的移动。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "22c49adbab6adbfcf4b75b7eeb6d907f41262d81f4b60b624ff10542c111f7fd",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈen.t̬ɚ/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "We entered the quiet room after knocking.",
+        "translation": "我们敲门后走进了那间安静的房间。",
+        "audio": {
+          "sha256": "77f2c1534a994504e33f7675699bf823c8b3565c375114afbea86d46f8da0993",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 3,
+        "targetEnd": 10
+      },
+      "images": [
+        {
+          "name": "一个人正从门外跨进房间。",
+          "media": {
+            "sha256": "8ad11adee5702704d50ff7ddd722027ccb5824474bebe328f7a8f665f098cc72",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary, enter",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/enter"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "从外部移动到内部",
+        "prototypeScenes": [
+          {
+            "summary": "推开房门，脚步从门外跨进房间里。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "We entered the quiet room after knocking."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:10-610",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "carry",
+      "acceptedForms": [
+        "carried"
+      ],
+      "meaning": "支撑或拿着某物并随自身移动",
+      "senseConfirmation": "对，你拿着东西移动时，就可以用这个词表达。",
+      "scene": "你把几袋杂货提在手里，带着它们一路走上楼。",
+      "sceneBridge": "手里的杂货跟着你从楼下移动到了家门口。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "a7e67a3527c8a84860a4cbc323219258125f879401cfa4ca0b9e81a7102d2f06",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈkæri/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "Mina carried the groceries up the stairs.",
+        "translation": "米娜提着杂货上了楼梯。",
+        "audio": {
+          "sha256": "fdacfe266bf3716bb24e2ee8ab3c7dd464e112d7237bff237ef254e5d95af753",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 5,
+        "targetEnd": 12
+      },
+      "images": [
+        {
+          "name": "一个人提着几袋杂货上楼。",
+          "media": {
+            "sha256": "78da30b1026720f50d6922b1d51a85197ba0d05ca69dd9a309f2f3528cb1cff7",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary, carry",
+          "url": "https://dictionary.cambridge.org/pronunciation/english/carry"
+        },
+        {
+          "title": "Cambridge Dictionary, carry",
+          "url": "https://dictionary.cambridge.org/dictionary/english/carry"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "支撑或拿着某物并随自身移动",
+        "prototypeScenes": [
+          {
+            "summary": "你把几袋杂货提在手里，带着它们一路走上楼。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Mina carried the groceries up the stairs."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:10-670",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "push",
+      "acceptedForms": [
+        "pushed"
+      ],
+      "meaning": "施力使物体远离自己或沿受力方向移动",
+      "senseConfirmation": "这是用身体施力，把物体向外或沿施力方向推动的动作。",
+      "scene": "想想你用手把一个箱子朝前推，让它沿着你的推力移动的情景。",
+      "sceneBridge": "Maya 对箱子施力，让它朝墙移动；英语用 push 表达这种向外推动的动作。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "273c6be377ba5081c7b2dbe32793d59d760254901f7425dfa18af9949754b200",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/pʊʃ/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "Push 描写向外或沿推力方向施力；pull 描写朝自己或牵引方向施力。辨别重点是施力方向，不是物体最后停在哪里。\n即使物体没有离开很远，向它施加朝外或沿目标方向的推力仍是 push；若把它拉向自己或牵引点，则是 pull。"
+      },
+      "sceneExample": {
+        "example": "Maya pushed the heavy box toward the wall.",
+        "translation": "玛雅把沉重的箱子朝墙推去。",
+        "audio": {
+          "sha256": "b6891f483f88bd5a7c3260a7ab1076ba5f95a024d8fe6d1356d1c75000dd0e78",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 5,
+        "targetEnd": 11
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "施力使物体远离自己或沿受力方向移动",
+        "prototypeScenes": [
+          {
+            "summary": "想想你用手把一个箱子朝前推，让它沿着你的推力移动的情景。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Maya pushed the heavy box toward the wall."
+        ],
+        "excludedCases": [
+          "这里聚焦于向外或沿推力方向施力；不包括把物体朝自己或牵引点拉来的 pull。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:11-210",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "give",
+      "acceptedForms": [
+        "gave"
+      ],
+      "meaning": "把某物交给接收者",
+      "senseConfirmation": "这里表示把东西交给某个人，由对方接收。",
+      "scene": "你把桌上的备用钥匙递到妹妹手里，她接过后拿着。",
+      "sceneBridge": "钥匙从你手里到了妹妹手里，这个交付动作正好用得上这个表达。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "c4456c70ad9b75d7bc91efe2a62e90b4513caffdd546ada4299ee72dc038a0b3",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ɡɪv/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "Maya gave her brother the spare key.",
+        "translation": "玛雅把备用钥匙交给了她哥哥。",
+        "audio": {
+          "sha256": "7545f24b5eab35de2920448d2810f6eb23daa0e514f0cc1e915015f977b11206",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 5,
+        "targetEnd": 9
+      },
+      "images": [
+        {
+          "name": "一人正把钥匙交到另一人手中。",
+          "media": {
+            "sha256": "a76a7cef8159473419774d318e0dad25ad07034e4a2a63c19c5e631634fb9f95",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary, give",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/give"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "把某物交给接收者",
+        "prototypeScenes": [
+          {
+            "summary": "你把桌上的备用钥匙递到妹妹手里，她接过后拿着。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Maya gave her brother the spare key."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:11-610",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "lend",
+      "meaning": "把自己的东西暂时交给别人用，之后会收回",
+      "senseConfirmation": "你把自己的伞暂时给朋友用，之后由朋友还回来。",
+      "scene": "朋友忘带伞，你把自己的伞交给他，约好明天还你。",
+      "sceneBridge": "想到把伞交给朋友、等他用完归还的那一刻。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "926a65138d42dd0306b14a79d82055b74f0436d89828acc275e52c9ae920b2c3",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/lɛnd/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "usagePattern": "可说 lend someone something，也可说 lend something to someone。",
+        "contrastNote": "lend：把自己的东西给别人暂用；borrow：从别人那里借来用。"
+      },
+      "sceneExample": {
+        "example": "Could you lend Maya your umbrella until tomorrow?",
+        "translation": "你能把伞借给玛雅用到明天吗？",
+        "audio": {
+          "sha256": "37988b30cf1da873ad2316ce41b4344bd7d1503b8f31b7133262dbc178f843de",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 10,
+        "targetEnd": 14
+      },
+      "sources": [
+        {
+          "title": "Cambridge Dictionary",
+          "url": "https://dictionary.cambridge.org/us/pronunciation/english/lend"
+        },
+        {
+          "title": "Cambridge Dictionary",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/lend"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "把自己的东西暂时交给别人用，之后会收回",
+        "prototypeScenes": [
+          {
+            "summary": "朋友忘带伞，你把自己的伞交给他，约好明天还你。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Could you lend Maya your umbrella until tomorrow?"
+        ],
+        "excludedCases": [
+          "不是向别人借入"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:11-620",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "borrow",
+      "meaning": "暂时使用别人的东西，之后归还",
+      "senseConfirmation": "这里是暂时从别人那里拿来用，之后要归还。",
+      "scene": "出门前发现手机没电，你先用室友的充电器，并答应明早还。",
+      "sceneBridge": "你暂时拿到室友的充电器来用，重点是你接过来并会归还。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "91629278f734aaf6fe0406466cb452988db08900b34c4643b1039d06cc2e682f",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈbɑːr.oʊ/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "usagePattern": "常说 borrow something from someone，表示从某人那里借来某物。",
+        "contrastNote": "borrow 是自己暂时拿来用；lend 是把东西暂时借给别人。"
+      },
+      "sceneExample": {
+        "example": "Could I borrow your charger until tomorrow morning?",
+        "translation": "我能借用一下你的充电器到明天早上吗？",
+        "audio": {
+          "sha256": "09db415597e1b3704864407302e471f895e828675d203adc11131c17cafe79a4",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 8,
+        "targetEnd": 14
+      },
+      "sources": [
+        {
+          "title": "Cambridge Dictionary, borrow",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/borrow"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "暂时使用别人的东西，之后归还",
+        "prototypeScenes": [
+          {
+            "summary": "出门前发现手机没电，你先用室友的充电器，并答应明早还。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Could I borrow your charger until tomorrow morning?"
+        ],
+        "excludedCases": [
+          "lend"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:11-810",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "buy",
+      "acceptedForms": [
+        "bought"
+      ],
+      "meaning": "付出钱或其他价值以取得东西",
+      "senseConfirmation": "这是 buy：你付出钱，取得自己选中的东西。",
+      "scene": "想象你在文具店挑中一本笔记本，付钱后把它带走。",
+      "sceneBridge": "Maya 付了笔记本的钱并把它带回家，句子从取得商品的顾客一方描述这次购买。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "e0f3d39a31737e0cb3ab157217ec93526c494413419c5c2d31ce9c63e88190e3",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/baɪ/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "buy 从买方看交易：付出价款以取得商品；从卖方看同一交易则用 sell。"
+      },
+      "sceneExample": {
+        "example": "Maya bought a notebook and took it home.",
+        "translation": "玛雅付钱买了一本笔记本，并把它带回家。",
+        "audio": {
+          "sha256": "e968aefaa55243d23104667eafae61a2b0d621b0f8273446bf4e30e6e979dbfd",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 5,
+        "targetEnd": 11
+      },
+      "images": [
+        {
+          "name": "顾客在柜台付钱后接过一本笔记本，画面从取得商品的买方视角呈现交易。",
+          "media": {
+            "sha256": "1d145ddd178aa795f6bcb8a43e594ae3998f555f5cca4c91dd3c16ca6e1f6fec",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "付出钱或其他价值以取得东西",
+        "prototypeScenes": [
+          {
+            "summary": "想象你在文具店挑中一本笔记本，付钱后把它带走。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Maya bought a notebook and took it home."
+        ],
+        "excludedCases": [
+          "聚焦取得商品的一方付出价款，不表示卖方收款或提供商品这一侧"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:11-820",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "sell",
+      "acceptedForms": [
+        "sold"
+      ],
+      "meaning": "把东西交给别人并收取钱或其他价值",
+      "senseConfirmation": "这是 sell：你把东西交给别人，并收到相应的价款。",
+      "scene": "想象你在柜台把一本笔记本递给顾客，并收下对方付的钱。",
+      "sceneBridge": "商店把笔记本交给玛雅并收取五美元，句子从提供商品的卖方一侧描述交易。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "99268980f690b3ed708058607feff3574ff9126c8eca5c1b62d8fa3b1fa7ae76",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/sɛl/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "sell 从卖方看交易：提供商品并收取价款；从买方看同一交易则用 buy。"
+      },
+      "sceneExample": {
+        "example": "The shop sold Maya a notebook for five dollars.",
+        "translation": "商店以五美元的价格卖给玛雅一本笔记本。",
+        "audio": {
+          "sha256": "27fd8c903cbc079375392948fb116399c44b4a5ab21489f272f401469a70476c",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 9,
+        "targetEnd": 13
+      },
+      "images": [
+        {
+          "name": "店员把一本笔记本递给顾客并收下钱，画面从提供商品的卖方视角呈现交易。",
+          "media": {
+            "sha256": "9e6819b954ede9c75aa47a8f676786077d8aaa877793bb160fa5a4900ea69b4b",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "把东西交给别人并收取钱或其他价值",
+        "prototypeScenes": [
+          {
+            "summary": "想象你在柜台把一本笔记本递给顾客，并收下对方付的钱。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The shop sold Maya a notebook for five dollars."
+        ],
+        "excludedCases": [
+          "聚焦提供商品并收取价款的一方，不表示买方付钱取得商品这一侧"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:12-130",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "sit",
+      "acceptedForms": [
+        "sits"
+      ],
+      "meaning": "让身体由臀部支撑而处于坐姿",
+      "senseConfirmation": "这里说的是臀部由座面或地面承托、膝盖弯曲的坐姿，不是身体直立并由双脚承托的姿势。",
+      "scene": "想象你在长途车上休息：臀部落在座椅上，膝盖弯曲，双脚放在地板上，身体重量由座椅承托。",
+      "sceneBridge": "Sit 描述臀部得到支撑的坐姿；句子里的诺拉正坐在窗边的椅子上。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "f56e8d4141356fc02d9753fcedb4b2b9253750739c83124533b3d8f286db247e",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/sɪt/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "sit down 常强调从站姿转为坐姿；本 Sense 聚焦坐姿本身。身体直立并由双脚支撑时，用 stand。"
+      },
+      "sceneExample": {
+        "example": "Nora sits on a chair by the window.",
+        "translation": "诺拉坐在窗边的椅子上。",
+        "audio": {
+          "sha256": "a1408e6e1a708cafecf4112359833b420c9dbe4ed4dba2c3c18a288eef61f5de",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 5,
+        "targetEnd": 9
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "让身体由臀部支撑而处于坐姿",
+        "prototypeScenes": [
+          {
+            "summary": "想象你在长途车上休息：臀部落在座椅上，膝盖弯曲，双脚放在地板上，身体重量由座椅承托。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Nora sits on a chair by the window."
+        ],
+        "excludedCases": [
+          "聚焦臀部得到座面或地面支撑后的坐姿，不把从站姿转为坐姿的过程当作重点。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:12-150",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "stand",
+      "acceptedForms": [
+        "stands"
+      ],
+      "meaning": "身体直立并由双脚支撑",
+      "senseConfirmation": "这是双脚支撑的直立姿势；臀部落在座面上、由座面承托则是另一种姿态。",
+      "scene": "想象你在公交站等车：身体直立，重心落在双脚上，臀部没有靠椅子承托。",
+      "sceneBridge": "Stand 表示身体直立并由双脚支撑；伊莱在句子里站在长椅旁，双脚踩在地上。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "150d899a6dc8bc08d205886e91c223bfb306d30c19e5930bd79738e4b0a2f6ac",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/stænd/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "stand up 常说从坐姿起身的动作；本 Sense 聚焦已经直立后的姿势。臀部由座位支撑时，用 sit。"
+      },
+      "sceneExample": {
+        "example": "Eli stands beside the bench with both feet on the ground.",
+        "translation": "伊莱站在长椅旁，双脚稳稳地踩在地上。",
+        "audio": {
+          "sha256": "051138469d36537c8e65af2e2328a88140f346b632dc70bb6d479c3889ac8312",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 4,
+        "targetEnd": 10
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "身体直立并由双脚支撑",
+        "prototypeScenes": [
+          {
+            "summary": "想象你在公交站等车：身体直立，重心落在双脚上，臀部没有靠椅子承托。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Eli stands beside the bench with both feet on the ground."
+        ],
+        "excludedCases": [
+          "聚焦已经直立、由双脚支撑的姿势，不表示从坐姿起身的瞬间，也不表示忍受或容忍。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:12-240",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "open",
+      "acceptedForms": [
+        "opened"
+      ],
+      "meaning": "使封闭的东西变得可以进入或使用",
+      "senseConfirmation": "门原本关着，你让它变得可以进入。",
+      "scene": "你推开关着的教室门，里面的空间终于可以进去了。",
+      "sceneBridge": "把手放上门把、推开门，让里面的房间可以进入。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "9bcd23b003c8b963c8c532971b712199d52a44114766aaddca7306ce0a375bd9",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈoʊ.pən/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "Jordan opened the classroom door for the students.",
+        "translation": "乔丹为学生们打开了教室门。",
+        "audio": {
+          "sha256": "c98642f3da0cfad4d827ada45fb7536fcfc3c315fbb7ec56b6f719aa32e98b25",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 7,
+        "targetEnd": 13
+      },
+      "images": [
+        {
+          "name": "一扇原本关闭的教室门被推开，学生现在可以走进去。",
+          "media": {
+            "sha256": "d2beff1d8750c2618a62a011c2242da5765c76e42d621a871e7605815a8d032d",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary",
+          "url": "https://dictionary.cambridge.org/us/pronunciation/english/open"
+        },
+        {
+          "title": "Cambridge Dictionary",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/open"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "使封闭的东西变得可以进入或使用",
+        "prototypeScenes": [
+          {
+            "summary": "你推开关着的教室门，里面的空间终于可以进去了。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Jordan opened the classroom door for the students."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:12-40",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "before",
+      "meaning": "在某个时间点或事件之前",
+      "senseConfirmation": "现在这个时间还在约定时刻之前。",
+      "scene": "约好六点见面，你看了眼时间，发现还有十分钟才到约定时刻。",
+      "sceneBridge": "事情发生在六点这个时间点的前面，可以用 before 来连接。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "1ccaee0718afe4f7ef090e4ce3fc6c70f535505acfb39ac7f5bb10c23a3c47f0",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/bɪˈfɔr/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "Let's grab a coffee before the movie starts.",
+        "translation": "电影开始前，我们去喝杯咖啡吧。",
+        "audio": {
+          "sha256": "959c56f277f5b782ef8b7f2e25606340edb6b6127e41524edff758e30fffe297",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 20,
+        "targetEnd": 26
+      },
+      "images": [
+        {
+          "name": "一个人提前十分钟到达约定地点等待。",
+          "media": {
+            "sha256": "8d1920ee38b005c0a4d9bffb14b4f88ff3af0164ce435d9cbf5225f15b5aa48f",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary: before pronunciation",
+          "url": "https://dictionary.cambridge.org/pronunciation/english/before"
+        },
+        {
+          "title": "Cambridge Dictionary: before",
+          "url": "https://dictionary.cambridge.org/dictionary/english/before"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "在某个时间点或事件之前",
+        "prototypeScenes": [
+          {
+            "summary": "约好六点见面，你看了眼时间，发现还有十分钟才到约定时刻。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Let's grab a coffee before the movie starts."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:12-410",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "right",
+      "meaning": "面向前方时，身体或空间的右侧",
+      "senseConfirmation": "对，这里说的是面向前方时身体或空间的右侧，不是表示正确。",
+      "scene": "站在房间里，面朝前门，想想自己的两只手；门旁哪一侧和右手在同一边？",
+      "sceneBridge": "说话者面向前门，以自己的朝向为准，鞋架在右手一侧，所以用 right。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "349e624ae2eb3a5a21ed7f094149b7648557cc6a2ba1d393b6319e78be28611f",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/raɪt/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "right 在这里表示与 left 相反的一侧，不表示正确或合适；判断时先确定观察者面向的方向。"
+      },
+      "sceneExample": {
+        "example": "Facing the front door, the shoe rack is on the right.",
+        "translation": "面向前门时，鞋架在右边。",
+        "audio": {
+          "sha256": "2e3cbad6281909edd7e7b33e27eff657318fedc437c40154b42dd203f6c573c0",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 47,
+        "targetEnd": 52
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "面向前方时，身体或空间的右侧",
+        "prototypeScenes": [
+          {
+            "summary": "站在房间里，面朝前门，想想自己的两只手；门旁哪一侧和右手在同一边？",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Facing the front door, the shoe rack is on the right."
+        ],
+        "excludedCases": [
+          "不表示正确、合适或正当；这里仅指面向前方时的右侧"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:12-420",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "left",
+      "meaning": "面向前方时，身体或空间的左侧",
+      "senseConfirmation": "对，这里说的是面向前方时身体或空间的左侧。",
+      "scene": "站在房间里，面朝前门，想想自己的两只手；门旁哪一侧和左手在同一边？",
+      "sceneBridge": "说话者面向前门，以自己的朝向为准，衣帽架在左手一侧，所以用 left。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "511a3d218640c97eacf56a2940737c3eb1a6b8d6f15ac59a6c6f736bb4bac7fc",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/lɛft/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "left 和 right 表示相反的两侧；判断时先确定观察者面向的方向。"
+      },
+      "sceneExample": {
+        "example": "Facing the front door, the coat rack is on the left.",
+        "translation": "面向前门时，衣帽架在左边。",
+        "audio": {
+          "sha256": "98b34e9e560d2eb8e2aa5974eba195145a3a51b65c17cb0488a2979c072936ae",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 47,
+        "targetEnd": 51
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "面向前方时，身体或空间的左侧",
+        "prototypeScenes": [
+          {
+            "summary": "站在房间里，面朝前门，想想自己的两只手；门旁哪一侧和左手在同一边？",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Facing the front door, the coat rack is on the left."
+        ],
+        "excludedCases": [
+          "不表示 leave 的过去式；这里仅指面向前方时的左侧"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:12-430",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "near",
+      "meaning": "与参照点距离很小",
+      "senseConfirmation": "这个词表示某处与参照点之间的距离很小。",
+      "scene": "想象咖啡馆就在车站附近，走很短一段就能到；始终以车站作为距离参照点。",
+      "sceneBridge": "这里用 near，表示咖啡馆到车站的距离很小。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "14856b8847ab07c0b1e72b3102a18f0cfb9d08aaa043b08a255f0455f6b673f8",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/nɪr/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "以车站为同一参照点：near 表示距离小；far 表示距离大。"
+      },
+      "sceneExample": {
+        "example": "The café is near the station.",
+        "translation": "这家咖啡馆离车站很近。",
+        "audio": {
+          "sha256": "e4a808ab9dd085d7ff3e095e61fea03d5d79dbdb1b8e8db7d7548fb5e3204b65",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 12,
+        "targetEnd": 16
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "与参照点距离很小",
+        "prototypeScenes": [
+          {
+            "summary": "想象咖啡馆就在车站附近，走很短一段就能到；始终以车站作为距离参照点。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The café is near the station."
+        ],
+        "excludedCases": [
+          "不表示与参照点距离很大；对照 far。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:12-440",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "far",
+      "meaning": "与参照点距离很大",
+      "senseConfirmation": "这个词表示某处与参照点之间的距离很大。",
+      "scene": "想象咖啡馆在很远的地方，从车站出发要走很长一段路才能到；始终以车站作为距离参照点。",
+      "sceneBridge": "这里用 far，表示咖啡馆到车站的距离很大。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "119fcfe23479094ac100b643de90e8ba877ca0b3b736ead32a2e9faba5ff0278",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/fɑr/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "以车站为同一参照点：far 表示距离大；near 表示距离小。"
+      },
+      "sceneExample": {
+        "example": "The café is far from the station.",
+        "translation": "这家咖啡馆离车站很远。",
+        "audio": {
+          "sha256": "a5e4b2e2eafea13d72fcb81d408dc4202b53648483bc9c62e4379bf04db22ce1",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 12,
+        "targetEnd": 15
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "与参照点距离很大",
+        "prototypeScenes": [
+          {
+            "summary": "想象咖啡馆在很远的地方，从车站出发要走很长一段路才能到；始终以车站作为距离参照点。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The café is far from the station."
+        ],
+        "excludedCases": [
+          "不表示与参照点距离很小；对照 near。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:12-50",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "inside",
+      "meaning": "位于边界所包围的内部",
+      "senseConfirmation": "它表示位置落在某个边界围出的内部。",
+      "scene": "钥匙掉进背包里，后来你在包的边界里面找到了它。",
+      "sceneBridge": "钥匙在包的边界之内，而不是放在包的外面。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "90ab419e14a0658b45a48ca22dd5ef002a7d129f8451750731810a9850724a11",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ɪnˈsaɪd/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The keys are inside my backpack.",
+        "translation": "钥匙在我的背包里面。",
+        "audio": {
+          "sha256": "b49fe7d42894f683b226fbefd53b0ef505e48ffac0d08856f7c2f31f859fb60c",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 13,
+        "targetEnd": 19
+      },
+      "images": [
+        {
+          "name": "钥匙掉进背包里，后来你在包的边界里面找到了它。",
+          "media": {
+            "sha256": "4d119c9bfd3f2beb342c6ba7a1fe4b69bc70a1d3051b1707b6c785c4c261e795",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary: inside pronunciation",
+          "url": "https://dictionary.cambridge.org/pronunciation/english/inside"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "位于边界所包围的内部",
+        "prototypeScenes": [
+          {
+            "summary": "钥匙掉进背包里，后来你在包的边界里面找到了它。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The keys are inside my backpack."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:12-550",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "big",
+      "meaning": "尺寸或规模较大",
+      "senseConfirmation": "这个词表示物体或整体规模较大；这里只比较纸箱体积，不比较重量或长度。",
+      "scene": "想象两只外形相近的纸箱并排放着：一只体积明显更大，另一只更小。",
+      "sceneBridge": "这里用 big，因为说的是体积明显较大的那只纸箱。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "3d299defe55960dbd3994ad18dd415da2f304424a97fb5402d1b78a1f432662f",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/bɪɡ/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "big 描述尺寸或规模；重量大用 heavy，从一端到另一端较长用 long。"
+      },
+      "sceneExample": {
+        "example": "The big box is beside the door.",
+        "translation": "大纸箱放在门旁边。",
+        "audio": {
+          "sha256": "1b66c0cd6b83d41fc08831430d983b65883e5c9b26073c9c6b9754af26f1ced0",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 4,
+        "targetEnd": 7
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "尺寸或规模较大",
+        "prototypeScenes": [
+          {
+            "summary": "想象两只外形相近的纸箱并排放着：一只体积明显更大，另一只更小。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The big box is beside the door."
+        ],
+        "excludedCases": [
+          "这里描述尺寸或规模较大，不表示重量大（heavy）或长度长（long）。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:12-560",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "small",
+      "meaning": "尺寸或规模较小",
+      "senseConfirmation": "这个词表示物体或整体规模较小；这里只比较纸箱体积，不比较重量或长度。",
+      "scene": "想象两只外形相近的纸箱并排放着：一只体积明显更大，另一只更小。",
+      "sceneBridge": "这里用 small，因为说的是体积明显较小的那只纸箱。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "f5574cf29b853693b2ce81c1d980e9a821c2a33be8651daa97fa3d9adc910aa2",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/smɔːl/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "small 描述尺寸或规模；重量轻用 light，从一端到另一端较短用 short。"
+      },
+      "sceneExample": {
+        "example": "The small box is beside the door.",
+        "translation": "小纸箱放在门旁边。",
+        "audio": {
+          "sha256": "d269f202d5a5c5e9c91ebd4700a5d26e7dd6303bfc112948862f05dea92eb8f0",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 4,
+        "targetEnd": 9
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "尺寸或规模较小",
+        "prototypeScenes": [
+          {
+            "summary": "想象两只外形相近的纸箱并排放着：一只体积明显更大，另一只更小。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The small box is beside the door."
+        ],
+        "excludedCases": [
+          "这里描述尺寸或规模较小，不表示重量轻（light）或长度短（short）。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:12-570",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "long",
+      "meaning": "从一端到另一端的长度较大；不是时间长",
+      "senseConfirmation": "这个词表示物体从一端到另一端的长度较大。",
+      "scene": "想象一根绳子从你手边一直延伸到院子另一头的树，绳子的两端相距很远。",
+      "sceneBridge": "这里说的是绳子的实际长度：它足以从说话者所在的位置伸到那棵树。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "14c220e3b23920065d576fcd717383a73e59389c9f0c2975b6887e06ddc75c4b",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/lɔŋ/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "long 也可以描述时间持续得久，但这里谈的是绳子的长度。"
+      },
+      "sceneExample": {
+        "example": "This rope is long enough to reach the tree.",
+        "translation": "这根绳子足够长，能够够到那棵树。",
+        "audio": {
+          "sha256": "c12089a22372e1f77f2e3db4ad66658ecd5638bfed417ba808b79a99af8914c2",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 13,
+        "targetEnd": 17
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "从一端到另一端的长度较大；不是时间长",
+        "prototypeScenes": [
+          {
+            "summary": "想象一根绳子从你手边一直延伸到院子另一头的树，绳子的两端相距很远。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "This rope is long enough to reach the tree."
+        ],
+        "excludedCases": [
+          "此处描述物体两端之间的实际长度，不表示持续时间长"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:12-590",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "short",
+      "meaning": "从一端到另一端的长度较小；不是时间短",
+      "senseConfirmation": "这个词表示物体从一端到另一端的长度较小。",
+      "scene": "想象一支不太长的铅笔，放进口袋里刚好装得下。",
+      "sceneBridge": "这里说的是铅笔的实际长度较小，所以它能放进口袋。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "0096c417e449b930d5dec774ba4c08c3338e77d22afe03bfa7514f553570a918",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ʃɔɹt/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "short 也可以描述时间持续得不久，但这里谈的是铅笔的长度。"
+      },
+      "sceneExample": {
+        "example": "This pencil is short, so it fits in my pocket.",
+        "translation": "这支铅笔很短，所以能放进我的口袋。",
+        "audio": {
+          "sha256": "cff332ddb806c8109578550268f99498bf38ec20fc7e03be042ca54e2feb740a",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 15,
+        "targetEnd": 20
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "从一端到另一端的长度较小；不是时间短",
+        "prototypeScenes": [
+          {
+            "summary": "想象一支不太长的铅笔，放进口袋里刚好装得下。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "This pencil is short, so it fits in my pocket."
+        ],
+        "excludedCases": [
+          "此处描述物体两端之间的实际长度，不表示持续时间短"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:13-180",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "enough",
+      "meaning": "数量或程度达到需要",
+      "senseConfirmation": "对，数量或程度达到所需时，就可以用这个词。",
+      "scene": "客人都坐下后，你发现椅子刚好每人一把，不多也不少。",
+      "sceneBridge": "椅子数量满足了所有人的需要，正好每人一把。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "da81d748ae354dcb576cf08673adfd50beaf175699e69a567d4f6ad97ad2a580",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/əˈnʌf/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "We have enough chairs for everyone.",
+        "translation": "我们的椅子够每个人坐。",
+        "audio": {
+          "sha256": "3c5e88dce0e5b6445d44aaa90cdaa7f0be0bed0392a713ce724f8c35bde97845",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 8,
+        "targetEnd": 14
+      },
+      "images": [
+        {
+          "name": "客人都有椅子坐，座位数量刚好够用。",
+          "media": {
+            "sha256": "8b9e8cf6eb34bb39b99367ba78917ed46b18bbbff4da4fcc997e191bbc6cfa12",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary, enough",
+          "url": "https://dictionary.cambridge.org/dictionary/english/enough"
+        },
+        {
+          "title": "Cambridge Dictionary, enough",
+          "url": "https://dictionary.cambridge.org/dictionary/english/enough"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "数量或程度达到需要",
+        "prototypeScenes": [
+          {
+            "summary": "客人都坐下后，你发现椅子刚好每人一把，不多也不少。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "We have enough chairs for everyone."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:13-210",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "full",
+      "meaning": "容器或空间已经装满，几乎没有可用余量",
+      "senseConfirmation": "这就是 full：容器已经装满，几乎没有可用空间。",
+      "scene": "想象往透明杯子里倒水，直到水面接近杯口，再倒就会溢出来。",
+      "sceneBridge": "水占满了杯子的大部分可用容量，所以用 full 描述杯子的状态。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "8831b5a48af195cbe5f8b52a5f63f9b04481fee84fe1b2dcfde5fc8b8e30b51c",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/fʊl/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "full 表示内容物已占满可用容量；empty 则表示容器里没有内容物。"
+      },
+      "sceneExample": {
+        "example": "The glass is full of water.",
+        "translation": "杯子里装满了水。",
+        "audio": {
+          "sha256": "6873798fc470e612a57913d0d334bd49b789de606b4925eec47266ff48983457",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 13,
+        "targetEnd": 17
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "容器或空间已经装满，几乎没有可用余量",
+        "prototypeScenes": [
+          {
+            "summary": "想象往透明杯子里倒水，直到水面接近杯口，再倒就会溢出来。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The glass is full of water."
+        ],
+        "excludedCases": [
+          "这里说容器中的东西已占满可用容量，不表示日程排满或吃饱"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:13-220",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "empty",
+      "meaning": "容器或空间中没有内容物",
+      "senseConfirmation": "这就是 empty：容器里没有内容物。",
+      "scene": "想象喝完杯里的水后往杯中看，里面已经没有饮料了。",
+      "sceneBridge": "杯子里已经没有饮料，所以用 empty 描述杯子的状态。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "3ad3d5dfac3c90ed6fa0fdca0ed9d991461bc6cd8bd0e79b08be97549fd88774",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈɛmpti/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "empty 表示没有内容物；如果还剩一点饮料，就不是这里要表达的完全空了。"
+      },
+      "sceneExample": {
+        "example": "The glass is empty.",
+        "translation": "杯子是空的。",
+        "audio": {
+          "sha256": "8a4d1c41d252f92984aa8d791c0b2830487093d1e976aef00605a0758eba6ab0",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 13,
+        "targetEnd": 18
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "容器或空间中没有内容物",
+        "prototypeScenes": [
+          {
+            "summary": "想象喝完杯里的水后往杯中看，里面已经没有饮料了。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The glass is empty."
+        ],
+        "excludedCases": [
+          "这里说容器里没有内容物，不表示房间无人、日程空闲或感到空虚"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:14-410",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "day",
+      "meaning": "从早晨到傍晚有日光的白天",
+      "senseConfirmation": "这里指有日光的白天，与夜晚相对。",
+      "scene": "天亮以后，你可以借自然光看清街道；直到傍晚天色再次暗下去。",
+      "sceneBridge": "day 在这里指白天；例句说白天可以看见那座山。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "ba6c8548aa426af9459c62ae964097d6f41ff2f3480b37d6fc45b881c46c43bd",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/deɪ/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "day 在此与 night 相对，指有日光的时段；也可在别处表示二十四小时的一天。"
+      },
+      "sceneExample": {
+        "example": "You can see the mountain during the day.",
+        "translation": "白天你能看见那座山。",
+        "audio": {
+          "sha256": "ac9d83cd16702ef49f3c509f205479bc2d35019316e3a198a387e271563f50ed",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 36,
+        "targetEnd": 39
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "从早晨到傍晚有日光的白天",
+        "prototypeScenes": [
+          {
+            "summary": "天亮以后，你可以借自然光看清街道；直到傍晚天色再次暗下去。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "You can see the mountain during the day."
+        ],
+        "excludedCases": [
+          "这里不是二十四小时的一整天。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:14-420",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "night",
+      "meaning": "天黑后到天亮前的夜晚",
+      "senseConfirmation": "这里指天黑后到天亮前的夜晚。",
+      "scene": "太阳落下后天空变暗，街灯亮起来，人们陆续回家休息。",
+      "sceneBridge": "night 指夜晚；例句说那条街在夜里很安静。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "5e5cac3908fd468149c4c880dd96becabc6a679353b6b1d2f3a3b92d73152898",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/naɪt/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The street is quiet at night.",
+        "translation": "那条街在夜里很安静。",
+        "audio": {
+          "sha256": "0f47cc64a460c2c1730d99fa76ab495c6c7700a2fa5500d3c0f5e9b4b84d8822",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 23,
+        "targetEnd": 28
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "天黑后到天亮前的夜晚",
+        "prototypeScenes": [
+          {
+            "summary": "太阳落下后天空变暗，街灯亮起来，人们陆续回家休息。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The street is quiet at night."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:15-410",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "hear",
+      "acceptedForms": [
+        "heard"
+      ],
+      "meaning": "不刻意时感知到声音",
+      "senseConfirmation": "你没有特意去听，只是感知到了那个声音。",
+      "scene": "安静读书时，隔壁房间传来一声轻轻的关门声，你的注意力短暂地被它吸引。",
+      "sceneBridge": "你注意到门外传来一声轻响，说明耳朵接收到了这个声音。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "c160b2f02e47db58ee2db54c00dd42d149958f026b765a0fe15e33740e45fcd4",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/hɪr/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "hear 是感知到声音；listen 强调主动留心去听。"
+      },
+      "sceneExample": {
+        "example": "I heard a soft knock while I was reading.",
+        "translation": "我读书时听到了一声轻轻的敲门声。",
+        "audio": {
+          "sha256": "99728158e10ac380b1f4f3af50d4cb3e1236f08633b3d18fb8168fa01c7db52d",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 2,
+        "targetEnd": 7
+      },
+      "images": [
+        {
+          "name": "一个人读书时注意到隔壁传来的轻微关门声。",
+          "media": {
+            "sha256": "cc137d47ec5877ceb6063b6b7a234969bbd3c04c57de8acc9d4672603736782f",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary: hear pronunciation",
+          "url": "https://dictionary.cambridge.org/us/pronunciation/english/hear"
+        },
+        {
+          "title": "Cambridge Dictionary: hear",
+          "url": "https://dictionary.cambridge.org/dictionary/english/hear"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "不刻意时感知到声音",
+        "prototypeScenes": [
+          {
+            "summary": "安静读书时，隔壁房间传来一声轻轻的关门声，你的注意力短暂地被它吸引。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "I heard a soft knock while I was reading."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:15-420",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "listen",
+      "acceptedForms": [
+        "listened"
+      ],
+      "meaning": "主动把注意力放在声音上",
+      "senseConfirmation": "没错，这个词强调你主动把注意力放到声音上。",
+      "scene": "你停下手边的事，专心分辨窗外传来的鸟叫声。",
+      "sceneBridge": "你停下来认真听窗外的鸟鸣，而不是只让声音从耳边经过。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "2c17665a752f0d94b26191e5bb4a0dbad764b3bd766efa609f83ccef2fc489a5",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈlɪsən/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "usagePattern": "常用 listen to + 人、声音或内容，例如 listen to the teacher / music。",
+        "contrastNote": "主动把注意力放到声音上是 listen；只是声音进入耳朵、没有专心留意，是 hear。"
+      },
+      "sceneExample": {
+        "example": "I listened to the rain tapping on the roof.",
+        "translation": "我专心听着雨点敲打屋顶的声音。",
+        "audio": {
+          "sha256": "2036d6fd26018b1eb61ce74d1b1a86b42b45d0b2d0c74e733c3f2bc88955d047",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 2,
+        "targetEnd": 10
+      },
+      "images": [
+        {
+          "name": "有人停下手头的事，专心听窗外的鸟叫。",
+          "media": {
+            "sha256": "9d52a7b1368151110a51beec599089e8582a5313efdf2cea88e7232e27329b0b",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary, listen",
+          "url": "https://dictionary.cambridge.org/us/pronunciation/english/listen"
+        },
+        {
+          "title": "Cambridge Dictionary, listen",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/listen"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "主动把注意力放在声音上",
+        "prototypeScenes": [
+          {
+            "summary": "你停下手边的事，专心分辨窗外传来的鸟叫声。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "I listened to the rain tapping on the roof."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:15-510",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "see",
+      "meaning": "通过视觉感知到某物",
+      "senseConfirmation": "眼睛能感知到眼前的景物，是 see；它不表示主动把视线投过去。",
+      "scene": "天刚放晴，窗外远处的山清楚地映入眼中，你并没有特意去寻找它们。",
+      "sceneBridge": "景物自然进入视野时，表达的是视觉上看见了什么。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "4bc2775d1a3a9647e553d94d3641cc8438e178f1cb5ad32277f19fdc12d3ebcf",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/siː/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "see 强调视觉上感知到；look at 强调主动把视线投向某物。"
+      },
+      "sceneExample": {
+        "example": "I can see the lighthouse from our window.",
+        "translation": "从我们的窗户能看见那座灯塔。",
+        "audio": {
+          "sha256": "f14d3034091db5d5cad0a20bdd567c1028b3c6170df79e87f984322e67cf00d0",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 6,
+        "targetEnd": 9
+      },
+      "images": [
+        {
+          "name": "从窗户望出去，远处的灯塔清晰可见。",
+          "media": {
+            "sha256": "2f5450893a55e474cee6a2b3d1a8ca13c05cf665ea94673f0f62026b6c71fc46",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary — see",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/see"
+        },
+        {
+          "title": "Cambridge Dictionary — see pronunciation",
+          "url": "https://dictionary.cambridge.org/us/pronunciation/english/see"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "通过视觉感知到某物",
+        "prototypeScenes": [
+          {
+            "summary": "天刚放晴，窗外远处的山清楚地映入眼中，你并没有特意去寻找它们。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "I can see the lighthouse from our window."
+        ],
+        "excludedCases": [
+          "look at"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:15-520",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "phrase",
+      "expression": "look at",
+      "meaning": "主动把视线投向对象",
+      "senseConfirmation": "这是主动把视线投向某个对象。",
+      "scene": "有人指向远处的云，你转过眼睛，把视线落到那片云上。",
+      "sceneBridge": "邀请别人把视线转向某样东西时，可以用 look at。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "c6d2605891deeff4a18ff6724ca2efa6d8d6bdb5e6ea967e2fdb7528fef07e4c",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈlʊk æt/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "phrase",
+        "partOfSpeech": null,
+        "contrastNote": "see 表示看见或感知到；look at 强调主动把视线投向对象。"
+      },
+      "sceneExample": {
+        "example": "Look at the clouds over the harbor.",
+        "translation": "看看港口上方的云。",
+        "audio": {
+          "sha256": "dd9536d7cdcbe8fcdd92b594cb28036c27cfdc36c3f9382b9874121ef1aa2acd",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 0,
+        "targetEnd": 7
+      },
+      "images": [
+        {
+          "name": "有人指向远处的云，你转过眼睛，把视线落到那片云上。",
+          "media": {
+            "sha256": "7334987a2585039050f81fa71d308296c49f11876bd66922cf9fdddc571f4ee4",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary: look at something",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/look-at"
+        },
+        {
+          "title": "Cambridge Dictionary: look",
+          "url": "https://dictionary.cambridge.org/us/pronunciation/english/look"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "主动把视线投向对象",
+        "prototypeScenes": [
+          {
+            "summary": "有人指向远处的云，你转过眼睛，把视线落到那片云上。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Look at the clouds over the harbor."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:15-810",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "heavy",
+      "meaning": "重量较大，拿起或移动需要较多力量",
+      "senseConfirmation": "这里说的是重量大、拿起来要费力，不是事情严重或心情沉重。",
+      "scene": "想象你要把一个装满书的大行李箱抬上台阶：双手用力，手臂和腿都明显需要使劲。",
+      "sceneBridge": "Heavy 描述行李箱重量大；玛雅需要双手把它抬起来。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "8d9c5fa954968f40cc15ede952089034946d52589fa8fdec96a1ecd3fa8d6a60",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈhɛvi/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "Maya lifts the heavy suitcase with both hands.",
+        "translation": "玛雅用双手提起那个沉重的行李箱。",
+        "audio": {
+          "sha256": "4f5aeccf91b8ba935e03ab10fe3b85e4870ac476da92bccec6b6f7921f148fe6",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 15,
+        "targetEnd": 20
+      },
+      "images": [
+        {
+          "name": "一位成年人弯腿并用双手费力地抬起一个大纸箱。",
+          "media": {
+            "sha256": "bb59bdadb74b1d63ee07234e0db41f7739472f705dea1f5de46fcf297aa5f46a",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "重量较大，拿起或移动需要较多力量",
+        "prototypeScenes": [
+          {
+            "summary": "想象你要把一个装满书的大行李箱抬上台阶：双手用力，手臂和腿都明显需要使劲。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Maya lifts the heavy suitcase with both hands."
+        ],
+        "excludedCases": [
+          "只表示物体重量较大，不延伸到严重、沉闷或重要等其他含义。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:15-820",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "light",
+      "meaning": "重量较小，容易拿起；不是光线或浅色",
+      "senseConfirmation": "这里的 light 说的是重量小、容易拿起；不是光线明亮，也不是颜色浅。",
+      "scene": "想象你用一只手轻松提起一个空的编织篮：手臂几乎不费力，篮子很容易离开地面。",
+      "sceneBridge": "Light 在这里描述篮子重量小；利奥单手就能轻松把它提起来。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "22dca2c57f8d1633c4c0164ac1ba052ac53d6dbecb6fcef663c07ef1f05ec940",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/laɪt/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "谈重量时，light 与 heavy 相对；表示明亮或颜色浅的 light 是别的含义。"
+      },
+      "sceneExample": {
+        "example": "Leo lifts the light basket with one hand.",
+        "translation": "利奥用一只手提起那个轻巧的篮子。",
+        "audio": {
+          "sha256": "1899cddb6f510e895034dae2d6821b4cd25e844c3ba741a83224c9e17c9463d9",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 14,
+        "targetEnd": 19
+      },
+      "images": [
+        {
+          "name": "一位成年人站直身体，用一只手轻松提起一个小纸箱。",
+          "media": {
+            "sha256": "4098f398a59618e4f3ff0f425406d40fecfe84d752bc891a283a1b83c1fcc248",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "重量较小，容易拿起；不是光线或浅色",
+        "prototypeScenes": [
+          {
+            "summary": "想象你用一只手轻松提起一个空的编织篮：手臂几乎不费力，篮子很容易离开地面。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Leo lifts the light basket with one hand."
+        ],
+        "excludedCases": [
+          "只表示物体重量较小、容易拿起，不表示明亮或颜色浅。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:15-830",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "wet",
+      "meaning": "表面或物体带有水分，摸起来潮湿；不一定已经浸透",
+      "senseConfirmation": "对，这里说的是物体表面或内部带着水分、摸起来潮湿。",
+      "scene": "刚洗过的毛巾还没晾干，摸上去有水分；想想这种触感。",
+      "sceneBridge": "毛巾洗过后仍带着水分，所以用 wet 描述它；不要求它被水完全浸透。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "f2378ed75a12238e5f9b0aad63d83a280e1ff1a039b864c96ac321e91e15f4f1",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/wɛt/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "wet 描述有水分，dry 描述水分没有了或已经消失；wet 也可表示潮湿，不一定是 soaked（浸透的）。"
+      },
+      "sceneExample": {
+        "example": "The towel is still wet after washing.",
+        "translation": "毛巾洗过后还是湿的。",
+        "audio": {
+          "sha256": "7bbf50699e4a47dd01cfc9e006a9f48726fec8332c67d665fd3d3b5ed6491e48",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 19,
+        "targetEnd": 22
+      },
+      "images": [
+        {
+          "name": "一只手拿着刚洗过的蓝色棉毛巾，布面颜色较深并带有水珠，旁边是白色洗手池。",
+          "media": {
+            "sha256": "88a9d1114ac538b53ced050094f11e2af010b826534571256698d9ee75f40526",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "表面或物体带有水分，摸起来潮湿；不一定已经浸透",
+        "prototypeScenes": [
+          {
+            "summary": "刚洗过的毛巾还没晾干，摸上去有水分；想想这种触感。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The towel is still wet after washing."
+        ],
+        "excludedCases": [
+          "这里描述物体带有水分，不表示天气潮湿或身体出汗。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:15-840",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "dry",
+      "meaning": "表面或物体没有水分，或水分已经消失",
+      "senseConfirmation": "对，这里说的是物体没有水分，或原有的水分已经消失。",
+      "scene": "毛巾挂在阳光下晾过之后，布料不再有水分；想想它摸起来的感觉。",
+      "sceneBridge": "毛巾在阳光下晾过，水分已经散去，因此用 dry 描述它。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "127032494f50f4def6b894917ff1e223b2a08e48984712b30d241b1c69ff28b6",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/draɪ/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "dry 与 wet 相反：dry 表示没有水分或水分已消失；也不要和表示“停止使用”的动词 dry out 等表达混为一谈。"
+      },
+      "sceneExample": {
+        "example": "The towel is dry after hanging in the sun.",
+        "translation": "毛巾在阳光下晾干了。",
+        "audio": {
+          "sha256": "833dc8001a7f2e70d38ace264d0e24efe9ca3d082a08ff2562c827d987ea8d3e",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 13,
+        "targetEnd": 16
+      },
+      "images": [
+        {
+          "name": "一只手拿着已晾干的蓝色棉毛巾，布面干爽，没有可见水珠，旁边是白色洗手池。",
+          "media": {
+            "sha256": "498feffacee0ccf84cf83dee871966b0f50e995f27bc5925c1b660c18402386d",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "表面或物体没有水分，或水分已经消失",
+        "prototypeScenes": [
+          {
+            "summary": "毛巾挂在阳光下晾过之后，布料不再有水分；想想它摸起来的感觉。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The towel is dry after hanging in the sun."
+        ],
+        "excludedCases": [
+          "这里指没有水分，不表示不使用或取消，也不描述干旱气候。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:15-850",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "hot",
+      "meaning": "温度高",
+      "senseConfirmation": "这里说的是东西温度高，摸起来很热。",
+      "scene": "刚倒好的茶杯拿在手里，杯壁烫得你立刻换了只手。",
+      "sceneBridge": "把手从烫热的杯子旁移开时，可以这样说它的温度。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "7639fd5203cd537bdef8f73d692d813bd4698254705f6b86f2fe5db4096eb9ae",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/hɑːt/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The tea is still hot, so let it cool for a minute.",
+        "translation": "茶还很烫，先让它凉一会儿。",
+        "audio": {
+          "sha256": "f4fabdfd421b9f0cdb19a9ec934e8555466987ca8ab737255eec0954b4f999ad",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 17,
+        "targetEnd": 20
+      },
+      "images": [
+        {
+          "name": "一只手碰近热气腾腾的茶杯后缩了回来。",
+          "media": {
+            "sha256": "475a1fad5cfa6f09ce091167aeee5b92f0ff53218cf46166ece17365707de6c5",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary, hot",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/hot"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "温度高",
+        "prototypeScenes": [
+          {
+            "summary": "刚倒好的茶杯拿在手里，杯壁烫得你立刻换了只手。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The tea is still hot, so let it cool for a minute."
+        ],
+        "excludedCases": [
+          "spicy"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:15-870",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "clean",
+      "meaning": "没有污垢、污渍或其他不洁物，处于适合使用的状态",
+      "senseConfirmation": "这就是 clean：表面没有污垢或污渍，处于洁净状态。",
+      "scene": "想象拿起一条刚洗好并晾干的白毛巾，布面看不到泥点或污渍，可以直接使用。",
+      "sceneBridge": "毛巾上没有需要洗掉的污渍，所以用 clean 描述它当前的状态。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "d5ac77ed7ee9525c8bf2a65f46f036c5cad8f811f82d64cecd3b584fd21c8f09",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/kliːn/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "clean 描述没有污垢的状态；dirty 描述带有污垢、需要清洁的状态。"
+      },
+      "sceneExample": {
+        "example": "This towel is clean and ready to use.",
+        "translation": "这条毛巾是干净的，可以使用了。",
+        "audio": {
+          "sha256": "c45b9a0792041e76501c2c19e612477018b928a747bee6a6434cf8a1f64106e0",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 14,
+        "targetEnd": 19
+      },
+      "images": [
+        {
+          "name": "一条折叠的白色棉毛巾放在浅色台面上，表面洁白，没有可见污渍。",
+          "media": {
+            "sha256": "9dc3137a6f95c7e21374e8224c9a4880b2b4788e26c2f82869c84d1fa868cbb6",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "没有污垢、污渍或其他不洁物，处于适合使用的状态",
+        "prototypeScenes": [
+          {
+            "summary": "想象拿起一条刚洗好并晾干的白毛巾，布面看不到泥点或污渍，可以直接使用。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "This towel is clean and ready to use."
+        ],
+        "excludedCases": [
+          "这里说表面没有污垢，不表示清理某物的动作，也不表示行为诚实或声音清晰"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:15-880",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "dirty",
+      "meaning": "物体表面带有污垢或污渍，需要清洁",
+      "senseConfirmation": "这就是 dirty：表面带有污垢或污渍，需要清洁。",
+      "scene": "想象一条白毛巾沾上了深色泥渍，布面摸起来或看起来不洁净，使用前需要清洗。",
+      "sceneBridge": "毛巾上的泥渍让它需要清洗，所以用 dirty 描述它当前的状态。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "16d58811558376fb3bdeb1313a3c79f57771f2de546310e8d84ddbe355799606",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈdɝː.ti/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "dirty 描述带有污垢、需要清洁的状态；clean 描述没有污垢的状态。"
+      },
+      "sceneExample": {
+        "example": "This towel is dirty and needs washing.",
+        "translation": "这条毛巾脏了，需要清洗。",
+        "audio": {
+          "sha256": "8ea67c59f3eebd340f5229848f08cfc9cd4453c1dd31828e319b095480f43a4e",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 14,
+        "targetEnd": 19
+      },
+      "images": [
+        {
+          "name": "一条折叠的白色棉毛巾放在浅色台面上，表面沾有明显的深色泥渍。",
+          "media": {
+            "sha256": "3f0e04f1d8c22fc41932c5d129e4b5b85f5950df3ba4580b6d8ad0421626e202",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "物体表面带有污垢或污渍，需要清洁",
+        "prototypeScenes": [
+          {
+            "summary": "想象一条白毛巾沾上了深色泥渍，布面摸起来或看起来不洁净，使用前需要清洗。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "This towel is dirty and needs washing."
+        ],
+        "excludedCases": [
+          "这里说表面有污垢，不表示名声不光彩、颜色暗淡或天气恶劣"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:16-710",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "good",
+      "meaning": "整体上令人满意、合适或具有正面价值；不是好运",
+      "senseConfirmation": "这个词表示对味道或体验的正面评价：令人满意、合适或有价值；这里说汤的味道好，不是说运气好。",
+      "scene": "想象你尝了一口刚端上来的汤，味道正合心意，忍不住向同伴点头。",
+      "sceneBridge": "这里用 good 来评价汤的味道令人满意。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "7de4c5e47a881ac117a697f59e1afeaa83e6a6fd2aaff2dc0aa5b572ff808d89",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ɡʊd/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "good 在这里评价汤的品质或体验；表示好运时通常说 good luck。"
+      },
+      "sceneExample": {
+        "example": "The soup tastes good.",
+        "translation": "这汤味道很好。",
+        "audio": {
+          "sha256": "6c477572a65d5d0ff4ef9a2e54f3a2abffdb232bfe1fef95a4b66ce57422e116",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 16,
+        "targetEnd": 20
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "整体上令人满意、合适或具有正面价值；不是好运",
+        "prototypeScenes": [
+          {
+            "summary": "想象你尝了一口刚端上来的汤，味道正合心意，忍不住向同伴点头。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The soup tastes good."
+        ],
+        "excludedCases": [
+          "这里表达对事物或体验的正面评价，不表示好运气。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:16-720",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "bad",
+      "meaning": "整体上不令人满意、不合适或具有负面价值；不是坏运气",
+      "senseConfirmation": "这个词表示对味道或体验的负面评价：不令人满意、不合适或有害；这里说汤的味道差，不是说运气差。",
+      "scene": "想象你尝了一口刚端上来的汤，味道不对劲，皱起眉头，把勺子放回碗边。",
+      "sceneBridge": "这里用 bad 来评价汤的味道令人不满意。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "25e497db28baed10250b39f7cc2eea1036f73b871d284c8a07652a339f5f8775",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/bæd/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "bad 在这里评价汤的品质或体验；表示坏运气时通常说 bad luck。"
+      },
+      "sceneExample": {
+        "example": "The soup tastes bad.",
+        "translation": "这汤味道很差。",
+        "audio": {
+          "sha256": "6c71f56f167322e9fdb6ed561bf945b170cf6f08671e5bb462a90d6906ea64ac",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 16,
+        "targetEnd": 19
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "整体上不令人满意、不合适或具有负面价值；不是坏运气",
+        "prototypeScenes": [
+          {
+            "summary": "想象你尝了一口刚端上来的汤，味道不对劲，皱起眉头，把勺子放回碗边。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The soup tastes bad."
+        ],
+        "excludedCases": [
+          "这里表达对事物或体验的负面评价，不表示坏运气。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:17-170",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "know",
+      "meaning": "知道某个事实或信息",
+      "senseConfirmation": "脑中掌握一个事实或信息，是这里的 know。",
+      "scene": "你听说列车六点出发，之后有人问起时，你能把这个时间说出来。",
+      "sceneBridge": "你记得列车出发的时间，说明这个信息已经为你所知。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "b72d324d8df05efc06e02f5e140e5e184ff8228c2205eb3ebcf4586767ee78a8",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/noʊ/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "know a fact 是知道一件事；know someone 是认识某个人。这个词义聚焦信息，不是人际关系。"
+      },
+      "sceneExample": {
+        "example": "I know the train leaves at six.",
+        "translation": "我知道列车六点出发。",
+        "audio": {
+          "sha256": "2d00dd2449d4719fb1a316b98e35eed1032feaef58611f060da2e7e9a6455cb0",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 2,
+        "targetEnd": 6
+      },
+      "sources": [
+        {
+          "title": "Cambridge Dictionary — know",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/know"
+        },
+        {
+          "title": "Cambridge Dictionary — know pronunciation",
+          "url": "https://dictionary.cambridge.org/us/pronunciation/english/know"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "知道某个事实或信息",
+        "prototypeScenes": [
+          {
+            "summary": "你听说列车六点出发，之后有人问起时，你能把这个时间说出来。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "I know the train leaves at six."
+        ],
+        "excludedCases": [
+          "know someone"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:18-310",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "ask",
+      "acceptedForms": [
+        "asked"
+      ],
+      "meaning": "提出问题以获得信息；不是请求别人做事",
+      "senseConfirmation": "这就是 ask：提出问题来获得自己还不知道的信息。",
+      "scene": "想象你和向导站在林间岔路口，你想知道通往湖边的小路从哪里开始，于是向他提出这个问题。",
+      "sceneBridge": "She asked the guide where the trail began. 说的是她向向导提问，想知道小路的起点。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "110bdda8828c68d3600db1f1dbf7ec6badbcda83a322c6d4f945e0308c18b833",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/æsk/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "ask a question 是提问以获取信息；ask someone to help 是请求对方帮忙，表达的是请求义。"
+      },
+      "sceneExample": {
+        "example": "She asked the guide where the trail began.",
+        "translation": "她问向导小路是从哪里开始的。",
+        "audio": {
+          "sha256": "f8bb7aef446c24be765c174c7fdd909ac2b8e54a03a9c00dd7215a0c12a6bfca",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 4,
+        "targetEnd": 9
+      },
+      "images": [
+        {
+          "name": "林间岔路口，一位徒步者向向导询问路线，向导认真倾听。",
+          "media": {
+            "sha256": "aeafd3efd012bb3a93967f84dab2a0720dd61ba258d4db27a41afe93642c68be",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "提出问题以获得信息；不是请求别人做事",
+        "prototypeScenes": [
+          {
+            "summary": "想象你和向导站在林间岔路口，你想知道通往湖边的小路从哪里开始，于是向他提出这个问题。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "She asked the guide where the trail began."
+        ],
+        "excludedCases": [
+          "这里表示通过提问获取信息，不表示请求、邀请或要求别人做某事"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:18-320",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "answer",
+      "acceptedForms": [
+        "answered"
+      ],
+      "meaning": "对问题作出回应或提供所问的信息",
+      "senseConfirmation": "这就是 answer：回应别人提出的问题，提供对方想知道的信息。",
+      "scene": "想象你问向导小路从哪里开始，他听完后告诉你入口就在湖边。",
+      "sceneBridge": "The guide answered, “The trail starts by the lake.” 向导回应了问题，并说出了小路的起点。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "67eabea7e63527a7e5cbbecd9d2e10f564725ef81e77a8b673f0dc3a07f987b7",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈænsər/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "answer a question 是回应问题；answer the phone 是接听电话，属于相关但不同的用法。"
+      },
+      "sceneExample": {
+        "example": "The guide answered, “The trail starts by the lake.”",
+        "translation": "向导回答说：“小路从湖边开始。”",
+        "audio": {
+          "sha256": "b210b7ae50c0204660489445aa50f306e3de9999b9c95d9430aae784f6141d48",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 10,
+        "targetEnd": 18
+      },
+      "images": [
+        {
+          "name": "林间岔路口，向导向徒步者指明湖边小路的入口，徒步者认真倾听。",
+          "media": {
+            "sha256": "42f547fc220b36d3e4d673964e11cf534dc88da245b69c744f7cff1bcbb79d05",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "对问题作出回应或提供所问的信息",
+        "prototypeScenes": [
+          {
+            "summary": "想象你问向导小路从哪里开始，他听完后告诉你入口就在湖边。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The guide answered, “The trail starts by the lake.”"
+        ],
+        "excludedCases": [
+          "这里表示回应问题或给出所需信息，不表示答案本身作为名词"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:18-560",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "paper",
+      "meaning": "可书写的纸张或纸这种材料",
+      "senseConfirmation": "这里指可用于书写的一张纸。",
+      "scene": "你从抽屉里拿出一张薄而平的白色材料，准备在上面写字。",
+      "sceneBridge": "paper 指纸张；例句说她把一张纸放在桌上。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "62b97382c3a339ce5ea4ccc453f81c691da1350b569154bac041d7522f3ad95a",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈpeɪpər/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "She placed a sheet of paper on the desk.",
+        "translation": "她把一张纸放在书桌上。",
+        "audio": {
+          "sha256": "b87f0bdff25856f423f3966764e3f83d0ccfbc53eccee8742942e71bac6a71b7",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 22,
+        "targetEnd": 27
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "可书写的纸张或纸这种材料",
+        "prototypeScenes": [
+          {
+            "summary": "你从抽屉里拿出一张薄而平的白色材料，准备在上面写字。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "She placed a sheet of paper on the desk."
+        ],
+        "excludedCases": [
+          "不指报纸、论文或考试试卷。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:18-570",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "pen",
+      "meaning": "用墨水写字的笔",
+      "senseConfirmation": "这里指用墨水写字的笔。",
+      "scene": "你拿起一件细长的书写工具，笔尖在纸上留下墨迹。",
+      "sceneBridge": "pen 指钢笔或其他用墨水书写的笔；例句说它放在笔记本旁。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "43ca17f688d9cd71c3265f24126a01c9e19aa076b35277f9669830f116e5f954",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/pen/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The pen is beside the notebook.",
+        "translation": "笔放在笔记本旁边。",
+        "audio": {
+          "sha256": "5a2ad618a586143e585a6a0728db277e7a1bd50fe98c518fba7e851ed00e66e1",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 4,
+        "targetEnd": 7
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "用墨水写字的笔",
+        "prototypeScenes": [
+          {
+            "summary": "你拿起一件细长的书写工具，笔尖在纸上留下墨迹。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The pen is beside the notebook."
+        ],
+        "excludedCases": [
+          "不指铅笔。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:18-610",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "book",
+      "meaning": "装订成册供人阅读的书",
+      "senseConfirmation": "这里指有书页、可以翻阅的一本书。",
+      "scene": "你从书架抽出一件装订好的纸页，翻开后逐页阅读。",
+      "sceneBridge": "book 指书；例句说她把一本书放回书架。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "4b97ae2465d457bb44e47900edd7413492c859a181bd893d8574ba5f8e280c00",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/bʊk/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "She put the book back on the shelf.",
+        "translation": "她把书放回书架。",
+        "audio": {
+          "sha256": "11c9cfc572a977cb24ac7c22c559521cbf906f3f38ef7b3654d98f5bbc140921",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 12,
+        "targetEnd": 16
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "装订成册供人阅读的书",
+        "prototypeScenes": [
+          {
+            "summary": "你从书架抽出一件装订好的纸页，翻开后逐页阅读。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "She put the book back on the shelf."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:2-510",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "uncle",
+      "meaning": "父母同辈的男性亲属",
+      "senseConfirmation": "英语里 uncle 可以称呼父母的兄弟，也可以称呼姑姨等亲属的丈夫。",
+      "scene": "家里有位和爸爸妈妈同辈的男性亲属，孩子见到他会亲切地叫一声。",
+      "sceneBridge": "英语用一个常见称呼覆盖中文里几种不同的长辈亲属称谓。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "f2a06aa9c9b3c1a7c7085b09fdbe240a225dce2d4c43e5e67d3bf69818511416",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈʌŋkəl/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "usagePattern": "uncle 不区分父系或母系，也不说明具体辈分称谓；需要说清关系时可补充名字或亲属关系。"
+      },
+      "sceneExample": {
+        "example": "My uncle is teaching me how to make pancakes.",
+        "translation": "我叔叔正在教我做松饼。",
+        "audio": {
+          "sha256": "264c5f268ce2e0ef62d7941a40f9f5ce58374d66fa0c59b9ec45658990510046",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 3,
+        "targetEnd": 8
+      },
+      "sources": [
+        {
+          "title": "Cambridge Dictionary: uncle",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/uncle"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "父母同辈的男性亲属",
+        "prototypeScenes": [
+          {
+            "summary": "家里有位和爸爸妈妈同辈的男性亲属，孩子见到他会亲切地叫一声。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "My uncle is teaching me how to make pancakes."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:4-140",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "hair",
+      "meaning": "生长在头上的头发",
+      "senseConfirmation": "这里指生长在头上的头发。",
+      "scene": "洗完澡后，你用毛巾擦干头顶长出的细丝，再拿梳子梳理。",
+      "sceneBridge": "hair 指头发；例句说她的头发淋湿了。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "40431b478ed8886af84433cf88594657e83800563fb781ae41e7ee2aacfe7226",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/her/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "Her hair got wet in the rain.",
+        "translation": "她的头发被雨淋湿了。",
+        "audio": {
+          "sha256": "9959096b708e582b7a32b880baee09081d3bf6bb2a0ba5970da5fb1a229303fb",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 4,
+        "targetEnd": 8
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "生长在头上的头发",
+        "prototypeScenes": [
+          {
+            "summary": "洗完澡后，你用毛巾擦干头顶长出的细丝，再拿梳子梳理。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Her hair got wet in the rain."
+        ],
+        "excludedCases": [
+          "不指身体其他部位的毛发。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:4-200",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "head",
+      "meaning": "身体最上方包含脸和头骨的头部",
+      "senseConfirmation": "这里指颈部上方的头部。",
+      "scene": "你戴帽子时，会把帽子放在颈部上方的身体部位。",
+      "sceneBridge": "head 指人的头部；例句说孩子把帽子戴在头上。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "7861b105abc34e1f1ba392f92bde5c1fcb16a9f94fc5cef59cfdae6eabdfcd46",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/hed/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The child put a hat on his head.",
+        "translation": "孩子把帽子戴在头上。",
+        "audio": {
+          "sha256": "8b5f8053382b886808718da93f76ea8c4ef1880aaefcac7ab260115724af5f05",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 27,
+        "targetEnd": 31
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "身体最上方包含脸和头骨的头部",
+        "prototypeScenes": [
+          {
+            "summary": "你戴帽子时，会把帽子放在颈部上方的身体部位。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The child put a hat on his head."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:4-210",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "eye",
+      "meaning": "用来看东西的眼睛",
+      "senseConfirmation": "这里指用来看的眼睛。",
+      "scene": "你合上一侧眼皮，只用另一侧的视觉器官看书上的字。",
+      "sceneBridge": "eye 指眼睛；例句说她闭上一只眼睛。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "14e3a2f7cc6dd3d23a622eaa85b3a28e25406301acf4190bfcf10d605010b88f",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/aɪ/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "She closed one eye to look through the camera.",
+        "translation": "她闭上一只眼睛，通过相机取景。",
+        "audio": {
+          "sha256": "0a29d8fa5cc957b86829387d5996c686de3495ae730ee371873f5de0b9aa2ac5",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 15,
+        "targetEnd": 18
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "用来看东西的眼睛",
+        "prototypeScenes": [
+          {
+            "summary": "你合上一侧眼皮，只用另一侧的视觉器官看书上的字。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "She closed one eye to look through the camera."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:4-220",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "ear",
+      "meaning": "头两侧用来听声音的耳朵",
+      "senseConfirmation": "这里指头两侧用来听声音的耳朵。",
+      "scene": "有人轻声说话时，你把头的一侧转向对方，好让声音听得更清楚。",
+      "sceneBridge": "ear 指耳朵；例句说她把一只耳朵贴近门。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "51377839ea186c027f4ced6d280e9a7e22e1854cd61120b37303b8ffc8761574",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ɪr/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "She put her ear close to the door.",
+        "translation": "她把耳朵贴近门边。",
+        "audio": {
+          "sha256": "9c3689a3461599c9e61681f73a37962d6fa4edb1c5fcefcdff2fb716b584fddd",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 12,
+        "targetEnd": 15
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "头两侧用来听声音的耳朵",
+        "prototypeScenes": [
+          {
+            "summary": "有人轻声说话时，你把头的一侧转向对方，好让声音听得更清楚。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "She put her ear close to the door."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:4-230",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "nose",
+      "meaning": "脸上用来呼吸和闻气味的鼻子",
+      "senseConfirmation": "这里指脸上用来闻气味和呼吸的鼻子。",
+      "scene": "花香飘来时，你用脸中央的部位吸气，马上闻到了香味。",
+      "sceneBridge": "nose 指鼻子；例句说他把鼻子凑近花。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "180bb2722debfcd774813071231649a310a62c74a5386b1a722d56b65b0dcc74",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/noʊz/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "He put his nose near the flower.",
+        "translation": "他把鼻子凑近那朵花。",
+        "audio": {
+          "sha256": "08ede370b7bc69559d2bf8a5eb19f210c3ef11ec1f44d1a053db11acfc2433c3",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 11,
+        "targetEnd": 15
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "脸上用来呼吸和闻气味的鼻子",
+        "prototypeScenes": [
+          {
+            "summary": "花香飘来时，你用脸中央的部位吸气，马上闻到了香味。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "He put his nose near the flower."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:4-240",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "mouth",
+      "meaning": "脸上用来进食和说话的嘴",
+      "senseConfirmation": "这里指用来进食、说话的嘴。",
+      "scene": "你准备咬一口苹果时，张开脸下方的开口。",
+      "sceneBridge": "mouth 指嘴；例句说孩子张嘴吃苹果。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "382e750dbe933419d21fee8a2e468500d0a6ff293666571b1ccfccbb3638b673",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/maʊθ/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The child opened his mouth to eat the apple.",
+        "translation": "孩子张开嘴准备吃苹果。",
+        "audio": {
+          "sha256": "511a381fef7363e34ac1c171ad933b24407d6f269cb931718d18e72d7e0157b5",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 21,
+        "targetEnd": 26
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "脸上用来进食和说话的嘴",
+        "prototypeScenes": [
+          {
+            "summary": "你准备咬一口苹果时，张开脸下方的开口。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The child opened his mouth to eat the apple."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:4-310",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "arm",
+      "meaning": "从肩到手腕的手臂",
+      "senseConfirmation": "这里指肩膀到手腕之间的手臂。",
+      "scene": "要从高处取盒子，你从肩部开始伸出上肢，直到手够到盒子。",
+      "sceneBridge": "arm 指手臂；例句说她伸出手臂去拿书。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "8618b151ac72a23f9c8add72e4fc374e4ecd7cb81a0685778279e99f668c6c88",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ɑrm/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "She stretched out her arm to reach the book.",
+        "translation": "她伸出手臂去够那本书。",
+        "audio": {
+          "sha256": "da985c572ae392f807c6355d441f8f2e75ab1013c054f22fee1256d226ad00ee",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 22,
+        "targetEnd": 25
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "从肩到手腕的手臂",
+        "prototypeScenes": [
+          {
+            "summary": "要从高处取盒子，你从肩部开始伸出上肢，直到手够到盒子。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "She stretched out her arm to reach the book."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:4-330",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "hand",
+      "meaning": "手腕末端带手指的手",
+      "senseConfirmation": "这里指带有手指、可以抓握的手。",
+      "scene": "你伸出手腕末端带有五根手指的部位，抓住门把手。",
+      "sceneBridge": "hand 指手；例句说她用一只手握住杯子。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "d160bbbb46237140fdfaecf1cb46885c3761a105493fb55d08fa1e7313f7b9b6",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/hænd/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "She held the cup in one hand.",
+        "translation": "她用一只手握着杯子。",
+        "audio": {
+          "sha256": "d5e76d6af56ddb6c27514501bd2d2ac882139b257061868a783ddbb4bc472711",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 24,
+        "targetEnd": 28
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "手腕末端带手指的手",
+        "prototypeScenes": [
+          {
+            "summary": "你伸出手腕末端带有五根手指的部位，抓住门把手。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "She held the cup in one hand."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:4-350",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "leg",
+      "meaning": "从髋部延伸到脚的腿",
+      "senseConfirmation": "这里指从髋部向下延伸的腿。",
+      "scene": "爬楼梯时，你抬起下半身的一条肢体，把脚踩到上一阶。",
+      "sceneBridge": "leg 指腿；例句说他爬楼梯时抬起一条腿。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "00a771eb515f1d09e1a71374779452952e590234d3460606a01154395acfa161",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/leɡ/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "He lifted one leg to climb the stairs.",
+        "translation": "他抬起一条腿上楼梯。",
+        "audio": {
+          "sha256": "ad2ecf223950ada381a4a351da16d6bb65f600cb49c2193e54c3d0d5a463dd5f",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 14,
+        "targetEnd": 17
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "从髋部延伸到脚的腿",
+        "prototypeScenes": [
+          {
+            "summary": "爬楼梯时，你抬起下半身的一条肢体，把脚踩到上一阶。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "He lifted one leg to climb the stairs."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:4-370",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "foot",
+      "meaning": "脚踝以下支撑身体的脚",
+      "senseConfirmation": "这里指脚踝以下的脚。",
+      "scene": "站起来时，身体重量落在脚踝以下接触地面的部位。",
+      "sceneBridge": "foot 指脚；例句说他把一只脚放在台阶上。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "aa7b7e7ce4781652a52fa3d845c997461dce8aff2060014a62314db6e8c2dcfc",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/fʊt/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "He put one foot on the step.",
+        "translation": "他把一只脚放在台阶上。",
+        "audio": {
+          "sha256": "41703da313f030d1728f5d2f54fd5120b8fcffcac9a7f0e13affe37ae38045cd",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 11,
+        "targetEnd": 15
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "脚踝以下支撑身体的脚",
+        "prototypeScenes": [
+          {
+            "summary": "站起来时，身体重量落在脚踝以下接触地面的部位。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "He put one foot on the step."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:4-610",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "sleep",
+      "meaning": "处于睡眠状态",
+      "senseConfirmation": "这就是身体休息、意识暂时离开的睡眠状态。",
+      "scene": "夜里躺下后意识渐渐淡去，醒来时已经是早晨。",
+      "sceneBridge": "说到夜里进入这种休息状态，可以用 sleep 来表达。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "78f3064eb85461e4be3e34177ed4940deb14392ccf928e98a7231c99cd5b9bf4",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/sliːp/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The baby went to sleep before the storm passed.",
+        "translation": "暴风雨过去前，宝宝就睡着了。",
+        "audio": {
+          "sha256": "adf572081d55a28030f997709474190566a83482ccf62a83015b6278eccd6017",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 17,
+        "targetEnd": 22
+      },
+      "images": [
+        {
+          "name": "夜里躺下后意识渐渐淡去，醒来时已经是早晨。",
+          "media": {
+            "sha256": "51a0093c8d3eae79d37c60c8c5f5ae38d36d07af69875fd5893174fc8430980f",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary: sleep",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/sleep"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "处于睡眠状态",
+        "prototypeScenes": [
+          {
+            "summary": "夜里躺下后意识渐渐淡去，醒来时已经是早晨。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The baby went to sleep before the storm passed."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-120",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "food",
+      "meaning": "人或动物吃下以获得营养的食物",
+      "senseConfirmation": "这里指可以吃下、提供营养的食物。",
+      "scene": "到了午饭时间，你把可以吃的东西盛到盘里，准备用餐。",
+      "sceneBridge": "food 指食物；例句说桌上的食物已经凉了。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "c735ec02937b1c3210411e2661ede333c2c0247598728f4a3f74a4202bb0a9f0",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/fuːd/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The food on the table has gone cold.",
+        "translation": "桌上的食物已经凉了。",
+        "audio": {
+          "sha256": "4babe99cd374c1eab0cc1306b48b4cadef9474d24246b05169d992ff93a92a03",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 4,
+        "targetEnd": 8
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "人或动物吃下以获得营养的食物",
+        "prototypeScenes": [
+          {
+            "summary": "到了午饭时间，你把可以吃的东西盛到盘里，准备用餐。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The food on the table has gone cold."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-121",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "cooked",
+      "meaning": "食物已经经过加热烹制",
+      "senseConfirmation": "这个词表示食物经过加热烹制后已经熟了。",
+      "scene": "想象一盘胡萝卜片刚从锅里盛出，带着热气，质地已经变软。",
+      "sceneBridge": "这里说胡萝卜经过加热变软，所以用 cooked 表示它们已经烹熟。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "111247276ee0b7666d66cbd6430050fdab26a8b0d4ede6f17aada7d1541702f6",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/kʊkt/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The carrots are cooked until tender.",
+        "translation": "这些胡萝卜煮到变软为止。",
+        "audio": {
+          "sha256": "cecdf5c5db6b6ba7a3377123636b08165acfa4abe2d0770ce0f680e1bcb0ceb9",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 16,
+        "targetEnd": 22
+      },
+      "images": [
+        {
+          "name": "一碗刚烹制好的胡萝卜圆片，质地柔软，仍冒着少量热气。",
+          "media": {
+            "sha256": "4c93c1bef3273195c93ec0ccdd33b83e59d66ba4b223c64f4a70e7b49f956459",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "食物已经经过加热烹制",
+        "prototypeScenes": [
+          {
+            "summary": "想象一盘胡萝卜片刚从锅里盛出，带着热气，质地已经变软。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The carrots are cooked until tender."
+        ],
+        "excludedCases": [
+          "这里描述食物经过加热烹制后的状态，不只是切碎、清洗或调味。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-122",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "raw",
+      "meaning": "食物尚未经过烹制",
+      "senseConfirmation": "这个词表示食物还没有经过烹制；它不是在说表面粗糙或品质不好。",
+      "scene": "想象一盘清洗后切成条的胡萝卜，颜色鲜亮、质地清脆，还没有经过加热烹制。",
+      "sceneBridge": "这里的胡萝卜保持未烹制的清脆状态，所以用 raw 描述它们。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "2554ff844c0f704722272a7564ee836c7da5a67cfda9f91714c0c050413769d1",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/rɑː/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "We ate raw carrots with hummus.",
+        "translation": "我们把生胡萝卜蘸鹰嘴豆泥吃。",
+        "audio": {
+          "sha256": "55a2d08f8583fbc2f7fd381eb833a590a8bdce3d31cd6496fc433d673a2b0f3f",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 7,
+        "targetEnd": 10
+      },
+      "images": [
+        {
+          "name": "一盘清洗后切成条的生胡萝卜，鲜亮清脆，没有烹制痕迹。",
+          "media": {
+            "sha256": "1c06ae46d778e8410baafdfe895daf7e42687e25a0c256deb14dac5775a80f72",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "食物尚未经过烹制",
+        "prototypeScenes": [
+          {
+            "summary": "想象一盘清洗后切成条的胡萝卜，颜色鲜亮、质地清脆，还没有经过加热烹制。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "We ate raw carrots with hummus."
+        ],
+        "excludedCases": [
+          "这里指食物未烹制的状态，不是“粗糙”，也不表示食材本身品质差。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-130",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "drink",
+      "meaning": "通过喝的方式摄入液体",
+      "senseConfirmation": "用嘴摄入水或其他液体，这个动作就是 drink。",
+      "scene": "刚运动完喉咙发干，你拿起水瓶喝了几口，感觉舒服了一些。",
+      "sceneBridge": "口渴时把水喝下去，就是把刚才的体验连到这个表达。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "a6d4729847cf0c346414f3feb8cd5cf69bedc5a101997d63d5108f3845406747",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/drɪŋk/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "After the hike, we stopped to drink some water.",
+        "translation": "徒步结束后，我们停下来喝了些水。",
+        "audio": {
+          "sha256": "630efdc62e14daa97a5e81a3a3dff9fce46ed5878ab9c7a3fbea2dc87f0770a5",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 30,
+        "targetEnd": 35
+      },
+      "images": [
+        {
+          "name": "刚运动完的人拿起水瓶喝水。",
+          "media": {
+            "sha256": "1eaa3b941830b573cdedb1f529317f30b90fab080a6d2726f32787e1044da4a5",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary — drink pronunciation",
+          "url": "https://dictionary.cambridge.org/us/pronunciation/english/drink"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "通过喝的方式摄入液体",
+        "prototypeScenes": [
+          {
+            "summary": "刚运动完喉咙发干，你拿起水瓶喝了几口，感觉舒服了一些。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "After the hike, we stopped to drink some water."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-320",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "plate",
+      "meaning": "用来盛食物的平盘",
+      "senseConfirmation": "这里指用来盛食物的盘子。",
+      "scene": "吃饭前，你把食物放在一个浅而平的餐具上，再端到桌边。",
+      "sceneBridge": "plate 指餐盘；例句说她把盘子放到桌上。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "5a9cf4da26e389ffc14f7b451eb8200544740ef3bf8da1a15e8e554e3a36e397",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/pleɪt/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "She put the plate on the table.",
+        "translation": "她把盘子放在桌上。",
+        "audio": {
+          "sha256": "92464cfb7d86d2283d68fb3ab80baf0c655c37d1f68036e35eb8ec57cdaad302",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 12,
+        "targetEnd": 17
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "用来盛食物的平盘",
+        "prototypeScenes": [
+          {
+            "summary": "吃饭前，你把食物放在一个浅而平的餐具上，再端到桌边。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "She put the plate on the table."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-350",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "cup",
+      "meaning": "用于饮水的杯状容器",
+      "senseConfirmation": "对，这里说的是用来盛饮料、方便拿来喝的杯子。",
+      "scene": "口渴时，你拿起桌上的小容器，把水倒进去准备喝。",
+      "sceneBridge": "你把水倒进杯子，正要喝上一口。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "c747c2eb5c4b75913c638aafe5d62ffdf542a987b476d8a23654c78eb13989e5",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/kʌp/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "She filled a cup with water before the walk.",
+        "translation": "她出发散步前往杯子里倒了些水。",
+        "audio": {
+          "sha256": "91508bfdba255d267417b9072c2d205a2a6f4cb067dfb691dd21ff5b27b2f00b",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 13,
+        "targetEnd": 16
+      },
+      "images": [
+        {
+          "name": "有人拿起桌上的水杯准备喝水。",
+          "media": {
+            "sha256": "247210cad5f14ff9372f7f64d8c8a9e0e310b62bb5194092590b233005fce7e3",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary, cup",
+          "url": "https://dictionary.cambridge.org/dictionary/english/cup"
+        },
+        {
+          "title": "Cambridge Dictionary, cup (container sense)",
+          "url": "https://dictionary.cambridge.org/dictionary/english/cup"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "用于饮水的杯状容器",
+        "prototypeScenes": [
+          {
+            "summary": "口渴时，你拿起桌上的小容器，把水倒进去准备喝。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "She filled a cup with water before the walk."
+        ],
+        "excludedCases": [
+          "这里指饮水容器，不是烹饪时的计量单位。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-370",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "spoon",
+      "meaning": "有凹形勺头和柄的勺子",
+      "senseConfirmation": "这里指用来舀汤或其他食物的勺子。",
+      "scene": "喝汤时，你用一件前端凹下去、后端有长柄的餐具舀起汤。",
+      "sceneBridge": "spoon 指勺子；例句说他用勺子搅汤。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "d652c28f9fc16eeddd7ab87616e2694f01447b378d0c5be79ac83183d9818fcf",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/spuːn/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "He stirred the soup with a spoon.",
+        "translation": "他用勺子搅动汤。",
+        "audio": {
+          "sha256": "568455d69c7373cdec8a853bf3bd159e9a8cca28b4bb90cbea58a11eb918005e",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 27,
+        "targetEnd": 32
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "有凹形勺头和柄的勺子",
+        "prototypeScenes": [
+          {
+            "summary": "喝汤时，你用一件前端凹下去、后端有长柄的餐具舀起汤。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "He stirred the soup with a spoon."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-510",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "bread",
+      "meaning": "用面粉烘烤成的面包",
+      "senseConfirmation": "这里指烘烤成的面包。",
+      "scene": "早餐时，你切开一条用面粉烤成、表面有棕色外皮的主食。",
+      "sceneBridge": "bread 指面包；例句说她把一片面包放进烤面包机。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "9b4bc1d8e673f185426bff09fe136d63ca032db26f8fb260d5ed81aecfc63c85",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/bred/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "She put a slice of bread in the toaster.",
+        "translation": "她把一片面包放进烤面包机。",
+        "audio": {
+          "sha256": "d72264958df0797b7c178cc068bd9981ba53ebe7ed77188e8a20ca7e3974b7cf",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 19,
+        "targetEnd": 24
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "用面粉烘烤成的面包",
+        "prototypeScenes": [
+          {
+            "summary": "早餐时，你切开一条用面粉烤成、表面有棕色外皮的主食。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "She put a slice of bread in the toaster."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-710",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "fruit",
+      "meaning": "植物结出的可食用果实",
+      "senseConfirmation": "这里指植物结出的可食用果实。",
+      "scene": "你从树上摘下一颗成熟的苹果，洗净后准备吃。",
+      "sceneBridge": "fruit 指水果或可食用果实；例句说篮子里有新鲜水果。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "42c6782a84ff17658648ac5b24abbed8cab5538a22b0e7cabfedb3fab82d7448",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/fruːt/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "There is fresh fruit in the basket.",
+        "translation": "篮子里有新鲜水果。",
+        "audio": {
+          "sha256": "3edcf4d80f50b9dabc9a8feaed51c444854070d5caacbefc8c1e97db6be95d7f",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 15,
+        "targetEnd": 20
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "植物结出的可食用果实",
+        "prototypeScenes": [
+          {
+            "summary": "你从树上摘下一颗成熟的苹果，洗净后准备吃。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "There is fresh fruit in the basket."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:5-970",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "egg",
+      "meaning": "鸟类产下的蛋，常作为食物",
+      "senseConfirmation": "这里指带壳、可以烹食的一枚蛋。",
+      "scene": "早餐前，你从盒里取出一枚椭圆形、有硬壳的食材，准备打入锅里。",
+      "sceneBridge": "egg 指一枚蛋；例句说他把蛋打进碗里。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "b14a224812f01c04af27c35dbb77065e9844b5d50c214ed088323a9dd8e22e25",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/eɡ/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "He cracked an egg into the bowl.",
+        "translation": "他把一个鸡蛋打进碗里。",
+        "audio": {
+          "sha256": "56e49f9424dd09d10a1c60a21deb54e2ae3067035c38e2a3990f6aa0119bc17b",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 14,
+        "targetEnd": 17
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "鸟类产下的蛋，常作为食物",
+        "prototypeScenes": [
+          {
+            "summary": "早餐前，你从盒里取出一枚椭圆形、有硬壳的食材，准备打入锅里。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "He cracked an egg into the bowl."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:6-110",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "phrase",
+      "expression": "put on",
+      "meaning": "把衣物或配饰穿戴到身上",
+      "senseConfirmation": "这个动作就是把衣物或配饰穿戴到身上。",
+      "scene": "出门前，你把外套套上手臂、拉好拉链，再戴上围巾。",
+      "sceneBridge": "从衣架取下外套、穿到身上的动作，可以这样表达：put on。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "021e8425d9fac73be0878cf8db81479b6d0f1baa0b1b66777a895398439ac903",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/pʊt ˈɑn/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "phrase",
+        "partOfSpeech": null,
+        "contrastNote": "put on 强调把衣物穿戴上身的动作；wear 强调身上正穿着的状态。"
+      },
+      "sceneExample": {
+        "example": "I put on my coat before stepping outside.",
+        "translation": "我出门前穿上了外套。",
+        "audio": {
+          "sha256": "c915d998359d77170c2d1fc1bacb267ef8daeeb0310e0acd22c0604a1cfcbc28",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 2,
+        "targetEnd": 8
+      },
+      "images": [
+        {
+          "name": "一个人出门前正在穿上外套。",
+          "media": {
+            "sha256": "4f429157b7a2aed738fba2499157cc22e4f970d3a8cbef483c769f4c6d558a77",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary: put something on",
+          "url": "https://dictionary.cambridge.org/dictionary/english/put-on"
+        },
+        {
+          "title": "Oxford Advanced American Dictionary: put on phrasal verb",
+          "url": "https://www.oxfordlearnersdictionaries.com/us/definition/american_english/put-on_2"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "把衣物或配饰穿戴到身上",
+        "prototypeScenes": [
+          {
+            "summary": "出门前，你把外套套上手臂、拉好拉链，再戴上围巾。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "I put on my coat before stepping outside."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:7-120",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "house",
+      "meaning": "供人居住的独立房屋",
+      "senseConfirmation": "这里指供人居住的一栋房屋。",
+      "scene": "街边有一栋带屋顶、外墙和入口的建筑，一家人住在里面。",
+      "sceneBridge": "house 指作为建筑的一栋住宅；例句说它有一扇蓝色的门。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "e9e7eebac0cde55ab66b646c02437b654997ca4396619f6f7b87884c7b2d450d",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/haʊs/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "house 指房屋建筑；home 更侧重一个人生活和归属的地方。"
+      },
+      "sceneExample": {
+        "example": "The house has a blue front door.",
+        "translation": "这栋房子的前门是蓝色的。",
+        "audio": {
+          "sha256": "e1540781aece9c0a7b317f25de591988125293e2fef318d20ecfd4a3d032b000",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 4,
+        "targetEnd": 9
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "供人居住的独立房屋",
+        "prototypeScenes": [
+          {
+            "summary": "街边有一栋带屋顶、外墙和入口的建筑，一家人住在里面。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The house has a blue front door."
+        ],
+        "excludedCases": [
+          "这里聚焦建筑物本身，不是抽象的“家”。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:7-210",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "room",
+      "meaning": "建筑物内由墙围出的房间",
+      "senseConfirmation": "这里指建筑内部的一间房。",
+      "scene": "你走进屋内一个四周有墙、可以关门的独立空间。",
+      "sceneBridge": "room 指房间；例句说这间房有两扇窗。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "8236adaa6e445bf2cccaf39f3c5f214ccc564b9ee077617cd276df8384e3a9a6",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ruːm/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The room has two windows.",
+        "translation": "这间房有两扇窗户。",
+        "audio": {
+          "sha256": "544d1d89833fd24bfe3563f8d4775281b2b3fd2611592bd7104c85a3daa731c1",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 4,
+        "targetEnd": 8
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "建筑物内由墙围出的房间",
+        "prototypeScenes": [
+          {
+            "summary": "你走进屋内一个四周有墙、可以关门的独立空间。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The room has two windows."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:7-220",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "door",
+      "meaning": "可开合以出入空间的门",
+      "senseConfirmation": "这里指供人进出的可开合的门。",
+      "scene": "你站在屋外，推开入口处可转动的板，走进屋内。",
+      "sceneBridge": "door 指门；例句说她轻轻关上了门。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "6bc7599ade725d697fd42c8aed9a815fc2b7ae34d0207088e7a9f57745a44d22",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/dɔr/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "She closed the door quietly.",
+        "translation": "她轻轻关上了门。",
+        "audio": {
+          "sha256": "18183dc4945453f2b77b28d7bb823fd522e55f13bf12007234662799b93b6a30",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 15,
+        "targetEnd": 19
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "可开合以出入空间的门",
+        "prototypeScenes": [
+          {
+            "summary": "你站在屋外，推开入口处可转动的板，走进屋内。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "She closed the door quietly."
+        ],
+        "excludedCases": [
+          "聚焦建筑入口的门，不是院子的大门或围栏门。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:7-240",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "key",
+      "meaning": "插入锁中开门的钥匙",
+      "senseConfirmation": "这里指用来打开门锁的钥匙。",
+      "scene": "门锁着，你从口袋里取出一件小金属物，插进锁孔后转动它。",
+      "sceneBridge": "key 指开锁的钥匙；例句说它还插在门锁里。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "920651dcafc7d947ed92e19834385c51fe851b8a15dd13a2a11d44398bb5b240",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/kiː/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The key is still in the door lock.",
+        "translation": "钥匙还插在门锁里。",
+        "audio": {
+          "sha256": "556a2a7cd6e60927164d4d7047db640122052979516b54c1091734af4e145535",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 4,
+        "targetEnd": 7
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "插入锁中开门的钥匙",
+        "prototypeScenes": [
+          {
+            "summary": "门锁着，你从口袋里取出一件小金属物，插进锁孔后转动它。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The key is still in the door lock."
+        ],
+        "excludedCases": [
+          "不指密码、答案或键盘上的按键。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:7-250",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "window",
+      "meaning": "墙上透光并可向外看的窗户",
+      "senseConfirmation": "这里指墙上让人看出去、让光透进来的窗户。",
+      "scene": "你站在屋里，透过墙上的玻璃开口看见外面的树。",
+      "sceneBridge": "window 指窗户；例句说她从窗户看见了树。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "a51cd969cc1336a3f87875731a110dc26d7392a8e38a279d6f6881faf4b34586",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈwɪndoʊ/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "She saw the tree through the window.",
+        "translation": "她透过窗户看见了那棵树。",
+        "audio": {
+          "sha256": "14274c5dbf1c54b93243b33b149aab7d951b976d369880aeba67ccff201a3d95",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 29,
+        "targetEnd": 35
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "墙上透光并可向外看的窗户",
+        "prototypeScenes": [
+          {
+            "summary": "你站在屋里，透过墙上的玻璃开口看见外面的树。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "She saw the tree through the window."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:7-420",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "bed",
+      "meaning": "供人躺下睡觉的床",
+      "senseConfirmation": "这里指供人躺着睡觉的床。",
+      "scene": "夜里你把枕头放好，躺在一件有床垫的家具上准备睡觉。",
+      "sceneBridge": "bed 指床；例句说猫睡在床上。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "c3538192f50585b2ee44b53e551a6601241c51f7a73ba3a0aea2cca33b412b62",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/bed/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The cat sleeps on the bed.",
+        "translation": "猫睡在床上。",
+        "audio": {
+          "sha256": "e880685ae878ce6052a66e02a1dbb260274049a6df368e6ddfac70e3050af8a7",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 22,
+        "targetEnd": 25
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "供人躺下睡觉的床",
+        "prototypeScenes": [
+          {
+            "summary": "夜里你把枕头放好，躺在一件有床垫的家具上准备睡觉。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The cat sleeps on the bed."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:7-430",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "chair",
+      "meaning": "供一个人坐的椅子",
+      "senseConfirmation": "这里指供一个人坐的椅子。",
+      "scene": "你拉开一件有座面和靠背的家具，坐下来看书。",
+      "sceneBridge": "chair 指椅子；例句说她把椅子移到桌边。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "437b5acfdca4ae20569c263ffbc55730eb2dba78979e27ecc102a46371240e7e",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/tʃer/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "She moved the chair closer to the table.",
+        "translation": "她把椅子挪近桌子。",
+        "audio": {
+          "sha256": "879200d51e0157c3e28d79479a50117f23f617f9f3986ebc8601857bf5ceb75c",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 14,
+        "targetEnd": 19
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "供一个人坐的椅子",
+        "prototypeScenes": [
+          {
+            "summary": "你拉开一件有座面和靠背的家具，坐下来看书。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "She moved the chair closer to the table."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:7-440",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "table",
+      "meaning": "有平面可放物品的桌子",
+      "senseConfirmation": "这里指有平坦台面、可以放东西的桌子。",
+      "scene": "你把书和杯子放在一件平坦的家具表面上，坐在旁边工作。",
+      "sceneBridge": "table 指桌子；例句说书放在桌面上。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "c8ed8fb3e2ee24992273242b86ccf2bfd7b87a179da5b0ef8dc556939ce7072e",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈteɪbəl/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The book is on the table.",
+        "translation": "书放在桌子上。",
+        "audio": {
+          "sha256": "2ff5d155e68afd958abaf78efa6fdb9f900d1dfbf00e1bfd7943b722adf10708",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 19,
+        "targetEnd": 24
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "有平面可放物品的桌子",
+        "prototypeScenes": [
+          {
+            "summary": "你把书和杯子放在一件平坦的家具表面上，坐在旁边工作。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The book is on the table."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:8-480",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "rice",
+      "meaning": "作为粮食或食物的稻米",
+      "senseConfirmation": "英语 rice 可以说这种粮食，也可以说煮熟后作为主食的米饭。",
+      "scene": "晚餐桌上有一碗热腾腾的白米饭，你舀起一勺，配着菜一起吃。",
+      "sceneBridge": "中文常按生熟说米或饭，英语里这个粮食和煮熟后的主食都可以用同一个词。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "030e2950a187c04792c997f5e05ee830171759740e77c725c01984a4249e7610",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/raɪs/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "中文会说生米、米饭，也会用“饭”泛指一餐；rice 指稻米或米饭，不等于一整顿饭。"
+      },
+      "sceneExample": {
+        "example": "We usually serve rice with grilled fish.",
+        "translation": "我们通常把米饭和烤鱼一起端上桌。",
+        "audio": {
+          "sha256": "2d4f86deaa7ba2a3ceed43419afa9b9eafca2e8c213263e703aa31b6740a9e28",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 17,
+        "targetEnd": 21
+      },
+      "images": [
+        {
+          "name": "餐桌上的一碗热米饭，旁边摆着家常菜。",
+          "media": {
+            "sha256": "8d56fd13c74861074df05b50c1ac28b3c84542c0e5472fe1d23fa1d77ceaacb9",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary — rice",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/rice"
+        },
+        {
+          "title": "Cambridge Dictionary — rice pronunciation",
+          "url": "https://dictionary.cambridge.org/us/pronunciation/english/rice"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "作为粮食或食物的稻米",
+        "prototypeScenes": [
+          {
+            "summary": "晚餐桌上有一碗热腾腾的白米饭，你舀起一勺，配着菜一起吃。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "We usually serve rice with grilled fish."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:8-570",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "flower",
+      "meaning": "植物开出的花",
+      "senseConfirmation": "这里指植物开出的花。",
+      "scene": "你看到植物枝头长出色彩鲜明的部分，花瓣围着中心展开。",
+      "sceneBridge": "flower 指植物的花；例句说一朵花在早晨开放。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "d15f66a36bfa0d2ac0b3a4e0446f5d9261d632bfa638e44b30f37827f2b0d81f",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/ˈflaʊər/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The flower opened this morning.",
+        "translation": "这朵花今天早晨开了。",
+        "audio": {
+          "sha256": "f3b442684b724b46d51473de53e8559b71cc99bea0a86ddf576a7ce32ddd2939",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 4,
+        "targetEnd": 10
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "植物开出的花",
+        "prototypeScenes": [
+          {
+            "summary": "你看到植物枝头长出色彩鲜明的部分，花瓣围着中心展开。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The flower opened this morning."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:8-600",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "tree",
+      "meaning": "有木质树干和树枝的树",
+      "senseConfirmation": "这里指有树干、枝条的树。",
+      "scene": "公园里有一株高大的植物，粗壮的木质主干向上分出许多枝条。",
+      "sceneBridge": "tree 指树这种植物；例句说它给院子带来树荫。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "d970d40b706e36e9b76e5c723f4de61bf23de7de1a4e9d71bf1ec7823120c701",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/triː/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The tree shades our yard in summer.",
+        "translation": "夏天这棵树给我们的院子遮阴。",
+        "audio": {
+          "sha256": "44be002cbdd55c970e3af447159cd4584894ddce6f5b8419650c5370c081b598",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 4,
+        "targetEnd": 8
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "有木质树干和树枝的树",
+        "prototypeScenes": [
+          {
+            "summary": "公园里有一株高大的植物，粗壮的木质主干向上分出许多枝条。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The tree shades our yard in summer."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:9-230",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "knife",
+      "meaning": "有刀刃可切东西的刀",
+      "senseConfirmation": "这里指用于切东西的刀。",
+      "scene": "准备蔬菜时，你握住柄，让有锋利边缘的金属片切开胡萝卜。",
+      "sceneBridge": "knife 指刀；例句说她用刀切胡萝卜。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "83036066527690039c52ac7bfb92311435374c7d301e841a478e4fd21afb2b6b",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/naɪf/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "She cut the carrot with a knife.",
+        "translation": "她用刀切胡萝卜。",
+        "audio": {
+          "sha256": "62c8515b6c11b56b792a8aa6926ddba85c09396165e47f88d3d4e9389e875a0c",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 26,
+        "targetEnd": 31
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "有刀刃可切东西的刀",
+        "prototypeScenes": [
+          {
+            "summary": "准备蔬菜时，你握住柄，让有锋利边缘的金属片切开胡萝卜。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "She cut the carrot with a knife."
+        ],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:9-260",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "break",
+      "acceptedForms": [
+        "broke"
+      ],
+      "meaning": "使完整的物体破损或失去功能",
+      "senseConfirmation": "杯子原本完整，现在碎裂并失去了原来的功能。",
+      "scene": "玻璃杯从桌边掉下，落地后裂成了几块，再也不能正常使用。",
+      "sceneBridge": "听见玻璃落地碎裂的声音，看到杯子不再完整。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "ac1573461b1230279a298988342b8e252c35565ba5aa10fa1fd59d0e2f9db56e",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/breɪk/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "sceneExample": {
+        "example": "The heavy box fell and broke the glass bowl.",
+        "translation": "沉重的箱子掉下来，把玻璃碗砸碎了。",
+        "audio": {
+          "sha256": "3aa7a7f783ad783f060a0ce4a3720b974c02932b5c19a7fc2ea2ef47ac2e6c35",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 23,
+        "targetEnd": 28
+      },
+      "images": [
+        {
+          "name": "箱子砸到完整的玻璃碗，碗裂开并无法继续正常使用。",
+          "media": {
+            "sha256": "198962f3b604b3a507a2377a88e95a2d216ad4810042f6d90955ffb67c44ab53",
+            "mimeType": "image/jpeg"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "title": "Cambridge Dictionary",
+          "url": "https://dictionary.cambridge.org/us/pronunciation/english/break"
+        },
+        {
+          "title": "Cambridge Dictionary",
+          "url": "https://dictionary.cambridge.org/us/dictionary/english/break"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "使完整的物体破损或失去功能",
+        "prototypeScenes": [
+          {
+            "summary": "玻璃杯从桌边掉下，落地后裂成了几块，再也不能正常使用。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "The heavy box fell and broke the glass bowl."
+        ],
+        "excludedCases": [
+          "此处说物体损坏，不指休息或违约"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "ids:9-330",
+      "packageVersion": 1,
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expressionKind": "word",
+      "expression": "pull",
+      "acceptedForms": [
+        "pulled"
+      ],
+      "meaning": "施力使物体朝自己或牵引方向移动",
+      "senseConfirmation": "这是施力把物体朝自己或牵引点拉来的动作。",
+      "scene": "想想你握住把手，让一个行李箱朝自己移动的情景。",
+      "sceneBridge": "Maya 握住箱子的把手，让行李箱朝自己移动；英语用 pull 表达这种朝施力者牵引的动作。",
+      "pronunciation": {
+        "audio": {
+          "sha256": "da0fd5ebfd68adf86cb049d3a64b1f1f5d4776268725735849079ef3235876c2",
+          "mimeType": "audio/mpeg"
+        },
+        "phoneticNotation": "/pʊl/",
+        "accentLabel": "en-US",
+        "source": "microsoft-edge-tts/en-US-JennyNeural",
+        "method": "tts"
+      },
+      "languageStructure": {
+        "expressionTypeLabel": "word",
+        "partOfSpeech": null,
+        "contrastNote": "Pull 描写朝自己或牵引点施力；push 描写向外或沿推力方向施力。辨别重点是施力方向，不是物体最后停在哪里。\nPull 不要求物体一定贴近身体；沿绳子或把手朝牵引点移动也属于 pull。若施力方向把物体向外推，则是 push。"
+      },
+      "sceneExample": {
+        "example": "Maya pulled the suitcase toward herself by its handle.",
+        "translation": "玛雅握住把手，把行李箱拉向自己。",
+        "audio": {
+          "sha256": "743e46a1f6f3379743f36d597b858b56711e5ffec5c8cc5a6e11dbc113e6e51d",
+          "mimeType": "audio/mpeg"
+        },
+        "targetStart": 5,
+        "targetEnd": 11
+      },
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "施力使物体朝自己或牵引方向移动",
+        "prototypeScenes": [
+          {
+            "summary": "想想你握住把手，让一个行李箱朝自己移动的情景。",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": [
+          "Maya pulled the suitcase toward herself by its handle."
+        ],
+        "excludedCases": [
+          "这里聚焦于把物体朝自己或牵引点拉动；不包括把物体向外或沿推力方向推开的 push。"
+        ],
+        "neighborContrasts": [],
+        "openQuestions": []
+      }
+    }
+  ]
+}

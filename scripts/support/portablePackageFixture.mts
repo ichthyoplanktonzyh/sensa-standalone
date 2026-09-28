@@ -11,6 +11,7 @@ import {
 import {sha256,stableUuid} from '@sensa/learning-kernel';
 
 export type PortablePackageFixtureOptions=Readonly<{
+  baseUrl?:string;
   packageId?:string;
   version?:number;
   targetLanguage?:string;
@@ -133,7 +134,7 @@ export const portablePackageFixture=(options:PortablePackageFixtureOptions={})=>
 
 export const portableBookDeliveryFixture=(options:PortablePackageFixtureOptions={})=>{
   const archive=portablePackageFixture(options);
-  const base='https://content.fixture.invalid/';
+  const base=options.baseUrl??'https://content.fixture.invalid/';
   const packageUrl=new URL(`${archive.archiveDigest}.sensa`,base).href;
   const publishedAt='2026-09-25T00:00:00Z';
   const publisher={namespace:'sensa.test',name:'Sensa test publisher'};
