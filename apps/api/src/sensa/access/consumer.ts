@@ -94,6 +94,7 @@ export type ConsumerRoutesOptions={
   semanticResolver?:SemanticResolver;
   readingCompletion?:ReadingCompletion;
   modelTurnCompletion?:ModelTurnCompletion;
+  publisherSubjects?:readonly string[];
 };
 
 export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
@@ -102,6 +103,8 @@ export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
   const transaction=options.transaction??unsafeTransaction;
   const verify=extensionVerifier(options.verify??verifyConsumer,transaction,clock);
   const verifyAgent=agentVerifier(verify,transaction,clock);
+  const publisherSubjects=new Set((options.publisherSubjects??process.env.SENSA_PUBLISHER_SUBJECTS?.split(',')??[])
+    .map(subject=>subject.trim()).filter(Boolean).map(subject=>uuid.parse(subject)));
 
   app.use('*',serviceTelemetry(options.telemetry));
   app.use('*',(context,next)=>bodyLimit({
@@ -291,7 +294,11 @@ export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
     z.object({installationId:uuid}).strict().parse(await context.req.json());
     return context.json(await transaction(async db=>{
       const current=await account(db,identity,true,false,clock());
-      return {authorized:true,accountId:current.account_id};
+      return {
+        authorized:true,
+        accountId:current.account_id,
+        capabilities:{publishLearningContent:publisherSubjects.has(identity.subject)},
+      };
     }));
   });
 

@@ -9,6 +9,7 @@ const positiveInteger = z.number().int().positive();
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const timestamp = z.string().datetime({offset: true});
 const publisherNamespace = nonEmpty.max(200).regex(/^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/u);
+const bookKey = nonEmpty.max(200).regex(/^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/u);
 const deliveryUrl = z.url().refine((value) => {
   const url = new URL(value);
   return !url.username
@@ -27,7 +28,7 @@ const publisherSchema = z.object({
 
 const bookSchema = z.object({
   bookId: uuid,
-  bookKey: label,
+  bookKey,
   bookVersionId: uuid,
   versionNumber: positiveInteger,
   title: label,
@@ -112,6 +113,14 @@ export const sensaPortableLearningContentRegistrySchema = z.object({
       code: "custom",
       path: ["items"],
       message: "Duplicate public Book version for one publisher and language route.",
+    });
+  }
+  const bookKeys = registry.items.map((item) => item.book.bookKey);
+  if (new Set(bookKeys).size !== bookKeys.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["items"],
+      message: "Public Book keys must be unique because each key owns one catalog URL.",
     });
   }
 });

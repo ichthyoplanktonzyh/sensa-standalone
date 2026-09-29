@@ -26,6 +26,7 @@ export default function AccountExperience({children,onReturnToLanding}:{children
  const {t}=useTranslation();
  const [deletionOpen,setDeletionOpen]=useState(()=>!!pendingAccountDeletion());const deletionRef=useRef(deletionOpen);deletionRef.current=deletionOpen;
  const [ready,setReady]=useState(false),[local,setLocal]=useState(false),[loginOpen,setLoginOpen]=useState(false),[onlineService,setOnlineService]=useState(false),[connectionConflict,setConnectionConflict]=useState(false);
+ const [publisherAccess,setPublisherAccess]=useState(false);
  const [libraryAvailability,setLibraryAvailability]=useState<LibraryAvailability>('restoring');
  const [webSession,setWebSession]=useState<'checking'|'present'|'absent'>('checking');
  const [email,setEmail]=useState(''),[code,setCode]=useState(''),[sent,setSent]=useState(false),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[owner,setOwner]=useState<Owner|null>(null);
@@ -59,7 +60,7 @@ export default function AccountExperience({children,onReturnToLanding}:{children
     setLocal(false);setNotice(localFlowText('accountUnreadable'));return;
    }
    if(stored.identity&&!extensionRequest){setLibraryAvailability(session&&!stored.usable?'restoring':!stored.owner||stored.usable?'authoritative':'restoring');setLocal(true);setReady(true);}
-   if(!session){setWebSession('absent');setOnlineService(false);setConnectionConflict(false);setLoginOpen(false);return;}
+   if(!session){setWebSession('absent');setOnlineService(false);setPublisherAccess(false);setConnectionConflict(false);setLoginOpen(false);return;}
    setWebSession('present');
    if(stored.owner&&stored.owner.subject!==session.user.id){setLocal(false);setNotice(localFlowText('wrongAccount'));return;}
    // A valid account session may open the local product before the online admission
@@ -67,7 +68,7 @@ export default function AccountExperience({children,onReturnToLanding}:{children
    const provisional:Owner={...stored.owner,subject:session.user.id,email:session.user.email??stored.owner?.email??''};
    needsInitialRestore=!stored.usable;
    setLibraryAvailability(needsInitialRestore?'restoring':'authoritative');
-   let guestAdmission:{accountId:string;installationId:string}|undefined;
+   let guestAdmission:{accountId:string;installationId:string;publisherAccess:boolean}|undefined;
    if(!stored.owner){
     guestAttempt=true;
     const endpoint=import.meta.env.VITE_SENSA_API_URL;
@@ -81,7 +82,7 @@ export default function AccountExperience({children,onReturnToLanding}:{children
     if(admission.cloudHasContent)recheckGuestContent=guestConnection.hasGuestLibraryContent;
     setConnectionConflict(false);
     setLibraryAvailability(admission.cloudHasContent&&!admission.localHasContent?'restoring':'authoritative');
-    guestAdmission={accountId:admission.accountId,installationId};
+    guestAdmission={accountId:admission.accountId,installationId,publisherAccess:admission.publisherAccess};
    }
    if(!stored.owner||stored.signedOut||stored.owner.email!==provisional.email)await command({id:crypto.randomUUID(),kind:'service.local-access',input:{subject:provisional.subject}},async tx=>{const current=await tx.get<Owner>('meta','service-owner');if(current&&current.subject!==provisional.subject)throw new Error('account mismatch');if(recheckGuestContent&&await recheckGuestContent(tx))throw new Error('localFlow.accountLibraryConflict');tx.put('meta','service-owner',provisional);tx.put('meta','signed-out',false);return null;});
    if(gen!==generation.current)return;
@@ -94,13 +95,17 @@ export default function AccountExperience({children,onReturnToLanding}:{children
    if(!endpoint){if(needsInitialRestore)setLibraryAvailability('failed');setNotice(localFlowText('onlineUnavailable'));return;}
    const installationId=await readLibrary(tx=>tx.get<string>('meta','service-installation'))??await command({id:crypto.randomUUID(),kind:'service.installation',input:{}},async tx=>{const existing=await tx.get<string>('meta','service-installation');if(existing)return existing;const id=guestAdmission?.installationId??crypto.randomUUID();tx.put('meta','service-installation',id);return id;});
    if(gen!==generation.current)return;
-   let access:{authorized:true;accountId:string};
-   if(guestAdmission)access={authorized:true,accountId:guestAdmission.accountId};
+   let access:{authorized:true;accountId:string;capabilities?:{publishLearningContent:boolean}};
+   if(guestAdmission)access={authorized:true,accountId:guestAdmission.accountId,capabilities:{publishLearningContent:guestAdmission.publisherAccess}};
    else{
     const response=await fetch(endpoint.replace(/\/+$/,'')+'/sensa/web/access/session',{method:'POST',headers:{authorization:'Bearer '+session.access_token,'content-type':'application/json'},body:JSON.stringify({installationId}),signal:AbortSignal.timeout(15000),redirect:'error'});
     if(gen!==generation.current)return;
     if(!response.ok){setOnlineService(false);if(needsInitialRestore)setLibraryAvailability('failed');const failure=await response.json().catch(()=>({}));if(failure.code==='account_deleted'){await import('../../data/library/dataControl').then(module=>module.eraseDeletedAccount(session.user.id));setLocal(false);setNotice(localFlowText('deleteDone'));await auth?.signOut({scope:'local'});return;}setNotice(response.status===403?localFlowText('contactSupport'):localFlowText('serviceRetry'));return;}
-    access=z.object({authorized:z.literal(true),accountId:z.string().uuid()}).parse(await response.json());
+    access=z.object({
+     authorized:z.literal(true),
+     accountId:z.string().uuid(),
+     capabilities:z.object({publishLearningContent:z.boolean()}).optional(),
+    }).parse(await response.json());
    }
    if((await auth?.getSession())?.data.session?.user.id!==session.user.id)throw new Error('account changed');
    if(gen!==generation.current)return;
@@ -116,7 +121,7 @@ export default function AccountExperience({children,onReturnToLanding}:{children
    // The local library remains the mutation authority, while an empty device keeps
    // summary projections unknown until its first account restore settles. The App
    // Shell stays open throughout; AccountLibrarySync advances that availability.
-   setOwner(next);setLocal(true);setOnlineService(true);setConnectionConflict(false);setLoginOpen(false);setNotice('');
+   setOwner(next);setLocal(true);setOnlineService(true);setPublisherAccess(access.capabilities?.publishLearningContent??false);setConnectionConflict(false);setLoginOpen(false);setNotice('');
   }catch(cause){if(gen===generation.current){if(needsInitialRestore)setLibraryAvailability(guestAttempt?'authoritative':'failed');if(cause instanceof Error&&cause.message==='localFlow.accountLibraryConflict'){setConnectionConflict(true);setLoginOpen(false);}setNotice(localFlowErrorKey(cause,'localFlow.networkRetry'));}}
   finally{if(gen===generation.current)setReady(true);}
  };
@@ -127,25 +132,26 @@ export default function AccountExperience({children,onReturnToLanding}:{children
   // or a new account; tearing down the app here interrupts extension PKCE.
   if(previous?.subject===next.subject&&previous.token===next.token&&event!=='USER_UPDATED')return;
   observedAuth.current=next;
-  if(event==='SIGNED_OUT'||previous&&previous.subject!==next.subject){generation.current++;void clearAllCredentials();setWebSession(event==='SIGNED_OUT'?'absent':'checking');setOnlineService(false);setLocal(false);}
+  if(event==='SIGNED_OUT'||previous&&previous.subject!==next.subject){generation.current++;void clearAllCredentials();setWebSession(event==='SIGNED_OUT'?'absent':'checking');setOnlineService(false);setPublisherAccess(false);setLocal(false);}
   setTimeout(()=>void recover(),0);
  });const online=()=>void recover();const storage=(event:StorageEvent)=>{if(event.key===null||event.key===authStorageKey)void recover();};window.addEventListener('online',online);window.addEventListener('storage',storage);return()=>{generation.current++;sub?.data.subscription.unsubscribe();window.removeEventListener('online',online);window.removeEventListener('storage',storage);};},[]);
  useEffect(()=>{if(!sent||now>=retryAt)return;const timer=window.setTimeout(()=>setNow(Date.now()),Math.max(0,retryAt-Date.now())+20);return()=>window.clearTimeout(timer);},[now,retryAt,sent]);
  useEffect(()=>observeLibrary(()=>{void readLibrary(async tx=>({signedOut:await tx.get('meta','signed-out')})).then(state=>{if(state.signedOut&&localRef.current){void clearAllCredentials();setOnlineService(false);}}).catch(()=>setNotice(localFlowText('localStatusFailed')));},['meta']),[]);
  const perform=useCallback(async(work:()=>Promise<void>)=>{callbackDismissed.current=true;setBusy(true);setNotice('');try{await work();}catch{setNotice(localFlowText('tryLater'));}finally{setBusy(false);}},[]);
  const send=async()=>{if(!auth)return;const {error}=await auth.signInWithOtp({email:email.trim(),options:{shouldCreateUser:true,emailRedirectTo:emailLinkRedirect()}});if(error){setNotice(error.status===429?localFlowText('otpRateLimit'):localFlowText('emailLinkSendFailed'));return;}setSent(true);setRetryAt(Date.now()+60000);};
- const logout=useCallback(async()=>{const extensionModule=await import('./extensionConnection');extensionModule.notifyExtensionSignout(owner?.accountId);await clearAllCredentials();await command({id:crypto.randomUUID(),kind:'service.signout',input:{}},async tx=>{tx.put('meta','signed-out',true);return null;});generation.current++;setLocal(false);setOnlineService(false);setLoginOpen(false);setSent(false);setCode('');setUseCode(false);const result=await auth?.signOut({scope:'local'});if(result?.error)setNotice(localFlowText('signoutIncomplete'));},[owner?.accountId]);
+ const logout=useCallback(async()=>{const extensionModule=await import('./extensionConnection');extensionModule.notifyExtensionSignout(owner?.accountId);await clearAllCredentials();await command({id:crypto.randomUUID(),kind:'service.signout',input:{}},async tx=>{tx.put('meta','signed-out',true);return null;});generation.current++;setLocal(false);setOnlineService(false);setPublisherAccess(false);setLoginOpen(false);setSent(false);setCode('');setUseCode(false);const result=await auth?.signOut({scope:'local'});if(result?.error)setNotice(localFlowText('signoutIncomplete'));},[owner?.accountId]);
  const updateLibraryAvailability=useCallback((value:LibraryAvailability)=>setLibraryAvailability(current=>current==='authoritative'?current:value),[]);
  const accountAccess=useMemo<AccountAccess>(()=>({
   deleteAccount:()=>{generation.current++;setDeletionOpen(true);},
   notice:localFlowNotice(notice),
   email:owner?.email??null,
   onlineService,
+  publisherAccess,
   connectionConflict,
   libraryAvailability,
   login:()=>setLoginOpen(true),
   logout:()=>perform(logout),
- }),[notice,onlineService,connectionConflict,libraryAvailability,owner?.email,perform,logout]);
+ }),[notice,onlineService,publisherAccess,connectionConflict,libraryAvailability,owner?.email,perform,logout]);
  if(deletionOpen)return <Suspense fallback={<main role="status">{localFlowText('loadingSensa')}</main>}><AccountDeletion onClose={()=>{location.assign('/profile');}}/></Suspense>;
  if(!ready)return <main role="status" className="grid min-h-screen place-content-center">{localFlowText(extensionRequest?'extensionConnecting':'loadingSensa')}</main>;
  if(extensionRequest&&webSession==='present')return <main className="grid min-h-screen place-content-center gap-4 p-8 text-center"><p role="status">{notice?localFlowNotice(notice):localFlowText('extensionConnecting')}</p>{notice&&<div className="flex justify-center gap-2"><button className={setupPrimary} disabled={busy} onClick={()=>void perform(recover)}>{localFlowText('extensionRetry')}</button><button className={setupButton} onClick={()=>location.assign('/profile')}>{localFlowText('cancel')}</button></div>}</main>;

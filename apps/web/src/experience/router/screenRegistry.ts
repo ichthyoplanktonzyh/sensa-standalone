@@ -6,6 +6,7 @@ export const SHELL_PARAM_KEYS = [
   'meaningId',
   'focusId',
   'targetId',
+  'bookKey',
   'worldAction',
 ] as const;
 
@@ -29,6 +30,8 @@ type ShellScreenDefinition = Readonly<{
  */
 export const SHELL_SCREEN_DEFINITIONS = [
   { id: 's-academy', host: 'learning' },
+  { id: 's-catalog', host: 'learning' },
+  { id: 's-catalog-book', host: 'learning', params: ['bookKey'], instance: { params: ['bookKey'] } },
   { id: 's-confirmed-sense', host: 'learning', params: ['meaningId', 'focusId'], instance: { params: ['meaningId', 'focusId'] } },
   { id: 's-content', host: 'learning', params: ['worldAction'] },
   { id: 's-content-coming', host: 'app', params: ['coming'], instance: { params: ['coming'], defaults: { coming: 'scenes' } } },
@@ -39,9 +42,11 @@ export const SHELL_SCREEN_DEFINITIONS = [
   { id: 's-learning-entry', host: 'learning' },
   { id: 's-learning-library', host: 'learning' },
   { id: 's-learning-target', host: 'learning', params: ['targetId'], instance: { params: ['targetId'] } },
+  { id: 's-library', host: 'learning' },
   { id: 's-personal-meaning', host: 'app', params: ['meaningId', 'focusId'], instance: { params: ['meaningId'], defaults: { meaningId: 'new' } } },
   { id: 's-practice-scope', host: 'learning' },
   { id: 's-profile', host: 'learning' },
+  { id: 's-publisher', host: 'learning' },
   { id: 's-real-world-listening', host: 'learning' },
   { id: 's-semantic-world', host: 'learning', params: ['worldAction'] },
   { id: 's-stats', host: 'learning' },

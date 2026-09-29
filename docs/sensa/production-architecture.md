@@ -184,6 +184,11 @@ direct stable Sense + target binding ──────────────�
                                       本地初学 → 复习/重学 → 历史、投影与调度
 ```
 
+面向人的 Content Supply 界面固定为四个地址：`/catalog` 是公开发现面，`/catalog/:bookKey` 是稳定详情，
+`/library` 是本机所有权与导入管理面，`/publisher` 是管理员运营面。前三者通过 Content Supply System
+读取目录与安装事实，不直接解析传输协议；Publisher 的可见性来自服务端账号 capability，发布凭据和
+Registry 提升仍留在受保护的 release workflow，不能下放到浏览器。
+
 Owner 明确将面向 Agent 的端口纳入完整采集蓝图。Agent 可以在用户授权范围内提交固定上下文、
 Expression、来源及 Sense，经过同一快慢轨和库交接合同；用户在当前 Agent 会话中
 明确要求保存可构成 delegated Semantic Acceptance，无需独立 grant id 或第二次 Sensa 确认。

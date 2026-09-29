@@ -16,7 +16,13 @@ import type {PracticeSenseItem} from '../practiceData';
 import {JourneyAlignmentLearningControls,PersonalPreparationTarget,pendingPersonalTargetView} from './PersonalLearningControls';
 import {LearningSetupFrame} from '../components/learning/LearningSetupFrame';
 import {LearningPreferencesPanel} from '../components/learning/LearningPreferencesPanel';
-import {PackageEntry,PackageTarget} from './PackageLearningViews';
+import {PackageTarget} from './PackageLearningViews';
+import {
+ PackageBookScreen,
+ PackageCatalogScreen,
+ PackageLibraryScreen,
+ PackagePublisherScreen,
+} from './PackageCenter';
 import {ScreenHost} from '../ui/ScreenHost';
 import {screenInstanceKey} from '../router/shellLocation';
 import type {LearningShellScreenId} from '../router/screenRegistry';
@@ -40,7 +46,10 @@ type LearningWorkspaceScreenId=LearningShellScreenId|'s-lightweight-runtime';
 export function LearningWorkspace({active=true}:{active?:boolean}){
  const {t}=useTranslation();
  const {viewMode,mainStack,params,setViewMode,goMain,backMain,resetMain,returnHome,setMainStack}=useShellNavigation();
- const packageLearning=usePackageLearning(viewMode==='main'&&mainStack.includes('s-learning-entry'));
+ const packageCenterOpen=viewMode==='main'&&mainStack.some(screen=>[
+  's-learning-entry','s-catalog','s-catalog-book','s-library','s-publisher',
+ ].includes(screen));
+ const packageLearning=usePackageLearning(packageCenterOpen);
  const personalLearning=usePersonalLearning();
  const {activeRoute}=useLanguageRoutes();
  const toast=useOverlayStore(state=>state.toast);
@@ -77,7 +86,7 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
  const updateLocalQuantity=(value:number)=>{void packageLearning.confirmQuantity(value);};
  const startLocalLearning=async(id?:string,reviewOnly=false)=>{
   const targetId=id??packageLearning.runtime?.currentTargetId??packageLearning.due[0]?.targetId??(!reviewOnly?packageLearning.initialReady[0]?.targetId:undefined);
-  if(!targetId){goMain('s-learning-entry');return;}
+  if(!targetId){setMainStack(['s-catalog']);return;}
   if(packageLearning.dailyLimit===undefined){setQuantityChoice(dailyNewCount);setQuantityTarget(targetId);return;}
   if(await packageLearning.start(targetId,dailyNewCount))setViewMode('lightweight');
  };
@@ -88,7 +97,7 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
     active={screenActive} screenId={screenId}
     initialAction={params.worldAction==='create'||params.worldAction==='inbox'?params.worldAction:undefined}
     onStartConversation={startSensaConversation}
-    onBrowseExisting={()=>goMain('s-learning-entry')} onOpenPersonalMeaning={openPersonalMeaning}
+    onBrowseExisting={()=>setMainStack(['s-catalog'])} onOpenPersonalMeaning={openPersonalMeaning}
     onOpenConfirmedSense={openConfirmedSense} onOpenSense={openSemanticWorldSense}
     onOpenSection={openContentSection} toast={toast}/>;
  const renderLearningTarget=(screenActive:boolean):ReactNode=>{
@@ -105,7 +114,7 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
   's-real-world-listening':screenActive=><YouGlishListeningScreen active={screenActive} targets={(activePracticeScope??practiceScopeCatalog.currentScope).targets} onBack={backMain} toast={toast}/>,
   's-study':screenActive=><StudyScreen
     policySummary={[...new Set(packageLearning.targets.map(target=>target.policy))].map(policy=>t('learningPreferences.policies.'+policy)).join(' · ')||undefined}
-    active={screenActive} tab={studyTab} onTabChange={setStudyTab} onAddLearning={()=>goMain('s-learning-entry')}
+    active={screenActive} tab={studyTab} onTabChange={setStudyTab} onAddLearning={()=>setMainStack(['s-catalog'])}
     onOpenTargetLibrary={()=>goMain('s-learning-library')} onOpenTarget={openLocalTarget}
     onPolicyChange={()=>{}} defaultPolicy="lightweight" policyOptions={packageLearning.policyOptions} fixedPolicy
     learningTargetCount={packageLearning.activeTargets.length+activePendingPersonal.length}
@@ -123,8 +132,21 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
     reviewDueTargetIds={new Set(packageLearning.due.map(target=>target.targetId))}
     relearningTargetIds={new Set(packageLearning.activeTargets.filter(target=>target.relearning).map(target=>target.targetId))}
     reviewingTargetIds={new Set()} relearningRepairTargetIds={new Set()} relearningRetestTargetIds={new Set()} declaredMasteryTargetIds={new Set(packageLearning.activeTargets.filter(target=>target.declaredMastery).map(target=>target.targetId))}
-    onBack={backMain} onAddLearning={()=>goMain('s-learning-entry')} onOpenTarget={openLocalTarget}/>,
-  's-learning-entry':screenActive=><PackageEntry active={screenActive} c={packageLearning} onBack={backMain} onLearning={()=>setMainStack(['s-study'])} onTarget={openLocalTarget}/>,
+    onBack={backMain} onAddLearning={()=>setMainStack(['s-catalog'])} onOpenTarget={openLocalTarget}/>,
+  's-catalog':screenActive=><PackageCatalogScreen active={screenActive} c={packageLearning} onBack={backMain}
+    onOpenBook={bookKey=>setMainStack(['s-catalog','s-catalog-book'],{bookKey})}
+    onLibrary={()=>setMainStack(['s-library'])} onPublisher={()=>setMainStack(['s-publisher'])}/>,
+  's-catalog-book':screenActive=><PackageBookScreen active={screenActive} bookKey={params.bookKey??null} c={packageLearning}
+    onBack={()=>setMainStack(['s-catalog'])} onLearning={()=>setMainStack(['s-study'])} onTarget={openLocalTarget}/>,
+  's-library':screenActive=><PackageLibraryScreen active={screenActive} c={packageLearning} onBack={backMain}
+    onCatalog={()=>setMainStack(['s-catalog'])}
+    onOpenBook={bookKey=>setMainStack(['s-catalog','s-catalog-book'],{bookKey})}
+    onPublisher={()=>setMainStack(['s-publisher'])} onLearning={()=>setMainStack(['s-study'])} onTarget={openLocalTarget}/>,
+  's-publisher':screenActive=><PackagePublisherScreen active={screenActive} c={packageLearning} onBack={backMain}
+    onCatalog={()=>setMainStack(['s-catalog'])} onLibrary={()=>setMainStack(['s-library'])}/>,
+  's-learning-entry':screenActive=><PackageCatalogScreen active={screenActive} c={packageLearning} onBack={backMain}
+    onOpenBook={bookKey=>setMainStack(['s-catalog','s-catalog-book'],{bookKey})}
+    onLibrary={()=>setMainStack(['s-library'])} onPublisher={()=>setMainStack(['s-publisher'])}/>,
   's-learning-target':renderLearningTarget,
   's-stats':screenActive=><StatsScreen active={screenActive} onBack={backMain} records={packageLearning.records} onOpenTarget={openLocalTarget}/>,
   's-profile':screenActive=><ProfileScreen localLibrary fixedLearningPolicy modelSettings={<ProviderPanel/>} active={screenActive} onGoStudyPlan={()=>{setStudyTab('a');goMain('s-study');}} defaultPolicy="lightweight" policyOptions={packageLearning.policyOptions} dailyNewCount={dailyNewCount} onPolicyChange={()=>{}} onDailyNewCountChange={updateLocalQuantity}/>,

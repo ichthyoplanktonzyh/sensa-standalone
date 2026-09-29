@@ -333,6 +333,9 @@ Web/API loopback 约束，然后自动退出；不调用模型或 TTS。
 原始的 `api:dev`、`web:dev` 和 `web:preview` 只用于单模块调试，不构成安全、完整的产品验收环境。
 Web 公共配置示例位于 `apps/web/.env.example`，API 私有配置示例位于 `apps/api/.env.example`；
 它们用于显式的真实服务调试，不会被上述受管入口读取。远程数据库连接必须使用受限运行角色并要求 TLS；迁移凭据只用于迁移。
+`SENSA_PUBLISHER_SUBJECTS` 是逗号分隔的 Supabase subject UUID allowlist；API 只在已认证的
+`/sensa/web/access/session` 响应中为这些 subject 返回 `publishLearningContent` capability。它控制
+`/publisher` 的可见性，但不替代 release workflow 的存储凭据、不可变对象校验或 Registry 提升门禁。
 API 数据库层显式限制每实例连接池、连接获取等待、SQL 执行、锁等待与事务闲置时间；生产发布配置为
 4 个连接、3 秒获取、15 秒 statement、3 秒 lock、10 秒 idle-in-transaction，并定期轮换连接。
 每次连接获取只记录等待毫秒数与池总量／空闲／排队数量，不记录查询或账号标识。事务失败必须回滚；

@@ -147,14 +147,16 @@ Context、完整 Expression、Sense 或 acceptance 中任一事实时，内容�
 ### 5.3 用户主流程
 
 ```text
-学习包目录
-    ↓ 发现与当前路线精确匹配的 Book
-Book 详情
+公开学习包目录 `/catalog`
+    ↓ 跨路线发现 Book
+稳定 Book 详情 `/catalog/:bookKey`
     ↓ 用户点击下载
 下载并验证一个 `.sensa-book`，通过统一入口原子安装其 `.sensa` 成员
     ↓ 大小 / digest / 合同 / 语言方向 / 资源校验通过
-已下载
+我的学习包 `/library`
     ↓ 用户明确点击“加入学习”
+当前路线与 Book 路线精确匹配
+    ↓
 Book Enrollment + Curriculum Membership + Learning Target
     ↓ ready plan
 初次学习运行时
@@ -169,6 +171,10 @@ Retention
 - **只发现新版**：只显示更新状态和作者变更摘要，不自动下载、不改变课程。
 - **只下载完成**：资源已安装，但尚未加入学习，不产生目标、进度或调度。
 - **语言路线不匹配**：解释目标语言或支持语言不匹配，并引导用户切换路线；不得隐式回退或重标语言。
+- **目录与资料库分离**：Catalog 可以展示未下载及其他路线的公开 Book；Library 只能展示本机实际拥有的
+  Book/Package，刷新目录不能改变 Library 所有权状态。
+- **发布后台**：只有服务端授予 `publishLearningContent` capability 的管理员可以看到 `/publisher`；
+  候选验证不等于发布，Registry 提升仍通过受保护 release workflow。
 - **应用新版**：必须由用户明确操作。新增条目只进入未来学习；删除条目只退出未来计划；身份未变的
   目标保留进度、复习和历史；已经开始的运行不增删 participant，兼容材料更新可刷新尚未操作的当前
   Step 和未来 Step，已经操作的 Step 保留实际材料。

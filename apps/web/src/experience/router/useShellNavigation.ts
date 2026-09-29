@@ -3,6 +3,7 @@ import { useNavigate, useRouterState } from '@tanstack/react-router';
 import {
   buildPathname,
   parseMainStack,
+  parsePathParams,
   parseShellParams,
   parseViewMode,
   retainParamsForStack,
@@ -47,7 +48,7 @@ export function useShellNavigation(): ShellNavigation {
 
   const mainStack = useMemo(() => parseMainStack(pathname), [pathname]);
   const viewMode = parseViewMode(search.flow);
-  const params = useMemo(() => parseShellParams(search), [search]);
+  const params = useMemo(() => ({...parseShellParams(search),...parsePathParams(pathname)}), [pathname,search]);
 
   /**
    * Move the sheet stack while leaving the learning flow untouched, and vice
@@ -57,12 +58,14 @@ export function useShellNavigation(): ShellNavigation {
    */
   const goToStack = useCallback(
     (stack: readonly string[], nextParams?: ShellParams) => {
-      const path = buildPathname(stack);
+      const pathParams=retainParamsForStack({...params,...(nextParams??{})},stack);
+      const path = buildPathname(stack,pathParams);
       const toSearch = (previous: Record<string, unknown>): Record<string, unknown> => {
         const merged = { ...parseShellParams(previous), ...(nextParams ?? {}) };
         const kept = retainParamsForStack(merged, stack);
+        const {bookKey:_pathBookKey,...searchParams}=kept;
         const flow = parseViewMode(previous.flow);
-        return flow === 'main' ? { ...kept } : { ...kept, flow };
+        return flow === 'main' ? searchParams : { ...searchParams, flow };
       };
       if (path === '/') {
         navigate({ to: '/', search: toSearch });
@@ -70,7 +73,7 @@ export function useShellNavigation(): ShellNavigation {
       }
       navigate({ to: '/$', params: { _splat: path.slice(1) }, search: toSearch });
     },
-    [navigate],
+    [navigate,params],
   );
 
   const setViewMode = useCallback(

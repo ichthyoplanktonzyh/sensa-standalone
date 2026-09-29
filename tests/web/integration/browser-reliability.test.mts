@@ -13,6 +13,7 @@ import {
   buildPathname,
   isKnownShellPath,
   parseMainStack,
+  parsePathParams,
   retainParamsForStack,
 } from "../../../apps/web/src/experience/router/shellLocation.ts";
 import {
@@ -106,6 +107,12 @@ assert.equal(rateLimited.headers.get('retry-after'), '60');
 assert(isKnownShellPath("/study/learning-library"));
 assert(!isKnownShellPath("/study/not-a-screen"));
 assert(!isKnownShellPath("/not-a-screen"));
+const catalogDetailPath=buildPathname(['s-catalog','s-catalog-book'],{bookKey:'english-foundation'});
+assert.equal(catalogDetailPath,'/catalog/english-foundation');
+assert.deepEqual(parseMainStack(catalogDetailPath),['s-catalog','s-catalog-book']);
+assert.deepEqual(parsePathParams(catalogDetailPath),{bookKey:'english-foundation'});
+assert(isKnownShellPath(catalogDetailPath));
+assert(!isKnownShellPath('/catalog/not%2Fa%2Fbook'));
 assert.equal(new Set(SHELL_SCREEN_DEFINITIONS.map(({id})=>id)).size,KNOWN_SHEET_IDS.length);
 for (const sheetId of KNOWN_SHEET_IDS) {
   const path = buildPathname([sheetId]);
@@ -129,6 +136,7 @@ assert.deepEqual(
 );
 assert.equal(screenInstanceKey('s-personal-meaning',{}),'s-personal-meaning:new');
 assert.equal(screenInstanceKey('s-content-sense',{senseId:'sense'}),'s-content-sense:sense');
+assert.equal(screenInstanceKey('s-catalog-book',{bookKey:'english-foundation'}),'s-catalog-book:english-foundation');
 console.log("PASS: browser errors are deduplicated and redacted, the API contract is strict/non-fatal, and shell routes round-trip while unknown paths are rejected.");
 
 });

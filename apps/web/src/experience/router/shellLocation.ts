@@ -77,6 +77,16 @@ const toSheetId = (segment: string, parentSheetId: string | undefined): string |
 };
 
 const FLOWS: readonly ShellFlow[] = ['lightweight'];
+const bookKeyPattern=/^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/u;
+
+const catalogDetail=(pathname:string):string|undefined=>{
+  const match=/^\/catalog\/([^/]+)\/?$/u.exec(pathname);
+  if(!match)return undefined;
+  try{
+    const key=decodeURIComponent(match[1]!);
+    return key.length<=200&&bookKeyPattern.test(key)?key:undefined;
+  }catch{return undefined;}
+};
 
 const isFlow = (value: unknown): value is ShellFlow =>
   typeof value === 'string' && (FLOWS as readonly string[]).includes(value);
@@ -87,6 +97,8 @@ const isFlow = (value: unknown): value is ShellFlow =>
  * degrades to the deepest stack it does describe rather than to an error.
  */
 const parseMainStackResult = (pathname: string): { readonly stack: string[]; readonly known: boolean } => {
+  const detail=catalogDetail(pathname);
+  if(detail)return {stack:['s-catalog','s-catalog-book'],known:true};
   const stack: string[] = [];
   let known = true;
   for (const segment of pathname.split('/')) {
@@ -112,6 +124,12 @@ const parseMainStackResult = (pathname: string): { readonly stack: string[]; rea
 };
 
 export const parseMainStack = (pathname: string): string[] => parseMainStackResult(pathname).stack;
+
+/** Params encoded in canonical path segments rather than the query string. */
+export const parsePathParams=(pathname:string):ShellParams=>{
+  const bookKey=catalogDetail(pathname);
+  return bookKey?{bookKey}:{};
+};
 
 /** Whether every non-empty segment describes a real or explicitly retired shell route. */
 export const isKnownShellPath = (pathname: string): boolean => {
@@ -155,8 +173,11 @@ export const retainParamsForStack = (
 };
 
 /** Build the pathname for a sheet stack. Inverse of {@link parseMainStack}. */
-export const buildPathname = (stack: readonly string[]): string => {
+export const buildPathname = (stack: readonly string[], params:ShellParams={}): string => {
   if (stack.length === 0) return '/';
+  if(stack.length===2&&stack[0]==='s-catalog'&&stack[1]==='s-catalog-book'&&params.bookKey){
+    return `/catalog/${encodeURIComponent(params.bookKey)}`;
+  }
   const segments = stack.map((sheetId, index) => toSegment(sheetId, stack[index - 1]));
   return `/${segments.join('/')}`;
 };

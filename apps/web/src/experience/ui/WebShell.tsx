@@ -17,7 +17,8 @@ export function WebShell({ children, current, focused, onNavigate, availableSect
 }) {
   const { t } = useTranslation();
   const visibleSections = sections.filter(section => !availableSections || availableSections.includes(section.id));
-  const selectedSection = current.startsWith('s-learning') || current === 's-stats' ? 's-study'
+  const selectedSection = current.startsWith('s-learning') || current === 's-stats'
+    || ['s-catalog','s-catalog-book','s-library','s-publisher'].includes(current) ? 's-study'
     : ['s-semantic-world','s-personal-meaning','s-confirmed-sense','s-expression-binding'].includes(current) ? 's-content'
     : current.startsWith('s-content') ? 's-content' : current;
   const brand = (

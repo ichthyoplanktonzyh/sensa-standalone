@@ -33,6 +33,7 @@ let origin='';
 let storageKey='';
 let delivery:ReturnType<typeof portableBookDeliveryFixture>;
 let registry:unknown;
+let publisherAccess=false;
 const delivered:string[]=[];
 const cloudBlocks=new Map<string,string>();
 let cloudRevision=0;
@@ -81,7 +82,7 @@ test.beforeAll(async()=>{
       if(url.pathname==='/auth/v1/user'){
         json({id:subject,aud:'authenticated',email:'package-center@sensa.invalid',app_metadata:{},user_metadata:{},created_at:new Date().toISOString()});return;
       }
-      if(url.pathname==='/sensa/web/access/session'){json({authorized:true,accountId:account});return;}
+      if(url.pathname==='/sensa/web/access/session'){json({authorized:true,accountId:account,capabilities:{publishLearningContent:publisherAccess}});return;}
       if(url.pathname==='/sensa/library-sync/head'){
         json({revision:cloudRevision,manifest:cloudManifest});return;
       }
@@ -210,15 +211,17 @@ test('discovers, downloads and enrolls a Book with durable local state',async({p
 
   await page.goto(origin);
   await expect(page.locator('[data-sensa-page-layout="application-shell"]')).toBeVisible({timeout:15_000});
-  await page.evaluate(()=>window.__sensaBrowserSmoke!.navigate('/learning-entry'));
-  const entry=page.locator('#s-learning-entry').last();
-  await expect(entry.getByRole('heading',{name:'学习包',exact:true})).toBeVisible({timeout:15_000});
+  await page.evaluate(()=>window.__sensaBrowserSmoke!.navigate('/catalog'));
+  const catalog=page.locator('#s-catalog').last();
+  await expect(catalog.getByRole('heading',{name:'学习包目录',exact:true})).toBeVisible({timeout:15_000});
 
-  await expect(entry.getByRole('button',{name:/English route essentials/})).toBeVisible();
-  await entry.getByRole('button',{name:/English route essentials/}).click();
+  await expect(catalog.getByRole('button',{name:/English route essentials/})).toBeVisible();
+  await catalog.getByRole('button',{name:/English route essentials/}).click();
+  await expect(page).toHaveURL(new RegExp(`/catalog/${delivery.descriptor.book.bookKey}$`));
+  const entry=page.locator('#s-catalog-book').last();
   await expect(entry.getByRole('heading',{name:'English route essentials'})).toBeVisible();
   await expect(entry.getByText('未下载',{exact:true})).toBeVisible();
-  await expect(entry.getByText('1 个表达',{exact:true})).toBeVisible();
+  await expect(entry.getByText(/1 个表达/)).toBeVisible();
 
   await entry.getByRole('button',{name:'下载学习包',exact:true}).click();
   await expect(entry.getByText('已下载',{exact:true})).toBeVisible({timeout:15_000});
@@ -237,11 +240,26 @@ test('discovers, downloads and enrolls a Book with durable local state',async({p
 
   await page.reload();
   await expect(page.locator('[data-sensa-page-layout="application-shell"]')).toBeVisible({timeout:15_000});
-  await page.evaluate(()=>window.__sensaBrowserSmoke!.navigate('/learning-entry'));
-  const restored=page.locator('#s-learning-entry').last();
-  await expect(restored.getByRole('button',{name:/English route essentials/})).toBeVisible({timeout:15_000});
-  await restored.getByRole('button',{name:/English route essentials/}).click();
+  await page.evaluate(()=>window.__sensaBrowserSmoke!.navigate('/library'));
+  const library=page.locator('#s-library').last();
+  await expect(library.getByRole('heading',{name:'我的学习包',exact:true})).toBeVisible({timeout:15_000});
+  await expect(library.getByRole('button',{name:/English route essentials/})).toBeVisible();
+  await library.getByRole('button',{name:/English route essentials/}).click();
+  const restored=page.locator('#s-catalog-book').last();
+  await expect(restored.getByRole('heading',{name:'English route essentials'})).toBeVisible({timeout:15_000});
   await expect(restored.getByText('已加入学习',{exact:true})).toBeVisible();
   await expect(restored.getByText('borrow',{exact:true})).toBeVisible();
+
+  await page.evaluate(()=>window.__sensaBrowserSmoke!.navigate('/publisher'));
+  await expect(page.locator('#s-publisher').last().getByRole('alert')).toContainText('当前账号尚未获得服务访问权限');
+  publisherAccess=true;
+  await page.reload();
+  const publisher=page.locator('#s-publisher').last();
+  await expect(publisher.getByRole('heading',{name:'发布后台',exact:true})).toBeVisible({timeout:15_000});
+  const bookBytes=[...delivery.responses.entries()].find(([url])=>url.endsWith('.sensa-book'))?.[1];
+  assert(bookBytes,'fixture Book archive missing');
+  await publisher.locator('input[type=file]').setInputFiles({name:'candidate.sensa-book',mimeType:'application/vnd.sensa.book+zip',buffer:Buffer.from(bookBytes)});
+  await expect(publisher.getByText('English route essentials',{exact:true}).first()).toBeVisible();
+  await expect(publisher.getByText(/^[0-9a-f]{64}$/)).toBeVisible();
   assert.deepEqual(runtimeErrors,[]);
 });

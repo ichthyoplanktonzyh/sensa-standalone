@@ -465,10 +465,10 @@ try{
  await returnHome();
  const meaningWarmMs=await measureSurface(`/personal-meaning?meaningId=${encodeURIComponent(meaningId)}`,'#s-personal-meaning');
  await returnHome();
- const learningColdMs=await measureSurface('/learning-entry','#s-learning-entry');
+ const learningColdMs=await measureSurface('/catalog','#s-catalog');
  await expect(b.page.getByText('暂时无法更新目录。已下载内容可继续使用；可以联网后重试。',{exact:true})).toBeVisible({timeout:SHELL_BUDGET_MS});
  await returnHome();
- const learningWarmMs=await measureSurface('/learning-entry','#s-learning-entry');
+ const learningWarmMs=await measureSurface('/catalog','#s-catalog');
  await returnHome();
  const referenceStarted=Date.now();
  await b.page.evaluate(()=>window.__sensaBrowserSmoke!.openReferenceFixture());

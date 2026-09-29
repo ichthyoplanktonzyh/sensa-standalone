@@ -286,6 +286,18 @@ test("official Registry delivers one atomic Book while preserving independent Se
       ...registry,
       items: [descriptor, descriptor],
     }), /Duplicate public Book version/u);
+    assert.throws(() => sensaPortableLearningContentRegistrySchema.parse({
+      ...registry,
+      items: [descriptor, {
+        ...descriptor,
+        publisher: {...descriptor.publisher, namespace: "another-publisher"},
+        book: {
+          ...descriptor.book,
+          bookId: "729ea821-bc15-4c5f-9e9c-2bbfe38487c9",
+          bookVersionId: "616af0ce-e28c-4fa2-9653-7b7aec90cc7c",
+        },
+      }],
+    }), /Public Book keys must be unique/u);
 
     const repeated = runBuilder(repeatReleases, repeatRegistryPath);
     assert.equal(repeated.status, 0, repeated.stderr || repeated.stdout);
