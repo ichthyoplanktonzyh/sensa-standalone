@@ -435,29 +435,51 @@ node --import tsx tests/web/run.mts --suite=manual --id=extension-popup
 
 `.github/workflows/sensa-consumer-check.yml` 在 pull request 和 `main` push 时运行 `Sensa CI`。它执行静态检查、构建、Web 快速测试、浏览器检查以及 PostgreSQL/API 集成。
 
-应用的日常生产发布只有一个入口：`.github/workflows/sensa-web-deploy.yml`。发布流程：
+整个生产系统只有一个人工发布入口：`.github/workflows/sensa-release.yml`。它先生成
+`sensa-system-release-plan-v1`，根据上一份成功的系统清单与目标 revision 之间的差异决定发布范围：
+应用变化只发布应用，authoring/content 变化只发布学习内容，公共 contracts、validator 或 learning kernel
+变化必须联动发布。显式 scope 可以要求重新发布某个组件，但不能省略 Planner 判定为必要的组件。
+
+统一发布流程：
 
 1. 接收一个完整的 `main` commit SHA，并要求当次 owner 授权；
 2. 等待该 SHA 的 `Sensa CI` 成功；
-3. 使用生产配置构建 Web、扩展和 API 一次；
-4. 校验并传递同一份固定制品；
-5. 应用前向数据库迁移并对齐 Supabase Auth 配置；
-6. 部署 Supabase Edge Function；
+3. 读取上一份 `sensa-system-release-manifest-v1`，按路径影响生成最小安全 Release Plan；
+4. 如需发布内容，先构建、验证、上传不可变 Book/Registry 并提升 Registry；
+5. 如需发布应用，使用生产配置构建 Web、扩展和 API 一次，并校验同一份固定制品；
+6. 应用前向数据库迁移、对齐 Supabase Auth、部署 Supabase Edge Function；
 7. 上传 Cloudflare Worker 版本，先验证预览，再提升到生产；
-8. 执行公网非模型 smoke 并保存发布证据。
+8. 执行公网非模型 smoke；
+9. 生成同时固定 Application、公开配置目标、前向 migration 集合与 Learning Content 身份的系统清单并保存发布证据。
+
+联动发布按 Content → Application 排序；共享合同必须在旧应用/新内容和新应用/新内容的滚动窗口中保持
+兼容。任一组件未成功时不会生成成功的系统清单。首次使用统一入口，或上一份系统清单已经不可用时，
+Planner 会要求 `scope=all` 的完整 bootstrap，而不是猜测线上组件状态。
 
 命令行触发方式：
 
 ```sh
-gh workflow run sensa-web-deploy.yml \
+gh workflow run sensa-release.yml \
   -f release_sha=<FULL_MAIN_SHA> \
+  -f scope=auto \
+  -f owner_accepted=true
+```
+
+第一次启用统一发布或系统清单丢失时使用完整 bootstrap，并提供已经密封的媒体输入：
+
+```sh
+gh workflow run sensa-release.yml \
+  -f release_sha=<FULL_MAIN_SHA> \
+  -f scope=all \
+  -f media_release_tag=sensa-learning-media-<DIGEST_PREFIX> \
+  -f media_pack_sha256=<FULL_MEDIA_PACK_SHA256> \
   -f owner_accepted=true
 ```
 
 `.github/workflows/sensa-web-candidate.yml` 是可选的深度验证，不是日常发布前置。`.github/workflows/sensa-web-monitor.yml` 负责已启用环境的定时公网和聚合阈值检查。
 
-学习内容拥有独立于应用版本的发布入口 `.github/workflows/sensa-learning-content-publish.yml`。它接收
-一个完整且已通过 `main` CI 的 commit SHA，并要求当次 owner 授权；随后从 `content/authored/*.json`
+学习内容拥有独立于应用版本的生命周期，但 `.github/workflows/sensa-learning-content-publish.yml` 只是由
+统一 Release Planner 调用的内部执行器，不接受人工 dispatch。它从 `content/authored/*.json`
 与仓库固定的路线基础输入重建正式 Book source，再构建每个 Sense 的不可变 `.sensa` 并原样封装成 `.sensa-book`，执行无网络 Registry smoke，按 Book archive →
 Registry 上传到 Supabase Storage 的 content-addressed 路径并逐一校验公网 bytes。只有以上步骤全部
 成功后，工作流才把 API 的 `SENSA_PACKAGE_REGISTRY_URL` 提升到新 Revision。它不重新部署 Web、
@@ -474,8 +496,9 @@ bytes，Registry v3 直接发布该 archive；`publishPortableLearningRegistry.m
 的顺序上传并验证公开 bytes，受保护 workflow 只提升这条链产生的 Registry v3。
 
 ```sh
-gh workflow run sensa-learning-content-publish.yml \
+gh workflow run sensa-release.yml \
   -f release_sha=<FULL_MAIN_SHA> \
+  -f scope=content \
   -f media_release_tag=sensa-learning-media-<DIGEST_PREFIX> \
   -f media_pack_sha256=<FULL_MEDIA_PACK_SHA256> \
   -f owner_accepted=true

@@ -47,6 +47,22 @@ async function removeSourceMaps(dir){
   if(clean!==source)await writeFile(path,clean);
  }
 }
+async function databaseMigrationSet(root){
+ const directory=resolve(root,'db/migrations');
+ const migrations=[];
+ for(const path of (await files(directory)).filter(path=>path.endsWith('.sql')).sort()){
+  const bytes=await readFile(path);
+  migrations.push({path:relative(root,path),bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')});
+ }
+ if(migrations.length===0)throw new Error('Release contains no database migrations');
+ return {
+  format:'sensa-forward-migration-set-v1',
+  count:migrations.length,
+  latest:migrations.at(-1).path,
+  sha256:createHash('sha256').update(JSON.stringify(migrations)).digest('hex'),
+  migrations,
+ };
+}
 export async function prepareCandidate(env,root=process.cwd()){
  const config=validateReleaseEnvironment(env);
  const head=execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim();
@@ -70,7 +86,8 @@ export async function prepareCandidate(env,root=process.cwd()){
   entries.push({path:relative(root,path),bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')});
   }
  }
- const report={format:'sensa-release-candidate-v2',...config,createdAt:new Date().toISOString(),scope:'Web, browser extension and compiled API; local-first library with ordinary account cloud sync',promotion:'requires an explicit owner-authorized production workflow for this exact SHA and artifact; user-flow acceptance is deferred until those flows are confirmed',files:entries};
+ const database=await databaseMigrationSet(root);
+ const report={format:'sensa-release-candidate-v2',...config,createdAt:new Date().toISOString(),scope:'Web, browser extension and compiled API; local-first library with ordinary account cloud sync',promotion:'requires an explicit owner-authorized production workflow for this exact SHA and artifact; user-flow acceptance is deferred until those flows are confirmed',database,files:entries};
  await mkdir(resolve(root,'release-candidate'),{recursive:true});await writeFile(resolve(root,'release-candidate/manifest.json'),JSON.stringify(report,null,2)+'\n');
  return report;
 }

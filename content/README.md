@@ -141,8 +141,9 @@ owner-selected release asset, verifies its whole-file digest, then sets
 `SENSA_AUTHORED_MEDIA_PACK`; the builder also verifies every inner object and
 rejects missing or unused bytes.
 
-Production publication is only through the protected
-`sensa-learning-content-publish.yml` workflow. It verifies every atomic `.sensa`, seals them
+Production publication is only through the protected `sensa-release.yml` system workflow;
+its planner calls the internal `sensa-learning-content-publish.yml` executor only when content
+must change. The executor verifies every atomic `.sensa`, seals them
 into immutable `.sensa-book` archives, publishes the Registry last, and promotes the API's public Registry URL.
 It makes no model or TTS calls and never overwrites an existing object.
 

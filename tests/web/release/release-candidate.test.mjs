@@ -40,6 +40,7 @@ try{
  execFileSync('git',['init','-q'],{cwd:root});execFileSync('git',['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','--allow-empty','-qm','fixture'],{cwd:root});
  const sha=execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim();
  const web=join(root,'apps/web/dist'),extension=join(root,'apps/browser-extension/dist');await mkdir(join(web,'assets'),{recursive:true});await mkdir(extension,{recursive:true});
+ await mkdir(join(root,'db/migrations'),{recursive:true});await writeFile(join(root,'db/migrations/0001_fixture.sql'),'SELECT 1;\n');
  for(const artifactRoot of candidateRoots.filter(path=>!['apps/web/dist','apps/browser-extension/dist'].includes(path))){const directory=join(root,artifactRoot);await mkdir(directory,{recursive:true});await writeFile(join(directory,'index.js'),'export {};\n//# sourceMappingURL=index.js.map\n');await writeFile(join(directory,'index.js.map'),'{}\n');await writeFile(join(directory,'index.d.ts'),'export {};\n//# sourceMappingURL=index.d.ts.map\n');await writeFile(join(directory,'index.d.ts.map'),'{}\n');}
  await writeFile(join(web,'index.html'),'<html></html>');await writeFile(join(web,'sw.js'),'// fixture');
  await writeFile(join(web,'assets/app.js'),JSON.stringify([env.VITE_SUPABASE_URL,env.VITE_SENSA_API_URL,env.VITE_SUPABASE_PUBLISHABLE_KEY,env.VITE_SENSA_SUPPORT_URL]));
@@ -52,12 +53,14 @@ try{
  assert.equal(candidate.commit,sha);assert.match(candidate.scope,/Web, browser extension and compiled API/);assert.match(candidate.scope,/ordinary account cloud sync/);assert(candidate.files.every(f=>/^[a-f0-9]{64}$/.test(f.sha256)));
  assert.equal('playerOrigin' in candidate,false);
  assert(candidate.files.some(f=>f.path==='apps/api/dist/index.js'));
+ assert.equal(candidate.database.count,1);assert.equal(candidate.database.latest,'db/migrations/0001_fixture.sql');assert.match(candidate.database.sha256,/^[a-f0-9]{64}$/u);
  assert(!candidate.files.some(f=>f.path==='apps/web/dist/youglish-player.html'));
  assert(!candidate.files.some(f=>f.path.endsWith('.map')));
  assert(!String(await readFile(join(root,'apps/api/dist/index.js'))).includes('sourceMappingURL'));
  assert(!String(await readFile(join(root,'apps/api/dist/index.d.ts'))).includes('sourceMappingURL'));
  assert.equal('catalogSha256' in candidate,false,'application releases must not capture a learning-content Registry');
  assert(!(await readFile(join(root,'release-candidate/manifest.json'),'utf8')).includes(env.VITE_SUPABASE_PUBLISHABLE_KEY));
+ await writeFile(join(root,'db/migrations/0001_fixture.sql'),'SELECT 2;\n');assert.throws(verify);await writeFile(join(root,'db/migrations/0001_fixture.sql'),'SELECT 1;\n');verify();
  await assert.rejects(prepareCandidate(env,root),/HEAD/);
  await writeFile(join(web,'assets/app.js'),'// stale local build');await assert.rejects(prepareCandidate(releaseEnv,root),/rebuild/);
  console.log('PASS: isolated candidate manifest, hashes, secret-free report and stale SHA/build rejection; no deployment.');

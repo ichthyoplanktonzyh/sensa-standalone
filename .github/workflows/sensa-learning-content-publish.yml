@@ -1,7 +1,7 @@
-name: Publish Sensa learning content
+name: Publish Sensa learning-content component
 run-name: Publish learning content from ${{ inputs.release_sha }} with ${{ inputs.media_release_tag }}
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
       release_sha:
         description: Full green main commit SHA containing the authored release
@@ -15,11 +15,6 @@ on:
         description: Full SHA-256 of authored-media-pack.json
         required: true
         type: string
-      owner_accepted:
-        description: Publish the immutable Book releases and promote this Registry
-        required: true
-        default: false
-        type: boolean
 permissions:
   contents: read
   actions: read
@@ -28,7 +23,6 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish:
-    if: inputs.owner_accepted
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: learning-content-production
@@ -48,21 +42,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.release_sha }}
-      - name: Require an exact green main revision
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          node --input-type=module <<'JS'
-          const env=process.env,sha=env.SENSA_RELEASE_SHA??'';
-          if(!/^[a-f0-9]{40}$/.test(sha)||!env.GH_TOKEN||!env.GITHUB_REPOSITORY)throw Error('Full release SHA and GitHub Actions identity required');
-          const commit=await fetch(`https://api.github.com/repos/${env.GITHUB_REPOSITORY}/commits/${sha}`,{headers:{authorization:`Bearer ${env.GH_TOKEN}`,accept:'application/vnd.github+json','x-github-api-version':'2026-03-10'}});
-          if(!commit.ok||(await commit.json()).sha!==sha)throw Error('Learning content revision is unavailable');
-          const runsUrl=new URL(`https://api.github.com/repos/${env.GITHUB_REPOSITORY}/actions/workflows/sensa-consumer-check.yml/runs`);
-          for(const [key,value] of Object.entries({branch:'main',event:'push',head_sha:sha,per_page:'10'}))runsUrl.searchParams.set(key,value);
-          const runs=await fetch(runsUrl,{headers:{authorization:`Bearer ${env.GH_TOKEN}`,accept:'application/vnd.github+json','x-github-api-version':'2026-03-10'}});
-          const run=(await runs.json()).workflow_runs?.find(candidate=>candidate.head_sha===sha&&candidate.head_branch==='main'&&candidate.event==='push');
-          if(!runs.ok||run?.conclusion!=='success')throw Error('Learning content publication requires a successful main CI run for the exact revision');
-          JS
+      - name: Verify exact revision
+        run: node scripts/release/verifyRevision.mjs
       - name: Fetch and verify the sealed authored media input
         env:
           GH_TOKEN: ${{ github.token }}

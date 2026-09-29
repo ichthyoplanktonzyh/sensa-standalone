@@ -48,6 +48,8 @@ if (supabaseUrl.protocol !== "https:"
   throw new Error("Supabase publication target mismatch");
 }
 const secret = required("SUPABASE_SECRET_KEY");
+const releaseSha = required("SENSA_RELEASE_SHA");
+if (!/^[a-f0-9]{40}$/u.test(releaseSha)) throw new Error("SENSA_RELEASE_SHA must be a full Git commit SHA");
 const bucket = safeSegment(
   process.env.SENSA_PACKAGE_BUCKET?.trim() || "sensa-learning-content",
   "SENSA_PACKAGE_BUCKET",
@@ -170,6 +172,7 @@ await writeFile(envOutput, `SENSA_PACKAGE_REGISTRY_URL='${registryUrl}'\n`, {mod
 await mkdir(dirname(reportOutput), {recursive: true});
 await writeFile(reportOutput, `${JSON.stringify({
   format: "sensa-portable-learning-content-publication-v2",
+  releaseSha,
   projectRef,
   bucket,
   registryRevision: registry.revision,

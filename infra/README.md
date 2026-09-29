@@ -5,10 +5,11 @@
 主要自动化入口：
 
 - `.github/workflows/sensa-consumer-check.yml`：pull request 和 `main` 的 CI；
-- `.github/workflows/sensa-web-deploy.yml`：唯一日常生产发布入口；
+- `.github/workflows/sensa-release.yml`：唯一人工生产发布入口与系统 Release Planner；
+- `.github/workflows/sensa-web-deploy.yml`：由 Planner 调用的应用组件执行器；
 - `.github/workflows/sensa-web-candidate.yml`：可选深度验证；
 - `.github/workflows/sensa-web-monitor.yml`：生产运行检查；
-- `.github/workflows/sensa-learning-content-publish.yml`：独立发布不可变 Book releases 与 Registry；
+- `.github/workflows/sensa-learning-content-publish.yml`：由 Planner 调用的内容组件执行器；
 - `.github/workflows/sensa-auth-config.yml`：单独对齐 Auth redirect 的维护入口。
 
 发布流程、授权和回滚边界见 [`docs/sensa/engineering.md`](../docs/sensa/engineering.md)。本地脚本和内容工具不得直接创建或部署云资源。
