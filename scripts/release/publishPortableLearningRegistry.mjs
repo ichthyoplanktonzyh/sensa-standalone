@@ -10,7 +10,10 @@ import {
   sensaPortableBookDescriptorSchema,
   sensaPortableLearningContentRegistrySchema,
 } from "@sensa/contracts/sensa";
-import {ensurePublicLearningContentBucket} from "./learningContentBucket.mjs";
+import {
+  ensurePublicLearningContentBucket,
+  portableBookContentType,
+} from "./learningContentBucket.mjs";
 
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const required = (name) => {
@@ -147,7 +150,7 @@ await publishInBatches(bookTasks, "Portable Books", async ({bookRelative, bookBy
   const bookUrl = await publishObject(
     `releases/${bookRelative}`,
     bookBytes,
-    "application/vnd.sensa.book+zip",
+    portableBookContentType,
   );
   if (bookUrl !== expectedUrl) throw new Error("Portable Book URL does not match the publication target");
 });

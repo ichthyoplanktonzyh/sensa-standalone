@@ -3,13 +3,16 @@ const bucketError = (message, error) => {
   return new Error(`${message}${detail}`);
 };
 
+export const portableBookContentType = "application/zip";
+export const learningContentMimeTypes = ["application/json", portableBookContentType];
+
 /**
  * Make sure immutable learning content can be read without authentication.
  * Existing public buckets are deliberately left unchanged: publication owns
  * content objects, not provider-wide storage policy.
  */
 export async function ensurePublicLearningContentBucket(storage, bucket) {
-  const requiredMimeTypes = ["application/json", "application/zip"];
+  const requiredMimeTypes = learningContentMimeTypes;
   let result = await storage.getBucket(bucket);
   if (result.error) {
     const created = await storage.createBucket(bucket, {

@@ -1,6 +1,10 @@
 import {describe, expect, it, vi} from "vitest";
 
-import {ensurePublicLearningContentBucket} from "../../../scripts/release/learningContentBucket.mjs";
+import {
+  ensurePublicLearningContentBucket,
+  learningContentMimeTypes,
+  portableBookContentType,
+} from "../../../scripts/release/learningContentBucket.mjs";
 
 const publicBucket = {
   id: "learning",
@@ -10,6 +14,11 @@ const publicBucket = {
 };
 
 describe("learning content publication bucket", () => {
+  it("publishes portable Books with a MIME type admitted by the bucket", () => {
+    expect(portableBookContentType).toBe("application/zip");
+    expect(learningContentMimeTypes).toContain(portableBookContentType);
+  });
+
   it("reuses an existing public bucket without rewriting provider policy", async () => {
     const storage = {
       getBucket: vi.fn().mockResolvedValue({data: publicBucket, error: null}),
