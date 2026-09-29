@@ -399,6 +399,12 @@ export async function readLearningWorkspaceProjection(input: Readonly<{
       : [];
   });
   return {
+    enrollments:snapshot.enrollments.filter(enrollment=>
+      enrollment.status==='active'
+      &&enrollment.languageContext.languageRouteId===input.languageContext.languageRouteId
+      &&enrollment.languageContext.targetLanguageTag===input.languageContext.targetLanguageTag
+      &&enrollment.languageContext.supportLanguageTag===input.languageContext.supportLanguageTag)
+      .map(enrollment=>({enrollmentId:enrollment.id,languageRouteId:enrollment.languageContext.languageRouteId,source:structuredClone(enrollment.source)})),
     targets,
     queue: {
       activeTargetIds: queue.activeTargets.map((target) => target.id),

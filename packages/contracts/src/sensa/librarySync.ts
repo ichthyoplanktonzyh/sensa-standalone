@@ -1,7 +1,7 @@
 import {z} from 'zod';
 /** Durable Personal Library Facts carried by a Cloud Checkpoint. `operations` is
  * deliberately absent: it is a device-local command ledger, not learner data. */
-export const librarySyncTables=['meta','drafts','settings','sessions','meanings','identities','packageInstallations','learningTargets','learningRuns','learningEvents','learningReconciliations','personalLearning','contentAttempts','annotations','semanticState','semanticMeanings','semanticRegistry','semanticInbox','semanticDrafts','semanticReceipts','media'] as const;
+export const librarySyncTables=['meta','drafts','settings','sessions','meanings','identities','packageInstallations','curriculumEnrollments','learningTargets','learningRuns','learningEvents','learningReconciliations','personalLearning','contentAttempts','annotations','semanticState','semanticMeanings','semanticRegistry','semanticInbox','semanticDrafts','semanticReceipts','media'] as const;
 export const librarySyncHash=z.string().regex(/^[a-f0-9]{64}$/);
 /** Content-addressed block size in JavaScript string units. Restoring a library is
  * a bounded number of block requests, so one block already carries a real payload.

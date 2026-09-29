@@ -12,7 +12,9 @@ import {stableUuid} from "@sensa/learning-kernel";
 import {
   canonicalConsumerJson,
   maxPortableBookArchiveBytes,
+  maxPortableBookMembers,
   sensaPortableBookDescriptorSchema,
+  sensaPortableBookManifestSchema,
   sensaPortableLearningContentRegistrySchema,
 } from "@sensa/contracts/sensa";
 
@@ -28,6 +30,41 @@ import {
 } from "../../../apps/web/src/data/library/store.ts";
 
 const digest = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
+
+test("one atomic Book contract can carry a 5,000-Sense curriculum", () => {
+  const memberCount = 5_000;
+  const manifest = sensaPortableBookManifestSchema.parse({
+    format:"sensa-portable-book-v1",
+    publisher:{namespace:"sensa.fixture",name:"Sensa Fixture"},
+    book:{
+      bookId:stableUuid("fixture:large-book"),
+      bookKey:"large-book-fixture",
+      bookVersionId:stableUuid("fixture:large-book:v1"),
+      versionNumber:1,
+      title:"Large Book Fixture",
+      description:"Contract boundary for a large, atomic curriculum.",
+    },
+    contentRelease:{
+      contentReleaseId:stableUuid("fixture:large-book:release:v1"),
+      versionNumber:1,
+      schemaVersion:"sensa-portable-lightweight-package-v2",
+    },
+    route:{targetLanguage:"en",supportLanguage:"zh-CN"},
+    publishedAt:"2026-09-30T00:00:00.000Z",
+    changeSummary:"Initial fixture release.",
+    semanticAttestation:{
+      kind:"publisher-attestation",
+      publisherNamespace:"sensa.fixture",
+      subject:"member-semantic-declarations",
+    },
+    members:Array.from({length:memberCount},(_,index)=>({
+      packageId:stableUuid(`fixture:large-book:member:${index}`),
+      version:1,
+    })),
+  });
+  assert.equal(manifest.members.length,memberCount);
+  assert(memberCount<=maxPortableBookMembers);
+});
 
 test("official Registry delivers one atomic Book while preserving independent Sense packages", async () => {
   const root = await mkdtemp(join(tmpdir(), "sensa-portable-learning-registry-"));

@@ -1,7 +1,7 @@
 import {reconcileConcurrentLearningEntries} from '../learningReconciliation';
 import type {DomainReplicaModule,ReplicaMergeResult,ReplicaRecordReference} from './domainReplica';
 
-const tables=new Set(['learningTargets','learningRuns','learningEvents','learningReconciliations']);
+const tables=new Set(['curriculumEnrollments','learningTargets','learningRuns','learningEvents','learningReconciliations']);
 const immutableHistory=new Set(['learningRuns','learningEvents','learningReconciliations']);
 const entryId=(entry:{table:string;key:string})=>JSON.stringify([entry.table,entry.key]);
 const record=(value:unknown):Record<string,any>|undefined=>value&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,any>:undefined;
@@ -33,16 +33,21 @@ export const learningReplica:DomainReplicaModule={
   if(entry.table==='meta')return reference('learningRuns',value);
   const fact=record(value);if(!fact)return [];
   if(entry.table==='learningTargets')return [
+   ...reference('curriculumEnrollments',fact.policyAssignment?.provenance?.curriculumEnrollmentId),
    ...reference('learningRuns',fact.committedPolicy?.committedByProtocolRunId),
    ...(Array.isArray(fact.curriculumMemberships)?fact.curriculumMemberships.flatMap((membership:unknown)=>{
     const item=record(membership);return [
      ...reference('packageInstallations',item?.packageKey),
+     ...reference('curriculumEnrollments',item?.provenance?.curriculumEnrollmentId),
      ...reference('contentAttempts',item?.provenance?.attemptId),
      ...reference('semanticMeanings',item?.provenance?.personalMeaningId),
      ...materialDependencies(item?.material),
     ];
    }):[]),
   ];
+  if(entry.table==='curriculumEnrollments')return fact.source?.kind==='portable_package'
+   ?reference('packageInstallations',fact.source.packageKey)
+   :[];
   if(entry.table==='learningRuns')return [
    ...references('learningTargets',fact.targetIds),
    ...reference('learningTargets',fact.targetId),

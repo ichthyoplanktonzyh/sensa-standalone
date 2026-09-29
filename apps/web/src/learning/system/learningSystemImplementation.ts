@@ -35,10 +35,22 @@ export const executeLearningCommand = async (command: LearningCommand): Promise<
         command.publicationArchiveSha256,
       );
     }
+    case 'enroll_book': {
+      const { enrollBook } = await import('../../data/library/learning');
+      return enrollBook(
+        command.operationId,
+        command.languageContext,
+        command.publicationArchiveSha256,
+      );
+    }
     case 'confirm_quantity': {
       const { confirmLearningQuantity } = await import('../../data/library/learning');
       await confirmLearningQuantity(command.operationId, command.languageContext, command.dailyLimit);
       return true;
+    }
+    case 'prepare_queue': {
+      const {prepareLearningQueue}=await import('../../data/library/learning');
+      return prepareLearningQueue(command.languageContext,command.at);
     }
     case 'start': {
       const { startLearning } = await import('../../data/library/learning');
@@ -88,13 +100,15 @@ export const executeLearningCommand = async (command: LearningCommand): Promise<
       return true;
     }
     case 'set_declared_mastery': {
-      const { setLocalDeclaredMastery } = await import('../../data/library/learning');
+      const { prepareLearningQueue, setLocalDeclaredMastery } = await import('../../data/library/learning');
+      const at=command.at??new Date().toISOString();
       await setLocalDeclaredMastery(
         command.operationId,
         command.targetId,
         command.active,
-        command.at,
+        at,
       );
+      if(command.active)await prepareLearningQueue(command.languageContext,at,command.operationId);
       return true;
     }
     case 'select_policy': {
@@ -114,7 +128,7 @@ export const executeLearningCommand = async (command: LearningCommand): Promise<
       return requestPersonalContentProvisioning(command);
     }
     case 'declare_mastery_and_continue': {
-      const { setLocalDeclaredMastery, startLearning } = await import('../../data/library/learning');
+      const { prepareLearningQueue, setLocalDeclaredMastery, startLearning } = await import('../../data/library/learning');
       const at = command.at ?? new Date().toISOString();
       await setLocalDeclaredMastery(
         stableUuid(`${command.operationId}:declare-mastery`),
@@ -125,6 +139,7 @@ export const executeLearningCommand = async (command: LearningCommand): Promise<
       const routeId = command.languageContext.languageRouteId;
       setRetries(routeId, removeRetryTarget(retriesFor(routeId), command.targetId));
       if (command.dailyLimit === null) return false;
+      await prepareLearningQueue(command.languageContext,at,command.operationId);
       const workspace = await readLearningWorkspaceProjection({
         languageContext: command.languageContext,
         clock: Date.parse(at),

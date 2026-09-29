@@ -246,7 +246,7 @@ const convergenceTests = new Set<string>([
 ]);
 const scaleTests = new Set<string>([
   'database/database-budget', 'browser/sqlite-opfs-benchmark',
-  'browser/web-bootstrap-budget', 'integration/content-agent',
+  'browser/web-bootstrap-budget', 'browser/package-center-journey', 'integration/content-agent',
   'quality/web-idle-work',
 ]);
 

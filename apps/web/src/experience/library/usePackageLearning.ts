@@ -17,6 +17,7 @@ import {localFlowNotice,localFlowText} from '../../i18n/localFlowText';
 import {useLanguageRoutes} from './useLanguageRoutes';
 
 const emptyWorkspace:LearningWorkspaceProjection={
+ enrollments:[],
  targets:[],
  queue:{activeTargetIds:[],dueTargetIds:[],initialReadyTargetIds:[],nextTargetId:null,nextChangeAt:null},
  runtime:null,
@@ -43,6 +44,7 @@ export function usePackageLearning(entryOpen:boolean){
  const {context:languageContext}=useLanguageRoutes();
 
  const refresh=async()=>{
+  await learningSystem.execute({kind:'prepare_queue',languageContext,at:new Date().toISOString()});
   const [projection,supply]=await Promise.all([
    learningSystem.read({kind:'workspace',languageContext,clock:Date.now()}),
    contentSupplySystem.read({kind:'workspace'}),
@@ -123,6 +125,7 @@ export function usePackageLearning(entryOpen:boolean){
 
  return {
   languageContext,
+  enrollments:workspace.enrollments,
   packages,catalog,
   targets:workspace.targets,
   activeTargets:workspace.targets,
@@ -157,13 +160,7 @@ export function usePackageLearning(entryOpen:boolean){
   exportPackage:(packageKey:string)=>inspect(()=>contentSupplySystem.execute({kind:'export_portable_package',packageKey})),
   selectPolicy:(targetId:string,profileId:LearningPolicy)=>perform(()=>learningSystem.execute({kind:'select_policy',operationId:crypto.randomUUID(),targetId,languageContext,profileId})),
   enroll:(packageKey:string,publicationArchiveSha256?:string)=>perform(()=>learningSystem.execute({kind:'enroll_package',operationId:crypto.randomUUID(),packageKey,languageContext,publicationArchiveSha256})),
-  enrollBook:(packageKeys:readonly string[],publicationArchiveSha256:string)=>perform(async()=>{
-   const targetIds:string[]=[];
-   for(const packageKey of packageKeys){
-    targetIds.push(...await learningSystem.execute({kind:'enroll_package',operationId:crypto.randomUUID(),packageKey,languageContext,publicationArchiveSha256}));
-   }
-   return targetIds;
-  }),
+  enrollBook:(publicationArchiveSha256:string)=>perform(()=>learningSystem.execute({kind:'enroll_book',operationId:crypto.randomUUID(),languageContext,publicationArchiveSha256})),
   start:(targetId:string,dailyLimit:number)=>perform(()=>learningSystem.execute({kind:'start',operationId:crypto.randomUUID(),targetId,languageContext,dailyLimit})),
   act:async(action:LearningAction)=>{
    if(!runtime||actInFlight.current)return null;
@@ -180,7 +177,7 @@ export function usePackageLearning(entryOpen:boolean){
     return result;
    }finally{actInFlight.current=false;}
   },
-  declareKnown:(targetId:string,active=true)=>perform(()=>learningSystem.execute({kind:'set_declared_mastery',operationId:crypto.randomUUID(),targetId,active})),
+  declareKnown:(targetId:string,active=true)=>perform(()=>learningSystem.execute({kind:'set_declared_mastery',operationId:crypto.randomUUID(),targetId,active,languageContext})),
   advance:()=>runtime&&dailyLimit!==null?perform(()=>learningSystem.execute({kind:'advance',operationId:crypto.randomUUID(),runId:runtime.runId,languageContext,dailyLimit})):Promise.resolve(null),
  };
 }

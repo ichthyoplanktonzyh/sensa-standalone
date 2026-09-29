@@ -20,6 +20,7 @@ export type {
   FourStageReviewSessionProjection,
   FourStageTargetPresentation,
   LearningAction,
+  LearningCurriculumEnrollmentProjection,
   LearningFourStageInitialRuntimeProjection,
   LearningFourStageReviewRuntimeProjection,
   LearningHomeProjection,
@@ -59,10 +60,21 @@ export type LearningCommand =
       publicationArchiveSha256?: string;
     }>
   | Readonly<{
+      kind: 'enroll_book';
+      operationId: string;
+      languageContext: SensaFormalPinnedLanguageContext;
+      publicationArchiveSha256: string;
+    }>
+  | Readonly<{
       kind: 'confirm_quantity';
       operationId: string;
       languageContext: SensaFormalPinnedLanguageContext;
       dailyLimit: number;
+    }>
+  | Readonly<{
+      kind:'prepare_queue';
+      languageContext:SensaFormalPinnedLanguageContext;
+      at?:string;
     }>
   | Readonly<{
       kind: 'start';
@@ -99,6 +111,7 @@ export type LearningCommand =
       operationId: string;
       targetId: string;
       active: boolean;
+      languageContext:SensaFormalPinnedLanguageContext;
       at?: string;
     }>
   | Readonly<{
@@ -133,7 +146,7 @@ export type LearningCommand =
     }>;
 
 export type LearningCommandResult<Command extends LearningCommand> =
-  Command['kind'] extends 'enroll_package' ? string[]
+  Command['kind'] extends 'enroll_package' | 'enroll_book' | 'prepare_queue' ? string[]
     : Command['kind'] extends 'enroll_personal' ? PersonalLearningEnrollment
       : boolean;
 
@@ -169,8 +182,8 @@ export interface LearningSystem {
 }
 
 const queryTables = {
-  home: ['packageCache', 'packageInstallations', 'learningTargets', 'learningRuns', 'settings', 'meta'],
-  workspace: ['packageCache', 'packageInstallations', 'learningTargets', 'learningRuns', 'learningEvents', 'settings', 'meta'],
+  home: ['packageCache', 'packageInstallations', 'curriculumEnrollments', 'learningTargets', 'learningRuns', 'settings', 'meta'],
+  workspace: ['packageCache', 'packageInstallations', 'curriculumEnrollments', 'learningTargets', 'learningRuns', 'learningEvents', 'settings', 'meta'],
   personal_enrollment_index: ['learningTargets'],
   semantic_memory: ['learningTargets'],
 } as const satisfies Record<LearningQuery['kind'], readonly Table[]>;

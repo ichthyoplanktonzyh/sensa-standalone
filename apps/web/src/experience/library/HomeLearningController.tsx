@@ -25,6 +25,7 @@ export function HomeLearningController({active=true}:{active?:boolean}){
  const [quantityChoice,setQuantityChoice]=useState(20);
  const refresh=async()=>{
   const learningSystem=await loadLearningSystem();
+  await learningSystem.execute({kind:'prepare_queue',languageContext,at:new Date().toISOString()});
   const next=await learningSystem.read({kind:'home',languageRouteId:languageContext.languageRouteId,clock:Date.now()});
   setProjection(next);
   setSummaryReady(true);

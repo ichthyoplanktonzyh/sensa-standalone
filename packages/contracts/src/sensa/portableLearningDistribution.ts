@@ -20,6 +20,7 @@ const deliveryUrl = z.url().refine((value) => {
 
 export const maxPortableBookArchiveBytes = 256 * 1024 * 1024;
 export const maxPortableBookManifestBytes = 1024 * 1024;
+export const maxPortableBookMembers = 10_000;
 
 const publisherSchema = z.object({
   namespace: publisherNamespace,
@@ -66,7 +67,7 @@ export const sensaPortableBookManifestSchema = z.object({
     publisherNamespace,
     subject: z.literal("member-semantic-declarations"),
   }).strict(),
-  members: z.array(sensaPortableBookMemberSchema).min(1).max(1_000),
+  members: z.array(sensaPortableBookMemberSchema).min(1).max(maxPortableBookMembers),
 }).strict().superRefine((manifest, context) => {
   if (manifest.semanticAttestation.publisherNamespace !== manifest.publisher.namespace) {
     context.addIssue({
@@ -90,7 +91,7 @@ export const sensaPortableBookDescriptorSchema = z.object({
   route: routeSchema,
   publishedAt: timestamp,
   changeSummary: z.string().trim().max(2_000),
-  memberCount: positiveInteger.max(1_000),
+  memberCount: positiveInteger.max(maxPortableBookMembers),
   byteLength: positiveInteger.max(maxPortableBookArchiveBytes),
   sha256: digest,
   url: deliveryUrl,

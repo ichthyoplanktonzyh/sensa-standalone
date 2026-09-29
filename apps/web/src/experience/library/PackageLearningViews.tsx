@@ -113,7 +113,7 @@ export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boole
  const notice=c.notice&&<p role="status" className="rounded-xl border border-border-subtle bg-surface-subtle p-4 text-sm leading-6">{localFlowNotice(c.notice)}</p>;
  const enrollInstalled=()=>{
   if(!installed.length)return;
-  if(descriptor)void c.enrollBook(installed.map(pack=>pack.key),descriptor.sha256);
+  if(descriptor)void c.enrollBook(descriptor.sha256);
   else void c.enroll(installed[0]!.key);
  };
  return <LearningSetupFrame key={importCandidate?.preview.archiveDigest??selected??'catalog'} id="s-learning-entry" active={active} onBack={()=>importCandidate?setImportCandidate(null):selected?setSelected(null):onBack()} title={item||importCandidate?localFlowText('packageCatalogTitle'):undefined}>

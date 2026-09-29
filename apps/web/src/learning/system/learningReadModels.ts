@@ -276,7 +276,26 @@ export type LearningRuntimeProjection =
   | LearningFourStageInitialRuntimeProjection
   | LearningFourStageReviewRuntimeProjection;
 
+export type LearningCurriculumEnrollmentProjection=Readonly<{
+ enrollmentId:string;
+ languageRouteId:string;
+ source:Readonly<{
+  kind:'published_book';
+  publisherNamespace:string;
+  bookId:string;
+  bookVersionId:string;
+  bookVersionNumber:number;
+  publicationArchiveSha256:string;
+ }>|Readonly<{
+  kind:'portable_package';
+  packageId:string;
+  packageVersion:number;
+  packageKey:string;
+ }>;
+}>;
+
 export interface LearningWorkspaceProjection {
+  readonly enrollments:readonly LearningCurriculumEnrollmentProjection[];
   readonly targets: readonly LearningTargetProjection[];
   readonly queue: LearningQueueProjection;
   readonly runtime: LearningRuntimeProjection | null;

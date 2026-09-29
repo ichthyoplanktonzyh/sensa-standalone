@@ -2,6 +2,7 @@ import {
   canonicalConsumerJson,
   maxPortableBookArchiveBytes,
   maxPortableBookManifestBytes,
+  maxPortableBookMembers,
   sensaPortableBookManifestSchema,
   type SensaPortableBookManifest,
   type SensaPortableBookMember,
@@ -15,7 +16,7 @@ import {
 } from "./portableLightweightPackageValidator.js";
 
 export const sensaPortableBookValidatorVersion = "sensa-portable-book-validator-v1" as const;
-export const sensaPortableBookMaximumEntries = 1_001;
+export const sensaPortableBookMaximumEntries = maxPortableBookMembers + 1;
 
 const manifestPath = "book.json";
 const fixedZipTimestamp = new Date(1980, 0, 1, 0, 0, 0);

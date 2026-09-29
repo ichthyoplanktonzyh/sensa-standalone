@@ -167,6 +167,10 @@ test.beforeAll(async()=>{
     baseUrl:`${origin}/published/`,
     expression:'borrow',
     title:'English route essentials',
+    memberExpressions:[
+      'borrow',
+      ...Array.from({length:99},(_,index)=>`fixture-${String(index+2).padStart(3,'0')}`),
+    ],
   });
   const snapshot={
     format:'sensa-learning-content-registry-v3' as const,
@@ -240,11 +244,11 @@ test('discovers, downloads and enrolls a Book with durable local state',async({p
   const entry=page.locator('#s-catalog-book').last();
   await expect(entry.getByRole('heading',{name:'English route essentials'})).toBeVisible();
   await expect(entry.getByText('未下载',{exact:true})).toBeVisible();
-  await expect(entry.getByText(/1 个表达/)).toBeVisible();
+  await expect(entry.getByText(/100 个表达/)).toBeVisible();
 
   await entry.getByRole('button',{name:'下载学习包',exact:true}).click();
   await expect(entry.getByText('已下载',{exact:true})).toBeVisible({timeout:15_000});
-  await expect(entry.getByText('borrow',{exact:true})).toBeVisible();
+  await expect(entry.locator('section').last().locator('li')).toHaveCount(50);
   await expect(entry.getByRole('button',{name:'加入学习',exact:true})).toBeVisible();
   assert.equal(
     delivered.filter(path=>path.endsWith('.sensa-book')).length,
@@ -253,9 +257,28 @@ test('discovers, downloads and enrolls a Book with durable local state',async({p
   );
   assert.equal(delivered.filter(path=>path.endsWith('.sensa')).length,0,'members must not require separate requests');
 
+  await page.evaluate(()=>{
+    const state={learningTargetCommits:0};
+    (window as unknown as {__packageEnrollmentCommits:typeof state}).__packageEnrollmentCommits=state;
+    window.addEventListener('sensa-library-changed',event=>{
+      const tables=(event as CustomEvent<{tables?:unknown}>).detail?.tables;
+      if(Array.isArray(tables)&&tables.includes('learningTargets'))state.learningTargetCommits++;
+    });
+  });
   await entry.getByRole('button',{name:'加入学习',exact:true}).click();
   await expect(entry.getByText('已加入学习',{exact:true})).toBeVisible({timeout:15_000});
   await expect(entry.getByRole('button',{name:'去学习',exact:true})).toBeVisible();
+  const contents=entry.locator('section').last();
+  await expect(contents.locator('li')).toHaveCount(50);
+  await expect(contents.locator('li button')).toHaveCount(20);
+  await contents.getByRole('button',{name:'查看更多',exact:true}).click();
+  await expect(contents.locator('li')).toHaveCount(100);
+  await expect(contents.getByRole('button',{name:'查看更多',exact:true})).toHaveCount(0);
+  assert.equal(
+    await page.evaluate(()=>(window as unknown as {__packageEnrollmentCommits:{learningTargetCommits:number}}).__packageEnrollmentCommits.learningTargetCommits),
+    1,
+    'a Book enrollment must publish one atomic bounded-candidate commit',
+  );
 
   await page.reload();
   await expect(page.locator('[data-sensa-page-layout="application-shell"]')).toBeVisible({timeout:15_000});
@@ -267,6 +290,7 @@ test('discovers, downloads and enrolls a Book with durable local state',async({p
   const restored=page.locator('#s-catalog-book').last();
   await expect(restored.getByRole('heading',{name:'English route essentials'})).toBeVisible({timeout:15_000});
   await expect(restored.getByText('已加入学习',{exact:true})).toBeVisible();
+  await restored.getByRole('button',{name:'查看更多',exact:true}).click();
   await expect(restored.getByText('borrow',{exact:true})).toBeVisible();
 
   await page.evaluate(()=>window.__sensaBrowserSmoke!.navigate('/publisher'));

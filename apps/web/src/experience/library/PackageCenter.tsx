@@ -14,6 +14,7 @@ import {
  Upload,
 } from 'lucide-react';
 import {useRef,useState} from 'react';
+import {useTranslation} from 'react-i18next';
 
 import {localFlowNotice,localFlowText} from '../../i18n/localFlowText';
 import {useAccountExperience} from '../account/AccountContext';
@@ -56,11 +57,6 @@ const centerItems=(c:Controller):Readonly<{
  catalog:PackageCenterItem[];
  library:PackageCenterItem[];
 }>=>{
- const enrolledFor=(pack:InstalledPackage)=>pack.content.entries.map(entry=>c.targets.find(target=>
-  entry.senseVersionId===target.identity.senseVersionId
-  &&entry.bindingVersionId===target.identity.bindingVersionId
-  &&target.packageKey===pack.key));
- const packageEnrolled=(pack:InstalledPackage)=>enrolledFor(pack).every(Boolean);
  const catalog=c.catalog.map((descriptor):PackageCenterItem=>{
   const packages=c.packages.filter(pack=>
    pack.content.targetLanguage===descriptor.route.targetLanguage
@@ -85,8 +81,10 @@ const centerItems=(c:Controller):Readonly<{
   const exactComplete=exact?.packages.length===descriptor.memberCount;
   const latest=complete.sort((left,right)=>right[1].version-left[1].version)[0];
   const installed=exactComplete?exact!.packages:latest?.[1].packages??[];
-  const active=complete.find(([,group])=>group.packages.every(packageEnrolled));
-  const baselineVersion=active?.[1].version??latest?.[1].version??null;
+  const active=c.enrollments.find(enrollment=>enrollment.source.kind==='published_book'
+   &&enrollment.source.publisherNamespace===descriptor.publisher.namespace
+   &&enrollment.source.bookId===descriptor.book.bookId);
+  const baselineVersion=active?.source.kind==='published_book'?active.source.bookVersionNumber:latest?.[1].version??null;
   const updateAvailable=baselineVersion!==null&&descriptor.book.versionNumber>baselineVersion;
   return {
    key:descriptor.book.bookKey,
@@ -102,7 +100,7 @@ const centerItems=(c:Controller):Readonly<{
    installed,
    updateAvailable,
    updateDownloaded:updateAvailable&&!!exactComplete,
-   enrolled:!!active&&active[1].version>=descriptor.book.versionNumber,
+   enrolled:!!active&&active.source.kind==='published_book'&&active.source.bookVersionNumber>=descriptor.book.versionNumber,
    routeMatchesActive:routeMatches(descriptor.route.targetLanguage,descriptor.route.supportLanguage,c),
   };
  });
@@ -149,7 +147,10 @@ const centerItems=(c:Controller):Readonly<{
    installed:latest.packages,
    updateAvailable:false,
    updateDownloaded:false,
-   enrolled:latest.packages.every(packageEnrolled),
+   enrolled:c.enrollments.some(enrollment=>enrollment.source.kind==='published_book'
+    &&enrollment.source.publisherNamespace===publication.publisher.namespace
+    &&enrollment.source.bookId===publication.book.bookId
+    &&enrollment.source.bookVersionNumber>=publication.book.versionNumber),
    routeMatchesActive:routeMatches(publication.route.targetLanguage,publication.route.supportLanguage,c),
   }];
  });
@@ -165,7 +166,9 @@ const centerItems=(c:Controller):Readonly<{
   installed:[pack],
   updateAvailable:false,
   updateDownloaded:false,
-  enrolled:packageEnrolled(pack),
+  enrolled:c.enrollments.some(enrollment=>enrollment.source.kind==='portable_package'
+   &&enrollment.source.packageId===pack.portableOrigin.manifest.metadata.packageId
+   &&enrollment.source.packageVersion>=pack.portableOrigin.manifest.metadata.version),
   routeMatchesActive:routeMatches(pack.content.targetLanguage,pack.content.supportLanguage,c),
  }));
  return {catalog,library:[...catalog.filter(item=>item.installed.length),...retired,...local]};
@@ -226,17 +229,28 @@ function PackageDetail({active,item,c,onBack,onLearning,onTarget}:{
  onLearning:()=>void;
  onTarget:(id:string)=>void;
 }){
+ const {t}=useTranslation();
  const [downloadKey,setDownloadKey]=useState<string|null>(null);
+ const [contentWindow,setContentWindow]=useState({itemKey:'',limit:50});
  if(!item)return <LearningSetupFrame id="s-catalog-book" active={active} onBack={onBack} title={localFlowText('packageCatalogTitle')}><p role="status">{localFlowText('packageNoResults')}</p></LearningSetupFrame>;
- const installedEntries=item.installed.flatMap(pack=>pack.content.entries.map(entry=>({
+ const contentLimit=contentWindow.itemKey===item.listKey?contentWindow.limit:50;
+ const targetByEntry=new Map(c.targets.map(target=>[
+  `${target.packageKey}\0${target.identity.senseVersionId}\0${target.identity.bindingVersionId}`,
+  target,
+ ]));
+ const installedEntryCount=item.installed.reduce((count,pack)=>count+pack.content.entries.length,0);
+ const installedEntries:ReadonlyArray<{
+  pack:InstalledPackage;
+  entry:InstalledPackage['content']['entries'][number];
+  target:Controller['targets'][number]|undefined;
+ }>=item.installed.flatMap(pack=>pack.content.entries.map(entry=>({
   pack,
   entry,
-  target:c.targets.find(target=>entry.senseVersionId===target.identity.senseVersionId
-   &&entry.bindingVersionId===target.identity.bindingVersionId&&target.packageKey===pack.key),
- })));
+  target:targetByEntry.get(`${pack.key}\0${entry.senseVersionId}\0${entry.bindingVersionId}`),
+ }))).slice(0,contentLimit);
  const enrollInstalled=()=>{
  if(!item.routeMatchesActive||!item.installed.length)return;
-  if(item.publicationArchiveSha256)void c.enrollBook(item.installed.map(pack=>pack.key),item.publicationArchiveSha256);
+  if(item.publicationArchiveSha256)void c.enrollBook(item.publicationArchiveSha256);
   else void c.enroll(item.installed[0]!.key);
  };
  const action=()=>{
@@ -273,10 +287,10 @@ function PackageDetail({active,item,c,onBack,onLearning,onTarget}:{
   </section>
   <section aria-label={localFlowText('packageContents')}>
    <h2 className="mb-4 text-lg font-medium">{localFlowText('packageContents')}</h2>
-   {installedEntries.length?<ul className="divide-y divide-border-subtle overflow-hidden rounded-2xl border border-border-subtle bg-surface-panel">{installedEntries.map(({entry,target})=><li key={`${entry.bindingVersionId}:${entry.senseVersionId}`} className="flex flex-wrap items-center justify-between gap-4 p-5">
+   {installedEntries.length?<><ul className="divide-y divide-border-subtle overflow-hidden rounded-2xl border border-border-subtle bg-surface-panel">{installedEntries.map(({pack,entry,target})=><li key={`${pack.key}:${entry.bindingVersionId}:${entry.senseVersionId}`} className="flex flex-wrap items-center justify-between gap-4 p-5">
     <div className="min-w-0 flex-1"><p className="break-words text-xl font-medium">{entry.expression}</p><p className="mt-2 text-sm leading-6 text-fg-secondary">{entry.meaning}</p></div>
     {target&&<button className={setupButton+' shrink-0'} aria-label={localFlowText('packageViewExpression',{expression:entry.expression})} onClick={()=>onTarget(target.targetId)}>{localFlowText('packageViewDetails')}<ArrowRight size={16}/></button>}
-   </li>)}</ul>:<p className="rounded-2xl border border-dashed border-border-strong p-6 text-sm leading-6 text-fg-secondary">{localFlowText('packageContentsAfterDownload')}</p>}
+   </li>)}</ul>{installedEntries.length<installedEntryCount&&<button type="button" className={setupButton+' mt-4'} onClick={()=>setContentWindow({itemKey:item.listKey,limit:contentLimit+50})}>{t('study.more')}</button>}</>:<p className="rounded-2xl border border-dashed border-border-strong p-6 text-sm leading-6 text-fg-secondary">{localFlowText('packageContentsAfterDownload')}</p>}
   </section>
  </LearningSetupFrame>;
 }

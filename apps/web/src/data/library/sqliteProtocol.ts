@@ -7,11 +7,11 @@ import type {
   PortablePackageMediaWrite,
 } from './portableMediaCache';
 
-export const sqliteLibraryFile = "/sensa-local-library-v10.sqlite3";
-export const sqlitePoolDirectory = "/sensa-local-library-v10";
+export const sqliteLibraryFile = "/sensa-local-library-v12.sqlite3";
+export const sqlitePoolDirectory = "/sensa-local-library-v12";
 /** First supported production-user baseline; prototype formats stay unsupported. */
 export const sqliteLibraryBaselineVersion = 10;
-export const sqliteLibrarySchemaVersion = 11;
+export const sqliteLibrarySchemaVersion = 12;
 /** Cross-tab RPC changes must bump this before adding or changing messages. */
 export const sqliteCoordinatorProtocolVersion = 6;
 
@@ -26,6 +26,7 @@ export const sqliteLibraryTables = [
   "identities",
   "packageCache",
   "packageInstallations",
+  "curriculumEnrollments",
   "learningTargets",
   "learningRuns",
   "learningEvents",

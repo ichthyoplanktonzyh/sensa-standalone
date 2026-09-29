@@ -23,6 +23,7 @@ import {
 } from '../../../apps/web/src/data/library/store.ts';
 import {localCurriculumMembershipForContext} from '../../../apps/web/src/learning/runtime/localCurriculum.ts';
 import type {LocalLearningRun,LocalLearningTarget} from '../../../apps/web/src/learning/runtime/localProtocol.ts';
+import {prepareLearningQueue} from '../../../apps/web/src/data/library/learning.ts';
 
 Object.assign(globalThis,{window:new EventTarget(),location:new URL('https://sensa.local/'),BroadcastChannel:undefined});
 await openLibrary();
@@ -226,7 +227,7 @@ test('a portable content update keeps Target progress and refreshes the unfinish
   assert((await estimateLibraryBackupSize()).usedBytes>0,'the refreshed Step must pass complete Library replay validation');
 });
 
-test('an update with a new semantic identity creates a fresh Target without deleting the prior one',async()=>{
+test('an update with a new semantic identity defers its fresh Target to the next scheduler window',async()=>{
   const oldTarget=(await readLibrary(tx=>tx.all<LocalLearningTarget>('learningTargets'))).find(target=>
     localCurriculumMembershipForContext(target,languageContext)?.material.snapshot.provenance.packageVersion==='2',
   )!;
@@ -242,7 +243,9 @@ test('an update with a new semantic identity creates a fresh Target without dele
   assert.equal(preview.status,'update_available');
   const installed=await contentSupplySystem.execute({kind:'install_portable_package',bytes:changedBytes,expectedArchiveDigest:preview.archiveDigest});
 
-  const [newTargetId]=await learningSystem.execute({kind:'enroll_package',operationId:crypto.randomUUID(),packageKey:installed.key,languageContext});
+  const eagerTargetIds=await learningSystem.execute({kind:'enroll_package',operationId:crypto.randomUUID(),packageKey:installed.key,languageContext});
+  assert.deepEqual(eagerTargetIds,[],'an exhausted daily window must not eagerly materialize a replacement Target');
+  const [newTargetId]=await prepareLearningQueue(languageContext,'2099-09-26T00:00:00.000Z');
   assert.notEqual(newTargetId,oldTarget.id);
   const targets=await readLibrary(tx=>tx.all<LocalLearningTarget>('learningTargets'));
   const prior=targets.find(target=>target.id===oldTarget.id)!;

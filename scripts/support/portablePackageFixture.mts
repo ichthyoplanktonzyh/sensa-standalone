@@ -30,6 +30,10 @@ export type PortablePackageFixtureOptions=Readonly<{
   semanticDeclaration?:SensaPortableLightweightPackage['semanticDeclaration'];
 }>;
 
+export type PortableBookDeliveryFixtureOptions=PortablePackageFixtureOptions&Readonly<{
+  memberExpressions?:readonly string[];
+}>;
+
 /** Deterministic, provider-free `.sensa` fixture for Web and Cloud tests. */
 export const portablePackageFixture=(options:PortablePackageFixtureOptions={})=>{
   const packageId=options.packageId??stableUuid('sensa:test-portable-package');
@@ -136,21 +140,32 @@ export const portablePackageFixture=(options:PortablePackageFixtureOptions={})=>
   return {...readSensaPortableLightweightPackage(bytes),bytes};
 };
 
-export const portableBookDeliveryFixture=(options:PortablePackageFixtureOptions={})=>{
-  const archive=portablePackageFixture(options);
-  const base=options.baseUrl??'https://content.fixture.invalid/';
+export const portableBookDeliveryFixture=(options:PortableBookDeliveryFixtureOptions={})=>{
+  const {memberExpressions,...packageOptions}=options;
+  const expressions=memberExpressions?.length?memberExpressions:[packageOptions.expression??'borrow'];
+  const rootPackageId=packageOptions.packageId??stableUuid('sensa:test-portable-package');
+  const archives=expressions.map((expression,index)=>portablePackageFixture(memberExpressions?{
+    ...packageOptions,
+    packageId:stableUuid(`${rootPackageId}:book-member:${index}:${expression}`),
+    senseId:`${packageOptions.senseId??'fixture'}:${index}:${expression}`,
+    expression,
+    title:`${expression} fixture`,
+  }:packageOptions));
+  const archive=archives[0]!;
+  const base=packageOptions.baseUrl??'https://content.fixture.invalid/';
   const publishedAt='2026-09-25T00:00:00Z';
   const publisher={namespace:'sensa.test',name:'Sensa test publisher'};
+  const bookIdentity=memberExpressions?rootPackageId:archive.package.metadata.packageId;
   const book={
-    bookId:stableUuid(`sensa:test-book:${archive.package.metadata.packageId}`),
-    bookKey:`fixture-${archive.package.metadata.packageId}`,
-    bookVersionId:stableUuid(`sensa:test-book-version:${archive.package.metadata.packageId}:${archive.package.metadata.version}`),
+    bookId:stableUuid(`sensa:test-book:${bookIdentity}`),
+    bookKey:`fixture-${bookIdentity}`,
+    bookVersionId:stableUuid(`sensa:test-book-version:${bookIdentity}:${archive.package.metadata.version}`),
     versionNumber:archive.package.metadata.version,
-    title:archive.package.metadata.title,
+    title:packageOptions.title??archive.package.metadata.title,
     description:archive.package.metadata.description,
   };
   const contentRelease={
-    contentReleaseId:stableUuid(`sensa:test-release:${archive.package.metadata.packageId}:${archive.package.metadata.version}`),
+    contentReleaseId:stableUuid(`sensa:test-release:${bookIdentity}:${archive.package.metadata.version}`),
     versionNumber:archive.package.metadata.version,
     schemaVersion:'sensa-portable-lightweight-package-v2',
   };
@@ -167,14 +182,17 @@ export const portableBookDeliveryFixture=(options:PortablePackageFixtureOptions=
       publisherNamespace:publisher.namespace,
       subject:'member-semantic-declarations',
     },
-    members:[{
-      packageId:archive.package.metadata.packageId,
-      version:archive.package.metadata.version,
-    }],
+    members:archives.map(member=>({
+      packageId:member.package.metadata.packageId,
+      version:member.package.metadata.version,
+    })),
   });
   const bookBytes=createSensaPortableBook(
     manifest,
-    new Map([[portableBookMemberKey(manifest.members[0]!),archive.bytes]]),
+    new Map(manifest.members.map((member,index)=>[
+      portableBookMemberKey(member),
+      archives[index]!.bytes,
+    ])),
   );
   const bookArchive=readSensaPortableBook(bookBytes);
   const bookUrl=new URL(`${bookArchive.archiveDigest}.sensa-book`,base).href;
@@ -186,7 +204,7 @@ export const portableBookDeliveryFixture=(options:PortablePackageFixtureOptions=
     route:manifest.route,
     publishedAt,
     changeSummary:manifest.changeSummary,
-    memberCount:1,
+    memberCount:manifest.members.length,
     byteLength:bookBytes.byteLength,
     sha256:bookArchive.archiveDigest,
     url:bookUrl,

@@ -45,6 +45,14 @@ import {
 import {applyLocalProtocolTransition,type LocalLearningTransitionRecord} from './learningSettlement';
 import {requireLanguageRouteContext} from './language';
 import {readStudyPlans,writeStudyPlans} from './studyPlans';
+import {backupEqual} from './backupCodec';
+import {
+ curriculumEnrollmentId,
+ curriculumEnrollmentSchema,
+ enrollmentMatchesContext,
+ type CurriculumEnrollmentSource,
+ type LocalCurriculumEnrollment,
+} from './curriculumEnrollments';
 
 export {localRunTargetIds};
 export type {LocalLearningRun,LocalLearningTarget};
@@ -127,56 +135,260 @@ const resolveRunPlan=(target:LocalLearningTarget,commitment:LocalCommittedLearni
  return {resolvedLearningPlanRevisionId:stableUuid(`local-resolved-plan:${target.id}:${commitment.commitmentId}:${commitment.revision}:${purpose}:${binding.protocolId}:${binding.protocolVersion}:${material.snapshot.learningMaterializationId}`),revision:1,learningTargetId:target.id,retentionTargetId:target.retentionId,purpose,profileId:profile.profileId,profileVersion:profile.profileVersion,protocolBinding:structuredClone(binding),contentDemands:structuredClone(binding.contentDemands),learningMaterializationIds:[material.snapshot.learningMaterializationId],readiness:'ready',resolvedAt:at};
 };
 
-export async function enrollPackage(operationId:string,key:string,languageContext:SensaFormalPinnedLanguageContext,publicationArchiveSha256?:string){return learningCommand({id:operationId,kind:'learning.enroll',input:{key,languageContext,...(publicationArchiveSha256?{publicationArchiveSha256}:{})}},async tx=>{
- const owner=await learningOwner(tx),context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);await requireLanguageRouteContext(tx,context);
- const pack=await tx.get<InstalledPackage>('packageCache',key);if(!pack)throw new Error('localFlow.downloadFirst');
- if(pack.content.targetLanguage!==context.targetLanguageTag)throw new Error('localFlow.routeLanguageMismatch');
- if(pack.content.supportLanguage!==context.supportLanguageTag)throw new Error('localFlow.routeSupportMismatch');
- const publications=pack.portableOrigin.publications;
- const publication=publicationArchiveSha256
- ?publications.find(candidate=>candidate.bookArchiveSha256===publicationArchiveSha256)
-  :[...publications].sort((left,right)=>right.book.versionNumber-left.book.versionNumber)[0];
- if(publicationArchiveSha256&&!publication)throw new Error('localFlow.catalogMismatch');
- const bookId=publication?.book.bookId??pack.portableOrigin.manifest.metadata.packageId,bookVersionId=publication?.book.bookVersionId??null,packageVersion=String(pack.portableOrigin.manifest.metadata.version),contentReleaseId=publication?.contentRelease.contentReleaseId??null,now=new Date().toISOString();
- const familyId=pack.portableOrigin.manifest.metadata.packageId,requestedVersion=pack.portableOrigin.manifest.metadata.version;
- const latestVersion=Math.max(...(await tx.all<InstalledPackage>('packageCache')).flatMap(candidate=>candidate.portableOrigin.manifest.metadata.packageId===familyId&&candidate.content.targetLanguage===pack.content.targetLanguage&&candidate.content.supportLanguage===pack.content.supportLanguage?[candidate.portableOrigin.manifest.metadata.version]:[]));
- if(requestedVersion<latestVersion)throw new Error('localFlow.packageVersionChanged');
- if(bookVersionId){
-  const supersededTargetIds=await tx.learningTargetIdsForBookUpgrade(context.languageRouteId,context.targetLanguageTag,context.supportLanguageTag,bookId,bookVersionId);
-  for(const targetId of supersededTargetIds){
-   const target=await tx.get<LocalLearningTarget>('learningTargets',targetId);if(!target)continue;
-   let changed=false;
-   const curriculumMemberships=target.curriculumMemberships.map(membership=>{
-    if(membership.status==='superseded'||membership.sourceKind!=='sense_learning_package'||membership.languageContext.languageRouteId!==context.languageRouteId||membership.languageContext.targetLanguageTag!==context.targetLanguageTag||membership.languageContext.supportLanguageTag!==context.supportLanguageTag||membership.provenance.bookId!==bookId||membership.provenance.bookVersionId===bookVersionId)return membership;
-    changed=true;
-    return {...membership,status:'superseded' as const,revision:membership.revision+1,updatedAt:now};
-   });
-   if(changed)tx.put('learningTargets',target.id,{...target,curriculumMemberships});
-  }
+type PublishedEnrollmentMember=Readonly<{
+ key:string;
+ pack:InstalledPackage;
+ publication:InstalledPackage['portableOrigin']['publications'][number]|undefined;
+ bookId:string;
+ bookVersionId:string|null;
+ contentReleaseId:string|null;
+ packageVersion:string;
+}>;
+
+const versionFamily=(pack:InstalledPackage)=>[
+ pack.portableOrigin.manifest.metadata.packageId,
+ pack.content.targetLanguage,
+ pack.content.supportLanguage,
+].join('\0');
+
+const sameLocalDay=(left:string,right:string)=>new Date(left).toDateString()===new Date(right).toDateString();
+
+const enrollmentPackages=(
+ enrollment:LocalCurriculumEnrollment,
+ packages:readonly InstalledPackage[],
+):PublishedEnrollmentMember[]=>{
+ const source=enrollment.source;
+ if(source.kind==='portable_package'){
+  const pack=packages.find(candidate=>candidate.key===source.packageKey);
+  return pack?[{
+   key:pack.key,pack,publication:undefined,
+   bookId:pack.portableOrigin.manifest.metadata.packageId,
+   bookVersionId:null,
+   contentReleaseId:null,
+   packageVersion:String(pack.portableOrigin.manifest.metadata.version),
+  }]:[];
  }
- const ids:string[]=[];
- for(const e of pack.content.entries){
-  const id=stableUuid(`sensa-learning-target:${owner.learnerId}:${e.senseVersionId}:${e.bindingVersionId}`);ids.push(id);
-  const material=materializePublishedEntry({learnerUserId:owner.learnerId,learningTargetId:id,packageKey:key,installedPackage:pack,entry:e,createdAt:now});
-  const snapshot=material.snapshot;
-  const profileId=e.assurancePackageKey?'high_assurance':'lightweight';
-  const source={kind:'sense_learning_package',bookId,bookVersionId,contentReleaseId,packageVersion,packageDigest:pack.digest,...(publication?{publicationArchiveSha256:publication.bookArchiveSha256}:{})};
-  const existing=await tx.get<LocalLearningTarget>('learningTargets',id);
-  if(existing&&(existing.identity.learnerUserId!==owner.learnerId||existing.identity.senseVersionId!==e.senseVersionId||existing.identity.bindingVersionId!==e.bindingVersionId||existing.targetLanguageTag!==pack.content.targetLanguage||existing.expression!==e.expression))throw new Error('localFlow.invalidTarget');
-  const membership=curriculumMembership({operationId,targetId:id,sourceKey:key,languageContext:context,sourceKind:'sense_learning_package',provenance:source,packageKey:key,assurancePackageKey:e.assurancePackageKey,material,at:snapshot.createdAt});
-  if(existing){
-   if(existing.curriculumMemberships.some(candidate=>candidate.id===membership.id))continue;
-   tx.put('learningTargets',id,upsertLocalCurriculumMembership(existing,membership));
-   await refreshCurrentStepsForMaterial(tx,id,now,operationId);
-   continue;
+ const matches=packages.flatMap(pack=>{
+  const publication=pack.portableOrigin.publications.find(candidate=>
+   candidate.bookArchiveSha256===source.publicationArchiveSha256
+   &&candidate.publisher.namespace===source.publisherNamespace
+   &&candidate.book.bookId===source.bookId
+   &&candidate.book.bookVersionId===source.bookVersionId);
+  return publication?[{
+   key:pack.key,pack,publication,
+   bookId:publication.book.bookId,
+   bookVersionId:publication.book.bookVersionId,
+   contentReleaseId:publication.contentRelease.contentReleaseId,
+   packageVersion:String(pack.portableOrigin.manifest.metadata.version),
+  }]:[];
+ }).sort((left,right)=>left.key.localeCompare(right.key));
+ return matches.length===source.memberCount?matches:[];
+};
+
+const activeTargetInRoute=(target:LocalLearningTarget,routeId:string)=>target.curriculumMemberships.some(membership=>
+ membership.status!=='superseded'&&membership.languageContext.languageRouteId===routeId);
+
+/** Materialize only the bounded candidate window the scheduler can introduce.
+ * The durable learner intent remains one Curriculum Enrollment regardless of
+ * whether its Book contains 10 or 10,000 Senses. */
+async function materializeCurriculumWindow(
+ tx:LibraryTransaction,
+ operationId:string,
+ context:SensaFormalPinnedLanguageContext,
+ dailyLimit:number,
+ at:string,
+):Promise<string[]> {
+ const owner=await learningOwner(tx);
+ const [enrollments,packages,targets]=await Promise.all([
+  tx.all<LocalCurriculumEnrollment>('curriculumEnrollments'),
+  tx.all<InstalledPackage>('packageCache'),
+  tx.all<LocalLearningTarget>('learningTargets'),
+ ]);
+ const routeTargets=targets.filter(target=>activeTargetInRoute(target,context.languageRouteId));
+ const startedToday=routeTargets.filter(target=>target.startedAt&&sameLocalDay(target.startedAt,at)).length;
+ const pending=routeTargets.filter(target=>!target.startedAt&&!target.completedAt&&!hasDeclaredMasteryOverride(target));
+ let slots=Math.max(0,dailyLimit-startedToday-pending.length);
+ if(!slots)return [];
+ const byId=new Map(targets.map(target=>[target.id,target]));
+ const active=enrollments.filter(enrollment=>enrollmentMatchesContext(enrollment,context)).sort((left,right)=>left.id.localeCompare(right.id));
+ const iterators=active.flatMap(enrollment=>{
+  const members=enrollmentPackages(enrollment,packages);
+  if(!members.length)return [];
+  function* candidates(){
+   for(const member of members)for(const entry of member.pack.content.entries){
+    const targetId=stableUuid(`sensa-learning-target:${owner.learnerId}:${entry.senseVersionId}:${entry.bindingVersionId}`);
+    const existing=byId.get(targetId);
+    if(existing&&activeTargetInRoute(existing,context.languageRouteId))continue;
+    yield {enrollment,member,entry,targetId,existing};
+   }
   }
-  const target:LocalLearningTarget={id,retentionId:stableUuid(`sensa-retention:${id}`),identity:{learnerUserId:owner.learnerId,senseId:e.senseId,senseVersionId:e.senseVersionId,senseExpressionBindingId:e.bindingId,bindingVersionId:e.bindingVersionId,targetLanguageTag:pack.content.targetLanguage},curriculumMemberships:[membership],expression:e.expression,policyAssignment:createPolicyAssignment({operationId,targetId:id,profileId,scope:'curriculum_source',at:snapshot.createdAt,provenance:{bookId,bookVersionId,contentReleaseId,packageVersion}}),committedPolicy:null,planningOverrides:[],targetLanguageTag:pack.content.targetLanguage,introducedLanguageRouteId:null,createdAt:snapshot.createdAt,startedAt:null,completedAt:null,memory:null,memoryRevision:0,relearnAt:null,relearningState:null};
-  tx.put('learningTargets',id,target);
+  return [candidates()];
+ });
+ const ids:string[]=[];
+ while(slots&&iterators.length){
+  let progressed=false;
+  for(let index=0;index<iterators.length&&slots;){
+   const next=iterators[index]!.next();
+   if(next.done){iterators.splice(index,1);continue;}
+   progressed=true;index++;
+   const {enrollment,member,entry,targetId,existing}=next.value;
+   const material=materializePublishedEntry({learnerUserId:owner.learnerId,learningTargetId:targetId,packageKey:member.key,installedPackage:member.pack,entry,createdAt:at});
+   const source={
+    kind:'sense_learning_package',
+    curriculumEnrollmentId:enrollment.id,
+    bookId:member.bookId,
+    bookVersionId:member.bookVersionId,
+    contentReleaseId:member.contentReleaseId,
+    packageVersion:member.packageVersion,
+    packageDigest:member.pack.digest,
+    ...(member.publication?{publicationArchiveSha256:member.publication.bookArchiveSha256}:{}),
+   };
+   const priorMembership=existing?.curriculumMemberships.find(candidate=>candidate.id===stableUuid(`local-curriculum-membership:${targetId}:${context.languageRouteId}:sense_learning_package:${member.key}`));
+   const membership=curriculumMembership({operationId,targetId,sourceKey:member.key,languageContext:context,sourceKind:'sense_learning_package',provenance:source,packageKey:member.key,assurancePackageKey:entry.assurancePackageKey,material,at,previous:priorMembership});
+   if(existing){
+    if(existing.identity.learnerUserId!==owner.learnerId||existing.identity.senseVersionId!==entry.senseVersionId||existing.identity.bindingVersionId!==entry.bindingVersionId||existing.targetLanguageTag!==member.pack.content.targetLanguage||existing.expression!==entry.expression)throw new Error('localFlow.invalidTarget');
+    const updated=upsertLocalCurriculumMembership(existing,membership);
+    tx.put('learningTargets',targetId,updated);byId.set(targetId,updated);
+   }else{
+    const profileId=entry.assurancePackageKey?'high_assurance':'lightweight';
+    const target:LocalLearningTarget={id:targetId,retentionId:stableUuid(`sensa-retention:${targetId}`),identity:{learnerUserId:owner.learnerId,senseId:entry.senseId,senseVersionId:entry.senseVersionId,senseExpressionBindingId:entry.bindingId,bindingVersionId:entry.bindingVersionId,targetLanguageTag:member.pack.content.targetLanguage},curriculumMemberships:[membership],expression:entry.expression,policyAssignment:createPolicyAssignment({operationId,targetId,profileId,scope:'curriculum_source',at,provenance:{curriculumEnrollmentId:enrollment.id,bookId:member.bookId,bookVersionId:member.bookVersionId,contentReleaseId:member.contentReleaseId,packageVersion:member.packageVersion}}),committedPolicy:null,planningOverrides:[],targetLanguageTag:member.pack.content.targetLanguage,introducedLanguageRouteId:null,createdAt:at,startedAt:null,completedAt:null,memory:null,memoryRevision:0,relearnAt:null,relearningState:null};
+    tx.put('learningTargets',targetId,target);byId.set(targetId,target);
+   }
+   ids.push(targetId);slots--;
+  }
+  if(!progressed)break;
  }
  return ids;
+}
+
+/** Rebind only Targets that already exist. Book updates may refresh a current
+ * unacted Step, but they must not eagerly create Targets for every new member. */
+async function refreshMaterializedEnrollmentMembers(
+ tx:LibraryTransaction,
+ operationId:string,
+ enrollmentId:string,
+ members:readonly PublishedEnrollmentMember[],
+ context:SensaFormalPinnedLanguageContext,
+ at:string,
+):Promise<string[]> {
+ const owner=await learningOwner(tx),targets=await tx.all<LocalLearningTarget>('learningTargets');
+ const byId=new Map(targets.map(target=>[target.id,target]));
+ const refreshed:string[]=[];
+ for(const member of members)for(const entry of member.pack.content.entries){
+  const targetId=stableUuid(`sensa-learning-target:${owner.learnerId}:${entry.senseVersionId}:${entry.bindingVersionId}`),existing=byId.get(targetId);
+  if(!existing)continue;
+  const hadEnrollment=existing.curriculumMemberships.some(candidate=>candidate.provenance.curriculumEnrollmentId===enrollmentId);
+  if(existing.identity.learnerUserId!==owner.learnerId||existing.identity.senseVersionId!==entry.senseVersionId||existing.identity.bindingVersionId!==entry.bindingVersionId||existing.targetLanguageTag!==member.pack.content.targetLanguage||existing.expression!==entry.expression)throw new Error('localFlow.invalidTarget');
+  const material=materializePublishedEntry({learnerUserId:owner.learnerId,learningTargetId:targetId,packageKey:member.key,installedPackage:member.pack,entry,createdAt:at});
+  const source={kind:'sense_learning_package',curriculumEnrollmentId:enrollmentId,bookId:member.bookId,bookVersionId:member.bookVersionId,contentReleaseId:member.contentReleaseId,packageVersion:member.packageVersion,packageDigest:member.pack.digest,...(member.publication?{publicationArchiveSha256:member.publication.bookArchiveSha256}:{})};
+  const prior=existing.curriculumMemberships.find(candidate=>candidate.id===stableUuid(`local-curriculum-membership:${targetId}:${context.languageRouteId}:sense_learning_package:${member.key}`));
+  const membership=curriculumMembership({operationId,targetId,sourceKey:member.key,languageContext:context,sourceKind:'sense_learning_package',provenance:source,packageKey:member.key,assurancePackageKey:entry.assurancePackageKey,material,at,previous:prior});
+  const updated=upsertLocalCurriculumMembership(existing,membership);
+  tx.put('learningTargets',targetId,updated);byId.set(targetId,updated);refreshed.push(targetId);
+  if(hadEnrollment)await refreshCurrentStepsForMaterial(tx,targetId,at,operationId);
+ }
+ return refreshed;
+}
+
+async function enrollInstalledPackages(
+ tx:LibraryTransaction,
+ operationId:string,
+ packageKeys:readonly string[],
+ languageContext:SensaFormalPinnedLanguageContext,
+ publicationArchiveSha256?:string,
+):Promise<string[]>{
+ const uniqueKeys=[...new Set(packageKeys)];
+ if(!uniqueKeys.length||uniqueKeys.length!==packageKeys.length)throw new Error('localFlow.catalogMismatch');
+ const owner=await learningOwner(tx),context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);await requireLanguageRouteContext(tx,context);
+ const available=await tx.all<InstalledPackage>('packageCache');
+ const byKey=new Map(available.map(pack=>[pack.key,pack]));
+ const latestVersions=new Map<string,number>();
+ for(const pack of available){
+  const family=versionFamily(pack),version=pack.portableOrigin.manifest.metadata.version;
+  latestVersions.set(family,Math.max(latestVersions.get(family)??version,version));
+ }
+ const selected:PublishedEnrollmentMember[]=uniqueKeys.map(key=>{
+  const pack=byKey.get(key);if(!pack)throw new Error('localFlow.downloadFirst');
+  if(pack.content.targetLanguage!==context.targetLanguageTag)throw new Error('localFlow.routeLanguageMismatch');
+  if(pack.content.supportLanguage!==context.supportLanguageTag)throw new Error('localFlow.routeSupportMismatch');
+  const publications=pack.portableOrigin.publications;
+  const publication=publicationArchiveSha256
+   ?publications.find(candidate=>candidate.bookArchiveSha256===publicationArchiveSha256)
+   :[...publications].sort((left,right)=>right.book.versionNumber-left.book.versionNumber)[0];
+  if(publicationArchiveSha256&&!publication)throw new Error('localFlow.catalogMismatch');
+  if(pack.portableOrigin.manifest.metadata.version<(latestVersions.get(versionFamily(pack))??0))throw new Error('localFlow.packageVersionChanged');
+  return {
+   key,pack,publication,
+   bookId:publication?.book.bookId??pack.portableOrigin.manifest.metadata.packageId,
+   bookVersionId:publication?.book.bookVersionId??null,
+   contentReleaseId:publication?.contentRelease.contentReleaseId??null,
+   packageVersion:String(pack.portableOrigin.manifest.metadata.version),
+  };
+ });
+ if(publicationArchiveSha256){
+  const reference=selected[0]!.publication!;
+  if(reference.memberCount!==selected.length||selected.some(item=>{
+   const publication=item.publication!;
+   return publication.bookArchiveSha256!==publicationArchiveSha256
+    ||publication.publisher.namespace!==reference.publisher.namespace
+    ||publication.book.bookId!==reference.book.bookId
+    ||publication.book.bookVersionId!==reference.book.bookVersionId
+    ||publication.contentRelease.contentReleaseId!==reference.contentRelease.contentReleaseId
+    ||publication.memberCount!==reference.memberCount;
+  }))throw new Error('localFlow.catalogMismatch');
+ }
+ const now=new Date().toISOString(),reference=selected[0]!;
+ const source:CurriculumEnrollmentSource=publicationArchiveSha256?{
+  kind:'published_book',
+  publisherNamespace:reference.publication!.publisher.namespace,
+  bookId:reference.publication!.book.bookId,
+  bookVersionId:reference.publication!.book.bookVersionId,
+  bookVersionNumber:reference.publication!.book.versionNumber,
+  contentReleaseId:reference.publication!.contentRelease.contentReleaseId,
+  publicationArchiveSha256,
+  memberCount:reference.publication!.memberCount,
+ }:{
+  kind:'portable_package',
+  packageId:reference.pack.portableOrigin.manifest.metadata.packageId,
+  packageVersion:reference.pack.portableOrigin.manifest.metadata.version,
+  packageKey:reference.key,
+ };
+ if(source.kind==='portable_package'&&selected.length!==1)throw new Error('localFlow.catalogMismatch');
+ const id=curriculumEnrollmentId(owner.learnerId,context.languageRouteId,source);
+ const previous=await tx.get<LocalCurriculumEnrollment>('curriculumEnrollments',id);
+ const changed=!previous||!backupEqual(previous.source,source)||previous.status!=='active'||!backupEqual(previous.languageContext,context);
+ if(changed){
+  const enrollment=curriculumEnrollmentSchema.parse({format:'sensa-curriculum-enrollment-v1',id,revision:(previous?.revision??0)+1,learnerUserId:owner.learnerId,languageContext:context,source,status:'active',createdByOperationId:previous?.createdByOperationId??operationId,createdAt:previous?.createdAt??now,updatedAt:now});
+  tx.put('curriculumEnrollments',id,enrollment);
+  if(previous&&source.kind==='published_book'){
+   const nextTargetIds=new Set(selected.flatMap(item=>item.pack.content.entries.map(entry=>stableUuid(`sensa-learning-target:${owner.learnerId}:${entry.senseVersionId}:${entry.bindingVersionId}`))));
+   for(const target of await tx.all<LocalLearningTarget>('learningTargets')){
+    let revised=false;
+    const curriculumMemberships=target.curriculumMemberships.map(membership=>{
+     if(membership.status==='superseded'||membership.provenance.curriculumEnrollmentId!==id||nextTargetIds.has(target.id))return membership;
+     revised=true;
+     return {...membership,status:'superseded' as const,revision:membership.revision+1,updatedAt:now};
+    });
+    if(revised)tx.put('learningTargets',target.id,{...target,curriculumMemberships});
+   }
+  }
+ }
+ const plans=await readStudyPlans(tx);
+ const refreshed=changed&&previous?await refreshMaterializedEnrollmentMembers(tx,operationId,id,selected,context,now):[];
+ const materialized=await materializeCurriculumWindow(tx,operationId,context,plans[context.languageRouteId]?.dailyNewSenseLimit??20,now);
+ return [...new Set([...refreshed,...materialized])];
+}
+
+export async function enrollPackage(operationId:string,key:string,languageContext:SensaFormalPinnedLanguageContext,publicationArchiveSha256?:string){return learningCommand({id:operationId,kind:'learning.enroll',input:{key,languageContext,...(publicationArchiveSha256?{publicationArchiveSha256}:{})}},tx=>enrollInstalledPackages(tx,operationId,[key],languageContext,publicationArchiveSha256));}
+
+export async function enrollBook(operationId:string,languageContext:SensaFormalPinnedLanguageContext,publicationArchiveSha256:string){return learningCommand({id:operationId,kind:'learning.enroll',input:{languageContext,publicationArchiveSha256}},async tx=>{
+ const packages=await tx.all<InstalledPackage>('packageCache');
+ const packageKeys=packages.flatMap(pack=>pack.portableOrigin.publications.some(publication=>publication.bookArchiveSha256===publicationArchiveSha256)?[pack.key]:[]);
+ return enrollInstalledPackages(tx,operationId,packageKeys,languageContext,publicationArchiveSha256);
 });}
 const learningOverviewFrom=async(tx:LibraryTransaction)=>({
  targets:await tx.all<LocalLearningTarget>('learningTargets'),
+ enrollments:await tx.all<LocalCurriculumEnrollment>('curriculumEnrollments'),
  runs:await tx.all<LocalLearningRun>('learningRuns'),
  active:await tx.get<string>('meta','learning-active'),
  studyPlans:await readStudyPlans(tx),
@@ -186,7 +398,22 @@ export const readLearningOverview=()=>readLibrary(learningOverviewFrom);
 /** Small projection for callers that only need Target facts. */
 export const learningTargetsSnapshot=()=>readLibrary(tx=>tx.all<LocalLearningTarget>('learningTargets'));
 export const readLearning=()=>readLibrary(async tx=>({targets:await tx.all<LocalLearningTarget>('learningTargets'),runs:await tx.all<LocalLearningRun>('learningRuns'),events:await tx.all<LearningEvent>('learningEvents'),active:await tx.get<string>('meta','learning-active'),studyPlans:await readStudyPlans(tx)}));
-export async function confirmLearningQuantity(operationId:string,languageContext:SensaFormalPinnedLanguageContext,dailyLimit:number){return learningCommand({id:operationId,kind:'learning.quantity',input:{languageContext,dailyLimit}},async tx=>{await learningOwner(tx);const context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);await requireLanguageRouteContext(tx,context);if(!Number.isInteger(dailyLimit)||dailyLimit<1||dailyLimit>100)throw new Error('localFlow.quantityRange');const plans=await readStudyPlans(tx),previous=plans[context.languageRouteId];plans[context.languageRouteId]={languageRouteId:context.languageRouteId,routeRevision:context.languageRouteRevision,revision:(previous?.revision??0)+1,dailyNewSenseLimit:dailyLimit,updatedAt:new Date().toISOString()};writeStudyPlans(tx,plans);return true;});}
+export async function confirmLearningQuantity(operationId:string,languageContext:SensaFormalPinnedLanguageContext,dailyLimit:number){return learningCommand({id:operationId,kind:'learning.quantity',input:{languageContext,dailyLimit}},async tx=>{await learningOwner(tx);const context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);await requireLanguageRouteContext(tx,context);if(!Number.isInteger(dailyLimit)||dailyLimit<1||dailyLimit>100)throw new Error('localFlow.quantityRange');const plans=await readStudyPlans(tx),previous=plans[context.languageRouteId],at=new Date().toISOString();plans[context.languageRouteId]={languageRouteId:context.languageRouteId,routeRevision:context.languageRouteRevision,revision:(previous?.revision??0)+1,dailyNewSenseLimit:dailyLimit,updatedAt:at};writeStudyPlans(tx,plans);await materializeCurriculumWindow(tx,operationId,context,dailyLimit,at);return true;});}
+
+export async function prepareLearningQueue(languageContext:SensaFormalPinnedLanguageContext,at=new Date().toISOString(),trigger='daily'){
+ const context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);
+ const fingerprint=await readLibrary(async tx=>{
+  const plans=await readStudyPlans(tx),enrollments=(await tx.all<LocalCurriculumEnrollment>('curriculumEnrollments')).filter(item=>enrollmentMatchesContext(item,context));
+  const packages=await tx.all<InstalledPackage>('packageCache');
+  return JSON.stringify({trigger,day:new Date(at).toDateString(),routeId:context.languageRouteId,dailyLimit:plans[context.languageRouteId]?.dailyNewSenseLimit??20,enrollments:enrollments.map(item=>[item.id,item.revision]),packages:packages.map(item=>[item.key,item.digest]).sort()});
+ });
+ const operationId=stableUuid(`local-learning-queue-window:${fingerprint}`);
+ return learningCommand({id:operationId,kind:'learning.materialize',input:{languageContext:context,day:new Date(at).toDateString(),trigger}},async tx=>{
+  await learningOwner(tx);await requireLanguageRouteContext(tx,context);
+  const plans=await readStudyPlans(tx);
+  return materializeCurriculumWindow(tx,operationId,context,plans[context.languageRouteId]?.dailyNewSenseLimit??20,at);
+ });
+}
 async function startLearningInTransaction(tx:LibraryTransaction,operationId:string,targetId:string,languageContext:SensaFormalPinnedLanguageContext,dailyLimit:number,at:string):Promise<LocalLearningRun>{
  const context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);await requireLanguageRouteContext(tx,context);if(!Number.isInteger(dailyLimit)||dailyLimit<1||dailyLimit>100||!Number.isFinite(Date.parse(at)))throw new Error('localFlow.confirmQuantity');
  const plan=(await readStudyPlans(tx))[context.languageRouteId];if(plan?.dailyNewSenseLimit!==dailyLimit)throw new Error('localFlow.confirmNewQuantity');

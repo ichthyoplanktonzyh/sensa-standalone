@@ -83,7 +83,7 @@ await store.readLibrary(async (tx) => {
 const diagnostics = await store.readLibraryStorageDiagnostics();
 assert.deepEqual(
   { engine: diagnostics.engine, persistence: diagnostics.persistence, schemaVersion: diagnostics.schemaVersion },
-  { engine: 'memory-adapter', persistence: 'memory', schemaVersion: 11 },
+  { engine: 'memory-adapter', persistence: 'memory', schemaVersion: 12 },
 );
 });
 
@@ -95,13 +95,13 @@ const [{ default: sqlite3InitModule }, { SqliteRecordDatabase, sqliteHomeLearnin
 ]);
 const sqlite3 = await sqlite3InitModule();
 test('unsupported physical schemas preserve owner data', () => {
-for (const version of [9, 12]) {
+for (const version of [9, 13]) {
   const incompatibleRaw = new sqlite3.oo1.DB(':memory:', 'c');
   incompatibleRaw.exec(`CREATE TABLE owner_fixture(value TEXT); INSERT INTO owner_fixture VALUES('preserve-me'); PRAGMA user_version=${version}`);
   const incompatibleDatabase = new SqliteRecordDatabase(sqlite3, incompatibleRaw, 'memory');
   assert.throws(
     () => incompatibleDatabase.initialize(),
-    version < 10 ? /sqlite_schema_legacy:9/u : /sqlite_schema_future:12/u,
+    version < 10 ? /sqlite_schema_legacy:9/u : /sqlite_schema_future:13/u,
     'unsupported physical schemas must stop instead of opening an empty replacement',
   );
   const preserved = incompatibleRaw.exec({ sql: 'SELECT value FROM owner_fixture', rowMode: 0, returnValue: 'resultRows' }) as unknown[];
@@ -115,7 +115,7 @@ test('schema 10 migrates in place and preserves owner tables',()=>{
                     INSERT INTO owner_fixture VALUES('preserve-me');
                     PRAGMA user_version=10`);
   const migrated=new SqliteRecordDatabase(sqlite3,migratedRaw,'memory');
-  assert.equal(migrated.initialize().schemaVersion,11);
+  assert.equal(migrated.initialize().schemaVersion,12);
   const preserved=migratedRaw.exec({
     sql:'SELECT value FROM owner_fixture',rowMode:0,returnValue:'resultRows',
   }) as unknown[];

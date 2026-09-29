@@ -22,6 +22,7 @@ import type {LearningEvent} from './learning';
 import {validateLearningReconciliationRows} from './learningReconciliation';
 import {applyLocalProtocolTransition} from './learningSettlement';
 import {packageInstallationSchema} from './packageRecords';
+import {curriculumEnrollmentSchema,type LocalCurriculumEnrollment} from './curriculumEnrollments';
 import type {LibraryIdentity,LibraryRecordTransition,Operation,Table} from './store';
 
 type RequireRow=(table:Table,id:string)=>any;
@@ -42,6 +43,21 @@ export type LearningSystemStateInput={
 export function assertLearningSystemState(input:LearningSystemStateInput){
  const {rows,maps,identity,routes,requireRow,requirePersonalSource,validateLanguageContext,operationInput,fail}=input;
  const uuid=z.string().uuid(),timestamp=z.string().datetime({offset:true});
+ for(const {key,value:raw} of rows.curriculumEnrollments){
+  const enrollment=curriculumEnrollmentSchema.parse(raw);
+  if(key!==enrollment.id||enrollment.learnerUserId!==identity.learnerId)fail();
+  validateLanguageContext(enrollment.languageContext);
+  const operation=operationInput(enrollment.createdByOperationId);
+  if(operation&&operation.kind!=='learning.enroll')fail();
+  if(enrollment.source.kind==='portable_package'){
+   const installation=packageInstallationSchema.parse(requireRow('packageInstallations',enrollment.source.packageKey));
+   if(installation.artifact.packageId!==enrollment.source.packageId||installation.artifact.version!==enrollment.source.packageVersion)fail();
+  }else{
+   const archiveSha256=enrollment.source.publicationArchiveSha256;
+   const members=rows.packageInstallations.map(row=>packageInstallationSchema.parse(row.value)).filter(item=>item.artifact.bookArchiveSha256===archiveSha256);
+   if(members.length!==enrollment.source.memberCount)fail();
+  }
+ }
  for(const {value:target} of rows.learningTargets){
   learningPolicyProfileRegistry.get(localTargetPolicy(target));
   const assignment=target.policyAssignment;
@@ -62,6 +78,8 @@ export function assertLearningSystemState(input:LearningSystemStateInput){
    if(target.expression!==membership.material.content.resources.find((resource:any)=>resource.materialRoleKey==='target_expression')?.contentPayload.surface)fail();
    if(membership.sourceKind==='sense_learning_package'){
     if(!membership.packageKey||membership.id!==stableUuid(`local-curriculum-membership:${target.id}:${context.languageRouteId}:sense_learning_package:${membership.packageKey}`))fail();
+    const enrollment=requireRow('curriculumEnrollments',z.string().uuid().parse(membership.provenance.curriculumEnrollmentId));
+    if(enrollment.learnerUserId!==identity.learnerId||enrollment.languageContext.languageRouteId!==context.languageRouteId)fail();
     const installation=packageInstallationSchema.parse(requireRow('packageInstallations',membership.packageKey));if(installation.artifact.targetLanguage!==context.targetLanguageTag||installation.artifact.supportLanguage!==context.supportLanguageTag)fail();
     const pack=maps.packageCache.get(membership.packageKey),entry=pack?.content.entries.find((candidate:any)=>candidate.senseVersionId===provenance.senseVersionId&&candidate.bindingVersionId===provenance.bindingVersionId);
     if(pack&&(!entry||pack.content.targetLanguage!==context.targetLanguageTag||pack.content.supportLanguage!==context.supportLanguageTag||!backupEqual(entry.content,baseContentBeforeSupplement(membership.material,context.supportLanguageTag))||entry.assurancePackageKey!==membership.assurancePackageKey))fail();
@@ -113,7 +131,9 @@ export function assertLearningSystemState(input:LearningSystemStateInput){
     if(portablePack?.portableOrigin){
      const packageKey=presentedPackageKey!,refreshedMembership=target.curriculumMemberships.find((candidate:any)=>candidate.packageKey===packageKey&&candidate.languageContext.languageRouteId===participant.languageContext.languageRouteId);
      const sourceMaterializationId=refreshedMembership?.material.snapshot.learningMaterializationId;
-     if(!sourceMaterializationId||operation&&(operation.kind!=='learning.enroll'||operation.input.key!==packageKey)||event.materializationId!==stableUuid(`local-run-materialization:${participant.protocolRunId}:${sourceMaterializationId}`))fail();
+     const enrolled=operation?.kind==='learning.enroll'&&(operation.input.key===packageKey
+      ||typeof operation.input.publicationArchiveSha256==='string'&&operation.input.publicationArchiveSha256===presented.snapshot.provenance.publicationArchiveSha256);
+     if(!sourceMaterializationId||operation&&!enrolled||event.materializationId!==stableUuid(`local-run-materialization:${participant.protocolRunId}:${sourceMaterializationId}`))fail();
     }else{
      const membership=target.curriculumMemberships.find((candidate:any)=>candidate.id===participant.curriculumMembershipId),attempt=requireRow('contentAttempts',event.operationId),task=requireRow('personalLearning',attempt.taskId),sourceMaterializationId=stableUuid(`sensa-personal-material:${event.operationId}`);
      if(attempt.status!=='ready'||task.targetId!==event.targetId||membership?.sourceKind!=='personal_meaning_alignment'||operation&&(operation.kind!=='personal.prepare'||attempt.taskId!==operation.input.id)||event.materializationId!==stableUuid(`local-run-materialization:${participant.protocolRunId}:${sourceMaterializationId}`))fail();
@@ -199,7 +219,7 @@ export function assertLearningSystemState(input:LearningSystemStateInput){
 }
 
 const learningTransitionTables=[
- 'learningTargets','learningRuns','learningEvents','learningReconciliations','meta','settings',
+ 'curriculumEnrollments','learningTargets','learningRuns','learningEvents','learningReconciliations','meta','settings',
 ] as const satisfies readonly Table[];
 type LearningTransitionTable=(typeof learningTransitionTables)[number];
 
@@ -278,6 +298,8 @@ async function validateTransitionTarget(
    const packageKey=requireFact(membership.packageKey,'Published Curriculum package identity is missing.');
    if(membership.id!==stableUuid(`local-curriculum-membership:${target.id}:${context.languageRouteId}:sense_learning_package:${packageKey}`))reject('Published Curriculum membership identity is invalid.');
    const installation=packageInstallationSchema.parse(requireFact(await input.read('packageInstallations',packageKey),'Published Curriculum installation is missing.'));
+   const enrollment=curriculumEnrollmentSchema.parse(requireFact(await input.read('curriculumEnrollments',z.string().uuid().parse(membership.provenance.curriculumEnrollmentId)),'Published Curriculum Enrollment is missing.'));
+   if(enrollment.learnerUserId!==input.identity.learnerId||enrollment.languageContext.languageRouteId!==context.languageRouteId)reject('Published Curriculum Enrollment is inconsistent.');
    if(installation.artifact.targetLanguage!==context.targetLanguageTag||installation.artifact.supportLanguage!==context.supportLanguageTag)reject('Published Curriculum languages are inconsistent.');
    const pack=await input.read('packageCache',packageKey) as any;
    if(pack){
@@ -308,14 +330,14 @@ function assertMembershipTransition(before:LocalLearningTarget,after:LocalLearni
 
 function assertTargetTransition(before:LocalLearningTarget|null,after:LocalLearningTarget,operation:Operation,hasLearningEvent:boolean,newRunTargetIds:ReadonlySet<string>):void{
  if(!before){
-  if(!['learning.enroll','personal.progress'].includes(operation.kind))reject('Only Curriculum admission may create a Learning Target.');
+  if(!['learning.enroll','learning.materialize','learning.quantity','personal.progress'].includes(operation.kind))reject('Only Curriculum admission may create a Learning Target.');
   if(after.policyAssignment.revision!==1||after.committedPolicy||after.startedAt||after.completedAt||after.memory||after.memoryRevision!==0||after.relearnAt||after.relearningState!==null)reject('A new Learning Target contains manufactured progress.');
   return;
  }
  if(!backupEqual(before.id,after.id)||!backupEqual(before.retentionId,after.retentionId)||!backupEqual(before.identity,after.identity)||before.expression!==after.expression||before.targetLanguageTag!==after.targetLanguageTag||before.createdAt!==after.createdAt)reject('Learning Target identity is immutable.');
  if(after.curriculumMemberships.length<before.curriculumMemberships.length)reject('Curriculum membership history cannot shrink.');
  assertMembershipTransition(before,after,operation);
- if(operation.kind==='learning.enroll'||operation.kind==='personal.progress'){
+ if(['learning.enroll','learning.materialize','learning.quantity','personal.progress'].includes(operation.kind)){
   if(!unchangedExcept(before as unknown as Record<string,unknown>,after as unknown as Record<string,unknown>,['curriculumMemberships']))reject('Curriculum admission changed Learning progress.');
   return;
  }
@@ -337,6 +359,30 @@ function assertTargetTransition(before:LocalLearningTarget|null,after:LocalLearn
   return;
  }
  reject('Unsupported Learning Target transition.');
+}
+
+async function assertCurriculumEnrollmentTransition(
+ input:LearningSystemTransitionInput,
+ change:LibraryRecordTransition<readonly LearningTransitionTable[]>,
+ routes:Awaited<ReturnType<typeof transitionRoutes>>,
+):Promise<void>{
+ if(change.after===null)reject('Curriculum Enrollments cannot be deleted.');
+ if(input.operation.kind!=='learning.enroll')reject('Only Book enrollment may change Curriculum Enrollment facts.');
+ const after=curriculumEnrollmentSchema.parse(change.after) as LocalCurriculumEnrollment;
+ if(change.key!==after.id||after.learnerUserId!==input.identity.learnerId||after.status!=='active')reject('Curriculum Enrollment identity is invalid.');
+ const route=routes.get(after.languageContext.languageRouteId);
+ if(!route||route.targetLanguageTag!==after.languageContext.targetLanguageTag||after.languageContext.languageRouteRevision>route.revision)reject('Curriculum Enrollment Language Route is invalid.');
+ if(change.before!==null){
+  const before=curriculumEnrollmentSchema.parse(change.before) as LocalCurriculumEnrollment;
+  if(before.id!==after.id||before.learnerUserId!==after.learnerUserId||before.createdAt!==after.createdAt||before.createdByOperationId!==after.createdByOperationId||after.revision!==before.revision+1)reject('Curriculum Enrollment revision is invalid.');
+ }
+ if(after.source.kind==='portable_package'){
+  const installation=packageInstallationSchema.parse(requireFact(await input.read('packageInstallations',after.source.packageKey),'Curriculum package installation is missing.'));
+  if(installation.artifact.packageId!==after.source.packageId||installation.artifact.version!==after.source.packageVersion)reject('Curriculum package source is inconsistent.');
+ }else{
+  // Each materialized member is checked again at the Learning Target boundary.
+  z.string().regex(/^[a-f0-9]{64}$/u).parse(after.source.publicationArchiveSha256);
+ }
 }
 
 async function validateTransitionRun(
@@ -456,7 +502,9 @@ async function assertLifecycleRunTransition(input:LearningSystemTransitionInput,
   const command=input.operation.input as any;
   const refreshed=after.participants[event.targetId]?.presentedMaterials[event.stepId];
   const personal=input.operation.kind==='personal.progress'&&event.operationId===command.attemptId;
-  const portable=input.operation.kind==='learning.enroll'&&event.operationId===input.operation.id&&refreshed?.snapshot.provenance.packageKey===command.key;
+  const portable=input.operation.kind==='learning.enroll'&&event.operationId===input.operation.id
+   &&(command.key===refreshed?.snapshot.provenance.packageKey
+    ||typeof command.publicationArchiveSha256==='string'&&command.publicationArchiveSha256===refreshed?.snapshot.provenance.publicationArchiveSha256);
   if(!personal&&!portable||event.eventId!==stableUuid(`local-run-material-refresh:${after.id}:${event.operationId}:${event.stepId}`)||event.materializationId!==refreshed?.snapshot.learningMaterializationId)reject('Learning Run material refresh is invalid.');
   const normalized=structuredClone(after),previousMaterial=before.participants[event.targetId]?.presentedMaterials[event.stepId];
   if(!previousMaterial||!normalized.participants[event.targetId])reject('Learning Run material refresh has no prior Step material.');
@@ -484,12 +532,14 @@ export async function assertLearningSystemTransition(input:LearningSystemTransit
  if(!relevant.length)return;
  const routes=await transitionRoutes(input);
  const targets=changedByTable({...input,changes:relevant},'learningTargets');
+ const enrollments=changedByTable({...input,changes:relevant},'curriculumEnrollments');
  const runs=changedByTable({...input,changes:relevant},'learningRuns');
  const events=changedByTable({...input,changes:relevant},'learningEvents');
  const reconciliations=changedByTable({...input,changes:relevant},'learningReconciliations');
  if(reconciliations.length)reject('Learning Reconciliation is created only by replica merge.');
  if(events.length>1)reject('A local command may append only one Learning Event.');
- for(const change of [...targets,...runs,...events])if(change.after===null)reject(`${change.table} facts cannot be physically deleted.`);
+ for(const change of [...enrollments,...targets,...runs,...events])if(change.after===null)reject(`${change.table} facts cannot be physically deleted.`);
+ for(const change of enrollments)await assertCurriculumEnrollmentTransition(input,change,routes);
  for(const change of events)if(change.before!==null)reject('Learning Events are append-only.');
  const newRunTargetIds=new Set(runs.filter(change=>change.before===null).flatMap(change=>localRunTargetIds(change.after as LocalLearningRun)));
  for(const change of targets){
