@@ -39,14 +39,16 @@ export async function verifyHostedWeb(origin){
 export async function verifyHostedApi(web,endpoint){
  const api=new URL(endpoint);
  if(api.protocol!=='https:')throw Error('Hosted API HTTPS target required');
- const unauthorized=await fetchEventually(
+ const catalog=await fetchEventually(
   api.href.replace(/\/$/,'')+'/sensa/packages',
   {headers:{Origin:web.origin},redirect:'error'},
-  response=>response.status===401,
-  'API authentication boundary failed',
+  response=>response.status===200,
+  'Public package catalog unavailable',
  );
- if((await unauthorized.json()).code!=='authentication_required')throw Error('API authentication boundary failed');
- if(unauthorized.headers.get('access-control-allow-origin')!==web.origin)throw Error('Web/API CORS mismatch');
+ const catalogBody=await catalog.json();
+ if(catalogBody?.format!=='sensa-learning-content-registry-v3'||!Array.isArray(catalogBody.items))throw Error('Public package catalog schema failed');
+ if(catalog.headers.get('access-control-allow-origin')!==web.origin)throw Error('Web/API CORS mismatch');
+ if(!/^public,\s*max-age=300$/u.test(catalog.headers.get('cache-control')??''))throw Error('Public package catalog cache policy missing');
  const invalidSetup=await fetchEventually(
   api.href.replace(/\/$/,'')+'/sensa/agent/connection-setups/exchange',
   {method:'POST',headers:{Origin:web.origin,'content-type':'application/json'},body:JSON.stringify({contractVersion:'sensa-agent-connection-v1',setupId:'00000000-0000-4000-8000-000000000001',setupCode:'sensa_setup_invalid-invalid-invalid-invalid'}),redirect:'error'},
