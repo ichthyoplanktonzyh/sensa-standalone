@@ -35,6 +35,7 @@ let delivery:ReturnType<typeof portableBookDeliveryFixture>;
 let registry:unknown;
 let publisherAccess=false;
 const delivered:string[]=[];
+const catalogAuthorizationHeaders:(string|string[]|undefined)[]=[];
 const cloudBlocks=new Map<string,string>();
 let cloudRevision=0;
 let cloudManifest:string[]|null=null;
@@ -120,7 +121,10 @@ test.beforeAll(async()=>{
       if(url.pathname==='/sensa/service/status'){
         json({authorized:true,explanationAvailable:true,checkedAt:new Date().toISOString(),windowHours:24,usage:[]});return;
       }
-      if(url.pathname==='/sensa/packages'){json(registry);return;}
+      if(url.pathname==='/sensa/packages'){
+        catalogAuthorizationHeaders.push(request.headers.authorization);
+        json(registry);return;
+      }
 
       const deliveryUrl=new URL(url.pathname,origin).href;
       const bytes=delivery.responses.get(deliveryUrl);
@@ -193,6 +197,21 @@ test.beforeAll(async()=>{
 test.afterAll(async()=>{
   if(server?.listening)await new Promise<void>(resolve=>server.close(()=>resolve()));
   await rm(output,{recursive:true,force:true});
+});
+
+test('a guest can browse the public package catalog without an account session',async({page})=>{
+  await page.addInitScript(()=>{
+    (window as unknown as {__name:(value:unknown)=>unknown}).__name=(value:unknown)=>value;
+  });
+  await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'
+    ?route.continue()
+    :route.abort());
+  await page.goto(`${origin}/catalog`);
+  const catalog=page.locator('#s-catalog').last();
+  await expect(catalog.getByRole('heading',{name:'学习包目录',exact:true})).toBeVisible({timeout:15_000});
+  await expect(catalog.getByRole('button',{name:/English route essentials/})).toBeVisible();
+  await expect(catalog.getByText('暂时无法更新目录。已下载内容可继续使用；可以联网后重试。',{exact:true})).toHaveCount(0);
+  assert.equal(catalogAuthorizationHeaders.at(-1),undefined,'the public catalog request must not carry account authority');
 });
 
 test('discovers, downloads and enrolls a Book with durable local state',async({page})=>{

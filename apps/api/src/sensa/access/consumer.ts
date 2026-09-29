@@ -203,15 +203,15 @@ export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
     complete:options.modelTurnCompletion,
   }));
 
+  // Registry descriptors and immutable artifact URLs are public discovery data;
+  // account, library-sync and publisher authority stay on their protected routes.
   app.get('/sensa/packages',async context=>{
-    const identity=await verify(context.req.raw);
-    await transaction(db=>account(db,identity,false,false,clock()));
     const catalog=await readLearningContentRegistry();
     if('format' in catalog){
       const etag=`"${catalog.revision}"`;
       context.header('ETag',etag);
-      context.header('Cache-Control','private, max-age=300');
-      if(context.req.header('if-none-match')===etag)return new Response(null,{status:304,headers:{ETag:etag,'Cache-Control':'private, max-age=300'}});
+      context.header('Cache-Control','public, max-age=300');
+      if(context.req.header('if-none-match')===etag)return new Response(null,{status:304,headers:{ETag:etag,'Cache-Control':'public, max-age=300'}});
     }else context.header('Cache-Control','no-store');
     return context.json(catalog);
   });
