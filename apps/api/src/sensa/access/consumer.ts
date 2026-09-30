@@ -95,6 +95,7 @@ export type ConsumerRoutesOptions={
   readingCompletion?:ReadingCompletion;
   modelTurnCompletion?:ModelTurnCompletion;
   publisherSubjects?:readonly string[];
+  learningContentRegistry?:()=>ReturnType<typeof readLearningContentRegistry>;
 };
 
 export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
@@ -206,7 +207,7 @@ export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
   // Registry descriptors and immutable artifact URLs are public discovery data;
   // account, library-sync and publisher authority stay on their protected routes.
   app.get('/sensa/packages',async context=>{
-    const catalog=await readLearningContentRegistry();
+    const catalog=await (options.learningContentRegistry??readLearningContentRegistry)();
     if('format' in catalog){
       const etag=`"${catalog.revision}"`;
       context.header('ETag',etag);

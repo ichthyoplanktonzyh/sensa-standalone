@@ -9,7 +9,7 @@ import {
  type ContentProvisioningTask,
  type PersonalMeaningLearningSource,
 } from '../../contentSupply/system';
-import {useLanguageRoutes} from './useLanguageRoutes';
+import {useActiveLanguageContext} from './useActiveLanguageContext';
 import {journeyGateway} from '../personalMeaningJourney';
 import {nextPersonalLearningLeaseExpiry} from './preparationSchedule';
 import {settleOperation} from './operationSettlement';
@@ -19,7 +19,7 @@ export function usePersonalLearning(){
  const [tasks,setTasks]=useState<ContentProvisioningTask[]>([]),[preparationAvailable,setPreparationAvailable]=useState(false),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[clock,setClock]=useState(Date.now());
  const [targets,setTargets]=useState<readonly LearningTargetProjection[]>([]);
  const batchTaskIds=useRef<string[]>([]);
- const {context:languageContext}=useLanguageRoutes();
+ const languageContext=useActiveLanguageContext();
  const batchLock=useRef(false),batchStop=useRef(false);
  const [batch,setBatch]=useState<{id:string;status:'waiting'|'working'|'ready'|'failed';notice:string}[]>([]);
  const refresh=async()=>{const [supply,learning]=await Promise.all([contentSupplySystem.read({kind:'provisioning_control'}),learningSystem.read({kind:'workspace',languageContext,clock:Date.now()})]);setTargets(learning.targets);setTasks([...supply.tasks]);setPreparationAvailable(supply.preparationAvailable);setClock(Date.now());};

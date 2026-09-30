@@ -28,9 +28,10 @@ export function HomeScreen({ active, onGo, onStartMixed, onResume, onStartReview
   const number = new Intl.NumberFormat(locale);
   const newCount = newAvailable ?? Math.max(0, mixedReadyN - reviewDueN);
   const hasWork = mixedReadyN > 0;
+  const chooseSource = summaryReady && !hasWork && !onResume;
   const date = accountDate ? new Date(accountDate+'T12:00:00') : new Date();
   const dateLabel = new Intl.DateTimeFormat(locale, { month: 'long', day: 'numeric', weekday: 'long' }).format(date);
-  const heading = !summaryReady ? 'home.title' : onResume ? 'home.resume' : !hasWork ? 'home.beginTitle' : newCount ? 'home.readyTitle' : 'home.reviewTitle';
+  const heading = !summaryReady ? 'home.title' : onResume ? 'home.resume' : !hasWork ? 'home.empty' : newCount ? 'home.readyTitle' : 'home.reviewTitle';
 
   return <SensaWorkspacePageLayout
     id="s-home"
@@ -46,21 +47,21 @@ export function HomeScreen({ active, onGo, onStartMixed, onResume, onStartReview
       <section aria-labelledby="today-learning-title" className="sensa-today-learning">
         <div className="sensa-today-invitation">
           <h2 id="today-learning-title">{t(heading)}</h2>
-          <p className="sensa-today-hint">{summaryReady ? t(onResume ? 'home.resumeHint' : !hasWork ? 'home.emptyHint' : reviewDueN && newCount ? 'home.reviewFirst' : reviewDueN ? 'home.reviewOnlyHint' : 'home.newOnly') : localFlowText('loadingSensa')}</p>
+          {!summaryReady && <p role="status" className="sensa-today-hint">{localFlowText('loadingSensa')}</p>}
           <div className="sensa-today-actions">
-            <SensaAction type="button" loading={busy || !summaryReady} onClick={onResume ?? (hasWork ? onStartMixed : () => onGo('s-learning-entry'))}
+            <SensaAction type="button" loading={busy || !summaryReady} onClick={onResume ?? (hasWork ? onStartMixed : () => onGo('s-catalog'))}
               className="sensa-today-start" trailing={<ArrowRight aria-hidden="true" size={18} strokeWidth={1.6}/> }>
-              {t(onResume ? 'home.resume' : hasWork ? 'home.start' : 'home.emptyAction')}
+              {onResume ? t('home.resume') : hasWork ? t('home.start') : localFlowText('packageCenterCatalog')}
             </SensaAction>
-            <SensaAction type="button" variant="quiet" onClick={onStartReview} disabled={busy || !summaryReady || !reviewDueN || !onStartReview}
-              aria-label={reviewDueN ? t('home.reviewCount',{count:reviewDueN}) : t('home.noReview')}
+            {chooseSource && <SensaAction type="button" variant="quiet" onClick={onRecordContext} leading={<MessageSquareText aria-hidden="true" size={16}/>}>{t('home.personal')}</SensaAction>}
+            {summaryReady && reviewDueN > 0 && onStartReview && <SensaAction type="button" variant="quiet" onClick={onStartReview} disabled={busy}
+              aria-label={t('home.reviewCount',{count:reviewDueN})}
               leading={<RotateCcw aria-hidden="true" size={16} strokeWidth={1.6}/> }>
-              {t(reviewDueN ? 'home.reviewOnly' : 'home.noReview')}
-            </SensaAction>
+              {t('home.reviewOnly')}
+            </SensaAction>}
           </div>
-          {summaryReady && !hasWork && !onResume && <p className="sensa-today-empty" role="status">{t('home.empty')}</p>}
         </div>
-        <div className="sensa-today-plan">
+        {chooseSource ? <SensaAction type="button" variant="quiet" onClick={() => onGo('s-study')} className="mt-6" trailing={<ArrowUpRight aria-hidden="true" size={16}/>}>{t('home.manage')}</SensaAction> : <div className="sensa-today-plan">
           <h3>{t('home.plan')}</h3>
           <dl aria-label={t('home.summary')} className="sensa-today-counts">
             {[{label:t('home.new'),count:newCount},{label:t('home.review'),count:reviewDueN}].map(({label,count}) => <div key={label}>
@@ -69,18 +70,18 @@ export function HomeScreen({ active, onGo, onStartMixed, onResume, onStartReview
             </div>)}
           </dl>
           <SensaAction type="button" variant="quiet" onClick={() => onGo('s-study')} trailing={<ArrowUpRight aria-hidden="true" size={16}/> }>{t('home.manage')}</SensaAction>
-        </div>
+        </div>}
       </section>
 
-      <section aria-labelledby="add-learning-title" className="sensa-today-discover">
+      {!chooseSource && <section aria-labelledby="add-learning-title" className="sensa-today-discover">
         <h2 id="add-learning-title">{t('home.add')}</h2>
         <div className="sensa-today-entries">
-          {[{title:t('home.existing'),hint:t('home.existingHint'),icon:BookOpen,action:()=>onGo('s-learning-entry')},{title:t('home.personal'),hint:t('home.personalHint'),icon:MessageSquareText,action:onRecordContext}].map(({title,hint,icon:Icon,action})=><button key={title} type="button" onClick={action} className="sensa-today-entry">
+          {[{title:localFlowText('packageCenterCatalog'),icon:BookOpen,action:()=>onGo('s-catalog')},{title:t('home.personal'),icon:MessageSquareText,action:onRecordContext}].map(({title,icon:Icon,action})=><button key={title} type="button" onClick={action} className="sensa-today-entry">
             <Icon aria-hidden="true" size={22} strokeWidth={1.5}/>
-            <span><strong>{title}</strong><span>{hint}</span></span><ArrowUpRight aria-hidden="true" size={18}/>
+            <span><strong>{title}</strong></span><ArrowUpRight aria-hidden="true" size={18}/>
           </button>)}
         </div>
-      </section>
+      </section>}
       </>,
     }}
   />;

@@ -4,6 +4,7 @@ import type {
 } from '@sensa/contracts/sensa';
 
 import type { InstalledPackage,InstalledPackageSummary } from '../../data/library/packageRecords';
+import type {PackageRouteCount} from '../../data/library/packageCacheProjection';
 import type {
   ContentProvisioningTask,
   PersonalMeaningLearningSource,
@@ -12,7 +13,7 @@ import type {
   PortablePackageExport,
   PortablePackagePreview,
 } from '../portable/portablePackage';
-import { observeLibrary, type Table } from '../../data/library/store';
+import {subscribeContentSupply} from './contentSupplySubscriptions';
 
 export type ContentSupplyPackage = InstalledPackageSummary;
 export type ContentSupplyRuntimePackage = InstalledPackage;
@@ -34,6 +35,8 @@ export interface ContentSupplyCatalogRefresh {
   readonly status: 'cached' | 'current' | 'updated';
 }
 
+export type ContentSupplyInstallationPhase='downloading'|'preparing'|'committing';
+
 export interface ContentProvisioningControl {
   readonly tasks: readonly ContentProvisioningTask[];
   readonly preparationAvailable: boolean;
@@ -47,6 +50,7 @@ export type ContentSupplyCommand =
       descriptor: ContentSupplyCatalogItem;
       signal: AbortSignal;
       onProgress?: (fraction: number) => void;
+      onPhase?: (phase: ContentSupplyInstallationPhase) => void;
     }>
   | Readonly<{ kind: 'preview_portable_package'; bytes: Uint8Array }>
   | Readonly<{
@@ -91,11 +95,15 @@ export type ContentSupplyCommandResult<Command extends ContentSupplyCommand> =
 
 export type ContentSupplyQuery =
   | Readonly<{ kind: 'workspace' }>
+  | Readonly<{kind:'catalog'}>
+  | Readonly<{kind:'route_counts'}>
   | Readonly<{kind:'runtime_packages';packageKeys:readonly string[]}>
   | Readonly<{ kind: 'provisioning_control' }>
   | Readonly<{ kind: 'provisioning_tasks' }>;
 export type ContentSupplyQueryResult<Query extends ContentSupplyQuery> =
   Query['kind'] extends 'workspace' ? ContentSupplyWorkspace
+    :Query['kind'] extends 'catalog'?readonly ContentSupplyCatalogItem[]
+    :Query['kind'] extends 'route_counts'?readonly PackageRouteCount[]
     :Query['kind'] extends 'runtime_packages'?readonly InstalledPackage[]
     : Query['kind'] extends 'provisioning_control' ? ContentProvisioningControl
       : readonly ContentProvisioningTask[];
@@ -117,13 +125,6 @@ export interface ContentSupplySystem {
   subscribe(query: ContentSupplyQuery, listener: () => void): () => void;
 }
 
-const queryTables = {
-  workspace: ['packageCache', 'packageInstallations', 'meta'],
-  runtime_packages:['packageCache'],
-  provisioning_control: ['personalLearning', 'providers', 'settings'],
-  provisioning_tasks: ['personalLearning'],
-} as const satisfies Record<ContentSupplyQuery['kind'], readonly Table[]>;
-
 export type {PortablePackageExport,PortablePackagePreview};
 
 export const contentSupplySystem: ContentSupplySystem = {
@@ -135,5 +136,5 @@ export const contentSupplySystem: ContentSupplySystem = {
     const { readContentSupplyQuery } = await import('./contentSupplySystemImplementation');
     return readContentSupplyQuery(query);
   }) as ContentSupplySystem['read'],
-  subscribe: (query, listener) => observeLibrary(listener, queryTables[query.kind]),
+  subscribe: subscribeContentSupply,
 };

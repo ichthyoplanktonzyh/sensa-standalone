@@ -1,5 +1,7 @@
 {
   "localFlow": {
+    "catalogTargetLanguage": "학습 언어",
+    "catalogSupportLanguage": "보조 언어",
     "resourceWord": "단어",
     "resourcePhrase": "구",
     "resourceConstruction": "구문",

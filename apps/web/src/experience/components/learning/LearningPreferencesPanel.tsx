@@ -63,7 +63,7 @@ export function LearningPreferencesPanel({allowedPolicies,policyOptions=[{id:'li
             {counts.map(count=><option value={count} key={count}>{t('learningPreferences.count',{count})}</option>)}
           </select>
         </label>}
-        {showDailyQuantity&&<p className="text-xs leading-6 text-fg-tertiary">{t('learningPreferences.future')}</p>}
+        {showDailyQuantity&&!onConfirm&&<p className="text-xs leading-6 text-fg-tertiary">{t('learningPreferences.future')}</p>}
         {status}
         {error&&<p role="alert" className="rounded-control bg-accent-soft p-4 text-sm text-feedback-danger">{t('runtime.saveError')}</p>}
       </div>,

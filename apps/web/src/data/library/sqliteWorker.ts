@@ -2,8 +2,17 @@
 
 import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
 import sqliteWasmUrl from "@sqlite.org/sqlite-wasm/sqlite3.wasm?url";
+import type {SAHPoolUtil} from '@sqlite.org/sqlite-wasm';
 
 import { SqliteRecordDatabase } from "./sqliteDatabase";
+import {
+  assertSahPoolAccessHandlesFree,
+  acquireSqliteSahPoolLease,
+  closeSqliteSahPoolSafely,
+  releaseSqliteSahPoolLeaseWhenFree,
+  SahPoolProbeCloseError,
+  type SqliteSahPoolLease,
+} from './sqlitePoolLifecycle';
 import {
   sqliteLibraryFile,
   sqlitePoolDirectory,
@@ -12,70 +21,188 @@ import {
 } from "./sqliteProtocol";
 
 const worker = self as unknown as DedicatedWorkerGlobalScope;
-let store: Promise<SqliteRecordDatabase> | undefined;
+type WorkerStore={
+  pool:SAHPoolUtil;
+  database:SqliteRecordDatabase;
+  initialized:boolean;
+};
 
-async function database(): Promise<SqliteRecordDatabase> {
-  if (!store) {
-    store = (async () => {
-      const initialize = sqlite3InitModule as unknown as (options?: {
-        locateFile?: (path: string) => string;
-      }) => ReturnType<typeof sqlite3InitModule>;
-      const sqlite3 = await initialize({
-        locateFile: (path) => path.endsWith(".wasm") ? sqliteWasmUrl : path,
-      });
-      const pool = await sqlite3.installOpfsSAHPoolVfs({
-        directory: sqlitePoolDirectory,
-        initialCapacity: 6,
-      });
-      const db = new pool.OpfsSAHPoolDb(sqliteLibraryFile);
-      return new SqliteRecordDatabase(sqlite3, db, "opfs");
+let store:Promise<WorkerStore>|undefined;
+let activeLease:SqliteSahPoolLease|undefined;
+let activePool:SAHPoolUtil|undefined;
+let activeDatabase:SqliteRecordDatabase|undefined;
+let installerStarted=false;
+let closing=false;
+let closed=false;
+let cleanupUnconfirmed=false;
+let requestQueue:Promise<void>=Promise.resolve();
+
+const verifyPoolHandles=()=>assertSahPoolAccessHandlesFree(navigator.storage,sqlitePoolDirectory);
+const releaseLease=async()=>{
+  const lease=activeLease;
+  if(!lease)return;
+  await lease.release();
+  activeLease=undefined;
+};
+
+async function database():Promise<WorkerStore>{
+  if(closed||closing||cleanupUnconfirmed)throw new Error('sqlite_worker_closing');
+  if(!store){
+    store=(async()=>{
+      activeLease=await acquireSqliteSahPoolLease(navigator.locks);
+      installerStarted=false;
+      try{
+        // The native probe catches Workers from pre-lock releases too. It only
+        // opens each SAH and closes it; it never changes file contents.
+        await verifyPoolHandles();
+        const initialize=sqlite3InitModule as unknown as (options?:{
+          locateFile?:(path:string)=>string;
+        })=>ReturnType<typeof sqlite3InitModule>;
+        const sqlite3=await initialize({
+          locateFile:(path)=>path.endsWith('.wasm')?sqliteWasmUrl:path,
+        });
+        installerStarted=true;
+        const pool=await sqlite3.installOpfsSAHPoolVfs({
+          directory:sqlitePoolDirectory,
+          initialCapacity:6,
+        });
+        activePool=pool;
+        const database=new pool.OpfsSAHPoolDb(sqliteLibraryFile);
+        activeDatabase=new SqliteRecordDatabase(sqlite3,database,'opfs');
+        return {pool,database:activeDatabase,initialized:false};
+      }catch(cause){
+        try{
+          if(!installerStarted&&!(cause instanceof SahPoolProbeCloseError)){
+            await releaseLease();
+          }else{
+            if(activeDatabase){activeDatabase.close(false);activeDatabase=undefined;}
+            if(activePool){activePool.pauseVfs();activePool=undefined;}
+            // The bundled 3.53.4 init-failure backport pauses rather than
+            // removes the pool. Verify every native handle before unlocking.
+            await releaseSqliteSahPoolLeaseWhenFree({
+              verifyAccessHandlesFree:verifyPoolHandles,
+              releaseLease,
+            });
+          }
+        }catch(cleanupCause){
+          cleanupUnconfirmed=true;
+          throw new AggregateError([cause,cleanupCause],'sqlite_sahpool_startup_cleanup_unconfirmed');
+        }
+        throw cause;
+      }
     })();
-    store.catch(() => { store = undefined; });
   }
   return store;
 }
 
-const message = async (request: SqliteWorkerRequest): Promise<unknown> => {
-  const db = await database();
-  switch (request.kind) {
-    case "initialize": return db.initialize();
-    case "get": return db.get(request.table, request.key);
-    case "entries": return db.entries(request.table);
-    case "changesSince": return db.changesSince(request.contentRevision, request.tables);
-    case "syncBaseEntries": return db.syncBaseEntries(request.keys);
-    case "count": return db.count(request.table);
-    case "estimateRecordBytes": return db.estimateRecordBytes(request.tables);
-    case "homeLearningProjection": return db.homeLearningProjection(request.languageRouteId);
-    case "countIntroducedLearningTargets": return db.countIntroducedLearningTargets(
+async function closeStorage():Promise<void>{
+  if(closed)return;
+  if(closing)return;
+  closing=true;
+  try{
+    const initializedStore=store?await store.catch(()=>undefined):undefined;
+    const databaseValue=initializedStore?.database??activeDatabase;
+    const pool=initializedStore?.pool??activePool;
+    if(databaseValue&&pool){
+      await closeSqliteSahPoolSafely({
+        closeDatabase:()=>databaseValue.close(initializedStore?.initialized??false),
+        pauseVfs:()=>pool.pauseVfs(),
+        verifyAccessHandlesFree:verifyPoolHandles,
+        releaseLease,
+      });
+      activeDatabase=undefined;
+      activePool=undefined;
+    }else if(activePool){
+      activePool.pauseVfs();
+      activePool=undefined;
+      if(activeLease){
+        await releaseSqliteSahPoolLeaseWhenFree({
+          verifyAccessHandlesFree:verifyPoolHandles,
+          releaseLease,
+        });
+      }
+    }else if(activeLease){
+      if(installerStarted){
+        await releaseSqliteSahPoolLeaseWhenFree({
+          verifyAccessHandlesFree:verifyPoolHandles,
+          releaseLease,
+        });
+      }else{
+        await releaseLease();
+      }
+    }
+    store=undefined;
+    cleanupUnconfirmed=false;
+    closed=true;
+  }catch(cause){
+    // Keep the physical Web Lock until a later cleanup succeeds or this Worker
+    // is terminated. A new Worker must not enter SQLite with uncertain handles.
+    cleanupUnconfirmed=true;
+    throw new Error('sqlite_sahpool_close_unconfirmed',{cause});
+  }finally{
+    closing=false;
+  }
+}
+
+const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
+  if(request.kind==='close'){
+    await closeStorage();
+    return null;
+  }
+  if(closed||closing||cleanupUnconfirmed)throw new Error('sqlite_worker_closing');
+  const current=await database();
+  switch(request.kind){
+    case 'initialize':{
+      try{
+        const diagnostics=current.database.initialize();
+        current.initialized=true;
+        return diagnostics;
+      }catch(cause){
+        await closeStorage();
+        throw cause;
+      }
+    }
+    case 'get': return current.database.get(request.table,request.key);
+    case 'entries': return current.database.entries(request.table);
+    case 'existingRecordKeys':return current.database.existingRecordKeys(request.table,request.keys);
+    case 'packageCacheProjection':return current.database.packageCacheProjection(request.query);
+    case 'changesSince': return current.database.changesSince(request.contentRevision,request.tables);
+    case 'syncBaseEntries': return current.database.syncBaseEntries(request.keys);
+    case 'count': return current.database.count(request.table);
+    case 'estimateRecordBytes': return current.database.estimateRecordBytes(request.tables);
+    case 'homeLearningProjection': return current.database.homeLearningProjection(request.languageRouteId);
+    case 'countIntroducedLearningTargets': return current.database.countIntroducedLearningTargets(
       request.languageRouteId,
       request.startedAfter,
       request.startedBefore,
     );
-    case "learningRunIdsForTarget": return db.learningRunIdsForTarget(request.targetId, request.openOnly);
-    case "openLearningRunTargets": return db.openLearningRunTargets();
-    case "countContentAttemptsSince": return db.countContentAttemptsSince(request.taskId, request.createdAfter);
-    case "learningTargetIdsForBookUpgrade": return db.learningTargetIdsForBookUpgrade(
+    case 'learningRunIdsForTarget': return current.database.learningRunIdsForTarget(request.targetId,request.openOnly);
+    case 'openLearningRunTargets': return current.database.openLearningRunTargets();
+    case 'countContentAttemptsSince': return current.database.countContentAttemptsSince(request.taskId,request.createdAfter);
+    case 'learningTargetIdsForBookUpgrade': return current.database.learningTargetIdsForBookUpgrade(
       request.languageRouteId,
       request.targetLanguageTag,
       request.supportLanguageTag,
       request.bookId,
       request.nextBookVersionId,
     );
-    case "isMediaReferenced": return db.isMediaReferenced(request.mediaId);
-    case "portableMedia": return db.portableMedia(request.sha256);
-    case "portableMediaDiagnostics": return db.portableMediaDiagnostics();
-    case "commit": db.commit(request.mutation); return null;
-    case "diagnostics": return db.diagnostics();
+    case 'isMediaReferenced': return current.database.isMediaReferenced(request.mediaId);
+    case 'portableMedia': return current.database.portableMedia(request.sha256);
+    case 'portableMediaDiagnostics': return current.database.portableMediaDiagnostics();
+    case 'commit': current.database.commit(request.mutation); return null;
+    case 'diagnostics': return current.database.diagnostics({verifyIntegrity:request.verifyIntegrity});
   }
 };
 
-worker.addEventListener("message", (event: MessageEvent<SqliteWorkerRequest>) => {
-  void message(event.data).then(
-    (value) => worker.postMessage({ id: event.data.id, ok: true, value } satisfies SqliteWorkerResult),
-    (cause) => worker.postMessage({
-      id: event.data.id,
-      ok: false,
-      error: cause instanceof Error ? cause.message : "sqlite_worker_failed",
+worker.addEventListener('message',(event:MessageEvent<SqliteWorkerRequest>)=>{
+  const response=requestQueue.then(()=>message(event.data));
+  requestQueue=response.then(()=>undefined,()=>undefined);
+  void response.then(
+    value=>worker.postMessage({id:event.data.id,ok:true,value} satisfies SqliteWorkerResult),
+    cause=>worker.postMessage({
+      id:event.data.id,
+      ok:false,
+      error:cause instanceof Error?cause.message:'sqlite_worker_failed',
     } satisfies SqliteWorkerResult),
   );
 });

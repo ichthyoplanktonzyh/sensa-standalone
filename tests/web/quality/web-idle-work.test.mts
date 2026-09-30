@@ -60,7 +60,7 @@ assert(!app.includes('usePackageLearning')&&!app.includes('usePersonalLearning')
 assert(!accountExperience.includes('await preloadMedia()'),'product startup must not wait for the complete personal-media cache');
 assert(!home.includes('usePackageLearning')&&!home.includes('usePersonalLearning'),'Home must use its small read projection instead of full learning controllers');
 assert(home.includes('useActiveLanguageContext')&&!home.includes('useLanguageRoutes'),'Home must not load Route management and availability discovery for one pinned context');
-assert(contentSupply.includes('packageCacheEntriesStored<InstalledPackage>()'),'content inventory must read stored package facts without hydrating Runtime media');
+assert(contentSupply.includes("packageCacheProjection({kind:'summaries'})"),'content inventory must read the derived summary index without transporting full Runtime package records');
 assert(/estimateLibraryBackupSize\(\)[\s\S]*estimateLibraryRecordBytes\(libraryBackupTables\)/u.test(backup),'backup size estimation must remain a storage aggregate');
 assert(!/estimateLibraryBackupSize\(\)[\s\S]{0,300}encodeCurrentLibrary\(/u.test(backup),'backup size estimation must not encode the complete Library');
 assert(/lazy\(\(\)=>import\('\.\/PackageLearningRuntime'\)/u.test(workspace),'formal learning Runtime must remain outside the learning workspace graph');

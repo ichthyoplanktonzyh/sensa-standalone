@@ -78,11 +78,13 @@ compositor transform，支持中断和 reduced-motion；所有页面仍保留显
 
 ## 数据与同步
 
-生产 Web 的个人学习库是 SQLite WASM 数据库 `sensa-local-library-v10.sqlite3`，持久化在浏览器
+生产 Web 的个人学习库是 SQLite WASM 数据库 `sensa-local-library-v12.sqlite3`，持久化在浏览器
 Origin Private File System。SQLite 在专用 Worker 中运行，使用不要求页面启用跨源隔离的
-`opfs-sahpool` VFS。Web Lock 选出唯一数据库 owner；其他同源 Sensa 标签页通过 BroadcastChannel
+`opfs-sahpool` VFS。页面 Web Lock 选出逻辑 owner，持有 OPFS 句柄的 Worker 另持物理 pool 锁；其他同源 Sensa 标签页通过 BroadcastChannel
 复用 owner 的记录接口，owner 关闭后由剩余页面重新选举，绝不打开竞争连接。跨页共享/排他事务锁覆盖
 完整 `LibraryTransaction`，因此多次读取到一次 commit 的 read/modify/write 序列不会在标签页之间交错。
+关闭时先排空 Worker 请求、关闭数据库、暂停 VFS 并确认原生句柄可再次打开，再释放所有权；无法确认时停止而不创建空库。
+SDK 初始化失败不得删除 pool 数据，构建中的版本和源片段检查必须阻止未审核依赖绕过保护。真实句柄冲突与 Worker 突然终止另由隔离 Chromium 回归验证。
 本机 `libraryId` 与 `learnerId` 在无账号时即建立；`service-owner` 只绑定在线账号，不是本机学习事务的
 准入条件。账号连接前读取云端 head：双方都有内容时保持本机库未绑定并停止自动同步；云端为空时连接
 已有本机库，空本机库则允许后台恢复原账号资料。加密手动快照的新 payload 可表示无账号库，并继续
@@ -96,14 +98,18 @@ SAH Pool 由 leader Worker 独占，所以数据库打开后的第一条 SQLite 
 无 shared-memory 环境的 WAL 前置条件，并保留 FULL 的提交同步；不得为了基准数字降为 NORMAL。
 真实 Chromium 对照可用 `npm run benchmark:sqlite-opfs` 复测，`test:browser` 同时验证 Worker 重启后的
 记录数、`quick_check` 和生产运行时实际采用的 WAL/FULL/EXCLUSIVE profile。
+同一物理连接只初始化一次。普通打开验证版本、读写能力和持久化配置；建库、结构变更及用户主动导出的支持诊断执行完整 `quick_check`。
+完整检查是随全库规模增长的健康扫描，不能成为每次页面刷新与标签页接入的前置步骤（[SQLite 检查语义](https://sqlite.org/pragma.html#pragma_quick_check)）。容量旅程在学习动作和恢复断言后独立执行完整检查。
 学习事实仍以逻辑 record 为写入 authority；SQLite 在同一事务内维护可重建的 Target、Run–Target 和
 Content Attempt 查询投影。首页只读取当前 Route 的 Target、该 Route 今日已占用的新词额度以及实际引用的
 Package key；运行恢复、策略锁定和生成频控通过领域索引查询，不遍历或解析无关 JSON。数据库打开及有写入
 的长连接周期内使用 `PRAGMA optimize` 维护查询规划统计。Book 版本替换和媒体引用完整性检查同样通过事务内
 关系投影完成。承载大 JSON 的逻辑 record 与 Target 投影使用普通 rowid 表，紧凑关系投影使用
-`WITHOUT ROWID`；物理 schema v10 使用新的 OPFS 文件，并在内容事务中维护记录级 revision 与删除 tombstone，供账号同步只读取上次收敛后变化的记录。云端确认的逐记录基线和 block refs 保存在内部 `sensa_sync_base` 表；未变化记录不再重新编码、分块或下载。`packageInstallations` 保存可跨设备复制的精确 `.sensa` identity、语言方向、长度、digest 与来源 Book archive digest；完整 Portable artifact 与编译后的设备 Runtime content 只进入本地 `packageCache`，缓存写入不增加个人内容 revision。恢复后由 Content Supply 使用 Registry 中的 `.sensa-book` 位置一次重新取得，验证外层摘要及全部成员，再只恢复已有安装事实对应的缓存；解析或下载失败时 Learning Target 保留但 readiness 为 blocked。状态只保存小型幂等 commit receipt，不重复保存整库或待发布记录。`npm run benchmark:cloud-sync` 在真实 Chromium OPFS 上执行 1k/10k 完整同步路径，并固定单记录变化只上传记录块与受影响的 manifest 分片。因当前无用户库数据，不迁移或读取 v9 文件。
-v10 同时是首个真实用户基线：打开版本低于 v10 或高于当前版本的文件会停止并保留原库，不创建空库冒充
-首次访问；后续 schema 只能按顺序增加事务迁移与固定旧版夹具。跨标签页协调协议独立版本化，版本不一致
+`WITHOUT ROWID`；内容事务维护记录级 revision 与删除 tombstone，供账号同步只读取上次收敛后变化的记录。云端确认的逐记录基线和 block refs 保存在内部 `sensa_sync_base` 表；未变化记录不再重新编码、分块或下载。`packageInstallations` 保存可跨设备复制的精确 `.sensa` identity、语言方向、长度、digest 与来源 Book archive digest；完整 Portable artifact 与编译后的设备 Runtime content 只进入本地 `packageCache`，缓存写入不增加个人内容 revision。恢复后由 Content Supply 使用 Registry 中的 `.sensa-book` 位置一次重新取得，验证外层摘要及全部成员，再只恢复已有安装事实对应的缓存；解析或下载失败时 Learning Target 保留但 readiness 为 blocked。状态只保存小型幂等 commit receipt，不重复保存整库或待发布记录。`npm run benchmark:cloud-sync` 在真实 Chromium OPFS 上执行 1k/10k 完整同步路径，并固定单记录变化只上传记录块与受影响的 manifest 分片。
+内容摘要、key/digest 和语言方向数量使用同事务维护的设备侧投影；它们不进入备份或账号同步，可以从真实缓存重建。
+学习状态变化只刷新学习投影，语言选择只读取当前语言方向；通知按记录 key 过滤，当前页面不重复处理自己发出的跨页通知。
+数据结构调整不要求保留历史格式兼容层；当前源事实和可重建索引分开处理，不通过清空用户库恢复初始化错误。
+不支持的物理版本会停止并保留原库，不创建空库冒充首次访问。跨标签页协调协议独立版本化，版本不一致
 时旧/新页面不交换记录，并要求用户关闭其他标签页。Service Worker 安装新 shell 后等待用户确认再接管，
 接管时保留上一发布版本的静态资源窗口，使仍在运行的旧页面能够完成或安全退出。
 
@@ -300,6 +306,12 @@ npm run preview:sensa:models
 `DEEPSEEK_API_KEY`，并只支持 `SENSA_SEMANTIC_PROVIDER=deepseek`；未配置时启动器直接退出。该入口会产生
 真实 Provider 请求并可能产生费用。也可以继续在产品设置中显式配置设备侧 Provider。
 
+需要用与线上相同的内容检查 Web 时，可显式设置 `SENSA_LOCAL_PUBLIC_CATALOG_URL` 为已发布的公开
+`/sensa/packages` HTTPS 地址，再启动 `dev:sensa` 或 `preview:sensa`。启动器只读取得目录，校验合同与
+revision 摘要后，把该快照交给本地 API；学习包仍按快照中的不可变 URL 和 digest 下载。此模式跳过
+本地预览书重打包，不复制线上账号、学习数据或私有配置，Auth、Intake、同步与模型请求仍走本地服务。
+目录读取或验证失败会明确停止启动，不用另一份预览内容冒充该发布版本。
+
 发布前使用真正的 production build 做第二次人工验收：
 
 ```sh
@@ -384,6 +396,37 @@ SENSA_TEST_DATABASE_URL=postgresql://... npm run test:web:db
 `foundation` 各按所需环境独立运行，单项可用 `--suite=... --id=...` 选择。旧的 `scripts/sensa*Smoke.*`
 入口和导入包装层已删除；原有断言现在直接属于 `tests/web` 下对应边界。较长的高风险检查已拆成具名场景，后续新增场景仍应维持既有验证语义。
 目录中的 `runner` 只有两种正式平台：不需要真实浏览器的测试用 Vitest，需要真实 Chromium、OPFS 或浏览器生命周期的测试用 Playwright Test；浏览器加数据库场景也用 Playwright Test。不得新增 `node:test` 或第三套通用测试运行器。`npm run test:vitest` 运行快速层，`npm run test:playwright` 运行浏览器层；单项和风险筛选仍通过目录入口执行。独立负载生成器和性能脚本仍是专项工具，不作为通用运行器。
+
+长旅程是产品收敛与验收 checkpoint 的基本单位。`user-journeys.md` 定义目标和合法出口；
+`tests/web/journeyMapping.mts` 保存稳定的 Journey → Phase → Scenario → Test Evidence 关联及共享风险检查。
+旧审计结论只作为历史输入，关联到测试不表示场景通过，更不表示整条旅程完成。
+旅程的关闭需要同时核对用户价值与页面衔接、必要异常和恢复分支、真实持久状态、相关性能和容量风险，
+以及独立使用验收。单个真实用户顺利走完不能替代其他证据；缺口仍在时不关闭 checkpoint。
+测试继续按现有 CI 环境执行，共享底层 Module 不按旅程复制。可在已构建产物的前提下集中列出或运行证据：
+
+```sh
+node --import tsx tests/web/run.mts --journey=LJ-01 --list
+node --import tsx tests/web/run.mts --journey=LJ-01 --suite=fast
+node --import tsx tests/web/run.mts --journey=LJ-01 --suite=browser
+```
+
+旅程性能证据必须注明规模、设备/CPU、网络条件、预算和测量范围。构建大小、SQLite/OPFS 查询预算、
+慢账号恢复期间的 Shell 响应以及受控浏览器交互是不同证据，不互相冒充，也不据此宣称真实设备 CWV 达标。
+
+性能验收以 Anki 的长期学习与 Obsidian 的本机内容使用体验为参照，不复制其数据模型，也不把它们
+没有公布的时延承诺当作 Sensa 已验证的基准。候选体验目标与既有 CI 回归预算分开记录：交互的首个
+可见反馈以 200ms 为目标，频繁的本机读取、评分、下一条与运行恢复以 500ms 为目标；端到端命令完成、
+Event Timing、最长任务和页面加载指标分别测量，不能互相替代。未在同机、同规模和同类操作下实际比较时，
+只称为 Sensa 的测量，不宣称与参照产品等效。
+
+容量证据分别声明新导入的 Book 成员数、已有库的目标/历史规模、媒体字节与后台活动。先固定媒体负载
+验证 5,000 / 10,000 Sense，再固定成员数验证媒体增长；100 个成员的样本或 Manifest schema 接受更大
+数量都不构成这两个规模的浏览器交付证明。完整导入允许随输入增长的校验与原子写入，但必须及时反馈、
+保持 UI 响应，并验证取消、失败和重试的真实持久结果。安装后的普通操作应围绕当前对象、路线与学习
+窗口读取，不重复处理整个分发归档；新增规模不能以放宽 CI 预算替代体验修正。深度容量测量按独立目录项
+顺序运行，记录失败阶段和已完成测量；未测到的后续阶段不填写成功或估算耗时。每条旅程只纳入相关风险，
+不要求穷举所有规模与全部产品系统的笛卡尔组合。
+
 `npm run test:coverage` 只生成当前 Vitest 用例所触及
 Web 学习投影的覆盖率报告，不设置全局覆盖率门槛；Playwright Test 失败时按测试项隔离保留 trace 和截图在被 Git 忽略的
 `.tmp/playwright-results/<test-id>` 中，CI 失败时上传这些诊断产物，不重试。Playwright Test 用例必须只使用合成、非敏感数据。

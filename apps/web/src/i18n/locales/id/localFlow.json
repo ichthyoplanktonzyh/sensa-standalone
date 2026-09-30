@@ -1,5 +1,7 @@
 {
   "localFlow": {
+    "catalogTargetLanguage": "Bahasa yang dipelajari",
+    "catalogSupportLanguage": "Bahasa pendukung",
     "resourceWord": "Kata",
     "resourcePhrase": "Frasa",
     "resourceConstruction": "Konstruksi",

@@ -1,5 +1,7 @@
 {
   "localFlow": {
+    "catalogTargetLanguage": "Idioma de aprendizagem",
+    "catalogSupportLanguage": "Idioma de apoio",
     "resourceWord": "Palavra",
     "resourcePhrase": "Expressão",
     "resourceConstruction": "Construção",

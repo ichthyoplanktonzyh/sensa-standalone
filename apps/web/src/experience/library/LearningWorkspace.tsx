@@ -8,7 +8,6 @@ import {useShellNavigation} from '../router/useShellNavigation';
 import {useOverlayStore} from '../stores/overlayStore';
 import {usePackageLearning} from './usePackageLearning';
 import {usePersonalLearning} from './usePersonalLearning';
-import {useLanguageRoutes} from './useLanguageRoutes';
 import {usePracticeScope} from '../usePracticeScope';
 import {createPracticeScopeSnapshot,type PracticeScopeSnapshot} from '../practiceScope';
 import {contentSenseForId,type ContentSectionId} from '../../learnerSemanticProjection/system';
@@ -51,7 +50,7 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
  ].includes(screen));
  const packageLearning=usePackageLearning(packageCenterOpen);
  const personalLearning=usePersonalLearning();
- const {activeRoute}=useLanguageRoutes();
+ const activeRoute={id:packageLearning.languageContext.languageRouteId,targetLanguageTag:packageLearning.languageContext.targetLanguageTag};
  const toast=useOverlayStore(state=>state.toast);
  const pendingPersonal=personalLearning.tasks.filter(task=>!packageLearning.targets.some(target=>target.targetId===task.targetId&&target.curriculumMembershipId===task.curriculumMembershipId));
  const activePendingPersonal=pendingPersonal.filter(task=>task.languageContext.languageRouteId===activeRoute.id);
@@ -137,11 +136,11 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
     onOpenBook={bookKey=>setMainStack(['s-catalog','s-catalog-book'],{bookKey})}
     onLibrary={()=>setMainStack(['s-library'])} onPublisher={()=>setMainStack(['s-publisher'])}/>,
   's-catalog-book':screenActive=><PackageBookScreen active={screenActive} bookKey={params.bookKey??null} c={packageLearning}
-    onBack={()=>setMainStack(['s-catalog'])} onLearning={()=>setMainStack(['s-study'])} onTarget={openLocalTarget}/>,
+    onBack={()=>setMainStack(['s-catalog'])} onLearning={returnHome} onTarget={openLocalTarget}/>,
   's-library':screenActive=><PackageLibraryScreen active={screenActive} c={packageLearning} onBack={backMain}
     onCatalog={()=>setMainStack(['s-catalog'])}
     onOpenBook={bookKey=>setMainStack(['s-catalog','s-catalog-book'],{bookKey})}
-    onPublisher={()=>setMainStack(['s-publisher'])} onLearning={()=>setMainStack(['s-study'])} onTarget={openLocalTarget}/>,
+    onPublisher={()=>setMainStack(['s-publisher'])} onLearning={returnHome} onTarget={openLocalTarget}/>,
   's-publisher':screenActive=><PackagePublisherScreen active={screenActive} c={packageLearning} onBack={backMain}
     onCatalog={()=>setMainStack(['s-catalog'])} onLibrary={()=>setMainStack(['s-library'])}/>,
   's-learning-entry':screenActive=><PackageCatalogScreen active={screenActive} c={packageLearning} onBack={backMain}

@@ -4,6 +4,8 @@ import {markLocalLibraryPresent} from './localLibraryHint';
 
 import { decodeBackupValue, encodeBackupValue } from "./backupCodec";
 import { sqliteRecordAdapter } from "./sqliteAdapter";
+import type {PackageCacheProjectionQuery,PackageCacheProjectionResult} from './packageCacheProjection';
+import type {InstalledPackageSummary} from './packageRecords';
 import type {
   PortableMediaStorageDiagnostics,
   PortablePackageMediaWrite,
@@ -32,6 +34,7 @@ export const cloudCheckpointRequestEvent = "sensa-cloud-checkpoint-requested";
 
 let sessionIncarnation: string | undefined;
 let serial: Promise<unknown> = Promise.resolve();
+const libraryNotificationSender=crypto.randomUUID();
 
 const recordKey = (key: string): string => {
   if (key.length === 0 || key.length > 2000) {
@@ -80,6 +83,12 @@ export class LibraryTransaction {
   private readonly clears = new Set<Table>();
   private readonly deletes = new Map<Table, Set<string>>();
   private readonly puts = new Map<Table, Map<string, unknown>>();
+  private readonly knownMissing=new Map<Table,Set<string>>();
+  private readonly commitSignals:Array<{
+    signal:AbortSignal;
+    code:string;
+    onCommitStart?:()=>void;
+  }> = [];
   private syncBaseReplacement: Array<{ table: Table; key: string; valueJson: string; blockRefs: string[] }> | undefined;
 
   constructor(
@@ -92,9 +101,15 @@ export class LibraryTransaction {
     const pending = this.puts.get(table);
     if (pending?.has(key)) return clone(pending.get(key) as T);
     if (this.clears.has(table) || this.deletes.get(table)?.has(key)) return undefined;
-    const encoded = await storageCall(() => this.adapter.get(table, key));
+    const encoded = await this.storedValue(table,key);
     if(encoded===null)return undefined;
-    return clone(await this.decodeStored<T>(table,encoded));
+    // Decoding creates a new owned value on every read.
+    return this.decodeStored<T>(table,encoded);
+  }
+
+  private async storedValue(table:Table,key:string):Promise<string|null>{
+    if(this.knownMissing.get(table)?.has(key))return null;
+    return storageCall(()=>this.adapter.get(table,key));
   }
 
   async entries(table: Table): Promise<Array<{ key: string; value: any }>> {
@@ -113,19 +128,48 @@ export class LibraryTransaction {
       .map(([key, value]) => ({ key, value: clone(value) }));
   }
 
-  /** Read admitted Package facts without reconstructing their Runtime media.
-   * Only inventory/index code may use this projection; execution and export
-   * continue through `get`/`entries`, which return complete Runtime values. */
-  async packageCacheEntriesStored<T>():Promise<Array<{key:string;value:T}>>{
-    const table='packageCache' as const;
-    const values=new Map<string,unknown>();
+  /** Batch existence checks use only record keys, not resource payloads. */
+  async existingRecordKeys(table:Table,keys:readonly string[]):Promise<Set<string>>{
+    const requested=[...new Set(keys.map(recordKey))];
+    const present=new Set(this.clears.has(table)?[]:
+      await storageCall(()=>this.adapter.existingRecordKeys(table,requested)));
     if(!this.clears.has(table)){
-      for(const row of await storageCall(()=>this.adapter.entries(table))){
-        if(!this.deletes.get(table)?.has(row.key))values.set(row.key,decode(row.encodedValue));
+      const missing=this.knownMissing.get(table)??new Set<string>();
+      for(const key of requested)if(!present.has(key))missing.add(key);
+      this.knownMissing.set(table,missing);
+    }
+    for(const key of requested){
+      if(this.deletes.get(table)?.has(key))present.delete(key);
+      if(this.puts.get(table)?.has(key))present.add(key);
+    }
+    return present;
+  }
+
+  /** Read the derived index, including this transaction's pending cache writes. */
+  async packageCacheProjection<Query extends PackageCacheProjectionQuery>(query:Query):Promise<PackageCacheProjectionResult<Query>>{
+    if(query.kind==='route_counts'){
+      if(this.wrote)throw new Error('library_projection_requires_snapshot');
+      return storageCall(()=>this.adapter.packageCacheProjection(query));
+    }
+    const table='packageCache' as const;
+    const values=new Map<string,{key:string;digest:string}|InstalledPackageSummary>();
+    if(!this.clears.has(table)){
+      const stored=query.kind==='identities'
+        ?await storageCall(()=>this.adapter.packageCacheProjection({kind:'identities'}))
+        :await storageCall(()=>this.adapter.packageCacheProjection({kind:'summaries'}));
+      for(const item of stored){
+        if(!this.deletes.get(table)?.has(item.key))values.set(item.key,item);
       }
     }
-    for(const [key,value] of this.puts.get(table)??[])values.set(key,value);
-    return [...values.entries()].sort(([left],[right])=>left.localeCompare(right)).map(([key,value])=>({key,value:clone(value as T)}));
+    const pending=this.puts.get(table);
+    if(pending?.size){
+      const {createPackageCacheSummary,isPackageCacheProjectionSource}=await import('./packageCacheProjection');
+      for(const [key,value] of pending){
+        if(!isPackageCacheProjectionSource(value)){values.delete(key);continue;}
+        values.set(key,query.kind==='identities'?{key,digest:value.digest}:createPackageCacheSummary(value));
+      }
+    }
+    return clone([...values.values()].sort((left,right)=>left.key.localeCompare(right.key))) as PackageCacheProjectionResult<Query>;
   }
 
   async changesSince<Tables extends readonly Table[]>(contentRevision: number, tables: Tables): Promise<Array<{
@@ -366,7 +410,7 @@ export class LibraryTransaction {
     const changes: Array<LibraryRecordTransition<Tables>> = [];
     for (const [table, tableKeys] of keys) {
       for (const key of tableKeys) {
-        const beforeEncoded = await storageCall(() => this.adapter.get(table, key));
+        const beforeEncoded = await this.storedValue(table,key);
         const after = await this.get(table, key);
         const afterEncoded = after === undefined ? null : encode(after);
         const before=beforeEncoded===null?null:await this.decodeStored(table,beforeEncoded);
@@ -392,12 +436,22 @@ export class LibraryTransaction {
     const externalize=portablePuts?.size
       ?(await import('./portableMediaCache')).externalizePortablePackageCache
       :null;
+    let prepared=0;
     for(const [table,values] of this.puts)for(const [key,value] of values){
+      this.assertCommitSignals();
       if(table!=='packageCache')puts.push({table,key,encodedValue:encode(value)});
       else{
         const externalized=externalize!(key,value);
         portablePackages.push(externalized.write);
         puts.push({table,key,encodedValue:encode(externalized.storedValue)});
+      }
+      // Preparation is not a SQLite commit. Let input/paint run between bounded
+      // chunks while the same write lock and single eventual commit stay intact.
+      if(++prepared%8===0&&typeof document!=='undefined'){
+        const scheduler=(globalThis as typeof globalThis&{scheduler?:{yield?:()=>Promise<void>}}).scheduler;
+        if(scheduler?.yield)await scheduler.yield();
+        else await new Promise<void>(resolve=>setTimeout(resolve,0));
+        this.assertCommitSignals();
       }
     }
     return {
@@ -410,6 +464,26 @@ export class LibraryTransaction {
         ? {}
         : { syncBaseReplacement: this.syncBaseReplacement }),
     };
+  }
+
+  requireCommitSignal(
+    signal:AbortSignal,
+    code='library_transaction_cancelled',
+    onCommitStart?:()=>void,
+  ):void{
+    this.assertWritable();this.commitSignals.push({signal,code,onCommitStart});
+  }
+
+  beginCommit():void{
+    this.assertCommitSignals();
+    // Keep these callbacks synchronous with the final abort check and the
+    // adapter.commit call. Once they run, the atomic storage commit has begun
+    // and an AbortSignal can no longer promise to undo it.
+    for(const {onCommitStart} of this.commitSignals)onCommitStart?.();
+  }
+
+  assertCommitSignals():void{
+    for(const {signal,code} of this.commitSignals)if(signal.aborted)throw new Error(code);
   }
 
   private hasPendingChanges(table: Table): boolean {
@@ -476,6 +550,7 @@ async function transaction<T>(
       }
       const mutation = await library.mutation();
       mutation.contentRevision = contentRevision;
+      library.beginCommit();
       await storageCall(() => adapter.commit(mutation));
       if (kind === "state") window.dispatchEvent(new Event("sensa-sync-state-changed"));
       else {
@@ -484,10 +559,12 @@ async function transaction<T>(
           ...mutation.deletes.map((row) => row.table),
           ...mutation.puts.map((row) => row.table),
         ])];
-        window.dispatchEvent(new CustomEvent("sensa-library-changed", { detail: { tables } }));
+        const changes={sender:libraryNotificationSender,tables,clears:mutation.clears,
+          records:[...mutation.puts,...mutation.deletes].map(({table,key})=>({table,key}))};
+        window.dispatchEvent(new CustomEvent("sensa-library-changed", { detail: changes }));
         if (typeof BroadcastChannel !== "undefined") {
           const channel = new BroadcastChannel("sensa-local-library");
-          channel.postMessage({ tables });
+          channel.postMessage(changes);
           channel.close();
         }
       }
@@ -603,20 +680,33 @@ export async function openLibrary(): Promise<LibraryIdentity> {
   return identity;
 }
 
-export function observeLibrary(listener: () => void, tables?: readonly Table[]): () => void {
+export function observeLibrary(listener: () => void, tables?: readonly Table[], keys?:Readonly<Partial<Record<Table,readonly string[]>>>): () => void {
   const filter = tables ? new Set<Table>(tables) : null;
-  const relevant = (changed: unknown): boolean => !filter
-    || !Array.isArray(changed)
-    || changed.some((table) => filter.has(table as Table));
+  const relevant = (change: {tables?:unknown;clears?:unknown;records?:unknown}|undefined): boolean => {
+    if(!filter||!Array.isArray(change?.tables))return true;
+    return change.tables.some((table:Table)=>{
+      if(!filter.has(table))return false;
+      const selected=keys?.[table];
+      if(!selected)return true;
+      // Notifications are hints, never facts. An incomplete hint triggers a
+      // coherent reread rather than silently missing a library replacement.
+      if(!Array.isArray(change.clears)||!Array.isArray(change.records))return true;
+      if(change.clears.includes(table))return true;
+      const records=change.records.filter(record=>record&&typeof record==='object'
+        &&record.table===table&&typeof record.key==='string');
+      return !records.length||records.some(record=>selected.includes(record.key));
+    });
+  };
   const local = (event: Event) => {
-    if (relevant((event as CustomEvent<{ tables?: unknown }>).detail?.tables)) listener();
+    if (relevant((event as CustomEvent).detail)) listener();
   };
   window.addEventListener("sensa-library-changed", local);
   const channel = typeof BroadcastChannel === "undefined"
     ? null
     : new BroadcastChannel("sensa-local-library");
   if (channel) channel.onmessage = (event) => {
-    if (relevant(event.data?.tables)) listener();
+    if(event.data?.sender===libraryNotificationSender)return;
+    if (relevant(event.data)) listener();
   };
   return () => {
     window.removeEventListener("sensa-library-changed", local);
@@ -638,9 +728,9 @@ export function observeCloudSyncState(listener: () => void): () => void {
   return () => window.removeEventListener("sensa-sync-state-changed", listener);
 }
 
-export async function readLibraryStorageDiagnostics(): Promise<SqliteStorageDiagnostics> {
+export async function readLibraryStorageDiagnostics(options?:Readonly<{verifyIntegrity?:boolean}>): Promise<SqliteStorageDiagnostics> {
   const adapter = await storageCall(sqliteRecordAdapter, 'localFlow.storageOpen');
-  return storageCall(() => adapter.diagnostics());
+  return storageCall(() => adapter.diagnostics(options),'localFlow.storageOpen');
 }
 
 export async function readPortableMediaStorageDiagnostics():Promise<PortableMediaStorageDiagnostics>{

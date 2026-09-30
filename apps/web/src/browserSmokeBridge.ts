@@ -19,8 +19,16 @@ type BrowserSmokeBridge = {
   navigate(path: string): Promise<void>;
   openReferenceFixture(): Promise<void>;
   closeReferenceFixture(): Promise<void>;
-  storageDiagnostics(): ReturnType<typeof readLibraryStorageDiagnostics>;
+  storageDiagnostics(options?:Readonly<{verifyIntegrity?:boolean}>): ReturnType<typeof readLibraryStorageDiagnostics>;
   transactionConcurrency(): Promise<{readersOverlap:boolean;writerWaited:boolean}>;
+  supplyCheckpoint(): Promise<{key:string;packageId:string;version:number;bookDigests:string[]}[]>;
+  learningCheckpoint(): Promise<{
+    targetIds:string[];
+    enrollments:{enrollmentId:string;sourceKind:string;bookVersionNumber:number|null;bookDigest:string|null}[];
+    runtime:{runId:string;targetId:string;stepId:string|null;materializationId:string|null}|null;
+    records:{recordId:string;targetId:string;kind:string}[];
+    completedTargets:{targetId:string;nextReviewAt:string|null}[];
+  }>;
 };
 
 declare global {
@@ -43,6 +51,38 @@ const randomDataUrl = (size: number): string => {
 
 if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
   window.__sensaBrowserSmoke = {
+    async supplyCheckpoint() {
+      const {contentSupplySystem}=await import('./contentSupply/system');
+      const snapshot=await contentSupplySystem.read({kind:'workspace'});
+      return snapshot.packages.map(pack=>({
+        key:pack.key,packageId:pack.portableOrigin.manifest.metadata.packageId,
+        version:pack.portableOrigin.manifest.metadata.version,
+        bookDigests:pack.portableOrigin.publications.map(publication=>publication.bookArchiveSha256),
+      })).sort((left,right)=>left.key.localeCompare(right.key));
+    },
+    async learningCheckpoint() {
+      const [{languageRoutesSnapshot},{learningSystem}]=await Promise.all([
+        import('./data/library/language'),import('./learning/system/learningSystem'),
+      ]);
+      const {context}=await languageRoutesSnapshot();
+      const snapshot=await learningSystem.read({kind:'workspace',languageContext:context});
+      const runtime=snapshot.runtime;
+      return {
+        targetIds:snapshot.targets.map(target=>target.targetId).sort(),
+        enrollments:snapshot.enrollments.map(enrollment=>({
+          enrollmentId:enrollment.enrollmentId,sourceKind:enrollment.source.kind,
+          bookVersionNumber:enrollment.source.kind==='published_book'?enrollment.source.bookVersionNumber:null,
+          bookDigest:enrollment.source.kind==='published_book'?enrollment.source.publicationArchiveSha256:null,
+        })).sort((left,right)=>left.enrollmentId.localeCompare(right.enrollmentId)),
+        runtime:runtime?{
+          runId:runtime.runId,targetId:runtime.currentTargetId,
+          stepId:runtime.kind==='lightweight'?runtime.step?.protocolStepInstanceId??null:null,
+          materializationId:runtime.kind==='lightweight'?runtime.step?.materialization.snapshot.learningMaterializationId??null:null,
+        }:null,
+        records:snapshot.records.map(record=>({recordId:record.recordId,targetId:record.targetId,kind:record.kind})),
+        completedTargets:snapshot.targets.filter(target=>target.completed).map(target=>({targetId:target.targetId,nextReviewAt:target.nextReviewAt})),
+      };
+    },
     async seedDrafts(drafts, images) {
       await openLibrary();
       // Reuse one real-sized image under differently shaped rows. Canonical sync should

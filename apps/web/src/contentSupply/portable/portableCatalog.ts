@@ -1,5 +1,4 @@
 import {
-  canonicalConsumerJson,
   maxPortableBookArchiveBytes,
   sensaPortableBookDescriptorSchema,
   type SensaPortableBookDescriptor,
@@ -7,7 +6,6 @@ import {
   type SensaPortableBookMember,
 } from '@sensa/contracts/sensa';
 import {
-  readSensaPortableBook,
   type SensaPortableBookPackage,
   type SensaPortableBookPackageMember,
 } from '@sensa/content-validator/portable-book';
@@ -18,7 +16,10 @@ import {
   type PortablePublicationAttestation,
 } from '../../data/library/packageRecords';
 import {readLibrary,writeLibraryCache} from '../../data/library/store';
-import {installPublishedPortableBookMembers} from './portablePackage';
+import {installPreparedPortablePackages,installPublishedPortableBookMembers} from './portablePackage';
+import {readPublishedBook} from './portablePreparation';
+import {preparePublishedBookOffThread} from './portablePreparationClient';
+import type {ContentSupplyInstallationPhase} from '../system/contentSupplySystem';
 
 const fetchExactBytes=async(
   url:string,
@@ -58,23 +59,6 @@ const fetchExactBytes=async(
   return bytes;
 };
 
-const expectedDescriptor=(
-  manifest:SensaPortableBookManifest,
-  descriptor:SensaPortableBookDescriptor,
-):SensaPortableBookDescriptor=>sensaPortableBookDescriptorSchema.parse({
-  format:'sensa-portable-book-descriptor-v1',
-  publisher:manifest.publisher,
-  book:manifest.book,
-  contentRelease:manifest.contentRelease,
-  route:manifest.route,
-  publishedAt:manifest.publishedAt,
-  changeSummary:manifest.changeSummary,
-  memberCount:manifest.members.length,
-  byteLength:descriptor.byteLength,
-  sha256:descriptor.sha256,
-  url:descriptor.url,
-});
-
 /** Fetch and fully validate the single distributable unit represented by a Registry item. */
 export const fetchPublishedBook=async(
   raw:SensaPortableBookDescriptor,
@@ -89,14 +73,7 @@ export const fetchPublishedBook=async(
     signal,
     progress,
   );
-  let archive:SensaPortableBookPackage;
-  try{archive=readSensaPortableBook(bytes);}
-  catch(cause){throw new Error('localFlow.catalogMismatch',{cause});}
-  if(archive.archiveDigest!==descriptor.sha256
-    ||canonicalConsumerJson(expectedDescriptor(archive.manifest,descriptor))!==canonicalConsumerJson(descriptor)){
-    throw new Error('localFlow.catalogMismatch');
-  }
-  return archive;
+  return readPublishedBook(bytes,descriptor);
 };
 
 const attestationFor=(
@@ -130,19 +107,26 @@ const installBookMembers=(
 );
 
 export const downloadPublishedBook=async(
-  descriptor:SensaPortableBookDescriptor,
+  raw:SensaPortableBookDescriptor,
   signal:AbortSignal,
   onProgress:(fraction:number)=>void,
+  onPhase?:(phase:ContentSupplyInstallationPhase)=>void,
 ):Promise<readonly InstalledPackage[]>=>{
+  onPhase?.('downloading');
   onProgress(0);
-  const archive=await fetchPublishedBook(
-    descriptor,
-    signal,
-    received=>onProgress(Math.min(1,received/descriptor.byteLength)),
-  );
-  const installed=await installBookMembers(archive,archive.members,signal);
-  onProgress(1);
-  return installed;
+  try{
+    const descriptor=sensaPortableBookDescriptorSchema.parse(raw);
+    const bytes=await fetchExactBytes(descriptor.url,descriptor.byteLength,maxPortableBookArchiveBytes,signal,
+      received=>onProgress(Math.min(1,received/descriptor.byteLength)));
+    onPhase?.('preparing');
+    const prepared=await preparePublishedBookOffThread(bytes,descriptor,signal);
+    const installed=await installPreparedPortablePackages(prepared,signal,()=>onPhase?.('committing'));
+    onProgress(1);
+    return installed;
+  }catch(cause){
+    if(signal.aborted)throw new Error('localFlow.downloadCancelled',{cause});
+    throw cause;
+  }
 };
 
 const installationMatchesMember=(
@@ -172,7 +156,7 @@ export const rehydratePublishedPortableInstallations=async(
 ):Promise<PortableRehydrationResult>=>{
   const snapshot=await readLibrary(async tx=>({
     installations:(await tx.all<PackageInstallation>('packageInstallations')),
-    cache:(await tx.packageCacheEntriesStored<InstalledPackage>()).map(row=>row.value),
+    cache:await tx.packageCacheProjection({kind:'identities'}),
   }));
   const facts=new Map(snapshot.installations.map(value=>[value.key,value]));
   const stale=snapshot.cache.filter(value=>facts.get(value.key)?.artifact.digest!==value.digest);
@@ -192,7 +176,9 @@ export const rehydratePublishedPortableInstallations=async(
   for(const installation of missing){
     const digest=installation.artifact.bookArchiveSha256;
     if(!digest){blocked.push(installation.key);continue;}
-    groups.set(digest,[...(groups.get(digest)??[]),installation]);
+    let group=groups.get(digest);
+    if(!group){group=[];groups.set(digest,group);}
+    group.push(installation);
   }
   for(const [bookArchiveSha256,installations] of groups){
     const descriptor=descriptors.find(item=>item.sha256===bookArchiveSha256);
@@ -200,13 +186,19 @@ export const rehydratePublishedPortableInstallations=async(
     try{
       const archive=await fetchPublishedBook(descriptor,signal);
       const selected:SensaPortableBookPackageMember[]=[];
+      const membersByPackage=new Map<string,Map<number,SensaPortableBookPackageMember>>();
+      for(const candidate of archive.members){
+        let versions=membersByPackage.get(candidate.member.packageId);
+        if(!versions){versions=new Map();membersByPackage.set(candidate.member.packageId,versions);}
+        if(!versions.has(candidate.member.version))versions.set(candidate.member.version,candidate);
+      }
       for(const installation of installations){
-        const member=archive.members.find(candidate=>installationMatchesMember(
+        const member=membersByPackage.get(installation.artifact.packageId)?.get(installation.artifact.version);
+        if(member&&installationMatchesMember(
           installation,
           archive,
-          candidate,
-        ));
-        if(member)selected.push(member);
+          member,
+        ))selected.push(member);
         else blocked.push(installation.key);
       }
       if(selected.length){

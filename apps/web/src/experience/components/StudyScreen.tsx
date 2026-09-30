@@ -2,6 +2,7 @@ import { StudyCalendar } from './StudyCalendar';
 import { type ReactNode } from 'react';
 import { ArrowRight, BookOpen, Plus, SlidersHorizontal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import {localFlowText} from '../../i18n/localFlowText';
 import type { LearningRecordKind, LearningRecordView } from '../learningJourney/learningHistory';
 import type { LearningPolicy, LearningPolicyOption } from '../../learning/system';
 import { LearningPreferencesPanel } from './learning/LearningPreferencesPanel';
@@ -67,7 +68,7 @@ export const StudyScreen = (props: StudyScreenProps) => {
           </dl>
           <div className="mt-auto flex flex-wrap gap-2">
             {props.learningTargetCount>0&&<button className={`${studyButton} bg-action-primary text-action-on-primary hover:bg-action-primary-hover`} onClick={props.onOpenTargetLibrary}>{t('study.browse')}<ArrowRight size={16}/></button>}
-            <button className={`${studyButton} border border-border-strong hover:bg-surface-panel`} onClick={props.onAddLearning}><Plus size={16}/>{t('study.add')}</button>
+            <button className={`${studyButton} border border-border-strong hover:bg-surface-panel`} onClick={props.onAddLearning}><Plus size={16}/>{localFlowText('packageCenterCatalog')}</button>
           </div>
         </section>
         <section className="rounded-overlay border border-border-subtle bg-surface-panel p-6 sm:p-8">

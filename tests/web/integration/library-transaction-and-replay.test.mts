@@ -50,6 +50,57 @@ await assert.rejects(
 );
 assert.equal(await store.readLibrary((tx) => tx.get('drafts', 'rolled-back')), undefined);
 
+const stopped=crypto.randomUUID(),cancel=new AbortController();
+await assert.rejects(store.command({id:stopped,kind:'fixture.cancel-before-commit',input:{}},async tx=>{
+  tx.requireCommitSignal(cancel.signal,'library_transaction_cancelled',()=>assert.fail('aborted work must not reach commit'));
+  tx.put('drafts','stopped-before-commit',{text:'must not survive'});
+  cancel.abort();
+}),/library_transaction_cancelled/u);
+assert.equal(await store.readLibrary(tx=>tx.get('drafts','stopped-before-commit')),undefined);
+assert.equal(await store.readLibrary(tx=>tx.get('operations',stopped)),undefined,'a cancelled commit has no replay receipt');
+
+const committing=crypto.randomUUID(),commitCancel=new AbortController(),phases:string[]=[];
+const committed=await store.command({id:committing,kind:'fixture.cancel-after-commit-start',input:{}},async tx=>{
+  tx.requireCommitSignal(commitCancel.signal,'library_transaction_cancelled',()=>{
+    phases.push('committing');
+    commitCancel.abort();
+  });
+  tx.put('drafts','commit-started',{text:'atomic commit has started'});
+  return {committed:true};
+});
+assert.deepEqual(phases,['committing']);
+assert.deepEqual(committed,{committed:true});
+assert.equal((await store.readLibrary(tx=>tx.get<any>('drafts','commit-started')))?.text,'atomic commit has started');
+const commitReceipt=await store.readLibrary(tx=>tx.get<any>('operations',committing));
+assert.deepEqual(commitReceipt?.result,{committed:true});
+assert.equal(typeof commitReceipt?.committedAt,'string');
+assert.deepEqual(await store.command({id:committing,kind:'fixture.cancel-after-commit-start',input:{}},async()=>{
+  assert.fail('a committed operation must replay its receipt instead of repeating work');
+}),{committed:true});
+
+const yielding=crypto.randomUUID(),yieldCancel=new AbortController();
+let yieldReachedCommit=false;
+const previousDocument=Object.getOwnPropertyDescriptor(globalThis,'document');
+Object.defineProperty(globalThis,'document',{configurable:true,value:{}});
+try{
+  await assert.rejects(store.command({id:yielding,kind:'fixture.cancel-during-mutation-yield',input:{}},async tx=>{
+    tx.requireCommitSignal(yieldCancel.signal,'library_transaction_cancelled',()=>{yieldReachedCommit=true;});
+    for(let index=0;index<8;index++)tx.put('drafts',`yield-batch-${index}`,{index});
+    // If encoding continues after the scheduled yield, this unsupported value
+    // would fail before the final signal guard and mask the expected cancel.
+    tx.put('drafts','yield-batch-unsupported',{value:new Map([['x',1]])});
+    for(let index=9;index<24;index++)tx.put('drafts',`yield-batch-${index}`,{index});
+    setTimeout(()=>yieldCancel.abort(),0);
+    return {committed:false};
+  }),/library_transaction_cancelled/u);
+}finally{
+  if(previousDocument)Object.defineProperty(globalThis,'document',previousDocument);
+  else Reflect.deleteProperty(globalThis,'document');
+}
+assert.equal(yieldReachedCommit,false,'cancellation while yielding must stop before the commit phase');
+assert.equal(await store.readLibrary(tx=>tx.get('drafts','yield-batch-0')),undefined);
+assert.equal(await store.readLibrary(tx=>tx.get('operations',yielding)),undefined,'a cancelled mutation has no replay receipt');
+
 await store.restoreLibraryTransaction(async (tx) => {
   tx.put('learningTargets', 'indexed-target', {
     introducedLanguageRouteId: 'indexed-route',
@@ -83,7 +134,7 @@ await store.readLibrary(async (tx) => {
 const diagnostics = await store.readLibraryStorageDiagnostics();
 assert.deepEqual(
   { engine: diagnostics.engine, persistence: diagnostics.persistence, schemaVersion: diagnostics.schemaVersion },
-  { engine: 'memory-adapter', persistence: 'memory', schemaVersion: 12 },
+  { engine: 'memory-adapter', persistence: 'memory', schemaVersion: 13 },
 );
 });
 
@@ -95,13 +146,13 @@ const [{ default: sqlite3InitModule }, { SqliteRecordDatabase, sqliteHomeLearnin
 ]);
 const sqlite3 = await sqlite3InitModule();
 test('unsupported physical schemas preserve owner data', () => {
-for (const version of [9, 13]) {
+for (const version of [9, 14]) {
   const incompatibleRaw = new sqlite3.oo1.DB(':memory:', 'c');
   incompatibleRaw.exec(`CREATE TABLE owner_fixture(value TEXT); INSERT INTO owner_fixture VALUES('preserve-me'); PRAGMA user_version=${version}`);
   const incompatibleDatabase = new SqliteRecordDatabase(sqlite3, incompatibleRaw, 'memory');
   assert.throws(
     () => incompatibleDatabase.initialize(),
-    version < 10 ? /sqlite_schema_legacy:9/u : /sqlite_schema_future:13/u,
+    version < 10 ? /sqlite_schema_legacy:9/u : /sqlite_schema_future:14/u,
     'unsupported physical schemas must stop instead of opening an empty replacement',
   );
   const preserved = incompatibleRaw.exec({ sql: 'SELECT value FROM owner_fixture', rowMode: 0, returnValue: 'resultRows' }) as unknown[];
@@ -115,7 +166,7 @@ test('schema 10 migrates in place and preserves owner tables',()=>{
                     INSERT INTO owner_fixture VALUES('preserve-me');
                     PRAGMA user_version=10`);
   const migrated=new SqliteRecordDatabase(sqlite3,migratedRaw,'memory');
-  assert.equal(migrated.initialize().schemaVersion,12);
+  assert.equal(migrated.initialize().schemaVersion,13);
   const preserved=migratedRaw.exec({
     sql:'SELECT value FROM owner_fixture',rowMode:0,returnValue:'resultRows',
   }) as unknown[];
@@ -397,8 +448,8 @@ test('portable media rows deduplicate by digest and collect after the last packa
   database.commit({
     clears:[],deletes:[],
     puts:[
-      {table:'packageCache',key:'portable-a',encodedValue:'{}'},
-      {table:'packageCache',key:'portable-b',encodedValue:'{}'},
+      {table:'packageCache',key:'portable-a',encodedValue:encoded({})},
+      {table:'packageCache',key:'portable-b',encodedValue:encoded({})},
     ],
     portablePackages:[portable('portable-a'),portable('portable-b')],
   });

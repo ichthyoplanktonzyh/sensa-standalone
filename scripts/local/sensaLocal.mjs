@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync 
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import { loadLocalModelEnvironment } from './sensaLocalModelEnvironment.mjs';
+import { loadPublishedContentCatalog, writeLocalCatalogSnapshot } from './publishedContentCatalog.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const runtimeRoot = join(root, '.sensa-local');
@@ -26,6 +27,7 @@ const mode = process.argv[2];
 const noBrowser = process.argv.includes('--no-browser');
 const smoke = process.argv.includes('--smoke');
 const modelsEnabled = process.argv.includes('--models') || process.env.SENSA_LOCAL_ENABLE_MODELS === '1';
+const publishedCatalogUrl = process.env.SENSA_LOCAL_PUBLIC_CATALOG_URL?.trim();
 if (!['dev', 'preview', 'reset'].includes(mode)) {
   console.error('Usage: node scripts/local/sensaLocal.mjs dev|preview|reset [--smoke] [--models] [--no-browser]');
   process.exit(2);
@@ -205,14 +207,21 @@ async function cleanup() {
 
 async function buildLocalAssets(webOrigin) {
   const environment = localWebEnvironment(webOrigin);
-  checked(process.execPath, ['--import', 'tsx', 'scripts/release/buildPortableBookRegistry.mts'], {
+  let catalog;
+  if (publishedCatalogUrl) {
+    catalog = await loadPublishedContentCatalog(publishedCatalogUrl);
+    console.log(`Using a verified public content snapshot with ${JSON.parse(catalog).items.length} Books; learner services remain local.`);
+  } else {
+   checked(process.execPath, ['--import', 'tsx', 'scripts/release/buildPortableBookRegistry.mts'], {
     env: {
       ...environment,
       SENSA_WEB_ORIGIN: webOrigin,
       SENSA_PACKAGE_OUTPUT: join(root, 'apps/web/public/learning-packages'),
       SENSA_BOOK_RELEASE_SOURCES: join(root, '.sensa-local/lightweight-resources-v7.json'),
     },
-  });
+   });
+   catalog = readFileSync(join(root, 'release-candidate/portable-catalog.json'), 'utf8');
+  }
   checked(process.execPath, ['build.mjs'], {
     cwd: join(root, 'apps/browser-extension'),
     env: {
@@ -223,7 +232,7 @@ async function buildLocalAssets(webOrigin) {
       SENSA_EXTENSION_NAME: mode === 'preview' ? 'Sensa · Local preview' : 'Sensa · Local development',
     },
   });
-  return environment;
+  return { environment, catalog };
 }
 
 async function launchBrowser(webOrigin, profile, session) {
@@ -278,14 +287,14 @@ async function runSmoke(page, webOrigin) {
 
 async function runLocal() {
   requireIdle();
-  if (!existsSync(join(root, '.sensa-local/lightweight-resources-v7.json'))) throw Error('Prepare the local Book first: npm run content:prepare-local -- --allow-tts');
+  if (!publishedCatalogUrl && !existsSync(join(root, '.sensa-local/lightweight-resources-v7.json'))) throw Error('Prepare the local Book first: npm run content:prepare-local -- --allow-tts');
   writeFileSync(lockPath, `${JSON.stringify({ pid: process.pid, mode, startedAt: new Date().toISOString() })}\n`, { mode: 0o600 });
   const webOrigin = mode === 'preview' ? 'http://127.0.0.1:4173' : 'http://127.0.0.1:3000';
   await ensureDatabaseContainer();
   migrateDatabase();
-  const webEnvironment = await buildLocalAssets(webOrigin);
+  const {environment: webEnvironment,catalog} = await buildLocalAssets(webOrigin);
+  const catalogPath = writeLocalCatalogSnapshot(runtimeRoot,catalog);
   checked(process.execPath, ['scripts/prepareWebMedia.mjs'], { env: webEnvironment });
-  const catalog = readFileSync(join(root, 'release-candidate/portable-catalog.json'), 'utf8');
   const service = start(process.execPath, ['--import', 'tsx', 'scripts/local/sensaLocalService.mts'], {
     env: {
       ...safeEnvironment(),
@@ -295,7 +304,7 @@ async function runLocal() {
       SENSA_LOCAL_WEB_ORIGINS: 'http://127.0.0.1:3000,http://127.0.0.1:4173',
       SENSA_REGISTRATION_POLICY: 'registered',
       ...modelEnvironment,
-      SENSA_PACKAGE_CATALOG_JSON: catalog,
+      SENSA_LOCAL_PACKAGE_CATALOG_PATH: catalogPath,
     },
   });
   await waitFor(`${serviceOrigin}/health`, 'Local service', service);

@@ -1,5 +1,7 @@
 {
   "localFlow": {
+    "catalogTargetLanguage": "Ngôn ngữ học",
+    "catalogSupportLanguage": "Ngôn ngữ hỗ trợ",
     "resourceWord": "Từ",
     "resourcePhrase": "Cụm từ",
     "resourceConstruction": "Cấu trúc",

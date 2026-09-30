@@ -62,11 +62,11 @@ export function useLanguageRoutes(){
       import('../../contentSupply/system/contentSupplySystem'),
       import('../../data/library/speech/edgeVoiceCatalog'),
     ]);
-    const {packages}=await supplyModule.contentSupplySystem.read({kind:'workspace'});
+    const routes=await supplyModule.contentSupplySystem.read({kind:'route_counts'});
     const packageCounts:Record<string,number>={};
-    for(const {content} of packages){
-      const key=JSON.stringify([content.targetLanguage,content.supportLanguage]);
-      packageCounts[key]=(packageCounts[key]??0)+1;
+    for(const route of routes){
+      const key=JSON.stringify([route.targetLanguage,route.supportLanguage]);
+      packageCounts[key]=route.packageCount;
     }
     const speechConfiguredLanguages=sensaLanguageForRole('target').map(({tag})=>tag).filter(tag=>speechApi.defaultClientSpeechConfiguredFor(tag));
     if(mounted.current&&generation===refreshGeneration.current)setState({...next,packageCounts,speechConfiguredLanguages,availabilityLoaded:true});
@@ -77,10 +77,10 @@ export function useLanguageRoutes(){
     const coordinator=createRefreshCoordinator(refresh);
     const read=()=>void coordinator.request().catch(()=>{if(active&&mounted.current)setNotice(localFlowText('languageReadFailed'));});
     read();
-    const stop=observeLibrary(read,['settings','meta']);
+    const stop=observeLibrary(read,['settings','meta'],{settings:['language-learning-routes'],meta:['active-language-route:web']});
     let stopSupply:(()=>void)|null=null;
     void import('../../contentSupply/system/contentSupplySystem').then(({contentSupplySystem})=>{
-      if(active&&mounted.current)stopSupply=contentSupplySystem.subscribe({kind:'workspace'},read);
+      if(active&&mounted.current)stopSupply=contentSupplySystem.subscribe({kind:'route_counts'},read);
     }).catch(()=>{if(active&&mounted.current)setNotice(localFlowText('languageReadFailed'));});
     return()=>{active=false;mounted.current=false;stop();stopSupply?.();};
   },[]);

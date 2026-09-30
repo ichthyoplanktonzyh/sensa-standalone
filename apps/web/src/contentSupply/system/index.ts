@@ -8,6 +8,7 @@ export {
 export type {
   ContentSupplyCatalogRefresh,
   ContentSupplyCatalogItem,
+  ContentSupplyInstallationPhase,
   ContentSupplyCommand,
   ContentSupplyCommandResult,
   ContentProvisioningControl,

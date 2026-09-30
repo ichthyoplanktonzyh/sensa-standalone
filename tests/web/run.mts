@@ -2,6 +2,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {journeyTestIds,validateJourneyMapping,type LongJourneyId} from './journeyMapping.mts';
 
 import {
   defaultWebTestEnvironments,
@@ -26,10 +27,12 @@ type Filters = Readonly<{
   suite?: WebTestSuite;
   runner?: WebTestRunner;
   id?: string;
+  journey?:LongJourneyId;
   list: boolean;
 }>;
 
 const catalog: readonly WebTestCatalogEntry[] = webTestCatalog;
+validateJourneyMapping(catalog);
 
 const option = (argument: string, name: string): string | undefined => {
   const prefix = `--${name}=`;
@@ -53,6 +56,7 @@ const parseFilters = (arguments_: readonly string[]): Filters => {
   let suite: string | undefined;
   let runner: string | undefined;
   let id: string | undefined;
+  let journey:LongJourneyId|undefined;
   let list = false;
 
   for (const argument of arguments_) {
@@ -90,6 +94,12 @@ const parseFilters = (arguments_: readonly string[]): Filters => {
       id = parsedId;
       continue;
     }
+    const parsedJourney=option(argument,'journey');
+    if(parsedJourney!==undefined){
+      journey=parsedJourney as LongJourneyId;
+      journeyTestIds(journey);
+      continue;
+    }
     throw new Error(`Unknown test selector ${JSON.stringify(argument)}`);
   }
 
@@ -100,22 +110,25 @@ const parseFilters = (arguments_: readonly string[]): Filters => {
     suite: allowed('suite', suite, webTestSuites),
     runner: allowed('runner', runner, webTestRunners),
     id,
+    journey,
     list,
   };
 };
 
 const selectedTests = (filters: Filters): readonly WebTestCatalogEntry[] => {
+  const journeyIds=filters.journey?new Set(journeyTestIds(filters.journey)):null;
   return catalog.filter((entry) => (
     (filters.kind === undefined || entry.kind === filters.kind)
     && (filters.runner === undefined || entry.runner === filters.runner)
     && (filters.risk === undefined || entry.risks.includes(filters.risk))
     && (filters.id === undefined || entry.id === filters.id)
+    && (journeyIds===null||journeyIds.has(entry.id))
     && (
       filters.suite !== undefined
         ? entry.suite === filters.suite || (filters.suite === 'fast' && entry.suite === 'foundation')
         : filters.environment !== undefined
           ? entry.environment === filters.environment
-          : filters.id !== undefined
+          : filters.id !== undefined || filters.journey !== undefined
             ? true
             : entry.suite === 'foundation' && defaultWebTestEnvironments.includes(entry.environment as (typeof defaultWebTestEnvironments)[number])
     )

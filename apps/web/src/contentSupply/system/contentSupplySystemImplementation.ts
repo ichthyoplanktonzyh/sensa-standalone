@@ -6,7 +6,7 @@ import {
 } from '@sensa/contracts/sensa';
 
 import { openLibrary, readLibrary, writeLibraryCache } from '../../data/library/store';
-import {installedPackageSummary,type InstalledPackage} from '../../data/library/packageRecords';
+import type {InstalledPackage} from '../../data/library/packageRecords';
 import type {
   ContentSupplyCatalogRefresh,
   ContentSupplyCommand,
@@ -65,7 +65,7 @@ const readWorkspace = async (): Promise<ContentSupplyWorkspace> => {
     const cache = parseCatalogCache(await tx.get<unknown>('meta', 'package-catalog'));
     return {
       catalog: [...cache.items],
-      packages:(await tx.packageCacheEntriesStored<InstalledPackage>()).map(row=>installedPackageSummary(row.value)),
+      packages:await tx.packageCacheProjection({kind:'summaries'}),
     };
   });
 };
@@ -134,6 +134,7 @@ export const executeContentSupplyCommand = async (command: ContentSupplyCommand)
         command.descriptor,
         command.signal,
         fraction=>command.onProgress?.(fraction),
+        phase=>command.onPhase?.(phase),
       );
     }
     case 'preview_portable_package': {
@@ -188,6 +189,8 @@ export const readContentSupplyQuery = async (query: ContentSupplyQuery): Promise
   switch (query.kind) {
     case 'workspace':
       return readWorkspace();
+    case 'catalog':return readLibrary(async tx=>parseCatalogCache(await tx.get<unknown>('meta','package-catalog')).items);
+    case 'route_counts':return readLibrary(tx=>tx.packageCacheProjection({kind:'route_counts'}));
     case 'runtime_packages':
       return readLibrary(async tx=>Promise.all([...new Set(query.packageKeys)].map(key=>tx.get<InstalledPackage>('packageCache',key))).then(values=>values.filter((value):value is InstalledPackage=>!!value)));
     case 'provisioning_tasks': {

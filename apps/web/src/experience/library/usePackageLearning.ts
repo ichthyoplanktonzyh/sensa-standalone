@@ -4,6 +4,7 @@ import {useEffect,useRef,useState} from 'react';
 import {
  contentSupplySystem,
  type ContentSupplyCatalogItem,
+ type ContentSupplyInstallationPhase,
  type ContentSupplyPackage as InstalledPackage,
  type PortablePackagePreview,
 } from '../../contentSupply/system';
@@ -14,7 +15,7 @@ import {
  type LearningWorkspaceProjection,
 } from '../../learning/system';
 import {localFlowNotice,localFlowText} from '../../i18n/localFlowText';
-import {useLanguageRoutes} from './useLanguageRoutes';
+import {useActiveLanguageContext} from './useActiveLanguageContext';
 import {settleOperation} from './operationSettlement';
 import {createRefreshCoordinator} from './refreshCoordinator';
 
@@ -27,6 +28,15 @@ const emptyWorkspace:LearningWorkspaceProjection={
  dailyLimit:null,
  records:[],
  policyOptions:[],
+};
+
+const measuredWorkspaceRead=async<T,>(name:string,work:()=>Promise<T>):Promise<T>=>{
+ const started=performance.now();
+ if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.mark(`sensa.workspace.${name}.start`);
+ try{return await work();}
+ finally{
+  if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure(`sensa.workspace.${name}`,{start:started,end:performance.now()});
+ }
 };
 
 export function usePackageLearning(entryOpen:boolean){
@@ -42,34 +52,49 @@ export function usePackageLearning(entryOpen:boolean){
  const transfer=useRef<AbortController|null>(null);
  const catalogRequest=useRef<AbortController|null>(null);
  const generation=useRef(0);
+ const lifecycle=useRef(0);
  const actInFlight=useRef(false);
- const {context:languageContext}=useLanguageRoutes();
+ const languageContext=useActiveLanguageContext();
 
- const refresh=async()=>{
-  const [projection,supply]=await Promise.all([
-   learningSystem.read({kind:'workspace',languageContext,clock:Date.now()}),
-   contentSupplySystem.read({kind:'workspace'}),
-  ]);
+ const refreshLearning=async()=>{
+  const current=lifecycle.current;
+  const projection=await measuredWorkspaceRead('learning',()=>learningSystem.read({kind:'workspace',languageContext,clock:Date.now()}));
+  if(current!==lifecycle.current)return;
   setWorkspace(projection);
+ };
+ const refreshSupply=async()=>{
+  const current=lifecycle.current;
+  const supply=await measuredWorkspaceRead('supply',()=>contentSupplySystem.read({kind:'workspace'}));
+  if(current!==lifecycle.current)return;
   setPackages([...supply.packages]);
   setCatalog([...supply.catalog]);
+ };
+ const refresh=async()=>{
+  const current=lifecycle.current;
+  await Promise.all([refreshLearning(),refreshSupply()]);
+  if(current!==lifecycle.current)return;
   setLoaded(true);
  };
 
  useEffect(()=>{
-  const coordinator=createRefreshCoordinator(refresh);
-  const reload=()=>void coordinator.request().catch(()=>setNotice(localFlowText('progressReadFailed')));
-  const prepare=async()=>{
-   await learningSystem.execute({kind:'prepare_queue',languageContext,at:new Date().toISOString()});
-   await coordinator.request();
+  setLoaded(false);
+  const learningCoordinator=createRefreshCoordinator(refreshLearning);
+  const supplyCoordinator=createRefreshCoordinator(refreshSupply);
+  const reloadLearning=()=>void learningCoordinator.request().catch(()=>setNotice(localFlowText('progressReadFailed')));
+  const reloadSupply=()=>void Promise.all([learningCoordinator.request(),supplyCoordinator.request()]).catch(()=>setNotice(localFlowText('progressReadFailed')));
+  const prepare=async(initial=false)=>{
+   await measuredWorkspaceRead('prepare',()=>learningSystem.execute({kind:'prepare_queue',languageContext,at:new Date().toISOString()}));
+   if(initial)await refresh();
+   else await learningCoordinator.request();
   };
-  void contentSupplySystem.execute({kind:'rehydrate'}).then(prepare).catch(()=>setNotice(localFlowText('learningReadFailed')));
-  const stopLearning=learningSystem.subscribe({kind:'workspace',languageContext},reload);
-  const stopSupply=contentSupplySystem.subscribe({kind:'workspace'},reload);
+  void measuredWorkspaceRead('rehydrate',()=>contentSupplySystem.execute({kind:'rehydrate'})).then(()=>prepare(true)).catch(()=>setNotice(localFlowText('learningReadFailed')));
+  const stopLearning=learningSystem.subscribe({kind:'workspace',languageContext},reloadLearning);
+  const stopSupply=contentSupplySystem.subscribe({kind:'workspace'},reloadSupply);
   const focus=()=>void prepare().catch(()=>setNotice(localFlowText('progressReadFailed')));
   window.addEventListener('focus',focus);
   return()=>{
    generation.current++;
+   lifecycle.current++;
    stopLearning();
    stopSupply();
    transfer.current?.abort();
@@ -82,17 +107,17 @@ export function usePackageLearning(entryOpen:boolean){
   if(workspace.queue.nextChangeAt===null)return;
   const timer=window.setTimeout(
    ()=>void learningSystem.execute({kind:'prepare_queue',languageContext,at:new Date().toISOString()})
-    .then(refresh)
+    .then(refreshLearning)
     .catch(()=>setNotice(localFlowText('progressReadFailed'))),
    Math.min(2_147_483_647,Math.max(20,workspace.queue.nextChangeAt-Date.now()+20)),
   );
   return()=>window.clearTimeout(timer);
  },[workspace.queue.nextChangeAt,languageContext.languageRouteId,languageContext.languageRouteRevision]);
 
- const perform=async<T,>(work:()=>Promise<T>)=>{
+ const perform=async<T,>(work:()=>Promise<T>,refreshAfter=refreshLearning)=>{
   setBusy(true);setNotice('');
   try{
-   const outcome=await settleOperation(work,refresh);
+   const outcome=await settleOperation(work,refreshAfter);
    if(outcome.kind==='rejected'){
     const error=outcome.error;
     setNotice(error instanceof Error&&error.message.startsWith('localFlow.')?error.message:localFlowText('retryOperation'));
@@ -114,14 +139,13 @@ export function usePackageLearning(entryOpen:boolean){
   catalogRequest.current?.abort();
   const request=new AbortController();catalogRequest.current=request;
   try{
-   const local=await contentSupplySystem.read({kind:'workspace'});
+   const local=await contentSupplySystem.read({kind:'catalog'});
    if(gen!==generation.current)return;
-   setCatalog([...local.catalog]);setCatalogBusy(true);
+   setCatalog([...local]);setCatalogBusy(true);
    const result=await contentSupplySystem.execute({kind:'refresh_catalog',force:notify,signal:request.signal});
    if(gen===generation.current){
     setCatalog([...result.items]);
     try{
-     await refresh();
      if(notify)setNotice(localFlowText(result.status==='current'?'catalogCurrent':'catalogUpdated'));
      else setNotice(current=>current==='localFlow.audioIncomplete'?'':current);
     }catch{setNotice(localFlowText('progressReadFailed'));}
@@ -153,11 +177,11 @@ export function usePackageLearning(entryOpen:boolean){
   dailyLimit:dailyLimit??undefined,
   notice:localFlowNotice(notice),busy,progress,loaded,catalogBusy,reloadCatalog,refresh,
   confirmQuantity:(n:number)=>perform(()=>learningSystem.execute({kind:'confirm_quantity',operationId:crypto.randomUUID(),languageContext,dailyLimit:n})),
-  download:(d:ContentSupplyCatalogItem)=>perform(async()=>{
+  download:(d:ContentSupplyCatalogItem,onPhase?:(phase:ContentSupplyInstallationPhase)=>void)=>perform(async()=>{
    const c=new AbortController();transfer.current=c;
-   try{setProgress(0);return await contentSupplySystem.execute({kind:'install_catalog_item',descriptor:d,signal:AbortSignal.any([c.signal,AbortSignal.timeout(120000)]),onProgress:n=>setProgress(Math.round(100*n))});}
+   try{setProgress(0);return await contentSupplySystem.execute({kind:'install_catalog_item',descriptor:d,signal:AbortSignal.any([c.signal,AbortSignal.timeout(120000)]),onProgress:n=>setProgress(Math.round(100*n)),onPhase});}
    finally{if(transfer.current===c)transfer.current=null;}
-  }),
+  },refresh),
   cancelDownload:()=>transfer.current?.abort(),
   previewImport:(file:File):Promise<PortablePackagePreview|null>=>inspect(async()=>{
    if(file.size>64*1024*1024)throw new Error('localFlow.packageTooLarge');
@@ -167,7 +191,7 @@ export function usePackageLearning(entryOpen:boolean){
    const installed=await perform(async()=>{
     if(file.size>64*1024*1024)throw new Error('localFlow.packageTooLarge');
     return contentSupplySystem.execute({kind:'install_portable_package',bytes:new Uint8Array(await file.arrayBuffer()),expectedArchiveDigest});
-   });
+   },refresh);
    if(installed)setNotice(installed.content.targetLanguage!==languageContext.targetLanguageTag
     ?'localFlow.routeLanguageMismatch'
     :installed.content.supportLanguage!==languageContext.supportLanguageTag

@@ -18,7 +18,9 @@ export function useActiveLanguageContext():SensaFormalPinnedLanguageContext{
   });
   const read=()=>void coordinator.request().catch(()=>{});
   read();
-  const stop=observeLibrary(read,['settings','meta']);
+  const stop=observeLibrary(read,['settings','meta'],{
+   settings:['language-learning-routes'],meta:['active-language-route:web'],
+  });
   return()=>{active=false;stop();};
  },[]);
  return context;

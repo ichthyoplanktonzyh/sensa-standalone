@@ -1,3 +1,9 @@
+export {
+  longJourneyMappings, auditedCapabilities, auditedScenarios,
+  scenarioEvidenceContributions, scenarioLongJourneyIds,
+  journeySupportingTests,journeyTestIds,
+} from './journeyMapping.mts';
+
 export const webTestKinds = ['unit', 'contract', 'integration', 'quality'] as const;
 export type WebTestKind = (typeof webTestKinds)[number];
 
@@ -163,6 +169,13 @@ const foundationTests = [
 type MigratedTest = Readonly<{path: string; suite: WebTestSuite; memoryLibrary?: boolean; env?: Readonly<Record<string, string>>}>;
 
 const fastBeforeMemory = [
+  'unit/canonical-digest',
+  'unit/book-center-projection',
+  'unit/sqlite-sahpool-preservation',
+  'unit/package-cache-projection',
+  'contracts/journey-evidence',
+  'integration/local-book-preparation',
+  'integration/local-published-catalog',
   'integration/support-diagnostics',
   'release/learning-content-bucket',
   'release/system-release',
@@ -176,6 +189,8 @@ const fastBeforeMemory = [
 ] as const;
 
 const fastWithMemory = [
+  'unit/package-workspace-refresh',
+  'integration/book-installation-journey',
   'integration/content-agent', 'integration/reveal-resources', 'integration/reveal-render',
   'integration/known-continuation', 'integration/speech-provider', 'quality/youglish-isolation',
   'contracts/resource-contracts', 'integration/learning-registry', 'integration/service-status',
@@ -203,6 +218,8 @@ const fastWithMemory = [
 const browserTests = [
   'browser/skin-surface', 'browser/reference-presentation',
   'browser/package-center-journey',
+  'browser/portable-book-capacity',
+  'browser/sqlite-sahpool-recovery',
   'browser/semantic-session-persistence-browser',
   'browser/extension-storage-recovery',
   'browser/sqlite-opfs-benchmark', 'browser/web-bootstrap-budget',
@@ -220,6 +237,8 @@ const manualTests = [
 const playwrightPaths = new Set<string>([
   'browser/skin-surface', 'browser/reference-presentation',
   'browser/package-center-journey',
+  'browser/portable-book-capacity',
+  'browser/sqlite-sahpool-recovery',
   'browser/semantic-session-persistence-browser',
   'browser/extension-storage-recovery',
   'browser/sqlite-opfs-benchmark', 'browser/web-bootstrap-budget',
@@ -227,10 +246,16 @@ const playwrightPaths = new Set<string>([
 ]);
 
 const durabilityTests = new Set<string>([
+  'unit/package-cache-projection',
+  'unit/sqlite-sahpool-preservation',
+  'integration/book-installation-journey',
+  'integration/portable-learning-registry',
   'database/account-deletion', 'database/intake-delivery', 'database/library-cloud',
   'database/model-request-state', 'browser/sqlite-opfs-benchmark',
   'browser/semantic-session-persistence-browser',
   'browser/package-center-journey',
+  'browser/portable-book-capacity',
+  'browser/sqlite-sahpool-recovery',
   'browser/extension-storage-recovery',
   'browser/web-bootstrap-budget', 'integration/known-continuation',
   'integration/learning-registry', 'integration/local-book',
@@ -242,11 +267,15 @@ const durabilityTests = new Set<string>([
   'integration/english-lightweight-release',
 ]);
 const convergenceTests = new Set<string>([
+  'unit/package-workspace-refresh',
   'database/library-cloud', 'browser/web-bootstrap-budget',
 ]);
 const scaleTests = new Set<string>([
+  'unit/package-workspace-refresh',
+  'unit/package-cache-projection',
+  'unit/book-center-projection',
   'database/database-budget', 'browser/sqlite-opfs-benchmark',
-  'browser/web-bootstrap-budget', 'browser/package-center-journey', 'integration/content-agent',
+  'browser/web-bootstrap-budget', 'browser/package-center-journey', 'browser/portable-book-capacity', 'integration/content-agent',
   'quality/web-idle-work',
 ]);
 
@@ -279,7 +308,7 @@ for (const [risk, paths] of [
 }
 
 const migratedEntry = ({path, suite, memoryLibrary, env}: MigratedTest): WebTestCatalogEntry => {
-  const kind = path.startsWith('contracts/') ? 'contract' : path.startsWith('quality/') ? 'quality' : 'integration';
+  const kind = path.startsWith('unit/') ? 'unit' : path.startsWith('contracts/') ? 'contract' : path.startsWith('quality/') ? 'quality' : 'integration';
   const environment = path === 'database/library-cloud' ? 'browser-postgres'
     : suite === 'browser' || path.startsWith('browser/') ? 'chromium'
       : suite === 'database' ? 'postgres' : 'node';

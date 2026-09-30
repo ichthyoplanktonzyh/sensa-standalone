@@ -1,6 +1,7 @@
 import type { Database, Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 
 import {decodeBackupValue,encodeBackupValue} from './backupCodec';
+import {createPackageCacheSummary,isPackageCacheProjectionSource,sqlitePackageCacheProjectionSchema,type PackageCacheProjectionQuery,type PackageCacheProjectionResult} from './packageCacheProjection';
 import {
   createHomeLearningTargetRecord,
   createHomeLearningStorageProjection,
@@ -55,6 +56,11 @@ export const sqliteHomeLearningTargetsQuery = `SELECT
 /** Internal SQLite record kernel owned by the OPFS Worker. */
 export class SqliteRecordDatabase {
   private nextOptimizeAt = 0;
+  private closed=false;
+  private initialized=false;
+  private initializationTimingsMs:Record<string,number>|undefined;
+  private integrityCheck:SqliteStorageDiagnostics['integrityCheck'];
+  private integrityFailed=false;
 
   constructor(
     private readonly sqlite3: Sqlite3Static,
@@ -63,6 +69,10 @@ export class SqliteRecordDatabase {
   ) {}
 
   initialize(): SqliteStorageDiagnostics {
+    if(this.closed)throw new Error('sqlite_database_closed');
+    if(this.integrityFailed)throw new Error('sqlite_integrity_failed');
+    if(this.initialized)return this.diagnostics();
+    const started=performance.now();
     // SQLite Wasm has no shared-memory API. Its documented WAL contract
     // requires exclusive locking to be the first operation after open.
     const lockingMode = this.scalarText("PRAGMA locking_mode=EXCLUSIVE");
@@ -70,6 +80,7 @@ export class SqliteRecordDatabase {
       throw new Error(`sqlite_locking_mode_failed:${lockingMode}`);
     }
     const before = this.scalarNumber("PRAGMA user_version");
+    const schemaCookie=this.scalarNumber('PRAGMA schema_version');
     if (before !== 0 && before < sqliteLibraryBaselineVersion) {
       throw new Error(`sqlite_schema_legacy:${before}`);
     }
@@ -84,6 +95,8 @@ export class SqliteRecordDatabase {
       this.database.exec('BEGIN IMMEDIATE');
       try{
         this.database.exec(sqlitePortableMediaSchema);
+        this.database.exec(sqlitePackageCacheProjectionSchema);
+        this.rebuildPackageCacheProjection();
         this.database.exec(`PRAGMA user_version=${sqliteLibrarySchemaVersion}`);
         this.database.exec('COMMIT');
       }catch(error){
@@ -92,25 +105,40 @@ export class SqliteRecordDatabase {
       }
       this.database.exec(sqliteLibrarySchema);
     }
+    else if(before===12){
+      this.database.exec('BEGIN IMMEDIATE');
+      try{
+        this.database.exec(sqlitePackageCacheProjectionSchema);
+        this.rebuildPackageCacheProjection();
+        this.database.exec(`PRAGMA user_version=${sqliteLibrarySchemaVersion}`);
+        this.database.exec('COMMIT');
+      }catch(error){
+        try{this.database.exec('ROLLBACK');}catch{/* Retain the authoritative cache. */}
+        throw error;
+      }
+      this.database.exec(sqliteLibrarySchema);
+    }
     else if (before !== sqliteLibrarySchemaVersion) {
       throw new Error(`sqlite_schema_migration_missing:${before}`);
     } else this.database.exec(sqliteLibrarySchema);
+    const schemaReady=performance.now();
     // This OPFS connection normally lives for the owning tab's lifetime. Let
     // SQLite refresh planner statistics after schema changes and on every open.
     this.database.exec("PRAGMA optimize=0x10002");
     this.nextOptimizeAt = Date.now() + sqliteOptimizeIntervalMs;
-    const integrity = this.database.exec({
-      sql: "PRAGMA quick_check(1)",
-      rowMode: 0,
-      returnValue: "resultRows",
-    }) as unknown[];
-    if (integrity[0] !== "ok") throw new Error("sqlite_integrity_failed");
+    const plannerReady=performance.now();
+    // A whole-file health scan grows with the entire collection. Run it for
+    // new/changed structures and explicit diagnostics, not each normal open.
+    if(before===0||before!==sqliteLibrarySchemaVersion||schemaCookie!==this.scalarNumber('PRAGMA schema_version'))this.verifyIntegrity();
+    const integrityReady=performance.now();
     if (this.persistence === "opfs") {
       const journalMode = this.scalarText("PRAGMA journal_mode");
       const synchronous = this.scalarNumber("PRAGMA synchronous");
       if (journalMode !== "wal") throw new Error(`sqlite_journal_mode_failed:${journalMode}`);
       if (synchronous !== 2) throw new Error(`sqlite_synchronous_failed:${synchronous}`);
     }
+    this.initialized=true;
+    this.initializationTimingsMs={schema:Math.round(schemaReady-started),planner:Math.round(plannerReady-schemaReady),integrity:Math.round(integrityReady-plannerReady),total:Math.round(performance.now()-started)};
     return this.diagnostics();
   }
 
@@ -135,6 +163,36 @@ export class SqliteRecordDatabase {
       key: String(row.record_key),
       encodedValue: String(row.value_json),
     }));
+  }
+
+  existingRecordKeys(table:SqliteLibraryTable,keys:readonly string[]):string[]{
+    if(!keys.length)return [];
+    return this.database.exec({
+      sql:`SELECT record_key FROM sensa_records WHERE table_name=?
+           AND record_key IN (SELECT value FROM json_each(?)) ORDER BY record_key`,
+      bind:[table,JSON.stringify(keys)],rowMode:0,returnValue:'resultRows',
+    }) as string[];
+  }
+
+  packageCacheProjection<Query extends PackageCacheProjectionQuery>(query:Query):PackageCacheProjectionResult<Query>{
+    if(query.kind==='route_counts'){
+      const rows=this.database.exec({
+        sql:`SELECT json_extract(summary_json,'$.content.targetLanguage') AS target_language,
+                    json_extract(summary_json,'$.content.supportLanguage') AS support_language,COUNT(*) AS package_count
+             FROM sensa_package_cache_projection GROUP BY target_language,support_language`,
+        rowMode:'object',returnValue:'resultRows',
+      }) as Array<Record<string,unknown>>;
+      return rows.map(row=>({targetLanguage:String(row.target_language),supportLanguage:String(row.support_language),packageCount:Number(row.package_count)})) as PackageCacheProjectionResult<Query>;
+    }
+    const rows=this.database.exec({
+      sql:query.kind==='identities'
+        ?'SELECT package_key,digest FROM sensa_package_cache_projection ORDER BY package_key'
+        :'SELECT summary_json FROM sensa_package_cache_projection ORDER BY package_key',
+      rowMode:'object',returnValue:'resultRows',
+    }) as Array<Record<string,unknown>>;
+    return (query.kind==='identities'
+      ?rows.map(row=>({key:String(row.package_key),digest:String(row.digest)}))
+      :rows.map(row=>JSON.parse(String(row.summary_json)))) as PackageCacheProjectionResult<Query>;
   }
 
   changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): SqliteRecordChange[] {
@@ -371,6 +429,7 @@ export class SqliteRecordDatabase {
   }
 
   commit(mutation: SqliteMutation): void {
+    if(this.integrityFailed)throw new Error('sqlite_integrity_failed');
     if (
       !mutation.clears.length
       && !mutation.deletes.length
@@ -407,7 +466,10 @@ export class SqliteRecordDatabase {
           });
         }
         this.database.exec({ sql: "DELETE FROM sensa_records WHERE table_name=?", bind: [table] });
-        if(table==='packageCache')this.database.exec('DELETE FROM sensa_portable_package_media');
+        if(table==='packageCache'){
+          this.database.exec('DELETE FROM sensa_portable_package_media');
+          this.database.exec('DELETE FROM sensa_package_cache_projection');
+        }
         if (table === 'learningTargets') this.database.exec('DELETE FROM sensa_learning_targets');
         if (table === 'learningRuns') this.database.exec('DELETE FROM sensa_learning_runs');
         if (table === 'contentAttempts') this.database.exec('DELETE FROM sensa_content_attempts');
@@ -431,10 +493,10 @@ export class SqliteRecordDatabase {
           sql: "DELETE FROM sensa_records WHERE table_name=? AND record_key=?",
           bind: [item.table, item.key],
         });
-        if(item.table==='packageCache')this.database.exec({
-          sql:'DELETE FROM sensa_portable_package_media WHERE package_key=?',
-          bind:[item.key],
-        });
+        if(item.table==='packageCache'){
+          this.database.exec({sql:'DELETE FROM sensa_portable_package_media WHERE package_key=?',bind:[item.key]});
+          this.database.exec({sql:'DELETE FROM sensa_package_cache_projection WHERE package_key=?',bind:[item.key]});
+        }
         if (item.table === 'learningTargets') {
           this.database.exec({
             sql: 'DELETE FROM sensa_learning_targets WHERE record_key=?',
@@ -506,6 +568,7 @@ export class SqliteRecordDatabase {
             bind: [item.table, item.key],
           });
         }
+        if(item.table==='packageCache')this.upsertPackageCacheProjection(item.key,item.encodedValue);
         if (item.table === 'learningTargets') {
           this.upsertLearningTargetProjection(item.key, item.encodedValue);
         }
@@ -529,14 +592,18 @@ export class SqliteRecordDatabase {
                               WHERE reference.sha256=sensa_portable_media.sha256
                             )`);
       this.database.exec("COMMIT");
+      this.integrityCheck=undefined;
     } catch (error) {
       try { this.database.exec("ROLLBACK"); } catch { /* Preserve the original failure. */ }
       throw error;
     }
   }
 
-  diagnostics(): SqliteStorageDiagnostics {
+  diagnostics(options?:Readonly<{verifyIntegrity?:boolean}>): SqliteStorageDiagnostics {
+    if(options?.verifyIntegrity)this.verifyIntegrity();
     return {
+      ...(this.integrityCheck?{integrityCheck:this.integrityCheck}:{}),
+      ...(this.initializationTimingsMs?{initializationTimingsMs:this.initializationTimingsMs}:{}),
       engine: "sqlite-wasm",
       persistence: this.persistence,
       sqliteVersion: this.sqlite3.version.libVersion,
@@ -547,9 +614,29 @@ export class SqliteRecordDatabase {
     };
   }
 
-  close(): void {
-    this.database.exec("PRAGMA optimize");
+  private verifyIntegrity():void{
+    const started=performance.now();
+    const rows=this.database.exec({sql:'PRAGMA quick_check(1)',rowMode:0,returnValue:'resultRows'}) as unknown[];
+    if(rows.length!==1||rows[0]!=='ok'){
+      this.integrityCheck=undefined;
+      this.integrityFailed=true;
+      throw new Error('sqlite_integrity_failed');
+    }
+    this.integrityFailed=false;
+    this.integrityCheck={status:'ok',checkedAt:new Date().toISOString(),durationMs:Math.round(performance.now()-started)};
+  }
+
+  close(optimize=true): void {
+    if(this.closed)return;
+    let optimizeFailed=false;
+    let optimizeFailure:unknown;
+    if(optimize){
+      try{this.database.exec("PRAGMA optimize");}
+      catch(cause){optimizeFailed=true;optimizeFailure=cause;}
+    }
     this.database.close();
+    this.closed=true;
+    if(optimizeFailed)throw optimizeFailure;
   }
 
   private scalarNumber(sql: string): number {
@@ -577,6 +664,26 @@ export class SqliteRecordDatabase {
 
   private decode<T>(encoded: string): T {
     return decodeBackupValue(JSON.parse(encoded)) as T;
+  }
+
+  private upsertPackageCacheProjection(key:string,encodedValue:string):void{
+    const value=this.decode<unknown>(encodedValue);
+    if(!isPackageCacheProjectionSource(value)){
+      this.database.exec({sql:'DELETE FROM sensa_package_cache_projection WHERE package_key=?',bind:[key]});
+      return;
+    }
+    const summary=createPackageCacheSummary(value);
+    if(value.key!==key)throw new Error('sqlite_package_cache_key_mismatch');
+    this.database.exec({
+      sql:`INSERT INTO sensa_package_cache_projection(package_key,digest,summary_json) VALUES(?,?,?)
+           ON CONFLICT(package_key) DO UPDATE SET digest=excluded.digest,summary_json=excluded.summary_json`,
+      bind:[key,summary.digest,JSON.stringify(summary)],
+    });
+  }
+
+  private rebuildPackageCacheProjection():void{
+    if(!this.scalarNumber("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='sensa_records'"))return;
+    for(const row of this.entries('packageCache'))this.upsertPackageCacheProjection(row.key,row.encodedValue);
   }
 
   private upsertLearningTargetProjection(key: string, encodedValue: string): void {

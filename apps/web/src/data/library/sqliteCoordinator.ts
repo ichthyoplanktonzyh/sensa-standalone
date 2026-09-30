@@ -10,6 +10,8 @@ import type {
   SqliteWorkerInput,
 } from './sqliteProtocol';
 import { sqliteCoordinatorProtocolVersion, sqliteLibrarySchemaVersion } from './sqliteProtocol';
+import {observeSahPoolPageHide} from './sqlitePoolLifecycle';
+import type {PackageCacheProjectionQuery,PackageCacheProjectionResult} from './packageCacheProjection';
 
 // Keep the original ownership name so a page from the previous release cannot
 // open a second OPFS connection while a newly deployed page is active.
@@ -19,6 +21,8 @@ const remoteTimeoutMs = 15_000;
 const leaderWaitMs = 10_000;
 
 export interface CoordinatedSqliteBackend {
+  existingRecordKeys(table:SqliteLibraryTable,keys:readonly string[]):Promise<string[]>;
+  packageCacheProjection<Query extends PackageCacheProjectionQuery>(query:Query):Promise<PackageCacheProjectionResult<Query>>;
   initialize(): Promise<SqliteStorageDiagnostics>;
   get(table: SqliteLibraryTable, key: string): Promise<string | null>;
   entries(table: SqliteLibraryTable): Promise<Array<{ key: string; encodedValue: string }>>;
@@ -36,7 +40,8 @@ export interface CoordinatedSqliteBackend {
   portableMedia(sha256:string):Promise<PortableMediaBlob|null>;
   portableMediaDiagnostics():Promise<PortableMediaStorageDiagnostics>;
   commit(mutation: SqliteMutation): Promise<void>;
-  diagnostics(): Promise<SqliteStorageDiagnostics>;
+  diagnostics(options?:Readonly<{verifyIntegrity?:boolean}>): Promise<SqliteStorageDiagnostics>;
+  close():Promise<void>;
 }
 
 type CoordinatorEnvelope = { protocol: number; schemaVersion: number };
@@ -71,8 +76,15 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
     reject: (error: Error) => void;
   }>();
   private backend: CoordinatedSqliteBackend | null = null;
+  private startupBackend:CoordinatedSqliteBackend|null=null;
   private connection: Promise<void> | null = null;
   private election: Promise<boolean> | null = null;
+  private ownerLockRelease:(()=>void)|null=null;
+  private closeInFlight:Promise<void>|null=null;
+  private readonly activeRemoteRequests=new Set<Promise<void>>();
+  private closing=false;
+  private cleanupUnconfirmed=false;
+  private lifecycleGeneration=0;
   private lastLeaderAt = 0;
   private incompatible = false;
 
@@ -80,6 +92,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
     this.channel.addEventListener('message', (event: MessageEvent<CoordinatorMessage>) => {
       this.receive(event.data);
     });
+    observeSahPoolPageHide(window,()=>this.close());
   }
 
   initialize(): Promise<SqliteStorageDiagnostics> {
@@ -92,6 +105,10 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
 
   entries(table: SqliteLibraryTable): Promise<Array<{ key: string; encodedValue: string }>> {
     return this.call({ kind: 'entries', table }) as Promise<Array<{ key: string; encodedValue: string }>>;
+  }
+
+  existingRecordKeys(table:SqliteLibraryTable,keys:readonly string[]):Promise<string[]>{
+    return this.call({kind:'existingRecordKeys',table,keys:[...keys]}) as Promise<string[]>;
   }
 
   changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]> {
@@ -115,6 +132,10 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
 
   homeLearningProjection(languageRouteId: string): Promise<HomeLearningStorageProjection> {
     return this.call({ kind: 'homeLearningProjection', languageRouteId }) as Promise<HomeLearningStorageProjection>;
+  }
+
+  packageCacheProjection<Query extends PackageCacheProjectionQuery>(query:Query):Promise<PackageCacheProjectionResult<Query>>{
+    return this.call({kind:'packageCacheProjection',query}) as Promise<PackageCacheProjectionResult<Query>>;
   }
 
   countIntroducedLearningTargets(languageRouteId: string, startedAfter: string, startedBefore: string): Promise<number> {
@@ -168,41 +189,96 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
     await this.call({ kind: 'commit', mutation });
   }
 
-  diagnostics(): Promise<SqliteStorageDiagnostics> {
-    return this.call({ kind: 'diagnostics' }) as Promise<SqliteStorageDiagnostics>;
+  diagnostics(options?:Readonly<{verifyIntegrity?:boolean}>): Promise<SqliteStorageDiagnostics> {
+    return this.call({ kind: 'diagnostics',...options }) as Promise<SqliteStorageDiagnostics>;
+  }
+
+  /** Close the Worker-owned database before releasing the document owner lock. */
+  close():Promise<void>{
+    if(this.closeInFlight)return this.closeInFlight;
+    const closing=(async()=>{
+      this.closing=true;
+      this.lifecycleGeneration++;
+      this.connection=null;
+      for(const waiter of [...this.leaderWaiters]){
+        waiter.reject(new Error('sqlite_owner_lifecycle_closed'));
+      }
+      try{
+        const election=this.election;
+        if(election)await election.catch(()=>false);
+        await Promise.all([...this.activeRemoteRequests]);
+        const backend=this.backend??this.startupBackend;
+        if(backend)await backend.close();
+        if(this.backend===backend)this.backend=null;
+        if(this.startupBackend===backend)this.startupBackend=null;
+        const release=this.ownerLockRelease;
+        this.ownerLockRelease=null;
+        release?.();
+        this.connection=null;
+        this.lastLeaderAt=0;
+        this.cleanupUnconfirmed=false;
+      }catch(cause){
+        this.cleanupUnconfirmed=true;
+        throw cause;
+      }finally{
+        this.closing=false;
+      }
+    })();
+    this.closeInFlight=closing.finally(()=>{this.closeInFlight=null;});
+    return this.closeInFlight;
   }
 
   private async call(input: SqliteWorkerInput): Promise<unknown> {
     if (this.incompatible) throw new Error('sqlite_owner_incompatible');
-    await this.connect();
+    if(this.closing||this.closeInFlight)throw new Error('sqlite_owner_closing');
+    if(this.cleanupUnconfirmed)await this.close();
+    if(this.closing||this.closeInFlight)throw new Error('sqlite_owner_closing');
+    const generation=this.lifecycleGeneration;
+    await this.connect(generation);
+    this.assertLifecycleGeneration(generation);
     if (this.incompatible) throw new Error('sqlite_owner_incompatible');
     if (this.backend) return this.dispatch(this.backend, input);
 
     // A stale announcement is harmless: the lock decides whether this tab may
     // replace the old owner before the request is sent.
     if (await this.tryBecomeLeader()) {
+      this.assertLifecycleGeneration(generation);
       return this.dispatch(this.backend!, input);
     }
+    this.assertLifecycleGeneration(generation);
     try {
       return await this.remote(input);
     } catch (cause) {
       if (errorMessage(cause) !== 'sqlite_coordination_timeout') throw cause;
+      this.assertLifecycleGeneration(generation);
       this.lastLeaderAt = 0;
-      if (await this.tryBecomeLeader()) return this.dispatch(this.backend!, input);
-      await this.waitForLeader();
+      if (await this.tryBecomeLeader()){
+        this.assertLifecycleGeneration(generation);
+        return this.dispatch(this.backend!, input);
+      }
+      await this.waitForLeader(generation);
+      this.assertLifecycleGeneration(generation);
       return this.remote(input);
     }
   }
 
-  private connect(): Promise<void> {
-    if (!this.connection) {
-      this.connection = (async () => {
-        if (await this.tryBecomeLeader()) return;
-        await this.waitForLeader();
-      })();
-      this.connection.catch(() => { this.connection = null; });
-    }
-    return this.connection;
+  private connect(generation:number): Promise<void> {
+    this.assertLifecycleGeneration(generation);
+    if(this.connection)return this.connection;
+    const connection=(async()=>{
+      if(await this.tryBecomeLeader()){
+        this.assertLifecycleGeneration(generation);
+        return;
+      }
+      this.assertLifecycleGeneration(generation);
+      await this.waitForLeader(generation);
+      this.assertLifecycleGeneration(generation);
+    })();
+    this.connection=connection;
+    void connection.catch(()=>{
+      if(this.connection===connection)this.connection=null;
+    });
+    return connection;
   }
 
   private tryBecomeLeader(): Promise<boolean> {
@@ -222,15 +298,54 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
           succeed(false);
           return;
         }
+        let releaseHold!:()=>void;
+        const hold=new Promise<void>(resolve=>{
+          releaseHold=resolve;
+          this.ownerLockRelease=resolve;
+        });
+        let backend:CoordinatedSqliteBackend|undefined;
         try {
-          const backend = this.createBackend();
+          backend=this.createBackend();
+          this.startupBackend=backend;
           await backend.initialize();
+          if(this.closing){
+            await backend.close();
+            this.startupBackend=null;
+            if(this.ownerLockRelease===releaseHold)this.ownerLockRelease=null;
+            succeed(false);
+            return;
+          }
           this.backend = backend;
+          this.startupBackend=null;
           this.markLeader();
           succeed(true);
-          await new Promise<void>(() => { /* The document lifetime owns the OPFS connection. */ });
+          await hold;
+          if(this.backend===backend)this.backend=null;
+          if(this.ownerLockRelease===releaseHold)this.ownerLockRelease=null;
         } catch (cause) {
-          fail(cause);
+          if(!backend){
+            releaseHold();
+            fail(cause);
+            if(this.ownerLockRelease===releaseHold)this.ownerLockRelease=null;
+            return;
+          }
+          try{
+            await backend.close();
+            this.startupBackend=null;
+            if(this.ownerLockRelease===releaseHold)this.ownerLockRelease=null;
+            releaseHold();
+            fail(cause);
+          }catch(cleanupCause){
+            this.cleanupUnconfirmed=true;
+            this.startupBackend=backend;
+            fail(new AggregateError([cause,cleanupCause],'sqlite_worker_cleanup_unconfirmed'));
+            // Keep the document lock while the Worker cannot prove that its
+            // pool handles are closed. pagehide may retry cleanup; destruction
+            // of this document is the final lease boundary.
+            await hold;
+            if(this.startupBackend===backend)this.startupBackend=null;
+            if(this.ownerLockRelease===releaseHold)this.ownerLockRelease=null;
+          }
         }
       }).catch(fail);
     });
@@ -238,7 +353,8 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
     return this.election;
   }
 
-  private waitForLeader(): Promise<void> {
+  private waitForLeader(generation:number): Promise<void> {
+    this.assertLifecycleGeneration(generation);
     if (this.incompatible) return Promise.reject(new Error('sqlite_owner_incompatible'));
     if (this.lastLeaderAt) return Promise.resolve();
     return new Promise((resolve, reject) => {
@@ -261,6 +377,12 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       this.leaderWaiters.add(waiter);
       this.post({ kind: 'probe', sender: this.id });
     });
+  }
+
+  private assertLifecycleGeneration(generation:number):void{
+    if(this.closing||generation!==this.lifecycleGeneration){
+      throw new Error('sqlite_owner_lifecycle_closed');
+    }
   }
 
   private remote(input: SqliteWorkerInput): Promise<unknown> {
@@ -293,7 +415,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       return;
     }
     if (message.kind === 'probe') {
-      if (this.backend) this.markLeader();
+      if (this.backend&&!this.closing) this.markLeader();
       return;
     }
     if (message.kind === 'response') {
@@ -307,7 +429,11 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       return;
     }
     if (!this.backend || message.sender === this.id) return;
-    void this.dispatch(this.backend, message.input).then(
+    if(this.closing){
+      this.post({kind:'response',recipient:message.sender,requestId:message.requestId,ok:false,error:'sqlite_owner_closing'});
+      return;
+    }
+    const request=this.dispatch(this.backend,message.input).then(
       (value) => this.post({ kind: 'response', recipient: message.sender, requestId: message.requestId, ok: true, value }),
       (cause) => this.post({
         kind: 'response',
@@ -317,6 +443,8 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
         error: errorMessage(cause),
       }),
     );
+    this.activeRemoteRequests.add(request);
+    void request.then(()=>this.activeRemoteRequests.delete(request),()=>this.activeRemoteRequests.delete(request));
   }
 
   private failIncompatible(): void {
@@ -358,6 +486,8 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       case 'initialize': return backend.initialize();
       case 'get': return backend.get(input.table, input.key);
       case 'entries': return backend.entries(input.table);
+      case 'existingRecordKeys':return backend.existingRecordKeys(input.table,input.keys);
+      case 'packageCacheProjection':return backend.packageCacheProjection(input.query);
       case 'changesSince': return backend.changesSince(input.contentRevision, input.tables);
       case 'syncBaseEntries': return backend.syncBaseEntries(input.keys);
       case 'count': return backend.count(input.table);
@@ -382,7 +512,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       case 'portableMedia': return backend.portableMedia(input.sha256);
       case 'portableMediaDiagnostics': return backend.portableMediaDiagnostics();
       case 'commit': return backend.commit(input.mutation);
-      case 'diagnostics': return backend.diagnostics();
+      case 'diagnostics': return backend.diagnostics({verifyIntegrity:input.verifyIntegrity});
     }
   }
 }

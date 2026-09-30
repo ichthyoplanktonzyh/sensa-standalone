@@ -1,6 +1,8 @@
 /** Internal protocol between the local-library module and its SQLite Worker. */
 
 import type {HomeLearningStorageProjection} from './homeLearningRecords';
+import type {PackageCacheProjectionQuery} from './packageCacheProjection';
+import {sqlitePackageCacheProjectionSchema} from './packageCacheProjection';
 import type {
   PortableMediaBlob,
   PortableMediaStorageDiagnostics,
@@ -11,9 +13,9 @@ export const sqliteLibraryFile = "/sensa-local-library-v12.sqlite3";
 export const sqlitePoolDirectory = "/sensa-local-library-v12";
 /** First supported production-user baseline; prototype formats stay unsupported. */
 export const sqliteLibraryBaselineVersion = 10;
-export const sqliteLibrarySchemaVersion = 12;
+export const sqliteLibrarySchemaVersion = 13;
 /** Cross-tab RPC changes must bump this before adding or changing messages. */
-export const sqliteCoordinatorProtocolVersion = 7;
+export const sqliteCoordinatorProtocolVersion = 11;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -74,8 +76,11 @@ export type SqliteSyncBaseEntry = {
 
 export type SqliteWorkerRequest =
   | { id: number; kind: "initialize" }
+  | { id: number; kind: "close" }
   | { id: number; kind: "get"; table: SqliteLibraryTable; key: string }
   | { id: number; kind: "entries"; table: SqliteLibraryTable }
+  | {id:number;kind:'existingRecordKeys';table:SqliteLibraryTable;keys:string[]}
+  | { id:number;kind:'packageCacheProjection';query:PackageCacheProjectionQuery }
   | { id: number; kind: "changesSince"; contentRevision: number; tables: SqliteLibraryTable[] }
   | { id: number; kind: "syncBaseEntries"; keys?: Array<{ table: SqliteLibraryTable; key: string }> }
   | { id: number; kind: "count"; table: SqliteLibraryTable }
@@ -90,9 +95,9 @@ export type SqliteWorkerRequest =
   | { id: number; kind: "portableMedia"; sha256: string }
   | { id: number; kind: "portableMediaDiagnostics" }
   | { id: number; kind: "commit"; mutation: SqliteMutation }
-  | { id: number; kind: "diagnostics" };
+  | { id: number; kind: "diagnostics";verifyIntegrity?:boolean };
 
-export type SqliteWorkerInput = SqliteWorkerRequest extends infer Request
+export type SqliteWorkerInput = Exclude<SqliteWorkerRequest,{id:number;kind:'close'}> extends infer Request
   ? Request extends { id: number }
     ? Omit<Request, "id">
     : never
@@ -105,6 +110,8 @@ export type SqliteWorkerResult =
 export type {HomeLearningStorageProjection};
 
 export type SqliteStorageDiagnostics = {
+  integrityCheck?:Readonly<{status:'ok';checkedAt:string;durationMs:number}>;
+  initializationTimingsMs?:Readonly<Record<string,number>>;
   engine: "sqlite-wasm" | "memory-adapter";
   persistence: "opfs" | "memory";
   sqliteVersion: string;
@@ -155,6 +162,7 @@ CREATE TABLE IF NOT EXISTS sensa_records(
 );
 CREATE INDEX IF NOT EXISTS sensa_records_content_revision
   ON sensa_records(content_revision,table_name,record_key);
+${sqlitePackageCacheProjectionSchema}
 CREATE TABLE IF NOT EXISTS sensa_record_tombstones(
   table_name TEXT NOT NULL CHECK(table_name IN (${quotedTables})),
   record_key TEXT NOT NULL CHECK(length(record_key) BETWEEN 1 AND 2000),
