@@ -59,6 +59,7 @@ assert(/const LearningWorkspace=lazy\(async\(\)=>\{/u.test(app)&&app.includes("i
 assert(!app.includes('usePackageLearning')&&!app.includes('usePersonalLearning'),'App must not eagerly initialize full learning controllers');
 assert(!accountExperience.includes('await preloadMedia()'),'product startup must not wait for the complete personal-media cache');
 assert(!home.includes('usePackageLearning')&&!home.includes('usePersonalLearning'),'Home must use its small read projection instead of full learning controllers');
+assert(home.includes('useActiveLanguageContext')&&!home.includes('useLanguageRoutes'),'Home must not load Route management and availability discovery for one pinned context');
 assert(contentSupply.includes('packageCacheEntriesStored<InstalledPackage>()'),'content inventory must read stored package facts without hydrating Runtime media');
 assert(/estimateLibraryBackupSize\(\)[\s\S]*estimateLibraryRecordBytes\(libraryBackupTables\)/u.test(backup),'backup size estimation must remain a storage aggregate');
 assert(!/estimateLibraryBackupSize\(\)[\s\S]{0,300}encodeCurrentLibrary\(/u.test(backup),'backup size estimation must not encode the complete Library');

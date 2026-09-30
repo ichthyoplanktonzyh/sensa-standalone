@@ -4,7 +4,7 @@ import {useTranslation} from 'react-i18next';
 import {HomeScreen} from '../components/HomeScreen';
 import {openLibrary} from '../../data/library/store';
 import type {LearningHomeProjection} from '../../learning/system';
-import {useLanguageRoutes} from './useLanguageRoutes';
+import {useActiveLanguageContext} from './useActiveLanguageContext';
 import {useShellNavigation} from '../router/useShellNavigation';
 import {localFlowNotice,localFlowText} from '../../i18n/localFlowText';
 import {useAccountExperience} from '../account/AccountContext';
@@ -18,7 +18,7 @@ export function HomeLearningController({active=true}:{active?:boolean}){
  const {t}=useTranslation();
  const {libraryAvailability}=useAccountExperience();
  const {goMain,setViewMode}=useShellNavigation();
- const {context:languageContext}=useLanguageRoutes();
+ const languageContext=useActiveLanguageContext();
  const [projection,setProjection]=useState<LearningHomeProjection|null>(null);
  const [summaryReady,setSummaryReady]=useState(false);
  const [busy,setBusy]=useState(false);
