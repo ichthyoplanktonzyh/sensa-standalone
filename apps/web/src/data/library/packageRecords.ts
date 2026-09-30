@@ -40,6 +40,48 @@ export type InstalledPackage={
  portableOrigin:PortablePackageOrigin;
 };
 
+type InstalledEntry=InstalledPackage['content']['entries'][number];
+export type InstalledPackageSummary=Readonly<{
+ key:string;
+ digest:string;
+ installedAt:string;
+ hasAssurance:boolean;
+ content:Readonly<{
+  targetLanguage:InstalledPackage['content']['targetLanguage'];
+  supportLanguage:InstalledPackage['content']['supportLanguage'];
+  entries:readonly Pick<InstalledEntry,'senseId'|'senseVersionId'|'bindingId'|'bindingVersionId'|'expression'|'meaning'|'semantic'>[];
+ }>;
+ portableOrigin:Readonly<{
+  manifest:Readonly<{metadata:InstalledPackage['portableOrigin']['manifest']['metadata']}>;
+  publications:InstalledPackage['portableOrigin']['publications'];
+ }>;
+}>;
+
+/** Inventory projection deliberately excludes Runtime resources and media. */
+export const installedPackageSummary=(value:InstalledPackage):InstalledPackageSummary=>({
+ key:value.key,
+ digest:value.digest,
+ installedAt:value.installedAt,
+ hasAssurance:!!value.content.assurance,
+ content:{
+  targetLanguage:value.content.targetLanguage,
+  supportLanguage:value.content.supportLanguage,
+  entries:value.content.entries.map(entry=>({
+   senseId:entry.senseId,
+   senseVersionId:entry.senseVersionId,
+   bindingId:entry.bindingId,
+   bindingVersionId:entry.bindingVersionId,
+   expression:entry.expression,
+   meaning:entry.meaning,
+   semantic:entry.semantic?structuredClone(entry.semantic):undefined,
+  })),
+ },
+ portableOrigin:{
+  manifest:{metadata:structuredClone(value.portableOrigin.manifest.metadata)},
+  publications:structuredClone(value.portableOrigin.publications),
+ },
+});
+
 const digestSchema=z.string().regex(/^[a-f0-9]{64}$/u);
 const artifactBase={
  digest:digestSchema,

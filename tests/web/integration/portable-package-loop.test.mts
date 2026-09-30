@@ -153,6 +153,8 @@ test('same package identity cannot silently replace different content',async()=>
 test('installed content re-exports deterministically and runs through Lightweight learning',async()=>{
   const workspace=await contentSupplySystem.read({kind:'workspace'});
   const installed=workspace.packages.find(item=>item.portableOrigin.manifest.metadata.packageId===manifest().metadata.packageId)!;
+  assert.equal('resources' in installed.content.entries[0]!,false,'inventory reads must not expose or hydrate Runtime resources');
+  assert.equal('assurance' in installed.content,false,'inventory reads must project assurance presence instead of its Runtime payload');
   const exported=await contentSupplySystem.execute({kind:'export_portable_package',packageKey:installed.key});
   assert.match(exported.fileName,/\.sensa$/u);
   assert.deepEqual(exported.bytes,bytes);

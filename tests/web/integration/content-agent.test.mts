@@ -54,7 +54,7 @@ afterAll(async()=>{globalThis.fetch=originalFetch;await rm(temp,{recursive:true,
    await test(interrupted?'checkpoint resume preserves partial resources after an offline interruption':'tool-loop repairs a partial candidate while retaining the original image',async()=>{
    let turn=0,speechCalls=0,referenceCalls=0,inflight=0,peak=0,checkpoint:any;
    const restoreSpeech=api.replaceClientSpeechProvider({id:`fixture-${interrupted}`,revision:1,displayName:'Fixture',synthesize:async(input:any)=>{speechCalls++;inflight++;peak=Math.max(peak,inflight);await new Promise(r=>setTimeout(r,5));inflight--;return {...syntheticSound(input.surface,input.languageTag),method:'tts'};}});
-   const responses=[[tool('prepare_pronunciation'),tool('lookup_references')],[tool('submit_resources',{resources:[cue,bridge,{...scene,payload:{...scene.payload,example:'I borroweded an umbrella.'}}]})],[tool('validate_resources')],[tool('submit_resources',{resources:[scene]})],[tool('validate_resources')]];
+   const responses=[[tool('prepare_pronunciation'),tool('prepare_pronunciation'),tool('lookup_references'),tool('lookup_references')],[tool('submit_resources',{resources:[cue,bridge,{...scene,payload:{...scene.payload,example:'I borroweded an umbrella.'}}]})],[tool('validate_resources')],[tool('submit_resources',{resources:[scene]})],[tool('validate_resources')]];
    globalThis.fetch=async(url,options)=>{
     if(String(url).endsWith('/sensa/resource-facts')){
      inflight++;peak=Math.max(peak,inflight);await new Promise(r=>setTimeout(r,5));inflight--;

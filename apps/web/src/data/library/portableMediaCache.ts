@@ -35,6 +35,32 @@ type StoredMediaReference=Readonly<{
 
 const digestPattern=/^[a-f0-9]{64}$/u;
 const dataUrlPattern=/^data:([^;,]+);base64,([A-Za-z0-9+/]+={0,2})$/u;
+/** Content-addressed blobs are immutable. Reuse recent verification/encoding,
+ * but keep a hard memory ceiling so externalized media cannot silently become
+ * a second unbounded in-memory package cache. */
+const hydratedBase64=new Map<string,string>();
+const MAX_HYDRATED_BASE64_CHARS=16*1024*1024;
+let hydratedBase64Chars=0;
+
+const cachedBase64=(digest:string):string|undefined=>{
+  const value=hydratedBase64.get(digest);
+  if(value===undefined)return undefined;
+  hydratedBase64.delete(digest);
+  hydratedBase64.set(digest,value);
+  return value;
+};
+
+const rememberBase64=(digest:string,value:string):void=>{
+  const previous=hydratedBase64.get(digest);
+  if(previous!==undefined){hydratedBase64.delete(digest);hydratedBase64Chars-=previous.length;}
+  if(value.length>MAX_HYDRATED_BASE64_CHARS)return;
+  while(hydratedBase64Chars+value.length>MAX_HYDRATED_BASE64_CHARS){
+    const oldest=hydratedBase64.entries().next().value as [string,string]|undefined;
+    if(!oldest)break;
+    hydratedBase64.delete(oldest[0]);hydratedBase64Chars-=oldest[1].length;
+  }
+  hydratedBase64.set(digest,value);hydratedBase64Chars+=value.length;
+};
 
 const bytesToBase64=(bytes:Uint8Array):string=>{
   let binary='';
@@ -112,6 +138,7 @@ export function externalizePortablePackageCache(
         throw new Error('portable_media_declaration_mismatch');
       }
       bytesByDigest.set(digest,parsed.bytes);
+      rememberBase64(digest,current.slice(current.indexOf(',')+1));
       return {$sensaPortableMedia:{
         format:'sensa-portable-media-reference-v1',
         sha256:digest,
@@ -145,20 +172,24 @@ export async function hydratePortablePackageCache(
   };
   collect(value);
   if(!digests.size)return value;
-  const blobs=new Map<string,PortableMediaBlob>();
+  const base64ByDigest=new Map<string,string>();
   await Promise.all([...digests].map(async digest=>{
+    const cached=cachedBase64(digest);
+    if(cached!==undefined){base64ByDigest.set(digest,cached);return;}
     const blob=await read(digest);
     if(!blob||blob.sha256!==digest||blob.sizeBytes!==blob.bytes.byteLength||sha256(blob.bytes)!==digest){
       throw new Error('portable_media_blob_invalid');
     }
-    blobs.set(digest,blob);
+    const base64=bytesToBase64(blob.bytes);
+    rememberBase64(digest,base64);
+    base64ByDigest.set(digest,base64);
   }));
   const transform=(current:unknown):unknown=>{
     if(storedReference(current)){
       const reference=current.$sensaPortableMedia;
-      const blob=blobs.get(reference.sha256);
-      if(!blob)throw new Error('portable_media_blob_missing');
-      return `data:${reference.mimeType};base64,${bytesToBase64(blob.bytes)}`;
+      const base64=base64ByDigest.get(reference.sha256);
+      if(!base64)throw new Error('portable_media_blob_missing');
+      return `data:${reference.mimeType};base64,${base64}`;
     }
     if(Array.isArray(current))return current.map(transform);
     if(current&&typeof current==='object')return Object.fromEntries(

@@ -208,6 +208,18 @@ export class SqliteRecordDatabase {
     return Number(rows[0] ?? 0);
   }
 
+  estimateRecordBytes(tables: readonly SqliteLibraryTable[]): number {
+    if(!tables.length)return 0;
+    const placeholders=tables.map(()=>'?').join(',');
+    const rows=this.database.exec({
+      sql:`SELECT COALESCE(SUM(length(CAST(record_key AS BLOB))+length(CAST(value_json AS BLOB))+16),0) FROM sensa_records WHERE table_name IN (${placeholders})`,
+      bind:[...tables],
+      rowMode:0,
+      returnValue:'resultRows',
+    }) as unknown[];
+    return Number(rows[0]??0);
+  }
+
   homeLearningProjection(languageRouteId: string): HomeLearningStorageProjection {
     const now = new Date();
     const dayStart = new Date(now);

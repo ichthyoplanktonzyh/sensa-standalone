@@ -13,7 +13,7 @@ export const sqlitePoolDirectory = "/sensa-local-library-v12";
 export const sqliteLibraryBaselineVersion = 10;
 export const sqliteLibrarySchemaVersion = 12;
 /** Cross-tab RPC changes must bump this before adding or changing messages. */
-export const sqliteCoordinatorProtocolVersion = 6;
+export const sqliteCoordinatorProtocolVersion = 7;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -79,6 +79,7 @@ export type SqliteWorkerRequest =
   | { id: number; kind: "changesSince"; contentRevision: number; tables: SqliteLibraryTable[] }
   | { id: number; kind: "syncBaseEntries"; keys?: Array<{ table: SqliteLibraryTable; key: string }> }
   | { id: number; kind: "count"; table: SqliteLibraryTable }
+  | { id: number; kind: "estimateRecordBytes"; tables: SqliteLibraryTable[] }
   | { id: number; kind: "homeLearningProjection"; languageRouteId: string }
   | { id: number; kind: "countIntroducedLearningTargets"; languageRouteId: string; startedAfter: string; startedBefore: string }
   | { id: number; kind: "learningRunIdsForTarget"; targetId: string; openOnly: boolean }

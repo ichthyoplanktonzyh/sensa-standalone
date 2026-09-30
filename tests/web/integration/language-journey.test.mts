@@ -138,6 +138,29 @@ await Promise.all([
 ]);
 assert.equal((await sharedRepository.load()).inboxItems.length,2,'independent tabs commit distinct Inbox records without a lost update');
 
+// A rejected stale command is still a command failure, but a successful reload
+// keeps the semantic world readable instead of replacing it with a global error.
+const recoverableBase=new MemoryJourneyRepository();
+let rejectCommit=true;
+const recoverableGateway=createJourneyGateway({
+  repository:{
+    load:()=>recoverableBase.load(),
+    commit:change=>rejectCommit
+      ?Promise.reject(new Error('localFlow.meaningChanged'))
+      :recoverableBase.commit(change),
+  },
+  clock:createSeededClock(),
+  languages:{read:async()=>slowContext},
+});
+await assert.rejects(
+  recoverableGateway.createClarificationDraft({operationId:crypto.randomUUID(),blocks:[{kind:'text',bodyText:'stale command'}]}),
+  /meaningChanged/,
+);
+assert.deepEqual(recoverableGateway.getStatus(),{ok:true,error:null,errorKind:null},'a successful conflict reload leaves the gateway usable');
+assert.deepEqual(recoverableGateway.getWorldItems(),[],'the reloaded semantic world remains visible after the rejected command');
+rejectCommit=false;
+await recoverableGateway.createClarificationDraft({operationId:crypto.randomUUID(),blocks:[{kind:'text',bodyText:'retry after reload'}]});
+
 // A third language is still a valid absolute language fact and goes straight
 // through; the current learning Route is irrelevant. Missing a language makes
 // the Expression incomplete, while a missing Context has its own slow-track state.

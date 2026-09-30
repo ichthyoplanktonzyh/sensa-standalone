@@ -1,5 +1,5 @@
 import {z} from 'zod';
-import {libraryTables,readLibrary,restoreLibraryTransaction,assertCurrentLibrary,type LibraryTransaction,type LibraryIdentity} from './store';
+import {libraryTables,readLibrary,restoreLibraryTransaction,assertCurrentLibrary,estimateLibraryRecordBytes,type LibraryTransaction,type LibraryIdentity} from './store';
 import {learningOwner} from './libraryOwnership';
 import {encodeBackupValue,decodeBackupValue} from './backupCodec';
 import {validateBackupRows,backupOwnerSchema,type BackupRows} from './backupValidation';
@@ -45,7 +45,12 @@ async function encodeCurrentLibrary(){
  const plaintext=new TextEncoder().encode(JSON.stringify(payload));if(plaintext.length>MAX_PLAIN)throw new Error('libraryBackup.errors.sizeLimit');
  return {payload,rows:snapshot.rows,plaintext};
 }
-export async function estimateLibraryBackupSize():Promise<BackupSizeEstimate>{const {plaintext}=await encodeCurrentLibrary();return {usedBytes:plaintext.byteLength,capacityBytes:MAX_PLAIN};}
+export async function estimateLibraryBackupSize():Promise<BackupSizeEstimate>{
+ // Row framing plus the fixed envelope is intentionally conservative. Export
+ // remains the only path that performs full authority validation and encoding.
+ const encodedBytes=await estimateLibraryRecordBytes(libraryBackupTables);
+ return {usedBytes:encodedBytes+2048,capacityBytes:MAX_PLAIN};
+}
 export async function exportLibraryBackup(password:string){
  passSchema.parse(password);
  const {payload,rows,plaintext}=await encodeCurrentLibrary();

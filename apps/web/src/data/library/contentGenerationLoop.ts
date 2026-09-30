@@ -114,10 +114,15 @@ export async function generateLearningCandidate(request:SensaContentGenerationRe
   // Only independent source operations run concurrently. Draft writes and
   // validation execute in model order to avoid races and stale validation.
   const outputs=new Map<string,ModelMessage>();
-  for(const name of ['prepare_pronunciation','lookup_references']){
-   if(calls.filter(c=>c.function.name===name).length>1)throw Error('localFlow.validationRejected');
-  }
-  await Promise.all(calls.filter(c=>['prepare_pronunciation','lookup_references'].includes(c.function.name)).map(async c=>outputs.set(c.id,await execute(c))));
+  // Source preparation is idempotent. Providers occasionally repeat the same
+  // call in one turn; serialize duplicates within a tool while still running
+  // the two independent source tools concurrently. Every call receives its
+  // own response/record, but external preparation happens only once.
+  await Promise.all(['prepare_pronunciation','lookup_references'].map(async name=>{
+   for(const call of calls.filter(candidate=>candidate.function.name===name)){
+    outputs.set(call.id,await execute(call));
+   }
+  }));
   for(const call of calls.filter(c=>!outputs.has(c.id)))outputs.set(call.id,await execute(call));
   state.history.push({role:'assistant',content:message.content??null,tool_calls:calls},...calls.map(c=>outputs.get(c.id)!));
   await save();if(ready){const result=seal(ready);await trace.raw(round,'agent_result',{resources:state.resources,prepared:state.prepared});trace.finish(round,'succeeded','validated_candidate');return result;}

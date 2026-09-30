@@ -29,7 +29,8 @@ assert.equal(nextPersonalLearningLeaseExpiry([task('failed',now+1_000),task('gen
 let failure=cloudSyncFailurePolicy('library_sync_network',true,0,now);
 assert.equal(automaticCloudSyncRetryAt(failure),now+cloudSyncRetryDelaysMs[0],'network failure receives a bounded first retry');
 failure=cloudSyncFailurePolicy('library_sync_network',true,cloudSyncRetryDelaysMs.length,now);
-assert.equal(automaticCloudSyncRetryAt(failure),null,'transient failures stop after the bounded retry budget');
+assert.equal(automaticCloudSyncRetryAt(failure),now+cloudSyncRetryDelaysMs.at(-1)!,'transient failures continue at the bounded maximum backoff');
+assert.equal(blocksAutomaticCloudSync(failure),false,'a transient outage never becomes a permanent automatic-sync block');
 const incompatible=cloudSyncFailurePolicy('library_sync_incompatible_checkpoint',true,0,now);
 assert.equal(incompatible.failureKind,'terminal');assert.equal(blocksAutomaticCloudSync(incompatible),true,'legacy Checkpoints must never enter the automatic retry loop');
 const advancedHead=cloudSyncFailurePolicy('library_sync_head_changed',true,0,now);
@@ -44,15 +45,23 @@ const sources=await Promise.all([
  'apps/web/src/experience/account/ExtensionIntake.tsx',
 ].map(async path=>[path,await readFile(path,'utf8')] as const));
 for(const [path,source] of sources)assert(!source.includes('setInterval('),`${path} must not restore fixed idle polling`);
+assert(!sources[0]![1].match(/const refresh=async\(\)=>\{\s*await learningSystem\.execute/u),'package learning refresh must remain a pure projection read');
 const app=await readFile('apps/web/src/experience/App.tsx','utf8');
+const accountExperience=await readFile('apps/web/src/experience/account/AccountExperience.tsx','utf8');
 const home=await readFile('apps/web/src/experience/library/HomeLearningController.tsx','utf8');
 const workspace=await readFile('apps/web/src/experience/library/LearningWorkspace.tsx','utf8');
+const contentSupply=await readFile('apps/web/src/contentSupply/system/contentSupplySystemImplementation.ts','utf8');
+const backup=await readFile('apps/web/src/data/library/backup.ts','utf8');
 const shell=await readFile('apps/web/src/experience/ui/WebShell.tsx','utf8');
 const screenHost=await readFile('apps/web/src/experience/ui/ScreenHost.tsx','utf8');
 assert(/lazy\(\(\)=>import\('\.\/library\/HomeLearningController'\)/u.test(app),'the lightweight Home controller must remain outside the shell chunk');
 assert(/const LearningWorkspace=lazy\(async\(\)=>\{/u.test(app)&&app.includes("import('./library/LearningWorkspace')"),'full learning controllers must remain outside the Home shell');
 assert(!app.includes('usePackageLearning')&&!app.includes('usePersonalLearning'),'App must not eagerly initialize full learning controllers');
+assert(!accountExperience.includes('await preloadMedia()'),'product startup must not wait for the complete personal-media cache');
 assert(!home.includes('usePackageLearning')&&!home.includes('usePersonalLearning'),'Home must use its small read projection instead of full learning controllers');
+assert(contentSupply.includes('packageCacheEntriesStored<InstalledPackage>()'),'content inventory must read stored package facts without hydrating Runtime media');
+assert(/estimateLibraryBackupSize\(\)[\s\S]*estimateLibraryRecordBytes\(libraryBackupTables\)/u.test(backup),'backup size estimation must remain a storage aggregate');
+assert(!/estimateLibraryBackupSize\(\)[\s\S]{0,300}encodeCurrentLibrary\(/u.test(backup),'backup size estimation must not encode the complete Library');
 assert(/lazy\(\(\)=>import\('\.\/PackageLearningRuntime'\)/u.test(workspace),'formal learning Runtime must remain outside the learning workspace graph');
 assert(app.includes('<ScreenHost')&&workspace.includes('<ScreenHost'),'both shell levels must delegate screen ownership to ScreenHost');
 assert(!shell.includes('MutationObserver'),'WebShell must not infer route ownership by observing DOM mutations');

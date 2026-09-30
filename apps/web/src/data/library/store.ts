@@ -113,6 +113,21 @@ export class LibraryTransaction {
       .map(([key, value]) => ({ key, value: clone(value) }));
   }
 
+  /** Read admitted Package facts without reconstructing their Runtime media.
+   * Only inventory/index code may use this projection; execution and export
+   * continue through `get`/`entries`, which return complete Runtime values. */
+  async packageCacheEntriesStored<T>():Promise<Array<{key:string;value:T}>>{
+    const table='packageCache' as const;
+    const values=new Map<string,unknown>();
+    if(!this.clears.has(table)){
+      for(const row of await storageCall(()=>this.adapter.entries(table))){
+        if(!this.deletes.get(table)?.has(row.key))values.set(row.key,decode(row.encodedValue));
+      }
+    }
+    for(const [key,value] of this.puts.get(table)??[])values.set(key,value);
+    return [...values.entries()].sort(([left],[right])=>left.localeCompare(right)).map(([key,value])=>({key,value:clone(value as T)}));
+  }
+
   async changesSince<Tables extends readonly Table[]>(contentRevision: number, tables: Tables): Promise<Array<{
     table: Tables[number];
     key: string;
@@ -500,6 +515,13 @@ export const writeLibraryCache = <T>(work: (tx: LibraryTransaction) => Promise<T
   transaction("readwrite", work, "cache");
 export const readLibrary = <T>(work: (tx: LibraryTransaction) => Promise<T>) =>
   transaction("readonly", work);
+
+/** Cheap advisory size for UI. The Worker aggregates encoded rows without
+ * hydrating media, cloning the library, or running restore validation. */
+export const estimateLibraryRecordBytes=async(tables:readonly Table[]):Promise<number>=>{
+  const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');
+  return storageCall(()=>adapter.estimateRecordBytes(tables));
+};
 
 /**
  * A Worker-owned, single-snapshot read for the home queue. It intentionally

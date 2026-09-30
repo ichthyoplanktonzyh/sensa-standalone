@@ -188,6 +188,17 @@ const enrollmentPackages=(
 const activeTargetInRoute=(target:LocalLearningTarget,routeId:string)=>target.curriculumMemberships.some(membership=>
  membership.status!=='superseded'&&membership.languageContext.languageRouteId===routeId);
 
+const hydratedPackage=async(
+ tx:LibraryTransaction,
+ key:string,
+ cache:Map<string,InstalledPackage>,
+):Promise<InstalledPackage>=>{
+ const existing=cache.get(key);if(existing)return existing;
+ const value=await tx.get<InstalledPackage>('packageCache',key);
+ if(!value)throw new Error('localFlow.downloadFirst');
+ cache.set(key,value);return value;
+};
+
 /** Materialize only the bounded candidate window the scheduler can introduce.
  * The durable learner intent remains one Curriculum Enrollment regardless of
  * whether its Book contains 10 or 10,000 Senses. */
@@ -201,7 +212,7 @@ async function materializeCurriculumWindow(
  const owner=await learningOwner(tx);
  const [enrollments,packages,targets]=await Promise.all([
   tx.all<LocalCurriculumEnrollment>('curriculumEnrollments'),
-  tx.all<InstalledPackage>('packageCache'),
+  tx.packageCacheEntriesStored<InstalledPackage>().then(rows=>rows.map(row=>row.value)),
   tx.all<LocalLearningTarget>('learningTargets'),
  ]);
  const routeTargets=targets.filter(target=>activeTargetInRoute(target,context.languageRouteId));
@@ -210,6 +221,7 @@ async function materializeCurriculumWindow(
  let slots=Math.max(0,dailyLimit-startedToday-pending.length);
  if(!slots)return [];
  const byId=new Map(targets.map(target=>[target.id,target]));
+ const hydratedPackages=new Map<string,InstalledPackage>();
  const active=enrollments.filter(enrollment=>enrollmentMatchesContext(enrollment,context)).sort((left,right)=>left.id.localeCompare(right.id));
  const iterators=active.flatMap(enrollment=>{
   const members=enrollmentPackages(enrollment,packages);
@@ -232,7 +244,10 @@ async function materializeCurriculumWindow(
    if(next.done){iterators.splice(index,1);continue;}
    progressed=true;index++;
    const {enrollment,member,entry,targetId,existing}=next.value;
-   const material=materializePublishedEntry({learnerUserId:owner.learnerId,learningTargetId:targetId,packageKey:member.key,installedPackage:member.pack,entry,createdAt:at});
+   const hydrated=await hydratedPackage(tx,member.key,hydratedPackages);
+   const hydratedEntry=hydrated.content.entries.find(candidate=>candidate.senseVersionId===entry.senseVersionId&&candidate.bindingVersionId===entry.bindingVersionId);
+   if(!hydratedEntry)throw new Error('localFlow.resourceInvalid');
+   const material=materializePublishedEntry({learnerUserId:owner.learnerId,learningTargetId:targetId,packageKey:member.key,installedPackage:hydrated,entry:hydratedEntry,createdAt:at});
    const source={
     kind:'sense_learning_package',
     curriculumEnrollmentId:enrollment.id,
@@ -273,13 +288,17 @@ async function refreshMaterializedEnrollmentMembers(
 ):Promise<string[]> {
  const owner=await learningOwner(tx),targets=await tx.all<LocalLearningTarget>('learningTargets');
  const byId=new Map(targets.map(target=>[target.id,target]));
+ const hydratedPackages=new Map<string,InstalledPackage>();
  const refreshed:string[]=[];
  for(const member of members)for(const entry of member.pack.content.entries){
   const targetId=stableUuid(`sensa-learning-target:${owner.learnerId}:${entry.senseVersionId}:${entry.bindingVersionId}`),existing=byId.get(targetId);
   if(!existing)continue;
   const hadEnrollment=existing.curriculumMemberships.some(candidate=>candidate.provenance.curriculumEnrollmentId===enrollmentId);
   if(existing.identity.learnerUserId!==owner.learnerId||existing.identity.senseVersionId!==entry.senseVersionId||existing.identity.bindingVersionId!==entry.bindingVersionId||existing.targetLanguageTag!==member.pack.content.targetLanguage||existing.expression!==entry.expression)throw new Error('localFlow.invalidTarget');
-  const material=materializePublishedEntry({learnerUserId:owner.learnerId,learningTargetId:targetId,packageKey:member.key,installedPackage:member.pack,entry,createdAt:at});
+   const hydrated=await hydratedPackage(tx,member.key,hydratedPackages);
+   const hydratedEntry=hydrated.content.entries.find(candidate=>candidate.senseVersionId===entry.senseVersionId&&candidate.bindingVersionId===entry.bindingVersionId);
+   if(!hydratedEntry)throw new Error('localFlow.resourceInvalid');
+   const material=materializePublishedEntry({learnerUserId:owner.learnerId,learningTargetId:targetId,packageKey:member.key,installedPackage:hydrated,entry:hydratedEntry,createdAt:at});
   const source={kind:'sense_learning_package',curriculumEnrollmentId:enrollmentId,bookId:member.bookId,bookVersionId:member.bookVersionId,contentReleaseId:member.contentReleaseId,packageVersion:member.packageVersion,packageDigest:member.pack.digest,...(member.publication?{publicationArchiveSha256:member.publication.bookArchiveSha256}:{})};
   const prior=existing.curriculumMemberships.find(candidate=>candidate.id===stableUuid(`local-curriculum-membership:${targetId}:${context.languageRouteId}:sense_learning_package:${member.key}`));
   const membership=curriculumMembership({operationId,targetId,sourceKey:member.key,languageContext:context,sourceKind:'sense_learning_package',provenance:source,packageKey:member.key,assurancePackageKey:entry.assurancePackageKey,material,at,previous:prior});
@@ -300,7 +319,7 @@ async function enrollInstalledPackages(
  const uniqueKeys=[...new Set(packageKeys)];
  if(!uniqueKeys.length||uniqueKeys.length!==packageKeys.length)throw new Error('localFlow.catalogMismatch');
  const owner=await learningOwner(tx),context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);await requireLanguageRouteContext(tx,context);
- const available=await tx.all<InstalledPackage>('packageCache');
+ const available=(await tx.packageCacheEntriesStored<InstalledPackage>()).map(row=>row.value);
  const byKey=new Map(available.map(pack=>[pack.key,pack]));
  const latestVersions=new Map<string,number>();
  for(const pack of available){
@@ -382,7 +401,7 @@ async function enrollInstalledPackages(
 export async function enrollPackage(operationId:string,key:string,languageContext:SensaFormalPinnedLanguageContext,publicationArchiveSha256?:string){return learningCommand({id:operationId,kind:'learning.enroll',input:{key,languageContext,...(publicationArchiveSha256?{publicationArchiveSha256}:{})}},tx=>enrollInstalledPackages(tx,operationId,[key],languageContext,publicationArchiveSha256));}
 
 export async function enrollBook(operationId:string,languageContext:SensaFormalPinnedLanguageContext,publicationArchiveSha256:string){return learningCommand({id:operationId,kind:'learning.enroll',input:{languageContext,publicationArchiveSha256}},async tx=>{
- const packages=await tx.all<InstalledPackage>('packageCache');
+ const packages=(await tx.packageCacheEntriesStored<InstalledPackage>()).map(row=>row.value);
  const packageKeys=packages.flatMap(pack=>pack.portableOrigin.publications.some(publication=>publication.bookArchiveSha256===publicationArchiveSha256)?[pack.key]:[]);
  return enrollInstalledPackages(tx,operationId,packageKeys,languageContext,publicationArchiveSha256);
 });}
@@ -404,7 +423,7 @@ export async function prepareLearningQueue(languageContext:SensaFormalPinnedLang
  const context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);
  const fingerprint=await readLibrary(async tx=>{
   const plans=await readStudyPlans(tx),enrollments=(await tx.all<LocalCurriculumEnrollment>('curriculumEnrollments')).filter(item=>enrollmentMatchesContext(item,context));
-  const packages=await tx.all<InstalledPackage>('packageCache');
+  const packages=(await tx.packageCacheEntriesStored<InstalledPackage>()).map(row=>row.value);
   return JSON.stringify({trigger,day:new Date(at).toDateString(),routeId:context.languageRouteId,dailyLimit:plans[context.languageRouteId]?.dailyNewSenseLimit??20,enrollments:enrollments.map(item=>[item.id,item.revision]),packages:packages.map(item=>[item.key,item.digest]).sort()});
  });
  const operationId=stableUuid(`local-learning-queue-window:${fingerprint}`);

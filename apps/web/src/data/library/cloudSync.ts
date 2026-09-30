@@ -39,7 +39,6 @@ async function capture(tx:LibraryTransaction){
  const incarnation=await assertCurrentLibrary(tx),owner=await tx.get<Owner>('meta','service-owner'),identity=await tx.get<LibraryIdentity>('meta','identity');
  if(!owner?.accountId||!identity||await tx.get('meta','signed-out'))throw new Error('authentication_required');
  const state=await tx.get<State>('meta',STATE),localRevision=await readLocalLibraryRevision(tx),entries:Entry[]=[];
- const packageCache=await tx.entries('packageCache');
  const base:Entry[]=(await tx.syncBaseEntries<typeof librarySyncTables>()).map(row=>({table:row.table,key:row.key,value:row.value,blocks:row.blocks}));
  base.sort((a,b)=>entryId(a).localeCompare(entryId(b)));
  if(state?.syncedLocalRevision!==undefined&&state.syncedLocalRevision<=localRevision){
@@ -68,7 +67,7 @@ async function capture(tx:LibraryTransaction){
   }
  }
  entries.sort((a,b)=>entryId(a).localeCompare(entryId(b)));
- return {owner,incarnation,identity,entries,base,localRevision,state,packageCache};
+ return {owner,incarnation,identity,entries,base,localRevision,state};
 }
 function sameOwner(a:Owner,b:Owner){return a.subject===b.subject&&a.accountId===b.accountId;}
 function empty(entries:Entry[]){return entries.every(r=>r.table==='meta'&&r.key==='identity');}
@@ -115,8 +114,7 @@ export async function resolveCloudSyncConflicts(choice:CloudSyncConflictChoice){
 async function saveState(expected:{owner:Owner;incarnation:string},work:(old:State|undefined)=>State,base?:Entry[]){
  await writeLibraryState(async tx=>{const owner=await tx.get<Owner>('meta','service-owner');if(!owner||!sameOwner(owner,expected.owner)||await tx.get('meta','signed-out')||(await assertCurrentLibrary(tx))!==expected.incarnation)throw new Error('account_changed');tx.put('meta',STATE,work(await tx.get<State>('meta',STATE)));if(base!==undefined)tx.replaceSyncBase(base);});
 }
-async function applyEntries(expected:Awaited<ReturnType<typeof capture>>,entries:Entry[],state:State,base:Entry[]){
- const rows=validateLibraryReplica(entries,expected.packageCache);
+async function applyEntries(expected:Awaited<ReturnType<typeof capture>>,entries:Entry[],rows:ReturnType<typeof validateLibraryReplica>,state:State,base:Entry[]){
  await restoreLibraryTransaction(async tx=>{
   const current=await capture(tx);if(!sameOwner(current.owner,expected.owner)||current.incarnation!==expected.incarnation)throw new Error('account_changed');
   if(!entriesEqual(current.entries,expected.entries))throw new Error('library_sync_local_changed');
@@ -248,15 +246,22 @@ export async function synchronizeLibrary(request:SyncRequest){
    if(state.resolution?.expectedRemoteRevision===head.revision){localEntries=uploadEntries=state.resolution.choice==='local'?partition.local:partition.upload;activeConflicts=[];conflict=undefined;}
    else{localEntries=partition.local;uploadEntries=partition.upload;nextBase=partition.base;}
   }
-  // Validate both dependency graphs, including original runtime replay, before publishing or applying.
-  try{validateLibraryReplica(localEntries,initial.packageCache);validateLibraryReplica(uploadEntries,initial.packageCache);}catch(error){
+  // Cloud Checkpoints replicate the recoverable Package installation fact, not
+  // the local Package/media cache. Validation must therefore use the same
+  // cache-independent authority path on both the publishing and restoring
+  // device; admitted Runtime bytes were already checked at local write time.
+  let localRows:ReturnType<typeof validateLibraryReplica>;
+  try{
+   localRows=validateLibraryReplica(localEntries);
+   if(!entriesEqual(localEntries,uploadEntries))validateLibraryReplica(uploadEntries);
+  }catch(error){
    if(activeConflicts.length){await saveState(expected,old=>({...old!,status:'conflict',conflicts:activeConflicts,conflict,resolution:undefined,error:'library_sync_conflict'}));return;}throw error;
   }
   // Rebuild the small row index deterministically, while reusing every confirmed
   // row block reference. Only rows without confirmed refs are encoded and hashed.
   const prepared=await blocks.manifest(uploadEntries),manifest=prepared.manifest;
   const publicationRequired=!entriesEqual(uploadEntries,remote)||!equal(manifest,head.manifest);
-  await applyEntries(initial,localEntries,{...state,revision:head.revision,storage:head.storage,status:'pending',conflicts:activeConflicts.length?activeConflicts:undefined,conflict,resolution:activeConflicts.length?undefined:state.resolution,pending:undefined},nextBase(remote));
+  await applyEntries(initial,localEntries,localRows,{...state,revision:head.revision,storage:head.storage,status:'pending',conflicts:activeConflicts.length?activeConflicts:undefined,conflict,resolution:activeConflicts.length?undefined:state.resolution,pending:undefined},nextBase(remote));
   if(publicationRequired){
    const pending={operationId:crypto.randomUUID(),baseRevision:head.revision,manifest};
    // Blocks are content-addressed and leased on upload. Persist only the compact

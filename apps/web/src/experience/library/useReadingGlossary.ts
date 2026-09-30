@@ -4,6 +4,7 @@ import type {SensaReadingGlossary} from '@sensa/contracts/sensa';
 import {observeLibrary} from '../../data/library/store';
 import {readingGlossarySnapshot,setReadingGlossaryEntry,removeReadingGlossaryEntry} from '../../data/library/glossary';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
+import {settleOperation} from './operationSettlement';
 
 /**
  * The learner's own glossary, shared by every surface that explains a word.
@@ -28,7 +29,7 @@ export function useReadingGlossary(){
  },[]);
  /** A write refreshes from storage rather than trusting what it returned: two
   * tabs can edit the same glossary, and only the library knows which edit stands. */
- const perform=async(work:()=>Promise<unknown>)=>{setBusy(true);setNotice('');try{await work();await refresh();setNotice(localFlowText('glossarySaved'));}catch{setNotice(localFlowText('glossarySaveFailed'));}finally{setBusy(false);}};
+ const perform=async(work:()=>Promise<unknown>)=>{setBusy(true);setNotice('');try{const outcome=await settleOperation(work,refresh);if(outcome.kind==='rejected')setNotice(localFlowText('glossarySaveFailed'));else setNotice(localFlowText(outcome.projection==='current'?'glossarySaved':'progressReadFailed'));}finally{setBusy(false);}};
  return {
   glossary:state?.glossary??[],saved:state?.saved??false,busy,notice:localFlowNotice(notice),
   add:(inputLanguageTag:string,outputLanguageTag:string,term:string,rendering:string)=>perform(()=>setReadingGlossaryEntry(crypto.randomUUID(),inputLanguageTag,outputLanguageTag,term,rendering)),

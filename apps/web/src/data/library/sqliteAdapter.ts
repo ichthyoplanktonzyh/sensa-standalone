@@ -23,6 +23,7 @@ export interface SqliteRecordAdapter {
   changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]>;
   syncBaseEntries(keys?: readonly { table: SqliteLibraryTable; key: string }[]): Promise<SqliteSyncBaseEntry[]>;
   count(table: SqliteLibraryTable): Promise<number>;
+  estimateRecordBytes(tables: readonly SqliteLibraryTable[]): Promise<number>;
   homeLearningProjection(languageRouteId: string): Promise<HomeLearningStorageProjection>;
   countIntroducedLearningTargets(languageRouteId: string, startedAfter: string, startedBefore: string): Promise<number>;
   learningRunIdsForTarget(targetId: string, openOnly: boolean): Promise<string[]>;
@@ -87,6 +88,10 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
 
   count(table: SqliteLibraryTable): Promise<number> {
     return this.send({ kind: "count", table }) as Promise<number>;
+  }
+
+  estimateRecordBytes(tables: readonly SqliteLibraryTable[]): Promise<number> {
+    return this.send({kind:'estimateRecordBytes',tables:[...tables]}) as Promise<number>;
   }
 
   homeLearningProjection(languageRouteId: string): Promise<HomeLearningStorageProjection> {
@@ -200,6 +205,18 @@ class MemoryRecordAdapter implements SqliteRecordAdapter {
     let count = 0;
     for (const key of this.records.keys()) if (key.startsWith(prefix)) count++;
     return count;
+  }
+
+  async estimateRecordBytes(tables: readonly SqliteLibraryTable[]): Promise<number> {
+    const selected=new Set(tables);
+    const encoder=new TextEncoder();
+    let bytes=0;
+    for(const [id,encodedValue] of this.records){
+      const separator=id.indexOf('\u0000');
+      if(separator<0||!selected.has(id.slice(0,separator) as SqliteLibraryTable))continue;
+      bytes+=encoder.encode(id.slice(separator+1)).byteLength+encoder.encode(encodedValue).byteLength+16;
+    }
+    return bytes;
   }
 
   async homeLearningProjection(languageRouteId: string): Promise<HomeLearningStorageProjection> {

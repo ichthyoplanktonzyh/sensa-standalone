@@ -15,6 +15,8 @@ import {
 } from '../../learning/system';
 import {localFlowNotice,localFlowText} from '../../i18n/localFlowText';
 import {useLanguageRoutes} from './useLanguageRoutes';
+import {settleOperation} from './operationSettlement';
+import {createRefreshCoordinator} from './refreshCoordinator';
 
 const emptyWorkspace:LearningWorkspaceProjection={
  enrollments:[],
@@ -44,7 +46,6 @@ export function usePackageLearning(entryOpen:boolean){
  const {context:languageContext}=useLanguageRoutes();
 
  const refresh=async()=>{
-  await learningSystem.execute({kind:'prepare_queue',languageContext,at:new Date().toISOString()});
   const [projection,supply]=await Promise.all([
    learningSystem.read({kind:'workspace',languageContext,clock:Date.now()}),
    contentSupplySystem.read({kind:'workspace'}),
@@ -56,11 +57,16 @@ export function usePackageLearning(entryOpen:boolean){
  };
 
  useEffect(()=>{
-  void contentSupplySystem.execute({kind:'rehydrate'}).then(refresh).catch(()=>setNotice(localFlowText('learningReadFailed')));
-  const reload=()=>void refresh().catch(()=>setNotice(localFlowText('progressReadFailed')));
+  const coordinator=createRefreshCoordinator(refresh);
+  const reload=()=>void coordinator.request().catch(()=>setNotice(localFlowText('progressReadFailed')));
+  const prepare=async()=>{
+   await learningSystem.execute({kind:'prepare_queue',languageContext,at:new Date().toISOString()});
+   await coordinator.request();
+  };
+  void contentSupplySystem.execute({kind:'rehydrate'}).then(prepare).catch(()=>setNotice(localFlowText('learningReadFailed')));
   const stopLearning=learningSystem.subscribe({kind:'workspace',languageContext},reload);
   const stopSupply=contentSupplySystem.subscribe({kind:'workspace'},reload);
-  const focus=()=>void refresh();
+  const focus=()=>void prepare().catch(()=>setNotice(localFlowText('progressReadFailed')));
   window.addEventListener('focus',focus);
   return()=>{
    generation.current++;
@@ -75,17 +81,26 @@ export function usePackageLearning(entryOpen:boolean){
  useEffect(()=>{
   if(workspace.queue.nextChangeAt===null)return;
   const timer=window.setTimeout(
-   ()=>void refresh(),
+   ()=>void learningSystem.execute({kind:'prepare_queue',languageContext,at:new Date().toISOString()})
+    .then(refresh)
+    .catch(()=>setNotice(localFlowText('progressReadFailed'))),
    Math.min(2_147_483_647,Math.max(20,workspace.queue.nextChangeAt-Date.now()+20)),
   );
   return()=>window.clearTimeout(timer);
- },[workspace.queue.nextChangeAt]);
+ },[workspace.queue.nextChangeAt,languageContext.languageRouteId,languageContext.languageRouteRevision]);
 
  const perform=async<T,>(work:()=>Promise<T>)=>{
   setBusy(true);setNotice('');
-  try{const result=await work();await refresh();return result;}
-  catch(e){setNotice(e instanceof Error&&e.message.startsWith('localFlow.')?e.message:localFlowText('retryOperation'));return null;}
-  finally{setBusy(false);setProgress(null);}
+  try{
+   const outcome=await settleOperation(work,refresh);
+   if(outcome.kind==='rejected'){
+    const error=outcome.error;
+    setNotice(error instanceof Error&&error.message.startsWith('localFlow.')?error.message:localFlowText('retryOperation'));
+    return null;
+   }
+   if(outcome.projection==='stale')setNotice(localFlowText('progressReadFailed'));
+   return outcome.value;
+  }finally{setBusy(false);setProgress(null);}
  };
  const inspect=async<T,>(work:()=>Promise<T>)=>{
   setBusy(true);setNotice('');
@@ -104,9 +119,12 @@ export function usePackageLearning(entryOpen:boolean){
    setCatalog([...local.catalog]);setCatalogBusy(true);
    const result=await contentSupplySystem.execute({kind:'refresh_catalog',force:notify,signal:request.signal});
    if(gen===generation.current){
-    await refresh();setCatalog([...result.items]);
-    if(notify)setNotice(localFlowText(result.status==='current'?'catalogCurrent':'catalogUpdated'));
-    else setNotice(current=>current==='localFlow.audioIncomplete'?'':current);
+    setCatalog([...result.items]);
+    try{
+     await refresh();
+     if(notify)setNotice(localFlowText(result.status==='current'?'catalogCurrent':'catalogUpdated'));
+     else setNotice(current=>current==='localFlow.audioIncomplete'?'':current);
+    }catch{setNotice(localFlowText('progressReadFailed'));}
    }
   }catch{if(gen===generation.current&&!request.signal.aborted)setNotice(localFlowText('catalogFailed'));}
   finally{

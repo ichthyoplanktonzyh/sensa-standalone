@@ -47,15 +47,21 @@ const announceMedia = (): void => {
 const refreshMedia = async (): Promise<void> => {
   const rows = await readLibrary((tx) => tx.entries('media'));
   const next = new Map<string, StoredMedia>();
+  let invalid: unknown = null;
   for (const row of rows) {
-    const media = parseStoredMedia(row.value);
-    if (row.key !== media.mediaId) throw new Error('libraryBackup.errors.inconsistent');
-    next.set(row.key, media);
+    try{
+      const media = parseStoredMedia(row.value);
+      if (row.key !== media.mediaId) throw new Error('libraryBackup.errors.inconsistent');
+      next.set(row.key, media);
+    }catch(cause){invalid??=cause;}
   }
   for(const [mediaId,media] of preparedMedia)next.set(mediaId,media);
   mediaCache = next;
   mediaReady = true;
   announceMedia();
+  // A corrupt row is isolated from valid personal media and from product
+  // startup, but remains observable to explicit callers and diagnostics.
+  if(invalid)throw invalid;
 };
 
 /** Load the render cache once and keep it aligned after restore or cloud sync. */
@@ -73,7 +79,7 @@ export const preloadMedia = (): Promise<void> => {
   return mediaLoad;
 };
 
-/** Synchronous render-cache lookup. Call `preloadMedia` before mounting the product. */
+/** Synchronous render-cache lookup. Subscribers rerender when background preload completes. */
 export const getMedia = (mediaId: string): StoredMedia | null => mediaCache.get(mediaId) ?? null;
 
 /** Async lookup for effects and non-render consumers that cannot assume preload. */

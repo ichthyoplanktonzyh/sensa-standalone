@@ -25,6 +25,7 @@ export interface CoordinatedSqliteBackend {
   changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]>;
   syncBaseEntries(keys?: readonly { table: SqliteLibraryTable; key: string }[]): Promise<SqliteSyncBaseEntry[]>;
   count(table: SqliteLibraryTable): Promise<number>;
+  estimateRecordBytes(tables: readonly SqliteLibraryTable[]): Promise<number>;
   homeLearningProjection(languageRouteId: string): Promise<HomeLearningStorageProjection>;
   countIntroducedLearningTargets(languageRouteId: string, startedAfter: string, startedBefore: string): Promise<number>;
   learningRunIdsForTarget(targetId: string, openOnly: boolean): Promise<string[]>;
@@ -106,6 +107,10 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
 
   count(table: SqliteLibraryTable): Promise<number> {
     return this.call({ kind: 'count', table }) as Promise<number>;
+  }
+
+  estimateRecordBytes(tables: readonly SqliteLibraryTable[]): Promise<number> {
+    return this.call({kind:'estimateRecordBytes',tables:[...tables]}) as Promise<number>;
   }
 
   homeLearningProjection(languageRouteId: string): Promise<HomeLearningStorageProjection> {
@@ -356,6 +361,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       case 'changesSince': return backend.changesSince(input.contentRevision, input.tables);
       case 'syncBaseEntries': return backend.syncBaseEntries(input.keys);
       case 'count': return backend.count(input.table);
+      case 'estimateRecordBytes': return backend.estimateRecordBytes(input.tables);
       case 'homeLearningProjection': return backend.homeLearningProjection(input.languageRouteId);
       case 'countIntroducedLearningTargets': return backend.countIntroducedLearningTargets(
         input.languageRouteId,

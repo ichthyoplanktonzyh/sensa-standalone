@@ -384,9 +384,14 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
       this.status = { ok: true, error: null, errorKind: null };
     } catch (cause) {
       transaction.settled=true;
-      try{this.state=await this.deps.repository.load();}
-      catch{this.state=null;}
-      this.status = errorStatus(cause);
+      try{
+        this.state=await this.deps.repository.load();
+        this.rememberIds(this.state);
+        this.status={ok:true,error:null,errorKind:null};
+      }catch(reloadCause){
+        this.state=null;
+        this.status=errorStatus(reloadCause);
+      }
       this.notify();
       throw cause;
     }

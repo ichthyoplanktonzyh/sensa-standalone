@@ -172,7 +172,7 @@ export const rehydratePublishedPortableInstallations=async(
 ):Promise<PortableRehydrationResult>=>{
   const snapshot=await readLibrary(async tx=>({
     installations:(await tx.all<PackageInstallation>('packageInstallations')),
-    cache:await tx.all<InstalledPackage>('packageCache'),
+    cache:(await tx.packageCacheEntriesStored<InstalledPackage>()).map(row=>row.value),
   }));
   const facts=new Map(snapshot.installations.map(value=>[value.key,value]));
   const stale=snapshot.cache.filter(value=>facts.get(value.key)?.artifact.digest!==value.digest);

@@ -19,6 +19,8 @@ import {
   updateLanguageRouteSupport,
 } from '../../data/library/language';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
+import {settleOperation} from './operationSettlement';
+import {createRefreshCoordinator} from './refreshCoordinator';
 
 type Snapshot={
   collection:SensaLanguageRouteCollection;
@@ -72,7 +74,8 @@ export function useLanguageRoutes(){
   useEffect(()=>{
     let active=true;
     mounted.current=true;
-    const read=()=>void refresh().catch(()=>{if(active&&mounted.current)setNotice(localFlowText('languageReadFailed'));});
+    const coordinator=createRefreshCoordinator(refresh);
+    const read=()=>void coordinator.request().catch(()=>{if(active&&mounted.current)setNotice(localFlowText('languageReadFailed'));});
     read();
     const stop=observeLibrary(read,['settings','meta']);
     let stopSupply:(()=>void)|null=null;
@@ -83,8 +86,7 @@ export function useLanguageRoutes(){
   },[]);
   const perform=async<T,>(work:()=>Promise<T>)=>{
     setBusy(true);setNotice('');
-    try{const result=await work();await refresh();return result;}
-    catch(e){setNotice(e instanceof Error&&e.message.startsWith('localFlow.')?e.message:localFlowText('languageReadFailed'));return null;}
+    try{const outcome=await settleOperation(work,refresh);if(outcome.kind==='rejected'){const error=outcome.error;setNotice(error instanceof Error&&error.message.startsWith('localFlow.')?error.message:localFlowText('languageReadFailed'));return null;}if(outcome.projection==='stale')setNotice(localFlowText('languageReadFailed'));return outcome.value;}
     finally{setBusy(false);}
   };
   const snapshot=state??defaultSnapshot;

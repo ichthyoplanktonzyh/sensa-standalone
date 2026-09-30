@@ -12,6 +12,7 @@ export type {
   ContentSupplyCommandResult,
   ContentProvisioningControl,
   ContentSupplyPackage,
+  ContentSupplyRuntimePackage,
   ContentSupplyQuery,
   ContentSupplyQueryResult,
   ContentSupplyRehydration,

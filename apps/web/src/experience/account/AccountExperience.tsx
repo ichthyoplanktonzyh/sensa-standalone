@@ -18,6 +18,7 @@ const ExtensionIntake=lazy(()=>import('./ExtensionIntake').then(module=>({defaul
 const RemoteIntakeDelivery=lazy(()=>import('./RemoteIntakeDelivery').then(module=>({default:module.RemoteIntakeDelivery})));
 const AccountDeletion=lazy(()=>import('./AccountDeletion').then(module=>({default:module.AccountDeletion})));
 const preloadMedia=()=>import('../personalMeaningJourney/mediaStore').then(module=>module.preloadMedia());
+const warmMedia=()=>{void preloadMedia().catch(()=>undefined);};
 const clearAllCredentials=()=>import('../../data/library/providers').then(module=>module.clearAllCredentials());
 
 type Owner={subject:string;email:string;accountId?:string};
@@ -51,7 +52,7 @@ export default function AccountExperience({children,onReturnToLanding}:{children
    let stored=await inspect();
    if(!stored.identity&&!stored.owner){await openLibrary();stored=await inspect();}
    if(gen!==generation.current)return;
-   if(stored.identity)await preloadMedia();
+   if(stored.identity)warmMedia();
    if(gen!==generation.current)return;
    setOwner(stored.owner??null);
    // Local access uses the already admitted owner. Refreshing an expired online
@@ -88,7 +89,7 @@ export default function AccountExperience({children,onReturnToLanding}:{children
    if(gen!==generation.current)return;
    await openLibrary();
    if(gen!==generation.current)return;
-   await preloadMedia();
+   warmMedia();
    if(gen!==generation.current)return;
    setOwner(provisional);setLocal(true);if(!extensionRequest)setReady(true);setLoginOpen(false);
    const endpoint=import.meta.env.VITE_SENSA_API_URL;

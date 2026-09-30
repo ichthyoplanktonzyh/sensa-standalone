@@ -1,6 +1,6 @@
 import type { SensaFormalPinnedLanguageContext } from '@sensa/contracts/sensa';
 
-import { contentSupplySystem, type ContentSupplyPackage } from '../../contentSupply/system';
+import { contentSupplySystem, type ContentSupplyRuntimePackage } from '../../contentSupply/system';
 import { readHomeLearningRecords } from '../../data/library/store';
 import { readLearningOverview } from '../../data/library/learning';
 import { localFlowText } from '../../i18n/localFlowText';
@@ -72,7 +72,7 @@ const selectablePolicies = policyOptions
   .map((option) => option.id);
 
 const packageFor = (
-  packages: readonly ContentSupplyPackage[],
+  packages: readonly ContentSupplyRuntimePackage[],
   membership: LocalCurriculumMembership | undefined,
 ) => membership?.packageKey
   ? packages.find((candidate) => candidate.key === membership.packageKey)
@@ -119,7 +119,7 @@ export const projectLearningTarget = (
   readiness: LearningReadiness,
   clock: number,
   material: LocalLearningMaterialization = membership.material,
-  pack?: ContentSupplyPackage,
+  pack?: ContentSupplyRuntimePackage,
 ): LearningTargetProjection => {
   const policy = localTargetPolicy(target);
   const declaredMastery = hasDeclaredMasteryOverride(target);
@@ -223,7 +223,7 @@ const runtimeTarget = (
 const projectRuntime = (
   run: LocalLearningRun,
   targets: readonly LocalLearningTarget[],
-  packages: readonly ContentSupplyPackage[],
+  packages: readonly ContentSupplyRuntimePackage[],
   clock: number,
 ): LearningRuntimeProjection => {
   const { target, participant, material, executable } = runtimeTarget(run, targets);
@@ -349,7 +349,7 @@ const projectRuntime = (
 
 const workspaceReadiness = (
   targets: readonly LocalLearningTarget[],
-  packages: readonly ContentSupplyPackage[],
+  packages: readonly ContentSupplyRuntimePackage[],
   context: SensaFormalPinnedLanguageContext,
 ) => Object.fromEntries(targets.map((target) => {
   const membership = localCurriculumMembershipForContext(target, context);
@@ -365,11 +365,13 @@ export async function readLearningWorkspaceProjection(input: Readonly<{
   clock: number;
   retries: readonly InterleavedLearningRetry[];
 }>): Promise<LearningWorkspaceProjection> {
-  const [snapshot, supply] = await Promise.all([
-    readLearningOverview(),
-    contentSupplySystem.read({ kind: 'workspace' }),
-  ]);
-  const readiness = workspaceReadiness(snapshot.targets, supply.packages, input.languageContext);
+  const snapshot=await readLearningOverview();
+  const packageKeys=snapshot.targets.flatMap(target=>{
+    const membership=localCurriculumMembershipForContext(target,input.languageContext);
+    return membership?.assurancePackageKey&&membership.packageKey?[membership.packageKey]:[];
+  });
+  const packages=await contentSupplySystem.read({kind:'runtime_packages',packageKeys});
+  const readiness = workspaceReadiness(snapshot.targets, packages, input.languageContext);
   const dailyLimit = snapshot.studyPlans[input.languageContext.languageRouteId]?.dailyNewSenseLimit;
   const queue = resolveLearningQueue({
     targets: snapshot.targets,
@@ -394,7 +396,7 @@ export async function readLearningWorkspaceProjection(input: Readonly<{
         readiness[target.id] ?? 'blocked',
         input.clock,
         membership.material,
-        packageFor(supply.packages, membership),
+        packageFor(packages, membership),
       )]
       : [];
   });
@@ -419,7 +421,7 @@ export async function readLearningWorkspaceProjection(input: Readonly<{
         dailyLimit,
       }),
     },
-    runtime: activeRun ? projectRuntime(activeRun, snapshot.targets, supply.packages, input.clock) : null,
+    runtime: activeRun ? projectRuntime(activeRun, snapshot.targets, packages, input.clock) : null,
     activeRunId: activeRun?.id ?? null,
     dailyLimit: dailyLimit ?? null,
     records: recordProjection(snapshot.runs, snapshot.targets),

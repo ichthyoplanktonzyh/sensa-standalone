@@ -468,6 +468,9 @@ async function assertActionTransition(
  }
  const executable=localExecutableTargetForParticipant(priorTarget,participant,presented),pack=executable.packageKey?await input.read('packageCache',executable.packageKey) as any:undefined;
  validateLocalProtocolResources(execution,executable,pack);
+ // This is authority replay, not a second user-facing calculation: the write
+ // proposal is admitted only when the canonical reducer reproduces every
+ // persisted fact and projection from the command plus prior state.
  const executed=reduceLocalProtocolAction({operationId:event.id,stepKey:stepId,execution,target:executable,run:beforeRun,resource:pack,action:event.detail.action,at:event.at});
  const applied=applyLocalProtocolTransition({operationId:event.id,stepId,at:event.at,target:priorTarget,run:executed.run,transition:executed.transition});
  if(!backupEqual(executed.facts,event.detail.formalEvaluation)||!backupEqual(applied.record,event.detail.transition)||!backupEqual(applied.target,nextTarget))reject('Learning Event settlement does not reproduce its Target projection.');

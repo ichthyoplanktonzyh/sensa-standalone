@@ -3,7 +3,7 @@ import type {
   SensaFormalPinnedLanguageContext,
 } from '@sensa/contracts/sensa';
 
-import type { InstalledPackage } from '../../data/library/packageRecords';
+import type { InstalledPackage,InstalledPackageSummary } from '../../data/library/packageRecords';
 import type {
   ContentProvisioningTask,
   PersonalMeaningLearningSource,
@@ -14,12 +14,13 @@ import type {
 } from '../portable/portablePackage';
 import { observeLibrary, type Table } from '../../data/library/store';
 
-export type ContentSupplyPackage = InstalledPackage;
+export type ContentSupplyPackage = InstalledPackageSummary;
+export type ContentSupplyRuntimePackage = InstalledPackage;
 export type ContentSupplyCatalogItem = SensaPortableBookDescriptor;
 
 export interface ContentSupplyWorkspace {
   readonly catalog: readonly ContentSupplyCatalogItem[];
-  readonly packages: readonly InstalledPackage[];
+  readonly packages: readonly ContentSupplyPackage[];
 }
 
 export interface ContentSupplyRehydration {
@@ -90,10 +91,12 @@ export type ContentSupplyCommandResult<Command extends ContentSupplyCommand> =
 
 export type ContentSupplyQuery =
   | Readonly<{ kind: 'workspace' }>
+  | Readonly<{kind:'runtime_packages';packageKeys:readonly string[]}>
   | Readonly<{ kind: 'provisioning_control' }>
   | Readonly<{ kind: 'provisioning_tasks' }>;
 export type ContentSupplyQueryResult<Query extends ContentSupplyQuery> =
   Query['kind'] extends 'workspace' ? ContentSupplyWorkspace
+    :Query['kind'] extends 'runtime_packages'?readonly InstalledPackage[]
     : Query['kind'] extends 'provisioning_control' ? ContentProvisioningControl
       : readonly ContentProvisioningTask[];
 
@@ -116,6 +119,7 @@ export interface ContentSupplySystem {
 
 const queryTables = {
   workspace: ['packageCache', 'packageInstallations', 'meta'],
+  runtime_packages:['packageCache'],
   provisioning_control: ['personalLearning', 'providers', 'settings'],
   provisioning_tasks: ['personalLearning'],
 } as const satisfies Record<ContentSupplyQuery['kind'], readonly Table[]>;

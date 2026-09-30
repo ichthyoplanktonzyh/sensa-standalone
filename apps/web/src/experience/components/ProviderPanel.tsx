@@ -18,6 +18,7 @@ import {
 } from '../../data/library/accountModels';
 import {setupButton,setupPrimary} from './learning/LearningSetupFrame';
 import {Cpu,RefreshCw,Server} from 'lucide-react';
+import {settleOperation} from '../library/operationSettlement';
 
 const feedback=' transition-colors hover:bg-surface-selected active:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-50';
 const field='mt-2 block min-h-11 w-full rounded-control border border-border-strong bg-surface-panel p-3 focus-visible:outline-2 focus-visible:outline-focus';
@@ -100,7 +101,7 @@ export function ProviderPanel(){
   if(account.onlineService&&visible)void readAccount();
   else if(!account.onlineService){setAccountModels(null);setAccountLoaded(false);setAccountError('');}
  },[account.onlineService,account.email,visible]);
- const perform=async(work:()=>Promise<unknown>)=>{setBusy(true);setNotice('');try{await work();await refresh();setNotice('modelService.updated');}catch(e){setNotice(localFlowErrorKey(e,'modelService.saveFailed'));}finally{setBusy(false);}};
+ const perform=async(work:()=>Promise<unknown>)=>{setBusy(true);setNotice('');try{const outcome=await settleOperation(work,refresh);if(outcome.kind==='rejected')setNotice(localFlowErrorKey(outcome.error,'modelService.saveFailed'));else setNotice(outcome.projection==='current'?'modelService.updated':'modelService.readFailed');}finally{setBusy(false);}};
 
  const localConnections=providers.filter(provider=>provider.id!==defaultSensaProvider.id);
  const accountConnections=accountModels?.connections??[];

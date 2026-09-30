@@ -6,7 +6,7 @@ import {
 } from '@sensa/contracts/sensa';
 
 import { openLibrary, readLibrary, writeLibraryCache } from '../../data/library/store';
-import type { InstalledPackage } from '../../data/library/packageRecords';
+import {installedPackageSummary,type InstalledPackage} from '../../data/library/packageRecords';
 import type {
   ContentSupplyCatalogRefresh,
   ContentSupplyCommand,
@@ -65,7 +65,7 @@ const readWorkspace = async (): Promise<ContentSupplyWorkspace> => {
     const cache = parseCatalogCache(await tx.get<unknown>('meta', 'package-catalog'));
     return {
       catalog: [...cache.items],
-      packages: await tx.all<InstalledPackage>('packageCache'),
+      packages:(await tx.packageCacheEntriesStored<InstalledPackage>()).map(row=>installedPackageSummary(row.value)),
     };
   });
 };
@@ -188,6 +188,8 @@ export const readContentSupplyQuery = async (query: ContentSupplyQuery): Promise
   switch (query.kind) {
     case 'workspace':
       return readWorkspace();
+    case 'runtime_packages':
+      return readLibrary(async tx=>Promise.all([...new Set(query.packageKeys)].map(key=>tx.get<InstalledPackage>('packageCache',key))).then(values=>values.filter((value):value is InstalledPackage=>!!value)));
     case 'provisioning_tasks': {
       const { personalLearningSnapshot } = await import('../../data/library/personalLearning');
       return personalLearningSnapshot();

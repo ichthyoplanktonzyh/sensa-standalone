@@ -8,6 +8,8 @@ import {useLanguageRoutes} from './useLanguageRoutes';
 import {useShellNavigation} from '../router/useShellNavigation';
 import {localFlowNotice,localFlowText} from '../../i18n/localFlowText';
 import {useAccountExperience} from '../account/AccountContext';
+import {settleOperation} from './operationSettlement';
+import {createRefreshCoordinator} from './refreshCoordinator';
 
 const LearningPreferencesPanel=lazy(()=>import('../components/learning/LearningPreferencesPanel').then(module=>({default:module.LearningPreferencesPanel})));
 const loadLearningSystem=()=>import('../../learning/system/learningSystem').then(module=>module.learningSystem);
@@ -25,7 +27,6 @@ export function HomeLearningController({active=true}:{active?:boolean}){
  const [quantityChoice,setQuantityChoice]=useState(20);
  const refresh=async()=>{
   const learningSystem=await loadLearningSystem();
-  await learningSystem.execute({kind:'prepare_queue',languageContext,at:new Date().toISOString()});
   const next=await learningSystem.read({kind:'home',languageRouteId:languageContext.languageRouteId,clock:Date.now()});
   setProjection(next);
   setSummaryReady(true);
@@ -34,27 +35,43 @@ export function HomeLearningController({active=true}:{active?:boolean}){
   let current=true;
   setSummaryReady(false);
   setNotice('');
-  const read=()=>void refresh().catch(()=>{if(current)setNotice(localFlowText('learningReadFailed'));});
+  const coordinator=createRefreshCoordinator(refresh);
+  const read=()=>void coordinator.request().catch(()=>{if(current)setNotice(localFlowText('learningReadFailed'));});
+  const prepare=async()=>{
+   const learningSystem=await loadLearningSystem();
+   await learningSystem.execute({kind:'prepare_queue',languageContext,at:new Date().toISOString()});
+   await coordinator.request();
+  };
   let stop=()=>{};
   void loadLearningSystem().then(system=>{
    if(!current)return;
    stop=system.subscribe({kind:'home',languageRouteId:languageContext.languageRouteId},read);
-   return openLibrary().then(read);
+   return openLibrary().then(prepare);
   }).catch(()=>{if(current)setNotice(localFlowText('learningReadFailed'));});
-  const focus=()=>void refresh();
+  const focus=()=>void prepare().catch(()=>{if(current)setNotice(localFlowText('learningReadFailed'));});
   window.addEventListener('focus',focus);
   return()=>{current=false;stop();window.removeEventListener('focus',focus);};
  },[languageContext.languageRouteId,languageContext.languageRouteRevision]);
  useEffect(()=>{
   if(projection?.nextChangeAt==null)return;
-  const timer=window.setTimeout(()=>void refresh(),Math.min(2_147_483_647,Math.max(20,projection.nextChangeAt-Date.now()+20)));
+  const timer=window.setTimeout(()=>void loadLearningSystem().then(async learningSystem=>{
+   await learningSystem.execute({kind:'prepare_queue',languageContext,at:new Date().toISOString()});
+   await refresh();
+  }).catch(()=>setNotice(localFlowText('learningReadFailed'))),Math.min(2_147_483_647,Math.max(20,projection.nextChangeAt-Date.now()+20)));
   return()=>window.clearTimeout(timer);
- },[projection?.nextChangeAt]);
+ },[projection?.nextChangeAt,languageContext.languageRouteId,languageContext.languageRouteRevision]);
  const perform=async(work:()=>Promise<unknown>)=>{
   setBusy(true);setNotice('');
-  try{await work();await refresh();return true;}
-  catch(error){setNotice(error instanceof Error&&error.message.startsWith('localFlow.')?error.message:localFlowText('retryOperation'));return false;}
-  finally{setBusy(false);}
+  try{
+   const outcome=await settleOperation(work,refresh);
+   if(outcome.kind==='rejected'){
+    const error=outcome.error;
+    setNotice(error instanceof Error&&error.message.startsWith('localFlow.')?error.message:localFlowText('retryOperation'));
+    return false;
+   }
+   if(outcome.projection==='stale')setNotice(localFlowText('progressReadFailed'));
+   return true;
+  }finally{setBusy(false);}
  };
  const begin=async(targetId:string,limit:number)=>{
   const learningSystem=await loadLearningSystem();
