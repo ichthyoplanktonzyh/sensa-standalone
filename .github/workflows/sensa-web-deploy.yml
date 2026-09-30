@@ -84,7 +84,7 @@ jobs:
       SENSA_RELEASE_SHA: ${{ inputs.release_sha }}
       SENSA_WEB_ORIGIN: ${{ vars.SENSA_WEB_ORIGIN }}
       VITE_SENSA_SUPPORT_URL: ${{ vars.SENSA_SUPPORT_URL }}
-      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_URL: ${{ format('https://{0}.supabase.co', vars.SUPABASE_PROJECT_REF) }}
       VITE_SENSA_API_URL: ${{ vars.VITE_SENSA_API_URL }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
       CLOUDFLARE_WORKER_NAME: ${{ vars.CLOUDFLARE_WORKER_NAME }}

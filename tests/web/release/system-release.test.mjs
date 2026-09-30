@@ -196,6 +196,8 @@ test("production has one manual release entry and internal component executors",
   assert.match(system, /uses: \.\/\.github\/workflows\/sensa-learning-content-publish\.yml/u);
   assert.match(system, /application:\n\s+needs: \[plan, learning_content\]/u,
     "content promotion precedes a coupled application promotion");
+  assert.match(application, /VITE_SUPABASE_URL: \$\{\{ format\('https:\/\/\{0\}\.supabase\.co', vars\.SUPABASE_PROJECT_REF\) \}\}/u,
+    "the production verifier must derive the Supabase origin from its approved project ref instead of requiring duplicate configuration");
   for (const executor of [application, content]) {
     assert.match(executor, /workflow_call:/u);
     assert.doesNotMatch(executor, /workflow_dispatch:/u);
