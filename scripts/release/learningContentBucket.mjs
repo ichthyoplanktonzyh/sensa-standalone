@@ -6,6 +6,47 @@ const bucketError = (message, error) => {
 export const portableBookContentType = "application/zip";
 export const learningContentMimeTypes = ["application/json", portableBookContentType];
 
+const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+/**
+ * Read newly published immutable bytes through their public URL. Storage may
+ * commit an upload even when the client times out, while the public edge can
+ * briefly lag behind it. Retrying the read makes that ambiguous outcome
+ * idempotent without ever overwriting an existing object.
+ */
+export async function readPublishedLearningContent(
+  url,
+  path,
+  {
+    attempts = 4,
+    fetchImpl = globalThis.fetch,
+    retryDelayMs = 1_000,
+    sleep = wait,
+    timeoutMs = 15_000,
+  } = {},
+) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetchImpl(url, {
+        cache: "no-store",
+        redirect: "error",
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (response.ok) return Buffer.from(await response.arrayBuffer());
+      await response.body?.cancel();
+      lastError = new Error(`HTTP ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+    if (attempt < attempts) await sleep(retryDelayMs * attempt);
+  }
+  const detail = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(`Published learning content is not readable at ${path}: ${detail}`, {
+    cause: lastError,
+  });
+}
+
 /**
  * Make sure immutable learning content can be read without authentication.
  * Existing public buckets are deliberately left unchanged: publication owns

@@ -13,6 +13,7 @@ import {
 import {
   ensurePublicLearningContentBucket,
   portableBookContentType,
+  readPublishedLearningContent,
 } from "./learningContentBucket.mjs";
 
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
@@ -25,18 +26,6 @@ const safeSegment = (value, name) => {
   if (!/^[a-z0-9][a-z0-9-]{1,62}$/u.test(value)) throw new Error(`${name} is invalid`);
   return value;
 };
-const fetchBytes = async (url, path) => {
-  const response = await fetch(url, {
-    cache: "no-store",
-    redirect: "error",
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!response.ok) {
-    throw new Error(`Published learning content is not readable at ${path} (${response.status})`);
-  }
-  return Buffer.from(await response.arrayBuffer());
-};
-
 if (process.env.SENSA_CONTENT_PUBLISH !== "true") {
   throw new Error("Set SENSA_CONTENT_PUBLISH=true only in the authorized content publication environment");
 }
@@ -89,7 +78,7 @@ async function publishObject(path, bytes, contentType) {
   if (uploaded.error) {
     let existing;
     try {
-      existing = await fetchBytes(publicUrl, path);
+      existing = await readPublishedLearningContent(publicUrl, path);
     } catch (error) {
       throw new Error(`Learning content upload failed at ${path}: ${uploaded.error.message}`, {
         cause: error,
@@ -100,7 +89,7 @@ async function publishObject(path, bytes, contentType) {
     }
     return publicUrl;
   }
-  const delivered = await fetchBytes(publicUrl, path);
+  const delivered = await readPublishedLearningContent(publicUrl, path);
   if (sha256(delivered) !== sha256(bytes)) {
     throw new Error("Uploaded learning content failed public digest verification");
   }

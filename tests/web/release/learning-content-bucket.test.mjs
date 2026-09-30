@@ -4,6 +4,7 @@ import {
   ensurePublicLearningContentBucket,
   learningContentMimeTypes,
   portableBookContentType,
+  readPublishedLearningContent,
 } from "../../../scripts/release/learningContentBucket.mjs";
 
 const publicBucket = {
@@ -14,6 +15,22 @@ const publicBucket = {
 };
 
 describe("learning content publication bucket", () => {
+  it("retries public verification after an ambiguous upload timeout", async () => {
+    const expected = Buffer.from("immutable learning content");
+    const fetchImpl = vi.fn()
+      .mockRejectedValueOnce(new DOMException("timed out", "TimeoutError"))
+      .mockResolvedValueOnce(new Response(expected, {status: 200}));
+    const sleep = vi.fn().mockResolvedValue(undefined);
+
+    await expect(readPublishedLearningContent(
+      "https://content.example/book.sensa-book",
+      "book.sensa-book",
+      {fetchImpl, sleep},
+    )).resolves.toEqual(expected);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledWith(1_000);
+  });
+
   it("publishes portable Books with a MIME type admitted by the bucket", () => {
     expect(portableBookContentType).toBe("application/zip");
     expect(learningContentMimeTypes).toContain(portableBookContentType);
