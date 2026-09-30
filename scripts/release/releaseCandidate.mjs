@@ -37,6 +37,11 @@ export function validateReleaseEnvironment(env){
  if(errors.length)throw new Error(errors.join('\n'));
  return {webOrigin:web.origin,supabaseOrigin:auth.origin,apiUrl:api.href,supportUrl:supportUrl.href,commit:env.SENSA_RELEASE_SHA};
 }
+function releaseProvenance(env){
+ const repository=env.GITHUB_REPOSITORY??'',workflowRunId=String(env.GITHUB_RUN_ID??''),workflowRunAttempt=String(env.GITHUB_RUN_ATTEMPT??'');
+ if(!/^[^/\s]+\/[^/\s]+$/u.test(repository)||!/^[1-9][0-9]*$/u.test(workflowRunId)||!/^[1-9][0-9]*$/u.test(workflowRunAttempt))throw new Error('Release candidate requires GitHub Actions build provenance');
+ return {repository,workflowRunId,workflowRunAttempt};
+}
 async function files(dir){const entries=await readdir(dir,{withFileTypes:true});return (await Promise.all(entries.map(e=>e.isDirectory()?files(resolve(dir,e.name)):[resolve(dir,e.name)]))).flat();}
 async function removeSourceMaps(dir){
  for(const path of await files(dir)){
@@ -65,6 +70,7 @@ async function databaseMigrationSet(root){
 }
 export async function prepareCandidate(env,root=process.cwd()){
  const config=validateReleaseEnvironment(env);
+ const provenance=releaseProvenance(env);
  const head=execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim();
  if(head!==config.commit)throw new Error('Release SHA does not match checked-out HEAD');
  const dist=resolve(root,'apps/web/dist'),extension=resolve(root,'apps/browser-extension/dist');
@@ -87,7 +93,7 @@ export async function prepareCandidate(env,root=process.cwd()){
   }
  }
  const database=await databaseMigrationSet(root);
- const report={format:'sensa-release-candidate-v2',...config,createdAt:new Date().toISOString(),scope:'Web, browser extension and compiled API; local-first library with ordinary account cloud sync',promotion:'requires an explicit owner-authorized production workflow for this exact SHA and artifact; user-flow acceptance is deferred until those flows are confirmed',database,files:entries};
+ const report={format:'sensa-release-candidate-v2',...config,provenance,createdAt:new Date().toISOString(),scope:'Web, browser extension and compiled API; local-first library with ordinary account cloud sync',promotion:'requires an explicit owner-authorized production workflow for this exact SHA and artifact; user-flow acceptance is deferred until those flows are confirmed',database,files:entries};
  await mkdir(resolve(root,'release-candidate'),{recursive:true});await writeFile(resolve(root,'release-candidate/manifest.json'),JSON.stringify(report,null,2)+'\n');
  return report;
 }

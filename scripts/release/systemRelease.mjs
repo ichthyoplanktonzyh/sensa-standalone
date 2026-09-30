@@ -195,9 +195,12 @@ function assertPlan(plan) {
   }
 }
 
-function applicationComponent(plan, candidate, cloudflare) {
+function applicationComponent(plan, candidate, cloudflare, repository) {
   if (candidate?.format !== "sensa-release-candidate-v2"
     || candidate.commit !== plan.source.commit
+    || candidate.provenance?.repository !== repository
+    || !/^[1-9][0-9]*$/u.test(candidate.provenance?.workflowRunId ?? "")
+    || !/^[1-9][0-9]*$/u.test(candidate.provenance?.workflowRunAttempt ?? "")
     || !Array.isArray(candidate.files)
     || candidate.files.length === 0
     || candidate.database?.format !== "sensa-forward-migration-set-v1"
@@ -217,6 +220,8 @@ function applicationComponent(plan, candidate, cloudflare) {
       format: candidate.format,
       manifestSha256: sha256(`${JSON.stringify(candidate, null, 2)}\n`),
       fileCount: candidate.files.length,
+      workflowRunId: candidate.provenance.workflowRunId,
+      workflowRunAttempt: candidate.provenance.workflowRunAttempt,
     },
     web: {provider: "cloudflare-workers", versionId: cloudflare.versionId},
     api: {provider: "supabase-edge-functions", releaseSha: plan.source.commit},
@@ -273,7 +278,7 @@ export function finalizeSystemRelease({
   assertPlan(plan);
   const previousComponents = plan.previousRelease?.components;
   const application = plan.decision.deployApplication
-    ? applicationComponent(plan, applicationCandidate, cloudflareVersion)
+    ? applicationComponent(plan, applicationCandidate, cloudflareVersion, repository)
     : clone(previousComponents?.application);
   const learningContent = plan.decision.publishLearningContent
     ? learningContentComponent(plan, learningContentPublication)

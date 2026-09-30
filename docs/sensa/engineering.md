@@ -433,7 +433,7 @@ node --import tsx tests/web/run.mts --suite=manual --id=extension-popup
 
 ## CI 与生产发布
 
-`.github/workflows/sensa-consumer-check.yml` 在 pull request 和 `main` push 时运行 `Sensa CI`。它执行静态检查、构建、Web 快速测试、浏览器检查以及 PostgreSQL/API 集成。
+`.github/workflows/sensa-consumer-check.yml` 在 pull request 和 `main` push 时运行 `Sensa CI`。它执行静态检查、构建、Web 快速测试、浏览器检查以及 PostgreSQL/API 集成。Pull request 只生成验证构建；`main` 的静态／快速 job 使用 `web-candidate` 公共配置构建一次生产候选，在同一 job 内固定完整 SHA、GitHub Actions provenance、公开目标、migration 集合和每个交付文件摘要，完成 artifact 检查与 Cloudflare dry-run 后才上传 `sensa-production-<SHA>`。其余 CI job 共同决定该候选是否具备发布资格；失败 run 中即使存在 artifact 也不能被发布器接受。
 
 整个生产系统只有一个人工发布入口：`.github/workflows/sensa-release.yml`。它先生成
 `sensa-system-release-plan-v1`，根据上一份成功的系统清单与目标 revision 之间的差异决定发布范围：
@@ -443,10 +443,10 @@ node --import tsx tests/web/run.mts --suite=manual --id=extension-popup
 统一发布流程：
 
 1. 接收一个完整的 `main` commit SHA，并要求当次 owner 授权；
-2. 等待该 SHA 的 `Sensa CI` 成功；
+2. 等待该 SHA 的 `Sensa CI` 成功，并固定产生候选的 CI run id / attempt；
 3. 读取上一份 `sensa-system-release-manifest-v1`，按路径影响生成最小安全 Release Plan；
 4. 如需发布内容，先构建、验证、上传不可变 Book/Registry 并提升 Registry；
-5. 如需发布应用，使用生产配置构建 Web、扩展和 API 一次，并校验同一份固定制品；
+5. 如需发布应用，从该成功 CI run 下载已经测试和固定的 Web、扩展与 API 候选，重新核对来源、目标和全部摘要，不再重新构建；
 6. 应用前向数据库迁移、对齐 Supabase Auth、部署 Supabase Edge Function；
 7. 上传 Cloudflare Worker 版本，先验证预览，再提升到生产；
 8. 执行公网非模型 smoke；
@@ -455,6 +455,8 @@ node --import tsx tests/web/run.mts --suite=manual --id=extension-popup
 联动发布按 Content → Application 排序；共享合同必须在旧应用/新内容和新应用/新内容的滚动窗口中保持
 兼容。任一组件未成功时不会生成成功的系统清单。首次使用统一入口，或上一份系统清单已经不可用时，
 Planner 会要求 `scope=all` 的完整 bootstrap，而不是猜测线上组件状态。
+
+应用交付遵循 `build once → verify once → promote once`：生产 workflow 没有应用 build job，也不会接受其他 run、其他 attempt 或只有相同文件名的 artifact。它仍会 checkout 同一 SHA 读取 forward-only migration 和发布脚本，在生产边界重新校验候选及目标，再执行 Supabase/Cloudflare 提升。候选保留 14 天；过期后发布应失败并重新取得当前 SHA 的绿色 CI 证据，不能在生产 job 中临时重建。
 
 命令行触发方式：
 

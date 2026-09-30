@@ -104,6 +104,11 @@ test("system release manifest records new evidence and carries an unchanged comp
   const candidate = {
     format: "sensa-release-candidate-v2",
     commit: sha("b"),
+    provenance: {
+      repository: "sensa/example",
+      workflowRunId: "100",
+      workflowRunAttempt: "1",
+    },
     webOrigin: "https://learn.example.com",
     apiUrl: "https://fixture.supabase.co/functions/v1/sensa-api",
     supabaseOrigin: "https://fixture.supabase.co",
@@ -131,6 +136,7 @@ test("system release manifest records new evidence and carries an unchanged comp
   });
   assert.equal(manifest.format, systemReleaseManifestFormat);
   assert.equal(manifest.components.application.sourceCommit, sha("b"));
+  assert.equal(manifest.components.application.candidate.workflowRunId, "100");
   assert.equal(manifest.components.application.web.versionId, "cloudflare-version-2");
   assert.equal(manifest.components.application.database.migrationSetSha256, digest("4"));
   assert.equal(manifest.components.application.targets.webOrigin, "https://learn.example.com");
@@ -185,17 +191,32 @@ test("system release manifest records a content-only promotion", () => {
   assert.equal(manifest.components.learningContent.packageCount, 3);
 });
 
-test("production has one manual release entry and internal component executors", async () => {
-  const [system, application, content] = await Promise.all([
+test("production promotes the exact application candidate tested by main CI", async () => {
+  const [system, application, content, ci] = await Promise.all([
     readFile(new URL("../../../.github/workflows/sensa-release.yml", import.meta.url), "utf8"),
     readFile(new URL("../../../.github/workflows/sensa-web-deploy.yml", import.meta.url), "utf8"),
     readFile(new URL("../../../.github/workflows/sensa-learning-content-publish.yml", import.meta.url), "utf8"),
+    readFile(new URL("../../../.github/workflows/sensa-consumer-check.yml", import.meta.url), "utf8"),
   ]);
   assert.match(system, /workflow_dispatch:/u);
   assert.match(system, /uses: \.\/\.github\/workflows\/sensa-web-deploy\.yml/u);
   assert.match(system, /uses: \.\/\.github\/workflows\/sensa-learning-content-publish\.yml/u);
   assert.match(system, /application:\n\s+needs: \[plan, learning_content\]/u,
     "content promotion precedes a coupled application promotion");
+  assert.match(system, /candidate_run_id: \$\{\{ steps\.ci\.outputs\.run_id \}\}/u);
+  assert.match(system, /candidate_run_attempt: \$\{\{ steps\.ci\.outputs\.run_attempt \}\}/u);
+  assert.match(system, /candidate_run_id: \$\{\{ needs\.plan\.outputs\.candidate_run_id \}\}/u);
+  assert.match(system, /candidate_run_attempt: \$\{\{ needs\.plan\.outputs\.candidate_run_attempt \}\}/u);
+  assert.match(ci, /name: Build, seal and verify the main release candidate/u);
+  assert.match(ci, /name: sensa-production-\$\{\{ github\.sha \}\}/u);
+  assert.match(ci, /node scripts\/release\/verifyCandidate\.mjs/u);
+  assert.match(ci, /npx wrangler versions upload --dry-run --strict/u);
+  assert.match(application, /run-id: \$\{\{ inputs\.candidate_run_id \}\}/u);
+  assert.match(application, /github-token: \$\{\{ github\.token \}\}/u);
+  assert.match(application, /SENSA_CANDIDATE_RUN_ID: \$\{\{ inputs\.candidate_run_id \}\}/u);
+  assert.match(application, /SENSA_CANDIDATE_RUN_ATTEMPT: \$\{\{ inputs\.candidate_run_attempt \}\}/u);
+  assert.doesNotMatch(application, /npm run build/u,
+    "production must promote the tested CI artifact instead of rebuilding it");
   assert.match(application, /VITE_SUPABASE_URL: \$\{\{ format\('https:\/\/\{0\}\.supabase\.co', vars\.SUPABASE_PROJECT_REF\) \}\}/u,
     "the production verifier must derive the Supabase origin from its approved project ref instead of requiring duplicate configuration");
   for (const executor of [application, content]) {

@@ -45,6 +45,8 @@ jobs:
       release_id: ${{ steps.planner.outputs.release_id }}
       deploy_application: ${{ steps.planner.outputs.deploy_application }}
       publish_learning_content: ${{ steps.planner.outputs.publish_learning_content }}
+      candidate_run_id: ${{ steps.ci.outputs.run_id }}
+      candidate_run_attempt: ${{ steps.ci.outputs.run_attempt }}
     env:
       SENSA_RELEASE_SHA: ${{ inputs.release_sha || github.sha }}
     steps:
@@ -67,10 +69,12 @@ jobs:
           ref: ${{ steps.release.outputs.sha }}
           fetch-depth: 0
       - name: Require green main CI for this revision
+        id: ci
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           node --input-type=module <<'JS'
+          import {appendFileSync} from 'node:fs';
           const env=process.env,sha=env.SENSA_RELEASE_SHA??'';
           if(!env.GH_TOKEN||!env.GITHUB_REPOSITORY)throw Error('GitHub Actions identity required');
           const endpoint=new URL(`https://api.github.com/repos/${env.GITHUB_REPOSITORY}/actions/workflows/sensa-consumer-check.yml/runs`);
@@ -81,6 +85,7 @@ jobs:
             const payload=await response.json(),run=payload.workflow_runs?.find(candidate=>candidate.head_sha===sha&&candidate.head_branch==='main'&&candidate.event==='push');
             if(run?.conclusion==='success'){
               console.log(`Verified green Sensa CI run ${run.id} for ${sha}.`);
+              appendFileSync(env.GITHUB_OUTPUT,`run_id=${run.id}\nrun_attempt=${run.run_attempt}\n`);
               process.exit(0);
             }
             if(run?.status==='completed')throw Error(`Sensa CI run ${run.id} concluded ${run.conclusion}`);
@@ -146,6 +151,8 @@ jobs:
     uses: ./.github/workflows/sensa-web-deploy.yml
     with:
       release_sha: ${{ needs.plan.outputs.release_sha }}
+      candidate_run_id: ${{ needs.plan.outputs.candidate_run_id }}
+      candidate_run_attempt: ${{ needs.plan.outputs.candidate_run_attempt }}
     secrets: inherit
 
   record:

@@ -20,6 +20,7 @@ jobs:
     name: Static, build and fast smoke
     runs-on: ubuntu-latest
     timeout-minutes: 12
+    environment: web-candidate
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -32,12 +33,47 @@ jobs:
       - run: npm ci
       - name: Typecheck
         run: npm run typecheck
-      - name: Build
+      - name: Build pull-request validation surface
+        if: ${{ github.event_name == 'pull_request' }}
         run: npm run build
+      - name: Build, seal and verify the main release candidate
+        if: ${{ github.event_name == 'push' }}
+        env:
+          SENSA_RELEASE_SHA: ${{ github.sha }}
+          SENSA_WEB_ORIGIN: ${{ vars.SENSA_WEB_ORIGIN }}
+          VITE_SENSA_SUPPORT_URL: ${{ vars.SENSA_SUPPORT_URL }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_SENSA_API_URL: ${{ vars.VITE_SENSA_API_URL }}
+          SENSA_EXTENSION_WEB_URL: ${{ vars.SENSA_WEB_ORIGIN }}
+          SENSA_EXTENSION_API_URL: ${{ vars.VITE_SENSA_API_URL }}
+        run: |
+          node scripts/release/releaseCandidate.mjs --check
+          npm run build
+          node scripts/release/releaseCandidate.mjs
+          node scripts/release/verifyCandidate.mjs
+          npx wrangler versions upload --dry-run --strict
       - name: Edge compile check
         run: npm run test:edge
       - name: Fast production-path smoke suite
         run: npm test
+      - name: Preserve the tested main release candidate
+        if: ${{ github.event_name == 'push' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sensa-production-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            apps/web/dist/
+            apps/browser-extension/dist/
+            apps/api/dist/
+            packages/contracts/dist/
+            packages/learning-kernel/dist/
+            packages/content-validator/dist/
+            packages/model-runtime/dist/
+            packages/mcp-server/dist/
+            release-candidate/manifest.json
 
   browser-integration:
     name: Chromium production integration
