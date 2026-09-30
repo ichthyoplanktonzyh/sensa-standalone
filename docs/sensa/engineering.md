@@ -435,16 +435,25 @@ node --import tsx tests/web/run.mts --suite=manual --id=extension-popup
 
 `.github/workflows/sensa-consumer-check.yml` 在 pull request 和 `main` push 时运行 `Sensa CI`。它执行静态检查、构建、Web 快速测试、浏览器检查以及 PostgreSQL/API 集成。Pull request 只生成验证构建；`main` 的静态／快速 job 使用 `web-candidate` 公共配置构建一次生产候选，在同一 job 内固定完整 SHA、GitHub Actions provenance、公开目标、migration 集合和每个交付文件摘要，完成 artifact 检查与 Cloudflare dry-run 后才上传 `sensa-production-<SHA>`。其余 CI job 共同决定该候选是否具备发布资格；失败 run 中即使存在 artifact 也不能被发布器接受。
 
-整个生产系统只有一个人工发布入口：`.github/workflows/sensa-release.yml`。它先生成
-`sensa-system-release-plan-v1`，根据上一份成功的系统清单与目标 revision 之间的差异决定发布范围：
+整个生产系统只有一个发布编排器：`.github/workflows/sensa-release.yml`。正常路径由成功的同仓库
+`Sensa CI` main run 通过 `workflow_run` 自动触发，不需要人员或 Agent 再点击发布按钮。编排器先核对
+触发 run 的仓库、事件、分支、完整 SHA、结论、run id 与 attempt，再生成
+`sensa-system-release-plan-v2`，根据上一份成功的系统清单与目标 revision 之间的差异决定发布范围：
 应用变化只发布应用，authoring/content 变化只发布学习内容，公共 contracts、validator 或 learning kernel
-变化必须联动发布。显式 scope 可以要求重新发布某个组件，但不能省略 Planner 判定为必要的组件。
+变化必须联动发布。没有生产变化的 revision 生成 `no-op` 系统清单并沿用两项组件身份，使后续差异基线
+仍然连续。显式 scope 可以要求重新发布某个组件，但不能省略 Planner 判定为必要的组件。
+
+自动路径受版本化的 `sensa-automatic-release-policy-v1` 约束，只批准已经具备绿色、不可变 CI 候选的普通
+application-only 变化。数据库迁移、`infra/`、Supabase/Cloudflare 生产配置、服务环境合同、学习内容与共享
+内容合同、Supabase Edge 入口以及 API authentication/access authority 都代表新的数据、权限、基础设施或内容发布授权，自动路径会停止并要求 owner 对精确 revision 使用
+备用 dispatch 显式授权。当前没有真实用户不会放宽这些边界；该策略就是后续存在真实用户时继续使用的
+默认保护。手动入口只用于上述策略例外、完整 bootstrap、明确重发和灾难恢复，不是日常发布步骤。
 
 统一发布流程：
 
-1. 接收一个完整的 `main` commit SHA，并要求当次 owner 授权；
-2. 等待该 SHA 的 `Sensa CI` 成功，并固定产生候选的 CI run id / attempt；
-3. 读取上一份 `sensa-system-release-manifest-v1`，按路径影响生成最小安全 Release Plan；
+1. 正常路径接收已完成的绿色 `Sensa CI` main run；备用路径接收 owner 明确授权的完整 main SHA；
+2. 固定产生候选的 CI run id / attempt；自动路径不重新查询或替换触发它的 run；
+3. 读取上一份 `sensa-system-release-manifest-v1|v2`，按路径影响生成最小安全 Release Plan；新成功记录写为带授权证据的 v2；
 4. 如需发布内容，先构建、验证、上传不可变 Book/Registry 并提升 Registry；
 5. 如需发布应用，从该成功 CI run 下载已经测试和固定的 Web、扩展与 API 候选，重新核对来源、目标和全部摘要，不再重新构建；
 6. 应用前向数据库迁移、对齐 Supabase Auth、部署 Supabase Edge Function；
@@ -458,7 +467,7 @@ Planner 会要求 `scope=all` 的完整 bootstrap，而不是猜测线上组件�
 
 应用交付遵循 `build once → verify once → promote once`：生产 workflow 没有应用 build job，也不会接受其他 run、其他 attempt 或只有相同文件名的 artifact。它仍会 checkout 同一 SHA 读取 forward-only migration 和发布脚本，在生产边界重新校验候选及目标，再执行 Supabase/Cloudflare 提升。候选保留 14 天；过期后发布应失败并重新取得当前 SHA 的绿色 CI 证据，不能在生产 job 中临时重建。
 
-命令行触发方式：
+普通 application-only 变化不需要运行发布命令。策略例外、明确重发或恢复时才使用备用入口：
 
 ```sh
 gh workflow run sensa-release.yml \
