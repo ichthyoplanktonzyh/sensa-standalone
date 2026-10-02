@@ -1,5 +1,13 @@
 {
   "localFlow": {
+    "packageAuthor": "Автор",
+    "packageFilesUnavailable": "Пакеты без файлов на этом устройстве: {{count}}. Импортируйте исходные файлы или скачайте их снова из каталога.",
+    "packageLicense": "Лицензия",
+    "confirmPackageImport": "Подтвердить установку",
+    "exportPortablePackage": "Экспорт .sensa",
+    "packageAlreadyInstalled": "Эта версия уже установлена",
+    "packageOlderVersion": "Старая версия; текущие учебные материалы не будут заменены более старыми",
+    "packageNewVersion": "Новая версия; примените обновление после установки",
     "catalogTargetLanguage": "Изучаемый язык",
     "catalogSupportLanguage": "Вспомогательный язык",
     "resourceWord":"Слово","resourcePhrase":"Фраза","resourceConstruction":"Конструкция","resourceUtterance":"Высказывание","resourceSentence":"Предложение","contextImage":"Изображение контекста","interactiveExperience":"Интерактивный опыт","editContext":"Изменить контекст","cancelEdit":"Отменить изменения","saveContext":"Сохранить контекст","viewResources":"Посмотреть учебные материалы","updateResources":"Обновить материалы с текущими настройками контекста","useExistingResources":"Учиться по готовым материалам","contextResourcesStale":"Контекст изменился. Учебные материалы не обновлены.","resourceExperience":"Материал для воспроизведения переживания","resourceHint":"Подсказка для воспроизведения","resourceExpression":"Целевое выражение","resourceMeaning":"Подтверждение значения","resourcePronunciation":"Произношение","resourceStructure":"Структура языка","resourceUsage":"Пример употребления","resourceBridge":"Связь со сценой","resourceSceneRealization":"Выразите это переживание","resourceBoundaryContrast":"Сопоставление","resourceWordFormation":"Словообразование","resourceMnemonic":"Мнемоника","resourceEtymology":"Этимология","savedExpression":"Сведения о материале","expressionDetails":"Сведения о выражении","conversationHistory":"Исходный материал и беседа","learningChoice":"Обучение","learningPreparation":"Подготовка учебных материалов","learningReady":"В вашей учебной коллекции","fixedLightweight":"Способ обучения: лёгкий","imageConversation":"Беседа с изображением","findExpression":"Найти выражение","sensaConversation":"Поговорить с Sensa","expressionInput":"Что вы хотите выразить?","expressionInputHint":"Опишите ситуацию, спросите, как что-то сказать, или добавьте изображение…","chatWelcome":"С чего хотите начать?","chatWelcomeHint":"Отправьте текст или изображения. В естественной беседе мы проясним контекст, смысл и выражение.","attachImages":"Добавить изображения",

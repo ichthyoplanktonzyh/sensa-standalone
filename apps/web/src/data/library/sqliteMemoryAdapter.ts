@@ -26,7 +26,7 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
     }
     return (query.kind==='identities'
       ?values.map(value=>({key:value.key,digest:value.digest}))
-      :values.map(createPackageCacheSummary)) as PackageCacheProjectionResult<Query>;
+      :values.filter(value=>query.packageId===undefined||value.portableOrigin.manifest.metadata.packageId===query.packageId).map(createPackageCacheSummary)) as PackageCacheProjectionResult<Query>;
   }
   private records = new Map<string, string>();
   private changes = new Map<string, SqliteRecordChange>();

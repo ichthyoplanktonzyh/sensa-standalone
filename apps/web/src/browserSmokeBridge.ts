@@ -6,6 +6,7 @@ import {
   readLibrary,
   readLibraryStorageDiagnostics,
   restoreLibraryTransaction,
+  writeLibraryCache,
 } from './data/library/store';
 import {loadJourneyStateFromLibrary} from './experience/personalMeaningJourney/repository';
 
@@ -22,6 +23,7 @@ type BrowserSmokeBridge = {
   storageDiagnostics(options?:Readonly<{verifyIntegrity?:boolean}>): ReturnType<typeof readLibraryStorageDiagnostics>;
   transactionConcurrency(): Promise<{readersOverlap:boolean;writerWaited:boolean}>;
   supplyCheckpoint(): Promise<{key:string;packageId:string;version:number;bookDigests:string[]}[]>;
+  discardPackageCacheForRecoveryTest():Promise<void>;
   learningCheckpoint(): Promise<{
     targetIds:string[];
     enrollments:{enrollmentId:string;sourceKind:string;bookVersionNumber:number|null;bookDigest:string|null}[];
@@ -51,6 +53,10 @@ const randomDataUrl = (size: number): string => {
 
 if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
   window.__sensaBrowserSmoke = {
+    async discardPackageCacheForRecoveryTest(){
+      // Fault injection only: learner facts and installation identities remain.
+      await writeLibraryCache(async tx=>{tx.clear('packageCache');});
+    },
     async supplyCheckpoint() {
       const {contentSupplySystem}=await import('./contentSupply/system');
       const snapshot=await contentSupplySystem.read({kind:'workspace'});

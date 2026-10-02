@@ -43,6 +43,52 @@ export const preserveSahPoolAfterInitFailure=(pool:SahPoolInitFailureHandle):Sah
   }
 };
 
+/** A damaged file association must stop startup before the SDK reclaims its data. */
+const patchSahPoolHeaderRecovery=(source:string):string=>{
+  const startMarker='getAssociatedPath(sah) {';
+  const nextMarker='setAssociatedPath(sah, path, flags) {';
+  if(source.split(startMarker).length!==2||source.split(nextMarker).length!==2){
+    throw new Error('sqlite_sahpool_preserver_header_method_mismatch');
+  }
+  const start=source.indexOf(startMarker);
+  const end=source.lastIndexOf('/**',source.indexOf(nextMarker,start));
+  const methodEnd=source.lastIndexOf('}',end);
+  const oldMethod=source.slice(start,methodEnd+1);
+  if(!oldMethod.includes('this.setAssociatedPath(sah, "", 0);')
+    ||!oldMethod.includes('if (0 === pathBytes) sah.truncate(HEADER_OFFSET_DATA);')
+    ||!oldMethod.includes('fileDigest.every((v, i) => v === compDigest[i])')){
+    throw new Error('sqlite_sahpool_preserver_header_method_mismatch');
+  }
+  const method=[
+    'getAssociatedPath(sah) {',
+    // addCapacity() can be interrupted after creating a file but before writing
+    // its first header. Only a physically empty file has no bytes to preserve.
+    '\tif (sah.getSize() === 0) { this.setAssociatedPath(sah, "", 0); return ""; }',
+    '\tif (sah.read(this.#apBody, { at: 0 }) !== HEADER_CORPUS_SIZE) throw new Error("sqlite_sahpool_header_short_read");',
+    '\tconst flags = this.#dvBody.getUint32(HEADER_OFFSET_FLAGS);',
+    '\tconst fileDigest = new Uint32Array(HEADER_DIGEST_SIZE / 4);',
+    '\tif (sah.read(fileDigest, { at: HEADER_OFFSET_DIGEST }) !== HEADER_DIGEST_SIZE) throw new Error("sqlite_sahpool_header_short_read");',
+    '\tconst compDigest = this.computeDigest(this.#apBody, flags);',
+    '\tif (!fileDigest.every((v, i) => v === compDigest[i])) throw new Error("sqlite_sahpool_header_digest_mismatch");',
+    '\tconst pathBytes = this.#apBody.subarray(0, HEADER_MAX_PATH_SIZE).findIndex((v) => 0 === v);',
+    '\tif (pathBytes < 0) throw new Error("sqlite_sahpool_header_path_invalid");',
+    '\tif (pathBytes === 0) {',
+    '\t\tif (flags !== 0 || sah.getSize() !== HEADER_OFFSET_DATA) throw new Error("sqlite_sahpool_header_orphaned_payload");',
+    '\t\treturn "";',
+    '\t}',
+    // Legitimate transient files can be reclaimed only after their full header
+    // digest is verified. Named persistent files never enter this branch.
+    '\tif (flags & capi.SQLITE_OPEN_DELETEONCLOSE) {',
+    '\t\tthis.setAssociatedPath(sah, "", 0);',
+    '\t\treturn "";',
+    '\t}',
+    '\tif ((flags & PERSISTENT_FILE_TYPES) === 0) throw new Error("sqlite_sahpool_header_flags_invalid");',
+    '\treturn textDecoder.decode(this.#apBody.subarray(0, pathBytes));',
+    '}',
+  ].join('\n');
+  return source.slice(0,start)+method+source.slice(methodEnd+1);
+};
+
 export const patchSqliteSahPoolInitFailure=(source:string,version:string):string=>{
   if(version!==sqliteSahPoolPreservedInitFailureVersion){
     throw new Error(`sqlite_sahpool_preserver_version_unsupported:${version}`);
@@ -87,6 +133,7 @@ export const patchSqliteSahPoolInitFailure=(source:string,version:string):string
     '}',
   ].join('\n');
   let transformed=source.slice(0,methodStart)+safeMethod+source.slice(methodEnd+1);
+  transformed=patchSahPoolHeaderRecovery(transformed);
 
   const releaseStart='releaseAccessHandles() {';
   const releaseEnd='\n\t\t\t\t}\n\t\t\t\t/**';

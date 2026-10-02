@@ -7,6 +7,7 @@ export const SHELL_PARAM_KEYS = [
   'focusId',
   'targetId',
   'bookKey',
+  'packageKey',
   'worldAction',
 ] as const;
 
@@ -43,6 +44,7 @@ export const SHELL_SCREEN_DEFINITIONS = [
   { id: 's-learning-library', host: 'learning' },
   { id: 's-learning-target', host: 'learning', params: ['targetId'], instance: { params: ['targetId'] } },
   { id: 's-library', host: 'learning' },
+  { id: 's-library-package', host: 'learning', params: ['packageKey'], instance: { params: ['packageKey'] } },
   { id: 's-personal-meaning', host: 'app', params: ['meaningId', 'focusId'], instance: { params: ['meaningId'], defaults: { meaningId: 'new' } } },
   { id: 's-practice-scope', host: 'learning' },
   { id: 's-profile', host: 'learning' },

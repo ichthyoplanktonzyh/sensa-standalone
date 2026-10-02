@@ -1,7 +1,7 @@
 import type { Database, Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 
 import {decodeBackupValue,encodeBackupValue} from './backupCodec';
-import {createPackageCacheSummary,isPackageCacheProjectionSource,sqlitePackageCacheProjectionSchema,type PackageCacheProjectionQuery,type PackageCacheProjectionResult} from './packageCacheProjection';
+import {createPackageCacheSummary,isPackageCacheProjectionSource,packageCacheKeyPrefix,sqlitePackageCacheProjectionSchema,type PackageCacheProjectionQuery,type PackageCacheProjectionResult} from './packageCacheProjection';
 import {
   createHomeLearningTargetRecord,
   createHomeLearningStorageProjection,
@@ -184,10 +184,12 @@ export class SqliteRecordDatabase {
       }) as Array<Record<string,unknown>>;
       return rows.map(row=>({targetLanguage:String(row.target_language),supportLanguage:String(row.support_language),packageCount:Number(row.package_count)})) as PackageCacheProjectionResult<Query>;
     }
+    const prefix=query.kind==='summaries'&&query.packageId!==undefined?packageCacheKeyPrefix(query.packageId):undefined;
     const rows=this.database.exec({
       sql:query.kind==='identities'
         ?'SELECT package_key,digest FROM sensa_package_cache_projection ORDER BY package_key'
-        :'SELECT summary_json FROM sensa_package_cache_projection ORDER BY package_key',
+        :`SELECT summary_json FROM sensa_package_cache_projection ${prefix===undefined?'':'WHERE package_key>=? AND package_key<?'} ORDER BY package_key`,
+      ...(prefix===undefined?{}:{bind:[prefix,`${prefix}\uffff`]}),
       rowMode:'object',returnValue:'resultRows',
     }) as Array<Record<string,unknown>>;
     return (query.kind==='identities'

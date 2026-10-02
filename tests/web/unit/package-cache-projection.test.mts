@@ -32,6 +32,10 @@ test('SQLite summary projection excludes execution/media and follows atomic cach
   assert.deepEqual(db.existingRecordKeys('packageCache',[records[0]!.key,'missing',records[0]!.key]),[records[0]!.key]);
   const summaries=db.packageCacheProjection({kind:'summaries'});
   assert.deepEqual(summaries,records.map(createPackageCacheSummary).sort((a,b)=>a.key.localeCompare(b.key)));
+  assert.deepEqual(db.packageCacheProjection({kind:'summaries',packageId:records[0]!.portableOrigin.manifest.metadata.packageId}),[createPackageCacheSummary(records[0]!)]);
+  assert.deepEqual(db.packageCacheProjection({kind:'summaries',packageId:'missing-package'}),[]);
+  const plan=raw.exec({sql:'EXPLAIN QUERY PLAN SELECT summary_json FROM sensa_package_cache_projection WHERE package_key>=? AND package_key<?',bind:['a','b'],rowMode:'object',returnValue:'resultRows'}) as {detail:string}[];
+  assert(plan.some(row=>/SEARCH.*INDEX/u.test(row.detail)),'a single-package preview must use a bounded index range, not scan the inventory');
   assert(!JSON.stringify(summaries).includes('data:audio/'),'inventory must not transport Runtime media');
   assert(summaries.every(value=>!('resources' in value.content)&&!('assurance' in value.content)));
   assert.equal(summaries.flatMap(value=>value.content.entries).length,3);

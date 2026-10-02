@@ -36,6 +36,10 @@ type BrowserRecoveryApi=Readonly<{
     response:WorkerResponse;
   }>>;
   probeSlots:(input:PoolInput)=>Promise<WorkerResponse>;
+  damageDigest:(input:PoolInput)=>Promise<WorkerResponse>;
+  restoreDigest:(input:PoolInput&{fileName:string;originalByte:number})=>Promise<WorkerResponse>;
+  inspectFile:(input:PoolInput&{fileName:string})=>Promise<WorkerResponse>;
+  createEmptySlot:(input:PoolInput)=>Promise<WorkerResponse>;
   releaseSlots:(input:Readonly<{workerId:string;pool:PoolInput}>)=>Promise<WorkerResponse>;
   terminateWorker:(input:Readonly<{workerId:string}>)=>Readonly<{terminated:boolean}>;
   terminateAll:(input:Readonly<Record<string,never>>)=>Readonly<{terminated:number}>;
@@ -236,6 +240,24 @@ test('real OPFS pool init conflict retains sentinel and releases every acquired 
     };
     report.seed={capacity:seeded.capacity,integrity:seeded.integrity,pauseState:seeded.pauseState};
 
+    const damageResponse=await stage('damageOnlySyntheticSentinelHeaderDigest',()=>invoke<PoolInput,WorkerResponse>('damageDigest',options));
+    expect(damageResponse.ok,damageResponse.error?.message).toBe(true);
+    const damaged=damageResponse.value as {fileName:string;originalByte:number;size:number;beforeDigest:string;afterDigest:string};
+    expect(damaged.size).toBeGreaterThan(4096);
+    const damagedOpen=await stage('rejectDamagedHeaderWithoutReclaimingDatabase',()=>invoke<PoolInput&{sentinelKey:string},WorkerResponse>('openAndRead',{...options,sentinelKey}));
+    expect(damagedOpen.ok).toBe(false);
+    expect(damagedOpen.error?.message).toContain('sqlite_sahpool_header_digest_mismatch');
+    const retainedResponse=await stage('verifyFailedOpenRetainsEveryFileByte',()=>invoke<PoolInput&{fileName:string},WorkerResponse>('inspectFile',{...options,fileName:damaged.fileName}));
+    expect(retainedResponse.ok,retainedResponse.error?.message).toBe(true);
+    expect(retainedResponse.value).toEqual({size:damaged.size,digest:damaged.afterDigest,fileCount:options.initialCapacity});
+    const repairedResponse=await stage('restoreSyntheticFaultAndRecoverOriginalFile',()=>invoke<PoolInput&{fileName:string;originalByte:number},WorkerResponse>('restoreDigest',{...options,fileName:damaged.fileName,originalByte:damaged.originalByte}));
+    expect(repairedResponse.ok,repairedResponse.error?.message).toBe(true);
+    expect(repairedResponse.value).toMatchObject({afterDigest:damaged.beforeDigest,size:damaged.size});
+    const afterRepair=await stage('readSameCommittedSentinelAfterHeaderRepair',()=>invoke<PoolInput&{sentinelKey:string},WorkerResponse>('openAndRead',{...options,sentinelKey}));
+    expect(afterRepair.ok,afterRepair.error?.message).toBe(true);
+    expect(afterRepair.value).toMatchObject({sentinelValue,integrity:'ok'});
+    report.headerRecovery={damagedOpenRejected:true,failedOpenRetainedExactBytes:true,originalFileRestored:true,sentinelPreserved:true};
+
     const holder=await stage('holdAnExistingNativeAccessHandle',()=>invoke<
       PoolInput&Readonly<{slotCount:number}>,Readonly<{workerId:string;response:WorkerResponse}>
     >('holdSlots',{...options,slotCount:1}));
@@ -355,6 +377,22 @@ test('real OPFS pool init conflict retains sentinel and releases every acquired 
       integrity:afterAbrupt.integrity,
       pauseState:afterAbrupt.pauseState,
     };
+    const beforeEmptySlot=await stage('inspectCommittedFileBeforeEmptySlotFault',()=>invoke<PoolInput&{fileName:string},WorkerResponse>('inspectFile',{...options,fileName:damaged.fileName}));
+    expect(beforeEmptySlot.ok,beforeEmptySlot.error?.message).toBe(true);
+    const emptyResponse=await stage('leaveNewPoolSlotPhysicallyEmpty',()=>invoke<PoolInput,WorkerResponse>('createEmptySlot',options));
+    expect(emptyResponse.ok,emptyResponse.error?.message).toBe(true);
+    const emptySlot=emptyResponse.value as {fileName:string;size:number};
+    expect(emptySlot.size).toBe(0);
+    const afterEmptySlot=await stage('initializeEmptySlotAndReadSameCommittedSentinel',()=>invoke<PoolInput&{sentinelKey:string},WorkerResponse>('openAndRead',{...options,sentinelKey}));
+    expect(afterEmptySlot.ok,afterEmptySlot.error?.message).toBe(true);
+    expect(afterEmptySlot.value).toMatchObject({sentinelValue,integrity:'ok',capacity:options.initialCapacity+1});
+    const initializedSlot=await stage('verifyEmptySlotHasACompleteReservedHeader',()=>invoke<PoolInput&{fileName:string},WorkerResponse>('inspectFile',{...options,fileName:emptySlot.fileName}));
+    expect(initializedSlot.ok,initializedSlot.error?.message).toBe(true);
+    expect(initializedSlot.value).toMatchObject({size:4096,fileCount:options.initialCapacity+1});
+    const afterEmptyFile=await stage('verifyEmptySlotRecoveryPreservesExistingFileBytes',()=>invoke<PoolInput&{fileName:string},WorkerResponse>('inspectFile',{...options,fileName:damaged.fileName}));
+    expect(afterEmptyFile.ok,afterEmptyFile.error?.message).toBe(true);
+    expect(afterEmptyFile.value).toEqual({...beforeEmptySlot.value as Record<string,unknown>,fileCount:options.initialCapacity+1});
+    report.emptySlotRecovery={physicallyEmptySlotInitialized:true,sentinelPreserved:true,existingFileBytesUnchanged:true};
     report.outcome='passed';
   }catch(error){
     report.outcome='failed';

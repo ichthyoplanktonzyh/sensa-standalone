@@ -80,7 +80,7 @@ const packageFor = (
 
 const targetExample = (material: LocalLearningMaterialization): string => {
   const value = material.content.resources.find((resource) => (
-    resource.materialRoleKey === 'usage_guidance'
+    resource.materialRoleKey === 'scene_realization'
   ))?.contentPayload.example;
   return typeof value === 'string' ? value : '';
 };

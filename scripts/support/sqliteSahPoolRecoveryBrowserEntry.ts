@@ -9,10 +9,12 @@ export type RecoveryPoolInput=Readonly<{
 
 type RecoveryWorkerRequest=RecoveryPoolInput&Readonly<{
   requestId:string;
-  action:'createSentinel'|'initExpectedConflict'|'openAndRead'|'openAbruptly'|'holdSlots'|'probeSlots'|'releaseSlots';
+  action:'createSentinel'|'initExpectedConflict'|'openAndRead'|'openAbruptly'|'holdSlots'|'probeSlots'|'releaseSlots'|'damageDigest'|'restoreDigest'|'inspectFile'|'createEmptySlot';
   sentinelKey?:string;
   sentinelValue?:string;
   slotCount?:number;
+  fileName?:string;
+  originalByte?:number;
 }>;
 
 export type RecoveryWorkerResponse=Readonly<{
@@ -140,6 +142,10 @@ export const sqliteSahPoolRecoveryApi=Object.freeze({
   openAndRead:(command:RecoveryPoolInput&Readonly<{sentinelKey:string}>)=>runOneShot({...command,action:'openAndRead'}),
   openAbruptly,
   probeSlots:(command:RecoveryPoolInput)=>runOneShot({...command,action:'probeSlots'}),
+  damageDigest:(command:RecoveryPoolInput)=>runOneShot({...command,action:'damageDigest'}),
+  restoreDigest:(command:RecoveryPoolInput&{fileName:string;originalByte:number})=>runOneShot({...command,action:'restoreDigest'}),
+  inspectFile:(command:RecoveryPoolInput&{fileName:string})=>runOneShot({...command,action:'inspectFile'}),
+  createEmptySlot:(command:RecoveryPoolInput)=>runOneShot({...command,action:'createEmptySlot'}),
   releaseSlots,
   terminateWorker,
   terminateAll:(_input:Readonly<Record<string,never>>)=>{

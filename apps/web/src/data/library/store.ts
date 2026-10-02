@@ -156,7 +156,7 @@ export class LibraryTransaction {
     if(!this.clears.has(table)){
       const stored=query.kind==='identities'
         ?await storageCall(()=>this.adapter.packageCacheProjection({kind:'identities'}))
-        :await storageCall(()=>this.adapter.packageCacheProjection({kind:'summaries'}));
+        :await storageCall(()=>this.adapter.packageCacheProjection({kind:'summaries',packageId:query.packageId}));
       for(const item of stored){
         if(!this.deletes.get(table)?.has(item.key))values.set(item.key,item);
       }
@@ -166,6 +166,7 @@ export class LibraryTransaction {
       const {createPackageCacheSummary,isPackageCacheProjectionSource}=await import('./packageCacheProjection');
       for(const [key,value] of pending){
         if(!isPackageCacheProjectionSource(value)){values.delete(key);continue;}
+        if(query.kind==='summaries'&&query.packageId!==undefined&&value.portableOrigin.manifest.metadata.packageId!==query.packageId){values.delete(key);continue;}
         values.set(key,query.kind==='identities'?{key,digest:value.digest}:createPackageCacheSummary(value));
       }
     }
@@ -441,7 +442,7 @@ export class LibraryTransaction {
       this.assertCommitSignals();
       if(table!=='packageCache')puts.push({table,key,encodedValue:encode(value)});
       else{
-        const externalized=externalize!(key,value);
+        const externalized=await externalize!(key,value);
         portablePackages.push(externalized.write);
         puts.push({table,key,encodedValue:encode(externalized.storedValue)});
       }
@@ -531,7 +532,7 @@ async function runAcrossPages<T>(
   }
 }
 
-/** Only local SQLite requests belong in work; network and hashing finish before entry. */
+/** No network work in the logical transaction; media serialization may yield before one final SQLite commit. */
 async function transaction<T>(
   mode: "readonly" | "readwrite",
   work: (tx: LibraryTransaction) => Promise<T>,
@@ -666,6 +667,8 @@ export async function openLibrary(): Promise<LibraryIdentity> {
     kind: "library.create",
     input: {},
   }, async (tx) => {
+    const existing=await tx.get<LibraryIdentity>('meta','identity');
+    if(existing)return existing;
     const identity: LibraryIdentity = {
       id: crypto.randomUUID(),
       learnerId: crypto.randomUUID(),

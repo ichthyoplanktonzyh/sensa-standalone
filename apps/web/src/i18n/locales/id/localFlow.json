@@ -1,5 +1,13 @@
 {
   "localFlow": {
+    "packageAuthor": "Penulis",
+    "packageFilesUnavailable": "Paket tanpa berkas di perangkat ini: {{count}}. Impor berkas asli atau unduh lagi dari katalog.",
+    "packageLicense": "Lisensi",
+    "confirmPackageImport": "Konfirmasi pemasangan",
+    "exportPortablePackage": "Ekspor .sensa",
+    "packageAlreadyInstalled": "Versi ini sudah terpasang",
+    "packageOlderVersion": "Versi lama; konten belajar saat ini tidak akan diturunkan",
+    "packageNewVersion": "Versi baru; terapkan pembaruan setelah pemasangan",
     "catalogTargetLanguage": "Bahasa yang dipelajari",
     "catalogSupportLanguage": "Bahasa pendukung",
     "resourceWord": "Kata",

@@ -90,7 +90,8 @@ function PackageCards({items,onOpen,emptyKey,loaded}:{
  </>;
 }
 
-function PackageDetail({active,item,c,onBack,onLearning,onTarget}:{
+function PackageDetail({active,item,c,onBack,onLearning,onTarget,screenId='s-catalog-book'}:{
+ screenId?:string;
  active:boolean;
  item:PackageCenterItem|undefined;
  c:Controller;
@@ -109,7 +110,7 @@ function PackageDetail({active,item,c,onBack,onLearning,onTarget}:{
  const contentProjection=useMemo(()=>item
   ?projectPackageContentWindow(item.installed,targetByEntry,contentLimit)
   :{entries:[],total:0},[item?.installed,targetByEntry,contentLimit]);
- if(!item)return <LearningSetupFrame id="s-catalog-book" active={active} onBack={onBack} title={localFlowText('packageCatalogTitle')}>{!c.loaded||c.catalogBusy?<div role="status" aria-label={t('reliability.loading')} className="h-32 animate-pulse rounded-2xl bg-surface-subtle"/>:<p role="status">{localFlowText('packageNoResults')}</p>}</LearningSetupFrame>;
+ if(!item)return <LearningSetupFrame id={screenId} active={active} onBack={onBack} title={localFlowText('packageCatalogTitle')}>{!c.loaded||c.catalogBusy?<div role="status" aria-label={t('reliability.loading')} className="h-32 animate-pulse rounded-2xl bg-surface-subtle"/>:<p role="status">{localFlowText('packageNoResults')}</p>}</LearningSetupFrame>;
  const installedEntryCount=contentProjection.total;
  const installedEntries=contentProjection.entries;
  const enrollInstalled=()=>{
@@ -144,16 +145,18 @@ function PackageDetail({active,item,c,onBack,onLearning,onTarget}:{
  };
  const disabled=!c.loaded||c.busy||c.catalogBusy||(!item.installed.length&&!item.descriptor)
   ||(item.installed.length>0&&!item.enrolled&&!item.routeMatchesActive);
- return <LearningSetupFrame id="s-catalog-book" active={active} onBack={onBack} title={localFlowText('packageCatalogTitle')}>
+ const routeMismatch=item.installed.length>0&&!item.enrolled&&!item.routeMatchesActive;
+ const redundantRouteNotice=routeMismatch&&[localFlowText('routeLanguageMismatch'),localFlowText('routeSupportMismatch')].includes(c.notice);
+ return <LearningSetupFrame id={screenId} active={active} onBack={onBack} title={localFlowText('packageCatalogTitle')}>
   <div className="mb-8 space-y-4">
    {c.loaded?<span className="inline-flex items-center gap-2 rounded-lg bg-accent-soft px-3 py-2 text-sm text-action-primary">{item.enrolled?<Check size={16}/>:<BookOpen size={16}/>} {itemState(item)}</span>:<span role="status" aria-label={t('reliability.loading')} className="inline-block h-9 w-24 animate-pulse rounded-lg bg-surface-subtle"/>}
    <h1 className="break-words text-3xl font-medium tracking-tight outline-none sm:text-4xl">{item.title}</h1>
    {item.description&&<p className="max-w-2xl text-sm leading-7 text-fg-secondary">{item.description}</p>}
-   <p className="text-sm text-fg-secondary">{interfaceLanguageDisplayName(item.targetLanguage,locale)} / {interfaceLanguageDisplayName(item.supportLanguage,locale)} · {localFlowText('packageExpressionCount',{count:item.count})}{item.descriptor?` · v${item.descriptor.book.versionNumber}`:''}</p>
+   <p className="text-sm text-fg-secondary">{interfaceLanguageDisplayName(item.targetLanguage,locale)} / {interfaceLanguageDisplayName(item.supportLanguage,locale)} · {localFlowText('packageExpressionCount',{count:item.count})}{item.descriptor?` · v${item.descriptor.book.versionNumber}`:item.kind==='local'?` · v${item.installed[0]?.portableOrigin.manifest.metadata.version}`:''}</p>
    {item.updateAvailable&&item.descriptor?.changeSummary&&<p className="max-w-2xl text-sm leading-6 text-fg-secondary">{item.descriptor.changeSummary}</p>}
   </div>
   <section aria-label={localFlowText('packageActions')} className="mb-8 space-y-4 rounded-2xl border border-border-strong bg-surface-panel p-5 sm:p-6">
-   {c.notice&&<p role="status" className="rounded-xl border border-border-subtle bg-surface-subtle p-4 text-sm leading-6">{localFlowNotice(c.notice)}</p>}
+   {c.notice&&!redundantRouteNotice&&<p role="status" className="rounded-xl border border-border-subtle bg-surface-subtle p-4 text-sm leading-6">{localFlowNotice(c.notice)}</p>}
    {item.installed.length>0&&!item.enrolled&&!item.routeMatchesActive&&<p role="status" className="text-sm leading-6 text-fg-secondary">{localFlowText('packageRouteMismatchHint')}</p>}
    {!c.loaded?<div role="status" aria-label={t('reliability.loading')} className="h-11 w-40 animate-pulse rounded-control bg-surface-subtle"/>:downloadKey===item.key&&installationPhase==='committing'?<p role="status" className="text-sm">{t('composer.saving')}</p>:downloadKey===item.key&&installationPhase==='preparing'?<>
     <p role="status" className="text-sm">{localFlowText('batchWorking')}</p>
@@ -167,7 +170,7 @@ function PackageDetail({active,item,c,onBack,onLearning,onTarget}:{
      {item.enrolled?<ArrowRight size={18}/>:item.updateDownloaded||item.installed.length?<Check size={18}/>:<Download size={18}/>}
      {localFlowText(c.busy?'processing':item.updateDownloaded?'applyPackageUpdate':item.updateAvailable?'downloadPackageUpdate':item.enrolled?'packageGoLearning':item.installed.length?'enroll':'downloadPackage')}
     </button>
-    {item.installed.length===1&&<button className={setupButton} disabled={c.busy} onClick={()=>void c.exportPackage(item.installed[0]!.key).then(result=>{if(result)downloadPortablePackage(result);})}><Download size={18}/>{localFlowText('downloadPackage')}</button>}
+    {item.installed.length===1&&<button className={setupButton} disabled={c.busy} onClick={()=>void c.exportPackage(item.installed[0]!.key).then(result=>{if(result)downloadPortablePackage(result);})}><Download size={18}/>{localFlowText('exportPortablePackage')}</button>}
    </div>}
   </section>
   <section aria-label={localFlowText('packageContents')}>
@@ -241,11 +244,19 @@ export function PackageBookScreen({active,bookKey,c,onBack,onLearning,onTarget}:
  return <PackageDetail active={active} item={item} c={c} onBack={onBack} onLearning={onLearning} onTarget={onTarget}/>;
 }
 
-export function PackageLibraryScreen({active,c,onBack,onCatalog,onOpenBook,onPublisher,onLearning,onTarget}:{
- active:boolean;c:Controller;onBack:()=>void;onCatalog:()=>void;onOpenBook:(bookKey:string)=>void;onPublisher:()=>void;onLearning:()=>void;onTarget:(id:string)=>void;
+export function PackageLibraryDetailScreen({active,packageKey,c,onBack,onLearning,onTarget}:{
+ active:boolean;packageKey:string|null;c:Controller;onBack:()=>void;onLearning:()=>void;onTarget:(id:string)=>void;
 }){
+ const projection=useMemo(()=>buildPackageCenterItems(c),[c.catalog,c.packages,c.enrollments,c.languageContext.targetLanguageTag,c.languageContext.supportLanguageTag]);
+ return <PackageDetail screenId="s-library-package" active={active} item={projection.library.find(item=>item.listKey===packageKey)} c={c} onBack={onBack} onLearning={onLearning} onTarget={onTarget}/>;
+}
+
+export function PackageLibraryScreen({active,c,onBack,onCatalog,onOpenBook,onOpenPackage,onPublisher}:{
+ active:boolean;c:Controller;onBack:()=>void;onCatalog:()=>void;onOpenBook:(bookKey:string)=>void;onOpenPackage:(key:string)=>void;onPublisher:()=>void;onLearning:()=>void;onTarget:(id:string)=>void;
+}){
+ const {i18n}=useTranslation();
+ const locale=resolveInterfaceLocale(i18n.resolvedLanguage??i18n.language);
  const [query,setQuery]=useScreenState('package-library:query','');
- const [selected,setSelected]=useState<string|null>(null);
  const [candidate,setCandidate]=useState<{file:File;preview:Awaited<ReturnType<Controller['previewImport']>>}|null>(null);
  const input=useRef<HTMLInputElement>(null);
  const projection=useMemo(()=>buildPackageCenterItems(c),[
@@ -255,11 +266,21 @@ export function PackageLibraryScreen({active,c,onBack,onCatalog,onOpenBook,onPub
  const items=projection.library;
  const normalized=query.trim().toLocaleLowerCase();
  const results=useMemo(()=>items.filter(item=>[item.title,item.description,item.targetLanguage,item.supportLanguage].join(' ').toLocaleLowerCase().includes(normalized)),[items,normalized]);
- const selectedItem=selected?items.find(item=>item.listKey===selected):undefined;
- if(selectedItem)return <PackageDetail active={active} item={selectedItem} c={c} onBack={()=>setSelected(null)} onLearning={onLearning} onTarget={onTarget}/>;
  if(candidate?.preview)return <LearningSetupFrame id="s-library" active={active} onBack={()=>setCandidate(null)} title={localFlowText('importPackageTitle')}>
-  <div className="mb-8 space-y-4"><span className="inline-flex items-center gap-2 rounded-lg bg-accent-soft px-3 py-2 text-sm text-action-primary"><Upload size={16}/>{localFlowText('importPackage')}</span><h1 className="break-words text-3xl font-medium tracking-tight sm:text-4xl">{candidate.preview.package.metadata.title}</h1><p className="text-sm text-fg-secondary">{candidate.preview.package.route.targetLanguage} / {candidate.preview.package.route.supportLanguage}</p></div>
-  <section className="space-y-4 rounded-2xl border border-border-strong bg-surface-panel p-5 sm:p-6"><p className="text-sm leading-6 text-fg-secondary">{localFlowText('importPackageHint')}</p>{c.notice&&<p role="status">{localFlowNotice(c.notice)}</p>}<div className="flex flex-wrap gap-3"><button className={setupButton} onClick={()=>setCandidate(null)}>{localFlowText('cancel')}</button><button className={setupPrimary} disabled={c.busy||candidate.preview.status==='version_conflict'} onClick={()=>void c.installImport(candidate.file,candidate.preview!.archiveDigest).then(installed=>{if(installed)setCandidate(null);})}><Upload size={18}/>{localFlowText(c.busy?'processing':'importPackage')}</button></div></section>
+  <div className="mb-8 space-y-4"><h1 className="break-words text-3xl font-medium tracking-tight sm:text-4xl">{candidate.preview.package.metadata.title}</h1><p className="text-sm text-fg-secondary">{interfaceLanguageDisplayName(candidate.preview.package.route.targetLanguage,locale)} / {interfaceLanguageDisplayName(candidate.preview.package.route.supportLanguage,locale)} · v{candidate.preview.package.metadata.version}</p></div>
+  <section className="mb-8 space-y-5 rounded-2xl border border-border-strong bg-surface-panel p-5 sm:p-6">
+   <h2 className="break-words text-2xl font-medium">{candidate.preview.package.targetExpression.text}</h2>
+   <p className="break-words leading-7">{candidate.preview.package.sense.meaning}</p>
+   <dl className="grid gap-4 text-sm sm:grid-cols-2">
+    <div><dt className="text-fg-secondary">{localFlowText('packageAuthor')}</dt><dd className="mt-1 break-words">{candidate.preview.package.metadata.author.name}</dd></div>
+    <div><dt className="text-fg-secondary">{localFlowText('packageLicense')}</dt><dd className="mt-1 break-words">{candidate.preview.package.metadata.license.name}</dd></div>
+   </dl>
+  </section>
+  <section aria-label={localFlowText('packageActions')} className="space-y-4">
+   {candidate.preview.status!=='new'&&<p role={candidate.preview.status==='version_conflict'?'alert':'status'} className="text-sm leading-6">{localFlowText(candidate.preview.status==='version_conflict'?'packageVersionChanged':candidate.preview.status==='installed'?'packageAlreadyInstalled':candidate.preview.status==='older_version'?'packageOlderVersion':'packageNewVersion')}</p>}
+   {c.notice&&<p role="status">{localFlowNotice(c.notice)}</p>}
+   <div className="flex flex-wrap gap-3"><button className={setupButton} disabled={c.busy} onClick={()=>setCandidate(null)}>{localFlowText('cancel')}</button><button className={setupPrimary} disabled={c.busy||candidate.preview.status==='version_conflict'} onClick={()=>void c.installImport(candidate.file,candidate.preview!.archiveDigest).then(installed=>{if(installed){setCandidate(null);if(!installed.portableOrigin.publications.length)onOpenPackage(`local:${installed.portableOrigin.manifest.metadata.packageId}`);}})}><Upload size={18}/>{localFlowText(c.busy?'processing':'confirmPackageImport')}</button></div>
+  </section>
  </LearningSetupFrame>;
  return <LearningSetupFrame id="s-library" active={active} onBack={onBack}>
   <CenterNavigation current="library" onCatalog={onCatalog} onLibrary={()=>{}} onPublisher={onPublisher}/>
@@ -267,9 +288,10 @@ export function PackageLibraryScreen({active,c,onBack,onCatalog,onOpenBook,onPub
    <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">{localFlowText('packageCenterLibrary')}</h1>
    <button className={setupButton} disabled={c.busy} onClick={()=>input.current?.click()}><Upload size={16}/>{localFlowText(c.busy?'processing':'importPackage')}</button>
   </div>
+  {c.loaded&&c.unavailablePackageKeys.length>0&&<p role="status" className="mb-6 rounded-xl border border-border-strong bg-surface-subtle p-4 text-sm leading-6">{localFlowText('packageFilesUnavailable',{count:c.unavailablePackageKeys.length})}</p>}
   {c.notice&&<p role="status" className="mb-6 rounded-xl border border-border-subtle bg-surface-subtle p-4 text-sm leading-6">{localFlowNotice(c.notice)}</p>}
   <div className="mb-8 flex min-h-14 items-center gap-3 rounded-2xl border border-border-strong bg-surface-panel px-4 focus-within:ring-2 focus-within:ring-focus"><Search size={20} className="shrink-0 text-fg-secondary" aria-hidden="true"/><input type="search" aria-label={localFlowText('packageSearch')} placeholder={localFlowText('packageSearch')} value={query} onChange={event=>setQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent py-4 text-sm outline-none"/></div>
-  <PackageCards items={results} loaded={c.loaded} onOpen={item=>item.kind==='published'?onOpenBook(item.key):setSelected(item.listKey)} emptyKey={query?'packageNoResults':'packageEmpty'}/>
+  <PackageCards items={results} loaded={c.loaded} onOpen={item=>item.kind==='published'?onOpenBook(item.key):onOpenPackage(item.listKey)} emptyKey={query?'packageNoResults':'packageEmpty'}/>
   <input ref={input} hidden tabIndex={-1} aria-label={localFlowText('importPackage')} type="file" accept=".sensa,application/zip,application/octet-stream" disabled={c.busy} onChange={event=>{const file=event.target.files?.[0];event.target.value='';if(file)void c.previewImport(file).then(preview=>{if(preview)setCandidate({file,preview});});}}/>
  </LearningSetupFrame>;
 }

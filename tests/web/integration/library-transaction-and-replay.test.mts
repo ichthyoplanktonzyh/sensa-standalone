@@ -10,6 +10,10 @@ const store = await import('../../../apps/web/src/data/library/store.ts');
 const identity = await store.openLibrary();
 assert.equal(identity.schemaVersion, 2);
 
+await store.restoreLibraryTransaction(async tx=>tx.delete('operations','00000000-0000-4000-8000-000000000001'));
+assert.deepEqual(await store.openLibrary(),identity,'a lost create receipt must never replace an existing library identity');
+assert.deepEqual((await store.readLibrary(tx=>tx.get<any>('operations','00000000-0000-4000-8000-000000000001')))?.result,identity);
+
 const operationId = crypto.randomUUID();
 const result = await store.command(
   { id: operationId, kind: 'fixture.sqlite', input: { revision: 1 } },

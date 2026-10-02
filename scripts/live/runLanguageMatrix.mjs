@@ -46,13 +46,14 @@ let serviceChild;
 let webChild;
 
 function parseArguments(arguments_) {
-  const parsed = { webOnly: false, extensionOnly: false, start: 0, limit: undefined, caseKey: undefined, dryRun: false, preflight: false, slot: 0, reusePreparedArtifacts: false };
+  const parsed = { webOnly: false, extensionOnly: false, start: 0, limit: undefined, caseKey: undefined, dryRun: false, preflight: false, interactive: false, slot: 0, reusePreparedArtifacts: false };
   for (let index = 0; index < arguments_.length; index += 1) {
     const argument = arguments_[index];
     if (argument === '--web-only') parsed.webOnly = true;
     else if (argument === '--extension-only') parsed.extensionOnly = true;
     else if (argument === '--dry-run') parsed.dryRun = true;
     else if (argument === '--preflight') parsed.preflight = true;
+    else if (argument === '--interactive') parsed.interactive = true;
     else if (argument === '--reuse-prepared-artifacts') parsed.reusePreparedArtifacts = true;
     else if (argument === '--slot' || argument.startsWith('--slot=')) {
       const value = argument === '--slot' ? arguments_[++index] : argument.slice('--slot='.length);
@@ -81,6 +82,9 @@ function parseArguments(arguments_) {
     } else {
       throw new Error(`Unknown option: ${argument}`);
     }
+  }
+  if (parsed.interactive && (parsed.preflight || parsed.webOnly || parsed.extensionOnly || parsed.start || parsed.limit || parsed.caseKey)) {
+    throw new Error('--interactive starts isolated services only and does not accept preflight, suite or case selectors');
   }
   if (parsed.webOnly && parsed.extensionOnly) throw new Error('Choose only one of --web-only or --extension-only');
   if (parsed.caseKey && parsed.limit) throw new Error('Use either --case or --limit, not both');
@@ -269,6 +273,9 @@ async function cleanup() {
 }
 
 function handleSignal(signal) {
+  try {
+    if (runState?.mode === 'interactive') writeResults(runState, { status: 'stopped', finishedAt: new Date().toISOString() });
+  } catch { /* A diagnostic write failure must not prevent isolated-resource cleanup. */ }
   void cleanup().finally(() => process.exit(signal === 'SIGINT' ? 130 : 143));
 }
 
@@ -306,7 +313,7 @@ async function main() {
   if (!['darwin', 'linux'].includes(process.platform)) throw new Error('The isolated language-matrix runner supports macOS and Linux.');
   if (Number(process.versions.node.split('.')[0]) < 24) throw new Error('The isolated language-matrix runner requires Node.js 24 or newer.');
   if (args.dryRun) {
-    console.log(`Dry run: suites=${selectedSuites.join(',')} case=${args.caseKey ?? 'all'} start=${args.start} limit=${args.limit ?? 'none'}`);
+    console.log(args.interactive ? 'Dry run: interactive isolated services; no automatic test suite.' : `Dry run: suites=${selectedSuites.join(',')} case=${args.caseKey ?? 'all'} start=${args.start} limit=${args.limit ?? 'none'}`);
     console.log(`A live run will use a newly created --rm PostgreSQL container, ${serviceOrigin}, ${webOrigin}, and write artifacts below .sensa-local/language-matrix/${runId}/.`);
     console.log('No services, models, or TTS were started.');
     return;
@@ -320,8 +327,8 @@ async function main() {
   const state = {
     runId,
     startedAt: new Date().toISOString(),
-    mode: args.preflight ? 'preflight' : 'live',
-    suites: args.preflight ? [] : selectedSuites,
+    mode: args.preflight ? 'preflight' : args.interactive ? 'interactive' : 'live',
+    suites: args.preflight || args.interactive ? [] : selectedSuites,
     case: args.caseKey ?? null,
     start: args.start,
     limit: args.limit ?? null,
@@ -373,6 +380,21 @@ async function main() {
     const preflight = await verifyPreflightSessions();
     writeResults(state, { status: 'passed', preflight, finishedAt: new Date().toISOString() });
     console.log(`PASS isolated database, API health, Web readiness, distinct synthetic accounts, and stable refresh tokens. Results: .sensa-local/language-matrix/${runId}/result.json`);
+    return;
+  }
+
+  if (args.interactive) {
+    const preflight = await verifyPreflightSessions();
+    writeResults(state, { status: 'ready', preflight, webOrigin, serviceOrigin });
+    console.log(`READY interactive acceptance: ${webOrigin}; API ${serviceOrigin}; artifacts ${runDirectory}`);
+    console.log('No automatic model/TTS requests or tests. Use an isolated browser; Ctrl-C stops these services and removes only this temporary database.');
+    await new Promise((_, reject) => {
+      for (const [name, child] of [['API', serviceChild], ['Web', webChild]]) {
+        const failed = (code, signal) => reject(new Error(`Interactive ${name} exited (${code ?? signal}); acceptance is not complete.`));
+        if (child.exitCode !== null || child.signalCode !== null) failed(child.exitCode, child.signalCode);
+        else child.once('exit', failed);
+      }
+    });
     return;
   }
 

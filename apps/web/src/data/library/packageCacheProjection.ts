@@ -7,7 +7,10 @@ export type PackageRouteCount=Readonly<{targetLanguage:string;supportLanguage:st
 export type PackageCacheProjectionQuery=
  |Readonly<{kind:'identities'}>
  |Readonly<{kind:'route_counts'}>
- |Readonly<{kind:'summaries'}>;
+ |Readonly<{kind:'summaries';packageId?:string}>;
+
+/** All versions of one package share this prefix in the primary-key index. */
+export const packageCacheKeyPrefix=(packageId:string)=>`${JSON.stringify([packageId]).slice(0,-1)},`;
 
 export type PackageCacheProjectionResult<Query extends PackageCacheProjectionQuery>=
  Query['kind'] extends 'identities'?PackageCacheIdentity[]:

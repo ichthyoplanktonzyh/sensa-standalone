@@ -146,6 +146,22 @@ test('package center groups complete publications by book, route and version whi
  assert.equal(result.library.find(item=>item.kind==='local')?.enrolled,true);
 });
 
+test('independent Portable versions share one card and require an explicit update without offering old-version downgrade',()=>{
+ const packageId=uuid('500');
+ const first=packageSummary({key:'portable-v1',packageId,title:'Portable v1',version:1,targetLanguage:'en',supportLanguage:'zh-CN'});
+ const next=packageSummary({key:'portable-v2',packageId,title:'Portable v2',version:2,targetLanguage:'en',supportLanguage:'zh-CN'});
+ const controller={catalog:[],packages:[next,first],enrollments:[{source:{kind:'portable_package',packageId,packageVersion:1}}],languageContext:{targetLanguageTag:'en',supportLanguageTag:'zh-CN'}} as unknown as Pick<Controller,'catalog'|'packages'|'enrollments'|'languageContext'>;
+ const library=buildPackageCenterItems(controller).library;
+ assert.equal(library.length,1);
+ assert.equal(library[0]?.installed[0]?.key,next.key);
+ assert.equal(library[0]?.updateDownloaded,true);
+ assert.equal(library[0]?.enrolled,false);
+ const applied=buildPackageCenterItems({...controller,enrollments:[{source:{kind:'portable_package',packageId,packageVersion:2}}] as Controller['enrollments']}).library;
+ assert.equal(applied[0]?.listKey,library[0]?.listKey,'detail selection must survive a version change');
+ assert.equal(applied[0]?.updateDownloaded,false);
+ assert.equal(applied[0]?.enrolled,true);
+});
+
 test('Book content windows retain the full count while projecting only visible rows',()=>{
  const entries=Array.from({length:10_000},(_,index)=>({
   senseVersionId:`sense-${index}`,

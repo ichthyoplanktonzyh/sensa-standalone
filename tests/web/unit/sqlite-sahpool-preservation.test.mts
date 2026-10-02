@@ -39,6 +39,9 @@ const pinnedSdkFixture=()=>[
   '/**',
   'Given an SAH, returns the client-specified name of',
   '*/',
+  sdkHeaderMethod(sqliteSdkSource),
+  '/** Existing writer is unchanged by the header read protection. */',
+  'setAssociatedPath(sah, path, flags) {}',
   '\t\t\t\tpauseVfs() {',
   '\t\t\t\t\tif (this.#mapS3FileToOFile_.size > 0) sqlite3.SQLite3Error.toss(capi.SQLITE_MISUSE, "Cannot pause VFS", this.vfsName, "because it has opened files.");',
   '\t\t\t\t\tif (this.#mapSAHToName.size > 0) {',
@@ -64,6 +67,98 @@ const pinnedSdkFixture=()=>[
 const sqlitePackageJson=createRequire(import.meta.url).resolve('@sqlite.org/sqlite-wasm/package.json');
 const sqliteSdkVersion=(JSON.parse(readFileSync(sqlitePackageJson,'utf8')) as {version:string}).version;
 const sqliteSdkSource=readFileSync(join(dirname(sqlitePackageJson),'dist/index.mjs'),'utf8');
+
+function sdkHeaderMethod(source:string){
+  const start=source.indexOf('getAssociatedPath(sah) {');
+  return source.slice(start,source.indexOf('\n\t\t\t\t/**',start));
+}
+
+function headerReader(){
+  const transformed=patchSqliteSahPoolInitFailure(sqliteSdkSource,sqliteSdkVersion);
+  const method=sdkHeaderMethod(transformed).trim()
+    .replace(/^getAssociatedPath\(sah\)/u,'function(sah)')
+    .replaceAll('this.#apBody','this.body').replaceAll('this.#dvBody','this.view');
+  return Function('capi','PERSISTENT_FILE_TYPES','HEADER_OFFSET_FLAGS','HEADER_DIGEST_SIZE','HEADER_OFFSET_DIGEST','HEADER_OFFSET_DATA','HEADER_CORPUS_SIZE','HEADER_MAX_PATH_SIZE','textDecoder',`return (${method})`)(
+    {SQLITE_OPEN_DELETEONCLOSE:8},0x100|0x800|0x4000|0x80000,512,8,516,4096,516,512,new TextDecoder(),
+  ) as (handle:unknown)=>string;
+}
+
+const digestBody=(body:Uint8Array,flags:number)=>{
+  if(!(flags&0x80))return new Uint32Array([0,0]);
+  let h1=3735928559,h2=1103547991;
+  for(const value of body){h1=Math.imul(h1^value,2654435761);h2=Math.imul(h2^value,104729);}
+  return new Uint32Array([h1>>>0,h2>>>0]);
+};
+
+function headerFixture(path='/fixture.sqlite3',flags=0x186,size=8192){
+  let bytes=new Uint8Array(size);
+  new TextEncoder().encodeInto(path,bytes.subarray(0,512));
+  new DataView(bytes.buffer).setUint32(512,flags);
+  bytes.set(new Uint8Array(digestBody(bytes.subarray(0,516),flags).buffer),516);
+  if(size>4096)bytes.set(new TextEncoder().encode('synthetic-committed-data'),4096);
+  const mutations:number[]=[];
+  const handle={getSize:()=>bytes.length,read(target:Uint8Array|Uint32Array,{at}:{at:number}){
+    const output=new Uint8Array(target.buffer,target.byteOffset,target.byteLength);
+    const input=bytes.subarray(at,at+output.length);output.set(input);return input.length;
+  },truncate(size:number){mutations.push(size);bytes=bytes.slice(0,size);}};
+  const body=new Uint8Array(516);
+  const context={body,view:new DataView(body.buffer),computeDigest:digestBody,setAssociatedPath(){handle.truncate(4096);}};
+  return {handle,context,mutations,get bytes(){return bytes;}};
+}
+
+test('the actual SDK header reader preserves damaged database bytes instead of reclaiming its slot',()=>{
+  const read=headerReader();
+  for(const change of [(bytes:Uint8Array)=>{bytes[516]^=1;},(bytes:Uint8Array)=>{bytes[512]^=1;}]){
+    const fixture=headerFixture();change(fixture.bytes);
+    const before=fixture.bytes.slice();
+    assert.throws(()=>read.call(fixture.context,fixture.handle),/sqlite_sahpool_header_digest_mismatch/u);
+    assert.deepEqual(fixture.bytes,before);
+    assert.deepEqual(fixture.mutations,[]);
+  }
+  const orphan=headerFixture('',0);
+  assert.throws(()=>read.call(orphan.context,orphan.handle),/sqlite_sahpool_header_orphaned_payload/u);
+  assert.equal(orphan.bytes.length,8192);
+  const short=headerFixture('',0,4096);
+  const truncatedHeader={...short.handle,read:()=>0};
+  assert.throws(()=>read.call(short.context,truncatedHeader),/sqlite_sahpool_header_short_read/u);
+  assert.deepEqual(short.mutations,[]);
+  const unknownFlags=headerFixture('/fixture.sqlite3',0);
+  const unknownBefore=unknownFlags.bytes.slice();
+  assert.throws(()=>read.call(unknownFlags.context,unknownFlags.handle),/sqlite_sahpool_header_flags_invalid/u);
+  assert.deepEqual(unknownFlags.bytes,unknownBefore,'a named file with unknown flags is not permission to erase its payload');
+});
+
+test('verified persistent headers remain readable and valid empty or transient slots retain their SDK meaning',()=>{
+  const read=headerReader(),database=headerFixture();
+  assert.equal(read.call(database.context,database.handle),'/fixture.sqlite3');
+  assert.deepEqual(database.mutations,[]);
+  const empty=headerFixture('',0,4096);
+  assert.equal(read.call(empty.context,empty.handle),'');
+  assert.deepEqual(empty.mutations,[]);
+  const transient=headerFixture('/temp',8|0x80);
+  assert.equal(read.call(transient.context,transient.handle),'');
+  assert.deepEqual(transient.mutations,[4096],'only a verified transient association can be reclaimed');
+});
+
+test('an interrupted zero-byte slot can initialize but nonempty short files retain every byte',()=>{
+  const read=headerReader();
+  const empty=headerFixture('',0,4096);
+  const zeroHandle={...empty.handle,getSize:()=>0,read:()=>{throw new Error('an empty file has no header to read');}};
+  assert.equal(read.call(empty.context,zeroHandle),'');
+  assert.deepEqual(empty.mutations,[4096],'the SDK initializes only a physically empty slot');
+  for(const size of [1,515,516,523]){
+    const short=headerFixture('',0,4096);
+    const bytes=short.bytes.slice(0,size);
+    const before=bytes.slice();
+    const shortHandle={...short.handle,getSize:()=>size,read(target:Uint8Array|Uint32Array,{at}:{at:number}){
+      const output=new Uint8Array(target.buffer,target.byteOffset,target.byteLength);
+      const input=bytes.subarray(at,at+output.length);output.set(input);return input.length;
+    }};
+    assert.throws(()=>read.call(short.context,shortHandle),/sqlite_sahpool_header_short_read/u);
+    assert.deepEqual(bytes,before);
+    assert.deepEqual(short.mutations,[],'nonempty partial headers cannot be treated as empty slots');
+  }
+});
 
 test('the pinned SQLite init-failure branch pauses and preserves the existing pool',()=>{
   const source=pinnedSdkFixture();

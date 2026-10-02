@@ -27,6 +27,7 @@ const compiled=await build({stdin:{contents:[
   `export * from './apps/web/src/experience/personalMeaningJourney/gateway';`,
   `export * from './apps/web/src/contentSupply/portable/personalPortablePackage';`,
   `export * from './apps/web/src/contentSupply/portable/portablePackage';`,
+  `export {readLearningWorkspaceProjection} from './apps/web/src/learning/system/learningProjection';`,
 ].join('\n'),resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env':JSON.stringify({VITE_SENSA_API_URL:'https://speech.fixture.invalid'})},plugins:[{name:'fixture-auth',setup(build){build.onLoad({filter:/[/\\]account[/\\]auth\.ts$/},()=>({contents:"export const auth={getSession:async()=>({data:{session:{access_token:'fixture',user:{id:'fixture'}}}})}; export {authStorageKey,cachedAuthSubject} from './authSessionHint';",loader:'ts'}));}}]});
 Object.assign(globalThis,{indexedDB,window:new EventTarget(),location:{origin:'http://127.0.0.1:9998'},BroadcastChannel:undefined});
 const temp=await mkdtemp(join(tmpdir(),'sensa-personal-'));
@@ -94,9 +95,13 @@ try{
   assert.deepEqual(Object.keys(task).includes('meaning'),false);
   assert.equal((await api.readLearning()).targets.length,0);
 
+  await assert.rejects(api.exportPersonalPortablePackage(id()),/localFlow.resourceInvalid/u,'unknown tasks cannot produce a Portable artifact');
+  await assert.rejects(api.exportPersonalPortablePackage(task.id),/localFlow.resourceInvalid/u,'waiting material cannot be exported as if ready');
+
   const prepare=async()=>api.preparePersonal(task.id,slowSource,provider,await api.selectedReviewProvider(),new AbortController().signal,()=>{});
   mode='leak';await prepare();
   assert.equal((await api.personalLearningSnapshot())[0].status,'rejected','the validator blocks target-expression leakage before publication');
+  await assert.rejects(api.exportPersonalPortablePackage(task.id),/localFlow.resourceInvalid/u,'rejected material cannot cross the export boundary');
   assert.equal((await api.readLearning()).targets.length,0);
   await api.setModelReviewEnabled(id(),true,(await api.providerSnapshot()).settings.revision);
   mode='review-fail';await assert.rejects(prepare());assert.equal((await api.readLearning()).targets.length,0);
@@ -117,8 +122,14 @@ try{
   assert.equal(personalPackage.package.route.supportLanguage,'zh-CN');
   assert.equal(personalPackage.package.targetExpression.text,'borrow');
   assert.equal(personalPackage.package.resources.sceneRealization.example,'May asked to borrow an umbrella.');
+  const workspace=await api.readLearningWorkspaceProjection({languageContext,clock:Date.now(),retries:[]});
+  assert.equal(workspace.targets[0].presentation.example,personalPackage.package.resources.sceneRealization.example,'the target context displays its actual admitted scene, not an optional unrelated usage example');
   assert.equal(personalPackage.package.media.length,1,'the generated TTS pronunciation is carried by .sensa');
   assert.equal(personalPackage.package.semanticDeclaration,undefined,'private export does not claim registry authority');
+  const exportedManifest=JSON.stringify(personalPackage.package);
+  for(const privateValue of ['Private marker:', 'fixture-secret', completed.personalMeaningId, task.id, task.targetId]){
+    assert(!exportedManifest.includes(privateValue),'private source, credentials and learner identities must not leak into the Portable manifest');
+  }
   const reinstalled=await api.installPortablePackage(firstExport.bytes,personalPackage.archiveDigest);
   assert.equal(reinstalled.content.entries[0].expression,'borrow','the personal .sensa re-enters through the public import path');
 
@@ -127,6 +138,8 @@ try{
   run=await api.actLearning(id(),run.id,run.revision,{kind:'reveal'});
   run=await api.actLearning(id(),run.id,run.revision,{kind:'rate',rating:'good'});
   assert.equal((await api.readLearning()).targets[0].memoryRevision,1);
+  const afterLearningExport=await api.exportPersonalPortablePackage(task.id);
+  assert.deepEqual(afterLearningExport.bytes,firstExport.bytes,'settled learning history and scheduling state cannot alter the shared material archive');
 
   // A complete payload from any entry bypasses Inbox mechanically and yields
   // the same learning-source shape; provenance remains data on that record.

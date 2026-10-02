@@ -34,7 +34,22 @@ type StoredMediaReference=Readonly<{
 }>;
 
 const digestPattern=/^[a-f0-9]{64}$/u;
-const dataUrlPattern=/^data:([^;,]+);base64,([A-Za-z0-9+/]+={0,2})$/u;
+const dataUrlHeaderPattern=/^data:([^;,]+);base64$/u;
+const mediaChunkSize=256*1024;
+
+/** Yield only in a UI context; Node and Workers can finish pure validation inline. */
+const yieldMediaWork=async()=>{
+  if(typeof document==='undefined')return;
+  const scheduler=(globalThis as typeof globalThis&{scheduler?:{yield?:()=>Promise<void>}}).scheduler;
+  if(scheduler?.yield)await scheduler.yield();
+  else await new Promise<void>(resolve=>setTimeout(resolve,0));
+};
+
+const mediaDigest=async(bytes:Uint8Array):Promise<string>=>{
+  if(bytes.byteLength<mediaChunkSize)return sha256(bytes);
+  const digest=await crypto.subtle.digest('SHA-256',bytes as Uint8Array<ArrayBuffer>);
+  return [...new Uint8Array(digest)].map(value=>value.toString(16).padStart(2,'0')).join('');
+};
 /** Content-addressed blobs are immutable. Reuse recent verification/encoding,
  * but keep a hard memory ceiling so externalized media cannot silently become
  * a second unbounded in-memory package cache. */
@@ -62,23 +77,41 @@ const rememberBase64=(digest:string,value:string):void=>{
   hydratedBase64.set(digest,value);hydratedBase64Chars+=value.length;
 };
 
-const bytesToBase64=(bytes:Uint8Array):string=>{
-  let binary='';
-  for(let offset=0;offset<bytes.length;offset+=0x8000){
-    binary+=String.fromCharCode(...bytes.subarray(offset,Math.min(bytes.length,offset+0x8000)));
+const bytesToBase64=async(bytes:Uint8Array):Promise<string>=>{
+  const chunks:string[]=[];
+  // Multiple of three, so only the final chunk has base64 padding.
+  const chunkSize=3*0x8000;
+  for(let offset=0;offset<bytes.length;offset+=chunkSize){
+    let binary='';
+    const end=Math.min(bytes.length,offset+chunkSize);
+    for(let at=offset;at<end;at+=0x8000){
+      binary+=String.fromCharCode(...bytes.subarray(at,Math.min(end,at+0x8000)));
+    }
+    chunks.push(btoa(binary));
+    if(bytes.length>=mediaChunkSize)await yieldMediaWork();
   }
-  return btoa(binary);
+  return chunks.join('');
 };
 
-const base64ToBytes=(value:string):Uint8Array=>{
-  const binary=atob(value);
-  return Uint8Array.from(binary,character=>character.charCodeAt(0));
-};
-
-const readDataUrl=(value:string):{mimeType:string;bytes:Uint8Array}|null=>{
-  const match=dataUrlPattern.exec(value);
+const readDataUrl=async(value:string):Promise<{mimeType:string;bytes:Uint8Array}|null>=>{
+  const comma=value.indexOf(',');
+  if(comma<0)return null;
+  const match=dataUrlHeaderPattern.exec(value.slice(0,comma));
   if(!match)return null;
-  return {mimeType:match[1]!,bytes:base64ToBytes(match[2]!)};
+  const base64=value.slice(comma+1);
+  if(!base64.length)return null;
+  const padding=base64.endsWith('==')?2:base64.endsWith('=')?1:0;
+  const bytes=new Uint8Array(Math.floor((base64.length-padding)*3/4));
+  let written=0;
+  for(let at=0;at<base64.length;at+=mediaChunkSize){
+    const last=at+mediaChunkSize>=base64.length;
+    const chunk=base64.slice(at,at+mediaChunkSize);
+    if(!(last?/^[A-Za-z0-9+/]+={0,2}$/u:/^[A-Za-z0-9+/]+$/u).test(chunk))return null;
+    const binary=atob(chunk);
+    for(let i=0;i<binary.length;i++)bytes[written++]=binary.charCodeAt(i);
+    if(base64.length>=mediaChunkSize)await yieldMediaWork();
+  }
+  return {mimeType:match[1]!,bytes};
 };
 
 const storedReference=(value:unknown):value is StoredMediaReference=>{
@@ -111,10 +144,10 @@ const installedPortableManifest=(value:unknown):{
  * The public InstalledPackage shape remains untouched at every read boundary;
  * this is strictly a private SQLite representation.
  */
-export function externalizePortablePackageCache(
+export async function externalizePortablePackageCache(
   packageKey:string,
   value:unknown,
-):{storedValue:unknown;write:PortablePackageMediaWrite}{
+):Promise<{storedValue:unknown;write:PortablePackageMediaWrite}>{
   const manifest=installedPortableManifest(value);
   if(!manifest)throw new Error('portable_media_manifest_missing');
   const declarationsByDigest=new Map<string,SensaPortableLightweightMedia[]>();
@@ -124,11 +157,11 @@ export function externalizePortablePackageCache(
     declarationsByDigest.set(declaration.sha256,declarations);
   }
   const bytesByDigest=new Map<string,Uint8Array>();
-  const transform=(current:unknown):unknown=>{
+  const transform=async(current:unknown):Promise<unknown>=>{
     if(typeof current==='string'){
-      const parsed=readDataUrl(current);
+      const parsed=await readDataUrl(current);
       if(!parsed)return current;
-      const digest=sha256(parsed.bytes);
+      const digest=await mediaDigest(parsed.bytes);
       const declarations=declarationsByDigest.get(digest);
       // InstalledPackage may carry additional Runtime-only resources (for
       // example an assurance release). Only media declared by this `.sensa`
@@ -145,13 +178,13 @@ export function externalizePortablePackageCache(
         mimeType:parsed.mimeType,
       }} satisfies StoredMediaReference;
     }
-    if(Array.isArray(current))return current.map(transform);
+    if(Array.isArray(current))return Promise.all(current.map(transform));
     if(current&&typeof current==='object')return Object.fromEntries(
-      Object.entries(current).map(([key,item])=>[key,transform(item)]),
+      await Promise.all(Object.entries(current).map(async([key,item])=>[key,await transform(item)])),
     );
     return current;
   };
-  const storedValue=transform(value);
+  const storedValue=await transform(value);
   const media=manifest.media.map(declaration=>{
     const bytes=bytesByDigest.get(declaration.sha256);
     if(!bytes)throw new Error('portable_media_bytes_missing');
@@ -177,10 +210,10 @@ export async function hydratePortablePackageCache(
     const cached=cachedBase64(digest);
     if(cached!==undefined){base64ByDigest.set(digest,cached);return;}
     const blob=await read(digest);
-    if(!blob||blob.sha256!==digest||blob.sizeBytes!==blob.bytes.byteLength||sha256(blob.bytes)!==digest){
+    if(!blob||blob.sha256!==digest||blob.sizeBytes!==blob.bytes.byteLength||await mediaDigest(blob.bytes)!==digest){
       throw new Error('portable_media_blob_invalid');
     }
-    const base64=bytesToBase64(blob.bytes);
+    const base64=await bytesToBase64(blob.bytes);
     rememberBase64(digest,base64);
     base64ByDigest.set(digest,base64);
   }));

@@ -20,6 +20,7 @@ import {
  PackageBookScreen,
  PackageCatalogScreen,
  PackageLibraryScreen,
+ PackageLibraryDetailScreen,
  PackagePublisherScreen,
 } from './PackageCenter';
 import {ScreenHost} from '../ui/ScreenHost';
@@ -46,7 +47,7 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
  const {t}=useTranslation();
  const {viewMode,mainStack,params,setViewMode,goMain,backMain,resetMain,returnHome,setMainStack}=useShellNavigation();
  const packageCenterOpen=viewMode==='main'&&mainStack.some(screen=>[
-  's-learning-entry','s-catalog','s-catalog-book','s-library','s-publisher',
+  's-learning-entry','s-catalog','s-catalog-book','s-library','s-library-package','s-publisher',
  ].includes(screen));
  const packageLearning=usePackageLearning(packageCenterOpen);
  const personalLearning=usePersonalLearning();
@@ -100,7 +101,14 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
     onOpenConfirmedSense={openConfirmedSense} onOpenSense={openSemanticWorldSense}
     onOpenSection={openContentSection} toast={toast}/>;
  const renderLearningTarget=(screenActive:boolean):ReactNode=>{
-  if(localSelectedTarget)return <PackageTarget active={screenActive} target={localSelectedTarget} c={packageLearning} onSource={()=>{const provenance=localSelectedTarget.material.snapshot.provenance;if('personalMeaningId' in provenance&&typeof provenance.personalMeaningId==='string')openPersonalMeaning(provenance.personalMeaningId);else backMain();}} onBack={backMain} onHome={resetMain} onStart={()=>void startLocalLearning(localSelectedTarget.targetId)}/>;
+  if(localSelectedTarget){
+   const personalTask=personalLearning.tasks.find(task=>task.status==='ready'&&task.targetId===localSelectedTarget.targetId&&task.curriculumMembershipId===localSelectedTarget.curriculumMembershipId);
+   const installed=packageLearning.packages.find(pack=>pack.key===localSelectedTarget.packageKey);
+   const onExport=personalTask?()=>personalLearning.exportPackage(personalTask.id):installed?()=>packageLearning.exportPackage(installed.key):undefined;
+   return <PackageTarget active={screenActive} target={localSelectedTarget} c={packageLearning}
+    onExport={onExport} exportBusy={personalTask?personalLearning.busy:packageLearning.busy} exportNotice={personalTask?personalLearning.notice:undefined}
+    onSource={()=>{const provenance=localSelectedTarget.material.snapshot.provenance;if('personalMeaningId' in provenance&&typeof provenance.personalMeaningId==='string')openPersonalMeaning(provenance.personalMeaningId);else backMain();}} onBack={backMain} onHome={resetMain} onStart={()=>void startLocalLearning(localSelectedTarget.targetId)}/>;
+  }
   if(selectedPersonalTask)return <PersonalPreparationTarget task={selectedPersonalTask} c={personalLearning} onSource={()=>openPersonalLearningSource(selectedPersonalTask)} active={screenActive} onBack={backMain} onHome={resetMain} onStart={id=>void startLocalLearning(id)}/>;
   return <LearningSetupFrame id="s-learning-target" active={screenActive} title={localFlowText('learningTarget')} onBack={backMain}><p role="status">{packageLearning.loaded?localFlowText('targetMissing'):localFlowText('targetLoading')}</p></LearningSetupFrame>;
  };
@@ -140,7 +148,10 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
   's-library':screenActive=><PackageLibraryScreen active={screenActive} c={packageLearning} onBack={backMain}
     onCatalog={()=>setMainStack(['s-catalog'])}
     onOpenBook={bookKey=>setMainStack(['s-catalog','s-catalog-book'],{bookKey})}
+    onOpenPackage={packageKey=>setMainStack(['s-library','s-library-package'],{packageKey})}
     onPublisher={()=>setMainStack(['s-publisher'])} onLearning={returnHome} onTarget={openLocalTarget}/>,
+  's-library-package':screenActive=><PackageLibraryDetailScreen active={screenActive} packageKey={params.packageKey??null} c={packageLearning}
+    onBack={backMain} onLearning={returnHome} onTarget={openLocalTarget}/>,
   's-publisher':screenActive=><PackagePublisherScreen active={screenActive} c={packageLearning} onBack={backMain}
     onCatalog={()=>setMainStack(['s-catalog'])} onLibrary={()=>setMainStack(['s-library'])}/>,
   's-learning-entry':screenActive=><PackageCatalogScreen active={screenActive} c={packageLearning} onBack={backMain}

@@ -1,5 +1,13 @@
 {
   "localFlow": {
+    "packageAuthor": "Autor",
+    "packageFilesUnavailable": "Lernpakete ohne lokale Datei: {{count}}. Importieren Sie die Originaldateien oder laden Sie sie erneut aus dem Katalog herunter.",
+    "packageLicense": "Lizenz",
+    "confirmPackageImport": "Installation bestätigen",
+    "exportPortablePackage": ".sensa exportieren",
+    "packageAlreadyInstalled": "Diese Version ist bereits installiert",
+    "packageOlderVersion": "Ältere Version; aktuelle Lerninhalte werden nicht zurückgesetzt",
+    "packageNewVersion": "Neue Version; Aktualisierung nach der Installation anwenden",
     "catalogTargetLanguage": "Lernsprache",
     "catalogSupportLanguage": "Unterstützungssprache",
     "resourceWord":"Wort","resourcePhrase":"Wortgruppe","resourceConstruction":"Konstruktion","resourceUtterance":"Äußerung","resourceSentence":"Satz","contextImage":"Kontextbild","interactiveExperience":"Interaktive Erfahrung","editContext":"Kontext bearbeiten","cancelEdit":"Bearbeiten abbrechen","saveContext":"Kontext speichern","viewResources":"Lernmaterial anzeigen","updateResources":"Material mit den aktuellen Kontexteinstellungen aktualisieren","useExistingResources":"Mit vorhandenem Material lernen","contextResourcesStale":"Der Kontext hat sich geändert. Vorhandenes Lernmaterial wurde nicht aktualisiert.","resourceExperience":"Inhalt zum Abrufen der Erfahrung","resourceHint":"Abrufhinweis","resourceExpression":"Zielausdruck","resourceMeaning":"Bedeutung bestätigen","resourcePronunciation":"Aussprache","resourceStructure":"Sprachstruktur","resourceUsage":"Gebrauchsbeispiel","resourceBridge":"Verbindung zur Szene","resourceSceneRealization":"Diese Erfahrung ausdrücken","resourceBoundaryContrast":"Kontrast","resourceWordFormation":"Wortbildung","resourceMnemonic":"Merkhilfe","resourceEtymology":"Etymologie","savedExpression":"Inhaltsdetails","expressionDetails":"Ausdrucksdetails","conversationHistory":"Ursprüngliches Material und Gespräch","learningChoice":"Lernen","learningPreparation":"Lernmaterial wird vorbereitet","learningReady":"In Ihrer Lernsammlung","fixedLightweight":"Lernmethode: Leichtes Lernen","imageConversation":"Bildgespräch","findExpression":"Ausdruck finden","sensaConversation":"Mit Sensa sprechen","expressionInput":"Was möchten Sie ausdrücken?","expressionInputHint":"Beschreiben Sie eine Situation, fragen Sie, wie man etwas sagt, oder fügen Sie ein Bild hinzu…","chatWelcome":"Womit möchten Sie beginnen?","chatWelcomeHint":"Teilen Sie Text oder Bilder. Wir klären Kontext, Bedeutung und Ausdruck in einem natürlichen Gespräch.","attachImages":"Bilder hinzufügen",

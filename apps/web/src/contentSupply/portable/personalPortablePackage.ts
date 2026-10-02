@@ -78,7 +78,8 @@ export async function exportPersonalPortablePackage(taskId:string):Promise<Porta
     const image=object(raw);
     return {
       mediaId:addMedia(image.dataUrl,'image'),
-      altText:optionalString(image.name)??`Learning image ${index+1}`,
+      // Personal image names originate in local filenames, not authored alt text.
+      altText:`Learning image ${index+1}`,
     };
   }):undefined;
   const cueHtml=optionalString(cue.html);

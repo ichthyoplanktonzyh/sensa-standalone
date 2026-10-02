@@ -48,6 +48,7 @@ export function usePackageLearning(entryOpen:boolean){
  const [busy,setBusy]=useState(false);
  const [progress,setProgress]=useState<number|null>(null);
  const [loaded,setLoaded]=useState(false);
+ const [unavailablePackageKeys,setUnavailablePackageKeys]=useState<readonly string[]>([]);
  const [catalogBusy,setCatalogBusy]=useState(false);
  const transfer=useRef<AbortController|null>(null);
  const catalogRequest=useRef<AbortController|null>(null);
@@ -67,6 +68,8 @@ export function usePackageLearning(entryOpen:boolean){
   const supply=await measuredWorkspaceRead('supply',()=>contentSupplySystem.read({kind:'workspace'}));
   if(current!==lifecycle.current)return;
   setPackages([...supply.packages]);
+  const available=new Set(supply.packages.map(pack=>pack.key));
+  setUnavailablePackageKeys(keys=>keys.filter(key=>!available.has(key)));
   setCatalog([...supply.catalog]);
  };
  const refresh=async()=>{
@@ -78,6 +81,7 @@ export function usePackageLearning(entryOpen:boolean){
 
  useEffect(()=>{
   setLoaded(false);
+  const current=lifecycle.current;
   const learningCoordinator=createRefreshCoordinator(refreshLearning);
   const supplyCoordinator=createRefreshCoordinator(refreshSupply);
   const reloadLearning=()=>void learningCoordinator.request().catch(()=>setNotice(localFlowText('progressReadFailed')));
@@ -87,7 +91,11 @@ export function usePackageLearning(entryOpen:boolean){
    if(initial)await refresh();
    else await learningCoordinator.request();
   };
-  void measuredWorkspaceRead('rehydrate',()=>contentSupplySystem.execute({kind:'rehydrate'})).then(()=>prepare(true)).catch(()=>setNotice(localFlowText('learningReadFailed')));
+  void measuredWorkspaceRead('rehydrate',()=>contentSupplySystem.execute({kind:'rehydrate'})).then(result=>{
+   if(current!==lifecycle.current)return;
+   setUnavailablePackageKeys(result.blocked);
+   return prepare(true);
+  }).catch(()=>setNotice(localFlowText('learningReadFailed')));
   const stopLearning=learningSystem.subscribe({kind:'workspace',languageContext},reloadLearning);
   const stopSupply=contentSupplySystem.subscribe({kind:'workspace'},reloadSupply);
   const focus=()=>void prepare().catch(()=>setNotice(localFlowText('progressReadFailed')));
@@ -175,7 +183,7 @@ export function usePackageLearning(entryOpen:boolean){
   records:workspace.records,
   policyOptions:workspace.policyOptions,
   dailyLimit:dailyLimit??undefined,
-  notice:localFlowNotice(notice),busy,progress,loaded,catalogBusy,reloadCatalog,refresh,
+  notice:localFlowNotice(notice),busy,progress,loaded,unavailablePackageKeys,catalogBusy,reloadCatalog,refresh,
   confirmQuantity:(n:number)=>perform(()=>learningSystem.execute({kind:'confirm_quantity',operationId:crypto.randomUUID(),languageContext,dailyLimit:n})),
   download:(d:ContentSupplyCatalogItem,onPhase?:(phase:ContentSupplyInstallationPhase)=>void)=>perform(async()=>{
    const c=new AbortController();transfer.current=c;

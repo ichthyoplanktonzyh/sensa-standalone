@@ -107,6 +107,9 @@ test('preview is read-only and explicit install preserves the portable origin',a
     targets:await readLibrary(tx=>tx.count('learningTargets')),
   },before,'preview must not install or enroll content');
 
+  await assert.rejects(contentSupplySystem.execute({kind:'install_portable_package',bytes,expectedArchiveDigest:'0'.repeat(64)}),/localFlow.packageVersionChanged/u);
+  assert.equal(await readLibrary(tx=>tx.count('packageInstallations')),before.installations,'a stale confirmation digest must not install anything');
+
   const installed=await contentSupplySystem.execute({
     kind:'install_portable_package',
     bytes,

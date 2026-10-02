@@ -1,5 +1,13 @@
 {
   "localFlow": {
+    "packageAuthor": "Tác giả",
+    "packageFilesUnavailable": "Gói thiếu tệp trên thiết bị này: {{count}}. Nhập lại tệp gốc hoặc tải lại từ danh mục.",
+    "packageLicense": "Giấy phép",
+    "confirmPackageImport": "Xác nhận cài đặt",
+    "exportPortablePackage": "Xuất .sensa",
+    "packageAlreadyInstalled": "Phiên bản này đã được cài đặt",
+    "packageOlderVersion": "Phiên bản cũ; nội dung học hiện tại sẽ không bị hạ cấp",
+    "packageNewVersion": "Phiên bản mới; áp dụng bản cập nhật sau khi cài đặt",
     "catalogTargetLanguage": "Ngôn ngữ học",
     "catalogSupportLanguage": "Ngôn ngữ hỗ trợ",
     "resourceWord": "Từ",

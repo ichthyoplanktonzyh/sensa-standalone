@@ -85,6 +85,11 @@ Origin Private File System。SQLite 在专用 Worker 中运行，使用不要求
 完整 `LibraryTransaction`，因此多次读取到一次 commit 的 read/modify/write 序列不会在标签页之间交错。
 关闭时先排空 Worker 请求、关闭数据库、暂停 VFS 并确认原生句柄可再次打开，再释放所有权；无法确认时停止而不创建空库。
 SDK 初始化失败不得删除 pool 数据，构建中的版本和源片段检查必须阻止未审核依赖绕过保护。真实句柄冲突与 Worker 突然终止另由隔离 Chromium 回归验证。
+pool 关联头的摘要或读取长度异常、无路径却仍含数据时，初始化拒绝打开并保留原文件，不能通过截断槽位
+创建新空库。合法临时文件只在完整关联头通过校验后按 SDK 语义回收。隔离 OPFS 回归通过单字节故障注入、
+失败前后完整文件摘要对比和还原后的原记录读取验证此保护；建库回执缺失也不会覆盖现有资料库身份。
+新增槽位在首次写头前中断留下的 0 字节文件可以初始化；任何非空短头仍拒绝并保留。
+隔离 OPFS 回归验证空槽恢复后原记录及原数据库文件摘要不变。
 本机 `libraryId` 与 `learnerId` 在无账号时即建立；`service-owner` 只绑定在线账号，不是本机学习事务的
 准入条件。账号连接前读取云端 head：双方都有内容时保持本机库未绑定并停止自动同步；云端为空时连接
 已有本机库，空本机库则允许后台恢复原账号资料。加密手动快照的新 payload 可表示无账号库，并继续
@@ -293,6 +298,10 @@ npm run dev:sensa
 Vite 的 `sensa-local` mode 也从独立空目录读取环境文件，并拒绝非 loopback 的 Auth/API URL。
 普通 `dev:sensa` / `preview:sensa` 始终暂停托管模型，不读取模型密钥，也不会产生模型费用。
 
+Vite 开发服务直接解析 contracts、learning-kernel 和 content-validator 的已声明导出到对应 `src`，
+不依赖构建时会被删除、重建的 `dist`；执行全量检查不应因此触发验收页面的缺模块重载。
+生产构建仍使用这些包的正式 `dist` 导出，开发源码映射不会改变发布边界。
+
 需要人工验收真实生成时，使用明确的模型 opt-in：
 
 ```sh
@@ -474,6 +483,18 @@ node --import tsx tests/web/run.mts --suite=manual --id=extension-popup
 
 脚本成功只能证明它覆盖的边界；真实账号、真实 Provider、浏览器商店和生产环境需要各自的验收证据。
 
+获得真实模型与 TTS 验收授权后，可为人工或 Agent 浏览器使用启动一次性隔离环境：
+
+```sh
+SENSA_LIVE_ACCEPTANCE=1 node scripts/live/runLanguageMatrix.mjs --interactive --slot=7
+```
+
+该模式沿用同一 runner 的临时 PostgreSQL、API 和 Web 隔离规则，端口已占用时直接拒绝，不接管现有进程。
+它不自动执行语言矩阵或调用模型；费用由实际用户操作触发。使用新的浏览器上下文，不复用 owner profile。
+`ready` 仅表示环境就绪，不是产品验收通过；实际结果、模型/TTS 调用和下载产物需另行留证。
+Ctrl-C 关闭该次运行的服务并删除其临时数据库，诊断产物保留在被 Git 忽略的运行目录；不清理 owner 数据。
+`--dry-run --interactive` 只检查参数并说明计划，既不启动服务，也不调用模型或 TTS。
+
 ## CI 与生产发布
 
 `.github/workflows/sensa-consumer-check.yml` 在 pull request 和 `main` push 时运行 `Sensa CI`。它执行静态检查、构建、Web 快速测试、浏览器检查以及 PostgreSQL/API 集成。Pull request 只生成验证构建；`main` 的静态／快速 job 使用 `web-candidate` 公共配置构建一次生产候选，在同一 job 内固定完整 SHA、GitHub Actions provenance、公开目标、migration 集合和每个交付文件摘要，完成 artifact 检查与 Cloudflare dry-run 后才上传 `sensa-production-<SHA>`。其余 CI job 共同决定该候选是否具备发布资格；失败 run 中即使存在 artifact 也不能被发布器接受。
@@ -626,6 +647,9 @@ digest 和内嵌 Manifest，再校验全部 `.sensa` 成员并用一个 transact
 Portable 准入、编译、安装和导出 authority。区别只在信任来源：Catalog 路径可依据 Registry 对 Book
 archive 的精确 digest 采用官方 semantic declaration，本地文件只能形成 Package-local
 identity。UI 不解析 ZIP、Manifest 或媒体，也不能绕过 Content Supply 直接构造 Runtime content。
+浏览器中的 Book 准入、独立 `.sensa` 导入预览和安装准备共用单任务 Worker，把 ZIP、摘要与内容编译移出
+UI 主线程；预览只返回已校验的 Manifest 和媒体统计，不把解码媒体传回界面。确认安装仍校验原归档摘要，
+Worker 不访问学习库；安装事实只由主流程的统一事务提交。无 Worker 的 Node 验证使用同一纯计算实现。
 
 迁移不能只把旧 Bundle 改扩展名。Portable v2 固定一个 Sense/Route，并以可选 `semanticDeclaration`
 携带官方 Book entry 所需的稳定 Sense/Binding semantic snapshot，用于跨 Book/Route 复用 identity 和从

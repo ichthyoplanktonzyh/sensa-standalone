@@ -1,5 +1,13 @@
 {
   "localFlow": {
+    "packageAuthor": "Autor",
+    "packageFilesUnavailable": "Pacotes sem arquivos neste dispositivo: {{count}}. Importe os originais ou baixe-os novamente do catálogo.",
+    "packageLicense": "Licença",
+    "confirmPackageImport": "Confirmar instalação",
+    "exportPortablePackage": "Exportar .sensa",
+    "packageAlreadyInstalled": "Esta versão já está instalada",
+    "packageOlderVersion": "Versão anterior; o conteúdo de aprendizagem atual não será revertido",
+    "packageNewVersion": "Nova versão; aplique a atualização após a instalação",
     "catalogTargetLanguage": "Idioma de aprendizagem",
     "catalogSupportLanguage": "Idioma de apoio",
     "resourceWord": "Palavra",

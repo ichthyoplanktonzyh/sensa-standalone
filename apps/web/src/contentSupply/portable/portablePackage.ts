@@ -16,11 +16,13 @@ import {
   mergePackageInstallationRecovery,
   portablePackageKey,
   type InstalledPackage,
+  type InstalledPackageSummary,
   type PackageInstallation,
   type PortablePublicationAttestation,
 } from '../../data/library/packageRecords';
 import {openLibrary,readLibrary} from '../../data/library/store';
 import {preparePortablePackage,type PreparedPortableInstallation} from './portablePreparation';
+import {inspectPortablePackageOffThread,prepareStandalonePortablePackageOffThread} from './portablePreparationClient';
 
 export type PortablePackagePreviewStatus=
   |'new'
@@ -59,14 +61,14 @@ const openPortable=(bytes:Uint8Array):SensaPortableLightweightPackageArchive=>{
 };
 
 const previewStatus=(
-  archive:SensaPortableLightweightPackageArchive,
-  installed:readonly InstalledPackage[],
+  archive:Pick<SensaPortableLightweightPackageArchive,'package'|'packageDigest'>,
+  installed:readonly InstalledPackageSummary[],
+  prior:PackageInstallation|undefined,
 ):PortablePackagePreviewStatus=>{
+  if(prior&&prior.artifact.packageDigest!==archive.packageDigest)return 'version_conflict';
   const exact=installed.find(item=>item.key===portableKey(archive.package));
   if(exact){
-    return exact.portableOrigin.packageDigest===archive.packageDigest
-      ?'installed'
-      :'version_conflict';
+    return 'installed';
   }
   const versions=installed
     .filter(item=>item.portableOrigin.manifest.metadata.packageId===archive.package.metadata.packageId)
@@ -78,16 +80,19 @@ const previewStatus=(
 
 export async function previewPortablePackage(bytes:Uint8Array):Promise<PortablePackagePreview>{
   await openLibrary();
-  const archive=openPortable(bytes);
-  const installed=await readLibrary(tx=>tx.all<InstalledPackage>('packageCache'));
+  const archive=await inspectPortablePackageOffThread(bytes);
+  const status=await readLibrary(async tx=>previewStatus(archive,
+    await tx.packageCacheProjection({kind:'summaries',packageId:archive.package.metadata.packageId}),
+    await tx.get<PackageInstallation>('packageInstallations',portableKey(archive.package)),
+  ));
   return Object.freeze({
     archiveDigest:archive.archiveDigest,
     packageDigest:archive.packageDigest,
     validatorVersion:sensaPortableLightweightPackageValidatorVersion,
-    status:previewStatus(archive,installed),
+    status,
     package:archive.package,
-    mediaBytes:[...archive.mediaById.values()].reduce((total,value)=>total+value.byteLength,0),
-    mediaCount:archive.package.media.length,
+    mediaBytes:archive.mediaBytes,
+    mediaCount:archive.mediaCount,
   });
 }
 
@@ -148,16 +153,12 @@ export const installPreparedPortablePackages=async(
   return installed;
 };
 
-export const installPortablePackage=(
+export const installPortablePackage=async(
   bytes:Uint8Array,
   expectedArchiveDigest:string,
   signal?:AbortSignal,
 ):Promise<InstalledPackage>=>installPreparedPortablePackages([
-  (()=>{
-    const input=openPortable(bytes);
-    if(input.archiveDigest!==expectedArchiveDigest)throw new Error('localFlow.packageVersionChanged');
-    return preparePortablePackage(bytes,input);
-  })(),
+  await prepareStandalonePortablePackageOffThread(bytes,expectedArchiveDigest,signal),
 ],signal).then(([installed])=>installed??invalidPortablePackage(new Error('Package was not installed')));
 
 export const installPublishedPortableBookMembers=(

@@ -176,6 +176,7 @@ const fastBeforeMemory = [
   'contracts/journey-evidence',
   'integration/local-book-preparation',
   'integration/local-published-catalog',
+  'integration/live-acceptance-runner',
   'integration/support-diagnostics',
   'release/learning-content-bucket',
   'release/system-release',
@@ -189,6 +190,9 @@ const fastBeforeMemory = [
 ] as const;
 
 const fastWithMemory = [
+  'unit/workspace-source-aliases',
+  'unit/personal-portable-export',
+  'unit/portable-media-cache',
   'unit/package-workspace-refresh',
   'integration/book-installation-journey',
   'integration/content-agent', 'integration/reveal-resources', 'integration/reveal-render',
@@ -216,6 +220,7 @@ const fastWithMemory = [
 ] as const;
 
 const browserTests = [
+  'browser/portable-package-journey',
   'browser/skin-surface', 'browser/reference-presentation',
   'browser/package-center-journey',
   'browser/portable-book-capacity',
@@ -235,6 +240,7 @@ const manualTests = [
 ] as const;
 
 const playwrightPaths = new Set<string>([
+  'browser/portable-package-journey',
   'browser/skin-surface', 'browser/reference-presentation',
   'browser/package-center-journey',
   'browser/portable-book-capacity',
@@ -246,6 +252,8 @@ const playwrightPaths = new Set<string>([
 ]);
 
 const durabilityTests = new Set<string>([
+  'unit/portable-media-cache',
+  'browser/portable-package-journey',
   'unit/package-cache-projection',
   'unit/sqlite-sahpool-preservation',
   'integration/book-installation-journey',
@@ -271,6 +279,8 @@ const convergenceTests = new Set<string>([
   'database/library-cloud', 'browser/web-bootstrap-budget',
 ]);
 const scaleTests = new Set<string>([
+  'unit/portable-media-cache',
+  'browser/portable-package-journey',
   'unit/package-workspace-refresh',
   'unit/package-cache-projection',
   'unit/book-center-projection',

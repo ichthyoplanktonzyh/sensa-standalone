@@ -92,12 +92,21 @@ export function buildPackageCenterItems(c:Pick<Controller,'catalog'|'packages'|'
  const bookReleases=new Map<string,Map<string,ReleaseGroup>>();
  const orphanGroups=new Map<string,Map<string,OrphanReleaseGroup>>();
  const local:PackageCenterItem[]=[];
+ const latestLocal=new Map<string,InstalledPackage>();
+ for(const pack of c.packages){
+  if(pack.portableOrigin.publications.length)continue;
+  const {packageId,version}=pack.portableOrigin.manifest.metadata;
+  if(version>(latestLocal.get(packageId)?.portableOrigin.manifest.metadata.version??0))latestLocal.set(packageId,pack);
+ }
  for(const pack of c.packages){
   const publications=pack.portableOrigin.publications;
   if(!publications.length){
+   const {packageId,version}=pack.portableOrigin.manifest.metadata;
+   if(latestLocal.get(packageId)!==pack)continue;
+   const enrolledVersion=highestEnrolledPackageVersion.get(packageId)??0;
    local.push({
-    key:pack.portableOrigin.manifest.metadata.packageId,
-    listKey:`local:${pack.key}`,
+    key:packageId,
+    listKey:`local:${packageId}`,
     kind:'local',
     title:pack.portableOrigin.manifest.metadata.title,
     description:pack.portableOrigin.manifest.metadata.description,
@@ -106,9 +115,8 @@ export function buildPackageCenterItems(c:Pick<Controller,'catalog'|'packages'|'
     supportLanguage:pack.content.supportLanguage,
     installed:[pack],
     updateAvailable:false,
-    updateDownloaded:false,
-    enrolled:(highestEnrolledPackageVersion.get(pack.portableOrigin.manifest.metadata.packageId)??0)
-     >=pack.portableOrigin.manifest.metadata.version,
+    updateDownloaded:enrolledVersion>0&&version>enrolledVersion,
+    enrolled:enrolledVersion>=version,
     routeMatchesActive:routeMatches(pack.content.targetLanguage,pack.content.supportLanguage,c),
    });
    continue;

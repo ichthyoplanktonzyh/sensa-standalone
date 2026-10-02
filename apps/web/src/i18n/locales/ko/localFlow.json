@@ -1,5 +1,13 @@
 {
   "localFlow": {
+    "packageAuthor": "작성자",
+    "packageFilesUnavailable": "이 기기에 파일이 없는 학습 패키지: {{count}}. 원본 파일을 다시 가져오거나 목록에서 다시 다운로드하세요.",
+    "packageLicense": "라이선스",
+    "confirmPackageImport": "설치 확인",
+    "exportPortablePackage": ".sensa 내보내기",
+    "packageAlreadyInstalled": "이미 설치된 버전입니다",
+    "packageOlderVersion": "이전 버전이며 현재 학습 콘텐츠를 되돌리지 않습니다",
+    "packageNewVersion": "새 버전이며 설치 후 업데이트를 적용할 수 있습니다",
     "catalogTargetLanguage": "학습 언어",
     "catalogSupportLanguage": "보조 언어",
     "resourceWord": "단어",

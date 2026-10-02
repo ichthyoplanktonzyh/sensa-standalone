@@ -181,6 +181,26 @@ export type PreparedPortableInstallation=Readonly<{
   publication?:PortablePublicationAttestation;
 }>;
 
+/** Preview returns validated metadata, never transfers decoded media to the UI. */
+export function inspectPortablePackage(bytes:Uint8Array){
+  let archive:SensaPortableLightweightPackageArchive;
+  try{archive=readSensaPortableLightweightPackage(bytes);}
+  catch(cause){return invalidPortablePackage(cause);}
+  return {
+    package:archive.package,archiveDigest:archive.archiveDigest,packageDigest:archive.packageDigest,
+    mediaBytes:[...archive.mediaById.values()].reduce((total,value)=>total+value.byteLength,0),
+    mediaCount:archive.package.media.length,
+  };
+}
+
+export function prepareStandalonePortablePackage(bytes:Uint8Array,expectedArchiveDigest:string){
+  let archive:SensaPortableLightweightPackageArchive;
+  try{archive=readSensaPortableLightweightPackage(bytes);}
+  catch(cause){return invalidPortablePackage(cause);}
+  if(archive.archiveDigest!==expectedArchiveDigest)throw new Error('localFlow.packageVersionChanged');
+  return preparePortablePackage(bytes,archive);
+}
+
 export const preparePortablePackage=(
   bytes:Uint8Array,
   input:SensaPortableLightweightPackageArchive,

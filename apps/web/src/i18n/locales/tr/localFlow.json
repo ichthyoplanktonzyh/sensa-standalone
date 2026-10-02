@@ -1,5 +1,13 @@
 {
   "localFlow": {
+    "packageAuthor": "Yazar",
+    "packageFilesUnavailable": "Bu cihazda dosyası bulunmayan paketler: {{count}}. Özgün dosyaları içe aktarın veya katalogdan yeniden indirin.",
+    "packageLicense": "Lisans",
+    "confirmPackageImport": "Kurulumu onayla",
+    "exportPortablePackage": ".sensa dışa aktar",
+    "packageAlreadyInstalled": "Bu sürüm zaten yüklü",
+    "packageOlderVersion": "Eski sürüm; mevcut öğrenme içeriği eski sürüme döndürülmez",
+    "packageNewVersion": "Yeni sürüm; kurulumdan sonra güncellemeyi uygula",
     "catalogTargetLanguage": "Öğrenilen dil",
     "catalogSupportLanguage": "Destek dili",
     "resourceWord":"Kelime","resourcePhrase":"Öbek","resourceConstruction":"Yapı","resourceUtterance":"Söyleyiş","resourceSentence":"Cümle","contextImage":"Bağlam görseli","interactiveExperience":"Etkileşimli deneyim","editContext":"Bağlamı düzenle","cancelEdit":"Düzenlemeyi iptal et","saveContext":"Bağlamı kaydet","viewResources":"Öğrenme kaynaklarını görüntüle","updateResources":"Kaynakları geçerli bağlam ayarlarıyla güncelle","useExistingResources":"Mevcut kaynaklarla öğren","contextResourcesStale":"Bağlam değişti. Mevcut öğrenme kaynakları güncellenmedi.","resourceExperience":"Deneyimi hatırlama içeriği","resourceHint":"Hatırlama ipucu","resourceExpression":"Hedef ifade","resourceMeaning":"Anlam onayı","resourcePronunciation":"Telaffuz","resourceStructure":"Dil yapısı","resourceUsage":"Kullanım örneği","resourceBridge":"Sahne bağlantısı","resourceSceneRealization":"Bu deneyimi ifade edin","resourceBoundaryContrast":"Karşıtlık","resourceWordFormation":"Kelime yapımı","resourceMnemonic":"Bellek desteği","resourceEtymology":"Etimoloji","savedExpression":"İçerik ayrıntıları","expressionDetails":"İfade ayrıntıları","conversationHistory":"Özgün materyal ve konuşma","learningChoice":"Öğrenme","learningPreparation":"Öğrenme kaynakları hazırlanıyor","learningReady":"Öğrenme koleksiyonunuzda","fixedLightweight":"Öğrenme yöntemi: Hafif","imageConversation":"Görselli konuşma","findExpression":"Bir ifade bul","sensaConversation":"Sensa ile konuş","expressionInput":"Ne ifade etmek istersiniz?","expressionInputHint":"Bir durumu açıklayın, nasıl söyleyeceğinizi sorun veya görsel ekleyin…","chatWelcome":"Nereden başlamak istersiniz?","chatWelcomeHint":"Metin veya görsel paylaşın. Doğal bir konuşmayla bağlamı, anlamı ve ifadeyi netleştirelim.","attachImages":"Görsel ekle",

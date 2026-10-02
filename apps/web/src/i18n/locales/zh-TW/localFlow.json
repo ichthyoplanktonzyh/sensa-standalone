@@ -1,5 +1,13 @@
 {
   "localFlow": {
+    "packageAuthor": "作者",
+    "packageFilesUnavailable": "有 {{count}} 個學習包缺少本機檔案。請重新匯入原檔案，或從目錄重新下載。",
+    "packageLicense": "授權",
+    "confirmPackageImport": "確認安裝",
+    "exportPortablePackage": "匯出 .sensa",
+    "packageAlreadyInstalled": "已安裝此版本",
+    "packageOlderVersion": "舊版本；不會降級目前學習內容",
+    "packageNewVersion": "新版本；安裝後可套用更新",
     "catalogTargetLanguage": "目標語言",
     "catalogSupportLanguage": "輔助語言",
     "resourceWord": "詞",

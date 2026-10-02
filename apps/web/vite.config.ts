@@ -8,6 +8,7 @@ import {readFileSync,realpathSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import {dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {workspaceSourceAliases} from './workspaceSourceAliases';
 import {
   patchSqliteSahPoolInitFailure,
   sqliteSahPoolPreservedInitFailureVersion,
@@ -58,7 +59,7 @@ const sqliteSahPoolInitPreserver=(assertSqliteWorkerBuild=false):Plugin=>{
   };
 };
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode,command,isPreview }) => {
   const localAcceptance = mode === 'sensa-local';
   const envDirectory = localAcceptance ? '../../.sensa-local/env' : '.';
   const env = loadEnv(mode, envDirectory, "VITE_");
@@ -76,6 +77,9 @@ export default defineConfig(({ mode }) => {
     }
   }
   return {
+    // Published builds still verify package exports from dist. Serving source
+    // keeps package clean/build cycles out of a live development module graph.
+    resolve:command==='serve'&&!isPreview?{alias:workspaceSourceAliases(fileURLToPath(new URL('../..',import.meta.url)))}:undefined,
     define: { __SENSA_RELEASE__: JSON.stringify(release) },
     envDir: envDirectory,
     publicDir: "public",

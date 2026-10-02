@@ -13,10 +13,12 @@ type PoolOptions=Readonly<{
 
 type WorkerRequest=PoolOptions&Readonly<{
   requestId:string;
-  action:'createSentinel'|'initExpectedConflict'|'openAndRead'|'openAbruptly'|'holdSlots'|'probeSlots'|'releaseSlots';
+  action:'createSentinel'|'initExpectedConflict'|'openAndRead'|'openAbruptly'|'holdSlots'|'probeSlots'|'releaseSlots'|'damageDigest'|'restoreDigest'|'inspectFile'|'createEmptySlot';
   sentinelKey?:string;
   sentinelValue?:string;
   slotCount?:number;
+  fileName?:string;
+  originalByte?:number;
 }>;
 
 type ErrorDetails=Readonly<{
@@ -113,6 +115,53 @@ const poolOpaqueDirectory=async(directoryName:string):Promise<FileSystemDirector
     directory=await directory.getDirectoryHandle(segment);
   }
   return directory.getDirectoryHandle('.opaque');
+};
+
+const fileDigest=async(bytes:Uint8Array<ArrayBuffer>)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)))
+  .map(value=>value.toString(16).padStart(2,'0')).join('');
+
+/** Fault injection is limited to the isolated test pool and its named sentinel file. */
+const editDigest=async(request:WorkerRequest):Promise<unknown>=>{
+  const directory=await poolOpaqueDirectory(request.directory);
+  for await(const [name,entry] of directory.entries()){
+    if(entry.kind!=='file'||(request.fileName&&name!==request.fileName))continue;
+    const handle=await (entry as FileSystemFileHandle).createSyncAccessHandle();
+    try{
+      const header=new Uint8Array(524);
+      if(handle.read(header,{at:0})!==header.length)continue;
+      const pathEnd=header.subarray(0,512).indexOf(0);
+      const path=new TextDecoder().decode(header.subarray(0,pathEnd));
+      if(path!==request.databaseFile)continue;
+      const before=new Uint8Array(handle.getSize());
+      if(handle.read(before,{at:0})!==before.length)throw new Error('fixture_file_read_short');
+      const originalByte=request.action==='damageDigest'?header[516]!:request.originalByte;
+      if(originalByte===undefined||!Number.isInteger(originalByte)||originalByte<0||originalByte>255)throw new Error('fixture_original_byte_invalid');
+      if(request.action==='restoreDigest'&&header[516]!==((originalByte^1)&255))throw new Error('fixture_header_changed');
+      const value=request.action==='damageDigest'?originalByte^1:originalByte;
+      handle.write(Uint8Array.of(value),{at:516});handle.flush();
+      const after=before.slice();after[516]=value;
+      return {fileName:name,originalByte,size:before.length,beforeDigest:await fileDigest(before),afterDigest:await fileDigest(after)};
+    }finally{handle.close();}
+  }
+  throw new Error('fixture_database_file_missing');
+};
+
+const inspectFile=async(request:WorkerRequest):Promise<unknown>=>{
+  if(!request.fileName)throw new Error('fixture_file_name_missing');
+  const directory=await poolOpaqueDirectory(request.directory);
+  const file=await(await directory.getFileHandle(request.fileName)).getFile();
+  const bytes=new Uint8Array(await file.arrayBuffer());
+  let fileCount=0;for await(const [,entry] of directory.entries())if(entry.kind==='file')fileCount++;
+  return {size:file.size,digest:await fileDigest(bytes),fileCount};
+};
+
+/** Reproduce addCapacity() stopping between fresh file creation and its header write. */
+const createEmptySlot=async(request:WorkerRequest):Promise<unknown>=>{
+  const directory=await poolOpaqueDirectory(request.directory);
+  const fileName=`empty-${crypto.randomUUID()}`;
+  const file=await(await directory.getFileHandle(fileName,{create:true})).getFile();
+  if(file.size!==0)throw new Error('fixture_empty_slot_not_empty');
+  return {fileName,size:file.size};
 };
 
 const createSentinel=async(request:WorkerRequest):Promise<unknown>=>{
@@ -289,6 +338,9 @@ scope.addEventListener('message',(event:MessageEvent<WorkerRequest>)=>{
       case 'holdSlots':return holdSlots(request);
       case 'probeSlots':return probeSlots(request);
       case 'releaseSlots':return releaseHeldSlots();
+      case 'damageDigest':case 'restoreDigest':return editDigest(request);
+      case 'inspectFile':return inspectFile(request);
+      case 'createEmptySlot':return createEmptySlot(request);
     }
   })().then(
     value=>respond(request.requestId,true,value),
