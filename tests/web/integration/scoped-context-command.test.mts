@@ -9,6 +9,7 @@ import {MemoryJourneyRepository} from '../../../apps/web/src/experience/personal
 import {createJourneyModules} from '../../../apps/web/src/experience/personalMeaningJourney/gateway';
 import {createSeededClock} from '../../../apps/web/src/experience/personalMeaningJourney/ports';
 import {semanticLookupPayload,syntheticSemanticWorld,advanceSemanticHeads} from '../support/semanticLookupFixtures';
+import {manualMeaningPayload,newManualMeaningDraft} from '../../../apps/web/src/experience/intake/manualMeaning';
 
 test('cold Context and draft commands are bounded, replay-safe, isolated and atomic under foreign writes',async()=>{
  const compiled=await build({stdin:{contents:[
@@ -39,6 +40,26 @@ test('cold Context and draft commands are bounded, replay-safe, isolated and ato
   adapter.entriesPage=async(table:string,after:string|null,limit:number)=>{if(table.startsWith('semantic'))throw new Error('scoped command paged through the whole source');return entriesPage(table,after,limit);};
   adapter.get=async(table:string,key:string)=>{reads.push({table,key});return get(table,key);};
   const gateway=(repository:unknown=library,ids?:{next:()=>string})=>api.createJourneyModules({repository,ids,clock:createSeededClock('2026-10-04T00:00:00Z'),languages:{read:async()=>({targetLanguageTag:'en',supportLanguageTag:'zh-CN'})}}).personalMeaningJourney;
+  const intake=(repository:unknown=library)=>api.createJourneyModules({repository,clock:createSeededClock('2026-10-04T00:00:00Z')}).semanticIntake;
+  const manual=manualMeaningPayload({...newManualMeaningDraft(),context:'She backed out of the trip.',occurrence:'backed out',canonicalForm:'back out',languageTag:'en',expressionType:'phrase',meaning:'退出已承诺参加的活动。',usage:'答应参加活动后，改变主意不再参加。'});
+  reads.length=0;
+  const manualSaved=await intake().submit(manual);expect(manualSaved.route).toBe('fast_track');
+  expect(reads.filter(row=>row.table==='semanticMeanings').every(row=>row.key===manualSaved.personalMeaningId)).toBe(true);
+  expect(reads.filter(row=>row.table==='semanticRegistry').length).toBeLessThan(35);
+  reads.length=0;expect(await intake().submit(manual)).toEqual({...manualSaved,replayed:true});
+  expect(reads.some(row=>['semanticMeanings','semanticRegistry','semanticInbox','semanticDrafts'].includes(row.table))).toBe(false);
+  await expect(intake().submit({...manual,capturedAt:'2026-10-05T12:00:00Z'})).rejects.toThrow('operationId');
+  // Another contextual Meaning may reuse the exact immutable Sense/Expression/Binding tuple.
+  const again=await intake().submit({...manual,operationId:crypto.randomUUID()});
+  const firstManual=await api.worldReadRepository.detail(manualSaved.personalMeaningId),secondManual=await api.worldReadRepository.detail(again.personalMeaningId);
+  expect(secondManual.detail.directAlignments[0].senseId).toBe(firstManual.detail.directAlignments[0].senseId);
+  expect(secondManual.detail.directAlignments[0].confirmedBindings[0]).toMatchObject({surfaceForm:'back out'});
+  const commitManual=adapter.commit.bind(adapter),failedManual={...manual,operationId:crypto.randomUUID()};
+  adapter.commit=async(mutation:any)=>{if(mutation.puts.some((row:any)=>row.table==='semanticMeanings'))throw new Error('fixture-manual-write-failure');return commitManual(mutation);};
+  await expect(intake().submit(failedManual)).rejects.toThrow('storageWrite');adapter.commit=commitManual;
+  expect(await library.readReceipt(failedManual.operationId)).toBeNull();
+  expect((await intake().submit(failedManual)).route).toBe('fast_track');
+  reads.length=0;
   const input={operationId:crypto.randomUUID(),personalMeaningId:id,expectedRevision:1,blocks:[{kind:'text',bodyText:'saved without reading the other 999 Meanings'}]};
   const result=await gateway().reviseContext(input);
   expect(result).toMatchObject({revision:2,replayed:false});expect(reads.filter(row=>row.table==='semanticMeanings').every(row=>row.key===id)).toBe(true);expect(reads.filter(row=>row.table==='semanticMeanings').length).toBeLessThan(4);expect(reads.filter(row=>row.table==='semanticRegistry').length).toBeLessThan(30);
@@ -90,10 +111,17 @@ test('cold Context and draft commands are bounded, replay-safe, isolated and ato
    let entered=false,release!:()=>void;const held=new Promise<void>(resolve=>{release=resolve;});
    const intercept=(scoped:any)=>({...scoped,commit:async(change:unknown)=>{entered=true;await held;return scoped.commit(change);}});
    const repository={lookupMeanings:(query:string)=>library.lookupMeanings(query),readReceipt:(id:string)=>library.readReceipt(id),load:()=>library.load(),refresh:(state:unknown,scope:unknown)=>library.refresh(state,scope),commit:(change:unknown)=>library.commit(change),withMeaningCommand:(scope:unknown,ids:unknown,execute:any)=>library.withMeaningCommand(scope,ids,(scoped:any,assigned:unknown)=>execute(intercept(scoped),assigned)),withClarificationCommand:(scope:unknown,ids:unknown,execute:any)=>library.withClarificationCommand(scope,ids,(scoped:any,assigned:unknown)=>execute(intercept(scoped),assigned))};
-   return {gateway:gateway(repository),entered:()=>entered,release};
+   Object.assign(repository,{withIntakeCommand:(scope:unknown,ids:unknown,execute:any)=>library.withIntakeCommand(scope,ids,(scoped:any,assigned:unknown)=>execute(intercept(scoped),assigned))});
+   return {gateway:gateway(repository),intake:intake(repository),entered:()=>entered,release};
   };
   const wait=async(predicate:()=>boolean)=>{for(let attempt=0;attempt<2000&&!predicate();attempt++)await new Promise(resolve=>setTimeout(resolve,0));expect(predicate()).toBe(true);};
   const appendDraft=()=>gateway().createClarificationDraft({...draftInput,operationId:crypto.randomUUID()});
+  const racedManual=manualMeaningPayload({...newManualMeaningDraft(),context:'We called it off.',occurrence:'called it off',canonicalForm:'call off',languageTag:'en',expressionType:'phrase',meaning:'取消原计划的活动。',usage:'组织者决定不再举办原定活动。'});
+  const manualRace=hold(),manualWriting=manualRace.intake.submit(racedManual),manualRejected=expect(manualWriting).rejects.toThrow('meaningChanged');await wait(manualRace.entered);
+  const manualWinner=await intake().submit({...racedManual,operationId:crypto.randomUUID()});
+  manualRace.release();await manualRejected;expect(await library.readReceipt(racedManual.operationId)).toBeNull();
+  const manualRetry=await intake().submit(racedManual);expect(manualRetry.route).toBe('fast_track');expect(manualRetry.personalMeaningId).not.toBe(manualWinner.personalMeaningId);
+  expect((await api.worldReadRepository.detail(manualRetry.personalMeaningId)).detail.directAlignments[0].senseId).toBe((await api.worldReadRepository.detail(manualWinner.personalMeaningId)).detail.directAlignments[0].senseId);
   const raceDraft=await appendDraft(),raceInput=await confirmation(raceDraft.intakeId,crypto.randomUUID(),'a-foreign-concurrent-key');
   const race=hold(),raceWriting=race.gateway.completeClarificationDraft(raceInput),raceRejected=expect(raceWriting).rejects.toThrow('meaningChanged');await wait(race.entered);
   const winningDraft=await appendDraft(),winning=await gateway().completeClarificationDraft(await confirmation(winningDraft.intakeId,crypto.randomUUID(),'a-foreign-concurrent-key'));

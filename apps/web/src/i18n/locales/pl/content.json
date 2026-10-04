@@ -1,5 +1,33 @@
 {
+  "manualMeaning": {
+  "context": "Kontekst lub oryginalne zdanie",
+  "occurrence": "Wyrażenie w tekście (lub zaznacz powyżej)",
+  "chooseOccurrence": "Wybierz to wystąpienie",
+  "language": "Język wyrażenia",
+  "chooseLanguage": "Wybierz język",
+  "type": "Typ wyrażenia",
+  "meaning": "Znaczenie w tym kontekście",
+  "usage": "Typowa sytuacja dla tego znaczenia",
+  "canonical": "Forma podstawowa (opcjonalnie)",
+  "save": "Potwierdź i zapisz",
+  "saving": "Zapisywanie…",
+  "contextRequired": "Wpisz kontekst lub oryginalne zdanie.",
+  "occurrenceRequired": "Wskaż dokładną pozycję wyrażenia w kontekście.",
+  "languageRequired": "Wybierz język wyrażenia.",
+  "meaningRequired": "Wpisz znaczenie i typową sytuację.",
+  "invalid": "Sprawdź wpisaną treść.",
+  "draftError": "Nie można zapisać szkicu lokalnie. Pozostaw stronę otwartą i spróbuj ponownie.",
+  "saveError": "Nie udało się potwierdzić zapisu. Treść została zachowana; spróbuj ponownie.",
+  "types": {
+    "word": "Słowo",
+    "phrase": "Fraza",
+    "construction": "Konstrukcja",
+    "sentence": "Zdanie",
+    "utterance_strategy": "Strategia wypowiedzi"
+  }
+},
   "content": {
+    "manual": "Utwórz ręcznie",
     "findExpression": "Porozmawiaj z Sensa",
     "findExpressionHint": "Udostępnij tekst lub obrazy, aby wyjaśnić kontekst, znaczenie i wyrażenie",
     "graph": {

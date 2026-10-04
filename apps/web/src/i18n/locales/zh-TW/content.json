@@ -1,5 +1,33 @@
 {
+  "manualMeaning": {
+  "context": "情境或原句",
+  "occurrence": "原文中的表達（可在上方選取）",
+  "chooseOccurrence": "選擇這一次出現",
+  "language": "表達語言",
+  "chooseLanguage": "選擇語言",
+  "type": "表達類型",
+  "meaning": "這裡表達的意思",
+  "usage": "這個意思適用的典型場景",
+  "canonical": "表達原形（選填）",
+  "save": "確認並儲存",
+  "saving": "正在儲存…",
+  "contextRequired": "請填寫情境或原句。",
+  "occurrenceRequired": "請標出情境中這個表達的準確位置。",
+  "languageRequired": "請選擇表達的語言。",
+  "meaningRequired": "請填寫意思和典型使用場景。",
+  "invalid": "請檢查填寫的內容。",
+  "draftError": "暫時無法將草稿儲存到本機，請保留頁面後重試。",
+  "saveError": "未能確認儲存結果，內容已保留，請重試。",
+  "types": {
+    "word": "詞",
+    "phrase": "片語",
+    "construction": "句式",
+    "sentence": "句子",
+    "utterance_strategy": "表達策略"
+  }
+},
   "content": {
+    "manual": "手動建立",
     "findExpression": "和 Sensa 聊聊",
     "findExpressionHint": "傳送文字或圖片，一起澄清場景、意思和表達",
     "graph": {

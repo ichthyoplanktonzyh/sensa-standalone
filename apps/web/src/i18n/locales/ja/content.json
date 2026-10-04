@@ -1,5 +1,33 @@
 {
+  "manualMeaning": {
+  "context": "状況または原文",
+  "occurrence": "原文中の表現（上で選択も可能）",
+  "chooseOccurrence": "該当する箇所を選択",
+  "language": "表現の言語",
+  "chooseLanguage": "言語を選択",
+  "type": "表現の種類",
+  "meaning": "この文脈での意味",
+  "usage": "この意味を使う典型的な場面",
+  "canonical": "基本形（任意）",
+  "save": "確認して保存",
+  "saving": "保存中…",
+  "contextRequired": "状況または原文を入力してください。",
+  "occurrenceRequired": "文脈内の表現の正確な位置を指定してください。",
+  "languageRequired": "表現の言語を選択してください。",
+  "meaningRequired": "意味と典型的な場面を入力してください。",
+  "invalid": "入力内容を確認してください。",
+  "draftError": "下書きを端末に保存できません。ページを開いたまま再試行してください。",
+  "saveError": "保存結果を確認できませんでした。内容は保持されています。再試行してください。",
+  "types": {
+    "word": "単語",
+    "phrase": "句",
+    "construction": "構文",
+    "sentence": "文",
+    "utterance_strategy": "発話方略"
+  }
+},
   "content": {
+    "manual": "手動で作成",
     "findExpression": "Sensaに相談",
     "findExpressionHint": "テキストや画像を共有して、文脈・意味・表現を明確にする",
     "graph": {

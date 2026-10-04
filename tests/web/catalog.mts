@@ -193,6 +193,7 @@ const fastBeforeMemory = [
 ] as const;
 
 const fastWithMemory = [
+  'integration/manual-meaning',
   'integration/scoped-context-command',
   'integration/semantic-lookup-storage',
   'unit/version-store',
@@ -270,6 +271,7 @@ const playwrightPaths = new Set<string>([
 ]);
 
 const durabilityTests = new Set<string>([
+  'integration/manual-meaning',
   'browser/extension-intake-journey',
   'integration/scoped-context-command',
   'unit/personal-learning-batch',

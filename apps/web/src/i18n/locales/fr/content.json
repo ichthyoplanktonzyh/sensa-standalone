@@ -1,5 +1,33 @@
 {
+  "manualMeaning": {
+  "context": "Contexte ou phrase originale",
+  "occurrence": "Expression dans le texte (ou sélectionnez-la ci-dessus)",
+  "chooseOccurrence": "Choisir cette occurrence",
+  "language": "Langue de l’expression",
+  "chooseLanguage": "Choisir une langue",
+  "type": "Type d’expression",
+  "meaning": "Sens dans ce contexte",
+  "usage": "Situation typique pour ce sens",
+  "canonical": "Forme de base (facultatif)",
+  "save": "Confirmer et enregistrer",
+  "saving": "Enregistrement…",
+  "contextRequired": "Saisissez un contexte ou une phrase originale.",
+  "occurrenceRequired": "Repérez précisément l’expression dans le contexte.",
+  "languageRequired": "Choisissez la langue de l’expression.",
+  "meaningRequired": "Saisissez le sens et une situation typique.",
+  "invalid": "Vérifiez le contenu saisi.",
+  "draftError": "Impossible d’enregistrer le brouillon localement. Gardez cette page ouverte et réessayez.",
+  "saveError": "Enregistrement non confirmé. Le contenu est conservé ; réessayez.",
+  "types": {
+    "word": "Mot",
+    "phrase": "Locution",
+    "construction": "Construction",
+    "sentence": "Phrase",
+    "utterance_strategy": "Stratégie d’expression"
+  }
+},
   "content": {
+    "manual": "Créer manuellement",
     "findExpression": "Parler à Sensa",
     "findExpressionHint": "Partagez du texte ou des images pour clarifier le contexte, le sens et l’expression",
     "graph": {

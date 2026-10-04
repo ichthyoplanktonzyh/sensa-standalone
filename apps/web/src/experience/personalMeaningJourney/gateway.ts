@@ -17,32 +17,13 @@
 
 import type {
   IngestResult,
-  SensaConfirmExpressionBindingFact,
-  SensaConfirmSenseProposalFact,
-  SensaExpressionBindingRelation,
-  SensaExpressionSnapshot,
-  SensaExpressionType,
-  SensaExpressionVersionSnapshot,
   SensaIntakeAcceptance,
   SensaIntakeContext,
   SensaIntakeItem,
   SensaIntakePayload,
-  SensaMeaningFocusAcceptanceFact,
-  SensaPersonalExpressionAnchorRevisionSnapshot,
-  SensaPersonalExpressionAnchorSnapshot,
-  SensaPersonalMeaningAlignmentEvent,
-  SensaPersonalMeaningAlignmentSnapshot,
-  SensaPersonalMeaningRevisionSnapshot,
   SensaSemanticAcceptanceAuthority,
-  SensaSemanticCoverage,
-  SensaSenseExpressionBindingSnapshot,
-  SensaSenseExpressionBindingVersionSnapshot,
-  SensaSenseProposalVersionSnapshot,
-  SensaSenseSemanticSpec,
-  SensaSenseSnapshot,
-  SensaSenseVersionSnapshot,
 } from '@sensa/contracts/sensa';
-import { publishedLearningSemanticFactsSchema, sensaIntakeContextSchema, sensaIntakePayloadSchema, sensaIntakeSenseSchema, sensaPinnedLanguageContextSchema } from '@sensa/contracts/sensa';
+import { sensaIntakeContextSchema, sensaIntakePayloadSchema, sensaIntakeSenseSchema } from '@sensa/contracts/sensa';
 import type {
   DismissSemanticIntakeCommand,
   ResolveSemanticIntakeCommand,
@@ -58,6 +39,11 @@ import {
   type IntakeEnginePorts,
 } from './intakeEngine';
 import { digestOf } from './digest';
+import {appendMaterialAnchor,createPersonalMeaningFacts} from './materialFacts';
+import {applyClarificationFacts} from './clarificationFacts';
+import {installPublishedLearningFacts,learningSceneAnchorRevision} from './publishedSceneFacts';
+import {settleExpressionBinding} from './expressionBindingFacts';
+import {appendMeaningRevision} from './meaningRecords';
 import {assertClarificationSource,sourceWitnessFromState,sameClarificationSource,ClarificationSourceChangedError,type ClarificationSourceKind,type ClarificationSourceWitness} from './clarificationSource';
 import { cryptoRandomIdPort, isUuid, type RandomIdPort } from './ids';
 import {
@@ -111,9 +97,6 @@ import type {
   ReviseContextResult,
 } from './types';
 
-const PSW = 'sensa-personal-semantic-world-v3' as const;
-const REG = 'sensa-semantic-registry-v1' as const;
-const SPEC_SCHEMA = 'sensa-sense-semantic-spec-v1' as const;
 const LEARNER_USER_ID = 'sensa-local-learner';
 
 /**
@@ -126,15 +109,6 @@ const localLearnerLanguages: LearnerLanguagePort = {
     return (await languageRoutesSnapshot()).context;
   },
 };
-
-type PersonalProvenanceKind =
-  SensaPersonalMeaningRevisionSnapshot['provenance']['kind'];
-type PersonalExpressionVerificationStatus =
-  SensaPersonalExpressionAnchorRevisionSnapshot['verificationStatus'];
-type SemanticGeneratorProvenance = NonNullable<
-  SensaSenseVersionSnapshot['provenance']['generator']
->;
-type ProposalGeneratorProvenance = SensaSenseProposalVersionSnapshot['generatorProvenance'];
 
 export interface JourneyGatewayStatus {
   ok: boolean;
@@ -229,8 +203,6 @@ const localSemanticAcceptanceAuthority: SemanticAcceptanceAuthorityPort = {
   },
 };
 
-const last = <T>(items: T[]): T | undefined => items[items.length - 1];
-
 const createJourneyDraft = (state: JourneyState): JourneyState => ({
   ...state,
   meanings: [...state.meanings],
@@ -245,33 +217,6 @@ const createJourneyDraft = (state: JourneyState): JourneyState => ({
   inboxItems: [...state.inboxItems],
   clarificationDrafts: [...state.clarificationDrafts],
   commandReceipts: [...state.commandReceipts],
-});
-
-const normalizedForm = (surfaceForm: string, languageTag: string): string =>
-  surfaceForm.trim().toLocaleLowerCase(languageTag);
-
-const contextProvenanceKind = (
-  context: SensaIntakeContext | null | undefined,
-): PersonalProvenanceKind => context?.source?.client === 'sensa-web' || !context?.source
-  ? 'learner_authored'
-  : 'imported';
-
-const cleanNotes = (notes: string[] | undefined): string[] =>
-  (notes ?? []).map((note) => note.trim()).filter(Boolean);
-
-const cloneSpec = (spec: SensaSenseSemanticSpec): SensaSenseSemanticSpec => ({
-  schemaVersion: SPEC_SCHEMA,
-  coreMeaningFocus: spec.coreMeaningFocus,
-  prototypeScenes: spec.prototypeScenes.map((scene) => ({
-    summary: scene.summary,
-    participantRoles: [...scene.participantRoles],
-    states: [...scene.states],
-    directionOrCausality: scene.directionOrCausality,
-  })),
-  includedCases: [...spec.includedCases],
-  excludedCases: [...spec.excludedCases],
-  neighborContrasts: spec.neighborContrasts.map((contrast) => ({ ...contrast })),
-  openQuestions: [...spec.openQuestions],
 });
 
 const errorStatus = (cause: unknown): JourneyGatewayStatus => {
@@ -660,110 +605,6 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
     return record;
   }
 
-  private activeExpressionAnchors(record: MeaningJourneyRecord) {
-    return record.personalExpressionAnchors.filter((anchor) => anchor.status === 'active');
-  }
-
-  private currentExpressionAnchorRevision(
-    record: MeaningJourneyRecord,
-    anchor: SensaPersonalExpressionAnchorSnapshot,
-  ): SensaPersonalExpressionAnchorRevisionSnapshot | null {
-    return record.personalExpressionAnchorRevisions.find(
-      (revision) =>
-        revision.personalExpressionAnchorId === anchor.personalExpressionAnchorId
-        && revision.revision === anchor.currentRevision,
-    ) ?? null;
-  }
-
-  private activeSourceExpressionAnchors(record: MeaningJourneyRecord) {
-    const boundRevisions=new Set([
-      ...record.bindingConfirmations.map(fact=>fact.personalExpressionAnchorRevisionId),
-      ...record.semanticAcceptances.map(fact=>fact.personalExpressionAnchorRevisionId),
-    ]);
-    return this.activeExpressionAnchors(record).filter((anchor) => {
-      const revision=this.currentExpressionAnchorRevision(record,anchor);
-      return revision!==null&&!boundRevisions.has(revision.personalExpressionAnchorRevisionId);
-    });
-  }
-
-  private activeExperienceAnchors(record: MeaningJourneyRecord) {
-    return record.personalSemanticAnchors.filter((anchor) => anchor.status === 'active');
-  }
-
-  private displayLabel(record: MeaningJourneyRecord): string | null {
-    const familiar = this.activeSourceExpressionAnchors(record)
-      .map((anchor) => record.personalExpressionAnchorRevisions.find(
-        (revision) =>
-          revision.personalExpressionAnchorId === anchor.personalExpressionAnchorId
-          && revision.revision === anchor.currentRevision,
-      )?.surfaceForm)
-      .find(Boolean);
-    if (familiar) return familiar;
-    const experience = this.activeExperienceAnchors(record)
-      .map((anchor) => record.personalSemanticAnchorRevisions.find(
-        (revision) =>
-          revision.personalSemanticAnchorId === anchor.personalSemanticAnchorId
-          && revision.revision === anchor.currentRevision,
-      )?.bodyText)
-      .find(Boolean);
-    if (!experience) return null;
-    return experience.length > 24 ? `${experience.slice(0, 24)}…` : experience;
-  }
-
-  private latestMeaningRevision(record: MeaningJourneyRecord) {
-    return record.personalMeaningRevisions.find(
-      (revision) => revision.revision === record.personalMeaning.currentRevision,
-    ) ?? last(record.personalMeaningRevisions);
-  }
-
-  private appendMeaningRevision(
-    record: MeaningJourneyRecord,
-    operationId: string,
-    sourceReferenceIds: string[],
-  ): string {
-    const nextRevision = record.personalMeaning.currentRevision + 1;
-    const revisionId = this.id();
-    const now = this.now();
-    record.personalMeaning.currentRevision = nextRevision;
-    record.personalMeaning.updatedAt = now;
-    record.personalMeaningRevisions.push({
-      contractVersion: PSW,
-      personalMeaningRevisionId: revisionId,
-      personalMeaningId: record.personalMeaning.personalMeaningId,
-      revision: nextRevision,
-      displayLabel: this.displayLabel(record),
-      learnerIntentNote: this.latestMeaningRevision(record)?.learnerIntentNote ?? null,
-      provenance: {
-        kind: 'learner_authored',
-        sourceReferenceIds: sourceReferenceIds.length > 0
-          ? sourceReferenceIds
-          : [record.personalMeaning.personalMeaningId],
-        createdByOperationId: operationId,
-      },
-      createdAt: now,
-    });
-    return revisionId;
-  }
-
-  private buildSemanticSpec(proposal: {
-    coreMeaningFocus: string;
-    prototypeScenes: SensaSenseSemanticSpec['prototypeScenes'];
-    includedCases: string[];
-    excludedCases: string[];
-    neighborContrasts: SensaSenseSemanticSpec['neighborContrasts'];
-    openQuestions: string[];
-  }): SensaSenseSemanticSpec {
-    return cloneSpec({
-      schemaVersion: SPEC_SCHEMA,
-      coreMeaningFocus: proposal.coreMeaningFocus,
-      prototypeScenes: proposal.prototypeScenes,
-      includedCases: proposal.includedCases,
-      excludedCases: proposal.excludedCases,
-      neighborContrasts: proposal.neighborContrasts,
-      openQuestions: proposal.openQuestions,
-    });
-  }
-
   // -- queries -------------------------------------------------------------
 
   private lookupFactsUnchanged(state:JourneyState):boolean{
@@ -896,85 +737,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
 
   // -- material ------------------------------------------------------------
 
-  /**
-   * Append one material block as its own Semantic Anchor, so it can be
-   * referenced independently of the other blocks.
-   */
-  private appendMaterialAnchor(
-    record: MeaningJourneyRecord,
-    operationId: string,
-    block: MaterialBlockInput,
-    intake: SensaIntakePayload | null = null,
-    completedContext: SensaIntakeContext | null = intake?.context ?? null,
-  ): { anchorId: string; anchorRevisionId: string } {
-    const now = this.now();
-    const anchorId = this.id();
-    const anchorRevisionId = this.id();
-    const isImage = block.kind === 'image';
-    const bodyText = block.bodyText?.trim() ?? '';
-    if (isImage) {
-      if (!block.personalMediaObjectId) {
-        throw new Error('图片材料块必须引用本地媒体对象。');
-      }
-    } else if (!bodyText) {
-      throw new Error('文字材料块不能为空。');
-    }
-    record.personalSemanticAnchors.push({
-      contractVersion: PSW,
-      personalSemanticAnchorId: anchorId,
-      personalMeaningId: record.personalMeaning.personalMeaningId,
-      currentRevision: 1,
-      lifecycleRevision: 1,
-      status: 'active',
-      createdAt: now,
-      updatedAt: now,
-      deletedAt: null,
-      deletedByOperationId: null,
-    });
-    record.personalSemanticAnchorRevisions.push({
-      contractVersion: PSW,
-      personalSemanticAnchorRevisionId: anchorRevisionId,
-      personalSemanticAnchorId: anchorId,
-      revision: 1,
-      anchorKind: isImage ? 'image' : 'text',
-      languageTag: isImage ? null : completedContext?.languageTag ?? null,
-      bodyText: isImage ? null : bodyText,
-      personalMediaObjectId: isImage ? block.personalMediaObjectId! : null,
-      structuredPayload: intake ? {
-        intake: {
-          contractVersion: intake.contractVersion,
-          operationId: intake.operationId,
-          capturedAt: intake.capturedAt,
-          contextSource: intake.context?.source ?? null,
-          contextLanguageTag: intake.context?.languageTag ?? null,
-          contextLanguageObservation:intake.context?.languageObservation??null,
-          mediaReferenceIds: intake.context?.mediaReferenceIds ?? [],
-          completedContextSource: completedContext?.source ?? null,
-          completedContextLanguageTag: completedContext?.languageTag ?? null,
-          completedContextLanguageObservation:completedContext?.languageObservation??null,
-          expression: intake.expression,
-          contextText: intake.context?.textSegment ?? null,
-          senseCandidate: intake.sense,
-          submittedAcceptance: intake.acceptance,
-        },
-      } : {},
-      provenance: {
-        kind: contextProvenanceKind(completedContext),
-        sourceReferenceIds: intake
-          ? [
-              intake.operationId,
-              intake.context?.source?.sourceReferenceId,
-              completedContext?.source?.sourceReferenceId,
-            ]
-            .filter((value): value is string => Boolean(value))
-          : [anchorId],
-        createdByOperationId: operationId,
-      },
-      createdAt: now,
-    });
-    return { anchorId, anchorRevisionId };
-  }
-
+  /** Save unconfirmed material in the Inbox; this does not accept a Meaning. */
   async createClarificationDraft(
     input: CreatePersonalMeaningInput,
   ): Promise<CreateClarificationDraftResult> {
@@ -1104,214 +867,11 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
       );
       if (replay) return replay;
     }
-    const state = this.requireState();
-    const familiarSurface = input.familiarExpression?.surfaceForm.trim() ?? '';
-    if (input.familiarExpression && !familiarSurface) {
-      throw new Error('熟悉表达不能为空。');
-    }
-    const blocks = input.blocks ?? [];
-    if (blocks.length === 0 && !familiarSurface) {
-      throw new Error('个人意义至少需要一个材料块或一个熟悉表达。');
-    }
-
-    // Read once, before any fact exists: this creation operation uses one
-    // resolved language context throughout.
-    const languages = options.languageContext ?? await this.deps.languages.read();
-    const personalMeaningId = this.id();
-    const personalMeaningRevisionId = this.id();
-    const now = this.now();
-    const familiarExpressionAnchorId = familiarSurface ? this.id() : null;
-    const familiarExpressionAnchorRevisionId = familiarSurface ? this.id() : null;
-
-    const firstText = blocks.find((block) => block.kind === 'text')?.bodyText?.trim() ?? '';
-    const record: MeaningJourneyRecord = {
-      personalMeaning: {
-        contractVersion: PSW,
-        personalMeaningId,
-        learnerUserId: LEARNER_USER_ID,
-        currentRevision: 1,
-        lifecycleRevision: 1,
-        status: 'active',
-        createdAt: now,
-        updatedAt: now,
-        deletedAt: null,
-        deletedByOperationId: null,
-      },
-      personalMeaningRevisions: [],
-      personalSemanticAnchors: [],
-      personalSemanticAnchorRevisions: [],
-      personalExpressionAnchors: [],
-      personalExpressionAnchorRevisions: [],
-      focuses: [],
-      focusRevisions: [],
-      focusAcceptances: [],
-      constructions: [],
-      constructionTurns: [],
-      proposals: [],
-      proposalVersions: [],
-      senseConfirmations: [],
-      semanticAcceptances: [],
-      alignments: [],
-      alignmentEvents: [],
-      bindingConfirmations: [],
-      mockState: {
-        focusAspectLabels: {},
-        startingPoint: input.startingPoint ?? null,
-      },
-    };
-
-    if (familiarSurface && familiarExpressionAnchorId && familiarExpressionAnchorRevisionId) {
-      record.personalExpressionAnchors.push({
-        contractVersion: PSW,
-        personalExpressionAnchorId: familiarExpressionAnchorId,
-        personalMeaningId,
-        currentRevision: 1,
-        lifecycleRevision: 1,
-        status: 'active',
-        createdAt: now,
-        updatedAt: now,
-        deletedAt: null,
-        deletedByOperationId: null,
-      });
-      record.personalExpressionAnchorRevisions.push({
-        contractVersion: PSW,
-        personalExpressionAnchorRevisionId: familiarExpressionAnchorRevisionId,
-        personalExpressionAnchorId: familiarExpressionAnchorId,
-        revision: 1,
-        // Provisional classification: the composer deliberately does not ask
-        // for one, and the model refines it during clarification.
-        expressionType: 'phrase',
-        languageTag: languages.supportLanguageTag,
-        surfaceForm: familiarSurface,
-        normalizedForm: normalizedForm(familiarSurface, languages.supportLanguageTag),
-        contextAnchorRevisionId: null,
-        occurrence: null,
-        provenanceKind: 'learner_authored',
-        verificationStatus: 'unverified',
-        provenance: {
-          kind: 'learner_authored',
-          sourceReferenceIds: [familiarExpressionAnchorId],
-          createdByOperationId: input.operationId,
-        },
-        createdAt: now,
-      });
-    }
-    const blockAnchors = blocks.map((block,index) => {
-      const sourceText=index===0&&block.kind==='text'?options.intake?.context?.textSegment:null;
-      const rewritten=Boolean(sourceText&&sourceText!==block.bodyText?.trim());
-      const original=this.appendMaterialAnchor(record,input.operationId,
-        rewritten?{...block,bodyText:sourceText!}:block,options.intake??null,
-        rewritten?options.intake!.context:options.completedContext??options.intake?.context??null,
-      );
-      if(rewritten){
-        const sourceRevision=record.personalSemanticAnchorRevisions.find(row=>row.personalSemanticAnchorRevisionId===original.anchorRevisionId)!;
-        const anchor=record.personalSemanticAnchors.find(row=>row.personalSemanticAnchorId===original.anchorId)!;
-        const now=this.now();
-        // Preserve the captured version for occurrence locators. The accepted
-        // clarified Context is a new revision, never a replacement of its source.
-        record.personalSemanticAnchorRevisions.push({
-          ...sourceRevision,personalSemanticAnchorRevisionId:this.id(),revision:2,
-          bodyText:block.bodyText!.trim(),languageTag:options.completedContext?.languageTag??null,
-          structuredPayload:{...sourceRevision.structuredPayload,intake:{
-            ...(sourceRevision.structuredPayload.intake as Record<string,unknown>),
-            completedContextSource:options.completedContext?.source??null,
-            completedContextLanguageTag:options.completedContext?.languageTag??null,
-            completedContextLanguageObservation:options.completedContext?.languageObservation??null,
-          }},provenance:{...sourceRevision.provenance,
-            kind:options.contextWordingSource??sourceRevision.provenance.kind,
-            sourceReferenceIds:[sourceRevision.personalSemanticAnchorRevisionId],
-          },createdAt:now,
-        });
-        anchor.currentRevision=2;anchor.updatedAt=now;
-      }
-      return original;
-    });
-
-    // A captured Expression belongs to the same Context even while its Sense
-    // is unresolved. Preserve the exact occurrence as an unverified source
-    // Anchor; learner confirmation later promotes this Anchor instead of
-    // manufacturing a source-less duplicate.
-    const capturedExpression = options.intake?.expression;
-    const capturedLocator=capturedExpression?.occurrence?.locator;
-    const capturedContextAnchor=capturedLocator?.kind==='media_region'
-      ? blockAnchors[blocks.findIndex(block=>block.personalMediaObjectId===capturedLocator.mediaReferenceId)]
-      : blockAnchors[0];
-    let capturedExpressionAnchorId: string | null = null;
-    if (
-      capturedExpression?.occurrence
-      && capturedExpression.languageTag
-      && capturedContextAnchor
-    ) {
-      const anchorId = this.id();
-      const anchorRevisionId = this.id();
-      capturedExpressionAnchorId = anchorId;
-      const sourceKind = contextProvenanceKind(
-        options.completedContext ?? options.intake?.context,
-      );
-      record.personalExpressionAnchors.push({
-        contractVersion: PSW,
-        personalExpressionAnchorId: anchorId,
-        personalMeaningId,
-        currentRevision: 1,
-        lifecycleRevision: 1,
-        status: 'active',
-        createdAt: now,
-        updatedAt: now,
-        deletedAt: null,
-        deletedByOperationId: null,
-      });
-      record.personalExpressionAnchorRevisions.push({
-        contractVersion: PSW,
-        personalExpressionAnchorRevisionId: anchorRevisionId,
-        personalExpressionAnchorId: anchorId,
-        revision: 1,
-        expressionType: capturedExpression.expressionTypeHint ?? 'word',
-        languageTag: capturedExpression.languageTag,
-        surfaceForm: capturedExpression.surfaceForm,
-        normalizedForm: normalizedForm(capturedExpression.surfaceForm, capturedExpression.languageTag),
-        contextAnchorRevisionId: capturedContextAnchor.anchorRevisionId,
-        occurrence: capturedExpression.occurrence.locator,
-        provenanceKind: sourceKind,
-        verificationStatus: 'unverified',
-        provenance: {
-          kind: sourceKind,
-          sourceReferenceIds: [options.intake!.operationId],
-          createdByOperationId: input.operationId,
-        },
-        createdAt: now,
-      });
-    }
-
-    record.personalMeaningRevisions.push({
-      contractVersion: PSW,
-      personalMeaningRevisionId,
-      personalMeaningId,
-      revision: 1,
-      displayLabel: familiarSurface
-        || (firstText.length > 24 ? `${firstText.slice(0, 24)}…` : firstText)
-        || '我的个人意义',
-      learnerIntentNote: null,
-      provenance: {
-        kind: 'learner_authored',
-        sourceReferenceIds: [
-          familiarExpressionAnchorId,
-          ...blockAnchors.map((anchor) => anchor.anchorId),
-          capturedExpressionAnchorId,
-        ].filter((id): id is string => id !== null),
-        createdByOperationId: input.operationId,
-      },
-      createdAt: now,
-    });
-
-    state.meanings.push(record);
-    const result = {
-      personalMeaningId,
-      personalMeaningRevisionId,
-      familiarExpressionAnchorId,
-    };
-    if (receipt) this.recordReceipt(input.operationId, 'CreatePersonalMeaning', result,digestOf(input));
-    if (persist) await this.persist();
-    return { ...result, replayed: false };
+    const languages=options.languageContext??await this.deps.languages.read();
+    const result=createPersonalMeaningFacts(this.requireState(),this.enginePorts(),input,languages,options);
+    if(receipt)this.recordReceipt(input.operationId,'CreatePersonalMeaning',result,digestOf(input));
+    if(persist)await this.persist();
+    return {...result,replayed:false};
   }
 
   async addMaterialBlock(input: AddMaterialBlockInput): Promise<AddMaterialBlockResult> {
@@ -1323,12 +883,12 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
     const replay = await this.replay<AddMaterialBlockResult>(input.operationId, 'AddMaterialBlock',digestOf(input));
     if (replay) return replay;
     const record = this.requireRecord(input.personalMeaningId);
-    const { anchorId } = this.appendMaterialAnchor(
+    const { anchorId } = appendMaterialAnchor(this.enginePorts(),
       record,
       input.operationId,
       input.block,
     );
-    this.appendMeaningRevision(record, input.operationId, [anchorId]);
+    appendMeaningRevision(this.enginePorts(),record, input.operationId, [anchorId]);
     const result = { anchorId };
     this.recordReceipt(input.operationId, 'AddMaterialBlock', result,digestOf(input));
     await this.persist();
@@ -1373,12 +933,12 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
           anchor.deletedAt = now;
           anchor.deletedByOperationId = input.operationId;
         });
-      const anchorIds = input.blocks.map((block) => this.appendMaterialAnchor(
+      const anchorIds = input.blocks.map((block) => appendMaterialAnchor(this.enginePorts(),
         record,
         input.operationId,
         block,
       ).anchorId);
-      const personalMeaningRevisionId = this.appendMeaningRevision(
+      const personalMeaningRevisionId = appendMeaningRevision(this.enginePorts(),
         record,
         input.operationId,
         anchorIds,
@@ -1401,368 +961,21 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
     return this.exclusive(() => this.writeClarification(input),true);
   }
 
-  private async writeClarification(
-    input: ConfirmClarificationInput,
-    options: { persist?: boolean; receipt?: boolean } = {},
-  ): Promise<ConfirmClarificationResult> {
-    const { persist = true, receipt = true } = options;
-    if (receipt) {
-      const replay = await this.replay<ConfirmClarificationResult>(
-        input.operationId,
-        'ConfirmClarification',
-        digestOf(input),
-      );
-      if (replay) return replay;
+  private async writeClarification(input:ConfirmClarificationInput,options:{persist?:boolean;receipt?:boolean}={}):Promise<ConfirmClarificationResult>{
+    const {persist=true,receipt=true}=options;
+    if(receipt){
+      const replay=await this.replay<ConfirmClarificationResult>(input.operationId,'ConfirmClarification',digestOf(input));
+      if(replay)return replay;
       await this.requireClarificationSource(input.source,'personal_meaning',input.personalMeaningId);
     }
-    const state = this.requireState();
-    const record = this.requireRecord(input.personalMeaningId);
-    const languages = sensaPinnedLanguageContextSchema.parse(input.languageContext);
-
-    // Validate the whole intent before writing any fact: a rejected step must
-    // leave the store exactly as it was.
-    const focusInput = input.focus ?? null;
-    const statement = focusInput?.statement.trim() ?? '';
-    if (focusInput && !statement) throw new Error('表达侧面陈述不能为空。');
-    const notes = focusInput ? cleanNotes(focusInput.distinguishingNotes) : [];
-    const aspectLabel = focusInput?.aspectLabel.trim() ?? '';
-    const senseKey = input.sense.proposedSenseKey.trim();
-    if (!senseKey) throw new Error('稳定意思缺少可复用的语义 key。');
-    if (!input.sense.coreMeaningFocus.trim()) throw new Error('稳定意思不能为空。');
-    if (input.sense.prototypeScenes.length === 0) {
-      throw new Error('稳定意思至少需要一个原型场景。');
-    }
-    if (!input.semanticPolicyVersion.trim()) throw new Error('缺少语义策略版本。');
-    const semanticSpec = this.buildSemanticSpec(input.sense);
-    const reused = input.sense.reuseSense
-      ? this.confirmedMeaningLookup().resolve(input.sense.reuseSense) : null;
-    if (input.sense.reuseSense && (!reused || reused.senseKey !== senseKey
-      || digestOf(reused.semanticSpec) !== digestOf(semanticSpec))) {
-      throw new Error('要复用的已确认意思已变化，或与当前审阅的语义不一致。请重新澄清。');
-    }
-    if(reused)this.transaction!.preconditions.push(...this.confirmedMeaningLookup().confirmationConditions(input.sense.reuseSense!));
-    const existingSense = state.registry.senses.find((sense) => sense.senseKey === senseKey);
-    if (!reused && existingSense) {
-      throw new Error('这个语义 key 已存在；复用必须明确选择已确认的 Sense Version，不能只按 key 自动匹配。请重新澄清。');
-    }
-    const provenance = input.provenance;
-    if (!provenance.provider.trim() || !provenance.model.trim() || !provenance.promptVersion.trim()) {
-      throw new Error('缺少模型来源信息。');
-    }
-    const expressionInput = input.expression
-      ? (() => {
-          const surfaceForm = input.expression!.surfaceForm.trim();
-          if (!surfaceForm) throw new Error('目标表达不能为空。');
-          const languageTag = input.expression!.languageTag.trim();
-          if (!languageTag) throw new Error('目标表达必须带语言标签。');
-          if (input.confirmExpression) {
-            if (!['realizes', 'approximates', 'evokes'].includes(input.expression!.relation)) {
-              throw new Error('请明确选择目标表达与 Sense 的关系。');
-            }
-            if (!['exact', 'broader', 'narrower', 'overlapping'].includes(input.expression!.semanticCoverage)) {
-              throw new Error('请明确选择目标表达的语义覆盖范围。');
-            }
-          }
-          return {
-            surfaceForm,
-            languageTag,
-            expressionType: input.expression!.expressionType,
-            relation: input.expression!.relation,
-            semanticCoverage: input.expression!.semanticCoverage,
-          };
-        })()
-      : null;
-    if (!focusInput && (!expressionInput || !input.confirmExpression)) {
-      throw new Error('无需 Focus 的语义条目必须同时确认 Context、Sense 与 Expression。');
-    }
-
-    const now = this.now();
-    const personalMeaningRevision = this.latestMeaningRevision(record);
-    if (!personalMeaningRevision) throw new Error('个人意义修订不存在，无法确认。');
-
-    // 1) A Meaning Focus exists only when this Context needed an explicit
-    //    aspect boundary. Clear contexts proceed directly to Sense construction.
-    const meaningFocusId = focusInput ? this.id() : null;
-    const meaningFocusRevisionId = focusInput ? this.id() : null;
-    if (focusInput && meaningFocusId && meaningFocusRevisionId) {
-      record.focuses.push({
-        contractVersion: PSW,
-        meaningFocusId,
-        personalMeaningId: input.personalMeaningId,
-        splitFromMeaningFocusId: null,
-        currentRevision: 1,
-        acceptedRevision: 1,
-        lifecycleRevision: 1,
-        status: 'active',
-        createdAt: now,
-        updatedAt: now,
-        deletedAt: null,
-        deletedByOperationId: null,
-      });
-      record.focusRevisions.push({
-        contractVersion: PSW,
-        meaningFocusRevisionId,
-        meaningFocusId,
-        revision: 1,
-        statement,
-        distinguishingNotes: notes,
-        provenance: {
-          kind: 'learner_authored',
-          sourceReferenceIds: [input.personalMeaningId],
-          createdByOperationId: input.operationId,
-        },
-        createdAt: now,
-      });
-      const acceptance: SensaMeaningFocusAcceptanceFact = {
-        contractVersion: PSW,
-        meaningFocusAcceptanceId: this.id(),
-        meaningFocusId,
-        meaningFocusRevisionId,
-        operationId: input.operationId,
-        acceptedAt: now,
-      };
-      record.focusAcceptances.push(acceptance);
-      if (aspectLabel) record.mockState.focusAspectLabels[meaningFocusId] = aspectLabel;
-    }
-
-    // 2) The transcript becomes the authoritative Construction turns.
-    const senseConstructionId = this.id();
-    record.constructions.push({
-      contractVersion: PSW,
-      senseConstructionId,
-      learnerUserId: LEARNER_USER_ID,
-      personalMeaningId: input.personalMeaningId,
-      personalMeaningRevisionId: personalMeaningRevision.personalMeaningRevisionId,
-      meaningFocusId,
-      meaningFocusRevisionId,
-      languageContext:languages,
-      semanticPolicyVersion: input.semanticPolicyVersion,
-      status: 'completed',
-      revision: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
-    input.transcript.forEach((message, index) => {
-      const modelProvenance = message.role === 'learner'
-        ? null
-        : {
-            provider: provenance.provider,
-            model: provenance.model,
-            promptVersion: provenance.promptVersion,
-          };
-      record.constructionTurns.push({
-        contractVersion: PSW,
-        constructionTurnId: this.id(),
-        senseConstructionId,
-        ordinal: index + 1,
-        actor: message.role === 'learner' ? 'learner' : 'semantic_llm',
-        body: message.body,
-        inputDigest: null,
-        outputDigest: digestOf(message.body),
-        modelProvenance,
-        occurredAt: message.occurredAt,
-      });
-    });
-
-    // 3) The proposal version carries the semantic spec and, when the panel
-    //    had one, the expression candidate. Recording a candidate is
-    //    provenance, never confirmation.
-    const senseProposalId = this.id();
-    const senseProposalVersionId = this.id();
-    const generator: ProposalGeneratorProvenance = {
-      provider: provenance.provider,
-      model: provenance.model,
-      promptVersion: provenance.promptVersion,
-      inputDigest: digestOf({ focus: focusInput, transcript: input.transcript }),
-      outputDigest: digestOf(input.sense),
-    };
-    const candidatesList = (input.expressionCandidates && input.expressionCandidates.length > 0)
-      ? input.expressionCandidates
-      : expressionInput ? [expressionInput] : [];
-
-    let chosenCandidateId: string | null = null;
-    const proposalExpressionCandidates = candidatesList.map((item) => {
-      const id = this.id();
-      if (expressionInput && item.surfaceForm === expressionInput.surfaceForm && !chosenCandidateId) {
-        chosenCandidateId = id;
-      }
-      const capturedRevision = record.personalExpressionAnchorRevisions.find((revision) => (
-        revision.verificationStatus === 'unverified'
-        && revision.languageTag === item.languageTag
-        && revision.expressionType === item.expressionType
-        && revision.surfaceForm === item.surfaceForm
-      ));
-      return {
-        candidateId: id,
-        personalExpressionAnchorRevisionId:
-          capturedRevision?.personalExpressionAnchorRevisionId ?? null,
-        expressionType: item.expressionType,
-        languageTag: item.languageTag,
-        surfaceForm: item.surfaceForm,
-        rationale: '由澄清对话提议的候选表达',
-      };
-    });
-
-    const candidateId = chosenCandidateId ?? (expressionInput ? this.id() : null);
-    record.proposals.push({
-      contractVersion: PSW,
-      senseProposalId,
-      senseConstructionId,
-      currentVersion: 1,
-      status: 'confirmed',
-      createdAt: now,
-      updatedAt: now,
-    });
-    record.proposalVersions.push({
-      contractVersion: PSW,
-      senseProposalVersionId,
-      senseProposalId,
-      version: 1,
-      meaningFocusRevisionId,
-      semanticSpec,
-      expressionCandidates: proposalExpressionCandidates,
-      unresolvedQuestions: cleanNotes(input.sense.unresolvedQuestions),
-      semanticPolicyVersion: input.semanticPolicyVersion,
-      generatorProvenance: generator,
-      createdAt: now,
-    });
-
-    // 4) Sense resolution: reuse an existing Sense with the same key, or
-    //    register a new learner-confirmed one.
-    let senseId: string;
-    let senseVersionId: string;
-    let resolution: 'create_new' | 'reuse_existing';
-    if (reused) {
-      senseId = reused.senseId;
-      senseVersionId = reused.senseVersionId;
-      resolution = 'reuse_existing';
-    } else {
-      senseId = this.id();
-      senseVersionId = this.id();
-      resolution = 'create_new';
-      const senseGenerator: SemanticGeneratorProvenance = {
-        provider: provenance.provider,
-        model: provenance.model,
-        promptVersion: provenance.promptVersion,
-        policyVersion: input.semanticPolicyVersion,
-        inputDigest: generator.inputDigest,
-        outputDigest: generator.outputDigest,
-      };
-      state.registry.senses.push({
-        contractVersion: REG,
-        senseId,
-        senseKey,
-        currentSenseVersionId: senseVersionId,
-        currentVersionNumber: 1,
-        createdAt: now,
-      });
-      state.registry.senseVersions.push({
-        contractVersion: REG,
-        senseVersionId,
-        senseId,
-        versionNumber: 1,
-        origin: 'learner_confirmed',
-        semanticPolicyVersion: input.semanticPolicyVersion,
-        semanticSpec: cloneSpec(semanticSpec),
-        provenance: {
-          sourceKind: 'learner_confirmed',
-          sourceReferenceIds: [senseProposalVersionId],
-          generator: senseGenerator,
-        },
-        reviewStatus: 'learner_confirmed',
-        contentReleaseId: null,
-        createdAt: now,
-      });
-    }
-
-    // 5) Sense confirmation + Alignment facts.
-    const senseProposalConfirmationId = this.id();
-    const senseConfirmation: SensaConfirmSenseProposalFact = {
-      contractVersion: PSW,
-      senseProposalConfirmationId,
-      operationId: input.operationId,
-      learnerUserId: LEARNER_USER_ID,
-      senseProposalVersionId,
-      meaningFocusRevisionId,
-      resolution,
-      senseId,
-      senseVersionId,
-      confirmedAt: now,
-    };
-    record.senseConfirmations.push(senseConfirmation);
-    const personalMeaningAlignmentId = this.id();
-    const alignment: SensaPersonalMeaningAlignmentSnapshot = {
-      contractVersion: PSW,
-      personalMeaningAlignmentId,
-      learnerUserId: LEARNER_USER_ID,
-      personalMeaningId: input.personalMeaningId,
-      personalMeaningRevisionId: personalMeaningRevision.personalMeaningRevisionId,
-      basis: {
-        kind: 'sense_construction',
-        meaningFocusId,
-        meaningFocusRevisionId,
-        senseProposalConfirmationId,
-      },
-      senseId,
-      senseVersionId,
-      status: 'active',
-      revision: 1,
-      createdAt: now,
-      updatedAt: now,
-    };
-    record.alignments.push(alignment);
-    const alignmentEvent: SensaPersonalMeaningAlignmentEvent = {
-      contractVersion: PSW,
-      personalMeaningAlignmentEventId: this.id(),
-      personalMeaningAlignmentId,
-      ordinal: 1,
-      eventType: 'confirmed',
-      operationId: input.operationId,
-      reason: null,
-      occurredAt: now,
-    };
-    record.alignmentEvents.push(alignmentEvent);
-
-    // 6) The optional third fact, in the same intent.
-    let expressionConfirmed = false;
-    if (expressionInput && input.confirmExpression && candidateId) {
-      this.settleExpressionBinding(
-        record,
-        alignment,
-        {
-          candidateId,
-          expressionType: expressionInput.expressionType,
-          languageTag: expressionInput.languageTag,
-          surfaceForm: expressionInput.surfaceForm,
-          personalExpressionAnchorRevisionId: proposalExpressionCandidates.find(
-            (candidate) => candidate.candidateId === candidateId,
-          )?.personalExpressionAnchorRevisionId ?? null,
-        },
-        {
-          operationId: input.operationId,
-          senseVersionId,
-          surfaceForm: expressionInput.surfaceForm,
-          languageTag: expressionInput.languageTag,
-          expressionType: expressionInput.expressionType,
-          relation: expressionInput.relation,
-          semanticCoverage: expressionInput.semanticCoverage,
-        },
-        senseProposalVersionId,
-      );
-      expressionConfirmed = true;
-    }
-
-    const result = {
-      meaningFocusId,
-      senseId,
-      senseVersionId,
-      personalMeaningAlignmentId,
-      resolution,
-      expressionConfirmed,
-    };
-    if (receipt) this.recordReceipt(input.operationId, 'ConfirmClarification', result,digestOf(input));
-    if (persist) await this.persist();
-    return { ...result, replayed: false };
+    const state=this.requireState(),record=this.requireRecord(input.personalMeaningId);
+    const lookup=input.sense.reuseSense?this.confirmedMeaningLookup():null;
+    const reused=lookup?.resolve(input.sense.reuseSense!)??null;
+    const result=applyClarificationFacts(state,record,input,this.enginePorts(),reused);
+    if(reused)this.transaction!.preconditions.push(...lookup!.confirmationConditions(input.sense.reuseSense!));
+    if(receipt)this.recordReceipt(input.operationId,'ConfirmClarification',result,digestOf(input));
+    if(persist)await this.persist();
+    return {...result,replayed:false};
   }
 
   async completeClarificationDraft(
@@ -1839,372 +1052,6 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
 
   // -- expression binding ---------------------------------------------------
 
-  private expressionAnchorRevisionFor(
-    record: MeaningJourneyRecord,
-    anchorId: string,
-    revision: number,
-  ): SensaPersonalExpressionAnchorRevisionSnapshot | null {
-    return record.personalExpressionAnchorRevisions.find(
-      (candidate) =>
-        candidate.personalExpressionAnchorId === anchorId
-        && candidate.revision === revision,
-    ) ?? null;
-  }
-
-  /**
-   * Shared binding core for `confirmClarification` and the standalone
-   * `confirmExpressionBinding`. Caller owns validation, receipts and persist;
-   * this only writes facts.
-   */
-  private settleExpressionBinding(
-    record: MeaningJourneyRecord,
-    alignment: SensaPersonalMeaningAlignmentSnapshot,
-    candidate: {
-      candidateId: string;
-      expressionType: SensaExpressionType;
-      languageTag: string;
-      surfaceForm: string;
-      provenanceKind?: PersonalProvenanceKind;
-      personalExpressionAnchorRevisionId?: string | null;
-    },
-    input: {
-      operationId: string;
-      senseVersionId: string;
-      surfaceForm: string;
-      languageTag: string;
-      expressionType: SensaExpressionType;
-      relation: SensaExpressionBindingRelation;
-      semanticCoverage: SensaSemanticCoverage;
-    },
-    senseProposalVersionId: string | null,
-    pinned?: {
-      expressionId: string;
-      expressionVersionId: string;
-      senseExpressionBindingId: string;
-      bindingVersionId: string;
-    },
-  ): {
-    expressionBindingConfirmationId: string;
-    personalExpressionAnchorRevisionId: string;
-    expressionId: string;
-    expressionVersionId: string;
-    senseExpressionBindingId: string;
-    bindingVersionId: string;
-  } {
-    const state = this.requireState();
-    const unchangedCandidate =
-      input.languageTag === candidate.languageTag
-      && input.expressionType === candidate.expressionType
-      && input.surfaceForm === candidate.surfaceForm;
-    const provenanceKind: PersonalProvenanceKind = unchangedCandidate
-      ? candidate.provenanceKind ?? 'llm_suggested'
-      : 'learner_authored';
-    const form = normalizedForm(input.surfaceForm, input.languageTag);
-    const existingExpression = pinned
-      ? state.registry.expressions.find((expression) => expression.expressionId === pinned.expressionId)
-      : state.registry.expressions.find((expression) =>
-          expression.expressionType === input.expressionType
-          && expression.languageTag === input.languageTag
-          && state.registry.expressionVersions.some(
-            (version) =>
-              version.expressionId === expression.expressionId
-              && version.normalizedForm === form,
-          ),
-        );
-    let expression: SensaExpressionSnapshot;
-    let expressionVersion: SensaExpressionVersionSnapshot;
-    const now = this.now();
-    if (pinned && !existingExpression) {
-      throw new Error('固定的已发布 Expression 不存在。');
-    }
-    if (existingExpression) {
-      expression = existingExpression;
-      expressionVersion = state.registry.expressionVersions.find(
-        (version) => pinned
-          ? version.expressionVersionId === pinned.expressionVersionId
-          : version.expressionId === expression.expressionId && version.normalizedForm === form,
-      )!;
-      if (!expressionVersion || expression.expressionType !== input.expressionType
-        || expression.languageTag !== input.languageTag || expressionVersion.normalizedForm !== form) {
-        throw new Error('固定的已发布 Expression Version 与学习目标不一致。');
-      }
-    } else {
-      const expressionId = this.id();
-      const expressionVersionId = this.id();
-      expression = {
-        contractVersion: REG,
-        expressionId,
-        expressionType: input.expressionType,
-        languageTag: input.languageTag,
-        lexemeId: null,
-        currentExpressionVersionId: expressionVersionId,
-        currentVersionNumber: 1,
-        createdAt: now,
-      };
-      expressionVersion = {
-        contractVersion: REG,
-        expressionVersionId,
-        expressionId,
-        versionNumber: 1,
-        surfaceForm: input.surfaceForm,
-        normalizedForm: form,
-        structure: {},
-        provenance: {
-          sourceKind: 'learner_confirmed',
-          sourceReferenceIds: [candidate.candidateId],
-          generator: null,
-        },
-        createdAt: now,
-      };
-      state.registry.expressions.push(expression);
-      state.registry.expressionVersions.push(expressionVersion);
-    }
-
-    const existingBinding = pinned
-      ? state.registry.bindings.find((binding) => binding.senseExpressionBindingId === pinned.senseExpressionBindingId)
-      : state.registry.bindings.find(
-          (binding) =>
-            binding.senseId === alignment.senseId
-            && binding.expressionId === expression.expressionId
-            && binding.relation === input.relation,
-        );
-    let binding: SensaSenseExpressionBindingSnapshot;
-    let bindingVersion: SensaSenseExpressionBindingVersionSnapshot | undefined;
-    if (pinned && !existingBinding) {
-      throw new Error('固定的已发布 Binding 不存在。');
-    }
-    if (existingBinding) {
-      binding = existingBinding;
-      bindingVersion = state.registry.bindingVersions.find(
-        (version) => pinned
-          ? version.bindingVersionId === pinned.bindingVersionId
-          : version.senseExpressionBindingId === binding.senseExpressionBindingId
-            && version.senseVersionId === input.senseVersionId
-            && version.expressionVersionId === expressionVersion.expressionVersionId
-            && version.semanticCoverage === input.semanticCoverage,
-      );
-      if (pinned && (!bindingVersion || binding.senseId !== alignment.senseId
-        || binding.expressionId !== expression.expressionId || binding.relation !== input.relation
-        || bindingVersion.senseVersionId !== input.senseVersionId
-        || bindingVersion.expressionVersionId !== expressionVersion.expressionVersionId
-        || bindingVersion.semanticCoverage !== input.semanticCoverage)) {
-        throw new Error('固定的已发布 Binding Version 与学习目标不一致。');
-      }
-      if (!bindingVersion) {
-        const nextVersion = binding.currentVersionNumber + 1;
-        const nextBindingVersionId = this.id();
-        const updatedBinding={
-          ...binding,
-          currentVersionNumber:nextVersion,
-          currentBindingVersionId:nextBindingVersionId,
-        };
-        state.registry.bindings[state.registry.bindings.indexOf(binding)]=updatedBinding;
-        binding=updatedBinding;
-        bindingVersion = {
-          contractVersion: REG,
-          bindingVersionId: nextBindingVersionId,
-          senseExpressionBindingId: binding.senseExpressionBindingId,
-          versionNumber: nextVersion,
-          senseVersionId: input.senseVersionId,
-          expressionVersionId: expressionVersion.expressionVersionId,
-          semanticCoverage: input.semanticCoverage,
-          registerLabel: null,
-          usageConstraints: [],
-          provenance: {
-            sourceKind: 'learner_confirmed',
-            sourceReferenceIds: [candidate.candidateId],
-            generator: null,
-          },
-          reviewStatus: 'learner_confirmed',
-          createdAt: now,
-        };
-        state.registry.bindingVersions.push(bindingVersion);
-      }
-    } else {
-      const senseExpressionBindingId = this.id();
-      const bindingVersionId = this.id();
-      binding = {
-        contractVersion: REG,
-        senseExpressionBindingId,
-        senseId: alignment.senseId,
-        expressionId: expression.expressionId,
-        relation: input.relation,
-        currentBindingVersionId: bindingVersionId,
-        currentVersionNumber: 1,
-        createdAt: now,
-      };
-      bindingVersion = {
-        contractVersion: REG,
-        bindingVersionId,
-        senseExpressionBindingId,
-        versionNumber: 1,
-        senseVersionId: input.senseVersionId,
-        expressionVersionId: expressionVersion.expressionVersionId,
-        semanticCoverage: input.semanticCoverage,
-        registerLabel: null,
-        usageConstraints: [],
-        provenance: {
-          sourceKind: 'learner_confirmed',
-          sourceReferenceIds: [candidate.candidateId],
-          generator: null,
-        },
-        reviewStatus: 'learner_confirmed',
-        createdAt: now,
-      };
-      state.registry.bindings.push(binding);
-      state.registry.bindingVersions.push(bindingVersion);
-    }
-
-    const existingConfirmation = record.bindingConfirmations.find(
-      (confirmation) =>
-        confirmation.senseVersionId === input.senseVersionId
-        && confirmation.expressionVersionId === expressionVersion.expressionVersionId
-        && confirmation.bindingVersionId === bindingVersion!.bindingVersionId,
-    );
-    if (existingConfirmation) {
-      return {
-        expressionBindingConfirmationId: existingConfirmation.expressionBindingConfirmationId,
-        personalExpressionAnchorRevisionId: existingConfirmation.personalExpressionAnchorRevisionId,
-        expressionId: expression.expressionId,
-        expressionVersionId: expressionVersion.expressionVersionId,
-        senseExpressionBindingId: binding.senseExpressionBindingId,
-        bindingVersionId: bindingVersion.bindingVersionId,
-      };
-    }
-
-    let anchorRevision: SensaPersonalExpressionAnchorRevisionSnapshot | null = null;
-    let anchor: SensaPersonalExpressionAnchorSnapshot | undefined;
-    let createdTargetAnchor = false;
-    if (candidate.personalExpressionAnchorRevisionId) {
-      const captured = record.personalExpressionAnchorRevisions.find(
-        (revision) => revision.personalExpressionAnchorRevisionId
-          === candidate.personalExpressionAnchorRevisionId,
-      );
-      const capturedAnchor = captured && record.personalExpressionAnchors.find(
-        (item) => item.personalExpressionAnchorId === captured.personalExpressionAnchorId
-          && item.status === 'active',
-      );
-      if (
-        captured
-        && capturedAnchor
-        && captured.languageTag === input.languageTag
-        && captured.expressionType === input.expressionType
-        && captured.surfaceForm === input.surfaceForm
-      ) {
-        anchor = capturedAnchor;
-        if (captured.verificationStatus === 'learner_confirmed') {
-          anchorRevision = captured;
-        } else {
-          anchorRevision = {
-            ...captured,
-            personalExpressionAnchorRevisionId: this.id(),
-            revision: capturedAnchor.currentRevision + 1,
-            verificationStatus: 'learner_confirmed',
-            provenance: {
-              ...captured.provenance,
-              sourceReferenceIds: [...new Set([
-                ...captured.provenance.sourceReferenceIds,
-                candidate.candidateId,
-              ])],
-              createdByOperationId: input.operationId,
-            },
-            createdAt: now,
-          };
-          capturedAnchor.currentRevision = anchorRevision.revision;
-          capturedAnchor.updatedAt = now;
-          record.personalExpressionAnchorRevisions.push(anchorRevision);
-        }
-      }
-    }
-    // The intake fast track pre-creates the captured expression anchor with
-    // this candidate id in its provenance (either language role), so match
-    // any active anchor before creating a duplicate.
-    for (const candidateAnchor of anchorRevision ? [] : this.activeExpressionAnchors(record)) {
-      const current = this.expressionAnchorRevisionFor(
-        record,
-        candidateAnchor.personalExpressionAnchorId,
-        candidateAnchor.currentRevision,
-      );
-      if (
-        current
-        && current.provenance.sourceReferenceIds.includes(candidate.candidateId)
-        && current.languageTag === input.languageTag
-        && current.expressionType === input.expressionType
-        && current.surfaceForm === input.surfaceForm
-      ) {
-        anchor = candidateAnchor;
-        anchorRevision = current;
-        break;
-      }
-    }
-    if (!anchorRevision) {
-      const anchorId = this.id();
-      const anchorRevisionId = this.id();
-      anchor = {
-        contractVersion: PSW,
-        personalExpressionAnchorId: anchorId,
-        personalMeaningId: record.personalMeaning.personalMeaningId,
-        currentRevision: 1,
-        lifecycleRevision: 1,
-        status: 'active',
-        createdAt: now,
-        updatedAt: now,
-        deletedAt: null,
-        deletedByOperationId: null,
-      };
-      anchorRevision = {
-        contractVersion: PSW,
-        personalExpressionAnchorRevisionId: anchorRevisionId,
-        personalExpressionAnchorId: anchorId,
-        revision: 1,
-        expressionType: input.expressionType,
-        languageTag: input.languageTag,
-        surfaceForm: input.surfaceForm,
-        normalizedForm: form,
-        contextAnchorRevisionId: null,
-        occurrence: null,
-        provenanceKind,
-        verificationStatus: 'learner_confirmed' as PersonalExpressionVerificationStatus,
-        provenance: {
-          kind: provenanceKind,
-          sourceReferenceIds: [candidate.candidateId],
-          createdByOperationId: input.operationId,
-        },
-        createdAt: now,
-      };
-      record.personalExpressionAnchors.push(anchor);
-      record.personalExpressionAnchorRevisions.push(anchorRevision);
-      createdTargetAnchor = true;
-    }
-
-    if (createdTargetAnchor) {
-      this.appendMeaningRevision(record, input.operationId, [anchorRevision.personalExpressionAnchorId]);
-    }
-
-    const expressionBindingConfirmationId = this.id();
-    const confirmation: SensaConfirmExpressionBindingFact = {
-      contractVersion: PSW,
-      expressionBindingConfirmationId,
-      operationId: input.operationId,
-      learnerUserId: LEARNER_USER_ID,
-      senseProposalVersionId,
-      personalExpressionAnchorRevisionId: anchorRevision.personalExpressionAnchorRevisionId,
-      senseVersionId: input.senseVersionId,
-      expressionVersionId: expressionVersion.expressionVersionId,
-      bindingVersionId: bindingVersion.bindingVersionId,
-      confirmedAt: now,
-    };
-    record.bindingConfirmations.push(confirmation);
-    return {
-      expressionBindingConfirmationId,
-      personalExpressionAnchorRevisionId: anchorRevision.personalExpressionAnchorRevisionId,
-      expressionId: expression.expressionId,
-      expressionVersionId: expressionVersion.expressionVersionId,
-      senseExpressionBindingId: binding.senseExpressionBindingId,
-      bindingVersionId: bindingVersion.bindingVersionId,
-    };
-  }
-
   async confirmExpressionBinding(
     input: ConfirmExpressionBindingInput,
   ): Promise<ConfirmExpressionBindingResult> {
@@ -2258,7 +1105,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
     if (!['exact', 'broader', 'narrower', 'overlapping'].includes(input.semanticCoverage)) {
       throw new Error('请明确选择目标表达的语义覆盖范围。');
     }
-    const result = this.settleExpressionBinding(
+    const result = settleExpressionBinding(this.requireState(),this.enginePorts(),
       record,
       alignment,
       candidate,
@@ -2280,190 +1127,6 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
 
   // -- published learning scene acceptance --------------------------------
 
-  private installPublishedLearningFacts(input: PublishedLearningSceneAcceptanceInput): void {
-    const state = this.requireState();
-    const semantic = publishedLearningSemanticFactsSchema.parse(input.semantic);
-    const { source, target } = input;
-    for (const value of [
-      source.bookId, source.bookVersionId, source.contentReleaseId,
-      target.learningTargetId, target.curriculumMembershipId, target.senseId,
-      target.senseVersionId, target.bindingId, target.bindingVersionId,
-      semantic.expressionId, semantic.expressionVersionId,
-    ]) if (!isUuid(value)) throw new Error('学习包语义身份无效。');
-    if (!Number.isFinite(Date.parse(source.publishedAt)) || !target.expression.trim()
-      || !target.targetLanguageTag.trim()) throw new Error('学习包语义来源无效。');
-
-    const sourceReferenceIds = [source.contentReleaseId, source.bookVersionId, source.packageKey];
-    const semanticProvenance = {
-      sourceKind: 'published_release' as const,
-      sourceReferenceIds,
-      generator: null,
-    };
-    const senseVersion: SensaSenseVersionSnapshot = {
-      contractVersion: REG,
-      senseVersionId: target.senseVersionId,
-      senseId: target.senseId,
-      versionNumber: semantic.senseVersionNumber,
-      origin: 'published_release',
-      semanticPolicyVersion: semantic.semanticPolicyVersion,
-      semanticSpec: structuredClone(semantic.semanticSpec),
-      provenance: semanticProvenance,
-      reviewStatus: 'reviewed',
-      contentReleaseId: source.contentReleaseId,
-      createdAt: source.publishedAt,
-    };
-    const expressionVersion: SensaExpressionVersionSnapshot = {
-      contractVersion: REG,
-      expressionVersionId: semantic.expressionVersionId,
-      expressionId: semantic.expressionId,
-      versionNumber: semantic.expressionVersionNumber,
-      surfaceForm: target.expression.trim(),
-      normalizedForm: normalizedForm(target.expression, target.targetLanguageTag),
-      structure: structuredClone(semantic.expressionStructure),
-      provenance: semanticProvenance,
-      createdAt: source.publishedAt,
-    };
-    const bindingVersion: SensaSenseExpressionBindingVersionSnapshot = {
-      contractVersion: REG,
-      bindingVersionId: target.bindingVersionId,
-      senseExpressionBindingId: target.bindingId,
-      versionNumber: semantic.bindingVersionNumber,
-      senseVersionId: target.senseVersionId,
-      expressionVersionId: semantic.expressionVersionId,
-      semanticCoverage: semantic.semanticCoverage,
-      registerLabel: semantic.registerLabel,
-      usageConstraints: [...semantic.usageConstraints],
-      provenance: semanticProvenance,
-      reviewStatus: 'reviewed',
-      createdAt: source.publishedAt,
-    };
-
-    const existingSenseByKey = state.registry.senses.find((fact) => fact.senseKey === semantic.senseKey);
-    if (existingSenseByKey && existingSenseByKey.senseId !== target.senseId) {
-      throw new Error('学习包 Sense key 与本机语义注册表冲突。');
-    }
-    const existingSense = state.registry.senses.find((fact) => fact.senseId === target.senseId);
-    if (existingSense) {
-      if (existingSense.senseKey !== semantic.senseKey) throw new Error('学习包 Sense identity 冲突。');
-      if (semantic.senseVersionNumber > existingSense.currentVersionNumber) {
-        state.registry.senses[state.registry.senses.indexOf(existingSense)]={
-          ...existingSense,
-          currentVersionNumber:semantic.senseVersionNumber,
-          currentSenseVersionId:target.senseVersionId,
-        };
-      }
-    } else {
-      state.registry.senses.push({
-        contractVersion: REG,
-        senseId: target.senseId,
-        senseKey: semantic.senseKey,
-        currentSenseVersionId: target.senseVersionId,
-        currentVersionNumber: semantic.senseVersionNumber,
-        createdAt: source.publishedAt,
-      } satisfies SensaSenseSnapshot);
-    }
-    const existingSenseVersion = state.registry.senseVersions.find((fact) => fact.senseVersionId === target.senseVersionId);
-    if (existingSenseVersion) {
-      if (digestOf({senseId:existingSenseVersion.senseId,versionNumber:existingSenseVersion.versionNumber,semanticPolicyVersion:existingSenseVersion.semanticPolicyVersion,semanticSpec:existingSenseVersion.semanticSpec,reviewStatus:existingSenseVersion.reviewStatus})
-        !== digestOf({senseId:senseVersion.senseId,versionNumber:senseVersion.versionNumber,semanticPolicyVersion:senseVersion.semanticPolicyVersion,semanticSpec:senseVersion.semanticSpec,reviewStatus:senseVersion.reviewStatus})) throw new Error('学习包 Sense Version 冲突。');
-    } else state.registry.senseVersions.push(senseVersion);
-
-    const existingExpression = state.registry.expressions.find((fact) => fact.expressionId === semantic.expressionId);
-    if (existingExpression) {
-      if (existingExpression.expressionType !== semantic.expressionType
-        || existingExpression.languageTag !== target.targetLanguageTag) throw new Error('学习包 Expression identity 冲突。');
-      if (semantic.expressionVersionNumber > existingExpression.currentVersionNumber) {
-        state.registry.expressions[state.registry.expressions.indexOf(existingExpression)]={
-          ...existingExpression,
-          currentVersionNumber:semantic.expressionVersionNumber,
-          currentExpressionVersionId:semantic.expressionVersionId,
-        };
-      }
-    } else {
-      state.registry.expressions.push({
-        contractVersion: REG,
-        expressionId: semantic.expressionId,
-        expressionType: semantic.expressionType,
-        languageTag: target.targetLanguageTag,
-        lexemeId: null,
-        currentExpressionVersionId: semantic.expressionVersionId,
-        currentVersionNumber: semantic.expressionVersionNumber,
-        createdAt: source.publishedAt,
-      });
-    }
-    const existingExpressionVersion = state.registry.expressionVersions.find((fact) => fact.expressionVersionId === semantic.expressionVersionId);
-    if (existingExpressionVersion) {
-      if (digestOf({expressionId:existingExpressionVersion.expressionId,versionNumber:existingExpressionVersion.versionNumber,surfaceForm:existingExpressionVersion.surfaceForm,normalizedForm:existingExpressionVersion.normalizedForm,structure:existingExpressionVersion.structure})
-        !== digestOf({expressionId:expressionVersion.expressionId,versionNumber:expressionVersion.versionNumber,surfaceForm:expressionVersion.surfaceForm,normalizedForm:expressionVersion.normalizedForm,structure:expressionVersion.structure})) throw new Error('学习包 Expression Version 冲突。');
-    } else state.registry.expressionVersions.push(expressionVersion);
-
-    const existingBinding = state.registry.bindings.find((fact) => fact.senseExpressionBindingId === target.bindingId);
-    if (existingBinding) {
-      if (existingBinding.senseId !== target.senseId
-        || existingBinding.expressionId !== semantic.expressionId
-        || existingBinding.relation !== semantic.relation) throw new Error('学习包 Binding identity 冲突。');
-      if (semantic.bindingVersionNumber > existingBinding.currentVersionNumber) {
-        state.registry.bindings[state.registry.bindings.indexOf(existingBinding)]={
-          ...existingBinding,
-          currentVersionNumber:semantic.bindingVersionNumber,
-          currentBindingVersionId:target.bindingVersionId,
-        };
-      }
-    } else {
-      state.registry.bindings.push({
-        contractVersion: REG,
-        senseExpressionBindingId: target.bindingId,
-        senseId: target.senseId,
-        expressionId: semantic.expressionId,
-        relation: semantic.relation,
-        currentBindingVersionId: target.bindingVersionId,
-        currentVersionNumber: semantic.bindingVersionNumber,
-        createdAt: source.publishedAt,
-      });
-    }
-    const existingBindingVersion = state.registry.bindingVersions.find((fact) => fact.bindingVersionId === target.bindingVersionId);
-    if (existingBindingVersion) {
-      if (digestOf({senseExpressionBindingId:existingBindingVersion.senseExpressionBindingId,versionNumber:existingBindingVersion.versionNumber,senseVersionId:existingBindingVersion.senseVersionId,expressionVersionId:existingBindingVersion.expressionVersionId,semanticCoverage:existingBindingVersion.semanticCoverage,registerLabel:existingBindingVersion.registerLabel,usageConstraints:existingBindingVersion.usageConstraints,reviewStatus:existingBindingVersion.reviewStatus})
-        !== digestOf({senseExpressionBindingId:bindingVersion.senseExpressionBindingId,versionNumber:bindingVersion.versionNumber,senseVersionId:bindingVersion.senseVersionId,expressionVersionId:bindingVersion.expressionVersionId,semanticCoverage:bindingVersion.semanticCoverage,registerLabel:bindingVersion.registerLabel,usageConstraints:bindingVersion.usageConstraints,reviewStatus:bindingVersion.reviewStatus})) throw new Error('学习包 Binding Version 冲突。');
-    } else state.registry.bindingVersions.push(bindingVersion);
-  }
-
-  private learningSceneAnchorRevision(
-    anchorId: string,
-    revision: number,
-    input: PublishedLearningSceneAcceptanceInput,
-    revisionId = this.id(),
-  ) {
-    const now = this.now();
-    return {
-      contractVersion: PSW,
-      personalSemanticAnchorRevisionId: revisionId,
-      personalSemanticAnchorId: anchorId,
-      revision,
-      anchorKind: 'scene' as const,
-      languageTag: null,
-      bodyText: input.scene.body.trim() || null,
-      personalMediaObjectId: null,
-      structuredPayload: {
-        learningScene: {
-          sceneId: input.scene.sceneId,
-          revisionId: input.scene.revisionId,
-          revision: input.scene.revision,
-          learningTargetId: input.target.learningTargetId,
-          curriculumMembershipId: input.target.curriculumMembershipId,
-        },
-        media: structuredClone(input.scene.media),
-        publishedSource: structuredClone(input.source),
-      },
-      provenance: {
-        kind: 'learner_authored' as const,
-        sourceReferenceIds: [input.scene.revisionId, input.source.contentReleaseId],
-        createdByOperationId: input.operationId,
-      },
-      createdAt: now,
-    };
-  }
-
   async acceptPublishedLearningScene(
     input: PublishedLearningSceneAcceptanceInput,
   ): Promise<PublishedLearningSceneAcceptanceResult> {
@@ -2482,7 +1145,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
         throw new Error('个人场景版本无效。');
       }
       return this.withStateTransaction(async () => {
-        this.installPublishedLearningFacts(input);
+        installPublishedLearningFacts(this.requireState(),input);
 
       const matchedRecord = input.existingPersonalMeaningId
         ? this.findRecord(input.existingPersonalMeaningId)
@@ -2517,7 +1180,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
           candidate.personalSemanticAnchorId === currentRevision.personalSemanticAnchorId
         ));
         if (!anchor) throw new Error('找不到已接受的个人场景。');
-        const nextRevision = this.learningSceneAnchorRevision(
+        const nextRevision = learningSceneAnchorRevision(this.enginePorts(),
           anchor.personalSemanticAnchorId,
           anchor.currentRevision + 1,
           input,
@@ -2601,7 +1264,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
       this.state = outcome.nextState;
       const anchor = outcome.record.personalSemanticAnchors[0]!;
       const originalAnchorRevisionId = outcome.record.personalSemanticAnchorRevisions[0]!.personalSemanticAnchorRevisionId;
-      const anchorRevision = this.learningSceneAnchorRevision(
+      const anchorRevision = learningSceneAnchorRevision(this.enginePorts(),
         anchor.personalSemanticAnchorId,
         1,
         input,
@@ -2617,7 +1280,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
           createdByOperationId: input.operationId,
         },
       };
-      this.settleExpressionBinding(
+      settleExpressionBinding(this.requireState(),this.enginePorts(),
         outcome.record,
         outcome.alignment,
         outcome.bindingCandidate,
@@ -2655,7 +1318,12 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
   }
 
   async submit(payload: SensaIntakePayload): Promise<SemanticIntakeResult> {
-    return this.exclusive(() => this.runIngest(payload.operationId, payload));
+    const parsed=sensaIntakePayloadSchema.parse(payload);
+    if(!this.loadStarted&&this.deps.repository.withIntakeCommand&&evaluateIntakeRoute(parsed).route==='fast_track'){
+      return this.isolatedCommand(parsed.operationId,'Ingest',digestOf(parsed),()=>
+        this.deps.repository.withIntakeCommand!(parsed,this.deps.ids,(repository,ids)=>new JourneyGatewayImpl({...this.deps,repository,ids}).submit(parsed)));
+    }
+    return this.exclusive(() => this.runIngest(parsed.operationId, parsed));
   }
 
   private async runIngest(
@@ -2694,7 +1362,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
       this.enginePorts(),
     );
     this.state = outcome.nextState;
-    this.settleExpressionBinding(
+    settleExpressionBinding(this.requireState(),this.enginePorts(),
       outcome.record,
       outcome.alignment,
       outcome.bindingCandidate,
@@ -2742,7 +1410,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
     this.requireState().clarificationDrafts = this.requireState().clarificationDrafts.filter(
       (candidate) => candidate.intakeId !== intakeId,
     );
-    this.settleExpressionBinding(
+    settleExpressionBinding(this.requireState(),this.enginePorts(),
       outcome.record,
       outcome.alignment,
       outcome.bindingCandidate,

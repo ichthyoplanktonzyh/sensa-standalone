@@ -185,6 +185,12 @@ Binding relation／精确版本 pins 与追加 ordinal 由源记录上的 SQLite
 本机实际的 tagged codec、只返回确定性的原始参数字段，不引入第二份注册表权威。缺失索引可重建，不改动源事实。
 选中候选与空结果、固定依赖、材料见证及新 ID 都在写锁内复查；Meaning、注册表 delta、原 Inbox／提示删除与收据
 一次提交。全量网关视图与其他命令仍有完整初始化路径，不能用这些命令的结果证明所有写入已满足规模性能要求。
+完整 Intake 的首次保存（包括 Web 手动创建）使用同样的有界注册表查询与提交前校验，只追加本次 Meaning、
+注册表 delta 和回执，不读取历史 Meaning。手动表单只构建 learner-authored Intake，Context 中的 exact occurrence
+与可选 canonical form 分离；用户明确保存后才附上 learner_direct 接受。按本机 library 分隔的编辑草稿保留
+原 operation ID 用于失败重试，编辑内容变化产生新 ID。它不调用模型，也不跨到 Learning System 写入。
+Journey Gateway 保留命令串行化、幂等、来源见证和原子提交；Context 材料、澄清事实、表达绑定、
+已发布学习场景及 Meaning revision 的构建分别由内部事实模块负责，不拥有独立存储或提交能力。
 首次新建澄清草稿同样使用独立追加快照，只能创建本次
 Inbox、会话提示与收据，媒体继续同事务准入，不读取已有 Meaning／注册表。新 ID 的保留索引与源事实同事务维护；分配时排除本次
 operation 和尚未入库的 media 引用，提交时再检查占用。普通读取不全扫；显式完整诊断按源行核对并修复

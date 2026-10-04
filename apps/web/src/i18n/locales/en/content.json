@@ -1,5 +1,33 @@
 {
+  "manualMeaning": {
+  "context": "Context or original sentence",
+  "occurrence": "Expression in the text (or select it above)",
+  "chooseOccurrence": "Choose this occurrence",
+  "language": "Expression language",
+  "chooseLanguage": "Choose a language",
+  "type": "Expression type",
+  "meaning": "Meaning in this context",
+  "usage": "Typical situation for this meaning",
+  "canonical": "Base form (optional)",
+  "save": "Confirm and save",
+  "saving": "Saving…",
+  "contextRequired": "Enter a context or original sentence.",
+  "occurrenceRequired": "Locate this expression exactly in the context.",
+  "languageRequired": "Choose the expression’s language.",
+  "meaningRequired": "Enter the meaning and a typical situation.",
+  "invalid": "Check the entered content.",
+  "draftError": "Cannot save the draft locally. Keep this page open and try again.",
+  "saveError": "Could not confirm the save. Your content is kept; try again.",
+  "types": {
+    "word": "Word",
+    "phrase": "Phrase",
+    "construction": "Construction",
+    "sentence": "Sentence",
+    "utterance_strategy": "Utterance strategy"
+  }
+},
   "content": {
+    "manual": "Create manually",
     "findExpression": "Talk to Sensa",
     "findExpressionHint": "Share text or images to clarify context, sense, and expression",
     "graph": {

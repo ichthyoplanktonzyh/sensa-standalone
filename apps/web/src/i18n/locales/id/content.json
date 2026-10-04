@@ -1,5 +1,33 @@
 {
+  "manualMeaning": {
+  "context": "Konteks atau kalimat asli",
+  "occurrence": "Ungkapan dalam teks (atau pilih di atas)",
+  "chooseOccurrence": "Pilih kemunculan ini",
+  "language": "Bahasa ungkapan",
+  "chooseLanguage": "Pilih bahasa",
+  "type": "Jenis ungkapan",
+  "meaning": "Makna dalam konteks ini",
+  "usage": "Situasi umum untuk makna ini",
+  "canonical": "Bentuk dasar (opsional)",
+  "save": "Konfirmasi dan simpan",
+  "saving": "Menyimpan…",
+  "contextRequired": "Masukkan konteks atau kalimat asli.",
+  "occurrenceRequired": "Tentukan posisi ungkapan yang tepat dalam konteks.",
+  "languageRequired": "Pilih bahasa ungkapan.",
+  "meaningRequired": "Masukkan makna dan situasi umumnya.",
+  "invalid": "Periksa isian Anda.",
+  "draftError": "Draf tidak dapat disimpan secara lokal. Biarkan halaman terbuka dan coba lagi.",
+  "saveError": "Penyimpanan belum terkonfirmasi. Isi tetap tersimpan di formulir; coba lagi.",
+  "types": {
+    "word": "Kata",
+    "phrase": "Frasa",
+    "construction": "Konstruksi",
+    "sentence": "Kalimat",
+    "utterance_strategy": "Strategi tuturan"
+  }
+},
   "content": {
+    "manual": "Buat secara manual",
     "findExpression": "Berbicara dengan Sensa",
     "findExpressionHint": "Bagikan teks atau gambar untuk memperjelas konteks, makna, dan ekspresi",
     "graph": {

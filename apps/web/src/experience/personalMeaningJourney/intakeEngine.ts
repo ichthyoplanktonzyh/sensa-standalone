@@ -29,6 +29,7 @@ import type {
 } from '@sensa/contracts/sensa';
 import { digestOf } from './digest';
 import type { JourneyState, MeaningJourneyRecord } from './store';
+import type {JourneyFactPorts} from './ports';
 
 export const LOCAL_SEMANTIC_POLICY_VERSION = 'sensa-semantic-policy-local-v1';
 
@@ -39,10 +40,7 @@ const LEARNER_USER_ID = 'sensa-local-learner';
 type PersonalProvenanceKind =
   SensaPersonalMeaningRevisionSnapshot['provenance']['kind'];
 
-export interface IntakeEnginePorts {
-  newId(): string;
-  nowIso(): string;
-}
+export type IntakeEnginePorts = JourneyFactPorts;
 
 export type IntakeRouteDecision =
   | { route: 'fast_track' }

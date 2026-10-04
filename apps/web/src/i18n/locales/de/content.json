@@ -1,5 +1,33 @@
 {
+  "manualMeaning": {
+  "context": "Kontext oder Originalsatz",
+  "occurrence": "Ausdruck im Text (oder oben auswählen)",
+  "chooseOccurrence": "Diese Fundstelle auswählen",
+  "language": "Sprache des Ausdrucks",
+  "chooseLanguage": "Sprache auswählen",
+  "type": "Art des Ausdrucks",
+  "meaning": "Bedeutung in diesem Kontext",
+  "usage": "Typische Situation für diese Bedeutung",
+  "canonical": "Grundform (optional)",
+  "save": "Bestätigen und speichern",
+  "saving": "Wird gespeichert…",
+  "contextRequired": "Gib einen Kontext oder Originalsatz ein.",
+  "occurrenceRequired": "Markiere die genaue Stelle des Ausdrucks im Kontext.",
+  "languageRequired": "Wähle die Sprache des Ausdrucks.",
+  "meaningRequired": "Gib die Bedeutung und eine typische Situation ein.",
+  "invalid": "Prüfe die eingegebenen Inhalte.",
+  "draftError": "Der Entwurf kann nicht lokal gespeichert werden. Lass die Seite geöffnet und versuche es erneut.",
+  "saveError": "Speicherung nicht bestätigt. Die Inhalte bleiben erhalten; versuche es erneut.",
+  "types": {
+    "word": "Wort",
+    "phrase": "Wendung",
+    "construction": "Konstruktion",
+    "sentence": "Satz",
+    "utterance_strategy": "Äußerungsstrategie"
+  }
+},
   "content": {
+    "manual": "Manuell erstellen",
     "findExpression": "Mit Sensa sprechen",
     "findExpressionHint": "Teilen Sie Texte oder Bilder, um Kontext, Bedeutung und Ausdruck zu klären",
     "graph": {

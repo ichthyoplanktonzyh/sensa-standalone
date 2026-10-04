@@ -1,5 +1,33 @@
 {
+  "manualMeaning": {
+  "context": "Ngữ cảnh hoặc câu gốc",
+  "occurrence": "Cách diễn đạt trong văn bản (hoặc chọn ở trên)",
+  "chooseOccurrence": "Chọn lần xuất hiện này",
+  "language": "Ngôn ngữ của cách diễn đạt",
+  "chooseLanguage": "Chọn ngôn ngữ",
+  "type": "Loại cách diễn đạt",
+  "meaning": "Ý nghĩa trong ngữ cảnh này",
+  "usage": "Tình huống điển hình cho ý nghĩa này",
+  "canonical": "Dạng gốc (không bắt buộc)",
+  "save": "Xác nhận và lưu",
+  "saving": "Đang lưu…",
+  "contextRequired": "Nhập ngữ cảnh hoặc câu gốc.",
+  "occurrenceRequired": "Xác định chính xác vị trí của cách diễn đạt trong ngữ cảnh.",
+  "languageRequired": "Chọn ngôn ngữ của cách diễn đạt.",
+  "meaningRequired": "Nhập ý nghĩa và tình huống điển hình.",
+  "invalid": "Kiểm tra nội dung đã nhập.",
+  "draftError": "Không thể lưu bản nháp trên thiết bị. Giữ trang mở và thử lại.",
+  "saveError": "Chưa thể xác nhận đã lưu. Nội dung vẫn được giữ lại; hãy thử lại.",
+  "types": {
+    "word": "Từ",
+    "phrase": "Cụm từ",
+    "construction": "Cấu trúc",
+    "sentence": "Câu",
+    "utterance_strategy": "Chiến lược phát ngôn"
+  }
+},
   "content": {
+    "manual": "Tạo thủ công",
     "findExpression": "Trò chuyện với Sensa",
     "findExpressionHint": "Chia sẻ văn bản hoặc hình ảnh để làm rõ ngữ cảnh, ý nghĩa và cách diễn đạt",
     "graph": {

@@ -1,5 +1,33 @@
 {
+  "manualMeaning": {
+  "context": "情境或原句",
+  "occurrence": "原文中的表达（可在上方选中）",
+  "chooseOccurrence": "选择这一次出现",
+  "language": "表达语言",
+  "chooseLanguage": "选择语言",
+  "type": "表达类型",
+  "meaning": "这里表达的意思",
+  "usage": "这个意思适用的典型场景",
+  "canonical": "表达原形（可选）",
+  "save": "确认并保存",
+  "saving": "正在保存…",
+  "contextRequired": "请填写情境或原句。",
+  "occurrenceRequired": "请标出情境中这条表达的准确位置。",
+  "languageRequired": "请选择表达的语言。",
+  "meaningRequired": "请填写意思和典型使用场景。",
+  "invalid": "请检查填写的内容。",
+  "draftError": "草稿暂时无法保存到本机，请保留页面后重试。",
+  "saveError": "未能确认保存结果，内容已保留，请重试。",
+  "types": {
+    "word": "词",
+    "phrase": "短语",
+    "construction": "句式",
+    "sentence": "句子",
+    "utterance_strategy": "表达策略"
+  }
+},
   "content": {
+    "manual": "手动创建",
     "findExpression": "和 Sensa 聊聊",
     "findExpressionHint": "发送文字或图片，一起澄清场景、意思和表达",
     "graph": {

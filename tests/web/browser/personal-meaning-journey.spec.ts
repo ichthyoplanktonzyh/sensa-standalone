@@ -94,6 +94,79 @@ const facts=async(page:Page)=>{
 const input=(page:Page)=>page.getByLabel('你想表达什么？',{exact:true});
 async function send(page:Page){await input(page).fill('上班前我给家里的植物浇水，这个动作英语怎么说？');await page.getByRole('button',{name:'发送',exact:true}).click();}
 
+for(const size of [0,10_000])test(`manual authoring at ${size} Meanings needs Context and explicit acceptance, stays offline, and reopens`,async({page},testInfo)=>{
+ test.setTimeout(180_000);
+ page.setDefaultTimeout(15_000);
+ requests=[];plans=[];
+ const modelCalls:string[]=[];
+ page.on('request',request=>{if(/chat\/completions|semantic-agent|\/tts|model.*execute/.test(request.url()))modelCalls.push(request.url());});
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
+ if(size){
+  const repository=new MemoryJourneyRepository(),modules=createJourneyModules({repository,clock:createSeededClock()});
+  await modules.semanticIntake.submit(semanticLookupPayload());scaleFixture=syntheticSemanticWorld(await repository.load(),size);
+  await page.waitForFunction(()=>!!window.__sensaBrowserSmoke);
+  expect(await page.evaluate(async()=>window.__sensaBrowserSmoke!.seedSemanticWorld(await (await fetch('/semantic-scale-fixture')).json()))).toBe(size);
+  await page.reload();
+ }
+ const open=async()=>{await page.getByRole('button',{name:'添加内容',exact:true}).click();await page.getByRole('button',{name:'手动创建',exact:true}).click();};
+ await open();const form=page.locator('.sensa-manual-meaning');
+ await expect(form.getByLabel('情境或原句',{exact:true})).toBeEnabled();
+ await form.getByLabel('原文中的表达（可在上方选中）',{exact:true}).fill('backed out');
+ await form.getByRole('button',{name:'确认并保存',exact:true}).click();
+ if(!size)expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticWorldContainsExpression('back out'))).toBe(false);
+ await form.getByLabel('情境或原句',{exact:true}).fill('She backed out of the trip. I backed out too.');
+ await form.getByLabel('表达语言',{exact:true}).selectOption('en');
+ await form.getByLabel('表达类型',{exact:true}).selectOption('phrase');
+ await form.getByLabel('这里表达的意思',{exact:true}).fill('退出已经答应参加的活动。');
+ await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('有人答应参加活动，后来改变主意不再参加。');
+ await form.getByText('表达原形（可选）',{exact:true}).click();
+ await form.getByLabel('表达原形（可选）',{exact:true}).fill('back out');
+ await form.getByRole('button',{name:'确认并保存',exact:true}).click();await expect(form.getByRole('alert')).toContainText('准确位置');
+ await form.getByRole('radio').last().check();
+ if(!size){
+  await page.setViewportSize({width:390,height:844});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.screenshot({path:testInfo.outputPath('manual-meaning-mobile.png'),fullPage:true});
+  await page.setViewportSize({width:1280,height:900});
+ }
+ await form.getByRole('button',{name:'关闭',exact:true}).click();
+ if(!size)expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticWorldContainsExpression('back out'))).toBe(false);
+ await page.reload();await open();
+ await expect(form.getByLabel('这里表达的意思',{exact:true})).toHaveValue('退出已经答应参加的活动。');
+ await expect(form.getByRole('radio').last()).toBeChecked();
+ if(!size){
+  // Fail only this editing draft's durable retry write, then exercise the UI retry.
+  await page.evaluate(()=>{
+   const original=Storage.prototype.setItem;
+   Storage.prototype.setItem=function(key,value){if(key.includes('manual-meaning:')){Storage.prototype.setItem=original;throw new DOMException('fixture quota exceeded','QuotaExceededError');}return original.call(this,key,value);};
+  });
+  await form.getByRole('button',{name:'确认并保存',exact:true}).click();
+  await expect(form.getByRole('alert')).toContainText('内容已保留');
+  await expect(form.getByLabel('这里表达的意思',{exact:true})).toHaveValue('退出已经答应参加的活动。');
+ }
+ await page.context().setOffline(true);
+ const started=await page.evaluate(()=>performance.now());
+ const readyMs=await clickToMeaningReady(page,form.getByRole('button',{name:'确认并保存',exact:true}),'back out');
+ await expect(form).toHaveCount(0);
+ await expect(page.getByRole('heading',{name:'back out',exact:true})).toBeVisible();
+ await expect(page.getByText('退出已经答应参加的活动。',{exact:true}).first()).toBeVisible();
+ const timing=await page.evaluate(started=>({durationMs:performance.now()-started,phases:performance.getEntriesByType('measure').filter(entry=>entry.startTime>=started&&entry.name.startsWith('sensa.journey.')).map(entry=>entry.name)}),started);
+ console.log('Manual click to readable stable actionable detail / Chromium+OPFS / no model',JSON.stringify({size,readyMs,...timing}));
+ expect(timing.phases).not.toContain('sensa.journey.records');expect(timing.phases).not.toContain('sensa.journey.authority');
+ expect(readyMs).toBeLessThan(1000);
+ const savedUrl=page.url();
+ const learning=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());expect(learning.targetIds).toEqual([]);expect(learning.records).toEqual([]);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.intakeInboxCount())).toBe(0);
+ await page.context().setOffline(false);await page.reload();
+ await expect(page.getByRole('heading',{name:'back out',exact:true})).toBeVisible();
+ expect(page.url()).toBe(savedUrl);
+ if(!size)expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticWorldContainsExpression('back out'))).toBe(true);
+ expect(modelCalls).toEqual([]);expect(requests).toEqual([]);
+ await page.screenshot({path:testInfo.outputPath('manual-meaning-detail.png'),fullPage:true});
+});
+
 test('a saved draft can explicitly continue with a newly configured teacher after its initial provider is unavailable',async({page})=>{
  requests=[];plans=[];
  await page.addInitScript(()=>{(window as unknown as {__name:(value:unknown)=>unknown}).__name=value=>value;});

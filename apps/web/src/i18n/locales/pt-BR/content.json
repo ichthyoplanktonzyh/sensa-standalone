@@ -1,5 +1,33 @@
 {
+  "manualMeaning": {
+  "context": "Contexto ou frase original",
+  "occurrence": "Expressão no texto (ou selecione acima)",
+  "chooseOccurrence": "Escolha esta ocorrência",
+  "language": "Idioma da expressão",
+  "chooseLanguage": "Escolha um idioma",
+  "type": "Tipo de expressão",
+  "meaning": "Significado neste contexto",
+  "usage": "Situação típica para este significado",
+  "canonical": "Forma base (opcional)",
+  "save": "Confirmar e salvar",
+  "saving": "Salvando…",
+  "contextRequired": "Insira um contexto ou uma frase original.",
+  "occurrenceRequired": "Localize a expressão exata no contexto.",
+  "languageRequired": "Escolha o idioma da expressão.",
+  "meaningRequired": "Insira o significado e uma situação típica.",
+  "invalid": "Confira o conteúdo inserido.",
+  "draftError": "Não foi possível salvar o rascunho localmente. Mantenha a página aberta e tente novamente.",
+  "saveError": "Não foi possível confirmar o salvamento. O conteúdo foi mantido; tente novamente.",
+  "types": {
+    "word": "Palavra",
+    "phrase": "Locução",
+    "construction": "Construção",
+    "sentence": "Frase",
+    "utterance_strategy": "Estratégia de expressão"
+  }
+},
   "content": {
+    "manual": "Criar manualmente",
     "findExpression": "Converse com o Sensa",
     "findExpressionHint": "Compartilhe textos ou imagens para esclarecer contexto, sentido e expressão",
     "graph": {

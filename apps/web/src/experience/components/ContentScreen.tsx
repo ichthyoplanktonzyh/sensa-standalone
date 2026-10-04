@@ -24,6 +24,7 @@ import {
   type JourneyWorldItemView,
 } from "../personalMeaningJourney";
 import { PersonalMeaningComposer } from "./PersonalMeaningComposer";
+import {ManualMeaningComposer} from './ManualMeaningComposer';
 import { IntakeInboxDrawer } from "./IntakeInboxDrawer";
 import { SensaCollectionBrowserLayout } from "../ui/SensaPageLayouts";
 import { useScreenState } from "../ui/ScreenHost";
@@ -118,6 +119,7 @@ function ContentScreenView({
   const [query, setQuery] = useScreenState(`${screenId}:query`, "");
   const [adding, setAdding] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
+  const [manualOpen,setManualOpen]=useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const page=useWorldWindow({query,filter},!providedSource&&active);
@@ -414,6 +416,7 @@ function ContentScreenView({
       {adding && (
         <ContentDrawer title={t("content.add")} onClose={() => setAdding(false)}>
             {[
+              ...(!providedSource?[{title:'manual',hint:null,icon:StickyNote,action:()=>setManualOpen(true)}]:[]),
               {
                 title: onStartConversation?"findExpression":"record",
                 hint: onStartConversation?"findExpressionHint":"recordHint",
@@ -445,9 +448,9 @@ function ContentScreenView({
                   <strong className="text-sm font-medium">
                     {t(`content.${title}`)}
                   </strong>
-                  <span className="mt-2 block text-xs leading-5 text-fg-tertiary">
+                  {hint&&<span className="mt-2 block text-xs leading-5 text-fg-tertiary">
                     {t(`content.${hint}`)}
-                  </span>
+                  </span>}
                 </span>
                 <ArrowRight size={16} />
               </button>
@@ -464,6 +467,7 @@ function ContentScreenView({
           open(id);
         }}
       />
+      {manualOpen&&<ManualMeaningComposer onClose={()=>setManualOpen(false)} onCreated={id=>{setManualOpen(false);source.reload();onOpenPersonalMeaning(id);}}/>}
       <IntakeInboxDrawer
         drafts={providedSource?drafts.map(item=>({personalMeaningId:item.personalMeaningId,label:item.experienceAnchors[0]?.surfaceForm||item.familiarAnchors[0]?.surfaceForm||item.primaryLabel})):inboxRead.value?.drafts??[]}
         onOpenDraft={(id) => {
