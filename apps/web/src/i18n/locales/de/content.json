@@ -1,5 +1,14 @@
 {
   "manualMeaning": {
+    "refine": "Die Ergebnisse sind zahlreich oder lang. Grenze die Suche ein.",
+    "existing": "Vorhandene Bedeutung wählen",
+    "find": "Nach Bedeutung oder Ausdruck suchen",
+    "search": "Suchen",
+    "useExisting": "Diese Bedeutung verwenden",
+    "writeOwn": "Selbst formulieren",
+    "complete": "Manuell ergänzen",
+    "original": "Ursprüngliches Material",
+    "restart": "Mit dem aktuellen Material neu beginnen",
   "context": "Kontext oder Originalsatz",
   "occurrence": "Ausdruck im Text (oder oben auswählen)",
   "chooseOccurrence": "Diese Fundstelle auswählen",
@@ -119,6 +128,8 @@
     "draftError": "Dieser Entwurf konnte nicht lokal gespeichert werden. Lassen Sie diese Seite bitte geöffnet."
   },
   "contentUi": {
+    "inboxMaterialChanged": "Dieses Material wurde geändert. Prüfe es vor dem Fortfahren erneut.",
+    "discardMaterialConfirmation": "Dieses Material und seine unvollständige Klärung verwerfen?",
     "noteSaved": "Notiz gespeichert",
     "saveFailed": "Speichern fehlgeschlagen. Versuchen Sie es erneut",
     "noteFor": "Notiz zu {{word}}",
@@ -333,7 +344,7 @@
     "chooseAMeaningToConfirm": "Zu bestätigende Bedeutung auswählen",
     "clarify": "Klären",
     "discard": "Verwerfen",
-    "yourInboxIsEmpty": "Ihr Posteingang ist leer",
+    "yourInboxIsEmpty": "Dein Posteingang ist leer",
     "personalContentForThisMeaning": "Persönliche Inhalte zu dieser Bedeutung",
     "editNoteForThisMeaning": "Notiz zu dieser Bedeutung bearbeiten",
     "addANoteForThisMeaning": "Notiz zu dieser Bedeutung hinzufügen",

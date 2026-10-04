@@ -1,5 +1,14 @@
 {
   "manualMeaning": {
+    "refine": "Wyników jest wiele lub są obszerne. Zawęź wyszukiwanie.",
+    "existing": "Wybierz istniejące znaczenie",
+    "find": "Szukaj według znaczenia lub wyrażenia",
+    "search": "Szukaj",
+    "useExisting": "Użyj tego znaczenia",
+    "writeOwn": "Napisz samodzielnie",
+    "complete": "Uzupełnij ręcznie",
+    "original": "Oryginalny materiał",
+    "restart": "Zacznij od nowa z aktualnym materiałem",
   "context": "Kontekst lub oryginalne zdanie",
   "occurrence": "Wyrażenie w tekście (lub zaznacz powyżej)",
   "chooseOccurrence": "Wybierz to wystąpienie",
@@ -119,6 +128,8 @@
     "draftError": "Nie udało się lokalnie zapisać wersji roboczej. Pozostaw tę stronę otwartą."
   },
   "contentUi": {
+    "inboxMaterialChanged": "Materiał się zmienił. Sprawdź go ponownie przed kontynuowaniem.",
+    "discardMaterialConfirmation": "Odrzucić ten materiał i niedokończone wyjaśnienie?",
     "noteSaved": "Zapisano notatkę",
     "saveFailed": "Nie udało się zapisać. Spróbuj ponownie",
     "noteFor": "Notatka do {{word}}",

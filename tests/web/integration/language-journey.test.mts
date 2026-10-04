@@ -1,4 +1,5 @@
 import {test} from 'vitest';
+import {digestOf} from '../../../apps/web/src/experience/personalMeaningJourney/digest';
 /**
  * Intake preserves absolute language facts without consulting the learner's
  * currently selected Route. Route selection belongs to Add-to-Learning, not to
@@ -172,7 +173,7 @@ const pendingAcceptance={...fastTrackPayload('They broke the ice.','broke','en')
 const acceptanceQueued=await raceIntake.submit(pendingAcceptance);
 assert.equal(acceptanceQueued.route,'inbox');
 if(acceptanceQueued.route!=='inbox')throw new Error('fixture must enter Inbox');
-const acceptedLater=await raceIntake.resolve({operationId:crypto.randomUUID(),intakeId:acceptanceQueued.intakeId,sense:pendingAcceptance.sense!});
+const acceptedLater=await raceIntake.resolve({operationId:crypto.randomUUID(),intakeId:acceptanceQueued.intakeId,expectedItemDigest:digestOf((await raceRepository.load()).inboxItems.find(item=>item.intakeId===acceptanceQueued.intakeId)),sense:pendingAcceptance.sense!});
 assert.equal(acceptedLater.route,'fast_track');
 if(acceptedLater.route!=='fast_track')throw new Error('fixture must commit');
 const acceptedRecord=(await raceRepository.load() as any).meanings.find((meaning:any)=>meaning.personalMeaning.personalMeaningId===acceptedLater.personalMeaningId);

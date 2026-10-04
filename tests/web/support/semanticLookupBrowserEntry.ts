@@ -39,10 +39,14 @@ let stopInboxRead:(()=>void)|undefined;
 export const watchInboxRead=()=>{stopInboxRead??=inboxReader.subscribe(()=>{});};
 export const unwatchInboxRead=()=>{stopInboxRead?.();stopInboxRead=undefined;};
 export const inboxReadState=()=>({status:inboxReader.read().status,ids:inboxReader.read().value?.items.map(item=>item.intakeId)??null});
-export const dismissInbox=(intakeId:string)=>modules.semanticIntake.dismiss({operationId:crypto.randomUUID(),intakeId});
+export const dismissInbox=async(intakeId:string)=>{
+ const {digestOf}=await import('../../../apps/web/src/experience/personalMeaningJourney/digest');
+ const item=(await worldReadRepository.inbox()).items.find(item=>item.intakeId===intakeId);
+ return modules.semanticIntake.dismiss({operationId:crypto.randomUUID(),intakeId,expectedItemDigest:digestOf(item)});
+};
 export const injectOrphanDraftHint=async()=>{const id=crypto.randomUUID();await restoreLibraryTransaction(async tx=>{tx.put('semanticDrafts',id,{intakeId:id,startingPoint:null});});return id;};
 export const removeDraftHint=(id:string)=>restoreLibraryTransaction(async tx=>{tx.delete('semanticDrafts',id);});
-function coldCommandGateway(){
+function coldCommandModules(){
  const holdScopedCommit:import('../../../apps/web/src/experience/personalMeaningJourney/repository').JourneyRepository['commit']=async change=>{
   if(held){held=false;entered=true;await new Promise<void>(resolve=>{release=resolve;});}return repository.commit(change);
  };
@@ -51,11 +55,15 @@ function coldCommandGateway(){
  }});
  const scopedPort={load:()=>repository.load(),lookupMeanings:(query:string)=>repository.lookupMeanings(query),readReceipt:(id:string)=>repository.readReceipt(id),
   commit:holdScopedCommit,
+  withInboxCommand:async<T,>(input:Parameters<LibraryJourneyRepository['withInboxCommand']>[0],ids:Parameters<LibraryJourneyRepository['withInboxCommand']>[1],execute:(scoped:import('../../../apps/web/src/experience/personalMeaningJourney/repository').JourneyRepository,assigned:typeof ids)=>Promise<T>):Promise<T>=>repository.withInboxCommand(input,ids,(scoped,assigned)=>execute(scopeCommit(scoped),assigned)),
   withMeaningCommand:async<T,>(input:Parameters<LibraryJourneyRepository['withMeaningCommand']>[0],ids:Parameters<LibraryJourneyRepository['withMeaningCommand']>[1],execute:(scoped:import('../../../apps/web/src/experience/personalMeaningJourney/repository').JourneyRepository,assigned:typeof ids)=>Promise<T>):Promise<T>=>repository.withMeaningCommand(input,ids,(scoped,assigned)=>execute(scopeCommit(scoped),assigned)),
   withDraftCreation:async<T,>(input:Parameters<LibraryJourneyRepository['withDraftCreation']>[0],ids:Parameters<LibraryJourneyRepository['withDraftCreation']>[1],execute:(scoped:import('../../../apps/web/src/experience/personalMeaningJourney/repository').JourneyRepository,assigned:typeof ids)=>Promise<T>):Promise<T>=>repository.withDraftCreation(input,ids,(scoped,assigned)=>execute(scopeCommit(scoped),assigned)),
   withClarificationCommand:async<T,>(input:Parameters<LibraryJourneyRepository['withClarificationCommand']>[0],ids:Parameters<LibraryJourneyRepository['withClarificationCommand']>[1],execute:(scoped:import('../../../apps/web/src/experience/personalMeaningJourney/repository').JourneyRepository,assigned:typeof ids)=>Promise<T>):Promise<T>=>repository.withClarificationCommand(input,ids,(scoped,assigned)=>execute(scopeCommit(scoped),assigned))};
- return createJourneyModules({repository:scopedPort,clock:createSeededClock('2026-10-04T00:00:00Z'),languages:{read:async()=>({targetLanguageTag:'en',supportLanguageTag:'zh-CN'})}}).personalMeaningJourney;
+ return createJourneyModules({repository:scopedPort,clock:createSeededClock('2026-10-04T00:00:00Z'),languages:{read:async()=>({targetLanguageTag:'en',supportLanguageTag:'zh-CN'})}});
 }
+const coldCommandGateway=()=>coldCommandModules().personalMeaningJourney;
+export const resolveColdInbox=(command:import('../../../apps/web/src/experience/intake/semanticIntakeModule').ResolveSemanticIntakeCommand)=>coldCommandModules().semanticIntake.resolve(command);
+export const dismissColdInbox=(command:import('../../../apps/web/src/experience/intake/semanticIntakeModule').DismissSemanticIntakeCommand)=>coldCommandModules().semanticIntake.dismiss(command);
 export const reviseContext=(id:string,expectedRevision:number,text:string,operationId=crypto.randomUUID())=>coldCommandGateway().reviseContext({operationId,personalMeaningId:id,expectedRevision,blocks:[{kind:'text',bodyText:text}]});
 export const createColdDraft=(text:string,operationId=crypto.randomUUID())=>coldCommandGateway().createClarificationDraft({operationId,blocks:[{kind:'text',bodyText:text}],startingPoint:'from_experience'});
 export const receipt=(operationId:string)=>repository.readReceipt(operationId);

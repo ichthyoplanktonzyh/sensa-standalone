@@ -10,6 +10,7 @@ import {createJourneyModules} from '../../../apps/web/src/experience/personalMea
 import {createSeededClock} from '../../../apps/web/src/experience/personalMeaningJourney/ports';
 import {semanticLookupPayload,syntheticSemanticWorld,advanceSemanticHeads} from '../support/semanticLookupFixtures';
 import {manualMeaningPayload,newManualMeaningDraft} from '../../../apps/web/src/experience/intake/manualMeaning';
+import {digestOf} from '../../../apps/web/src/experience/personalMeaningJourney/digest';
 
 test('cold Context and draft commands are bounded, replay-safe, isolated and atomic under foreign writes',async()=>{
  const compiled=await build({stdin:{contents:[
@@ -42,6 +43,14 @@ test('cold Context and draft commands are bounded, replay-safe, isolated and ato
   const gateway=(repository:unknown=library,ids?:{next:()=>string})=>api.createJourneyModules({repository,ids,clock:createSeededClock('2026-10-04T00:00:00Z'),languages:{read:async()=>({targetLanguageTag:'en',supportLanguageTag:'zh-CN'})}}).personalMeaningJourney;
   const intake=(repository:unknown=library)=>api.createJourneyModules({repository,clock:createSeededClock('2026-10-04T00:00:00Z')}).semanticIntake;
   const manual=manualMeaningPayload({...newManualMeaningDraft(),context:'She backed out of the trip.',occurrence:'backed out',canonicalForm:'back out',languageTag:'en',expressionType:'phrase',meaning:'退出已承诺参加的活动。',usage:'答应参加活动后，改变主意不再参加。'});
+  // Raw external captures append to Inbox without hydrating the existing World.
+  const pendingCapture={...manual,operationId:crypto.randomUUID(),sense:null,acceptance:null};
+  reads.length=0;
+  const captured=await intake().submit(pendingCapture);expect(captured.route).toBe('inbox');
+  expect(reads.some(row=>['semanticMeanings','semanticRegistry'].includes(row.table))).toBe(false);
+  reads.length=0;expect(await intake().submit(pendingCapture)).toEqual({...captured,replayed:true});
+  expect(reads.some(row=>['semanticMeanings','semanticRegistry','semanticInbox','semanticDrafts'].includes(row.table))).toBe(false);
+  await expect(intake().submit({...pendingCapture,capturedAt:'2026-10-05T12:00:00Z'})).rejects.toThrow('operationId');
   reads.length=0;
   const manualSaved=await intake().submit(manual);expect(manualSaved.route).toBe('fast_track');
   expect(reads.filter(row=>row.table==='semanticMeanings').every(row=>row.key===manualSaved.personalMeaningId)).toBe(true);
@@ -93,6 +102,61 @@ test('cold Context and draft commands are bounded, replay-safe, isolated and ato
   expect(imageDraft.intakeId).not.toBe(draftMediaId);expect(imageDraft.intakeId).not.toBe(draftMediaInput.operationId);
   expect(await api.readLibrary((tx:any)=>tx.get('media',draftMediaId))).toEqual(draftMedia);expect(api.preparedMediaSnapshot()).toEqual([]);
   expect((await api.worldReadRepository.detail(imageDraft.intakeId)).draft.materialBlocks[0].personalMediaObjectId).toBe(draftMediaId);
+
+  // Inbox actions operate only on the material actually reviewed by the user.
+  const targetDraft=await gateway().createClarificationDraft({...draftInput,operationId:crypto.randomUUID()});
+  const targetItem=await api.readLibrary((tx:any)=>tx.get('semanticInbox',targetDraft.intakeId));
+  const dismissal={operationId:crypto.randomUUID(),intakeId:targetDraft.intakeId,expectedItemDigest:digestOf(targetItem)};
+  reads.length=0;await intake().dismiss(dismissal);
+  expect(reads.some(row=>['semanticMeanings','semanticRegistry'].includes(row.table))).toBe(false);
+  expect(await api.readLibrary((tx:any)=>tx.get('semanticInbox',created.intakeId))).toBeDefined();
+  reads.length=0;await intake().dismiss(dismissal);expect(reads.some(row=>['semanticMeanings','semanticRegistry','semanticInbox','semanticDrafts'].includes(row.table))).toBe(false);
+  await expect(intake().dismiss({...dismissal,expectedItemDigest:'f'.repeat(64)})).rejects.toThrow('operationId');
+  const heldDraft=await gateway().createClarificationDraft({...draftInput,operationId:crypto.randomUUID()});
+  const originalItem=await api.readLibrary((tx:any)=>tx.get('semanticInbox',heldDraft.intakeId));
+  const oldDismissal={operationId:crypto.randomUUID(),intakeId:heldDraft.intakeId,expectedItemDigest:digestOf(originalItem)};
+  await api.restoreLibraryTransaction(async(tx:any)=>tx.put('semanticInbox',heldDraft.intakeId,{...originalItem,summaryView:'changed material',payload:{...originalItem.payload,context:{...originalItem.payload.context,textSegment:'changed material'}}}));
+  await expect(intake().dismiss(oldDismissal)).rejects.toThrow('clarificationSourceChanged');expect(await library.readReceipt(oldDismissal.operationId)).toBeNull();
+  const currentItem=await api.readLibrary((tx:any)=>tx.get('semanticInbox',heldDraft.intakeId));
+  const freshDismissal={...oldDismissal,operationId:crypto.randomUUID(),expectedItemDigest:digestOf(currentItem)};
+  const beforeInboxCommit=adapter.commit.bind(adapter);
+  adapter.commit=async(mutation:any)=>{if(mutation.deletes.some((row:any)=>row.table==='semanticInbox'))throw new Error('fixture-inbox-write-failure');return beforeInboxCommit(mutation);};
+  await expect(intake().dismiss(freshDismissal)).rejects.toThrow('storageWrite');adapter.commit=beforeInboxCommit;
+  expect(await library.readReceipt(freshDismissal.operationId)).toBeNull();expect((await api.worldReadRepository.detail(heldDraft.intakeId)).draft).not.toBeNull();
+  await intake().dismiss(freshDismissal);
+  // Prepare a complete-but-unaccepted tuple through the actual Inbox fact shape.
+  const pendingDraft=await gateway().createClarificationDraft({...draftInput,operationId:crypto.randomUUID()});
+  const pendingItem={...originalItem,intakeId:pendingDraft.intakeId,status:'pending_acceptance',summaryView:manual.context!.textSegment,payload:{...manual,operationId:crypto.randomUUID(),acceptance:null}};
+  await api.restoreLibraryTransaction(async(tx:any)=>tx.put('semanticInbox',pendingDraft.intakeId,pendingItem));
+  const resolution={operationId:crypto.randomUUID(),intakeId:pendingDraft.intakeId,expectedItemDigest:digestOf(pendingItem),sense:manual.sense!};
+  const staleResolution={...resolution,operationId:crypto.randomUUID(),expectedItemDigest:'f'.repeat(64)};
+  await expect(intake().resolve(staleResolution)).rejects.toThrow('clarificationSourceChanged');expect(await library.readReceipt(staleResolution.operationId)).toBeNull();
+  adapter.commit=async(mutation:any)=>{if(mutation.puts.some((row:any)=>row.table==='semanticMeanings'))throw new Error('fixture-inbox-acceptance-failure');return beforeInboxCommit(mutation);};
+  await expect(intake().resolve(resolution)).rejects.toThrow('storageWrite');adapter.commit=beforeInboxCommit;
+  expect(await library.readReceipt(resolution.operationId)).toBeNull();expect(await api.readLibrary((tx:any)=>tx.get('semanticInbox',pendingDraft.intakeId))).toEqual(pendingItem);
+  reads.length=0;const resolved=await intake().resolve(resolution);expect(resolved.route).toBe('fast_track');
+  expect(reads.filter(row=>row.table==='semanticMeanings').every(row=>row.key===resolved.personalMeaningId)).toBe(true);expect(reads.filter(row=>row.table==='semanticRegistry').length).toBeLessThan(40);
+  expect((await api.worldReadRepository.detail(pendingDraft.intakeId)).draft).toBeNull();expect((await api.worldReadRepository.detail(resolved.personalMeaningId)).detail.directAlignments[0].confirmedBindings[0].surfaceForm).toBe('back out');
+  reads.length=0;expect(await intake().resolve(resolution)).toEqual({...resolved,replayed:true});expect(reads.some(row=>['semanticMeanings','semanticRegistry','semanticInbox','semanticDrafts'].includes(row.table))).toBe(false);
+  const noContextDraft=await gateway().createClarificationDraft({...draftInput,operationId:crypto.randomUUID()});
+  const noContextItem={...pendingItem,intakeId:noContextDraft.intakeId,status:'pending_context',payload:{...pendingItem.payload,context:null,expression:{...manual.expression!,occurrence:null}}};
+  await api.restoreLibraryTransaction(async(tx:any)=>tx.put('semanticInbox',noContextItem.intakeId,noContextItem));
+  const completion={operationId:crypto.randomUUID(),intakeId:noContextItem.intakeId,expectedItemDigest:digestOf(noContextItem),context:manual.context!,expression:manual.expression!,sense:manual.sense!};
+  reads.length=0;const completedManually=await intake().resolve(completion);expect(completedManually.route).toBe('fast_track');
+  expect(reads.filter(row=>row.table==='semanticMeanings').every(row=>row.key===completedManually.personalMeaningId)).toBe(true);expect(reads.filter(row=>row.table==='semanticRegistry').length).toBeLessThan(40);
+  expect((await api.worldReadRepository.detail(noContextItem.intakeId)).draft).toBeNull();
+  const selectedMeaning={senseId:firstManual.detail.directAlignments[0].senseId,senseVersionId:firstManual.detail.directAlignments[0].senseVersionId};
+  const historicalDraft=await gateway().createClarificationDraft({...draftInput,operationId:crypto.randomUUID()});
+  const historicalItem={...noContextItem,intakeId:historicalDraft.intakeId};
+  await api.restoreLibraryTransaction(async(tx:any)=>{
+   const ordinal=(await tx.registrySelection({kind:'ordinal',registryKind:'senseVersions'})).nextOrdinal;
+   tx.put('semanticInbox',historicalItem.intakeId,historicalItem);
+   const senseKey=`senses:${selectedMeaning.senseId}`,versionKey=`senseVersions:${selectedMeaning.senseVersionId}`,sense=await tx.get('semanticRegistry',senseKey),version=await tx.get('semanticRegistry',versionKey),nextId=crypto.randomUUID();
+   tx.put('semanticRegistry',`senseVersions:${nextId}`,{...version,ordinal,value:{...version.value,senseVersionId:nextId,versionNumber:2,semanticSpec:{...version.value.semanticSpec,coreMeaningFocus:'new head, not the reviewed meaning'}}});
+   tx.put('semanticRegistry',senseKey,{...sense,value:{...sense.value,currentSenseVersionId:nextId,currentVersionNumber:2}});
+  });
+  const historical=await intake().resolve({...completion,operationId:crypto.randomUUID(),intakeId:historicalItem.intakeId,expectedItemDigest:digestOf(historicalItem),reuseSense:{senseId:selectedMeaning.senseId,senseVersionId:selectedMeaning.senseVersionId}});
+  expect((await api.worldReadRepository.detail(historical.personalMeaningId)).detail.directAlignments[0].senseVersionId).toBe(selectedMeaning.senseVersionId);
 
   const confirmation=async(intakeId:string,operationId=crypto.randomUUID(),newKey?:string)=>({operationId,intakeId,source:await api.worldReadRepository.captureSource('intake',intakeId),context:semanticLookupPayload().context,languageContext:{targetLanguageTag:'en',supportLanguageTag:'zh-CN'},focus:null,
    sense:{...state.registry.senseVersions[0]!.semanticSpec,proposedSenseKey:newKey??state.registry.senses[0]!.senseKey,...(newKey?{}:{reuseSense:{senseId:state.registry.senses[0]!.senseId,senseVersionId:state.registry.senseVersions[0]!.senseVersionId}}),unresolvedQuestions:[]},expression:{surfaceForm:newKey?'new-learner-expression':'borrow-0',languageTag:'en',expressionType:'word',relation:'realizes',semanticCoverage:'exact'},confirmExpression:true,transcript:[],provenance:{provider:'fixture',model:'fixture',promptVersion:'v9'},semanticPolicyVersion:'fixture-v1'});

@@ -1,5 +1,14 @@
 {
   "manualMeaning": {
+    "refine": "Kết quả nhiều hoặc dài. Hãy thu hẹp tìm kiếm.",
+    "existing": "Chọn ý nghĩa đã có",
+    "find": "Tìm theo ý nghĩa hoặc cách diễn đạt",
+    "search": "Tìm",
+    "useExisting": "Dùng ý nghĩa này",
+    "writeOwn": "Tự viết",
+    "complete": "Bổ sung thủ công",
+    "original": "Tư liệu gốc",
+    "restart": "Nhập lại từ tư liệu mới nhất",
   "context": "Ngữ cảnh hoặc câu gốc",
   "occurrence": "Cách diễn đạt trong văn bản (hoặc chọn ở trên)",
   "chooseOccurrence": "Chọn lần xuất hiện này",
@@ -119,6 +128,8 @@
     "draftError": "Không thể lưu bản nháp này cục bộ. Vui lòng giữ trang đang mở."
   },
   "contentUi": {
+    "inboxMaterialChanged": "Tư liệu đã thay đổi. Hãy xem lại trước khi tiếp tục.",
+    "discardMaterialConfirmation": "Bỏ tư liệu này cùng phần làm rõ chưa hoàn tất?",
     "noteSaved": "Đã lưu ghi chú",
     "saveFailed": "Không thể lưu. Vui lòng thử lại",
     "noteFor": "Ghi chú cho {{word}}",
@@ -333,7 +344,7 @@
     "chooseAMeaningToConfirm": "Chọn nghĩa để xác nhận",
     "clarify": "Làm rõ",
     "discard": "Loại bỏ",
-    "yourInboxIsEmpty": "Hộp thư đến đang trống",
+    "yourInboxIsEmpty": "Hộp thư đến trống",
     "personalContentForThisMeaning": "Nội dung cá nhân cho nghĩa này",
     "editNoteForThisMeaning": "Chỉnh sửa ghi chú cho nghĩa này",
     "addANoteForThisMeaning": "Thêm ghi chú cho nghĩa này",

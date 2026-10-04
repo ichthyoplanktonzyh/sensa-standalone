@@ -1,5 +1,14 @@
 {
   "manualMeaning": {
+    "refine": "Hasil banyak atau panjang. Persempit pencarian.",
+    "existing": "Pilih makna yang ada",
+    "find": "Cari makna atau ungkapan",
+    "search": "Cari",
+    "useExisting": "Gunakan makna ini",
+    "writeOwn": "Tulis sendiri",
+    "complete": "Lengkapi manual",
+    "original": "Materi asli",
+    "restart": "Mulai lagi dari materi terbaru",
   "context": "Konteks atau kalimat asli",
   "occurrence": "Ungkapan dalam teks (atau pilih di atas)",
   "chooseOccurrence": "Pilih kemunculan ini",
@@ -139,6 +148,8 @@
     "note": "Halaman ini saat ini hanya menampilkan struktur yang direncanakan. Halaman ini tidak membuat konten pribadi atau catatan belajar."
   },
   "contentUi": {
+    "inboxMaterialChanged": "Materi ini telah berubah. Tinjau kembali sebelum melanjutkan.",
+    "discardMaterialConfirmation": "Buang materi ini beserta klarifikasi yang belum selesai?",
     "noteSaved": "Catatan disimpan",
     "saveFailed": "Tidak dapat menyimpan. Silakan coba lagi",
     "noteFor": "Catatan untuk {{word}}",

@@ -3,6 +3,8 @@ import type {
   SensaIntakeItem,
   SensaIntakePayload,
   SensaIntakeSense,
+  SensaIntakeContext,
+  SensaIntakeExpression,
 } from '@sensa/contracts/sensa';
 
 /**
@@ -14,12 +16,19 @@ export type SemanticIntakeResult = IngestResult & { replayed: boolean };
 export interface ResolveSemanticIntakeCommand {
   operationId: string;
   intakeId: string;
+  /** Exact material the learner reviewed, not a newly fetched replacement. */
+  expectedItemDigest: string;
   sense: SensaIntakeSense;
+  /** Explicitly completed facts; omitted facts retain the captured values. */
+  context?: SensaIntakeContext;
+  expression?: SensaIntakeExpression;
+  reuseSense?: {senseId:string;senseVersionId:string};
 }
 
 export interface DismissSemanticIntakeCommand {
   operationId: string;
   intakeId: string;
+  expectedItemDigest: string;
 }
 
 /**

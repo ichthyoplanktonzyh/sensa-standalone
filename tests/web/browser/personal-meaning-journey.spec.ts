@@ -167,6 +167,144 @@ for(const size of [0,10_000])test(`manual authoring at ${size} Meanings needs Co
  await page.screenshot({path:testInfo.outputPath('manual-meaning-detail.png'),fullPage:true});
 });
 
+async function manualInboxCompletion(page:Page,missing:'context'|'expression'|'sense'|'image'){
+ page.setDefaultTimeout(15_000);requests=[];plans=[];
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();await expect(page.getByRole('navigation',{name:'主要导航'})).toBeVisible();await page.waitForFunction(()=>!!window.__sensaBrowserSmoke);
+ const base=semanticLookupPayload(),mediaId=crypto.randomUUID(),png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII=';
+ const original={...base,acceptance:null,context:missing==='context'?null:{...base.context!,source:{client:'codex',url:'https://example.test/original',title:'原始网页',sourceReferenceId:'source-manual-completion',domSelector:null,paragraphContext:null},...(missing==='sense'?{modality:'mixed' as const,mediaReferenceIds:[mediaId]}:{}),...(missing==='image'?{modality:'image' as const,textSegment:null,mediaReferenceIds:[mediaId]}:{})},expression:missing==='expression'?null:{...base.expression!,...(missing==='context'?{occurrence:null}:{}),...(missing==='image'?{languageTag:'en-US',occurrence:{surfaceForm:'borrow',locator:{kind:'media_region' as const,mediaReferenceId:mediaId,x:0,y:0,width:1,height:1}}}:{})},sense:['sense','image'].includes(missing)?null:base.sense};
+ const id=await page.evaluate(({original,media})=>window.__sensaBrowserSmoke!.seedInboxForTest(original,original.context?.mediaReferenceIds.length?media:undefined),{original,media:{mediaId,mediaKind:'image' as const,mimeType:'image/png',dataUrl:'data:image/png;base64,'+png,sizeBytes:Buffer.from(png,'base64').byteLength,createdAt:'2026-10-05T00:00:00Z'}});
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
+ const inbox=page.locator('.sensa-intake-inbox'),form=page.locator('.sensa-manual-meaning');
+ const open=async()=>{await page.getByRole('button',{name:/^收件箱/u}).click();await inbox.getByRole('button',{name:'手动补全',exact:true}).click();};
+ await open();await expect(form.getByLabel('情境或原句',{exact:true})).toBeEnabled();
+ if(missing==='context')await form.getByLabel('情境或原句',{exact:true}).fill('I asked to borrow an umbrella on a rainy day.');
+ if(missing==='expression'){await form.getByLabel('原文中的表达（可在上方选中）',{exact:true}).fill('borrow');await form.getByLabel('表达语言',{exact:true}).selectOption('en');}
+ const fillSense=async()=>{await form.getByLabel('这里表达的意思',{exact:true}).fill('临时取得物品使用，之后归还。');await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('下雨时向同事借伞，回家后再把伞还给同事。');};
+ if(missing==='sense'||missing==='image')await fillSense();
+ if(missing==='image')await expect(form.getByLabel('表达语言',{exact:true})).toHaveValue('en-US');
+ await form.getByRole('button',{name:'关闭',exact:true}).click();await expect(inbox.getByRole('article')).toHaveCount(1);
+ await page.reload();await open();await expect(form.getByLabel('这里表达的意思',{exact:true})).not.toHaveValue('');
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticWorldContainsExpression('borrow'))).toBe(false);
+ let capturedText=original.context?.textSegment??null;
+ if(missing==='sense'){
+  await page.evaluate(id=>window.__sensaBrowserSmoke!.appendInboxContextForTest(id,'原材料新增的一行。'),id);
+  await form.getByRole('button',{name:'确认并保存',exact:true}).click();await expect(form.getByRole('alert')).toContainText('材料已发生变化');
+  await expect(form.getByLabel('这里表达的意思',{exact:true})).toHaveValue('临时取得物品使用，之后归还。');
+  await form.getByRole('button',{name:'关闭',exact:true}).click();await inbox.getByRole('button',{name:'手动补全',exact:true}).click();
+  await expect(form.getByRole('button',{name:'确认并保存',exact:true})).toBeDisabled();
+  await expect(form.getByLabel('这里表达的意思',{exact:true})).toHaveValue('临时取得物品使用，之后归还。');
+  await form.getByRole('button',{name:'从最新材料重新填写',exact:true}).click();await fillSense();
+  capturedText=await form.getByLabel('情境或原句',{exact:true}).inputValue();
+  await form.getByLabel('情境或原句',{exact:true}).fill(capturedText+' 我的现场补充。');
+ }
+ let competing:Page|undefined;
+ if(missing==='context'){
+  competing=await page.context().newPage();
+  await competing.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+  await competing.goto(page.url());await competing.getByRole('button',{name:/^收件箱/u}).click();
+  await competing.locator('.sensa-intake-inbox').getByRole('button',{name:'手动补全',exact:true}).click();
+  await competing.locator('.sensa-manual-meaning').getByLabel('这里表达的意思',{exact:true}).fill('另一窗口尚未确认的填写。');
+ }
+ await page.context().setOffline(true);
+ if(missing==='context'){
+  await page.evaluate(id=>window.__sensaBrowserSmoke!.loseNextInboxResolveResponseForTest(id),id);
+  await form.getByRole('button',{name:'确认并保存',exact:true}).click();await expect(form.getByRole('alert')).toBeVisible();
+  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.intakeInboxCount())).toBe(0);
+  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(1);
+  await expect(form.getByLabel('情境或原句',{exact:true})).toHaveValue('I asked to borrow an umbrella on a rainy day.');
+ }
+ await form.getByRole('button',{name:'确认并保存',exact:true}).click();await expect(page.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(1);
+ if(competing){
+  const otherForm=competing.locator('.sensa-manual-meaning');
+  await otherForm.getByRole('button',{name:'确认并保存',exact:true}).click();await expect(otherForm.getByRole('alert')).toContainText('材料已发生变化');
+  await expect(otherForm.getByLabel('这里表达的意思',{exact:true})).toHaveValue('另一窗口尚未确认的填写。');
+  await otherForm.getByRole('button',{name:'关闭',exact:true}).click();await expect(competing.locator('.sensa-intake-inbox').getByRole('article')).toHaveCount(0);
+  expect(await competing.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(1);await competing.close();
+ }
+ if(missing==='sense'||missing==='image')await expect(page.getByRole('article',{name:'表达详情'}).getByRole('img')).toBeVisible();
+ if(missing==='sense')await expect(page.getByRole('article',{name:'表达详情'})).toContainText('我的现场补充。');
+ await page.context().setOffline(false);await page.reload();await expect(page.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
+ if(original.context){const source=page.locator('details').filter({has:page.locator('summary').filter({hasText:'Codex · 原始网页'})});await source.locator('summary').click();await expect(source.getByRole('link')).toHaveAttribute('href','https://example.test/original');if(capturedText)await expect((missing==='sense'?source:page.getByRole('article',{name:'表达详情'})).getByText(capturedText,{exact:true})).toBeVisible();}
+ if(missing==='sense'||missing==='image')await expect(page.getByRole('article',{name:'表达详情'}).getByRole('img')).toBeVisible();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.intakeInboxCount())).toBe(0);expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).targetIds).toEqual([]);expect(requests).toEqual([]);
+}
+test('manual Inbox completion fills missing context without AI and preserves its original capture',async({page})=>manualInboxCompletion(page,'context'));
+test('manual Inbox completion fills missing expression without AI and preserves its original capture',async({page})=>manualInboxCompletion(page,'expression'));
+test('manual Inbox completion fills missing sense without AI and preserves its original capture',async({page})=>manualInboxCompletion(page,'sense'));
+test('manual Inbox completion preserves a located image occurrence without requiring invented text',async({page})=>manualInboxCompletion(page,'image'));
+
+test('Inbox manual completion can review and reuse a local meaning without accepting it merely by selection',async({page})=>{
+ page.setDefaultTimeout(15_000);requests=[];plans=[];
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();await expect(page.getByRole('navigation',{name:'主要导航'})).toBeVisible();await page.waitForFunction(()=>!!window.__sensaBrowserSmoke);
+ const repository=new MemoryJourneyRepository(),modules=createJourneyModules({repository,clock:createSeededClock()});await modules.semanticIntake.submit(semanticLookupPayload());scaleFixture=await repository.load();
+ const selected=scaleFixture.registry.senses[0]!;
+ await page.evaluate(async()=>window.__sensaBrowserSmoke!.seedSemanticWorld(await (await fetch('/semantic-scale-fixture')).json()));
+ await page.evaluate(payload=>window.__sensaBrowserSmoke!.seedInboxForTest(payload),{...semanticLookupPayload(),operationId:crypto.randomUUID(),sense:null,acceptance:null});
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
+ const open=async()=>{await page.getByRole('button',{name:/^收件箱/u}).click();await page.locator('.sensa-intake-inbox').getByRole('button',{name:'手动补全',exact:true}).click();};
+ await open();const form=page.locator('.sensa-manual-meaning');await expect(form.getByLabel('情境或原句',{exact:true})).toBeEnabled();
+ await form.getByText('选择已有意思',{exact:true}).click();await form.getByLabel('按意思或表达查找',{exact:true}).fill('no-such-expression');await form.getByRole('button',{name:'查找',exact:true}).click();await expect(form.getByRole('status')).toContainText('没有匹配');
+ await form.getByLabel('按意思或表达查找',{exact:true}).fill('borrow');await form.getByRole('button',{name:'查找',exact:true}).click();
+ await form.getByText('场景与边界',{exact:true}).click();await expect(form.getByText('永久赠送',{exact:true})).toBeVisible();
+ await form.getByRole('button',{name:'使用这个意思',exact:true}).click();
+ await expect(form.getByLabel('这里表达的意思',{exact:true})).toHaveAttribute('readonly','');
+ await form.getByRole('button',{name:'关闭',exact:true}).click();expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.intakeInboxCount())).toBe(1);
+ await page.reload();await open();await expect(form.getByRole('button',{name:'自己填写',exact:true})).toBeVisible();
+ await page.context().setOffline(true);await form.getByRole('button',{name:'确认并保存',exact:true}).click();await expect(page.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
+ const id=new URL(page.url()).searchParams.get('meaningId')!;expect(await page.evaluate(id=>window.__sensaBrowserSmoke!.meaningPinsForTest(id),id)).toEqual([{senseId:selected.senseId,senseVersionId:selected.currentSenseVersionId}]);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.intakeInboxCount())).toBe(0);expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).targetIds).toEqual([]);expect(requests).toEqual([]);
+});
+
+test('Inbox shows original material and media, confirms complete facts offline, and discards only after explicit confirmation',async({page},testInfo)=>{
+ page.setDefaultTimeout(15_000);requests=[];plans=[];
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ await expect(page.getByRole('navigation',{name:'主要导航'})).toBeVisible();await page.waitForFunction(()=>!!window.__sensaBrowserSmoke);
+ const base=semanticLookupPayload(),mediaId=crypto.randomUUID(),png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII=';
+ const source={client:'browser-extension',url:'https://example.test/reading',title:'原文来源',sourceReferenceId:null,domSelector:null,paragraphContext:null};
+ const imageText=base.context!.textSegment+' '+('原始材料。'.repeat(40))+'完整原文尾部';
+ const pending=[
+  {...base,operationId:crypto.randomUUID(),acceptance:null,context:{...base.context!,source,textSegment:base.context!.textSegment+' 等待明确确认'}},
+  {...base,operationId:crypto.randomUUID(),acceptance:null,sense:null,context:{...base.context!,source,textSegment:imageText,modality:'mixed' as const,mediaReferenceIds:[mediaId]}},
+  {...base,operationId:crypto.randomUUID(),acceptance:null,context:null,expression:{...base.expression!,occurrence:null}},
+  {...base,operationId:crypto.randomUUID(),acceptance:null,expression:null},
+ ];
+ const ids=await page.evaluate(async({pending,media})=>{const ids:string[]=[];for(const payload of pending)ids.push(await window.__sensaBrowserSmoke!.seedInboxForTest(payload,payload.context?.mediaReferenceIds.length?media:undefined));return ids;},{pending,media:{mediaId,mediaKind:'image' as const,mimeType:'image/png',dataUrl:'data:image/png;base64,'+png,sizeBytes:Buffer.from(png,'base64').byteLength,createdAt:'2026-10-05T00:00:00Z'}});
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();await page.getByRole('button',{name:/^收件箱/u}).click();
+ const inbox=page.locator('.sensa-intake-inbox'),rows=inbox.getByRole('article');await expect(rows).toHaveCount(4);
+ for(const state of ['待接纳','待确认词义','待补充语境','待圈定表达'])await expect(inbox.getByText(state,{exact:true})).toBeVisible();
+ const imageItem=rows.filter({has:page.getByText('待确认词义',{exact:true})});
+ await expect(imageItem.getByText(imageText,{exact:true})).toBeVisible();await expect(imageItem.getByRole('link')).toHaveAttribute('href','https://example.test/reading');
+ await imageItem.locator('summary').click();await expect(imageItem.getByRole('img')).toBeVisible();
+ expect(await imageItem.getByRole('img').evaluate((image:HTMLImageElement)=>image.complete&&image.naturalWidth>0)).toBe(true);
+ await page.evaluate(mediaId=>window.__sensaBrowserSmoke!.hideInboxMediaForTest(mediaId),mediaId);
+ await expect(imageItem.getByRole('alert')).toBeVisible();await imageItem.getByRole('button',{name:'重试',exact:true}).click();await expect(imageItem.getByRole('alert')).toBeVisible();
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.restoreInboxMediaForTest());await expect(imageItem.getByRole('img')).toBeVisible();
+ await imageItem.getByRole('button',{name:'丢弃',exact:true}).click();await imageItem.getByRole('button',{name:'取消',exact:true}).click();await expect(rows).toHaveCount(4);
+ await imageItem.getByRole('button',{name:'丢弃',exact:true}).click();
+ await page.evaluate(id=>window.__sensaBrowserSmoke!.appendInboxContextForTest(id,'另一窗口补充了原材料。'),ids[1]!);
+ await expect(imageItem.getByText(/另一窗口补充了原材料/u)).toBeVisible();await imageItem.getByRole('button',{name:'确认',exact:true}).click();
+ await expect(imageItem.getByRole('alert')).toContainText('材料已发生变化');await expect(rows).toHaveCount(4);await imageItem.getByRole('button',{name:'取消',exact:true}).click();
+ const ready=rows.filter({has:page.getByText('待接纳',{exact:true})});await expect(ready.getByRole('button',{name:'确认保存',exact:true})).toBeEnabled();
+ await page.evaluate(id=>window.__sensaBrowserSmoke!.failNextInboxCommitForTest(id),ids[0]!);
+ await ready.getByRole('button',{name:'确认保存',exact:true}).click();await expect(ready.getByRole('alert')).toBeVisible();await expect(rows).toHaveCount(4);
+ await page.context().setOffline(true);await ready.getByRole('button',{name:'确认保存',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).targetIds).toEqual([]);
+ await page.getByRole('button',{name:'返回我的语义世界',exact:true}).click();await page.getByRole('button',{name:/^收件箱/u}).click();await expect(rows).toHaveCount(3);
+ await imageItem.locator('summary').click();await expect(imageItem.getByRole('img')).toBeVisible();
+ await imageItem.getByRole('button',{name:'丢弃',exact:true}).click();await page.evaluate(id=>window.__sensaBrowserSmoke!.failNextInboxCommitForTest(id),ids[1]!);
+ await imageItem.getByRole('button',{name:'确认',exact:true}).click();await expect(imageItem.getByRole('alert')).toBeVisible();await expect(rows).toHaveCount(3);
+ await imageItem.getByRole('button',{name:'确认',exact:true}).click();await expect(rows).toHaveCount(2);
+ await expect(inbox.getByText('待补充语境',{exact:true})).toBeVisible();await expect(inbox.getByText('待圈定表达',{exact:true})).toBeVisible();
+ await page.context().setOffline(false);await page.reload();await page.getByRole('button',{name:/^收件箱/u}).click();await expect(rows).toHaveCount(2);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticWorldContainsExpression('borrow'))).toBe(true);expect(requests).toEqual([]);
+ await page.screenshot({path:testInfo.outputPath('inbox-after-explicit-actions.png'),fullPage:true});
+});
+
 test('a saved draft can explicitly continue with a newly configured teacher after its initial provider is unavailable',async({page})=>{
  requests=[];plans=[];
  await page.addInitScript(()=>{(window as unknown as {__name:(value:unknown)=>unknown}).__name=value=>value;});

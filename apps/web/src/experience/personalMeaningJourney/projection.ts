@@ -298,14 +298,14 @@ const buildAnchorViews = (record: MeaningJourneyRecord) => {
       );
       if (!revision) return [];
       const intake=revision.structuredPayload.intake as Record<string,unknown>|undefined;
-      const parsedSource=sensaIntakeSourceMetaSchema.safeParse(intake?.contextSource??revision.structuredPayload.source);
+      const parsedSource=sensaIntakeSourceMetaSchema.safeParse(intake&&Object.hasOwn(intake,'contextSource')?intake.contextSource:revision.structuredPayload.source);
       const source=parsedSource.success?parsedSource.data:null;
       const capturedRevision=record.personalExpressionAnchorRevisions.flatMap(expression=>{
         if(!expression.contextAnchorRevisionId)return [];
         return record.personalSemanticAnchorRevisions.filter(candidate=>candidate.personalSemanticAnchorRevisionId===expression.contextAnchorRevisionId
           &&candidate.personalSemanticAnchorId===anchor.personalSemanticAnchorId);
       })[0];
-      const originalText=capturedRevision?.bodyText??(typeof intake?.contextText==='string'?intake.contextText:null);
+      const originalText=intake&&Object.hasOwn(intake,'contextText')?(typeof intake.contextText==='string'?intake.contextText:null):capturedRevision?.bodyText??null;
       const capturedSource=source||originalText&&(originalText!==revision.bodyText||anchor.status!=='active')?{text:originalText,source}:undefined;
       if(capturedSource)capturedSources.push({anchorId:anchor.personalSemanticAnchorId,...capturedSource});
       // Retirement changes the current Context, not its capture provenance.

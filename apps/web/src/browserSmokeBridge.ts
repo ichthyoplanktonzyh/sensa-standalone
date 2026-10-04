@@ -12,6 +12,14 @@ import {loadJourneyStateFromLibrary} from './experience/personalMeaningJourney/r
 import type {JourneyState} from './experience/personalMeaningJourney/store';
 
 type BrowserSmokeBridge = {
+  meaningPinsForTest(id:string):Promise<Array<{senseId:string;senseVersionId:string}>>;
+  seedInboxForTest(payload:import('@sensa/contracts/sensa').SensaIntakePayload,media?:import('./data/library/media').StoredMedia):Promise<string>;
+  appendInboxContextForTest(intakeId:string,text:string):Promise<void>;
+  failNextInboxCommitForTest(intakeId:string):Promise<void>;
+  loseNextInboxResolveResponseForTest(intakeId:string):Promise<void>;
+  semanticMeaningCountForTest():Promise<number>;
+  hideInboxMediaForTest(mediaId:string):Promise<void>;
+  restoreInboxMediaForTest():Promise<void>;
   seedDrafts(drafts: number, images: number): Promise<number>;
   seedSemanticWorld(state:JourneyState):Promise<number>;
   holdWorldDetailReadsForTest():Promise<void>;
@@ -65,7 +73,47 @@ const randomDataUrl = (size: number): string => {
 if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
   let releaseWorldReads:(()=>void)|undefined;
   let releaseInboxReads:((fail?:boolean)=>void)|undefined;
+  let hiddenInboxMedia:import('./data/library/media').StoredMedia|undefined;
   window.__sensaBrowserSmoke = {
+    async meaningPinsForTest(id){
+      const {worldReadRepository}=await import('./experience/personalMeaningJourney/worldRepository');
+      return (await worldReadRepository.detail(id)).detail?.directAlignments.map(({senseId,senseVersionId})=>({senseId,senseVersionId}))??[];
+    },
+    async failNextInboxCommitForTest(intakeId){
+      const {sqliteRecordAdapter}=await import('./data/library/sqliteAdapter');
+      const adapter=await sqliteRecordAdapter(),commit=adapter.commit.bind(adapter);
+      adapter.commit=async mutation=>{if(mutation.deletes.some(row=>row.table==='semanticInbox'&&row.key===intakeId)){adapter.commit=commit;throw new Error('fixture Inbox commit failure');}return commit(mutation);};
+    },
+    async semanticMeaningCountForTest(){return (await loadJourneyStateFromLibrary()).meanings.length;},
+    async loseNextInboxResolveResponseForTest(intakeId){
+      const {semanticIntakeModule}=await import('./experience/personalMeaningJourney/gateway');
+      const resolve=semanticIntakeModule.resolve.bind(semanticIntakeModule);
+      semanticIntakeModule.resolve=async command=>{
+        if(command.intakeId!==intakeId)return resolve(command);
+        const result=await resolve(command);semanticIntakeModule.resolve=resolve;
+        if(result.route!=='fast_track')throw new Error('fixture expected committed Meaning');
+        throw new Error('fixture lost committed result');
+      };
+    },
+    async appendInboxContextForTest(intakeId,text){
+      const {createJourneyGateway}=await import('./experience/personalMeaningJourney/gateway');
+      await createJourneyGateway().addClarificationMaterial(crypto.randomUUID(),intakeId,{kind:'text',bodyText:text});
+    },
+    async hideInboxMediaForTest(mediaId){
+      if(hiddenInboxMedia)throw new Error('one media fault at a time');
+      await restoreLibraryTransaction(async tx=>{const row=await tx.get<import('./data/library/media').StoredMedia>('media',mediaId);if(!row)throw new Error('fixture media missing');hiddenInboxMedia=row;tx.delete('media',mediaId);});
+    },
+    async restoreInboxMediaForTest(){
+      const row=hiddenInboxMedia;if(!row)throw new Error('no held media');
+      await restoreLibraryTransaction(async tx=>tx.put('media',row.mediaId,row));hiddenInboxMedia=undefined;
+    },
+    async seedInboxForTest(payload,media){
+      const {createJourneyModules}=await import('./experience/personalMeaningJourney/gateway');
+      if(media){const {stageMedia}=await import('./experience/personalMeaningJourney/mediaStore');stageMedia(media);}
+      const result=await createJourneyModules().semanticIntake.submit(payload);
+      if(result.route!=='inbox')throw new Error('fixture requires an incomplete or unaccepted tuple');
+      return result.intakeId;
+    },
     async holdWorldInboxReadsForTest(){
       if(releaseInboxReads)throw new Error('Inbox read fixture is already held');
       const {worldReadRepository}=await import('./experience/personalMeaningJourney/worldRepository');
@@ -86,9 +134,9 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
     },
     releaseWorldDetailReadsForTest(){releaseWorldReads?.();},
     async notifyWorldReadForTest(){
-      // Isolated browser fixture only: a notification/frame change without
-      // creating or rewriting any learner source, outcome or learning fact.
-      await restoreLibraryTransaction(async tx=>{tx.put('meta','world-read-refresh-fixture',crypto.randomUUID());});
+      // A coarse semantic invalidation hint, not an unrelated meta write.
+      // It forces a coherent reread without manufacturing learner facts.
+      window.dispatchEvent(new CustomEvent('sensa-library-changed',{detail:{tables:['semanticMeanings']}}));
     },
     async reviseMeaningContextForTest(id,text){
       const [{worldReadRepository},{createJourneyGateway}]=await Promise.all([

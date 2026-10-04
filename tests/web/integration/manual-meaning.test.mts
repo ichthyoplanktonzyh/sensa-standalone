@@ -1,5 +1,7 @@
 import {test,expect} from 'vitest';
-import {manualMeaningPayload,newManualMeaningDraft,occurrencePositions} from '../../../apps/web/src/experience/intake/manualMeaning';
+import {manualMeaningPayload,manualDraftFromIntake,newManualMeaningDraft,occurrencePositions} from '../../../apps/web/src/experience/intake/manualMeaning';
+import {digestOf} from '../../../apps/web/src/experience/personalMeaningJourney/digest';
+import {semanticLookupPayload,advanceSemanticHeads} from '../support/semanticLookupFixtures';
 import {createJourneyModules} from '../../../apps/web/src/experience/personalMeaningJourney/gateway';
 import {MemoryJourneyRepository} from '../../../apps/web/src/experience/personalMeaningJourney/repository';
 import {createSeededClock} from '../../../apps/web/src/experience/personalMeaningJourney/ports';
@@ -35,4 +37,67 @@ test('explicit manual save creates the complete ordinary Meaning once with no mo
   expect(meaning.bindingConfirmations).toHaveLength(1);
   expect(state.registry.senseVersions[0]?.semanticSpec).toEqual(payload.sense!.semanticSpec);
   expect(meaning.focuses).toHaveLength(0);
+});
+
+test('manual Inbox completion retains original source/media while accepting learner-written context and meaning atomically',async()=>{
+ const repository=new MemoryJourneyRepository(),modules=createJourneyModules({repository,clock:createSeededClock()});
+ const seed=semanticLookupPayload(),mediaId=crypto.randomUUID();
+ const original={...seed,acceptance:null,sense:null,context:{...seed.context!,mediaReferenceIds:[mediaId],modality:'mixed' as const,source:{client:'browser-extension',url:'https://example.test/story',title:'Original story',sourceReferenceId:null,domSelector:null,paragraphContext:null}}};
+ const queued=await modules.semanticIntake.submit(original);if(queued.route!=='inbox')throw new Error('expected Inbox');
+ const item=(await repository.load()).inboxItems[0]!,edit={...manualDraftFromIntake(item),context:'Added personal detail. '+original.context.textSegment,meaning:'临时借用并归还。',usage:'我向同事借伞，下班后归还。'};
+ const completed=manualMeaningPayload(edit,item),command={operationId:edit.operationId,intakeId:item.intakeId,expectedItemDigest:digestOf(item),context:{...completed.context!,mediaReferenceIds:[]},expression:completed.expression!,sense:completed.sense!};
+ const result=await modules.semanticIntake.resolve(command);if(result.route!=='fast_track')throw new Error('expected Meaning');
+ expect(await modules.semanticIntake.resolve(command)).toEqual({...result,replayed:true});
+ const saved=await repository.load();expect(saved.meanings).toHaveLength(1);expect(saved.inboxItems).toEqual([]);
+ const record=saved.meanings[0]!;
+ expect(record.semanticAcceptances[0]?.resolutionProvenance.resolverKind).toBe('learner');
+ expect(record.personalSemanticAnchorRevisions[0]).toMatchObject({bodyText:edit.context,provenance:{kind:'learner_authored'},structuredPayload:{intake:{contextText:original.context.textSegment,contextSource:original.context.source,expression:original.expression},mediaReferenceIds:[mediaId]}});
+ const detail=modules.personalMeaningJourney.getDetail(result.personalMeaningId)!;
+ expect(detail.capturedSources?.[0]).toMatchObject({text:original.context.textSegment,source:original.context.source});
+ expect(detail.materialBlocks.some(block=>block.personalMediaObjectId===mediaId)).toBe(true);
+});
+
+test('unchanged captured Sense keeps its resolver and all constraints; added Context is never attributed to the image source',async()=>{
+ const repository=new MemoryJourneyRepository(),modules=createJourneyModules({repository,clock:createSeededClock()});
+ const seed=semanticLookupPayload(),mediaId=crypto.randomUUID(),source={client:'browser-extension',url:'https://example.test/image',title:'Image source',sourceReferenceId:null,domSelector:null,paragraphContext:null};
+ await modules.semanticIntake.submit({...seed,acceptance:null,context:{...seed.context!,textSegment:null,modality:'image',mediaReferenceIds:[mediaId],source},expression:{...seed.expression!,occurrence:null}});
+ const item=(await repository.load()).inboxItems[0]!,edit={...manualDraftFromIntake(item),context:'I borrow an umbrella.',occurrence:'borrow'};
+ const completed=manualMeaningPayload(edit,item);expect(completed.sense).toEqual(seed.sense);
+ const result=await modules.semanticIntake.resolve({operationId:edit.operationId,intakeId:item.intakeId,expectedItemDigest:digestOf(item),context:completed.context!,expression:completed.expression!,sense:completed.sense!});if(result.route!=='fast_track')throw new Error('expected Meaning');
+ const record=(await repository.load()).meanings[0]!;
+ expect(record.semanticAcceptances[0]?.resolutionProvenance).toEqual(seed.sense!.resolutionProvenance);
+ expect(record.personalExpressionAnchorRevisions[0]?.provenanceKind).toBe('learner_authored');
+ expect(modules.personalMeaningJourney.getDetail(result.personalMeaningId)?.capturedSources?.[0]).toMatchObject({text:null,source});
+ expect(modules.personalMeaningJourney.getDetail(result.personalMeaningId)?.materialBlocks.some(block=>block.personalMediaObjectId===mediaId)).toBe(true);
+ const changed=manualMeaningPayload({...edit,meaning:'新的手写意思'},item);expect(changed.sense?.wordingSource).toBe('learner_authored');expect(changed.sense?.semanticSpec.includedCases).toEqual([]);
+});
+
+test('choosing an existing meaning pins the reviewed version and rejects edited semantic content',async()=>{
+ const repository=new MemoryJourneyRepository(),modules=createJourneyModules({repository,clock:createSeededClock()});
+ const seed=semanticLookupPayload();await modules.semanticIntake.submit(seed);
+ const selected=(await modules.personalMeaningJourney.lookupMeanings('borrow')).meanings[0]!;
+ await modules.semanticIntake.submit({...seed,operationId:crypto.randomUUID(),sense:null,acceptance:null});
+ const item=(await repository.load()).inboxItems[0]!;
+ const draft={...manualDraftFromIntake(item),existingSense:{senseId:selected.senseId,senseVersionId:selected.senseVersionId,senseKey:selected.senseKey,semanticSpec:selected.semanticSpec},meaning:selected.semanticSpec.coreMeaningFocus,usage:selected.semanticSpec.prototypeScenes[0]!.summary};
+ const payload=manualMeaningPayload(draft,item);
+ expect(()=>manualMeaningPayload({...draft,meaning:'未解除复用便改写意思'},item)).toThrow('manualMeaning.invalid');
+ const before=await repository.load();await repository.commit({before,after:advanceSemanticHeads(before)});
+ const intake=createJourneyModules({repository,clock:createSeededClock()}).semanticIntake;
+ const command={operationId:draft.operationId,intakeId:item.intakeId,expectedItemDigest:digestOf(item),context:payload.context!,expression:payload.expression!,sense:payload.sense!,reuseSense:{senseId:selected.senseId,senseVersionId:selected.senseVersionId}};
+ await expect(intake.resolve({...command,sense:{...command.sense,semanticSpec:{...command.sense.semanticSpec,coreMeaningFocus:'tampered pinned meaning'}}})).rejects.toThrow('固定');
+ expect((await repository.load()).inboxItems).toHaveLength(1);expect(await repository.readReceipt(command.operationId)).toBeNull();
+ const result=await intake.resolve(command);if(result.route!=='fast_track')throw new Error('expected Meaning');
+ const after=await repository.load(),record=after.meanings.find(record=>record.personalMeaning.personalMeaningId===result.personalMeaningId)!;
+ expect(after.registry.senses).toHaveLength(1);expect(record.semanticAcceptances[0]).toMatchObject({senseId:selected.senseId,senseVersionId:selected.senseVersionId,resolution:'reuse_existing',resolutionProvenance:{resolverKind:'external_tool',provider:'sensa-local-registry',model:null}});
+ expect(record.bindingConfirmations[0]?.senseVersionId).toBe(selected.senseVersionId);
+});
+
+test('an already located image occurrence is valid Context without inventing a text example',async()=>{
+ const repository=new MemoryJourneyRepository(),modules=createJourneyModules({repository,clock:createSeededClock()}),seed=semanticLookupPayload(),mediaId=crypto.randomUUID();
+ const occurrence={surfaceForm:'borrow',locator:{kind:'media_region' as const,mediaReferenceId:mediaId,x:.1,y:.1,width:.3,height:.2}};
+ await modules.semanticIntake.submit({...seed,sense:null,acceptance:null,context:{...seed.context!,textSegment:null,modality:'image',mediaReferenceIds:[mediaId]},expression:{...seed.expression!,languageTag:'en-US',occurrence}});
+ const item=(await repository.load()).inboxItems[0]!,draft={...manualDraftFromIntake(item),meaning:'临时借用',usage:'借用雨伞后归还。'},payload=manualMeaningPayload(draft,item);
+ expect(payload.context?.textSegment).toBeNull();expect(payload.expression?.occurrence).toEqual(occurrence);expect(payload.expression?.languageTag).toBe('en-US');
+ const result=await modules.semanticIntake.resolve({operationId:draft.operationId,intakeId:item.intakeId,expectedItemDigest:digestOf(item),context:payload.context!,expression:payload.expression!,sense:payload.sense!});if(result.route!=='fast_track')throw new Error('expected Meaning');
+ const detail=modules.personalMeaningJourney.getDetail(result.personalMeaningId)!;expect(detail.materialBlocks.filter(block=>block.personalMediaObjectId===mediaId)).toHaveLength(1);expect(detail.materialBlocks.filter(block=>block.kind==='text')).toHaveLength(0);
 });

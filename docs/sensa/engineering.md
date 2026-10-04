@@ -189,10 +189,22 @@ Binding relation／精确版本 pins 与追加 ordinal 由源记录上的 SQLite
 注册表 delta 和回执，不读取历史 Meaning。手动表单只构建 learner-authored Intake，Context 中的 exact occurrence
 与可选 canonical form 分离；用户明确保存后才附上 learner_direct 接受。按本机 library 分隔的编辑草稿保留
 原 operation ID 用于失败重试，编辑内容变化产生新 ID。它不调用模型，也不跨到 Learning System 写入。
+Inbox 的直接接受与丢弃同样使用单材料命令快照：只读取该材料、提示、操作回执及接受所需的注册表依赖；
+命令必须携带用户所见 item 的 digest，防止旧页面操作被替换的材料。丢弃不准修改 Meaning、注册表或其他 Inbox；
+接受则原子移除原项并生成一个完整 Meaning。UI 对同一事实的失败重试保留 operation ID，丢弃先要求明确确认。
+Inbox 图片按展开条目的 media ID 精确读取，并响应这些媒体或资料库身份的变更；媒体缺失／损坏有显式失败与重试状态。
+World 订阅不把无关的 meta 写入当成语义变化，但资料库 identity／incarnation 变化仍强制重新读取。
+Inbox 手动补全通过原 Resolve 命令显式提供 Context／Expression，媒体引用取原捕获与本次内容的并集。
+Intake engine 把原 payload 留在捕获 provenance 中，确认 tuple 使用本次内容；Context、Expression、Sense 的
+来源分别处理。独立媒体使用可投影的 Anchor；Published Learning Scene 继续由其专用 inline-media Anchor 承载，
+不能同时制造一套无版本历史的媒体 Anchor。原文读取优先采用明确的捕获文本字段，包括“没有原文”的 null。
+本机意思选择使用有界查询，不初始化完整 World；查询失败可用新的只读命令重试。选择的 Sense ID、版本 ID 与
+完整 Semantic Spec 随本次确认固定，版本推进不能改换用户所选内容，缺失或内容不符不能自动变成新 Sense。
+手动编辑草稿按 Library／Inbox ID 隔离并记录来源 digest；过期填写保留，但必须重新核对后显式开始最新版本。
 Journey Gateway 保留命令串行化、幂等、来源见证和原子提交；Context 材料、澄清事实、表达绑定、
 已发布学习场景及 Meaning revision 的构建分别由内部事实模块负责，不拥有独立存储或提交能力。
-首次新建澄清草稿同样使用独立追加快照，只能创建本次
-Inbox、会话提示与收据，媒体继续同事务准入，不读取已有 Meaning／注册表。新 ID 的保留索引与源事实同事务维护；分配时排除本次
+首次新建澄清草稿或接收不完整 Intake 同样使用独立追加快照，只能创建本次
+Inbox、适用的会话提示与收据，媒体继续同事务准入，不读取已有 Meaning／注册表。新 ID 的保留索引与源事实同事务维护；分配时排除本次
 operation 和尚未入库的 media 引用，提交时再检查占用。普通读取不全扫；显式完整诊断按源行核对并修复
 身份缓存的逐行漂移，诊断输出区分 `ok` 与 `rebuilt`，不改动源数据或同步 revision。发现漂移后先独立
 持久化失效版本，再事务重建；重建失败不能回滚掉失效标记。标记本身写失败时当前连接拒绝身份读取和语义

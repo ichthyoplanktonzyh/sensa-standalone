@@ -1,5 +1,14 @@
 {
   "manualMeaning": {
+    "refine": "結果が多いか内容が長いため、検索を絞り込んでください。",
+    "existing": "既存の意味を選ぶ",
+    "find": "意味や表現で検索",
+    "search": "検索",
+    "useExisting": "この意味を使う",
+    "writeOwn": "自分で入力",
+    "complete": "手動で補完",
+    "original": "元の資料",
+    "restart": "最新の資料から入力し直す",
   "context": "状況または原文",
   "occurrence": "原文中の表現（上で選択も可能）",
   "chooseOccurrence": "該当する箇所を選択",
@@ -119,6 +128,8 @@
     "draftError": "この下書きをローカルに保存できません。ページを開いたままにしてください。"
   },
   "contentUi": {
+    "inboxMaterialChanged": "資料が変更されました。確認し直してから操作してください。",
+    "discardMaterialConfirmation": "この資料と未完了の意味の整理を破棄しますか？",
     "noteSaved": "メモを保存しました",
     "saveFailed": "保存できませんでした。もう一度試してください",
     "noteFor": "{{word}}のメモ",

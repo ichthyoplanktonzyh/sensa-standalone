@@ -120,6 +120,7 @@ function ContentScreenView({
   const [adding, setAdding] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
   const [manualOpen,setManualOpen]=useState(false);
+  const [manualIntake,setManualIntake]=useState<import('@sensa/contracts/sensa').SensaIntakeItem|null>(null);
   const [inboxOpen, setInboxOpen] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const page=useWorldWindow({query,filter},!providedSource&&active);
@@ -468,7 +469,10 @@ function ContentScreenView({
         }}
       />
       {manualOpen&&<ManualMeaningComposer onClose={()=>setManualOpen(false)} onCreated={id=>{setManualOpen(false);source.reload();onOpenPersonalMeaning(id);}}/>}
+      {manualIntake&&<ManualMeaningComposer key={manualIntake.intakeId} original={manualIntake} onClose={()=>{setManualIntake(null);setInboxOpen(true);}} onCreated={id=>{setManualIntake(null);source.reload();onOpenPersonalMeaning(id);}}/>}
       <IntakeInboxDrawer
+        onManual={item=>{setInboxOpen(false);setManualIntake(item);}}
+        onResolved={id=>{setInboxOpen(false);open(id);}}
         drafts={providedSource?drafts.map(item=>({personalMeaningId:item.personalMeaningId,label:item.experienceAnchors[0]?.surfaceForm||item.familiarAnchors[0]?.surfaceForm||item.primaryLabel})):inboxRead.value?.drafts??[]}
         onOpenDraft={(id) => {
           setInboxOpen(false);

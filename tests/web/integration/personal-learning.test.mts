@@ -25,6 +25,7 @@ test("personal-learning", async () => {
 const compiled=await build({stdin:{contents:[
   ...['store','providers','personalLearning','learning','language','speech/defaultProvider'].map(name=>`export * from './apps/web/src/data/library/${name}';`),
   `export * from './apps/web/src/experience/personalMeaningJourney/gateway';`,
+  `export {worldReadRepository} from './apps/web/src/experience/personalMeaningJourney/worldRepository';`,
   `export * from './apps/web/src/contentSupply/portable/personalPortablePackage';`,
   `export * from './apps/web/src/contentSupply/portable/portablePackage';`,
   `export {readLearningWorkspaceProjection} from './apps/web/src/learning/system/learningProjection';`,
@@ -81,10 +82,11 @@ try{
   const slow=canonicalIntake(false),queued=await intake.submit(slow);
   assert.equal(queued.route,'inbox');
   const completed=await gateway.completeClarificationDraft({operationId:id(),intakeId:queued.intakeId,source:await gateway.captureClarificationSource('intake',queued.intakeId),context:slow.context!,languageContext:{supportLanguageTag:'zh-CN',targetLanguageTag:'en'},focus:null,sense:{proposedSenseKey:'borrow-temporarily',coreMeaningFocus:semanticSpec.coreMeaningFocus,prototypeScenes:semanticSpec.prototypeScenes,includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[],unresolvedQuestions:[]},expression:{surfaceForm:'borrow',expressionType:'word',languageTag:'en',relation:'realizes',semanticCoverage:'exact'},expressionCandidates:[{surfaceForm:'borrow',expressionType:'word',languageTag:'en',relation:'realizes',semanticCoverage:'exact'}],confirmExpression:true,transcript:[{messageId:id(),role:'learner',body:'这里强调临时使用并归还。',occurredAt:'2026-09-16T01:01:00.000Z'}],provenance:{provider:'fixture',model:'fixture',promptVersion:'v1'},semanticPolicyVersion:'fixture-v1'});
-  assert.equal(intake.snapshot().length,0);
-  const slowSource=gateway.getLearningSources(completed.personalMeaningId)[0];
+  assert.equal((await api.worldReadRepository.inbox()).items.length,0);
+  const slowDetail=await api.worldReadRepository.detail(completed.personalMeaningId);
+  const slowSource=slowDetail.sources[0];
   assert(slowSource);assert.equal(slowSource.context.text,slow.context!.textSegment);assert.equal(slowSource.expression.surfaceForm,'borrow');
-  const detail=gateway.getDetail(completed.personalMeaningId)!;
+  const detail=slowDetail.detail!;
   assert.equal(detail.directAlignments[0]?.basisKind,'sense_construction');
 
   // Add-to-Learning sees only an authoritative Alignment reference. Enrolling
@@ -145,9 +147,10 @@ try{
   // the same learning-source shape; provenance remains data on that record.
   const fast=canonicalIntake(true),accepted=await intake.submit(fast);
   assert.equal(accepted.route,'fast_track');
-  const fastSource=gateway.getLearningSources(accepted.personalMeaningId)[0];
+  const fastDetail=await api.worldReadRepository.detail(accepted.personalMeaningId);
+  const fastSource=fastDetail.sources[0];
   assert(fastSource);assert.equal(fastSource.sourceKind,'personal_meaning_alignment');
-  assert.equal(gateway.getDetail(accepted.personalMeaningId)!.directAlignments[0]?.basisKind,'contextual_resolution');
+  assert.equal(fastDetail.detail!.directAlignments[0]?.basisKind,'contextual_resolution');
   assert.equal((await api.personalLearningSnapshot()).length,1,'admission never enrolls learning implicitly');
 
   // Language roles are frozen into requests and prompts, not inferred from UI locale.

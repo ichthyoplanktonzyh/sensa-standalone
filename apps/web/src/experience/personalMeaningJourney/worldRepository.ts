@@ -54,7 +54,7 @@ export async function readRegistryRecords(tx:LibraryTransaction,initialKeys:read
  return {records,registry};
 }
 export const worldReadRepository={
- subscribe(listener:()=>void):()=>void{return observeLibrary(listener,['semanticState','semanticMeanings','semanticRegistry','semanticInbox','semanticDrafts','meta']);},
+ subscribe(listener:()=>void):()=>void{return observeLibrary(listener,['semanticState','semanticMeanings','semanticRegistry','semanticInbox','semanticDrafts','meta'],{meta:['identity','local-incarnation']});},
  inbox():Promise<WorldInboxSnapshot>{return readLibrary(async tx=>{
   const stamp=await readWorldFrame(tx),items:JourneyState['inboxItems']=[],drafts:WorldInboxSnapshot['drafts']=[];
   // One Library snapshot keeps both Inbox categories coherent. Read only

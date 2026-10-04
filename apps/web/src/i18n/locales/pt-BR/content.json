@@ -1,5 +1,14 @@
 {
   "manualMeaning": {
+    "refine": "Os resultados são numerosos ou longos. Refine a busca.",
+    "existing": "Escolher um significado existente",
+    "find": "Buscar por significado ou expressão",
+    "search": "Buscar",
+    "useExisting": "Usar este significado",
+    "writeOwn": "Escrever por conta própria",
+    "complete": "Completar manualmente",
+    "original": "Material original",
+    "restart": "Recomeçar com o material atualizado",
   "context": "Contexto ou frase original",
   "occurrence": "Expressão no texto (ou selecione acima)",
   "chooseOccurrence": "Escolha esta ocorrência",
@@ -119,6 +128,8 @@
     "draftError": "Não foi possível salvar este rascunho localmente. Mantenha esta página aberta."
   },
   "contentUi": {
+    "inboxMaterialChanged": "Este material mudou. Revise-o antes de continuar.",
+    "discardMaterialConfirmation": "Descartar este material e seu esclarecimento pendente?",
     "noteSaved": "Anotação salva",
     "saveFailed": "Não foi possível salvar. Tente novamente.",
     "noteFor": "Anotação sobre {{word}}",

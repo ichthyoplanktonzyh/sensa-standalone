@@ -1,5 +1,14 @@
 {
   "manualMeaning": {
+    "refine": "Les résultats sont nombreux ou longs. Affinez votre recherche.",
+    "existing": "Choisir un sens existant",
+    "find": "Rechercher un sens ou une expression",
+    "search": "Rechercher",
+    "useExisting": "Utiliser ce sens",
+    "writeOwn": "Rédiger moi-même",
+    "complete": "Compléter manuellement",
+    "original": "Contenu original",
+    "restart": "Recommencer avec le contenu à jour",
   "context": "Contexte ou phrase originale",
   "occurrence": "Expression dans le texte (ou sélectionnez-la ci-dessus)",
   "chooseOccurrence": "Choisir cette occurrence",
@@ -119,6 +128,8 @@
     "draftError": "Impossible d’enregistrer ce brouillon localement. Gardez cette page ouverte."
   },
   "contentUi": {
+    "inboxMaterialChanged": "Ce contenu a changé. Vérifiez-le avant de continuer.",
+    "discardMaterialConfirmation": "Supprimer ce contenu et sa clarification inachevée ?",
     "noteSaved": "Note enregistrée",
     "saveFailed": "Impossible d’enregistrer. Réessayez",
     "noteFor": "Note pour {{word}}",

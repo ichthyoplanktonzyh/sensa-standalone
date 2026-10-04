@@ -1,5 +1,14 @@
 {
   "manualMeaning": {
+    "refine": "结果较多或内容较长，请缩小查找范围。",
+    "existing": "选择已有意思",
+    "find": "按意思或表达查找",
+    "search": "查找",
+    "useExisting": "使用这个意思",
+    "writeOwn": "自己填写",
+    "complete": "手动补全",
+    "original": "原始材料",
+    "restart": "从最新材料重新填写",
   "context": "情境或原句",
   "occurrence": "原文中的表达（可在上方选中）",
   "chooseOccurrence": "选择这一次出现",
@@ -119,6 +128,8 @@
     "draftError": "草稿暂时无法保存在本机，请先不要刷新页面。"
   },
   "contentUi": {
+    "inboxMaterialChanged": "材料已发生变化，请重新查看后再操作。",
+    "discardMaterialConfirmation": "丢弃这条材料及其未完成的澄清？",
     "noteSaved": "笔记已保存",
     "saveFailed": "保存失败，请重试",
     "noteFor": "{{word}} 的笔记",
@@ -333,7 +344,7 @@
     "chooseAMeaningToConfirm": "快速消歧：轻点候选义项直接结案",
     "clarify": "召唤 AI",
     "discard": "丢弃",
-    "yourInboxIsEmpty": "材料盒已清空，捕获的材料都会先出现在这里",
+    "yourInboxIsEmpty": "收件箱为空",
     "personalContentForThisMeaning": "当前义项的个人内容",
     "editNoteForThisMeaning": "编辑当前义项的笔记",
     "addANoteForThisMeaning": "为当前义项添加笔记",

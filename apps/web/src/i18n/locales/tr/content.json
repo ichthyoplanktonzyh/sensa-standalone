@@ -1,5 +1,14 @@
 {
   "manualMeaning": {
+    "refine": "Sonuçlar çok sayıda veya uzun. Aramanızı daraltın.",
+    "existing": "Mevcut anlamı seç",
+    "find": "Anlam veya ifadeye göre ara",
+    "search": "Ara",
+    "useExisting": "Bu anlamı kullan",
+    "writeOwn": "Kendim yazayım",
+    "complete": "Elle tamamla",
+    "original": "Özgün içerik",
+    "restart": "Güncel içerikle yeniden başla",
   "context": "Bağlam veya özgün cümle",
   "occurrence": "Metindeki ifade (veya yukarıdan seçin)",
   "chooseOccurrence": "Bu kullanımı seçin",
@@ -119,6 +128,8 @@
     "draftError": "Bu taslak yerel olarak kaydedilemedi. Lütfen bu sayfayı açık tutun."
   },
   "contentUi": {
+    "inboxMaterialChanged": "Bu içerik değişti. Devam etmeden önce yeniden inceleyin.",
+    "discardMaterialConfirmation": "Bu içerik ve tamamlanmamış açıklama silinsin mi?",
     "noteSaved": "Not kaydedildi",
     "saveFailed": "Kaydedilemedi. Yeniden deneyin",
     "noteFor": "{{word}} için not",

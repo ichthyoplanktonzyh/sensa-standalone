@@ -564,6 +564,11 @@ Inbox 澄清必须尽可能继承原 Intake 的 Context、Expression、Sense can
 不得通过另建一条无来源草稿来丢弃捕获事实。中断时继续停留在 Inbox/construction draft，不能提前创建
 正式 Personal Meaning。
 
+“手动补全”与“继续对话”是同一条 Inbox 的两种处理方式。前者预填已知事实，支持按意思／表达查找本机
+已有 Meaning 并选择其 Sense 版本；点选不提交，明确确认后才原子消费原 Inbox。用户改写的 Context 与原始
+文本／来源分别保留，原媒体不能因补全被隐式移除。已有图片 occurrence 可继续使用，不补造文字位置。
+草稿关闭／刷新可继续；来源变更与版本失效必须拒绝旧操作，并保留用户填写内容供重新核对。
+
 ## 12. `LJ-07` 至 `LJ-09`：学习运行时的共同出口
 
 无论来源是学习包、Personal Meaning 还是 direct stable-Sense entry，进入 ready 后都使用同一学习边界：

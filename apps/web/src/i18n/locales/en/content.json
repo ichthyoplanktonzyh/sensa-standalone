@@ -1,5 +1,14 @@
 {
   "manualMeaning": {
+    "refine": "Results are numerous or lengthy. Narrow your search.",
+    "existing": "Choose an existing meaning",
+    "find": "Find by meaning or expression",
+    "search": "Find",
+    "useExisting": "Use this meaning",
+    "writeOwn": "Write my own",
+    "complete": "Complete manually",
+    "original": "Original material",
+    "restart": "Start again from the latest material",
   "context": "Context or original sentence",
   "occurrence": "Expression in the text (or select it above)",
   "chooseOccurrence": "Choose this occurrence",
@@ -119,6 +128,8 @@
     "draftError": "Unable to save this draft locally. Please keep this page open."
   },
   "contentUi": {
+    "inboxMaterialChanged": "This material has changed. Review it again before continuing.",
+    "discardMaterialConfirmation": "Discard this material and its unfinished clarification?",
     "noteSaved": "Note saved",
     "saveFailed": "Could not save. Please try again",
     "noteFor": "Note for {{word}}",

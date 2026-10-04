@@ -1,5 +1,14 @@
 {
   "manualMeaning": {
+    "refine": "Hay muchos resultados o son extensos. Afina la búsqueda.",
+    "existing": "Elegir un significado existente",
+    "find": "Buscar por significado o expresión",
+    "search": "Buscar",
+    "useExisting": "Usar este significado",
+    "writeOwn": "Escribir el mío",
+    "complete": "Completar manualmente",
+    "original": "Material original",
+    "restart": "Empezar de nuevo con el material actualizado",
   "context": "Contexto o frase original",
   "occurrence": "Expresión en el texto (o selecciónala arriba)",
   "chooseOccurrence": "Elige esta aparición",
@@ -139,6 +148,8 @@
     "note": "Esta página solo muestra por ahora la estructura prevista. No crea contenido personal ni registros de aprendizaje."
   },
   "contentUi": {
+    "inboxMaterialChanged": "Este material ha cambiado. Revísalo antes de continuar.",
+    "discardMaterialConfirmation": "¿Descartar este material y su aclaración pendiente?",
     "noteSaved": "Nota guardada",
     "saveFailed": "No se pudo guardar. Inténtalo de nuevo",
     "noteFor": "Nota para {{word}}",

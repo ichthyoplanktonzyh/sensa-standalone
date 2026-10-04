@@ -1254,6 +1254,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
           payload,
           operationId: input.operationId,
           authority,
+          materializeContextMedia:false,
           pinnedSense: {
             senseId: input.target.senseId,
             senseVersionId: input.target.senseVersionId,
@@ -1323,6 +1324,11 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
       return this.isolatedCommand(parsed.operationId,'Ingest',digestOf(parsed),()=>
         this.deps.repository.withIntakeCommand!(parsed,this.deps.ids,(repository,ids)=>new JourneyGatewayImpl({...this.deps,repository,ids}).submit(parsed)));
     }
+    if(!this.loadStarted&&this.deps.repository.withDraftCreation&&evaluateIntakeRoute(parsed).route==='inbox'){
+      return this.isolatedCommand(parsed.operationId,'Ingest',digestOf(parsed),()=>
+        this.deps.repository.withDraftCreation!({operationId:parsed.operationId,reservedIds:parsed.context?.mediaReferenceIds??[]},this.deps.ids,
+          (repository,ids)=>new JourneyGatewayImpl({...this.deps,repository,ids}).submit(parsed)));
+    }
     return this.exclusive(() => this.runIngest(parsed.operationId, parsed));
   }
 
@@ -1379,22 +1385,17 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
   }
 
   async resolve(command: ResolveSemanticIntakeCommand): Promise<SemanticIntakeResult> {
-    return this.exclusive(() => this.runInboxResolution(
-      command.operationId,
-      command.intakeId,
-      command.sense,
-    ));
+    if(!this.loadStarted&&this.deps.repository.withInboxCommand)return this.isolatedCommand(command.operationId,'ResolveInboxItem',digestOf(command),()=>
+      this.deps.repository.withInboxCommand!(command,this.deps.ids,(repository,ids)=>new JourneyGatewayImpl({...this.deps,repository,ids}).resolve(command)));
+    return this.exclusive(() => this.runInboxResolution(command));
   }
 
-  private async runInboxResolution(
-    operationId: string,
-    intakeId: string,
-    resolution: ResolveSemanticIntakeCommand['sense'],
-  ): Promise<SemanticIntakeResult> {
-
-    const requestDigest=digestOf({operationId,intakeId,resolution});
+  private async runInboxResolution(command:ResolveSemanticIntakeCommand): Promise<SemanticIntakeResult> {
+    const {operationId,intakeId,sense:resolution}=command;
+    const requestDigest=digestOf(command);
     const replay = await this.replay<SemanticIntakeResult>(operationId, 'ResolveInboxItem',requestDigest);
     if (replay) return replay;
+    this.requireReviewedInboxItem(command);
     const state = this.requireState();
     // Boundary validation for the learner-confirmed sense before any write.
     const sense = sensaIntakeSenseSchema.parse(resolution);
@@ -1403,7 +1404,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
     });
     const outcome = resolveInboxItemWithSense(
       state,
-      { intakeId, sense, operationId, authority },
+      {...command,sense,authority},
       this.enginePorts(),
     );
     this.state = outcome.nextState;
@@ -1427,16 +1428,21 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
   }
 
   async dismiss(command: DismissSemanticIntakeCommand): Promise<void> {
-    return this.exclusive(() => this.writeInboxDismissal(
-      command.operationId,
-      command.intakeId,
-    ));
+    if(!this.loadStarted&&this.deps.repository.withInboxCommand){await this.isolatedCommand(command.operationId,'DismissInboxItem',digestOf(command),()=>
+      this.deps.repository.withInboxCommand!(command,this.deps.ids,(repository,ids)=>new JourneyGatewayImpl({...this.deps,repository,ids}).dismiss(command)));return;}
+    return this.exclusive(() => this.writeInboxDismissal(command));
   }
 
-  private async writeInboxDismissal(operationId: string, intakeId: string): Promise<void> {
-    const requestDigest=digestOf({operationId,intakeId});
+  private requireReviewedInboxItem(command:DismissSemanticIntakeCommand):void{
+    const state=this.requireState(),item=state.inboxItems.find(item=>item.intakeId===command.intakeId);
+    if(!item||digestOf(item)!==command.expectedItemDigest)throw new ClarificationSourceChangedError();
+    this.transaction!.preconditions.push({table:'semanticInbox',key:command.intakeId,expected:item},{table:'semanticDrafts',key:command.intakeId,expected:state.clarificationDrafts.find(item=>item.intakeId===command.intakeId)});
+  }
+  private async writeInboxDismissal(command:DismissSemanticIntakeCommand): Promise<void> {
+    const {operationId,intakeId}=command,requestDigest=digestOf(command);
     const found = await this.receipt(operationId, 'DismissInboxItem',requestDigest);
     if (found) return;
+    this.requireReviewedInboxItem(command);
     const state = this.requireState();
     // Pure removal; throws when the item is unknown, before any write.
     this.state = dismissInboxItem(state, intakeId);

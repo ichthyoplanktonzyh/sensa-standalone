@@ -8,6 +8,7 @@ import {test,expect,chromium,type Page} from '@playwright/test';
 import {build as viteBuild} from 'vite';
 import type * as Entry from '../support/semanticLookupBrowserEntry';
 import {semanticLookupPayload} from '../support/semanticLookupFixtures';
+import {digestOf} from '../../../apps/web/src/experience/personalMeaningJourney/digest';
 
 declare global {interface Window{semanticLookupFixture:typeof Entry}}
 let server:Server,origin:string;
@@ -49,6 +50,31 @@ test('cold Inbox creation appends only this draft and converges on the exact rec
  expect(await page.evaluate(()=>window.semanticLookupFixture.checkpoint())).toEqual(saved);
  expect(await page.evaluate(({text,operationId})=>window.semanticLookupFixture.createColdDraft(text,operationId),{text,operationId:sameOperation})).toEqual({...winner,replayed:true});
  await other.close();
+});
+
+test('cold Inbox acceptance and dismissal fence reviewed material and replay one receipt across OPFS tabs',async({page,context})=>{
+ await enter(page);await page.evaluate(()=>window.semanticLookupFixture.seed(1000));
+ const pending={...semanticLookupPayload(),acceptance:null};
+ const queued=await page.evaluate(payload=>window.semanticLookupFixture.submitPayload(payload),pending);if(queued.route!=='inbox')throw new Error('fixture must queue');
+ const item=(await page.evaluate(()=>window.semanticLookupFixture.worldInbox())).items.find(item=>item.intakeId===queued.intakeId)!;
+ const command={operationId:crypto.randomUUID(),intakeId:item.intakeId,expectedItemDigest:digestOf(item),sense:item.payload.sense!};
+ const other=await context.newPage();await enter(other);
+ await page.evaluate(()=>window.semanticLookupFixture.trackCommandReads());await page.evaluate(()=>window.semanticLookupFixture.holdCommit());
+ const own=page.evaluate(command=>window.semanticLookupFixture.resolveColdInbox(command),command);await expect.poll(()=>page.evaluate(()=>window.semanticLookupFixture.commitEntered())).toBe(true);
+ const winner=await other.evaluate(command=>window.semanticLookupFixture.resolveColdInbox(command),command);
+ const unrelated=await other.evaluate(()=>window.semanticLookupFixture.createColdDraft('keep this unrelated material'));
+ await page.evaluate(()=>window.semanticLookupFixture.releaseCommit());expect(await own).toEqual({...winner,replayed:true});
+ const reads=await page.evaluate(()=>window.semanticLookupFixture.commandReadSnapshot());expect(reads.filter(row=>row.table==='semanticMeanings').every(row=>winner.route==='fast_track'&&row.key===winner.personalMeaningId)).toBe(true);
+ await page.evaluate(()=>window.semanticLookupFixture.stopTrackingCommandReads());
+ const remaining=(await page.evaluate(()=>window.semanticLookupFixture.worldInbox())).items;expect(remaining.map(item=>item.intakeId)).toEqual([unrelated.intakeId]);
+ const discard={operationId:crypto.randomUUID(),intakeId:unrelated.intakeId,expectedItemDigest:digestOf(remaining[0])};
+ await page.evaluate(()=>window.semanticLookupFixture.trackCommandReads());await page.evaluate(()=>window.semanticLookupFixture.holdCommit());
+ const deleting=page.evaluate(command=>window.semanticLookupFixture.dismissColdInbox(command),discard);await expect.poll(()=>page.evaluate(()=>window.semanticLookupFixture.commitEntered())).toBe(true);
+ await other.evaluate(command=>window.semanticLookupFixture.dismissColdInbox(command),discard);await page.evaluate(()=>window.semanticLookupFixture.releaseCommit());await deleting;
+ expect((await page.evaluate(()=>window.semanticLookupFixture.commandReadSnapshot())).some(row=>['semanticMeanings','semanticRegistry'].includes(row.table))).toBe(false);
+ await page.evaluate(()=>window.semanticLookupFixture.stopTrackingCommandReads());await page.reload();await page.waitForFunction(()=>!!window.semanticLookupFixture);
+ expect(await page.evaluate(command=>window.semanticLookupFixture.resolveColdInbox(command),command)).toEqual({...winner,replayed:true});await page.evaluate(command=>window.semanticLookupFixture.dismissColdInbox(command),discard);
+ expect((await page.evaluate(()=>window.semanticLookupFixture.worldInbox())).items).toEqual([]);await other.close();
 });
 
 test('cold scoped Context writes use exact rows and survive cross-tab races and replay in real OPFS',async({page,context})=>{

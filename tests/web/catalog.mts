@@ -305,6 +305,7 @@ const durabilityTests = new Set<string>([
   'integration/english-lightweight-release',
 ]);
 const convergenceTests = new Set<string>([
+  'browser/personal-meaning-journey',
   'integration/scoped-context-command',
   'unit/world-readers',
   'integration/world-browse-storage',
