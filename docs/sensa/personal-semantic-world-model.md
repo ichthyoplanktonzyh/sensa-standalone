@@ -126,6 +126,12 @@ Sense Expression Binding。它首先由 Context 与被定位 Expression 的解�
 明确授予的正式提交权限，它对一个完整解析的调用本身就是 delegated acceptance，不需要 learner
 回到第一方 UI 再确认一次。
 
+检索个人世界时只把当前有效连接作为候选来源；复用已经选定的 Sense Version 时，接受的对象则是
+该固定语义合同，而不是原 Personal Meaning 的当前 membership 或表达 Binding。原个人材料后来被
+删除、撤销对齐或修改，不会使共享 Sense Version 消失，也不能阻止 learner 在新 Context 下明确接受
+一个新的完整 Personal Meaning。新接受不得复活旧 identity、自动采用 Sense 的新 head version，或
+宣称复用了未被选定的 Binding；提交时仍须验证固定版本在当前资料库中存在且合同未被改写。
+
 ## 3. 公共 Sense 的含义
 
 “公共”不表示 Sense 必须预先存在于一个封闭数据库，也不表示所有人必须共享一个唯一概念本体。

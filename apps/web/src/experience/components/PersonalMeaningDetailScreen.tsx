@@ -2,6 +2,7 @@ import '../../i18n/contentResources';
 import {ExpressionChatInput} from './ExpressionChatInput';
 import type {ConversationImage} from '../../data/library/conversationImages';
 import {localFlowNotice,localFlowText} from '../../i18n/localFlowText';
+import {sameClarificationSource,ClarificationSourceChangedError} from '../personalMeaningJourney/clarificationSource';
 import { useTranslation } from 'react-i18next';
 import { uiText } from '../../i18n/uiText';
 import { classNames } from '../ui/primitives';
@@ -34,7 +35,6 @@ import {
 } from 'react';
 import {
   useJourneyDetail,
-  useJourneyClarificationDraft,
   useJourneyGateway,
   type ClarificationDraftView,
   type JourneyAlignmentView,
@@ -43,6 +43,9 @@ import {
 } from '../personalMeaningJourney';
 import { newUuid } from '../personalMeaningJourney/ids';
 import { createRealSemanticAgent } from '../personalMeaningJourney/realSemanticAgent';
+import {intakeSourceLabel,intakeSourceUrl} from '../personalMeaningJourney/sourcePresentation';
+import type {JourneyMaterialBlockView} from '../personalMeaningJourney/types';
+import {completedContextForDraft} from '../personalMeaningJourney/clarificationContext';
 import { beginAgentBusinessTrace } from '../../observability/agentTrace';
 import { languageRoutesSnapshot } from '../../data/library/language';
 import {
@@ -80,7 +83,6 @@ import type {
 import {
   type SensaExpressionBindingRelation,
   type SensaExpressionType,
-  type SensaIntakeContext,
   type SensaSemanticCoverage,
 } from '@sensa/contracts/sensa';
 
@@ -93,6 +95,7 @@ export interface MeaningConversationController {
 }
 interface PersonalMeaningDetailScreenProps {
  learningControls?:import('react').ReactNode;
+ alignmentLearningControls?:(detail:JourneyDetailView,alignment:JourneyAlignmentView)=>import('react').ReactNode;
  conversation?:MeaningConversationController;
   active: boolean;
   personalMeaningId: string | null;
@@ -169,35 +172,6 @@ const materialForDraft = (draft: ClarificationDraftView): SemanticAgentMaterial 
   familiarExpression: draft.familiarExpression,
   startingPoint: draft.startingPoint,
 });
-
-const completedContextForDraft = (
-  draft: ClarificationDraftView,
-  context: AgentContextCandidate,
-  supportLanguageTag: string,
-): SensaIntakeContext | null => {
-  // The accepted Context is the clarified real-world situation, not the raw
-  // language-learning request or the learner's follow-up chat. Source material
-  // and conversation remain available as provenance/construction evidence.
-  const textSegment = context.summary.trim();
-  const mediaReferenceIds = draft.materialBlocks
-    .filter((block) => block.kind === 'image' && block.personalMediaObjectId)
-    .map((block) => block.personalMediaObjectId!);
-  if (!textSegment && mediaReferenceIds.length === 0) return null;
-  return {
-    modality: textSegment ? mediaReferenceIds.length ? 'mixed' : 'text' : 'image',
-    textSegment: textSegment || null,
-    mediaReferenceIds,
-    languageTag: draft.context?.languageTag ?? supportLanguageTag,
-    source: draft.context?.source ?? {
-      client: 'sensa-web',
-      url: null,
-      title: 'Inbox clarification',
-      sourceReferenceId: draft.intakeId,
-      domSelector: null,
-      paragraphContext: null,
-    },
-  };
-};
 
 type TrackTone = 'idle' | 'candidate' | 'confirmed';
 
@@ -422,6 +396,15 @@ const persistPreparedImages = async (images: ConversationImage[]): Promise<strin
   }
 };
 
+function CapturedMaterialSource({captured,currentText}:{captured:NonNullable<JourneyMaterialBlockView['capturedSource']>;currentText:string|null}){
+  const source=captured.source,href=source?intakeSourceUrl(source):null;
+  return <details className="mt-3 break-words text-body-support text-fg-secondary">
+    <summary className="cursor-pointer text-metadata">{source?intakeSourceLabel(source):localFlowText('viewSource')}</summary>
+    {captured.text&&captured.text!==currentText&&<p className="mt-2 whitespace-pre-wrap leading-7">{captured.text}</p>}
+    {href&&source&&<a href={href} target="_blank" rel="noreferrer">{localFlowText('viewSource')}{source.title??source.url}</a>}
+  </details>;
+}
+
 /**
  * The checkpoint presentation for an accepted tuple: the expression is now
  * the object being viewed, not another turn in the clarification Agent.
@@ -436,6 +419,7 @@ const ConfirmedExpressionDetail = ({
   busy,
   error,
   onSaveContext,
+  learningControls,
 }: {
   detail: JourneyDetailView;
   focus: JourneyFocusView | null;
@@ -445,9 +429,10 @@ const ConfirmedExpressionDetail = ({
   contextImages: ConversationImage[];
   busy: boolean;
   error: string;
-  onSaveContext: (text: string, images: ConversationImage[]) => Promise<void>;
+  onSaveContext: (text: string, images: ConversationImage[],expectedRevision:number) => Promise<void>;
+  learningControls?:import('react').ReactNode;
 }) => {
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState<{revision:number;text:string;images:ConversationImage[]}|null>(null);
   const expression = alignment.confirmedBindings[0]!;
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6">
@@ -481,28 +466,31 @@ const ConfirmedExpressionDetail = ({
               className="mt-3 max-h-64 max-w-full rounded-control object-contain"
             />
           ))}
+          {(detail.capturedSources??detail.materialBlocks.flatMap(block=>block.capturedSource?[{anchorId:block.anchorId,...block.capturedSource}]:[])).map(captured=><CapturedMaterialSource key={captured.anchorId} captured={captured} currentText={contextText}/>)}
         </div>
       </article>
+      {learningControls}
       <button
         type="button"
+        disabled={busy}
         className="mb-4 rounded-control border border-border-strong bg-surface-subtle px-4 py-3 focus-visible:outline-2 focus-visible:outline-focus"
-        onClick={() => setEditing((value) => !value)}
+        onClick={() => setEditing(value=>value?null:{revision:detail.revision,text:contextText,images:contextImages})}
       >
         {localFlowText(editing ? 'cancelEdit' : 'editContext')}
       </button>
       {editing && (
         <ExpressionChatInput
-          key={`context-${detail.revision}`}
+          key={`context-${editing.revision}`}
           busy={busy}
-          initialText={contextText}
+          initialText={editing.text}
           inputLabel={localFlowText('context')}
           inputHint={localFlowText('context')}
-          initialImages={contextImages}
+          initialImages={editing.images}
           maxImages={MAX_SCENE_IMAGES}
           submitLabel={localFlowText('saveContext')}
           onSend={async (text, images) => {
-            await onSaveContext(text, images);
-            setEditing(false);
+            await onSaveContext(text, images,editing.revision);
+            setEditing(null);
           }}
         />
       )}
@@ -601,11 +589,11 @@ const PreviewPersonalMeaningDetailScreen = ({
   onBack,
   onConversationCreated,
   toast,
+  alignmentLearningControls,
 }: PersonalMeaningDetailScreenProps) => {
   useTranslation();
   const gateway = useJourneyGateway();
-  const { detail, status } = useJourneyDetail(personalMeaningId);
-  const clarificationDraft = useJourneyClarificationDraft(personalMeaningId);
+  const { detail, status,reload,draft:clarificationDraft,source,readCurrent } = useJourneyDetail(personalMeaningId);
   const clarificationMaterial = detail
     ? materialFor(detail)
     : clarificationDraft ? materialForDraft(clarificationDraft) : null;
@@ -616,6 +604,7 @@ const PreviewPersonalMeaningDetailScreen = ({
   const cameraRef = useRef<HTMLInputElement>(null);
   const openedThread = useRef<string | null>(null);
   const turnAbortRef = useRef<AbortController | null>(null);
+  const turnLock=useRef(false);
   const streamFrameRef = useRef<number | null>(null);
   const streamTextRef = useRef('');
   const [session, setSession] = useState<SemanticAgentSession | null>(null);
@@ -629,6 +618,7 @@ const PreviewPersonalMeaningDetailScreen = ({
   const [reviewOpen, setReviewOpen] = useState(false);
   const [includeExpression, setIncludeExpression] = useState(true);
   const [editingTrack, setEditingTrack] = useState<WorkingSetTrack | null>(null);
+  const readUnavailable=!!status.loading||!status.ok;
 
   useEffect(() => {
     if (!personalMeaningId) {
@@ -729,9 +719,9 @@ const PreviewPersonalMeaningDetailScreen = ({
     baseSession: SemanticAgentSession,
     learnerBody?: string,
     learnerMediaReferenceIds: string[] = [],
-    materialOverride?: SemanticAgentMaterial,
   ) => {
-    if (!clarificationMaterial) return;
+    if (!clarificationMaterial||readUnavailable||turnLock.current) return false;
+    turnLock.current=true;setBusy(true);setError('');
     if (baseSession.messages.length === 0) beginAgentBusinessTrace();
     const learnerMessage = learnerBody?.trim() || learnerMediaReferenceIds.length
       ? message('learner', learnerBody?.trim() ?? '', learnerMediaReferenceIds)
@@ -739,20 +729,23 @@ const PreviewPersonalMeaningDetailScreen = ({
     const messages = learnerMessage
       ? [...baseSession.messages, learnerMessage]
       : [...baseSession.messages];
-    const languageContext=baseSession.languageContext??(await languageRoutesSnapshot()).context;
-    const waiting = { ...baseSession, messages,languageContext };
-    const waitingPersistence = await commit(waiting);
-    if (!waitingPersistence.saved && waitingPersistence.reason === 'conflict') return;
-    setBusy(true);
-    setError('');
     streamTextRef.current = '';
     setStreamingAssistant('');
     turnAbortRef.current?.abort();
     const controller = new AbortController();
     turnAbortRef.current = controller;
     try {
+      const languageContext=baseSession.languageContext??(await languageRoutesSnapshot()).context;
+      const current=await readCurrent();
+      if(!current.source)throw new ClarificationSourceChangedError();
+      const material=current.detail?materialFor(current.detail):current.draft?materialForDraft(current.draft):null;
+      if(!material)throw new ClarificationSourceChangedError();
+      if(controller.signal.aborted)throw controller.signal.reason??new DOMException('Aborted','AbortError');
+      const waiting = { ...baseSession, messages,languageContext,readyToConfirm:false,proposalSource:current.source };
+      const waitingPersistence = await commit(waiting);
+      if (!waitingPersistence.saved && waitingPersistence.reason === 'conflict') return false;
       const result = await semanticAgent.turn({
-        material: materialOverride ?? clarificationMaterial,
+        material,
         messages,
         workingSet: baseSession.workingSet,
         readyToConfirm: baseSession.readyToConfirm,
@@ -783,10 +776,12 @@ const PreviewPersonalMeaningDetailScreen = ({
         provenance: result.provenance,
         steps: [...waiting.steps, ...result.steps].slice(-40),
       });
+      return true;
     } catch (cause) {
       setError(controller.signal.aborted
         ? localFlowText('requestStopped')
         : cause instanceof Error ? cause.message : uiText('unableToContinueThisConversationPleaseRetry'));
+      return false;
     } finally {
       if (turnAbortRef.current === controller) {
         turnAbortRef.current = null;
@@ -795,9 +790,10 @@ const PreviewPersonalMeaningDetailScreen = ({
         streamTextRef.current = '';
         setStreamingAssistant('');
         setBusy(false);
+        turnLock.current=false;
       }
     }
-  }, [clarificationMaterial, commit]);
+  }, [clarificationMaterial, commit,readUnavailable,readCurrent]);
 
   const stopTurn = useCallback(() => {
     turnAbortRef.current?.abort();
@@ -806,25 +802,27 @@ const PreviewPersonalMeaningDetailScreen = ({
   // Captured material opens in the same agent as an ordinary user message.
   // The agent decides whether to propose immediately or ask a natural question.
   useEffect(() => {
-    if (!active || !clarificationMaterial || !session) return;
+    if (!active || !clarificationMaterial || !session||readUnavailable) return;
     if (allConfirmed) return;
     if (session.messages.some((item) => item.role === 'assistant')
       || openedThread.current === session.threadId) return;
     openedThread.current = session.threadId;
     void runTurn(session);
-  }, [active, allConfirmed, clarificationMaterial, runTurn, session]);
+  }, [active, allConfirmed, clarificationMaterial, runTurn, session,readUnavailable]);
 
   const sendConversationMessage = async (body: string, images: ConversationImage[]) => {
+    if(readUnavailable)throw new Error(status.error??localFlowText('loadingSensa'));
     if (!session || busy || !clarificationMaterial) return;
     if (images.length === 0) {
-      await runTurn(session, body);
+      if(!await runTurn(session, body))throw new Error('clarification_turn_not_completed');
       return;
     }
     setBusy(true);
     setError('');
-    const mediaIds = await persistPreparedImages(images);
+    let mediaIds:string[]=[];
     const attached = new Set<string>();
     try {
+      mediaIds=await persistPreparedImages(images);
       for (const mediaId of mediaIds) {
         if (detail) {
           await gateway.addMaterialBlock({
@@ -841,19 +839,7 @@ const PreviewPersonalMeaningDetailScreen = ({
         }
         attached.add(mediaId);
       }
-      const extraBlocks = images.map((image) => ({
-        blockId: image.id,
-        kind: 'image' as const,
-        bodyText: null,
-        mediaDataUrl: image.dataUrl,
-        mediaMimeType: 'image/jpeg',
-      }));
-      await runTurn(
-        session,
-        body,
-        mediaIds,
-        { ...clarificationMaterial, blocks: [...clarificationMaterial.blocks, ...extraBlocks] },
-      );
+      if(!await runTurn(session,body,mediaIds))throw new Error('clarification_turn_not_completed');
     } catch (cause) {
       await Promise.allSettled(mediaIds.filter((id) => !attached.has(id)).map(removeMedia));
       setError(cause instanceof Error ? cause.message : uiText('unableToContinueThisConversationPleaseRetry'));
@@ -863,8 +849,8 @@ const PreviewPersonalMeaningDetailScreen = ({
     }
   };
 
-  const saveConfirmedContext = async (body: string, images: ConversationImage[]) => {
-    if (!detail || !session || busy) return;
+  const saveConfirmedContext = async (body: string, images: ConversationImage[],expectedRevision:number) => {
+    if (!detail || !session || busy||readUnavailable)throw new Error(status.error??localFlowText('meaningChanged'));
     setBusy(true);
     setError('');
     const alreadyStored = new Set(
@@ -872,11 +858,12 @@ const PreviewPersonalMeaningDetailScreen = ({
     );
     let mediaIds: string[] = [];
     try {
+      if(detail.revision!==expectedRevision)throw new Error('localFlow.meaningChanged');
       mediaIds = await persistPreparedImages(images);
       await gateway.reviseContext({
         operationId: newUuid(),
         personalMeaningId: detail.personalMeaningId,
-        expectedRevision: detail.revision,
+        expectedRevision,
         blocks: [
           ...(body.trim() ? [{ kind: 'text' as const, bodyText: body.trim() }] : []),
           ...mediaIds.map((personalMediaObjectId) => ({
@@ -922,6 +909,7 @@ const PreviewPersonalMeaningDetailScreen = ({
     .filter((block) => block.kind === 'image').length;
 
   const addImageFile = useCallback(async (file: File) => {
+    if(readUnavailable)throw new Error(status.error??localFlowText('loadingSensa'));
     const currentDetail = detail;
     const currentDraft = clarificationDraft;
     if (!currentDetail && !currentDraft) return;
@@ -945,10 +933,10 @@ const PreviewPersonalMeaningDetailScreen = ({
       await removeMedia(mediaId).catch(() => undefined);
       throw cause;
     }
-  }, [clarificationDraft, detail, gateway]);
+  }, [clarificationDraft, detail, gateway,readUnavailable,status.error]);
 
   const sceneImages = useSceneImageInput({
-    disabled: busy,
+    disabled: busy||readUnavailable,
     imageCount: materialImageCount,
     onAddFile: addImageFile,
     onStart: () => setImageError(''),
@@ -969,26 +957,29 @@ const PreviewPersonalMeaningDetailScreen = ({
     sceneImages.clearStatuses();
   }, [personalMeaningId, sceneImages.clearStatuses]);
 
-  const imageInputUnavailable = busy || sceneImages.processing;
+  const imageInputUnavailable = busy || readUnavailable || sceneImages.processing;
 
   /** One atomic confirmation; Focus is included only when disambiguation needed it. */
   const confirm = async () => {
     if ((!detail && !clarificationDraft) || !session || busy) return;
+    if(readUnavailable)return;
     const { context, focus, sense, expression } = session.workingSet;
-    if (!context || !sense || (draftMode && (!expression || !includeExpression))) return;
+    if (!session.readyToConfirm || !context || !sense || (draftMode && (!expression || !includeExpression))) return;
     setBusy(true);
     setError('');
     try {
+      if(!sameClarificationSource(session.proposalSource,source))throw new ClarificationSourceChangedError();
       const languageContext = session.languageContext
         ?? (await languageRoutesSnapshot()).context;
       const completedContext = clarificationDraft
-        ? completedContextForDraft(clarificationDraft, context, languageContext.supportLanguageTag)
+        ? completedContextForDraft(clarificationDraft, context, languageContext.supportLanguageTag,session.learnerEditedTracks.includes('context'))
         : null;
       if (draftMode && !completedContext) {
         throw new Error(uiText('addContext'));
       }
       const clarification = {
         operationId: newUuid(),
+        source:session.proposalSource!,
         languageContext,
         focus: focus ? {
           statement: focus.statement,
@@ -997,6 +988,7 @@ const PreviewPersonalMeaningDetailScreen = ({
         } : null,
         sense: {
           proposedSenseKey: sense.proposedSenseKey,
+          ...(sense.reuseSense ? {reuseSense: sense.reuseSense} : {}),
           coreMeaningFocus: sense.coreMeaningFocus,
           prototypeScenes: sense.prototypeScenes,
           includedCases: sense.includedCases,
@@ -1033,6 +1025,7 @@ const PreviewPersonalMeaningDetailScreen = ({
             ...clarification,
             intakeId: clarificationDraft!.intakeId,
             context: completedContext!,
+            contextWordingSource:session.learnerEditedTracks.includes('context')?'learner_authored':'llm_suggested',
             confirmExpression: true,
           })
         : await gateway.confirmClarification({
@@ -1067,12 +1060,14 @@ const PreviewPersonalMeaningDetailScreen = ({
   const confirmExpressionOnly = async () => {
     const expression = session?.workingSet.expression;
     const candidate = alignment?.expressionCandidates[0];
-    if (!detail || !session || !confirmedFocus || !alignment || !expression || !candidate) return;
+    if (!detail || !session?.readyToConfirm || busy || !confirmedFocus || !alignment || !expression || !candidate) return;
+    if(readUnavailable)return;
     setBusy(true);
     setError('');
     try {
       await gateway.confirmExpressionBinding({
         operationId: newUuid(),
+        source:source!,
         personalMeaningId: detail.personalMeaningId,
         meaningFocusId: confirmedFocus.meaningFocusId,
         senseVersionId: alignment.senseVersionId,
@@ -1100,6 +1095,7 @@ const PreviewPersonalMeaningDetailScreen = ({
     ? working.expressions
     : (working.expression ? [working.expression] : []);
   const senseConfirmed = Boolean(alignment);
+  const sourceStale=!!session?.readyToConfirm&&!senseConfirmed&&!readUnavailable&&!sameClarificationSource(session.proposalSource,source);
   const contextStatus = trackTone(Boolean(working.context), senseConfirmed);
   const senseStatus = trackTone(Boolean(working.sense), senseConfirmed);
   const expressionStatus = trackTone(Boolean(working.expression), allConfirmed);
@@ -1109,21 +1105,25 @@ const PreviewPersonalMeaningDetailScreen = ({
       (message) => message.role === 'learner' && message.body.trim(),
     ));
   const canConfirm = Boolean(
-    working.context
+    session?.readyToConfirm
+    && working.context
     &&
     working.sense
     && hasCompleteContext
     && (!draftMode || (working.expression && includeExpression)),
-  ) && !busy;
+  ) && !busy&&!readUnavailable&&sameClarificationSource(session?.proposalSource,source);
   const canConfirmExpressionOnly = Boolean(
-    working.expression && alignment?.expressionCandidates.length,
-  ) && !busy;
+    session?.readyToConfirm && working.expression && alignment?.expressionCandidates.length,
+  ) && !busy&&!readUnavailable&&!!source;
 
   const body = !status.ok ? (
     <div className={classNames("pmw-error")} role="alert">
       <b>{uiText('unableToReadThisMaterial')}</b>
       <p>{status.error}</p>
+      <button type="button" onClick={reload}>{localFlowText('retryPreparation')}</button>
     </div>
+  ) : status.loading&&!detail&&!clarificationDraft||(detail||clarificationDraft)&&!session ? (
+    <div className={classNames("pmw-empty")} role="status" aria-busy="true">{localFlowText('loadingSensa')}</div>
   ) : (!detail && !clarificationDraft) || !session ? (
     <div className={classNames("pmw-empty")}>{uiText('thisMaterialWasNotFound')}</div>
   ) : allConfirmed && detail && alignment ? (
@@ -1132,11 +1132,12 @@ const PreviewPersonalMeaningDetailScreen = ({
       focus={confirmedFocus}
       alignment={alignment}
       session={session}
-      contextText={session.workingSet.context?.summary || confirmedContextText}
+      contextText={confirmedContextText}
       contextImages={confirmedContextImages}
-      busy={busy}
+      busy={busy||!!status.loading}
       error={error}
       onSaveContext={saveConfirmedContext}
+      learningControls={alignmentLearningControls?.(detail,alignment)}
     />
   ) : (
     <>
@@ -1170,7 +1171,7 @@ const PreviewPersonalMeaningDetailScreen = ({
             inlineDataUrl: null,
             inlineMimeType: null,
             revision: 1,
-          }))).map((block) => (
+          }))).map((block:JourneyMaterialBlockView) => (
             block.kind === 'image' ? (
               <img
                 key={block.anchorId}
@@ -1178,7 +1179,10 @@ const PreviewPersonalMeaningDetailScreen = ({
                 alt={uiText('contextImage')}
               />
             ) : (
-              <p key={block.anchorId}>{block.bodyText}</p>
+              <div key={block.anchorId}>
+                <p>{block.bodyText}</p>
+                {block.capturedSource&&<CapturedMaterialSource captured={block.capturedSource} currentText={block.bodyText}/>}
+              </div>
             )
           ))}
           {(detail?.familiarAnchors ?? (clarificationDraft?.familiarExpression ? [{
@@ -1265,12 +1269,16 @@ const PreviewPersonalMeaningDetailScreen = ({
         )}
       </div>
 
+      {sourceStale&&!reviewOpen&&<div className={classNames('pmw-inline-error')} role="alert">
+        <span>{localFlowText('clarificationSourceChanged')}</span>
+        <button type="button" disabled={busy||readUnavailable} onClick={()=>void runTurn(session!)}>{uiText('keepTalking2')}</button>
+      </div>}
       {error && (
         <div className={classNames("pmw-inline-error")} role="alert">
           <span>{localFlowNotice(error)}</span>
           <button
             type="button"
-            disabled={busy}
+            disabled={busy||readUnavailable}
             onClick={() => void runTurn(session)}
           >
             {uiText('retry')}</button>
@@ -1481,15 +1489,16 @@ const PreviewPersonalMeaningDetailScreen = ({
             </div>,
 
           controls: <div className={classNames("pmw-review-controls")}>
+              {sourceStale&&<div role="alert"><p>{localFlowText('clarificationSourceChanged')}</p><button type="button" disabled={busy||readUnavailable} onClick={()=>{setReviewOpen(false);void runTurn(session!);}}>{uiText('keepTalking2')}</button></div>}
               <p className={classNames("pmw-review-consequence")}>
                 {uiText('confirmationSavesThisToYourMeanings')}{working.expression && includeExpression ? uiText('andConnectsTheExpression') : uiText('youCanConnectAnExpressionLater')}。
               </p>
-              {error && <p className={classNames("pmw-review-error")} role="alert">{error}</p>}
+              {error && <p className={classNames("pmw-review-error")} role="alert">{localFlowNotice(error)}</p>}
               <div className={classNames("pmw-review-actions")}>
                 <button
                   type="button"
                   className={classNames("pmw-primary")}
-                  disabled={busy}
+                  disabled={!canConfirm}
                   onClick={() => void confirm()}
                 >
                   {busy ? uiText('confirming') : uiText('confirm')}

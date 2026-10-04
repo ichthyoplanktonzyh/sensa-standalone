@@ -15,6 +15,23 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  const primary=await fixture.createAccount('first'),secondary=await fixture.createAccount('second'),clearance=await fixture.createAccount('clearance');
  const accountId=primary.accountId,otherId=secondary.accountId;
  const a=await fixture.createClient(primary);const b=await fixture.createClient(primary);const other=await fixture.createClient(secondary);
+ await test.step('explicit Agent destination initialization publishes only an empty account identity',async()=>{
+  const agentAccount=await fixture.createAccount('agent-empty-identity');
+  const sender=await fixture.createClient(agentAccount);
+  const originalIdentity=await sender.evaluate(()=>(window as any).core.openLibrary());
+  await sender.evaluate(()=>(window as any).sync());
+  assert.equal((await pool.query('SELECT revision FROM sensa_consumer.library_cloud WHERE account_id=$1',[agentAccount.accountId])).rows[0].revision,0,'ordinary empty boot stays read-only');
+  await sender.evaluate(()=>(window as any).core.synchronizeLibrary((window as any).request,{publishEmptyIdentity:true}));
+  const initialized=(await pool.query('SELECT revision,manifest FROM sensa_consumer.library_cloud WHERE account_id=$1',[agentAccount.accountId])).rows[0];
+  assert.equal(initialized.revision,1);assert(initialized.manifest);
+  assert.deepEqual(await sender.evaluate(()=>(window as any).core.listDrafts()),[],'identity initialization cannot invent learner material');
+  const receiver=await fixture.createClient(agentAccount);await receiver.evaluate(()=>(window as any).sync());
+  const restoredIdentity=await receiver.evaluate(()=>(window as any).core.openLibrary());
+  assert.equal(restoredIdentity.id,originalIdentity.id,'another empty device restores the same Agent destination identity');
+  await receiver.evaluate(()=>(window as any).core.synchronizeLibrary((window as any).request,{publishEmptyIdentity:true}));
+  assert.equal((await pool.query('SELECT revision FROM sensa_consumer.library_cloud WHERE account_id=$1',[agentAccount.accountId])).rows[0].revision,1,'initialization is idempotent, not another destination');
+  await sender.context().close();await receiver.context().close();
+ });
  await test.step('account isolation, local caches, legacy heads and mid-sync writes',async()=>{
  const draft=await a.evaluate(async()=>{const c=(window as any).core;return c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'My raincoat',images:[{id:crypto.randomUUID(),name:'raincoat.jpg',dataUrl:document.createElement('canvas').toDataURL('image/jpeg')}]});});
  await a.evaluate(()=>(window as any).sync());

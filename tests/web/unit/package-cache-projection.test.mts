@@ -75,9 +75,38 @@ test('repeated initialization validates the same open SQLite connection only onc
  assert.throws(()=>db.initialize(),/sqlite_database_closed/u);
 });
 
+test('a current library with a missing source table fails without recreating an empty table or losing other records',()=>{
+ const raw=new sqlite3.oo1.DB(':memory:','c');
+ new SqliteRecordDatabase(sqlite3,raw,'memory').initialize();
+ raw.exec({sql:'INSERT INTO sensa_records(table_name,record_key,value_json) VALUES(?,?,?)',bind:['meta','owner-proof',encoded({preserve:true})]});
+ raw.exec('DROP TABLE sensa_record_tombstones');
+ const db=new SqliteRecordDatabase(sqlite3,raw,'memory');
+ try{
+  assert.throws(()=>db.initialize(),/sqlite_source_schema_incomplete/u);
+  assert.equal(raw.selectValue("SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name='sensa_record_tombstones'"),0);
+  assert.equal(db.get('meta','owner-proof'),encoded({preserve:true}));
+ }finally{db.close(false);}
+});
+
+test('missing fixed query indexes are repaired without replacing source tables or records',()=>{
+ const raw=new sqlite3.oo1.DB(':memory:','c');new SqliteRecordDatabase(sqlite3,raw,'memory').initialize();
+ raw.exec({sql:'INSERT INTO sensa_records(table_name,record_key,value_json) VALUES(?,?,?)',bind:['meta','owner-proof',encoded({preserve:true})]});
+ const missing=['sensa_records_content_revision','sensa_meaning_lookup_gram_document','sensa_world_browse_order'];
+ for(const index of missing)raw.exec(`DROP INDEX ${index}`);
+ const db=new SqliteRecordDatabase(sqlite3,raw,'memory');
+ try{
+  assert.equal(db.initialize().integrityCheck?.status,'ok');
+  for(const index of missing)assert.equal(raw.selectValue("SELECT COUNT(*) FROM sqlite_schema WHERE type='index' AND name=?",[index]),1);
+  assert.equal(db.get('meta','owner-proof'),encoded({preserve:true}));
+ }finally{db.close();}
+});
+
 test('existing-schema open avoids a full scan; explicit diagnostics detect corruption and preserve the source',()=>{
  const raw=new sqlite3.oo1.DB(':memory:','c');
- raw.exec(sqliteLibrarySchema);
+ // A current database includes every worker-owned derived schema. Creating a
+ // newly introduced index is a structure change and correctly requires one
+ // health scan; this case specifically exercises the unchanged reopen path.
+ new SqliteRecordDatabase(sqlite3,raw,'memory').initialize();
  const original=raw.exec.bind(raw);
  let checks=0;
  raw.exec=((...args:unknown[])=>{
@@ -99,11 +128,11 @@ test('existing-schema open avoids a full scan; explicit diagnostics detect corru
 
 test('the derived index is rebuilt from the current cache without changing source records or owner facts',()=>{
  const raw=new sqlite3.oo1.DB(':memory:','c');
+ const db=new SqliteRecordDatabase(sqlite3,raw,'memory');
  raw.exec(sqliteLibrarySchema);
  raw.exec('DROP TABLE sensa_package_cache_projection; PRAGMA user_version=12');
  for(const value of records)raw.exec({sql:'INSERT INTO sensa_records(table_name,record_key,value_json) VALUES(?,?,?)',bind:['packageCache',value.key,encoded(value)]});
  raw.exec({sql:'INSERT INTO sensa_records(table_name,record_key,value_json) VALUES(?,?,?)',bind:['meta','owner-proof',encoded({value:'preserve-me'})]});
- const db=new SqliteRecordDatabase(sqlite3,raw,'memory');
  try{
   assert.equal(db.initialize().schemaVersion,13);
   assert.equal(db.packageCacheProjection({kind:'identities'}).length,3);

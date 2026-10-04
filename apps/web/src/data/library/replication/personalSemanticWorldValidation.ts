@@ -42,7 +42,9 @@ export function validatePersonalSemanticWorldReplica(input:{
   const semantic=semanticWorld??fail();if(semantic.version!=='sensa-personal-meaning-journey-store-v5')fail();
   for(const field of ['personalMeaningId','personalMeaningRevisionId','personalMeaningAlignmentId','alignmentBasisReferenceId','senseId','senseVersionId','bindingId','bindingVersionId'])uuid.parse(source[field]);
   z.number().int().positive().parse(source.alignmentRevision);if(source.meaningFocusId!==null)uuid.parse(source.meaningFocusId);
-  const record=semantic.meanings?.find((candidate:any)=>candidate.personalMeaning?.personalMeaningId===source.personalMeaningId&&candidate.personalMeaning?.status==='active')??fail();
+  // A durable learning source pins historical facts, not today's World view.
+  // Tombstoning the personal origin must not invalidate already accepted learning.
+  const record=semantic.meanings?.find((candidate:any)=>candidate.personalMeaning?.personalMeaningId===source.personalMeaningId)??fail();
   if(!record.personalMeaningRevisions.some((candidate:any)=>candidate.personalMeaningRevisionId===source.personalMeaningRevisionId))fail();
   const alignment=record.alignments.find((candidate:any)=>candidate.personalMeaningAlignmentId===source.personalMeaningAlignmentId&&candidate.status==='active')??fail();
   if(alignment.personalMeaningRevisionId!==source.personalMeaningRevisionId||alignment.revision!==source.alignmentRevision||alignment.senseId!==source.senseId||alignment.senseVersionId!==source.senseVersionId)fail();
@@ -50,7 +52,18 @@ export function validatePersonalSemanticWorldReplica(input:{
   if(basisReferenceId!==source.alignmentBasisReferenceId||(alignment.basis.kind==='sense_construction'?alignment.basis.meaningFocusId:null)!==source.meaningFocusId)fail();
   const bindingVersion=semantic.registry?.bindingVersions?.find((candidate:any)=>candidate.bindingVersionId===source.bindingVersionId)??fail();
   const binding=semantic.registry?.bindings?.find((candidate:any)=>candidate.senseExpressionBindingId===source.bindingId)??fail();
-  if(binding.currentBindingVersionId!==source.bindingVersionId||binding.senseId!==source.senseId||bindingVersion.senseExpressionBindingId!==source.bindingId||bindingVersion.senseVersionId!==source.senseVersionId)fail();
+  if(binding.senseId!==source.senseId||bindingVersion.senseExpressionBindingId!==source.bindingId||bindingVersion.senseVersionId!==source.senseVersionId)fail();
+  const basis=alignment.basis;
+  const proposalVersionId=basis.kind==='sense_construction'
+    ?record.senseConfirmations.find(candidate=>candidate.senseProposalConfirmationId===basis.senseProposalConfirmationId)?.senseProposalVersionId:null;
+  const expressionAnchorId=basis.kind==='contextual_resolution'
+    ?record.semanticAcceptances.find(candidate=>candidate.semanticAcceptanceId===basis.semanticAcceptanceId)?.personalExpressionAnchorRevisionId:null;
+  if(!record.bindingConfirmations.some(confirmation=>confirmation.bindingVersionId===source.bindingVersionId
+    &&confirmation.senseVersionId===source.senseVersionId&&confirmation.expressionVersionId===bindingVersion.expressionVersionId
+    &&confirmation.learnerUserId===record.personalMeaning.learnerUserId
+    &&(alignment.basis.kind==='sense_construction'
+      ?proposalVersionId!=null&&confirmation.senseProposalVersionId===proposalVersionId
+      :expressionAnchorId!=null&&confirmation.senseProposalVersionId===null&&confirmation.personalExpressionAnchorRevisionId===expressionAnchorId)))fail();
   return {record,alignment};
  };
  for(const {value:draft} of rows.drafts){uuid.parse(draft.id);z.number().int().positive().parse(draft.revision);z.string().max(16000).parse(draft.text);if(draft.images)conversationImagesSchema.parse(draft.images);timestamp.parse(draft.createdAt);timestamp.parse(draft.updatedAt);}

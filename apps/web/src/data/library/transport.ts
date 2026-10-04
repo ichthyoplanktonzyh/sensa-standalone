@@ -33,7 +33,8 @@ function modelFailure(code:unknown):never{
  if(code==='model_queue_full')throw new Error('localFlow.modelQueueFull');
  if(code==='model_rate_limited')throw new Error('localFlow.modelRateLimited');
  if(code==='model_request_rejected')throw new Error('localFlow.modelRequestRejected');
- if(code==='model_invalid_response'||code==='model_stream_invalid')throw new Error('localFlow.modelResponseInvalid');
+ if(code==='model_invalid_response')throw new Error('localFlow.modelResponseInvalid',{cause:{code}});
+ if(code==='model_stream_invalid')throw new Error('localFlow.modelResponseInvalid');
  if(code==='model_response_too_large')throw new Error('localFlow.responseLimit');
  if(code==='model_stream_incomplete')throw new Error('localFlow.modelIncomplete');
  if(code==='model_daily_budget'||code==='reading_daily_budget')throw new Error('localFlow.serviceLimit');

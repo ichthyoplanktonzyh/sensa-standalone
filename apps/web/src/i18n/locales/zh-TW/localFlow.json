@@ -1,5 +1,6 @@
 {
   "localFlow": {
+    "clarificationSourceChanged": "請繼續對話，核對目前材料後再確認。",
     "packageAuthor": "作者",
     "packageFilesUnavailable": "有 {{count}} 個學習包缺少本機檔案。請重新匯入原檔案，或從目錄重新下載。",
     "packageLicense": "授權",

@@ -15,22 +15,22 @@ const route=await readFile('apps/api/src/sensa/models/turn.ts','utf8');
 const modelProtocol=await readFile('packages/contracts/src/sensa/modelProtocol.ts','utf8');
 
 assert(runner.includes('MAX_STEPS = 6'));
-assert(runner.includes("name: 'organize_answer'"));
-assert(runner.includes("name: 'reply_to_learner'"));
-assert(runner.includes("complete(provider, 'teacher', executionId, messages, teacherTools, modelSignal)"));
+assert(runner.includes("name:'lookup_meanings'"));
+assert(!runner.includes("name: 'organize_answer'"));
+assert(!runner.includes("name: 'reply_to_learner'"));
+assert(runner.includes("complete(provider,'teacher',executionId,messages,teacherTools,modelSignal,"));
 assert(!runner.includes('openingReplyPrompt'));
 assert(!runner.includes('isOpeningReply'));
-assert(runner.includes('parseOrganizedAnswer'));
-assert(runner.includes('parseLearnerReply'));
+assert(runner.includes('parseTeacherTurn'));
+assert(runner.includes('teacherReplyPrefix'));
 assert(!runner.includes('projectionPrompt'));
-assert(!runner.includes('responseFormat'));
-assert(!runner.includes("name: 'lookup_meanings'"));
+assert(runner.includes("responseFormat:'json_object'"));
 assert(route.includes('teacher:[...SENSA_TEACHER_AGENT_TOOLS]'));
 assert(!runner.includes("name: 'lookup_reference_facts'"));
-assert(modelProtocol.includes("'organize_answer','reply_to_learner'"));
+assert(modelProtocol.includes("SENSA_TEACHER_AGENT_TOOLS=['lookup_meanings']"));
 assert(!contract.includes("SemanticAgentTurnMode = 'chat' | 'consolidate'"));
 assert(contract.includes('onAssistantText?: (text: string) => void'));
-assert(runner.includes('input.onAssistantText?.(reply)'));
+assert(runner.includes('input.onAssistantText?.(result.reply)'));
 assert(screen.includes('streamingAssistant'));
 assert(modelProtocol.includes('stream: z.literal(false)'));
 assert(modelProtocol.includes('modelTurnStreamEventSchema'));
@@ -41,7 +41,13 @@ assert(screen.includes('ContextCard'));
 assert(screen.includes('ConfirmedExpressionDetail'));
 assert(screen.includes('gateway.reviseContext'));
 assert(screen.includes('if (allConfirmed) return;'));
-assert(screen.includes('const textSegment = context.summary.trim()'));
+assert(screen.includes('if (!session.readyToConfirm || !context || !sense'));
+assert(screen.includes('if (!detail || !session?.readyToConfirm || busy || !confirmedFocus'));
+assert(screen.includes('session?.readyToConfirm && working.expression && alignment?.expressionCandidates.length'));
+const contextAdapter=await readFile('apps/web/src/experience/personalMeaningJourney/clarificationContext.ts','utf8');
+assert(screen.includes('completedContextForDraft(clarificationDraft, context,'));
+assert(contextAdapter.includes('textSegment=context.summary.trim()'));
+assert(!contextAdapter.includes('conversationText = messages'));
 assert(!screen.includes('const conversationText = messages'));
 assert(world.includes('confirmedExpressionFor(item)'));
 assert(screen.includes('maxImages={MAX_SCENE_IMAGES}'));
@@ -50,8 +56,17 @@ assert(
  learningWorkspace.includes('worldAction:undefined'),
  'opening clarification must consume the one-shot create action so Back cannot immediately reopen it',
 );
-assert(app.includes('onConversationCreated={openPersonalMeaning}'));
+assert(learningWorkspace.includes('onConversationCreated={openPersonalMeaning}'));
+assert(learningWorkspace.includes('alignmentLearningControls={(detail,alignment)'));
+assert(!app.includes("'s-personal-meaning':"),'personal detail must share the explicit learning bridge controller, not a disconnected App renderer');
 
-console.log('PASS: native Sensa entry and Inbox clarification use one bounded teacher loop with separate proposal and visible-reply tools; no model/paid calls.');
+const inboxSource=await readFile('apps/web/src/experience/components/IntakeInboxDrawer.tsx','utf8');
+assert(!inboxSource.includes("uiText('webSource')"),'Agent intake provenance must not be mislabeled as a webpage');
+assert(inboxSource.includes('intakeSourceLabel(source)'),'Inbox delegates source presentation to the recorded-client formatter');
+const {intakeSourceLabel}=await import('../../../apps/web/src/experience/personalMeaningJourney/sourcePresentation.ts');
+const source={client:'codex',title:'Original conversation',url:null,sourceReferenceId:null,domSelector:null,paragraphContext:null};
+assert.equal(intakeSourceLabel(source),'Codex · Original conversation','Agent provenance must remain visibly distinct from a webpage');
+assert.equal(intakeSourceLabel({...source,client:'another-agent'}),'another-agent · Original conversation','an unknown producer must not be relabeled as Sensa or a webpage');
+console.log('PASS: native Sensa entry and Inbox clarification share one bounded teacher loop with a streamed reply and private final proposal; only owned-semantic lookup is a tool. No model/paid calls.');
 
 });

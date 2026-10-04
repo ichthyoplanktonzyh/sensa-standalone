@@ -54,6 +54,19 @@ await assert.rejects(
 );
 assert.equal(await store.readLibrary((tx) => tx.get('drafts', 'rolled-back')), undefined);
 
+const probeRevision=await store.readLibrary(store.readLocalLibraryRevision);
+assert.equal(await store.readLibrary(tx=>tx.hasChangesSince(probeRevision,['drafts'])),false);
+await store.restoreLibraryTransaction(async tx=>{
+  tx.put('drafts','revision-probe',{text:'no payload required for invalidation'});
+  await assert.rejects(tx.hasChangesSince(probeRevision,['drafts']),/library_changes_require_snapshot/u);
+  await assert.rejects(tx.entryBatches('drafts').next(),/library_entries_require_snapshot/u);
+});
+assert.equal(await store.readLibrary(tx=>tx.hasChangesSince(probeRevision,['drafts'])),true);
+assert.equal(await store.readLibrary(tx=>tx.hasChangesSince(probeRevision,['semanticMeanings'])),false);
+const deletionRevision=await store.readLibrary(store.readLocalLibraryRevision);
+await store.restoreLibraryTransaction(async tx=>{tx.delete('drafts','revision-probe');});
+assert.equal(await store.readLibrary(tx=>tx.hasChangesSince(deletionRevision,['drafts'])),true,'deleted rows must invalidate through tombstones');
+
 const stopped=crypto.randomUUID(),cancel=new AbortController();
 await assert.rejects(store.command({id:stopped,kind:'fixture.cancel-before-commit',input:{}},async tx=>{
   tx.requireCommitSignal(cancel.signal,'library_transaction_cancelled',()=>assert.fail('aborted work must not reach commit'));
@@ -180,9 +193,9 @@ test('schema 10 migrates in place and preserves owner tables',()=>{
 });
 test('SQLite initialization maintains query planner statistics', () => {
 const optimizerRawDatabase = new sqlite3.oo1.DB(':memory:', 'c');
+const optimizerDatabase = new SqliteRecordDatabase(sqlite3, optimizerRawDatabase, 'memory');
 optimizerRawDatabase.exec(sqliteLibrarySchema);
 optimizerRawDatabase.exec("INSERT INTO sensa_records(table_name,record_key,value_json) VALUES('drafts','optimizer-fixture','{}')");
-const optimizerDatabase = new SqliteRecordDatabase(sqlite3, optimizerRawDatabase, 'memory');
 optimizerDatabase.initialize();
 const plannerStatistics = optimizerRawDatabase.exec({
   sql: "SELECT COUNT(*) FROM sqlite_stat1",
@@ -244,6 +257,17 @@ assert.deepEqual(database.changesSince(1, ['drafts']), [
   { table: 'drafts', key: 'changed-c', encodedValue: '{"revision":1}', contentRevision: 2 },
 ]);
 assert.deepEqual(database.changesSince(2, ['drafts']), []);
+assert.equal(database.hasChangesSince(1,['drafts']),true);
+assert.equal(database.hasChangesSince(2,['drafts']),false);
+assert.equal(database.hasChangesSince(0,['semanticMeanings']),false);
+assert.equal(database.hasChangesSince(1,[]),false);
+assert.equal(database.hasChangesSince(-1,['drafts']),false);
+database.commit({contentRevision:3,clears:[],deletes:[{table:'drafts',key:'changed-c'}],puts:[]});
+assert.equal(database.hasChangesSince(2,['drafts']),true,'tombstone-only changes are not an unchanged snapshot');
+assert.deepEqual(database.entriesPage('drafts',null,1),[database.entries('drafts')[0]]);
+assert.deepEqual(database.entriesPage('drafts','changed-b',1),[]);
+assert.throws(()=>database.entriesPage('drafts',null,0),/sqlite_invalid_page_size/u);
+assert.throws(()=>database.entriesPage('drafts',null,257),/sqlite_invalid_page_size/u);
 database.commit({
   clears: [],
   deletes: [],

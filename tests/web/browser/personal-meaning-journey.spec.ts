@@ -1,0 +1,514 @@
+/** Shipped UI + real OPFS, controlled compatible-model HTTP stream. No paid calls. */
+import {createHash} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
+import {createServer,type Server} from 'node:http';
+import {once} from 'node:events';
+import {mkdir,mkdtemp,readFile,rm} from 'node:fs/promises';
+import {extname,join,resolve} from 'node:path';
+import {test,expect,type Page,type Locator} from '@playwright/test';
+import {canonicalConsumerJson} from '@sensa/contracts/sensa';
+import {MemoryJourneyRepository} from '../../../apps/web/src/experience/personalMeaningJourney/repository';
+import {createJourneyModules} from '../../../apps/web/src/experience/personalMeaningJourney/gateway';
+import {createSeededClock} from '../../../apps/web/src/experience/personalMeaningJourney/ports';
+import {semanticLookupPayload,syntheticSemanticWorld} from '../support/semanticLookupFixtures';
+import type {JourneyState} from '../../../apps/web/src/experience/personalMeaningJourney/store';
+import {PERSONAL_SEMANTIC_WORLD_SCOPE_ID} from '../../../apps/web/src/experience/practiceScope';
+
+declare global{interface Window{semanticDetailPaint?:{startedAt:number;elapsedMs:number|null}}}
+
+let server:Server,origin:string,output:string;
+type Plan={value:unknown;hold?:boolean;fail?:boolean};
+let plans:Plan[]=[],requests:Array<{messages:Array<{role:string;content:string}>;tools:Array<{function:{name:string}}>}> = [];
+let releaseStream:(()=>void)|undefined;
+let scaleFixture:JourneyState|undefined;
+const proposal={context:'上班前，学习者给家里的植物浇水。',sense:'给植物供水的动作。',senseKey:'water_plants',scene:'学习者用水壶给家里的植物浇水。',expression:'water',expressionType:'word',relation:'realizes',coverage:'exact',reason:'water 可以作动词表示给植物浇水。'};
+const answer={reply:'这里可以说 water，表示给植物浇水。你看这个表达合适吗？',clarity:{context:true,sense:true,expression:true},proposal};
+const snapshot={format:'sensa-learning-content-registry-v3',publishedAt:'2026-10-03T00:00:00Z',items:[]};
+const registry={...snapshot,revision:createHash('sha256').update(canonicalConsumerJson(snapshot)).digest('hex')};
+const types:Record<string,string>={'.js':'text/javascript','.css':'text/css','.wasm':'application/wasm','.svg':'image/svg+xml','.png':'image/png','.woff2':'font/woff2','.json':'application/json'};
+test.setTimeout(90_000);
+test.use({locale:'zh-CN',viewport:{width:1280,height:900}});
+
+test.beforeAll(async()=>{
+ await mkdir('.tmp',{recursive:true});output=await mkdtemp(resolve('.tmp/personal-meaning-journey-'));
+ const dist=join(output,'dist');
+ server=createServer(async(req,res)=>{
+  const url=new URL(req.url??'/',origin||'http://127.0.0.1');
+  if(url.pathname==='/semantic-scale-fixture'&&scaleFixture){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify(scaleFixture));return;}
+  if(url.pathname==='/v1/chat/completions'){
+   let body='';for await(const chunk of req)body+=chunk.toString();
+   requests.push(JSON.parse(body));const plan=plans.shift();
+   if(!plan){res.writeHead(500);res.end('fixture plan exhausted');return;}
+   res.writeHead(200,{'content-type':'text/event-stream','cache-control':'no-store'});
+   const delta=(content:string)=>res.write('data: '+JSON.stringify({model:'fixture-teacher',choices:[{index:0,delta:{content},finish_reason:null}]})+'\n\n');
+   const raw=JSON.stringify(plan.value),prefix=raw.slice(0,raw.indexOf('water')+5);
+   delta(prefix);
+   if(plan.hold)await new Promise<void>(done=>{releaseStream=done;res.on('close',done);});
+   if(res.destroyed)return;
+   if(plan.fail){res.end();return;}
+   delta(raw.slice(prefix.length));
+   res.end('data: '+JSON.stringify({model:'fixture-teacher',choices:[{index:0,delta:{},finish_reason:'stop'}]})+'\n\ndata: [DONE]\n\n');return;
+  }
+  if(url.pathname==='/sensa/packages'){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify(registry));return;}
+  if(url.pathname==='/favicon.ico'){res.writeHead(204);res.end();return;}
+  if(url.pathname.startsWith('/sensa/')||url.pathname.startsWith('/auth/')){res.writeHead(401,{'content-type':'application/json'});res.end(JSON.stringify({code:'authentication_required'}));return;}
+  const path=resolve(dist,`.${url.pathname}`);
+  if(!path.startsWith(dist+'/')&&path!==dist){res.writeHead(404);res.end();return;}
+  try{const extension=extname(path);res.writeHead(200,{'content-type':types[extension]??'text/html','cache-control':'no-store'});res.end(await readFile(extension?path:join(dist,'index.html')));}
+  catch{res.writeHead(404);res.end();}
+ });
+ server.listen(0,'127.0.0.1');await once(server,'listening');origin=`http://127.0.0.1:${(server.address() as {port:number}).port}`;
+ execFileSync('npm',['run','build','-w','@sensa/web','--','--outDir',dist,'--emptyOutDir'],{
+  env:{...process.env,VITE_SENSA_MODE:'production',VITE_SENSA_BROWSER_SMOKE:'true',VITE_SUPABASE_URL:origin,VITE_SUPABASE_PUBLISHABLE_KEY:'fixture-public-key',VITE_SENSA_API_URL:origin},stdio:'pipe',
+ });
+});
+test.afterEach(()=>{releaseStream?.();releaseStream=undefined;});
+test.afterAll(async()=>{releaseStream?.();if(server?.listening)await new Promise<void>(done=>server.close(()=>done()));if(output)await rm(output,{recursive:true,force:true});});
+
+async function enterAndConfigureTeacher(page:Page){
+ requests=[];plans=[];
+ await page.addInitScript(()=>{(window as unknown as {__name:(value:unknown)=>unknown}).__name=value=>value;});
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ await configureTeacher(page);
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
+ await page.getByRole('button',{name:'和 Sensa 聊聊',exact:true}).click();
+}
+async function configureTeacher(page:Page){
+ await page.getByRole('button',{name:'账号与设置',exact:true}).click();
+ await page.locator('#s-profile').getByRole('button',{name:/模型服务/}).click();
+ await page.getByRole('button',{name:'添加本机连接',exact:true}).click();
+ const form=page.locator('form').filter({has:page.getByRole('heading',{name:'添加本机连接',exact:true})});
+ await form.getByLabel('名称',{exact:true}).fill('旅程测试教师');
+ await form.getByLabel('服务地址',{exact:true}).fill(origin+'/v1');
+ await form.getByLabel('模型名称',{exact:true}).fill('fixture-teacher');
+ await form.getByLabel('密钥（可稍后填写）',{exact:true}).fill('fixture-not-a-secret');
+ await form.getByRole('button',{name:'保存连接',exact:true}).click();
+ await page.getByLabel('澄清与解释',{exact:true}).selectOption({label:'旅程测试教师 · fixture-teacher'});
+ await expect(page.getByLabel('澄清与解释',{exact:true})).toBeEnabled();
+}
+const facts=async(page:Page)=>{
+ await page.waitForFunction(()=>!!window.__sensaBrowserSmoke);
+ return page.evaluate(async()=>({contains:await window.__sensaBrowserSmoke!.semanticWorldContainsExpression('water'),inbox:await window.__sensaBrowserSmoke!.intakeInboxCount(),provisioning:await window.__sensaBrowserSmoke!.provisioningCheckpoint(),learning:await window.__sensaBrowserSmoke!.learningCheckpoint()}));
+};
+const input=(page:Page)=>page.getByLabel('你想表达什么？',{exact:true});
+async function send(page:Page){await input(page).fill('上班前我给家里的植物浇水，这个动作英语怎么说？');await page.getByRole('button',{name:'发送',exact:true}).click();}
+
+test('a saved draft can explicitly continue with a newly configured teacher after its initial provider is unavailable',async({page})=>{
+ requests=[];plans=[];
+ await page.addInitScript(()=>{(window as unknown as {__name:(value:unknown)=>unknown}).__name=value=>value;});
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();await page.getByRole('button',{name:'和 Sensa 聊聊',exact:true}).click();await send(page);
+ await expect(page.getByRole('alert')).toContainText('请先登录');const threadUrl=page.url();
+ await configureTeacher(page);plans=[{value:answer}];
+ // BYOK credentials belong to this page session, not a durable model-secret
+ // store. Return through the actual SPA/Inbox flow, not a document reload.
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.holdWorldInboxReadsForTest());
+ await page.getByRole('button',{name:/^收件箱/u}).click();
+ const inbox=page.locator('.sensa-intake-inbox').getByRole('dialog');
+ await expect(inbox.getByRole('status')).toContainText('正在读取 Sensa');
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.releaseWorldInboxReadsForTest(true));
+ await expect(inbox.getByRole('alert')).toBeVisible();await inbox.getByRole('button',{name:'重试',exact:true}).click();
+ await expect(inbox.getByRole('button',{name:'继续对话',exact:true})).toBeEnabled();
+ await inbox.getByRole('button',{name:'关闭',exact:true}).click();
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.holdWorldInboxReadsForTest());
+ await page.getByRole('button',{name:/^收件箱/u}).click();
+ await expect(inbox.getByRole('status')).toContainText('正在读取 Sensa');
+ await expect(inbox.getByRole('button',{name:'继续对话',exact:true})).toHaveCount(0);
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.releaseWorldInboxReadsForTest());
+ await inbox.getByRole('button',{name:'继续对话',exact:true}).click();expect(page.url()).toBe(threadUrl);
+ await expect(page.getByRole('button',{name:'就是这个意思',exact:true})).toBeEnabled().catch(async cause=>{console.log('Explicit provider-recovery diagnosis:',JSON.stringify({alerts:await page.getByRole('alert').allTextContents(),requests:requests.length,assistant:await page.locator('.pmw-message.is-assistant').allTextContents()}));throw cause;});
+ expect(requests).toHaveLength(1);await page.getByRole('button',{name:'就是这个意思',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'确认',exact:true}).click();await expect(page.getByRole('heading',{name:'water',exact:true})).toBeVisible();
+});
+/** Start at the actual browser click, not Playwright's preceding stability
+ * wait. Require readable, stable detail and a reachable editing action. */
+async function clickToMeaningReady(page:Page,action:Locator,label:string){
+ await page.evaluate(label=>{
+  window.semanticDetailPaint={startedAt:0,elapsedMs:null};
+  document.addEventListener('click',()=>{
+   const measure=window.semanticDetailPaint!;measure.startedAt=performance.now();
+   let previousGeometry:string|null=null;
+   const painted=()=>{
+    const heading=document.querySelector<HTMLElement>('.pmw-screen.active article[aria-label="表达详情"] h2');
+    const article=heading?.closest('article');
+    const edit=[...article?.parentElement?.querySelectorAll<HTMLButtonElement>('button')??[]].find(button=>button.textContent?.trim()==='编辑场景');
+    const readable=(element:HTMLElement|undefined)=>{
+     if(!element||element.closest('[inert],[aria-hidden="true"]')||!element.checkVisibility({checkOpacity:true,checkVisibilityCSS:true}))return false;
+     const rect=element.getBoundingClientRect();
+     if(rect.width<=0||rect.height<=0||rect.left<0||rect.right>innerWidth||rect.top<0||rect.bottom>innerHeight)return false;
+     for(let ancestor:HTMLElement|null=element;ancestor;ancestor=ancestor.parentElement)if(ancestor.getAnimations().some(animation=>animation.playState==='running'))return false;
+     const top=document.elementFromPoint(rect.left+rect.width/2,rect.top+rect.height/2);
+     return !!top&&(top===element||element.contains(top));
+    };
+    const ready=heading?.textContent===label&&readable(heading)&&readable(edit)&&!edit!.disabled;
+    const geometry=ready?JSON.stringify([heading!.getBoundingClientRect().toJSON(),edit!.getBoundingClientRect().toJSON()]):null;
+    if(geometry!==null&&geometry===previousGeometry){measure.elapsedMs=performance.now()-measure.startedAt;return;}
+    previousGeometry=geometry;
+    if(performance.now()-measure.startedAt<30_000)requestAnimationFrame(painted);
+   };
+   requestAnimationFrame(painted);
+  },{once:true,capture:true});
+ },label);
+ await action.click();await expect(page.getByRole('heading',{name:label,exact:true})).toBeVisible();
+ await expect.poll(()=>page.evaluate(()=>window.semanticDetailPaint?.elapsedMs)).not.toBeNull();
+ return (await page.evaluate(()=>window.semanticDetailPaint!.elapsedMs))!;
+}
+
+test('reply streams before candidate disclosure, explicit acceptance persists, and the learning bridge stays optional',async({page})=>{
+ await enterAndConfigureTeacher(page);plans=[{value:answer,hold:true}];await send(page);
+ const workspace=page.locator('.pmw-screen.active'),originalSkin=await page.evaluate(()=>document.documentElement.getAttribute('data-sensa-skin'));
+ // Exercise the shipped CSS adapters in the live conversation. Preference
+ // persistence/switch controls remain the separate Skin Lab boundary.
+ try{
+  for(const skin of ['quiet','clear'])for(const width of [1280,390]){
+   await page.evaluate(skin=>document.documentElement.setAttribute('data-sensa-skin',skin),skin);await page.setViewportSize({width,height:900});
+   const workspaceBox=await workspace.boundingBox(),headerBox=await workspace.locator(':scope > [data-sensa-page-region="header"]').boundingBox();
+   expect(workspaceBox).not.toBeNull();expect(headerBox).not.toBeNull();
+   expect(Math.abs(headerBox!.x-workspaceBox!.x),`${skin}/${width}: conversation must not reserve an empty backdrop column`).toBeLessThan(2);
+   expect(headerBox!.width).toBeGreaterThan(workspaceBox!.width-2);
+  }
+ }finally{await page.evaluate(skin=>{if(skin)document.documentElement.setAttribute('data-sensa-skin',skin);else document.documentElement.removeAttribute('data-sensa-skin');},originalSkin);await page.setViewportSize({width:1280,height:900});}
+ await expect(page.locator('.pmw-message.is-assistant')).toContainText('water');
+ await expect(page.getByRole('button',{name:'就是这个意思',exact:true})).toBeDisabled();
+ expect((await facts(page)).contains).toBe(false);expect((await facts(page)).learning.targetIds).toEqual([]);
+ releaseStream!();await expect(page.getByRole('button',{name:'就是这个意思',exact:true})).toBeEnabled();
+ await page.getByRole('button',{name:'就是这个意思',exact:true}).click();
+ await page.getByRole('dialog').getByRole('button',{name:'确认',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'water',exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'加入学习',exact:true})).toBeEnabled();
+ expect((await facts(page)).contains).toBe(true);expect((await facts(page)).inbox).toBe(0);
+ const saved=await facts(page);expect(saved.learning.targetIds).toEqual([]);expect(saved.learning.records).toEqual([]);
+ await page.reload();await expect(page.getByRole('heading',{name:'water',exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'加入学习',exact:true})).toBeEnabled();expect(await facts(page)).toEqual(saved);
+ await page.getByRole('button',{name:'编辑场景',exact:true}).click();
+ const unsaved=page.getByRole('textbox',{name:'场景',exact:true});await unsaved.fill('尚未保存的场景修改，不能被后台重读丢弃。');
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.holdWorldDetailReadsForTest());
+ try{
+  await page.evaluate(()=>window.__sensaBrowserSmoke!.notifyWorldReadForTest());
+  await expect(page.getByRole('button',{name:'保存场景',exact:true})).toBeDisabled();
+  await expect(unsaved).toHaveValue('尚未保存的场景修改，不能被后台重读丢弃。');
+ }finally{await page.evaluate(()=>window.__sensaBrowserSmoke!.releaseWorldDetailReadsForTest());}
+ await expect(page.getByRole('button',{name:'保存场景',exact:true})).toBeEnabled();
+ await expect(unsaved).toHaveValue('尚未保存的场景修改，不能被后台重读丢弃。');
+ const editedId=await page.evaluate(()=>window.__sensaBrowserSmoke!.firstMeaningId());expect(editedId).not.toBeNull();
+ await page.evaluate(id=>window.__sensaBrowserSmoke!.reviseMeaningContextForTest(id!,'另一写入者保存了新场景，旧编辑不能覆盖。'),editedId);
+ await expect(page.getByRole('article',{name:'表达详情'}).getByText('另一写入者保存了新场景，旧编辑不能覆盖。',{exact:true})).toBeVisible();
+ await expect(unsaved).toHaveValue('尚未保存的场景修改，不能被后台重读丢弃。');
+ await page.getByRole('button',{name:'保存场景',exact:true}).click();
+ await expect(page.getByRole('alert')).toContainText('原内容已改变');
+ await expect(unsaved).toHaveValue('尚未保存的场景修改，不能被后台重读丢弃。');
+ await expect(page.getByRole('article',{name:'表达详情'}).getByText('另一写入者保存了新场景，旧编辑不能覆盖。',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'取消编辑',exact:true}).click();
+ const source=page.locator('details').filter({has:page.locator('summary').filter({hasText:'Sensa · Sensa Web'})});
+ await source.locator('summary').click();
+ await expect(source.getByText('上班前我给家里的植物浇水，这个动作英语怎么说？',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'加入学习',exact:true}).click();
+ await expect(page.getByRole('region',{name:'个人内容学习准备'})).toContainText('请先登录 Sensa 在线服务');
+ await expect(page.getByRole('button',{name:'重试 / 恢复准备',exact:true})).toBeVisible();
+ expect((await facts(page)).learning.records).toEqual([]);
+ expect((await facts(page)).learning.runtime).toBeNull();
+ const enrolled=await facts(page);
+ expect(enrolled.provisioning,'explicit intent is durable even when its provider is unavailable').toHaveLength(1);
+ expect(enrolled.provisioning[0]!.status).toBe('failed');
+ await page.reload();await expect(page.getByRole('heading',{name:'water',exact:true})).toBeVisible();
+ expect((await facts(page)).provisioning).toEqual(enrolled.provisioning);
+ expect(requests,'joining with unavailable content provider must not call a paid model or invent ready content').toHaveLength(1);
+});
+
+test('field-specific correction recovers a rejected final object without creating duplicate meaning facts',async({page})=>{
+ await enterAndConfigureTeacher(page);plans=[{value:{...answer,changeReason:'wrong-level fixture'}},{value:answer}];await send(page);
+ await expect(page.getByRole('button',{name:'就是这个意思',exact:true})).toBeEnabled();
+ expect(requests).toHaveLength(2);
+ expect(requests[1]!.messages.at(-1)!.content).toContain('unrecognized_keys');expect(requests[1]!.messages.at(-1)!.content).toContain('changeReason');
+ expect((await facts(page)).contains).toBe(false);
+ await page.getByRole('button',{name:'就是这个意思',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'确认',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'water',exact:true})).toBeVisible();expect((await facts(page)).inbox).toBe(0);
+ await page.reload();await expect(page.getByRole('heading',{name:'water',exact:true})).toBeVisible();expect((await facts(page)).contains).toBe(true);expect((await facts(page)).learning.targetIds).toEqual([]);
+});
+
+test('a proposal generated or reviewed against changed material cannot confirm until the conversation rechecks that source',async({page})=>{
+ await enterAndConfigureTeacher(page);plans=[{value:answer,hold:true}];await send(page);
+ await expect(page.locator('.pmw-message.is-assistant')).toContainText('water');
+ const firstChange='生成期间补充：浇水时植物已经在窗边。';
+ const draftId=await page.evaluate(text=>window.__sensaBrowserSmoke!.appendIntakeMaterialForTest(text),firstChange);
+ releaseStream!();await expect(page.getByRole('alert')).toContainText('核对当前材料');
+ await expect(page.getByRole('button',{name:'就是这个意思',exact:true})).toBeDisabled();
+ expect((await facts(page)).contains).toBe(false);expect((await facts(page)).inbox).toBe(1);
+ expect(requests).toHaveLength(1);await expect(page.locator('.pmw-message.is-assistant')).toContainText('water');
+ // Reload restores the same stale proposal, not an automatic paid retry or
+ // a new draft. The explicit continuation must use a fresh coherent material.
+ await page.reload();await expect(page.getByRole('alert')).toContainText('核对当前材料');
+ await expect(page.getByRole('button',{name:'就是这个意思',exact:true})).toBeDisabled();expect(requests).toHaveLength(1);
+ // Local model keys are intentionally page-only. Restore this synthetic key
+ // through the actual settings UI, not by persisting a test secret after reload.
+ await page.getByRole('button',{name:'账号与设置',exact:true}).click();
+ await page.locator('#s-profile').getByRole('button',{name:/模型服务/}).click();
+ const connection=page.getByRole('article').filter({has:page.getByRole('heading',{name:'旅程测试教师 · fixture-teacher',exact:true})});
+ await connection.getByRole('button',{name:'填写或更换密钥',exact:true}).click();
+ await page.getByLabel('旅程测试教师 的密钥',{exact:true}).fill('fixture-not-a-secret');
+ await page.getByRole('button',{name:'仅保存在本页',exact:true}).click();
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
+ await page.getByRole('button',{name:'收件箱 1',exact:true}).click();await page.getByRole('button',{name:'继续对话',exact:true}).click();
+ await expect(page.getByRole('alert')).toContainText('核对当前材料');expect(requests).toHaveLength(1);
+ plans=[{value:answer}];await page.getByRole('alert').getByRole('button',{name:'再聊聊',exact:true}).click();
+ await expect(page.getByRole('button',{name:'就是这个意思',exact:true})).toBeEnabled();expect(requests).toHaveLength(2);
+ expect(JSON.stringify(requests[1]!.messages)).toContain(firstChange);
+ await page.getByRole('button',{name:'就是这个意思',exact:true}).click();
+ const dialog=page.getByRole('dialog');await expect(dialog.getByRole('button',{name:'确认',exact:true})).toBeEnabled();
+ const reviewChange='审阅期间补充：只浇这一盆植物。';
+ expect(await page.evaluate(text=>window.__sensaBrowserSmoke!.appendIntakeMaterialForTest(text),reviewChange)).toBe(draftId);
+ await expect(dialog.getByRole('button',{name:'确认',exact:true})).toBeDisabled();await expect(dialog.getByRole('alert')).toContainText('核对当前材料');
+ expect((await facts(page)).contains).toBe(false);expect((await facts(page)).inbox).toBe(1);
+ plans=[{value:answer}];await dialog.getByRole('alert').getByRole('button',{name:'再聊聊',exact:true}).click();
+ await expect(page.getByRole('button',{name:'就是这个意思',exact:true})).toBeEnabled();expect(requests).toHaveLength(3);
+ expect(JSON.stringify(requests[2]!.messages)).toContain(firstChange);expect(JSON.stringify(requests[2]!.messages)).toContain(reviewChange);
+ await page.getByRole('button',{name:'就是这个意思',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'确认',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'water',exact:true})).toBeVisible();const saved=await facts(page);
+ expect(saved.contains).toBe(true);expect(saved.inbox).toBe(0);expect(saved.learning.targetIds).toEqual([]);expect(saved.learning.records).toEqual([]);
+ await page.reload();await expect(page.getByRole('heading',{name:'water',exact:true})).toBeVisible();expect(await facts(page)).toEqual(saved);expect(requests).toHaveLength(3);
+});
+
+test('an incomplete stream preserves the original draft and continuing from Inbox does not create a copy',async({page})=>{
+ await enterAndConfigureTeacher(page);plans=[{value:answer,hold:true,fail:true}];await send(page);
+ await expect(page.locator('.pmw-message.is-assistant')).toContainText('water');const draftUrl=page.url();
+ releaseStream!();await expect(page.getByRole('alert')).toContainText('模型响应未完成');
+ await expect(page.getByRole('button',{name:'就是这个意思',exact:true})).toBeDisabled();
+ await expect(page.locator('.pmw-message.is-assistant')).toHaveCount(0);expect(requests).toHaveLength(1);
+ expect((await facts(page)).contains).toBe(false);expect((await facts(page)).inbox).toBe(1);
+ await page.getByRole('button',{name:'返回我的语义世界',exact:true}).click();await page.getByRole('button',{name:'收件箱 1',exact:true}).click();
+ await expect(page.getByRole('dialog')).toContainText('上班前我给家里的植物浇水');
+ plans=[{value:answer}];await page.getByRole('button',{name:'继续对话',exact:true}).click();
+ await expect(page).toHaveURL(draftUrl);await expect(page.getByRole('button',{name:'就是这个意思',exact:true})).toBeEnabled();
+ expect((await facts(page)).inbox).toBe(1);expect((await facts(page)).contains).toBe(false);expect(requests).toHaveLength(2);
+});
+
+test('an appended learner image is read with the same source witness sent to the teacher and retained by acceptance',async({page})=>{
+ await enterAndConfigureTeacher(page);plans=[{value:answer}];await send(page);
+ await expect(page.getByRole('button',{name:'就是这个意思',exact:true})).toBeEnabled();
+ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII=','base64');
+ await page.locator('.pmw-screen.active form input[type="file"][multiple]').setInputFiles({name:'synthetic-scene.png',mimeType:'image/png',buffer:png});
+ const thumbnail=page.getByRole('img',{name:'synthetic-scene.png',exact:true});await expect(thumbnail).toBeVisible();
+ const prepared=await thumbnail.getAttribute('src');expect(prepared).toMatch(/^data:image\/jpeg;base64,/u);
+ plans=[{value:answer}];await page.getByRole('textbox',{name:'你想表达什么？',exact:true}).fill('这是同一个浇水场景，结合图片继续核对。');await page.getByRole('button',{name:'发送',exact:true}).click();
+ await expect(page.getByRole('button',{name:'就是这个意思',exact:true})).toBeEnabled();expect(requests).toHaveLength(2);
+ expect(JSON.stringify(requests[1]!.messages)).toContain(prepared);
+ const media=await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMediaCheckpoint());expect(media).toHaveLength(1);expect(media[0]!.dataUrl).toBe(prepared);
+ await page.getByRole('button',{name:'就是这个意思',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'确认',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'water',exact:true})).toBeVisible();
+ await expect(page.getByRole('article',{name:'表达详情'}).locator('img')).toHaveAttribute('src',prepared!);
+ expect((await facts(page)).learning.targetIds).toEqual([]);
+ await page.reload();await expect(page.getByRole('heading',{name:'water',exact:true})).toBeVisible();
+ await expect(page.getByRole('article',{name:'表达详情'}).locator('img')).toHaveAttribute('src',prepared!);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMediaCheckpoint())).toEqual(media);expect(requests).toHaveLength(2);
+});
+
+test('explicit batch confirmation saves all intentions and failed preparation retries without duplicate enrollments',async({page})=>{
+ requests=[];plans=[];
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ await expect(page.getByRole('navigation',{name:'主要导航'})).toBeVisible();await page.waitForFunction(()=>!!window.__sensaBrowserSmoke);
+ const repository=new MemoryJourneyRepository(),modules=createJourneyModules({repository,clock:createSeededClock(),languages:{read:async()=>({targetLanguageTag:'en',supportLanguageTag:'zh-CN'})}});
+ await modules.semanticIntake.submit(semanticLookupPayload());scaleFixture=syntheticSemanticWorld(await repository.load(),12);
+ expect(await page.evaluate(async()=>window.__sensaBrowserSmoke!.seedSemanticWorld(await (await fetch('/semantic-scale-fixture')).json()))).toBe(12);
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
+ const world=page.locator('.sensa-world.active').last();
+ await world.getByRole('button',{name:'批量选择',exact:true}).click();
+ await expect(world.getByRole('button',{name:'全选当前结果',exact:true})).toBeEnabled();
+ await world.getByRole('button',{name:'全选当前结果',exact:true}).click();
+ await expect(world.getByRole('button',{name:'加入学习（12）',exact:true})).toBeEnabled();
+ const search=world.getByRole('textbox',{name:'搜索场景、意思或表达',exact:true});await search.fill('no-matching-batch-candidate');
+ await expect(world.getByText('没有匹配的内容',{exact:true})).toBeVisible();await expect(world.getByRole('button',{name:'加入学习（12）',exact:true})).toBeEnabled();await search.fill('');
+ await world.getByRole('button',{name:'加入学习（12）',exact:true}).click();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.provisioningCheckpoint())).toEqual([]);
+ const confirm=world.getByRole('region',{name:'确认加入学习',exact:true});
+ await expect(confirm.getByRole('checkbox')).not.toBeChecked();
+ await confirm.getByRole('checkbox').check();await confirm.getByRole('button',{name:'取消编辑',exact:true}).click();
+ await world.getByRole('button',{name:'加入学习（12）',exact:true}).click();await expect(confirm.getByRole('checkbox')).not.toBeChecked();
+ await confirm.getByRole('button',{name:'确认加入学习',exact:true}).click();
+ const progress=world.getByRole('region',{name:'批量学习准备',exact:true});
+ await expect(progress.getByRole('status')).toHaveText('已加入 0 / 12，失败 12',{timeout:30_000});
+ const saved=await page.evaluate(()=>window.__sensaBrowserSmoke!.provisioningCheckpoint());
+ expect(saved).toHaveLength(12);expect(new Set(saved.map(task=>task.taskId)).size).toBe(12);expect(saved.every(task=>task.status==='failed')).toBe(true);
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).targetIds).toEqual([]);
+ await progress.locator('summary').click();await expect(progress.getByRole('listitem').first()).toContainText('失败');
+ expect(await progress.getByRole('listitem').count()).toBeLessThan(40);
+ await progress.getByRole('button',{name:'仅重试失败项',exact:true}).click();
+ await expect(progress.getByRole('status')).toHaveText('已加入 0 / 12，失败 12',{timeout:30_000});
+ await expect(progress.getByRole('button',{name:'仅重试失败项',exact:true})).toBeEnabled();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.provisioningCheckpoint())).toEqual(saved);
+ expect(requests,'unavailable default provider must not call a real model or manufacture ready material').toEqual([]);
+ await page.reload();await expect(page.getByRole('navigation',{name:'主要导航'})).toBeVisible();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.provisioningCheckpoint())).toEqual(saved);
+ expect(requests).toEqual([]);
+});
+
+test('10k personal meanings keep the shipped World bounded and searchable, with real detail and refresh recovery',async({page})=>{
+ test.setTimeout(180_000);
+ page.on('crash',()=>console.log('Semantic scale fixture renderer crashed during browser acceptance'));
+ const preference={sourceId:PERSONAL_SEMANTIC_WORLD_SCOPE_ID,targetIds:['pending-source-selection']};
+ await page.addInitScript(preference=>{
+  const key='sensa:web-ui:v1:sensa.free-practice.scope-selection.v2';
+  if(localStorage.getItem(key)===null)localStorage.setItem(key,JSON.stringify(preference));
+ },preference);
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ // The smoke bridge exists before guest bootstrap. Wait for the actual shell
+ // before holding its storage transaction for a large, isolated fixture import.
+ await expect(page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true})).toBeVisible();
+ await page.waitForFunction(()=>!!window.__sensaBrowserSmoke);
+ const repository=new MemoryJourneyRepository(),modules=createJourneyModules({repository,clock:createSeededClock(),languages:{read:async()=>({targetLanguageTag:'en',supportLanguageTag:'zh-CN'})}});
+ await modules.semanticIntake.submit(semanticLookupPayload());
+ scaleFixture=syntheticSemanticWorld(await repository.load(),10_000);
+ await modules.personalMeaningJourney.createClarificationDraft({operationId:crypto.randomUUID(),blocks:[{kind:'text',bodyText:'尚待确认的材料'}]});
+ const pendingState=await repository.load();scaleFixture.inboxItems=pendingState.inboxItems;scaleFixture.clarificationDrafts=pendingState.clarificationDrafts;
+ // Deliver bulky setup through the fixture HTTP server, not one enormous CDP
+ // argument serialization. This does not measure import or replace the UI flow.
+ expect(await page.evaluate(async()=>window.__sensaBrowserSmoke!.seedSemanticWorld(await (await fetch('/semantic-scale-fixture')).json()))).toBe(10_000);
+ const start=await page.evaluate(()=>performance.now());
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
+ const world=page.locator('.sensa-world.active').last();
+ // A fast indexed read may settle before the driver can observe a loading
+ // frame. Held-read cases verify loading states without requiring a delay.
+ await expect(world.locator('.sensa-world-row').first()).toBeVisible({timeout:30_000});
+ const initial={openMs:await page.evaluate(start=>performance.now()-start,start),renderedRows:await world.locator('.sensa-world-row').count()};
+ console.log('Shipped World / real Chromium+OPFS / synthetic 10k / unthrottled / no model:',JSON.stringify(initial));
+ const phases=await page.evaluate(start=>performance.getEntriesByType('measure')
+  .filter(entry=>entry.name.startsWith('sensa.journey.')&&entry.startTime>=start).map(entry=>({phase:entry.name,durationMs:entry.duration})),start);
+ console.log('World load phases / smoke-only diagnostics:',JSON.stringify(phases));
+ expect(phases,'ordinary browsing must not hydrate the full journey gateway').toEqual([]);
+ // A slow or failed Inbox read must never claim that the Inbox is empty.
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.holdWorldInboxReadsForTest());
+ await world.getByRole('button',{name:/^收件箱/u}).click();
+ const inbox=page.locator('.sensa-intake-inbox').getByRole('dialog');
+ await expect(inbox.getByRole('status')).toContainText('正在读取 Sensa');
+ await expect(inbox.getByRole('button',{name:'继续对话',exact:true})).toHaveCount(0);
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.releaseWorldInboxReadsForTest(true));
+ await expect(inbox.getByRole('alert')).toBeVisible();
+ await inbox.getByRole('button',{name:'重试',exact:true}).click();
+ await expect(inbox.getByText('尚待确认的材料',{exact:true})).toBeVisible();
+ await inbox.getByRole('button',{name:'关闭',exact:true}).click();
+ const inboxStart=await page.evaluate(()=>performance.now());await world.getByRole('button',{name:/^收件箱/u}).click();
+ await expect(inbox.getByRole('button',{name:'继续对话',exact:true})).toBeEnabled();
+ const inboxMs=await page.evaluate(start=>performance.now()-start,inboxStart);
+ const inboxPhases=await page.evaluate(start=>performance.getEntriesByType('measure').filter(entry=>entry.startTime>=start&&entry.name.startsWith('sensa.journey.')).map(entry=>entry.name),start);
+ console.log('Shipped Inbox / 10k confirmed Meanings and one pending material:',JSON.stringify({inboxMs,fullGatewayPhases:inboxPhases}));
+ expect(inboxMs).toBeLessThan(500);expect(inboxPhases).toEqual([]);
+ await inbox.getByRole('button',{name:'关闭',exact:true}).click();
+ expect(initial.openMs,'local unthrottled 10k first World open budget').toBeLessThan(1000);
+ expect(initial.renderedRows,'a large World must not mount every row into the DOM').toBeLessThan(80);
+ await world.evaluate(element=>{element.scrollTop=element.scrollHeight;});
+ await expect(world.locator('[role="listitem"][aria-posinset="10000"] .sensa-world-row')).toBeVisible();
+ expect(await world.locator('.sensa-world-row').count()).toBeLessThan(80);
+ // Header/controls can grow after cross-tab updates without resizing this
+ // fixed viewport. The mounted window must follow its new document position.
+ const controls=world.locator(':scope > [data-sensa-page-region="controls"]');
+ await controls.evaluate(element=>{(element as HTMLElement).style.paddingTop='1800px';});
+ await expect.poll(()=>world.evaluate(element=>{
+  const viewport=element.getBoundingClientRect();
+  return [...element.querySelectorAll('.sensa-world-row')].some(row=>{
+   const rect=row.getBoundingClientRect();return rect.top<viewport.bottom&&rect.bottom>viewport.top;
+  });
+ })).toBe(true);
+ await world.evaluate(element=>{element.scrollTop=element.scrollHeight;});
+ await expect(world.locator('[role="listitem"][aria-posinset="10000"] .sensa-world-row')).toBeVisible();
+ await controls.evaluate(element=>{(element as HTMLElement).style.paddingTop='';});
+ await world.evaluate(element=>{element.scrollTop=0;});
+ const search=world.locator('input').first();await search.fill('ＢＯＲＲＯＷ-９９９９');
+ const coldDetailMs=await clickToMeaningReady(page,world.getByRole('button',{name:/^borrow-9999(?:\s|$)/u}),'borrow-9999');
+ expect(await page.evaluate(start=>performance.getEntriesByType('measure').filter(entry=>entry.name.startsWith('sensa.journey.')&&entry.startTime>=start).map(entry=>entry.name),start),
+  'first exact detail and its learning controls must not hydrate the full gateway').toEqual([]);
+ console.log('Shipped World / 10k / first detail before any batch or command:',JSON.stringify({coldDetailMs}));
+ expect(coldDetailMs).toBeLessThan(500);
+ await page.getByRole('button',{name:'返回我的语义世界',exact:true}).click();await search.fill('');
+ const selectionStarted=await page.evaluate(()=>performance.now());
+ await world.getByRole('button',{name:'批量选择',exact:true}).click();
+ await expect(world.getByRole('checkbox').first()).toBeVisible();
+ const selectionOpenMs=await page.evaluate(start=>performance.now()-start,selectionStarted);
+ expect(selectionOpenMs,'10k selection opening must read only a compact window').toBeLessThan(1000);
+ expect(await world.getByRole('checkbox').count()).toBeLessThan(80);
+ await world.getByRole('checkbox').first().check();
+ await expect(world.getByRole('checkbox').first()).toBeChecked();
+ await world.getByRole('checkbox').first().press('Space');await expect(world.getByRole('checkbox').first()).not.toBeChecked();
+ await world.getByRole('checkbox').first().press('Space');await expect(world.getByRole('checkbox').first()).toBeChecked();
+ await world.evaluate(element=>{element.scrollTop=element.scrollHeight;});
+ const lastChoice=world.locator('[role="listitem"][aria-posinset="10000"]');
+ await expect(lastChoice.getByRole('checkbox')).toBeVisible();await expect(lastChoice.locator('strong')).toHaveText(/^borrow-\d+$/u);
+ await lastChoice.getByRole('checkbox').check();expect(await world.getByRole('checkbox').count()).toBeLessThan(80);
+ await world.evaluate(element=>{element.scrollTop=0;});
+ const allStarted=await page.evaluate(()=>performance.now());
+ await world.getByRole('button',{name:'全选当前结果',exact:true}).click();
+ await expect(world.getByRole('button',{name:'加入学习（10000）',exact:true})).toBeEnabled();
+ const selectAllMs=await page.evaluate(start=>performance.now()-start,allStarted);
+ expect(await page.evaluate(start=>performance.getEntriesByType('measure').filter(entry=>entry.name.startsWith('sensa.journey.')&&entry.startTime>=start).map(entry=>entry.name),selectionStarted),'opening/selecting the full 10k result must not hydrate the command gateway').toEqual([]);
+ console.log('Shipped batch selection / real Chromium+OPFS / synthetic 10k / compact pins only:',JSON.stringify({selectionOpenMs,selectAllMs,mountedChoices:await world.getByRole('checkbox').count()}));
+ expect(selectAllMs,'explicit whole-result 10k selection budget').toBeLessThan(2000);
+ await search.fill('ＢＯＲＲＯＷ-９９９９');
+ await expect(world.getByRole('listitem')).toHaveCount(1);await expect(world.getByRole('checkbox')).toBeChecked();
+ await expect(world.getByRole('button',{name:'加入学习（10000）',exact:true})).toBeEnabled();
+ await search.fill('');
+ await world.getByRole('button',{name:'清空选择',exact:true}).click();
+ await world.getByRole('button',{name:'完成选择',exact:true}).click();
+ const searchStart=await page.evaluate(()=>performance.now());await search.fill('ＢＯＲＲＯＷ-９９９９');
+ const row=world.getByRole('button',{name:/^borrow-9999(?:\s|$)/u});
+ await expect(row).toBeVisible();
+ const searchMs=await page.evaluate(start=>performance.now()-start,searchStart);
+ // Readable, stable detail and an enabled editing action are measured inside
+ // the browser, independently of the driver's assertion polling schedule.
+ const profiler=process.env.SENSA_UI_PROFILE?await page.context().newCDPSession(page):null;
+ if(profiler){await profiler.send('Profiler.enable');await profiler.send('Profiler.start');}
+ const detailMs=await clickToMeaningReady(page,row,'borrow-9999');
+ if(profiler){
+  const {profile}=await profiler.send('Profiler.stop');
+  const nodes=new Map((profile.nodes as Array<{id:number;callFrame:{functionName:string;url:string}}>).map(node=>[node.id,node.callFrame]));
+  const costs=new Map<number,number>();
+  (profile.samples as number[]).forEach((id,index)=>costs.set(id,(costs.get(id)??0)+(profile.timeDeltas?.[index]??0)));
+  console.log('Diagnostic detail CPU self-time (profiling enabled, not latency baseline):',JSON.stringify([...costs].sort((a,b)=>b[1]-a[1]).slice(0,18).map(([id,micros])=>({...nodes.get(id),ms:micros/1000}))));
+  await profiler.detach();
+ }
+ await page.getByRole('button',{name:'编辑场景',exact:true}).click();
+ const context=page.getByRole('textbox',{name:'场景',exact:true});await context.fill('验收修改：借用同伴的雨伞，用完后归还。');
+ const saveStart=await page.evaluate(()=>performance.now());await page.getByRole('button',{name:'保存场景',exact:true}).click();
+ // A text locator also matches the editor's textarea. Success means the
+ // committed read-only article changed and the completed editor disappeared.
+ await expect(page.getByRole('article',{name:'表达详情'}).getByText('验收修改：借用同伴的雨伞，用完后归还。',{exact:true})).toBeVisible();
+ await expect(context).toHaveCount(0);
+ const saveMs=await page.evaluate(start=>performance.now()-start,saveStart);
+ console.log('Shipped World / 10k synthetic / UI actions / no model:',JSON.stringify({searchMs,detailMs,saveMs}));
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('sensa:web-ui:v1:sensa.free-practice.scope-selection.v2')!))).toEqual(preference);
+ await page.reload();await expect(page.getByRole('heading',{name:'borrow-9999',exact:true})).toBeVisible({timeout:30_000});
+ await expect(page.getByRole('article',{name:'表达详情'}).getByText('验收修改：借用同伴的雨伞，用完后归还。',{exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('sensa:web-ui:v1:sensa.free-practice.scope-selection.v2')!))).toEqual(preference);
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).targetIds).toEqual([]);
+ expect(searchMs).toBeLessThan(500);expect(detailMs).toBeLessThan(500);expect(saveMs).toBeLessThan(500);
+
+ // After a genuine reload, neither a new capture nor its explicit acceptance
+ // may hydrate the existing World. Hold the controlled teacher reply so the
+ // first learner-message timing measures local persistence, not generation.
+ const capture='追加材料：下班后在窗台边给植物浇水。';await configureTeacher(page);
+ plans=[{value:{...answer,proposal:{...proposal,context:capture,scene:capture}},hold:true}];
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
+ await page.getByRole('button',{name:'添加内容',exact:true}).click();
+ // The menu's accessible name includes its action subtitle, unlike the
+ // empty-World shortcut; select the same visible action by its title prefix.
+ await page.getByRole('button',{name:/^和 Sensa 聊聊(?:\s|$)/u}).click({timeout:10_000});
+ await input(page).fill(capture);
+ const draftStart=await page.evaluate(()=>performance.now());await page.getByRole('button',{name:'发送',exact:true}).click();
+ await expect(page.locator('.pmw-message.is-learner').getByText(capture,{exact:true})).toBeVisible();
+ const draftSaveMs=await page.evaluate(start=>performance.now()-start,draftStart);
+ const capturePhases=await page.evaluate(start=>performance.getEntriesByType('measure').filter(entry=>entry.startTime>=start&&['sensa.journey.records','sensa.journey.authority'].includes(entry.name)).map(entry=>entry.name),draftStart);
+ console.log('Shipped capture / real Chromium+OPFS / existing synthetic 10k / cold gateway / no model reply:',JSON.stringify({draftSaveMs,fullGatewayPhases:capturePhases}));
+ expect(capturePhases,'first capture must not enumerate the existing semantic World').toEqual([]);expect(draftSaveMs).toBeLessThan(500);
+ await expect(page.locator('.pmw-message.is-assistant')).toContainText('water');releaseStream!();
+ await expect(page.getByRole('button',{name:'就是这个意思',exact:true})).toBeEnabled().catch(async cause=>{console.log('Controlled 10k teacher failure:',JSON.stringify({alerts:await page.getByRole('alert').allTextContents(),requests:requests.length,assistant:await page.locator('.pmw-message.is-assistant').allTextContents()}));throw cause;});
+ await page.getByRole('button',{name:'就是这个意思',exact:true}).click();
+ const acceptanceStart=await page.evaluate(()=>performance.now());
+ const acceptanceMs=await clickToMeaningReady(page,page.getByRole('dialog').getByRole('button',{name:'确认',exact:true}),'water');
+ const automationElapsedMs=await page.evaluate(start=>performance.now()-start,acceptanceStart);
+ const acceptancePhases=await page.evaluate(start=>performance.getEntriesByType('measure').filter(entry=>entry.startTime>=start&&['sensa.journey.records','sensa.journey.authority'].includes(entry.name)).map(entry=>entry.name),acceptanceStart);
+ console.log('Shipped acceptance / real Chromium+OPFS / existing synthetic 10k / new Sense+Expression / controlled teacher, excluding reply:',JSON.stringify({clickToReadyMs:acceptanceMs,automationElapsedMs,fullGatewayPhases:acceptancePhases}));
+ expect(acceptancePhases).toEqual([]);expect(acceptanceMs).toBeLessThan(500);
+ await page.reload();await expect(page.getByRole('heading',{name:'water',exact:true})).toBeVisible();
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).targetIds).toEqual([]);
+});

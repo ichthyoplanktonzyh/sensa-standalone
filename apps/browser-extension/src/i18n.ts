@@ -43,7 +43,7 @@ const messages={
  working:['正在处理…','Working…'],starting:['正在开启当前页阅读模式…','Starting reading mode…'],stopping:['正在关闭当前页阅读模式…','Stopping reading mode…'],checkingSave:['正在检查保存结果…','Checking saved content…'],disconnecting:['正在断开连接…','Disconnecting…'],
  started:['当前页阅读模式已开启。朗读和保存无需模型；解释需要模型服务。','Reading mode is on. Speech and saving work without a model; explanations need a model.'],stopped:['当前页阅读模式已关闭。','Reading mode is off.'],checked:['已检查保存结果。','Saved content checked.'],disconnected:['已断开插件连接，原账号材料已保留。','Extension disconnected. Existing content is preserved.'],
  pending:['{count} 项已暂存在插件，等待交付到我的语义世界。','{count} items saved in the extension, awaiting delivery to My Semantic World.'],
- saved:['已保存到我的语义世界 · ','Saved to My Semantic World · '],inbox:['已保存待处理 · ','Saved for clarification · '],removed:['已移出 · ','Removed · '],text:['文字材料','Text'],
+ saved:['已保存到我的语义世界 · ','Saved to My Semantic World · '],inbox:['已送到收件箱 · ','Delivered to inbox · '],removed:['已移出 · ','Removed · '],text:['文字材料','Text'],
  failed:['暂时无法完成，已保存的内容仍保留。','Could not complete this action. Saved content is preserved.'],
  invalid_request:['无法读取这个选区，请重新选择。','Could not read this selection. Select it again.'],source_mismatch:['页面内容已变化，请重新选择。','The page changed. Select the content again.'],
  authentication_required:['请登录 Sensa 后重试。','Sign in to Sensa and try again.'],access_revoked:['登录授权已失效，请重新登录 Sensa。','Authorization expired. Sign in to Sensa again.'],

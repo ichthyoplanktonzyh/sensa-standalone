@@ -197,6 +197,7 @@ export const readContentSupplyQuery = async (query: ContentSupplyQuery): Promise
       const { personalLearningSnapshot } = await import('../../data/library/personalLearning');
       return personalLearningSnapshot();
     }
+    case 'provisioning_task':return readLibrary(async tx=>await tx.get('personalLearning',query.taskId)??null);
     case 'provisioning_control': {
       const { personalLearningControlSnapshot } = await import('../../data/library/personalLearning');
       const snapshot = await personalLearningControlSnapshot();

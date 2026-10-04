@@ -13,6 +13,9 @@ test('journey selection includes user-facing evidence and shared performance gua
  const portable=journeyTestIds('LJ-02');
  for(const id of ['portable-package-journey','portable-package-loop','portable-lightweight-package','package-cache-projection','book-center-projection','personal-learning','personal-portable-export','portable-media-cache','sqlite-sahpool-preservation','sqlite-sahpool-recovery','library-transaction-and-replay','workspace-source-aliases','web-bundle-budget'])assert(portable.includes(id),id);
  assert.throws(()=>journeyTestIds('LJ-unknown'),/Unknown Journey/u);
+ const personal=journeyTestIds('LJ-03');
+ for(const id of ['semantic-teacher-flow','semantic-teacher-contract','semantic-session-persistence','semantic-session-persistence-browser','web-intake','agent-mcp','intake-delivery','model-turn'])assert(personal.includes(id),id);
+ assert.equal(new Set(personal).size,personal.length);
  assert.throws(()=>validateJourneyMapping(webTestCatalog.filter(test=>test.id!=='web-bootstrap-budget')),/supporting Test/u);
 });
 

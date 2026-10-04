@@ -1,5 +1,7 @@
 import type {
   HomeLearningStorageProjection,
+  MeaningLookupResult,
+  WorldBrowseQuery,WorldBrowsePage,WorldLearningChoiceQuery,WorldLearningChoicePage,
   PortableMediaBlob,
   PortableMediaStorageDiagnostics,
   SqliteLibraryTable,
@@ -17,9 +19,16 @@ import {CoordinatedSqliteAdapter,type CoordinatedSqliteBackend} from './sqliteCo
 export interface SqliteRecordAdapter {
   get(table: SqliteLibraryTable, key: string): Promise<string | null>;
   entries(table: SqliteLibraryTable): Promise<Array<{ key: string; encodedValue: string }>>;
+  entriesPage(table:SqliteLibraryTable,afterKey:string|null,limit:number):Promise<Array<{key:string;encodedValue:string}>>;
   existingRecordKeys(table:SqliteLibraryTable,keys:readonly string[]):Promise<string[]>;
   packageCacheProjection<Query extends PackageCacheProjectionQuery>(query:Query):Promise<PackageCacheProjectionResult<Query>>;
+  lookupMeanings(query:string):Promise<MeaningLookupResult>;
+  worldBrowse(query:WorldBrowseQuery):Promise<WorldBrowsePage>;
+  registrySelection(query:import('./sqliteProtocol').RegistrySelectionQuery):Promise<import('./sqliteProtocol').RegistrySelection>;
+  worldLearningChoices(query:WorldLearningChoiceQuery):Promise<WorldLearningChoicePage>;
+  existingJourneyIdentities(ids:readonly string[]):Promise<string[]>;
   changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]>;
+  hasChangesSince(contentRevision:number,tables:readonly SqliteLibraryTable[]):Promise<boolean>;
   syncBaseEntries(keys?: readonly { table: SqliteLibraryTable; key: string }[]): Promise<SqliteSyncBaseEntry[]>;
   count(table: SqliteLibraryTable): Promise<number>;
   estimateRecordBytes(tables: readonly SqliteLibraryTable[]): Promise<number>;
@@ -76,6 +85,9 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
   entries(table: SqliteLibraryTable): Promise<Array<{ key: string; encodedValue: string }>> {
     return this.send({ kind: "entries", table }) as Promise<Array<{ key: string; encodedValue: string }>>;
   }
+  entriesPage(table:SqliteLibraryTable,afterKey:string|null,limit:number):Promise<Array<{key:string;encodedValue:string}>>{
+    return this.send({kind:'entriesPage',table,afterKey,limit}) as Promise<Array<{key:string;encodedValue:string}>>;
+  }
 
   existingRecordKeys(table:SqliteLibraryTable,keys:readonly string[]):Promise<string[]>{
     return this.send({kind:'existingRecordKeys',table,keys:[...keys]}) as Promise<string[]>;
@@ -87,6 +99,15 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
 
   changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]> {
     return this.send({ kind: "changesSince", contentRevision, tables: [...tables] }) as Promise<SqliteRecordChange[]>;
+  }
+  lookupMeanings(query:string):Promise<MeaningLookupResult>{return this.send({kind:'meaningLookup',query}) as Promise<MeaningLookupResult>;}
+  worldBrowse(query:WorldBrowseQuery):Promise<WorldBrowsePage>{return this.send({kind:'worldBrowse',query}) as Promise<WorldBrowsePage>;}
+  registrySelection(query:import('./sqliteProtocol').RegistrySelectionQuery):Promise<import('./sqliteProtocol').RegistrySelection>{return this.send({kind:'registrySelection',query}) as Promise<import('./sqliteProtocol').RegistrySelection>;}
+  worldLearningChoices(query:WorldLearningChoiceQuery):Promise<WorldLearningChoicePage>{return this.send({kind:'worldLearningChoices',query}) as Promise<WorldLearningChoicePage>;}
+  existingJourneyIdentities(ids:readonly string[]):Promise<string[]>{return this.send({kind:'existingJourneyIdentities',ids:[...ids]}) as Promise<string[]>;}
+
+  hasChangesSince(contentRevision:number,tables:readonly SqliteLibraryTable[]):Promise<boolean>{
+    return this.send({kind:'hasChangesSince',contentRevision,tables:[...tables]}) as Promise<boolean>;
   }
 
   syncBaseEntries(keys?: readonly { table: SqliteLibraryTable; key: string }[]): Promise<SqliteSyncBaseEntry[]> {

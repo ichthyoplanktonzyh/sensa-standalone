@@ -99,6 +99,7 @@ export type ContentSupplyQuery =
   | Readonly<{kind:'route_counts'}>
   | Readonly<{kind:'runtime_packages';packageKeys:readonly string[]}>
   | Readonly<{ kind: 'provisioning_control' }>
+  | Readonly<{ kind:'provisioning_task';taskId:string }>
   | Readonly<{ kind: 'provisioning_tasks' }>;
 export type ContentSupplyQueryResult<Query extends ContentSupplyQuery> =
   Query['kind'] extends 'workspace' ? ContentSupplyWorkspace
@@ -106,6 +107,7 @@ export type ContentSupplyQueryResult<Query extends ContentSupplyQuery> =
     :Query['kind'] extends 'route_counts'?readonly PackageRouteCount[]
     :Query['kind'] extends 'runtime_packages'?readonly InstalledPackage[]
     : Query['kind'] extends 'provisioning_control' ? ContentProvisioningControl
+      :Query['kind'] extends 'provisioning_task'?ContentProvisioningTask|null
       : readonly ContentProvisioningTask[];
 
 /**

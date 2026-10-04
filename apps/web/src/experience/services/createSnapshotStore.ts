@@ -90,7 +90,13 @@ export function createVersionStore(
 
   const subscribe = (onStoreChange: () => void): (() => void) => {
     listeners.add(onStoreChange);
-    if (listeners.size === 1) sourcesConnected = subscribeToSources(bump);
+    if (listeners.size === 1) {
+      sourcesConnected = subscribeToSources(bump);
+      // Source changes while detached (including render -> subscription) have
+      // no counter event. Force React's post-subscribe snapshot check to see
+      // a different version and reselect the current facts.
+      bump();
+    }
     return () => {
       listeners.delete(onStoreChange);
       if (listeners.size === 0 && sourcesConnected !== null) {

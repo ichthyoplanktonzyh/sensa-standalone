@@ -128,6 +128,44 @@ export class LibraryTransaction {
       .map(([key, value]) => ({ key, value: clone(value) }));
   }
 
+  /** Bounded transport/decode batches for a coherent large semantic snapshot. */
+  async *entryBatches(table:Table):AsyncGenerator<Array<{key:string;value:unknown}>>{
+    if(this.wrote)throw new Error('library_entries_require_snapshot');
+    let afterKey:string|null=null;
+    for(;;){
+      const rows=await storageCall(()=>this.adapter.entriesPage(table,afterKey,128));
+      if(!rows.length)return;
+      const decoded:Array<{key:string;value:unknown}>=[];
+      let until=performance.now()+8;
+      for(const row of rows){
+        decoded.push({key:row.key,value:await this.decodeStored(table,row.encodedValue)});
+        if(performance.now()>=until){await new Promise<void>(resolve=>setTimeout(resolve,0));until=performance.now()+8;}
+      }
+      yield decoded;afterKey=rows.at(-1)!.key;
+      if(rows.length<128)return;
+    }
+  }
+  async lookupMeanings(query:string):Promise<import('./sqliteProtocol').MeaningLookupResult>{
+    if(this.wrote)throw new Error('library_projection_requires_snapshot');
+    return storageCall(()=>this.adapter.lookupMeanings(query));
+  }
+  async worldBrowse(query:import('./sqliteProtocol').WorldBrowseQuery):Promise<import('./sqliteProtocol').WorldBrowsePage>{
+    if(this.wrote)throw new Error('library_projection_requires_snapshot');
+    return storageCall(()=>this.adapter.worldBrowse(query));
+  }
+  async registrySelection(query:import('./sqliteProtocol').RegistrySelectionQuery):Promise<import('./sqliteProtocol').RegistrySelection>{
+    if(this.wrote)throw new Error('library_projection_requires_snapshot');
+    return storageCall(()=>this.adapter.registrySelection(query));
+  }
+  async worldLearningChoices(query:import('./sqliteProtocol').WorldLearningChoiceQuery):Promise<import('./sqliteProtocol').WorldLearningChoicePage>{
+    if(this.wrote)throw new Error('library_projection_requires_snapshot');
+    return storageCall(()=>this.adapter.worldLearningChoices(query));
+  }
+  async existingJourneyIdentities(ids:readonly string[]):Promise<Set<string>>{
+    if(this.wrote)throw new Error('library_projection_requires_snapshot');
+    return new Set(await storageCall(()=>this.adapter.existingJourneyIdentities(ids)));
+  }
+
   /** Batch existence checks use only record keys, not resource payloads. */
   async existingRecordKeys(table:Table,keys:readonly string[]):Promise<Set<string>>{
     const requested=[...new Set(keys.map(recordKey))];
@@ -171,6 +209,12 @@ export class LibraryTransaction {
       }
     }
     return clone([...values.values()].sort((left,right)=>left.key.localeCompare(right.key))) as PackageCacheProjectionResult<Query>;
+  }
+
+  /** Coherent metadata-only invalidation probe, including deletion tombstones. */
+  async hasChangesSince(contentRevision:number,tables:readonly Table[]):Promise<boolean>{
+    if(this.wrote)throw new Error('library_changes_require_snapshot');
+    return storageCall(()=>this.adapter.hasChangesSince(contentRevision,tables));
   }
 
   async changesSince<Tables extends readonly Table[]>(contentRevision: number, tables: Tables): Promise<Array<{

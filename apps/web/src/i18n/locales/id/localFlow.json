@@ -1,5 +1,6 @@
 {
   "localFlow": {
+    "clarificationSourceChanged": "Lanjutkan percakapan untuk memeriksa materi saat ini sebelum mengonfirmasi.",
     "packageAuthor": "Penulis",
     "packageFilesUnavailable": "Paket tanpa berkas di perangkat ini: {{count}}. Impor berkas asli atau unduh lagi dari katalog.",
     "packageLicense": "Lisensi",

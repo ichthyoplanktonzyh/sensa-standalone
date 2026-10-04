@@ -22,8 +22,9 @@ async function endpoint(): Promise<{ base: string; token: string; subject: strin
   };
 }
 
-async function send(path: string, body: unknown): Promise<unknown> {
+async function send(path: string, body: unknown, expectedSubject?:string): Promise<unknown> {
   const target = await endpoint();
+  if(expectedSubject&&target.subject!==expectedSubject)throw new Error('account_changed');
   const response = await fetch(target.base + path, {
     method: "POST",
     headers: {
@@ -43,12 +44,12 @@ async function send(path: string, body: unknown): Promise<unknown> {
   return value;
 }
 
-export async function registerIntakeDeliveryChannel(libraryId: string): Promise<void> {
+export async function registerIntakeDeliveryChannel(libraryId: string, expectedSubject?:string): Promise<void> {
   const request = sensaIntakeDeliveryChannelRequestSchema.parse({
     contractVersion: sensaIntakeDeliveryContractVersion,
     libraryId,
   });
-  await send("/channel", request);
+  await send("/channel", request, expectedSubject);
 }
 
 export async function pullIntakeDeliveries(libraryId: string): Promise<SensaQueuedIntakeDelivery[]> {

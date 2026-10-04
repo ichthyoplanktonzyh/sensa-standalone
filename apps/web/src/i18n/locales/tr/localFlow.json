@@ -1,5 +1,6 @@
 {
   "localFlow": {
+    "clarificationSourceChanged": "Onaylamadan önce mevcut içeriği kontrol etmek için konuşmaya devam edin.",
     "packageAuthor": "Yazar",
     "packageFilesUnavailable": "Bu cihazda dosyası bulunmayan paketler: {{count}}. Özgün dosyaları içe aktarın veya katalogdan yeniden indirin.",
     "packageLicense": "Lisans",

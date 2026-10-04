@@ -202,7 +202,7 @@ async function downloadStableHead(blocks:Blocks,request:SyncRequest,base:Entry[]
  throw new Error('library_sync_head_changed');
 }
 /** Injected transport permits offline/idempotency/restore tests without real accounts. */
-export async function synchronizeLibrary(request:SyncRequest){
+export async function synchronizeLibrary(request:SyncRequest,options:{publishEmptyIdentity?:boolean}={}){
  let initial=await readLibrary(capture);const expected={owner:initial.owner,incarnation:initial.incarnation};
  const prior=initial.state;
  if(prior&&(!sameOwner(prior.owner,initial.owner)||prior.incarnation!==initial.incarnation))throw new Error('account_changed');
@@ -228,7 +228,7 @@ export async function synchronizeLibrary(request:SyncRequest){
   // An identity-only browser and a null remote head are the authoritative empty
   // account. Confirm that state without publishing device bootstrap metadata.
   // The first learner-content write will still become pending and publish v5.
-  if(head.manifest===null&&empty(initial.entries)){
+  if(head.manifest===null&&empty(initial.entries)&&!options.publishEmptyIdentity){
    const completedAt=new Date().toISOString();
    await saveState(expected,old=>({...old!,revision:head.revision,storage:head.storage,status:'synced',syncedLocalRevision:initial.localRevision,pending:undefined,conflicts:undefined,conflict:undefined,resolution:undefined,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined}),[]);
    return;

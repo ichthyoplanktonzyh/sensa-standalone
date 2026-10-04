@@ -1,7 +1,8 @@
 import { previewStorage } from './services/previewStorage';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useJourneyLearningSources } from './personalMeaningJourney/usePersonalMeaningJourney';
+import { useJourneyLearningSources,useJourneyStatus } from './personalMeaningJourney/usePersonalMeaningJourney';
+import {journeyGateway} from './personalMeaningJourney/gateway';
 import {
   CURRENT_STUDY_SCOPE_ID,
   DEFAULT_PRACTICE_SCOPE_SELECTION,
@@ -13,6 +14,7 @@ import {
 } from './practiceScope';
 
 const PRACTICE_SCOPE_SELECTION_KEY = 'sensa.free-practice.scope-selection.v2';
+export type PracticeScopeAvailability='loading'|'ready'|'unavailable';
 
 const selectionKey = (selection: PracticeScopeSelection): string =>
   selection.sourceId === CURRENT_STUDY_SCOPE_ID
@@ -49,11 +51,15 @@ const readSelection = (): PracticeScopeSelection => {
 export interface PracticeScopeState {
   readonly catalog: PracticeScopeCatalog;
   readonly selectScope: (selection: PracticeScopeSelection) => void;
+  /** A provisional fallback is not a learner-selected Session scope. */
+  readonly availability: PracticeScopeAvailability;
+  readonly reload:()=>void;
 }
 
 export interface UsePracticeScopeInput {
   readonly studyTargets: readonly PracticeStudyTarget[];
   readonly activeLanguageTag: string;
+  readonly enabled?:boolean;
 }
 
 /**
@@ -63,9 +69,11 @@ export interface UsePracticeScopeInput {
 export const usePracticeScope = ({
   studyTargets,
   activeLanguageTag,
+  enabled=true,
 }: UsePracticeScopeInput): PracticeScopeState => {
   const { t } = useTranslation();
-  const personalMeaningSources = useJourneyLearningSources();
+  const personalMeaningSources = useJourneyLearningSources(enabled);
+  const journeyStatus=useJourneyStatus(enabled);
   const [selection, setSelection] = useState<PracticeScopeSelection>(readSelection);
   const catalog = useMemo(
     () => resolvePracticeScopeCatalog({
@@ -80,6 +88,8 @@ export const usePracticeScope = ({
   const normalizedKey = selectionKey(catalog.selection);
 
   useEffect(() => {
+    // Inactive or still-loading sources cannot invalidate a saved learner choice.
+    if(!enabled||journeyStatus.loading||!journeyStatus.ok)return;
     if (selectionKey(selection) !== normalizedKey) {
       setSelection(catalog.selection);
       return;
@@ -92,11 +102,13 @@ export const usePracticeScope = ({
     } catch {
       // The in-memory selection remains valid when storage is unavailable.
     }
-  }, [catalog.selection, normalizedKey, selection]);
+  }, [catalog.selection, normalizedKey, selection,enabled,journeyStatus.loading,journeyStatus.ok]);
 
   const selectScope = useCallback((next: PracticeScopeSelection) => {
     setSelection(next);
   }, []);
 
-  return useMemo(() => ({ catalog, selectScope }), [catalog, selectScope]);
+  const availability:PracticeScopeAvailability=!journeyStatus.ok?'unavailable':!enabled||journeyStatus.loading?'loading':'ready';
+  const reload=useCallback(()=>journeyGateway.reload(),[]);
+  return useMemo(() => ({ catalog, selectScope,availability,reload }), [catalog, selectScope,availability,reload]);
 };

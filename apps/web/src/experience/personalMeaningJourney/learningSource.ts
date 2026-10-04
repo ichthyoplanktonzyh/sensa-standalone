@@ -2,7 +2,8 @@ import type { SensaContextImage } from '@sensa/contracts/sensa';
 import type {
   PersonalMeaningLearningSource,
 } from '../../contentSupply/system';
-import type { MeaningJourneyRecord, SenseRegistryState } from './store';
+import type { MeaningJourneyRecord } from './store';
+import {readRegistry,type RegistryRead} from './registryRead';
 
 const bindingBelongsToConstructionAlignment = (
   record: MeaningJourneyRecord,
@@ -71,11 +72,12 @@ const alignedAnchorRevisions = (
 /**
  * Resolve every learnable Binding on one active Alignment directly from the
  * authoritative Personal Semantic World aggregate. Incomplete records and
- * stale Binding versions deliberately yield no source.
+ * incompatible Binding versions deliberately yield no source. Registry heads
+ * may advance without replacing an Alignment's explicitly accepted versions.
  */
 export const buildPersonalMeaningLearningSources = (
   record: MeaningJourneyRecord,
-  registry: SenseRegistryState,
+  registry: RegistryRead,
   alignmentId?: string,
 ): PersonalMeaningLearningSource[] => record.alignments
   .filter((alignment) => (
@@ -86,9 +88,7 @@ export const buildPersonalMeaningLearningSources = (
     const meaningRevision = record.personalMeaningRevisions.find(
       (candidate) => candidate.personalMeaningRevisionId === alignment.personalMeaningRevisionId,
     );
-    const senseVersion = registry.senseVersions.find(
-      (candidate) => candidate.senseVersionId === alignment.senseVersionId,
-    );
+    const senseVersion = readRegistry(registry,'senseVersions',alignment.senseVersionId);
     if (!meaningRevision || !senseVersion || senseVersion.senseId !== alignment.senseId) return [];
 
     const contextualAcceptanceId = alignment.basis.kind === 'contextual_resolution'
@@ -120,26 +120,16 @@ export const buildPersonalMeaningLearningSources = (
             === contextualAcceptance?.personalExpressionAnchorRevisionId;
       if (!belongs) return [];
 
-      const bindingVersion = registry.bindingVersions.find(
-        (candidate) => candidate.bindingVersionId === confirmation.bindingVersionId,
-      );
-      const binding = bindingVersion && registry.bindings.find(
-        (candidate) => candidate.senseExpressionBindingId
-          === bindingVersion.senseExpressionBindingId,
-      );
-      const expressionVersion = registry.expressionVersions.find(
-        (candidate) => candidate.expressionVersionId === confirmation.expressionVersionId,
-      );
-      const expression = expressionVersion && registry.expressions.find(
-        (candidate) => candidate.expressionId === expressionVersion.expressionId,
-      );
+      const bindingVersion = readRegistry(registry,'bindingVersions',confirmation.bindingVersionId);
+      const binding = bindingVersion && readRegistry(registry,'bindings',bindingVersion.senseExpressionBindingId);
+      const expressionVersion = readRegistry(registry,'expressionVersions',confirmation.expressionVersionId);
+      const expression = expressionVersion && readRegistry(registry,'expressions',expressionVersion.expressionId);
       if (
         !bindingVersion
         || !binding
         || !expressionVersion
         || !expression
         || binding.senseId !== alignment.senseId
-        || binding.currentBindingVersionId !== bindingVersion.bindingVersionId
         || bindingVersion.senseVersionId !== alignment.senseVersionId
         || bindingVersion.expressionVersionId !== expressionVersion.expressionVersionId
       ) return [];
@@ -171,7 +161,7 @@ export const buildPersonalMeaningLearningSources = (
         expression: {
           surfaceForm: expressionVersion.surfaceForm,
           ...(typeof expressionVersion.structure.spokenForm==='string'?{spokenForm:expressionVersion.structure.spokenForm}:{}),
-          ...(Array.isArray(expressionVersion.structure.formParts)?{formParts:expressionVersion.structure.formParts as {kind:'fixed'|'slot';text:string;constraint?:string}[]}:{}),
+          ...(Array.isArray(expressionVersion.structure.formParts)?{formParts:structuredClone(expressionVersion.structure.formParts) as {kind:'fixed'|'slot';text:string;constraint?:string}[]}:{}),
           expressionType: expression.expressionType,
           languageTag: expression.languageTag,
         },

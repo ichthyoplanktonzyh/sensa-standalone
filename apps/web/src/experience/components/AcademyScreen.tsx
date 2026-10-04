@@ -1,5 +1,6 @@
 import type { ResolvedPracticeScope } from '../practiceScope';
 import { SensaFreePracticeScreen } from './SensaFreePracticeScreen';
+import type {PracticeScopeAvailability} from '../usePracticeScope';
 
 export interface AcademyScreenProps {
   active: boolean;
@@ -7,6 +8,8 @@ export interface AcademyScreenProps {
   onOpenPracticeScope: () => void;
   onOpenRealWorldListening: () => void;
   practiceScope: ResolvedPracticeScope;
+  scopeAvailability?: PracticeScopeAvailability;
+  onRetryScope?:()=>void;
 }
 
 export const AcademyScreen = (props: AcademyScreenProps) => (

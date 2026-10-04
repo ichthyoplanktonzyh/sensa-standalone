@@ -15,7 +15,8 @@ const {createJourneyModules}=await import('../../../apps/web/src/experience/pers
 const {createSeededClock}=await import('../../../apps/web/src/experience/personalMeaningJourney/ports.ts');
 const {MemoryJourneyRepository}=await import('../../../apps/web/src/experience/personalMeaningJourney/repository.ts');
 const library={id:crypto.randomUUID()},accountId=crypto.randomUUID(),other=crypto.randomUUID(),journeyRepository=new MemoryJourneyRepository();
-const intake=createJourneyModules({repository:journeyRepository,clock:createSeededClock(),languages:{read:async()=>({targetLanguageTag:'en',supportLanguageTag:'zh-CN'})}}).semanticIntake;
+const journeyModules=createJourneyModules({repository:journeyRepository,clock:createSeededClock(),languages:{read:async()=>({targetLanguageTag:'en',supportLanguageTag:'zh-CN'})}});
+const intake=journeyModules.semanticIntake;
 let signedOut=false;
 const receiveWebIntake=async(account:string,raw:unknown)=>{
  const request=sensaBrowserIntakeDeliverySchema.parse(raw);
@@ -31,6 +32,7 @@ const clientId=crypto.randomUUID();
 const browserResolution={resolverKind:'language_model' as const,provider:'fixture',model:'fixture',policyVersion:'fixture-v1',sourceReferenceIds:['browser-lookup-fixture']};
 const delivery=(operationId:string,proposalValue:typeof proposal|null,snapshotValue=snapshot)=>sensaBrowserIntakeDeliverySchema.parse({contractVersion:'sensa-browser-intake-delivery-v1',libraryId:library.id,clientId,intake:browserCaptureToIntake(operationId,snapshotValue,proposalValue,proposalValue?browserResolution:null)});
 const request=delivery(crypto.randomUUID(),null);
+assert.deepEqual(request.intake.context?.languageObservation,{source:'detector',confidence:.9},'capture observation provenance survives the port-neutral handoff');
 // These named checks share the same synthetic extension state and run in file order.
 let listener:any;
 let session:Record<string,unknown>;
@@ -54,6 +56,7 @@ assert.equal((await receiveWebIntake(accountId,request)).result.route,'inbox');
 await assert.rejects(receiveWebIntake(accountId,{...request,intake:{...request.intake,capturedAt:'2026-09-16T01:00:00.000Z'}}),/operationId/);
 assert.equal((await journeyState()).inboxItems.length,1);
 assert.equal((await journeyState()).meanings.length,0);
+assert.deepEqual((await journeyState()).inboxItems[0].payload.context?.languageObservation,{source:'detector',confidence:.9});
 failStorage=true;await assert.rejects(acknowledgeWeb(accountId,receipt));failStorage=false;
 assert.equal((await webStatus(accountId)).pending,1);
 await assert.rejects(acknowledgeWeb(other,receipt),/web_invalid_receipt/);
@@ -67,6 +70,10 @@ const fastReceipt=await receiveWebIntake(accountId,fast);assert.equal(fastReceip
 await acknowledgeWeb(accountId,fastReceipt);
 const saved=await journeyState();
 assert.equal(saved.meanings.length,1);assert.equal(saved.meanings[0].alignments[0].basis.kind,'contextual_resolution');
+assert.deepEqual(saved.meanings[0].personalSemanticAnchorRevisions[0].structuredPayload.languageObservation,{source:'detector',confidence:.9},'fast-track admission retains actual language observation provenance');
+const webDraft=await journeyModules.personalMeaningJourney.createClarificationDraft({operationId:crypto.randomUUID(),blocks:[{kind:'text',bodyText:'Bonjour, I am not asking in the active route language.'}]});
+const unclassified=(await journeyState()).inboxItems.find(item=>item.intakeId===webDraft.intakeId)!;
+assert.equal(unclassified.payload.context?.languageTag,null,'the current support route is not evidence of the language of learner input');
 signedOut=true;await assert.rejects(receiveWebIntake(accountId,fast),/account_mismatch/);signedOut=false;
 assert.equal((await receiveWebIntake(accountId,fast)).result.route,'fast_track');
 const acceptedButIncomplete={...fast,intake:{...fast.intake,operationId:crypto.randomUUID(),sense:null}};

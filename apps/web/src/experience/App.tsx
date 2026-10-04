@@ -20,7 +20,6 @@ const LearningWorkspace=lazy(async()=>{
  ]);
  return {default:module.LearningWorkspace};
 });
-const PersonalMeaningDetailScreen=lazy(()=>import('./components/PersonalMeaningDetailScreen').then(module=>({default:module.PersonalMeaningDetailScreen})));
 const ExpressionBindingScreen=lazy(()=>import('./components/ExpressionBindingScreen').then(module=>({default:module.ExpressionBindingScreen})));
 const ContentLibraryScreen=lazy(()=>import('./components/ContentLibraryScreen').then(module=>({default:module.ContentLibraryScreen})));
 const ContentSenseDetailScreen=lazy(()=>import('./components/ContentSenseDetailScreen').then(module=>({default:module.ContentSenseDetailScreen})));
@@ -41,8 +40,6 @@ export default function App(){
  const personalMeaningId=params.meaningId??null;
  const meaningFocusId=params.focusId??null;
  const openContentSense=useCallback((item:PracticeSenseItem)=>goMain('s-content-sense',{senseId:item.senseId}),[goMain]);
- const openPersonalMeaning=useCallback((meaningId:string,focusId?:string)=>goMain('s-personal-meaning',{meaningId,focusId}),[goMain]);
- const openConfirmedSense=useCallback((meaningId:string,focusId:string)=>goMain('s-confirmed-sense',{meaningId,focusId}),[goMain]);
  const openContentExample=useCallback((item:PracticeSenseItem)=>goMain('s-content-example',{exampleId:item.senseId}),[goMain]);
 
  const dictModalWord=useOverlayStore(state=>state.dictModalWord);
@@ -66,10 +63,6 @@ export default function App(){
  const baseActive=!overlayOpen;
  const appScreenRenderers:Record<AppScreenId,(active:boolean)=>ReactNode>={
   's-home':active=><HomeLearningController active={active}/>,
-  's-personal-meaning':active=><PersonalMeaningDetailScreen
-    key={personalMeaningId} active={active} personalMeaningId={personalMeaningId}
-    onConversationCreated={openPersonalMeaning} onBack={backMain}
-    onOpenConfirmedSense={openConfirmedSense} toast={toast}/>,
   's-expression-binding':active=><ExpressionBindingScreen
     active={active} personalMeaningId={personalMeaningId} meaningFocusId={meaningFocusId}
     onBack={backMain} toast={toast}/>,

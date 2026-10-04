@@ -4,9 +4,11 @@ import { studyButton } from '../StudyScreen';
 import type {LearningPolicy,LearningReadiness} from '../../../learning/system';
 import { SensaCollectionBrowserLayout } from '../../ui/SensaPageLayouts';
 import { useScreenState } from '../../ui/ScreenHost';
+import type {ReactNode} from 'react';
 
 interface LearningTargetLibraryScreenProps {
   active: boolean;
+  notice?:ReactNode;
   targets: Readonly<Record<string, {expression: string; meaning: string; sourceKind: string}>>;
   targetIds: readonly string[];
   /** Effective policy and readiness are projected from the persisted local Target. */
@@ -55,6 +57,7 @@ export const LearningTargetLibraryScreen = (props: LearningTargetLibraryScreenPr
     className={`screen z-20 ${props.active ? 'active' : 'invisible pointer-events-none'}`}
     regions={{
       header: <>
+      {props.notice}
       <button className={`${studyButton} -ml-4 text-fg-secondary`} onClick={props.onBack}><ArrowLeft size={18}/>{t('study.back')}</button>
       <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
         <div><h1 className="text-3xl font-medium tracking-tight">{t('study.library')}</h1><p className="mt-3 text-sm text-fg-secondary">{t('study.count', { count: items.length })}</p></div>

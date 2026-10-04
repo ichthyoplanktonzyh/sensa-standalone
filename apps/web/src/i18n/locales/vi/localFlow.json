@@ -1,5 +1,6 @@
 {
   "localFlow": {
+    "clarificationSourceChanged": "Hãy tiếp tục trò chuyện để kiểm tra nội dung hiện tại trước khi xác nhận.",
     "packageAuthor": "Tác giả",
     "packageFilesUnavailable": "Gói thiếu tệp trên thiết bị này: {{count}}. Nhập lại tệp gốc hoặc tải lại từ danh mục.",
     "packageLicense": "Giấy phép",

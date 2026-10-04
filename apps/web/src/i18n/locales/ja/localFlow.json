@@ -1,5 +1,6 @@
 {
   "localFlow": {
+    "clarificationSourceChanged": "会話を続けて現在の資料を確認してから、確定してください。",
     "packageAuthor": "作者",
     "packageFilesUnavailable": "この端末にファイルがない学習パッケージ：{{count}}。元のファイルを再インポートするか、カタログから再ダウンロードしてください。",
     "packageLicense": "ライセンス",

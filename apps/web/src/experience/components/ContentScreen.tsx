@@ -23,11 +23,15 @@ import {
   useJourneyWorld,
   type JourneyWorldItemView,
 } from "../personalMeaningJourney";
-import { useIntakeInbox } from "../intake";
 import { PersonalMeaningComposer } from "./PersonalMeaningComposer";
 import { IntakeInboxDrawer } from "./IntakeInboxDrawer";
 import { SensaCollectionBrowserLayout } from "../ui/SensaPageLayouts";
 import { useScreenState } from "../ui/ScreenHost";
+import {SensaVirtualList,SensaPagedVirtualList} from '../ui/SensaVirtualList';
+import {localFlowText} from '../../i18n/localFlowText';
+import {normalizeMeaningQuery} from '../personalMeaningJourney/meaningLookupFacts';
+import {useWorldWindow,useWorldInbox} from '../personalMeaningJourney/useWorldRead';
+import type {WorldBrowseItem,WorldBrowseQuery} from '../personalMeaningJourney/worldRead';
 
 export interface ContentScreenSource {
   items: JourneyWorldItemView[];
@@ -38,7 +42,7 @@ export interface ContentScreenSource {
   composer: import("./PersonalMeaningComposer").MaterialComposerPort;
 }
 interface ContentScreenProps {
-  bulkLearning?:(items:JourneyWorldItemView[],list:import('react').ReactNode)=>import('react').ReactNode;
+  bulkLearning?:(items:JourneyWorldItemView[],list:import('react').ReactNode,query?:Pick<WorldBrowseQuery,'query'|'filter'>)=>import('react').ReactNode;
   source?:ContentScreenSource;
   notice?:import("react").ReactNode;
   active: boolean;
@@ -83,20 +87,18 @@ const searchText = (item: JourneyWorldItemView) =>
   [
     labelFor(item),
     ...item.familiarAnchors.map((a) => a.surfaceForm),
+    ...item.experienceAnchors.map((a)=>a.surfaceForm),
+    ...item.detail.materialBlocks.flatMap(block=>[block.bodyText??'',block.capturedSource?.text??'']),
+    ...(item.detail.capturedSources??[]).map(source=>source.text??''),
     ...alignmentBranches(item).flatMap((b) => [
       b.label,
       ...(b.alignment?.confirmedBindings.map((e) => e.surfaceForm) ?? []),
     ]),
   ]
-    .join(" ")
-    .toLocaleLowerCase();
+    .join(" ");
 
 export function ContentScreen(props:ContentScreenProps){
- return props.source?<ContentScreenView {...props} source={props.source}/>:<ConnectedContentScreen {...props}/>;
-}
-function ConnectedContentScreen(props:ContentScreenProps){
- const {items,status}=useJourneyWorld();const gateway=useJourneyGateway();const inbox=useIntakeInbox();const projection=useLearnerSemanticProjection();
- return <ContentScreenView {...props} source={{items,status,inbox,projection,reload:()=>gateway.reload()}}/>;
+ return <ContentScreenView {...props}/>;
 }
 function ContentScreenView({
   active,
@@ -107,10 +109,9 @@ function ContentScreenView({
   onOpenConfirmedSense,
   onOpenSense,
   onOpenSection,
-  toast,source,notice,bulkLearning,
-}: Omit<ContentScreenProps,"source"> & {source:Omit<ContentScreenSource,"composer"> & {composer?:ContentScreenSource["composer"]}}) {
+  toast,source:providedSource,notice,bulkLearning,
+}: ContentScreenProps) {
   const { t, i18n } = useTranslation();
-  const {items,status,inbox,projection}=source;
   const [category, setCategory] = useScreenState<Category>(`${screenId}:category`, "personal");
   const [view, setView] = useScreenState<"list" | "world">(`${screenId}:view`, "list");
   const [filter, setFilter] = useScreenState<Filter>(`${screenId}:filter`, "all");
@@ -119,6 +120,14 @@ function ContentScreenView({
   const [composerOpen, setComposerOpen] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
+  const page=useWorldWindow({query,filter},!providedSource&&active);
+  const fullRead=!providedSource&&active&&category==='personal'&&view==='world';
+  const world=useJourneyWorld(fullRead),gateway=useJourneyGateway();
+  const inboxRead=useWorldInbox(!providedSource&&active&&inboxOpen);
+  const projectionRead=useLearnerSemanticProjection(!providedSource&&active&&category!=='personal');
+  const source=providedSource??{items:world.items,status:fullRead?world.status:page.status,inbox:inboxRead.value?.items??[],projection:projectionRead,reload:()=>{page.reload();if(fullRead)void gateway.reload();}};
+  const {items,status,inbox,projection}=source;
+  const paged=!providedSource&&category==='personal'&&view==='list';
   const fmt = (n: number) =>
     new Intl.NumberFormat(i18n.resolvedLanguage).format(n);
   useEffect(() => {
@@ -140,14 +149,16 @@ function ContentScreenView({
     (filter === "binding" &&
       ["pending", "partial"].includes(item.expressionBinding.phase)) ||
     (filter === "complete" && item.expressionBinding.phase === "bound");
+  const searchable=useMemo(()=>new Map(items.map(item=>[item.personalMeaningId,normalizeMeaningQuery(searchText(item))])),[items]);
+  const normalizedQuery=normalizeMeaningQuery(query);
   const visible = useMemo(
     () =>
       items
         .filter((item) =>
-          searchText(item).includes(query.trim().toLocaleLowerCase()),
+          searchable.get(item.personalMeaningId)!.includes(normalizedQuery),
         )
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
-    [items, query],
+    [items, searchable,normalizedQuery],
   ).filter(matchesFilter);
   const learning = projection.semanticSenses.filter((item) =>
     `${item.expression.formL2} ${item.ground.labelL1} ${item.ground.experienceL1}`
@@ -161,7 +172,7 @@ function ContentScreenView({
         item.expressionBinding.phase !== "bound",
     )
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  const next = drafts[0];
+  const next = paged?page.next:drafts[0];
   const open = (id: string, focusId?: string) => {
     setSelected(id);
     const item = items.find((item) => item.personalMeaningId === id);
@@ -199,9 +210,9 @@ function ContentScreenView({
       )}
     </div>
   );
-  const personalList=(
-            <div className="divide-y divide-border-subtle border-y border-border-subtle">
-              {visible.map((item) => (
+  const row=(item:JourneyWorldItemView|WorldBrowseItem)=>{
+   const label='label'in item?item.label:labelFor(item);
+   return (
                 <button
                   key={item.personalMeaningId}
                   onClick={() => open(item.personalMeaningId)}
@@ -212,9 +223,9 @@ function ContentScreenView({
                   </span>
                   <span className="min-w-0 flex-1">
                     <strong className="block truncate text-sm font-medium">
-                      {labelFor(item)}
+                      {label}
                     </strong>
-                    {item.primaryLabel !== labelFor(item) && <span className="sensa-world-context mt-2 block line-clamp-2 text-sm leading-6 text-fg-secondary">{item.primaryLabel}</span>}
+                    {item.primaryLabel !== label && <span className="sensa-world-context mt-2 block line-clamp-2 text-sm leading-6 text-fg-secondary">{item.primaryLabel}</span>}
                     <span className="mt-2 block text-xs text-fg-tertiary">
                       {t(`content.phase.${item.senseFormation.phase}`)} ·{" "}
                       {t(`content.expression.${item.expressionBinding.phase}`)}
@@ -222,9 +233,11 @@ function ContentScreenView({
                   </span>
                   <ArrowUpRight size={16} className="shrink-0 text-fg-tertiary" />
                 </button>
-              ))}
-            </div>
-  );
+              );
+  };
+  const personalList=paged?<SensaPagedVirtualList count={page.total} itemAt={index=>page.items.get(index)} indexForKey={key=>{for(const [index,item] of page.items)if(item.personalMeaningId===key)return index;return -1;}} itemKey={item=>item.personalMeaningId} label={t('content.personal')} renderItem={row} request={page.request}/>
+   :<SensaVirtualList items={visible} itemKey={item=>item.personalMeaningId} label={t('content.personal')} renderItem={row}/>;
+  const personalCollection=status.loading&&(paged?!page.total:!items.length)?<div role="status" aria-busy="true" className="py-20 text-center text-sm text-fg-secondary">{localFlowText('loadingSensa')}</div>:!status.ok?<div role="alert" className="rounded-card border border-feedback-danger p-6 text-feedback-danger"><p>{t('content.loadError')}</p><button className={button} onClick={source.reload}>{t('content.retry')}</button></div>:!(paged?page.total:visible.length)?empty:view==='list'?personalList:<MeaningGraphView items={visible} selectedMeaningId={selected} onSelectMeaning={setSelected} onOpenMeaning={open} onOpenConfirmedSense={onOpenConfirmedSense}/>;
   return (
     <>
       <SensaCollectionBrowserLayout
@@ -232,7 +245,7 @@ function ContentScreenView({
         measure="wide"
         className={`screen sensa-world z-10 ${active ? "active" : "invisible pointer-events-none"}`}
         regions={{
-          header: <>{notice}<ContentHeader inboxCount={inbox.length+drafts.length} onInbox={()=>setInboxOpen(true)} onAdd={()=>setAdding(true)}/></>,
+          header: <>{notice}<ContentHeader inboxCount={providedSource?inbox.length+drafts.length:page.inboxCount+page.pending} onInbox={()=>setInboxOpen(true)} onAdd={()=>setAdding(true)}/></>,
           navigation: <div
           aria-label={t("content.categories")}
           className="flex gap-6 overflow-x-auto border-b border-border-subtle"
@@ -257,7 +270,7 @@ function ContentScreenView({
             <span className="shrink-0 text-fg-secondary">
               {t("content.continue")}
             </span>
-            <span className="min-w-0 flex-1 truncate">{labelFor(next)}</span>
+            <span className="min-w-0 flex-1 truncate">{'label'in next?next.label:labelFor(next)}</span>
             <ArrowRight size={16} />
           </button>
         )}
@@ -269,6 +282,7 @@ function ContentScreenView({
                 aria-label={t("content.search")}
                 placeholder={t("content.search")}
                 value={query}
+                maxLength={200}
                 onChange={(e) => setQuery(e.target.value)}
                 className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none"
               />
@@ -323,27 +337,7 @@ function ContentScreenView({
         )}
           </>,
           collection: <>
-        {category === "personal" &&
-          (!status.ok ? (
-            <div role="alert" className="rounded-card border border-feedback-danger p-6 text-feedback-danger">
-              <p>{t("content.loadError")}</p>
-              <button className={button} onClick={source.reload}>
-                {t("content.retry")}
-              </button>
-            </div>
-          ) : !visible.length ? (
-            empty
-          ) : view === "list" ? (
-            bulkLearning?bulkLearning(visible,personalList):personalList
-          ) : (
-            <MeaningGraphView
-              items={visible}
-              selectedMeaningId={selected}
-              onSelectMeaning={setSelected}
-              onOpenMeaning={open}
-              onOpenConfirmedSense={onOpenConfirmedSense}
-            />
-          ))}
+        {category === 'personal' && (view==='list'&&bulkLearning?bulkLearning(visible,personalCollection,paged?{query,filter}:undefined):personalCollection)}
         {category === "learning" &&
           (learning.length ? (
             <div className="divide-y divide-border-subtle border-y border-border-subtle">
@@ -461,7 +455,7 @@ function ContentScreenView({
         </ContentDrawer>
       )}
       <PersonalMeaningComposer
-        persistence={source.composer}
+        persistence={providedSource?.composer}
         open={composerOpen}
         onClose={() => setComposerOpen(false)}
         onSaved={toast}
@@ -471,12 +465,14 @@ function ContentScreenView({
         }}
       />
       <IntakeInboxDrawer
-        drafts={drafts}
+        drafts={providedSource?drafts.map(item=>({personalMeaningId:item.personalMeaningId,label:item.experienceAnchors[0]?.surfaceForm||item.familiarAnchors[0]?.surfaceForm||item.primaryLabel})):inboxRead.value?.drafts??[]}
         onOpenDraft={(id) => {
           setInboxOpen(false);
           open(id);
         }}
         open={inboxOpen}
+        status={providedSource?status:inboxRead.status}
+        onRetry={providedSource?source.reload:inboxRead.reload}
         items={inbox}
         onClose={() => setInboxOpen(false)}
         onSummoned={(id) => {

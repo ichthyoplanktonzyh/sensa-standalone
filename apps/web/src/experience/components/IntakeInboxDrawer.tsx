@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { uiText } from '../../i18n/uiText';
+import {localFlowText} from '../../i18n/localFlowText';
 /**
  * 待处理材料盒（Inbox）抽屉。
  *
@@ -12,13 +13,16 @@ import { uiText } from '../../i18n/uiText';
 import { useEffect, useState } from 'react';
 import type { SensaIntakeItem, SensaIntakeSense } from '@sensa/contracts/sensa';
 import { newUuid } from '../personalMeaningJourney/ids';
-import { type JourneyWorldItemView } from '../personalMeaningJourney';
+import type {JourneyGatewayStatus} from '../personalMeaningJourney/gateway';
 import { useSemanticIntake } from '../intake';
 import { SensaOverlayLayout } from '../ui/SensaComponents';
+import {intakeSourceLabel} from '../personalMeaningJourney/sourcePresentation';
 
 interface IntakeInboxDrawerProps {
   open: boolean;
-  drafts?: JourneyWorldItemView[];
+  drafts?: Array<{personalMeaningId:string;label:string}>;
+  status?: JourneyGatewayStatus;
+  onRetry?:()=>void;
   onOpenDraft?: (id: string) => void;
   items: SensaIntakeItem[];
   onClose: () => void;
@@ -62,8 +66,10 @@ export const IntakeInboxDrawer = ({
   onClose,
   onSummoned,
   toast,
+  status,
+  onRetry,
 }: IntakeInboxDrawerProps) => {
-  useTranslation();
+  const {t}=useTranslation();
   const intake = useSemanticIntake();
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -126,14 +132,14 @@ export const IntakeInboxDrawer = ({
       header: <div className="flex min-h-12 items-center justify-between gap-4">
           <div>
             <small className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary">{uiText('inbox')}</small>
-            <h2 className="mt-1 text-section-title font-semibold" id="intake-drawer-title">{uiText('inboxCount', { count: items.length + drafts.length })}</h2>
+            <h2 className="mt-1 text-section-title font-semibold" id="intake-drawer-title">{status?.loading||status&&!status.ok?uiText('inbox'):uiText('inboxCount', { count: items.length + drafts.length })}</h2>
           </div>
           <button className="grid size-11 place-items-center rounded-control border-0 bg-transparent text-xl text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" type="button" onClick={onClose} aria-label={uiText('close')}>×</button>
         </div>,
-      primary: <div>
+      primary: status?.loading?<div role="status" aria-busy="true" className="min-h-64 p-5">{localFlowText('loadingSensa')}</div>:status&&!status.ok?<div role="alert" className="min-h-64 space-y-4 p-5"><p>{uiText('unableToReadThisMaterial')}</p><button type="button" className="min-h-12 rounded-control border border-border-strong px-5" onClick={onRetry}>{t('content.retry')}</button></div>:<div>
           <p className="mb-5 text-body-support leading-6 text-fg-secondary">
             {uiText('capturedMaterialAwaitingYourConfirmation')}</p>
-          {drafts.map(item => <button key={item.personalMeaningId} type="button" onClick={()=>onOpenDraft?.(item.personalMeaningId)} className="mb-4 block w-full rounded-card border border-border-subtle bg-surface-panel p-5 text-left focus-visible:outline-2 focus-visible:outline-focus"><span className="text-xs text-fg-tertiary">{uiText('continueDraft')}</span><strong className="mt-3 block text-sm font-medium leading-6">{item.experienceAnchors[0]?.surfaceForm || item.familiarAnchors[0]?.surfaceForm || item.primaryLabel}</strong></button>)}
+          {drafts.map(item => <button key={item.personalMeaningId} type="button" onClick={()=>onOpenDraft?.(item.personalMeaningId)} className="mb-4 block w-full rounded-card border border-border-subtle bg-surface-panel p-5 text-left focus-visible:outline-2 focus-visible:outline-focus"><span className="text-xs text-fg-tertiary">{uiText('continueDraft')}</span><strong className="mt-3 block text-sm font-medium leading-6">{item.label}</strong></button>)}
           {items.map((item) => {
             const busy = busyId === item.intakeId || busyId != null;
             const options = disambiguationOptions(item);
@@ -151,9 +157,10 @@ export const IntakeInboxDrawer = ({
                   )}
                 </header>
                 <p className="mt-4 text-body leading-7 text-fg-primary">{item.summaryView}</p>
+                {item.payload.expression&&<p className="mt-3 break-words text-body font-medium text-fg-primary">{item.payload.expression.surfaceForm}</p>}
                 {source && (
                   <p className="mt-3 break-words text-metadata leading-5 text-fg-tertiary">
-                    {uiText('webSource')}{source.title ?? source.url ?? uiText('unknownSource')}
+                    {intakeSourceLabel(source)}
                   </p>
                 )}
                 {options.length > 0 && (
@@ -178,7 +185,7 @@ export const IntakeInboxDrawer = ({
                     disabled={busy}
                     onClick={() => void summon(item)}
                   >
-                    {uiText('clarify')}</button>
+                    {localFlowText('continueConversation')}</button>
                   <button
                     type="button"
                     className="min-h-12 rounded-control border border-border-strong bg-surface-panel px-5 text-control-label font-semibold text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus"

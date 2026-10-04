@@ -25,6 +25,7 @@ type WorkerStore={
   pool:SAHPoolUtil;
   database:SqliteRecordDatabase;
   initialized:boolean;
+  startupTimingsMs:Record<string,number>;
 };
 
 let store:Promise<WorkerStore>|undefined;
@@ -49,27 +50,32 @@ async function database():Promise<WorkerStore>{
   if(closed||closing||cleanupUnconfirmed)throw new Error('sqlite_worker_closing');
   if(!store){
     store=(async()=>{
+      const started=performance.now();
       activeLease=await acquireSqliteSahPoolLease(navigator.locks);
+      const leased=performance.now();
       installerStarted=false;
       try{
         // The native probe catches Workers from pre-lock releases too. It only
         // opens each SAH and closes it; it never changes file contents.
         await verifyPoolHandles();
+        const probed=performance.now();
         const initialize=sqlite3InitModule as unknown as (options?:{
           locateFile?:(path:string)=>string;
         })=>ReturnType<typeof sqlite3InitModule>;
         const sqlite3=await initialize({
           locateFile:(path)=>path.endsWith('.wasm')?sqliteWasmUrl:path,
         });
+        const wasmReady=performance.now();
         installerStarted=true;
         const pool=await sqlite3.installOpfsSAHPoolVfs({
           directory:sqlitePoolDirectory,
           initialCapacity:6,
         });
+        const poolReady=performance.now();
         activePool=pool;
         const database=new pool.OpfsSAHPoolDb(sqliteLibraryFile);
         activeDatabase=new SqliteRecordDatabase(sqlite3,database,'opfs');
-        return {pool,database:activeDatabase,initialized:false};
+        return {pool,database:activeDatabase,initialized:false,startupTimingsMs:{lease:Math.round(leased-started),nativeProbe:Math.round(probed-leased),wasm:Math.round(wasmReady-probed),pool:Math.round(poolReady-wasmReady),databaseOpen:Math.round(performance.now()-poolReady),total:Math.round(performance.now()-started)}};
       }catch(cause){
         try{
           if(!installerStarted&&!(cause instanceof SahPoolProbeCloseError)){
@@ -156,7 +162,7 @@ const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
       try{
         const diagnostics=current.database.initialize();
         current.initialized=true;
-        return diagnostics;
+        return {...diagnostics,workerStartupTimingsMs:current.startupTimingsMs};
       }catch(cause){
         await closeStorage();
         throw cause;
@@ -164,9 +170,16 @@ const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
     }
     case 'get': return current.database.get(request.table,request.key);
     case 'entries': return current.database.entries(request.table);
+    case 'entriesPage':return current.database.entriesPage(request.table,request.afterKey,request.limit);
     case 'existingRecordKeys':return current.database.existingRecordKeys(request.table,request.keys);
     case 'packageCacheProjection':return current.database.packageCacheProjection(request.query);
+    case 'meaningLookup':return current.database.lookupMeanings(request.query);
+    case 'worldBrowse':return current.database.worldBrowse(request.query);
+    case 'registrySelection':return current.database.registrySelection(request.query);
+    case 'worldLearningChoices':return current.database.worldLearningChoices(request.query);
+    case 'existingJourneyIdentities':return current.database.existingJourneyIdentities(request.ids);
     case 'changesSince': return current.database.changesSince(request.contentRevision,request.tables);
+    case 'hasChangesSince':return current.database.hasChangesSince(request.contentRevision,request.tables);
     case 'syncBaseEntries': return current.database.syncBaseEntries(request.keys);
     case 'count': return current.database.count(request.table);
     case 'estimateRecordBytes': return current.database.estimateRecordBytes(request.tables);
@@ -190,7 +203,7 @@ const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
     case 'portableMedia': return current.database.portableMedia(request.sha256);
     case 'portableMediaDiagnostics': return current.database.portableMediaDiagnostics();
     case 'commit': current.database.commit(request.mutation); return null;
-    case 'diagnostics': return current.database.diagnostics({verifyIntegrity:request.verifyIntegrity});
+    case 'diagnostics': return {...current.database.diagnostics({verifyIntegrity:request.verifyIntegrity}),workerStartupTimingsMs:current.startupTimingsMs};
   }
 };
 

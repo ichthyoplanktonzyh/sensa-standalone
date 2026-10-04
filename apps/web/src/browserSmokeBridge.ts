@@ -9,13 +9,24 @@ import {
   writeLibraryCache,
 } from './data/library/store';
 import {loadJourneyStateFromLibrary} from './experience/personalMeaningJourney/repository';
+import type {JourneyState} from './experience/personalMeaningJourney/store';
 
 type BrowserSmokeBridge = {
   seedDrafts(drafts: number, images: number): Promise<number>;
+  seedSemanticWorld(state:JourneyState):Promise<number>;
+  holdWorldDetailReadsForTest():Promise<void>;
+  releaseWorldDetailReadsForTest():void;
+  holdWorldInboxReadsForTest():Promise<void>;
+  releaseWorldInboxReadsForTest(fail?:boolean):void;
+  notifyWorldReadForTest():Promise<void>;
+  reviseMeaningContextForTest(id:string,text:string):Promise<void>;
+  appendIntakeMaterialForTest(text:string):Promise<string>;
+  semanticMediaCheckpoint():Promise<{mediaId:string;dataUrl:string}[]>;
   draftCount(): Promise<number>;
   syncStatus(): Promise<string>;
   semanticWorldContainsExpression(surfaceForm: string): Promise<boolean>;
   intakeInboxCount(): Promise<number>;
+  provisioningCheckpoint():Promise<{taskId:string;targetId:string;status:string}[]>;
   firstMeaningId(): Promise<string | null>;
   navigate(path: string): Promise<void>;
   openReferenceFixture(): Promise<void>;
@@ -52,7 +63,61 @@ const randomDataUrl = (size: number): string => {
 };
 
 if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
+  let releaseWorldReads:(()=>void)|undefined;
+  let releaseInboxReads:((fail?:boolean)=>void)|undefined;
   window.__sensaBrowserSmoke = {
+    async holdWorldInboxReadsForTest(){
+      if(releaseInboxReads)throw new Error('Inbox read fixture is already held');
+      const {worldReadRepository}=await import('./experience/personalMeaningJourney/worldRepository');
+      const original=worldReadRepository.inbox;let resume!:(fail:boolean)=>void;
+      const held=new Promise<boolean>(resolve=>{resume=resolve;});
+      worldReadRepository.inbox=async()=>{if(await held)throw new Error('fixture-inbox-read-failure');return original();};
+      releaseInboxReads=(fail=false)=>{worldReadRepository.inbox=original;resume(fail);releaseInboxReads=undefined;};
+    },
+    releaseWorldInboxReadsForTest(fail){releaseInboxReads?.(fail);},
+    async holdWorldDetailReadsForTest(){
+      if(releaseWorldReads)throw new Error('World read fixture is already held');
+      const {worldReadRepository}=await import('./experience/personalMeaningJourney/worldRepository');
+      const original=worldReadRepository.detail;
+      let resume:()=>void=()=>{};
+      const held=new Promise<void>(resolve=>{resume=resolve;});
+      worldReadRepository.detail=async id=>{await held;return original(id);};
+      releaseWorldReads=()=>{worldReadRepository.detail=original;resume();releaseWorldReads=undefined;};
+    },
+    releaseWorldDetailReadsForTest(){releaseWorldReads?.();},
+    async notifyWorldReadForTest(){
+      // Isolated browser fixture only: a notification/frame change without
+      // creating or rewriting any learner source, outcome or learning fact.
+      await restoreLibraryTransaction(async tx=>{tx.put('meta','world-read-refresh-fixture',crypto.randomUUID());});
+    },
+    async reviseMeaningContextForTest(id,text){
+      const [{worldReadRepository},{createJourneyGateway}]=await Promise.all([
+        import('./experience/personalMeaningJourney/worldRepository'),import('./experience/personalMeaningJourney/gateway'),
+      ]);
+      const source=await worldReadRepository.detail(id);if(!source.detail)throw new Error('Missing fixture Meaning');
+      // Separate command gateway, like a foreign writer. No provider/model or
+      // fabricated fact: the actual command validates and commits the revision.
+      await createJourneyGateway().reviseContext({operationId:crypto.randomUUID(),personalMeaningId:id,expectedRevision:source.detail.revision,blocks:[{kind:'text',bodyText:text}]});
+    },
+    async appendIntakeMaterialForTest(text){
+      const {createJourneyGateway}=await import('./experience/personalMeaningJourney/gateway');
+      const rows=await readLibrary(tx=>tx.entries('semanticInbox'));
+      if(rows.length!==1)throw new Error('This browser fixture requires exactly one pending Intake');
+      const id=(rows[0]!.value as JourneyState['inboxItems'][number]).intakeId;
+      await createJourneyGateway().addClarificationMaterial(crypto.randomUUID(),id,{kind:'text',bodyText:text});return id;
+    },
+    async semanticMediaCheckpoint(){return readLibrary(async tx=>(await tx.entries('media')).map(row=>({mediaId:row.value.mediaId as string,dataUrl:row.value.dataUrl as string})));},
+    async seedSemanticWorld(state){
+      // Browser-test setup only: validate actual domain facts and use the same
+      // atomic repository as the application. Never overwrite a populated World.
+      const [{LibraryJourneyRepository},{assertPersonalSemanticWorldState}]=await Promise.all([
+        import('./experience/personalMeaningJourney/repository'),import('./experience/personalMeaningJourney/authority'),
+      ]);
+      assertPersonalSemanticWorldState(state);
+      const repository=new LibraryJourneyRepository(),before=await repository.load();
+      if(before.meanings.length||before.inboxItems.length||Object.values(before.registry).some(rows=>rows.length))throw new Error('semantic scale setup requires an empty isolated World');
+      await repository.commit({before,after:state});return state.meanings.length;
+    },
     async discardPackageCacheForRecoveryTest(){
       // Fault injection only: learner facts and installation identities remain.
       await writeLibraryCache(async tx=>{tx.clear('packageCache');});
@@ -124,6 +189,10 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
     },
     async intakeInboxCount() {
       return (await loadJourneyStateFromLibrary()).inboxItems.length;
+    },
+    async provisioningCheckpoint(){
+      const {contentSupplySystem}=await import('./contentSupply/system');
+      return (await contentSupplySystem.read({kind:'provisioning_tasks'})).map(task=>({taskId:task.id,targetId:task.targetId,status:task.status})).sort((left,right)=>left.taskId.localeCompare(right.taskId));
     },
     async firstMeaningId() {
       return (await loadJourneyStateFromLibrary()).meanings[0]?.personalMeaning.personalMeaningId ?? null;

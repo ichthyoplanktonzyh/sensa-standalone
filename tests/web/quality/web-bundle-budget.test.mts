@@ -82,7 +82,10 @@ const workspaceFile=findOne(/^LearningWorkspace-[^.]+\.js$/u,'learning workspace
 const workspaceResourcesFile=findOne(/^workspaceResources-[^.]+\.js$/u,'workspace translations');
 const runtimeFile=findOne(/^PackageLearningRuntime-[^.]+\.js$/u,'learning Runtime');
 const accountFile=findOne(/^AccountExperience-[^.]+\.js$/u,'account experience');
-const storeFile=findOne(/^store-[^.]+\.js$/u,'local library store');
+// Worker-side projections can split both the Library and Journey store modules
+// into separate chunks. Neither store is permitted in the anonymous entry.
+const storeFiles=files.filter(file=>/^store-[^.]+\.js$/u.test(file));
+assert(storeFiles.length>0,'expected at least one store chunk');
 const portablePackageFile=findOne(/^portablePackage-[^.]+\.js$/u,'Portable Package installer');
 const installedContentFile=findOne(/^installedLearningContent-[^.]+\.js$/u,'installed content validator');
 const lemmaFile=findOne(/^resolveClickedLemma-[^.]+\.js$/u,'clicked-lemma resolver');
@@ -125,7 +128,7 @@ assert(!homeInteractiveClosure.has(workspaceFile),`${workspaceFile} must not ent
 assert(!appClosure.has(runtimeFile),`${runtimeFile} must not enter the authenticated App static closure`);
 assert(!workspaceLoadedClosure.has(runtimeFile),`${runtimeFile} must not enter the full workspace static closure`);
 assert(!indexClosure.has(accountFile),`${accountFile} must remain behind the explicit account boundary`);
-assert(!indexClosure.has(storeFile),`${storeFile} must not initialize SQLite for the signed-out Landing`);
+for(const storeFile of storeFiles)assert(!indexClosure.has(storeFile),`${storeFile} must not enter the signed-out Landing`);
 for(const installerFile of [portablePackageFile,installedContentFile]){
  assert(!indexClosure.has(installerFile)&&!appClosure.has(installerFile)&&!homeInteractiveClosure.has(installerFile)&&!workspaceLoadedClosure.has(installerFile),`${installerFile} must load only for Portable Package installation`);
 }

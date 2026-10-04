@@ -222,6 +222,7 @@ export const newSemanticAgentSession = (
   focusLocked: false,
   readyToConfirm: false,
   provenance: null,
+  proposalSource:null,
   steps: [],
   outcome: null,
 });

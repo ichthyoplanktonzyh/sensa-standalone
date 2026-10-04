@@ -133,8 +133,9 @@ export async function runBusinessCaseInPage(item: LanguageMatrixCase): Promise<B
     startingPoint: 'from_experience',
   });
   const clarification = await stage('clarification', async () => {
-    const storedDraft = gateway.getClarificationDraft(draft.intakeId);
-    if (!storedDraft) throw new Error('localFlow.resourceInvalid');
+    const {worldReadRepository}=await import('../../../apps/web/src/experience/personalMeaningJourney/worldRepository');
+    const captured=await worldReadRepository.detail(draft.intakeId),storedDraft=captured.draft,source=captured.source;
+    if (!storedDraft||!source) throw new Error('localFlow.resourceInvalid');
     const material = {
       blocks: storedDraft.materialBlocks.map((block, index) => ({
         blockId: `business-material-${index}`,
@@ -182,7 +183,7 @@ export async function runBusinessCaseInPage(item: LanguageMatrixCase): Promise<B
     const selectedSurface = normalize(expression.surfaceForm);
     const familiarSurface = normalize(item.fixture.expression);
     if (!selectedSurface.includes(familiarSurface)) throw new Error('expression_surface_mismatch');
-    return { messages, workingSet, provenance, expressionExactMatch: selectedSurface === familiarSurface };
+    return { messages, workingSet, provenance,source, expressionExactMatch: selectedSurface === familiarSurface };
   }, value => ({ expressionLanguageVerified: value.workingSet.expression?.languageTag === item.targetLanguageTag,
     expressionExactMatch: value.expressionExactMatch }));
 
@@ -199,6 +200,7 @@ export async function runBusinessCaseInPage(item: LanguageMatrixCase): Promise<B
     const result = await gateway.completeClarificationDraft({
       operationId: operationId(),
       intakeId: draft.intakeId,
+      source:clarification.source,
       context: completedContext,
       languageContext: routeContext,
       focus: focus ? { statement: focus.statement, distinguishingNotes: focus.distinguishingNotes, aspectLabel: focus.aspectLabel } : null,

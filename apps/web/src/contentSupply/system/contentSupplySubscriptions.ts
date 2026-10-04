@@ -8,6 +8,7 @@ const queryTables = {
   runtime_packages:['packageCache'],
   provisioning_control: ['personalLearning', 'providers', 'settings'],
   provisioning_tasks: ['personalLearning'],
+  provisioning_task: ['personalLearning'],
 } as const satisfies Record<ContentSupplyQuery['kind'], readonly Table[]>;
 
 export const subscribeContentSupply=(query:ContentSupplyQuery,listener:()=>void):(()=>void)=>

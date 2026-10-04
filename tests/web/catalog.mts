@@ -169,6 +169,9 @@ const foundationTests = [
 type MigratedTest = Readonly<{path: string; suite: WebTestSuite; memoryLibrary?: boolean; env?: Readonly<Record<string, string>>}>;
 
 const fastBeforeMemory = [
+  'unit/personal-learning-batch',
+  'unit/world-readers',
+  'integration/world-browse-storage',
   'unit/canonical-digest',
   'unit/book-center-projection',
   'unit/sqlite-sahpool-preservation',
@@ -190,6 +193,11 @@ const fastBeforeMemory = [
 ] as const;
 
 const fastWithMemory = [
+  'integration/scoped-context-command',
+  'integration/semantic-lookup-storage',
+  'unit/version-store',
+  'integration/agent-destination-initialization',
+  'integration/semantic-lookup',
   'unit/workspace-source-aliases',
   'unit/personal-portable-export',
   'unit/portable-media-cache',
@@ -220,6 +228,11 @@ const fastWithMemory = [
 ] as const;
 
 const browserTests = [
+  'browser/extension-intake-journey',
+  'browser/practice-source-loading',
+  'browser/extension-selection',
+  'browser/semantic-lookup-opfs',
+  'browser/personal-meaning-journey',
   'browser/portable-package-journey',
   'browser/skin-surface', 'browser/reference-presentation',
   'browser/package-center-journey',
@@ -240,6 +253,11 @@ const manualTests = [
 ] as const;
 
 const playwrightPaths = new Set<string>([
+  'browser/extension-intake-journey',
+  'browser/practice-source-loading',
+  'browser/extension-selection',
+  'browser/semantic-lookup-opfs',
+  'browser/personal-meaning-journey',
   'browser/portable-package-journey',
   'browser/skin-surface', 'browser/reference-presentation',
   'browser/package-center-journey',
@@ -252,6 +270,16 @@ const playwrightPaths = new Set<string>([
 ]);
 
 const durabilityTests = new Set<string>([
+  'browser/extension-intake-journey',
+  'integration/scoped-context-command',
+  'unit/personal-learning-batch',
+  'unit/world-readers',
+  'integration/world-browse-storage',
+  'browser/practice-source-loading',
+  'integration/semantic-lookup-storage',
+  'browser/semantic-lookup-opfs',
+  'integration/semantic-lookup',
+  'browser/personal-meaning-journey',
   'unit/portable-media-cache',
   'browser/portable-package-journey',
   'unit/package-cache-projection',
@@ -275,10 +303,23 @@ const durabilityTests = new Set<string>([
   'integration/english-lightweight-release',
 ]);
 const convergenceTests = new Set<string>([
+  'integration/scoped-context-command',
+  'unit/world-readers',
+  'integration/world-browse-storage',
+  'integration/semantic-lookup-storage',
+  'browser/semantic-lookup-opfs',
   'unit/package-workspace-refresh',
   'database/library-cloud', 'browser/web-bootstrap-budget',
 ]);
 const scaleTests = new Set<string>([
+  'integration/scoped-context-command',
+  'unit/personal-learning-batch',
+  'unit/world-readers',
+  'integration/world-browse-storage',
+  'browser/personal-meaning-journey',
+  'integration/semantic-lookup-storage',
+  'browser/semantic-lookup-opfs',
+  'integration/semantic-lookup',
   'unit/portable-media-cache',
   'browser/portable-package-journey',
   'unit/package-workspace-refresh',

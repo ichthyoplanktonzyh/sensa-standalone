@@ -41,6 +41,8 @@ const measuredWorkspaceRead=async<T,>(name:string,work:()=>Promise<T>):Promise<T
 
 export function usePackageLearning(entryOpen:boolean){
  useTranslation();
+ const languageContext=useActiveLanguageContext();
+ const routeKey=`${languageContext.languageRouteId}:${languageContext.languageRouteRevision}`;
  const [packages,setPackages]=useState<InstalledPackage[]>([]);
  const [catalog,setCatalog]=useState<ContentSupplyCatalogItem[]>([]);
  const [workspace,setWorkspace]=useState<LearningWorkspaceProjection>(emptyWorkspace);
@@ -48,14 +50,19 @@ export function usePackageLearning(entryOpen:boolean){
  const [busy,setBusy]=useState(false);
  const [progress,setProgress]=useState<number|null>(null);
  const [loaded,setLoaded]=useState(false);
+ const [loadState,setLoadState]=useState<{routeKey:string;status:'loading'|'ready'|'unavailable'}>(()=>({routeKey,status:'loading'}));
+ // A changed Route invalidates readiness during render, before the passive
+ // reload effect can run. Old targets cannot become a new Session's scope.
+ const loadStatus=loadState.routeKey===routeKey?loadState.status:'loading';
+ const setLoadStatus=(status:typeof loadState.status)=>setLoadState({routeKey,status});
  const [unavailablePackageKeys,setUnavailablePackageKeys]=useState<readonly string[]>([]);
  const [catalogBusy,setCatalogBusy]=useState(false);
  const transfer=useRef<AbortController|null>(null);
  const catalogRequest=useRef<AbortController|null>(null);
  const generation=useRef(0);
  const lifecycle=useRef(0);
+ const initialRead=useRef<Promise<void>|null>(null);
  const actInFlight=useRef(false);
- const languageContext=useActiveLanguageContext();
 
  const refreshLearning=async()=>{
   const current=lifecycle.current;
@@ -77,25 +84,43 @@ export function usePackageLearning(entryOpen:boolean){
   await Promise.all([refreshLearning(),refreshSupply()]);
   if(current!==lifecycle.current)return;
   setLoaded(true);
+  setLoadStatus('ready');
+ };
+
+ const retryInitialLoad=()=>{
+  if(initialRead.current)return initialRead.current;
+  const current=lifecycle.current;
+  setLoadStatus('loading');
+  setNotice(current=>current===localFlowText('learningReadFailed')?'':current);
+  const request=(async()=>{
+   try{
+    const result=await measuredWorkspaceRead('rehydrate',()=>contentSupplySystem.execute({kind:'rehydrate'}));
+    if(current!==lifecycle.current)return;
+    setUnavailablePackageKeys(result.blocked);
+    await measuredWorkspaceRead('prepare',()=>learningSystem.execute({kind:'prepare_queue',languageContext,at:new Date().toISOString()}));
+    if(current!==lifecycle.current)return;
+    await refresh();
+   }catch{
+    if(current!==lifecycle.current)return;
+    setLoadStatus('unavailable');setNotice(localFlowText('learningReadFailed'));
+   }
+  })();
+  initialRead.current=request;
+  void request.finally(()=>{if(initialRead.current===request)initialRead.current=null;});
+  return request;
  };
 
  useEffect(()=>{
   setLoaded(false);
-  const current=lifecycle.current;
   const learningCoordinator=createRefreshCoordinator(refreshLearning);
   const supplyCoordinator=createRefreshCoordinator(refreshSupply);
   const reloadLearning=()=>void learningCoordinator.request().catch(()=>setNotice(localFlowText('progressReadFailed')));
   const reloadSupply=()=>void Promise.all([learningCoordinator.request(),supplyCoordinator.request()]).catch(()=>setNotice(localFlowText('progressReadFailed')));
-  const prepare=async(initial=false)=>{
+  const prepare=async()=>{
    await measuredWorkspaceRead('prepare',()=>learningSystem.execute({kind:'prepare_queue',languageContext,at:new Date().toISOString()}));
-   if(initial)await refresh();
-   else await learningCoordinator.request();
+   await learningCoordinator.request();
   };
-  void measuredWorkspaceRead('rehydrate',()=>contentSupplySystem.execute({kind:'rehydrate'})).then(result=>{
-   if(current!==lifecycle.current)return;
-   setUnavailablePackageKeys(result.blocked);
-   return prepare(true);
-  }).catch(()=>setNotice(localFlowText('learningReadFailed')));
+  void retryInitialLoad();
   const stopLearning=learningSystem.subscribe({kind:'workspace',languageContext},reloadLearning);
   const stopSupply=contentSupplySystem.subscribe({kind:'workspace'},reloadSupply);
   const focus=()=>void prepare().catch(()=>setNotice(localFlowText('progressReadFailed')));
@@ -103,6 +128,7 @@ export function usePackageLearning(entryOpen:boolean){
   return()=>{
    generation.current++;
    lifecycle.current++;
+   initialRead.current=null;
    stopLearning();
    stopSupply();
    transfer.current?.abort();
@@ -183,7 +209,7 @@ export function usePackageLearning(entryOpen:boolean){
   records:workspace.records,
   policyOptions:workspace.policyOptions,
   dailyLimit:dailyLimit??undefined,
-  notice:localFlowNotice(notice),busy,progress,loaded,unavailablePackageKeys,catalogBusy,reloadCatalog,refresh,
+  notice:localFlowNotice(notice),busy,progress,loaded:loaded&&loadStatus==='ready',loadStatus,retryInitialLoad,unavailablePackageKeys,catalogBusy,reloadCatalog,refresh,
   confirmQuantity:(n:number)=>perform(()=>learningSystem.execute({kind:'confirm_quantity',operationId:crypto.randomUUID(),languageContext,dailyLimit:n})),
   download:(d:ContentSupplyCatalogItem,onPhase?:(phase:ContentSupplyInstallationPhase)=>void)=>perform(async()=>{
    const c=new AbortController();transfer.current=c;

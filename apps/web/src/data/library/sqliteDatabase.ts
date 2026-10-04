@@ -1,6 +1,13 @@
 import type { Database, Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 
 import {decodeBackupValue,encodeBackupValue} from './backupCodec';
+import {SqliteMeaningLookupProjection} from './meaningLookupProjection';
+import {SqliteWorldBrowseProjection} from './worldBrowseProjection';
+import {SqliteJourneyIdentityProjection} from './journeyIdentityProjection';
+import {ensureSqliteSchemaIndexes} from './sqliteSchemaIndexes';
+import {registryFieldReader,registrySelectionSql,registrySelectionResult,type RegistrySelectionQuery,type RegistrySelection} from './semanticRegistrySelection';
+import type {WorldBrowseQuery,WorldBrowsePage,WorldLearningChoiceQuery,WorldLearningChoicePage} from '../../experience/personalMeaningJourney/worldRead';
+import type {MeaningLookupResult} from '../../experience/personalMeaningJourney/meaningLookup';
 import {createPackageCacheSummary,isPackageCacheProjectionSource,packageCacheKeyPrefix,sqlitePackageCacheProjectionSchema,type PackageCacheProjectionQuery,type PackageCacheProjectionResult} from './packageCacheProjection';
 import {
   createHomeLearningTargetRecord,
@@ -35,6 +42,8 @@ type SemanticInboxMediaSource = {
 };
 
 const sqliteOptimizeIntervalMs = 24 * 60 * 60 * 1000;
+const sqliteRequiredTables=[...sqliteLibrarySchema.matchAll(/CREATE TABLE IF NOT EXISTS (\w+)/gu)].map(match=>match[1]!);
+const sqliteRuntimePragmas=sqliteLibrarySchema.slice(0,sqliteLibrarySchema.indexOf('CREATE TABLE'));
 
 /** Kept beside the storage kernel so diagnostics exercise the exact shipped query. */
 export const sqliteHomeLearningTargetsQuery = `SELECT
@@ -61,12 +70,23 @@ export class SqliteRecordDatabase {
   private initializationTimingsMs:Record<string,number>|undefined;
   private integrityCheck:SqliteStorageDiagnostics['integrityCheck'];
   private integrityFailed=false;
+  private meaningLookup:SqliteMeaningLookupProjection;
+  private worldBrowseProjection:SqliteWorldBrowseProjection;
+  private walMaintenance:SqliteStorageDiagnostics['walMaintenance'];
+  private journeyIdentities:SqliteJourneyIdentityProjection;
+  private recordGet:ReturnType<Database['prepare']>|undefined;
 
   constructor(
     private readonly sqlite3: Sqlite3Static,
     private readonly database: Database,
     private readonly persistence: SqliteStorageDiagnostics["persistence"],
-  ) {}
+  ) {
+    const field=registryFieldReader();
+    this.database.createFunction({name:'sensa_registry_field',arity:2,deterministic:true,innocuous:true,xFunc:(_context,encoded,key)=>field(encoded,key)});
+    this.meaningLookup=new SqliteMeaningLookupProjection(database,(table,key)=>this.get(table,key));
+    this.worldBrowseProjection=new SqliteWorldBrowseProjection(database,(table,key)=>this.get(table,key));
+    this.journeyIdentities=new SqliteJourneyIdentityProjection(database);
+  }
 
   initialize(): SqliteStorageDiagnostics {
     if(this.closed)throw new Error('sqlite_database_closed');
@@ -81,6 +101,8 @@ export class SqliteRecordDatabase {
     }
     const before = this.scalarNumber("PRAGMA user_version");
     const schemaCookie=this.scalarNumber('PRAGMA schema_version');
+    const headerReady=performance.now();
+    let runtimeReady=headerReady,sourceSchemaReady=headerReady,lookupReady=headerReady,worldReady=headerReady;
     if (before !== 0 && before < sqliteLibraryBaselineVersion) {
       throw new Error(`sqlite_schema_legacy:${before}`);
     }
@@ -120,36 +142,57 @@ export class SqliteRecordDatabase {
     }
     else if (before !== sqliteLibrarySchemaVersion) {
       throw new Error(`sqlite_schema_migration_missing:${before}`);
-    } else this.database.exec(sqliteLibrarySchema);
+    } else {
+      // A supported unchanged source schema must already be complete. Do not
+      // replay DDL or rewrite user_version on every reconnect, and do not
+      // manufacture empty source tables when an existing library is damaged.
+      this.database.exec(sqliteRuntimePragmas);
+      runtimeReady=performance.now();
+      const present=this.database.exec({sql:"SELECT name FROM sqlite_schema WHERE type='table' AND name IN (SELECT value FROM json_each(?))",bind:[JSON.stringify(sqliteRequiredTables)],rowMode:'object',returnValue:'resultRows'}) as unknown[];
+      if(present.length!==sqliteRequiredTables.length)throw new Error('sqlite_source_schema_incomplete');
+      ensureSqliteSchemaIndexes(this.database,sqliteLibrarySchema);
+    }
+    sourceSchemaReady=performance.now();
+    this.database.exec('BEGIN IMMEDIATE');
+    try{
+      this.meaningLookup.initialize();
+      lookupReady=performance.now();
+      this.worldBrowseProjection.initialize();
+      worldReady=performance.now();
+      this.journeyIdentities.initialize();
+      this.database.exec('COMMIT');
+    }catch(error){try{this.database.exec('ROLLBACK');}catch{/* Preserve initialization failure. */}throw error;}
     const schemaReady=performance.now();
-    // This OPFS connection normally lives for the owning tab's lifetime. Let
-    // SQLite refresh planner statistics after schema changes and on every open.
-    this.database.exec("PRAGMA optimize=0x10002");
+    // Consider every table after a schema change. Ordinary reconnects reuse
+    // persisted statistics and let actual query history guide maintenance;
+    // reopening one page must not inspect every large derived index.
+    const schemaChanged=before===0||before!==sqliteLibrarySchemaVersion||schemaCookie!==this.scalarNumber('PRAGMA schema_version');
+    this.database.exec(schemaChanged?"PRAGMA optimize=0x10002":"PRAGMA optimize");
     this.nextOptimizeAt = Date.now() + sqliteOptimizeIntervalMs;
     const plannerReady=performance.now();
     // A whole-file health scan grows with the entire collection. Run it for
     // new/changed structures and explicit diagnostics, not each normal open.
-    if(before===0||before!==sqliteLibrarySchemaVersion||schemaCookie!==this.scalarNumber('PRAGMA schema_version'))this.verifyIntegrity();
+    if(schemaChanged)this.verifyIntegrity();
     const integrityReady=performance.now();
     if (this.persistence === "opfs") {
       const journalMode = this.scalarText("PRAGMA journal_mode");
       const synchronous = this.scalarNumber("PRAGMA synchronous");
       if (journalMode !== "wal") throw new Error(`sqlite_journal_mode_failed:${journalMode}`);
       if (synchronous !== 2) throw new Error(`sqlite_synchronous_failed:${synchronous}`);
+      // Cache creation/version replacement can be a large transaction even
+      // though it changes no learner revision. Ordinary unchanged opens do
+      // not checkpoint, and maintenance cannot invalidate successful rebuilds.
+      if(schemaChanged)this.maintainWal();
     }
     this.initialized=true;
-    this.initializationTimingsMs={schema:Math.round(schemaReady-started),planner:Math.round(plannerReady-schemaReady),integrity:Math.round(integrityReady-plannerReady),total:Math.round(performance.now()-started)};
+    this.initializationTimingsMs={header:Math.round(headerReady-started),runtime:Math.round(runtimeReady-headerReady),sourceSchema:Math.round(sourceSchemaReady-runtimeReady),lookupCache:Math.round(lookupReady-sourceSchemaReady),worldCache:Math.round(worldReady-lookupReady),identityCache:Math.round(schemaReady-worldReady),schema:Math.round(schemaReady-started),planner:Math.round(plannerReady-schemaReady),integrity:Math.round(integrityReady-plannerReady),total:Math.round(performance.now()-started)};
     return this.diagnostics();
   }
 
   get(table: SqliteLibraryTable, key: string): string | null {
-    const rows = this.database.exec({
-      sql: "SELECT value_json FROM sensa_records WHERE table_name=? AND record_key=?",
-      bind: [table, key],
-      rowMode: 0,
-      returnValue: "resultRows",
-    }) as unknown[];
-    return rows.length === 0 ? null : String(rows[0]);
+    const statement=this.recordGet??=this.database.prepare('SELECT value_json FROM sensa_records WHERE table_name=? AND record_key=?');
+    statement.reset(true);statement.bind([table,key]);
+    try{return statement.step()?String(statement.get(0)):null;}finally{statement.reset(true);}
   }
 
   entries(table: SqliteLibraryTable): StoredEntry[] {
@@ -163,6 +206,24 @@ export class SqliteRecordDatabase {
       key: String(row.record_key),
       encodedValue: String(row.value_json),
     }));
+  }
+  lookupMeanings(query:string):MeaningLookupResult{return this.meaningLookup.query(query);}
+  worldBrowse(query:WorldBrowseQuery):WorldBrowsePage{return this.worldBrowseProjection.query(query);}
+  registrySelection(query:RegistrySelectionQuery):RegistrySelection{
+    const {sql,bind}=registrySelectionSql(query);
+    const rows=this.database.exec({sql,bind:bind as import('@sqlite.org/sqlite-wasm').SqlValue[],rowMode:'object',returnValue:'resultRows'}) as Record<string,any>[];
+    return registrySelectionResult(query,rows);
+  }
+  worldLearningChoices(query:WorldLearningChoiceQuery):WorldLearningChoicePage{return this.worldBrowseProjection.learningChoices(query);}
+  existingJourneyIdentities(ids:readonly string[]):string[]{return this.journeyIdentities.existing(ids);}
+
+  entriesPage(table:SqliteLibraryTable,afterKey:string|null,limit:number):StoredEntry[]{
+    if(!Number.isSafeInteger(limit)||limit<1||limit>256)throw new Error('sqlite_invalid_page_size');
+    const rows=this.database.exec({
+      sql:`SELECT record_key,value_json FROM sensa_records WHERE table_name=? ${afterKey===null?'':'AND record_key>?'} ORDER BY record_key LIMIT ?`,
+      bind:afterKey===null?[table,limit]:[table,afterKey,limit],rowMode:'object',returnValue:'resultRows',
+    }) as Array<Record<string,unknown>>;
+    return rows.map(row=>({key:String(row.record_key),encodedValue:String(row.value_json)}));
   }
 
   existingRecordKeys(table:SqliteLibraryTable,keys:readonly string[]):string[]{
@@ -195,6 +256,18 @@ export class SqliteRecordDatabase {
     return (query.kind==='identities'
       ?rows.map(row=>({key:String(row.package_key),digest:String(row.digest)}))
       :rows.map(row=>JSON.parse(String(row.summary_json)))) as PackageCacheProjectionResult<Query>;
+  }
+
+  /** Covering revision-index probe: never hydrate rows just to invalidate a cache. */
+  hasChangesSince(contentRevision:number,tables:readonly SqliteLibraryTable[]):boolean{
+    if(!Number.isSafeInteger(contentRevision)||contentRevision<0||!tables.length)return false;
+    const selected=[...new Set(tables)],placeholders=selected.map(()=>'?').join(',');
+    const rows=this.database.exec({
+      sql:`SELECT EXISTS(SELECT 1 FROM sensa_records WHERE content_revision>? AND table_name IN (${placeholders}))
+        OR EXISTS(SELECT 1 FROM sensa_record_tombstones WHERE content_revision>? AND table_name IN (${placeholders}))`,
+      bind:[contentRevision,...selected,contentRevision,...selected],rowMode:0,returnValue:'resultRows',
+    }) as unknown[];
+    return Number(rows[0])===1;
   }
 
   changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): SqliteRecordChange[] {
@@ -443,6 +516,9 @@ export class SqliteRecordDatabase {
       this.database.exec("PRAGMA optimize");
       this.nextOptimizeAt = Date.now() + sqliteOptimizeIntervalMs;
     }
+    const changesBefore=this.database.changes(true);
+    let encodedWriteSize=0;
+    let bulkMaintenance=false;
     this.database.exec("BEGIN IMMEDIATE");
     try {
       const contentRevision = mutation.contentRevision;
@@ -452,9 +528,11 @@ export class SqliteRecordDatabase {
       if (mutation.syncBaseReplacement) {
         this.database.exec('DELETE FROM sensa_sync_base');
         for (const entry of mutation.syncBaseReplacement) {
+          const blockRefsJson=JSON.stringify(entry.blockRefs);
+          encodedWriteSize+=entry.valueJson.length+blockRefsJson.length;
           this.database.exec({
             sql: 'INSERT INTO sensa_sync_base(table_name,record_key,value_json,block_refs_json) VALUES(?,?,?,?)',
-            bind: [entry.table, entry.key, entry.valueJson, JSON.stringify(entry.blockRefs)],
+            bind: [entry.table, entry.key, entry.valueJson, blockRefsJson],
           });
         }
       }
@@ -530,6 +608,7 @@ export class SqliteRecordDatabase {
           bind:[portable.packageKey],
         });
         for(const media of portable.media){
+          encodedWriteSize+=media.bytes.byteLength;
           this.database.exec({
             sql:`INSERT INTO sensa_portable_media(sha256,size_bytes,bytes) VALUES(?,?,?)
                   ON CONFLICT(sha256) DO NOTHING`,
@@ -551,6 +630,7 @@ export class SqliteRecordDatabase {
         }
       }
       for (const item of mutation.puts) {
+        encodedWriteSize+=item.encodedValue.length;
         if (contentRevision === undefined) {
           this.database.exec({
             sql: `INSERT INTO sensa_records(table_name,record_key,value_json,content_revision) VALUES(?,?,?,0)
@@ -593,17 +673,42 @@ export class SqliteRecordDatabase {
                               SELECT 1 FROM sensa_portable_package_media AS reference
                               WHERE reference.sha256=sensa_portable_media.sha256
                             )`);
+      this.meaningLookup.update(mutation);
+      this.worldBrowseProjection.update(mutation);
+      this.journeyIdentities.update(mutation);
+      // Rapid bulk growth is a maintenance point. Persist useful statistics
+      // with that import instead of making the next page's reopen pay for it.
+      // Count actual SQL writes, including sync baselines, normalized media
+      // and derived indexes. Large individual encoded values/media also need
+      // maintenance even when they occupy only a handful of logical rows.
+      bulkMaintenance=this.database.changes(true)-changesBefore>256||encodedWriteSize>1024*1024||mutation.clears.length>0;
+      if(bulkMaintenance)this.database.exec('PRAGMA optimize');
       this.database.exec("COMMIT");
       this.integrityCheck=undefined;
     } catch (error) {
       try { this.database.exec("ROLLBACK"); } catch { /* Preserve the original failure. */ }
       throw error;
     }
+    // A completed large transaction can leave a large reusable WAL. Bound its
+    // cold-reopen cost after COMMIT; failure here cannot undo/deny that commit.
+    if(this.persistence==='opfs'&&bulkMaintenance)this.maintainWal();
+  }
+
+  private maintainWal():void{
+    const started=performance.now(),checkedAt=new Date().toISOString();
+    try{
+      const result=this.database.exec({sql:'PRAGMA wal_checkpoint(TRUNCATE)',rowMode:'object',returnValue:'resultRows'}) as Array<{busy:number}>;
+      this.walMaintenance={status:result[0]?.busy===0?'ok':'deferred',checkedAt,durationMs:Math.round(performance.now()-started)};
+    }catch(cause){this.walMaintenance={status:'failed',checkedAt,durationMs:Math.round(performance.now()-started),reason:cause instanceof Error?cause.message:String(cause)};}
   }
 
   diagnostics(options?:Readonly<{verifyIntegrity?:boolean}>): SqliteStorageDiagnostics {
     if(options?.verifyIntegrity)this.verifyIntegrity();
+    const journeyIdentityCheck=options?.verifyIntegrity?this.journeyIdentities.checkAndRepair():undefined;
+    if(journeyIdentityCheck?.status==='rebuilt'&&this.persistence==='opfs')this.maintainWal();
     return {
+      ...(this.walMaintenance?{walMaintenance:this.walMaintenance}:{}),
+      ...(journeyIdentityCheck?{journeyIdentityCheck}:{}),
       ...(this.integrityCheck?{integrityCheck:this.integrityCheck}:{}),
       ...(this.initializationTimingsMs?{initializationTimingsMs:this.initializationTimingsMs}:{}),
       engine: "sqlite-wasm",
@@ -636,6 +741,7 @@ export class SqliteRecordDatabase {
       try{this.database.exec("PRAGMA optimize");}
       catch(cause){optimizeFailed=true;optimizeFailure=cause;}
     }
+    this.meaningLookup.close();this.worldBrowseProjection.close();this.journeyIdentities.close();this.recordGet?.finalize();this.recordGet=undefined;
     this.database.close();
     this.closed=true;
     if(optimizeFailed)throw optimizeFailure;

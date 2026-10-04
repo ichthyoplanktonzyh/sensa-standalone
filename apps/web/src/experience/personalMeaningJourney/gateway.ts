@@ -58,6 +58,7 @@ import {
   type IntakeEnginePorts,
 } from './intakeEngine';
 import { digestOf } from './digest';
+import {assertClarificationSource,sourceWitnessFromState,sameClarificationSource,ClarificationSourceChangedError,type ClarificationSourceKind,type ClarificationSourceWitness} from './clarificationSource';
 import { cryptoRandomIdPort, isUuid, type RandomIdPort } from './ids';
 import {
   StorageUnavailableError,
@@ -72,8 +73,9 @@ import {
   type CommandReceipt,
   type JourneyState,
   type MeaningJourneyRecord,
+  type SenseRegistryState,
 } from './store';
-import {LibraryJourneyRepository,type JourneyRepository} from './repository';
+import {LibraryJourneyRepository,JourneyConflictError,type JourneyRepository,type JourneyReadCondition} from './repository';
 import {markPreparedMediaCommitted,preparedMediaSnapshot} from './mediaStore';
 import {
   buildDetailView,
@@ -81,6 +83,10 @@ import {
   buildWorldItemView,
 } from './projection';
 import { buildPersonalMeaningLearningSources } from './learningSource';
+import {createMeaningLookup,createMeaningLookupCooperatively,type MeaningLookupResult} from './meaningLookup';
+import {runCooperatively} from './cooperative';
+import {validateMeaningQuery,confirmedLookupConnections} from './meaningLookupFacts';
+import {indexRegistry,type IndexedRegistryRead} from './registryRead';
 import type { PersonalMeaningLearningSource } from '../../contentSupply/system';
 import type {
   AddMaterialBlockInput,
@@ -134,6 +140,8 @@ export interface JourneyGatewayStatus {
   ok: boolean;
   error: string | null;
   errorKind: 'corrupted' | 'unavailable' | null;
+  /** Read lifecycle only; an unknown World must not be presented as empty. */
+  loading?:boolean;
 }
 
 export interface PersonalMeaningJourneyGateway {
@@ -142,8 +150,12 @@ export interface PersonalMeaningJourneyGateway {
   reload(): void;
   getListItems(): JourneyListItemView[];
   getWorldItems(): JourneyWorldItemView[];
+  /** Bounded, owner-local confirmed semantics; no Context, drafts or detail projection. */
+  lookupMeanings(query: string): Promise<MeaningLookupResult>;
   getDetail(personalMeaningId: string): JourneyDetailView | null;
   getClarificationDraft(intakeId: string): ClarificationDraftView | null;
+  /** Exact owner-local learner witness; no full gateway load in the Library adapter. */
+  captureClarificationSource(kind:ClarificationSourceKind,id:string):Promise<ClarificationSourceWitness>;
   /** Complete, learnable Alignment projections; incomplete meanings yield none. */
   getLearningSources(
     personalMeaningId: string,
@@ -276,43 +288,110 @@ const errorStatus = (cause: unknown): JourneyGatewayStatus => {
   };
 };
 
+type ReplayIntent={operationId:string;command:string;requestDigest?:string;objectResult?:boolean};
+type CommandTransaction={before:JourneyState;settled:boolean;preconditions:JourneyReadCondition[];replay?:ReplayIntent};
 class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntakeModule {
   private state: JourneyState | null = null;
+  private committedState: JourneyState | null = null;
+  private lookupState: JourneyState | null = null;
+  private lookupIndex: ReturnType<typeof createMeaningLookup> | null = null;
   private readonly usedIds = new Set<string>();
   private status: JourneyGatewayStatus = { ok: true, error: null, errorKind: null };
   private readonly listeners = new Set<() => void>();
-  private ready: Promise<void>;
-  private transaction: {before:JourneyState;settled:boolean}|null=null;
+  private ready: Promise<void> = Promise.resolve();
+  private loadStarted=false;
+  private scopedCommitGeneration=0;
+  private loading=false;
+  private transaction:CommandTransaction|null=null;
+  private stopRepositoryObservation:(()=>void)|undefined;
+  private refreshScheduled=false;
+  private registryReads=new WeakMap<SenseRegistryState,IndexedRegistryRead>();
+  private meaningReads=new WeakMap<JourneyState['meanings'],Map<string,MeaningJourneyRecord>>();
+  private sourceIncarnation=crypto.randomUUID();
 
   constructor(private readonly deps: JourneyGatewayDeps) {
-    this.ready = this.load();
-    void this.ready.finally(() => this.notify());
+    // A read-only teacher lookup must not also hydrate the entire World UI.
+    // In-memory adapters retain their snapshot-based query implementation.
+    if(!deps.repository.lookupMeanings)void this.ensureLoaded();
+  }
+
+  private ensureLoaded():Promise<void>{
+    if(!this.loadStarted){this.loadStarted=true;this.ready=this.load();void this.ready.finally(()=>this.notify());}
+    return this.ready;
   }
 
   private async load(): Promise<void> {
+    this.loading=true;this.notify();
+    const previous=this.committedState;
     try {
-      const state = await this.deps.repository.load();
-      this.rememberIds(state);
+      let generation=this.scopedCommitGeneration;
+      let state = await this.deps.repository.load();
+      await this.rememberIdsCooperatively(state);
+      // A bounded command may commit while an explicitly opened global view
+      // is loading. Recheck that view without making the bounded command wait
+      // on a reload queued behind its own gate.
+      while(generation!==this.scopedCommitGeneration){
+        generation=this.scopedCommitGeneration;
+        state=this.deps.repository.refresh?await this.deps.repository.refresh(state,'frame'):await this.deps.repository.load();
+        await this.rememberIdsCooperatively(state);
+      }
+      if(this.committedState!==previous)return;
       this.state = state;
+      this.committedState = state;
       this.status = { ok: true, error: null, errorKind: null };
     } catch (cause) {
+      if(this.committedState!==previous)return;
       this.state = null;
+      this.committedState = null;
       this.status = errorStatus(cause);
-    }
+    }finally{this.loading=false;}
   }
 
   reload(): void {
-    this.ready = this.gate.then(() => this.load());
-    void this.ready.finally(() => this.notify());
+    this.loadStarted=true;
+    const previousReady=this.ready;
+    const loading=this.gate.then(()=>previousReady).then(()=>this.load());
+    this.ready=loading;
+    this.gate=loading.then(()=>undefined,()=>undefined);
+    void loading.finally(() => this.notify());
   }
 
   getStatus(): JourneyGatewayStatus {
-    return { ...this.status };
+    return { ...this.status,loading:this.status.ok&&(this.loading||!this.loadStarted) };
   }
 
   subscribe(listener: () => void): () => void {
+    void this.ensureLoaded();
     this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    if(this.listeners.size===1&&this.deps.repository.subscribe){
+      this.stopRepositoryObservation=this.deps.repository.subscribe(()=>this.refreshObservedFrame());
+      // A detached view may have missed changes while no listener existed.
+      this.refreshObservedFrame();
+    }
+    return () => {
+      this.listeners.delete(listener);
+      if(!this.listeners.size){this.stopRepositoryObservation?.();this.stopRepositoryObservation=undefined;}
+    };
+  }
+
+  private refreshObservedFrame():void{
+    if(this.refreshScheduled)return;
+    this.refreshScheduled=true;
+    const ready=this.ensureLoaded();
+    const refreshing=this.gate.then(async()=>{
+      await ready;this.refreshScheduled=false;
+      if(!this.listeners.size)return;
+      const previous=this.committedState;
+      try{
+        const state=previous&&this.deps.repository.refresh
+          ?await this.deps.repository.refresh(previous,'frame'):await this.deps.repository.load();
+        if(state===previous)return;
+        await this.rememberIdsCooperatively(state);
+        this.state=state;this.committedState=state;this.status={ok:true,error:null,errorKind:null};
+      }catch(cause){this.state=null;this.committedState=null;this.status=errorStatus(cause);}
+      this.notify();
+    });
+    this.gate=refreshing.then(()=>undefined,()=>{this.refreshScheduled=false;});
   }
 
   private notify(): void {
@@ -330,11 +409,39 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
    */
   private gate: Promise<unknown> = Promise.resolve();
 
-  private exclusive<T>(work: () => Promise<T>): Promise<T> {
+  /** Reuse the same domain command in a purpose-specific repository frame.
+   * Never publish that partial frame as the full gateway's World snapshot. */
+  private isolatedCommand<T>(operationId:string,command:string,requestDigest:string,work:()=>Promise<T>):Promise<T>{
+    const repository=this.deps.repository;
+    const run=this.gate.then(async()=>{
+      // Exact retries precede allocation/source reads, including after the
+      // source has advanced, been discarded or otherwise disappeared.
+      const receipt=this.matchReceipt(await repository.readReceipt?.(operationId)??undefined,command,requestDigest);
+      if(receipt)return {...receipt.result,replayed:true} as unknown as T;
+      const result=await work();
+      this.scopedCommitGeneration++;
+      // An explicit global view can start loading while this command runs.
+      // Do not await a reload queued behind this command's own gate.
+      if(this.loadStarted&&this.committedState&&repository.refresh){
+        try{const state=await repository.refresh(this.committedState,'frame');await this.rememberIdsCooperatively(state);this.state=state;this.committedState=state;}
+        catch(cause){this.state=null;this.committedState=null;this.status=errorStatus(cause);}
+        this.notify();
+      }
+      return result;
+    });
+    this.gate=run.then(()=>undefined,()=>undefined);return run;
+  }
+
+  private exclusive<T>(work: () => Promise<T>,refreshFrame=false): Promise<T> {
+    const ready=this.ensureLoaded();
     const run = this.gate.then(async () => {
-      await this.ready;
+      await ready;
+      if(refreshFrame&&this.deps.repository.refresh&&this.committedState){
+        const prior=this.committedState,current=await this.deps.repository.refresh(prior,'frame');
+        if(current!==prior){await this.rememberIdsCooperatively(current);this.state=current;this.committedState=current;}
+      }
       const before=this.requireState();
-      const transaction={before,settled:false};
+      const transaction:CommandTransaction={before,settled:false,preconditions:[]};
       this.transaction=transaction;
       this.state=createJourneyDraft(before);
       try{
@@ -344,6 +451,14 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
       }
       catch(cause){
         if(!transaction.settled)this.state=before;
+        // A concurrent writer may have committed this exact operation after
+        // both callers checked its receipt. The failed commit already reloaded
+        // durable facts. Replay that receipt; never rerun the command/model.
+        if(transaction.settled&&cause instanceof JourneyConflictError&&transaction.replay&&this.state){
+          const intent=transaction.replay,found=this.state.commandReceipts.find(row=>row.operationId===intent.operationId);
+          const receipt=this.matchReceipt(found,intent.command,intent.requestDigest);
+          if(receipt)return (intent.objectResult?{...receipt.result,replayed:true}:undefined) as T;
+        }
         throw cause;
       }finally{
         if(this.transaction===transaction)this.transaction=null;
@@ -369,6 +484,24 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
     return this.state;
   }
 
+  async captureClarificationSource(kind:ClarificationSourceKind,id:string):Promise<ClarificationSourceWitness>{
+    if(this.deps.repository.captureSource)return this.deps.repository.captureSource(kind,id);
+    await this.ensureLoaded();
+    return sourceWitnessFromState(this.requireState(),this.sourceIncarnation,kind,id);
+  }
+
+  private async requireClarificationSource(witness:ClarificationSourceWitness,kind:ClarificationSourceKind,id:string):Promise<void>{
+    assertClarificationSource(witness,kind,id);
+    const durable=await this.captureClarificationSource(kind,id),state=this.requireState();
+    if(!sameClarificationSource(witness,durable)||!sameClarificationSource(witness,sourceWitnessFromState(state,durable.incarnation,kind,id)))throw new ClarificationSourceChangedError();
+    // Validate again under the write lock, including an otherwise untouched
+    // draft hint. A valid check before an async operation is not a commit guard.
+    const preconditions=this.transaction!.preconditions;
+    if(kind==='personal_meaning')preconditions.push({table:'semanticMeanings',key:id,expected:state.meanings.find(record=>record.personalMeaning.personalMeaningId===id)});
+    else preconditions.push({table:'semanticInbox',key:id,expected:state.inboxItems.find(item=>item.intakeId===id)},
+      {table:'semanticDrafts',key:id,expected:state.clarificationDrafts.find(draft=>draft.intakeId===id)});
+  }
+
   private async persist(): Promise<void> {
     const state = this.requireState();
     const transaction=this.transaction;
@@ -378,18 +511,24 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
         before:transaction.before,
         after:state,
         preparedMedia:preparedMediaSnapshot(),
+        preconditions:transaction.preconditions,
       });
       markPreparedMediaCommitted(result.committedMediaIds);
       transaction.settled=true;
+      this.state=result.state??state;
+      this.committedState = this.state;
+      if(result.state)await this.rememberIdsCooperatively(result.state);
       this.status = { ok: true, error: null, errorKind: null };
     } catch (cause) {
       transaction.settled=true;
       try{
         this.state=await this.deps.repository.load();
-        this.rememberIds(this.state);
+        this.committedState=this.state;
+        await this.rememberIdsCooperatively(this.state);
         this.status={ok:true,error:null,errorKind:null};
       }catch(reloadCause){
         this.state=null;
+        this.committedState=null;
         this.status=errorStatus(reloadCause);
       }
       this.notify();
@@ -410,41 +549,69 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
     }
   }
 
-  private rememberIds(value: unknown): void {
-    if (typeof value === 'string') {
-      if (isUuid(value)) this.usedIds.add(value);
-      return;
+  private async rememberIdsCooperatively(state:JourneyState):Promise<void>{
+    const started=performance.now();
+    const ids=this.usedIds;
+    function* fact(value:object):Generator<void>{
+      // Identity reservation is not a recursive search of learner prose,
+      // source payloads, semantic boundaries or other opaque content.
+      for(const [field,valueId] of Object.entries(value))if(field.endsWith('Id')&&typeof valueId==='string'&&isUuid(valueId))ids.add(valueId);
+      yield;
     }
-    if (Array.isArray(value)) {
-      value.forEach((item) => this.rememberIds(item));
-      return;
-    }
-    if (value && typeof value === 'object') {
-      Object.values(value).forEach((item) => this.rememberIds(item));
-    }
+    await runCooperatively((function*(){
+      for(const rows of Object.values(state.registry))for(const row of rows)yield*fact(row);
+      for(const meaning of state.meanings){
+        yield*fact(meaning.personalMeaning);
+        for(const rows of Object.values(meaning))if(Array.isArray(rows))for(const row of rows)yield*fact(row);
+        for(const version of meaning.proposalVersions)for(const candidate of version.expressionCandidates)yield*fact(candidate);
+      }
+      for(const item of state.inboxItems){
+        yield*fact(item);yield*fact(item.payload);
+        for(const id of item.payload.context?.mediaReferenceIds??[])if(isUuid(id))ids.add(id);
+      }
+      for(const draft of state.clarificationDrafts)yield*fact(draft);
+      for(const receipt of state.commandReceipts){yield*fact(receipt);yield*fact(receipt.result);}
+    })());
+    if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.journey.identities',{start:started,end:performance.now()});
   }
 
   private now(): string {
     return this.deps.clock.nowIso();
   }
 
-  private receipt(
+  private matchReceipt(found:CommandReceipt|undefined,command:string,requestDigest?:string):CommandReceipt|null{
+    if(found&&(found.command!==command||requestDigest!==undefined&&found.requestDigest!==requestDigest))throw new Error('这个 operationId 已用于另一个个人意义操作。');
+    return found??null;
+  }
+  private async receipt(
     operationId: string,
     command: string,
     requestDigest?: string,
-  ): CommandReceipt | null {
+  ): Promise<CommandReceipt | null> {
+    if(this.transaction)this.transaction.replay={operationId,command,requestDigest};
     const found = this.requireState().commandReceipts.find(
       (candidate) => candidate.operationId === operationId,
     );
-    if (found && (
-      found.command !== command
-      || (requestDigest !== undefined
-        && found.requestDigest !== undefined
-        && found.requestDigest !== requestDigest)
-    )) {
-      throw new Error('这个 operationId 已用于另一个个人意义操作。');
+    // Even a local cache hit must cross the durable incarnation check. A clear
+    // or replacement can precede the cross-tab notification by one event turn.
+    if(!this.deps.repository.readReceipt)return this.matchReceipt(found,command,requestDigest);
+    let persisted:CommandReceipt|null;
+    try{persisted=await this.deps.repository.readReceipt(operationId);}
+    catch(cause){
+      this.state=null;this.committedState=null;this.status=errorStatus(cause);
+      if(this.transaction)this.transaction.settled=true;
+      this.notify();throw cause;
     }
-    return found ?? null;
+    if(found&&!persisted)throw new JourneyConflictError();
+    if(!persisted)return null;
+    this.matchReceipt(persisted,command,requestDigest);
+    if(found)return persisted;
+    try{
+      const state=await this.deps.repository.load();await this.rememberIdsCooperatively(state);
+      this.state=state;this.committedState=state;this.status={ok:true,error:null,errorKind:null};
+    }catch(cause){this.state=null;this.committedState=null;this.status=errorStatus(cause);throw cause;}
+    finally{if(this.transaction)this.transaction.settled=true;this.notify();}
+    return persisted;
   }
 
   private recordReceipt(
@@ -461,8 +628,9 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
     });
   }
 
-  private replay<T>(operationId: string, command: string, requestDigest?: string): T | null {
-    const found = this.receipt(operationId, command, requestDigest);
+  private async replay<T>(operationId: string, command: string, requestDigest?: string): Promise<T | null> {
+    const found = await this.receipt(operationId, command, requestDigest);
+    if(this.transaction?.replay)this.transaction.replay.objectResult=true;
     return found ? ({ ...found.result, replayed: true } as T) : null;
   }
 
@@ -598,26 +766,92 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
 
   // -- queries -------------------------------------------------------------
 
+  private lookupFactsUnchanged(state:JourneyState):boolean{
+    const previous=this.lookupState;
+    return !!previous&&(previous===state||previous.meanings.length===state.meanings.length
+      &&previous.meanings.every((row,index)=>row===state.meanings[index])
+      &&(Object.keys(state.registry) as Array<keyof JourneyState['registry']>).every(kind=>
+        previous.registry[kind].length===state.registry[kind].length
+        &&previous.registry[kind].every((row,index)=>row===state.registry[kind][index])));
+  }
+
+  private confirmedMeaningLookup(state=this.committedState) {
+    if (!state || !this.status.ok) throw new Error('semantic_world_unavailable');
+    if (this.lookupState !== state || !this.lookupIndex) {
+      if(!this.lookupFactsUnchanged(state)||!this.lookupIndex)this.lookupIndex = createMeaningLookup(state);
+      this.lookupState = state;
+    }
+    return this.lookupIndex;
+  }
+
+  private lookupJobs=new WeakMap<JourneyState,Promise<ReturnType<typeof createMeaningLookup>>>();
+  private async cooperativeLookup(state:JourneyState){
+    if(!this.status.ok)throw new Error('semantic_world_unavailable');
+    if(this.lookupIndex&&this.lookupFactsUnchanged(state)){this.lookupState=state;return this.lookupIndex;}
+    let building=this.lookupJobs.get(state);
+    if(!building){building=createMeaningLookupCooperatively(state);this.lookupJobs.set(state,building);}
+    const index=await building;this.lookupState=state;this.lookupIndex=index;return index;
+  }
+
+  async lookupMeanings(query: string): Promise<MeaningLookupResult> {
+      validateMeaningQuery(query);
+      if(this.deps.repository.lookupMeanings){
+        if(!this.status.ok)throw new Error('semantic_world_unavailable');
+        try{return await this.deps.repository.lookupMeanings(query);}
+        catch(cause){
+          this.state=null;this.committedState=null;this.status=errorStatus(cause);
+          if(this.transaction)this.transaction.settled=true;
+          this.notify();throw cause;
+        }
+      }
+      await this.ensureLoaded();
+      const prior=this.committedState;
+      if(!prior)throw new Error('semantic_world_unavailable');
+      const state=await this.deps.repository.refresh?.(prior)??prior;
+      if(state!==prior&&!this.transaction&&this.committedState===prior){
+        await this.rememberIdsCooperatively(state);
+        if(!this.transaction&&this.committedState===prior){this.state=state;this.committedState=state;this.notify();}
+      }
+      return (await this.cooperativeLookup(state)).query(query);
+  }
+
   getListItems(): JourneyListItemView[] {
-    if (!this.state) return [];
-    return this.state.meanings
+    const state=this.committedState;if (!state) return [];
+    const registry=this.registryRead(state);
+    const started=performance.now();
+    const items=state.meanings
       .filter((record) => record.personalMeaning.status === 'active'
-        && buildPersonalMeaningLearningSources(record, this.state!.registry).length > 0)
-      .map((record) => buildListItemView(record, this.state!.registry));
+        && confirmedLookupConnections(record,registry).length > 0)
+      .map((record) => buildListItemView(record,registry));
+    if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.journey.listView',{start:started,end:performance.now()});
+    return items;
   }
 
   getWorldItems(): JourneyWorldItemView[] {
-    if (!this.state) return [];
-    return this.state.meanings
+    const state=this.committedState;if (!state) return [];
+    const registry=this.registryRead(state);
+    const started=performance.now();
+    const items=state.meanings
       .filter((record) => record.personalMeaning.status === 'active'
-        && buildPersonalMeaningLearningSources(record, this.state!.registry).length > 0)
-      .map((record) => buildWorldItemView(record, this.state!.registry));
+        && confirmedLookupConnections(record,registry).length > 0)
+      .map((record) => buildWorldItemView(record,registry));
+    if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.journey.worldView',{start:started,end:performance.now()});
+    return items;
+  }
+
+  private registryRead(state:JourneyState):IndexedRegistryRead{
+    let read=this.registryReads.get(state.registry);if(!read){read=indexRegistry(state.registry);this.registryReads.set(state.registry,read);}return read;
+  }
+  private committedMeaning(state:JourneyState,id:string):MeaningJourneyRecord|undefined{
+    let meanings=this.meaningReads.get(state.meanings);
+    if(!meanings){meanings=new Map(state.meanings.map(record=>[record.personalMeaning.personalMeaningId,record]));this.meaningReads.set(state.meanings,meanings);}
+    return meanings.get(id);
   }
 
   getDetail(personalMeaningId: string): JourneyDetailView | null {
-    if (!this.state) return null;
-    const record = this.findRecord(personalMeaningId);
-    return record ? buildDetailView(record, this.state.registry) : null;
+    const state=this.committedState;if (!state) return null;
+    const record = this.committedMeaning(state,personalMeaningId);
+    return record ? buildDetailView(record,this.registryRead(state)) : null;
   }
 
   getClarificationDraft(intakeId: string): ClarificationDraftView | null {
@@ -650,12 +884,12 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
     personalMeaningId: string,
     personalMeaningAlignmentId?: string,
   ): PersonalMeaningLearningSource[] {
-    if (!this.state) return [];
-    const record = this.findRecord(personalMeaningId);
+    const state=this.committedState;if (!state) return [];
+    const record = this.committedMeaning(state,personalMeaningId);
     if (!record || record.personalMeaning.status !== 'active') return [];
     return buildPersonalMeaningLearningSources(
       record,
-      this.state.registry,
+      this.registryRead(state),
       personalMeaningAlignmentId,
     );
   }
@@ -670,7 +904,6 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
     record: MeaningJourneyRecord,
     operationId: string,
     block: MaterialBlockInput,
-    supportLanguageTag: string,
     intake: SensaIntakePayload | null = null,
     completedContext: SensaIntakeContext | null = intake?.context ?? null,
   ): { anchorId: string; anchorRevisionId: string } {
@@ -704,7 +937,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
       personalSemanticAnchorId: anchorId,
       revision: 1,
       anchorKind: isImage ? 'image' : 'text',
-      languageTag: isImage ? null : completedContext?.languageTag ?? supportLanguageTag,
+      languageTag: isImage ? null : completedContext?.languageTag ?? null,
       bodyText: isImage ? null : bodyText,
       personalMediaObjectId: isImage ? block.personalMediaObjectId! : null,
       structuredPayload: intake ? {
@@ -714,10 +947,13 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
           capturedAt: intake.capturedAt,
           contextSource: intake.context?.source ?? null,
           contextLanguageTag: intake.context?.languageTag ?? null,
+          contextLanguageObservation:intake.context?.languageObservation??null,
           mediaReferenceIds: intake.context?.mediaReferenceIds ?? [],
           completedContextSource: completedContext?.source ?? null,
           completedContextLanguageTag: completedContext?.languageTag ?? null,
+          completedContextLanguageObservation:completedContext?.languageObservation??null,
           expression: intake.expression,
+          contextText: intake.context?.textSegment ?? null,
           senseCandidate: intake.sense,
           submittedAcceptance: intake.acceptance,
         },
@@ -742,10 +978,16 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
   async createClarificationDraft(
     input: CreatePersonalMeaningInput,
   ): Promise<CreateClarificationDraftResult> {
+    if(!this.loadStarted&&this.deps.repository.withDraftCreation){
+      return this.isolatedCommand(input.operationId,'CreateClarificationDraft',digestOf(input),()=>
+        this.deps.repository.withDraftCreation!({operationId:input.operationId,reservedIds:(input.blocks??[]).flatMap(block=>block.personalMediaObjectId?[block.personalMediaObjectId]:[])},this.deps.ids,
+          (repository,ids)=>new JourneyGatewayImpl({...this.deps,repository,ids}).createClarificationDraft(input)));
+    }
     return this.exclusive(async () => {
-      const replay = this.replay<CreateClarificationDraftResult>(
+      const replay = await this.replay<CreateClarificationDraftResult>(
         input.operationId,
         'CreateClarificationDraft',
+        digestOf(input),
       );
       if (replay) return replay;
       const blocks = input.blocks ?? [];
@@ -762,7 +1004,6 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
       if (!text && mediaReferenceIds.length === 0 && !familiarExpression) {
         throw new Error('澄清草稿至少需要一段材料或一个熟悉表达。');
       }
-      const languages = await this.deps.languages.read();
       const payload = sensaIntakePayloadSchema.parse({
         contractVersion: 'sensa-intake-v3',
         operationId: input.operationId,
@@ -771,7 +1012,8 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
           modality: text ? mediaReferenceIds.length ? 'mixed' : 'text' : 'image',
           textSegment: text || null,
           mediaReferenceIds,
-          languageTag: languages.supportLanguageTag,
+          languageTag: null,
+          languageObservation:null,
           source: {
             client: 'sensa-web',
             url: null,
@@ -783,7 +1025,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
         } : null,
         expression: familiarExpression ? {
           surfaceForm: familiarExpression,
-          languageTag: languages.supportLanguageTag,
+          languageTag: null,
           occurrence: null,
           expressionTypeHint: null,
         } : null,
@@ -798,7 +1040,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
         startingPoint: input.startingPoint ?? null,
       });
       const result = { intakeId: item.intakeId, status: item.status };
-      this.recordReceipt(input.operationId, 'CreateClarificationDraft', result);
+      this.recordReceipt(input.operationId, 'CreateClarificationDraft', result,digestOf(input));
       await this.persist();
       return { ...result, replayed: false };
     });
@@ -810,12 +1052,12 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
     block: MaterialBlockInput,
   ): Promise<void> {
     return this.exclusive(async () => {
-      if (this.receipt(operationId, 'AddClarificationMaterial')) return;
+      const requestDigest=digestOf({operationId,intakeId,block});
+      if (await this.receipt(operationId, 'AddClarificationMaterial',requestDigest)) return;
       const state = this.requireState();
       const index = state.inboxItems.findIndex((candidate) => candidate.intakeId === intakeId);
       if (index < 0) throw new Error('找不到这条澄清草稿。');
       const item = state.inboxItems[index]!;
-      const languages = await this.deps.languages.read();
       const existing = item.payload.context;
       const text = block.kind === 'text' ? block.bodyText?.trim() ?? '' : '';
       const mediaId = block.kind === 'image' ? block.personalMediaObjectId : null;
@@ -831,12 +1073,13 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
           modality: textSegment ? mediaReferenceIds.length ? 'mixed' : 'text' : 'image',
           textSegment,
           mediaReferenceIds,
-          languageTag: existing?.languageTag ?? languages.supportLanguageTag,
+          languageTag: existing?.languageTag ?? null,
+          languageObservation:existing?.languageObservation??null,
           source: existing?.source ?? null,
         },
       });
       state.inboxItems[index] = createInboxItem(payload, item.intakeId, item.createdAt);
-      this.recordReceipt(operationId, 'AddClarificationMaterial', { intakeId });
+      this.recordReceipt(operationId, 'AddClarificationMaterial', { intakeId },requestDigest);
       await this.persist();
     });
   }
@@ -849,13 +1092,15 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
       languageContext?: CommandLanguages;
       intake?: SensaIntakePayload | null;
       completedContext?: SensaIntakeContext | null;
+      contextWordingSource?: 'learner_authored' | 'llm_suggested';
     } = {},
   ): Promise<CreatePersonalMeaningResult> {
     const { persist = true, receipt = true } = options;
     if (receipt) {
-      const replay = this.replay<CreatePersonalMeaningResult>(
+      const replay = await this.replay<CreatePersonalMeaningResult>(
         input.operationId,
         'CreatePersonalMeaning',
+        digestOf(input),
       );
       if (replay) return replay;
     }
@@ -951,28 +1196,51 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
         createdAt: now,
       });
     }
-    const blockAnchors = blocks.map(
-      (block, index) =>
-        this.appendMaterialAnchor(
-          record,
-          input.operationId,
-          block,
-          languages.supportLanguageTag,
-          index === 0 ? options.intake ?? null : null,
-          index === 0 ? options.completedContext ?? options.intake?.context ?? null : null,
-        ),
-    );
+    const blockAnchors = blocks.map((block,index) => {
+      const sourceText=index===0&&block.kind==='text'?options.intake?.context?.textSegment:null;
+      const rewritten=Boolean(sourceText&&sourceText!==block.bodyText?.trim());
+      const original=this.appendMaterialAnchor(record,input.operationId,
+        rewritten?{...block,bodyText:sourceText!}:block,options.intake??null,
+        rewritten?options.intake!.context:options.completedContext??options.intake?.context??null,
+      );
+      if(rewritten){
+        const sourceRevision=record.personalSemanticAnchorRevisions.find(row=>row.personalSemanticAnchorRevisionId===original.anchorRevisionId)!;
+        const anchor=record.personalSemanticAnchors.find(row=>row.personalSemanticAnchorId===original.anchorId)!;
+        const now=this.now();
+        // Preserve the captured version for occurrence locators. The accepted
+        // clarified Context is a new revision, never a replacement of its source.
+        record.personalSemanticAnchorRevisions.push({
+          ...sourceRevision,personalSemanticAnchorRevisionId:this.id(),revision:2,
+          bodyText:block.bodyText!.trim(),languageTag:options.completedContext?.languageTag??null,
+          structuredPayload:{...sourceRevision.structuredPayload,intake:{
+            ...(sourceRevision.structuredPayload.intake as Record<string,unknown>),
+            completedContextSource:options.completedContext?.source??null,
+            completedContextLanguageTag:options.completedContext?.languageTag??null,
+            completedContextLanguageObservation:options.completedContext?.languageObservation??null,
+          }},provenance:{...sourceRevision.provenance,
+            kind:options.contextWordingSource??sourceRevision.provenance.kind,
+            sourceReferenceIds:[sourceRevision.personalSemanticAnchorRevisionId],
+          },createdAt:now,
+        });
+        anchor.currentRevision=2;anchor.updatedAt=now;
+      }
+      return original;
+    });
 
     // A captured Expression belongs to the same Context even while its Sense
     // is unresolved. Preserve the exact occurrence as an unverified source
     // Anchor; learner confirmation later promotes this Anchor instead of
     // manufacturing a source-less duplicate.
     const capturedExpression = options.intake?.expression;
+    const capturedLocator=capturedExpression?.occurrence?.locator;
+    const capturedContextAnchor=capturedLocator?.kind==='media_region'
+      ? blockAnchors[blocks.findIndex(block=>block.personalMediaObjectId===capturedLocator.mediaReferenceId)]
+      : blockAnchors[0];
     let capturedExpressionAnchorId: string | null = null;
     if (
       capturedExpression?.occurrence
       && capturedExpression.languageTag
-      && blockAnchors[0]
+      && capturedContextAnchor
     ) {
       const anchorId = this.id();
       const anchorRevisionId = this.id();
@@ -1001,7 +1269,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
         languageTag: capturedExpression.languageTag,
         surfaceForm: capturedExpression.surfaceForm,
         normalizedForm: normalizedForm(capturedExpression.surfaceForm, capturedExpression.languageTag),
-        contextAnchorRevisionId: blockAnchors[0].anchorRevisionId,
+        contextAnchorRevisionId: capturedContextAnchor.anchorRevisionId,
         occurrence: capturedExpression.occurrence.locator,
         provenanceKind: sourceKind,
         verificationStatus: 'unverified',
@@ -1041,7 +1309,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
       personalMeaningRevisionId,
       familiarExpressionAnchorId,
     };
-    if (receipt) this.recordReceipt(input.operationId, 'CreatePersonalMeaning', result);
+    if (receipt) this.recordReceipt(input.operationId, 'CreatePersonalMeaning', result,digestOf(input));
     if (persist) await this.persist();
     return { ...result, replayed: false };
   }
@@ -1052,26 +1320,29 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
 
   private async writeMaterialBlock(input: AddMaterialBlockInput): Promise<AddMaterialBlockResult> {
 
-    const replay = this.replay<AddMaterialBlockResult>(input.operationId, 'AddMaterialBlock');
+    const replay = await this.replay<AddMaterialBlockResult>(input.operationId, 'AddMaterialBlock',digestOf(input));
     if (replay) return replay;
     const record = this.requireRecord(input.personalMeaningId);
-    const languages = await this.deps.languages.read();
     const { anchorId } = this.appendMaterialAnchor(
       record,
       input.operationId,
       input.block,
-      languages.supportLanguageTag,
     );
     this.appendMeaningRevision(record, input.operationId, [anchorId]);
     const result = { anchorId };
-    this.recordReceipt(input.operationId, 'AddMaterialBlock', result);
+    this.recordReceipt(input.operationId, 'AddMaterialBlock', result,digestOf(input));
     await this.persist();
     return { ...result, replayed: false };
   }
 
   async reviseContext(input: ReviseContextInput): Promise<ReviseContextResult> {
+    if(!this.loadStarted&&this.deps.repository.withMeaningCommand){
+      return this.isolatedCommand(input.operationId,'ReviseContext',digestOf(input),()=>
+        this.deps.repository.withMeaningCommand!({personalMeaningId:input.personalMeaningId,operationId:input.operationId,identityCount:input.blocks.length*2+1,reservedIds:input.blocks.flatMap(block=>block.personalMediaObjectId?[block.personalMediaObjectId]:[])},this.deps.ids,
+          (repository,ids)=>new JourneyGatewayImpl({...this.deps,repository,ids}).reviseContext(input)));
+    }
     return this.exclusive(() => this.withStateTransaction(async () => {
-      const replay = this.replay<ReviseContextResult>(input.operationId, 'ReviseContext');
+      const replay = await this.replay<ReviseContextResult>(input.operationId, 'ReviseContext',digestOf(input));
       if (replay) return replay;
       const record = this.requireRecord(input.personalMeaningId);
       if (record.personalMeaning.currentRevision !== input.expectedRevision) {
@@ -1092,7 +1363,6 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
         }
       }
 
-      const languages = await this.deps.languages.read();
       const now = this.now();
       record.personalSemanticAnchors
         .filter((anchor) => anchor.status === 'active')
@@ -1107,7 +1377,6 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
         record,
         input.operationId,
         block,
-        languages.supportLanguageTag,
       ).anchorId);
       const personalMeaningRevisionId = this.appendMeaningRevision(
         record,
@@ -1118,7 +1387,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
         personalMeaningRevisionId,
         revision: record.personalMeaning.currentRevision,
       };
-      this.recordReceipt(input.operationId, 'ReviseContext', result);
+      this.recordReceipt(input.operationId, 'ReviseContext', result,digestOf(input));
       await this.persist();
       return { ...result, replayed: false };
     }));
@@ -1129,7 +1398,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
   async confirmClarification(
     input: ConfirmClarificationInput,
   ): Promise<ConfirmClarificationResult> {
-    return this.exclusive(() => this.writeClarification(input));
+    return this.exclusive(() => this.writeClarification(input),true);
   }
 
   private async writeClarification(
@@ -1138,11 +1407,13 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
   ): Promise<ConfirmClarificationResult> {
     const { persist = true, receipt = true } = options;
     if (receipt) {
-      const replay = this.replay<ConfirmClarificationResult>(
+      const replay = await this.replay<ConfirmClarificationResult>(
         input.operationId,
         'ConfirmClarification',
+        digestOf(input),
       );
       if (replay) return replay;
+      await this.requireClarificationSource(input.source,'personal_meaning',input.personalMeaningId);
     }
     const state = this.requireState();
     const record = this.requireRecord(input.personalMeaningId);
@@ -1162,6 +1433,18 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
       throw new Error('稳定意思至少需要一个原型场景。');
     }
     if (!input.semanticPolicyVersion.trim()) throw new Error('缺少语义策略版本。');
+    const semanticSpec = this.buildSemanticSpec(input.sense);
+    const reused = input.sense.reuseSense
+      ? this.confirmedMeaningLookup().resolve(input.sense.reuseSense) : null;
+    if (input.sense.reuseSense && (!reused || reused.senseKey !== senseKey
+      || digestOf(reused.semanticSpec) !== digestOf(semanticSpec))) {
+      throw new Error('要复用的已确认意思已变化，或与当前审阅的语义不一致。请重新澄清。');
+    }
+    if(reused)this.transaction!.preconditions.push(...this.confirmedMeaningLookup().confirmationConditions(input.sense.reuseSense!));
+    const existingSense = state.registry.senses.find((sense) => sense.senseKey === senseKey);
+    if (!reused && existingSense) {
+      throw new Error('这个语义 key 已存在；复用必须明确选择已确认的 Sense Version，不能只按 key 自动匹配。请重新澄清。');
+    }
     const provenance = input.provenance;
     if (!provenance.provider.trim() || !provenance.model.trim() || !provenance.promptVersion.trim()) {
       throw new Error('缺少模型来源信息。');
@@ -1293,7 +1576,6 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
       inputDigest: digestOf({ focus: focusInput, transcript: input.transcript }),
       outputDigest: digestOf(input.sense),
     };
-    const semanticSpec = this.buildSemanticSpec(input.sense);
     const candidatesList = (input.expressionCandidates && input.expressionCandidates.length > 0)
       ? input.expressionCandidates
       : expressionInput ? [expressionInput] : [];
@@ -1347,13 +1629,12 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
 
     // 4) Sense resolution: reuse an existing Sense with the same key, or
     //    register a new learner-confirmed one.
-    const existingSense = state.registry.senses.find((sense) => sense.senseKey === senseKey);
     let senseId: string;
     let senseVersionId: string;
     let resolution: 'create_new' | 'reuse_existing';
-    if (existingSense) {
-      senseId = existingSense.senseId;
-      senseVersionId = existingSense.currentSenseVersionId;
+    if (reused) {
+      senseId = reused.senseId;
+      senseVersionId = reused.senseVersionId;
       resolution = 'reuse_existing';
     } else {
       senseId = this.id();
@@ -1479,7 +1760,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
       resolution,
       expressionConfirmed,
     };
-    if (receipt) this.recordReceipt(input.operationId, 'ConfirmClarification', result);
+    if (receipt) this.recordReceipt(input.operationId, 'ConfirmClarification', result,digestOf(input));
     if (persist) await this.persist();
     return { ...result, replayed: false };
   }
@@ -1487,12 +1768,18 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
   async completeClarificationDraft(
     input: CompleteClarificationDraftInput,
   ): Promise<CompleteClarificationDraftResult> {
+    if(!this.loadStarted&&this.deps.repository.withClarificationCommand){
+      return this.isolatedCommand(input.operationId,'CompleteClarificationDraft',digestOf(input),()=>
+        this.deps.repository.withClarificationCommand!(input,this.deps.ids,(repository,ids)=>new JourneyGatewayImpl({...this.deps,repository,ids}).completeClarificationDraft(input)));
+    }
     return this.exclusive(async () => {
-      const replay = this.replay<CompleteClarificationDraftResult>(
+      const replay = await this.replay<CompleteClarificationDraftResult>(
         input.operationId,
         'CompleteClarificationDraft',
+        digestOf(input),
       );
       if (replay) return replay;
+      await this.requireClarificationSource(input.source,'intake',input.intakeId);
       if (!input.expression || !input.confirmExpression) {
         throw new Error('进入我的语义世界前，需要同时确认 Context、Sense 与 Expression。');
       }
@@ -1527,6 +1814,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
           languageContext: input.languageContext,
           intake: item.payload,
           completedContext: context,
+          contextWordingSource:input.contextWordingSource,
         });
         const confirmed = await this.writeClarification({
           ...input,
@@ -1542,11 +1830,11 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
           ...confirmed,
           personalMeaningId: created.personalMeaningId,
         };
-        this.recordReceipt(input.operationId, 'CompleteClarificationDraft', result);
+        this.recordReceipt(input.operationId, 'CompleteClarificationDraft', result,digestOf(input));
         await this.persist();
         return result;
       });
-    });
+    },true);
   }
 
   // -- expression binding ---------------------------------------------------
@@ -1920,17 +2208,19 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
   async confirmExpressionBinding(
     input: ConfirmExpressionBindingInput,
   ): Promise<ConfirmExpressionBindingResult> {
-    return this.exclusive(()=>this.writeExpressionBinding(input));
+    return this.exclusive(()=>this.writeExpressionBinding(input),true);
   }
 
   private async writeExpressionBinding(
     input: ConfirmExpressionBindingInput,
   ): Promise<ConfirmExpressionBindingResult> {
-    const replay = this.replay<ConfirmExpressionBindingResult>(
+    const replay = await this.replay<ConfirmExpressionBindingResult>(
       input.operationId,
       'ConfirmExpressionBinding',
+      digestOf(input),
     );
     if (replay) return replay;
+    await this.requireClarificationSource(input.source,'personal_meaning',input.personalMeaningId);
     const record = this.requireRecord(input.personalMeaningId);
     const alignment = record.alignments.find(
       (candidate) =>
@@ -1983,7 +2273,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
       },
       senseConfirmation?.senseProposalVersionId ?? null,
     );
-    this.recordReceipt(input.operationId, 'ConfirmExpressionBinding', result);
+    this.recordReceipt(input.operationId, 'ConfirmExpressionBinding', result,digestOf(input));
     await this.persist();
     return { ...result, replayed: false };
   }
@@ -2179,7 +2469,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
   ): Promise<PublishedLearningSceneAcceptanceResult> {
     return this.exclusive(async () => {
       const requestDigest = digestOf(input);
-      const replay = this.replay<PublishedLearningSceneAcceptanceResult>(
+      const replay = await this.replay<PublishedLearningSceneAcceptanceResult>(
         input.operationId,
         'AcceptPublishedLearningScene',
         requestDigest,
@@ -2380,7 +2670,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
       throw new Error('ingest 的 operationId 必须与载荷的 operationId 一致。');
     }
     const requestDigest = digestOf(parsed);
-    const replay = this.replay<SemanticIntakeResult>(operationId, 'Ingest', requestDigest);
+    const replay = await this.replay<SemanticIntakeResult>(operationId, 'Ingest', requestDigest);
     if (replay) return replay;
     const state = this.requireState();
     const decision = evaluateIntakeRoute(parsed);
@@ -2434,7 +2724,8 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
     resolution: ResolveSemanticIntakeCommand['sense'],
   ): Promise<SemanticIntakeResult> {
 
-    const replay = this.replay<SemanticIntakeResult>(operationId, 'ResolveInboxItem');
+    const requestDigest=digestOf({operationId,intakeId,resolution});
+    const replay = await this.replay<SemanticIntakeResult>(operationId, 'ResolveInboxItem',requestDigest);
     if (replay) return replay;
     const state = this.requireState();
     // Boundary validation for the learner-confirmed sense before any write.
@@ -2462,7 +2753,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
       route: 'fast_track',
       personalMeaningId: outcome.personalMeaningId,
     };
-    this.recordReceipt(operationId, 'ResolveInboxItem', result);
+    this.recordReceipt(operationId, 'ResolveInboxItem', result,requestDigest);
     await this.persist();
     return { ...result, replayed: false };
   }
@@ -2475,7 +2766,8 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
   }
 
   private async writeInboxDismissal(operationId: string, intakeId: string): Promise<void> {
-    const found = this.receipt(operationId, 'DismissInboxItem');
+    const requestDigest=digestOf({operationId,intakeId});
+    const found = await this.receipt(operationId, 'DismissInboxItem',requestDigest);
     if (found) return;
     const state = this.requireState();
     // Pure removal; throws when the item is unknown, before any write.
@@ -2483,7 +2775,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
     this.requireState().clarificationDrafts = this.requireState().clarificationDrafts.filter(
       (candidate) => candidate.intakeId !== intakeId,
     );
-    this.recordReceipt(operationId, 'DismissInboxItem', { intakeId });
+    this.recordReceipt(operationId, 'DismissInboxItem', { intakeId },requestDigest);
     await this.persist();
   }
 }

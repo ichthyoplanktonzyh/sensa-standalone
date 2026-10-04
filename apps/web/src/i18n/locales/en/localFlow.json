@@ -1,5 +1,6 @@
 {
   "localFlow": {
+    "clarificationSourceChanged": "Continue the conversation to recheck the current material before confirming.",
     "packageAuthor": "Author",
     "packageFilesUnavailable": "Package files unavailable on this device: {{count}}. Import the originals or download them again from the catalog.",
     "packageLicense": "License",

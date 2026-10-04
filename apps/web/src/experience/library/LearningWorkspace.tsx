@@ -13,7 +13,7 @@ import {createPracticeScopeSnapshot,type PracticeScopeSnapshot} from '../practic
 import {contentSenseForId,type ContentSectionId} from '../../learnerSemanticProjection/system';
 import type {PracticeSenseItem} from '../practiceData';
 import {JourneyAlignmentLearningControls,PersonalPreparationTarget,pendingPersonalTargetView} from './PersonalLearningControls';
-import {LearningSetupFrame} from '../components/learning/LearningSetupFrame';
+import {LearningSetupFrame,setupButton} from '../components/learning/LearningSetupFrame';
 import {LearningPreferencesPanel} from '../components/learning/LearningPreferencesPanel';
 import {PackageTarget} from './PackageLearningViews';
 import {
@@ -28,6 +28,7 @@ import {screenInstanceKey} from '../router/shellLocation';
 import type {LearningShellScreenId} from '../router/screenRegistry';
 
 const AcademyScreen=lazy(()=>import('../components/AcademyScreen').then(module=>({default:module.AcademyScreen})));
+const PersonalMeaningDetailScreen=lazy(()=>import('../components/PersonalMeaningDetailScreen').then(module=>({default:module.PersonalMeaningDetailScreen})));
 const PracticeScopeScreen=lazy(()=>import('../components/PracticeScopeScreen').then(module=>({default:module.PracticeScopeScreen})));
 const YouGlishListeningScreen=lazy(()=>import('../components/YouGlishListeningScreen').then(module=>({default:module.YouGlishListeningScreen})));
 const ContentScreen=lazy(()=>import('../components/ContentScreen').then(module=>({default:module.ContentScreen})));
@@ -46,11 +47,12 @@ type LearningWorkspaceScreenId=LearningShellScreenId|'s-lightweight-runtime';
 export function LearningWorkspace({active=true}:{active?:boolean}){
  const {t}=useTranslation();
  const {viewMode,mainStack,params,setViewMode,goMain,backMain,resetMain,returnHome,setMainStack}=useShellNavigation();
+ const currentScreen=viewMode==='lightweight'?'s-lightweight-runtime':mainStack.at(-1)??'s-study';
  const packageCenterOpen=viewMode==='main'&&mainStack.some(screen=>[
   's-learning-entry','s-catalog','s-catalog-book','s-library','s-library-package','s-publisher',
  ].includes(screen));
  const packageLearning=usePackageLearning(packageCenterOpen);
- const personalLearning=usePersonalLearning();
+ const personalLearning=usePersonalLearning(currentScreen==='s-learning-library'?{kind:'library'}:currentScreen==='s-learning-target'&&params.targetId?{kind:'target',targetId:params.targetId}:null);
  const activeRoute={id:packageLearning.languageContext.languageRouteId,targetLanguageTag:packageLearning.languageContext.targetLanguageTag};
  const toast=useOverlayStore(state=>state.toast);
  const pendingPersonal=personalLearning.tasks.filter(task=>!packageLearning.targets.some(target=>target.targetId===task.targetId&&target.curriculumMembershipId===task.curriculumMembershipId));
@@ -59,12 +61,21 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
  const localSelectedTarget=packageLearning.activeTargets.find(target=>target.targetId===params.targetId);
  const openLocalTarget=(id:string)=>goMain('s-learning-target',{targetId:id});
  const practiceStudyTargets=useMemo(()=>packageLearning.activeTargets.map(target=>({target})),[packageLearning.activeTargets]);
- const {catalog:practiceScopeCatalog,selectScope}=usePracticeScope({studyTargets:practiceStudyTargets,activeLanguageTag:activeRoute.targetLanguageTag});
+ const practiceOpen=active&&['s-academy','s-practice-scope','s-real-world-listening'].includes(currentScreen);
+ const {catalog:practiceScopeCatalog,selectScope,availability:personalScopeAvailability,reload:reloadPracticeScope}=usePracticeScope({studyTargets:practiceStudyTargets,activeLanguageTag:activeRoute.targetLanguageTag,enabled:practiceOpen});
+ const practiceScopeAvailability=personalScopeAvailability==='unavailable'||packageLearning.loadStatus==='unavailable'?'unavailable'
+  :personalScopeAvailability==='loading'||packageLearning.loadStatus==='loading'?'loading':'ready';
+ const practiceScopeReady=practiceScopeAvailability==='ready';
+ const retryPracticeScope=()=>{
+  reloadPracticeScope();
+  if(packageLearning.loadStatus==='unavailable')void packageLearning.retryInitialLoad();
+ };
  const [activePracticeScope,setActivePracticeScope]=useState<PracticeScopeSnapshot|null>(null);
  const openRealWorldListening=useCallback(()=>{
+  if(!practiceScopeReady)return;
   setActivePracticeScope(createPracticeScopeSnapshot(practiceScopeCatalog.currentScope,crypto.randomUUID(),new Date().toISOString()));
   goMain('s-real-world-listening');
- },[goMain,practiceScopeCatalog.currentScope]);
+ },[goMain,practiceScopeCatalog.currentScope,practiceScopeReady]);
  const openContentSection=useCallback((section:ContentSectionId)=>goMain('s-content-library',{section}),[goMain]);
  const openContentSense=useCallback((item:PracticeSenseItem)=>goMain('s-content-sense',{senseId:item.senseId}),[goMain]);
  const openSemanticWorldSense=useCallback((senseId:string)=>{const item=contentSenseForId(senseId);if(item)openContentSense(item);},[openContentSense]);
@@ -91,9 +102,8 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
   if(await packageLearning.start(targetId,dailyNewCount))setViewMode('lightweight');
  };
  const personalMeaningId=params.meaningId??null,meaningFocusId=params.focusId??null;
- const currentScreen=viewMode==='lightweight'?'s-lightweight-runtime':mainStack.at(-1)??'s-study';
  const renderContentScreen=(screenId:'s-content'|'s-semantic-world',screenActive:boolean)=><ContentScreen
-    bulkLearning={(items,list)=><BatchPersonalLearning items={items} c={personalLearning}>{list}</BatchPersonalLearning>}
+    bulkLearning={(items,list,query)=><BatchPersonalLearning items={items} query={query} c={personalLearning}>{list}</BatchPersonalLearning>}
     active={screenActive} screenId={screenId}
     initialAction={params.worldAction==='create'||params.worldAction==='inbox'?params.worldAction:undefined}
     onStartConversation={startSensaConversation}
@@ -113,10 +123,13 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
   return <LearningSetupFrame id="s-learning-target" active={screenActive} title={localFlowText('learningTarget')} onBack={backMain}><p role="status">{packageLearning.loaded?localFlowText('targetMissing'):localFlowText('targetLoading')}</p></LearningSetupFrame>;
  };
  const learningScreenRenderers:Record<LearningWorkspaceScreenId,(active:boolean)=>ReactNode>={
-  's-academy':screenActive=><AcademyScreen active={screenActive} onBack={backMain} onOpenPracticeScope={()=>goMain('s-practice-scope')} onOpenRealWorldListening={openRealWorldListening} practiceScope={practiceScopeCatalog.currentScope}/>,
-  's-practice-scope':screenActive=><PracticeScopeScreen active={screenActive} catalog={practiceScopeCatalog} onBack={backMain} onSelectScope={selectScope}/>,
+  's-academy':screenActive=><AcademyScreen active={screenActive} onBack={backMain} onOpenPracticeScope={()=>goMain('s-practice-scope')} onOpenRealWorldListening={openRealWorldListening} practiceScope={practiceScopeCatalog.currentScope} scopeAvailability={practiceScopeAvailability} onRetryScope={retryPracticeScope}/>,
+  's-practice-scope':screenActive=><PracticeScopeScreen active={screenActive} catalog={practiceScopeCatalog} onBack={backMain} onSelectScope={selectScope} scopeAvailability={practiceScopeAvailability} onRetryScope={retryPracticeScope}/>,
   's-content':screenActive=>renderContentScreen('s-content',screenActive),
   's-semantic-world':screenActive=>renderContentScreen('s-semantic-world',screenActive),
+  's-personal-meaning':screenActive=><PersonalMeaningDetailScreen key={personalMeaningId} active={screenActive} personalMeaningId={personalMeaningId}
+    onConversationCreated={openPersonalMeaning} onBack={backMain} onOpenConfirmedSense={openConfirmedSense} toast={toast}
+    alignmentLearningControls={(detail,alignment)=><JourneyAlignmentLearningControls detail={detail} alignment={alignment} c={personalLearning} onStart={id=>void startLocalLearning(id)}/>}/>,
   's-confirmed-sense':screenActive=><ConfirmedSenseDetailScreen active={screenActive} personalMeaningId={personalMeaningId} meaningFocusId={meaningFocusId} onBack={backMain} onOpenBinding={()=>goMain('s-expression-binding')} learningControls={(detail,alignment)=><JourneyAlignmentLearningControls detail={detail} alignment={alignment} c={personalLearning} onStart={id=>void startLocalLearning(id)}/>}/>,
   's-real-world-listening':screenActive=><YouGlishListeningScreen active={screenActive} targets={(activePracticeScope??practiceScopeCatalog.currentScope).targets} onBack={backMain} toast={toast}/>,
   's-study':screenActive=><StudyScreen
@@ -130,7 +143,8 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
     dailyNewCount={dailyNewCount} learningRecords={packageLearning.records}
     onOpenStats={()=>goMain('s-stats')} onDailyNewCountChange={updateLocalQuantity}/>,
   's-learning-library':screenActive=><LearningTargetLibraryScreen active={screenActive}
-    targets={Object.fromEntries([...packageLearning.activeTargets.map(target=>[target.targetId,target.presentation]),...activePendingPersonal.map(task=>[task.targetId,pendingPersonalTargetView(task,personalLearning.sourceForTask(task))])])}
+    notice={personalLearning.taskSourcesUnavailable?<div role="alert"><p>{localFlowText('preparationReadFailed')}</p><button className={setupButton} onClick={personalLearning.retryTaskSources}>{localFlowText('retryPreparation')}</button></div>:personalLearning.taskSourcesLoading?<p role="status" aria-busy="true">{localFlowText('loadingSensa')}</p>:null}
+    targets={Object.fromEntries([...packageLearning.activeTargets.map(target=>[target.targetId,target.presentation]),...activePendingPersonal.map(task=>[task.targetId,pendingPersonalTargetView(task,personalLearning.sourceForTask(task),personalLearning.taskSourcesLoading)])])}
     targetIds={[...packageLearning.activeTargets.map(target=>target.targetId),...activePendingPersonal.map(task=>task.targetId)]}
     policyByTarget={Object.fromEntries([...packageLearning.activeTargets.map(target=>[target.targetId,target.policy]),...activePendingPersonal.map(task=>[task.targetId,'lightweight' as const])])}
     preparationByTarget={Object.fromEntries([...packageLearning.activeTargets.map(target=>[target.targetId,target.preparation]),...activePendingPersonal.map(task=>[task.targetId,task.status==='failed'||task.status==='rejected'?'blocked' as const:'preparing' as const])])}

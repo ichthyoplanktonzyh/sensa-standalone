@@ -3,6 +3,10 @@
 import type {HomeLearningStorageProjection} from './homeLearningRecords';
 import type {PackageCacheProjectionQuery} from './packageCacheProjection';
 import {sqlitePackageCacheProjectionSchema} from './packageCacheProjection';
+import {sqliteRegistrySelectionSchema} from './semanticRegistrySchema';
+import type {RegistrySelectionQuery,RegistrySelection} from './semanticRegistrySelection';
+import type {MeaningLookupResult} from '../../experience/personalMeaningJourney/meaningLookup';
+import type {WorldBrowseQuery,WorldBrowsePage,WorldLearningChoiceQuery,WorldLearningChoicePage} from '../../experience/personalMeaningJourney/worldRead';
 import type {
   PortableMediaBlob,
   PortableMediaStorageDiagnostics,
@@ -15,7 +19,7 @@ export const sqlitePoolDirectory = "/sensa-local-library-v12";
 export const sqliteLibraryBaselineVersion = 10;
 export const sqliteLibrarySchemaVersion = 13;
 /** Cross-tab RPC changes must bump this before adding or changing messages. */
-export const sqliteCoordinatorProtocolVersion = 11;
+export const sqliteCoordinatorProtocolVersion = 21;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -79,9 +83,16 @@ export type SqliteWorkerRequest =
   | { id: number; kind: "close" }
   | { id: number; kind: "get"; table: SqliteLibraryTable; key: string }
   | { id: number; kind: "entries"; table: SqliteLibraryTable }
+  | {id:number;kind:'entriesPage';table:SqliteLibraryTable;afterKey:string|null;limit:number}
   | {id:number;kind:'existingRecordKeys';table:SqliteLibraryTable;keys:string[]}
   | { id:number;kind:'packageCacheProjection';query:PackageCacheProjectionQuery }
+  | {id:number;kind:'meaningLookup';query:string}
+  | {id:number;kind:'worldBrowse';query:WorldBrowseQuery}
+  | {id:number;kind:'registrySelection';query:RegistrySelectionQuery}
+  | {id:number;kind:'worldLearningChoices';query:WorldLearningChoiceQuery}
+  | {id:number;kind:'existingJourneyIdentities';ids:string[]}
   | { id: number; kind: "changesSince"; contentRevision: number; tables: SqliteLibraryTable[] }
+  | { id:number;kind:'hasChangesSince';contentRevision:number;tables:SqliteLibraryTable[] }
   | { id: number; kind: "syncBaseEntries"; keys?: Array<{ table: SqliteLibraryTable; key: string }> }
   | { id: number; kind: "count"; table: SqliteLibraryTable }
   | { id: number; kind: "estimateRecordBytes"; tables: SqliteLibraryTable[] }
@@ -108,10 +119,15 @@ export type SqliteWorkerResult =
   | { id: number; ok: false; error: string };
 
 export type {HomeLearningStorageProjection};
+export type {MeaningLookupResult};
+export type {WorldBrowseQuery,WorldBrowsePage,WorldLearningChoiceQuery,WorldLearningChoicePage};
 
 export type SqliteStorageDiagnostics = {
   integrityCheck?:Readonly<{status:'ok';checkedAt:string;durationMs:number}>;
+  journeyIdentityCheck?:Readonly<{status:'ok'|'rebuilt';checkedAt:string;durationMs:number;recordsChecked:number}>;
   initializationTimingsMs?:Readonly<Record<string,number>>;
+  workerStartupTimingsMs?:Readonly<Record<string,number>>;
+  walMaintenance?:Readonly<{status:'ok'|'deferred'|'failed';checkedAt:string;durationMs:number;reason?:string}>;
   engine: "sqlite-wasm" | "memory-adapter";
   persistence: "opfs" | "memory";
   sqliteVersion: string;
@@ -163,6 +179,7 @@ CREATE TABLE IF NOT EXISTS sensa_records(
 CREATE INDEX IF NOT EXISTS sensa_records_content_revision
   ON sensa_records(content_revision,table_name,record_key);
 ${sqlitePackageCacheProjectionSchema}
+${sqliteRegistrySelectionSchema}
 CREATE TABLE IF NOT EXISTS sensa_record_tombstones(
   table_name TEXT NOT NULL CHECK(table_name IN (${quotedTables})),
   record_key TEXT NOT NULL CHECK(length(record_key) BETWEEN 1 AND 2000),
@@ -243,3 +260,4 @@ PRAGMA user_version=${sqliteLibrarySchemaVersion};
 `;
 
 export type {PortableMediaBlob,PortableMediaStorageDiagnostics};
+export type {RegistrySelectionQuery,RegistrySelection};

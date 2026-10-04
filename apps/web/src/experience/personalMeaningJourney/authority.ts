@@ -27,6 +27,7 @@ import {
   sensaSenseVersionSnapshotSchema,
 } from '@sensa/contracts/sensa';
 import type {z} from 'zod';
+import {runCooperatively,runSynchronously} from './cooperative';
 
 import {
   JOURNEY_STORE_VERSION,
@@ -94,7 +95,7 @@ function indexRegistry(registry:SenseRegistryState):RegistryIndex{return {
  bindingVersions:indexed(registry.bindingVersions,fact=>fact.bindingVersionId),
 };}
 
-function validateRegistry(registry:SenseRegistryState):RegistryIndex{
+function* validateRegistrySteps(registry:SenseRegistryState):Generator<void,RegistryIndex>{
  const specs=[
   ['senses',sensaSenseSnapshotSchema,'senseId'],
   ['senseVersions',sensaSenseVersionSnapshotSchema,'senseVersionId'],
@@ -103,7 +104,7 @@ function validateRegistry(registry:SenseRegistryState):RegistryIndex{
   ['bindings',sensaSenseExpressionBindingSnapshotSchema,'senseExpressionBindingId'],
   ['bindingVersions',sensaSenseExpressionBindingVersionSnapshotSchema,'bindingVersionId'],
  ] as const;
- for(const [field,schema,id] of specs){for(const fact of registry[field])parse(schema,fact,`Semantic Registry ${field}`);unique(registry[field] as Fact[],fact=>fact[id],`Semantic Registry ${field}`);}
+ for(const [field,schema,id] of specs){for(const fact of registry[field]){parse(schema,fact,`Semantic Registry ${field}`);yield;}unique(registry[field] as Fact[],fact=>fact[id],`Semantic Registry ${field}`);yield;}
  unique(registry.senseVersions,fact=>fact.senseVersionId,'Sense Version',fact=>`${fact.senseId}:${fact.versionNumber}`);
  unique(registry.expressionVersions,fact=>fact.expressionVersionId,'Expression Version',fact=>`${fact.expressionId}:${fact.versionNumber}`);
  unique(registry.bindingVersions,fact=>fact.bindingVersionId,'Binding Version',fact=>`${fact.senseExpressionBindingId}:${fact.versionNumber}`);
@@ -112,26 +113,31 @@ function validateRegistry(registry:SenseRegistryState):RegistryIndex{
  for(const sense of registry.senses){
   const version=requireFact(result.senseVersions,sense.currentSenseVersionId,'Sense head');
   requireInvariant(version.senseId===sense.senseId&&version.versionNumber===sense.currentVersionNumber,'Sense head 指针无效。');
+  yield;
  }
  for(const version of registry.senseVersions)requireFact(result.senses,version.senseId,'Sense Version');
  for(const expression of registry.expressions){
   const version=requireFact(result.expressionVersions,expression.currentExpressionVersionId,'Expression head');
   requireInvariant(version.expressionId===expression.expressionId&&version.versionNumber===expression.currentVersionNumber,'Expression head 指针无效。');
+  yield;
  }
  for(const version of registry.expressionVersions)requireFact(result.expressions,version.expressionId,'Expression Version');
  for(const binding of registry.bindings){
   requireFact(result.senses,binding.senseId,'Binding');requireFact(result.expressions,binding.expressionId,'Binding');
   const version=requireFact(result.bindingVersions,binding.currentBindingVersionId,'Binding head');
   requireInvariant(version.senseExpressionBindingId===binding.senseExpressionBindingId&&version.versionNumber===binding.currentVersionNumber,'Binding head 指针无效。');
+  yield;
  }
  for(const version of registry.bindingVersions){
   const binding=requireFact(result.bindings,version.senseExpressionBindingId,'Binding Version');
   const senseVersion=requireFact(result.senseVersions,version.senseVersionId,'Binding Version');
   const expressionVersion=requireFact(result.expressionVersions,version.expressionVersionId,'Binding Version');
   requireInvariant(senseVersion.senseId===binding.senseId&&expressionVersion.expressionId===binding.expressionId,'Binding Version 跨越了错误的 Sense 或 Expression。');
+  yield;
  }
  return result;
 }
+const validateRegistry=(registry:SenseRegistryState):RegistryIndex=>runSynchronously(validateRegistrySteps(registry));
 
 const meaningSchemas={
  personalMeaningRevisions:sensaPersonalMeaningRevisionSnapshotSchema,
@@ -216,7 +222,19 @@ function validateMeaning(meaning:MeaningJourneyRecord,registry:RegistryIndex){
  }
  for(const revision of meaning.personalExpressionAnchorRevisions){
   requireFact(expressionAnchors,revision.personalExpressionAnchorId,'Expression Anchor revision');
-  if(revision.contextAnchorRevisionId)requireFact(semanticAnchorRevisions,revision.contextAnchorRevisionId,'Expression Anchor revision');
+  if(revision.contextAnchorRevisionId){
+   const context=requireFact(semanticAnchorRevisions,revision.contextAnchorRevisionId,'Expression Anchor revision');
+   const locator=revision.occurrence;
+   if(locator?.kind==='text_span'){
+    requireInvariant(typeof context.bodyText==='string'&&locator.end<=context.bodyText.length,'Expression occurrence 越出了原始 Context。');
+    const intake=context.structuredPayload.intake as {expression?:{occurrence?:{surfaceForm?:unknown}}}|undefined;
+    const expected=intake?.expression?.occurrence?.surfaceForm??context.structuredPayload.occurrenceSurfaceForm;
+    if(typeof expected==='string')requireInvariant(context.bodyText!.slice(locator.start,locator.end)===expected,'Expression occurrence 与原始 Context 不一致。');
+   }
+   if(locator?.kind==='media_region')requireInvariant(context.personalMediaObjectId===locator.mediaReferenceId
+    ||(Array.isArray(context.structuredPayload.mediaReferenceIds)&&context.structuredPayload.mediaReferenceIds.includes(locator.mediaReferenceId)),
+    'Expression occurrence 引用了错误的媒体 Context。');
+  }
  }
  for(const focus of meaning.focuses){
   requireInvariant(focus.personalMeaningId===meaningId,'Meaning Focus 属于错误的 Meaning。');
@@ -248,6 +266,7 @@ function validateMeaning(meaning:MeaningJourneyRecord,registry:RegistryIndex){
   for(const candidate of version.expressionCandidates)if(candidate.personalExpressionAnchorRevisionId)requireFact(expressionAnchorRevisions,candidate.personalExpressionAnchorRevisionId,'Sense Proposal expression candidate');
  }
  for(const confirmation of meaning.senseConfirmations){
+  requireInvariant(confirmation.learnerUserId===meaning.personalMeaning.learnerUserId,'Sense confirmation 属于错误的 learner。');
   requireFact(proposalVersions,confirmation.senseProposalVersionId,'Sense confirmation');
   if(confirmation.meaningFocusRevisionId)requireFact(focusRevisions,confirmation.meaningFocusRevisionId,'Sense confirmation');
   const sense=requireFact(registry.senses,confirmation.senseId,'Sense confirmation');
@@ -255,6 +274,7 @@ function validateMeaning(meaning:MeaningJourneyRecord,registry:RegistryIndex){
   requireInvariant(version.senseId===sense.senseId,'Sense confirmation 引用了错误的 Sense Version。');
  }
  for(const acceptance of meaning.semanticAcceptances){
+  requireInvariant(acceptance.learnerUserId===meaning.personalMeaning.learnerUserId,'Semantic Acceptance 属于错误的 learner。');
   requireFact(semanticAnchorRevisions,acceptance.personalSemanticAnchorRevisionId,'Semantic Acceptance');
   requireFact(expressionAnchorRevisions,acceptance.personalExpressionAnchorRevisionId,'Semantic Acceptance');
   const sense=requireFact(registry.senses,acceptance.senseId,'Semantic Acceptance');
@@ -263,19 +283,25 @@ function validateMeaning(meaning:MeaningJourneyRecord,registry:RegistryIndex){
  }
  for(const alignment of meaning.alignments){
   requireInvariant(alignment.personalMeaningId===meaningId,'Alignment 属于错误的 Meaning。');
+  requireInvariant(alignment.learnerUserId===meaning.personalMeaning.learnerUserId,'Alignment 属于错误的 learner。');
   requireFact(meaningRevisions,alignment.personalMeaningRevisionId,'Alignment');
   const sense=requireFact(registry.senses,alignment.senseId,'Alignment');
   const version=requireFact(registry.senseVersions,alignment.senseVersionId,'Alignment');
   requireInvariant(version.senseId===sense.senseId,'Alignment 引用了错误的 Sense Version。');
-  if(alignment.basis.kind==='contextual_resolution')requireFact(semanticAcceptances,alignment.basis.semanticAcceptanceId,'Alignment basis');
+  if(alignment.basis.kind==='contextual_resolution'){
+   const acceptance=requireFact(semanticAcceptances,alignment.basis.semanticAcceptanceId,'Alignment basis');
+   requireInvariant(acceptance.senseId===alignment.senseId&&acceptance.senseVersionId===alignment.senseVersionId,'Alignment 与 Semantic Acceptance 的 Sense Version 不一致。');
+  }
   else{
-   requireFact(senseConfirmations,alignment.basis.senseProposalConfirmationId,'Alignment basis');
+   const confirmation=requireFact(senseConfirmations,alignment.basis.senseProposalConfirmationId,'Alignment basis');
+   requireInvariant(confirmation.senseId===alignment.senseId&&confirmation.senseVersionId===alignment.senseVersionId,'Alignment 与 Sense confirmation 的 Sense Version 不一致。');
    if(alignment.basis.meaningFocusId){const focus=requireFact(focuses,alignment.basis.meaningFocusId,'Alignment basis');const focusRevision=requireFact(focusRevisions,alignment.basis.meaningFocusRevisionId!,'Alignment basis');requireInvariant(focusRevision.meaningFocusId===focus.meaningFocusId,'Alignment basis 引用了错误的 Focus revision。');}
   }
   requireInvariant(meaning.alignmentEvents.some(event=>event.personalMeaningAlignmentId===alignment.personalMeaningAlignmentId&&event.ordinal===alignment.revision),'Alignment revision 没有对应事件。');
  }
  for(const event of meaning.alignmentEvents)requireFact(alignments,event.personalMeaningAlignmentId,'Alignment event');
  for(const confirmation of meaning.bindingConfirmations){
+  requireInvariant(confirmation.learnerUserId===meaning.personalMeaning.learnerUserId,'Binding confirmation 属于错误的 learner。');
   if(confirmation.senseProposalVersionId)requireFact(proposalVersions,confirmation.senseProposalVersionId,'Binding confirmation');
   requireFact(expressionAnchorRevisions,confirmation.personalExpressionAnchorRevisionId,'Binding confirmation');
   const senseVersion=requireFact(registry.senseVersions,confirmation.senseVersionId,'Binding confirmation');
@@ -317,6 +343,15 @@ export function assertPersonalSemanticWorldState(state:JourneyState):void{
  const registry=validateRegistry(state.registry);
  unique(state.meanings,meaning=>meaning.personalMeaning.personalMeaningId,'Personal Meaning');
  for(const meaning of state.meanings)validateMeaning(meaning,registry);
+ validateAuxiliaryState(state);
+}
+
+/** Same authority checks, cooperatively scheduled during a large browser read. */
+export async function assertPersonalSemanticWorldStateCooperatively(state:JourneyState):Promise<void>{
+ requireStateShape(state);
+ const registry=await runCooperatively(validateRegistrySteps(state.registry));
+ unique(state.meanings,meaning=>meaning.personalMeaning.personalMeaningId,'Personal Meaning');
+ await runCooperatively((function*(){for(const meaning of state.meanings){validateMeaning(meaning,registry);yield;}})());
  validateAuxiliaryState(state);
 }
 

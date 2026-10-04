@@ -2,7 +2,7 @@ import {test} from 'vitest';
 /** In-process Web model route checks. Synthetic provider only; no database or network. */
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {canonicalConsumerJson} from '@sensa/contracts/sensa';
+import {canonicalConsumerJson,type ModelTurnInput} from '@sensa/contracts/sensa';
 import {createModelTurnRoutes} from '../../../apps/api/src/sensa/models/turn.ts';
 import {ConsumerError} from '../../../apps/api/src/sensa/access/auth.ts';
 
@@ -14,7 +14,7 @@ let authorizations=0,reservations=0,completions=0,running=0,succeeded=0;const se
 const receipts=new Map<string,{digest:string;response?:unknown;state:'reserved'|'running'|'succeeded'|'unknown'}>();
 const app=createModelTurnRoutes({
   // The route authenticates first and resolves its connection only once the purpose is known.
-  authorize:async()=>{authorizations++;return {select:(purpose:keyof typeof connections)=>{selected.push(purpose);return connections[purpose]??connections.teacher;}};},
+  authorize:async()=>{authorizations++;return {select:(purpose:ModelTurnInput['purpose'])=>{selected.push(purpose);return connections[purpose]??connections.teacher;}};},
   reserve:async(_request,input,select)=>{
    const old=receipts.get(input.id);
    if(old){if(old.digest!==input.inputDigest)throw new ConsumerError(409,'model_request_conflict');if(old.state==='succeeded')return {kind:'replay' as const,response:old.response};throw new ConsumerError(409,'model_request_in_progress');}
@@ -44,10 +44,11 @@ assert.equal(reservations,1);assert.equal(completions,1);assert.equal(authorizat
 const changed={...teacher,body:{...teacher.body,messages:[...message,{role:'user' as const,content:'different'}]}};
 const conflict=await send(changed);assert.equal(conflict.status,409);assert.deepEqual(await conflict.json(),{code:'model_request_conflict'});
 
-// Reuse lookup is outside the teacher loop, so the teacher cannot call it.
+// The teacher can read owned semantics, never publish a candidate through a tool.
 const teacherTools={...teacher,id:crypto.randomUUID(),body:{...teacher.body,response_format:{type:'json_object' as const},tools:['lookup_meanings'].map(name=>({type:'function' as const,function:{name,description:name,parameters:{type:'object'}}}))}};
-const toolsDenied=await send(teacherTools);
-assert.equal(toolsDenied.status,400);assert.deepEqual(await toolsDenied.json(),{code:'unapproved_tool'});assert.equal(reservations,1);assert.equal(completions,1);assert.deepEqual(selected,['teacher']);
+const lookupApp=createModelTurnRoutes({authorize:async()=>({select:()=>base}),reserve:async(_request,_input,select)=>({kind:'execute',connection:select(),markRunning:async()=>{},succeed:async()=>{},failBeforeExecution:async()=>{},failAfterExecution:async()=>{}}),complete:async(_connection,_body,_signal,meta)=>{await meta.onExecutionStart();return {model:'fixture'};}});
+const toolsAccepted=await lookupApp.request('/turn',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...teacherTools,inputDigest:createHash('sha256').update(canonicalConsumerJson(teacherTools)).digest('hex')})});
+assert.equal(toolsAccepted.status,200);assert.equal(reservations,1);assert.equal(completions,1);assert.deepEqual(selected,['teacher']);
 
 // A legacy proposal tool is not part of the teacher contract.
 const fakeProposalTool={...teacher,id:crypto.randomUUID(),body:{...teacher.body,tools:[{type:'function' as const,function:{name:'propose_meaning',description:'not a capability',parameters:{type:'object'}}}]}};
@@ -105,10 +106,10 @@ assert.equal((await lostApp.request('/turn',{method:'POST',headers:{'content-typ
 const recovered=await lostApp.request('/turn',{method:'POST',headers:{'content-type':'application/json'},body:lostBody});assert.equal(recovered.status,200);assert.equal(lostCompletions,1);assert.equal((await recovered.json() as any).response.answer,'saved-before-response');
 console.log('PASS: pre-execution queue/cancel failures release reservations; upstream rejection consumes a known terminal state; timeout remains unknown; a lost HTTP response replays the saved result without a second model call.');
 
-// The teacher's two scoped tools are accepted through the managed route.
+// Obsolete reply/proposal tools are outside the current managed contract.
 for (const name of ['organize_answer', 'reply_to_learner']) {
  const response=await send({...teacher,id:crypto.randomUUID(),body:{...teacher.body,tools:[{type:'function' as const,function:{name,description:name,parameters:{type:'object'}}}]}});
- assert.equal(response.status,200);
+ assert.equal(response.status,400);assert.deepEqual(await response.json(),{code:'invalid_request'});
 }
 
 });

@@ -23,12 +23,18 @@ if (!installed.__sensaCaptureInstalled) {
   let current: ReturnType<typeof showReadingPanel> | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let dismissedRange: Range | null = null;
+  let requestedRange:Range|null=null;
+  let captureEpoch=0;
+  const sameRange=(left:Range,right:Range)=>left.startContainer===right.startContainer&&left.startOffset===right.startOffset
+    &&left.endContainer===right.endContainer&&left.endOffset===right.endOffset;
   const fromPanel = (event: Event) => Boolean(current && event.composedPath().includes(current.host));
   const close = () => {
+    captureEpoch++;
     if (timer !== null) clearTimeout(timer);
     timer = null;
     current?.destroy();
     current = null;
+    requestedRange=null;
   };
   function stopSurfaces(){pageSurface?.destroy();videoSurface?.destroy();writingSurface?.destroy();pageSurface=null;videoSurface=null;writingSurface=null;pageUrl='';}
   function startSurfaces(){
@@ -66,14 +72,16 @@ if (!installed.__sensaCaptureInstalled) {
     const selection = getSelection();
     if (!selection || selection.isCollapsed || !selection.rangeCount) return;
     const range = selection.getRangeAt(0).cloneRange();
+    close();
+    const epoch=captureEpoch;
+    requestedRange=range;
     const owner = accountId;
-    const stillWanted = () => !suspended && enabled && accountId === owner && !preferences.disabledSites.includes(location.hostname);
+    const stillWanted = () => epoch===captureEpoch&&!suspended && enabled && accountId === owner && !preferences.disabledSites.includes(location.hostname);
     // Detection is asynchronous, so the reading mode may have been switched off
     // or the account changed while it ran; the panel is only opened for a
     // selection that is still wanted.
     const snapshot = await captureSelection(range);
     if (!snapshot || !stillWanted()) return;
-    close();
     // The wider capture is cut from the same frozen range, so the block context
     // cannot disagree with the sentence about what language it is in.
     const wider = await captureSelection(range, 'block');
@@ -96,6 +104,17 @@ if (!installed.__sensaCaptureInstalled) {
   });
   document.addEventListener('keyup', event => {
     if (event.key === 'Shift' && !fromPanel(event)) selected(true);
+  });
+  document.addEventListener('selectionchange',()=>{
+    if(!requestedRange)return;
+    const selection=getSelection();if(!selection?.rangeCount||selection.isCollapsed){close();return;}
+    const range=selection.getRangeAt(0);
+    if(sameRange(range,requestedRange)||current&&range.intersectsNode(current.host))return;
+    // Assistive/programmatic selection changes need the same protection as
+    // pointer and keyboard selection. Never keep the previous Save enabled
+    // while the language detector prepares the replacement snapshot.
+    close();
+    timer=setTimeout(()=>{timer=null;void selected();},0);
   });
   window.addEventListener('pagehide', ()=>{suspended=true;close();stopSurfaces();});
   window.addEventListener('pageshow', ()=>{suspended=false;navigating=false;startSurfaces();});

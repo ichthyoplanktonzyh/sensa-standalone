@@ -42,6 +42,7 @@ export const browserCaptureToIntake = (
       textSegment: snapshot.sentence,
       mediaReferenceIds: [],
       languageTag: snapshot.language,
+      languageObservation:snapshot.languageSource?{source:snapshot.languageSource,confidence:snapshot.languageConfidence}:null,
       source: {
         client: 'sensa-browser-extension',
         url: snapshot.source.url,

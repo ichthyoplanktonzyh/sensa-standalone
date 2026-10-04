@@ -200,6 +200,9 @@ html[data-sensa-skin="clear"] {
   --sensa-overlay-layout-controls-inset: 1.25rem;
 }
 
+/* A routed conversation has no separate underlying page to leave exposed. */
+html[data-sensa-skin="clear"] .pmw-screen { --sensa-layout-detail-panel-width: 100%; }
+
 html[data-sensa-skin="clear"][data-sensa-color-mode="dark"] {
   --sensa-surface-canvas: #171922;
   --sensa-surface-subtle: #262a36;

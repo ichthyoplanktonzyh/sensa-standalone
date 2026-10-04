@@ -90,6 +90,8 @@ export interface AgentFocusCandidate {
 export interface AgentSenseCandidate {
   /** Stable key used for reuse detection when the learner confirms. */
   proposedSenseKey: string;
+  /** Explicit immutable version selected from confirmed local semantics, never guessed by key. */
+  reuseSense?: {senseId: string; senseVersionId: string};
   coreMeaningFocus: string;
   prototypeScenes: ProposalDraftScene[];
   includedCases: string[];
@@ -137,7 +139,7 @@ export const emptyWorkingSet = (): SemanticAgentWorkingSet => ({
 export interface SemanticAgentStep {
   stepId: string;
   /** Historical lookup activity may remain in a restored session. */
-  tool: 'lookup_meanings' | 'organize_answer' | 'reply_to_learner' | 'unknown';
+  tool: 'lookup_meanings' | 'unknown';
   status: 'completed' | 'failed';
   summary: string;
 }
@@ -204,6 +206,8 @@ export interface SemanticAgentSession {
   focusLocked: boolean;
   readyToConfirm: boolean;
   provenance: SemanticLlmProvenance | null;
+  /** Proposal provenance, not a domain fact. Missing witnesses cannot confirm. */
+  proposalSource?:import('./clarificationSource').ClarificationSourceWitness|null;
   steps: SemanticAgentStep[];
   outcome: ClarificationOutcome | null;
 }

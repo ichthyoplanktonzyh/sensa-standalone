@@ -1,6 +1,7 @@
 import '../../i18n/contentResources';
 import { useTranslation } from 'react-i18next';
 import { uiText } from '../../i18n/uiText';
+import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import {
   contentNavigationBackClass,
   contentNavigationClass,
@@ -116,7 +117,7 @@ export const ExpressionBindingScreen = ({
   useTranslation();
   const screenRef = useRef<HTMLElement>(null);
   const gateway = useJourneyGateway();
-  const { detail, status } = useJourneyDetail(personalMeaningId);
+  const { detail, status,source } = useJourneyDetail(personalMeaningId);
   const focus = detail?.focuses.find((item) => item.meaningFocusId === meaningFocusId) ?? null;
   const alignment = focus?.alignment ?? null;
   const candidates = alignment?.expressionCandidates ?? [];
@@ -163,6 +164,7 @@ export const ExpressionBindingScreen = ({
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if(status.loading||!status.ok||!source||busy)return;
     if (
       !selectedCandidate
       || !alignment
@@ -177,6 +179,7 @@ export const ExpressionBindingScreen = ({
     try {
       await gateway.confirmExpressionBinding({
         operationId: opId(),
+        source,
         personalMeaningId,
         meaningFocusId,
         senseVersionId: alignment.senseVersionId,
@@ -206,6 +209,8 @@ export const ExpressionBindingScreen = ({
         <button className="mt-4 min-h-11 rounded-control border border-border-strong bg-surface-panel px-4 text-control-label font-semibold" type="button" onClick={onBack}>{uiText('back')}</button>
       </div>
     )
+    : status.loading&&!detail
+      ? <div role="status" aria-busy="true">{localFlowText('loadingSensa')}</div>
     : !personalMeaningId || !meaningFocusId
       ? unavailable(uiText('unableToConnectAnExpression'), uiText('theContextAndConfirmedMeaningWereNot'))
       : !detail || !focus || !alignment
@@ -259,7 +264,7 @@ export const ExpressionBindingScreen = ({
                   </section>
                 )}
 
-                <form onSubmit={submit}>
+                <form onSubmit={submit}><fieldset className="contents" disabled={busy||!!status.loading||!source}>
                   {bindingStep === 'form' && <section className="rounded-card border border-border-subtle bg-surface-panel p-5" aria-labelledby="ebs-form-heading">
                     <header>
                       <div><h2 className="text-section-title font-semibold" id="ebs-form-heading">{uiText('confirmSpellingAndType')}</h2></div>
@@ -290,7 +295,7 @@ export const ExpressionBindingScreen = ({
                     </div>
                   </section>}
 
-                  {formError && <p className="mt-4 rounded-control border border-feedback-danger bg-surface-panel p-3 text-body-support text-feedback-danger" role="alert">{formError}</p>}
+                  {formError && <p className="mt-4 rounded-control border border-feedback-danger bg-surface-panel p-3 text-body-support text-feedback-danger" role="alert">{localFlowNotice(formError)}</p>}
 
                   {bindingStep === 'relation' && <section className="rounded-card border border-border-subtle bg-surface-panel p-5" aria-labelledby="ebs-relation-heading">
                     <header>
@@ -340,7 +345,7 @@ export const ExpressionBindingScreen = ({
                       <button className="min-h-11 rounded-control border-0 bg-transparent px-4 text-control-label font-semibold text-fg-secondary hover:bg-surface-subtle" type="button" disabled={busy} onClick={() => setBindingStep('form')}>{uiText('backToForm')}</button>
                     </div>
                   </section>}
-                </form>
+                </fieldset></form>
               </>
             );
 

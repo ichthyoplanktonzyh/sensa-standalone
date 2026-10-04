@@ -59,6 +59,14 @@ createRoot(document.getElementById('root')!).render(<PersonalMeaningDetailScreen
     plugins: [{
       name: 'fixture-personal-meaning-journey',
       setup(build) {
+        build.onLoad({filter:/personalMeaningJourney.*mediaStore\.ts$/},()=>({loader:'ts',contents:`
+export const useMediaStoreVersion=()=>0;
+export const getMedia=()=>null;
+export class MediaStoreFullError extends Error {}
+export const removeMedia=async()=>{};
+export const storeImageFile=async()=>{throw new Error('controlled unsupported image write');};
+export const stageMedia=()=>{throw new Error('localFlow.imageRead');};
+`}));
         build.onLoad({filter: /personalMeaningJourney.*index\.ts$/}, () => ({
           loader: 'ts',
           contents: `
@@ -75,7 +83,8 @@ const gateway = {
   completeClarificationDraft: async () => ({}), confirmExpressionBinding: async () => ({}),
 };
 export const useJourneyGateway = () => gateway;
-export const useJourneyDetail = () => ({detail: null, status: {ok: true}});
+const source={kind:'intake',id:draft.intakeId,incarnation:'controlled-session-fixture',digest:'0'.repeat(64)};
+export const useJourneyDetail = () => ({detail: null,draft,source,status:{ok:true},readCurrent:async()=>({detail:null,draft,source}),reload:()=>{}});
 export const useJourneyClarificationDraft = (id) => id ? draft : null;
 `,
         }));
@@ -162,6 +171,21 @@ test('failed persistence keeps input and warning through reload until retry succ
   assert.deepEqual(runtimeErrors, []);
 });
 
+test('rejected image staging keeps the input and photo available without leaving the conversation busy',async({page})=>{
+ const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+ await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
+ await page.goto(`http://127.0.0.1:${port}`);
+ const input=page.getByLabel('What would you like to express?');await expect(input).toBeVisible();
+ await input.fill('Preserve my input when the photo cannot be staged');
+ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII=','base64');
+ await page.locator('form').filter({has:input}).getByLabel('Add images',{exact:true}).setInputFiles({name:'synthetic-stage-failure.png',mimeType:'image/png',buffer:png});
+ const image=page.getByRole('img',{name:'synthetic-stage-failure.png',exact:true});await expect(image).toBeVisible();
+ const prepared=await image.getAttribute('src');await page.getByRole('button',{name:'Send',exact:true}).click();
+ await expect(page.getByRole('alert')).toBeVisible();await expect(input).toBeEnabled();await expect(input).toHaveValue('Preserve my input when the photo cannot be staged');
+ await expect(image).toHaveAttribute('src',prepared!);await expect(page.getByRole('button',{name:'Send',exact:true})).toBeEnabled();
+ await expect(page.getByText('Your input is still in this tab.',{exact:true})).toHaveCount(0);expect(errors).toEqual([]);
+});
+
 test('a stale tab preserves its input and must load the latest revision before continuing', async ({context, page}) => {
   const runtimeErrors: string[] = [];
   page.on('pageerror', (error) => runtimeErrors.push(error.message));
@@ -185,8 +209,8 @@ test('a stale tab preserves its input and must load the latest revision before c
   const staleInput = stalePage.getByLabel('What would you like to express?');
   await staleInput.fill('Protected stale-tab input');
   await stalePage.getByRole('button', {name: 'Send'}).click();
-  await expect(staleInput).toHaveValue('');
-  await expect(stalePage.getByText('Protected stale-tab input', {exact: true})).toBeVisible();
+  await expect(staleInput).toHaveValue('Protected stale-tab input');
+  await expect(stalePage.locator('.pmw-message').getByText('Protected stale-tab input', {exact: true})).toBeVisible();
   const conflict = stalePage.locator('[data-session-persistence="conflict"]');
   await expect(conflict).toContainText('changed in another tab');
   await expect(stalePage.getByText('Saved by the first tab', {exact: true})).toHaveCount(0);
@@ -194,11 +218,12 @@ test('a stale tab preserves its input and must load the latest revision before c
   await conflict.getByRole('button').click();
   await expect(conflict).toHaveCount(0);
   await expect(stalePage.getByText('Saved by the first tab', {exact: true})).toBeVisible();
-  await expect(stalePage.getByText('Protected stale-tab input', {exact: true})).toHaveCount(0);
+  await expect(stalePage.locator('.pmw-message').getByText('Protected stale-tab input', {exact: true})).toHaveCount(0);
+  await expect(staleInput).toHaveValue('Protected stale-tab input');
 
   await stalePage.reload();
   await expect(stalePage.getByText('Saved by the first tab', {exact: true})).toBeVisible();
-  await expect(stalePage.getByText('Protected stale-tab input', {exact: true})).toHaveCount(0);
+  await expect(stalePage.locator('.pmw-message').getByText('Protected stale-tab input', {exact: true})).toHaveCount(0);
   await expect(stalePage.locator('[data-session-persistence="conflict"]')).toHaveCount(0);
   assert.deepEqual(runtimeErrors, []);
 });

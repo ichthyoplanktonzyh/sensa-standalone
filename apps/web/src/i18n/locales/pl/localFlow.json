@@ -1,4 +1,5 @@
 {"localFlow":{
+    "clarificationSourceChanged": "Kontynuuj rozmowę, aby sprawdzić aktualny materiał przed potwierdzeniem.",
     "packageAuthor": "Autor",
     "packageFilesUnavailable": "Pakiety bez plików na tym urządzeniu: {{count}}. Zaimportuj oryginalne pliki lub pobierz je ponownie z katalogu.",
     "packageLicense": "Licencja",

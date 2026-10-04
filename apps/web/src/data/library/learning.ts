@@ -426,7 +426,7 @@ export async function prepareLearningQueue(languageContext:SensaFormalPinnedLang
  const fingerprint=await readLibrary(async tx=>{
   const plans=await readStudyPlans(tx),enrollments=(await tx.all<LocalCurriculumEnrollment>('curriculumEnrollments')).filter(item=>enrollmentMatchesContext(item,context));
   const packages=await tx.packageCacheProjection({kind:'identities'});
-  return JSON.stringify({trigger,day:new Date(at).toDateString(),routeId:context.languageRouteId,dailyLimit:plans[context.languageRouteId]?.dailyNewSenseLimit??20,enrollments:enrollments.map(item=>[item.id,item.revision]),packages:packages.map(item=>[item.key,item.digest]).sort()});
+  return JSON.stringify({trigger,day:new Date(at).toDateString(),languageContext:context,dailyLimit:plans[context.languageRouteId]?.dailyNewSenseLimit??20,enrollments:enrollments.map(item=>[item.id,item.revision]),packages:packages.map(item=>[item.key,item.digest]).sort()});
  });
  const operationId=stableUuid(`local-learning-queue-window:${fingerprint}`);
  return learningCommand({id:operationId,kind:'learning.materialize',input:{languageContext:context,day:new Date(at).toDateString(),trigger}},async tx=>{

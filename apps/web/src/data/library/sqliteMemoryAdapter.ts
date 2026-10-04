@@ -5,9 +5,61 @@ import {decodeBackupValue} from './backupCodec';
 import type {PackageCacheProjectionQuery,PackageCacheProjectionResult} from './packageCacheProjection';
 import {createHomeLearningStorageProjection} from './homeLearningRecords';
 import type {LocalLearningRun,LocalLearningTarget} from '../../learning/runtime/localProtocol';
+import {emptyJourneyState,type MeaningJourneyRecord,type SenseRegistryState} from '../../experience/personalMeaningJourney/store';
+import {createMeaningLookup,type MeaningLookupResult} from '../../experience/personalMeaningJourney/meaningLookup';
+import {worldRegistryClosure,worldItemFromRecord,summarizeWorldItem,worldSearchText,isWorldRecordVisible,matchesWorldFilter,validateWorldQuery,type WorldBrowseQuery,type WorldBrowsePage,type WorldRecordRead} from '../../experience/personalMeaningJourney/worldRead';
+import {validateWorldLearningChoiceQuery,worldLearningChoice,type WorldLearningChoiceQuery,type WorldLearningChoicePage} from '../../experience/personalMeaningJourney/worldRead';
+import {buildPersonalMeaningLearningSources} from '../../experience/personalMeaningJourney/learningSource';
+import {indexRegistry} from '../../experience/personalMeaningJourney/registryRead';
+import {journeyIdentityTables,journeyReservedIdentities} from '../../experience/personalMeaningJourney/reservedIdentities';
+import {isUuid} from '../../experience/personalMeaningJourney/ids';
+import {memoryRegistrySelection,type RegistrySelectionQuery,type RegistrySelection} from './semanticRegistrySelection';
 
 /** Test/non-browser Adapter. Production never selects this path. */
 export class MemoryRecordAdapter implements SqliteRecordAdapter {
+  async registrySelection(query:RegistrySelectionQuery):Promise<RegistrySelection>{
+    // This test adapter has no SQL planner. Do not call the public source-read
+    // interface while emulating a purpose-specific selector internally.
+    const rows=[...this.records].filter(([key])=>key.startsWith('semanticRegistry\u0000')).map(([key,encoded])=>({key:key.slice('semanticRegistry\u0000'.length),value:decodeBackupValue(JSON.parse(encoded)) as {kind:string;ordinal:number;value:Record<string,any>}}));
+    return memoryRegistrySelection(query,rows);
+  }
+  async existingJourneyIdentities(ids:readonly string[]):Promise<string[]>{
+    if(ids.length>256||ids.some(id=>!isUuid(id)))throw new Error('journey_identity_query_invalid');
+    return [...new Set(ids)].filter(id=>this.journeyIdentityCounts.has(id)).sort();
+  }
+  async worldLearningChoices(raw:WorldLearningChoiceQuery):Promise<WorldLearningChoicePage>{
+    const query=validateWorldLearningChoiceQuery(raw);
+    const read:WorldRecordRead=(table,key)=>{const encoded=this.records.get(`${table}\u0000${key}`);return encoded===undefined?undefined:decodeBackupValue(JSON.parse(encoded));};
+    const choices=(await this.entries('semanticMeanings')).flatMap(row=>{
+      const record=decodeBackupValue(JSON.parse(row.encodedValue)) as MeaningJourneyRecord;
+      const registry=worldRegistryClosure(record,read),item=worldItemFromRecord(record,read);
+      return isWorldRecordVisible(record,registry)&&matchesWorldFilter(item,query.filter)&&worldSearchText(item).includes(query.query)
+        ?buildPersonalMeaningLearningSources(record,indexRegistry(registry)).filter(source=>source.targetLanguageTag===query.targetLanguageTag).map(source=>({choice:worldLearningChoice(source),updatedAt:item.updatedAt})):[];
+    }).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt)||(a.choice.reference.personalMeaningId<b.choice.reference.personalMeaningId?-1:a.choice.reference.personalMeaningId>b.choice.reference.personalMeaningId?1:a.choice.key<b.choice.key?-1:1));
+    return {items:choices.slice(query.offset,query.offset+query.limit).map(row=>row.choice),total:choices.length};
+  }
+  async worldBrowse(raw:WorldBrowseQuery):Promise<WorldBrowsePage>{
+    const query=validateWorldQuery(raw);
+    const read:WorldRecordRead=(table,key)=>{const encoded=this.records.get(`${table}\u0000${key}`);return encoded===undefined?undefined:decodeBackupValue(JSON.parse(encoded));};
+    const visible=(await this.entries('semanticMeanings')).flatMap(row=>{
+      const record=decodeBackupValue(JSON.parse(row.encodedValue)) as MeaningJourneyRecord;
+      const registry=worldRegistryClosure(record,read),item=worldItemFromRecord(record,read);
+      return isWorldRecordVisible(record,registry)?[{item:summarizeWorldItem(item),search:worldSearchText(item)}]:[];
+    }).sort((a,b)=>b.item.updatedAt.localeCompare(a.item.updatedAt)||(a.item.personalMeaningId<b.item.personalMeaningId?-1:1));
+    const selected=visible.filter(row=>matchesWorldFilter(row.item,query.filter)&&row.search.includes(query.query));
+    return {items:selected.slice(query.offset,query.offset+query.limit).map(row=>row.item),total:selected.length,
+      pending:visible.filter(row=>row.item.senseFormation.phase!=='sense_confirmed'||row.item.expressionBinding.phase!=='bound').length,
+      next:visible.find(row=>row.item.senseFormation.phase!=='sense_confirmed'||row.item.expressionBinding.phase!=='bound')?.item??null};
+  }
+  async lookupMeanings(query:string):Promise<MeaningLookupResult>{
+    const state=emptyJourneyState();
+    state.meanings=(await this.entries('semanticMeanings')).map(row=>decodeBackupValue(JSON.parse(row.encodedValue)) as MeaningJourneyRecord);
+    for(const row of await this.entries('semanticRegistry')){
+      const decoded=decodeBackupValue(JSON.parse(row.encodedValue)) as {kind:keyof SenseRegistryState;value:unknown};
+      (state.registry[decoded.kind] as unknown[]).push(decoded.value);
+    }
+    return createMeaningLookup(state).query(query);
+  }
   async existingRecordKeys(table:SqliteLibraryTable,keys:readonly string[]):Promise<string[]>{
     return [...new Set(keys)].filter(key=>this.records.has(`${table}\u0000${key}`)).sort();
   }
@@ -29,6 +81,8 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
       :values.filter(value=>query.packageId===undefined||value.portableOrigin.manifest.metadata.packageId===query.packageId).map(createPackageCacheSummary)) as PackageCacheProjectionResult<Query>;
   }
   private records = new Map<string, string>();
+  private journeyIdentityRows=new Map<string,string[]>();
+  private journeyIdentityCounts=new Map<string,number>();
   private changes = new Map<string, SqliteRecordChange>();
   private syncBase = new Map<string, SqliteSyncBaseEntry>();
   private portableMediaBlobs=new Map<string,PortableMediaBlob>();
@@ -45,6 +99,12 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
       .map(([key, encodedValue]) => ({ key: key.slice(prefix.length), encodedValue }))
       .sort((left, right) => left.key.localeCompare(right.key));
   }
+  async entriesPage(table:SqliteLibraryTable,afterKey:string|null,limit:number){
+    if(!Number.isSafeInteger(limit)||limit<1||limit>256)throw new Error('sqlite_invalid_page_size');
+    const prefix=`${table}\u0000`;
+    return [...this.records].filter(([id])=>id.startsWith(prefix)).map(([id,encodedValue])=>({key:id.slice(prefix.length),encodedValue}))
+      .filter(row=>afterKey===null||row.key>afterKey).sort((a,b)=>a.key<b.key?-1:a.key>b.key?1:0).slice(0,limit);
+  }
 
   async changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]> {
     const selected = new Set(tables);
@@ -54,6 +114,11 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
         || left.table.localeCompare(right.table)
         || left.key.localeCompare(right.key))
       .map((change) => ({ ...change }));
+  }
+
+  async hasChangesSince(contentRevision:number,tables:readonly SqliteLibraryTable[]):Promise<boolean>{
+    const selected=new Set(tables);
+    return Number.isSafeInteger(contentRevision)&&contentRevision>=0&&[...this.changes.values()].some(change=>change.contentRevision>contentRevision&&selected.has(change.table));
   }
 
   async syncBaseEntries(keys?: readonly { table: SqliteLibraryTable; key: string }[]): Promise<SqliteSyncBaseEntry[]> {
@@ -245,6 +310,16 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
       next.set(`${item.table}\u0000${item.key}`, item.encodedValue);
       remember(item.table, item.key, item.encodedValue);
     }
+    const identityRows=new Map(this.journeyIdentityRows),identityCounts=new Map(this.journeyIdentityCounts);
+    const removeIdentityRow=(key:string)=>{for(const id of identityRows.get(key)??[]){const count=identityCounts.get(id)!-1;if(count)identityCounts.set(id,count);else identityCounts.delete(id);}identityRows.delete(key);};
+    for(const table of mutation.clears)if(journeyIdentityTables.includes(table as typeof journeyIdentityTables[number]))for(const key of identityRows.keys())if(key.startsWith(`${table}\u0000`))removeIdentityRow(key);
+    for(const row of mutation.deletes)removeIdentityRow(`${row.table}\u0000${row.key}`);
+    for(const row of mutation.puts)if(journeyIdentityTables.includes(row.table as typeof journeyIdentityTables[number])){
+      const key=`${row.table}\u0000${row.key}`;removeIdentityRow(key);
+      const ids=journeyReservedIdentities(row.table as typeof journeyIdentityTables[number],decodeBackupValue(JSON.parse(row.encodedValue)));identityRows.set(key,ids);
+      for(const id of ids)identityCounts.set(id,(identityCounts.get(id)??0)+1);
+    }
+    this.journeyIdentityRows=identityRows;this.journeyIdentityCounts=identityCounts;
     this.records = next;
     this.changes = nextChanges;
     this.syncBase = nextSyncBase;

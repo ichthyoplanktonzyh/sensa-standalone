@@ -226,6 +226,7 @@ export const executeFastTrack = (
     mediaReferenceIds: [...context.mediaReferenceIds],
     source: context.source,
     languageTag: context.languageTag,
+    languageObservation:context.languageObservation??null,
     occurrenceSurfaceForm: occurrence.surfaceForm,
   };
 
@@ -267,6 +268,12 @@ export const executeFastTrack = (
     senseVersionId = pinnedVersion.senseVersionId;
     resolution = 'reuse_existing';
   } else if (existingSense) {
+    const existingVersion = state.registry.senseVersions.find(
+      candidate => candidate.senseVersionId === existingSense.currentSenseVersionId,
+    );
+    if (!existingVersion || digestOf(existingVersion.semanticSpec) !== digestOf(sense.semanticSpec)) {
+      throw new Error('语义 key 与已保存的 Sense 不一致，不能静默替换提交的意思。');
+    }
     senseId = existingSense.senseId;
     senseVersionId = existingSense.currentSenseVersionId;
     resolution = 'reuse_existing';

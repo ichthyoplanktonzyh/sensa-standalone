@@ -108,7 +108,12 @@ SAH Pool 由 leader Worker 独占，所以数据库打开后的第一条 SQLite 
 学习事实仍以逻辑 record 为写入 authority；SQLite 在同一事务内维护可重建的 Target、Run–Target 和
 Content Attempt 查询投影。首页只读取当前 Route 的 Target、该 Route 今日已占用的新词额度以及实际引用的
 Package key；运行恢复、策略锁定和生成频控通过领域索引查询，不遍历或解析无关 JSON。数据库打开及有写入
-的长连接周期内使用 `PRAGMA optimize` 维护查询规划统计。Book 版本替换和媒体引用完整性检查同样通过事务内
+的长连接周期内使用 `PRAGMA optimize` 维护查询规划统计。结构变化才考虑全部表；大批量写入在该事务内维护统计，
+在 durable commit 之后通过 SQLite checkpoint 缩短遗留 WAL 的冷重开成本；仍保持 WAL/FULL/EXCLUSIVE。
+维护触发考虑实际 SQL 行变更和大段已编码值／媒体，不只统计逻辑 `puts`；同步基线替换和启动时派生索引
+重建也包括在内。它是维护策略，不是 WAL 字节数的硬上限；普通未变结构的重开不执行 checkpoint。
+提交后的维护失败仅进入独立诊断，不撤销既有收据或把已保存事实误报为未保存（[SQLite WAL](https://sqlite.org/wal.html)）。
+普通重开复用已有结构与统计，不重放 DDL、重写版本或制造缺失的空源表。Book 版本替换和媒体引用完整性检查同样通过事务内
 关系投影完成。承载大 JSON 的逻辑 record 与 Target 投影使用普通 rowid 表，紧凑关系投影使用
 `WITHOUT ROWID`；内容事务维护记录级 revision 与删除 tombstone，供账号同步只读取上次收敛后变化的记录。云端确认的逐记录基线和 block refs 保存在内部 `sensa_sync_base` 表；未变化记录不再重新编码、分块或下载。`packageInstallations` 保存可跨设备复制的精确 `.sensa` identity、语言方向、长度、digest 与来源 Book archive digest；完整 Portable artifact 与编译后的设备 Runtime content 只进入本地 `packageCache`，缓存写入不增加个人内容 revision。恢复后由 Content Supply 使用 Registry 中的 `.sensa-book` 位置一次重新取得，验证外层摘要及全部成员，再只恢复已有安装事实对应的缓存；解析或下载失败时 Learning Target 保留但 readiness 为 blocked。状态只保存小型幂等 commit receipt，不重复保存整库或待发布记录。`npm run benchmark:cloud-sync` 在真实 Chromium OPFS 上执行 1k/10k 完整同步路径，并固定单记录变化只上传记录块与受影响的 manifest 分片。
 内容摘要、key/digest 和语言方向数量使用同事务维护的设备侧投影；它们不进入备份或账号同步，可以从真实缓存重建。
@@ -125,6 +130,23 @@ Web 应用层的逻辑表与 Personal Semantic World Journey 共用这一物理�
 重写整个世界或图片载荷。当前没有生产用户数据，因此规范化语义格式与内容供给边界直接使用新数据库与 Checkpoint v5，
 不读取、迁移或兼容 v1 单聚合格式。账号副本、界面偏好和其他 `localStorage`
 状态不能充当个人学习库的第二权威。
+
+Personal Semantic World 的私有浏览读取接口与 Agent 的公共候选检索分开：浏览索引可以检索本人的
+Context 与捕获来源文本，但分页只返回列表需要的摘要，单条详情只读取该 Meaning 及其显式语义依赖。
+普通列表通过有界窗口读取；详情、待处理草稿与该 Meaning 的学习来源共用同一读取快照，不订阅完整命令网关。
+刷新中的已有详情保留上一份一致快照并阻止新操作，场景编辑固定其开始编辑时的版本；外部更新不能替换未保存输入
+或被旧编辑静默覆盖。已退出当前 Context 的捕获来源仍来自原始事实，详情展示与私有检索不因 Anchor 退休而丢失来源。
+批量选择复用同一私有查询条件，从同事务维护的派生 choice 索引读取精确 Alignment/Binding pins 与标题，不携带完整 Context、媒体或生成材料。列表窗口有界；明确全选按分页收集完整过滤结果，跨 revision/incarnation 或被取消时不提交部分选择。已选项跨搜索保留、按语言路线隔离；明确确认之后才逐项解析完整 source。批量执行先保存意图，再按固定并发准备材料，任务读取按精确 ID；停止只取消运行项，核实持久停止结果，保留尚待执行的意图。进度通知合并，不能用每条意图触发全量父树刷新。重试使用原批次的 Context 授权，不能把旧批次静默转移到另一语言路线。
+Inbox 使用独立的同事务快照读取待处理材料与未完成条目的摘要，不订阅完整命令网关；未完成条目的筛选、计数和下一项使用专用部分索引。原材料继续保留候选、来源与媒体引用，进入对话时按 ID 读取详情。抽屉独立呈现加载、失败重试与已核实的空状态；外部更新时重新核实快照。该读取成本随待处理条目数量增长，不随已确认世界的数量增长。
+图谱仍有完整读取路径；普通列表与批量选择的有界读取不证明首次写命令、全量批次执行或显式全局视图已满足规模要求。
+澄清提案同时保存生成时的本机材料见证（Library incarnation、来源 identity 与摘要），不发送给模型。
+模型发起前，材料和见证从同一读取快照取得；普通的读取修订与其他条目变更不会替换它。
+确认必须携带该见证：网关检查当前源事实，并在保存事务内再次比较所依赖的 Meaning 或 Inbox／草稿行。
+材料或 Library 被替换后，旧提案不能借用新材料的 identity 直接确认；用户保留对话并明确继续核对。
+成功操作的精确重试仍先返回原始收据，不因确认本身改变源材料而重复创建事实。
+这些私有派生索引均为设备内可重建数据，不进入备份或账号同步；它们与源事实同事务更新，索引的存储读取或写入失败
+必须回滚提交，源事实缺失或损坏不得被展示为正常空库。索引接口通过不代表页面已接入该读取路径或性能验收通过，
+仍须由真实页面的长旅程证据核实实际读取与交互成本。
 
 学习历史不进入普通记录冲突选择器：两个设备从同一基线为同一 Target 完成互不重叠的 Run 时，
 `learningReconciliations` 保存 ADR 0005 的确定性裁决，原始 Run/Event 均保留，只有选中分支参与当前
@@ -154,8 +176,21 @@ Replica Module 显式声明的记录依赖；learner prose 和其他任意字符
 Replica Module 的 normalize/restore seam，不另写领域状态修复分支。本地 Journey Repository 在计算
 任何逻辑行变更前，通过同一个 Personal Semantic World authority 校验发生变化的 facts、内部引用以及
 before→after transition；未变化聚合按对象 identity 跳过，加载、同步和备份重建才执行完整状态校验。
-因此 Gateway 提议的非法 revision 改写、tombstone 复活或物理删除不会进入 SQLite，也不会让普通命令
-退化成随整个语义世界增长的全库扫描。具体规则见
+因此 Gateway 提议的非法 revision 改写、tombstone 复活或物理删除不会进入 SQLite；记录级提交本身
+不会扫描未变化聚合的完整 facts。普通详情的首次 Context 保存使用独立单 Meaning 命令快照，沿用原领域命令，
+只读该聚合、固定注册表依赖和当前 operation receipt；其 delta 不得修改注册表、Inbox 或其他收据。依赖、
+版本与 Library incarnation 在写锁内再次检查。首次 Inbox 最终确认也沿用原领域命令，只读这条材料、
+会话提示和所需注册表闭包；不初始化已有 Meaning 聚合。Sense key、历史 Expression Version 的 normalized form、
+Binding relation／精确版本 pins 与追加 ordinal 由源记录上的 SQLite expression index 查询，字段读取函数使用
+本机实际的 tagged codec、只返回确定性的原始参数字段，不引入第二份注册表权威。缺失索引可重建，不改动源事实。
+选中候选与空结果、固定依赖、材料见证及新 ID 都在写锁内复查；Meaning、注册表 delta、原 Inbox／提示删除与收据
+一次提交。全量网关视图与其他命令仍有完整初始化路径，不能用这些命令的结果证明所有写入已满足规模性能要求。
+首次新建澄清草稿同样使用独立追加快照，只能创建本次
+Inbox、会话提示与收据，媒体继续同事务准入，不读取已有 Meaning／注册表。新 ID 的保留索引与源事实同事务维护；分配时排除本次
+operation 和尚未入库的 media 引用，提交时再检查占用。普通读取不全扫；显式完整诊断按源行核对并修复
+身份缓存的逐行漂移，诊断输出区分 `ok` 与 `rebuilt`，不改动源数据或同步 revision。发现漂移后先独立
+持久化失效版本，再事务重建；重建失败不能回滚掉失效标记。标记本身写失败时当前连接拒绝身份读取和语义
+写入并报告存储错误，不承诺无法持久化任何标记时仍能跨进程记住诊断结果。具体规则见
 [ADR 0007](../adr/0007-personal-semantic-world-revision-merge.md)。
 Learning System 使用相同的单一准入模式：逻辑事务在 SQLite commit 前把已暂存记录的 `before/after`
 交给 Learning authority；authority 只读取改变的 Target、Run、Event、active Run / Study Plan 及直接依赖，

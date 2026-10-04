@@ -1,15 +1,17 @@
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import {localFlowText} from '../../i18n/localFlowText';
+import type {PracticeScopeAvailability} from '../usePracticeScope';
 import { CURRENT_STUDY_SCOPE_ID, PERSONAL_SEMANTIC_WORLD_SCOPE_ID, type PracticeScopeCatalog, type PracticeScopeSelection, type PracticeScopeTarget } from '../practiceScope';
 import { practiceBody, practiceButton, practiceSurface } from './SensaFreePracticeScreen';
 import { useScreenState } from '../ui/ScreenHost';
 export interface PracticeScopeScreenProps {
- active:boolean; catalog:PracticeScopeCatalog; onBack:()=>void; onSelectScope:(selection:PracticeScopeSelection)=>void;
+ active:boolean; catalog:PracticeScopeCatalog; onBack:()=>void; onSelectScope:(selection:PracticeScopeSelection)=>void; scopeAvailability?:PracticeScopeAvailability; onRetryScope?:()=>void;
 }
 function TargetCopy({target}:{target:PracticeScopeTarget}) {
  return <span className="min-w-0 flex-1"><strong className="text-lg font-medium">{target.expression.surfaceForm}</strong><span className="mt-2 block text-sm text-fg-secondary">{target.sense.label}</span>{target.context?.preview&&<span className="mt-2 block text-xs leading-6 text-fg-tertiary">{target.context.preview}</span>}</span>;
 }
-export const PracticeScopeScreen=({active,catalog,onBack,onSelectScope}:PracticeScopeScreenProps)=>{
+export const PracticeScopeScreen=({active,catalog,onBack,onSelectScope,scopeAvailability='ready',onRetryScope}:PracticeScopeScreenProps)=>{
  const {t}=useTranslation();
  const [view,setView]=useScreenState<'targets'|'sources'|'personal'>('practice-scope:view','targets');
  const [draft,setDraft]=useScreenState<readonly string[]>('practice-scope:draft',()=>catalog.selection.sourceId===PERSONAL_SEMANTIC_WORLD_SCOPE_ID?catalog.selection.targetIds:[]);
@@ -19,7 +21,7 @@ export const PracticeScopeScreen=({active,catalog,onBack,onSelectScope}:Practice
  return <section id="s-practice-scope" className={practiceSurface(active)}><main className={practiceBody}>
   <button onClick={back} className={`${practiceButton} -ml-4 text-fg-secondary`}><ArrowLeft size={18}/>{t('practice.back')}</button>
   <header className="my-7 flex flex-wrap items-center justify-between gap-4"><h1 className="text-3xl font-medium">{t(view==='targets'?'practice.scope':view==='sources'?'practice.change':'practice.choose')}</h1>{view==='targets'&&<button onClick={()=>setView('sources')} className={`${practiceButton} border border-border-subtle bg-surface-panel hover:bg-surface-selected`}>{t('practice.change')}</button>}</header>
-  {view==='sources'?<div className="grid gap-4 md:grid-cols-2">{catalog.sources.map(source=><button key={source.sourceId} disabled={!source.targets.length} onClick={()=>{
+  {scopeAvailability==='loading'?<p role="status" aria-busy="true">{localFlowText('loadingSensa')}</p>:scopeAvailability==='unavailable'?<div role="alert"><p>{t('content.loadError')}</p>{onRetryScope&&<button onClick={onRetryScope} className={practiceButton}>{t('content.retry')}</button>}</div>:view==='sources'?<div className="grid gap-4 md:grid-cols-2">{catalog.sources.map(source=><button key={source.sourceId} disabled={!source.targets.length} onClick={()=>{
    if(source.sourceId===PERSONAL_SEMANTIC_WORLD_SCOPE_ID){setDraft(catalog.selection.sourceId===PERSONAL_SEMANTIC_WORLD_SCOPE_ID?catalog.selection.targetIds:[]);setView('personal');}
    else {onSelectScope({sourceId:CURRENT_STUDY_SCOPE_ID});setView('targets');}
   }} className="flex items-center gap-4 rounded-card border border-border-subtle bg-surface-panel p-6 text-left focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-40"><span className="flex-1"><strong className="font-medium">{t('practice.sources.'+source.sourceId)}</strong><span className="mt-3 block text-sm text-fg-tertiary">{t('practice.count',{count:source.targets.length})}</span></span>{source.selected?<Check size={18}/>:<ArrowRight size={18}/>}</button>)}</div>:<>

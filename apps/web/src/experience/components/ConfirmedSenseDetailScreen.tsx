@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { uiText } from '../../i18n/uiText';
+import {localFlowText} from '../../i18n/localFlowText';
 import {interfaceLanguageDisplayName} from '../../i18n/languageDisplayName';
 import {resolveInterfaceLocale} from '../../i18n/localeRegistry';
 /**
@@ -216,6 +217,8 @@ export const ConfirmedSenseDetailScreen = ({
         <button className="mt-4 min-h-11 rounded-control border border-border-strong bg-surface-panel px-4 text-control-label font-semibold text-fg-primary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" type="button" onClick={onBack}>{uiText('back')}</button>
       </div>
     )
+    : status.loading&&!detail
+      ? <div role="status" aria-busy="true">{localFlowText('loadingSensa')}</div>
     : !personalMeaningId || !meaningFocusId
       ? unavailableCopy(uiText('theContextAndConfirmedMeaningWereNot'))
       : !detail || !alignment

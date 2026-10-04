@@ -11,15 +11,17 @@ const intakeVersionStore = createVersionStore((listener) =>
   semanticIntakeModule.subscribe(listener),
 );
 
-export const useIntakeInbox = (): SensaIntakeItem[] => {
+const inactiveSubscribe=()=>()=>{};
+const inactiveVersion=()=>0;
+export const useIntakeInbox = (enabled=true): SensaIntakeItem[] => {
   const version = useSyncExternalStore(
-    intakeVersionStore.subscribe,
-    intakeVersionStore.getSnapshot,
+    enabled?intakeVersionStore.subscribe:inactiveSubscribe,
+    enabled?intakeVersionStore.getSnapshot:inactiveVersion,
   );
   return useMemo(
-    () => semanticIntakeModule.snapshot(),
+    () => enabled?semanticIntakeModule.snapshot():[],
     // The version is intentionally the invalidation token for this snapshot.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [version],
+    [version,enabled],
   );
 };

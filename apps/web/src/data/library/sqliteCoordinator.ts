@@ -26,7 +26,14 @@ export interface CoordinatedSqliteBackend {
   initialize(): Promise<SqliteStorageDiagnostics>;
   get(table: SqliteLibraryTable, key: string): Promise<string | null>;
   entries(table: SqliteLibraryTable): Promise<Array<{ key: string; encodedValue: string }>>;
+  entriesPage(table:SqliteLibraryTable,afterKey:string|null,limit:number):Promise<Array<{key:string;encodedValue:string}>>;
+  lookupMeanings(query:string):Promise<import('./sqliteProtocol').MeaningLookupResult>;
+  worldBrowse(query:import('./sqliteProtocol').WorldBrowseQuery):Promise<import('./sqliteProtocol').WorldBrowsePage>;
+  registrySelection(query:import('./sqliteProtocol').RegistrySelectionQuery):Promise<import('./sqliteProtocol').RegistrySelection>;
+  worldLearningChoices(query:import('./sqliteProtocol').WorldLearningChoiceQuery):Promise<import('./sqliteProtocol').WorldLearningChoicePage>;
+  existingJourneyIdentities(ids:readonly string[]):Promise<string[]>;
   changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]>;
+  hasChangesSince(contentRevision:number,tables:readonly SqliteLibraryTable[]):Promise<boolean>;
   syncBaseEntries(keys?: readonly { table: SqliteLibraryTable; key: string }[]): Promise<SqliteSyncBaseEntry[]>;
   count(table: SqliteLibraryTable): Promise<number>;
   estimateRecordBytes(tables: readonly SqliteLibraryTable[]): Promise<number>;
@@ -113,6 +120,18 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
 
   changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]> {
     return this.call({ kind: 'changesSince', contentRevision, tables: [...tables] }) as Promise<SqliteRecordChange[]>;
+  }
+  lookupMeanings(query:string):Promise<import('./sqliteProtocol').MeaningLookupResult>{return this.call({kind:'meaningLookup',query}) as Promise<import('./sqliteProtocol').MeaningLookupResult>;}
+  worldBrowse(query:import('./sqliteProtocol').WorldBrowseQuery):Promise<import('./sqliteProtocol').WorldBrowsePage>{return this.call({kind:'worldBrowse',query}) as Promise<import('./sqliteProtocol').WorldBrowsePage>;}
+  registrySelection(query:import('./sqliteProtocol').RegistrySelectionQuery):Promise<import('./sqliteProtocol').RegistrySelection>{return this.call({kind:'registrySelection',query}) as Promise<import('./sqliteProtocol').RegistrySelection>;}
+  worldLearningChoices(query:import('./sqliteProtocol').WorldLearningChoiceQuery):Promise<import('./sqliteProtocol').WorldLearningChoicePage>{return this.call({kind:'worldLearningChoices',query}) as Promise<import('./sqliteProtocol').WorldLearningChoicePage>;}
+  existingJourneyIdentities(ids:readonly string[]):Promise<string[]>{return this.call({kind:'existingJourneyIdentities',ids:[...ids]}) as Promise<string[]>;}
+  entriesPage(table:SqliteLibraryTable,afterKey:string|null,limit:number):Promise<Array<{key:string;encodedValue:string}>>{
+    return this.call({kind:'entriesPage',table,afterKey,limit}) as Promise<Array<{key:string;encodedValue:string}>>;
+  }
+
+  hasChangesSince(contentRevision:number,tables:readonly SqliteLibraryTable[]):Promise<boolean>{
+    return this.call({kind:'hasChangesSince',contentRevision,tables:[...tables]}) as Promise<boolean>;
   }
 
   syncBaseEntries(keys?: readonly { table: SqliteLibraryTable; key: string }[]): Promise<SqliteSyncBaseEntry[]> {
@@ -486,9 +505,16 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       case 'initialize': return backend.initialize();
       case 'get': return backend.get(input.table, input.key);
       case 'entries': return backend.entries(input.table);
+      case 'entriesPage':return backend.entriesPage(input.table,input.afterKey,input.limit);
       case 'existingRecordKeys':return backend.existingRecordKeys(input.table,input.keys);
       case 'packageCacheProjection':return backend.packageCacheProjection(input.query);
+      case 'meaningLookup':return backend.lookupMeanings(input.query);
+      case 'worldBrowse':return backend.worldBrowse(input.query);
+      case 'registrySelection':return backend.registrySelection(input.query);
+      case 'worldLearningChoices':return backend.worldLearningChoices(input.query);
+      case 'existingJourneyIdentities':return backend.existingJourneyIdentities(input.ids);
       case 'changesSince': return backend.changesSince(input.contentRevision, input.tables);
+      case 'hasChangesSince':return backend.hasChangesSince(input.contentRevision,input.tables);
       case 'syncBaseEntries': return backend.syncBaseEntries(input.keys);
       case 'count': return backend.count(input.table);
       case 'estimateRecordBytes': return backend.estimateRecordBytes(input.tables);

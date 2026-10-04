@@ -1,5 +1,6 @@
 {
   "localFlow": {
+    "clarificationSourceChanged": "Setze das Gespräch fort und prüfe das aktuelle Material vor dem Bestätigen.",
     "packageAuthor": "Autor",
     "packageFilesUnavailable": "Lernpakete ohne lokale Datei: {{count}}. Importieren Sie die Originaldateien oder laden Sie sie erneut aus dem Katalog herunter.",
     "packageLicense": "Lizenz",

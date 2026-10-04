@@ -3,8 +3,9 @@ import {readLibrary} from './store';
 import {synchronizeLibrary} from './cloudSync';
 let running:Promise<void>|undefined;
 export const accountLibrarySyncFinishedEvent='sensa-account-library-sync-finished';
-export function syncAccountLibrary(){
- if(running)return running;
+export function syncAccountLibrary(options:{publishEmptyIdentity?:boolean}={}):Promise<void>{
+ // An explicit connection must not be swallowed by a concurrent ordinary empty pull.
+ if(running)return options.publishEmptyIdentity?running.then(()=>syncAccountLibrary(options)):running;
  const work=async()=>{
   const owner=await readLibrary(tx=>tx.get<{subject:string;accountId:string}>('meta','service-owner'));
   if(!owner)throw new Error('authentication_required');
@@ -19,7 +20,7 @@ export function syncAccountLibrary(){
    if(response.status===429)throw new Error('library_sync_rate_limited');if(response.status>=500)throw new Error('library_sync_server_error');
    let value:any;try{value=await response.json();}catch{throw new Error('library_sync_format');}
    if(!response.ok)throw new Error(value.code??'library_sync_unavailable');return value;
-  });
+  },options);
   // Checkpoint convergence is independent from public artifact delivery. Try
   // the device catalog after sync, but leave unavailable artifacts honestly
   // blocked instead of turning a healthy learner-data sync into a failure.
