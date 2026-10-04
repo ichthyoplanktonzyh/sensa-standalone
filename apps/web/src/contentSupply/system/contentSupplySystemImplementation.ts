@@ -116,6 +116,24 @@ const refreshCatalog = async (
 export const executeContentSupplyCommand = async (command: ContentSupplyCommand): Promise<unknown> => {
   await openLibrary();
   switch (command.kind) {
+    case 'prepare_direct_materialization': {
+      const [{learningSystem},{enrollDirectProvisioning,readDirectProvisioningSource},{preparationProvidersSnapshot,preparePersonal},{DirectLearningSourceError}]=await Promise.all([
+        import('../../learning/system/learningSystem'),import('../../data/library/directProvisioning'),import('../../data/library/personalLearning'),import('../../learning/system/directLearningSource'),
+      ]);
+      if(command.signal.aborted)throw command.signal.reason;
+      try{
+        const published=await learningSystem.execute({kind:'prepare_direct',operationId:crypto.randomUUID(),enrollmentId:command.enrollmentId});
+        if(published.status!=='needs_generation')return {...published,taskId:null};
+      }catch(cause){if(!(cause instanceof DirectLearningSourceError)||cause.reason!=='missing')throw cause;}
+      // A retained accepted publication can be regenerated without its cache;
+      // missing/corrupt registry facts still fail source resolution below.
+      const task=await enrollDirectProvisioning(crypto.randomUUID(),command.enrollmentId);
+      const [source,providers]=await Promise.all([readDirectProvisioningSource(command.enrollmentId),preparationProvidersSnapshot()]);
+      await preparePersonal(task.id,source,providers.content,providers.review,command.signal,()=>{});
+      const current=await readLibrary(tx=>tx.get<import('../provisioning/contracts').ContentProvisioningTask>('personalLearning',task.id));
+      if(!current)throw new Error('localFlow.enrollFirst');
+      return {taskId:current.id,targetId:current.targetId,status:current.status};
+    }
     case 'rehydrate': {
       const cache=await readLibrary(
         tx=>tx.get<unknown>('meta','package-catalog').then(parseCatalogCache),
@@ -155,10 +173,10 @@ export const executeContentSupplyCommand = async (command: ContentSupplyCommand)
     }
     case 'prepare_materialization': {
       const {
-        personalLearningControlSnapshot,
+        preparationProvidersSnapshot,
         preparePersonal,
       } = await import('../../data/library/personalLearning');
-      const { providers } = await personalLearningControlSnapshot();
+      const providers = await preparationProvidersSnapshot();
       return preparePersonal(
         command.taskId,
         command.source,
@@ -187,6 +205,10 @@ export const executeContentSupplyCommand = async (command: ContentSupplyCommand)
 
 export const readContentSupplyQuery = async (query: ContentSupplyQuery): Promise<unknown> => {
   switch (query.kind) {
+    case 'direct_provisioning_task': {
+      const {directProvisioningTaskId}=await import('../../data/library/directProvisioning');
+      return readLibrary(async tx=>await tx.get('personalLearning',directProvisioningTaskId(query.enrollmentId))??null);
+    }
     case 'workspace':
       return readWorkspace();
     case 'catalog':return readLibrary(async tx=>parseCatalogCache(await tx.get<unknown>('meta','package-catalog')).items);

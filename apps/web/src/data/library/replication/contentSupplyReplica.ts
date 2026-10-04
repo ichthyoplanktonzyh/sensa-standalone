@@ -17,6 +17,7 @@ export const contentSupplyReplica:DomainReplicaModule={
  conflictDependencies(entry,value){
   const fact=value&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,any>:{};
   if(entry.table==='personalLearning')return [
+   ...reference('curriculumEnrollments',fact.source?.enrollmentId),
    ...reference('semanticMeanings',fact.source?.personalMeaningId),
    ...reference('learningTargets',fact.targetId),
    ...reference('contentAttempts',fact.attemptId),

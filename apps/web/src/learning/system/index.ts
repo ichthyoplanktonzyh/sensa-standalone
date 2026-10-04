@@ -5,6 +5,11 @@ export {
   learningSystem,
 } from './learningSystem';
 export type {
+  DirectLearningChoice,
+  DirectLearningChoicePage,
+  DirectLearningReference,
+  DirectLearningSource,
+  DirectLearningEnrollment,
   FourStageInitialSessionProjection,
   FourStageReviewAnswer,
   FourStageReviewSessionProjection,

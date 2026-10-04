@@ -2,6 +2,7 @@ import {observeLibrary,type Table} from '../../data/library/store';
 import type {ContentSupplyQuery} from './contentSupplySystem';
 
 const queryTables = {
+  direct_provisioning_task:['personalLearning','meta'],
   workspace: ['packageCache', 'packageInstallations', 'meta'],
   catalog:['meta'],
   route_counts:['packageCache'],

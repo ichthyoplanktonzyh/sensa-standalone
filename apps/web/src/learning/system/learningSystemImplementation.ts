@@ -26,6 +26,14 @@ const setRetries = (languageRouteId: string, retries: readonly InterleavedLearni
 
 export const executeLearningCommand = async (command: LearningCommand): Promise<unknown> => {
   switch (command.kind) {
+    case 'prepare_direct': {
+      const {prepareDirectPublishedLearning}=await import('../../data/library/learning');
+      return prepareDirectPublishedLearning(command.operationId,command.enrollmentId);
+    }
+    case 'enroll_direct': {
+      const {enrollDirectSense}=await import('../../data/library/directLearningEnrollment');
+      return enrollDirectSense(command);
+    }
     case 'enroll_package': {
       const { enrollPackage } = await import('../../data/library/learning');
       return enrollPackage(
@@ -185,6 +193,20 @@ export const executeLearningCommand = async (command: LearningCommand): Promise<
 
 export const readLearningQuery = async (query: LearningQuery): Promise<unknown> => {
   switch (query.kind) {
+    case 'direct_choices': {
+      const {readDirectLearningChoices}=await import('./directLearningChoices');
+      return readDirectLearningChoices({query:query.query,targetLanguageTag:query.targetLanguageTag,page:query.page});
+    }
+    case 'direct_enrollment': {
+      const {readDirectLearningEnrollment}=await import('../../data/library/directLearningEnrollment');
+      return readDirectLearningEnrollment(query.enrollmentId);
+    }
+    case 'direct_source': {
+      const [{readLibrary,assertCurrentLibrary},{resolveDirectLearningSource}]=await Promise.all([
+        import('../../data/library/store'),import('./directLearningSource'),
+      ]);
+      return readLibrary(async tx=>{await assertCurrentLibrary(tx);return resolveDirectLearningSource(tx,query.reference,query.expectedDigest);});
+    }
     case 'home': {
       return readLearningHomeProjection({
         languageRouteId: query.languageRouteId,

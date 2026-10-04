@@ -45,9 +45,15 @@ export const learningReplica:DomainReplicaModule={
     ];
    }):[]),
   ];
-  if(entry.table==='curriculumEnrollments')return fact.source?.kind==='portable_package'
-   ?reference('packageInstallations',fact.source.packageKey)
-   :[];
+  if(entry.table==='curriculumEnrollments'){
+   if(fact.source?.kind==='portable_package')return reference('packageInstallations',fact.source.packageKey);
+   if(fact.source?.kind==='stable_sense'){
+    const selected=fact.source.selection?.reference;
+    if(selected?.origin?.kind==='published_package')return reference('packageInstallations',selected.origin.packageKey);
+    return [['senses',selected?.senseId],['senseVersions',selected?.senseVersionId],['bindings',selected?.bindingId],['bindingVersions',selected?.bindingVersionId]].flatMap(([kind,id])=>typeof id==='string'?reference('semanticRegistry',`${kind}:${id}`):[]);
+   }
+   return [];
+  }
   if(entry.table==='learningRuns')return [
    ...references('learningTargets',fact.targetIds),
    ...reference('learningTargets',fact.targetId),

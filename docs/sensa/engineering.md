@@ -203,6 +203,29 @@ Intake engine 把原 payload 留在捕获 provenance 中，确认 tuple 使用�
 手动编辑草稿按 Library／Inbox ID 隔离并记录来源 digest；过期填写保留，但必须重新核对后显式开始最新版本。
 Journey Gateway 保留命令串行化、幂等、来源见证和原子提交；Context 材料、澄清事实、表达绑定、
 已发布学习场景及 Meaning revision 的构建分别由内部事实模块负责，不拥有独立存储或提交能力。
+
+Learning System 的 `direct_source` 查询从确切 Registry 版本或已准入发布包解析学习来源，不借用 Personal Meaning。
+规范包摘要与归档摘要分别校验，发布包具体 spoken form 与 accepted forms 取其 `targetExpression`；未对齐 Reference、被拒绝或
+非 exact/realizes Binding 不可冒充学习来源。`enroll_direct` 在同一事务复查来源摘要和 Route，保存含不可变来源
+快照的 `stable_sense` Curriculum Enrollment；没有可用材料时只表示等待内容。同连接／路线意图幂等，已有有效
+membership 返回 already-in-scope，不替换进度或材料。`prepare_direct` 的已发布路径只准入选中的连接，与 Book
+复用 publication materialization，但保存独立 direct membership；无匹配发布内容时返回 needs-generation，不能
+显示 ready。Content Supply 的 `prepare_direct_materialization` 优先复用已发布材料，否则从已接受来源启动共享
+按需准备引擎；请求只含固定 Expression／Sense／通用原型，不构造 Personal Meaning 或私人 Context 授权。
+生成中出现其他入口提供的同连接／路线材料时，任务记录 covered，不覆盖现有材料；失败、停止和审核重试保留
+实际候选与尝试关系。所有来源的 Ready 按需材料在本机准入与恢复时必须提供请求、候选并重新通过同一
+无网络校验，不只信任保存的通过标记；请求与候选声明的生成策略身份和版本必须一致。
+按需内容生成策略 v4 要求桥接资源保存独立的 `meaningRendering`（固定辅助语言标签和准确含义呈现）；
+原始 `sense_confirmation` 仍逐字绑定已确认语义，不能由模型覆盖。学习卡片、详情、记录与 Portable 导出
+共用呈现读取规则，membership 准入同时核对呈现语言。旧策略的未完成候选不能沿用到 v4 准备；历史已保存
+物料保持自己的内容快照，不在显示时翻译或重写。
+Web 的“添加内容 → 按表达查找”通过 `direct_choices` 查询本机 Registry 当前 Binding 和已保存发布包，
+按目标语言、表达前缀与有限分页检索。SQLite 对源字段／轻量包摘要维护表达索引，不读取全部私人意义或包媒体；
+选中后解析确切版本，确认时再次核验。候选发现的 current-head 默认不改变已经选定版本的固定语义。
+确认保存的 intent 以 enrollment URL 恢复，并在学习列表中作为待准备条目参与搜索和计数；它不是 Ready Target。
+未对齐的词典 Reference 仍只读，不通过字符串匹配冒充此入口。备份和同步保留来源快照及固定依赖；公共包缓存缺失
+不抹去已接受意图，也不证明资源仍可执行。
+
 首次新建澄清草稿或接收不完整 Intake 同样使用独立追加快照，只能创建本次
 Inbox、适用的会话提示与收据，媒体继续同事务准入，不读取已有 Meaning／注册表。新 ID 的保留索引与源事实同事务维护；分配时排除本次
 operation 和尚未入库的 media 引用，提交时再检查占用。普通读取不全扫；显式完整诊断按源行核对并修复

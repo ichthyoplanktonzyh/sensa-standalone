@@ -22,6 +22,9 @@ type BrowserSmokeBridge = {
   restoreInboxMediaForTest():Promise<void>;
   seedDrafts(drafts: number, images: number): Promise<number>;
   seedSemanticWorld(state:JourneyState):Promise<number>;
+  holdDirectEnrollmentResultForTest():Promise<void>;
+  releaseDirectEnrollmentResultForTest():void;
+  failLearningWorkspaceReadsForTest(active:boolean):Promise<void>;
   holdWorldDetailReadsForTest():Promise<void>;
   releaseWorldDetailReadsForTest():void;
   holdWorldInboxReadsForTest():Promise<void>;
@@ -74,7 +77,24 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
   let releaseWorldReads:(()=>void)|undefined;
   let releaseInboxReads:((fail?:boolean)=>void)|undefined;
   let hiddenInboxMedia:import('./data/library/media').StoredMedia|undefined;
+  let releaseDirectResult:(()=>void)|undefined,restoreLearningReads:(()=>void)|undefined;
   window.__sensaBrowserSmoke = {
+    async holdDirectEnrollmentResultForTest(){
+      if(releaseDirectResult)throw new Error('Direct result already held');
+      const {learningSystem}=await import('./learning/system');const original=learningSystem.execute;
+      let release!:()=>void;const held=new Promise<void>(resolve=>{release=resolve;});
+      learningSystem.execute=(async command=>{const result=await original(command);if(command.kind==='enroll_direct'){learningSystem.execute=original;await held;}return result;}) as typeof original;
+      releaseDirectResult=()=>{learningSystem.execute=original;release();releaseDirectResult=undefined;};
+    },
+    releaseDirectEnrollmentResultForTest(){releaseDirectResult?.();},
+    async failLearningWorkspaceReadsForTest(active){
+      const {learningSystem}=await import('./learning/system');
+      if(!active){restoreLearningReads?.();restoreLearningReads=undefined;return;}
+      if(restoreLearningReads)throw new Error('Learning read fault already active');const original=learningSystem.read;
+      learningSystem.read=(async query=>{if(query.kind==='workspace')throw new Error('fixture-workspace-read-failure');return original(query);}) as typeof original;
+      restoreLearningReads=()=>{learningSystem.read=original;};
+      window.dispatchEvent(new CustomEvent('sensa-library-changed',{detail:{tables:['curriculumEnrollments']}}));
+    },
     async meaningPinsForTest(id){
       const {worldReadRepository}=await import('./experience/personalMeaningJourney/worldRepository');
       return (await worldReadRepository.detail(id)).detail?.directAlignments.map(({senseId,senseVersionId})=>({senseId,senseVersionId}))??[];

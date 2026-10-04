@@ -1,4 +1,5 @@
 {
+  "directLearning": {"title":"依表達查找","search":"搜尋表達","empty":"沒有符合的已確認表達","local":"本機語義庫","published":"已儲存學習包","previous":"上一頁","next":"下一頁","settings":"語言與模型設定","view":"查看學習","confirm":"確認加入學習"},
   "assurance": {
     "uk": "英音",
     "us": "美音",

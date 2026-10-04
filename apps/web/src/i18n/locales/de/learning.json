@@ -1,4 +1,5 @@
 {
+  "directLearning": {"title":"Ausdruck finden","search":"Ausdrücke suchen","empty":"Keine passenden bestätigten Ausdrücke","local":"Lokale Bedeutungen","published":"Gespeicherte Lernpakete","previous":"Zurück","next":"Weiter","settings":"Sprach- und Modelleinstellungen","view":"Lernen anzeigen","confirm":"Aufnahme bestätigen"},
   "assurance": {
     "uk": "UK",
     "us": "US",

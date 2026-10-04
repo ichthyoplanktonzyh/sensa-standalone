@@ -9,6 +9,7 @@ export const SHELL_PARAM_KEYS = [
   'bookKey',
   'packageKey',
   'worldAction',
+  'enrollmentId',
 ] as const;
 
 export type ShellParamKey = (typeof SHELL_PARAM_KEYS)[number];
@@ -41,6 +42,7 @@ export const SHELL_SCREEN_DEFINITIONS = [
   { id: 's-content-sense', host: 'app', params: ['senseId'], instance: { params: ['senseId'] } },
   { id: 's-expression-binding', host: 'app', params: ['meaningId', 'focusId'], instance: { params: ['meaningId', 'focusId'] } },
   { id: 's-learning-entry', host: 'learning' },
+  { id: 's-direct-learning', host: 'learning', params: ['enrollmentId'], instance: { params: ['enrollmentId'], defaults: { enrollmentId: 'search' } } },
   { id: 's-learning-library', host: 'learning' },
   { id: 's-learning-target', host: 'learning', params: ['targetId'], instance: { params: ['targetId'] } },
   { id: 's-library', host: 'learning' },

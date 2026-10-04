@@ -8,6 +8,42 @@ import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec.
 import {librarySyncBlockChars,librarySyncBlockStoreBatch} from '../../../packages/contracts/src/sensa/librarySync.ts';
 import {createLibraryCloudBrowserFixture} from '../../../tests/web/support/libraryCloudBrowserFixture.mts';
 test.setTimeout(300_000);
+test('direct learning intent and ready membership survive cloud restore without a Personal Meaning or package cache',async({browser})=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount('direct-learning'),sender=await fixture.createClient(account);
+  const publication=await libraryCloudPackageFixture();
+  const intent=await sender.evaluate(async({bookBytes,descriptor})=>{
+   const c=(window as any).core,original=window.fetch;
+   window.fetch=async input=>String(input)===descriptor.url?new Response(new Uint8Array(bookBytes)):new Response(null,{status:404});
+   try{
+    await c.contentSupplySystem.execute({kind:'install_catalog_item',descriptor,signal:new AbortController().signal});
+    const languageContext=(await c.languageRoutesSnapshot()).context;
+    const choices=await c.learningSystem.read({kind:'direct_choices',query:'borrow',targetLanguageTag:languageContext.targetLanguageTag,page:0});
+    const reference=choices.items[0].reference,source=await c.learningSystem.read({kind:'direct_source',reference});
+    return c.learningSystem.execute({kind:'enroll_direct',operationId:crypto.randomUUID(),reference,expectedDigest:source.sourceDigest,languageContext});
+   }finally{window.fetch=original;}
+  },{bookBytes:Array.from(publication.bookBytes),descriptor:publication.descriptor});
+  await sender.evaluate(()=>(window as any).sync());
+  const pendingReceiver=await fixture.createClient(account);await pendingReceiver.evaluate(()=>(window as any).sync());
+  const inspect=(page:import('@playwright/test').Page)=>page.evaluate(async(enrollmentId)=>{
+   const c=(window as any).core;
+   return {intent:await c.learningSystem.read({kind:'direct_enrollment',enrollmentId}),targets:(await c.readLearning()).targets,
+    meanings:await c.readLibrary((tx:any)=>tx.entries('semanticMeanings')),packages:await c.installedPackages()};
+  },intent.enrollmentId);
+  const pending=await inspect(pendingReceiver);assert.deepEqual(pending.intent,intent);assert.deepEqual(pending.targets,[]);assert.deepEqual(pending.meanings,[]);assert.deepEqual(pending.packages,[]);
+  assert.equal((await sender.evaluate(enrollmentId=>(window as any).core.learningSystem.execute({kind:'prepare_direct',operationId:crypto.randomUUID(),enrollmentId}),intent.enrollmentId)).status,'ready');
+  await sender.evaluate(()=>(window as any).sync());
+  const receiver=await fixture.createClient(account);await receiver.evaluate(()=>(window as any).sync());
+  const ready=await inspect(receiver),original=await inspect(sender);
+  assert.deepEqual(ready.targets,original.targets);assert.equal(ready.targets.length,1);assert.equal(ready.targets[0].curriculumMemberships[0].sourceKind,'stable_sense');
+  assert.deepEqual(ready.meanings,[]);assert.deepEqual(ready.packages,[]);
+  const backup=await receiver.evaluate(async()=>{const c=(window as any).core;return (await c.exportLibraryBackup('direct-fixture-backup-password')).summary;});
+  assert.equal(backup.targets,1);assert.equal(backup.runs,0,'restoration never fabricates a Run');
+  await receiver.reload();await receiver.evaluate(async()=>{const path='/core.js';(window as any).core=await import(/* @vite-ignore */ path);await (window as any).core.openLibrary();});
+  assert.deepEqual((await inspect(receiver)).targets,ready.targets);
+ }finally{await fixture.close();}
+});
 test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres', async({browser})=>{
  const fixture=await createLibraryCloudBrowserFixture(browser);
  const {origin,pool}=fixture;
@@ -114,15 +150,15 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  // Canonical v3 Intake -> Personal Semantic World -> generated resources.
  await a.evaluate(async()=>{
   const c=(window as any).core,id=()=>crypto.randomUUID(),library=await c.openLibrary();
-  const operationId=id(),modules=c.createJourneyModules(),gateway=modules.personalMeaningJourney,intake=modules.semanticIntake;
+  const operationId=id(),modules=c.createJourneyModules(),intake=modules.semanticIntake;
   const text='I wore my raincoat in the rain.';
   const accepted=await intake.submit({contractVersion:'sensa-intake-v3',operationId,capturedAt:new Date().toISOString(),context:{modality:'text',textSegment:text,mediaReferenceIds:[],languageTag:'en',source:{client:'sensa-web',url:'https://example.org',title:'A rainy day',sourceReferenceId:null,domSelector:null,paragraphContext:null}},expression:{surfaceForm:'raincoat',languageTag:'en',occurrence:{surfaceForm:'raincoat',locator:{kind:'text_span',start:10,end:18}},expressionTypeHint:'word'},sense:{senseKey:null,semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1',coreMeaningFocus:'防雨时穿在身上的衣服',prototypeScenes:[{summary:'一个人在雨中穿着防水的外衣。',participantRoles:['穿衣者'],states:['下雨'],directionOrCausality:null}],includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[]},wordingSource:'llm_suggested',resolutionProvenance:{resolverKind:'language_model',provider:'fixture',model:'fixture',policyVersion:'fixture-v1',sourceReferenceIds:['cloud-smoke']}},acceptance:{mode:'learner_direct'}});
   if(accepted.route!=='fast_track'||!accepted.personalMeaningId)throw Error('canonical intake not accepted');
-  const source=gateway.getLearningSources(accepted.personalMeaningId)[0];if(!source)throw Error('canonical learning source missing');
+  const source=(await c.worldReadRepository.detail(accepted.personalMeaningId)).sources[0];if(!source)throw Error('canonical learning source missing');
   const provider=await c.saveProvider(id(),{id:id(),expectedRevision:0,name:'Test model',kind:'compatible',endpoint:'https://sync-model.invalid/v1',model:'synthetic'},'fixture-device-secret');
   const settings=(await c.providerSnapshot()).settings;await c.assignProvider(id(),'content',provider.id,settings.revision);
   const restoreSpeech=c.replaceClientSpeechProvider({id:'fixture',revision:1,displayName:'Fixture',synthesize:async(input:any)=>({...input,audioUrl:'data:audio/mpeg;base64,UklGRg==',phoneticNotation:null,accentLabel:'en-US',source:'synthetic test fixture',method:'tts'})});
-  const original=window.fetch;window.fetch=async(url:any,init:any)=>{const address=String(url);if(address.endsWith('/sensa/resource-facts'))return new Response(JSON.stringify({input:JSON.parse(String(init?.body)),references:[]}),{headers:{'content-type':'application/json'}});if(address.startsWith(provider.endpoint))return new Response(JSON.stringify({model:'synthetic',choices:[{finish_reason:'stop',message:{content:JSON.stringify({resources:[{role:'experience_recall_cue',payload:{scene:'下雨时一个人穿了自己的防水外衣，挡住雨水。',senseFocus:'防雨时穿在身上的衣服'}},{role:'scene_bridge',payload:{text:'回想雨中穿着防水外衣的体验。'}},{role:'scene_realization',payload:{example:'I wore my raincoat in the rain.',targetStart:10,targetEnd:18,experienceResourceKey:'experience_recall_cue:0'}}]})}}]}),{headers:{'content-type':'application/json'}});return original(url,init);};
+  const original=window.fetch;window.fetch=async(url:any,init:any)=>{const address=String(url);if(address.endsWith('/sensa/resource-facts'))return new Response(JSON.stringify({input:JSON.parse(String(init?.body)),references:[]}),{headers:{'content-type':'application/json'}});if(address.startsWith(provider.endpoint))return new Response(JSON.stringify({model:'synthetic',choices:[{finish_reason:'stop',message:{content:JSON.stringify({resources:[{role:'experience_recall_cue',payload:{scene:'下雨时一个人穿了自己的防水外衣，挡住雨水。',senseFocus:'防雨时穿在身上的衣服'}},{role:'scene_bridge',payload:{text:'回想雨中穿着防水外衣的体验。',meaningRendering:{meaning:'在下雨时穿在身上、用来挡雨的外衣。',languageTag:'zh-CN'}}},{role:'scene_realization',payload:{example:'I wore my raincoat in the rain.',targetStart:10,targetEnd:18,experienceResourceKey:'experience_recall_cue:0'}}]})}}]}),{headers:{'content-type':'application/json'}});return original(url,init);};
   try{const languageContext=(await c.languageRoutesSnapshot()).context,task=await c.enrollPersonal(id(),source,languageContext,true);await c.preparePersonal(task.id,source,provider,null,new AbortController().signal,()=>{});}finally{restoreSpeech();window.fetch=original;}
   if((await c.personalLearningSnapshot())[0].status!=='ready')throw Error('personal resources not ready');
  });
@@ -159,7 +195,7 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  await fresh.evaluate(async({bookBytes,descriptor})=>{const c=(window as any).core,original=window.fetch;window.fetch=async input=>{const url=String(input);const body=url===descriptor.url?new Uint8Array(bookBytes):null;return body?new Response(body,{headers:{'content-length':String(body.byteLength)}}):new Response(null,{status:404});};try{await c.writeLibraryState((tx:any)=>tx.put('meta','package-catalog',{format:'sensa-local-registry-cache-v3',revision:'fixture',checkedAt:new Date().toISOString(),items:[descriptor]}));const result=await c.contentSupplySystem.execute({kind:'rehydrate'});if(result.ready.length!==1)throw Error(JSON.stringify(result));}finally{window.fetch=original;}},{bookBytes,descriptor});
  assert.equal((await fresh.evaluate(()=>(window as any).core.installedPackages())).length,1,'the Content Supply resolver rehydrates exact package bytes after learner facts converge');
  const backup=await fresh.evaluate(async()=>{const c=(window as any).core;return (await c.exportLibraryBackup('sync-test-backup-password')).summary;});assert.equal(backup.targets,2);assert.equal(backup.packages,1);assert(backup.events>0);
- assert.equal(await fresh.evaluate(async()=>{const gateway=(window as any).core.createJourneyGateway();for(let attempt=0;attempt<50;attempt++){const count=gateway.getWorldItems().length;if(count)return count;await new Promise(resolve=>setTimeout(resolve,10));}return 0;}),1);assert.equal((await fresh.evaluate(()=>(window as any).core.personalLearningSnapshot()))[0].status,'ready');
+ assert.equal(await fresh.evaluate(async()=>((await (window as any).core.worldReadRepository.page({query:'',filter:'all',offset:0,limit:40})).total)),1);assert.equal((await fresh.evaluate(()=>(window as any).core.personalLearningSnapshot()))[0].status,'ready');
  const checkpointBlocks=(await pool.query('SELECT data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1',[accountId])).rows;
  assert(!checkpointBlocks.some(r=>r.data.includes('fixture-device-secret')),'BYOK credentials stay device-local');
  assert(!checkpointBlocks.some(r=>r.data.includes(Buffer.from('synthetic-sync-audio:').toString('base64'))),'public package audio bytes stay outside learner Cloud Checkpoints');

@@ -6,7 +6,7 @@ import {
 import { canonicalJsonDigest, stableUuid } from '@sensa/learning-kernel';
 
 import type { InstalledPackage } from '../../data/library/packageRecords';
-import type { PersonalMeaningLearningSource } from './contracts';
+import type { ContentProvisioningSource } from './contracts';
 import type { LocalLearningMaterialization } from '../../learning/runtime/localProtocol';
 import {
   validateLightweightInitialMaterialization,
@@ -64,13 +64,17 @@ export function materializePublishedEntry(input: {
 export function materializeOnDemandContent(input: {
   learnerUserId: string;
   learningTargetId: string;
-  source: PersonalMeaningLearningSource;
+  source: ContentProvisioningSource;
   content: LightweightInitialLearningMaterialization['content'];
   attemptId: string;
   personalAnchorUseGrantId: string | null;
   createdAt: string;
 }): LocalLearningMaterialization {
   const { reference } = input.source;
+  const provenance=input.source.sourceKind==='stable_sense'
+    ?{kind:'stable_sense',curriculumEnrollmentId:input.source.reference.enrollmentId,sourceDigest:input.source.reference.sourceDigest}
+    :{personalMeaningId:input.source.reference.personalMeaningId,personalMeaningRevisionId:input.source.reference.personalMeaningRevisionId,alignmentBasisReferenceId:input.source.reference.alignmentBasisReferenceId};
+  if(input.source.sourceKind==='stable_sense'&&input.personalAnchorUseGrantId!==null)throw new Error('localFlow.meaningChanged');
   const content = structuredClone(input.content);
   const snapshot = sensaLearningMaterializationSnapshotSchema.parse({
     contractVersion: sensaLearningConnectionContractVersion,
@@ -85,9 +89,7 @@ export function materializeOnDemandContent(input: {
     validationStatus: 'validated',
     validatorVersion: 'sensa-web-content-v1',
     provenance: {
-      personalMeaningId: reference.personalMeaningId,
-      personalMeaningRevisionId: reference.personalMeaningRevisionId,
-      alignmentBasisReferenceId: reference.alignmentBasisReferenceId,
+      ...provenance,
       senseId: reference.senseId,
       senseVersionId: reference.senseVersionId,
       bindingId: reference.bindingId,

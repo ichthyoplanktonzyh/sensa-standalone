@@ -1,9 +1,12 @@
 import type { SensaFormalPinnedLanguageContext } from '@sensa/contracts/sensa';
+import {learningSupportMeaning} from '@sensa/contracts/sensa';
 
 import { contentSupplySystem, type ContentSupplyRuntimePackage } from '../../contentSupply/system';
 import { readHomeLearningRecords } from '../../data/library/store';
 import { readLearningOverview } from '../../data/library/learning';
 import { localFlowText } from '../../i18n/localFlowText';
+import '../../i18n/learningResources';
+import i18n from '../../i18n';
 import { assuranceContent, assuranceView, localAssuranceState } from '../protocols/assurance';
 import { fourStageContent, fourStageQueue } from '../protocols/fourStage';
 import { toReviewSpec } from '../content/reviewCards';
@@ -99,8 +102,8 @@ const targetPresentation = (
   example: targetExample(material),
   partOfSpeech: '',
   expressionTypeLabel: localFlowText('expression'),
-  sourceKind: membership.packageKey ? 'book' : 'personal_semantic_world',
-  sourceLabel: membership.packageKey
+  sourceKind: membership.provenance.kind==='stable_sense'?'direct':membership.packageKey ? 'book' : 'personal_semantic_world',
+  sourceLabel: membership.provenance.kind==='stable_sense'?i18n.t('study.sources.direct',{ns:'learning'}):membership.packageKey
     ? localFlowText('downloadedPackages')
     : localFlowText('semanticWorld'),
   runtimeSenseId: null,
@@ -182,9 +185,7 @@ const recordProjection = (
     const target = targets.find((candidate) => candidate.id === targetId);
     const participant = run.participants[targetId];
     const material = participant ? localLastPresentedMaterial(participant) : undefined;
-    const meaning = material?.content.resources.find((resource) => (
-      resource.materialRoleKey === 'sense_confirmation'
-    ))?.contentPayload.meaning;
+    const meaning = material?learningSupportMeaning(material.content.resources,participant?.languageContext.supportLanguageTag):undefined;
     return {
       recordId: `${run.id}:${targetId}`,
       targetId,
@@ -406,7 +407,11 @@ export async function readLearningWorkspaceProjection(input: Readonly<{
       &&enrollment.languageContext.languageRouteId===input.languageContext.languageRouteId
       &&enrollment.languageContext.targetLanguageTag===input.languageContext.targetLanguageTag
       &&enrollment.languageContext.supportLanguageTag===input.languageContext.supportLanguageTag)
-      .map(enrollment=>({enrollmentId:enrollment.id,languageRouteId:enrollment.languageContext.languageRouteId,source:structuredClone(enrollment.source)})),
+      .map(enrollment=>({enrollmentId:enrollment.id,languageRouteId:enrollment.languageContext.languageRouteId,source:enrollment.source.kind==='stable_sense'
+        ?{kind:'stable_sense' as const,senseId:enrollment.source.selection.reference.senseId,senseVersionId:enrollment.source.selection.reference.senseVersionId,
+          bindingId:enrollment.source.selection.reference.bindingId,bindingVersionId:enrollment.source.selection.reference.bindingVersionId,
+          expression:enrollment.source.selection.expression.surfaceForm,meaning:enrollment.source.selection.semanticSpec.coreMeaningFocus}
+        :structuredClone(enrollment.source)})),
     targets,
     queue: {
       activeTargetIds: queue.activeTargets.map((target) => target.id),

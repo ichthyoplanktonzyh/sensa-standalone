@@ -9,6 +9,19 @@ import {worldReadRepository} from '../../../apps/web/src/experience/personalMean
 import type {WorldBrowseQuery} from '../../../apps/web/src/experience/personalMeaningJourney/worldRead';
 import {sqliteRecordAdapter} from '../../../apps/web/src/data/library/sqliteAdapter';
 import {WorldSnapshotReader} from '../../../apps/web/src/experience/personalMeaningJourney/worldReaders';
+import {learningSystem,type DirectLearningReference} from '../../../apps/web/src/learning/system/learningSystem';
+import {languageRoutesSnapshot} from '../../../apps/web/src/data/library/language';
+import {readLibrary,openLibrary} from '../../../apps/web/src/data/library/store';
+
+export async function directSourceForTest(meaningId:string){
+ await openLibrary();
+ const fixed=(await worldReadRepository.detail(meaningId)).sources[0]!.reference;
+ const reference:DirectLearningReference={origin:{kind:'semantic_registry'},senseId:fixed.senseId,senseVersionId:fixed.senseVersionId,bindingId:fixed.bindingId,bindingVersionId:fixed.bindingVersionId};
+ return {selection:await learningSystem.read({kind:'direct_source',reference}),languageContext:(await languageRoutesSnapshot()).context};
+}
+export const enrollDirectForTest=(input:Extract<import('../../../apps/web/src/learning/system/learningSystem').LearningCommand,{kind:'enroll_direct'}>)=>learningSystem.execute(input);
+export const directEnrollmentForTest=(enrollmentId:string)=>learningSystem.read({kind:'direct_enrollment',enrollmentId});
+export const directCountsForTest=()=>readLibrary(async tx=>({meanings:await tx.count('semanticMeanings'),enrollments:await tx.count('curriculumEnrollments'),targets:await tx.count('learningTargets'),runs:await tx.count('learningRuns')}));
 
 const repository=new LibraryJourneyRepository();
 let held=false,release:(()=>void)|undefined,entered=false;

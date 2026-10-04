@@ -4,7 +4,7 @@ import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import {useEffect,useState} from 'react';
 import {
  personalLearningSourceKey,
- type ContentProvisioningTask,
+ type PersonalContentProvisioningTask as ContentProvisioningTask,
  type PersonalMeaningLearningSource,
 } from '../../contentSupply/system';
 import type {usePersonalLearning} from './usePersonalLearning';

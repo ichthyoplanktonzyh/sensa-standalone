@@ -1,4 +1,5 @@
 {
+  "directLearning": {"title":"Buscar una expresión","search":"Buscar expresiones","empty":"No hay expresiones confirmadas coincidentes","local":"Significados locales","published":"Paquetes guardados","previous":"Anterior","next":"Siguiente","settings":"Ajustes de idioma y modelo","view":"Ver aprendizaje","confirm":"Confirmar incorporación"},
   "assurance": {
     "uk": "Reino Unido",
     "us": "EE. UU.",

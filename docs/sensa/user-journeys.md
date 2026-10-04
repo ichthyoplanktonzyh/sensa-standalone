@@ -139,7 +139,7 @@ Sensa 的长旅程分成三层：
 | `LJ-02` | 导入、导出或分享一个 Portable `.sensa` | 只读预览/合格内容快照 → 明确安装或导出 → 本机拥有可复用包 | 不携带进度、Evidence 或调度；加入学习是后续动作 |
 | `LJ-03` | 从真实材料形成个人意义 | Web、扩展或 Agent Capture → Semantic Intake → Personal Meaning 或 Inbox | 快轨/慢轨是事实完整性分支，不是不同旅程 |
 | `LJ-04` | 处理待确认材料 | Inbox → 补 Context/Expression/Sense/Acceptance 或丢弃 → Meaning/Discarded | 必须继承原来源、媒体和已知事实 |
-| `LJ-05` | 从已有 stable Sense 直接学习 | 搜索/Reference/Reviewed Lookup → 选择 Binding 与 Route → Add-to-Learning | 不要求创建 Personal Meaning；当前 UI 入口仍需完整闭合 |
+| `LJ-05` | 从已有 stable Sense 直接学习 | 搜索/Reference/Reviewed Lookup → 选择 Binding 与 Route → Add-to-Learning | 不要求创建 Personal Meaning；Reference-only 结果不冒充 stable Sense |
 | `LJ-06` | 明确把一个来源加入正式学习 | Learning Source → 固定 Route 和 consent → Provisioning → Ready/Blocked | 意图、材料准备和 Ready 是三个状态 |
 | `LJ-07` | 完成首次正式学习 | Ready Plan → Initial Learning Run → Completion → Scheduling Handoff | 只有 Runtime 可产生正式完成事实 |
 | `LJ-08` | 完成一次到期复习 | Due Retention Target → Review Run → Memory Outcome → 新调度 | 每次 Review 至多结算一次 |
@@ -677,8 +677,10 @@ stable Sense 和 target Binding，再明确加入当前路线：
 共同 Provisioning / Ready / Runtime 主干
 ```
 
-该路径不得作为副作用创建 Personal Meaning。若当前 UI 没有完整入口，应把它标为不可用或实现缺口，而不是
-从正式用户旅程中删除这项领域能力。
+Web 的“添加内容 → 按表达查找”检索本机已有的稳定连接和已安装发布包，选择后预览固定意义、表达与 Route，
+明确加入后才保存学习意图。已发布且语言匹配的材料可直接准备，否则由用户明确启动按需准备；失败或中断的
+意图可从学习列表找回并重试。没有稳定 Sense/Binding 的 Reference-only 结果不得伪造为可加入的连接。
+该路径不得作为副作用创建 Personal Meaning，也不要求用户先给已有稳定 Sense 补造私人 Context。
 
 ### 16.3 Add-to-Learning 与 Provisioning
 

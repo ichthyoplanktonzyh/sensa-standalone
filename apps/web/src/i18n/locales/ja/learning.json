@@ -1,4 +1,5 @@
 {
+  "directLearning": {"title":"表現を探す","search":"表現を検索","empty":"一致する確認済みの表現はありません","local":"ローカルの意味","published":"保存済み学習パッケージ","previous":"前へ","next":"次へ","settings":"言語とモデルの設定","view":"学習を表示","confirm":"学習への追加を確定"},
   "assurance": {
     "uk": "UK",
     "us": "US",

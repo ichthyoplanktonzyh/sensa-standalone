@@ -39,7 +39,7 @@ export interface LocalCurriculumMembership {
    * libraries written before Book release updates existed. */
   readonly status?:'active'|'superseded';
   readonly languageContext:SensaFormalPinnedLanguageContext;
-  readonly sourceKind:'sense_learning_package'|'personal_meaning_alignment';
+  readonly sourceKind:'sense_learning_package'|'personal_meaning_alignment'|'stable_sense';
   readonly provenance:Readonly<Record<string,unknown>>;
   readonly packageKey:string|null;
   readonly assurancePackageKey?:string;

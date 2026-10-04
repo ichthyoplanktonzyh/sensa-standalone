@@ -91,7 +91,7 @@ test('a current library with a missing source table fails without recreating an 
 test('missing fixed query indexes are repaired without replacing source tables or records',()=>{
  const raw=new sqlite3.oo1.DB(':memory:','c');new SqliteRecordDatabase(sqlite3,raw,'memory').initialize();
  raw.exec({sql:'INSERT INTO sensa_records(table_name,record_key,value_json) VALUES(?,?,?)',bind:['meta','owner-proof',encoded({preserve:true})]});
- const missing=['sensa_records_content_revision','sensa_meaning_lookup_gram_document','sensa_world_browse_order'];
+ const missing=['sensa_records_content_revision','sensa_meaning_lookup_gram_document','sensa_world_browse_order','sensa_registry_binding_expression','sensa_package_learning_expression'];
  for(const index of missing)raw.exec(`DROP INDEX ${index}`);
  const db=new SqliteRecordDatabase(sqlite3,raw,'memory');
  try{

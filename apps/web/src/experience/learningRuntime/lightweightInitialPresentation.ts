@@ -1,4 +1,4 @@
-import {roleAllowedByResourcePlan} from '@sensa/contracts/sensa';
+import {roleAllowedByResourcePlan,learningSupportMeaning} from '@sensa/contracts/sensa';
 /**
  * Delivery contract for the two Lightweight Initial card presentations.
  *
@@ -16,7 +16,6 @@ import {
   sensaLightweightPronunciationMaterialSchema,
   sensaLightweightRecallSupportSchema,
   sensaLightweightSceneBridgeMaterialSchema,
-  sensaLightweightSenseConfirmationMaterialSchema,
   sensaLightweightTargetExpressionMaterialSchema,
   sensaLightweightUsageGuidanceMaterialSchema,
   type SensaCardPresentationDefinition,
@@ -226,9 +225,6 @@ export const assembleLightweightInitialPresentation = (
     const expression = sensaLightweightTargetExpressionMaterialSchema.parse(
       requiredResourceForRole(step, materialization, 'target_expression').contentPayload,
     );
-    const sense = sensaLightweightSenseConfirmationMaterialSchema.parse(
-      requiredResourceForRole(step, materialization, 'sense_confirmation').contentPayload,
-    );
     const pronunciationResource = boundResourcesForRole(
       step,
       materialization,
@@ -271,7 +267,7 @@ export const assembleLightweightInitialPresentation = (
       slots: Object.freeze({
         categoryResources: Object.freeze(LIGHTWEIGHT_INITIAL_MATERIAL_ROLES.filter(key=>!['experience_recall_cue','recall_support','target_expression','sense_confirmation','pronunciation','language_structure','usage_guidance','scene_bridge','scene_realization'].includes(key) && LIGHTWEIGHT_RESOURCE_PROFILE[key].phase==='post_reveal').flatMap(key=>boundResourcesForRole(step,materialization,key)).filter(resource=>!materialization.content.resourcePlan||roleAllowedByResourcePlan(materialization.content.resourcePlan,resource.materialRoleKey))),
         expressionPrimary: Object.freeze({ surface: expression.surface,spokenForm:expression.spokenForm }),
-        senseConfirmation: Object.freeze({ meaning: sense.meaning }),
+        senseConfirmation: Object.freeze({ meaning: learningSupportMeaning([requiredResourceForRole(step,materialization,'sense_confirmation'),...boundResourcesForRole(step,materialization,'scene_bridge')]) }),
         pronunciation: pronunciation
           ? Object.freeze(pronunciation)
           : null,

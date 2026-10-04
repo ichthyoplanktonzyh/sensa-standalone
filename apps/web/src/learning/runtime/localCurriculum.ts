@@ -1,4 +1,4 @@
-import type {SensaFormalPinnedLanguageContext} from '@sensa/contracts/sensa';
+import {learningSupportMeaning,type SensaFormalPinnedLanguageContext} from '@sensa/contracts/sensa';
 import type {
   LocalCurriculumMembership,
   LocalExecutableLearningTarget,
@@ -37,9 +37,7 @@ export function localTargetInRoute(
 }
 
 export function localCurriculumMeaning(membership:LocalCurriculumMembership):string {
-  const value=membership.material.content.resources.find(resource=>resource.materialRoleKey==='sense_confirmation')?.contentPayload.meaning;
-  if(typeof value!=='string'||!value.trim())throw new Error('localFlow.resourceInvalid');
-  return value;
+  return learningSupportMeaning(membership.material.content.resources,membership.languageContext.supportLanguageTag);
 }
 
 export function localExecutableTarget(

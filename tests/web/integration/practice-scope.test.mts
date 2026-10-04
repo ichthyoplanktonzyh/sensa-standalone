@@ -26,6 +26,7 @@ const studyTarget: PracticeStudyTarget = {
     },
     presentation: {
       expression: 'borrow',
+      meaning: '他人の物を一時的に受け取り、返すつもりで使うこと。',
       targetLanguageTag: 'en',
     },
     material: {
@@ -103,7 +104,7 @@ assert.equal(current.currentScope.targets.length, 1, 'current learning comes onl
 const learned = current.currentScope.targets[0]!;
 assert.equal(learned.identity.kind, 'learning_target');
 assert.equal(learned.expression.surfaceForm, 'borrow');
-assert.equal(learned.sense.label, '暂时取得并预期归还');
+assert.equal(learned.sense.label, '他人の物を一時的に受け取り、返すつもりで使うこと。', 'practice uses the localized learner projection, not the raw semantic source');
 assert.equal(learned.context?.preview, '向同事借伞，第二天归还。');
 assert.equal(learned.capabilities.validatedLearningMaterial, true);
 assert.equal(learned.capabilities.pronunciation, true);
@@ -140,7 +141,7 @@ const snapshot = createPracticeScopeSnapshot(
   '2026-09-16T04:00:00.000Z',
 );
 (current.currentScope.targets[0]!.sense as { label: string }).label = 'changed later';
-assert.equal(snapshot.targets[0]?.sense.label, '暂时取得并预期归还', 'a Session snapshot is detached from later source changes');
+assert.equal(snapshot.targets[0]?.sense.label, '他人の物を一時的に受け取り、返すつもりで使うこと。', 'a Session snapshot is detached from later source changes');
 assert.equal(snapshot.snapshotId, 'practice-snapshot-1');
 
 console.log('PASS: Free Practice resolves real learning and semantic-world targets, checks capabilities, and pins detached Session scope snapshots.');

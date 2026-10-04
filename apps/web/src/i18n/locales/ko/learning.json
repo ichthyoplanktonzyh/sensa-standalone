@@ -1,4 +1,5 @@
 {
+  "directLearning": {"title":"표현 찾기","search":"표현 검색","empty":"일치하는 확정된 표현이 없습니다","local":"로컬 의미","published":"저장된 학습 패키지","previous":"이전","next":"다음","settings":"언어 및 모델 설정","view":"학습 보기","confirm":"학습 추가 확인"},
   "assurance": {
     "uk": "영국",
     "us": "미국",

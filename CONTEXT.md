@@ -342,8 +342,8 @@ grounding or during repair. It is neither the authoring Sketch itself nor proof
 that the learner reconstructed the experience.
 
 **Support-Language Bridge**:
-A reviewed access path with a declared Language Tag that activates existing concepts
-and marks important support/target-language coverage differences. It is used only
+A reviewed access path with a declared Language Tag that renders the fixed meaning for the learner,
+activates existing concepts and marks important support/target-language coverage differences. It is used only
 when compatible with the Pinned Language Context and is not the Sense itself, a
 translation identity or an assessment answer.
 

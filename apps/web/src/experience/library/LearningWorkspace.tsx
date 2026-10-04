@@ -38,6 +38,8 @@ const LearningTargetLibraryScreen=lazy(()=>import('../components/learning/Learni
 const ProfileScreen=lazy(()=>import('../components/ProfileScreen').then(module=>({default:module.ProfileScreen})));
 const StatsScreen=lazy(()=>import('../components/StatsScreen').then(module=>({default:module.StatsScreen})));
 const BatchPersonalLearning=lazy(()=>import('./BatchPersonalLearning').then(module=>({default:module.BatchPersonalLearning})));
+const DirectLearningScreen=lazy(()=>import('./DirectLearningScreen').then(module=>({default:module.DirectLearningScreen})));
+const LearningEntryScreen=lazy(()=>import('./DirectLearningScreen').then(module=>({default:module.LearningEntryScreen})));
 const ProviderPanel=lazy(()=>import('../components/ProviderPanel').then(module=>({default:module.ProviderPanel})));
 const PackageRuntime=lazy(()=>import('./PackageLearningRuntime').then(module=>({default:module.PackageRuntime})));
 
@@ -57,6 +59,12 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
  const toast=useOverlayStore(state=>state.toast);
  const pendingPersonal=personalLearning.tasks.filter(task=>!packageLearning.targets.some(target=>target.targetId===task.targetId&&target.curriculumMembershipId===task.curriculumMembershipId));
  const activePendingPersonal=pendingPersonal.filter(task=>task.languageContext.languageRouteId===activeRoute.id);
+ const pendingDirect=packageLearning.enrollments.flatMap(enrollment=>{
+  const source=enrollment.source;
+  return source.kind==='stable_sense'&&enrollment.languageRouteId===activeRoute.id&&!packageLearning.activeTargets.some(target=>target.identity.senseVersionId===source.senseVersionId&&target.identity.bindingVersionId===source.bindingVersionId)
+   ?[{enrollmentId:enrollment.enrollmentId,expression:source.expression,meaning:source.meaning}]:[];
+ });
+ const openDirect=(enrollmentId?:string)=>goMain('s-direct-learning',{enrollmentId});
  const selectedPersonalTask=activePendingPersonal.find(task=>task.targetId===params.targetId);
  const localSelectedTarget=packageLearning.activeTargets.find(target=>target.targetId===params.targetId);
  const openLocalTarget=(id:string)=>goMain('s-learning-target',{targetId:id});
@@ -134,16 +142,18 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
   's-real-world-listening':screenActive=><YouGlishListeningScreen active={screenActive} targets={(activePracticeScope??practiceScopeCatalog.currentScope).targets} onBack={backMain} toast={toast}/>,
   's-study':screenActive=><StudyScreen
     policySummary={[...new Set(packageLearning.targets.map(target=>target.policy))].map(policy=>t('learningPreferences.policies.'+policy)).join(' · ')||undefined}
-    active={screenActive} tab={studyTab} onTabChange={setStudyTab} onAddLearning={()=>setMainStack(['s-catalog'])}
+    active={screenActive} tab={studyTab} onTabChange={setStudyTab} onAddLearning={()=>goMain('s-learning-entry')}
     onOpenTargetLibrary={()=>goMain('s-learning-library')} onOpenTarget={openLocalTarget}
     onPolicyChange={()=>{}} defaultPolicy="lightweight" policyOptions={packageLearning.policyOptions} fixedPolicy
-    learningTargetCount={packageLearning.activeTargets.length+activePendingPersonal.length}
+    learningTargetCount={packageLearning.activeTargets.length+activePendingPersonal.length+pendingDirect.length}
     languageLabel={interfaceLanguageDisplayName(activeRoute.targetLanguageTag,resolveInterfaceLocale(i18n.language))}
     readyInitialCount={packageLearning.initialReady.length} reviewCount={packageLearning.due.length}
     dailyNewCount={dailyNewCount} learningRecords={packageLearning.records}
     onOpenStats={()=>goMain('s-stats')} onDailyNewCountChange={updateLocalQuantity}/>,
   's-learning-library':screenActive=><LearningTargetLibraryScreen active={screenActive}
-    notice={personalLearning.taskSourcesUnavailable?<div role="alert"><p>{localFlowText('preparationReadFailed')}</p><button className={setupButton} onClick={personalLearning.retryTaskSources}>{localFlowText('retryPreparation')}</button></div>:personalLearning.taskSourcesLoading?<p role="status" aria-busy="true">{localFlowText('loadingSensa')}</p>:null}
+    availability={packageLearning.loadStatus}
+    notice={packageLearning.loadStatus==='unavailable'?<div role="alert"><p>{packageLearning.notice||localFlowText('preparationReadFailed')}</p><button className={setupButton} onClick={()=>void packageLearning.retryInitialLoad()}>{t('reliability.retry')}</button></div>:packageLearning.loadStatus==='loading'?<p role="status" aria-busy="true">{localFlowText('loadingSensa')}</p>:personalLearning.taskSourcesUnavailable?<div role="alert"><p>{localFlowText('preparationReadFailed')}</p><button className={setupButton} onClick={personalLearning.retryTaskSources}>{localFlowText('retryPreparation')}</button></div>:personalLearning.taskSourcesLoading?<p role="status" aria-busy="true">{localFlowText('loadingSensa')}</p>:null}
+    pendingEntries={pendingDirect} onOpenPending={openDirect}
     targets={Object.fromEntries([...packageLearning.activeTargets.map(target=>[target.targetId,target.presentation]),...activePendingPersonal.map(task=>[task.targetId,pendingPersonalTargetView(task,personalLearning.sourceForTask(task),personalLearning.taskSourcesLoading)])])}
     targetIds={[...packageLearning.activeTargets.map(target=>target.targetId),...activePendingPersonal.map(task=>task.targetId)]}
     policyByTarget={Object.fromEntries([...packageLearning.activeTargets.map(target=>[target.targetId,target.policy]),...activePendingPersonal.map(task=>[task.targetId,'lightweight' as const])])}
@@ -153,7 +163,7 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
     reviewDueTargetIds={new Set(packageLearning.due.map(target=>target.targetId))}
     relearningTargetIds={new Set(packageLearning.activeTargets.filter(target=>target.relearning).map(target=>target.targetId))}
     reviewingTargetIds={new Set()} relearningRepairTargetIds={new Set()} relearningRetestTargetIds={new Set()} declaredMasteryTargetIds={new Set(packageLearning.activeTargets.filter(target=>target.declaredMastery).map(target=>target.targetId))}
-    onBack={backMain} onAddLearning={()=>setMainStack(['s-catalog'])} onOpenTarget={openLocalTarget}/>,
+    onBack={backMain} onAddLearning={()=>goMain('s-learning-entry')} onOpenTarget={openLocalTarget}/>,
   's-catalog':screenActive=><PackageCatalogScreen active={screenActive} c={packageLearning} onBack={backMain}
     onOpenBook={bookKey=>setMainStack(['s-catalog','s-catalog-book'],{bookKey})}
     onLibrary={()=>setMainStack(['s-library'])} onPublisher={()=>setMainStack(['s-publisher'])}/>,
@@ -168,9 +178,9 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
     onBack={backMain} onLearning={returnHome} onTarget={openLocalTarget}/>,
   's-publisher':screenActive=><PackagePublisherScreen active={screenActive} c={packageLearning} onBack={backMain}
     onCatalog={()=>setMainStack(['s-catalog'])} onLibrary={()=>setMainStack(['s-library'])}/>,
-  's-learning-entry':screenActive=><PackageCatalogScreen active={screenActive} c={packageLearning} onBack={backMain}
-    onOpenBook={bookKey=>setMainStack(['s-catalog','s-catalog-book'],{bookKey})}
-    onLibrary={()=>setMainStack(['s-library'])} onPublisher={()=>setMainStack(['s-publisher'])}/>,
+  's-learning-entry':screenActive=><LearningEntryScreen active={screenActive} onBack={backMain} onCatalog={()=>goMain('s-catalog')} onDirect={()=>openDirect()} onWorld={()=>goMain('s-semantic-world')}/>,
+  's-direct-learning':screenActive=><DirectLearningScreen active={screenActive} languageContext={packageLearning.languageContext} enrollmentId={params.enrollmentId}
+    onEnrolled={enrollmentId=>setMainStack(mainStack,{enrollmentId})} onBack={backMain} onCatalog={()=>goMain('s-catalog')} onSettings={()=>goMain('s-profile')} onTarget={openLocalTarget}/>,
   's-learning-target':renderLearningTarget,
   's-stats':screenActive=><StatsScreen active={screenActive} onBack={backMain} records={packageLearning.records} onOpenTarget={openLocalTarget}/>,
   's-profile':screenActive=><ProfileScreen localLibrary fixedLearningPolicy modelSettings={<ProviderPanel/>} active={screenActive} onGoStudyPlan={()=>{setStudyTab('a');goMain('s-study');}} defaultPolicy="lightweight" policyOptions={packageLearning.policyOptions} dailyNewCount={dailyNewCount} onPolicyChange={()=>{}} onDailyNewCountChange={updateLocalQuantity}/>,

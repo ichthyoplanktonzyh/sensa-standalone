@@ -883,6 +883,8 @@ scene domain、construction、disambiguating cue、collocations 和 variation no
   呈现；Text Experience Render 必须是可独立建立经验的场景而非说明，renderer fallback 不得改变
   目标 Sense 或教学约束；
 - Support-Language Bridge 使用其声明的 Support Language，明确必要的跨语言范围差异；
+  面向 learner 的含义呈现与固定 Sense 语义原文分离，必须保持同一 Sense Version 的范围与视角，
+  不得把源文字直接重标成另一种语言，也不得以翻译或重述创建新的 Sense 或 Personal Meaning；
 - Example 必须自然表达目标 Sense，target form/span 可确定性核验；存在 support-language render 时，
   两侧语义必须一致；
 - Attested Usage 必须固定真实 source/rights、exact clip/context、target occurrence 与 approved

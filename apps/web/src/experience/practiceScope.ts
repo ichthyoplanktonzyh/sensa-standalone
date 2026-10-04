@@ -172,11 +172,10 @@ const targetsFromStudyScope = (
   inputs: readonly PracticeStudyTarget[],
 ): readonly PracticeScopeTarget[] => inputs.map(({ target }) => {
   const expressionPayload = payloadFor(target, 'target_expression');
-  const sensePayload = payloadFor(target, 'sense_confirmation');
   const pronunciationPayload = payloadFor(target, 'pronunciation');
   const contextPayload = payloadFor(target, 'experience_recall_cue');
   const expression = payloadString(expressionPayload, 'surface') ?? target.presentation.expression;
-  const meaning = payloadString(sensePayload, 'meaning') ?? target.identity.senseId;
+  const meaning = target.presentation.meaning;
   const contextPreview = compact(
     payloadString(contextPayload, 'scene')
       ?? payloadString(contextPayload, 'senseFocus')

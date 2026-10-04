@@ -1,4 +1,5 @@
 {
+  "directLearning": {"title":"İfade bul","search":"İfade ara","empty":"Eşleşen onaylanmış ifade yok","local":"Yerel anlamlar","published":"Kaydedilen öğrenme paketleri","previous":"Önceki","next":"Sonraki","settings":"Dil ve model ayarları","view":"Öğrenmeyi görüntüle","confirm":"Eklemeyi onayla"},
   "assurance": {
     "uk": "BK",
     "us": "ABD",

@@ -1,4 +1,5 @@
 import {sensaSenseSemanticSpecSchema} from './semanticRegistry.js';
+import {sensaLanguageTagSchema} from './language.js';
 import {z} from "zod";
 import {sensaContextImagesSchema,sensaInteractiveHtmlSchema} from "./richExperience.js";
 const nonEmpty = z.string().trim().min(1);
@@ -124,8 +125,18 @@ export const sensaLightweightUsageGuidanceMaterialSchema = z
   })
   .strict();
 export const sensaLightweightSceneBridgeMaterialSchema = z
-  .object({ text: nonEmpty })
+  .object({ text: nonEmpty, meaningRendering:z.object({meaning:nonEmpty,languageTag:sensaLanguageTagSchema}).strict().optional() })
   .strict();
+
+/** A learner-facing rendering does not replace the fixed semantic source.
+ * Published resources may already carry an approved localized confirmation. */
+export function learningSupportMeaning(resources:readonly {materialRoleKey:string;contentPayload:Record<string,unknown>}[],supportLanguageTag?:string):string{
+ const source=sensaLightweightSenseConfirmationMaterialSchema.parse(resources.find(resource=>resource.materialRoleKey==='sense_confirmation')?.contentPayload);
+ const bridge=resources.find(resource=>resource.materialRoleKey==='scene_bridge');
+ const rendering=bridge?sensaLightweightSceneBridgeMaterialSchema.parse(bridge.contentPayload).meaningRendering:undefined;
+ if(rendering&&supportLanguageTag&&rendering.languageTag!==supportLanguageTag)throw new Error('learning_meaning_language_mismatch');
+ return rendering?.meaning??source.meaning;
+}
 
 
 export const sensaSceneRealizationSchema = z.object({
@@ -150,7 +161,7 @@ export const LEARNING_RESOURCE_DEFINITIONS = Object.freeze({
   pronunciation: definition(sensaLightweightPronunciationMaterialSchema,{generation:'source',instruction:'Requires a sourced, playable recording or fixed TTS output for the exact expression and language. IPA alone does not satisfy this role.',fields:['surface','phoneticNotation','accentLabel','languageTag','source']}),
   language_structure: definition(sensaLightweightLanguageStructureMaterialSchema,{generation:'model',instruction:'Provide only when it helps use this expression. Match its expressionKind; explain fixed parts and replaceable slots using usagePattern. Never invent grammatical facts or force a template on a fixed utterance. Omit contrastNote unless the resolved contrast category is applicable.',fields:['expressionTypeLabel','partOfSpeech','usagePattern','contrastNote']}),
   usage_guidance: definition(sensaLightweightUsageGuidanceMaterialSchema,{generation:'model',instruction:'An optional natural target-language example of this exact sense. Translation is in the support language. Do not invent an audio URL. This is not necessarily the original scene.',fields:['example','translation']}),
-  scene_bridge: definition(sensaLightweightSceneBridgeMaterialSchema,{generation:'model',instruction:'Explain briefly in the support language why the target expression fits the experience_recall_cue in this bundle. Align perspective, roles or intent; do not merely repeat the gloss or invent personal facts.',fields:['text']}),
+  scene_bridge: definition(sensaLightweightSceneBridgeMaterialSchema,{generation:'model',instruction:'Supply meaningRendering {meaning,languageTag}: a precise concise rendering of the fixed confirmed Sense in the exact support language, even when the source wording uses another language. Preserve semantic scope, perspective and exclusions; this is a rendering, never a new meaning. Separately, text explains in that same support language why the target expression fits the experience_recall_cue. Do not confuse the fixed meaning with a scene-specific event, merely repeat the gloss in text, or invent personal facts.',fields:['text']}),
   scene_realization: definition(sensaSceneRealizationSchema,{generation:'model',instruction:'Express the SAME recall experience naturally in the target language. Use the target expression with natural inflection appropriate to the scene and fixed Sense. Set targetText to the actual expression text in the example whenever it differs from the headword. Code computes highlighting and experience linkage; do not supply offsets or resource keys. Only when the example contains multiple matches, choose the intended targetText and its 1-based targetOccurrence. A target utterance may itself be the example. Translation optional; never invent personal details or audio URLs.',fields:['example','translation']}),
   boundary_contrast: definition(sensaSourcedExplanationSchema,{generation:'source',instruction:'Use a verified contrast for this exact sense; never fabricate a distinction.',fields:['explanation','source','sourceUrl']}),
   word_formation: definition(sensaSourcedExplanationSchema,{generation:'source',instruction:'Use verified modern word formation, not historical etymology or arbitrary spelling splits.',fields:['explanation','source','sourceUrl']}),

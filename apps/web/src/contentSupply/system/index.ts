@@ -4,6 +4,7 @@ export {
 export {
   personalLearningSourceKey,
   personalLearningSourceRevision,
+  isPersonalProvisioningTask,
 } from '../provisioning/contracts';
 export type {
   ContentSupplyCatalogRefresh,
@@ -25,6 +26,7 @@ export type {
 export type {
   ContentProvisioningStatus,
   ContentProvisioningTask,
+  PersonalContentProvisioningTask,
   PersonalMeaningLearningReference,
   PersonalMeaningLearningSource,
 } from '../provisioning/contracts';

@@ -29,3 +29,23 @@ test('selected personal image pixels can be shared without disclosing the origin
  for(const privateValue of [fileName,imageId,'private-target','private-membership'])assert(!JSON.stringify(archive.package).includes(privateValue));
  assert.equal((cue.contentPayload.images as {name:string}[])[0]!.name,fileName,'export never rewrites the local material');
 });
+
+test('portable export uses the pinned support-language rendering without rewriting fixed source material',async()=>{
+ const fixture=portablePackageFixture();
+ const content=structuredClone(prepareStandalonePortablePackage(fixture.bytes,readSensaPortableLightweightPackage(fixture.bytes).archiveDigest).content.entries[0]!.content);
+ const confirmation=content.resources.find(item=>item.materialRoleKey==='sense_confirmation')!;
+ const originalMeaning=confirmation.contentPayload.meaning;
+ const bridge=content.resources.find(item=>item.materialRoleKey==='scene_bridge')!;
+ const meaning='他人の物を一時的に借り、後で返すこと。';
+ bridge.contentPayload.meaningRendering={meaning,languageTag:'ja'};
+ state.task={id:'c03e321c-5fe9-4e73-843e-918bfb692fa8',status:'ready',targetId:'private-target',curriculumMembershipId:'private-membership',languageContext:{targetLanguageTag:'en',supportLanguageTag:'ja'},source:{senseId:'borrow-temporarily'}};
+ state.target={curriculumMemberships:[{id:'private-membership',revision:1,material:{content,snapshot:{createdAt:'2026-10-01T00:00:00.000Z'}}}]};
+ const output=await exportPersonalPortablePackage('c03e321c-5fe9-4e73-843e-918bfb692fa8');
+ const archive=readSensaPortableLightweightPackage(output.bytes);
+ assert.equal(archive.package.route.supportLanguage,'ja');
+ assert.equal(archive.package.sense.meaning,meaning);
+ assert.equal(archive.package.resources.senseConfirmation.text,meaning);
+ assert.equal(confirmation.contentPayload.meaning,originalMeaning);
+ bridge.contentPayload.meaningRendering={meaning,languageTag:'zh-CN'};
+ await assert.rejects(()=>exportPersonalPortablePackage('c03e321c-5fe9-4e73-843e-918bfb692fa8'),/learning_meaning_language_mismatch/);
+});

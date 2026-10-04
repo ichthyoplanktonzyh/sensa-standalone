@@ -7,6 +7,7 @@ import type { InstalledPackage,InstalledPackageSummary } from '../../data/librar
 import type {PackageRouteCount} from '../../data/library/packageCacheProjection';
 import type {
   ContentProvisioningTask,
+  ContentProvisioningStatus,
   PersonalMeaningLearningSource,
 } from '../provisioning/contracts';
 import type {
@@ -43,6 +44,7 @@ export interface ContentProvisioningControl {
 }
 
 export type ContentSupplyCommand =
+  | Readonly<{kind:'prepare_direct_materialization';enrollmentId:string;signal:AbortSignal}>
   | Readonly<{ kind: 'rehydrate'; signal?: AbortSignal }>
   | Readonly<{ kind: 'refresh_catalog'; force?: boolean; signal?: AbortSignal }>
   | Readonly<{
@@ -82,7 +84,8 @@ export type ContentSupplyCommand =
     }>;
 
 export type ContentSupplyCommandResult<Command extends ContentSupplyCommand> =
-  Command['kind'] extends 'rehydrate' ? ContentSupplyRehydration
+  Command['kind'] extends 'prepare_direct_materialization'?{taskId:string|null;targetId:string;status:ContentProvisioningStatus|'already_in_scope'}
+    : Command['kind'] extends 'rehydrate' ? ContentSupplyRehydration
     : Command['kind'] extends 'refresh_catalog' ? ContentSupplyCatalogRefresh
       : Command['kind'] extends 'install_catalog_item' ? readonly InstalledPackage[]
         : Command['kind'] extends 'preview_portable_package' ? PortablePackagePreview
@@ -94,6 +97,7 @@ export type ContentSupplyCommandResult<Command extends ContentSupplyCommand> =
                   : InstalledPackage;
 
 export type ContentSupplyQuery =
+  | Readonly<{kind:'direct_provisioning_task';enrollmentId:string}>
   | Readonly<{ kind: 'workspace' }>
   | Readonly<{kind:'catalog'}>
   | Readonly<{kind:'route_counts'}>
@@ -102,7 +106,8 @@ export type ContentSupplyQuery =
   | Readonly<{ kind:'provisioning_task';taskId:string }>
   | Readonly<{ kind: 'provisioning_tasks' }>;
 export type ContentSupplyQueryResult<Query extends ContentSupplyQuery> =
-  Query['kind'] extends 'workspace' ? ContentSupplyWorkspace
+  Query['kind'] extends 'direct_provisioning_task'?ContentProvisioningTask|null
+    : Query['kind'] extends 'workspace' ? ContentSupplyWorkspace
     :Query['kind'] extends 'catalog'?readonly ContentSupplyCatalogItem[]
     :Query['kind'] extends 'route_counts'?readonly PackageRouteCount[]
     :Query['kind'] extends 'runtime_packages'?readonly InstalledPackage[]

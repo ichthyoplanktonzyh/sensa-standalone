@@ -291,6 +291,8 @@ export type LearningCurriculumEnrollmentProjection=Readonly<{
   packageId:string;
   packageVersion:number;
   packageKey:string;
+ }>|Readonly<{
+  kind:'stable_sense';senseId:string;senseVersionId:string;bindingId:string;bindingVersionId:string;expression:string;meaning:string;
  }>;
 }>;
 

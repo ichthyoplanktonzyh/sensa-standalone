@@ -169,6 +169,7 @@ const foundationTests = [
 type MigratedTest = Readonly<{path: string; suite: WebTestSuite; memoryLibrary?: boolean; env?: Readonly<Record<string, string>>}>;
 
 const fastBeforeMemory = [
+  'unit/direct-learning-choices',
   'unit/personal-learning-batch',
   'unit/world-readers',
   'integration/world-browse-storage',
@@ -193,6 +194,9 @@ const fastBeforeMemory = [
 ] as const;
 
 const fastWithMemory = [
+  'integration/direct-learning-provisioning',
+  'integration/direct-learning-enrollment',
+  'integration/direct-learning-source',
   'integration/manual-meaning',
   'integration/scoped-context-command',
   'integration/semantic-lookup-storage',
@@ -271,6 +275,8 @@ const playwrightPaths = new Set<string>([
 ]);
 
 const durabilityTests = new Set<string>([
+  'integration/direct-learning-provisioning',
+  'integration/direct-learning-enrollment',
   'integration/manual-meaning',
   'browser/extension-intake-journey',
   'integration/scoped-context-command',
@@ -305,6 +311,8 @@ const durabilityTests = new Set<string>([
   'integration/english-lightweight-release',
 ]);
 const convergenceTests = new Set<string>([
+  'integration/direct-learning-provisioning',
+  'integration/direct-learning-enrollment',
   'browser/personal-meaning-journey',
   'integration/scoped-context-command',
   'unit/world-readers',
@@ -315,6 +323,7 @@ const convergenceTests = new Set<string>([
   'database/library-cloud', 'browser/web-bootstrap-budget',
 ]);
 const scaleTests = new Set<string>([
+  'unit/direct-learning-choices',
   'integration/scoped-context-command',
   'unit/personal-learning-batch',
   'unit/world-readers',

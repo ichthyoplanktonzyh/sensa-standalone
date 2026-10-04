@@ -91,7 +91,7 @@ export function usePackageLearning(entryOpen:boolean){
   if(initialRead.current)return initialRead.current;
   const current=lifecycle.current;
   setLoadStatus('loading');
-  setNotice(current=>current===localFlowText('learningReadFailed')?'':current);
+  setNotice(current=>[localFlowText('learningReadFailed'),localFlowText('progressReadFailed')].includes(current)?'':current);
   const request=(async()=>{
    try{
     const result=await measuredWorkspaceRead('rehydrate',()=>contentSupplySystem.execute({kind:'rehydrate'}));
@@ -114,8 +114,10 @@ export function usePackageLearning(entryOpen:boolean){
   setLoaded(false);
   const learningCoordinator=createRefreshCoordinator(refreshLearning);
   const supplyCoordinator=createRefreshCoordinator(refreshSupply);
-  const reloadLearning=()=>void learningCoordinator.request().catch(()=>setNotice(localFlowText('progressReadFailed')));
-  const reloadSupply=()=>void Promise.all([learningCoordinator.request(),supplyCoordinator.request()]).catch(()=>setNotice(localFlowText('progressReadFailed')));
+  const current=lifecycle.current;
+  const readFailed=()=>{if(current!==lifecycle.current)return;setLoadStatus('unavailable');setNotice(localFlowText('progressReadFailed'));};
+  const reloadLearning=()=>void learningCoordinator.request().catch(readFailed);
+  const reloadSupply=()=>void Promise.all([learningCoordinator.request(),supplyCoordinator.request()]).catch(readFailed);
   const prepare=async()=>{
    await measuredWorkspaceRead('prepare',()=>learningSystem.execute({kind:'prepare_queue',languageContext,at:new Date().toISOString()}));
    await learningCoordinator.request();

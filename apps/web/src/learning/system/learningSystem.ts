@@ -1,6 +1,12 @@
 import type { SensaFormalPinnedLanguageContext } from '@sensa/contracts/sensa';
 
 import type { PersonalMeaningLearningSource } from '../../contentSupply/provisioning/contracts';
+import type {DirectLearningReference,DirectLearningSource} from './directLearningSource';
+import type {DirectLearningChoicePage} from './directLearningChoices';
+export type {DirectLearningChoice,DirectLearningChoicePage} from './directLearningChoices';
+export type {DirectLearningReference,DirectLearningSource} from './directLearningSource';
+import type {DirectLearningEnrollment} from '../../data/library/directLearningEnrollment';
+export type {DirectLearningEnrollment} from '../../data/library/directLearningEnrollment';
 import { observeLibrary, type Table } from '../../data/library/store';
 import type {
   LearningAction,
@@ -52,6 +58,8 @@ export interface PersonalLearningEnrollment {
 }
 
 export type LearningCommand =
+  | Readonly<{kind:'prepare_direct';operationId:string;enrollmentId:string}>
+  | Readonly<{kind:'enroll_direct';operationId:string;reference:DirectLearningReference;expectedDigest:string;languageContext:SensaFormalPinnedLanguageContext}>
   | Readonly<{
       kind: 'enroll_package';
       operationId: string;
@@ -146,11 +154,16 @@ export type LearningCommand =
     }>;
 
 export type LearningCommandResult<Command extends LearningCommand> =
-  Command['kind'] extends 'enroll_package' | 'enroll_book' | 'prepare_queue' ? string[]
+  Command['kind'] extends 'prepare_direct' ? {targetId:string;status:'ready'|'already_in_scope'|'needs_generation'}
+    : Command['kind'] extends 'enroll_direct' ? DirectLearningEnrollment
+    : Command['kind'] extends 'enroll_package' | 'enroll_book' | 'prepare_queue' ? string[]
     : Command['kind'] extends 'enroll_personal' ? PersonalLearningEnrollment
       : boolean;
 
 export type LearningQuery =
+  | Readonly<{kind:'direct_choices';query:string;targetLanguageTag:string;page:number}>
+  | Readonly<{kind:'direct_enrollment';enrollmentId:string}>
+  | Readonly<{kind:'direct_source';reference:DirectLearningReference;expectedDigest?:string}>
   | Readonly<{ kind: 'home'; languageRouteId: string; clock?: number }>
   | Readonly<{
       kind: 'workspace';
@@ -161,7 +174,10 @@ export type LearningQuery =
   | Readonly<{ kind: 'semantic_memory' }>;
 
 export type LearningQueryResult<Query extends LearningQuery> =
-  Query['kind'] extends 'home' ? LearningHomeProjection
+  Query['kind'] extends 'direct_choices' ? DirectLearningChoicePage
+    : Query['kind'] extends 'direct_enrollment' ? DirectLearningEnrollment|null
+    : Query['kind'] extends 'direct_source' ? DirectLearningSource
+    : Query['kind'] extends 'home' ? LearningHomeProjection
           : Query['kind'] extends 'workspace' ? LearningWorkspaceProjection
             : Query['kind'] extends 'personal_enrollment_index' ? LearningPersonalEnrollmentIndex
               : LearningSemanticMemoryProjection;
@@ -182,6 +198,9 @@ export interface LearningSystem {
 }
 
 const queryTables = {
+  direct_choices: ['semanticRegistry','packageCache','packageInstallations','meta'],
+  direct_enrollment: ['curriculumEnrollments','learningTargets','meta'],
+  direct_source: ['semanticRegistry','packageCache','packageInstallations','meta'],
   home: ['packageCache', 'packageInstallations', 'curriculumEnrollments', 'learningTargets', 'learningRuns', 'settings', 'meta'],
   workspace: ['packageCache', 'packageInstallations', 'curriculumEnrollments', 'learningTargets', 'learningRuns', 'learningEvents', 'settings', 'meta'],
   personal_enrollment_index: ['learningTargets'],

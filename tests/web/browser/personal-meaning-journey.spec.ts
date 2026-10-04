@@ -5,7 +5,7 @@ import {createServer,type Server} from 'node:http';
 import {once} from 'node:events';
 import {mkdir,mkdtemp,readFile,rm} from 'node:fs/promises';
 import {extname,join,resolve} from 'node:path';
-import {test,expect,type Page,type Locator} from '@playwright/test';
+import {test,expect,type Page,type Locator,type TestInfo} from '@playwright/test';
 import {canonicalConsumerJson} from '@sensa/contracts/sensa';
 import {MemoryJourneyRepository} from '../../../apps/web/src/experience/personalMeaningJourney/repository';
 import {createJourneyModules} from '../../../apps/web/src/experience/personalMeaningJourney/gateway';
@@ -514,6 +514,57 @@ test('an appended learner image is read with the same source witness sent to the
  await expect(page.getByRole('article',{name:'表达详情'}).locator('img')).toHaveAttribute('src',prepared!);
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMediaCheckpoint())).toEqual(media);expect(requests).toHaveLength(2);
 });
+
+async function directDiscoveryJourney(page:Page,testInfo:TestInfo,size:number){
+ test.setTimeout(180_000);const expression=`borrow-${size-1}`;
+ requests=[];plans=[];
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();await page.waitForFunction(()=>!!window.__sensaBrowserSmoke);
+ const repository=new MemoryJourneyRepository();await createJourneyModules({repository}).semanticIntake.submit(semanticLookupPayload());
+ scaleFixture=syntheticSemanticWorld(await repository.load(),size);scaleFixture.meanings=[];
+ expect(await page.evaluate(async()=>window.__sensaBrowserSmoke!.seedSemanticWorld(await (await fetch('/semantic-scale-fixture')).json()))).toBe(0);
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的学习',exact:true}).click();
+ await page.locator('#s-study').getByRole('button',{name:'添加内容',exact:true}).click();
+ await page.locator('#s-learning-entry').getByRole('button',{name:'按表达查找',exact:true}).click();
+ const screen=page.locator('#s-direct-learning').last(),search=screen.getByRole('searchbox',{name:'搜索表达',exact:true});
+ await expect(screen.getByRole('listitem')).toHaveCount(20);await screen.getByRole('button',{name:'下一页',exact:true}).click();await expect(screen.getByRole('button',{name:'上一页',exact:true})).toBeEnabled();
+ await search.evaluate((input,expression)=>{input.addEventListener('input',()=>{const started=performance.now();const measure=()=>{const rows=document.querySelectorAll('#s-direct-learning.active li');if(rows.length===1&&rows[0]?.querySelector('strong')?.textContent===expression)(window as any).__directSearchMs=performance.now()-started;else requestAnimationFrame(measure);};requestAnimationFrame(measure);},{once:true});},expression);
+ await search.fill(expression);await expect(screen.getByRole('listitem')).toHaveCount(1);
+ await expect.poll(()=>page.evaluate(()=>(window as any).__directSearchMs)).toBeGreaterThan(0);
+ const searchMs=await page.evaluate(()=>(window as any).__directSearchMs as number);expect(searchMs).toBeLessThan(1000);console.log('Direct expression input to one visible result / Chromium+OPFS / no model',JSON.stringify({size,searchMs}));
+ await screen.getByRole('button',{name:new RegExp(expression)}).click();await expect(screen.getByRole('heading',{name:expression,exact:true})).toBeVisible();
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).enrollments).toEqual([]);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);
+ await screen.getByRole('button',{name:'取消',exact:true}).click();await expect(search).toHaveValue(expression);await screen.getByRole('button',{name:new RegExp(expression)}).click();
+ if(size===250)await page.evaluate(()=>window.__sensaBrowserSmoke!.holdDirectEnrollmentResultForTest());
+ await screen.getByRole('button',{name:'确认加入学习',exact:true}).click();
+ if(size===250){
+  await expect.poll(async()=>(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).enrollments.length).toBe(1);
+  await screen.getByRole('button',{name:'返回',exact:true}).click();const backUrl=page.url();
+  await page.evaluate(()=>window.__sensaBrowserSmoke!.releaseDirectEnrollmentResultForTest());
+  await expect(page.locator('#s-learning-entry').getByRole('button',{name:'按表达查找',exact:true})).toBeVisible();expect(page.url()).toBe(backUrl);
+  await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的学习',exact:true}).click();await page.locator('#s-study').getByRole('button',{name:'查看内容',exact:true}).click();
+  await page.locator('#s-learning-library').getByRole('button',{name:new RegExp(expression)}).click();
+ }
+ await expect(page).toHaveURL(/enrollmentId=/);await expect(screen.getByRole('button',{name:'准备学习资源',exact:true})).toBeEnabled();
+ const accepted=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());expect(accepted.enrollments).toHaveLength(1);expect(accepted.enrollments[0]!.sourceKind).toBe('stable_sense');expect(accepted.targetIds).toEqual([]);expect(accepted.runtime).toBeNull();
+ await page.reload();await expect(screen.getByRole('heading',{name:expression,exact:true})).toBeVisible();await screen.getByRole('button',{name:'准备学习资源',exact:true}).click();
+ await expect(screen.getByRole('button',{name:'重试 / 恢复准备',exact:true}).last()).toBeEnabled();
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).enrollments).toEqual(accepted.enrollments);
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).targetIds).toEqual([]);
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的学习',exact:true}).click();await page.locator('#s-study').getByRole('button',{name:'查看内容',exact:true}).click();
+ const library=page.locator('#s-learning-library');await library.getByRole('textbox',{name:'搜索单词或意思',exact:true}).fill('no-such-expression');await expect(library.getByRole('button',{name:new RegExp(expression)})).toHaveCount(0);
+ if(size===250){
+  await expect(library.getByText('没有符合条件的内容',{exact:true})).toBeVisible();
+  await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningWorkspaceReadsForTest(true));await expect(library.getByRole('alert')).toBeVisible();
+  await expect(library.getByText('没有符合条件的内容',{exact:true})).toHaveCount(0);
+  await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningWorkspaceReadsForTest(false));await library.getByRole('button',{name:'重试',exact:true}).click();await expect(library.getByRole('alert')).toHaveCount(0);
+ }
+ await library.getByRole('textbox',{name:'搜索单词或意思',exact:true}).fill(expression);await library.getByRole('button',{name:new RegExp(expression)}).click();await expect(screen.getByRole('heading',{name:expression,exact:true})).toBeVisible();
+ await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:testInfo.outputPath('direct-preparation-mobile.png'),fullPage:true});
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);expect(requests).toEqual([]);
+}
+test('direct discovery at 250 connections stays read-only until enrollment and recovers without a Personal Meaning',async({page},testInfo)=>directDiscoveryJourney(page,testInfo,250));
+test('direct discovery at 10000 connections stays read-only until enrollment and recovers without a Personal Meaning',async({page},testInfo)=>directDiscoveryJourney(page,testInfo,10_000));
 
 test('explicit batch confirmation saves all intentions and failed preparation retries without duplicate enrollments',async({page})=>{
  requests=[];plans=[];

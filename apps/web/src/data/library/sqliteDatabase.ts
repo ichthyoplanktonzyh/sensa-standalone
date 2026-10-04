@@ -1,6 +1,7 @@
 import type { Database, Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 
 import {decodeBackupValue,encodeBackupValue} from './backupCodec';
+import {learningExpressionForm,learningPackageChoicesSql,validateLearningPackageQuery} from './packageCacheProjection';
 import {SqliteMeaningLookupProjection} from './meaningLookupProjection';
 import {SqliteWorldBrowseProjection} from './worldBrowseProjection';
 import {SqliteJourneyIdentityProjection} from './journeyIdentityProjection';
@@ -82,6 +83,7 @@ export class SqliteRecordDatabase {
     private readonly persistence: SqliteStorageDiagnostics["persistence"],
   ) {
     const field=registryFieldReader();
+    this.database.createFunction({name:'sensa_expression_form',arity:2,deterministic:true,innocuous:true,xFunc:(_context,text,language)=>learningExpressionForm(text,language)});
     this.database.createFunction({name:'sensa_registry_field',arity:2,deterministic:true,innocuous:true,xFunc:(_context,encoded,key)=>field(encoded,key)});
     this.meaningLookup=new SqliteMeaningLookupProjection(database,(table,key)=>this.get(table,key));
     this.worldBrowseProjection=new SqliteWorldBrowseProjection(database,(table,key)=>this.get(table,key));
@@ -236,6 +238,11 @@ export class SqliteRecordDatabase {
   }
 
   packageCacheProjection<Query extends PackageCacheProjectionQuery>(query:Query):PackageCacheProjectionResult<Query>{
+    if(query.kind==='learning_choices'){
+      validateLearningPackageQuery(query);
+      const rows=this.database.exec({sql:learningPackageChoicesSql,bind:[query.languageTag,query.normalizedPrefix,query.normalizedPrefix+'\u{10ffff}',query.limit,query.offset],rowMode:'object',returnValue:'resultRows'}) as Array<{summary_json:string}>;
+      return rows.map(row=>JSON.parse(row.summary_json)) as PackageCacheProjectionResult<Query>;
+    }
     if(query.kind==='route_counts'){
       const rows=this.database.exec({
         sql:`SELECT json_extract(summary_json,'$.content.targetLanguage') AS target_language,

@@ -5,12 +5,28 @@ export type PackageCacheIdentity=Readonly<{key:string;digest:string}>;
 export type PackageRouteCount=Readonly<{targetLanguage:string;supportLanguage:string;packageCount:number}>;
 
 export type PackageCacheProjectionQuery=
+ |Readonly<{kind:'learning_choices';languageTag:string;normalizedPrefix:string;offset:number;limit:number}>
  |Readonly<{kind:'identities'}>
  |Readonly<{kind:'route_counts'}>
  |Readonly<{kind:'summaries';packageId?:string}>;
 
 /** All versions of one package share this prefix in the primary-key index. */
 export const packageCacheKeyPrefix=(packageId:string)=>`${JSON.stringify([packageId]).slice(0,-1)},`;
+
+export const learningExpressionForm=(text:unknown,language:unknown):string|null=>{
+ if(typeof text!=='string'||typeof language!=='string')return null;
+ try{return text.trim().toLocaleLowerCase(language);}catch{return null;}
+};
+export function validateLearningPackageQuery(query:Extract<PackageCacheProjectionQuery,{kind:'learning_choices'}>):void{
+ if(typeof query.languageTag!=='string'||typeof query.normalizedPrefix!=='string'||query.normalizedPrefix.length>500||!Number.isSafeInteger(query.offset)||query.offset<0||!Number.isSafeInteger(query.limit)||query.limit<1||query.limit>41)throw new Error('direct_learning_query_invalid');
+}
+export const learningPackageChoicesSql=`SELECT summary_json FROM sensa_package_cache_projection
+ WHERE json_extract(summary_json,'$.content.targetLanguage')=?
+ AND sensa_expression_form(json_extract(summary_json,'$.content.entries[0].expression'),json_extract(summary_json,'$.content.targetLanguage'))>=?
+ AND sensa_expression_form(json_extract(summary_json,'$.content.entries[0].expression'),json_extract(summary_json,'$.content.targetLanguage'))<?
+ AND json_array_length(summary_json,'$.portableOrigin.publications')>0
+ AND json_extract(summary_json,'$.content.entries[0].semantic.relation')='realizes' AND json_extract(summary_json,'$.content.entries[0].semantic.semanticCoverage')='exact'
+ ORDER BY sensa_expression_form(json_extract(summary_json,'$.content.entries[0].expression'),json_extract(summary_json,'$.content.targetLanguage')),package_key LIMIT ? OFFSET ?`;
 
 export type PackageCacheProjectionResult<Query extends PackageCacheProjectionQuery>=
  Query['kind'] extends 'identities'?PackageCacheIdentity[]:
@@ -61,4 +77,6 @@ CREATE INDEX IF NOT EXISTS sensa_package_cache_identity
  ON sensa_package_cache_projection(package_key,digest);
 CREATE INDEX IF NOT EXISTS sensa_package_cache_routes
  ON sensa_package_cache_projection(json_extract(summary_json,'$.content.targetLanguage'),json_extract(summary_json,'$.content.supportLanguage'));
+CREATE INDEX IF NOT EXISTS sensa_package_learning_expression
+ ON sensa_package_cache_projection(json_extract(summary_json,'$.content.targetLanguage'),sensa_expression_form(json_extract(summary_json,'$.content.entries[0].expression'),json_extract(summary_json,'$.content.targetLanguage')),package_key);
 `;

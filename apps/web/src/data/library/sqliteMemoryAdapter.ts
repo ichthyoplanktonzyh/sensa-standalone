@@ -64,9 +64,15 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
     return [...new Set(keys)].filter(key=>this.records.has(`${table}\u0000${key}`)).sort();
   }
   async packageCacheProjection<Query extends PackageCacheProjectionQuery>(query:Query):Promise<PackageCacheProjectionResult<Query>>{
-    const {createPackageCacheSummary,isPackageCacheProjectionSource}=await import('./packageCacheProjection');
+    const {createPackageCacheSummary,isPackageCacheProjectionSource,learningExpressionForm,validateLearningPackageQuery}=await import('./packageCacheProjection');
     const values=(await this.entries('packageCache')).map(row=>
       decodeBackupValue(JSON.parse(row.encodedValue))).filter(isPackageCacheProjectionSource);
+    if(query.kind==='learning_choices'){
+      validateLearningPackageQuery(query);
+      return values.filter(value=>value.content.targetLanguage===query.languageTag&&learningExpressionForm(value.content.entries[0]?.expression,query.languageTag)?.startsWith(query.normalizedPrefix)&&value.portableOrigin.publications.length>0&&value.content.entries[0]?.semantic?.relation==='realizes'&&value.content.entries[0]?.semantic?.semanticCoverage==='exact')
+        .sort((a,b)=>{const af=learningExpressionForm(a.content.entries[0]!.expression,query.languageTag)!,bf=learningExpressionForm(b.content.entries[0]!.expression,query.languageTag)!;return af<bf?-1:af>bf?1:a.key<b.key?-1:1;})
+        .slice(query.offset,query.offset+query.limit).map(createPackageCacheSummary) as PackageCacheProjectionResult<Query>;
+    }
     if(query.kind==='route_counts'){
       const counts=new Map<string,{targetLanguage:string;supportLanguage:string;packageCount:number}>();
       for(const {content} of values){

@@ -1,4 +1,5 @@
 {
+  "directLearning": {"title":"Znajdź wyrażenie","search":"Szukaj wyrażeń","empty":"Brak pasujących potwierdzonych wyrażeń","local":"Lokalne znaczenia","published":"Zapisane pakiety nauki","previous":"Poprzednia","next":"Następna","settings":"Ustawienia języka i modelu","view":"Pokaż naukę","confirm":"Potwierdź dodanie"},
   "assurance": {
     "uk": "UK",
     "us": "US",

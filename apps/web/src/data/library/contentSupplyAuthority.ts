@@ -7,6 +7,10 @@ import { stableUuid } from '@sensa/learning-kernel';
 import { z } from 'zod';
 
 import { backupEqual } from './backupCodec';
+import {directProvisioningReferenceSchema,isDirectProvisioningReference,provisioningTaskId,provisioningMembershipId} from '../../contentSupply/provisioning/contracts';
+import {curriculumEnrollmentSchema} from './curriculumEnrollments';
+import {assertDirectTaskEnrollment,assertDirectAttemptSource} from './directProvisioningAssertions';
+import {assertReadyContentAttempt} from './contentAttemptEvidence';
 import {
   packageInstallationSchema,
   samePackageInstallationArtifact,
@@ -34,6 +38,7 @@ export class ContentSupplyInvariantError extends Error {
 type ContentSupplyTable = (typeof contentSupplyTransitionTables)[number];
 
 const allowedPersonalOperations = new Set([
+  'direct.enroll',
   'personal.enroll',
   'personal.prepare',
   'personal.progress',
@@ -88,10 +93,10 @@ export async function assertContentSupplyTransition(input: {
       z.boolean().parse(task.useContext);
       z.number().nonnegative().parse(task.leaseUntil);
       z.string().parse(task.notice);
-      if (!['waiting','generating','reviewing','failed','rejected','stopped','ready'].includes(task.status)) {
+      if (!['waiting','generating','reviewing','failed','rejected','stopped','ready','covered'].includes(task.status)) {
         reject('Unknown provisioning task state.');
       }
-      const source = z.object({
+      const source = task.source?.kind==='stable_sense'?directProvisioningReferenceSchema.parse(task.source):z.object({
         personalMeaningId: uuid,
         personalMeaningRevisionId: uuid,
         personalMeaningAlignmentId: uuid,
@@ -103,14 +108,19 @@ export async function assertContentSupplyTransition(input: {
         bindingId: z.string().min(1),
         bindingVersionId: z.string().min(1),
       }).strict().parse(task.source);
-      const sourceKey = `${source.personalMeaningAlignmentId}:${source.bindingVersionId}`;
-      const expectedTaskId = stableUuid(`sensa-personal-learning:${sourceKey}:${context.languageRouteId}`);
+      const direct=isDirectProvisioningReference(source);
+      if(direct){
+        const enrollment=curriculumEnrollmentSchema.parse(await read('curriculumEnrollments',source.enrollmentId));
+        assertDirectTaskEnrollment(task,enrollment);
+        if(enrollment.learnerUserId!==identity.learnerId)reject('Direct provisioning belongs to another learner.');
+        if((change.before===null||['generating','reviewing','ready'].includes(task.status))&&enrollment.status!=='active')reject('Direct preparation requires an active enrollment.');
+        if(change.before===null&&(operation.input as any)?.enrollmentId!==source.enrollmentId)reject('Direct preparation was not explicitly requested.');
+      }
+      const expectedTaskId = provisioningTaskId(source,context.languageRouteId);
       const expectedTargetId = stableUuid(
         `sensa-learning-target:${identity.learnerId}:${source.senseVersionId}:${source.bindingVersionId}`,
       );
-      const expectedMembershipId = stableUuid(
-        `local-curriculum-membership:${expectedTargetId}:${context.languageRouteId}:personal_meaning_alignment:${source.personalMeaningAlignmentId}`,
-      );
+      const expectedMembershipId = provisioningMembershipId(source,expectedTargetId,context.languageRouteId);
       if (
         change.key !== task.id
         || task.id !== expectedTaskId
@@ -125,7 +135,8 @@ export async function assertContentSupplyTransition(input: {
           || before.curriculumMembershipId !== task.curriculumMembershipId
           || before.createdAt !== task.createdAt
         ) reject('Provisioning task identity is immutable.');
-      } else if (operation.kind !== 'personal.enroll') {
+        if(direct&&(!backupEqual(before.source,task.source)||before.planRevision!==task.planRevision||!backupEqual(before.languageContext,task.languageContext)))reject('Direct provisioning pins are immutable.');
+      } else if (operation.kind !== (direct?'direct.enroll':'personal.enroll')) {
         reject('A provisioning task must originate from an explicit Learning enrollment.');
       }
       if (task.attemptId !== null) {
@@ -139,6 +150,14 @@ export async function assertContentSupplyTransition(input: {
           reject('Ready provisioning must hand an admitted materialization to Learning.');
         }
       }
+      if(task.status==='covered'){
+        if(!direct)reject('Only direct preparation can be covered by another entry.');
+        uuid.parse(task.coveredByMembershipId);
+        const target=await read('learningTargets',task.targetId) as any;
+        const member=target?.curriculumMemberships?.find((item:any)=>item.id===task.coveredByMembershipId);
+        if(!member||member.languageContext.languageRouteId!==context.languageRouteId||member.languageContext.targetLanguageTag!==context.targetLanguageTag||member.languageContext.supportLanguageTag!==context.supportLanguageTag
+          ||target.identity.senseId!==source.senseId||target.identity.senseVersionId!==source.senseVersionId||target.identity.senseExpressionBindingId!==source.bindingId||target.identity.bindingVersionId!==source.bindingVersionId)reject('Covering membership is missing or has another fixed connection.');
+      }else if(task.coveredByMembershipId!==undefined)reject('Unexpected covered preparation reference.');
       continue;
     }
 
@@ -152,6 +171,10 @@ export async function assertContentSupplyTransition(input: {
     }
     const task = await read('personalLearning', attempt.taskId) as any;
     if (!task || task.attemptId !== attempt.id) reject('Content Agent Attempt is not current for its task.');
+    if(task.source?.kind==='stable_sense'){
+      const enrollment=curriculumEnrollmentSchema.parse(await read('curriculumEnrollments',task.source.enrollmentId));
+      assertDirectAttemptSource(attempt,task,assertDirectTaskEnrollment(task,enrollment),identity.learnerId);
+    }else assertReadyContentAttempt(attempt);
     if (attempt.request) sensaContentGenerationRequestSchema.parse(attempt.request);
     if (attempt.bundle) {
       sensaMaterialCandidateBundleSchema.parse(attempt.bundle);

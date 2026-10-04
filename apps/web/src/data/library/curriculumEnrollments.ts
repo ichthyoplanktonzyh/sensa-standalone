@@ -4,6 +4,8 @@ import {
 } from '@sensa/contracts/sensa';
 import {stableUuid} from '@sensa/learning-kernel';
 import {z} from 'zod';
+import {directLearningSourceSchema,resolveDirectLearningSourceSnapshot,type DirectLearningSource} from '../../learning/system/directLearningSource';
+import {packageInstallationSchema} from './packageRecords';
 
 const timestamp=z.string().datetime({offset:true});
 const bookSourceSchema=z.object({
@@ -22,6 +24,11 @@ const packageSourceSchema=z.object({
  packageVersion:z.number().int().positive(),
  packageKey:z.string().min(1).max(2000),
 }).strict();
+const directSourceSchema=z.object({kind:z.literal('stable_sense'),selection:directLearningSourceSchema}).strict();
+const sourceIdentity=(source:z.infer<typeof bookSourceSchema>|z.infer<typeof packageSourceSchema>|z.infer<typeof directSourceSchema>)=>source.kind==='published_book'
+ ?`published_book:${source.publisherNamespace}:${source.bookId}`
+ :source.kind==='portable_package'?`portable_package:${source.packageId}`
+ :`stable_sense:${source.selection.reference.senseVersionId}:${source.selection.reference.bindingVersionId}`;
 
 export const curriculumEnrollmentSchema=z.object({
  format:z.literal('sensa-curriculum-enrollment-v1'),
@@ -29,16 +36,13 @@ export const curriculumEnrollmentSchema=z.object({
  revision:z.number().int().positive(),
  learnerUserId:z.string().uuid(),
  languageContext:sensaFormalPinnedLanguageContextSchema,
- source:z.discriminatedUnion('kind',[bookSourceSchema,packageSourceSchema]),
+ source:z.discriminatedUnion('kind',[bookSourceSchema,packageSourceSchema,directSourceSchema]),
  status:z.enum(['active','superseded']),
  createdByOperationId:z.string().uuid(),
  createdAt:timestamp,
  updatedAt:timestamp,
 }).strict().superRefine((value,context)=>{
- const sourceIdentity=value.source.kind==='published_book'
-  ?`published_book:${value.source.publisherNamespace}:${value.source.bookId}`
-  :`portable_package:${value.source.packageId}`;
- const expected=stableUuid(`local-curriculum-enrollment:${value.learnerUserId}:${value.languageContext.languageRouteId}:${sourceIdentity}`);
+ const expected=stableUuid(`local-curriculum-enrollment:${value.learnerUserId}:${value.languageContext.languageRouteId}:${sourceIdentity(value.source)}`);
  if(value.id!==expected)context.addIssue({code:'custom',path:['id'],message:'Curriculum Enrollment identity is inconsistent'});
  if(Date.parse(value.updatedAt)<Date.parse(value.createdAt))context.addIssue({code:'custom',path:['updatedAt'],message:'Curriculum Enrollment time moved backwards'});
 });
@@ -50,9 +54,7 @@ export const curriculumEnrollmentId=(
  learnerUserId:string,
  languageRouteId:string,
  source:CurriculumEnrollmentSource,
-):string=>stableUuid(`local-curriculum-enrollment:${learnerUserId}:${languageRouteId}:${source.kind==='published_book'
- ?`published_book:${source.publisherNamespace}:${source.bookId}`
- :`portable_package:${source.packageId}`}`);
+):string=>stableUuid(`local-curriculum-enrollment:${learnerUserId}:${languageRouteId}:${sourceIdentity(source)}`);
 
 export const enrollmentMatchesContext=(
  enrollment:LocalCurriculumEnrollment,
@@ -61,3 +63,16 @@ export const enrollmentMatchesContext=(
  &&enrollment.languageContext.languageRouteId===context.languageRouteId
  &&enrollment.languageContext.targetLanguageTag===context.targetLanguageTag
  &&enrollment.languageContext.supportLanguageTag===context.supportLanguageTag;
+
+/** Public bytes are recoverable cache; the accepted source remains a learner fact. */
+export function assertDirectEnrollmentSource(selection:DirectLearningSource,read:Parameters<typeof resolveDirectLearningSourceSnapshot>[0]):void{
+ const source=directLearningSourceSchema.parse(selection),origin=source.reference.origin;
+ if(origin.kind==='published_package'&&!read('packageCache',origin.packageKey)){
+  const installation=packageInstallationSchema.parse(read('packageInstallations',origin.packageKey));
+  if(installation.key!==origin.packageKey||installation.artifact.packageDigest!==origin.packageDigest
+    ||installation.artifact.digest!==source.publishedContent!.archiveDigest||installation.artifact.targetLanguage!==source.targetLanguageTag
+    ||installation.artifact.supportLanguage!==source.publishedContent!.supportLanguageTag)throw new Error('direct_learning_source_changed');
+  return;
+ }
+ resolveDirectLearningSourceSnapshot(read,source.reference,source.sourceDigest);
+}

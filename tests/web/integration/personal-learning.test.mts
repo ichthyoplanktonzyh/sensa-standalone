@@ -6,6 +6,7 @@ import {
   validateSensaPortableLightweightPackage,
 } from '@sensa/content-validator/portable-lightweight';
 import {
+  canonicalConsumerJson,
   SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND,
   generationSystem,
   independentReviewSystem,
@@ -13,6 +14,7 @@ import {
   requestLanguages,
   sensaIntakePayloadSchema,
 } from '@sensa/contracts/sensa';
+import {sha256} from '@sensa/learning-kernel';
 import {indexedDB} from 'fake-indexeddb';
 import {build} from 'esbuild';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
@@ -23,7 +25,7 @@ import {pathToFileURL} from 'node:url';
 test("personal-learning", async () => {
 
 const compiled=await build({stdin:{contents:[
-  ...['store','providers','personalLearning','learning','language','speech/defaultProvider'].map(name=>`export * from './apps/web/src/data/library/${name}';`),
+  ...['store','providers','personalLearning','learning','language','speech/defaultProvider','backupValidation'].map(name=>`export * from './apps/web/src/data/library/${name}';`),
   `export * from './apps/web/src/experience/personalMeaningJourney/gateway';`,
   `export {worldReadRepository} from './apps/web/src/experience/personalMeaningJourney/worldRepository';`,
   `export * from './apps/web/src/contentSupply/portable/personalPortablePackage';`,
@@ -68,7 +70,7 @@ globalThis.fetch=async(_url,input)=>{
   if(review&&mode==='review-fail')throw Error('Offline');
   const result=review
     ?{accepted:mode!=='reject',reason:mode==='reject'?'场景改变了原意':'符合固定含义与来源'}
-    :{resources:[{role:'experience_recall_cue',payload:{scene:mode==='leak'?'一个人想要 borrow 一把雨伞。':'一个人向同伴临时借用一把雨伞，约好之后归还。',senseFocus:'临时使用并预期归还'}},{role:'scene_bridge',payload:{text:'从取得者的视角表达临时使用并准备归还。'}},{role:'scene_realization',payload:{example:'May asked to borrow an umbrella.',targetStart:13,targetEnd:19,experienceResourceKey:'experience_recall_cue:0'}}]};
+    :{resources:[{role:'experience_recall_cue',payload:{scene:mode==='leak'?'一个人想要 borrow 一把雨伞。':'一个人向同伴临时借用一把雨伞，约好之后归还。',senseFocus:'临时使用并预期归还'}},{role:'scene_bridge',payload:{text:'从取得者的视角表达临时使用并准备归还。',meaningRendering:{meaning:'从取得者的视角表达临时使用并准备归还。',languageTag:'zh-CN'}}},{role:'scene_realization',payload:{example:'May asked to borrow an umbrella.',targetStart:13,targetEnd:19,experienceResourceKey:'experience_recall_cue:0'}}]};
   return new Response(JSON.stringify({model:'fixture',choices:[{finish_reason:'stop',message:{content:JSON.stringify(result)}}]}),{headers:{'content-type':'application/json'}});
 };
 
@@ -112,6 +114,17 @@ try{
   const learning=await api.readLearning();assert.equal(learning.targets.length,1);
   assert.equal(learning.targets[0].identity.senseVersionId,slowSource.reference.senseVersionId);
   assert.equal(learning.targets[0].identity.bindingVersionId,slowSource.reference.bindingVersionId);
+  const saved=await api.readLibrary(async(tx:any)=>Object.fromEntries(await Promise.all(api.libraryTables.map(async(table:string)=>[table,await tx.entries(table)]))));
+  api.validateBackupRows(saved);
+  const tampered=structuredClone(saved),readyTask=tampered.personalLearning.find((row:any)=>row.key===task.id).value;
+  const readyAttempt=tampered.contentAttempts.find((row:any)=>row.key===readyTask.attemptId).value;
+  delete readyAttempt.validation.content.resources.find((resource:any)=>resource.materialRoleKey==='scene_bridge').contentPayload.meaningRendering;
+  const material=tampered.learningTargets[0].value.curriculumMemberships[0].material;
+  material.content=structuredClone(readyAttempt.validation.content);
+  assert.throws(()=>api.validateBackupRows(tampered),/admitted candidate evidence/,'personal restoration rechecks real v4 evidence rather than trusting matching validation and membership claims');
+  const bridgeCandidate=readyAttempt.bundle.candidates.find((candidate:any)=>candidate.materialRoleKey==='scene_bridge');
+  delete bridgeCandidate.contentPayload.meaningRendering;bridgeCandidate.contentDigest=sha256(canonicalConsumerJson(bridgeCandidate.contentPayload));
+  assert.throws(()=>api.validateBackupRows(tampered),/admitted candidate evidence/,'matching candidate digests cannot waive the v4 required rendering');
 
   const firstExport=await api.exportPersonalPortablePackage(task.id);
   const secondExport=await api.exportPersonalPortablePackage(task.id);

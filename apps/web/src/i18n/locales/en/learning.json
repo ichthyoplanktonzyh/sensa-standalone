@@ -1,4 +1,5 @@
 {
+  "directLearning": {"title":"Find an expression","search":"Search expressions","empty":"No matching confirmed expressions","local":"Local meanings","published":"Saved learning packages","previous":"Previous","next":"Next","settings":"Language and model settings","view":"View learning","confirm":"Confirm enrollment"},
   "assurance": {
     "uk": "UK",
     "us": "US",

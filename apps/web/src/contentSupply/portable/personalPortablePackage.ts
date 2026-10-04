@@ -4,6 +4,7 @@ import type {
 } from '@sensa/contracts/sensa';
 import {createSensaPortableLightweightPackage} from '@sensa/content-validator/portable-lightweight';
 import {sha256,stableUuid} from '@sensa/learning-kernel';
+import {learningSupportMeaning} from '@sensa/contracts/sensa';
 
 import type {ContentProvisioningTask} from '../provisioning/contracts';
 import type {LocalCurriculumMembership,LocalLearningTarget} from '../../learning/runtime/localProtocol';
@@ -86,7 +87,6 @@ export async function exportPersonalPortablePackage(taskId:string):Promise<Porta
   if(!cueText&&!cueImages?.length&&!cueHtml)return invalid();
 
   const expression=one('target_expression');
-  const confirmation=one('sense_confirmation');
   const pronunciation=one('pronunciation');
   const bridge=one('scene_bridge');
   const realization=one('scene_realization');
@@ -146,7 +146,7 @@ export async function exportPersonalPortablePackage(taskId:string):Promise<Porta
   if(mnemonic)optional.mnemonic={text:requiredString(mnemonic.text)};
 
   const expressionText=requiredString(expression.surface);
-  const meaning=requiredString(confirmation.meaning);
+  const meaning=learningSupportMeaning(membership.material.content.resources,task.languageContext.supportLanguageTag);
   const expressionKind=requiredString(expression.expressionKind) as SensaPortableLightweightPackage['targetExpression']['expressionKind'];
   const acceptedForms=Array.isArray(expression.acceptedForms)
     ?expression.acceptedForms.map(requiredString)

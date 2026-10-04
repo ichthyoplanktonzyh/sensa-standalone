@@ -28,6 +28,25 @@ test.beforeAll(async()=>{
 test.afterAll(async()=>{if(server?.listening)await new Promise<void>(done=>server.close(()=>done()));});
 async function enter(page:Page){await page.goto(origin);await page.waitForFunction(()=>!!window.semanticLookupFixture);await page.evaluate(()=>window.semanticLookupFixture.initialize());}
 
+test('direct stable Sense enrollment converges across OPFS tabs and reloads without a duplicate Meaning or ready Target',async({page,context})=>{
+ await enter(page);await page.evaluate(()=>window.semanticLookupFixture.seed(1000));
+ const item=(await page.evaluate(()=>window.semanticLookupFixture.worldPage({query:'borrow-999',filter:'all',offset:0,limit:40}))).items[0]!;
+ const {selection,languageContext}=await page.evaluate(id=>window.semanticLookupFixture.directSourceForTest(id),item.personalMeaningId);
+ const command={kind:'enroll_direct' as const,operationId:crypto.randomUUID(),reference:selection.reference,expectedDigest:selection.sourceDigest,languageContext};
+ const other=await context.newPage();await enter(other);
+ await page.evaluate(()=>window.semanticLookupFixture.trackCommandReads());
+ const [left,right]=await Promise.all([page.evaluate(input=>window.semanticLookupFixture.enrollDirectForTest(input),command),other.evaluate(input=>window.semanticLookupFixture.enrollDirectForTest(input),command)]);
+ expect(left).toEqual(right);expect(left.status).toBe('awaiting_content');
+ expect((await page.evaluate(()=>window.semanticLookupFixture.commandReadSnapshot())).some(row=>row.table==='semanticMeanings')).toBe(false);
+ await page.evaluate(()=>window.semanticLookupFixture.stopTrackingCommandReads());
+ expect(await other.evaluate(input=>window.semanticLookupFixture.enrollDirectForTest({...input,operationId:crypto.randomUUID()}),command)).toEqual(left);
+ expect(await page.evaluate(()=>window.semanticLookupFixture.directCountsForTest())).toEqual({meanings:1000,enrollments:1,targets:0,runs:0});
+ await page.reload();await page.waitForFunction(()=>!!window.semanticLookupFixture);
+ expect(await page.evaluate(input=>window.semanticLookupFixture.enrollDirectForTest(input),command)).toEqual(left);
+ expect(await page.evaluate(id=>window.semanticLookupFixture.directEnrollmentForTest(id),left.enrollmentId!)).toEqual(left);
+ await other.close();
+});
+
 test('cold Inbox creation appends only this draft and converges on the exact receipt across OPFS tabs',async({page,context})=>{
  await enter(page);await page.evaluate(()=>window.semanticLookupFixture.seed(1000));
  const other=await context.newPage();await enter(other);

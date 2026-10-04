@@ -1,4 +1,5 @@
 {
+  "directLearning": {"title":"Cari ungkapan","search":"Cari ungkapan","empty":"Tidak ada ungkapan terkonfirmasi yang cocok","local":"Makna lokal","published":"Paket belajar tersimpan","previous":"Sebelumnya","next":"Berikutnya","settings":"Pengaturan bahasa dan model","view":"Lihat pembelajaran","confirm":"Konfirmasi penambahan"},
   "assurance": {
     "uk": "Inggris Britania",
     "us": "Amerika Serikat",
