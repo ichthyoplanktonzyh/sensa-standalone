@@ -448,6 +448,39 @@ test('direct published discovery enrolls only the selected expression and resume
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);
 });
 
+test('a personal meaning created from a learning scene reuses its Book target without generation or replacing the active material',async({page})=>{
+ const providerRequests:string[]=[];
+ page.on('request',request=>{if(/\/model\/|chat\/completions|\/speech\//.test(request.url()))providerRequests.push(request.url());});
+ await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ const home=page.locator('#s-home');await home.getByRole('button',{name:'学习包目录',exact:true}).click();
+ await page.locator('#s-catalog').last().getByRole('button',{name:/雨天借伞/}).click();const book=page.locator('#s-catalog-book').last();
+ await book.getByRole('button',{name:'下载学习包',exact:true}).click();await expect(book.getByText('已下载',{exact:true})).toBeVisible();
+ await book.getByRole('button',{name:'加入学习',exact:true}).click();await book.getByRole('button',{name:'去学习',exact:true}).click();
+ await home.getByRole('button',{name:'开始学习',exact:true}).click();await page.getByRole('dialog',{name:'学习偏好',exact:true}).getByRole('button',{name:'确认数量并开始',exact:true}).click();
+ const runtime=page.locator('#s-lightweight-runtime');await runtime.getByRole('button',{name:/查看表达/}).click();await expect(runtime.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
+ const original=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ await runtime.getByRole('button',{name:'添加我的场景',exact:true}).click();
+ const editor=page.getByRole('dialog').filter({has:page.getByRole('heading',{name:'我的场景',exact:true})});
+ await editor.getByRole('textbox').fill('昨天我向同事借了一把雨伞，并约好今天归还。');await editor.getByRole('button',{name:'保存我的场景',exact:true}).click();
+ await runtime.getByRole('button',{name:'存入我的语义世界',exact:true}).click();await expect(runtime.getByRole('button',{name:'已存入我的语义世界',exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(1);
+ await runtime.getByRole('button',{name:'暂停',exact:true}).click();
+ await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的语义世界',exact:true}).click();
+ await page.getByRole('button',{name:/borrow/}).click();
+ const preparation=page.getByRole('region',{name:'个人内容学习准备',exact:true});
+ await expect(preparation.getByRole('checkbox'),'existing Book material must not offer an unused generation consent').toHaveCount(0);
+ await preparation.getByRole('button',{name:'加入学习',exact:true}).click();
+ await expect(preparation.getByRole('heading')).toContainText('已加入学习');
+ await expect(preparation.getByRole('button',{name:'开始 / 继续学习',exact:true})).toBeEnabled();
+ const tasks=await page.evaluate(()=>window.__sensaBrowserSmoke!.provisioningCheckpoint());expect(tasks).toHaveLength(1);expect(tasks[0]!.status).toBe('covered');
+ const after=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());expect(after.targetIds).toEqual(original.targetIds);expect(after.runtime).toEqual(original.runtime);expect(after.records).toEqual([]);expect(providerRequests).toEqual([]);
+ await page.reload();await expect(preparation.getByRole('button',{name:'开始 / 继续学习',exact:true})).toBeEnabled();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.provisioningCheckpoint())).toEqual(tasks);
+ await preparation.getByRole('button',{name:'开始 / 继续学习',exact:true}).click();await expect(runtime.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).runtime).toEqual(original.runtime);expect(providerRequests).toEqual([]);
+});
+
 test('a guest learns a Book through the UI and resumes the revealed step after reload',async({page})=>{
   await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
   await page.goto(origin);
@@ -772,7 +805,11 @@ test('closing and reopening Chromium restores the same revealed learning step',a
     let page=context.pages()[0]!;
     await page.goto(origin);
     await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
-    await page.locator('#s-home').getByRole('button',{name:'学习包目录',exact:true}).click();
+    // Wait on the primary empty-library action, not the temporary duplicate
+    // shortcut shown while the local readiness projection is loading.
+    const catalogAction=page.locator('#s-home .sensa-today-start');
+    await expect(catalogAction).toHaveAccessibleName('学习包目录');
+    await catalogAction.click();
     await page.locator('#s-catalog').last().getByRole('button',{name:/雨天借伞/}).click();
     const book=page.locator('#s-catalog-book').last();
     await book.getByRole('button',{name:'下载学习包',exact:true}).click();

@@ -20,7 +20,7 @@ function fixture(size:number){
    return id;
   },
   task:async id=>tasks.get(id)??null,
-  revise:async(id,_source,languageContext,useContext)=>{Object.assign(tasks.get(id)!,{languageContext,useContext});events.push(`revise:${id}`);},
+  revise:async(id,source,languageContext,useContext)=>{Object.assign(tasks.get(id)!,{languageContext,useContext,contextPin:[...source.context.personalSemanticAnchorRevisionIds],status:'waiting'});events.push(`revise:${id}`);},
   prepare:async id=>{
    active++;maxActive=Math.max(maxActive,active);events.push(`prepare:${id}`);tasks.get(id)!.status='generating';
    try{await new Promise<void>((resolve,reject)=>held.set(id,{resolve,reject}));tasks.get(id)!.status='ready';}
@@ -50,6 +50,38 @@ test('ready material from an old route revision is selectable and explicitly rev
  const batch=new PersonalLearningBatch(f.port),work=batch.run([choice],next,false);
  while(!f.held.size)await tick();expect(f.events.some(event=>event===`revise:${id}`)).toBe(true);
  f.held.get(id)!.resolve();await work;expect(isBatchTaskReady(f.tasks.get(id),next)).toBe(true);
+});
+
+test('a failed explicit update is not reported as prepared just because old material remains ready',async()=>{
+ const f=fixture(1),id=await f.port.enroll(f.sources[0]!,context,false);f.tasks.get(id)!.status='ready';
+ f.port.revise=async()=>{throw new Error('localFlow.storageUnavailable');};
+ const batch=new PersonalLearningBatch(f.port);await batch.run(f.choices,{...context,languageRouteRevision:2,supportLanguageTag:'ja'},false);
+ expect(batch.read().counts).toEqual({ready:0,failed:1,waiting:0,working:0});
+ expect(batch.rowAt(0)?.notice).toBe('localFlow.storageUnavailable');
+ expect(f.tasks.get(id)).toMatchObject({status:'ready',languageContext:context});
+ expect(f.events.some(event=>event.startsWith('prepare:'))).toBe(false);
+});
+
+test('a preparation error after durable success still reports the saved ready result',async()=>{
+ const f=fixture(1);f.port.prepare=async id=>{f.tasks.get(id)!.status='ready';throw new Error('notification_failed');};
+ const batch=new PersonalLearningBatch(f.port);await batch.run(f.choices,context,false);
+ expect(batch.read().counts).toEqual({ready:1,failed:0,waiting:0,working:0});
+});
+
+test('covered tasks reuse existing material without preparing or changing Context consent',async()=>{
+ const f=fixture(2);
+ for(const source of f.sources){const id=await f.port.enroll(source,context,false);Object.assign(f.tasks.get(id)!,{status:'covered',coveredByMembershipId:crypto.randomUUID()});}
+ const batch=new PersonalLearningBatch(f.port);await batch.run(f.choices,{...context,languageRouteRevision:2},true);
+ expect(batch.read().counts).toEqual({ready:2,failed:0,waiting:0,working:0});
+ expect(f.events.some(event=>event.startsWith('prepare:')||event.startsWith('revise:'))).toBe(false);
+ expect([...f.tasks.values()].every(task=>task.useContext===false)).toBe(true);
+});
+
+test('a revised task already covered in the new route pair never starts a redundant preparation',async()=>{
+ const f=fixture(1),id=await f.port.enroll(f.sources[0]!,context,false);f.tasks.get(id)!.status='covered';
+ f.port.revise=async(taskId,_source,languageContext,useContext)=>{Object.assign(f.tasks.get(taskId)!,{languageContext,useContext,status:'covered',coveredByMembershipId:crypto.randomUUID()});};
+ const batch=new PersonalLearningBatch(f.port);await batch.run(f.choices,{...context,languageRouteRevision:2,supportLanguageTag:'ja'},false);
+ expect(batch.read().counts.ready).toBe(1);expect(f.events.some(event=>event.startsWith('prepare:'))).toBe(false);
 });
 
 test('a failed persistent stop never reports an active lease as a saved waiting task',async()=>{

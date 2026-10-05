@@ -57,7 +57,7 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
  const personalLearning=usePersonalLearning(currentScreen==='s-learning-library'?{kind:'library'}:currentScreen==='s-learning-target'&&params.targetId?{kind:'target',targetId:params.targetId}:null);
  const activeRoute={id:packageLearning.languageContext.languageRouteId,targetLanguageTag:packageLearning.languageContext.targetLanguageTag};
  const toast=useOverlayStore(state=>state.toast);
- const pendingPersonal=personalLearning.tasks.filter(task=>!packageLearning.targets.some(target=>target.targetId===task.targetId&&target.curriculumMembershipId===task.curriculumMembershipId));
+ const pendingPersonal=personalLearning.tasks.filter(task=>!packageLearning.targets.some(target=>target.targetId===task.targetId));
  const activePendingPersonal=pendingPersonal.filter(task=>task.languageContext.languageRouteId===activeRoute.id);
  const pendingDirect=packageLearning.enrollments.flatMap(enrollment=>{
   const source=enrollment.source;

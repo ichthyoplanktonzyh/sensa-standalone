@@ -12,6 +12,8 @@ import {loadJourneyStateFromLibrary} from './experience/personalMeaningJourney/r
 import type {JourneyState} from './experience/personalMeaningJourney/store';
 
 type BrowserSmokeBridge = {
+  setSpeechFixtureForTest(unavailable:boolean):Promise<void>;
+  operatedStepMaterialsForTest():Promise<{eventId:string;runId:string;stepId:string;materializationId:string}[]>;
   meaningPinsForTest(id:string):Promise<Array<{senseId:string;senseVersionId:string}>>;
   seedInboxForTest(payload:import('@sensa/contracts/sensa').SensaIntakePayload,media?:import('./data/library/media').StoredMedia):Promise<string>;
   appendInboxContextForTest(intakeId:string,text:string):Promise<void>;
@@ -37,7 +39,7 @@ type BrowserSmokeBridge = {
   syncStatus(): Promise<string>;
   semanticWorldContainsExpression(surfaceForm: string): Promise<boolean>;
   intakeInboxCount(): Promise<number>;
-  provisioningCheckpoint():Promise<{taskId:string;targetId:string;status:string}[]>;
+  provisioningCheckpoint():Promise<{taskId:string;targetId:string;status:string;useContext:boolean}[]>;
   firstMeaningId(): Promise<string | null>;
   navigate(path: string): Promise<void>;
   openReferenceFixture(): Promise<void>;
@@ -79,6 +81,21 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
   let hiddenInboxMedia:import('./data/library/media').StoredMedia|undefined;
   let releaseDirectResult:(()=>void)|undefined,restoreLearningReads:(()=>void)|undefined;
   window.__sensaBrowserSmoke = {
+    async operatedStepMaterialsForTest(){
+      return readLibrary(async tx=>(await tx.entries('learningEvents')).flatMap(({key,value})=>{
+        const event=value as {runId:string;detail?:{stepId?:string;materializationId?:string}};
+        return event.detail?.stepId&&event.detail.materializationId?[{eventId:key,runId:event.runId,stepId:event.detail.stepId,materializationId:event.detail.materializationId}]:[];
+      }).sort((left,right)=>left.eventId.localeCompare(right.eventId)));
+    },
+    async setSpeechFixtureForTest(unavailable){
+      // Provider-boundary fixture only. Preparation still constructs requests,
+      // validates all candidates and admits material through production code.
+      const {replaceClientSpeechProvider}=await import('./data/library/speech/provider');
+      replaceClientSpeechProvider({id:'browser-fixture',revision:1,displayName:'Synthetic browser fixture',synthesize:async input=>{
+        if(unavailable)throw new Error('speech_language_unavailable');
+        return {...input,audioUrl:'data:audio/mpeg;base64,UklGRg==',phoneticNotation:null,accentLabel:'en-US',source:'Synthetic browser fixture, not audible quality evidence',method:'tts'};
+      }});
+    },
     async holdDirectEnrollmentResultForTest(){
       if(releaseDirectResult)throw new Error('Direct result already held');
       const {learningSystem}=await import('./learning/system');const original=learningSystem.execute;
@@ -260,7 +277,7 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
     },
     async provisioningCheckpoint(){
       const {contentSupplySystem}=await import('./contentSupply/system');
-      return (await contentSupplySystem.read({kind:'provisioning_tasks'})).map(task=>({taskId:task.id,targetId:task.targetId,status:task.status})).sort((left,right)=>left.taskId.localeCompare(right.taskId));
+      return (await contentSupplySystem.read({kind:'provisioning_tasks'})).map(task=>({taskId:task.id,targetId:task.targetId,status:task.status,useContext:task.useContext})).sort((left,right)=>left.taskId.localeCompare(right.taskId));
     },
     async firstMeaningId() {
       return (await loadJourneyStateFromLibrary()).meanings[0]?.personalMeaning.personalMeaningId ?? null;

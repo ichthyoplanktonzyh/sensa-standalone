@@ -5,7 +5,8 @@ import {worldFactRegistryReferences,worldRegistryClosure,worldItemFromRegistry,t
 import {isUuid} from './ids';
 import type {JourneyDetailView,ClarificationDraftView} from './types';
 import {sensaIntakeItemSchema} from '@sensa/contracts/sensa';
-import {buildPersonalMeaningLearningSources} from './learningSource';
+import {buildPersonalMeaningLearningSources,hydratePersonalLearningImages} from './learningSource';
+import {parseStoredMedia} from '../../data/library/media';
 import {indexRegistry} from './registryRead';
 import type {PersonalMeaningLearningSource} from '../../contentSupply/system';
 import {clarificationSourceWitness,meaningSourceValue,intakeSourceValue,type ClarificationSourceWitness,type ClarificationSourceKind} from './clarificationSource';
@@ -25,13 +26,13 @@ export async function readWorldFrame(tx:LibraryTransaction):Promise<WorldReadSta
   if(await tx.count(table))throw new StoreCorruptedError('本机的个人意义数据缺少版本记录。');
  return {incarnation,revision};
 }
-export async function readMeaningRegistry(tx:LibraryTransaction,record:MeaningJourneyRecord):Promise<{registry:SenseRegistryState;records:ReadonlyMap<string,unknown>}>{
+export async function readMeaningRegistry(tx:Pick<LibraryTransaction,'get'>,record:MeaningJourneyRecord):Promise<{registry:SenseRegistryState;records:ReadonlyMap<string,unknown>}>{
  const keys=new Set<string>();
  for(const rows of Object.values(record))if(Array.isArray(rows))for(const fact of rows)for(const key of worldFactRegistryReferences(fact))keys.add(key);
  return readRegistryRecords(tx,[...keys],record);
 }
 /** Command frames reuse the same exact-reference/current-head traversal. */
-export async function readRegistryRecords(tx:LibraryTransaction,initialKeys:readonly string[],record?:MeaningJourneyRecord):Promise<{registry:SenseRegistryState;records:ReadonlyMap<string,unknown>}>{
+export async function readRegistryRecords(tx:Pick<LibraryTransaction,'get'>,initialKeys:readonly string[],record?:MeaningJourneyRecord):Promise<{registry:SenseRegistryState;records:ReadonlyMap<string,unknown>}>{
  const records=new Map<string,unknown>(),keys=new Set(initialKeys);
  let pending=[...keys];
  while(pending.length){
@@ -122,7 +123,11 @@ export const worldReadRepository={
    if(record.personalMeaning.status==='deleted')return {...stamp,detail:null,draft:null,sources:[],source:null};
    if(record.personalMeaning.personalMeaningId!==id)throw new StoreCorruptedError('个人意义身份与存储记录不一致。');
    const {registry}=await readMeaningRegistry(tx,record),item=worldItemFromRegistry(record,registry);
-   return {...stamp,detail:item.detail,draft:null,sources:buildPersonalMeaningLearningSources(record,indexRegistry(registry)),source:clarificationSourceWitness(stamp.incarnation,'personal_meaning',id,meaningSourceValue(record))};
+   const sources=await hydratePersonalLearningImages(record,buildPersonalMeaningLearningSources(record,indexRegistry(registry)),async mediaId=>{
+    const media=parseStoredMedia(await tx.get('media',mediaId));if(media.mediaId!==mediaId)throw new StoreCorruptedError('Context 图片引用不一致。');
+    return {id:mediaId,name:'personal-context-image',dataUrl:media.dataUrl};
+   });
+   return {...stamp,detail:item.detail,draft:null,sources,source:clarificationSourceWitness(stamp.incarnation,'personal_meaning',id,meaningSourceValue(record))};
   });
  },
 };

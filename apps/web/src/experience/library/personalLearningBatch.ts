@@ -1,5 +1,5 @@
 import type {SensaFormalPinnedLanguageContext} from '@sensa/contracts/sensa';
-import type {ContentProvisioningTask,PersonalMeaningLearningSource} from '../../contentSupply/provisioning/contracts';
+import {personalLearningSourceRevision,personalLearningContextMatches,isPersonalProvisioningTask,type ContentProvisioningTask,type PersonalMeaningLearningSource} from '../../contentSupply/provisioning/contracts';
 import type {WorldLearningChoice} from '../personalMeaningJourney/worldRead';
 
 type Status='waiting'|'working'|'ready'|'failed';
@@ -15,7 +15,7 @@ export interface PersonalLearningBatchPort{
  stop(id:string):Promise<unknown>;
 }
 const notice=(cause:unknown)=>cause instanceof Error&&cause.message.startsWith('localFlow.')?cause.message:'localFlow.preparationPreserved';
-export const isBatchTaskReady=(task:ContentProvisioningTask|undefined,context:SensaFormalPinnedLanguageContext)=>task?.status==='ready'&&task.languageContext.languageRouteId===context.languageRouteId&&task.languageContext.languageRouteRevision===context.languageRouteRevision&&task.languageContext.targetLanguageTag===context.targetLanguageTag&&task.languageContext.supportLanguageTag===context.supportLanguageTag;
+export const isBatchTaskReady=(task:ContentProvisioningTask|undefined,context:SensaFormalPinnedLanguageContext)=>(task?.status==='ready'||task?.status==='covered')&&task.languageContext.languageRouteId===context.languageRouteId&&(task.status==='covered'||task.languageContext.languageRouteRevision===context.languageRouteRevision)&&task.languageContext.targetLanguageTag===context.targetLanguageTag&&task.languageContext.supportLanguageTag===context.supportLanguageTag;
 
 /** Explicit intentions are saved before generation. Only compact choices are
  * retained: one full source during enrollment, at most three during preparation.
@@ -48,7 +48,7 @@ export class PersonalLearningBatch{
   this.publish({counts:{...this.snapshot.counts,[prior.status]:this.snapshot.counts[prior.status]-1,[status]:this.snapshot.counts[status]+(prior.status===status?0:1)}});
  }
  private result(index:number,task:ContentProvisioningTask|null,cause?:unknown){
-  if(task?.status==='ready'){this.mark(index,'ready');return;}
+  if(task?.status==='ready'||task?.status==='covered'){this.mark(index,'ready');return;}
   if(task&&['waiting','stopped'].includes(task.status)&&(!cause||this.stopped)){this.mark(index,'waiting',task.notice|| (cause?notice(cause):''));return;}
   this.mark(index,'failed',cause?notice(cause):task?.notice||(['generating','reviewing'].includes(task?.status??'')?'localFlow.preparationBusy':'localFlow.preparationPreserved'));
  }
@@ -83,21 +83,30 @@ export class PersonalLearningBatch{
    const worker=async()=>{
     while(!this.stopped&&cursor<queued.length){
      const {index,taskId}=queued[cursor++]!;this.mark(index,'working');
+     let preparationStarted=false;
      try{
       let task=await this.port.task(taskId);if(!task)throw new Error('localFlow.enrollFirst');
-      if(!isBatchTaskReady(task,context)||task.useContext!==useContext){
-       const source=await this.port.resolve(unique[index]!);if(this.stopped){this.mark(index,'waiting');continue;}
-       if(task.languageContext.languageRouteRevision!==context.languageRouteRevision||task.languageContext.supportLanguageTag!==context.supportLanguageTag||task.useContext!==useContext)
+      const source=await this.port.resolve(unique[index]!);if(this.stopped){this.mark(index,'waiting');continue;}
+      const sourceChanged=isPersonalProvisioningTask(task)&&(personalLearningSourceRevision(task.source)!==personalLearningSourceRevision(source.reference)||useContext&&!personalLearningContextMatches(task,source));
+      if(!isBatchTaskReady(task,context)||(task.status!=='covered'&&(task.useContext!==useContext||sourceChanged))){
+       if(task.languageContext.languageRouteRevision!==context.languageRouteRevision||task.languageContext.supportLanguageTag!==context.supportLanguageTag||task.useContext!==useContext||sourceChanged){
         await this.port.revise(taskId,source,context,useContext);
+        task=await this.port.task(taskId);if(!task)throw new Error('localFlow.enrollFirst');
+        if(isBatchTaskReady(task,context)){this.result(index,task);continue;}
+       }
        if(this.stopped){this.mark(index,'waiting');continue;}
        this.active.add(taskId);
+       preparationStarted=true;
        try{await this.port.prepare(taskId,source);}finally{this.active.delete(taskId);}
        task=await this.port.task(taskId);if(!task)throw new Error('localFlow.enrollFirst');
       }
       this.result(index,task);
      }catch(cause){
-      const task=await this.port.task(taskId).catch(()=>null);
-      this.result(index,task,cause);
+      // Old ready material is still usable, but it cannot stand in for an
+      // update which failed before preparation. After preparation starts,
+      // re-read its durable outcome (a notification can fail after commit).
+      if(!preparationStarted)this.mark(index,'failed',notice(cause));
+      else this.result(index,await this.port.task(taskId).catch(()=>null),cause);
      }
     }
    };
@@ -108,7 +117,7 @@ export class PersonalLearningBatch{
    for(const {index,taskId} of queued)if(this.stoppedTasks.has(taskId)){
     try{
      const task=await this.port.task(taskId);if(!task)throw new Error('localFlow.enrollFirst');
-     const status=task.status==='ready'?'ready':this.stopFailures.has(taskId)||!['waiting','stopped'].includes(task.status)?'failed':'waiting';
+     const status=task.status==='ready'||task.status==='covered'?'ready':this.stopFailures.has(taskId)||!['waiting','stopped'].includes(task.status)?'failed':'waiting';
      this.mark(index,status,status==='ready'?'':this.stopFailures.has(taskId)?notice(this.stopFailures.get(taskId)):task.notice||(['generating','reviewing'].includes(task.status)?'localFlow.preparationBusy':''));
     }catch(cause){this.mark(index,'failed',notice(cause));}
    }

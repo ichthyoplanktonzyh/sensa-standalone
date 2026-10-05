@@ -10,7 +10,9 @@ import { backupEqual } from './backupCodec';
 import {directProvisioningReferenceSchema,isDirectProvisioningReference,provisioningTaskId,provisioningMembershipId} from '../../contentSupply/provisioning/contracts';
 import {curriculumEnrollmentSchema} from './curriculumEnrollments';
 import {assertDirectTaskEnrollment,assertDirectAttemptSource} from './directProvisioningAssertions';
-import {assertReadyContentAttempt} from './contentAttemptEvidence';
+import {assertPersonalAttemptSource} from './personalProvisioningAssertions';
+import {readPersonalProvisioningSource} from './personalProvisioningSource';
+import {assertPersonalContextPin} from '../../experience/personalMeaningJourney/learningSource';
 import {
   packageInstallationSchema,
   samePackageInstallationArtifact,
@@ -109,6 +111,8 @@ export async function assertContentSupplyTransition(input: {
         bindingVersionId: z.string().min(1),
       }).strict().parse(task.source);
       const direct=isDirectProvisioningReference(source);
+      if(direct&&task.contextPin!==undefined)reject('Direct preparation cannot pin personal Context.');
+      if(!direct&&task.contextPin!==undefined)assertPersonalContextPin(await read('semanticMeanings',source.personalMeaningId) as any,task.contextPin);
       if(direct){
         const enrollment=curriculumEnrollmentSchema.parse(await read('curriculumEnrollments',source.enrollmentId));
         assertDirectTaskEnrollment(task,enrollment);
@@ -151,7 +155,6 @@ export async function assertContentSupplyTransition(input: {
         }
       }
       if(task.status==='covered'){
-        if(!direct)reject('Only direct preparation can be covered by another entry.');
         uuid.parse(task.coveredByMembershipId);
         const target=await read('learningTargets',task.targetId) as any;
         const member=target?.curriculumMemberships?.find((item:any)=>item.id===task.coveredByMembershipId);
@@ -171,10 +174,15 @@ export async function assertContentSupplyTransition(input: {
     }
     const task = await read('personalLearning', attempt.taskId) as any;
     if (!task || task.attemptId !== attempt.id) reject('Content Agent Attempt is not current for its task.');
+    if(!backupEqual(attempt.contextPin??null,task.contextPin??null))reject('Content Agent Attempt changed its fixed Context.');
+    if(!backupEqual(attempt.fixedInput,{source:task.source,languageContext:task.languageContext,planRevision:task.planRevision,useContext:task.useContext}))reject('Content Agent Attempt changed its fixed preparation input.');
     if(task.source?.kind==='stable_sense'){
       const enrollment=curriculumEnrollmentSchema.parse(await read('curriculumEnrollments',task.source.enrollmentId));
       assertDirectAttemptSource(attempt,task,assertDirectTaskEnrollment(task,enrollment),identity.learnerId);
-    }else assertReadyContentAttempt(attempt);
+    }else{
+      const source=await readPersonalProvisioningSource({get:async(table,key)=>await read(table,key) as any},attempt.fixedInput.source,attempt.contextPin);
+      assertPersonalAttemptSource(attempt,task,source,identity.learnerId);
+    }
     if (attempt.request) sensaContentGenerationRequestSchema.parse(attempt.request);
     if (attempt.bundle) {
       sensaMaterialCandidateBundleSchema.parse(attempt.bundle);
@@ -194,6 +202,7 @@ export async function assertContentSupplyTransition(input: {
       if (before.id !== attempt.id || before.taskId !== attempt.taskId || before.createdAt !== attempt.createdAt) {
         reject('Content Agent Attempt identity is immutable.');
       }
+      if(!backupEqual(before.fixedInput,attempt.fixedInput)||!backupEqual(before.contextPin??null,attempt.contextPin??null))reject('Content Agent Attempt fixed input is immutable.');
     }
   }
 }

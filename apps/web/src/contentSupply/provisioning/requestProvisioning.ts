@@ -21,6 +21,6 @@ export async function requestPersonalContentProvisioning(input: {
   );
   return {
     provisioningTaskId: task.id,
-    provisioningStatus: task.status === 'ready' ? 'ready' as const : 'waiting' as const,
+    provisioningStatus: task.status === 'ready'||task.status==='covered' ? 'ready' as const : 'waiting' as const,
   };
 }

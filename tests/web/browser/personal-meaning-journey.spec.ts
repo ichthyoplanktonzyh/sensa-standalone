@@ -37,8 +37,12 @@ test.beforeAll(async()=>{
   if(url.pathname==='/semantic-scale-fixture'&&scaleFixture){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify(scaleFixture));return;}
   if(url.pathname==='/v1/chat/completions'){
    let body='';for await(const chunk of req)body+=chunk.toString();
-   requests.push(JSON.parse(body));const plan=plans.shift();
+   const request=JSON.parse(body);requests.push(request);const plan=plans.shift();
    if(!plan){res.writeHead(500);res.end('fixture plan exhausted');return;}
+   if(request.stream!==true){
+    res.writeHead(200,{'content-type':'application/json'});
+    res.end(JSON.stringify({model:'fixture-teacher',choices:[{finish_reason:'stop',message:{content:JSON.stringify(plan.value)}}]}));return;
+   }
    res.writeHead(200,{'content-type':'text/event-stream','cache-control':'no-store'});
    const delta=(content:string)=>res.write('data: '+JSON.stringify({model:'fixture-teacher',choices:[{index:0,delta:{content},finish_reason:null}]})+'\n\n');
    const raw=JSON.stringify(plan.value),prefix=raw.slice(0,raw.indexOf('water')+5);
@@ -50,6 +54,10 @@ test.beforeAll(async()=>{
    res.end('data: '+JSON.stringify({model:'fixture-teacher',choices:[{index:0,delta:{},finish_reason:'stop'}]})+'\n\ndata: [DONE]\n\n');return;
   }
   if(url.pathname==='/sensa/packages'){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify(registry));return;}
+  if(url.pathname==='/sensa/resource-facts'){
+   let body='';for await(const chunk of req)body+=chunk.toString();
+   res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({input:JSON.parse(body),references:[]}));return;
+  }
   if(url.pathname==='/favicon.ico'){res.writeHead(204);res.end();return;}
   if(url.pathname.startsWith('/sensa/')||url.pathname.startsWith('/auth/')){res.writeHead(401,{'content-type':'application/json'});res.end(JSON.stringify({code:'authentication_required'}));return;}
   const path=resolve(dist,`.${url.pathname}`);
@@ -65,16 +73,16 @@ test.beforeAll(async()=>{
 test.afterEach(()=>{releaseStream?.();releaseStream=undefined;});
 test.afterAll(async()=>{releaseStream?.();if(server?.listening)await new Promise<void>(done=>server.close(()=>done()));if(output)await rm(output,{recursive:true,force:true});});
 
-async function enterAndConfigureTeacher(page:Page){
+async function enterAndConfigureTeacher(page:Page,content=false){
  requests=[];plans=[];
  await page.addInitScript(()=>{(window as unknown as {__name:(value:unknown)=>unknown}).__name=value=>value;});
  await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
  await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
- await configureTeacher(page);
+ await configureTeacher(page,content);
  await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
  await page.getByRole('button',{name:'和 Sensa 聊聊',exact:true}).click();
 }
-async function configureTeacher(page:Page){
+async function configureTeacher(page:Page,content=false){
  await page.getByRole('button',{name:'账号与设置',exact:true}).click();
  await page.locator('#s-profile').getByRole('button',{name:/模型服务/}).click();
  await page.getByRole('button',{name:'添加本机连接',exact:true}).click();
@@ -85,6 +93,7 @@ async function configureTeacher(page:Page){
  await form.getByLabel('密钥（可稍后填写）',{exact:true}).fill('fixture-not-a-secret');
  await form.getByRole('button',{name:'保存连接',exact:true}).click();
  await page.getByLabel('澄清与解释',{exact:true}).selectOption({label:'旅程测试教师 · fixture-teacher'});
+ if(content)await page.getByLabel('学习材料生成',{exact:true}).selectOption({label:'旅程测试教师 · fixture-teacher'});
  await expect(page.getByLabel('澄清与解释',{exact:true})).toBeEnabled();
 }
 const facts=async(page:Page)=>{
@@ -422,10 +431,105 @@ test('reply streams before candidate disclosure, explicit acceptance persists, a
  expect((await facts(page)).learning.runtime).toBeNull();
  const enrolled=await facts(page);
  expect(enrolled.provisioning,'explicit intent is durable even when its provider is unavailable').toHaveLength(1);
- expect(enrolled.provisioning[0]!.status).toBe('failed');
- await page.reload();await expect(page.getByRole('heading',{name:'water',exact:true})).toBeVisible();
+  expect(enrolled.provisioning[0]!.status).toBe('failed');
+  const preparation=page.getByRole('region',{name:'个人内容学习准备',exact:true});
+  const consent=preparation.getByRole('checkbox',{name:'使用我的场景准备学习内容。',exact:true});
+  await expect(consent).not.toBeChecked();await consent.check();
+  expect((await facts(page)).provisioning[0]!.useContext,'changing the checkbox alone is not a saved grant').toBe(false);
+  await preparation.getByRole('button',{name:'重试 / 恢复准备',exact:true}).click();
+  await expect.poll(async()=>(await facts(page)).provisioning[0]).toMatchObject({taskId:enrolled.provisioning[0]!.taskId,status:'failed',useContext:true});
+  await consent.uncheck();await page.reload();
+  await expect(consent).toBeChecked();
+  await consent.uncheck();await preparation.getByRole('button',{name:'重试 / 恢复准备',exact:true}).click();
+  await expect.poll(async()=>(await facts(page)).provisioning[0]).toMatchObject({taskId:enrolled.provisioning[0]!.taskId,status:'failed',useContext:false});
+  await page.reload();await expect(page.getByRole('heading',{name:'water',exact:true})).toBeVisible();
  expect((await facts(page)).provisioning).toEqual(enrolled.provisioning);
  expect(requests,'joining with unavailable content provider must not call a paid model or invent ready content').toHaveLength(1);
+});
+
+test('personal preparation pins explicit Context updates, preserves the active Run and recovers unavailable speech without leaking revoked Context',async({page})=>{
+ test.setTimeout(150_000);
+ page.setDefaultTimeout(15_000);
+ await enterAndConfigureTeacher(page,true);
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
+ await page.getByRole('button',{name:'添加内容',exact:true}).click();await page.getByRole('button',{name:'手动创建',exact:true}).click();
+ const form=page.locator('.sensa-manual-meaning'),oldContext='Private-A: Every morning I water the plants.',nextContext='Private-B: At dusk I water the flowers on the balcony.';
+ await form.getByLabel('情境或原句',{exact:true}).fill(oldContext);
+ await form.getByLabel('原文中的表达（可在上方选中）',{exact:true}).fill('water');
+ await form.getByLabel('表达语言',{exact:true}).selectOption('en');
+ await form.getByLabel('这里表达的意思',{exact:true}).fill('给植物供水。');
+ await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('一个人给植物浇水，让它们获得需要的水分。');
+ await form.getByRole('button',{name:'确认并保存',exact:true}).click();await expect(form).toHaveCount(0);
+ const meaningId=await page.evaluate(()=>window.__sensaBrowserSmoke!.firstMeaningId());
+ const sensePins=await page.evaluate(id=>window.__sensaBrowserSmoke!.meaningPinsForTest(id!),meaningId);
+ expect(requests).toHaveLength(0);
+ const candidate=(scene:string,example:string)=>({resources:[
+  {role:'experience_recall_cue',payload:{scene,senseFocus:'给植物供水'}},
+  {role:'scene_bridge',payload:{text:'把给植物供水的动作联系到这个表达。',meaningRendering:{meaning:'给植物供水。',languageTag:'zh-CN'}}},
+  {role:'scene_realization',payload:{example,targetStart:example.indexOf('water'),targetEnd:example.indexOf('water')+5,experienceResourceKey:'experience_recall_cue:0'}},
+ ]});
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.setSpeechFixtureForTest(false));
+ plans=[{value:candidate('清晨，一个人用水壶给室内的植物浇水。','Every morning I water the plants.')}];
+ const preparation=page.getByRole('region',{name:'个人内容学习准备',exact:true});
+ const consent=preparation.getByRole('checkbox',{name:'使用我的场景准备学习内容。',exact:true});
+ await consent.check();await preparation.getByRole('button',{name:'加入学习',exact:true}).click();
+ await expect(preparation.getByRole('button',{name:'开始 / 继续学习',exact:true})).toBeEnabled();
+ expect(requests).toHaveLength(1);expect(JSON.stringify(requests[0])).toContain(oldContext);
+ const initial=await facts(page);expect(initial.provisioning[0]).toMatchObject({status:'ready',useContext:true});expect(initial.learning.targetIds).toHaveLength(1);
+ await preparation.getByRole('button',{name:'开始 / 继续学习',exact:true}).click();
+ await page.getByRole('dialog',{name:'学习偏好',exact:true}).getByRole('button',{name:'确认数量并开始',exact:true}).click();
+ await page.locator('#s-lightweight-runtime').getByRole('button',{name:/查看表达/}).click();
+ const active=(await facts(page)).learning;expect(active.runtime).not.toBeNull();
+ await page.locator('#s-lightweight-runtime').getByRole('button',{name:'暂停',exact:true}).click();
+ const suspended=(await facts(page)).learning;
+ const operated=await page.evaluate(()=>window.__sensaBrowserSmoke!.operatedStepMaterialsForTest());expect(operated).toHaveLength(1);
+ expect(operated[0]!.materializationId).toBe(active.runtime!.materializationId);
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
+ await page.locator('.sensa-world.active .sensa-world-row').filter({hasText:'water'}).first().click();
+ await expect(page.getByRole('heading',{name:'water',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'编辑场景',exact:true}).click();await page.getByRole('textbox',{name:'场景',exact:true}).fill(nextContext);
+ await page.getByRole('button',{name:'保存场景',exact:true}).click();
+ await expect(preparation).toContainText('场景已修改');expect(requests).toHaveLength(1);
+ await preparation.getByText('查看学习资源',{exact:true}).click();
+ await expect(preparation.getByText('清晨，一个人用水壶给室内的植物浇水。',{exact:true})).toBeVisible();
+ await expect(preparation.getByRole('button',{name:'开始 / 继续学习',exact:true})).toBeEnabled();
+ plans=[{value:candidate('傍晚，一个人在阳台上给花浇水。','At dusk I water the flowers on the balcony.')}];
+ await preparation.getByRole('button',{name:'使用当前场景设置更新资源',exact:true}).click();
+ await expect(preparation.getByText('傍晚，一个人在阳台上给花浇水。',{exact:true})).toBeVisible();
+ expect(requests).toHaveLength(2);expect(JSON.stringify(requests[1])).toContain(nextContext);expect(JSON.stringify(requests[1])).not.toContain(oldContext);
+ const updated=(await facts(page)).learning;
+ expect(updated).toEqual({...suspended,runtime:{...suspended.runtime!,materializationId:updated.runtime!.materializationId}});
+ expect(updated.runtime!.materializationId).not.toBe(suspended.runtime!.materializationId);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.operatedStepMaterialsForTest())).toEqual(operated);
+ expect(await page.evaluate(id=>window.__sensaBrowserSmoke!.meaningPinsForTest(id!),meaningId)).toEqual(sensePins);
+ // Revocation is an explicit fresh preparation. Unavailable speech must not
+ // fabricate Ready or replace the previous material, and retry resumes safely.
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.setSpeechFixtureForTest(true));
+ plans=[{value:candidate('一个人用水壶给植物浇水，让植物获得水分。','I water the plants.')}];
+ await consent.uncheck();await preparation.getByRole('button',{name:'使用当前场景设置更新资源',exact:true}).click();
+ await expect(preparation.getByRole('button',{name:'重试 / 恢复准备',exact:true})).toBeVisible();
+ await expect.poll(async()=>(await facts(page)).provisioning[0]).toMatchObject({status:'failed',useContext:false});
+ expect((await facts(page)).learning).toEqual(updated);
+ await expect(preparation.getByText('傍晚，一个人在阳台上给花浇水。',{exact:true})).toBeVisible();
+ await expect(preparation.getByRole('button',{name:'使用原有资源学习',exact:true})).toBeEnabled();
+ expect(JSON.stringify(requests.slice(2))).not.toMatch(/Private-A|Private-B/);
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.setSpeechFixtureForTest(false));
+ // A speech failure may happen before or after the model, depending on its
+ // tool order; provide one bounded fixture response if retry still needs it.
+ plans=[{value:candidate('一个人用水壶给植物浇水，让植物获得水分。','I water the plants.')}];
+ await preparation.getByRole('button',{name:'重试 / 恢复准备',exact:true}).click();
+ await expect.poll(async()=>(await facts(page)).provisioning[0]).toMatchObject({status:'ready',useContext:false});
+ expect(JSON.stringify(requests.slice(2))).not.toMatch(/Private-A|Private-B/);
+ const finalLearning=(await facts(page)).learning;
+ expect(finalLearning).toEqual({...updated,runtime:{...updated.runtime!,materializationId:finalLearning.runtime!.materializationId}});
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.operatedStepMaterialsForTest())).toEqual(operated);
+ const completedRequests=requests.length;await page.reload();
+ await expect(preparation.getByRole('button',{name:'开始 / 继续学习',exact:true})).toBeEnabled();expect(requests).toHaveLength(completedRequests);
+ await preparation.getByRole('button',{name:'开始 / 继续学习',exact:true}).click();
+ await expect(page.locator('#s-lightweight-runtime').getByRole('heading',{name:'water',exact:true})).toBeVisible();
+ await expect(page.locator('#s-lightweight-runtime').getByRole('button',{name:/查看表达/})).toHaveCount(0);
+ expect((await facts(page)).learning).toEqual(finalLearning);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.operatedStepMaterialsForTest())).toEqual(operated);
 });
 
 test('field-specific correction recovers a rejected final object without creating duplicate meaning facts',async({page})=>{

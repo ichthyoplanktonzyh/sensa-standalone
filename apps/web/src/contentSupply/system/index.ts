@@ -4,7 +4,9 @@ export {
 export {
   personalLearningSourceKey,
   personalLearningSourceRevision,
+  personalLearningContextMatches,
   isPersonalProvisioningTask,
+  provisioningResultMembershipId,
 } from '../provisioning/contracts';
 export type {
   ContentSupplyCatalogRefresh,

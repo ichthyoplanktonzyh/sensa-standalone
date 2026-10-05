@@ -103,7 +103,11 @@ const acceptedSource=gateway.getLearningSources(completed.personalMeaningId)[0]!
 const revised=await gateway.reviseContext({operationId:crypto.randomUUID(),personalMeaningId:completed.personalMeaningId,expectedRevision:acceptedDetail.revision,blocks:[{kind:'text',bodyText:'雨停以后，我在巷口想开口却又停下。'}]});
 assert.equal(revised.revision,acceptedDetail.revision+1);
 assert.equal(gateway.getDetail(completed.personalMeaningId)?.materialBlocks[0]?.bodyText,'雨停以后，我在巷口想开口却又停下。','accepted expression details expose the current Context revision');
-assert.equal(gateway.getLearningSources(completed.personalMeaningId)[0]?.context.text,acceptedSource.context.text,'editing Context preserves the originally accepted learning source rather than silently rewriting it');
+const currentLearningSource=gateway.getLearningSources(completed.personalMeaningId)[0]!;
+assert.equal(currentLearningSource.context.text,'雨停以后，我在巷口想开口却又停下。','a new explicit preparation can select the current Context');
+assert.deepEqual(currentLearningSource.reference,acceptedSource.reference,'Context revision does not replace accepted Sense, Binding or Alignment identity');
+assert.equal(acceptedSource.context.text,'雨后的巷子\n\n雨停了','the previously resolved snapshot stays unchanged');
+assert.equal((await saved()).meanings[0].personalSemanticAnchorRevisions.find((revision:any)=>revision.personalSemanticAnchorRevisionId===acceptedSource.context.personalSemanticAnchorRevisionIds[0]).bodyText,acceptedSource.context.text,'original Context remains available for pinned requests and history');
 await assert.rejects(gateway.reviseContext({operationId:crypto.randomUUID(),personalMeaningId:completed.personalMeaningId,expectedRevision:acceptedDetail.revision,blocks:[{kind:'text',bodyText:'过期页面的覆盖'}]}),/meaningChanged/,'a stale expression detail cannot overwrite a newer Context revision');
 
 // Two captures may arrive together from a batch-oriented Agent. Commands stay

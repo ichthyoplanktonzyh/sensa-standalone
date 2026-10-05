@@ -204,6 +204,25 @@ Intake engine 把原 payload 留在捕获 provenance 中，确认 tuple 使用�
 Journey Gateway 保留命令串行化、幂等、来源见证和原子提交；Context 材料、澄清事实、表达绑定、
 已发布学习场景及 Meaning revision 的构建分别由内部事实模块负责，不拥有独立存储或提交能力。
 
+个人来源在加入学习、准备开始、保存生成进度与显式更新时，均在同一事务读取选中的 Meaning 与其精确
+Registry 依赖，重新构造已接受的来源。调用者携带相同 ID 但不同语义、表达或私人 Context 不能调用 Provider
+或改写准备意图；该校验不枚举完整 World，也不会仅为验证来源初始化 Journey Gateway。
+普通加入与生成进度保存共用精确 Target／Route 的 coverage 检查：其他来源已有可用 membership 时，任务记录
+`coveredByMembershipId`，既不重新生成，也不追加会改变材料选择的 membership。单项和批量入口使用原目标；
+显式资源更新只更新该来源自己已有的材料，不借 `replacing` 绕过其他来源的覆盖。学习列表按实际可用 Target
+去重，准备意图不能遮住另一来源提供的同目标。覆盖引用在本机写入与恢复时均校验真实 membership 和固定身份。
+保存的 coverage 结果可作为历史保留；准备查询仍重新检查当前 active membership，并订阅 Target 变化。
+Book 更新移除覆盖时，查询显示 waiting 而不在读取中改写事实；用户再次明确加入时才持久化新的待准备状态。
+个人准备任务与每次尝试分别保存 `contextPin`，固定该次选中的 Anchor Revision ID 列表；它不改变 Alignment、
+Sense 或 Binding 引用。新的来源预览读取当前 active Context，普通等待、重试和在途进度按任务 pins 重构输入。
+明确更新才选择新 pins 与 plan revision，失败继续保留原材料；恢复校验允许历史 pins 引用已退役 Anchor。
+独立 Context 图片按精确媒体引用加载，进入已授权输入和经验资源。已有其他来源材料时不显示生成授权选项；
+自己的材料可继续使用，Context 或授权变更另由显式更新提交。
+每次 attempt 另冻结 `fixedInput`（来源、Route、plan revision 与 consent）。本机 transition 与恢复都会独立核对
+实际 request 的固定语义、表达和 Origin；即使是 failed/stopped checkpoint，也必须按自身历史 Context pin
+核对 grant digest 与接收者。未授权的尝试不能带 personal anchor，重试不得复用另一授权范围的请求。
+历史尝试不会随任务更新而改写；批量更新提交失败不能以仍可用的旧材料冒充本次准备成功。
+
 Learning System 的 `direct_source` 查询从确切 Registry 版本或已准入发布包解析学习来源，不借用 Personal Meaning。
 规范包摘要与归档摘要分别校验，发布包具体 spoken form 与 accepted forms 取其 `targetExpression`；未对齐 Reference、被拒绝或
 非 exact/realizes Binding 不可冒充学习来源。`enroll_direct` 在同一事务复查来源摘要和 Route，保存含不可变来源

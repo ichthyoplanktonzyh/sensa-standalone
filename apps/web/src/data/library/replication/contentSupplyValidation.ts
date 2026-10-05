@@ -13,7 +13,11 @@ import type {LibraryIdentity,Table} from '../store';
 import {isDirectProvisioningReference,provisioningTaskId,provisioningMembershipId} from '../../../contentSupply/provisioning/contracts';
 import {curriculumEnrollmentSchema} from '../curriculumEnrollments';
 import {assertDirectTaskEnrollment,assertDirectAttemptSource} from '../directProvisioningAssertions';
-import {assertReadyContentAttempt} from '../contentAttemptEvidence';
+import {assertPersonalAttemptSource} from '../personalProvisioningAssertions';
+import {assertPersonalContextPin,buildPersonalMeaningLearningSources} from '../../../experience/personalMeaningJourney/learningSource';
+import {canonicalConsumerJson} from '@sensa/contracts/sensa';
+import {parseStoredMedia} from '../media';
+import {backupEqual} from '../backupCodec';
 
 type RequireRow=(table:Table,id:string)=>any;
 
@@ -45,6 +49,8 @@ export function validateContentSupplyReplica(input:{
   const direct=isDirectProvisioningReference(task.source);
   if(direct)assertDirectTaskEnrollment(task,curriculumEnrollmentSchema.parse(requireRow('curriculumEnrollments',task.source.enrollmentId)));
   else requirePersonalSource(task.source);
+  if(direct&&task.contextPin!==undefined)fail();
+  if(!direct&&task.contextPin!==undefined)assertPersonalContextPin(requireRow('semanticMeanings',task.source.personalMeaningId),task.contextPin);
   const context=validateLanguageContext(task.languageContext);
   if(task.id!==provisioningTaskId(task.source,context.languageRouteId)||task.targetId!==stableUuid(`sensa-learning-target:${identity.learnerId}:${task.source.senseVersionId}:${task.source.bindingVersionId}`)
     ||task.curriculumMembershipId!==provisioningMembershipId(task.source,task.targetId,context.languageRouteId))fail();
@@ -52,7 +58,7 @@ export function validateContentSupplyReplica(input:{
   if(task.attemptId&&requireRow('contentAttempts',task.attemptId).taskId!==task.id)fail();
   if(task.status==='ready'&&!requireRow('learningTargets',task.targetId).curriculumMemberships.some((membership:any)=>membership.id===task.curriculumMembershipId))fail();
   if(task.status==='covered'){
-   if(!direct)fail();const target=requireRow('learningTargets',task.targetId),member=target.curriculumMemberships.find((candidate:any)=>candidate.id===task.coveredByMembershipId);
+   const target=requireRow('learningTargets',task.targetId),member=target.curriculumMemberships.find((candidate:any)=>candidate.id===task.coveredByMembershipId);
    if(target.identity.senseId!==task.source.senseId||target.identity.senseVersionId!==task.source.senseVersionId||target.identity.senseExpressionBindingId!==task.source.bindingId||target.identity.bindingVersionId!==task.source.bindingVersionId)fail();
    if(!member||member.languageContext.languageRouteId!==task.languageContext.languageRouteId||member.languageContext.targetLanguageTag!==task.languageContext.targetLanguageTag||member.languageContext.supportLanguageTag!==task.languageContext.supportLanguageTag)fail();
   }else if(task.coveredByMembershipId!==undefined)fail();
@@ -60,8 +66,27 @@ export function validateContentSupplyReplica(input:{
  }
  for(const {value:attempt} of rows.contentAttempts){
   const task=requireRow('personalLearning',attempt.taskId);
+  if(task.attemptId===attempt.id&&!backupEqual(attempt.contextPin??null,task.contextPin??null))fail();
+  if(task.attemptId===attempt.id&&!backupEqual(attempt.fixedInput,{source:task.source,languageContext:task.languageContext,planRevision:task.planRevision,useContext:task.useContext}))fail();
+  if(attempt.contextPin!==undefined){
+   if(isDirectProvisioningReference(task.source))fail();
+   assertPersonalContextPin(requireRow('semanticMeanings',task.source.personalMeaningId),attempt.contextPin);
+  }
   if(isDirectProvisioningReference(task.source))assertDirectAttemptSource(attempt,task,assertDirectTaskEnrollment(task,curriculumEnrollmentSchema.parse(requireRow('curriculumEnrollments',task.source.enrollmentId))),identity.learnerId);
-  else assertReadyContentAttempt(attempt);
+  else{
+   if(!attempt.fixedInput)throw new Error('Personal preparation is missing its frozen input.');
+   validateLanguageContext(attempt.fixedInput.languageContext);
+   requirePersonalSource(attempt.fixedInput.source);
+   const record=requireRow('semanticMeanings',attempt.fixedInput.source.personalMeaningId);
+   const source=buildPersonalMeaningLearningSources(record,(kind,id)=>requireRow('semanticRegistry',`${kind}:${id}`).value,attempt.fixedInput.source.personalMeaningAlignmentId,attempt.contextPin)
+    .find(candidate=>canonicalConsumerJson(candidate.reference)===canonicalConsumerJson(attempt.fixedInput.source));
+   if(!source)throw new Error('Personal preparation has a different accepted source.');
+   const ids=new Set(source.context.personalSemanticAnchorRevisionIds);
+   const mediaIds=[...new Set<string>(record.personalSemanticAnchorRevisions.filter((revision:any)=>ids.has(revision.personalSemanticAnchorRevisionId)).flatMap((revision:any)=>revision.personalMediaObjectId?[revision.personalMediaObjectId]:[]))];
+   const images=mediaIds.map(mediaId=>({id:mediaId,name:'personal-context-image',dataUrl:parseStoredMedia(requireRow('media',mediaId)).dataUrl}));
+   source.context.images=[...new Map([...source.context.images,...images].map(image=>[image.id,image])).values()];
+   assertPersonalAttemptSource(attempt,task,source,identity.learnerId);
+  }
   if(attempt.request)sensaContentGenerationRequestSchema.parse(attempt.request);
   if(attempt.bundle){sensaMaterialCandidateBundleSchema.parse(attempt.bundle);if(!attempt.request||attempt.bundle.contentGenerationRequestId!==attempt.request.contentGenerationRequestId)fail();}
   if(attempt.resumedFrom)requireRow('contentAttempts',attempt.resumedFrom);

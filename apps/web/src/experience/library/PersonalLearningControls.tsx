@@ -4,6 +4,9 @@ import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import {useEffect,useState} from 'react';
 import {
  personalLearningSourceKey,
+ personalLearningSourceRevision,
+ personalLearningContextMatches,
+ provisioningResultMembershipId,
  type PersonalContentProvisioningTask as ContentProvisioningTask,
  type PersonalMeaningLearningSource,
 } from '../../contentSupply/system';
@@ -17,16 +20,22 @@ import {downloadPortablePackage} from './portableDownload';
 type Controller=ReturnType<typeof usePersonalLearning>;
 
 export function PersonalLearningControls({source,c,onStart}:{source:PersonalMeaningLearningSource;c:Controller;onStart:(targetId:string)=>void}){
- useTranslation();
- const task=c.tasks.find(candidate=>personalLearningSourceKey(candidate.source)===personalLearningSourceKey(source.reference)&&candidate.languageContext.languageRouteId===c.languageContext.languageRouteId);const [useContext,setUseContext]=useState(task?.useContext??false);const target=c.targets.find(candidate=>candidate.targetId===task?.targetId&&candidate.curriculumMembershipId===task?.curriculumMembershipId);const stale=!!task&&(task.languageContext.languageRouteRevision!==c.languageContext.languageRouteRevision||task.languageContext.supportLanguageTag!==c.languageContext.supportLanguageTag||task.useContext!==useContext);
+ const {t}=useTranslation();
+ const task=c.tasks.find(candidate=>personalLearningSourceKey(candidate.source)===personalLearningSourceKey(source.reference)&&candidate.languageContext.languageRouteId===c.languageContext.languageRouteId);const [useContext,setUseContext]=useState(task?.useContext??false);const target=c.targets.find(candidate=>candidate.targetId===task?.targetId&&candidate.curriculumMembershipId===(task?provisioningResultMembershipId(task):undefined));const stale=!!task&&(task.languageContext.languageRouteRevision!==c.languageContext.languageRouteRevision||task.languageContext.supportLanguageTag!==c.languageContext.supportLanguageTag||task.useContext!==useContext||personalLearningSourceRevision(task.source)!==personalLearningSourceRevision(source.reference)||(task.useContext||useContext)&&!personalLearningContextMatches(task,source));
  useEffect(()=>{if(task)setUseContext(task.useContext);},[task?.id,task?.useContext]);
  const running=!!task&&['generating','reviewing'].includes(task.status)&&task.leaseUntil>c.clock;
+ const reusableTarget=c.targets.find(candidate=>candidate.identity.senseVersionId===source.reference.senseVersionId&&candidate.identity.bindingVersionId===source.reference.bindingVersionId&&(!task||candidate.curriculumMembershipId!==task.curriculumMembershipId));
+ if(task?.status==='covered'&&target)return <section className="sensa-preparation my-4 space-y-3 rounded-2xl border border-border-subtle p-5" aria-label={localFlowText('personalPreparation')}>
+  <h3 className="font-medium">{source.expression.surfaceForm} · {t('learningSetup.added')}</h3>
+  {c.notice&&<p role="status">{localFlowNotice(c.notice)}</p>}
+  <button className={setupPrimary} disabled={c.busy} onClick={()=>onStart(task.targetId)}>{localFlowText('startLearning')}</button>
+ </section>;
  return <section className="sensa-preparation my-4 space-y-3 rounded-2xl border border-border-subtle p-5" aria-label={localFlowText('personalPreparation')}>
   <h3 className="font-medium">{source.expression.surfaceForm} · {localFlowText(task?.status==='ready'?'learningReady':task?'learningPreparation':'learningChoice')}</h3>
   <p className="text-sm text-fg-secondary">{localFlowText('fixedLightweight')}</p>
-  {(!task||!!target)&&<label className="flex items-start gap-2 text-sm"><input type="checkbox" disabled={c.busy} checked={useContext} onChange={event=>setUseContext(event.target.checked)}/>{localFlowText('sourceConsent')}</label>}
+  {!reusableTarget&&<label className="flex items-start gap-2 text-sm"><input type="checkbox" disabled={c.busy||running} checked={useContext} onChange={event=>setUseContext(event.target.checked)}/>{localFlowText('sourceConsent')}</label>}
   {(c.notice||(task?.status!=='ready'&&task?.notice))&&<p role="status" className="text-sm">{localFlowNotice(c.notice||task?.notice)}</p>}
-  {!task?<button className={setupPrimary} disabled={c.busy} onClick={()=>void c.enroll(source,useContext)}>{localFlowText('enroll')}</button>:task.status==='ready'&&!stale?<button className={setupPrimary} disabled={c.busy} onClick={()=>onStart(task.targetId)}>{localFlowText('startLearning')}</button>:running?<><p role="status">{task.status==='generating'?localFlowText('generating'):localFlowText('reviewing')}</p><button className={setupButton} onClick={()=>c.stop(task.id)}>{localFlowText('stopPreparation')}</button></>:<button className={setupPrimary} disabled={c.busy||!c.preparationAvailable} onClick={()=>void (stale?c.update(task.id,source,useContext):c.prepare(task.id))}>{c.busy?localFlowText('processing'):task.status==='waiting'?localFlowText('generateResources'):task.status==='rejected'?localFlowText('regenerate'):localFlowText('retryPreparation')}</button>}
+  {!task?<button className={setupPrimary} disabled={c.busy} onClick={()=>void c.enroll(source,useContext)}>{localFlowText('enroll')}</button>:task.status==='ready'&&target?<button className={setupPrimary} disabled={c.busy} onClick={()=>onStart(task.targetId)}>{localFlowText('startLearning')}</button>:running?<><p role="status">{task.status==='generating'?localFlowText('generating'):localFlowText('reviewing')}</p><button className={setupButton} onClick={()=>c.stop(task.id)}>{localFlowText('stopPreparation')}</button></>:<button className={setupPrimary} disabled={c.busy||!c.preparationAvailable} onClick={()=>void (stale?c.update(task.id,source,useContext):c.prepare(task.id))}>{c.busy?localFlowText('processing'):task.status==='waiting'?localFlowText('generateResources'):task.status==='rejected'?localFlowText('regenerate'):localFlowText('retryPreparation')}</button>}
   {target&&<><LearningResourceDetails material={target.material}/>{stale&&<p className="text-sm">{localFlowText('contextResourcesStale')}</p>}<button className={setupButton} disabled={c.busy||running||!stale} onClick={()=>void c.update(task!.id,source,useContext)}>{localFlowText('updateResources')}</button>{task?.status==='ready'&&<button className={setupButton} disabled={c.busy} onClick={()=>void c.exportPackage(task.id).then(result=>{if(result)downloadPortablePackage(result);})}><Download size={18}/>{localFlowText('exportPortablePackage')}</button>}{task?.status!=='ready'&&<button className={setupButton} disabled={c.busy} onClick={()=>onStart(target.targetId)}>{localFlowText('useExistingResources')}</button>}</>}
  </section>;
 }

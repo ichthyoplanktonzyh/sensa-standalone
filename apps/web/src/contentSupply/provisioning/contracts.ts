@@ -80,6 +80,8 @@ export interface ContentProvisioningTask<Reference extends ContentProvisioningRe
   languageContext: SensaFormalPinnedLanguageContext;
   planRevision: string;
   useContext: boolean;
+  /** Selected Context revisions; independent of the accepted semantic source. */
+  contextPin?: string[];
   status: ContentProvisioningStatus;
   attemptId: string | null;
   leaseUntil: number;
@@ -88,6 +90,10 @@ export interface ContentProvisioningTask<Reference extends ContentProvisioningRe
 }
 export type PersonalContentProvisioningTask=ContentProvisioningTask<PersonalMeaningLearningReference>;
 export const isPersonalProvisioningTask=(task:ContentProvisioningTask):task is PersonalContentProvisioningTask=>!isDirectProvisioningReference(task.source);
+/** Coverage references an existing membership; it does not create the task's own. */
+export const provisioningResultMembershipId=(task:ContentProvisioningTask):string=>task.status==='covered'&&task.coveredByMembershipId?task.coveredByMembershipId:task.curriculumMembershipId;
+export const personalLearningContextMatches=(task:ContentProvisioningTask,source:PersonalMeaningLearningSource):boolean=>
+  (task.contextPin??[]).join(':')===source.context.personalSemanticAnchorRevisionIds.join(':');
 
 export const personalLearningSourceKey = (
   reference: PersonalMeaningLearningReference,

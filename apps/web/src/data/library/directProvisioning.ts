@@ -51,15 +51,3 @@ export async function enrollDirectProvisioning(operationId:string,enrollmentId:s
 }
 
 export const readDirectProvisioningSource=(enrollmentId:string)=>readLibrary(async tx=>(await directProvisioningSource(tx,enrollmentId)).source);
-export class DirectPreparationCovered extends Error {
- constructor(readonly membershipId:string){super('direct_preparation_covered');this.name='DirectPreparationCovered';}
-}
-
-export async function directProvisioningCoverage(tx:Pick<LibraryTransaction,'get'>,task:ContentProvisioningTask,source:DirectProvisioningSource){
- const target=await tx.get<LocalLearningTarget>('learningTargets',task.targetId);
- if(!target)return undefined;
- if(target.id!==task.targetId||target.identity.senseId!==source.reference.senseId||target.identity.senseVersionId!==source.reference.senseVersionId
-   ||target.identity.senseExpressionBindingId!==source.reference.bindingId||target.identity.bindingVersionId!==source.reference.bindingVersionId
-   ||target.expression!==source.expression.surfaceForm||target.targetLanguageTag!==source.targetLanguageTag)throw new Error('localFlow.invalidTarget');
- return localCurriculumMembershipForContext(target,task.languageContext);
-}

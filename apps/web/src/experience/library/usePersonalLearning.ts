@@ -47,7 +47,7 @@ export function usePersonalLearning(sourceView:{kind:'library'}|{kind:'target';t
   const personalTasks=supply.tasks.filter(isPersonalProvisioningTask);
   const ids=[...new Set(personalTasks.filter(task=>sourceView&&task.languageContext.languageRouteId===languageContext.languageRouteId
     &&(sourceView.kind==='library'||task.targetId===sourceView.targetId)
-    &&!learning.targets.some(target=>target.targetId===task.targetId&&target.curriculumMembershipId===task.curriculumMembershipId)).map(task=>task.source.personalMeaningId))];
+    &&!learning.targets.some(target=>target.targetId===task.targetId)).map(task=>task.source.personalMeaningId))];
   const sources=await Promise.all(ids.map(id=>worldReadRepository.detail(id)));
   if(batchRunner.read().busy||currentRoute.current!==routeKey||generation!==readGeneration.current)return;
   setTaskSources(new Map(sources.flatMap(row=>row.sources.map(source=>[personalLearningSourceKey(source.reference),source] as const))));
@@ -80,7 +80,7 @@ export function usePersonalLearning(sourceView:{kind:'library'}|{kind:'target';t
  };
  return {batch,batchRowAt:batchRunner.rowAt,batchIndexForKey:batchRunner.indexForKey,retryBatch,enrollBatch,sourceForTask,taskSourcesLoading:!!sourceView&&sourceReadKey!==routeKey,taskSourcesUnavailable:!!sourceView&&sourceFailureKey===routeKey,retryTaskSources:()=>{setSourceReadKey(null);void refresh().catch(failedSourceRead);},stopBatch:()=>void batchRunner.stop(),tasks,targets,preparationAvailable,notice:localFlowNotice(notice),busy,clock,languageContext,
   enroll:(source:PersonalMeaningLearningSource,useContext:boolean)=>perform(async()=>{const enrollment=await learningSystem.execute({kind:'enroll_personal',operationId:crypto.randomUUID(),source,languageContext,useContext});if(enrollment.provisioningStatus!=='ready')await prepare(enrollment.provisioningTaskId,source);}),
-  update:(taskId:string,source:PersonalMeaningLearningSource,useContext:boolean)=>perform(async()=>{await contentSupplySystem.execute({kind:'revise_provisioning',operationId:crypto.randomUUID(),taskId,source,languageContext,useContext});await prepare(taskId,source);}),
+  update:(taskId:string,source:PersonalMeaningLearningSource,useContext:boolean)=>perform(async()=>{const revised=await contentSupplySystem.execute({kind:'revise_provisioning',operationId:crypto.randomUUID(),taskId,source,languageContext,useContext});if(revised.status!=='covered')await prepare(taskId,source);}),
   prepare:(id:string)=>perform(()=>prepare(id)),
   stop:(taskId:string)=>{backgroundPreparation.cancel(taskId);void contentSupplySystem.execute({kind:'stop_provisioning',operationId:crypto.randomUUID(),taskId}).catch(()=>setNotice(localFlowText('preparationPreserved')));},
   exportPackage:(taskId:string)=>perform(()=>contentSupplySystem.execute({kind:'export_personal_portable_package',taskId})),
