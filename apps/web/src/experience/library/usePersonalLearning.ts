@@ -17,7 +17,7 @@ import {settleOperation} from './operationSettlement';
 import {createRefreshCoordinator} from './refreshCoordinator';
 import {PersonalLearningBatch} from './personalLearningBatch';
 import type {WorldLearningChoice} from '../personalMeaningJourney/worldRead';
-export function usePersonalLearning(sourceView:{kind:'library'}|{kind:'target';targetId:string}|null=null,enabled=true){
+export function usePersonalLearning(sourceView:{kind:'library'}|{kind:'target';targetId:string}|null=null,enabled=true,compactControl=false){
  useTranslation();
  const [tasks,setTasks]=useState<ContentProvisioningTask[]>([]),[preparationAvailable,setPreparationAvailable]=useState(false),[notice,setNotice]=useState(''),[operationBusy,setBusy]=useState(false),[clock,setClock]=useState(Date.now());
  const [targets,setTargets]=useState<readonly LearningTargetProjection[]>([]);
@@ -33,7 +33,7 @@ export function usePersonalLearning(sourceView:{kind:'library'}|{kind:'target';t
  }),[]);
  const batch=useSyncExternalStore(batchRunner.subscribe,batchRunner.read),busy=operationBusy||batch.busy;
  const languageContext=useActiveLanguageContext();
- const sourceViewKey=JSON.stringify([sourceView,enabled]),routeKey=JSON.stringify([languageContext,sourceViewKey]),currentRoute=useRef(routeKey),readGeneration=useRef(0);
+ const sourceViewKey=JSON.stringify([sourceView,enabled,compactControl]),routeKey=JSON.stringify([languageContext,sourceViewKey]),currentRoute=useRef(routeKey),readGeneration=useRef(0);
  currentRoute.current=routeKey;
  const [sourceReadKey,setSourceReadKey]=useState<string|null>(null);
  const [sourceFailureKey,setSourceFailureKey]=useState<string|null>(null);
@@ -43,7 +43,9 @@ export function usePersonalLearning(sourceView:{kind:'library'}|{kind:'target';t
   // complete task/workspace projection after each of thousands of intentions.
   if(!enabled||batchRunner.read().busy)return;
   const generation=++readGeneration.current;
-  const [supply,learning]=await Promise.all([contentSupplySystem.read({kind:'provisioning_control'}),learningSystem.read({kind:'workspace',languageContext,clock:Date.now()})]);
+  const [supply,learning]=await Promise.all([contentSupplySystem.read({kind:'provisioning_control'}),compactControl?Promise.resolve({targets:[] as readonly LearningTargetProjection[]}):sourceView?.kind==='target'
+   ?learningSystem.read({kind:'target',targetId:sourceView.targetId,languageContext,clock:Date.now()}).then(detail=>({targets:detail.target?[detail.target]:[]}))
+   :learningSystem.read({kind:'workspace',languageContext,clock:Date.now()})]);
   const personalTasks=supply.tasks.filter(isPersonalProvisioningTask);
   const ids=[...new Set(personalTasks.filter(task=>sourceView&&task.languageContext.languageRouteId===languageContext.languageRouteId
     &&(sourceView.kind==='library'||task.targetId===sourceView.targetId)

@@ -11,6 +11,7 @@ import {
 } from './localProtocol';
 import {initialCompletionContractOf,orchestrationRegistry} from './orchestrations';
 import {localRunBinding} from './localRuntimeBindings';
+import {runBaselineMaterial,runStepMaterial} from './runMaterialPins';
 /**
  * Executable Lightweight Initial Learning protocol.
  *
@@ -363,9 +364,7 @@ export const localLightweightPhase=(run:LocalLearningRun)=>localState(run).phase
 export const localLightweightAdoptedExperience=(run:LocalLearningRun,participant:LocalLearningRunParticipant):LocalLearningMaterialization|null=>{
  if(run.completedAt||localState(run).phase!=='reveal')return null;
  const stepId=lightweightProtocolStepId(run.id,run.ordinal-1,'recall',run.protocolVersion);
- const material=participant.presentedMaterials[stepId];
- if(!material)throw new Error('localFlow.resourceInvalid');
- return material;
+ return runStepMaterial(participant,stepId);
 };
 
 /** Persistence adapter. Protocols emit settlement intent; only the library settlement module writes memory. */
@@ -381,6 +380,10 @@ export const lightweightLocalExecution: LocalProtocolExecution = {
   let evaluation:ReturnType<LocalProtocolExecution['unsafeTransition']>['evaluation']=null;
   if(run.purpose==='initial_learning'){
    if(!state.initial)throw new Error('localFlow.resourceInvalid');
+   // The completed Step must record the material actually acted on. Rebinding
+   // only a renderer copy would leave saved protocol history on the baseline.
+   const current=localInitialState(run,target,target.material);
+   state.initial={...state.initial,learningMaterializationId:current.learningMaterializationId,materialBindings:current.materialBindings};
    const result=transitionLightweightInitialProtocol(state.initial,action.kind==='reveal'?'reveal_requested':action.rating);
    state.initial=result.state;
    next=result.state.currentStepDefinitionId===null?'completed':phaseForDefinition(result.state.currentStepDefinitionId);
@@ -423,7 +426,7 @@ const phaseForDefinition=(id:string):'recall'|'reveal'=>{
 function localInitialState(run:LocalLearningRun,target:LocalLearningTarget,material?:LocalLearningMaterialization){
  const participant=run.participants[target.id];
  if(!participant)throw new Error('localFlow.resourceInvalid');
- const selected=material??participant.material;
+ const selected=material??runBaselineMaterial(participant);
  return createLightweightInitialProtocolRun({protocolRunId:participant.protocolRunId,retentionTargetId:target.retentionId,learningMaterializationId:selected.snapshot.learningMaterializationId,materialResources:selected.content.resources});
 }
 export function localLightweightStep(run:LocalLearningRun,target:LocalLearningTarget,material?:LocalLearningMaterialization):LightweightProtocolStepInstance|null{

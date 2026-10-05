@@ -12,6 +12,10 @@ import type {
 import { sqliteCoordinatorProtocolVersion, sqliteLibrarySchemaVersion } from './sqliteProtocol';
 import {observeSahPoolPageHide} from './sqlitePoolLifecycle';
 import type {PackageCacheProjectionQuery,PackageCacheProjectionResult} from './packageCacheProjection';
+import type {RuntimeLearningCandidateQuery,RuntimeLearningCandidates} from './runtimeLearningCandidates';
+import type {LearningManagementSummaryQuery,LearningManagementStorageSummary} from './runtimeLearningCandidates';
+import type {LearningHistoryRequest} from '../../learning/system/learningHistoryModel';
+import type {StoredLearningHistoryPage} from './learningHistoryProjection';
 
 // Keep the original ownership name so a page from the previous release cannot
 // open a second OPFS connection while a newly deployed page is active.
@@ -37,7 +41,10 @@ export interface CoordinatedSqliteBackend {
   syncBaseEntries(keys?: readonly { table: SqliteLibraryTable; key: string }[]): Promise<SqliteSyncBaseEntry[]>;
   count(table: SqliteLibraryTable): Promise<number>;
   estimateRecordBytes(tables: readonly SqliteLibraryTable[]): Promise<number>;
-  homeLearningProjection(languageRouteId: string): Promise<HomeLearningStorageProjection>;
+  homeLearningProjection(languageRouteId: string,clock?:number): Promise<HomeLearningStorageProjection>;
+  learningHistoryPage(query:LearningHistoryRequest):Promise<StoredLearningHistoryPage>;
+  learningManagementSummary(query:LearningManagementSummaryQuery):Promise<LearningManagementStorageSummary>;
+  runtimeLearningCandidates(query:RuntimeLearningCandidateQuery):Promise<RuntimeLearningCandidates>;
   countIntroducedLearningTargets(languageRouteId: string, startedAfter: string, startedBefore: string): Promise<number>;
   learningRunIdsForTarget(targetId: string, openOnly: boolean): Promise<string[]>;
   openLearningRunTargets(): Promise<Array<{ runId: string; targetId: string }>>;
@@ -149,9 +156,12 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
     return this.call({kind:'estimateRecordBytes',tables:[...tables]}) as Promise<number>;
   }
 
-  homeLearningProjection(languageRouteId: string): Promise<HomeLearningStorageProjection> {
-    return this.call({ kind: 'homeLearningProjection', languageRouteId }) as Promise<HomeLearningStorageProjection>;
+  homeLearningProjection(languageRouteId: string,clock=Date.now()): Promise<HomeLearningStorageProjection> {
+    return this.call({ kind: 'homeLearningProjection', languageRouteId,clock }) as Promise<HomeLearningStorageProjection>;
   }
+  runtimeLearningCandidates(query:RuntimeLearningCandidateQuery):Promise<RuntimeLearningCandidates>{return this.call({kind:'runtimeLearningCandidates',query}) as Promise<RuntimeLearningCandidates>;}
+  learningHistoryPage(query:LearningHistoryRequest):Promise<StoredLearningHistoryPage>{return this.call({kind:'learningHistoryPage',query}) as Promise<StoredLearningHistoryPage>;}
+  learningManagementSummary(query:LearningManagementSummaryQuery):Promise<LearningManagementStorageSummary>{return this.call({kind:'learningManagementSummary',query}) as Promise<LearningManagementStorageSummary>;}
 
   packageCacheProjection<Query extends PackageCacheProjectionQuery>(query:Query):Promise<PackageCacheProjectionResult<Query>>{
     return this.call({kind:'packageCacheProjection',query}) as Promise<PackageCacheProjectionResult<Query>>;
@@ -518,7 +528,10 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       case 'syncBaseEntries': return backend.syncBaseEntries(input.keys);
       case 'count': return backend.count(input.table);
       case 'estimateRecordBytes': return backend.estimateRecordBytes(input.tables);
-      case 'homeLearningProjection': return backend.homeLearningProjection(input.languageRouteId);
+      case 'homeLearningProjection': return backend.homeLearningProjection(input.languageRouteId,input.clock);
+      case 'runtimeLearningCandidates':return backend.runtimeLearningCandidates(input.query);
+      case 'learningHistoryPage':return backend.learningHistoryPage(input.query);
+      case 'learningManagementSummary':return backend.learningManagementSummary(input.query);
       case 'countIntroducedLearningTargets': return backend.countIntroducedLearningTargets(
         input.languageRouteId,
         input.startedAfter,

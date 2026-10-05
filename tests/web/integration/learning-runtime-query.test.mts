@@ -6,9 +6,9 @@ import {learningSystem} from '../../../apps/web/src/learning/system';
 import {command,openLibrary} from '../../../apps/web/src/data/library/store';
 import {sqliteRecordAdapter} from '../../../apps/web/src/data/library/sqliteAdapter';
 
-test('the current Runtime uses exact Run/participant reads, plans only at a Run boundary, and never enumerates collection material or history',async()=>{
+test('Runtime and Target detail use exact reads, plan only at a Run boundary, and never enumerate collection material or history',async()=>{
  Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined});
- const id=()=>crypto.randomUUID(),context=sensaPinnedLanguageContext(defaultSensaLanguageRoute),at='2026-10-05T08:00:00.000Z';
+ const id=()=>crypto.randomUUID(),context=sensaPinnedLanguageContext(defaultSensaLanguageRoute);
  await openLibrary();await command({id:id(),kind:'fixture.owner',input:{}},async tx=>tx.put('meta','service-owner',{subject:id(),accountId:id()}));
  for(const expression of ['borrow','lend']){
   const fixture=portablePackageFixture({packageId:id(),expression});
@@ -16,6 +16,7 @@ test('the current Runtime uses exact Run/participant reads, plans only at a Run 
   await learningSystem.execute({kind:'enroll_package',operationId:id(),packageKey:pack.key,languageContext:context});
  }
  await learningSystem.execute({kind:'confirm_quantity',operationId:id(),languageContext:context,dailyLimit:20});
+ const at=new Date().toISOString();
  const initial=await learningSystem.read({kind:'workspace',languageContext:context,clock:Date.parse(at)});
  const targetId=initial.queue.initialReadyTargetIds[0]!;
  await learningSystem.execute({kind:'start',operationId:id(),targetId,languageContext:context,dailyLimit:20,at});
@@ -33,6 +34,21 @@ test('the current Runtime uses exact Run/participant reads, plans only at a Run 
   expect(current.nextTargetId).toBeNull();
   expect(current.dailyLimit).toBe(20);
   expect(targetReads).toEqual([targetId]);
+  targetReads.length=0;
+  const detail=await learningSystem.read({kind:'target',targetId,languageContext:context,clock:Date.parse(at)});
+  expect(detail.target).toEqual(expected.targets.find(target=>target.targetId===targetId));
+  expect(detail.activeRunTargetIds).toEqual(expected.runtime!.targetIds);
+  expect(detail.dailyLimit).toBe(20);
+  expect(detail.policyOptions).toEqual(expected.policyOptions);
+  expect(detail.exportPackageKey).toBe(detail.target!.packageKey);
+  expect(targetReads).toEqual([targetId]);
+  const mismatch=await learningSystem.read({kind:'target',targetId,languageContext:{...context,supportLanguageTag:'ja'},clock:Date.parse(at)});
+  expect(mismatch.target).toBeNull();expect(mismatch.exportPackageKey).toBeNull();
+  const missing=await learningSystem.read({kind:'target',targetId:id(),languageContext:context,clock:Date.parse(at)});
+  expect(missing.target).toBeNull();
+  await expect(learningSystem.read({kind:'target',targetId,languageContext:context,clock:Number.NaN})).rejects.toThrow('localFlow.clockChanged');
+  adapter.get=async(table,key)=>{if(table==='learningTargets'&&key===targetId)throw new Error('detail_read_failed');return get(table,key);};
+  await expect(learningSystem.read({kind:'target',targetId,languageContext:context,clock:Date.parse(at)})).rejects.toThrow();
  }finally{adapter.entries=entries;adapter.entriesPage=page;adapter.get=get;adapter.homeLearningProjection=home;}
  const before=await learningSystem.read({kind:'runtime',languageContext:context,clock:Date.parse(at)});
  if(before.runtime?.kind!=='lightweight')throw new Error('Fixture must start ordinary lightweight Runtime');

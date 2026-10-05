@@ -12,6 +12,8 @@ import {loadJourneyStateFromLibrary} from './experience/personalMeaningJourney/r
 import type {JourneyState} from './experience/personalMeaningJourney/store';
 
 type BrowserSmokeBridge = {
+  copyVerifiedLearningCapacityForTest(manifestPath:string):Promise<{targets:number;runs:number;events:number}>;
+  learningCapacityCheckpointForTest(targetId:string):Promise<{memoryRevision:number;runs:number;events:number;activeRunId:string|null;activeTargetId:string|null}>;
   setSpeechFixtureForTest(unavailable:boolean):Promise<void>;
   operatedStepMaterialsForTest():Promise<{eventId:string;runId:string;stepId:string;materializationId:string}[]>;
   meaningPinsForTest(id:string):Promise<Array<{senseId:string;senseVersionId:string}>>;
@@ -27,7 +29,11 @@ type BrowserSmokeBridge = {
   holdDirectEnrollmentResultForTest():Promise<void>;
   releaseDirectEnrollmentResultForTest():void;
   failLearningWorkspaceReadsForTest(active:boolean):Promise<void>;
+  failLearningManagementReadsForTest(active:boolean):Promise<void>;
+  failLearningHistoryReadsForTest(active:boolean):Promise<void>;
+  failLearningTargetReadsForTest(active:boolean):Promise<void>;
   learningReadsForTest(reset?:boolean):Promise<Record<string,number>>;
+  traceLearningReadsForTest(active:boolean):Promise<void>;
   learningSettlementFactsForTest():Promise<{targets:{targetId:string;memoryRevision:number;reps:number|null}[];actionEventCount:number;behavioralEvidenceCount:number}>;
   failNextLearningCommitForTest():Promise<void>;
   loseNextLearningActionResponseForTest():Promise<void>;
@@ -87,13 +93,66 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
   let hiddenInboxMedia:import('./data/library/media').StoredMedia|undefined;
   let releaseDirectResult:(()=>void)|undefined,restoreLearningReads:(()=>void)|undefined;
   let releaseLearningResult:(()=>void)|undefined,learningReadCounts:Record<string,number>|undefined;
+  let restoreLearningTrace:(()=>void)|undefined;
   window.__sensaBrowserSmoke = {
+    async copyVerifiedLearningCapacityForTest(manifestPath){
+      if(!manifestPath.startsWith('/__capacity_fixture/'))throw new Error('Invalid capacity fixture path');
+      const [{libraryTables},{decodeBackupValue,encodeBackupValue},{sqliteRecordAdapter}]=await Promise.all([import('./data/library/store'),import('./data/library/backupCodec'),import('./data/library/sqliteAdapter')]);
+      const manifest=await fetch(manifestPath).then(response=>response.json()) as {format:string;targets:number;runs:number;events:number;batches:{table:string;file:string;rowCount:number;sha256:string}[]};
+      if(manifest.format!=='sensa-retention-capacity-facts-v1'||manifest.targets<1||manifest.targets>10000)throw new Error('Invalid capacity fixture manifest');
+      const adapter=await sqliteRecordAdapter();
+      // Specialized fixture transport, not a product backup/atomic-restore
+      // path. The Node producer fully replay-validates these exact facts before
+      // writing digest-addressed batches. Copy one bounded batch at a time into
+      // an empty test guest; never synthesize or strip Target/Run/Event fields.
+      // The Library lock prevents app commands from observing partial setup.
+      return restoreLibraryTransaction(async tx=>{
+        if(await tx.get('meta','service-owner'))throw new Error('Capacity fixture requires an isolated guest');
+        for(const table of libraryTables)if(!['meta','settings','operations','packageCache'].includes(table)&&await tx.count(table))throw new Error('Capacity fixture destination is occupied');
+        const seen=new Set<string>();
+        // Source dependency order also ensures completed history can find its
+        // Targets when setup deliberately uses separate small transactions.
+        for(const table of libraryTables)for(const batch of manifest.batches.filter(batch=>batch.table===table)){
+          if(!/^\w+-\d+\.json$/u.test(batch.file)||seen.has(batch.file)||batch.rowCount<1||batch.rowCount>64)throw new Error('Invalid capacity fixture batch');seen.add(batch.file);
+          const response=await fetch(`/__capacity_fixture/${batch.file}`);if(!response.ok)throw new Error('Capacity fixture missing');
+          const bytes=new Uint8Array(await response.arrayBuffer()),digest=new Uint8Array(await crypto.subtle.digest('SHA-256',bytes));
+          if([...digest].map(byte=>byte.toString(16).padStart(2,'0')).join('')!==batch.sha256)throw new Error('Capacity fixture digest mismatch');
+          const chunk=decodeBackupValue(JSON.parse(new TextDecoder().decode(bytes)));if(!Array.isArray(chunk)||chunk.length!==batch.rowCount||chunk.some(row=>typeof row.key!=='string'||table==='meta'&&row.key==='service-owner'))throw new Error('Capacity fixture count or guest mismatch');
+          await adapter.commit({clears:[],deletes:[],puts:chunk.map(row=>({table,key:row.key,encodedValue:JSON.stringify(encodeBackupValue(row.value))}))});
+        }
+        if(seen.size!==manifest.batches.length)throw new Error('Unknown capacity fixture table');
+        const counts={targets:await tx.count('learningTargets'),runs:await tx.count('learningRuns'),events:await tx.count('learningEvents')};
+        if(counts.targets!==manifest.targets||counts.runs!==manifest.runs||counts.events!==manifest.events)throw new Error('Capacity fixture source count mismatch');
+        tx.put('meta','local-incarnation',crypto.randomUUID());
+        return counts;
+      });
+    },
+    async learningCapacityCheckpointForTest(targetId){
+      return readLibrary(async tx=>{
+        const target=await tx.get<import('./learning/runtime/localProtocol').LocalLearningTarget>('learningTargets',targetId),activeRunId=await tx.get<string>('meta','learning-active');
+        const run=activeRunId?await tx.get<import('./learning/runtime/localProtocol').LocalLearningRun>('learningRuns',activeRunId):null;
+        if(!target)throw new Error('Capacity Target missing');
+        return {memoryRevision:target.memoryRevision,runs:await tx.count('learningRuns'),events:await tx.count('learningEvents'),activeRunId:activeRunId??null,activeTargetId:run?.targetId??null};
+      });
+    },
     async learningSettlementFactsForTest(){
       return readLibrary(async tx=>{
         const targets=await tx.all<import('./learning/runtime/localProtocol').LocalLearningTarget>('learningTargets');
         const events=await tx.all<{detail?:{formalEvaluation?:{evidence?:unknown[]}}}>('learningEvents');
         return {targets:targets.map(target=>({targetId:target.id,memoryRevision:target.memoryRevision,reps:target.memory?.reps??null})),actionEventCount:events.length,behavioralEvidenceCount:events.reduce((count,event)=>count+(event.detail?.formalEvaluation?.evidence?.length??0),0)};
       });
+    },
+    async traceLearningReadsForTest(active){
+      if(!active){restoreLearningTrace?.();restoreLearningTrace=undefined;return;}
+      if(restoreLearningTrace)throw new Error('Learning trace already active');
+      const [{learningSystem},{sqliteRecordAdapter}]=await Promise.all([import('./learning/system'),import('./data/library/sqliteAdapter')]);
+      const adapter=await sqliteRecordAdapter(),read=learningSystem.read,execute=learningSystem.execute,home=adapter.homeLearningProjection.bind(adapter),history=adapter.learningHistoryPage.bind(adapter),summary=adapter.learningManagementSummary.bind(adapter),candidates=adapter.runtimeLearningCandidates.bind(adapter);let sequence=0;
+      const traced=async<T,>(label:string,work:()=>Promise<T>)=>{const id=++sequence;console.debug(`__sensaLearningTrace|start|${id}|${label}`);try{return await work();}finally{console.debug(`__sensaLearningTrace|end|${id}|${label}`);}};
+      learningSystem.read=(async query=>traced(`query:${query.kind}`,()=>read(query))) as typeof read;
+      learningSystem.execute=(async command=>traced(`command:${command.kind}`,()=>execute(command))) as typeof execute;
+      adapter.homeLearningProjection=(routeId,clock)=>traced('storage:home',()=>home(routeId,clock));adapter.learningHistoryPage=query=>traced('storage:history',()=>history(query));adapter.learningManagementSummary=query=>traced('storage:summary',()=>summary(query));
+      adapter.runtimeLearningCandidates=query=>traced('storage:candidates',()=>candidates(query));
+      restoreLearningTrace=()=>{learningSystem.read=read;learningSystem.execute=execute;adapter.homeLearningProjection=home;adapter.learningHistoryPage=history;adapter.learningManagementSummary=summary;adapter.runtimeLearningCandidates=candidates;};
     },
     async learningReadsForTest(reset=false){
       if(!learningReadCounts){
@@ -148,6 +207,27 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
       learningSystem.read=(async query=>{if(query.kind==='workspace')throw new Error('fixture-workspace-read-failure');return original(query);}) as typeof original;
       restoreLearningReads=()=>{learningSystem.read=original;};
       window.dispatchEvent(new CustomEvent('sensa-library-changed',{detail:{tables:['curriculumEnrollments']}}));
+    },
+    async failLearningManagementReadsForTest(active){
+      const {learningSystem}=await import('./learning/system');
+      if(!active){restoreLearningReads?.();restoreLearningReads=undefined;return;}
+      if(restoreLearningReads)throw new Error('Learning read fault already active');const original=learningSystem.read;
+      learningSystem.read=(async query=>{if(query.kind==='management')throw new Error('fixture-management-read-failure');return original(query);}) as typeof original;
+      restoreLearningReads=()=>{learningSystem.read=original;};
+    },
+    async failLearningHistoryReadsForTest(active){
+      const {learningSystem}=await import('./learning/system');
+      if(!active){restoreLearningReads?.();restoreLearningReads=undefined;return;}
+      if(restoreLearningReads)throw new Error('Learning read fault already active');const original=learningSystem.read;
+      learningSystem.read=(async query=>{if(query.kind==='history')throw new Error('fixture-history-read-failure');return original(query);}) as typeof original;
+      restoreLearningReads=()=>{learningSystem.read=original;};
+    },
+    async failLearningTargetReadsForTest(active){
+      const {learningSystem}=await import('./learning/system');
+      if(!active){restoreLearningReads?.();restoreLearningReads=undefined;return;}
+      if(restoreLearningReads)throw new Error('Learning read fault already active');const original=learningSystem.read;
+      learningSystem.read=(async query=>{if(query.kind==='target')throw new Error('fixture-target-read-failure');return original(query);}) as typeof original;
+      restoreLearningReads=()=>{learningSystem.read=original;};
     },
     async meaningPinsForTest(id){
       const {worldReadRepository}=await import('./experience/personalMeaningJourney/worldRepository');

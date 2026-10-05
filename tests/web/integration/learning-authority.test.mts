@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {test} from 'vitest';
+import {test,vi} from 'vitest';
 import {indexedDB} from 'fake-indexeddb';
 import {defaultSensaLanguageRoute,sensaPinnedLanguageContext} from '@sensa/contracts/sensa';
 
@@ -31,12 +31,14 @@ import {
     tx.put('meta','service-owner',{subject:id(),accountId:id()});
   });
   const fixture=await libraryCloudPackageFixture();
+  vi.useFakeTimers({toFake:['Date']});vi.setSystemTime('2026-09-20T08:00:00.000Z');
   const pack=await contentSupplySystem.execute({
     kind:'install_portable_package',
     bytes:fixture.bytes,
     expectedArchiveDigest:fixture.archiveDigest,
   });
   const [targetId]=await enrollPackage(id(),pack.key,context);
+  vi.useRealTimers();
   await confirmLearningQuantity(id(),context,20);
   const run=await startLearning(id(),targetId!,context,20,'2026-09-20T08:00:00.000Z');
   const revision=await readLibrary(readLocalLibraryRevision);

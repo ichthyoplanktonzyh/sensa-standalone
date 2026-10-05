@@ -7,6 +7,7 @@ import { stableUuid } from '@sensa/learning-kernel';
 import { z } from 'zod';
 
 import { backupEqual } from './backupCodec';
+import {assertReadyContentAttempt} from './contentAttemptEvidence';
 import {directProvisioningReferenceSchema,isDirectProvisioningReference,provisioningTaskId,provisioningMembershipId} from '../../contentSupply/provisioning/contracts';
 import {curriculumEnrollmentSchema} from './curriculumEnrollments';
 import {assertDirectTaskEnrollment,assertDirectAttemptSource} from './directProvisioningAssertions';
@@ -168,6 +169,8 @@ export async function assertContentSupplyTransition(input: {
     uuid.parse(attempt.id);
     uuid.parse(attempt.taskId);
     timestamp.parse(attempt.createdAt);
+    if(attempt.status==='ready')assertReadyContentAttempt(attempt);
+    else if(attempt.readyAt!==null)reject('Only admitted preparation can have a readiness instant.');
     if (change.key !== attempt.id) reject('Content Agent Attempt identity changed.');
     if (!['generating','reviewing','ready','rejected','stopped','failed'].includes(attempt.status)) {
       reject('Unknown Content Agent Attempt state.');
@@ -202,6 +205,7 @@ export async function assertContentSupplyTransition(input: {
       if (before.id !== attempt.id || before.taskId !== attempt.taskId || before.createdAt !== attempt.createdAt) {
         reject('Content Agent Attempt identity is immutable.');
       }
+      if(before.readyAt!==null&&before.readyAt!==attempt.readyAt)reject('Content Agent Attempt admission time is immutable.');
       if(!backupEqual(before.fixedInput,attempt.fixedInput)||!backupEqual(before.contextPin??null,attempt.contextPin??null))reject('Content Agent Attempt fixed input is immutable.');
     }
   }

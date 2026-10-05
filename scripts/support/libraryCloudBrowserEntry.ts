@@ -8,6 +8,7 @@ export * from '../../apps/web/src/data/library/packageRecords';
 export {contentSupplySystem} from '../../apps/web/src/contentSupply/system';
 export {learningSystem} from '../../apps/web/src/learning/system';
 export * from '../../apps/web/src/data/library/learning';
+export {startLearning,actLearning} from '../../tests/web/support/learningRunFixture';
 export * from '../../apps/web/src/data/library/language';
 export * from '../../apps/web/src/data/library/speech/defaultProvider';
 export * from '../../apps/web/src/data/library/backup';

@@ -44,6 +44,10 @@ export type WebTestCatalogEntry = Readonly<{
  * split into named behavior scenarios.
  */
 const foundationTests = [
+  {id:'library-sync-transport',file:'tests/web/integration/library-sync-transport.test.mts',kind:'integration',risks:['local-correctness','durability','convergence'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
+  {id:'library-sync-blocks',file:'tests/web/unit/library-sync-blocks.test.mts',kind:'unit',risks:['local-correctness','durability','scale'],environment:'node',suite:'fast',runner:'vitest'},
+  {id:'shared-learning-storage',file:'tests/web/integration/shared-learning-storage.test.mts',kind:'integration',risks:['local-correctness','durability','scale'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
+  {id:'learning-target-view',file:'tests/web/unit/learning-target-view.test.mts',kind:'unit',risks:['local-correctness'],environment:'node',suite:'fast',runner:'vitest'},
   {
     id: 'learning-language-matrix',
     file: 'tests/web/integration/learning-language-matrix.test.mts',
@@ -130,7 +134,7 @@ const foundationTests = [
     id: 'library-transaction-and-replay',
     file: 'tests/web/integration/library-transaction-and-replay.test.mts',
     kind: 'integration',
-    risks: ['local-correctness', 'durability'],
+    risks: ['local-correctness', 'durability','scale'],
     environment: 'node',
     suite: 'foundation',
     runner: 'vitest',
@@ -221,7 +225,7 @@ const fastWithMemory = [
   'integration/live-matrix-summary',
   'integration/language-trace-evidence',
   'integration/guest-library', 'integration/local-clear-sync', 'integration/backup-restore', 'integration/extension-local-models',
-  'integration/package-learning', 'integration/portable-package-loop', 'integration/local-learning-runtime', 'integration/learning-runtime-query', 'integration/media-library',
+  'integration/package-learning', 'integration/learning-command-receipt', 'integration/learning-material-pins', 'integration/review-session', 'integration/portable-package-loop', 'integration/local-learning-runtime', 'integration/learning-runtime-query', 'integration/runtime-learning-candidates', 'integration/learning-management-query', 'integration/learning-history-page', 'integration/media-library',
   'integration/learning-scene-bridge', 'integration/personal-learning', 'integration/language-route',
   'integration/language-journey', 'integration/reading-language', 'integration/reading-glossary',
   'integration/reading-skip', 'integration/extension-speech', 'integration/reading-site',
@@ -233,6 +237,7 @@ const fastWithMemory = [
 ] as const;
 
 const browserTests = [
+  'browser/retention-review-capacity',
   'browser/extension-intake-journey',
   'browser/practice-source-loading',
   'browser/extension-selection',
@@ -258,6 +263,7 @@ const manualTests = [
 ] as const;
 
 const playwrightPaths = new Set<string>([
+  'browser/retention-review-capacity',
   'browser/extension-intake-journey',
   'browser/practice-source-loading',
   'browser/extension-selection',
@@ -275,6 +281,10 @@ const playwrightPaths = new Set<string>([
 ]);
 
 const durabilityTests = new Set<string>([
+  'integration/learning-material-pins',
+  'integration/learning-management-query',
+  'integration/learning-command-receipt',
+  'integration/review-session',
   'integration/learning-runtime-query',
   'integration/direct-learning-provisioning',
   'integration/direct-learning-enrollment',
@@ -324,6 +334,11 @@ const convergenceTests = new Set<string>([
   'database/library-cloud', 'browser/web-bootstrap-budget',
 ]);
 const scaleTests = new Set<string>([
+  'integration/learning-history-page',
+  'integration/runtime-learning-candidates',
+  'integration/learning-material-pins',
+  'integration/learning-management-query',
+  'browser/retention-review-capacity',
   'integration/learning-runtime-query',
   'unit/direct-learning-choices',
   'integration/scoped-context-command',

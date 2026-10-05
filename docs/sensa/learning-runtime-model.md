@@ -819,6 +819,14 @@ Step Instance 成为 current 时解析最新兼容的不可变 Learning Material
 Action，同一 Membership 的新材料版本可以刷新当前绑定，同时写入可重放的 Run lifecycle fact 并使旧
 UI revision 失效；Action 被接受后，Step 的 materialization 和 role bindings 即成为不可变历史。
 
+历史保留每个 Step 的首次材料绑定，以及尚未操作时各次合法刷新的因果先后；最终材料映射本身不足以
+替代这些事实。即使多个操作发生于同一时刻，重放仍须复现其实际接受顺序，才能判断 Action 当时使用的
+材料与后继 Step 的绑定。历史摘要采用实际最后呈现的材料，不由容器遍历或序列化的排列推断。
+
+材料被来源正式接纳为 Ready 的时点独立于 Run 或 Step 的开始时点。Run 的材料快照必须保留这一事实，
+不能借改写快照创建时间，把后来就绪的材料当作先前已可用；个人生成材料以实际接纳的 Content Agent
+Attempt 为据，发布材料以本地 Curriculum 准入为据。补充资源也只能在它已接纳之后用于呈现。
+
 Sense Encounter 是对一个 learner、一个 Retention Target 及其 Sense、一个 Step purpose 和一组不可变版本的一次计划接触。
 它保存 Study Scope Revision、Curriculum source/Learning Entry Provenance、Learning Materialization、Learning
 Protocol/Step/Policy versions；同一 Sense 有多个 source 时只保存实际采用的主 provenance，但不复制

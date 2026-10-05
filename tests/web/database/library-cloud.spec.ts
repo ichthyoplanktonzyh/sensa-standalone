@@ -6,7 +6,9 @@ import {expect,test} from '@playwright/test';
 import {purgeExpiredLibraryCloudBlocks} from '../../../apps/api/src/sensa/library/retention.ts';
 import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec.ts';
 import {librarySyncBlockChars,librarySyncBlockStoreBatch} from '../../../packages/contracts/src/sensa/librarySync.ts';
+import {decodeLibrarySyncBlock,encodeLibrarySyncBlock} from '../../../packages/contracts/src/sensa/librarySyncBlocks.ts';
 import {createLibraryCloudBrowserFixture} from '../../../tests/web/support/libraryCloudBrowserFixture.mts';
+import type {LearningHistoryProjection} from '../../../apps/web/src/learning/system';
 test.setTimeout(300_000);
 test('direct learning intent and ready membership survive cloud restore without a Personal Meaning or package cache',async({browser})=>{
  const fixture=await createLibraryCloudBrowserFixture(browser);
@@ -90,7 +92,7 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  // A legacy Checkpoint is terminal: fetch only its small manifest, preserve the
  // local library, and leave retry scheduling to explicit recovery.
  const legacyRow=JSON.stringify({kind:'legacy-operation',payload:'x'.repeat(32_768)}),legacyRowHash=createHash('sha256').update(legacyRow).digest('hex');
- const legacyManifest=JSON.stringify({version:1,libraryId:crypto.randomUUID(),learnerId:crypto.randomUUID(),rows:[{table:'operations',key:crypto.randomUUID(),blocks:[legacyRowHash]}]}),legacyManifestHash=createHash('sha256').update(legacyManifest).digest('hex');
+ const legacyManifest=JSON.stringify({version:5,libraryId:crypto.randomUUID(),learnerId:crypto.randomUUID(),rows:[{table:'drafts',key:crypto.randomUUID(),blocks:[legacyRowHash]}]}),legacyManifestHash=createHash('sha256').update(legacyManifest).digest('hex');
  await pool.query('INSERT INTO sensa_consumer.library_cloud_blocks(account_id,hash,data) VALUES($1,$2,$3),($1,$4,$5) ON CONFLICT(account_id,hash) DO UPDATE SET data=EXCLUDED.data',[otherId,legacyRowHash,legacyRow,legacyManifestHash,legacyManifest]);
  await pool.query('UPDATE sensa_consumer.library_cloud SET revision=revision+1,manifest=$2::jsonb,updated_at=now() WHERE account_id=$1',[otherId,JSON.stringify([legacyManifestHash])]);
  const legacy=await fixture.createClient(secondary),localIdentity=await legacy.evaluate(()=>(window as any).core.openLibrary());fixture.clearRequests();
@@ -163,7 +165,23 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
   if((await c.personalLearningSnapshot())[0].status!=='ready')throw Error('personal resources not ready');
  });
  // Actual learning resources (including audio), runtime records and schedule restore/replay.
- progress=await a.evaluate(async({bookBytes,descriptor})=>{const c=(window as any).core,languageContext=(await c.languageRoutesSnapshot()).context,original=window.fetch;window.fetch=async input=>{const url=String(input);const body=url===descriptor.url?new Uint8Array(bookBytes):null;return body?new Response(body,{headers:{'content-length':String(body.byteLength)}}):new Response(null,{status:404});};try{const [pack]=await c.contentSupplySystem.execute({kind:'install_catalog_item',descriptor,signal:new AbortController().signal});await c.writeLibraryState((tx:any)=>tx.put('meta','package-catalog',{format:'sensa-local-registry-cache-v3',revision:'fixture',checkedAt:new Date().toISOString(),items:[descriptor]}));const ids=await c.enrollPackage(crypto.randomUUID(),pack.key,languageContext,descriptor.sha256);await c.confirmLearningQuantity(crypto.randomUUID(),languageContext,20);let run=await c.startLearning(crypto.randomUUID(),ids[0],languageContext,20,'2026-09-11T04:00:00.000Z');run=await c.actLearning(crypto.randomUUID(),run.id,run.revision,{kind:'reveal'},'2026-09-11T04:00:00.000Z');run=await c.actLearning(crypto.randomUUID(),run.id,run.revision,{kind:'rate',rating:'good'},'2026-09-11T04:00:00.000Z');if(!run.completedAt)throw Error('runtime incomplete');await c.finishLearning(crypto.randomUUID(),run.id);const learning=await c.readLearning();return JSON.stringify({...learning,packages:[]});}finally{window.fetch=original;}},{bookBytes,descriptor});
+ progress=await a.evaluate(async({bookBytes,descriptor})=>{
+  const c=(window as any).core,languageContext=(await c.languageRoutesSnapshot()).context,original=window.fetch;
+  window.fetch=async input=>{const body=String(input)===descriptor.url?new Uint8Array(bookBytes):null;return body?new Response(body,{headers:{'content-length':String(body.byteLength)}}):new Response(null,{status:404});};
+  try{
+   const [pack]=await c.contentSupplySystem.execute({kind:'install_catalog_item',descriptor,signal:new AbortController().signal});
+   await c.writeLibraryState((tx:any)=>tx.put('meta','package-catalog',{format:'sensa-local-registry-cache-v3',revision:'fixture',checkedAt:new Date().toISOString(),items:[descriptor]}));
+   const ids=await c.enrollPackage(crypto.randomUUID(),pack.key,languageContext,descriptor.sha256);
+   await c.confirmLearningQuantity(crypto.randomUUID(),languageContext,20);
+   const at=new Date().toISOString();
+   let run=await c.startLearning(crypto.randomUUID(),ids[0],languageContext,20,at);
+   run=await c.actLearning(crypto.randomUUID(),run.id,run.revision,{kind:'reveal'},at);
+   run=await c.actLearning(crypto.randomUUID(),run.id,run.revision,{kind:'rate',rating:'good'},at);
+   if(!run.completedAt)throw Error('runtime incomplete');
+   await c.finishLearning(crypto.randomUUID(),run.id);
+   return JSON.stringify({...await c.readLearning(),packages:[]});
+  }finally{window.fetch=original;}
+ },{bookBytes,descriptor});
  await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());
  assert.equal((await b.evaluate(()=>(window as any).core.installedPackages())).length,0,'published package bytes must not arrive in a Cloud Checkpoint');
  assert.equal((await b.evaluate(()=>(window as any).core.packageInstallations())).length,1,'the exact package installation fact must synchronize');
@@ -177,6 +195,9 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  // both Runs and all Events remain durable history.
  const concurrentTargetId=(JSON.parse(progress) as any).targets.find((target:any)=>target.curriculumMemberships.some((membership:any)=>membership.sourceKind==='sense_learning_package')).id;
  const branchRuns=[] as string[];
+ // Future fixture dates must advance the trusted browser clock, rather than
+ // bypassing due eligibility through a future command timestamp.
+ for(const page of [a,b])await page.clock.setFixedTime(new Date('2030-09-21T09:05:00.000Z'));
  for(const [page,at] of [[a,'2030-09-21T09:00:00.000Z'],[b,'2030-09-21T09:05:00.000Z']] as const)branchRuns.push(await page.evaluate(async({targetId,at})=>{const c=(window as any).core,languageContext=(await c.languageRoutesSnapshot()).context,pack=(await c.installedPackages())[0];let run=await c.startLearning(crypto.randomUUID(),targetId,languageContext,20,at),steps=0;while(!run.completedAt&&steps++<60){let action:any;if(run.protocolState.adapterId==='lightweight')action=run.protocolState.value.phase==='recall'?{kind:'reveal'}:{kind:'rate',rating:'good'};else{const session=c.fourStageQueue(run).getCurrentSession();let response:any;if(session.phase==='feedback')response={kind:'continue'};else if(session.mode==='review'||session.mode==='relearning')response={kind:'review',answer:'known'};else if(['meaning_choice','sound_choice'].includes(session.presentation)){const target=(await c.readLearning()).targets.find((candidate:any)=>candidate.id===session.targetId),executable=c.localExecutableTargetForParticipant(target,run.participants[target.id]),content=c.fourStageContent(executable,pack);response={kind:'choice',optionId:content.recognitionAssessment.options.find((option:any)=>option.isCorrect).id};}else response={kind:'self_report',known:true};action={kind:'protocol',response};}run=await c.actLearning(crypto.randomUUID(),run.id,run.revision,action,at);}if(!run.completedAt)throw Error('concurrent runtime incomplete');await c.finishLearning(crypto.randomUUID(),run.id);return run.id;},{targetId:concurrentTargetId,at}));
  await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());await a.evaluate(()=>(window as any).sync());
  for(const page of [a,b]){const reconciled=await page.evaluate(async()=>{const c=(window as any).core;return {state:await c.readCloudSync(),learning:JSON.stringify(await c.readLearning()),decisions:await c.readLibrary((tx:any)=>tx.entries('learningReconciliations')),runs:await c.readLibrary((tx:any)=>tx.entries('learningRuns'))};});assert.equal(reconciled.state.status,'synced');assert(reconciled.decisions.length>0,'concurrent learning must persist a reconciliation decision');assert(branchRuns.every(runId=>reconciled.runs.some((row:any)=>row.key===runId)),'both concurrent Runs must remain in history');}
@@ -190,6 +211,14 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  // That API accepts eight hashes and omits the deferred field.
  await fresh.evaluate(()=>{const w=window as any,original=w.request;w.request=async(path:string,body?:any)=>{if(path==='/blocks/fetch'){if(body.hashes.length>8)throw new Error('invalid_request');const value=await original(path,body);delete value.deferred;return value;}return original(path,body);};});
  await fresh.evaluate(()=>(window as any).sync());assert.deepEqual(JSON.parse(await fresh.evaluate(async()=>{const learning=await (window as any).core.readLearning();return JSON.stringify({...learning,packages:[]});})),{...JSON.parse(reconciledProgress),packages:[]});
+ const restoredHistory=async(page:typeof fresh)=>page.evaluate(async()=>{
+  const c=(window as any).core,languageContext=(await c.languageRoutesSnapshot()).context,filter={surface:'study',range:'all',start:'',end:'',kind:'all',languageChoice:null};
+  const records:LearningHistoryProjection['records'][number][]=[];let cursor:LearningHistoryProjection['nextCursor']=null,total=0;
+  do{const historyPage:LearningHistoryProjection=await c.learningSystem.read({kind:'history',languageContext,filter,cursor,limit:1});total=historyPage.total;records.push(...historyPage.records);cursor=historyPage.nextCursor;}while(cursor);
+  return {records,total};
+ });
+ assert.deepEqual(await restoredHistory(fresh),await restoredHistory(a),'fresh Cloud restore must rebuild complete paged Study history despite Runs-before-Targets replica ordering');
+ const history=await restoredHistory(fresh);assert(history.total>0,'a fresh restored learner must not see a false empty Study history');assert.equal(history.records.length,history.total,'all cursor pages must match the complete-range count');
  assert.deepEqual(await fresh.evaluate(()=>(window as any).core.listDrafts()),await a.evaluate(()=>(window as any).core.listDrafts()));
  assert.equal((await fresh.evaluate(()=>(window as any).core.installedPackages())).length,0,'a new device starts with an empty public artifact cache');
  await fresh.evaluate(async({bookBytes,descriptor})=>{const c=(window as any).core,original=window.fetch;window.fetch=async input=>{const url=String(input);const body=url===descriptor.url?new Uint8Array(bookBytes):null;return body?new Response(body,{headers:{'content-length':String(body.byteLength)}}):new Response(null,{status:404});};try{await c.writeLibraryState((tx:any)=>tx.put('meta','package-catalog',{format:'sensa-local-registry-cache-v3',revision:'fixture',checkedAt:new Date().toISOString(),items:[descriptor]}));const result=await c.contentSupplySystem.execute({kind:'rehydrate'});if(result.ready.length!==1)throw Error(JSON.stringify(result));}finally{window.fetch=original;}},{bookBytes,descriptor});
@@ -241,10 +270,15 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  const refresh=async()=>{const rows=(await pool.query('SELECT hash,data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1',[accountId])).rows;stored.clear();for(const row of rows)stored.set(row.hash,row.data);};
  await refresh();
  const post=async(path:string,body:unknown)=>fetch(origin+'/sensa/'+path,{method:'POST',headers:{authorization:'Bearer first','content-type':'application/json'},body:JSON.stringify(body)});
- const readHead=async()=>{const row=(await pool.query('SELECT revision,manifest FROM sensa_consumer.library_cloud WHERE account_id=$1',[accountId])).rows[0];const refs=row.manifest as string[];const blocks=new Map((await pool.query('SELECT hash,data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[accountId,refs])).rows.map(r=>[r.hash,r.data]));if(refs.some(h=>!blocks.has(h)))throw Error('head manifest references a missing block');return {revision:Number(row.revision),manifest:JSON.parse(refs.map(h=>blocks.get(h)).join(''))};};
+ const corruptPacked=JSON.parse(encodeLibrarySyncBlock('immutable content'.repeat(400)));corruptPacked[1]='0'.repeat(64);
+ const corruptData=JSON.stringify(corruptPacked),corruptHash=createHash('sha256').update(corruptData).digest('hex');
+ const corruptReply=await post('library-sync/blocks/store',{blocks:[{hash:corruptHash,data:corruptData}]});
+ assert.equal(corruptReply.status,400);assert.equal((await corruptReply.json() as any).code,'library_sync_format');
+ assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=$2',[accountId,corruptHash])).rows[0].n,0,'a correctly addressed but corrupt compressed block is not stored');
+ const readHead=async()=>{const row=(await pool.query('SELECT revision,manifest FROM sensa_consumer.library_cloud WHERE account_id=$1',[accountId])).rows[0];const refs=row.manifest as string[];const blocks=new Map((await pool.query('SELECT hash,data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[accountId,refs])).rows.map(r=>[r.hash,r.data]));if(refs.some(h=>!blocks.has(h)))throw Error('head manifest references a missing block');return {revision:Number(row.revision),manifest:JSON.parse(refs.map(h=>decodeLibrarySyncBlock(blocks.get(h)!)).join(''))};};
  const publish=async(manifest:any,baseRevision:number,chunk:number)=>{
   const rewritten=new Map<string,string>();
-  for(const row of manifest.rows){const text=row.blocks.map((h:string)=>stored.get(h)).join(''),refs:string[]=[];
+  for(const row of manifest.rows){const text=row.blocks.map((h:string)=>decodeLibrarySyncBlock(stored.get(h)!)).join(''),refs:string[]=[];
    for(let at=0;at<text.length;at+=chunk){const data=text.slice(at,at+chunk),hash=createHash('sha256').update(data).digest('hex');rewritten.set(hash,data);refs.push(hash);}
    if(!refs.length){const hash=createHash('sha256').update('').digest('hex');rewritten.set(hash,'');refs.push(hash);}
    row.blocks=refs;}
@@ -280,7 +314,13 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  const priorRevision=head.revision;
  const repacked=await publish(JSON.parse(JSON.stringify(head.manifest)),priorRevision,8192);assert.equal(repacked.status,200,'repacking published history must be accepted');
  head=await readHead();assert.equal(head.revision,priorRevision+1);await refresh();
- assert.equal(head.manifest.version,5);assert.equal(head.manifest.rows.some((row:any)=>row.table==='operations'),false,'new Checkpoints must not contain the device ledger');
+ const repackedReceiver=await fixture.createClient(primary);fixture.clearRequests();
+ await repackedReceiver.evaluate(()=>(window as any).sync());
+ assert.equal((await readHead()).revision,head.revision,'restoring identical facts with a different block layout must not republish');
+ assert.equal(fixture.requests().filter(call=>call.path.endsWith('/commit')).length,0);
+ assert.equal((await repackedReceiver.evaluate(()=>(window as any).core.readCloudSync())).checkpointVersion,6);
+ await repackedReceiver.context().close();
+ assert.equal(head.manifest.version,6);assert.equal(head.manifest.rows.some((row:any)=>row.table==='operations'),false,'new Checkpoints must not contain the device ledger');
  assert.equal(head.manifest.rows.some((row:any)=>row.table==='packageCache'),false,'new Checkpoints must not contain public artifact cache bytes');
  assert.equal(head.manifest.rows.some((row:any)=>row.table==='packageInstallations'),true,'new Checkpoints must contain exact package installation facts');
  assert.equal(head.manifest.rows.some((row:any)=>row.table==='meta'&&row.key==='package-catalog'),false,'package catalog cache must not enter account checkpoints');

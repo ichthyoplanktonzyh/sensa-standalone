@@ -16,6 +16,7 @@ import {
 } from '@sensa/contracts/sensa';
 import {sha256} from '@sensa/learning-kernel';
 import {directPublishedFixture} from '../support/directPublishedFixture';
+import {portablePackageFixture} from '../../../scripts/support/portablePackageFixture.mts';
 import {indexedDB} from 'fake-indexeddb';
 import {build} from 'esbuild';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
@@ -31,9 +32,11 @@ const compiled=await build({stdin:{contents:[
   `export {worldReadRepository} from './apps/web/src/experience/personalMeaningJourney/worldRepository';`,
   `export {sqliteRecordAdapter} from './apps/web/src/data/library/sqliteAdapter';`,
   `export {learningSystem} from './apps/web/src/learning/system/learningSystem';`,
+  `export {startLearning,actLearning} from './tests/web/support/learningRunFixture';`,
   `export * from './apps/web/src/contentSupply/portable/personalPortablePackage';`,
   `export * from './apps/web/src/contentSupply/portable/portablePackage';`,
   `export {readLearningWorkspaceProjection} from './apps/web/src/learning/system/learningProjection';`,
+  `export {runBaselineMaterial,runStepMaterial} from './apps/web/src/learning/runtime/runMaterialPins';`,
 ].join('\n'),resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env':JSON.stringify({VITE_SENSA_API_URL:'https://speech.fixture.invalid'})},plugins:[{name:'fixture-auth',setup(build){build.onLoad({filter:/[/\\]account[/\\]auth\.ts$/},()=>({contents:"export const auth={getSession:async()=>({data:{session:{access_token:'fixture',user:{id:'fixture'}}}})}; export {authStorageKey,cachedAuthSubject} from './authSessionHint';",loader:'ts'}));}}]});
 Object.assign(globalThis,{indexedDB,window:new EventTarget(),location:{origin:'http://127.0.0.1:9998'},BroadcastChannel:undefined});
 const temp=await mkdtemp(join(tmpdir(),'sensa-personal-'));
@@ -149,7 +152,7 @@ try{
   for(const corruption of ['fixed-identity','unauthorized-context'] as const){
     const changed=structuredClone(saved),savedTask=changed.personalLearning.find((row:any)=>row.key===task.id).value;
     const checkpoint=structuredClone(changed.contentAttempts.find((row:any)=>row.key===savedTask.attemptId).value);
-    checkpoint.id=id();checkpoint.status='failed';checkpoint.bundle=null;checkpoint.review=null;checkpoint.validation=null;checkpoint.resumedFrom=null;checkpoint.generationCheckpoint={};
+    checkpoint.id=id();checkpoint.status='failed';checkpoint.readyAt=null;checkpoint.bundle=null;checkpoint.review=null;checkpoint.validation=null;checkpoint.resumedFrom=null;checkpoint.generationCheckpoint={};
     savedTask.attemptId=checkpoint.id;savedTask.status='failed';
     if(corruption==='fixed-identity')checkpoint.request.senseId=id();
     else{
@@ -196,6 +199,12 @@ try{
   assert.equal(reinstalled.content.entries[0].expression,'borrow','the personal .sensa re-enters through the public import path');
 
   await api.confirmLearningQuantity(id(),languageContext,20);
+  const beforeBackdatedStart=await api.readLibrary(async(tx:any)=>Object.fromEntries(await Promise.all(api.libraryTables.map(async(table:string)=>[table,await tx.entries(table)]))));
+  const sourceMaterial=(await api.readLearning()).targets.find((target:any)=>target.id===task.targetId).curriculumMemberships[0].material;
+  const sourceReadyAt=sourceMaterial.snapshot.provenance.sourceReadyAt;
+  assert.equal(sourceReadyAt,(await api.readLibrary((tx:any)=>tx.get('contentAttempts',sourceMaterial.snapshot.provenance.attemptId)))?.readyAt);
+  await assert.rejects(api.startLearning(id(),task.targetId,languageContext,20,new Date(Date.parse(sourceReadyAt)-1).toISOString()),/clockChanged/);
+  assert.deepEqual(await api.readLibrary(async(tx:any)=>Object.fromEntries(await Promise.all(api.libraryTables.map(async(table:string)=>[table,await tx.entries(table)])))),beforeBackdatedStart,'starting before Ready cannot persist a Run, policy commitment, active selection or receipt');
   let run=await api.startLearning(id(),task.targetId,languageContext,20);
   run=await api.actLearning(id(),run.id,run.revision,{kind:'reveal'});
   run=await api.actLearning(id(),run.id,run.revision,{kind:'rate',rating:'good'});
@@ -332,6 +341,45 @@ try{
     assert.throws(()=>api.validateBackupRows(changed),/Personal preparation/,'historical attempts must match their own pinned Context and authorized recipients, not the task current settings');
   }
   const badPin=structuredClone(finalRows);badPin.contentAttempts.find((row:any)=>row.key===flightAttempt.id).value.contextPin=[id()];assert.throws(()=>api.validateBackupRows(badPin));
+
+  // The Run starts with private material. An explicit Portable update may
+  // refresh the unacted Step without replacing that baseline or acted evidence.
+  const registry=await api.readLibrary(async(tx:any)=>{
+    const get=async(kind:string,key:string)=>(await tx.get('semanticRegistry',`${kind}:${key}`)).value;
+    const senseVersion=await get('senseVersions',flightSource.reference.senseVersionId);
+    const bindingVersion=await get('bindingVersions',flightSource.reference.bindingVersionId);
+    const expressionVersion=await get('expressionVersions',bindingVersion.expressionVersionId);
+    return {sense:await get('senses',senseVersion.senseId),senseVersion,binding:await get('bindings',bindingVersion.senseExpressionBindingId),bindingVersion,expressionVersion,expression:await get('expressions',expressionVersion.expressionId)};
+  });
+  const portableOptions={packageId:id(),expression:'borrow',semanticDeclaration:{
+    contractVersion:'sensa-portable-semantic-declaration-v1' as const,
+    sense:{senseId:flightSource.reference.senseId,senseVersionId:flightSource.reference.senseVersionId,senseKey:registry.sense.senseKey,versionNumber:registry.senseVersion.versionNumber,semanticPolicyVersion:registry.senseVersion.semanticPolicyVersion,semanticSpec:flightSource.semanticSpec},
+    expression:{expressionId:registry.expression.expressionId,expressionVersionId:registry.expressionVersion.expressionVersionId,versionNumber:registry.expressionVersion.versionNumber,expressionType:registry.expression.expressionType,structure:registry.expressionVersion.structure},
+    binding:{senseExpressionBindingId:flightSource.reference.bindingId,bindingVersionId:flightSource.reference.bindingVersionId,versionNumber:registry.bindingVersion.versionNumber,relation:registry.binding.relation,semanticCoverage:registry.bindingVersion.semanticCoverage,registerLabel:registry.bindingVersion.registerLabel,usageConstraints:registry.bindingVersion.usageConstraints},
+  }};
+  let mixedRun=await api.startLearning(id(),flightTask.targetId,languageContext,20);
+  mixedRun=await api.actLearning(id(),mixedRun.id,mixedRun.revision,{kind:'reveal'});
+  const personalStep=await api.readLibrary(async(tx:any)=>(await tx.all('learningEvents')).find((event:any)=>event.runId===mixedRun.id&&event.kind==='reveal').detail.stepId);
+  const publicationTemplate=directPublishedFixture().pack.portableOrigin.publications[0]!;
+  const installPublished=async(version:number,scene?:string)=>{
+    const fixture=portablePackageFixture({...portableOptions,version,...(scene?{scene}:{})}),archive=readSensaPortableLightweightPackage(fixture.bytes);
+    const publication={...publicationTemplate,book:{...publicationTemplate.book,bookVersionId:id(),versionNumber:version},contentRelease:{...publicationTemplate.contentRelease,contentReleaseId:id(),versionNumber:version},member:{packageId:portableOptions.packageId,version}};
+    return (await api.installPublishedPortableBookMembers([{bytes:fixture.bytes,archive,publication}]))[0];
+  };
+  const installedV1=await installPublished(1);
+  await api.enrollPackage(id(),installedV1.key,languageContext);
+  const installedV2=await installPublished(2,'同事借出一把伞，约好第二天归还。');
+  await api.enrollPackage(id(),installedV2.key,languageContext);
+  assert((await api.readLearning()).targets.find((target:any)=>target.id===flightTask.targetId).curriculumMemberships.some((member:any)=>member.packageKey===installedV2.key));
+  const installedV3=await installPublished(3,'周末向邻居借一把伞，约好第二天归还。');
+  await api.enrollPackage(id(),installedV3.key,languageContext);
+  const mixedRows=await api.readLibrary(async(tx:any)=>Object.fromEntries(await Promise.all(api.libraryTables.map(async(table:string)=>[table,await tx.entries(table)]))));
+  const mixedSaved=mixedRows.learningRuns.find((row:any)=>row.key===mixedRun.id).value,mixedParticipant=mixedSaved.participants[flightTask.targetId];
+  assert.equal(api.runBaselineMaterial(mixedParticipant).snapshot.provenance.packageKey,undefined);
+  assert.equal(api.runStepMaterial(mixedParticipant,personalStep).snapshot.provenance.packageKey,undefined);
+  assert(Object.values(mixedParticipant.presentedMaterials).some((reference:any)=>mixedParticipant.materializations[reference].snapshot.provenance.packageKey===installedV3.key));
+  mixedRows.packageCache=[];api.validateBackupRows(mixedRows);
+  await api.actLearning(id(),mixedSaved.id,mixedSaved.revision,{kind:'rate',rating:'good'});
 
   // Language roles are frozen into requests and prompts, not inferred from UI locale.
   const spanish={supportLanguageTag:'zh-CN',targetLanguageTag:'es'};

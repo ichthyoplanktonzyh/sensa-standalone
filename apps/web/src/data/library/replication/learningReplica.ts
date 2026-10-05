@@ -55,19 +55,20 @@ export const learningReplica:DomainReplicaModule={
    return [];
   }
   if(entry.table==='learningRuns')return [
+   ...reference('learningRuns',fact.continuedFromRunId),
+   ...(Array.isArray(fact.lifecycleEvents)?fact.lifecycleEvents.flatMap(event=>reference('learningRuns',record(event)?.continuedFromRunId)):[]),
    ...references('learningTargets',fact.targetIds),
    ...reference('learningTargets',fact.targetId),
    ...Object.entries(record(fact.participants)??{}).flatMap(([targetId,participant])=>{
     const item=record(participant);return [
      ...reference('learningTargets',targetId),
-     ...materialDependencies(item?.material),
-     ...Object.values(record(item?.presentedMaterials)??{}).flatMap(materialDependencies),
+     ...Object.values(record(item?.materializations)??{}).flatMap(materialDependencies),
     ];
    }),
    ...(Array.isArray(fact.lifecycleEvents)?fact.lifecycleEvents.flatMap((event:unknown)=>{
     const item=record(event);
     if(item?.kind!=='current_step_material_refreshed')return [];
-    const participant=record(record(fact.participants)?.[item.targetId]),material=record(record(participant?.presentedMaterials)?.[item.stepId]),provenance=record(record(material?.snapshot)?.provenance);
+    const participant=record(record(fact.participants)?.[item.targetId]),material=Object.values(record(participant?.materializations)??{}).map(record).find(material=>record(material?.snapshot)?.learningMaterializationId===item.materializationId),provenance=record(record(material?.snapshot)?.provenance);
     return provenance?.packageKey?[]:reference('contentAttempts',item.operationId);
    }):[]),
   ];

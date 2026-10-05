@@ -10,6 +10,10 @@ import {
   readLearningSemanticMemoryProjection,
   readLearningWorkspaceProjection,
   readLearningRuntimeProjection,
+  readLearningManagementProjection,
+  readLearningPreferencesProjection,
+  readLearningHistoryProjection,
+  readLearningTargetDetailProjection,
   removeRetryTarget,
 } from './learningProjection';
 import type { LearningCommand, LearningQuery } from './learningSystem';
@@ -26,6 +30,9 @@ const setRetries = (languageRouteId: string, retries: readonly InterleavedLearni
 };
 
 export const executeLearningCommand = async (command: LearningCommand): Promise<unknown> => {
+  // A caller-supplied timestamp cannot turn future eligibility into a fact.
+  // Deterministic tests and UI acceptance advance the actual injected clock.
+  if('at' in command&&command.at!==undefined&&(!Number.isFinite(Date.parse(command.at))||Date.parse(command.at)>Date.now()))throw new Error('localFlow.clockChanged');
   switch (command.kind) {
     case 'prepare_direct': {
       const {prepareDirectPublishedLearning}=await import('../../data/library/learning');
@@ -69,6 +76,7 @@ export const executeLearningCommand = async (command: LearningCommand): Promise<
         command.languageContext,
         command.dailyLimit,
         command.at,
+        command.sessionIntent,
       );
       return true;
     }
@@ -109,15 +117,16 @@ export const executeLearningCommand = async (command: LearningCommand): Promise<
       return true;
     }
     case 'set_declared_mastery': {
-      const { prepareLearningQueue, setLocalDeclaredMastery } = await import('../../data/library/learning');
+      const { prepareLearningQueue, setLocalDeclaredMastery,readActiveLearningSessionIntent } = await import('../../data/library/learning');
       const at=command.at??new Date().toISOString();
+      const intent=await readActiveLearningSessionIntent();
       await setLocalDeclaredMastery(
         command.operationId,
         command.targetId,
         command.active,
         at,
       );
-      if(command.active)await prepareLearningQueue(command.languageContext,at,command.operationId);
+      if(command.active&&intent!=='review_only')await prepareLearningQueue(command.languageContext,at,command.operationId);
       return true;
     }
     case 'select_policy': {
@@ -137,8 +146,9 @@ export const executeLearningCommand = async (command: LearningCommand): Promise<
       return requestPersonalContentProvisioning(command);
     }
     case 'declare_mastery_and_continue': {
-      const { prepareLearningQueue, setLocalDeclaredMastery, startLearning } = await import('../../data/library/learning');
+      const { prepareLearningQueue, setLocalDeclaredMastery, startLearning,readActiveLearningSessionIntent } = await import('../../data/library/learning');
       const at = command.at ?? new Date().toISOString();
+      const sessionIntent=await readActiveLearningSessionIntent();
       await setLocalDeclaredMastery(
         stableUuid(`${command.operationId}:declare-mastery`),
         command.targetId,
@@ -148,11 +158,12 @@ export const executeLearningCommand = async (command: LearningCommand): Promise<
       const routeId = command.languageContext.languageRouteId;
       setRetries(routeId, removeRetryTarget(retriesFor(routeId), command.targetId));
       if (command.dailyLimit === null) return false;
-      await prepareLearningQueue(command.languageContext,at,command.operationId);
+      if(sessionIntent!=='review_only')await prepareLearningQueue(command.languageContext,at,command.operationId);
       const workspace = await readLearningRuntimeProjection({
         languageContext: command.languageContext,
         clock: Date.parse(at),
         retries: retriesFor(routeId),
+        sessionIntent,
       });
       const nextTargetId = workspace.nextTargetId;
       if (!nextTargetId) return false;
@@ -162,6 +173,7 @@ export const executeLearningCommand = async (command: LearningCommand): Promise<
         command.languageContext,
         command.dailyLimit,
         at,
+        sessionIntent,
       );
       return true;
     }
@@ -194,6 +206,10 @@ export const executeLearningCommand = async (command: LearningCommand): Promise<
 
 export const readLearningQuery = async (query: LearningQuery): Promise<unknown> => {
   switch (query.kind) {
+    case 'target':return readLearningTargetDetailProjection({targetId:query.targetId,languageContext:query.languageContext,clock:query.clock??Date.now()});
+    case 'history':return readLearningHistoryProjection({request:{...query.filter,activeLanguageTag:query.languageContext.targetLanguageTag,clock:query.cursor?.clock??query.clock??Date.now(),cursor:query.cursor??null,limit:query.limit??20}});
+    case 'management':return readLearningManagementProjection({languageContext:query.languageContext,clock:query.clock??Date.now()});
+    case 'preferences':return readLearningPreferencesProjection(query.languageContext);
     case 'runtime':return readLearningRuntimeProjection({languageContext:query.languageContext,clock:query.clock??Date.now(),retries:retriesFor(query.languageContext.languageRouteId)});
     case 'direct_choices': {
       const {readDirectLearningChoices}=await import('./directLearningChoices');

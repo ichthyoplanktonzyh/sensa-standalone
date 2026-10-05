@@ -11,6 +11,7 @@ import {
   type SensaPortableLightweightPackage,
 } from '@sensa/contracts/sensa';
 import {sha256} from '@sensa/learning-kernel';
+import {runBaselineMaterial,runStepMaterial,runMaterialDigest,validateRunMaterialPins} from '../../../apps/web/src/learning/runtime/runMaterialPins';
 
 import {contentSupplySystem} from '../../../apps/web/src/contentSupply/system/index.ts';
 import {learningSystem} from '../../../apps/web/src/learning/system/index.ts';
@@ -20,6 +21,7 @@ import {
   readLibrary,
   readPortableMediaStorageDiagnostics,
   writeLibraryCache,
+  libraryTables,
 } from '../../../apps/web/src/data/library/store.ts';
 import {localCurriculumMembershipForContext} from '../../../apps/web/src/learning/runtime/localCurriculum.ts';
 import type {LocalLearningRun,LocalLearningTarget} from '../../../apps/web/src/learning/runtime/localProtocol.ts';
@@ -220,12 +222,12 @@ test('a portable content update keeps Target progress and refreshes the unfinish
   assert(afterRun);
   const pinnedParticipant=afterRun.participants[beforeTarget.id]!;
   assert.equal(pinnedParticipant.curriculumMembershipId,originalMembershipId);
-  assert.equal(pinnedParticipant.material.snapshot.provenance.packageVersion,'1');
+  assert.equal(runBaselineMaterial(pinnedParticipant).snapshot.provenance.packageVersion,'1');
   const refreshEvent=afterRun.lifecycleEvents.at(-1)!;
-  const presentedVersions=Object.values(pinnedParticipant.presentedMaterials).map(item=>item.snapshot.provenance.packageVersion);
+  const presentedVersions=Object.keys(pinnedParticipant.presentedMaterials).map(stepId=>runStepMaterial(pinnedParticipant,stepId).snapshot.provenance.packageVersion);
   assert.deepEqual([...presentedVersions].sort(),['1','2'],'the acted Step remains v1 while the current unacted Step refreshes to v2');
   assert.equal(
-    pinnedParticipant.presentedMaterials[refreshEvent.stepId]?.content.resources.find(item=>item.materialRoleKey==='scene_bridge')?.contentPayload.text,
+    runStepMaterial(pinnedParticipant,refreshEvent.stepId).content.resources.find(item=>item.materialRoleKey==='scene_bridge')?.contentPayload.text,
     updated.resources.sceneBridge.text,
   );
   assert.equal(refreshEvent.kind,'current_step_material_refreshed');
@@ -233,20 +235,39 @@ test('a portable content update keeps Target progress and refreshes the unfinish
   assert.equal(current.runtime?.kind,'lightweight');
   if(current.runtime?.kind!=='lightweight')throw new Error('expected lightweight runtime');
   assert.equal(current.runtime.questionResources.find(item=>item.materialRoleKey==='scene_bridge')?.contentPayload.text,updated.resources.sceneBridge.text);
+  const newest=structuredClone(updated);newest.metadata.version=3;newest.metadata.createdAt='2026-09-26T01:00:00Z';newest.resources.sceneBridge.text='第三版：口渴时，你请求杯子里的清凉饮品。';
+  const newestBytes=createSensaPortableLightweightPackage(newest,media),newestPreview=await contentSupplySystem.execute({kind:'preview_portable_package',bytes:newestBytes});
+  const newestInstalled=await contentSupplySystem.execute({kind:'install_portable_package',bytes:newestBytes,expectedArchiveDigest:newestPreview.archiveDigest});
+  await learningSystem.execute({kind:'enroll_package',operationId:crypto.randomUUID(),packageKey:newestInstalled.key,languageContext});
+  const newestRun=(await readLibrary(tx=>tx.get<LocalLearningRun>('learningRuns',beforeRun.id)))!,newestParticipant=newestRun.participants[beforeTarget.id]!;
+  assert.equal(runStepMaterial(newestParticipant,refreshEvent.stepId).snapshot.provenance.packageVersion,'3');
+  assert.deepEqual(Object.values(newestParticipant.materializations).map(material=>material.snapshot.provenance.packageVersion).sort(),['1','2','3'],'successive unacted refreshes retain every frozen material body and the acted v1 Step');
   assert.equal(current.runtime.questionResources.find(item=>item.materialRoleKey==='experience_recall_cue')?.contentPayload.scene,manifest().resources.experienceRecallCue.text,'question context retains the actual previous experience version');
   assert(!JSON.stringify(current.runtime.questionResources).includes(updated.resources.experienceRecallCue.text));
   const {estimateLibraryBackupSize}=await import('../../../apps/web/src/data/library/backup.ts');
   assert((await estimateLibraryBackupSize()).usedBytes>0,'the refreshed Step must pass complete Library replay validation');
+  const {validateBackupRows}=await import('../../../apps/web/src/data/library/backupValidation.ts');
+  const rows=await readLibrary(async tx=>Object.fromEntries(await Promise.all(libraryTables.map(async table=>[table,await tx.entries(table)])))) as import('../../../apps/web/src/data/library/backupValidation.ts').BackupRows;
+  rows.packageCache=[];
+  validateBackupRows(rows);
+  const substituted=structuredClone(rows),substitutedRun=substituted.learningRuns.find(row=>row.key===newestRun.id)!.value as LocalLearningRun,substitutedParticipant=substitutedRun.participants[beforeTarget.id]!;
+  const oldReference=substitutedParticipant.presentedMaterials[refreshEvent.stepId]!,captured=structuredClone(runStepMaterial(substitutedParticipant,refreshEvent.stepId)),replacement={...captured,snapshot:{...captured.snapshot,createdAt:substitutedRun.startedAt}};
+  const replacementReference=runMaterialDigest(replacement);delete substitutedParticipant.materializations[oldReference];substitutedParticipant.materializations[replacementReference]=replacement;
+  for(const [stepId,reference] of Object.entries(substitutedParticipant.presentedMaterials))if(reference===oldReference)substitutedParticipant.presentedMaterials[stepId]=replacementReference;
+  substitutedParticipant.material=replacementReference;
+  substitutedParticipant.resolvedPlan={...substitutedParticipant.resolvedPlan,learningMaterializationIds:[replacement.snapshot.learningMaterializationId]};
+  assert.doesNotThrow(()=>validateRunMaterialPins(substitutedParticipant),'all body digests and references are internally valid');
+  assert.throws(()=>validateBackupRows(substituted),/libraryBackup.errors.inconsistent/,'a genuine compatible later source cannot silently replace the Run selected baseline');
 });
 
 test('an update with a new semantic identity defers its fresh Target to the next scheduler window',async()=>{
   const oldTarget=(await readLibrary(tx=>tx.all<LocalLearningTarget>('learningTargets'))).find(target=>
-    localCurriculumMembershipForContext(target,languageContext)?.material.snapshot.provenance.packageVersion==='2',
+    localCurriculumMembershipForContext(target,languageContext)?.material.snapshot.provenance.packageVersion==='3',
   )!;
   const changed=manifest();
-  changed.metadata.version=3;
+  changed.metadata.version=4;
   changed.metadata.title='Portable water fixture, new sense';
-  changed.metadata.createdAt='2026-09-25T02:00:00Z';
+  changed.metadata.createdAt='2026-09-27T02:00:00Z';
   changed.sense.senseId='fixture:water-supply';
   changed.sense.meaning='可供使用的一份水资源';
   changed.resources.senseConfirmation.text='这里说的是可供使用的一份水资源。';
@@ -262,7 +283,7 @@ test('an update with a new semantic identity defers its fresh Target to the next
   const targets=await readLibrary(tx=>tx.all<LocalLearningTarget>('learningTargets'));
   const prior=targets.find(target=>target.id===oldTarget.id)!;
   const replacement=targets.find(target=>target.id===newTargetId)!;
-  assert.equal(localCurriculumMembershipForContext(prior,languageContext)?.material.snapshot.provenance.packageVersion,'2');
+  assert.equal(localCurriculumMembershipForContext(prior,languageContext)?.material.snapshot.provenance.packageVersion,'3');
   assert.equal(localCurriculumMembershipForContext(replacement,languageContext)?.packageKey,installed.key);
   assert.equal(replacement.startedAt,null);
   assert.equal(replacement.memory,null);

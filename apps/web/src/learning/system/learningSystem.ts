@@ -16,6 +16,9 @@ import type {
   LearningSemanticMemoryProjection,
   LearningWorkspaceProjection,
   LearningRuntimeWorkspaceProjection,
+  LearningManagementProjection,
+  LearningHistoryProjection,
+  LearningTargetDetailProjection,
 } from './learningReadModels';
 export {
   LEARNING_LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND,
@@ -31,6 +34,8 @@ export type {
   LearningFourStageInitialRuntimeProjection,
   LearningFourStageReviewRuntimeProjection,
   LearningHomeProjection,
+  LearningManagementProjection,
+  LearningHistoryProjection,
   LearningLightweightRuntimeProjection,
   LearningLightweightRating,
   LearningLightweightStepProjection,
@@ -50,6 +55,7 @@ export type {
   LearningStructuredRuntimeProjection,
   LearningTargetPresentation,
   LearningTargetProjection,
+  LearningTargetDetailProjection,
   LearningTargetState,
   LearningWorkspaceProjection,
 } from './learningReadModels';
@@ -92,6 +98,7 @@ export type LearningCommand =
       targetId: string;
       languageContext: SensaFormalPinnedLanguageContext;
       dailyLimit: number;
+      sessionIntent?:'mixed'|'review_only';
       at?: string;
     }>
   | Readonly<{
@@ -163,6 +170,10 @@ export type LearningCommandResult<Command extends LearningCommand> =
       : boolean;
 
 export type LearningQuery =
+  | Readonly<{kind:'target';targetId:string;languageContext:SensaFormalPinnedLanguageContext;clock?:number}>
+  | Readonly<{kind:'history';languageContext:SensaFormalPinnedLanguageContext;filter:import('./learningHistoryModel').LearningHistoryFilter;clock?:number;cursor?:import('./learningHistoryModel').LearningHistoryCursor|null;limit?:number}>
+  | Readonly<{kind:'management';languageContext:SensaFormalPinnedLanguageContext;clock?:number}>
+  | Readonly<{kind:'preferences';languageContext:SensaFormalPinnedLanguageContext}>
   | Readonly<{kind:'runtime';languageContext:SensaFormalPinnedLanguageContext;clock?:number}>
   | Readonly<{kind:'direct_choices';query:string;targetLanguageTag:string;page:number}>
   | Readonly<{kind:'direct_enrollment';enrollmentId:string}>
@@ -177,7 +188,11 @@ export type LearningQuery =
   | Readonly<{ kind: 'semantic_memory' }>;
 
 export type LearningQueryResult<Query extends LearningQuery> =
-  Query['kind'] extends 'runtime' ? LearningRuntimeWorkspaceProjection
+  Query['kind'] extends 'target'?LearningTargetDetailProjection
+  : Query['kind'] extends 'history'?LearningHistoryProjection
+  : Query['kind'] extends 'management'?LearningManagementProjection
+  : Query['kind'] extends 'preferences'?Pick<LearningManagementProjection,'dailyLimit'|'policyOptions'>
+  : Query['kind'] extends 'runtime' ? LearningRuntimeWorkspaceProjection
     : Query['kind'] extends 'direct_choices' ? DirectLearningChoicePage
     : Query['kind'] extends 'direct_enrollment' ? DirectLearningEnrollment|null
     : Query['kind'] extends 'direct_source' ? DirectLearningSource
@@ -202,6 +217,10 @@ export interface LearningSystem {
 }
 
 const queryTables = {
+  target:['learningTargets','learningRuns','packageCache','settings','meta'],
+  history:['learningRuns','learningTargets','meta'],
+  management:['packageCache','packageInstallations','learningTargets','learningRuns','curriculumEnrollments','settings','meta'],
+  preferences:['settings','meta'],
   runtime:['packageCache','learningTargets','learningRuns','settings','meta'],
   direct_choices: ['semanticRegistry','packageCache','packageInstallations','meta'],
   direct_enrollment: ['curriculumEnrollments','learningTargets','meta'],

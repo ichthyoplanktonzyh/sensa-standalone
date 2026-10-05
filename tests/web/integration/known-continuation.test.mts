@@ -13,6 +13,7 @@ test("known-continuation", async () => {
 const compiled=await build({stdin:{contents:[
  ...['store','learning','backupValidation'].map(name=>`export * from './apps/web/src/data/library/${name}';`),
  "export {learningSystem} from './apps/web/src/learning/system';",
+ "export {startLearning,actLearning} from './tests/web/support/learningRunFixture';",
  "export {contentSupplySystem} from './apps/web/src/contentSupply/system';",
  "export * from './apps/web/src/contentSupply/provisioning/hybridMaterialization';",
 ].join('\n'),resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env':'{}'}});
@@ -37,6 +38,7 @@ try{
  // new immutable material, never an in-place edit of its base or running Step.
  const base=structuredClone(membership.material),response={request:api.supplementRequest(base,'etymology','zh-CN'),provider:'fixture-source',sourceVersion:'fixture-v1',result:{status:'available',payload:{explanation:'Synthetic sourced historical explanation.',source:'Explicit fixture source',sourceUrl:'https://fixture.invalid/etymology'}}};
  const hybrid=api.appendResourceSupplement(base,response,id(),new Date().toISOString(),'zh-CN');
+ assert.throws(()=>api.appendResourceSupplement(base,response,id(),new Date(Date.parse(base.snapshot.provenance.sourceReadyAt)-1).toISOString(),'zh-CN'),/clockChanged/,'a supplement cannot be admitted before its base source is Ready');
  assert.notEqual(hybrid.snapshot.learningMaterializationId,base.snapshot.learningMaterializationId);
  assert.notEqual(hybrid.snapshot.contentDigest,base.snapshot.contentDigest);
  assert.deepEqual(api.baseContentBeforeSupplement(hybrid,'zh-CN'),base.content);

@@ -18,6 +18,7 @@ import {assertPersonalContextPin,buildPersonalMeaningLearningSources} from '../.
 import {canonicalConsumerJson} from '@sensa/contracts/sensa';
 import {parseStoredMedia} from '../media';
 import {backupEqual} from '../backupCodec';
+import {assertReadyContentAttempt} from '../contentAttemptEvidence';
 
 type RequireRow=(table:Table,id:string)=>any;
 
@@ -65,6 +66,8 @@ export function validateContentSupplyReplica(input:{
   if(!['waiting','generating','reviewing','failed','rejected','stopped','ready','covered'].includes(task.status))fail();
  }
  for(const {value:attempt} of rows.contentAttempts){
+  if(attempt.status==='ready')assertReadyContentAttempt(attempt);
+  else if(attempt.readyAt!==null)fail();
   const task=requireRow('personalLearning',attempt.taskId);
   if(task.attemptId===attempt.id&&!backupEqual(attempt.contextPin??null,task.contextPin??null))fail();
   if(task.attemptId===attempt.id&&!backupEqual(attempt.fixedInput,{source:task.source,languageContext:task.languageContext,planRevision:task.planRevision,useContext:task.useContext}))fail();

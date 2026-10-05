@@ -7,7 +7,8 @@
     ".": "./dist/index.js",
     "./sensa": "./dist/sensa/index.js",
     "./sensa/canonical-json": "./dist/sensa/canonicalJson.js",
-    "./sensa/language": "./dist/sensa/language.js"
+    "./sensa/language": "./dist/sensa/language.js",
+    "./sensa/library-sync-blocks": "./dist/sensa/librarySyncBlocks.js"
   },
   "types": "./dist/index.d.ts",
   "scripts": {
@@ -16,6 +17,7 @@
   },
   "dependencies": {
     "@sensa/learning-kernel": "file:../learning-kernel",
+    "fflate": "^0.8.3",
     "zod": "^4.4.3"
   }
 }

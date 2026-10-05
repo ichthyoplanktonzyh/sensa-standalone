@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {afterAll,test} from 'vitest';
+import {resolveLearningQueue} from '../../../apps/web/src/learning/system/learningPlanning.ts';
 
 Object.assign(globalThis, { window: new EventTarget(), BroadcastChannel: undefined });
 
@@ -151,7 +152,7 @@ await store.readLibrary(async (tx) => {
 const diagnostics = await store.readLibraryStorageDiagnostics();
 assert.deepEqual(
   { engine: diagnostics.engine, persistence: diagnostics.persistence, schemaVersion: diagnostics.schemaVersion },
-  { engine: 'memory-adapter', persistence: 'memory', schemaVersion: 13 },
+  { engine: 'memory-adapter', persistence: 'memory', schemaVersion: 14 },
 );
 });
 
@@ -163,13 +164,13 @@ const [{ default: sqlite3InitModule }, { SqliteRecordDatabase, sqliteHomeLearnin
 ]);
 const sqlite3 = await sqlite3InitModule();
 test('unsupported physical schemas preserve owner data', () => {
-for (const version of [9, 14]) {
+for (const version of [9, 15]) {
   const incompatibleRaw = new sqlite3.oo1.DB(':memory:', 'c');
   incompatibleRaw.exec(`CREATE TABLE owner_fixture(value TEXT); INSERT INTO owner_fixture VALUES('preserve-me'); PRAGMA user_version=${version}`);
   const incompatibleDatabase = new SqliteRecordDatabase(sqlite3, incompatibleRaw, 'memory');
   assert.throws(
     () => incompatibleDatabase.initialize(),
-    version < 10 ? /sqlite_schema_legacy:9/u : /sqlite_schema_future:14/u,
+    version < 10 ? /sqlite_schema_legacy:9/u : /sqlite_schema_future:15/u,
     'unsupported physical schemas must stop instead of opening an empty replacement',
   );
   const preserved = incompatibleRaw.exec({ sql: 'SELECT value FROM owner_fixture', rowMode: 0, returnValue: 'resultRows' }) as unknown[];
@@ -183,7 +184,7 @@ test('schema 10 migrates in place and preserves owner tables',()=>{
                     INSERT INTO owner_fixture VALUES('preserve-me');
                     PRAGMA user_version=10`);
   const migrated=new SqliteRecordDatabase(sqlite3,migratedRaw,'memory');
-  assert.equal(migrated.initialize().schemaVersion,13);
+  assert.equal(migrated.initialize().schemaVersion,14);
   const preserved=migratedRaw.exec({
     sql:'SELECT value FROM owner_fixture',rowMode:0,returnValue:'resultRows',
   }) as unknown[];
@@ -332,7 +333,7 @@ database.commit({
 assert.equal(database.count('learningTargets'), 2);
 const projectionPlan = rawDatabase.exec({
   sql: `EXPLAIN QUERY PLAN ${sqliteHomeLearningTargetsQuery}`,
-  bind: ['route-a', 'route-a', '2026-09-14T00:00:00.000Z', '2026-09-15T00:00:00.000Z'],
+  bind: ['route-a', 'route-a', Date.parse('2026-09-14T00:00:00.000Z'), Date.parse('2026-09-15T00:00:00.000Z')],
   rowMode: 'object',
   returnValue: 'resultRows',
 }) as Array<Record<string, unknown>>;
@@ -342,7 +343,7 @@ assert(
   `route branch must use the route index: ${projectionPlanDetails.join(' | ')}`,
 );
 assert(
-  projectionPlanDetails.some((detail) => detail.includes('SEARCH target USING INDEX sensa_learning_targets_introduced')),
+  projectionPlanDetails.some((detail) => detail.includes('SEARCH introduced USING COVERING INDEX sensa_runtime_learning_day')),
   `introduced branch must use the date index: ${projectionPlanDetails.join(' | ')}`,
 );
 assert(
@@ -358,6 +359,29 @@ assert.equal(database.countIntroducedLearningTargets(
   '2026-09-14T00:00:00.000Z',
   '2026-09-15T00:00:00.000Z',
 ), 0);
+});
+test('Home uses the caller day for superseded initial introductions as well as active due Targets',()=>{
+ const retired={...target('target-retired','route-a','package-a'),introducedLanguageRouteId:'route-a',startedAt:'2026-09-17T08:00:00.000Z'};
+ retired.curriculumMemberships=retired.curriculumMemberships.map(membership=>({...membership,status:'superseded'}));
+ database.commit({clears:[],deletes:[],puts:[{table:'learningTargets',key:retired.id,encodedValue:encoded(retired)}]});
+ assert.deepEqual(database.homeLearningProjection('route-a',Date.parse('2026-09-17T12:00:00.000Z')).targets.map(entry=>entry.id),['target-a','target-retired']);
+ assert.deepEqual(database.homeLearningProjection('route-a',Date.parse('2026-09-18T12:00:00.000Z')).targets.map(entry=>entry.id),['target-a']);
+ database.commit({clears:[],deletes:[{table:'learningTargets',key:retired.id}],puts:[]});
+});
+test('offset timestamps count the same retired introduction in Home, runtime and start admission without rewriting its source',()=>{
+ const clock=Date.parse('2026-09-18T12:00:00Z'),dayStart=new Date(clock);dayStart.setHours(0,0,0,0);
+ const dayEnd=new Date(dayStart);dayEnd.setDate(dayEnd.getDate()+1);
+ const instant=dayStart.getTime()+30*60_000,at=new Date(instant-10*60*60_000).toISOString().slice(0,-1)+'-10:00';
+ const retired={...target('target-offset','route-a','package-a'),introducedLanguageRouteId:'route-a',startedAt:at};
+ retired.curriculumMemberships=retired.curriculumMemberships.map(membership=>({...membership,status:'superseded'}));
+ database.commit({clears:[],deletes:[],puts:[{table:'learningTargets',key:retired.id,encodedValue:encoded(retired)}]});
+ try{
+  assert.equal(Date.parse(at),instant);
+  assert.deepEqual(database.homeLearningProjection('route-a',clock).targets.map(entry=>entry.id),['target-a','target-offset']);
+  assert.equal(database.countIntroducedLearningTargets('route-a',dayStart.toISOString(),dayEnd.toISOString()),1);
+  assert.equal(database.runtimeLearningCandidates({languageContext:retired.curriculumMemberships[0].languageContext,clock,dailyLimit:1,supportedPolicies:['lightweight'],currentTargetIds:[],retryTargetIds:[]}).nextChangeAt,dayEnd.getTime());
+  assert.equal(database.get('learningTargets',retired.id),encoded(retired),'normalizing derived dates cannot rewrite the accepted timestamp');
+ }finally{database.commit({clears:[],deletes:[{table:'learningTargets',key:retired.id}],puts:[]});}
 });
 test('learning, content and media indexes update with commits and deletes', () => {
 database.commit({
@@ -398,10 +422,10 @@ const indexedQueryPlans = [
     expected: 'sensa_content_attempts_task_created',
   },
   {
-    sql: `EXPLAIN QUERY PLAN SELECT COUNT(*) FROM sensa_learning_targets
-          WHERE introduced_language_route_id=? AND started_at>=? AND started_at<?`,
-    bind: ['route-a', '2026-09-14T00:00:00.000Z', '2026-09-15T00:00:00.000Z'],
-    expected: 'sensa_learning_targets_introduced',
+    sql: `EXPLAIN QUERY PLAN SELECT COUNT(*) FROM sensa_runtime_learning_introductions
+          WHERE language_route_id=? AND started_at>=? AND started_at<?`,
+    bind: ['route-a', Date.parse('2026-09-14T00:00:00.000Z'), Date.parse('2026-09-15T00:00:00.000Z')],
+    expected: 'sensa_runtime_learning_day',
   },
   {
     sql: `EXPLAIN QUERY PLAN SELECT DISTINCT target_key FROM sensa_learning_route_targets
@@ -493,5 +517,22 @@ test('portable media rows deduplicate by digest and collect after the last packa
   assert.deepEqual(database.portableMediaDiagnostics(),{
     blobCount:0,totalBytes:0,referenceCount:0,
   });
+});
+test('synthetic 10k retained scheduling rows use compact Home planning without reading material or history',()=>{
+ const count=10_000,route='retention-capacity',clock=Date.parse('2026-09-14T12:00:00.000Z');
+ const puts=Array.from({length:count},(_,index)=>{
+  const id=`retained-${String(index).padStart(5,'0')}`;
+  const row={...target(id,route,'capacity-package'),introducedLanguageRouteId:route,startedAt:'2026-09-01T08:00:00.000Z',completedAt:'2026-09-01T08:01:00.000Z',committedPolicy:{profileId:'lightweight'},memory:{dueAt:new Date(index<count/2?'2026-09-14T00:00:00.000Z':'2026-09-15T00:00:00.000Z')}};
+  return {table:'learningTargets' as const,key:id,encodedValue:encoded(row)};
+ });
+ database.commit({clears:[],deletes:[],puts});
+ const begin=performance.now(),stored=database.homeLearningProjection(route,clock);
+ const queue=resolveLearningQueue({targets:stored.targets,languageRouteId:route,clock,dailyLimit:20,readiness:Object.fromEntries(stored.targets.map(target=>[target.id,'ready' as const]))});
+ const elapsedMs=performance.now()-begin;
+ assert.equal(stored.targets.length,count);assert.equal(queue.due.length,count/2);assert.equal(queue.initialReady.length,0);
+ assert(stored.targets.every(target=>target.curriculumMemberships.every(membership=>!('content' in membership.material))));
+ assert(elapsedMs<1500,`Compact kernel planning regression ceiling exceeded: ${elapsedMs}ms`);
+ console.info(JSON.stringify({boundary:'SQLite/Wasm in-memory kernel, not Chromium/OPFS/UI',syntheticRetainedTargets:count,dueTargets:queue.due.length,historyRuns:0,planningMs:Math.round(elapsedMs),regressionCeilingMs:1500}));
+ database.commit({clears:[],deletes:puts.map(({table,key})=>({table,key})),puts:[]});
 });
 afterAll(()=>database.close());

@@ -1,10 +1,14 @@
 import type { Database, Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 
 import {decodeBackupValue,encodeBackupValue} from './backupCodec';
+import {externalizeSharedRecordContent,expandSharedRecordContent,packStoredRecord,unpackStoredRecord,sharedRecordTables} from './sharedRecordContent';
 import {learningExpressionForm,learningPackageChoicesSql,validateLearningPackageQuery} from './packageCacheProjection';
 import {SqliteMeaningLookupProjection} from './meaningLookupProjection';
 import {SqliteWorldBrowseProjection} from './worldBrowseProjection';
 import {SqliteJourneyIdentityProjection} from './journeyIdentityProjection';
+import {SqliteLearningHistoryProjection,type StoredLearningRecord,type StoredLearningHistoryPage} from './learningHistoryProjection';
+import type {LearningHistoryRequest} from '../../learning/system/learningHistoryModel';
+import {SqliteRuntimeLearningCandidates,type RuntimeLearningCandidateQuery,type RuntimeLearningCandidates,type LearningManagementSummaryQuery,type LearningManagementStorageSummary} from './runtimeLearningCandidates';
 import {ensureSqliteSchemaIndexes} from './sqliteSchemaIndexes';
 import {registryFieldReader,registrySelectionSql,registrySelectionResult,type RegistrySelectionQuery,type RegistrySelection} from './semanticRegistrySelection';
 import type {WorldBrowseQuery,WorldBrowsePage,WorldLearningChoiceQuery,WorldLearningChoicePage} from '../../experience/personalMeaningJourney/worldRead';
@@ -12,13 +16,13 @@ import type {MeaningLookupResult} from '../../experience/personalMeaningJourney/
 import {createPackageCacheSummary,isPackageCacheProjectionSource,packageCacheKeyPrefix,sqlitePackageCacheProjectionSchema,type PackageCacheProjectionQuery,type PackageCacheProjectionResult} from './packageCacheProjection';
 import {
   createHomeLearningTargetRecord,
-  createHomeLearningStorageProjection,
   type HomeLearningStorageProjection,
 } from './homeLearningRecords';
 import type {LocalLearningRun,LocalLearningTarget} from '../../learning/runtime/localProtocol';
 import {
   sqliteLibrarySchema,
   sqlitePortableMediaSchema,
+  sqliteSharedRecordContentSchema,
   sqliteLibraryBaselineVersion,
   sqliteLibrarySchemaVersion,
   type SqliteLibraryTable,
@@ -59,8 +63,10 @@ export const sqliteHomeLearningTargetsQuery = `SELECT
         target.record_key AS record_key,
         target.projection_value_json AS projection_value_json
       FROM sensa_learning_targets AS target
-      WHERE target.introduced_language_route_id=?
-        AND target.started_at>=? AND target.started_at<?
+      JOIN sensa_runtime_learning_introductions AS introduced
+        ON introduced.target_key=target.record_key
+      WHERE introduced.language_route_id=?
+        AND introduced.started_at>=? AND introduced.started_at<?
       ORDER BY record_key`;
 
 /** Internal SQLite record kernel owned by the OPFS Worker. */
@@ -75,6 +81,8 @@ export class SqliteRecordDatabase {
   private worldBrowseProjection:SqliteWorldBrowseProjection;
   private walMaintenance:SqliteStorageDiagnostics['walMaintenance'];
   private journeyIdentities:SqliteJourneyIdentityProjection;
+  private learningHistory:SqliteLearningHistoryProjection;
+  private runtimeCandidates:SqliteRuntimeLearningCandidates;
   private recordGet:ReturnType<Database['prepare']>|undefined;
 
   constructor(
@@ -88,6 +96,8 @@ export class SqliteRecordDatabase {
     this.meaningLookup=new SqliteMeaningLookupProjection(database,(table,key)=>this.get(table,key));
     this.worldBrowseProjection=new SqliteWorldBrowseProjection(database,(table,key)=>this.get(table,key));
     this.journeyIdentities=new SqliteJourneyIdentityProjection(database);
+    this.learningHistory=new SqliteLearningHistoryProjection(database,id=>this.decoded<LocalLearningTarget>('learningTargets',id),encoded=>this.decode<LocalLearningRun>(this.logicalEncoded('learningRuns',encoded)));
+    this.runtimeCandidates=new SqliteRuntimeLearningCandidates(database,encoded=>this.decode<LocalLearningTarget>(this.logicalEncoded('learningTargets',encoded)));
   }
 
   initialize(): SqliteStorageDiagnostics {
@@ -119,6 +129,7 @@ export class SqliteRecordDatabase {
       this.database.exec('BEGIN IMMEDIATE');
       try{
         this.database.exec(sqlitePortableMediaSchema);
+        this.database.exec(sqliteSharedRecordContentSchema);
         this.database.exec(sqlitePackageCacheProjectionSchema);
         this.rebuildPackageCacheProjection();
         this.database.exec(`PRAGMA user_version=${sqliteLibrarySchemaVersion}`);
@@ -133,6 +144,7 @@ export class SqliteRecordDatabase {
       this.database.exec('BEGIN IMMEDIATE');
       try{
         this.database.exec(sqlitePackageCacheProjectionSchema);
+        this.database.exec(sqliteSharedRecordContentSchema);
         this.rebuildPackageCacheProjection();
         this.database.exec(`PRAGMA user_version=${sqliteLibrarySchemaVersion}`);
         this.database.exec('COMMIT');
@@ -140,6 +152,14 @@ export class SqliteRecordDatabase {
         try{this.database.exec('ROLLBACK');}catch{/* Retain the authoritative cache. */}
         throw error;
       }
+      this.database.exec(sqliteLibrarySchema);
+    }
+    else if(before===13){
+      // Add private representation storage only. Existing facts are neither
+      // decoded nor rewritten; ordinary future writes may use shared bodies.
+      this.database.exec('BEGIN IMMEDIATE');
+      try{this.database.exec(sqliteSharedRecordContentSchema);this.database.exec(`PRAGMA user_version=${sqliteLibrarySchemaVersion}`);this.database.exec('COMMIT');}
+      catch(error){try{this.database.exec('ROLLBACK');}catch{/* Preserve the migration failure. */}throw error;}
       this.database.exec(sqliteLibrarySchema);
     }
     else if (before !== sqliteLibrarySchemaVersion) {
@@ -162,6 +182,8 @@ export class SqliteRecordDatabase {
       this.worldBrowseProjection.initialize();
       worldReady=performance.now();
       this.journeyIdentities.initialize();
+      this.learningHistory.initialize();
+      this.runtimeCandidates.initialize();
       this.database.exec('COMMIT');
     }catch(error){try{this.database.exec('ROLLBACK');}catch{/* Preserve initialization failure. */}throw error;}
     const schemaReady=performance.now();
@@ -194,7 +216,8 @@ export class SqliteRecordDatabase {
   get(table: SqliteLibraryTable, key: string): string | null {
     const statement=this.recordGet??=this.database.prepare('SELECT value_json FROM sensa_records WHERE table_name=? AND record_key=?');
     statement.reset(true);statement.bind([table,key]);
-    try{return statement.step()?String(statement.get(0)):null;}finally{statement.reset(true);}
+    let value:string|null;try{value=statement.step()?String(statement.get(0)):null;}finally{statement.reset(true);}
+    return value===null?null:this.logicalEncoded(table,value);
   }
 
   entries(table: SqliteLibraryTable): StoredEntry[] {
@@ -206,7 +229,7 @@ export class SqliteRecordDatabase {
     }) as Array<Record<string, unknown>>;
     return rows.map((row) => ({
       key: String(row.record_key),
-      encodedValue: String(row.value_json),
+      encodedValue: this.logicalEncoded(table,String(row.value_json)),
     }));
   }
   lookupMeanings(query:string):MeaningLookupResult{return this.meaningLookup.query(query);}
@@ -225,7 +248,7 @@ export class SqliteRecordDatabase {
       sql:`SELECT record_key,value_json FROM sensa_records WHERE table_name=? ${afterKey===null?'':'AND record_key>?'} ORDER BY record_key LIMIT ?`,
       bind:afterKey===null?[table,limit]:[table,afterKey,limit],rowMode:'object',returnValue:'resultRows',
     }) as Array<Record<string,unknown>>;
-    return rows.map(row=>({key:String(row.record_key),encodedValue:String(row.value_json)}));
+    return rows.map(row=>({key:String(row.record_key),encodedValue:this.logicalEncoded(table,String(row.value_json))}));
   }
 
   existingRecordKeys(table:SqliteLibraryTable,keys:readonly string[]):string[]{
@@ -297,7 +320,7 @@ export class SqliteRecordDatabase {
     return rows.map((row) => ({
       table: String(row.table_name) as SqliteLibraryTable,
       key: String(row.record_key),
-      encodedValue: row.value_json === null ? null : String(row.value_json),
+      encodedValue: row.value_json === null ? null : this.logicalEncoded(String(row.table_name) as SqliteLibraryTable,String(row.value_json)),
       contentRevision: Number(row.content_revision),
     }));
   }
@@ -318,7 +341,7 @@ export class SqliteRecordDatabase {
           entries.push({
             table: key.table,
             key: key.key,
-            valueJson: String(row.value_json),
+            valueJson: this.logicalEncoded(key.table,String(row.value_json)),
             blockRefs: JSON.parse(String(row.block_refs_json)) as string[],
           });
         }
@@ -333,7 +356,7 @@ export class SqliteRecordDatabase {
     return rows.map((row) => ({
       table: String(row.table_name) as SqliteLibraryTable,
       key: String(row.record_key),
-      valueJson: String(row.value_json),
+      valueJson: this.logicalEncoded(String(row.table_name) as SqliteLibraryTable,String(row.value_json)),
       blockRefs: JSON.parse(String(row.block_refs_json)) as string[],
     }));
   }
@@ -357,18 +380,21 @@ export class SqliteRecordDatabase {
       rowMode:0,
       returnValue:'resultRows',
     }) as unknown[];
-    return Number(rows[0]??0);
+    const bodies=this.database.exec({sql:`SELECT COALESCE(SUM(length(CAST(value_json AS BLOB))+length(CAST(digest AS BLOB))+32),0)
+      FROM sensa_shared_record_content WHERE digest IN(SELECT digest FROM sensa_shared_record_content_owners WHERE owner_kind='record' AND table_name IN (${placeholders}))`,bind:[...tables],rowMode:0,returnValue:'resultRows'}) as unknown[];
+    return Number(rows[0]??0)+Number(bodies[0]??0);
   }
 
-  homeLearningProjection(languageRouteId: string): HomeLearningStorageProjection {
-    const now = new Date();
+  homeLearningProjection(languageRouteId: string,clock=Date.now()): HomeLearningStorageProjection {
+    if(!Number.isFinite(clock))throw new Error('localFlow.clockChanged');
+    const now = new Date(clock);
     const dayStart = new Date(now);
     dayStart.setHours(0, 0, 0, 0);
     const dayEnd = new Date(dayStart);
     dayEnd.setDate(dayEnd.getDate() + 1);
     const targetRows = this.database.exec({
       sql: sqliteHomeLearningTargetsQuery,
-      bind: [languageRouteId, languageRouteId, dayStart.toISOString(), dayEnd.toISOString()],
+      bind: [languageRouteId, languageRouteId, dayStart.getTime(), dayEnd.getTime()],
       rowMode: 'object',
       returnValue: 'resultRows',
     }) as Array<Record<string, unknown>>;
@@ -384,16 +410,18 @@ export class SqliteRecordDatabase {
       returnValue: 'resultRows',
     }) as unknown[];
     const activeId = this.decoded<string>('meta', 'learning-active');
-    return createHomeLearningStorageProjection({
-      targets: targetRows.map((row) => this.decode<LocalLearningTarget>(String(row.projection_value_json))),
-      availablePackageKeys: packageRows.map(String),
-      activeRun: activeId
-        ? this.decoded<LocalLearningRun>('learningRuns', activeId) ?? null
-        : null,
-      studyPlans: this.decoded('settings', 'language-route-study-plans') ?? {},
-      languageRouteId,
-    });
+    const active=activeId?this.decoded<LocalLearningRun>('learningRuns',activeId):undefined;
+    const plans=this.decoded<Record<string,{dailyNewSenseLimit?:number}>>('settings','language-route-study-plans');
+    // These rows already contain the compact projection and the SQL query
+    // already selected active Route membership plus today's introductions.
+    // Do not reconstruct and filter the whole collection a second time.
+    return {targets:targetRows.map(row=>this.decode<HomeLearningStorageProjection['targets'][number]>(String(row.projection_value_json))),availablePackageKeys:packageRows.map(String),activeRun:active?{id:active.id,targetId:active.targetId}:null,dailyLimit:plans?.[languageRouteId]?.dailyNewSenseLimit};
   }
+
+  learningHistoryProjection():StoredLearningRecord[]{return this.learningHistory.records();}
+  learningHistoryPage(query:LearningHistoryRequest):StoredLearningHistoryPage{return this.learningHistory.page(query);}
+  learningManagementSummary(query:LearningManagementSummaryQuery):LearningManagementStorageSummary{return this.runtimeCandidates.management(query);}
+  runtimeLearningCandidates(query:RuntimeLearningCandidateQuery):RuntimeLearningCandidates{return this.runtimeCandidates.read(query);}
 
   learningRunIdsForTarget(targetId: string, openOnly: boolean): string[] {
     const rows = this.database.exec({
@@ -413,10 +441,10 @@ export class SqliteRecordDatabase {
     startedBefore: string,
   ): number {
     const rows = this.database.exec({
-      sql: `SELECT COUNT(*) FROM sensa_learning_targets
-            WHERE introduced_language_route_id=?
+      sql: `SELECT COUNT(*) FROM sensa_runtime_learning_introductions
+            WHERE language_route_id=?
               AND started_at>=? AND started_at<?`,
-      bind: [languageRouteId, startedAfter, startedBefore],
+      bind: [languageRouteId, Date.parse(startedAfter), Date.parse(startedBefore)],
       rowMode: 0,
       returnValue: 'resultRows',
     }) as unknown[];
@@ -526,6 +554,7 @@ export class SqliteRecordDatabase {
     const changesBefore=this.database.changes(true);
     let encodedWriteSize=0;
     let bulkMaintenance=false;
+    const removedContent=new Set<string>();
     this.database.exec("BEGIN IMMEDIATE");
     try {
       const contentRevision = mutation.contentRevision;
@@ -533,17 +562,20 @@ export class SqliteRecordDatabase {
         throw new Error('sqlite_content_revision_invalid');
       }
       if (mutation.syncBaseReplacement) {
+        for(const row of this.database.exec({sql:"SELECT DISTINCT digest FROM sensa_shared_record_content_owners WHERE owner_kind='sync'",rowMode:0,returnValue:'resultRows'}) as string[])removedContent.add(row);
+        this.database.exec("DELETE FROM sensa_shared_record_content_owners WHERE owner_kind='sync'");
         this.database.exec('DELETE FROM sensa_sync_base');
         for (const entry of mutation.syncBaseReplacement) {
           const blockRefsJson=JSON.stringify(entry.blockRefs);
           encodedWriteSize+=entry.valueJson.length+blockRefsJson.length;
           this.database.exec({
             sql: 'INSERT INTO sensa_sync_base(table_name,record_key,value_json,block_refs_json) VALUES(?,?,?,?)',
-            bind: [entry.table, entry.key, entry.valueJson, blockRefsJson],
+            bind: [entry.table, entry.key, this.storedEncoded('sync',entry.table,entry.key,entry.valueJson,removedContent), blockRefsJson],
           });
         }
       }
       for (const table of mutation.clears) {
+        this.detachSharedContent('record',table,undefined,removedContent);
         if (contentRevision !== undefined) {
           this.database.exec({
             sql: `INSERT INTO sensa_record_tombstones(table_name,record_key,content_revision)
@@ -557,8 +589,8 @@ export class SqliteRecordDatabase {
           this.database.exec('DELETE FROM sensa_portable_package_media');
           this.database.exec('DELETE FROM sensa_package_cache_projection');
         }
-        if (table === 'learningTargets') this.database.exec('DELETE FROM sensa_learning_targets');
-        if (table === 'learningRuns') this.database.exec('DELETE FROM sensa_learning_runs');
+        if (table === 'learningTargets'){this.database.exec('DELETE FROM sensa_learning_targets');this.runtimeCandidates.clear();}
+        if (table === 'learningRuns'){this.database.exec('DELETE FROM sensa_learning_runs');this.learningHistory.clear();}
         if (table === 'contentAttempts') this.database.exec('DELETE FROM sensa_content_attempts');
         if (table === 'semanticMeanings' || table === 'semanticInbox') {
           this.database.exec({
@@ -568,6 +600,7 @@ export class SqliteRecordDatabase {
         }
       }
       for (const item of mutation.deletes) {
+        this.detachSharedContent('record',item.table,item.key,removedContent);
         if (contentRevision !== undefined) {
           this.database.exec({
             sql: `INSERT INTO sensa_record_tombstones(table_name,record_key,content_revision)
@@ -585,12 +618,14 @@ export class SqliteRecordDatabase {
           this.database.exec({sql:'DELETE FROM sensa_package_cache_projection WHERE package_key=?',bind:[item.key]});
         }
         if (item.table === 'learningTargets') {
+          this.runtimeCandidates.delete(item.key);
           this.database.exec({
             sql: 'DELETE FROM sensa_learning_targets WHERE record_key=?',
             bind: [item.key],
           });
         }
         if (item.table === 'learningRuns') {
+          this.learningHistory.delete(item.key);
           this.database.exec({
             sql: 'DELETE FROM sensa_learning_runs WHERE record_key=?',
             bind: [item.key],
@@ -638,11 +673,12 @@ export class SqliteRecordDatabase {
       }
       for (const item of mutation.puts) {
         encodedWriteSize+=item.encodedValue.length;
+        const stored=this.storedEncoded('record',item.table,item.key,item.encodedValue,removedContent);
         if (contentRevision === undefined) {
           this.database.exec({
             sql: `INSERT INTO sensa_records(table_name,record_key,value_json,content_revision) VALUES(?,?,?,0)
                   ON CONFLICT(table_name,record_key) DO UPDATE SET value_json=excluded.value_json`,
-            bind: [item.table, item.key, item.encodedValue],
+            bind: [item.table, item.key, stored],
           });
         } else {
           this.database.exec({
@@ -650,7 +686,7 @@ export class SqliteRecordDatabase {
                   ON CONFLICT(table_name,record_key) DO UPDATE SET
                     value_json=excluded.value_json,
                     content_revision=excluded.content_revision`,
-            bind: [item.table, item.key, item.encodedValue, contentRevision],
+            bind: [item.table, item.key, stored, contentRevision],
           });
           this.database.exec({
             sql: 'DELETE FROM sensa_record_tombstones WHERE table_name=? AND record_key=?',
@@ -671,6 +707,10 @@ export class SqliteRecordDatabase {
           this.replaceMediaReferences(item.table, item.key, item.encodedValue);
         }
       }
+      // Replica mutations are ordered by record identity, not dependency:
+      // fresh-device Runs can precede their Targets. Index completed history
+      // only after every source row has been staged in this same transaction.
+      for(const item of mutation.puts)if(item.table==='learningRuns')this.learningHistory.upsert(item.key,this.decode<LocalLearningRun>(item.encodedValue));
       if(
         mutation.clears.includes('packageCache')
         ||mutation.deletes.some(item=>item.table==='packageCache')
@@ -683,6 +723,9 @@ export class SqliteRecordDatabase {
       this.meaningLookup.update(mutation);
       this.worldBrowseProjection.update(mutation);
       this.journeyIdentities.update(mutation);
+      // Only dependencies detached by this mutation can become orphaned. An
+      // ordinary rating must not sweep all immutable bodies in the library.
+      for(const digest of removedContent)this.database.exec({sql:'DELETE FROM sensa_shared_record_content WHERE digest=? AND NOT EXISTS(SELECT 1 FROM sensa_shared_record_content_owners WHERE digest=?)',bind:[digest,digest]});
       // Rapid bulk growth is a maintenance point. Persist useful statistics
       // with that import instead of making the next page's reopen pay for it.
       // Count actual SQL writes, including sync baselines, normalized media
@@ -772,6 +815,36 @@ export class SqliteRecordDatabase {
     return String(rows[0] ?? "").toLowerCase();
   }
 
+  private logicalEncoded(table:SqliteLibraryTable,encoded:string):string{
+    if(!sharedRecordTables.has(table))return encoded;
+    const plain=unpackStoredRecord(encoded);
+    if(!plain.includes('sensa-shared-content-v1'))return plain;
+    return JSON.stringify(expandSharedRecordContent(JSON.parse(plain),digest=>{
+      const rows=this.database.exec({sql:'SELECT value_json FROM sensa_shared_record_content WHERE digest=?',bind:[digest],rowMode:0,returnValue:'resultRows'}) as string[];
+      return rows.length?unpackStoredRecord(String(rows[0])):undefined;
+    }));
+  }
+
+  private detachSharedContent(kind:'record'|'sync',table:SqliteLibraryTable,key:string|undefined,removed:Set<string>):void{
+    if(!sharedRecordTables.has(table))return;
+    const where=key===undefined?'owner_kind=? AND table_name=?':'owner_kind=? AND table_name=? AND record_key=?',bind=key===undefined?[kind,table]:[kind,table,key];
+    for(const digest of this.database.exec({sql:`SELECT digest FROM sensa_shared_record_content_owners WHERE ${where}`,bind,rowMode:0,returnValue:'resultRows'}) as string[])removed.add(digest);
+    this.database.exec({sql:`DELETE FROM sensa_shared_record_content_owners WHERE ${where}`,bind});
+  }
+
+  private storedEncoded(kind:'record'|'sync',table:SqliteLibraryTable,key:string,encoded:string,removed:Set<string>):string{
+    if(!sharedRecordTables.has(table))return encoded;
+    this.detachSharedContent(kind,table,key,removed);
+    const shared=externalizeSharedRecordContent(JSON.parse(encoded));
+    for(const [digest,body] of shared.bodies){
+      const current=this.database.exec({sql:'SELECT value_json FROM sensa_shared_record_content WHERE digest=?',bind:[digest],rowMode:0,returnValue:'resultRows'}) as string[];
+      if(current.length){if(unpackStoredRecord(String(current[0]))!==body)throw new Error('sqlite_shared_content_invalid');}
+      else this.database.exec({sql:'INSERT INTO sensa_shared_record_content(digest,value_json) VALUES(?,?)',bind:[digest,packStoredRecord(body)]});
+      this.database.exec({sql:'INSERT INTO sensa_shared_record_content_owners(owner_kind,table_name,record_key,digest) VALUES(?,?,?,?)',bind:[kind,table,key,digest]});
+    }
+    return packStoredRecord(JSON.stringify(shared.value));
+  }
+
   private decoded<T>(table: SqliteLibraryTable, key: string): T | undefined {
     const encoded = this.get(table, key);
     return encoded === null ? undefined : this.decode<T>(encoded);
@@ -803,6 +876,7 @@ export class SqliteRecordDatabase {
 
   private upsertLearningTargetProjection(key: string, encodedValue: string): void {
     const target = this.decode<LocalLearningTarget>(encodedValue);
+    this.runtimeCandidates.upsert(key,target);
     const projection = createHomeLearningTargetRecord(target);
     this.database.exec({
       sql: `INSERT INTO sensa_learning_targets(

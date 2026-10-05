@@ -42,6 +42,7 @@ let origin='';
 let storageKey='';
 let delivery:ReturnType<typeof portableBookDeliveryFixture>;
 let learningDelivery:ReturnType<typeof portableBookDeliveryFixture>;
+let reviewDelivery:ReturnType<typeof portableBookDeliveryFixture>;
 let updateDelivery:ReturnType<typeof portableBookDeliveryFixture>;
 let scaleDelivery:ReturnType<typeof portableBookDeliveryFixture>;
 let mismatchedDelivery:ReturnType<typeof portableBookDeliveryFixture>;
@@ -155,7 +156,7 @@ test.beforeAll(async()=>{
       }
 
       const deliveryUrl=new URL(url.pathname,origin).href;
-      const bytes=delivery.responses.get(deliveryUrl)??learningDelivery.responses.get(deliveryUrl)
+      const bytes=delivery.responses.get(deliveryUrl)??learningDelivery.responses.get(deliveryUrl)??reviewDelivery.responses.get(deliveryUrl)
         ??updateDelivery.responses.get(deliveryUrl)??mismatchedDelivery.responses.get(deliveryUrl)
         ??scaleDelivery.responses.get(deliveryUrl)
         ??(deliveryUrl===invalidMemberDelivery.descriptor.url?invalidMemberDelivery.bytes:undefined);
@@ -228,6 +229,7 @@ test.beforeAll(async()=>{
     expression:'borrow',
     title:'雨天借伞',
   });
+  reviewDelivery=portableBookDeliveryFixture({baseUrl:`${origin}/published/`,packageId:randomUUID(),expression:'borrow',title:'到期复习样本',memberExpressions:['borrow','lend']});
   updateDelivery=portableBookDeliveryFixture({
     baseUrl:`${origin}/published/`,expression:'borrow',title:'English route essentials',
     version:2,memberExpressions:['borrow',...Array.from({length:99},(_,index)=>`fixture-${String(index+2).padStart(3,'0')}`)],
@@ -281,9 +283,9 @@ test.afterAll(async()=>{
   await rm(output,{recursive:true,force:true});
 });
 
-async function startOrdinaryBook(page:Page){
+async function startOrdinaryBook(page:Page,title=/雨天借伞/){
  await page.goto(`${origin}/catalog`);
- await page.locator('#s-catalog').last().getByRole('button',{name:/雨天借伞/}).click();
+ await page.locator('#s-catalog').last().getByRole('button',{name:title}).click();
  const book=page.locator('#s-catalog-book').last();
  await book.getByRole('button',{name:'下载学习包',exact:true}).click();
  await expect(book.getByRole('button',{name:'加入学习',exact:true})).toBeEnabled({timeout:15_000});
@@ -298,6 +300,106 @@ async function startOrdinaryBook(page:Page){
  return runtime;
 }
 
+async function startDueReviewWithPausedInitial(page:Page){
+ setRegistry([reviewDelivery.descriptor]);
+ const runtime=await startOrdinaryBook(page,/到期复习样本/);
+ const first=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ await runtime.getByRole('button',{name:/查看表达/}).click();
+ await runtime.getByRole('button',{name:/已经连上/}).click();
+ await expect.poll(async()=>(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).runtime?.targetId).not.toBe(first.runtime!.targetId);
+ await expect(runtime.getByRole('button',{name:/查看表达/})).toBeEnabled();
+ await runtime.getByRole('button',{name:/查看表达/}).click();
+ const paused=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ expect(paused.records).toHaveLength(1);expect(paused.runtime!.targetId).not.toBe(first.runtime!.targetId);
+ await runtime.getByRole('button',{name:'暂停',exact:true}).click();
+ const home=page.locator('#s-home');
+ await expect(home.getByRole('button',{name:/只复习/})).toHaveCount(0);
+ const due=paused.completedTargets.find(target=>target.targetId===first.runtime!.targetId)!.nextReviewAt!;
+ await page.clock.setFixedTime(new Date(Date.parse(due)+60_000));
+ await page.reload();await expect(home.getByRole('button',{name:/只复习/})).toBeEnabled();
+ await home.getByRole('button',{name:/只复习/}).click();
+ await expect(runtime.getByRole('button',{name:/查看表达/})).toBeEnabled();
+ const review=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ expect(review.runtime!.targetId).toBe(first.runtime!.targetId);expect(review.runtime!.runId).not.toBe(first.runtime!.runId);
+ return {runtime,home,paused,review,due};
+}
+
+test.describe('history calendar in the actual SQLite Worker',()=>{
+ test.use({timezoneId:'America/New_York'});
+ test('a real completion near UTC midnight appears on the learner local calendar day',async({page})=>{
+  await page.clock.setFixedTime(new Date('2026-11-01T00:30:00Z'));
+  setRegistry([reviewDelivery.descriptor]);
+  const runtime=await startOrdinaryBook(page,/到期复习样本/);
+  await runtime.getByRole('button',{name:/查看表达/}).click();await runtime.getByRole('button',{name:/已经连上/}).click();
+  await expect(runtime.getByRole('button',{name:/查看表达/})).toBeEnabled();await runtime.getByRole('button',{name:'暂停',exact:true}).click();
+  await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的学习',exact:true}).click();
+  const study=page.locator('#s-study');await expect(study.locator('ol').getByRole('button')).toHaveCount(1);
+  await study.getByRole('button',{name:'学习统计',exact:true}).click();const stats=page.locator('#s-stats');
+  await stats.getByRole('button',{name:'今天',exact:true}).click();await expect(stats.locator('ol').getByRole('button')).toHaveCount(1);
+  await expect(stats.getByRole('status').filter({hasText:'1 条'})).toBeVisible();
+  const localDay=await page.evaluate(()=>new Intl.DateTimeFormat('zh-CN',{dateStyle:'medium'}).format(new Date(2026,9,31)));
+  await expect(stats.getByRole('rowheader',{name:localDay,exact:true})).toBeVisible();
+  await page.reload();await expect(stats.getByRole('rowheader',{name:localDay,exact:true})).toBeVisible();
+ });
+});
+
+test('review-only retains a paused initial Step through failed writes, two-tab Hard settlement and offline reload',async({page,context})=>{
+ const {runtime,home,paused,review,due}=await startDueReviewWithPausedInitial(page);
+ await runtime.getByRole('button',{name:/查看表达/}).click();
+ const revealed=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ const beforeFacts=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest());
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.failNextLearningCommitForTest());
+ await runtime.getByRole('button',{name:/有点印象/}).click();
+ await expect(page.getByText(/未能保存到本机/).first()).toBeVisible();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(revealed);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest())).toEqual(beforeFacts);
+ const second=await context.newPage();await second.clock.setFixedTime(new Date(Date.parse(due)+60_000));await second.goto(page.url());
+ const secondRuntime=second.locator('#s-lightweight-runtime');
+ await expect(secondRuntime.getByRole('button',{name:/有点印象/})).toBeEnabled();
+ await Promise.all([runtime.getByRole('button',{name:/有点印象/}).click(),secondRuntime.getByRole('button',{name:/有点印象/}).click()]);
+ await expect(runtime.getByRole('heading',{name:'本轮完成',exact:true})).toBeVisible();
+ await expect(secondRuntime.getByRole('heading',{name:'本轮完成',exact:true})).toBeVisible();
+ const saved=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ expect(saved.records.map(record=>record.kind).sort()).toEqual(['initial_learning','retention_review']);
+ expect(saved.records.every(record=>record.targetId===review.runtime!.targetId)).toBe(true);
+ const facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest());
+ expect(facts.targets.find(target=>target.targetId===review.runtime!.targetId)!.memoryRevision).toBe(2);expect(facts.behavioralEvidenceCount).toBe(0);
+ await second.close();
+ await context.setOffline(true);
+ try{
+  await page.reload();await expect(runtime.getByRole('heading',{name:'本轮完成',exact:true})).toBeVisible();
+  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(saved);
+  await runtime.getByRole('button',{name:/完成并回到首页/}).click();
+  await expect(home.getByRole('button',{name:'继续学习',exact:true})).toBeEnabled();
+  await home.getByRole('button',{name:'继续学习',exact:true}).click();
+  await expect(runtime.getByRole('button',{name:/有点印象/})).toBeEnabled();
+  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).runtime).toEqual(paused.runtime);
+ }finally{await context.setOffline(false);}
+});
+
+test('review-only Again survives a lost receipt and reload as a separate Relearning Run without a second FSRS update',async({page})=>{
+ const {runtime,home,review}=await startDueReviewWithPausedInitial(page);
+ await runtime.getByRole('button',{name:/查看表达/}).click();
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.loseNextLearningActionResponseForTest());
+ await runtime.getByRole('button',{name:/还没连上/}).click();
+ await expect(runtime.getByRole('button',{name:/查看表达/})).toBeEnabled();
+ const repair=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ expect(repair.runtime!.targetId).toBe(review.runtime!.targetId);expect(repair.runtime!.runId).not.toBe(review.runtime!.runId);
+ expect(repair.records.filter(record=>record.kind==='retention_review')).toHaveLength(1);
+ const facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest());
+ expect(facts.targets.find(target=>target.targetId===review.runtime!.targetId)!.memoryRevision).toBe(2);
+ await runtime.getByRole('button',{name:'暂停',exact:true}).click();await page.reload();
+ await home.getByRole('button',{name:'继续学习',exact:true}).click();
+ await expect(runtime.getByRole('button',{name:/查看表达/})).toBeEnabled();expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).runtime).toEqual(repair.runtime);
+ await runtime.getByRole('button',{name:/查看表达/}).click();await runtime.getByRole('button',{name:/已经连上/}).click();
+ await expect(runtime.getByRole('heading',{name:'本轮完成',exact:true})).toBeVisible();
+ const saved=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ expect(saved.records.map(record=>record.kind).sort()).toEqual(['initial_learning','relearning','retention_review']);
+ const after=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest());
+ expect(after.targets).toEqual(facts.targets);expect(after.behavioralEvidenceCount).toBe(0);
+ await runtime.getByRole('button',{name:/完成并回到首页/}).click();await expect(home.getByRole('button',{name:'继续学习',exact:true})).toBeEnabled();
+});
+
 test('initial Again retries the same Run, failed writes do not advance, and a lost receipt rereads saved progress',async({page})=>{
  const runtime=await startOrdinaryBook(page);
  const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
@@ -309,7 +411,7 @@ test('initial Again retries the same Run, failed writes do not advance, and a lo
  await expect(runtime.getByRole('button',{name:/查看表达/})).toBeEnabled();
  await expect(runtime.getByRole('heading',{name:'borrow',exact:true})).toHaveCount(0);
  const failedReads=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningReadsForTest());
- expect(failedReads.workspace??0).toBe(0);expect(failedReads.runtime).toBeGreaterThan(0);
+ expect(failedReads.workspace??0).toBe(0);expect(failedReads.home??0).toBe(0);expect(failedReads.runtime).toBeGreaterThan(0);
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(before);
  await runtime.getByRole('button',{name:/查看表达/}).click();
  await expect(runtime.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
@@ -328,7 +430,7 @@ test('initial Again retries the same Run, failed writes do not advance, and a lo
  await expect(runtime.getByRole('heading',{name:'本轮完成',exact:true})).toBeVisible();
  await expect(page.getByRole('status')).toContainText('未收到操作结果');
  const reads=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningReadsForTest());
- expect(reads.workspace??0).toBe(0);expect(reads.runtime).toBeGreaterThan(0);
+ expect(reads.workspace??0).toBe(0);expect(reads.home??0).toBe(0);expect(reads.runtime).toBeGreaterThan(0);
  const completed=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
  expect(completed.records).toHaveLength(1);expect(completed.completedTargets).toHaveLength(1);
  expect(completed.completedTargets[0]!.nextReviewAt).toBeTruthy();
@@ -655,6 +757,20 @@ test('a personal meaning created from a learning scene reuses its Book target wi
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.provisioningCheckpoint())).toEqual(tasks);
  await preparation.getByRole('button',{name:'开始 / 继续学习',exact:true}).click();await expect(runtime.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).runtime).toEqual(original.runtime);expect(providerRequests).toEqual([]);
+ // A covered personal request must not hide a failed formal Target read behind
+ // a preparation screen or its unrelated retry action.
+ await runtime.getByRole('button',{name:'暂停',exact:true}).click();
+ await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的学习',exact:true}).click();
+ await page.locator('#s-study').getByRole('button',{name:'查看内容',exact:true}).click();
+ await page.locator('#s-learning-library').getByRole('button',{name:/borrow/}).click();
+ const target=page.locator('#s-learning-target');await expect(target.getByRole('heading',{name:'borrow',level:2,exact:true})).toBeVisible();
+ await page.evaluate(async()=>{await window.__sensaBrowserSmoke!.failLearningTargetReadsForTest(true);window.dispatchEvent(new Event('sensa-library-changed'));});
+ await expect(target.getByRole('alert')).toBeVisible();await expect(target.locator('summary')).toHaveCount(0);
+ await expect(target.getByRole('button',{name:'重试',exact:true})).toBeEnabled();
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningTargetReadsForTest(false));await target.getByRole('button',{name:'重试',exact:true}).click();
+ await expect(target.getByRole('heading',{name:'borrow',level:2,exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.provisioningCheckpoint())).toEqual(tasks);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(after);expect(providerRequests).toEqual([]);
 });
 
 test('a guest learns a Book through the UI and resumes the revealed step after reload',async({page})=>{
@@ -752,6 +868,35 @@ test('a guest learns a Book through the UI and resumes the revealed step after r
     expect(reviewed.records.every(record=>record.targetId===completed.records[0]!.targetId)).toBe(true);
     expect(Date.parse(reviewed.completedTargets[0]!.nextReviewAt!)).toBeGreaterThan(Date.parse(completed.completedTargets[0]!.nextReviewAt!));
   }finally{await page.context().setOffline(false);}
+});
+
+test('a failed Statistics code module recovers after reconnect without losing saved learning records',async({browser})=>{
+ // Bypass shell caching only for this deliberate first-load module failure.
+ // Real offline shell behavior is verified by the existing offline journeys.
+ const context=await browser.newContext({locale:'zh-CN',serviceWorkers:'block'});
+ const page=await context.newPage();
+ try{
+  await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
+  const runtime=await startOrdinaryBook(page);
+  await runtime.getByRole('button',{name:/查看表达/}).click();
+  await runtime.getByRole('button',{name:/已经连上/}).click();
+  await runtime.getByRole('button',{name:/完成并回到首页/}).click();
+  await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的学习',exact:true}).click();
+  const study=page.locator('#s-study');
+  await expect(study.locator('ol').getByRole('button',{name:/borrow/})).toHaveCount(1);
+  const saved=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+  const blockedModule='**/assets/StatsScreen-*.js';let blockedRequests=0;
+  await page.route(blockedModule,route=>{blockedRequests++;return route.abort('internetdisconnected');});
+  await study.getByRole('button',{name:'学习统计',exact:true}).click();
+  const recovery=page.locator('[data-sensa-product-recovery="error"]');
+  await expect(recovery).toBeVisible();expect(blockedRequests).toBeGreaterThan(0);
+  await expect(recovery.getByRole('button',{name:'重新加载',exact:true})).toBeEnabled();
+  await page.unroute(blockedModule);
+  await recovery.getByRole('button',{name:'重新加载',exact:true}).click();
+  const stats=page.locator('#s-stats');
+  await expect(stats.locator('ol').getByRole('button',{name:/borrow/})).toHaveCount(1,{timeout:15_000});
+  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(saved);
+ }finally{await context.close();}
 });
 
 test('a corrupt Book download remains uninstalled and can be retried through the UI',async({page})=>{
@@ -901,10 +1046,18 @@ test('the Book journey stays responsive with 342 catalog entries and a 100-membe
       await book.getByText('已加入学习',{exact:true}).waitFor({state:'visible',timeout:15_000});
     });
     const initialLongTasks=await page.evaluate(()=>(window as unknown as {__bookJourneyLongTasks:number[]}).__bookJourneyLongTasks);
-    await measure('restoredDetail',6000,async()=>{
-      await page.reload();
-      await book.getByText('已加入学习',{exact:true}).waitFor({state:'visible',timeout:15_000});
-    });
+    await cdp.send('Profiler.enable');await cdp.send('Profiler.start');
+    try{
+      await measure('restoredDetail',6000,async()=>{
+        await page.reload();
+        await book.getByText('已加入学习',{exact:true}).waitFor({state:'visible',timeout:15_000});
+      });
+    }finally{
+      const {profile}=await cdp.send('Profiler.stop');
+      await writeFile(test.info().outputPath('restoration-cpu.cpuprofile'),JSON.stringify(profile));
+      await test.info().attach('restoration-cpu.cpuprofile',{body:JSON.stringify(profile),contentType:'application/json'});
+      await cdp.send('Profiler.disable');
+    }
     const beforeIdle=catalogAuthorizationHeaders.length;
     // An explicit observation window, not a wait for UI readiness.
     await page.waitForTimeout(1000);

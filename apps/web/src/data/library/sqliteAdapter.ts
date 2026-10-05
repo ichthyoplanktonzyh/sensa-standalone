@@ -14,6 +14,10 @@ import type {
   SqliteWorkerResult,
 } from "./sqliteProtocol";
 import type {PackageCacheProjectionQuery,PackageCacheProjectionResult} from './packageCacheProjection';
+import type {RuntimeLearningCandidateQuery,RuntimeLearningCandidates} from './runtimeLearningCandidates';
+import type {LearningManagementSummaryQuery,LearningManagementStorageSummary} from './runtimeLearningCandidates';
+import type {LearningHistoryRequest} from '../../learning/system/learningHistoryModel';
+import type {StoredLearningHistoryPage} from './learningHistoryProjection';
 import {CoordinatedSqliteAdapter,type CoordinatedSqliteBackend} from './sqliteCoordinator';
 
 export interface SqliteRecordAdapter {
@@ -32,7 +36,10 @@ export interface SqliteRecordAdapter {
   syncBaseEntries(keys?: readonly { table: SqliteLibraryTable; key: string }[]): Promise<SqliteSyncBaseEntry[]>;
   count(table: SqliteLibraryTable): Promise<number>;
   estimateRecordBytes(tables: readonly SqliteLibraryTable[]): Promise<number>;
-  homeLearningProjection(languageRouteId: string): Promise<HomeLearningStorageProjection>;
+  homeLearningProjection(languageRouteId: string,clock?:number): Promise<HomeLearningStorageProjection>;
+  learningHistoryPage(query:LearningHistoryRequest):Promise<StoredLearningHistoryPage>;
+  learningManagementSummary(query:LearningManagementSummaryQuery):Promise<LearningManagementStorageSummary>;
+  runtimeLearningCandidates(query:RuntimeLearningCandidateQuery):Promise<RuntimeLearningCandidates>;
   countIntroducedLearningTargets(languageRouteId: string, startedAfter: string, startedBefore: string): Promise<number>;
   learningRunIdsForTarget(targetId: string, openOnly: boolean): Promise<string[]>;
   openLearningRunTargets(): Promise<Array<{ runId: string; targetId: string }>>;
@@ -125,9 +132,12 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
     return this.send({kind:'estimateRecordBytes',tables:[...tables]}) as Promise<number>;
   }
 
-  homeLearningProjection(languageRouteId: string): Promise<HomeLearningStorageProjection> {
-    return this.send({ kind: "homeLearningProjection", languageRouteId }) as Promise<HomeLearningStorageProjection>;
+  homeLearningProjection(languageRouteId: string,clock=Date.now()): Promise<HomeLearningStorageProjection> {
+    return this.send({ kind: "homeLearningProjection", languageRouteId,clock }) as Promise<HomeLearningStorageProjection>;
   }
+  runtimeLearningCandidates(query:RuntimeLearningCandidateQuery):Promise<RuntimeLearningCandidates>{return this.send({kind:'runtimeLearningCandidates',query}) as Promise<RuntimeLearningCandidates>;}
+  learningHistoryPage(query:LearningHistoryRequest):Promise<StoredLearningHistoryPage>{return this.send({kind:'learningHistoryPage',query}) as Promise<StoredLearningHistoryPage>;}
+  learningManagementSummary(query:LearningManagementSummaryQuery):Promise<LearningManagementStorageSummary>{return this.send({kind:'learningManagementSummary',query}) as Promise<LearningManagementStorageSummary>;}
 
   countIntroducedLearningTargets(languageRouteId: string, startedAfter: string, startedBefore: string): Promise<number> {
     return this.send({

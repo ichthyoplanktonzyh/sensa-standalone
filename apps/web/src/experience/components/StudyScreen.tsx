@@ -3,17 +3,19 @@ import { type ReactNode } from 'react';
 import { ArrowRight, BookOpen, Plus, SlidersHorizontal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {localFlowText} from '../../i18n/localFlowText';
-import type { LearningRecordKind, LearningRecordView } from '../learningJourney/learningHistory';
+import type { LearningRecordKind } from '../learningJourney/learningHistory';
 import type { LearningPolicy, LearningPolicyOption } from '../../learning/system';
 import { LearningPreferencesPanel } from './learning/LearningPreferencesPanel';
 import { SensaWorkspacePageLayout } from '../ui/SensaPageLayouts';
 import { useScreenState } from '../ui/ScreenHost';
+import {useLearningHistory} from '../library/useLearningHistory';
 
 interface StudyScreenProps {
   policySummary?: string;
   fixedPolicy?: boolean;
   active: boolean;
   status?: ReactNode;
+  availability?:'loading'|'ready'|'unavailable';
   calendar?: ReactNode;
   onOpenPreferences?: () => void;
   tab: 'a' | 'b';
@@ -32,7 +34,6 @@ interface StudyScreenProps {
   readyInitialCount: number;
   reviewCount: number;
   dailyNewCount: number;
-  learningRecords: readonly LearningRecordView[];
   onDailyNewCountChange: (count: number) => void;
 }
 export const studyButton = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-control px-4 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus';
@@ -40,7 +41,8 @@ export const StudyScreen = (props: StudyScreenProps) => {
   const {t,i18n}=useTranslation();
   const [filter,setFilter]=useScreenState<'all'|LearningRecordKind>('study:history-filter','all');
   const [limit,setLimit]=useScreenState('study:history-limit',10);
-  const records=props.learningRecords.filter(record=>filter==='all'||record.kind===filter);
+  const history=useLearningHistory({surface:'study',range:'all',start:'',end:'',kind:filter,languageChoice:null},props.active,limit);
+  const records=history.projection?.records??[];
   const closePreferences=()=>{
     props.onTabChange('a');
     requestAnimationFrame(()=>document.getElementById('study-preferences-button')?.focus());
@@ -53,10 +55,11 @@ export const StudyScreen = (props: StudyScreenProps) => {
       regions={{
         header: <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-3xl font-medium tracking-tight lg:text-4xl">{t('study.title')}</h1>
-        <button id="study-preferences-button" className={`${studyButton} border border-border-subtle bg-surface-panel hover:bg-surface-selected`} onClick={()=>props.onOpenPreferences ? props.onOpenPreferences() : props.onTabChange('b')}><SlidersHorizontal size={17}/>{t('study.preferences')}</button>
+        <button id="study-preferences-button" disabled={!!props.availability&&props.availability!=='ready'} className={`${studyButton} border border-border-subtle bg-surface-panel hover:bg-surface-selected`} onClick={()=>props.onOpenPreferences ? props.onOpenPreferences() : props.onTabChange('b')}><SlidersHorizontal size={17}/>{t('study.preferences')}</button>
         </div>,
         primary: <>
       {props.status}
+      {(!props.availability||props.availability==='ready')&&<>
       <div className="sensa-study-overview grid gap-5 lg:grid-cols-[1.4fr_1fr]">
         <section className="flex flex-col rounded-overlay bg-surface-subtle p-6 sm:p-8">
           <div className="flex items-center gap-2 text-sm text-fg-secondary"><BookOpen size={18}/>{t('study.scope')}</div>
@@ -88,18 +91,19 @@ export const StudyScreen = (props: StudyScreenProps) => {
           </div>
         </div>
         <p className="mt-3 text-xs leading-6 text-fg-tertiary">{t('study.historyNote')}</p>
-        {records.length===0?<div className="py-16 text-center"><p className="font-medium">{t(props.learningRecords.length?'study.noMatches':'study.noRecords')}</p>{!props.learningRecords.length&&<p className="mt-2 text-sm text-fg-tertiary">{t('study.noRecordsHint')}</p>}</div>:<ol className="mt-5 divide-y divide-border-subtle">
+        {history.availability==='unavailable'?<div role="alert"><p>{localFlowText('progressReadFailed')}</p><button className={studyButton} onClick={history.retry}>{t('reliability.retry')}</button></div>:!history.projection?<p role="status" aria-busy="true">{localFlowText('loadingSensa')}</p>:records.length===0?<div className="py-16 text-center"><p className="font-medium">{t(history.projection.hasRecords?'study.noMatches':'study.noRecords')}</p>{!history.projection.hasRecords&&<p className="mt-2 text-sm text-fg-tertiary">{t('study.noRecordsHint')}</p>}</div>:<ol className="mt-5 divide-y divide-border-subtle">
           {records.slice(0,limit).map(record=><li key={record.recordId}><button className="flex w-full flex-wrap items-center gap-4 rounded-control py-5 text-left hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus sm:flex-nowrap" onClick={()=>props.onOpenTarget(record.targetId)}>
             <span className="min-w-0 flex-1"><strong className="font-medium">{record.expression}</strong><span className="mt-1 block text-sm text-fg-secondary">{record.meaning ?? record.detail}</span></span>
             <span className="rounded-control bg-accent-soft px-2 py-1 text-xs text-fg-secondary">{t('study.'+record.kind)}</span>
             <time className="w-full text-xs tabular-nums text-fg-tertiary sm:w-auto" dateTime={record.occurredAt}>{new Intl.DateTimeFormat(i18n.language,{dateStyle:'medium',timeStyle:'short'}).format(new Date(record.occurredAt))}</time><ArrowRight className="hidden shrink-0 text-fg-tertiary sm:block" size={16}/>
           </button></li>)}
         </ol>}
-        {records.length>limit&&<button className={`${studyButton} mt-4 border border-border-subtle`} onClick={()=>setLimit(value=>value+10)}>{t('study.more')}</button>}
+        {history.projection&&history.projection.total>limit&&<button disabled={history.busy} className={`${studyButton} mt-4 border border-border-subtle`} onClick={()=>setLimit(value=>value+10)}>{t('study.more')}</button>}
       </section>
+      </>}
         </>,
       }}
     />
-    {props.active&&props.tab==='b'&&<LearningPreferencesPanel policyOptions={props.policyOptions} fixedPolicy={props.fixedPolicy} defaultPolicy={props.defaultPolicy} dailyNewCount={props.dailyNewCount} onPolicyChange={props.onPolicyChange} onDailyNewCountChange={props.onDailyNewCountChange} onClose={closePreferences} closeLabel={t('study.done')}/>}
+    {props.active&&props.tab==='b'&&(!props.availability||props.availability==='ready')&&<LearningPreferencesPanel policyOptions={props.policyOptions} fixedPolicy={props.fixedPolicy} defaultPolicy={props.defaultPolicy} dailyNewCount={props.dailyNewCount} onPolicyChange={props.onPolicyChange} onDailyNewCountChange={props.onDailyNewCountChange} onClose={closePreferences} closeLabel={t('study.done')}/>}
   </>;
 };

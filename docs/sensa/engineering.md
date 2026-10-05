@@ -21,7 +21,7 @@
 [ADR 0006](../adr/0006-three-product-systems.md) 的 Personal Semantic World、Learning System 与 Content
 Supply System 是产品领域划分，不与上述目录一一对应。当前 Web 的 Product Shell 位于 `experience`。
 学习应用层只通过 `apps/web/src/learning/system/learningSystem.ts` 的 deep Module interface 提交 command、
-读取 `home | workspace | runtime | personal_enrollment_index | semantic_memory` 等显式 projection 并订阅对应查询失效；页面
+读取 `home | workspace | runtime | management | preferences | personal_enrollment_index | semantic_memory` 等显式 projection 并订阅对应查询失效；页面
 不知道 Learning 的逻辑表、事务准入、Curriculum membership、Policy registry、协议选择、重放、readiness
 或队列/调度原语。`workspace` 一次返回 Target presentation、状态集合、下一候选、历史和一个可辨识的
 Runtime presentation union；Renderer 只展示该 union 并回交 learner action。`apps/web/src/learning/runtime`、
@@ -29,9 +29,16 @@ Runtime presentation union；Renderer 只展示该 union 并回交 learner actio
 presentation type 的纯呈现装配，`apps/web/src/data/library/learning*.ts` 是本机事务与 authority 实现，
 都不是页面 API。
 
-`workspace` 用于管理目标与历史；执行中的 `runtime` 只精确读取当前 Run 和参与目标，在 Run 边界才
+`workspace` 用于完整目标与详情；Study/Stats 的 `management` 在同一 Library 读锁下读取紧凑队列与历史摘要，
+不加载完整历史 Run、Target 材料或 Content Supply inventory。Profile 的 `preferences` 只读取每日数量与策略选项。
+历史摘要是设备侧可重建索引，从正式完成的 Run 与固定呈现材料生成；它不创造 Completion 或 Memory Outcome，
+与源事实同一 SQLite 事务维护，并在所有源 rows 写入后更新，不能依赖云恢复的表顺序。读取失败时不显示虚假空状态。
+紧凑历史当前仍返回全部可用摘要，不等于无限历史的有界读取或容量通过。执行中的 `runtime` 只精确读取当前 Run 和参与目标，在 Run 边界才
 计算后续候选，不随每个步骤重新读取课程集合或历史。学习包目录界面在对应页面进入时加载，不进入
-恢复学习的同步模块闭包。操作未收到回执时只重读已保存事实，不以重提交来探测是否成功；读取失败
+恢复学习的同步模块闭包。Learning 操作回执只保存有界的 Run identity、原始 revision 与时间/语言元数据，
+不重复保存材料和协议状态；重放返回原收据，并核对其创建、Action 或 resume witness。续学绑定已完成的前序 Run、
+时间顺序、原 Session intent 与语言方向；无 device operation ledger 的云恢复也从 Run/lifecycle facts 验证这些关系。
+操作未收到回执时只重读已保存事实，不以重提交来探测是否成功；读取失败
 暂时关闭操作入口并提供重读出口。
 
 揭示卡的学习问答通过 Learning System 内的独立只读服务固定 Run、目标、步骤与材料版本，使用
@@ -126,10 +133,16 @@ Package key；运行恢复、策略锁定和生成频控通过领域索引查询
 提交后的维护失败仅进入独立诊断，不撤销既有收据或把已保存事实误报为未保存（[SQLite WAL](https://sqlite.org/wal.html)）。
 普通重开复用已有结构与统计，不重放 DDL、重写版本或制造缺失的空源表。Book 版本替换和媒体引用完整性检查同样通过事务内
 关系投影完成。承载大 JSON 的逻辑 record 与 Target 投影使用普通 rowid 表，紧凑关系投影使用
-`WITHOUT ROWID`；内容事务维护记录级 revision 与删除 tombstone，供账号同步只读取上次收敛后变化的记录。云端确认的逐记录基线和 block refs 保存在内部 `sensa_sync_base` 表；未变化记录不再重新编码、分块或下载。`packageInstallations` 保存可跨设备复制的精确 `.sensa` identity、语言方向、长度、digest 与来源 Book archive digest；完整 Portable artifact 与编译后的设备 Runtime content 只进入本地 `packageCache`，缓存写入不增加个人内容 revision。恢复后由 Content Supply 使用 Registry 中的 `.sensa-book` 位置一次重新取得，验证外层摘要及全部成员，再只恢复已有安装事实对应的缓存；解析或下载失败时 Learning Target 保留但 readiness 为 blocked。状态只保存小型幂等 commit receipt，不重复保存整库或待发布记录。`npm run benchmark:cloud-sync` 在真实 Chromium OPFS 上执行 1k/10k 完整同步路径，并固定单记录变化只上传记录块与受影响的 manifest 分片。
+`WITHOUT ROWID`；内容事务维护记录级 revision 与删除 tombstone，供账号同步只读取上次收敛后变化的记录。云端确认的逐记录基线和 block refs 保存在内部 `sensa_sync_base` 表；未变化记录不再重新编码、分块或下载。`packageInstallations` 保存可跨设备复制的精确 `.sensa` identity、语言方向、长度、digest 与来源 Book archive digest；完整 Portable artifact 与编译后的设备 Runtime content 只进入本地 `packageCache`，缓存写入不增加个人内容 revision。恢复后由 Content Supply 使用 Registry 中的 `.sensa-book` 位置一次重新取得，验证外层摘要及全部成员，再只恢复已有安装事实对应的缓存；解析或下载失败时 Learning Target 保留但 readiness 为 blocked。状态只保存小型幂等 commit receipt，不重复保存整库或待发布记录。`npm run benchmark:cloud-sync` 使用受控传输在真实 Chromium/OPFS 上执行 1k/10k 合成 Draft 的同步，检查单记录变化只上传记录块与受影响的 manifest 分片；它不是成熟学习历史、真实 API/网络或账号容量验收。
 内容摘要、key/digest 和语言方向数量使用同事务维护的设备侧投影；它们不进入备份或账号同步，可以从真实缓存重建。
 学习状态变化只刷新学习投影，语言选择只读取当前语言方向；通知按记录 key 过滤，当前页面不重复处理自己发出的跨页通知。
 数据结构调整不要求保留历史格式兼容层；当前源事实和可重建索引分开处理，不通过清空用户库恢复初始化错误。
+物理 schema 14 以共享摘要存储材料内容、协议绑定和步骤定义，记录仍独立保存身份、版本、时间、provenance
+及结算事实。`sharedRecordContent.ts` 只改变无损存储表示；普通 record 接口读取还原后的原值，页面和协议
+不解析存储引用。共享 body 与 record／sync baseline 的直接 owner 关系同事务写入；只回收本次事务解除引用
+后确实无 owner 的 body，不在日常评分时扫描全部 body。压缩覆盖剩余记录 framing，摘要验证还原的精确字节。
+这些 body 是源事实表示的一部分，不是可猜测重建的缓存；缺失或损坏必须失败，不从当前包、模型或材料新版替代。
+13→14 仅创建辅助结构，不批量改写已有来源行。历史／候选索引重建通过同一逻辑解码入口读取源记录。
 不支持的物理版本会停止并保留原库，不创建空库冒充首次访问。跨标签页协调协议独立版本化，版本不一致
 时旧/新页面不交换记录，并要求用户关闭其他标签页。Service Worker 安装新 shell 后等待用户确认再接管，
 接管时保留上一发布版本的静态资源窗口，使仍在运行的旧页面能够完成或安全退出。
@@ -138,7 +151,7 @@ Web 应用层的逻辑表与 Personal Semantic World Journey 共用这一物理�
 意义聚合、注册表事实、Inbox、澄清草稿和 operation receipt 分别保存在 `semanticMeanings`、
 `semanticRegistry`、`semanticInbox`、`semanticDrafts` 与 `semanticReceipts` 等规范化逻辑表；媒体字节
 单独保存在 `media` 表。一次领域保存仍由同一个 `LibraryTransaction` 原子提交，但普通语义修改不再
-重写整个世界或图片载荷。当前没有生产用户数据，因此规范化语义格式与内容供给边界直接使用新数据库与 Checkpoint v5，
+重写整个世界或图片载荷。规范化语义格式与内容供给边界使用当前数据库与 Checkpoint v6，
 不读取、迁移或兼容 v1 单聚合格式。账号副本、界面偏好和其他 `localStorage`
 状态不能充当个人学习库的第二权威。
 
@@ -172,9 +185,16 @@ FSRS 都由本地领域事务结算。Hono/Edge 不创建或推进学习 Run，�
 Evaluation 与 Transition 数据完成不可改写验证和重放。Remote Intake 重投可从 Draft 保存的 canonical
 Intake 重建本地结果，不需要同步完整命令输入或返回值。同一份 base64 媒体按内容边界切块，使重复引用
 复用摘要块。
-Published artifact 与公共媒体字节不属于 Personal Library Fact：Checkpoint v5 和加密手动快照 v6 只记录
+Published artifact 与公共媒体字节不属于 Personal Library Fact：Checkpoint v6 和加密手动快照 v6 只记录
 `packageInstallations` 的精确可恢复引用，不承载 `packageCache`。learner-private / On-demand Materialization、
 Personal Anchor media 与 Practice Artifact 仍按各自 learner-owned 表进入同步和备份，不能被误判为公共缓存。
+`librarySyncBlocks.ts` 提供 Web 与 API 共用的无损块编码：相同材料、步骤定义与协议内容按精确文本边界
+复用块，块可确定性 gzip 压缩；拼接解码后仍是原始 tagged wire。API 在接收时验证压缩块，Event／裁决
+不可改写保护比较解码后的完整文本，不比较压缩表示。客户端限制同时保留的传输块为 96 MiB，并分窗口
+消费、在最后引用后释放；解码行上限 90 MiB、累计新增解码事实上限保持 64 MiB 是不同保护，不是 JS heap
+承诺或已通过的大规模云端性能结论。账号存储边界仍为 256 MiB。不兼容 checkpoint 停止同步并保留原副本，
+不会为编码升级自动覆盖旧 head。
+完整 capture／merge 仍读取完整事实与同步基线；分块压缩不证明大规模跨设备恢复的内存或容量达标。
 Checkpoint 的 block/manifest 传输、CAS commit、重试和 baseline 由 Cloud Sync Coordinator 负责；记录的
 跨设备归一化、三方收敛、完整性验证、历史 replay 与删除许可由领域 Replica Module 负责。Personal
 Semantic World、Personal Content、Learning System、Content Supply 和 Preference 各声明唯一记录所有权，
@@ -333,6 +353,14 @@ mailbox 和 Agent credential 存储由 `db/migrations/0028_sensa_encrypted_intak
 Point manifest、摘要、大小、library/learner/schema identity 与 `account_assisted | zero_knowledge`
 模式；仓库目前没有 backup route、store、scheduler 或 restore workflow。现有 account sync 仍是收敛服务，
 不得在代码或 UI 中当作已实现备份。
+
+本机手动恢复文件使用 AES-GCM／PBKDF2 的 `sensa-web-library-backup-v2` envelope，认证 gzip 传输；
+内部 snapshot-v3 以独立 NDJSON frame 保存 header、共享 body、逻辑 records 和结束标记。`backupArchive.ts`
+逐帧验证摘要、完整引用集合、表计数与重复 key，不拼接整个解压快照，也不同时保留另一份全库 tagged graph。
+内容按摘要共享，保留原 Date、undefined 与用户保留键；还原后的事实继续执行完整领域 replay，再进入既有
+账号、空目标库与 incarnation 恢复检查。压缩明文上限仍为 64 MiB，文件上限仍为 90 MiB，record 上限仍为
+200k；解压总量和单帧另有 512 MiB／96 MiB 的防护边界，不能把这些字节上限当作实际 JS heap 承诺。
+本机压缩表示与手动恢复格式不自动改变 Cloud Checkpoint 的分块协议或证明其容量通过。
 
 Web 页面与扩展之间的桥也只声明一次：`packages/contracts/src/sensa/consumer/extension.ts` 同时声明握手（授权、交换、凭据）、页面请求/应答和不含内容的 Intake-ready 通知。Web 应用按它构造请求并校验应答，`apps/browser-extension/src/background.ts` 在分发前解析每条桥消息——未声明的 kind 或字段一律拒绝，不再静默丢弃；页面侧的 `webBridge.ts` 是每个 Sensa 页面都会加载的内容脚本，因此不带 schema，它的频道名、id 上限与 kind 白名单由 `apps/browser-extension/build.mjs` 在构建时从同一份声明注入。扩展完成持久化后主动通知已打开的 Web 页面，页面再通过完整 pull/ack 合同取数据；空闲页不轮询扩展，恢复焦点和可见性作为丢失通知的兜底。游客采集由 `localIntake.ts` 独立保存并绑定本机 Web library，账号采集继续由 `webDestination.ts` 保管；两者不自动迁移。授权这一轮同样共用：API 路由与 Web 前置校验读同一组 schema。Web 页面在后台自动续接普通连接；插件中的显式登录则使用 Chrome Identity Web Auth Flow 打开带 PKCE challenge 的短时入口。已有 Web Session 自动签发一次性 code；没有 Session 才显示登录，登录完成后继续原请求。verifier 和最终扩展 credential 始终只在扩展后台，另一账号或资料库的队列不会随连接迁移。`tests/web/contracts/bridge-contract.test.mts` 在快速测试里把真实 forwarder 与真实 background 装进同一台假浏览器，逐 kind 走一遍。
 
@@ -527,6 +555,39 @@ node --import tsx tests/web/run.mts --journey=LJ-01 --suite=browser
 
 旅程性能证据必须注明规模、设备/CPU、网络条件、预算和测量范围。构建大小、SQLite/OPFS 查询预算、
 慢账号恢复期间的 Shell 响应以及受控浏览器交互是不同证据，不互相冒充，也不据此宣称真实设备 CWV 达标。
+
+成熟学习容量夹具由 `scripts/generateRetentionCapacity.mts --targets=N` 专项工具生成，需要显式设置
+`SENSA_TEST_MEMORY_LIBRARY=true`。它使用正式 Learning commands 和 SQLite/Wasm，在受控时钟下产生初学、
+到期复习及历史，完整 replay validation 后才保存到忽略的 `.tmp/retention-capacity-facts-*`，不直接填造完成或调度字段。
+`retention-review-capacity` Playwright 用例可通过 `SENSA_RETENTION_CAPACITY_FIXTURE` 复用该目录，未提供时生成 1k 样本。
+测试只在空的隔离 guest 中按 digest 分批复制这些已验证的原始事实；复制是测试准备，不是产品备份恢复或其原子性证据。
+生成、复制、逻辑记录体积与 UI 交互分别报告；万条规模需显式选择，不能从 1k 或零历史的合成调度行外推通过。
+
+Learning continuation 的 Worker 查询返回有界候选前缀和实际 retry 候选，不传输整条 Route 的 Target 摘要。
+本机候选索引只保存可重建的调度标量，与 Target 的正式写入同事务更新；额度仍计入已被 supersede 的当日 introduction，
+材料、冻结语言方向、policy/cache readiness 与重试顺序不能因查询优化而放宽。索引写入失败需回滚正式事实及 receipt，
+丢失索引只能从既有事实重建，正常重开不重写来源数据；相应 parity、rollback 与 rebuild 检查属于 LJ‑08 的共享保护。
+
+Study 的计划摘要与学习历史分开查询；Stats 不重建内容/准备工作区。历史列表按 epoch 与 record ID 的游标分页，
+汇总和按日/语言分组针对整个选中范围计算，不由已加载前缀推算。分页链固定首次读取的时钟；Library revision、
+incarnation 或设备时区变化时重新读取前缀，筛选/路线/页面切换后的晚响应不能回写新视图。历史缓存只是同事务更新的
+本机可重建投影，重建按小批次读已有 Run，不修改正式事实；统计排除晚于读取时钟的记录，跨语言不混成同一每日计数。
+
+历史到 Target 详情只读取指定 Target、当前 Run 与每日设置，不重新准备队列、恢复内容或读取全库历史。
+详情仍使用正式 membership/readiness 与同一展示投影，按当前冻结语言方向选择；页面、路线、目标的读取版本隔离
+迟到响应和重试去重。读取失败先撤下旧材料与行动，再由显式重试恢复。页面代码模块加载失败则使用重新加载恢复，
+不能仅 reset 路由后再次展示已被模块加载器缓存的同一失败；该恢复不改动本机学习事实。
+
+Run 的材料目录保存不可变 body、Step 引用和 participant 首次绑定顺序。Action 明确保存其 before Run
+revision 及后继 presentation（完成则为显式 null）；lifecycle fact 引用同一修订流。恢复从计划基线和初始 Step
+重放，严格合并连续、唯一的每 Run revision，再比较材料目录、映射、顺序与最终 Run；不能把最终映射直接当作
+历史输入。当前格式不猜测或补写旧 Run 缺失的顺序与因果字段；旧来源事实不迁移、不清除，格式验收使用隔离新库。
+
+Content Supply 保存独立的来源准入时点 `provenance.sourceReadyAt`；个人准备的 `ContentAttempt.readyAt`
+只在审核与确定性校验接纳的同一事务中赋值，之后不可更改。Run 重建快照创建时间时仍保留来源时点；
+补充资源另存自己的 Ready 时点。开始、刷新与恢复校验来源时点、Membership 生命周期及确切 Attempt，
+不能用 Run/Action 时间代替 Ready，早于材料可用时间的请求须整体拒绝。历史测试通过受控准入时钟构造顺序，
+不在测试中改写已提交来源事实来补齐时间。
 
 性能验收以 Anki 的长期学习与 Obsidian 的本机内容使用体验为参照，不复制其数据模型，也不把它们
 没有公布的时延承诺当作 Sensa 已验证的基准。候选体验目标与既有 CI 回归预算分开记录：交互的首个

@@ -183,7 +183,10 @@ const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
     case 'syncBaseEntries': return current.database.syncBaseEntries(request.keys);
     case 'count': return current.database.count(request.table);
     case 'estimateRecordBytes': return current.database.estimateRecordBytes(request.tables);
-    case 'homeLearningProjection': return current.database.homeLearningProjection(request.languageRouteId);
+    case 'homeLearningProjection': return current.database.homeLearningProjection(request.languageRouteId,request.clock);
+    case 'runtimeLearningCandidates':return current.database.runtimeLearningCandidates(request.query);
+    case 'learningHistoryPage':return current.database.learningHistoryPage(request.query);
+    case 'learningManagementSummary':return current.database.learningManagementSummary(request.query);
     case 'countIntroducedLearningTargets': return current.database.countIntroducedLearningTargets(
       request.languageRouteId,
       request.startedAfter,

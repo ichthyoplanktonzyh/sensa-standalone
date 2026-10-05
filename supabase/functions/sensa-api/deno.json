@@ -6,6 +6,8 @@
     "jose": "npm:jose@6.2.12",
     "zod": "npm:zod@4.4.3",
     "@sensa/contracts/sensa": "../../../packages/contracts/dist/sensa/index.js",
+    "@sensa/contracts/sensa/library-sync-blocks": "../../../packages/contracts/dist/sensa/librarySyncBlocks.js",
+    "fflate": "npm:fflate@0.8.3",
     "@sensa/learning-kernel": "../../../packages/learning-kernel/dist/index.js",
     "hono/cors": "npm:hono@4.13.4/cors",
     "hono/body-limit": "npm:hono@4.13.4/body-limit",

@@ -1,4 +1,5 @@
 import {materialForNextStep} from '../../contentSupply/provisioning/hybridMaterialization';
+import {assertMaterialAvailableAt} from '../../contentSupply/provisioning/materialReadiness';
 import {
   materializeOnDemandContent,
   materializePublishedEntry,
@@ -11,6 +12,8 @@ import {stableUuid} from '@sensa/learning-kernel';
 import {sensaFormalPinnedLanguageContextSchema,type SensaFormalPinnedLanguageContext} from '@sensa/contracts/sensa';
 import {readLibrary,requestCloudCheckpoint,type LibraryTransaction,type LibraryIdentity} from './store';
 import {learningCommand} from './learningAdmission';
+import {learningRunReceipt,readVerifiedLearningRunReceipt,sameLearningSessionDirection} from './learningCommandReceipt';
+import {runBaselineMaterial,runStepMaterial,runMaterialDigest,pinRunStepMaterial} from '../../learning/runtime/runMaterialPins';
 import {learningOwner} from './libraryOwnership';
 import type {InstalledPackage,InstalledPackageSummary} from './packageRecords';
 import {validateLightweightInitialMaterialization,type LightweightInitialLearningMaterialization} from '../../contentSupply/provisioning/lightweightInitialContent';
@@ -23,12 +26,15 @@ import {
   localProtocolStepId,
   localProtocolOutcomePermissions,
   localRunOpenPlanningInterruption,
+  localRunOpenSessionPause,
+  localRunSessionIntent,
   reduceLocalProtocolAction,
   localLearningPurpose,
   localRunTargetIds,
   type LocalCommittedLearningPolicy,
   type LocalCurriculumMembership,
   type LocalLearningRun,
+  type LocalLearningSessionIntent,
   type LocalLearningMaterialization,
   type LocalLearningPolicyAssignment,
   type LocalProtocolEvaluationFacts,
@@ -60,7 +66,8 @@ import {
 export {localRunTargetIds};
 export type {LocalLearningRun,LocalLearningTarget};
 export type {LocalStudyPlan} from './studyPlans';
-export type LearningEvent={id:string;runId:string;targetId:string;kind:string;at:string;detail:{stepId:string;materializationId:string;personalLearningScene:{sceneId:string;revisionId:string;revision:number}|null;action:LocalLearningAction;formalEvaluation:LocalProtocolEvaluationFacts|null;transition:LocalLearningTransitionRecord}};
+export type LearningStepPresentation={targetId:string;stepId:string;material:string};
+export type LearningEvent={id:string;runId:string;targetId:string;kind:string;at:string;detail:{runRevision:number;nextPresentation:LearningStepPresentation|null;stepId:string;materializationId:string;personalLearningScene:{sceneId:string;revisionId:string;revision:number}|null;action:LocalLearningAction;formalEvaluation:LocalProtocolEvaluationFacts|null;transition:LocalLearningTransitionRecord}};
 
 const createPolicyAssignment=(input:{operationId:string;targetId:string;profileId:LearningPolicyId;scope:LocalLearningPolicyAssignment['scope'];at:string;provenance:Readonly<Record<string,unknown>>}):LocalLearningPolicyAssignment=>({
  assignmentId:stableUuid(`local-policy-assignment:${input.targetId}`),revision:1,scope:input.scope,profileId:input.profileId,
@@ -81,10 +88,13 @@ const curriculumMembership=(input:{
  createdByOperationId:input.previous?.createdByOperationId??input.operationId,createdAt:input.previous?.createdAt??input.at,updatedAt:input.at,
 });
 
-const materialForProtocolRun=(material:LocalLearningMaterialization,purpose:LocalLearningRun['purpose'],protocolRunId:string,at:string):LocalLearningMaterialization=>({
+const materialForProtocolRun=(material:LocalLearningMaterialization,purpose:LocalLearningRun['purpose'],protocolRunId:string,at:string):LocalLearningMaterialization=>{
+ assertMaterialAvailableAt(material,at);
+ return {
  snapshot:{...structuredClone(material.snapshot),learningMaterializationId:stableUuid(`local-run-materialization:${protocolRunId}:${material.snapshot.learningMaterializationId}`),protocolPurpose:purpose,createdAt:at},
  content:structuredClone(material.content),
-});
+ };
+};
 
 const sameRunLanguagePair=(left:SensaFormalPinnedLanguageContext,right:SensaFormalPinnedLanguageContext)=>
  left.languageRouteId===right.languageRouteId&&left.targetLanguageTag===right.targetLanguageTag&&left.supportLanguageTag===right.supportLanguageTag;
@@ -97,7 +107,7 @@ async function bindCurrentStepMaterial(tx:LibraryTransaction,run:LocalLearningRu
  const execution=localExecutionForRun(run),targetId=localProtocolActiveTargetId(execution,run),participant=run.participants[targetId];
  if(!participant)throw new Error('localFlow.stepChanged');
  const stepId=localProtocolStepId(execution,run);
- const previous=participant.presentedMaterials[stepId];
+ const previous=participant.presentedMaterials[stepId]?runStepMaterial(participant,stepId):undefined;
  if(!replace&&previous)return false;
  const target=await tx.get<LocalLearningTarget>('learningTargets',targetId);if(!target)throw new Error('localFlow.enrollFirst');
  const pinnedMembership=target.curriculumMemberships.find(candidate=>candidate.id===participant.curriculumMembershipId&&sameRunLanguagePair(candidate.languageContext,participant.languageContext));
@@ -105,14 +115,19 @@ async function bindCurrentStepMaterial(tx:LibraryTransaction,run:LocalLearningRu
  const currentPack=currentMembership?.packageKey?await tx.get<InstalledPackage>('packageCache',currentMembership.packageKey):undefined;
  // Unfinished Steps may adopt material from the currently active Portable membership.
  const membership=currentPack?currentMembership:pinnedMembership;
- const material=membership?materialForProtocolRun(replace?membership.material:materialForNextStep(participant.material,membership.material),run.purpose,participant.protocolRunId,at):structuredClone(participant.material);
+ const baseline=runBaselineMaterial(participant),source=membership?(replace?membership.material:materialForNextStep(baseline,membership.material)):baseline;
+ let material=source===baseline?structuredClone(baseline):materialForProtocolRun(source,run.purpose,participant.protocolRunId,at);
+ // One materialization identity has one creation instant. Binding another
+ // Step to it must reuse that snapshot, not mint a timestamp-only revision.
+ const adopted=Object.values(participant.materializations).find(candidate=>candidate.snapshot.learningMaterializationId===material.snapshot.learningMaterializationId);
+ if(adopted){material={...material,snapshot:{...material.snapshot,createdAt:adopted.snapshot.createdAt}};if(!backupEqual(adopted,material))throw new Error('localFlow.resourceInvalid');material=structuredClone(adopted);}
  assertLocalTargetMaterialIdentity(target,material);validateLightweightInitialMaterialization(material);
  const executable=localExecutableTargetForParticipant(target,participant,material),pack=executable.packageKey?await tx.get<InstalledPackage>('packageCache',executable.packageKey):undefined;
  validateLocalProtocolResources(execution,executable,pack);
- participant.presentedMaterials[stepId]=material;
+ pinRunStepMaterial(participant,stepId,material);
  if(replace){
   if(!previous||!operationId)throw new Error('localFlow.resourceInvalid');
-  run.lifecycleEvents.push({eventId:stableUuid(`local-run-material-refresh:${run.id}:${operationId}:${stepId}`),kind:'current_step_material_refreshed',operationId,targetId,stepId,materializationId:material.snapshot.learningMaterializationId,at});
+  run.lifecycleEvents.push({runRevision:run.revision,eventId:stableUuid(`local-run-material-refresh:${run.id}:${operationId}:${stepId}`),kind:'current_step_material_refreshed',operationId,targetId,stepId,materializationId:material.snapshot.learningMaterializationId,at});
  }
  return true;
 }
@@ -401,7 +416,7 @@ async function enrollInstalledPackages(
  }
  const plans=await readStudyPlans(tx);
  const refreshed=changed&&previous?await refreshMaterializedEnrollmentMembers(tx,operationId,id,selected,context,now):[];
- const materialized=await materializeCurriculumWindow(tx,operationId,context,plans[context.languageRouteId]?.dailyNewSenseLimit??20,now,available);
+ const materialized=await materializeCurriculumWindowUnlessReviewOnly(tx,operationId,context,plans[context.languageRouteId]?.dailyNewSenseLimit??20,now,available);
  return [...new Set([...refreshed,...materialized])];
 }
 
@@ -448,10 +463,17 @@ export const readLearningOverview=()=>readLibrary(learningOverviewFrom);
 /** Small projection for callers that only need Target facts. */
 export const learningTargetsSnapshot=()=>readLibrary(tx=>tx.all<LocalLearningTarget>('learningTargets'));
 export const readLearning=()=>readLibrary(async tx=>({targets:await tx.all<LocalLearningTarget>('learningTargets'),runs:await tx.all<LocalLearningRun>('learningRuns'),events:await tx.all<LearningEvent>('learningEvents'),active:await tx.get<string>('meta','learning-active'),studyPlans:await readStudyPlans(tx)}));
-export async function confirmLearningQuantity(operationId:string,languageContext:SensaFormalPinnedLanguageContext,dailyLimit:number){return learningCommand({id:operationId,kind:'learning.quantity',input:{languageContext,dailyLimit}},async tx=>{await learningOwner(tx);const context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);await requireLanguageRouteContext(tx,context);if(!Number.isInteger(dailyLimit)||dailyLimit<1||dailyLimit>100)throw new Error('localFlow.quantityRange');const plans=await readStudyPlans(tx),previous=plans[context.languageRouteId],at=new Date().toISOString();plans[context.languageRouteId]={languageRouteId:context.languageRouteId,routeRevision:context.languageRouteRevision,revision:(previous?.revision??0)+1,dailyNewSenseLimit:dailyLimit,updatedAt:at};writeStudyPlans(tx,plans);await materializeCurriculumWindow(tx,operationId,context,dailyLimit,at);return true;});}
+export async function confirmLearningQuantity(operationId:string,languageContext:SensaFormalPinnedLanguageContext,dailyLimit:number){return learningCommand({id:operationId,kind:'learning.quantity',input:{languageContext,dailyLimit}},async tx=>{await learningOwner(tx);const context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);await requireLanguageRouteContext(tx,context);if(!Number.isInteger(dailyLimit)||dailyLimit<1||dailyLimit>100)throw new Error('localFlow.quantityRange');const plans=await readStudyPlans(tx),previous=plans[context.languageRouteId],at=new Date().toISOString();plans[context.languageRouteId]={languageRouteId:context.languageRouteId,routeRevision:context.languageRouteRevision,revision:(previous?.revision??0)+1,dailyNewSenseLimit:dailyLimit,updatedAt:at};writeStudyPlans(tx,plans);await materializeCurriculumWindowUnlessReviewOnly(tx,operationId,context,dailyLimit,at);return true;});}
+async function materializeCurriculumWindowUnlessReviewOnly(tx:LibraryTransaction,operationId:string,context:SensaFormalPinnedLanguageContext,dailyLimit:number,at:string,availablePackages?:readonly InstalledPackageSummary[]){
+ const active=await tx.get<string>('meta','learning-active'),run=active?await tx.get<LocalLearningRun>('learningRuns',active):null;
+ if(run?.languageContext.languageRouteId===context.languageRouteId&&localRunSessionIntent(run)==='review_only')return [];
+ return materializeCurriculumWindow(tx,operationId,context,dailyLimit,at,availablePackages);
+}
 
 export async function prepareLearningQueue(languageContext:SensaFormalPinnedLanguageContext,at=new Date().toISOString(),trigger='daily'){
  const context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);
+ const reviewOnly=await readLibrary(async tx=>{const active=await tx.get<string>('meta','learning-active');const run=active?await tx.get<LocalLearningRun>('learningRuns',active):null;return !!run&&run.languageContext.languageRouteId===context.languageRouteId&&localRunSessionIntent(run)==='review_only';});
+ if(reviewOnly)return [];
  const fingerprint=await readLibrary(async tx=>{
   const plans=await readStudyPlans(tx),enrollments=(await tx.all<LocalCurriculumEnrollment>('curriculumEnrollments')).filter(item=>enrollmentMatchesContext(item,context));
   const packages=await tx.packageCacheProjection({kind:'identities'});
@@ -461,22 +483,38 @@ export async function prepareLearningQueue(languageContext:SensaFormalPinnedLang
  return learningCommand({id:operationId,kind:'learning.materialize',input:{languageContext:context,day:new Date(at).toDateString(),trigger}},async tx=>{
   await learningOwner(tx);await requireLanguageRouteContext(tx,context);
   const plans=await readStudyPlans(tx);
-  return materializeCurriculumWindow(tx,operationId,context,plans[context.languageRouteId]?.dailyNewSenseLimit??20,at);
+  return materializeCurriculumWindowUnlessReviewOnly(tx,operationId,context,plans[context.languageRouteId]?.dailyNewSenseLimit??20,at);
  });
 }
-async function startLearningInTransaction(tx:LibraryTransaction,operationId:string,targetId:string,languageContext:SensaFormalPinnedLanguageContext,dailyLimit:number,at:string):Promise<LocalLearningRun>{
+export const readActiveLearningSessionIntent=()=>readLibrary(async tx=>{const active=await tx.get<string>('meta','learning-active');const run=active?await tx.get<LocalLearningRun>('learningRuns',active):null;return run?localRunSessionIntent(run):'mixed' as const;});
+async function startLearningInTransaction(tx:LibraryTransaction,operationId:string,targetId:string,languageContext:SensaFormalPinnedLanguageContext,dailyLimit:number,at:string,sessionIntent:LocalLearningSessionIntent='mixed',continuedFromRunId?:string):Promise<LocalLearningRun>{
  const context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);await requireLanguageRouteContext(tx,context);if(!Number.isInteger(dailyLimit)||dailyLimit<1||dailyLimit>100||!Number.isFinite(Date.parse(at)))throw new Error('localFlow.confirmQuantity');
  const plan=(await readStudyPlans(tx))[context.languageRouteId];if(plan?.dailyNewSenseLimit!==dailyLimit)throw new Error('localFlow.confirmNewQuantity');
- const active=await tx.get<string>('meta','learning-active');if(active){const run=await tx.get<LocalLearningRun>('learningRuns',active);if(run)return run;}
+ if(!['mixed','review_only'].includes(sessionIntent))throw new Error('localFlow.resourceInvalid');
  const t=await tx.get<LocalLearningTarget>('learningTargets',targetId);if(!t)throw new Error('localFlow.enrollFirst');if(hasDeclaredMasteryOverride(t))throw new Error('localFlow.stepChanged');
  const selectedMembership=localCurriculumMembershipForContext(t,context);if(!selectedMembership)throw new Error('localFlow.routeMembershipMissing');
+ if(sessionIntent==='review_only'&&localLearningPurpose(t)==='initial_learning')throw new Error('localFlow.notDue');
+ const active=await tx.get<string>('meta','learning-active'),activeRun=active?await tx.get<LocalLearningRun>('learningRuns',active):null;
+ if(activeRun&&!activeRun.completedAt&&localRunTargetIds(activeRun).includes(targetId)&&activeRun.languageContext.languageRouteId===context.languageRouteId){
+   if(Date.parse(at)<Date.parse(activeRun.startedAt))throw new Error('localFlow.stepChanged');
+   if(!sameLearningSessionDirection(activeRun.languageContext,context))throw new Error('localFlow.stepChanged');
+   activeRun.lifecycleEvents.push({runRevision:activeRun.revision,eventId:stableUuid(`local-run-intent:${activeRun.id}:${operationId}`),kind:'session_intent_selected',operationId,sessionIntent,requestedLanguageContext:context,...(continuedFromRunId?{continuedFromRunId}:{}),at});activeRun.revision++;tx.put('learningRuns',activeRun.id,activeRun);
+  return activeRun;
+ }
+ if(activeRun&&!activeRun.completedAt){
+  if(Date.parse(at)<Date.parse(activeRun.startedAt)||localRunOpenSessionPause(activeRun)||localRunOpenPlanningInterruption(activeRun))throw new Error('localFlow.clockChanged');
+  activeRun.lifecycleEvents.push({runRevision:activeRun.revision,eventId:stableUuid(`local-run-session-pause:${activeRun.id}:${operationId}`),kind:'paused_for_session_switch',operationId,selectedTargetId:targetId,at});activeRun.revision++;tx.put('learningRuns',activeRun.id,activeRun);
+ }
  const unfinishedId=(await tx.learningRunIdsForTarget(targetId,{openOnly:true}))[0];
  const unfinished=unfinishedId?await tx.get<LocalLearningRun>('learningRuns',unfinishedId):undefined;if(unfinished){
   for(const id of localRunTargetIds(unfinished)){const member=await tx.get<LocalLearningTarget>('learningTargets',id);if(member&&hasDeclaredMasteryOverride(member))throw new Error('localFlow.stepChanged');}
   const interruption=localRunOpenPlanningInterruption(unfinished);
-  if(!interruption)throw new Error('localFlow.stepChanged');
-  if(Date.parse(at)<Date.parse(interruption.at))throw new Error('localFlow.clockChanged');
-  unfinished.lifecycleEvents.push({eventId:stableUuid(`local-run-resume:${unfinished.id}:${operationId}`),kind:'resumed_after_planning_override',operationId,interruptionEventId:interruption.eventId,at});unfinished.revision++;tx.put('learningRuns',unfinished.id,unfinished);
+  const pause=localRunOpenSessionPause(unfinished);
+  if(!interruption&&!pause)throw new Error('localFlow.stepChanged');
+  if(!sameLearningSessionDirection(unfinished.languageContext,context))throw new Error('localFlow.stepChanged');
+  if(Date.parse(at)<Date.parse((interruption??pause)!.at))throw new Error('localFlow.clockChanged');
+  const selection={runRevision:unfinished.revision,eventId:stableUuid(`local-run-resume:${unfinished.id}:${operationId}`),operationId,sessionIntent,requestedLanguageContext:context,...(continuedFromRunId?{continuedFromRunId}:{}),at};
+  unfinished.lifecycleEvents.push(pause?{...selection,kind:'resumed_after_session_switch',interruptionEventId:pause.eventId}:{...selection,kind:'resumed_after_planning_override',interruptionEventId:interruption!.eventId});unfinished.revision++;tx.put('learningRuns',unfinished.id,unfinished);
   tx.put('meta','learning-active',unfinished.id);return unfinished;
  }
  const now=new Date(at),purpose=localLearningPurpose(t);
@@ -516,12 +554,13 @@ async function startLearningInTransaction(tx:LibraryTransaction,operationId:stri
   const material=materialForProtocolRun(membership.material,purpose,protocolRunId,at);
   const resolvedPlan=resolveRunPlan(participant,policyCommitment,purpose,material,at);
   participant.committedPolicy=policyCommitment;
-  return [participant.id,{protocolRunId,curriculumMembershipId:membership.id,languageContext:context,startReason:{kind:purpose==='initial_learning'?'initial_learning_ready':purpose==='retention_review'?'due_review':'relearning_ready',selectionReason:participant.id===targetId?'requested_target':'cohort_candidate',triggerAt:at,triggerMemoryRevision:participant.memoryRevision},outcomePermissions:localProtocolOutcomePermissions(purpose,binding),material,presentedMaterials:{},policyCommitment,resolvedPlan,progress:createLocalProtocolProgress(protocolRunId,binding),memoryRevision:participant.memoryRevision,dueAt:participant.memory?.dueAt.toISOString()??null,evidenceIds:[]}];
+  const materialReference=runMaterialDigest(material);
+  return [participant.id,{protocolRunId,curriculumMembershipId:membership.id,languageContext:context,startReason:{kind:purpose==='initial_learning'?'initial_learning_ready':purpose==='retention_review'?'due_review':'relearning_ready',selectionReason:participant.id===targetId?'requested_target':'cohort_candidate',triggerAt:at,triggerMemoryRevision:participant.memoryRevision},outcomePermissions:localProtocolOutcomePermissions(purpose,binding),material:materialReference,materializations:{[materialReference]:material},presentedMaterials:{},presentationOrder:[],policyCommitment,resolvedPlan,progress:createLocalProtocolProgress(protocolRunId,binding),memoryRevision:participant.memoryRevision,dueAt:participant.memory?.dueAt.toISOString()??null,evidenceIds:[]}];
  }));
  const run:LocalLearningRun={
-  id:sessionId,targetId,targetIds:participants.map(v=>v.id),
+  id:sessionId,startedByOperationId:operationId,...(continuedFromRunId?{continuedFromRunId}:{}),targetId,targetIds:participants.map(v=>v.id),
   participants:participantSnapshots,
-  targetCompletions:{},languageContext:context,purpose,policyProfileId:profileId,policyProfileVersion:profile.profileVersion,
+  targetCompletions:{},languageContext:context,sessionIntent,purpose,policyProfileId:profileId,policyProfileVersion:profile.profileVersion,
   protocolBinding:structuredClone(binding),protocolVersion:binding.localProtocolVersion,
   protocolState:createLocalProtocolState(binding.runtimeAdapterId,null),
   schedulingPolicyId:profile.lifecycle.schedulingPolicyId,schedulingPolicy:structuredClone(schedulingPolicy),
@@ -538,48 +577,60 @@ async function startLearningInTransaction(tx:LibraryTransaction,operationId:stri
  for(const participant of participants)if(!participant.startedAt){participant.startedAt=at;participant.introducedLanguageRouteId=context.languageRouteId;tx.put('learningTargets',participant.id,participant);}
  tx.put('learningRuns',run.id,run);tx.put('meta','learning-active',run.id);return run;
 }
-export async function startLearning(operationId:string,targetId:string,languageContext:SensaFormalPinnedLanguageContext,dailyLimit:number,at=new Date().toISOString()){return learningCommand({id:operationId,kind:'learning.start',input:{targetId,languageContext,dailyLimit,at}},async tx=>{await learningOwner(tx);return startLearningInTransaction(tx,operationId,targetId,languageContext,dailyLimit,at);});}
-export async function actLearning(operationId:string,runId:string,revision:number,action:LocalLearningAction,at=new Date().toISOString()){return learningCommand({id:operationId,kind:'learning.act',input:{runId,revision,action,at}},async tx=>{
+export async function startLearning(operationId:string,targetId:string,languageContext:SensaFormalPinnedLanguageContext,dailyLimit:number,at=new Date().toISOString(),sessionIntent:LocalLearningSessionIntent='mixed'){
+ const operation={id:operationId,kind:'learning.start',input:{targetId,languageContext,dailyLimit,at,sessionIntent}};
+ const receipt=await learningCommand(operation,async tx=>{await learningOwner(tx);return learningRunReceipt(await startLearningInTransaction(tx,operationId,targetId,languageContext,dailyLimit,at,sessionIntent));});
+ return readVerifiedLearningRunReceipt(operation,receipt);
+}
+export async function actLearning(operationId:string,runId:string,revision:number,action:LocalLearningAction,at=new Date().toISOString()){
+ const operation={id:operationId,kind:'learning.act',input:{runId,revision,action,at}};
+ const receipt=await learningCommand(operation,async tx=>{
  await learningOwner(tx);const run=await tx.get<LocalLearningRun>('learningRuns',runId);
  if(!run||run.revision!==revision||run.completedAt||await tx.get('meta','learning-active')!==runId)throw new Error('localFlow.stepChanged');
  const execution=localExecutionForRun(run);
  const activeTargetId=localProtocolActiveTargetId(execution,run);
  const t=(await tx.get<LocalLearningTarget>('learningTargets',activeTargetId))!;
  await bindCurrentStepMaterial(tx,run,at);
- const stepId=localProtocolStepId(execution,run),participant=run.participants[activeTargetId]!,presentedMaterial=participant.presentedMaterials[stepId];
+ const stepId=localProtocolStepId(execution,run),participant=run.participants[activeTargetId]!,presentedMaterial=runStepMaterial(participant,stepId);
  if(!presentedMaterial)throw new Error('localFlow.resourceInvalid');
+ if(Date.parse(presentedMaterial.snapshot.createdAt)>Date.parse(at))throw new Error('localFlow.clockChanged');
  const executable=localExecutableTargetForParticipant(t,participant,presentedMaterial);
  const scene:PersonalLearningScene|undefined=await readPersonalLearningSceneForAction(tx,t.id,participant.languageContext.languageRouteId);
  const sceneRevision=scene?.revisions.find(candidate=>candidate.revision===scene.currentRevision);
  const personalLearningScene=scene&&sceneRevision?{sceneId:scene.sceneId,revisionId:sceneRevision.revisionId,revision:sceneRevision.revision}:null;
- if(hasDeclaredMasteryOverride(t)||localRunOpenPlanningInterruption(run))throw new Error('localFlow.stepChanged');
+ if(hasDeclaredMasteryOverride(t)||localRunOpenPlanningInterruption(run)||localRunOpenSessionPause(run))throw new Error('localFlow.stepChanged');
  if(!Number.isFinite(Date.parse(at))||Date.parse(at)<Date.parse(run.startedAt))throw new Error('localFlow.clockChanged');
  const pack=executable.packageKey?await tx.get<InstalledPackage>('packageCache',executable.packageKey):undefined;validateLocalProtocolResources(execution,executable,pack);
  const executed=reduceLocalProtocolAction({operationId,stepKey:stepId,execution,target:executable,run,resource:pack,action,at});
  const nextRun=executed.run;
  const applied=applyLocalProtocolTransition({operationId,stepId,at,target:t,run:nextRun,transition:executed.transition});
  nextRun.ordinal++;nextRun.revision++;if(!nextRun.completedAt)await bindCurrentStepMaterial(tx,nextRun,at);tx.put('learningRuns',nextRun.id,nextRun);tx.put('learningTargets',applied.target.id,applied.target);
- tx.put('learningEvents',operationId,{id:operationId,runId,targetId:t.id,kind:action.kind,at,detail:{stepId,materializationId:presentedMaterial.snapshot.learningMaterializationId,personalLearningScene,action,formalEvaluation:executed.facts,transition:applied.record}} satisfies LearningEvent);return nextRun;
-});}
+ const nextTargetId=nextRun.completedAt?null:localProtocolActiveTargetId(execution,nextRun),nextStepId=nextTargetId?localProtocolStepId(execution,nextRun):null;
+ const nextPresentation=nextTargetId&&nextStepId?{targetId:nextTargetId,stepId:nextStepId,material:nextRun.participants[nextTargetId]!.presentedMaterials[nextStepId]!}:null;
+ tx.put('learningEvents',operationId,{id:operationId,runId,targetId:t.id,kind:action.kind,at,detail:{runRevision:revision,nextPresentation,stepId,materializationId:presentedMaterial.snapshot.learningMaterializationId,personalLearningScene,action,formalEvaluation:executed.facts,transition:applied.record}} satisfies LearningEvent);return learningRunReceipt(nextRun);
+ });return readVerifiedLearningRunReceipt(operation,receipt);
+}
 export async function finishLearning(operationId:string,runId:string){const result=await learningCommand({id:operationId,kind:'learning.finish',input:{runId}},async tx=>{await learningOwner(tx);const run=await tx.get<LocalLearningRun>('learningRuns',runId);if(!run?.completedAt)throw new Error('localFlow.finishFirst');if(await tx.get('meta','learning-active')===runId)tx.delete('meta','learning-active');return true;});requestCloudCheckpoint();return result;}
 /** Complete one Run and start its successor as one published library state.
  * Observers must never see an empty active-Run gap while the learner is moving
  * directly to the next target. */
 export async function continueLearning(operationId:string,runId:string,targetId:string,languageContext:SensaFormalPinnedLanguageContext,dailyLimit:number,at=new Date().toISOString()){
- const result=await learningCommand({id:operationId,kind:'learning.continue',input:{runId,targetId,languageContext,dailyLimit,at}},async tx=>{
+ const operation={id:operationId,kind:'learning.continue',input:{runId,targetId,languageContext,dailyLimit,at}};
+ const result=await learningCommand(operation,async tx=>{
   await learningOwner(tx);
   const completed=await tx.get<LocalLearningRun>('learningRuns',runId);if(!completed?.completedAt)throw new Error('localFlow.finishFirst');
+  if(Date.parse(at)<Date.parse(completed.completedAt))throw new Error('localFlow.clockChanged');
+  if(!sameLearningSessionDirection(completed.languageContext,languageContext))throw new Error('localFlow.stepChanged');
   if(await tx.get('meta','learning-active')===runId)tx.delete('meta','learning-active');
-  return startLearningInTransaction(tx,operationId,targetId,languageContext,dailyLimit,at);
+  return learningRunReceipt(await startLearningInTransaction(tx,operationId,targetId,languageContext,dailyLimit,at,localRunSessionIntent(completed),completed.id));
  });
- requestCloudCheckpoint();return result;
+ requestCloudCheckpoint();return readVerifiedLearningRunReceipt(operation,result);
 }
 
 /** The same runtime target is committed only after independent material validation. */
-export async function commitPersonalMaterial(tx:LibraryTransaction,owner:LibraryIdentity,source:ContentProvisioningSource,languageContext:SensaFormalPinnedLanguageContext,content:LightweightInitialLearningMaterialization['content'],attemptId:string,grantId:string|null,replace=false){
+export async function commitPersonalMaterial(tx:LibraryTransaction,owner:LibraryIdentity,source:ContentProvisioningSource,languageContext:SensaFormalPinnedLanguageContext,content:LightweightInitialLearningMaterialization['content'],attemptId:string,grantId:string|null,replace=false,now=new Date().toISOString()){
  const {reference}=source,id=stableUuid(`sensa-learning-target:${owner.learnerId}:${reference.senseVersionId}:${reference.bindingVersionId}`);
  const existing=await tx.get<LocalLearningTarget>('learningTargets',id);
- const now=new Date().toISOString();
  const context=sensaFormalPinnedLanguageContextSchema.parse(languageContext),targetLanguageTag=source.targetLanguageTag;
  if(targetLanguageTag!==context.targetLanguageTag)throw new Error('localFlow.routeLanguageMismatch');
  const material=materializeOnDemandContent({learnerUserId:owner.learnerId,learningTargetId:id,source,content,attemptId,personalAnchorUseGrantId:grantId,createdAt:now});
@@ -608,7 +659,7 @@ export async function setLocalDeclaredMastery(operationId:string,targetId:string
   const run=runId?await tx.get<LocalLearningRun>('learningRuns',runId):null;
   if(active&&run&&localRunTargetIds(run).includes(targetId)){
    if(Date.parse(at)<Date.parse(run.startedAt))throw new Error('localFlow.clockChanged');
-   if(!localRunOpenPlanningInterruption(run)){run.lifecycleEvents.push({eventId:stableUuid(`local-run-interruption:${run.id}:${operationId}`),kind:'interrupted_by_planning_override',operationId,targetId,overrideKind:'declared_mastery',at});run.revision++;tx.put('learningRuns',run.id,run);}
+   if(!localRunOpenPlanningInterruption(run)){run.lifecycleEvents.push({runRevision:run.revision,eventId:stableUuid(`local-run-interruption:${run.id}:${operationId}`),kind:'interrupted_by_planning_override',operationId,targetId,overrideKind:'declared_mastery',at});run.revision++;tx.put('learningRuns',run.id,run);}
    tx.delete('meta','learning-active');
   }
   return true;

@@ -4,7 +4,12 @@ import {sqliteLibrarySchemaVersion} from './sqliteProtocol';
 import {decodeBackupValue} from './backupCodec';
 import type {PackageCacheProjectionQuery,PackageCacheProjectionResult} from './packageCacheProjection';
 import {createHomeLearningStorageProjection} from './homeLearningRecords';
+import {runtimeLearningCandidatesFromRecords,learningManagementSummaryFromRecords,type RuntimeLearningCandidateQuery,type RuntimeLearningCandidates,type LearningManagementSummaryQuery,type LearningManagementStorageSummary} from './runtimeLearningCandidates';
+import {learningHistoryPageFromRecords,type StoredLearningHistoryPage} from './learningHistoryProjection';
+import type {LearningHistoryRequest} from '../../learning/system/learningHistoryModel';
 import type {LocalLearningRun,LocalLearningTarget} from '../../learning/runtime/localProtocol';
+import {localLastPresentedMaterial} from '../../learning/runtime/localCurriculum';
+import {learningSupportMeaning} from '@sensa/contracts/sensa';
 import {emptyJourneyState,type MeaningJourneyRecord,type SenseRegistryState} from '../../experience/personalMeaningJourney/store';
 import {createMeaningLookup,type MeaningLookupResult} from '../../experience/personalMeaningJourney/meaningLookup';
 import {worldRegistryClosure,worldItemFromRecord,summarizeWorldItem,worldSearchText,isWorldRecordVisible,matchesWorldFilter,validateWorldQuery,type WorldBrowseQuery,type WorldBrowsePage,type WorldRecordRead} from '../../experience/personalMeaningJourney/worldRead';
@@ -154,7 +159,7 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
     return bytes;
   }
 
-  async homeLearningProjection(languageRouteId: string): Promise<HomeLearningStorageProjection> {
+  async homeLearningProjection(languageRouteId: string,clock=Date.now()): Promise<HomeLearningStorageProjection> {
     const decode = <T>(encoded: string | undefined): T | undefined => encoded === undefined
       ? undefined
       : decodeBackupValue(JSON.parse(encoded)) as T;
@@ -163,6 +168,7 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
     const availablePackageKeys = (await this.entries('packageCache')).map((row) => row.key);
     const activeId = decode<string>(this.records.get('meta\u0000learning-active'));
     return createHomeLearningStorageProjection({
+      clock,
       targets,
       availablePackageKeys,
       activeRun: activeId
@@ -172,6 +178,9 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
       languageRouteId,
     });
   }
+  async runtimeLearningCandidates(query:RuntimeLearningCandidateQuery):Promise<RuntimeLearningCandidates>{return runtimeLearningCandidatesFromRecords(await this.homeLearningProjection(query.languageContext.languageRouteId,query.clock),query);}
+  async learningManagementSummary(query:LearningManagementSummaryQuery):Promise<LearningManagementStorageSummary>{return learningManagementSummaryFromRecords(await this.homeLearningProjection(query.languageContext.languageRouteId,query.clock),query);}
+  async learningHistoryPage(query:LearningHistoryRequest):Promise<StoredLearningHistoryPage>{return learningHistoryPageFromRecords(await this.learningHistoryProjection(),query);}
 
   async learningRunIdsForTarget(targetId: string, openOnly: boolean): Promise<string[]> {
     return (await this.entries('learningRuns'))
@@ -179,6 +188,13 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
       .filter(({ run }) => run.targetIds.includes(targetId) && (!openOnly || !run.completedAt))
       .map(({ key }) => key)
       .sort();
+  }
+  async learningHistoryProjection():Promise<import('./learningHistoryProjection').StoredLearningRecord[]>{
+    const targets=new Map((await this.entries('learningTargets')).map(row=>[row.key,decodeBackupValue(JSON.parse(row.encodedValue)) as LocalLearningTarget]));
+    return (await this.entries('learningRuns')).flatMap(row=>{const run=decodeBackupValue(JSON.parse(row.encodedValue)) as LocalLearningRun;if(!run.completedAt||run.completionKind==='wait_relearning')return [];
+      return run.targetIds.map(targetId=>{const target=targets.get(targetId)!,participant=run.participants[targetId]!,material=localLastPresentedMaterial(participant),meaning=material?learningSupportMeaning(material.content.resources,participant.languageContext.supportLanguageTag):undefined;
+        return {recordId:`${run.id}:${targetId}`,targetId,expression:target.expression,languageTag:target.targetLanguageTag,...(typeof meaning==='string'?{meaning}:{}),occurredAt:run.targetCompletions?.[targetId]?.at??run.completedAt!,kind:run.purpose};});
+    }).sort((left,right)=>right.occurredAt.localeCompare(left.occurredAt)||left.recordId.localeCompare(right.recordId));
   }
 
   async countIntroducedLearningTargets(
@@ -190,8 +206,8 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
       .map((row) => decodeBackupValue(JSON.parse(row.encodedValue)) as LocalLearningTarget)
       .filter((target) => target.introducedLanguageRouteId === languageRouteId
         && target.startedAt !== null
-        && target.startedAt >= startedAfter
-        && target.startedAt < startedBefore)
+        && Date.parse(target.startedAt) >= Date.parse(startedAfter)
+        && Date.parse(target.startedAt) < Date.parse(startedBefore))
       .length;
   }
 

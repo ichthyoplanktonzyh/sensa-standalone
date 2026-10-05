@@ -11,9 +11,11 @@ import { canonicalJsonDigest, stableUuid } from '@sensa/learning-kernel';
 
 import type { LocalLearningMaterialization } from '../../learning/runtime/localProtocol';
 import { validateLightweightInitialMaterialization } from './lightweightInitialContent';
+import {assertMaterialAvailableAt} from './materialReadiness';
 
 const revisionSchema = z.object({
   operationId: z.string().uuid(),
+  readyAt: z.string().datetime({offset:true}),
   baseContentDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   baseMaterializationId: z.string().uuid(),
   response: resourceSupplementResultSchema,
@@ -74,6 +76,7 @@ export function appendResourceSupplement(
   supportLanguageTag: string,
 ): LocalLearningMaterialization {
   validateLightweightInitialMaterialization(base);
+  assertMaterialAvailableAt(base,at);
   const response = resourceSupplementResultSchema.parse(responseInput);
   if (response.result.status !== 'available') throw Error('localFlow.resourceInvalid');
   if (canonicalJsonDigest(response.request) !== canonicalJsonDigest(supplementRequest(
@@ -119,6 +122,7 @@ export function appendResourceSupplement(
         ...base.snapshot.provenance,
         resourceSupplement: {
           operationId,
+          readyAt: at,
           baseContentDigest: base.snapshot.contentDigest,
           baseMaterializationId: base.snapshot.learningMaterializationId,
           response,

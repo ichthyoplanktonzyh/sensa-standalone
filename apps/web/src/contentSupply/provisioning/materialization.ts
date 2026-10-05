@@ -42,6 +42,7 @@ export function materializePublishedEntry(input: {
     validationStatus: 'validated',
     validatorVersion: 'sensa-web-package-v1',
     provenance: {
+      sourceReadyAt: input.createdAt,
       packageKey: input.packageKey,
       bookId: packageManifest.metadata.packageId,
       bookVersionId: null,
@@ -90,6 +91,7 @@ export function materializeOnDemandContent(input: {
     validatorVersion: 'sensa-web-content-v1',
     provenance: {
       ...provenance,
+      sourceReadyAt: input.createdAt,
       senseId: reference.senseId,
       senseVersionId: reference.senseVersionId,
       bindingId: reference.bindingId,

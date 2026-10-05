@@ -19,6 +19,7 @@ import {mkdir,readFile,rm} from 'node:fs/promises';
 import {extname,join,resolve} from 'node:path';
 import {test,expect,type Browser} from '@playwright/test';
 import {librarySyncBlockFetchBytes,librarySyncBlockStoreChars} from '../../../packages/contracts/src/sensa/librarySync.ts';
+import {decodeLibrarySyncBlock} from '../../../packages/contracts/src/sensa/librarySyncBlocks.ts';
 import {pageLayoutFamilyContract} from '../../../apps/web/src/experience/appearance/pageLayoutContract.ts';
 import type {} from '../../../apps/web/src/browserSmokeBridge.ts';
 
@@ -61,11 +62,11 @@ const cloudFor=(account:string):Cloud=>{const existing=clouds.get(account);if(ex
  *  Restoring it must still cost a byte-bounded number of round trips. */
 const repackCloud=(cloud:Cloud,chars:number)=>{
  if(!cloud.manifest)throw Error('nothing to repack');
- const manifest=JSON.parse(cloud.blocks.get(cloud.manifest[0]!)!) as {version:number;rows:{table:string;key:string;blocks:string[]}[]};
- if(manifest.version!==5||manifest.rows.some(row=>row.table==='operations'||row.table==='packageCache'))throw Error('current Checkpoint carried device-local state');
+ const manifest=JSON.parse(cloud.manifest.map(hash=>decodeLibrarySyncBlock(cloud.blocks.get(hash)!)).join('')) as {version:number;rows:{table:string;key:string;blocks:string[]}[]};
+ if(manifest.version!==6||manifest.rows.some(row=>row.table==='operations'||row.table==='packageCache'))throw Error('current Checkpoint carried device-local state');
  const added=new Map<string,string>(),rows:{table:string;key:string;blocks:string[]}[]=[];
  for(const [rowIndex,row] of manifest.rows.entries()){
-  const text=row.blocks.map(hash=>cloud.blocks.get(hash)!).join(''),refs:string[]=[];
+  const text=row.blocks.map(hash=>decodeLibrarySyncBlock(cloud.blocks.get(hash)!)).join(''),refs:string[]=[];
   // Historical row-by-row layouts placed the same embedded media after different
   // amounts of JSON, so their fixed-size chunk alignment drifted from row to row.
   const rowChars=chars-(rowIndex%29)*211;
@@ -164,10 +165,10 @@ const server=createServer(async(request,response)=>{
     if(prior){json({revision:Number(prior),manifest:input.manifest});return;}
     if(cloud.revision!==input.baseRevision){json({code:'library_sync_conflict'},409);return;}
    if(input.manifest.some(hash=>!cloud.blocks.has(hash))){json({code:'library_sync_missing_block'},409);return;}
-    const priorManifest=cloud.manifest?[...cloud.manifest]:[],priorRows=priorManifest.length?(JSON.parse(priorManifest.map(hash=>cloud.blocks.get(hash)!).join('')) as {rows:{blocks:string[]}[]}).rows:[];
+    const priorManifest=cloud.manifest?[...cloud.manifest]:[],priorRows=priorManifest.length?(JSON.parse(priorManifest.map(hash=>decodeLibrarySyncBlock(cloud.blocks.get(hash)!)).join('')) as {rows:{blocks:string[]}[]}).rows:[];
     cloud.revision+=1;cloud.manifest=input.manifest;cloud.commits.set(input.operationId,String(cloud.revision));
     // The committed manifest is the account baseline: it defines the restore cost.
-    const committed=JSON.parse(cloud.blocks.get(input.manifest[0]!)??'{"rows":[]}') as {rows:{blocks:string[]}[]};
+    const committed=JSON.parse(input.manifest.map(hash=>decodeLibrarySyncBlock(cloud.blocks.get(hash)!)).join('')) as {rows:{blocks:string[]}[]};
     const publishedRefs=[...new Set(committed.rows.flatMap(row=>row.blocks))];
     cloud.published=publishedRefs.length;
     cloud.publishedBytes=publishedRefs.reduce((total,hash)=>total+Buffer.byteLength(cloud.blocks.get(hash)??''),0);

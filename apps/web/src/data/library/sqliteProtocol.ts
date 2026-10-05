@@ -1,6 +1,11 @@
 /** Internal protocol between the local-library module and its SQLite Worker. */
 
 import type {HomeLearningStorageProjection} from './homeLearningRecords';
+import type {StoredLearningRecord} from './learningHistoryProjection';
+import type {RuntimeLearningCandidateQuery} from './runtimeLearningCandidates';
+import type {LearningManagementSummaryQuery} from './runtimeLearningCandidates';
+import type {LearningHistoryRequest} from '../../learning/system/learningHistoryModel';
+export type {StoredLearningRecord} from './learningHistoryProjection';
 import type {PackageCacheProjectionQuery} from './packageCacheProjection';
 import {sqlitePackageCacheProjectionSchema} from './packageCacheProjection';
 import {sqliteRegistrySelectionSchema} from './semanticRegistrySchema';
@@ -17,9 +22,9 @@ export const sqliteLibraryFile = "/sensa-local-library-v12.sqlite3";
 export const sqlitePoolDirectory = "/sensa-local-library-v12";
 /** First supported production-user baseline; prototype formats stay unsupported. */
 export const sqliteLibraryBaselineVersion = 10;
-export const sqliteLibrarySchemaVersion = 13;
+export const sqliteLibrarySchemaVersion = 14;
 /** Cross-tab RPC changes must bump this before adding or changing messages. */
-export const sqliteCoordinatorProtocolVersion = 22;
+export const sqliteCoordinatorProtocolVersion = 29;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -96,7 +101,10 @@ export type SqliteWorkerRequest =
   | { id: number; kind: "syncBaseEntries"; keys?: Array<{ table: SqliteLibraryTable; key: string }> }
   | { id: number; kind: "count"; table: SqliteLibraryTable }
   | { id: number; kind: "estimateRecordBytes"; tables: SqliteLibraryTable[] }
-  | { id: number; kind: "homeLearningProjection"; languageRouteId: string }
+  | { id: number; kind: "homeLearningProjection"; languageRouteId: string;clock:number }
+  | { id:number;kind:'learningHistoryPage';query:LearningHistoryRequest }
+  | {id:number;kind:'learningManagementSummary';query:LearningManagementSummaryQuery}
+  | {id:number;kind:'runtimeLearningCandidates';query:RuntimeLearningCandidateQuery}
   | { id: number; kind: "countIntroducedLearningTargets"; languageRouteId: string; startedAfter: string; startedBefore: string }
   | { id: number; kind: "learningRunIdsForTarget"; targetId: string; openOnly: boolean }
   | { id: number; kind: "openLearningRunTargets" }
@@ -139,6 +147,19 @@ export type SqliteStorageDiagnostics = {
 
 const quotedTables = sqliteLibraryTables.map((value) => `'${value}'`).join(",");
 
+/** Private representation storage. Keep DDL free of compression/archive imports
+ * so importing the Worker protocol does not pull them into the Home closure. */
+export const sqliteSharedRecordContentSchema=`
+CREATE TABLE IF NOT EXISTS sensa_shared_record_content(
+ digest TEXT PRIMARY KEY NOT NULL CHECK(length(digest)=64),value_json TEXT NOT NULL
+) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS sensa_shared_record_content_owners(
+ owner_kind TEXT NOT NULL CHECK(owner_kind IN ('record','sync')),table_name TEXT NOT NULL,record_key TEXT NOT NULL,digest TEXT NOT NULL,
+ PRIMARY KEY(owner_kind,table_name,record_key,digest),
+ FOREIGN KEY(digest) REFERENCES sensa_shared_record_content(digest) ON DELETE RESTRICT
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS sensa_shared_record_content_digest ON sensa_shared_record_content_owners(digest);
+`;
 export const sqlitePortableMediaSchema=`
 CREATE TABLE IF NOT EXISTS sensa_portable_media(
   sha256 TEXT NOT NULL PRIMARY KEY CHECK(length(sha256)=64),
@@ -256,6 +277,7 @@ CREATE TABLE IF NOT EXISTS sensa_media_references(
 CREATE INDEX IF NOT EXISTS sensa_media_references_owner
   ON sensa_media_references(owner_table,owner_key);
 ${sqlitePortableMediaSchema}
+${sqliteSharedRecordContentSchema}
 PRAGMA user_version=${sqliteLibrarySchemaVersion};
 `;
 

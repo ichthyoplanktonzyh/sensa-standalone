@@ -1,21 +1,23 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {test} from 'vitest';
+import {test,vi} from 'vitest';
 import { indexedDB } from 'fake-indexeddb';
 import {portablePackageFixture} from '../../../scripts/support/portablePackageFixture.mts';
-import {openLibrary,command,writeLibraryCache} from '../../../apps/web/src/data/library/store.ts';
+import {openLibrary,command,writeLibraryCache,readLibrary,libraryTables} from '../../../apps/web/src/data/library/store.ts';
+import type {BackupRows} from '../../../apps/web/src/data/library/backupValidation';
+import {runBaselineMaterial,runMaterialDigest,validateRunMaterialPins} from '../../../apps/web/src/learning/runtime/runMaterialPins';
 import {contentSupplySystem} from '../../../apps/web/src/contentSupply/system/index.ts';
 import {validateInstalledLearningContent} from '../../../apps/web/src/contentSupply/portable/installedLearningContent.ts';
 import {
-  actLearning,
   confirmLearningQuantity,
   enrollPackage,
   finishLearning,
   readLearning,
   selectLocalLearningPolicy,
-  startLearning,
   type LocalLearningRun,
+  type LocalLearningTarget,
 } from '../../../apps/web/src/data/library/learning.ts';
+import {startLearning,actLearning} from '../support/learningRunFixture';
 import { assuranceView, localAssuranceState } from '../../../apps/web/src/learning/protocols/assurance.ts';
 import {
   fourStageContent,
@@ -28,6 +30,7 @@ import {localExecutableTargetForParticipant} from '../../../apps/web/src/learnin
 
 Object.assign(globalThis, {
   indexedDB,
+  location:new URL('http://runtime.fixture.invalid/'),
   window: new EventTarget(),
   BroadcastChannel: undefined,
 });
@@ -48,7 +51,7 @@ await command({id:id(),kind:'fixture.owner',input:{}},async tx=>{
   tx.put('meta','service-owner',{subject:id()});
 });
 
-const assurancePortable=async(word:'borrow'|'lend')=>{
+const assurancePortable=async(word:'borrow'|'lend',version=1)=>{
   const release=JSON.parse(await readFile(
     new URL('../../../apps/web/src/learning/content/releases/golden-learning-release-v1.json',import.meta.url),
     'utf8',
@@ -76,6 +79,7 @@ const assurancePortable=async(word:'borrow'|'lend')=>{
   const lexeme=release.lexemes.find((candidate:any)=>candidate.lexemeKey===word)!;
   const fixture=portablePackageFixture({
     packageId:stableUuid(`sensa:${word}-runtime-portable`),
+    version,
     expression:lexeme.lemma,
     meaning:definition.sense.guideLabelL1,
     scene:definition.experience.recap.bodyL1,
@@ -93,12 +97,14 @@ const assurancePortable=async(word:'borrow'|'lend')=>{
   return installed;
 };
 
+vi.useFakeTimers({toFake:['Date']});vi.setSystemTime('2026-09-11T04:00:00.000Z');
 const pack=await assurancePortable('borrow');
 const fourStagePack=await assurancePortable('lend');
 const targetIds=[
   ...await enrollPackage(id(),pack.key,languageContext),
   ...await enrollPackage(id(),fourStagePack.key,languageContext),
 ];
+vi.useRealTimers();
 assert.equal(targetIds.length, 2);
 assert((await readLearning()).targets.every(
   candidate=>candidate.curriculumMemberships[0]?.assurancePackageKey,
@@ -163,6 +169,22 @@ assert(assuranceEvidenceIds.length>0,'independent structured assessments create 
 const assuranceCompletion=state.events.find(event=>event.runId===run.id&&event.detail.transition.retention?.kind==='initial_learning_completion')!.detail.transition.retention!;
 if(assuranceCompletion.kind!=='initial_learning_completion')throw new Error('missing assurance completion');
 assert.deepEqual(new Set(assuranceCompletion.handoff.evidenceIds),new Set(assuranceEvidenceIds),'Scheduling Handoff references accumulated Evidence instead of a UI claim');
+});
+
+test('cacheless Structured restore still validates source readiness on frozen Run material, without claiming full Protocol replay',async()=>{
+ const {validateBackupRows}=await import('../../../apps/web/src/data/library/backupValidation');
+ const rows=await readLibrary(async tx=>Object.fromEntries(await Promise.all(libraryTables.map(async table=>[table,await tx.entries(table)])))) as BackupRows;
+ rows.packageCache=[];rows.operations=[];validateBackupRows(rows);
+ for(const mutation of ['before_admission','after_start'] as const){
+  const changed=structuredClone(rows),saved=changed.learningRuns.find(row=>row.key===run.id)!.value as LocalLearningRun,pin=saved.participants[saved.targetId]!;
+  const previous=pin.material,material=structuredClone(runBaselineMaterial(pin));
+  material.snapshot.provenance.sourceReadyAt=new Date(Date.parse(saved.startedAt)+(mutation==='after_start'?1:-1)).toISOString();
+  const reference=runMaterialDigest(material);delete pin.materializations[previous];pin.materializations[reference]=material;pin.material=reference;
+  for(const step of pin.presentationOrder)pin.presentedMaterials[step]=reference;
+  for(const row of changed.learningEvents){const event=row.value;if(event.runId===saved.id&&event.detail.nextPresentation)event.detail.nextPresentation.material=reference;}
+  assert.doesNotThrow(()=>validateRunMaterialPins(pin),'correctly rehashed references alone do not establish source readiness');
+  assert.throws(()=>validateBackupRows(changed),'Structured cache absence cannot bypass the source admission clock');
+ }
 });
 
 let assuranceReviewRevision: number;
@@ -242,4 +264,35 @@ assert.equal(target.memoryRevision,fourStageReviewRevision,'Four-stage Relearnin
 assert.equal(target.relearnAt,null);
 assert.equal(state.events.filter(event=>event.runId===run.id&&event.detail.transition.retention?.kind==='memory_outcome').length,0);
 assert.equal(state.events.filter(event=>event.runId===run.id&&event.detail.transition.retention?.kind==='relearning_completion').length,1);
+});
+
+test('cacheless Structured refresh cannot use a material snapshot or source that becomes Ready after its actual presentation event',async()=>{
+ const base=Date.now();vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(base);
+ try{
+  const review=await startLearning(id(),assuranceTargetId,languageContext,20);
+  vi.setSystemTime(base+1000);const updated=await assurancePortable('borrow',2);
+  await enrollPackage(id(),updated.key,languageContext);
+  const {validateBackupRows}=await import('../../../apps/web/src/data/library/backupValidation');
+  const rows=await readLibrary(async tx=>Object.fromEntries(await Promise.all(libraryTables.map(async table=>[table,await tx.entries(table)])))) as BackupRows;
+  rows.packageCache=[];rows.operations=[];validateBackupRows(rows);
+  const saved=rows.learningRuns.find(row=>row.key===review.id)!.value as LocalLearningRun;
+  assert(saved.lifecycleEvents.some(event=>event.kind==='current_step_material_refreshed'),'actual compatible Portable admission must refresh the unfinished Structured Step');
+  for(const mutation of ['snapshot_after_event','source_after_event'] as const){
+   const changed=structuredClone(rows),run=changed.learningRuns.find(row=>row.key===review.id)!.value as LocalLearningRun;
+   const event=run.lifecycleEvents.find(event=>event.kind==='current_step_material_refreshed')!;
+   if(event.kind!=='current_step_material_refreshed')throw Error('Missing refresh');
+   const pin=run.participants[event.targetId]!,previous=pin.presentedMaterials[event.stepId]!,material=structuredClone(pin.materializations[previous]!);
+   const future=new Date(Date.parse(event.at)+1).toISOString();material.snapshot.createdAt=future;
+   if(mutation==='source_after_event'){
+    material.snapshot.provenance.sourceReadyAt=future;
+    const target=changed.learningTargets.find(row=>row.key===event.targetId)!.value as LocalLearningTarget;
+    const source=target.curriculumMemberships.find(member=>member.packageKey===updated.key)!;
+    Object.assign(source,{createdAt:future,updatedAt:future});source.material.snapshot.provenance.sourceReadyAt=future;
+    Object.assign(source.material.snapshot,{createdAt:future});
+   }
+   const reference=runMaterialDigest(material);delete pin.materializations[previous];pin.materializations[reference]=material;pin.presentedMaterials[event.stepId]=reference;
+   assert.doesNotThrow(()=>validateRunMaterialPins(pin),'all content hashes remain exact');
+   assert.throws(()=>validateBackupRows(changed),'the presentation event cannot precede the material/source it actually used');
+  }
+ }finally{vi.useRealTimers();}
 });

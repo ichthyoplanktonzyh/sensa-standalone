@@ -10,7 +10,7 @@ import {
   sensaSchedulingDecisionSchema,
   sensaSchedulingHandoffSchema,
 } from '@sensa/contracts/sensa';
-import {test} from 'vitest';
+import {test,vi} from 'vitest';
 
 import {portablePackageFixture} from '../../../scripts/support/portablePackageFixture.mts';
 import {contentSupplySystem} from '../../../apps/web/src/contentSupply/system/index.ts';
@@ -80,8 +80,11 @@ test('Portable installation and enrollment remain separate idempotent authoritie
   );
   assert.equal('content' in installation,false,'synchronized installation facts carry no Runtime bytes');
 
-  [targetId]=await enrollPackage(id(),pack.key,languageContext) as [string];
-  await enrollPackage(id(),pack.key,languageContext);
+  vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(at);
+  try{
+    [targetId]=await enrollPackage(id(),pack.key,languageContext) as [string];
+    await enrollPackage(id(),pack.key,languageContext);
+  }finally{vi.useRealTimers();}
   const state=await readLearning();
   assert.equal(state.targets.length,1);
   assert.equal(state.targets[0]!.id,targetId);

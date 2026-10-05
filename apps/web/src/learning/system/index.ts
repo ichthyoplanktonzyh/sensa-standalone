@@ -20,6 +20,8 @@ export type {
   LearningFourStageInitialRuntimeProjection,
   LearningFourStageReviewRuntimeProjection,
   LearningHomeProjection,
+  LearningManagementProjection,
+  LearningHistoryProjection,
   LearningLightweightRuntimeProjection,
   LearningLightweightRating,
   LearningLightweightStepProjection,
@@ -42,6 +44,7 @@ export type {
   LearningSystem,
   LearningTargetPresentation,
   LearningTargetProjection,
+  LearningTargetDetailProjection,
   LearningTargetState,
   LearningWorkspaceProjection,
 } from './learningSystem';

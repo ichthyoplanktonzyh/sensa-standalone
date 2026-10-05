@@ -652,10 +652,14 @@ export const estimateLibraryRecordBytes=async(tables:readonly Table[]):Promise<n
  */
 export const readHomeLearningRecords = async (
   languageRouteId: string,
+  clock=Date.now(),
 ): Promise<HomeLearningStorageProjection> => {
   const adapter = await storageCall(sqliteRecordAdapter, 'localFlow.storageOpen');
-  return storageCall(() => adapter.homeLearningProjection(languageRouteId));
+  return storageCall(() => adapter.homeLearningProjection(languageRouteId,clock));
 };
+export const readLearningHistoryPage=async(query:import('../../learning/system/learningHistoryModel').LearningHistoryRequest)=>{const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');return storageCall(()=>adapter.learningHistoryPage(query));};
+export const readLearningManagementSummary=async(query:import('./runtimeLearningCandidates').LearningManagementSummaryQuery)=>{const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');return storageCall(()=>adapter.learningManagementSummary(query));};
+export const readRuntimeLearningCandidates=async(query:import('./runtimeLearningCandidates').RuntimeLearningCandidateQuery)=>{const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');return storageCall(()=>adapter.runtimeLearningCandidates(query));};
 
 export const readLocalLibraryRevision = (tx: LibraryTransaction): Promise<number> =>
   tx.get<number>("meta", localLibraryRevisionKey).then((value) => value ?? 0);

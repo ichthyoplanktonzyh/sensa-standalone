@@ -6,6 +6,7 @@ import type {
 } from '@sensa/contracts/sensa';
 
 import type { LightweightInitialLearningMaterialization } from '../../contentSupply/provisioning/lightweightInitialContent';
+import type {LearningHistorySummary} from './learningHistoryModel';
 import type { AssessmentResource } from '../content/assessmentResources';
 import type { RuntimeLearningContent } from '../content/learningCatalog';
 import type {
@@ -125,6 +126,7 @@ export interface LearningQueueProjection {
 
 export interface LearningHomeProjection {
   readonly activeRunId: string | null;
+  readonly resumeTargetId:string|null;
   readonly dailyLimit: number | null;
   readonly readyInitialCount: number;
   readonly reviewDueCount: number;
@@ -136,6 +138,12 @@ export interface LearningHomeProjection {
   readonly policyOptions: readonly LearningPolicyOption[];
 }
 
+export interface LearningManagementProjection{
+ readonly targetIds:readonly string[];readonly pendingDirectCount:number;readonly policies:readonly LearningPolicy[];readonly dailyLimit:number|null;
+ readonly readyInitialCount:number;readonly reviewDueCount:number;
+ readonly policyOptions:readonly LearningPolicyOption[];
+}
+export interface LearningHistoryProjection extends LearningHistorySummary{readonly records:readonly LearningRecordProjection[];readonly version:string;}
 export interface LearningPersonalEnrollmentIndex {
   readonly targets: readonly Readonly<{
     targetId: string;
@@ -319,5 +327,15 @@ export interface LearningRuntimeWorkspaceProjection {
   /** Continuation is planned only at a Run boundary, never during a Step. */
   readonly nextTargetId: string | null;
   readonly nextChangeAt: number | null;
+  readonly policyOptions: readonly LearningPolicyOption[];
+}
+
+/** One current Route's Target detail, without collection planning or history.
+ * The active participant identities preserve the existing continue action. */
+export interface LearningTargetDetailProjection {
+  readonly target: LearningTargetProjection | null;
+  readonly activeRunTargetIds: readonly string[];
+  readonly exportPackageKey: string | null;
+  readonly dailyLimit: number | null;
   readonly policyOptions: readonly LearningPolicyOption[];
 }

@@ -1,4 +1,5 @@
 import {learningSupportMeaning,type SensaFormalPinnedLanguageContext} from '@sensa/contracts/sensa';
+import {runBaselineMaterial,runStepMaterial} from './runMaterialPins';
 import type {
   LocalCurriculumMembership,
   LocalExecutableLearningTarget,
@@ -58,8 +59,8 @@ export function localExecutableTarget(
 
 export function localExecutableTargetForParticipant(
   target:LocalLearningTarget,
-  participant:Pick<LocalLearningRunParticipant,'curriculumMembershipId'|'languageContext'|'material'>,
-  presentedMaterial:LocalLearningMaterialization=participant.material,
+  participant:Pick<LocalLearningRunParticipant,'curriculumMembershipId'|'languageContext'|'material'|'materializations'|'presentedMaterials'|'presentationOrder'>,
+  presentedMaterial:LocalLearningMaterialization=runBaselineMaterial(participant),
 ):LocalExecutableLearningTarget {
   const membership=target.curriculumMemberships.find(candidate=>candidate.id===participant.curriculumMembershipId);
   if(!membership)throw new Error('localFlow.routeMembershipMissing');
@@ -69,20 +70,19 @@ export function localExecutableTargetForParticipant(
 /** Material currently bound to this Step. An explicit compatible refresh may
  * replace it until the learner acts; the acted Step then keeps that revision. */
 export function localPresentedMaterial(
-  participant:Pick<LocalLearningRunParticipant,'presentedMaterials'>,
+  participant:Pick<LocalLearningRunParticipant,'material'|'materializations'|'presentedMaterials'|'presentationOrder'>,
   stepId:string,
 ):LocalLearningMaterialization {
-  const material=participant.presentedMaterials[stepId];
-  if(!material)throw new Error('localFlow.resourceInvalid');
-  return material;
+  return runStepMaterial(participant,stepId);
 }
 
 /** Historical summaries use the last material the Run actually presented, not
  * either today's Curriculum material or the Run's older planning baseline. */
 export function localLastPresentedMaterial(
-  participant:Pick<LocalLearningRunParticipant,'material'|'presentedMaterials'>,
+  participant:Pick<LocalLearningRunParticipant,'material'|'materializations'|'presentedMaterials'|'presentationOrder'>,
 ):LocalLearningMaterialization {
-  return Object.values(participant.presentedMaterials).at(-1)??participant.material;
+  if(!Array.isArray(participant.presentationOrder))throw new Error('localFlow.resourceInvalid');
+  const stepId=participant.presentationOrder.at(-1);return stepId?runStepMaterial(participant,stepId):runBaselineMaterial(participant);
 }
 
 /** Adding another source is idempotent and never changes Target/Retention identity. */

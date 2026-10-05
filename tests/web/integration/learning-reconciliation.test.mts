@@ -6,6 +6,7 @@ import {
   reconcileConcurrentLearningEntries,
   validateLearningReconciliationRows,
 } from '../../../apps/web/src/data/library/learningReconciliation.ts';
+import {learningReplica} from '../../../apps/web/src/data/library/replication/learningReplica.ts';
 import {
   isReplicatedLibraryEntry,
   mergeLibraryReplicas,
@@ -76,6 +77,15 @@ const dependencies={
  package:'package-fixture',task:crypto.randomUUID(),attempt:crypto.randomUUID(),meaning:crypto.randomUUID(),media:crypto.randomUUID(),
  registrySenseVersion:crypto.randomUUID(),unrelatedRegistrySenseVersion:crypto.randomUUID(),annotation:'learning-scene:fixture',draft:crypto.randomUUID(),reconciliation:crypto.randomUUID(),
 };
+const continuationParent=crypto.randomUUID(),selectionParent=crypto.randomUUID();
+assert.deepEqual(learningReplica.conflictDependencies({table:'learningRuns',key:ids.localRun} as any,{
+ id:ids.localRun,continuedFromRunId:continuationParent,
+ lifecycleEvents:[{kind:'session_intent_selected',continuedFromRunId:selectionParent}],
+ participants:{[ids.target]:{materializations:{digest:{snapshot:{provenance:{packageKey:dependencies.package,attemptId:dependencies.attempt}}}}}},
+}).filter(reference=>reference.table==='learningRuns'||reference.table==='packageInstallations'||reference.table==='contentAttempts'),[
+ {table:'learningRuns',key:continuationParent},{table:'learningRuns',key:selectionParent},
+ {table:'packageInstallations',key:dependencies.package},{table:'contentAttempts',key:dependencies.attempt},
+],'continuation and selection parents, plus referenced immutable bodies, follow the Run conflict closure');
 const dependencyRows=[
  entry('packageInstallations',dependencies.package,{key:dependencies.package}),
  entry('learningTargets',ids.target,{id:ids.target,curriculumMemberships:[{packageKey:dependencies.package,provenance:{}}]}),

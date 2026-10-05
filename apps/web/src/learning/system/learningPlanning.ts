@@ -70,6 +70,7 @@ const needsReviewAt = (target: LearningQueueTarget): number | null => {
 };
 
 export const resolveLearningQueue = <Target extends LearningQueueTarget>(input: LearningQueueInput<Target>) => {
+  const localDay=new Date(input.clock).toDateString();
   const activeTargets = input.targets.filter((target) => (
     target.curriculumMemberships.some((membership) => (
       membership.status !== 'superseded'
@@ -85,7 +86,7 @@ export const resolveLearningQueue = <Target extends LearningQueueTarget>(input: 
   const startedToday = input.targets.filter((target) => (
     target.introducedLanguageRouteId === input.languageRouteId
     && target.startedAt
-    && new Date(target.startedAt).toDateString() === new Date(input.clock).toDateString()
+    && new Date(target.startedAt).toDateString() === localDay
   )).length;
   const remaining = Math.max(0, (input.dailyLimit ?? 20) - startedToday);
   const initialReady = [
@@ -107,8 +108,9 @@ export const resolveLearningQueue = <Target extends LearningQueueTarget>(input: 
 
 export const nextLearningQueueChangeAt = <Target extends LearningQueueTarget>(
   input: LearningQueueInput<Target>,
+  resolvedQueue?:Pick<ReturnType<typeof resolveLearningQueue<Target>>,'activeTargets'|'startedToday'>,
 ): number | null => {
-  const queue = resolveLearningQueue(input);
+  const queue = resolvedQueue??resolveLearningQueue(input);
   const futureDue = queue.activeTargets
     .filter((target) => !hasDeclaredMastery(target) && input.readiness[target.id] === 'ready')
     .map(needsReviewAt)
