@@ -16,6 +16,8 @@ interface StudyScreenProps {
   active: boolean;
   status?: ReactNode;
   availability?:'loading'|'ready'|'unavailable';
+  preferencesBusy?: boolean;
+  preferencesStatus?: ReactNode;
   calendar?: ReactNode;
   onOpenPreferences?: () => void;
   tab: 'a' | 'b';
@@ -28,8 +30,7 @@ interface StudyScreenProps {
   defaultPolicy: LearningPolicy;
   policyOptions?: readonly LearningPolicyOption[];
   learningTargetCount: number;
-  /** The language the counts and the queue act on. The daily limit is the
-   * account's, so it is named separately from the language counts. */
+  /** Counts and daily quota are scoped to the current learning Route. */
   languageLabel: string;
   readyInitialCount: number;
   reviewCount: number;
@@ -104,6 +105,6 @@ export const StudyScreen = (props: StudyScreenProps) => {
         </>,
       }}
     />
-    {props.active&&props.tab==='b'&&(!props.availability||props.availability==='ready')&&<LearningPreferencesPanel policyOptions={props.policyOptions} fixedPolicy={props.fixedPolicy} defaultPolicy={props.defaultPolicy} dailyNewCount={props.dailyNewCount} onPolicyChange={props.onPolicyChange} onDailyNewCountChange={props.onDailyNewCountChange} onClose={closePreferences} closeLabel={t('study.done')}/>}
+    {props.active&&props.tab==='b'&&(!props.availability||props.availability==='ready')&&<LearningPreferencesPanel busy={props.preferencesBusy} status={props.preferencesStatus} policyOptions={props.policyOptions} fixedPolicy={props.fixedPolicy} defaultPolicy={props.defaultPolicy} dailyNewCount={props.dailyNewCount} onPolicyChange={props.onPolicyChange} onDailyNewCountChange={props.onDailyNewCountChange} onClose={closePreferences} closeLabel={t('study.done')}/>}
   </>;
 };

@@ -134,6 +134,7 @@
     "grade": "Bewertung gespeichert: {{grade}}"
   },
   "learningPreferences": {
+    "quantitySaveUnconfirmed": "Das Speicherergebnis konnte nicht bestätigt werden. Die Tagesmenge wurde erneut gelesen; bitte vor einem neuen Versuch prüfen.",
     "finishSelection": "Fertig",
     "title": "Lernpräferenzen",
     "close": "Lernpräferenzen schließen",
@@ -461,7 +462,7 @@
     "daily": "Tägliches Limit für neue Bedeutungen",
     "method": "Standardlernmethode",
     "currentLanguage": "Aktuelle Sprache: {{language}}",
-    "dailyNote": "Das tägliche Limit neuer Bedeutungen gilt pro Konto. Ein Sprachwechsel schafft daher heute keine zusätzlichen Plätze.",
+    "dailyNote": "Das tägliche Limit neuer Bedeutungen gilt für den aktuellen Lernpfad.",
     "ready": "Neu zu lernen",
     "review": "Zur Wiederholung fällig",
     "history": "Aktuelle Einträge",

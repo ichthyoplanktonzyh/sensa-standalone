@@ -160,3 +160,44 @@ test('initial learning, Review and Relearning settle only replayable outcomes',a
   if(relearning?.kind!=='relearning_completion')throw new Error('missing relearning completion');
   sensaRelearningCompletionSchema.parse(relearning.completion);
 });
+
+test('revoking a known declaration restores eligibility without replacing another active Run; explicit selection resumes its original revealed Step',async()=>{
+  const clock='2027-01-10T08:00:00.000Z';
+  vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(clock);
+  try{
+    const targets:string[]=[];
+    for(const expression of ['retain','resume']){
+      const fixture=portablePackageFixture({packageId:id(),expression});
+      const installed=await contentSupplySystem.execute({kind:'install_portable_package',bytes:fixture.bytes,expectedArchiveDigest:fixture.archiveDigest});
+      targets.push(...await learningSystem.execute({kind:'enroll_package',operationId:id(),packageKey:installed.key,languageContext}));
+    }
+    const [firstTarget,secondTarget]=targets as [string,string];
+    const runtime=async()=>{const value=(await learningSystem.read({kind:'runtime',languageContext,clock:Date.parse(clock)})).runtime;assert(value?.kind==='lightweight');return value;};
+    await learningSystem.execute({kind:'confirm_quantity',operationId:id(),languageContext,dailyLimit:20});
+    await learningSystem.execute({kind:'start',operationId:id(),targetId:firstTarget,languageContext,dailyLimit:20,at:clock});
+    const initial=await runtime();
+    await learningSystem.execute({kind:'act',operationId:id(),runId:initial.runId,expectedRevision:initial.revision,action:{kind:'reveal'},at:clock});
+    const first=await runtime();
+    const before=await readLearning();
+    await learningSystem.execute({kind:'set_declared_mastery',operationId:id(),targetId:firstTarget,active:true,languageContext,at:clock});
+    await learningSystem.execute({kind:'start',operationId:id(),targetId:secondTarget,languageContext,dailyLimit:20,at:clock});
+    const second=await runtime(),secondRun=(await readLearning()).runs.find(run=>run.id===second.runId);
+    await learningSystem.execute({kind:'set_declared_mastery',operationId:id(),targetId:firstTarget,active:false,languageContext,at:clock});
+    const eligible=await readLearning();
+    assert.equal(eligible.active,second.runId,'revocation alone cannot replace the current Run');
+    assert.deepEqual(eligible.runs.find(run=>run.id===second.runId),secondRun);
+    assert.equal(hasDeclaredMasteryOverride(eligible.targets.find(target=>target.id===firstTarget)!),false);
+    assert.deepEqual(eligible.events,before.events,'declaration and revocation create no grading events');
+    for(const targetId of targets){
+      const target=eligible.targets.find(target=>target.id===targetId)!;
+      assert.equal(target.memory,null);assert.equal(target.memoryRevision,0);
+    }
+    await learningSystem.execute({kind:'start',operationId:id(),targetId:firstTarget,languageContext,dailyLimit:20,at:clock});
+    const projection=await runtime();
+    assert.equal(projection.runId,first.runId,'explicit selection lawfully resumes the interrupted Run');
+    assert.equal(projection.phase,'reveal');
+    assert.equal(projection.currentTargetId,firstTarget);
+    assert.deepEqual(projection.step,first.step);
+    assert.deepEqual((await readLearning()).events,before.events);
+  }finally{vi.useRealTimers();}
+});

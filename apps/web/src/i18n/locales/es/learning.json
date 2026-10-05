@@ -134,6 +134,7 @@
     "grade": "Valoración guardada: {{grade}}"
   },
   "learningPreferences": {
+    "quantitySaveUnconfirmed": "No se pudo confirmar el guardado. Se volvió a leer la cantidad diaria; compruébala antes de reintentar.",
     "finishSelection": "Terminar selección",
     "title": "Preferencias de aprendizaje",
     "close": "Cerrar",
@@ -461,7 +462,7 @@
     "daily": "Límite diario de significados nuevos",
     "method": "Método de aprendizaje predeterminado",
     "currentLanguage": "Idioma actual: {{language}}",
-    "dailyNote": "El límite diario de significados nuevos se cuenta por cuenta, así que cambiar de idioma no añade cupos para hoy.",
+    "dailyNote": "El límite diario de significados nuevos se aplica a la ruta de aprendizaje actual.",
     "ready": "Nuevos para aprender",
     "review": "Pendientes de repaso",
     "history": "Registros recientes",

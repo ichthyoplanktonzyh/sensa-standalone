@@ -134,6 +134,7 @@
     "grade": "Değerlendirme kaydedildi: {{grade}}"
   },
   "learningPreferences": {
+    "quantitySaveUnconfirmed": "Kaydetme sonucu doğrulanamadı. Günlük miktar yeniden okundu; tekrar denemeden önce kontrol edin.",
     "finishSelection": "Bitti",
     "title": "Öğrenme tercihleri",
     "close": "Öğrenme tercihlerini kapat",
@@ -461,7 +462,7 @@
     "daily": "Günlük yeni anlam sınırı",
     "method": "Varsayılan öğrenme yöntemi",
     "currentLanguage": "Geçerli dil: {{language}}",
-    "dailyNote": "Günlük yeni anlam sınırı hesap başına sayılır; dili değiştirmek bugün için yeni yer açmaz.",
+    "dailyNote": "Günlük yeni anlam sınırı geçerli öğrenme rotası için hesaplanır.",
     "ready": "Öğrenilecek yeni",
     "review": "Tekrar zamanı gelen",
     "history": "Son kayıtlar",

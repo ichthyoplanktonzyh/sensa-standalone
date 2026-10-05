@@ -205,7 +205,7 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
   return()=>window.clearTimeout(timer);
  },[workspace.queue.nextChangeAt,languageContext.languageRouteId,languageContext.languageRouteRevision,mode]);
 
- const perform=async<T,>(work:()=>Promise<T>,refreshAfter:()=>Promise<void>=async()=>{await refreshLearning();})=>{
+ const perform=async<T,>(work:()=>Promise<T>,refreshAfter:()=>Promise<void>=async()=>{await refreshLearning();},unconfirmedNotice='runtime.actionReceiptUnavailable')=>{
   const current=lifecycle.current;
   setBusy(true);setNotice('');
   try{
@@ -215,7 +215,7 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
    if(outcome.kind==='unconfirmed'){
     if(outcome.projection==='stale')return null;
     const error=outcome.error;
-    setNotice(error instanceof Error&&error.message.startsWith('localFlow.')?error.message:'runtime.actionReceiptUnavailable');
+    setNotice(error instanceof Error&&error.message.startsWith('localFlow.')?error.message:unconfirmedNotice);
     return null;
    }
    return outcome.value;
@@ -273,8 +273,8 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
   records:workspace.records,
   policyOptions:workspace.policyOptions,
   dailyLimit:dailyLimit??undefined,
-  notice:notice==='runtime.actionReceiptUnavailable'?i18n.t(notice):localFlowNotice(notice),busy:busy||loadStatus!=='ready',progress,loaded:loaded&&loadStatus==='ready',loadStatus,retryInitialLoad,unavailablePackageKeys,catalogBusy,reloadCatalog,refresh,
-  confirmQuantity:(n:number)=>perform(()=>learningSystem.execute({kind:'confirm_quantity',operationId:crypto.randomUUID(),languageContext,dailyLimit:n})),
+  notice:notice==='runtime.actionReceiptUnavailable'||notice==='learningPreferences.quantitySaveUnconfirmed'?i18n.t(notice):localFlowNotice(notice),busy:busy||loadStatus!=='ready',progress,loaded:loaded&&loadStatus==='ready',loadStatus,retryInitialLoad,unavailablePackageKeys,catalogBusy,reloadCatalog,refresh,
+  confirmQuantity:(n:number)=>perform(()=>learningSystem.execute({kind:'confirm_quantity',operationId:crypto.randomUUID(),languageContext,dailyLimit:n}),undefined,'learningPreferences.quantitySaveUnconfirmed'),
   download:(d:ContentSupplyCatalogItem,onPhase?:(phase:ContentSupplyInstallationPhase)=>void)=>perform(async()=>{
    const c=new AbortController();transfer.current=c;
    try{setProgress(0);return await contentSupplySystem.execute({kind:'install_catalog_item',descriptor:d,signal:AbortSignal.any([c.signal,AbortSignal.timeout(120000)]),onProgress:n=>setProgress(Math.round(100*n)),onPhase});}
@@ -324,6 +324,6 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
    }finally{actInFlight.current=false;}
   },
   declareKnown:(targetId:string,active=true)=>perform(()=>learningSystem.execute({kind:'set_declared_mastery',operationId:crypto.randomUUID(),targetId,active,languageContext})),
-  advance:()=>runtime&&dailyLimit!==null?perform(()=>learningSystem.execute({kind:'advance',operationId:crypto.randomUUID(),runId:runtime.runId,languageContext,dailyLimit})):Promise.resolve(null),
+  advance:()=>runtime?perform(()=>learningSystem.execute({kind:'advance',operationId:crypto.randomUUID(),runId:runtime.runId,languageContext,dailyLimit})):Promise.resolve(null),
  };
 }

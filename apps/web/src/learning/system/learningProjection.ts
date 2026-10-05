@@ -7,6 +7,7 @@ import {stableUuid} from '@sensa/learning-kernel';
 import type {LocalCurriculumEnrollment} from '../../data/library/curriculumEnrollments';
 import { readLearningOverview } from '../../data/library/learning';
 import {readStudyPlans} from '../../data/library/studyPlans';
+import {sameLearningSessionDirection} from '../../data/library/learningCommandReceipt';
 import {runBaselineMaterial} from '../runtime/runMaterialPins';
 import { localFlowText } from '../../i18n/localFlowText';
 import '../../i18n/learningResources';
@@ -504,7 +505,9 @@ export async function readLearningRuntimeProjection(input:Readonly<{
     // chain, so it is safe under this lock without nesting a Library transaction.
     const dailyLimit=(await readStudyPlans(tx))[input.languageContext.languageRouteId]?.dailyNewSenseLimit;
     return {run,targets,dailyLimit,
-      planning:!run||run.completedAt?await readRuntimeLearningCandidates({languageContext:input.languageContext,clock:input.clock,dailyLimit,supportedPolicies:policyOptions.map(option=>option.id),currentTargetIds:run?.targetIds??[],retryTargetIds:input.retries.map(retry=>retry.id)}):null};
+      // A pinned Run can finish after the surface Route changes. It cannot
+      // continue its Session into a different direction or Route.
+      planning:(!run||run.completedAt&&sameLearningSessionDirection(run.languageContext,input.languageContext))?await readRuntimeLearningCandidates({languageContext:input.languageContext,clock:input.clock,dailyLimit,supportedPolicies:policyOptions.map(option=>option.id),currentTargetIds:run?.targetIds??[],retryTargetIds:input.retries.map(retry=>retry.id)}):null};
   });
   const packageKeys=snapshot.targets.flatMap(target=>{
     const participant=snapshot.run!.participants[target.id];

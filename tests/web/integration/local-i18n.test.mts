@@ -104,6 +104,7 @@ for(const locale of interfaceLocales){
   for(const namespace of translationNamespaces)assert(i18n.hasResourceBundle(locale,namespace),`${locale}:${namespace}: registered`);
   assert.equal(i18n.t('nav.home'),((resources.get(locale)!.get('common')!.nav as Messages).home));
   assert.equal(localFlowNotice('localFlow.preparationStopped'),(resources.get(locale)!.get('localFlow')!.localFlow as Record<string,string>).preparationStopped);
+  assert.equal(i18n.t('learningPreferences.quantitySaveUnconfirmed'),(resources.get(locale)!.get('learning')!.learningPreferences as Record<string,string>).quantitySaveUnconfirmed);
 }
 
 const zhLocalFlow=(resources.get('zh-CN')!.get('localFlow')!.localFlow as Record<string,string>);

@@ -134,6 +134,7 @@
     "grade": "評価を保存しました: {{grade}}"
   },
   "learningPreferences": {
+    "quantitySaveUnconfirmed": "保存結果を確認できなかったため、1日の数量を読み直しました。確認してから再試行してください。",
     "finishSelection": "完了",
     "title": "学習設定",
     "close": "学習設定を閉じる",
@@ -461,7 +462,7 @@
     "daily": "1日の新しい意味の上限",
     "method": "既定の学習方法",
     "currentLanguage": "現在の言語：{{language}}",
-    "dailyNote": "1日の新しい意味の上限はアカウントごとに数えられるため、言語を切り替えても今日の枠は増えません。",
+    "dailyNote": "1日の新しい意味の上限は、現在の学習ルートごとに計算されます。",
     "ready": "学習する新しい意味",
     "review": "復習期限",
     "history": "最近の記録",

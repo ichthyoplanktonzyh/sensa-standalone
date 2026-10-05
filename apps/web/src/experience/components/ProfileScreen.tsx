@@ -26,6 +26,8 @@ interface ProfileScreenProps {
   active: boolean;
   account?: {email: string; pending: number; busy: boolean; onSync: () => void; onLogout: () => void};
   status?: ReactNode;
+  preferencesBusy?: boolean;
+  preferencesStatus?: ReactNode;
   modelSettings?: ReactNode;
   localLibrary?: boolean;
   onOpenPreferences?: () => void;
@@ -222,7 +224,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
         </>,
       }}
     />
-    {props.active && preferencesOpen && <LearningPreferencesPanel policyOptions={props.policyOptions} fixedPolicy={props.fixedLearningPolicy} defaultPolicy={props.defaultPolicy} dailyNewCount={props.dailyNewCount} onPolicyChange={props.onPolicyChange} onDailyNewCountChange={props.onDailyNewCountChange} onClose={closePreferences} closeLabel={t('account.done')}/>}
+    {props.active && preferencesOpen && <LearningPreferencesPanel busy={props.preferencesBusy} status={props.preferencesStatus} policyOptions={props.policyOptions} fixedPolicy={props.fixedLearningPolicy} defaultPolicy={props.defaultPolicy} dailyNewCount={props.dailyNewCount} onPolicyChange={props.onPolicyChange} onDailyNewCountChange={props.onDailyNewCountChange} onClose={closePreferences} closeLabel={t('account.done')}/>}
     {props.active && languagesOpen && <LanguagePanelHost onClose={() => setLanguagesOpen(false)}/>}
     {props.active && glossaryOpen && <GlossaryPanelHost onClose={() => setGlossaryOpen(false)}/>}
   </>;

@@ -134,6 +134,7 @@
     "grade": "Avaliação salva: {{grade}}"
   },
   "learningPreferences": {
+    "quantitySaveUnconfirmed": "Não foi possível confirmar o salvamento. A quantidade diária foi relida; confira antes de tentar novamente.",
     "finishSelection": "Concluído",
     "title": "Preferências de aprendizagem",
     "close": "Fechar preferências de aprendizagem",
@@ -461,7 +462,7 @@
     "daily": "Limite diário de novos sentidos",
     "method": "Método de aprendizagem padrão",
     "currentLanguage": "Idioma atual: {{language}}",
-    "dailyNote": "O limite diário de novos sentidos é contado por conta; trocar de idioma não cria novas vagas para hoje.",
+    "dailyNote": "O limite diário de novos sentidos se aplica à rota de aprendizagem atual.",
     "ready": "Novos para aprender",
     "review": "Revisão pendente",
     "history": "Registros recentes",

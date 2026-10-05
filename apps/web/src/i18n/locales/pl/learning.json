@@ -134,6 +134,7 @@
     "grade": "Zapisano ocenę: {{grade}}"
   },
   "learningPreferences": {
+    "quantitySaveUnconfirmed": "Nie udało się potwierdzić zapisu. Dzienna liczba została ponownie odczytana; sprawdź ją przed kolejną próbą.",
     "finishSelection": "Gotowe",
     "title": "Preferencje nauki",
     "close": "Zamknij preferencje nauki",
@@ -461,7 +462,7 @@
     "daily": "Dzienny limit nowych znaczeń",
     "method": "Domyślna metoda nauki",
     "currentLanguage": "Bieżący język: {{language}}",
-    "dailyNote": "Dzienny limit nowych znaczeń jest liczony dla konta, więc zmiana języka nie zwiększa dzisiejszego limitu.",
+    "dailyNote": "Dzienny limit nowych znaczeń dotyczy bieżącej ścieżki nauki.",
     "ready": "Nowe do nauki",
     "review": "Do powtórki",
     "history": "Ostatnie zapisy",

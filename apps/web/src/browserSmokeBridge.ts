@@ -35,8 +35,9 @@ type BrowserSmokeBridge = {
   learningReadsForTest(reset?:boolean):Promise<Record<string,number>>;
   traceLearningReadsForTest(active:boolean):Promise<void>;
   learningSettlementFactsForTest():Promise<{targets:{targetId:string;memoryRevision:number;reps:number|null}[];actionEventCount:number;behavioralEvidenceCount:number}>;
-  failNextLearningCommitForTest():Promise<void>;
+  failNextLearningCommitForTest(kind?:'action'|'quantity'|'finish'):Promise<void>;
   loseNextLearningActionResponseForTest():Promise<void>;
+  loseNextLearningQuantityResponseForTest():Promise<void>;
   holdNextLearningActionResponseForTest():Promise<void>;
   releaseLearningActionResponseForTest():void;
   holdWorldDetailReadsForTest():Promise<void>;
@@ -161,13 +162,17 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
       }
       const result={...learningReadCounts};if(reset)learningReadCounts={};return result;
     },
-    async failNextLearningCommitForTest(){
+    async failNextLearningCommitForTest(kind='action'){
       const {sqliteRecordAdapter}=await import('./data/library/sqliteAdapter');const adapter=await sqliteRecordAdapter(),commit=adapter.commit.bind(adapter);
-      adapter.commit=async mutation=>{if(mutation.puts.some(row=>row.table==='learningEvents')){adapter.commit=commit;throw new Error('fixture learning commit failed');}return commit(mutation);};
+      adapter.commit=async mutation=>{const reject=kind==='finish'?mutation.deletes.some(row=>row.table==='meta'&&row.key==='learning-active'):mutation.puts.some(row=>kind==='quantity'?row.table==='settings'&&row.key==='language-route-study-plans':row.table==='learningEvents');if(reject){adapter.commit=commit;throw new Error('fixture learning commit failed');}return commit(mutation);};
     },
     async loseNextLearningActionResponseForTest(){
       const {learningSystem}=await import('./learning/system');const execute=learningSystem.execute;
       learningSystem.execute=(async command=>{const result=await execute(command);if(command.kind==='act'){learningSystem.execute=execute;throw new Error('fixture lost committed Action receipt');}return result;}) as typeof execute;
+    },
+    async loseNextLearningQuantityResponseForTest(){
+      const {learningSystem}=await import('./learning/system');const execute=learningSystem.execute;
+      learningSystem.execute=(async command=>{const result=await execute(command);if(command.kind==='confirm_quantity'){learningSystem.execute=execute;throw new Error('fixture lost committed quantity receipt');}return result;}) as typeof execute;
     },
     async holdNextLearningActionResponseForTest(){
       if(releaseLearningResult)throw new Error('Action response already held');

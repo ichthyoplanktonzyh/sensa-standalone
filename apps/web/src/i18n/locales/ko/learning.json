@@ -134,6 +134,7 @@
     "grade": "평가 저장됨: {{grade}}"
   },
   "learningPreferences": {
+    "quantitySaveUnconfirmed": "저장 결과를 확인하지 못해 하루 수량을 다시 읽었습니다. 확인한 후 다시 시도하세요.",
     "finishSelection": "완료",
     "title": "학습 설정",
     "close": "학습 설정 닫기",
@@ -461,7 +462,7 @@
     "daily": "하루 신규 의미 한도",
     "method": "기본 학습 방법",
     "currentLanguage": "현재 언어: {{language}}",
-    "dailyNote": "하루 신규 의미 한도는 계정별로 계산되므로 언어를 바꾸어도 오늘의 신규 슬롯이 늘어나지 않습니다.",
+    "dailyNote": "하루 신규 의미 한도는 현재 학습 경로별로 계산됩니다.",
     "ready": "학습할 새 항목",
     "review": "복습 시점",
     "history": "최근 기록",

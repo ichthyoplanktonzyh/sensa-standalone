@@ -134,6 +134,7 @@
     "grade": "Rating saved: {{grade}}"
   },
   "learningPreferences": {
+    "quantitySaveUnconfirmed": "The save result could not be confirmed. The daily quantity was reread; check it before retrying.",
     "finishSelection": "Done",
     "title": "Learning preferences",
     "close": "Close learning preferences",
@@ -461,7 +462,7 @@
     "daily": "Daily new-meaning limit",
     "method": "Default learning method",
     "currentLanguage": "Current language: {{language}}",
-    "dailyNote": "The daily new-meaning limit is counted per account, so switching language does not add new slots for today.",
+    "dailyNote": "The daily new-meaning limit applies to the current learning route.",
     "ready": "New to learn",
     "review": "Due for review",
     "history": "Recent records",

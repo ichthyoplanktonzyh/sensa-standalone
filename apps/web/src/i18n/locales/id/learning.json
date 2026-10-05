@@ -134,6 +134,7 @@
     "grade": "Penilaian tersimpan: {{grade}}"
   },
   "learningPreferences": {
+    "quantitySaveUnconfirmed": "Hasil penyimpanan belum dapat dikonfirmasi. Jumlah harian telah dibaca ulang; periksa sebelum mencoba lagi.",
     "finishSelection": "Selesaikan pilihan",
     "title": "Preferensi belajar",
     "close": "Tutup",
@@ -461,7 +462,7 @@
     "daily": "Batas makna baru harian",
     "method": "Metode belajar bawaan",
     "currentLanguage": "Bahasa saat ini: {{language}}",
-    "dailyNote": "Batas makna baru harian dihitung per akun, jadi mengganti bahasa tidak menambah slot baru hari ini.",
+    "dailyNote": "Batas makna baru harian berlaku untuk rute belajar saat ini.",
     "ready": "Makna baru untuk dipelajari",
     "review": "Perlu diulang",
     "history": "Catatan terbaru",

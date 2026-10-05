@@ -134,6 +134,7 @@
     "grade": "已保留评价：{{grade}}"
   },
   "learningPreferences": {
+    "quantitySaveUnconfirmed": "未能确认保存结果，已重新读取每日数量。请核对后重试。",
     "finishSelection": "完成选择",
     "title": "学习偏好",
     "close": "关闭学习偏好",
@@ -461,7 +462,7 @@
     "daily": "每日新学上限",
     "method": "默认学习方式",
     "currentLanguage": "当前语言：{{language}}",
-    "dailyNote": "每日新学上限按账号计算，切换语言不会增加今天的新学名额。",
+    "dailyNote": "每日新学上限按当前学习路线计算。",
     "ready": "待新学",
     "review": "待复习",
     "history": "最近记录",

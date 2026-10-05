@@ -134,6 +134,7 @@
     "grade": "Valutazione salvata: {{grade}}"
   },
   "learningPreferences": {
+    "quantitySaveUnconfirmed": "Non è stato possibile confermare il salvataggio. La quantità giornaliera è stata riletta; controllala prima di riprovare.",
     "finishSelection": "Fine",
     "title": "Preferenze di apprendimento",
     "close": "Chiudi le preferenze di apprendimento",
@@ -461,7 +462,7 @@
     "daily": "Limite giornaliero di nuovi significati",
     "method": "Metodo di apprendimento predefinito",
     "currentLanguage": "Lingua corrente: {{language}}",
-    "dailyNote": "Il limite giornaliero di nuovi significati è conteggiato per account: cambiare lingua non aggiunge nuovi posti per oggi.",
+    "dailyNote": "Il limite giornaliero di nuovi significati si applica al percorso di apprendimento attuale.",
     "ready": "Nuovi da imparare",
     "review": "Da ripassare",
     "history": "Record recenti",

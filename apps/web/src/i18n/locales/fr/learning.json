@@ -134,6 +134,7 @@
     "grade": "Évaluation enregistrée : {{grade}}"
   },
   "learningPreferences": {
+    "quantitySaveUnconfirmed": "L’enregistrement n’a pas pu être confirmé. La quantité quotidienne a été relue ; vérifiez-la avant de réessayer.",
     "finishSelection": "Terminé",
     "title": "Préférences d’apprentissage",
     "close": "Fermer les préférences d’apprentissage",
@@ -461,7 +462,7 @@
     "daily": "Limite quotidienne de nouveaux sens",
     "method": "Méthode d’apprentissage par défaut",
     "currentLanguage": "Langue actuelle : {{language}}",
-    "dailyNote": "La limite quotidienne de nouveaux sens est calculée par compte ; changer de langue n’ajoute donc pas de nouveaux créneaux aujourd’hui.",
+    "dailyNote": "La limite quotidienne de nouveaux sens s’applique au parcours d’apprentissage actuel.",
     "ready": "Nouveaux sens à apprendre",
     "review": "À réviser",
     "history": "Enregistrements récents",

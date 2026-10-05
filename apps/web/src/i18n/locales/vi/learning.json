@@ -134,6 +134,7 @@
     "grade": "Đã lưu đánh giá: {{grade}}"
   },
   "learningPreferences": {
+    "quantitySaveUnconfirmed": "Chưa thể xác nhận kết quả lưu. Số lượng hằng ngày đã được đọc lại; hãy kiểm tra trước khi thử lại.",
     "finishSelection": "Xong",
     "title": "Tùy chọn học tập",
     "close": "Đóng tùy chọn học tập",
@@ -461,7 +462,7 @@
     "daily": "Giới hạn nghĩa mới mỗi ngày",
     "method": "Phương pháp học mặc định",
     "currentLanguage": "Ngôn ngữ hiện tại: {{language}}",
-    "dailyNote": "Giới hạn nghĩa mới hằng ngày tính theo tài khoản, nên đổi ngôn ngữ không tạo thêm suất học mới hôm nay.",
+    "dailyNote": "Giới hạn nghĩa mới hằng ngày áp dụng cho lộ trình học hiện tại.",
     "ready": "Nội dung mới để học",
     "review": "Đến hạn ôn tập",
     "history": "Bản ghi gần đây",

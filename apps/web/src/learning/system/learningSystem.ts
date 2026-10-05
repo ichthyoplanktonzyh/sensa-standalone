@@ -159,7 +159,7 @@ export type LearningCommand =
       operationId: string;
       runId: string;
       languageContext: SensaFormalPinnedLanguageContext;
-      dailyLimit: number;
+      dailyLimit: number | null;
       at?: string;
     }>;
 

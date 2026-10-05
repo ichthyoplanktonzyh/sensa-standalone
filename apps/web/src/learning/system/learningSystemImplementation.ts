@@ -188,7 +188,7 @@ export const executeLearningCommand = async (command: LearningCommand): Promise<
         retries: retriesFor(routeId),
       });
       const nextTargetId = workspace.nextTargetId;
-      if (nextTargetId) {
+      if (nextTargetId && command.dailyLimit !== null) {
         await continueLearning(
           stableUuid(`${command.operationId}:continue-next`),
           command.runId,

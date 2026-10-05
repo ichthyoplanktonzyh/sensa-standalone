@@ -3,7 +3,7 @@ import {useTranslation} from 'react-i18next';
 import i18n from '../../i18n';
 import {interfaceLanguageDisplayName} from '../../i18n/languageDisplayName';
 import {resolveInterfaceLocale} from '../../i18n/localeRegistry';
-import {localFlowText} from '../../i18n/localFlowText';
+import {localFlowNotice,localFlowText} from '../../i18n/localFlowText';
 import {useShellNavigation} from '../router/useShellNavigation';
 import {useOverlayStore} from '../stores/overlayStore';
 import {usePackageLearning} from './usePackageLearning';
@@ -140,6 +140,8 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
   return <LearningSetupFrame id="s-learning-target" active={screenActive} title={localFlowText('learningTarget')} onBack={backMain}><p role="status">{packageLearning.loaded?localFlowText('targetMissing'):localFlowText('targetLoading')}</p></LearningSetupFrame>;
  };
  const managementStatus=packageLearning.loadStatus==='unavailable'?<div role="alert"><p>{packageLearning.notice||localFlowText('progressReadFailed')}</p><button className={setupButton} onClick={()=>void packageLearning.retryInitialLoad()}>{t('reliability.retry')}</button></div>:packageLearning.loadStatus==='loading'?<p role="status" aria-busy="true">{localFlowText('loadingSensa')}</p>:null;
+ const preferencesStatus=managementStatus??(packageLearning.notice?<p role="alert">{localFlowNotice(packageLearning.notice)}</p>:null);
+ const preferencesBusy=packageLearning.busy||packageLearning.loadStatus!=='ready';
  const learningScreenRenderers:Record<LearningWorkspaceScreenId,(active:boolean)=>ReactNode>={
   's-academy':screenActive=><AcademyScreen active={screenActive} onBack={backMain} onOpenPracticeScope={()=>goMain('s-practice-scope')} onOpenRealWorldListening={openRealWorldListening} practiceScope={practiceScopeCatalog.currentScope} scopeAvailability={practiceScopeAvailability} onRetryScope={retryPracticeScope}/>,
   's-practice-scope':screenActive=><PracticeScopeScreen active={screenActive} catalog={practiceScopeCatalog} onBack={backMain} onSelectScope={selectScope} scopeAvailability={practiceScopeAvailability} onRetryScope={retryPracticeScope}/>,
@@ -152,6 +154,7 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
   's-real-world-listening':screenActive=><YouGlishListeningScreen active={screenActive} targets={(activePracticeScope??practiceScopeCatalog.currentScope).targets} onBack={backMain} toast={toast}/>,
   's-study':screenActive=><StudyScreen
     availability={packageLearning.loadStatus} status={managementStatus}
+    preferencesBusy={preferencesBusy} preferencesStatus={preferencesStatus}
     policySummary={[...new Set(packageLearning.management?.policies??packageLearning.targets.map(target=>target.policy))].map(policy=>t('learningPreferences.policies.'+policy)).join(' · ')||undefined}
     active={screenActive} tab={studyTab} onTabChange={setStudyTab} onAddLearning={()=>goMain('s-learning-entry')}
     onOpenTargetLibrary={()=>goMain('s-learning-library')} onOpenTarget={openLocalTarget}
@@ -194,8 +197,8 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
     onEnrolled={enrollmentId=>setMainStack(mainStack,{enrollmentId})} onBack={backMain} onCatalog={()=>goMain('s-catalog')} onSettings={()=>goMain('s-profile')} onTarget={openLocalTarget}/>,
   's-learning-target':renderLearningTarget,
   's-stats':screenActive=><StatsScreen active={screenActive} onBack={backMain} onOpenTarget={openLocalTarget}/>,
-  's-profile':screenActive=><ProfileScreen localLibrary fixedLearningPolicy modelSettings={<ProviderPanel/>} active={screenActive} onGoStudyPlan={()=>{setStudyTab('a');goMain('s-study');}} defaultPolicy="lightweight" policyOptions={packageLearning.policyOptions} dailyNewCount={dailyNewCount} onPolicyChange={()=>{}} onDailyNewCountChange={updateLocalQuantity}/>,
-  's-lightweight-runtime':screenActive=><PackageRuntime active={screenActive} c={packageLearning} onExit={returnHome} onViewLearningLibrary={()=>setMainStack(['s-study','s-learning-library'])} onFinish={()=>void packageLearning.advance().then(continued=>{if(!continued)returnHome();})}/>,
+  's-profile':screenActive=><ProfileScreen localLibrary fixedLearningPolicy modelSettings={<ProviderPanel/>} active={screenActive} preferencesBusy={preferencesBusy} preferencesStatus={preferencesStatus} onGoStudyPlan={()=>{setStudyTab('a');goMain('s-study');}} defaultPolicy="lightweight" policyOptions={packageLearning.policyOptions} dailyNewCount={dailyNewCount} onPolicyChange={()=>{}} onDailyNewCountChange={updateLocalQuantity}/>,
+  's-lightweight-runtime':screenActive=><PackageRuntime active={screenActive} c={packageLearning} onExit={returnHome} onViewLearningLibrary={()=>setMainStack(['s-study','s-learning-library'])} onFinish={()=>void packageLearning.advance().then(continued=>{if(continued===false)returnHome();})}/>,
  };
  const renderScreen=(screenActive:boolean)=>learningScreenRenderers[currentScreen as LearningWorkspaceScreenId]?.(screenActive)??null;
  const fallback=<section id={currentScreen} className="screen active absolute inset-0 grid place-content-center bg-surface-canvas text-fg-primary" role="status">{localFlowText('loadingSensa')}</section>;
