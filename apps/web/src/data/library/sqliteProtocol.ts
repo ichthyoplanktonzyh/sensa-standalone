@@ -24,7 +24,7 @@ export const sqlitePoolDirectory = "/sensa-local-library-v12";
 export const sqliteLibraryBaselineVersion = 10;
 export const sqliteLibrarySchemaVersion = 14;
 /** Cross-tab RPC changes must bump this before adding or changing messages. */
-export const sqliteCoordinatorProtocolVersion = 30;
+export const sqliteCoordinatorProtocolVersion = 31;
 
 export const sqliteLibraryTables = [
   "meta",

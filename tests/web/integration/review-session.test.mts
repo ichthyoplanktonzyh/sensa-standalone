@@ -44,7 +44,7 @@ test('review-only switches away from a paused initial Run, retains its exact Ste
  await act({kind:'reveal'},at);
  const paused=(await runtime()).runtime!;
  if(paused.kind!=='lightweight')throw new Error('Expected lightweight initial fixture');
- const home=await learningSystem.read({kind:'home',languageRouteId:context.languageRouteId,clock:Date.parse(due)});
+ const home=await learningSystem.read({kind:'home',languageContext:context,clock:Date.parse(due)});
  expect(home.reviewDueCount).toBe(1);expect(home.nextReviewTargetId).toBe(retained);
  await learningSystem.execute({kind:'start',operationId:id(),targetId:retained,languageContext:context,dailyLimit:20,sessionIntent:'review_only',at:due});
  expect((await runtime()).runtime!.currentTargetId).toBe(retained);

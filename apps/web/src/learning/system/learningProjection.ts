@@ -5,9 +5,10 @@ import { contentSupplySystem, type ContentSupplyRuntimePackage } from '../../con
 import { readHomeLearningRecords,readLibrary,readLearningHistoryPage,readRuntimeLearningCandidates,readLearningManagementSummary,readLocalLibraryRevision } from '../../data/library/store';
 import {stableUuid} from '@sensa/learning-kernel';
 import type {LocalCurriculumEnrollment} from '../../data/library/curriculumEnrollments';
-import { readLearningOverview } from '../../data/library/learning';
+import { readLearningOverview } from '../../data/library/learningOverview';
 import {readStudyPlans} from '../../data/library/studyPlans';
 import {sameLearningSessionDirection} from '../../data/library/learningCommandReceipt';
+import {planningMembershipForContext,curriculumSourceEligibility} from '../runtime/curriculumEligibility';
 import {runBaselineMaterial} from '../runtime/runMaterialPins';
 import { localFlowText } from '../../i18n/localFlowText';
 import '../../i18n/learningResources';
@@ -19,7 +20,6 @@ import { resolveReviewMemoryOutcome } from '../review/types';
 import {
   localCurriculumMeaning,
   localCurriculumMembershipForContext,
-  localCurriculumMembershipForRoute,
   localExecutableTargetForParticipant,
   localLastPresentedMaterial,
   localPresentedMaterial,
@@ -373,16 +373,19 @@ const workspaceReadiness = async (
   targets: readonly LocalLearningTarget[],
   packages: readonly ContentSupplyRuntimePackage[],
   context: SensaFormalPinnedLanguageContext,
+  enrollments:ReadonlyMap<string,LocalCurriculumEnrollment>,
 ) => {
-  const readiness:Record<string,'ready'|'blocked'>={};let until=performance.now()+8;
+  const readiness:Record<string,'ready'|'blocked'>={},eligibility:Record<string,{introduce:boolean;ongoing:boolean}>={};let until=performance.now()+8;
   for(const target of targets){
-    const membership=localCurriculumMembershipForContext(target,context);
-    readiness[target.id]=inspectLocalTargetReadiness(target,membership,packageFor(packages,membership)).status;
+    const membership=planningMembershipForContext(target,context,enrollments,member=>inspectLocalTargetReadiness(target,member,packageFor(packages,member)).status==='ready');
+    readiness[target.id]=membership?'ready':'blocked';
+    const id=membership?.provenance?.curriculumEnrollmentId;
+    eligibility[target.id]=membership?curriculumSourceEligibility(membership,typeof id==='string'?enrollments.get(id):undefined,!!target.startedAt):{introduce:false,ongoing:false};
     // All content checks remain mandatory. Yield between Targets so validating
     // a collection cannot monopolize one main-thread task on a slower device.
     if(performance.now()>=until){await new Promise<void>(resolve=>setTimeout(resolve,0));until=performance.now()+8;}
   }
-  return readiness;
+  return {readiness,eligibility};
 };
 
 export async function readLearningWorkspaceProjection(input: Readonly<{
@@ -391,17 +394,16 @@ export async function readLearningWorkspaceProjection(input: Readonly<{
   retries: readonly InterleavedLearningRetry[];
 }>): Promise<LearningWorkspaceProjection> {
   const snapshot=await readLearningOverview();
-  const packageKeys=snapshot.targets.flatMap(target=>{
-    const membership=localCurriculumMembershipForContext(target,input.languageContext);
-    return membership?.assurancePackageKey&&membership.packageKey?[membership.packageKey]:[];
-  });
+  const enrollments=new Map(snapshot.enrollments.map(enrollment=>[enrollment.id,enrollment]));
+  const packageKeys=snapshot.targets.flatMap(target=>target.curriculumMemberships.flatMap(member=>member.languageContext.languageRouteId===input.languageContext.languageRouteId&&member.assurancePackageKey&&member.packageKey?[member.packageKey]:[]));
   const packages=await contentSupplySystem.read({kind:'runtime_packages',packageKeys});
-  const readiness = await workspaceReadiness(snapshot.targets, packages, input.languageContext);
+  const {readiness,eligibility} = await workspaceReadiness(snapshot.targets, packages, input.languageContext,enrollments);
   const dailyLimit = snapshot.studyPlans[input.languageContext.languageRouteId]?.dailyNewSenseLimit;
   const queue = resolveLearningQueue({
     targets: snapshot.targets,
     languageRouteId: input.languageContext.languageRouteId,
     readiness,
+    eligibility,
     clock: input.clock,
     dailyLimit,
   });
@@ -412,13 +414,13 @@ export async function readLearningWorkspaceProjection(input: Readonly<{
     currentRunTargetIds: (activeRun?.targetIds??[]).filter(id=>!(activeRun?.purpose==='retention_review'&&queue.due.some(target=>target.id===id&&target.relearnAt))),
     retries: input.retries,
   });
-  const targets = queue.activeTargets.flatMap((target) => {
-    const membership = localCurriculumMembershipForContext(target, input.languageContext);
+  const targets = snapshot.targets.flatMap((target) => {
+    const membership = planningMembershipForContext(target,input.languageContext,enrollments,member=>inspectLocalTargetReadiness(target,member,packageFor(packages,member)).status==='ready')??localCurriculumMembershipForContext(target, input.languageContext);
     return membership
       ? [projectLearningTarget(
         target,
         membership,
-        readiness[target.id] ?? 'blocked',
+        inspectLocalTargetReadiness(target,membership,packageFor(packages,membership)).status,
         input.clock,
         membership.material,
         packageFor(packages, membership),
@@ -575,19 +577,25 @@ export async function readLearningHistoryProjection(input:{request:import('./lea
  });
 }
 export async function readLearningHomeProjection(input: Readonly<{
-  languageRouteId: string;
+  languageContext: SensaFormalPinnedLanguageContext;
   clock: number;
 }>): Promise<LearningHomeProjection> {
-  const stored = await readHomeLearningRecords(input.languageRouteId,input.clock);
+  const languageRouteId=input.languageContext.languageRouteId;
+  const stored = await readHomeLearningRecords(languageRouteId,input.clock);
   const availablePackageKeys = new Set(stored.availablePackageKeys);
+  const enrollments=new Map((stored.enrollments??[]).map(enrollment=>[enrollment.id,enrollment]));
+  const eligibility:Record<string,{introduce:boolean;ongoing:boolean}>={};
   const readiness = Object.fromEntries(stored.targets.map((target) => {
-    const membership = localCurriculumMembershipForRoute(target, input.languageRouteId);
+    const membership = planningMembershipForContext(target,input.languageContext,enrollments,member=>homeLearningReadiness(target,member,availablePackageKeys)==='ready',stored.sourceEligibility);
+    const id=membership?.provenance?.curriculumEnrollmentId;
+    eligibility[target.id]=membership?(membership.id&&stored.sourceEligibility?.[membership.id]||curriculumSourceEligibility(membership,typeof id==='string'?enrollments.get(id):undefined,!!target.startedAt)):{introduce:false,ongoing:false};
     return [target.id, homeLearningReadiness(target, membership, availablePackageKeys)];
   })) as Readonly<Record<string, 'ready' | 'blocked'>>;
   const queue = resolveLearningQueue({
     targets: stored.targets,
-    languageRouteId: input.languageRouteId,
+    languageRouteId,
     readiness,
+    eligibility,
     clock: input.clock,
     dailyLimit: stored.dailyLimit,
   });
@@ -603,8 +611,9 @@ export async function readLearningHomeProjection(input: Readonly<{
     nextReviewTargetId: queue.due[0]?.id ?? null,
     nextChangeAt: nextLearningQueueChangeAt({
       targets: stored.targets,
-      languageRouteId: input.languageRouteId,
+      languageRouteId,
       readiness,
+      eligibility,
       clock: input.clock,
       dailyLimit: stored.dailyLimit,
     },queue),

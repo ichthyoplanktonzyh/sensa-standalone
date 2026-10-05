@@ -176,6 +176,7 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
         ? decode<LocalLearningRun>(this.records.get(`learningRuns\u0000${activeId}`)) ?? null
         : null,
       studyPlans: decode(this.records.get('settings\u0000language-route-study-plans')) ?? {},
+      enrollments:(await this.entries('curriculumEnrollments')).map(row=>decode<import('./curriculumEnrollments').LocalCurriculumEnrollment>(row.encodedValue)!),
       languageRouteId,
     });
   }

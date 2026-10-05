@@ -27,6 +27,7 @@ import {applyLocalProtocolTransition} from './learningSettlement';
 import {packageInstallationSchema} from './packageRecords';
 import {assertPublishedCurriculumSource,publishedMaterialMembership} from './publishedCurriculumSources';
 import {curriculumEnrollmentSchema,assertDirectEnrollmentSource,type LocalCurriculumEnrollment} from './curriculumEnrollments';
+import {assertResolvedBookRange} from './bookPlans';
 import {resolveDirectLearningSource,directLearningReferenceSchema} from '../../learning/system/directLearningSource';
 import {assertDirectTaskEnrollment,assertDirectAttemptSource} from './directProvisioningAssertions';
 import type {LibraryIdentity,LibraryRecordTransition,Operation,Table} from './store';
@@ -139,6 +140,7 @@ export function assertLearningSystemState(input:LearningSystemStateInput){
     ||reference&&(reference.bookId!==source.bookId||reference.bookVersionId!==source.bookVersionId||reference.memberCount!==source.memberCount)))fail();
    const positions=members.flatMap(({reference})=>reference?[reference.memberIndex]:[]);
    if(new Set(positions).size!==positions.length)fail();
+   if(enrollment.bookPlan)assertResolvedBookRange(enrollment.bookPlan.range,members.map(member=>member.installation),[...maps.packageCache.values()]);
   }
  }
  for(const {value:target} of rows.learningTargets){
@@ -574,6 +576,12 @@ async function assertCurriculumEnrollmentTransition(
  }else{
   // Each materialized member is checked again at the Learning Target boundary.
   z.string().regex(/^[a-f0-9]{64}$/u).parse(after.source.publicationArchiveSha256);
+  if(after.bookPlan&&after.bookPlan.range.selection.kind!=='all'){
+   const keys=[...new Set(after.bookPlan.range.members.map(member=>member.packageKey))];
+   const installations=await Promise.all(keys.map(async key=>packageInstallationSchema.parse(requireFact(await input.read('packageInstallations',key),'Book Range installation is missing.'))));
+   const packages=(await Promise.all(keys.map(key=>input.read('packageCache',key)))).filter(Boolean) as any[];
+   assertResolvedBookRange(after.bookPlan.range,installations,packages);
+  }
  }
 }
 

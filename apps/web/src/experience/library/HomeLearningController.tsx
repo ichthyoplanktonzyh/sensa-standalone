@@ -2,7 +2,6 @@ import {lazy,Suspense,useEffect,useRef,useState} from 'react';
 import '../../i18n/accountResources';
 import {useTranslation} from 'react-i18next';
 import {HomeScreen} from '../components/HomeScreen';
-import {openLibrary} from '../../data/library/store';
 import type {LearningHomeProjection} from '../../learning/system';
 import {useActiveLanguageContext} from './useActiveLanguageContext';
 import {useShellNavigation} from '../router/useShellNavigation';
@@ -36,7 +35,7 @@ export function HomeLearningController({active=true}:{active?:boolean}){
   const version=viewEpoch.current.version;
   if(!active||viewEpoch.current.key!==viewKey)return;
   const learningSystem=await loadLearningSystem();
-  const next=await learningSystem.read({kind:'home',languageRouteId:languageContext.languageRouteId,clock:Date.now()});
+  const next=await learningSystem.read({kind:'home',languageContext,clock:Date.now()});
   if(version!==viewEpoch.current.version)return;
   setProjection({routeKey,value:next});
   setSummaryEpoch(version);
@@ -58,8 +57,8 @@ export function HomeLearningController({active=true}:{active?:boolean}){
   let stop=()=>{};
   void loadLearningSystem().then(system=>{
    if(!current)return;
-   stop=system.subscribe({kind:'home',languageRouteId:languageContext.languageRouteId},read);
-   return openLibrary().then(prepare);
+   stop=system.subscribe({kind:'home',languageContext},read);
+   return import('../../data/library/store').then(module=>module.openLibrary()).then(prepare);
   }).catch(()=>{if(current)setNotice(localFlowText('learningReadFailed'));});
   const focus=()=>void prepare().catch(()=>{if(current)setNotice(localFlowText('learningReadFailed'));});
   window.addEventListener('focus',focus);

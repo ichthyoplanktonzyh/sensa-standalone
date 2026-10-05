@@ -228,7 +228,7 @@ export const readLearningQuery = async (query: LearningQuery): Promise<unknown> 
     }
     case 'home': {
       return readLearningHomeProjection({
-        languageRouteId: query.languageRouteId,
+        languageContext: query.languageContext,
         clock: query.clock ?? Date.now(),
       });
     }

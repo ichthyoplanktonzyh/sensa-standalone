@@ -37,7 +37,7 @@ test('compact management matches actual completed records and rejects partial in
  await learningSystem.execute(await action({kind:'reveal'}));
  const grade=await action({kind:'rate',rating:'good'}),sourceBefore=database.entries('learningRuns');
  const targetsBefore=database.entries('learningTargets');
- raw.exec("CREATE TRIGGER reject_runtime_plan BEFORE INSERT ON sensa_runtime_learning_candidates BEGIN SELECT RAISE(ABORT,'fixture_plan_write_rejected'); END");
+ raw.exec("CREATE TRIGGER reject_runtime_plan BEFORE INSERT ON sensa_runtime_learning_candidate_sources BEGIN SELECT RAISE(ABORT,'fixture_plan_write_rejected'); END");
  try{
   await expect(learningSystem.execute(grade)).rejects.toThrow();
   expect(database.entries('learningTargets')).toEqual(targetsBefore);expect(database.entries('learningRuns')).toEqual(sourceBefore);
@@ -98,7 +98,7 @@ test('history presentation indexes rebuild from the same genuine facts, preserve
  const changes=raw.changes(true);reopen();expect(raw.changes(true)).toBe(changes);
  const query={languageContext:context,clock:Date.parse(at),dailyLimit:20,supportedPolicies:['lightweight'],currentTargetIds:[],retryTargetIds:[]};
  const candidates=database.runtimeLearningCandidates(query);
- raw.exec('DROP TABLE sensa_runtime_learning_candidates');reopen();
+ raw.exec('DROP TABLE sensa_runtime_learning_candidate_sources');reopen();
  expect(database.runtimeLearningCandidates(query)).toEqual(candidates);
  expect({targets:database.entries('learningTargets'),runs:database.entries('learningRuns'),events:database.entries('learningEvents')}).toEqual(sources);
  // A read error must not turn into a verified empty-history response.

@@ -179,7 +179,7 @@ export type LearningQuery =
   | Readonly<{kind:'direct_choices';query:string;targetLanguageTag:string;page:number}>
   | Readonly<{kind:'direct_enrollment';enrollmentId:string}>
   | Readonly<{kind:'direct_source';reference:DirectLearningReference;expectedDigest?:string}>
-  | Readonly<{ kind: 'home'; languageRouteId: string; clock?: number }>
+  | Readonly<{ kind: 'home'; languageContext: SensaFormalPinnedLanguageContext; clock?: number }>
   | Readonly<{
       kind: 'workspace';
       languageContext: SensaFormalPinnedLanguageContext;

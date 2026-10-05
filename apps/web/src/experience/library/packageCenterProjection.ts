@@ -29,12 +29,14 @@ type ReleaseGroup=Readonly<{
  memberCount:number;
  packages:InstalledPackage[];
  packageKeys:Set<string>;
+ memberIndices:Map<string,number>;
 }>;
 
 type OrphanReleaseGroup=Readonly<{
  publication:Publication;
  packages:InstalledPackage[];
  packageKeys:Set<string>;
+ memberIndices:Map<string,number>;
 }>;
 
 const identity=(...parts:string[])=>parts.join('\0');
@@ -57,6 +59,13 @@ const addPackage=(group:{packages:InstalledPackage[];packageKeys:Set<string>},pa
  if(group.packageKeys.has(pack.key))return;
  group.packageKeys.add(pack.key);
  group.packages.push(pack);
+};
+
+const orderAdmittedMembers=(group:{packages:InstalledPackage[];memberIndices:Map<string,number>})=>{
+ // Unknown positions keep their recorded display order; do not infer ordinals
+ // from Package UUIDs or mix one known position into an unpositioned edition.
+ if(group.memberIndices.size!==group.packages.length||new Set(group.memberIndices.values()).size!==group.packages.length)return;
+ group.packages.sort((left,right)=>group.memberIndices.get(left.key)!-group.memberIndices.get(right.key)!);
 };
 
 /** Build catalog, library and retired Book views with one pass over installed publications. */
@@ -138,9 +147,11 @@ export function buildPackageCenterItems(c:Pick<Controller,'catalog'|'packages'|'
       memberCount:publication.memberCount,
       packages:[],
       packageKeys:new Set(),
+      memberIndices:new Map(),
      };
     }
     addPackage(group,pack);
+    if(typeof publication.memberIndex==='number')group.memberIndices.set(pack.key,publication.memberIndex);
     releases.set(publication.bookArchiveSha256,group);
     bookReleases.set(bookKey,releases);
    }
@@ -154,12 +165,16 @@ export function buildPackageCenterItems(c:Pick<Controller,'catalog'|'packages'|'
    if(knownBooks.has(orphanIdentity))continue;
    const releases=orphanGroups.get(orphanIdentity)??new Map<string,OrphanReleaseGroup>();
    let group=releases.get(publication.bookArchiveSha256);
-   if(!group)group={publication,packages:[],packageKeys:new Set()};
+   if(!group)group={publication,packages:[],packageKeys:new Set(),memberIndices:new Map()};
    addPackage(group,pack);
+   if(typeof publication.memberIndex==='number')group.memberIndices.set(pack.key,publication.memberIndex);
    releases.set(publication.bookArchiveSha256,group);
    orphanGroups.set(orphanIdentity,releases);
   }
  }
+
+ for(const releases of bookReleases.values())for(const group of releases.values())orderAdmittedMembers(group);
+ for(const releases of orphanGroups.values())for(const group of releases.values())orderAdmittedMembers(group);
 
  const catalog=c.catalog.map((descriptor):PackageCenterItem=>{
   const releases=bookReleases.get(routeBookIdentity(

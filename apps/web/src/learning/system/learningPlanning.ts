@@ -18,6 +18,7 @@ export interface LearningQueueInput<Target extends LearningQueueTarget = Learnin
   readonly readiness: Readonly<Record<string, 'ready' | 'blocked'>>;
   readonly clock: number;
   readonly dailyLimit: number | undefined;
+  readonly eligibility?:Readonly<Record<string,Readonly<{introduce:boolean;ongoing:boolean}>>>;
 }
 
 export interface InterleavedLearningRetry {
@@ -71,13 +72,16 @@ const needsReviewAt = (target: LearningQueueTarget): number | null => {
 
 export const resolveLearningQueue = <Target extends LearningQueueTarget>(input: LearningQueueInput<Target>) => {
   const localDay=new Date(input.clock).toDateString();
-  const activeTargets = input.targets.filter((target) => (
+  const activeTargets = input.targets.filter((target) => input.eligibility
+   ?(input.eligibility[target.id]?.introduce||input.eligibility[target.id]?.ongoing)
+   :(
     target.curriculumMemberships.some((membership) => (
       membership.status !== 'superseded'
       && membership.languageContext.languageRouteId === input.languageRouteId
     ))
   ));
   const due = activeTargets
+    .filter(target=>!input.eligibility||input.eligibility[target.id]?.ongoing)
     .filter((target) => !hasDeclaredMastery(target) && input.readiness[target.id] === 'ready')
     .filter((target) => {
       const dueAt = needsReviewAt(target);
@@ -94,12 +98,14 @@ export const resolveLearningQueue = <Target extends LearningQueueTarget>(input: 
       !hasDeclaredMastery(target)
       && !target.completedAt
       && target.startedAt
+      && (!input.eligibility||input.eligibility[target.id]?.ongoing)
       && input.readiness[target.id] === 'ready'
     )),
     ...activeTargets.filter((target) => (
       !hasDeclaredMastery(target)
       && !target.completedAt
       && !target.startedAt
+      && (!input.eligibility||input.eligibility[target.id]?.introduce)
       && input.readiness[target.id] === 'ready'
     )).slice(0, remaining),
   ];

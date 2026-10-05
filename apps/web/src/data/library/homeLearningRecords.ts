@@ -1,7 +1,9 @@
 import type {LocalLearningRun,LocalLearningTarget} from '../../learning/runtime/localProtocol';
-import {localTargetInRoute} from '../../learning/runtime/localCurriculum';
+import type {LocalCurriculumEnrollment} from './curriculumEnrollments';
 
 export interface HomeLearningMembershipRecord {
+  readonly id?:string;
+  readonly provenance?:Readonly<Record<string,unknown>>;
   readonly status?: 'active' | 'superseded';
   readonly languageContext: LocalLearningTarget['curriculumMemberships'][number]['languageContext'];
   readonly packageKey: string | null;
@@ -32,6 +34,8 @@ export interface HomeLearningStorageProjection {
   readonly availablePackageKeys: readonly string[];
   readonly activeRun: Pick<LocalLearningRun, 'id' | 'targetId'> | null;
   readonly dailyLimit: number | undefined;
+  readonly enrollments?:readonly LocalCurriculumEnrollment[];
+  readonly sourceEligibility?:Readonly<Record<string,import('../../learning/runtime/curriculumEligibility').CurriculumSourceEligibility>>;
 }
 
 type StudyPlanRecord = Readonly<Record<string, { readonly dailyNewSenseLimit?: unknown }>>;
@@ -42,6 +46,8 @@ export function createHomeLearningTargetRecord(
   return {
     id: target.id,
     curriculumMemberships: target.curriculumMemberships.map((membership) => ({
+      id:membership.id,
+      ...(membership.provenance?{provenance:{curriculumEnrollmentId:membership.provenance.curriculumEnrollmentId,publicationArchiveSha256:membership.provenance.publicationArchiveSha256,senseVersionId:membership.material.snapshot.provenance?.senseVersionId??membership.provenance.senseVersionId,bindingVersionId:membership.material.snapshot.provenance?.bindingVersionId??membership.provenance.bindingVersionId}}:{}),
       ...(membership.status ? { status: membership.status } : {}),
       languageContext: membership.languageContext,
       packageKey: membership.packageKey,
@@ -78,19 +84,25 @@ export function createHomeLearningStorageProjection(input: {
   readonly studyPlans: StudyPlanRecord;
   readonly languageRouteId: string;
   readonly clock?: number;
+  readonly enrollments?:readonly LocalCurriculumEnrollment[];
 }): HomeLearningStorageProjection {
   const dailyLimit = input.studyPlans[input.languageRouteId]?.dailyNewSenseLimit;
   const clock = input.clock ?? Date.now();
+  const enrollmentMap=new Map((input.enrollments??[]).map(enrollment=>[enrollment.id,enrollment]));
   const targets = input.targets.filter((target) => (
-    localTargetInRoute(target, input.languageRouteId)
+    target.curriculumMemberships.some(member=>{
+      if(member.languageContext.languageRouteId!==input.languageRouteId)return false;
+      if(member.status!=='superseded')return true;
+      const id=member.provenance?.curriculumEnrollmentId,enrollment=typeof id==='string'?enrollmentMap.get(id):undefined;
+      return !!target.startedAt&&enrollment?.source.kind==='published_book'&&enrollment.status==='active'&&enrollment.bookPlan?.mode!=='paused';
+    })
     || target.introducedLanguageRouteId === input.languageRouteId
       && !!target.startedAt
       && sameLocalDay(target.startedAt, clock)
   ));
   const neededPackageKeys = new Set(targets.flatMap((target) => (
     target.curriculumMemberships
-      .filter((membership) => membership.status !== 'superseded'
-        && membership.languageContext.languageRouteId === input.languageRouteId)
+      .filter((membership) => membership.languageContext.languageRouteId === input.languageRouteId)
       .flatMap((membership) => membership.packageKey ? [membership.packageKey] : [])
   )));
   return {
@@ -102,5 +114,6 @@ export function createHomeLearningStorageProjection(input: {
     dailyLimit: typeof dailyLimit === 'number' && Number.isInteger(dailyLimit)
       ? dailyLimit
       : undefined,
+    ...(input.enrollments?{enrollments:input.enrollments}:{}),
   };
 }

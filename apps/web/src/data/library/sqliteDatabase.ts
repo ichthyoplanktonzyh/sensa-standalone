@@ -68,6 +68,13 @@ export const sqliteHomeLearningTargetsQuery = `SELECT
         ON introduced.target_key=target.record_key
       WHERE introduced.language_route_id=?
         AND introduced.started_at>=? AND introduced.started_at<?
+      UNION
+      SELECT target.record_key AS record_key,target.projection_value_json AS projection_value_json
+      FROM sensa_learning_targets AS target
+      JOIN sensa_runtime_learning_candidate_sources AS historical ON historical.target_key=target.record_key
+      JOIN sensa_runtime_learning_enrollments AS enrollment ON enrollment.enrollment_key=historical.enrollment_key
+      WHERE historical.language_route_id=?1 AND historical.started=1 AND historical.superseded=1
+        AND enrollment.kind='published_book' AND enrollment.status='active' AND enrollment.mode<>'paused'
       ORDER BY record_key`;
 
 /** Internal SQLite record kernel owned by the OPFS Worker. */
@@ -98,7 +105,7 @@ export class SqliteRecordDatabase {
     this.worldBrowseProjection=new SqliteWorldBrowseProjection(database,(table,key)=>this.get(table,key));
     this.journeyIdentities=new SqliteJourneyIdentityProjection(database);
     this.learningHistory=new SqliteLearningHistoryProjection(database,id=>this.decoded<LocalLearningTarget>('learningTargets',id),encoded=>this.decode<LocalLearningRun>(this.logicalEncoded('learningRuns',encoded)));
-    this.runtimeCandidates=new SqliteRuntimeLearningCandidates(database,encoded=>this.decode<LocalLearningTarget>(this.logicalEncoded('learningTargets',encoded)));
+    this.runtimeCandidates=new SqliteRuntimeLearningCandidates(database,encoded=>this.decode<LocalLearningTarget>(this.logicalEncoded('learningTargets',encoded)),encoded=>this.decode<import('./curriculumEnrollments').LocalCurriculumEnrollment>(this.logicalEncoded('curriculumEnrollments',encoded)),(id,target)=>this.writeLearningTargetProjection(id,target));
   }
 
   initialize(): SqliteStorageDiagnostics {
@@ -420,6 +427,13 @@ export class SqliteRecordDatabase {
             JOIN sensa_records AS package
               ON package.table_name='packageCache' AND package.record_key=route.package_key
             WHERE route.language_route_id=?
+            UNION
+            SELECT DISTINCT package.record_key
+            FROM sensa_runtime_learning_candidate_sources AS historical
+            JOIN sensa_runtime_learning_enrollments AS enrollment ON enrollment.enrollment_key=historical.enrollment_key
+            JOIN sensa_records AS package ON package.table_name='packageCache' AND package.record_key=historical.package_key
+            WHERE historical.language_route_id=?1 AND historical.started=1 AND historical.superseded=1
+              AND enrollment.kind='published_book' AND enrollment.status='active' AND enrollment.mode<>'paused'
             ORDER BY package.record_key`,
       bind: [languageRouteId],
       rowMode: 0,
@@ -431,7 +445,7 @@ export class SqliteRecordDatabase {
     // These rows already contain the compact projection and the SQL query
     // already selected active Route membership plus today's introductions.
     // Do not reconstruct and filter the whole collection a second time.
-    return {targets:targetRows.map(row=>this.decode<HomeLearningStorageProjection['targets'][number]>(String(row.projection_value_json))),availablePackageKeys:packageRows.map(String),activeRun:active?{id:active.id,targetId:active.targetId}:null,dailyLimit:plans?.[languageRouteId]?.dailyNewSenseLimit};
+    return {targets:targetRows.map(row=>this.decode<HomeLearningStorageProjection['targets'][number]>(String(row.projection_value_json))),availablePackageKeys:packageRows.map(String),activeRun:active?{id:active.id,targetId:active.targetId}:null,dailyLimit:plans?.[languageRouteId]?.dailyNewSenseLimit,sourceEligibility:this.runtimeCandidates.sourceEligibility(languageRouteId)};
   }
 
   learningHistoryProjection():StoredLearningRecord[]{return this.learningHistory.records();}
@@ -606,6 +620,7 @@ export class SqliteRecordDatabase {
           this.database.exec('DELETE FROM sensa_package_cache_projection');
         }
         if (table === 'learningTargets'){this.database.exec('DELETE FROM sensa_learning_targets');this.runtimeCandidates.clear();}
+        if(table==='curriculumEnrollments')this.runtimeCandidates.clearEnrollments();
         if (table === 'learningRuns'){this.database.exec('DELETE FROM sensa_learning_runs');this.learningHistory.clear();}
         if (table === 'contentAttempts') this.database.exec('DELETE FROM sensa_content_attempts');
         if (table === 'semanticMeanings' || table === 'semanticInbox') {
@@ -640,6 +655,7 @@ export class SqliteRecordDatabase {
             bind: [item.key],
           });
         }
+        if(item.table==='curriculumEnrollments')this.runtimeCandidates.deleteEnrollment(item.key);
         if (item.table === 'learningRuns') {
           this.learningHistory.delete(item.key);
           this.database.exec({
@@ -710,6 +726,7 @@ export class SqliteRecordDatabase {
           });
         }
         if(item.table==='packageCache')this.upsertPackageCacheProjection(item.key,item.encodedValue);
+        if(item.table==='curriculumEnrollments')this.runtimeCandidates.upsertEnrollment(item.key,this.decode<import('./curriculumEnrollments').LocalCurriculumEnrollment>(item.encodedValue));
         if (item.table === 'learningTargets') {
           this.upsertLearningTargetProjection(item.key, item.encodedValue);
         }
@@ -893,6 +910,10 @@ export class SqliteRecordDatabase {
   private upsertLearningTargetProjection(key: string, encodedValue: string): void {
     const target = this.decode<LocalLearningTarget>(encodedValue);
     this.runtimeCandidates.upsert(key,target);
+    this.writeLearningTargetProjection(key,target);
+  }
+
+  private writeLearningTargetProjection(key:string,target:LocalLearningTarget):void{
     const projection = createHomeLearningTargetRecord(target);
     this.database.exec({
       sql: `INSERT INTO sensa_learning_targets(
@@ -914,7 +935,7 @@ export class SqliteRecordDatabase {
       bind: [key],
     });
     for (const membership of target.curriculumMemberships) {
-      if (membership.status === 'superseded') continue;
+      if(membership.status==='superseded')continue;
       const provenance = membership.provenance;
       const bookId = typeof provenance.bookId === 'string' ? provenance.bookId : null;
       const bookVersionId = typeof provenance.bookVersionId === 'string' ? provenance.bookVersionId : null;

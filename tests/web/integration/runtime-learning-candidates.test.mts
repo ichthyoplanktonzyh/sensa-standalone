@@ -55,6 +55,6 @@ test('continuations read scalar indexed rows rather than Target/material JSON, a
  try{
   candidates.read({languageContext:context,clock,dailyLimit:20,supportedPolicies,currentTargetIds:[],retryTargetIds:[]});
   const changes=raw.changes(true);candidates.initialize();expect(raw.changes(true)).toBe(changes);
-  expect(statements.some(sql=>sql.includes('sensa_runtime_learning_candidates'))).toBe(true);
+  expect(statements.some(sql=>sql.includes('sensa_runtime_learning_candidate_sources'))).toBe(true);
  }finally{raw.exec=exec;}
 });

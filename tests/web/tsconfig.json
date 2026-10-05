@@ -12,6 +12,7 @@
     "types": ["node", "vite/client", "chrome"]
   },
   "files": [
+    "integration/book-plan-planning.test.mts",
     "integration/book-curriculum-sources.test.mts",
     "catalog.mts",
     "integration/book-publication-provenance.test.mts",
@@ -61,6 +62,7 @@
     "integration/learning-command-receipt.test.mts",
     "integration/learning-material-pins.test.mts",
     "integration/learning-management-query.test.mts",
+    "integration/learning-runtime-query.test.mts",
     "integration/learning-history-page.test.mts",
     "integration/runtime-learning-candidates.test.mts",
     "../../scripts/support/nodeLearningCapacity.mts",

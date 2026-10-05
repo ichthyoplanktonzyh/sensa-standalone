@@ -1,7 +1,7 @@
 import {stableUuid} from '@sensa/learning-kernel';
 import {sensaFormalPinnedLanguageContextSchema,type SensaFormalPinnedLanguageContext} from '@sensa/contracts/sensa';
 import {resolveDirectLearningSource,type DirectLearningReference,type DirectLearningSource} from '../../learning/system/directLearningSource';
-import {localCurriculumMembershipForContext} from '../../learning/runtime/localCurriculum';
+import {planningMembershipForContext} from '../../learning/runtime/curriculumEligibility';
 import type {LocalLearningTarget} from '../../learning/runtime/localProtocol';
 import {curriculumEnrollmentId,curriculumEnrollmentSchema,type LocalCurriculumEnrollment} from './curriculumEnrollments';
 import {learningCommand} from './learningAdmission';
@@ -24,10 +24,14 @@ export function assertDirectTargetIdentity(target:LocalLearningTarget,selection:
    ||target.identity.senseExpressionBindingId!==reference.bindingId||target.identity.bindingVersionId!==reference.bindingVersionId||target.expression!==selection.expression.surfaceForm
    ||target.targetLanguageTag!==selection.targetLanguageTag)throw new Error('localFlow.invalidTarget');
 }
-async function inScope(tx:LibraryTransaction,targetId:string,context:SensaFormalPinnedLanguageContext,selection:DirectLearningSource,learnerId:string){
+export async function directSourceAlreadyCovered(tx:LibraryTransaction,targetId:string,context:SensaFormalPinnedLanguageContext,selection:DirectLearningSource,learnerId:string){
   const target=await tx.get<LocalLearningTarget>('learningTargets',targetId);
-  if(target)assertDirectTargetIdentity(target,selection,learnerId);
-  return !!target&&!!localCurriculumMembershipForContext(target,context);
+  if(!target)return false;
+  assertDirectTargetIdentity(target,selection,learnerId);
+  const enrollments=new Map<string,LocalCurriculumEnrollment>();
+  const ids=new Set(target.curriculumMemberships.flatMap(member=>typeof member.provenance.curriculumEnrollmentId==='string'?[member.provenance.curriculumEnrollmentId]:[]));
+  for(const id of ids){const enrollment=await tx.get<LocalCurriculumEnrollment>('curriculumEnrollments',id);if(enrollment)enrollments.set(id,enrollment);}
+  return !!planningMembershipForContext(target,context,enrollments);
 }
 
 /** Explicit Curriculum intent. Content readiness is never inferred from a click. */
@@ -38,7 +42,7 @@ export function enrollDirectSense(input:{operationId:string;reference:DirectLear
     const selection=await resolveDirectLearningSource(tx,input.reference,input.expectedDigest);
     if(selection.targetLanguageTag!==languageContext.targetLanguageTag)throw new Error('localFlow.routeLanguageMismatch');
     const targetId=targetIdFor(owner.learnerId,selection.reference);
-    if(await inScope(tx,targetId,languageContext,selection,owner.learnerId))return {enrollmentId:null,targetId,status:'already_in_scope',languageContext,selection};
+    if(await directSourceAlreadyCovered(tx,targetId,languageContext,selection,owner.learnerId))return {enrollmentId:null,targetId,status:'already_in_scope',languageContext,selection};
     const source={kind:'stable_sense' as const,selection},id=curriculumEnrollmentId(owner.learnerId,languageContext.languageRouteId,source);
     const existing=await tx.get<LocalCurriculumEnrollment>('curriculumEnrollments',id);
     if(existing){
@@ -64,6 +68,6 @@ export function readDirectLearningEnrollment(enrollmentId:string):Promise<Direct
     if(!raw)return null;const enrollment=curriculumEnrollmentSchema.parse(raw);
     if(enrollment.id!==enrollmentId||enrollment.learnerUserId!==owner.learnerId||enrollment.source.kind!=='stable_sense'||enrollment.status!=='active')return null;
     const selection=enrollment.source.selection,targetId=targetIdFor(owner.learnerId,selection.reference);
-    return {enrollmentId,targetId,status:await inScope(tx,targetId,enrollment.languageContext,selection,owner.learnerId)?'already_in_scope':'awaiting_content',languageContext:enrollment.languageContext,selection};
+    return {enrollmentId,targetId,status:await directSourceAlreadyCovered(tx,targetId,enrollment.languageContext,selection,owner.learnerId)?'already_in_scope':'awaiting_content',languageContext:enrollment.languageContext,selection};
   });
 }

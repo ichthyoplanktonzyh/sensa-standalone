@@ -5,6 +5,8 @@ import {contentSupplySystem} from '../../../apps/web/src/contentSupply/system';
 import {learningSystem} from '../../../apps/web/src/learning/system';
 import {command,openLibrary} from '../../../apps/web/src/data/library/store';
 import {sqliteRecordAdapter} from '../../../apps/web/src/data/library/sqliteAdapter';
+import {addLanguageRoute,updateLanguageRouteSupport} from '../../../apps/web/src/data/library/language';
+import {readLibrary} from '../../../apps/web/src/data/library/store';
 
 test('Runtime and Target detail use exact reads, plan only at a Run boundary, and never enumerate collection material or history',async()=>{
  Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined});
@@ -76,4 +78,39 @@ test('Runtime and Target detail use exact reads, plan only at a Run boundary, an
  expect(completed.runtime?.completed).toBe(true);expect(completed.nextTargetId).not.toBe(targetId);expect(completed.nextTargetId).not.toBeNull();
  const saved=await learningSystem.read({kind:'workspace',languageContext:context,clock:Date.parse(at)});
  expect(saved.records).toHaveLength(1);expect(saved.targets.find(target=>target.targetId===targetId)?.nextReviewAt).toBeTruthy();
+});
+
+test('Home plans the current exact language pair after a support revision without rebinding the open Run',async()=>{
+ Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined});
+ await openLibrary();
+ const id=()=>crypto.randomUUID();
+ const route=await addLanguageRoute(id(),'en','ja'),context=sensaPinnedLanguageContext(route);
+ const install=async(expression:string,supportLanguage:string)=>{
+  const fixture=portablePackageFixture({packageId:id(),expression,supportLanguage});
+  const pack=await contentSupplySystem.execute({kind:'install_portable_package',bytes:fixture.bytes,expectedArchiveDigest:fixture.archiveDigest});
+  return pack.key;
+ };
+ const targets:string[]=[];
+ for(const expression of ['route-first','route-second']){
+  const key=await install(expression,'ja');
+  targets.push((await learningSystem.execute({kind:'enroll_package',operationId:id(),packageKey:key,languageContext:context}))[0]!);
+ }
+ await learningSystem.execute({kind:'confirm_quantity',operationId:id(),languageContext:context,dailyLimit:20});
+ expect((await learningSystem.read({kind:'home',languageContext:context})).readyInitialCount).toBe(2);
+ await learningSystem.execute({kind:'start',operationId:id(),targetId:targets[0]!,languageContext:context,dailyLimit:20});
+ const before=await learningSystem.read({kind:'runtime',languageContext:context});
+ const run=await readLibrary(tx=>tx.get<any>('learningRuns',before.runtime!.runId));
+ const revised=sensaPinnedLanguageContext(await updateLanguageRouteSupport(id(),route.id,'es'));
+ const home=await learningSystem.read({kind:'home',languageContext:revised});
+ expect(home.readyInitialCount).toBe(0);expect(home.mixedReadyCount).toBe(0);expect(home.nextReviewTargetId).toBeNull();
+ expect(home.activeRunId).toBe(run.id);
+ expect((await learningSystem.read({kind:'workspace',languageContext:revised})).queue.initialReadyTargetIds).toEqual([]);
+ const resumed=await learningSystem.read({kind:'runtime',languageContext:revised});
+ expect(resumed.runtime).toEqual(before.runtime);expect(run.languageContext).toEqual(context);
+ expect(await readLibrary(tx=>tx.get('learningRuns',run.id))).toEqual(run);
+ const key=await install('route-current','es');
+ const current=(await learningSystem.execute({kind:'enroll_package',operationId:id(),packageKey:key,languageContext:revised}))[0]!;
+ const next=await learningSystem.read({kind:'home',languageContext:revised});
+ expect(next.readyInitialCount).toBe(1);expect(next.activeRunId).toBe(run.id);
+ expect((await learningSystem.read({kind:'workspace',languageContext:revised})).queue.initialReadyTargetIds).toEqual([current]);
 });
