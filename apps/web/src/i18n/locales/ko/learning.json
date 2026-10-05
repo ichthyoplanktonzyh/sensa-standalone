@@ -295,6 +295,9 @@
   "learningQuestion": {"title":"표현에 대해 질문","question":"질문","send":"질문하기","close":"닫기","pending":"답변 중…","useScene":"내 상황의 글 사용","offline":"오프라인 — 질문할 수 없음","answer":"AI 답변 · 검토되지 않음"},
   "learningQuestionConsent": {"sharePersonal":"현재 개인 상황과 학습 텍스트를 {{recipient}}에게 공유"},
   "runtime": {
+    "relearningRetryTitle": "재학습이 더 필요합니다",
+    "relearningRetryAction": "다시 시도",
+    "relearningBackHome": "홈으로",
     "initialSaved": "{{expression}} · 첫 학습 저장됨",
     "actionReceiptUnavailable": "작업 확인을 받지 못했습니다. 진행 상황을 다시 읽었으니 현재 단계를 확인하세요.",
     "checkpointUnreadable": "로컬 학습 기록을 읽을 수 없습니다. 원본 기록은 보존됩니다. 새 세션을 시작하지 마세요.",

@@ -295,6 +295,9 @@
   "learningQuestion": {"title":"Pergunta sobre a expressão","question":"Sua pergunta","send":"Perguntar","close":"Fechar","pending":"Respondendo…","useScene":"Usar o texto da minha cena","offline":"Offline — perguntas indisponíveis","answer":"Resposta de IA · não revisada"},
   "learningQuestionConsent": {"sharePersonal":"Compartilhar a cena pessoal e os textos de aprendizagem com {{recipient}}"},
   "runtime": {
+    "relearningRetryTitle": "Precisa reaprender",
+    "relearningRetryAction": "Tentar novamente",
+    "relearningBackHome": "Voltar ao início",
     "initialSaved": "{{expression}} · aprendizagem inicial salva",
     "actionReceiptUnavailable": "Confirmação não recebida. O progresso foi relido; confira a etapa atual.",
     "checkpointUnreadable": "Não foi possível ler os registros locais de aprendizagem. O registro original foi preservado; não inicie uma nova sessão.",

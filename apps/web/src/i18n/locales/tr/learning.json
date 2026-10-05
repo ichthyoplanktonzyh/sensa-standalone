@@ -295,6 +295,9 @@
   "learningQuestion": {"title":"İfade hakkında soru","question":"Sorunuz","send":"Sor","close":"Kapat","pending":"Yanıtlanıyor…","useScene":"Kendi sahne metnimi kullan","offline":"Çevrimdışı — sorular kullanılamıyor","answer":"Yapay zekâ yanıtı · incelenmedi"},
   "learningQuestionConsent": {"sharePersonal":"Mevcut kişisel sahneyi ve öğrenme metinlerini {{recipient}} ile paylaş"},
   "runtime": {
+    "relearningRetryTitle": "Yeniden öğrenmeye devam etmek gerekiyor",
+    "relearningRetryAction": "Tekrar dene",
+    "relearningBackHome": "Ana sayfaya dön",
     "initialSaved": "{{expression}} · ilk öğrenme kaydedildi",
     "actionReceiptUnavailable": "İşlem onayı alınmadı. İlerleme yeniden okundu; mevcut adımı kontrol edin.",
     "checkpointUnreadable": "Yerel öğrenme kayıtları okunamıyor. Özgün kayıt korundu; lütfen yeni bir oturum başlatmayın.",

@@ -263,6 +263,7 @@ const projectRuntime = (
     return {
       ...base,
       kind: 'lightweight',
+      needsRelearning: run.completionKind === 'wait_relearning',
       capabilities: ['toast', 'dictionary', 'personal_scenes', 'personal_content_menu', 'declared_mastery'],
       target: targetView,
       phase: localLightweightPhase(run) === 'reveal' ? 'reveal' : 'experience',

@@ -295,6 +295,9 @@
   "learningQuestion": {"title":"Frage zum Ausdruck","question":"Ihre Frage","send":"Fragen","close":"Schließen","pending":"Antwort wird erstellt…","useScene":"Meinen Szenentext verwenden","offline":"Offline — Fragen sind nicht verfügbar","answer":"KI-Antwort · ungeprüft"},
   "learningQuestionConsent": {"sharePersonal":"Aktuelle persönliche Szene und Lerntexte mit {{recipient}} teilen"},
   "runtime": {
+    "relearningRetryTitle": "Erneutes Lernen nötig",
+    "relearningRetryAction": "Erneut versuchen",
+    "relearningBackHome": "Zur Startseite",
     "initialSaved": "{{expression}} · erstes Lernen gespeichert",
     "actionReceiptUnavailable": "Keine Bestätigung erhalten. Der Fortschritt wurde neu geladen; prüfen Sie den aktuellen Schritt.",
     "checkpointUnreadable": "Lokale Lernaufzeichnungen können nicht gelesen werden. Der ursprüngliche Datensatz bleibt erhalten. Beginnen Sie bitte keine neue Sitzung.",

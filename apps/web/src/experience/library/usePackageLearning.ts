@@ -302,6 +302,12 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
   enroll:(packageKey:string,publicationArchiveSha256?:string)=>perform(()=>learningSystem.execute({kind:'enroll_package',operationId:crypto.randomUUID(),packageKey,languageContext,publicationArchiveSha256})),
   enrollBook:(publicationArchiveSha256:string)=>perform(()=>learningSystem.execute({kind:'enroll_book',operationId:crypto.randomUUID(),languageContext,publicationArchiveSha256})),
   start:(targetId:string,dailyLimit:number,sessionIntent:'mixed'|'review_only'='mixed')=>perform(()=>learningSystem.execute({kind:'start',operationId:crypto.randomUUID(),targetId,languageContext,dailyLimit,sessionIntent})),
+  retryRelearning:async()=>{
+   if(runtime?.kind!=='lightweight'||!runtime.needsRelearning||!runtime.completed||dailyLimit===null||actInFlight.current||loadStatus!=='ready')return null;
+   actInFlight.current=true;
+   try{return await perform(()=>learningSystem.execute({kind:'continue',operationId:crypto.randomUUID(),runId:runtime.runId,targetId:runtime.currentTargetId,languageContext,dailyLimit,requiredPurpose:'relearning'}));}
+   finally{actInFlight.current=false;}
+  },
   act:async(action:LearningAction)=>{
    if(!runtime||actInFlight.current||loadStatus!=='ready')return null;
    actInFlight.current=true;

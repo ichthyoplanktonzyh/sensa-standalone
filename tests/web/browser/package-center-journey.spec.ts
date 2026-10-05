@@ -1127,6 +1127,52 @@ test('a route-mismatched Book stays downloaded without silently enrolling',async
   expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).targetIds).toEqual([]);
 });
 
+test('repeated Relearning failure requires explicit retry and survives offline reopen without a second Review settlement',async()=>{
+  const profile=await mkdtemp(join(tmpdir(),'sensa-relearning-user-'));
+  let context=await chromium.launchPersistentContext(profile,{headless:true,viewport:{width:1280,height:900},locale:'zh-CN'});
+  try{
+    let page=context.pages()[0]!;
+    const {runtime,review}=await startDueReviewWithPausedInitial(page);
+    await runtime.getByRole('button',{name:/查看表达/}).click();await runtime.getByRole('button',{name:/还没连上/}).click();
+    await expect(runtime.getByRole('button',{name:/查看表达/})).toBeEnabled();
+    await runtime.getByRole('button',{name:/查看表达/}).click();
+    const revealed=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+    const clock=await page.evaluate(()=>Date.now());
+    // The Runtime route itself reopens offline at its saved Step; it does not
+    // navigate to Home or require another artificial resume click.
+    await context.setOffline(true);await page.reload();
+    await expect(runtime.getByRole('button',{name:/还没连上/})).toBeEnabled();
+    expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).runtime).toEqual(revealed.runtime);
+    await context.setOffline(false);await context.close();
+    context=await chromium.launchPersistentContext(profile,{headless:true,viewport:{width:1280,height:900},locale:'zh-CN'});
+    page=context.pages()[0]!;await page.clock.setFixedTime(clock);await page.goto(origin);
+    await page.locator('#s-home').getByRole('button',{name:'继续学习',exact:true}).click();
+    const reopened=page.locator('#s-lightweight-runtime');await expect(reopened.getByRole('button',{name:/还没连上/})).toBeEnabled();
+    expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).runtime).toEqual(revealed.runtime);
+    const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest());
+    await page.evaluate(()=>window.__sensaBrowserSmoke!.loseNextLearningActionResponseForTest());
+    await reopened.getByRole('button',{name:/还没连上/}).click();
+    await expect(reopened.getByRole('heading',{name:'还需再学习',exact:true})).toBeVisible();
+    await expect(reopened.getByRole('heading',{name:'本轮完成',exact:true})).toHaveCount(0);
+    await expect(reopened.getByRole('progressbar')).toHaveCount(0);
+    const pending=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+    expect(pending.runtime!.runId).toBe(revealed.runtime!.runId);expect(pending.records.filter(record=>record.kind==='relearning')).toHaveLength(0);
+    await page.reload();
+    await expect(reopened.getByRole('heading',{name:'还需再学习',exact:true})).toBeVisible();
+    expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).runtime).toEqual(pending.runtime);
+    await reopened.getByRole('button',{name:'再试一次',exact:true}).click();
+    await expect(reopened.getByRole('button',{name:/查看表达/})).toBeEnabled();
+    const retried=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+    expect(retried.runtime!.runId).not.toBe(pending.runtime!.runId);expect(retried.runtime!.targetId).toBe(review.runtime!.targetId);
+    await reopened.getByRole('button',{name:/查看表达/}).click();await reopened.getByRole('button',{name:/已经连上/}).click();
+    await expect(reopened.getByRole('heading',{name:'本轮完成',exact:true})).toBeVisible();
+    const after=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest());expect(after.targets).toEqual(before.targets);
+    expect(after.behavioralEvidenceCount).toBe(0);
+    const saved=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+    expect(saved.records.map(record=>record.kind).sort()).toEqual(['initial_learning','relearning','retention_review']);
+  }finally{await context.setOffline(false);await context.close();await rm(profile,{recursive:true,force:true});}
+});
+
 test('closing and reopening Chromium restores the same revealed learning step',async()=>{
   const profile=await mkdtemp(join(tmpdir(),'sensa-book-user-'));
   let context=await chromium.launchPersistentContext(profile,{headless:true,viewport:{width:1280,height:900},locale:'zh-CN'});

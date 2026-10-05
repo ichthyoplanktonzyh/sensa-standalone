@@ -203,6 +203,8 @@ interface LearningRuntimeProjectionBase {
 
 export interface LearningLightweightRuntimeProjection extends LearningRuntimeProjectionBase {
   readonly kind: 'lightweight';
+  /** The Run ended, but its recorded repair progress is not a Completion. */
+  readonly needsRelearning: boolean;
   readonly target: LearningTargetProjection;
   readonly phase: 'experience' | 'reveal';
   readonly step: LearningLightweightStepProjection | null;

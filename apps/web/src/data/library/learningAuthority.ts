@@ -30,7 +30,7 @@ import {resolveDirectLearningSource,directLearningReferenceSchema} from '../../l
 import {assertDirectTaskEnrollment,assertDirectAttemptSource} from './directProvisioningAssertions';
 import type {LibraryIdentity,LibraryRecordTransition,Operation,Table} from './store';
 import {localRunOpenSessionPause,localRunSessionIntent} from '../../learning/runtime/localProtocol';
-import {verifyLearningRunReceiptFacts,verifyLearningSelectionWitness,lawfulLearningPredecessor} from './learningCommandReceipt';
+import {verifyLearningRunReceiptFacts,verifyLearningSelectionWitness,lawfulLearningPredecessor,assertLearningContinuationPurpose} from './learningCommandReceipt';
 import {runMaterial,runBaselineMaterial,runStepMaterial,runMaterialById,pinRunStepMaterial,validateRunMaterialPins} from '../../learning/runtime/runMaterialPins';
 
 type RequireRow=(table:Table,id:string)=>any;
@@ -777,10 +777,12 @@ export async function assertLearningSystemTransition(input:LearningSystemTransit
    const request=input.operation.input as any;
    if(after.startedByOperationId!==input.operation.id)reject('New Learning Run has no immutable creation witness.');
    const previous=input.operation.kind==='learning.continue'?requireFact(await input.read('learningRuns',request.runId) as LocalLearningRun|undefined,'Preceding Learning Run is missing.'):undefined;
+   if(previous)assertLearningContinuationPurpose(request,previous,after);
    const intent=previous?localRunSessionIntent(previous):request.sessionIntent??'mixed';
    if(after.startedAt!==request.at||!backupEqual(after.languageContext,request.languageContext)||after.continuedFromRunId!==(previous?.id)||previous&&!lawfulLearningPredecessor(previous,after.languageContext,after.startedAt,intent,after.id))reject('Learning continuation has no lawful completed predecessor.');
    if((after.sessionIntent??'mixed')!==intent)reject('Learning Session intent differs from its entry command.');
    const primary=requireFact(await input.read('learningTargets',after.targetId) as LocalLearningTarget|undefined,'Learning Run primary Target is missing.'),participant=after.participants[after.targetId];
+   if(request.requiredPurpose!==undefined&&(!primary.relearnAt||primary.memoryRevision!==previous?.participants[after.targetId]?.memoryRevision||input.changes.find(change=>change.table==='meta'&&change.key==='learning-active')?.before!==previous?.id))reject('Relearning retry no longer has the same pending repair.');
    const execution=localExecutionForRun(after),executable=localExecutableTargetForParticipant(primary,participant),pack=executable.packageKey?await input.read('packageCache',executable.packageKey) as any:undefined;
    const replayed=replayLocalProtocolRun({execution,target:executable,resource:pack,saved:after});
    const initialTargetId=localProtocolActiveTargetId(execution,replayed),initialStepId=localProtocolStepId(execution,replayed);

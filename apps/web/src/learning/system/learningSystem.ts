@@ -121,6 +121,7 @@ export type LearningCommand =
       targetId: string;
       languageContext: SensaFormalPinnedLanguageContext;
       dailyLimit: number;
+      requiredPurpose?: 'relearning';
       at?: string;
     }>
   | Readonly<{

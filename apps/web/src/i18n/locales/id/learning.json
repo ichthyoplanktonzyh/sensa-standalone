@@ -295,6 +295,9 @@
   "learningQuestion": {"title":"Tanya tentang ungkapan ini","question":"Pertanyaan Anda","send":"Tanya","close":"Tutup","pending":"Menjawab…","useScene":"Gunakan teks situasi saya","offline":"Luring — pertanyaan tidak tersedia","answer":"Jawaban AI · belum ditinjau"},
   "learningQuestionConsent": {"sharePersonal":"Bagikan situasi pribadi dan teks pembelajaran saat ini kepada {{recipient}}"},
   "runtime": {
+    "relearningRetryTitle": "Perlu belajar ulang lagi",
+    "relearningRetryAction": "Coba lagi",
+    "relearningBackHome": "Kembali ke beranda",
     "initialSaved": "{{expression}} · pembelajaran awal tersimpan",
     "actionReceiptUnavailable": "Konfirmasi operasi tidak diterima. Progres telah dibaca ulang; periksa langkah saat ini.",
     "checkpointUnreadable": "Catatan belajar lokal tidak dapat dibaca. Catatan asli tetap tersimpan; jangan mulai sesi baru.",

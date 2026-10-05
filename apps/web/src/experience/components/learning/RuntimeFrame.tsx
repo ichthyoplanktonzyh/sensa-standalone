@@ -20,7 +20,7 @@ export function RuntimeFrame({
   active: boolean;
   title: string;
   stepLabel: string;
-  progress: number;
+  progress: number | null;
   onExit: () => void;
   children: ReactNode;
   tools?: ReactNode;
@@ -58,7 +58,7 @@ export function RuntimeFrame({
             </button>
           </>
         ),
-        progress: (
+        progress: progress===null?null:(
           <div
             className="sensa-runtime-progress"
             role="progressbar"

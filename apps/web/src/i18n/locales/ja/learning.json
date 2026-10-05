@@ -295,6 +295,9 @@
   "learningQuestion": {"title":"学習について質問","question":"質問","send":"質問する","close":"閉じる","pending":"回答中…","useScene":"自分の場面の文章を使う","offline":"オフラインのため質問できません","answer":"AIの回答 · 未確認"},
   "learningQuestionConsent": {"sharePersonal":"現在の個人場面と学習用文章を {{recipient}} に共有する"},
   "runtime": {
+    "relearningRetryTitle": "再学習が必要です",
+    "relearningRetryAction": "もう一度試す",
+    "relearningBackHome": "ホームに戻る",
     "initialSaved": "{{expression}} · 初回学習を保存しました",
     "actionReceiptUnavailable": "操作結果を受信できませんでした。進捗を再読み込みしたので、現在の手順を確認してください。",
     "checkpointUnreadable": "ローカルの学習記録を読み取れません。元の記録は保持されています。新しいセッションを開始しないでください。",

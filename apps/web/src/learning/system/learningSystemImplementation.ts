@@ -113,6 +113,7 @@ export const executeLearningCommand = async (command: LearningCommand): Promise<
         command.languageContext,
         command.dailyLimit,
         command.at,
+        command.requiredPurpose,
       );
       return true;
     }

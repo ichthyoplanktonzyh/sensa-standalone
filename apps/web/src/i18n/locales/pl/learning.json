@@ -295,6 +295,9 @@
   "learningQuestion": {"title":"Pytanie o wyrażenie","question":"Twoje pytanie","send":"Zapytaj","close":"Zamknij","pending":"Odpowiadanie…","useScene":"Użyj tekstu mojej sytuacji","offline":"Offline — pytania niedostępne","answer":"Odpowiedź AI · niesprawdzona"},
   "learningQuestionConsent": {"sharePersonal":"Udostępnij osobistą sytuację i teksty do nauki odbiorcy {{recipient}}"},
   "runtime": {
+    "relearningRetryTitle": "Potrzebna dalsza ponowna nauka",
+    "relearningRetryAction": "Spróbuj ponownie",
+    "relearningBackHome": "Wróć na stronę główną",
     "initialSaved": "{{expression}} · pierwsza nauka zapisana",
     "actionReceiptUnavailable": "Nie otrzymano potwierdzenia. Odczytano ponownie postęp; sprawdź bieżący krok.",
     "checkpointUnreadable": "Nie można odczytać lokalnych zapisów nauki. Pierwotny zapis został zachowany; nie rozpoczynaj nowej sesji.",

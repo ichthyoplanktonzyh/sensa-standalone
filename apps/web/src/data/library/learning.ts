@@ -12,7 +12,7 @@ import {stableUuid} from '@sensa/learning-kernel';
 import {sensaFormalPinnedLanguageContextSchema,type SensaFormalPinnedLanguageContext} from '@sensa/contracts/sensa';
 import {readLibrary,requestCloudCheckpoint,type LibraryTransaction,type LibraryIdentity} from './store';
 import {learningCommand} from './learningAdmission';
-import {learningRunReceipt,readVerifiedLearningRunReceipt,sameLearningSessionDirection} from './learningCommandReceipt';
+import {learningRunReceipt,readVerifiedLearningRunReceipt,sameLearningSessionDirection,assertLearningContinuationPurpose} from './learningCommandReceipt';
 import {runBaselineMaterial,runStepMaterial,runMaterialDigest,pinRunStepMaterial} from '../../learning/runtime/runMaterialPins';
 import {learningOwner} from './libraryOwnership';
 import type {InstalledPackage,InstalledPackageSummary} from './packageRecords';
@@ -614,13 +614,18 @@ export async function finishLearning(operationId:string,runId:string){const resu
 /** Complete one Run and start its successor as one published library state.
  * Observers must never see an empty active-Run gap while the learner is moving
  * directly to the next target. */
-export async function continueLearning(operationId:string,runId:string,targetId:string,languageContext:SensaFormalPinnedLanguageContext,dailyLimit:number,at=new Date().toISOString()){
- const operation={id:operationId,kind:'learning.continue',input:{runId,targetId,languageContext,dailyLimit,at}};
+export async function continueLearning(operationId:string,runId:string,targetId:string,languageContext:SensaFormalPinnedLanguageContext,dailyLimit:number,at=new Date().toISOString(),requiredPurpose?:'relearning'){
+ const operation={id:operationId,kind:'learning.continue',input:{runId,targetId,languageContext,dailyLimit,at,...(requiredPurpose!==undefined?{requiredPurpose}:{})}};
  const result=await learningCommand(operation,async tx=>{
   await learningOwner(tx);
   const completed=await tx.get<LocalLearningRun>('learningRuns',runId);if(!completed?.completedAt)throw new Error('localFlow.finishFirst');
   if(Date.parse(at)<Date.parse(completed.completedAt))throw new Error('localFlow.clockChanged');
   if(!sameLearningSessionDirection(completed.languageContext,languageContext))throw new Error('localFlow.stepChanged');
+  if(requiredPurpose!==undefined){
+   assertLearningContinuationPurpose(operation.input,completed);
+   const target=await tx.get<LocalLearningTarget>('learningTargets',targetId);
+   if(await tx.get('meta','learning-active')!==runId||!target?.relearnAt||target.memoryRevision!==completed.participants[targetId]?.memoryRevision)throw new Error('localFlow.stepChanged');
+  }
   if(await tx.get('meta','learning-active')===runId)tx.delete('meta','learning-active');
   return learningRunReceipt(await startLearningInTransaction(tx,operationId,targetId,languageContext,dailyLimit,at,localRunSessionIntent(completed),completed.id));
  });

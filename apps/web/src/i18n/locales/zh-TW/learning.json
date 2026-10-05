@@ -295,6 +295,9 @@
   "learningQuestion": {"title":"學習提問","question":"你的問題","send":"提問","close":"關閉","pending":"正在回答…","useScene":"使用我的場景文字","offline":"離線，暫時無法提問","answer":"AI 回答 · 未審核"},
   "learningQuestionConsent": {"sharePersonal":"向 {{recipient}} 分享目前個人場景及其學習材料文字"},
   "runtime": {
+    "relearningRetryTitle": "仍需再學習",
+    "relearningRetryAction": "再試一次",
+    "relearningBackHome": "回到首頁",
     "initialSaved": "{{expression}} · 首次學習已儲存",
     "actionReceiptUnavailable": "未收到操作結果，已重新讀取進度。請核對目前步驟。",
     "checkpointUnreadable": "本機學習記錄無法讀取，已保留原記錄。請先不要開始新的學習。",

@@ -295,6 +295,9 @@
   "learningQuestion": {"title":"Domanda sull’espressione","question":"La tua domanda","send":"Chiedi","close":"Chiudi","pending":"Risposta in corso…","useScene":"Usa il testo della mia scena","offline":"Offline — domande non disponibili","answer":"Risposta IA · non verificata"},
   "learningQuestionConsent": {"sharePersonal":"Condividi la scena personale e i testi di apprendimento con {{recipient}}"},
   "runtime": {
+    "relearningRetryTitle": "Occorre ripetere l’apprendimento",
+    "relearningRetryAction": "Riprova",
+    "relearningBackHome": "Torna alla home",
     "initialSaved": "{{expression}} · apprendimento iniziale salvato",
     "actionReceiptUnavailable": "Conferma non ricevuta. Il progresso è stato riletto; controlla il passaggio attuale.",
     "checkpointUnreadable": "Impossibile leggere i record di apprendimento locali. Il record originale è conservato; non avviare una nuova sessione.",

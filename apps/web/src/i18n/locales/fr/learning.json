@@ -295,6 +295,9 @@
   "learningQuestion": {"title":"Question sur cette expression","question":"Votre question","send":"Poser la question","close":"Fermer","pending":"Réponse en cours…","useScene":"Utiliser le texte de ma scène","offline":"Hors ligne — questions indisponibles","answer":"Réponse IA · non vérifiée"},
   "learningQuestionConsent": {"sharePersonal":"Partager la scène personnelle et les textes d’apprentissage avec {{recipient}}"},
   "runtime": {
+    "relearningRetryTitle": "Un réapprentissage est encore nécessaire",
+    "relearningRetryAction": "Réessayer",
+    "relearningBackHome": "Retour à l’accueil",
     "initialSaved": "{{expression}} · apprentissage initial enregistré",
     "actionReceiptUnavailable": "Aucune confirmation reçue. La progression a été relue ; vérifiez l’étape actuelle.",
     "checkpointUnreadable": "Impossible de lire les enregistrements d’apprentissage locaux. L’enregistrement d’origine est conservé ; ne commencez pas une nouvelle session.",

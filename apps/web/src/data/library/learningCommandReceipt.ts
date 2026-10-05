@@ -18,6 +18,10 @@ export const sameLearningSessionDirection=(pinned:SensaFormalPinnedLanguageConte
  pinned.languageRouteId===requested.languageRouteId&&pinned.targetLanguageTag===requested.targetLanguageTag&&pinned.supportLanguageTag===requested.supportLanguageTag&&requested.languageRouteRevision>=pinned.languageRouteRevision;
 export const lawfulLearningPredecessor=(previous:LocalLearningRun|undefined,context:SensaFormalPinnedLanguageContext,at:string,intent:string,childId:string)=>
  !!previous?.completedAt&&previous.id!==childId&&Date.parse(at)>=Date.parse(previous.completedAt)&&sameLearningSessionDirection(previous.languageContext,context)&&localRunSessionIntent(previous)===intent;
+/** Explicit repair retry cannot be reinterpreted as another purpose. */
+export function assertLearningContinuationPurpose(input:{requiredPurpose?:unknown;targetId?:string},previous?:LocalLearningRun,child?:LocalLearningRun):void{
+ if(input.requiredPurpose!==undefined&&(input.requiredPurpose!=='relearning'||previous?.purpose!=='relearning'||previous.completionKind!=='wait_relearning'||previous.targetId!==input.targetId||previous.targetIds.length!==1||child&&(child.purpose!=='relearning'||child.targetId!==input.targetId)))throw new Error('localFlow.stepChanged');
+}
 export function verifyLearningSelectionWitness(run:LocalLearningRun,event:{at:string;sessionIntent?:string;requestedLanguageContext?:SensaFormalPinnedLanguageContext;continuedFromRunId?:string},previous?:LocalLearningRun):void{
  const requested=sensaFormalPinnedLanguageContextSchema.parse(event.requestedLanguageContext);
  if(Object.hasOwn(event,'continuedFromRunId'))z.string().uuid().parse(event.continuedFromRunId);
@@ -35,12 +39,13 @@ export const learningRunReceipt=(run:LocalLearningRun):LearningRunReceipt=>({
 export function verifyLearningRunReceiptFacts(operation:Operation,raw:unknown,run:LocalLearningRun|undefined,event?:any,previous?:LocalLearningRun):LearningRunReceipt{
  const receipt=receiptSchema.parse(raw);
  if(!run||run.revision<receipt.revision||run.targetId!==receipt.targetId||run.purpose!==receipt.purpose||run.startedAt!==receipt.startedAt||!backupEqual(run.languageContext,receipt.languageContext)||receipt.completedAt!==null&&run.completedAt!==receipt.completedAt)throw new Error('localFlow.progressReadFailed');
- const input=operation.input as {runId?:string;targetId?:string;revision?:number;action?:unknown;at?:string;languageContext?:unknown;sessionIntent?:string};
+ const input=operation.input as {runId?:string;targetId?:string;revision?:number;action?:unknown;at?:string;languageContext?:unknown;sessionIntent?:string;requiredPurpose?:unknown};
  if(operation.kind==='learning.act'){
   if(input.runId!==run.id||!Number.isSafeInteger(input.revision)||Number(input.revision)<1||receipt.revision!==Number(input.revision)+1||!event||event.runId!==run.id||event.detail.runRevision!==input.revision||event.at!==input.at||!backupEqual(event.detail.action,input.action)||receipt.completedAt!==(event.detail.nextPresentation===null?event.at:null))throw new Error('localFlow.progressReadFailed');
  }else{
   if(!['learning.start','learning.continue'].includes(operation.kind)||!input.targetId||!run.targetIds.includes(input.targetId))throw new Error('localFlow.progressReadFailed');
   const continuing=operation.kind==='learning.continue';
+  if(continuing)assertLearningContinuationPurpose(input,previous,run);
   const requested=sensaFormalPinnedLanguageContextSchema.parse(input.languageContext);
   const intent=continuing&&previous?localRunSessionIntent(previous):input.sessionIntent??'mixed';
   if(!sameLearningSessionDirection(run.languageContext,requested)||continuing&&(previous?.id!==input.runId||!lawfulLearningPredecessor(previous,requested,input.at!,intent,run.id)))throw new Error('localFlow.progressReadFailed');

@@ -295,6 +295,9 @@
   "learningQuestion": {"title":"Вопрос о выражении","question":"Ваш вопрос","send":"Спросить","close":"Закрыть","pending":"Подготовка ответа…","useScene":"Использовать текст моей ситуации","offline":"Нет сети — вопросы недоступны","answer":"Ответ ИИ · не проверен"},
   "learningQuestionConsent": {"sharePersonal":"Поделиться личной ситуацией и учебными текстами с {{recipient}}"},
   "runtime": {
+    "relearningRetryTitle": "Требуется повторное изучение",
+    "relearningRetryAction": "Попробовать ещё раз",
+    "relearningBackHome": "На главную",
     "initialSaved": "{{expression}} · первое изучение сохранено",
     "actionReceiptUnavailable": "Подтверждение не получено. Прогресс прочитан заново; проверьте текущий шаг.",
     "checkpointUnreadable": "Не удаётся прочитать локальные учебные записи. Исходная запись сохранена; не начинайте новое занятие.",

@@ -295,6 +295,9 @@
   "learningQuestion": {"title":"Ask about this expression","question":"Your question","send":"Ask","close":"Close","pending":"Answering…","useScene":"Use my scene text","offline":"Offline — questions are unavailable","answer":"AI answer · not reviewed"},
   "learningQuestionConsent": {"sharePersonal":"Share the current personal scene and derived learning text with {{recipient}}"},
   "runtime": {
+    "relearningRetryTitle": "More relearning needed",
+    "relearningRetryAction": "Try again",
+    "relearningBackHome": "Back to home",
     "initialSaved": "{{expression}} · initial learning saved",
     "actionReceiptUnavailable": "No operation receipt was received. Progress was reread; check the current step.",
     "checkpointUnreadable": "Local learning records cannot be read. The original record is preserved; please do not start a new session.",
