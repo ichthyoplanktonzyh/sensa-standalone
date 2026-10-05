@@ -25,6 +25,7 @@ import type {LearningEvent,LearningStepPresentation} from './learning';
 import {validateLearningReconciliationRows} from './learningReconciliation';
 import {applyLocalProtocolTransition} from './learningSettlement';
 import {packageInstallationSchema} from './packageRecords';
+import {assertPublishedCurriculumSource,publishedMaterialMembership} from './publishedCurriculumSources';
 import {curriculumEnrollmentSchema,assertDirectEnrollmentSource,type LocalCurriculumEnrollment} from './curriculumEnrollments';
 import {resolveDirectLearningSource,directLearningReferenceSchema} from '../../learning/system/directLearningSource';
 import {assertDirectTaskEnrollment,assertDirectAttemptSource} from './directProvisioningAssertions';
@@ -66,9 +67,10 @@ function replayNextPresentation(run:LocalLearningRun,execution:ReturnType<typeof
 function baselineBindsSelectedMembership(run:LocalLearningRun,target:LocalLearningTarget,participant:LocalLearningRun['participants'][string]):boolean{
  const membership=target.curriculumMemberships.find(candidate=>candidate.id===participant.curriculumMembershipId),material=runBaselineMaterial(participant),provenance=material.snapshot.provenance;
  if(!membership||material.snapshot.createdAt!==run.startedAt||(provenance.packageKey??null)!==membership.packageKey)return false;
+ if(typeof provenance.curriculumMembershipId==='string'&&provenance.curriculumMembershipId!==membership.id)return false;
  const supplement=provenance.resourceSupplement as {operationId?:string}|undefined;
  const sourceId=supplement?.operationId?stableUuid(`supplement-material:${supplement.operationId}`):provenance.packageKey
-  ?stableUuid(`sensa-material:${target.identity.learnerUserId}:${provenance.packageKey}:${target.id}`)
+  ?stableUuid(`sensa-material:${target.identity.learnerUserId}:${provenance.packageKey}:${target.id}${typeof provenance.curriculumMembershipId==='string'?`:${provenance.curriculumMembershipId}`:''}${typeof provenance.materializationOperationId==='string'?`:${provenance.materializationOperationId}`:''}`)
   :typeof provenance.attemptId==='string'?stableUuid(`sensa-personal-material:${provenance.attemptId}`):null;
  return sourceId!==null&&material.snapshot.learningMaterializationId===stableUuid(`local-run-materialization:${participant.protocolRunId}:${sourceId}`);
 }
@@ -160,10 +162,11 @@ export function assertLearningSystemState(input:LearningSystemStateInput){
    if(membership.material.snapshot.learnerUserId!==identity.learnerId||membership.material.snapshot.learningTargetId!==target.id||provenance.senseId!==target.identity.senseId||provenance.senseVersionId!==target.identity.senseVersionId||provenance.bindingId!==target.identity.senseExpressionBindingId||provenance.bindingVersionId!==target.identity.bindingVersionId)fail();
    if(target.expression!==membership.material.content.resources.find((resource:any)=>resource.materialRoleKey==='target_expression')?.contentPayload.surface)fail();
    if(membership.sourceKind==='sense_learning_package'||membership.sourceKind==='stable_sense'&&membership.packageKey!==null){
-    if(!membership.packageKey||membership.sourceKind==='sense_learning_package'&&membership.id!==stableUuid(`local-curriculum-membership:${target.id}:${context.languageRouteId}:sense_learning_package:${membership.packageKey}`))fail();
+    if(!membership.packageKey)fail();
     const enrollment=requireRow('curriculumEnrollments',z.string().uuid().parse(membership.provenance.curriculumEnrollmentId));
     if(enrollment.learnerUserId!==identity.learnerId||enrollment.languageContext.languageRouteId!==context.languageRouteId)fail();
     const installation=packageInstallationSchema.parse(requireRow('packageInstallations',membership.packageKey));if(installation.artifact.targetLanguage!==context.targetLanguageTag||installation.artifact.supportLanguage!==context.supportLanguageTag)fail();
+    assertPublishedCurriculumSource(target,membership,enrollment,installation);
     if(membership.sourceKind==='stable_sense')assertDirectPublishedMembership(enrollment,target,membership,installation.artifact.digest);
     const pack=maps.packageCache.get(membership.packageKey),entry=pack?.content.entries.find((candidate:any)=>candidate.senseVersionId===provenance.senseVersionId&&candidate.bindingVersionId===provenance.bindingVersionId);
     if(pack&&(!entry||pack.content.targetLanguage!==context.targetLanguageTag||pack.content.supportLanguage!==context.supportLanguageTag||!backupEqual(entry.content,baseContentBeforeSupplement(membership.material,context.supportLanguageTag))||entry.assurancePackageKey!==membership.assurancePackageKey))fail();
@@ -245,7 +248,7 @@ export function assertLearningSystemState(input:LearningSystemStateInput){
     assertRunMaterialPresentedBy(presented,saved,event.at);
     const presentedPackageKey=typeof presented.snapshot.provenance.packageKey==='string'?presented.snapshot.provenance.packageKey:null;
     if(presentedPackageKey){
-     const packageKey=presentedPackageKey!,refreshedMembership=target.curriculumMemberships.find((candidate:any)=>candidate.packageKey===packageKey&&candidate.languageContext.languageRouteId===participant.languageContext.languageRouteId);
+     const packageKey=presentedPackageKey!,refreshedMembership=publishedMaterialMembership(target,presented,participant.languageContext);
      const sourceMaterializationId=refreshedMembership?.material.snapshot.learningMaterializationId;
      const enrolled=operation?.kind==='learning.enroll'&&(operation.input.key===packageKey
       ||typeof operation.input.publicationArchiveSha256==='string'&&operation.input.publicationArchiveSha256===presented.snapshot.provenance.publicationArchiveSha256);
@@ -270,9 +273,7 @@ export function assertLearningSystemState(input:LearningSystemStateInput){
      if(material.snapshot.protocolPurpose!==saved.purpose)fail();
      const provenance=material.snapshot.provenance,packageKey=provenance.packageKey?z.string().min(1).parse(provenance.packageKey):null;
      const attempt=packageKey?undefined:requireRow('contentAttempts',z.string().uuid().parse(provenance.attemptId)),task=attempt?requireRow('personalLearning',attempt.taskId):undefined;
-     const source=target.curriculumMemberships.find((candidate:LocalLearningTarget['curriculumMemberships'][number])=>provenance.packageKey
-      ?candidate.packageKey===packageKey&&samePinnedDirection(candidate.languageContext,participant.languageContext)
-      :candidate.id===task?.curriculumMembershipId)??fail();
+     const source=(packageKey?publishedMaterialMembership(target,material,participant.languageContext):target.curriculumMemberships.find((candidate:LocalLearningTarget['curriculumMemberships'][number])=>candidate.id===task?.curriculumMembershipId))??fail();
      assertMaterialAdmissionTime(material,source,attempt);
      if(packageKey&&provenance.packageDigest!==packageInstallationSchema.parse(requireRow('packageInstallations',packageKey)).artifact.digest)fail();
     }
@@ -296,7 +297,7 @@ export function assertLearningSystemState(input:LearningSystemStateInput){
     if(material.snapshot.learningTargetId!==id||material.snapshot.learnerUserId!==identity.learnerId||material.snapshot.protocolPurpose!==saved.purpose||materialProvenance.senseId!==target.identity.senseId||materialProvenance.senseVersionId!==target.identity.senseVersionId||materialProvenance.bindingId!==target.identity.senseExpressionBindingId||materialProvenance.bindingVersionId!==target.identity.bindingVersionId)fail();
     if(materialProvenance.packageKey){
      const materialPackageKey=z.string().min(1).parse(materialProvenance.packageKey),pack=maps.packageCache.get(materialPackageKey),installation=packageInstallationSchema.parse(requireRow('packageInstallations',materialPackageKey));
-     const source=target.curriculumMemberships.find(member=>member.packageKey===materialPackageKey&&samePair(member.languageContext,participant.languageContext));if(!source)fail();
+     const source=publishedMaterialMembership(target,material,participant.languageContext);if(!source)fail();
      assertMaterialAdmissionTime(material,source!);
      if(materialProvenance.packageDigest!==installation.artifact.digest)fail();
      if(pack){const entry=pack.content.entries.find((candidate:any)=>candidate.senseVersionId===materialProvenance.senseVersionId&&candidate.bindingVersionId===materialProvenance.bindingVersionId);if(!entry||!backupEqual(entry.content,baseContentBeforeSupplement(material,participant.languageContext.supportLanguageTag)))fail();}
@@ -472,11 +473,11 @@ async function validateTransitionTarget(
   const provenance=membership.material.snapshot.provenance as Record<string,any>;
   if(membership.sourceKind==='sense_learning_package'||membership.sourceKind==='stable_sense'&&membership.packageKey!==null){
    const packageKey=requireFact(membership.packageKey,'Published Curriculum package identity is missing.');
-   if(membership.sourceKind==='sense_learning_package'&&membership.id!==stableUuid(`local-curriculum-membership:${target.id}:${context.languageRouteId}:sense_learning_package:${packageKey}`))reject('Published Curriculum membership identity is invalid.');
    const installation=packageInstallationSchema.parse(requireFact(await input.read('packageInstallations',packageKey),'Published Curriculum installation is missing.'));
    const enrollment=curriculumEnrollmentSchema.parse(requireFact(await input.read('curriculumEnrollments',z.string().uuid().parse(membership.provenance.curriculumEnrollmentId)),'Published Curriculum Enrollment is missing.'));
    if(enrollment.learnerUserId!==input.identity.learnerId||enrollment.languageContext.languageRouteId!==context.languageRouteId)reject('Published Curriculum Enrollment is inconsistent.');
    if(installation.artifact.targetLanguage!==context.targetLanguageTag||installation.artifact.supportLanguage!==context.supportLanguageTag)reject('Published Curriculum languages are inconsistent.');
+   assertPublishedCurriculumSource(target,membership,enrollment,installation);
    if(membership.sourceKind==='stable_sense')assertDirectPublishedMembership(enrollment,target,membership,installation.artifact.digest);
    const pack=await input.read('packageCache',packageKey) as any;
    if(pack){
@@ -603,9 +604,7 @@ async function validateTransitionRun(
    validateLightweightInitialMaterialization(material);assertLocalTargetMaterialIdentity(target,material);
    const provenance=material.snapshot.provenance,attempt=provenance.packageKey?undefined:await input.read('contentAttempts',provenance.attemptId as string) as any;
    const task=attempt?await input.read('personalLearning',attempt.taskId) as any:undefined;
-   const source=target.curriculumMemberships.find(candidate=>provenance.packageKey
-    ?candidate.packageKey===provenance.packageKey&&samePinnedDirection(candidate.languageContext,participant.languageContext)
-    :candidate.id===task?.curriculumMembershipId);
+   const source=provenance.packageKey?publishedMaterialMembership(target,material,participant.languageContext):target.curriculumMemberships.find(candidate=>candidate.id===task?.curriculumMembershipId);
    if(!source)reject('Learning material has no admitted Curriculum source.');
    assertMaterialAdmissionTime(material,source!,attempt);
   }

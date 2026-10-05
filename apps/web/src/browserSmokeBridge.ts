@@ -66,6 +66,10 @@ type BrowserSmokeBridge = {
     identities:import('./data/library/packageCacheProjection').PackagePublicationIdentity[];
   }>;
   discardPackageCacheForRecoveryTest():Promise<void>;
+  curriculumSourceCheckpointForTest():Promise<{
+    targets:import('./learning/runtime/localProtocol').LocalLearningTarget[];
+    runs:import('./learning/runtime/localProtocol').LocalLearningRun[];
+  }>;
   learningCheckpoint(): Promise<{
     targetIds:string[];
     enrollments:{enrollmentId:string;sourceKind:string;bookVersionNumber:number|null;bookDigest:string|null}[];
@@ -348,6 +352,13 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
         installations:(await tx.all<import('./data/library/packageRecords').PackageInstallation>('packageInstallations')).sort((a,b)=>a.key.localeCompare(b.key)),
         cache:(await tx.packageCacheProjection({kind:'summaries'})).map(pack=>({key:pack.key,publications:pack.portableOrigin.publications.map(publication=>({archiveSha256:publication.bookArchiveSha256,memberIndex:publication.memberIndex??null})).sort((a,b)=>a.archiveSha256.localeCompare(b.archiveSha256))})),
         identities:await tx.packageCacheProjection({kind:'publication_identities'}),
+      }));
+    },
+    async curriculumSourceCheckpointForTest(){
+      // Read-only assertions over actual UI admissions/actions; never seed facts.
+      return readLibrary(async tx=>({
+        targets:await tx.all<import('./learning/runtime/localProtocol').LocalLearningTarget>('learningTargets'),
+        runs:await tx.all<import('./learning/runtime/localProtocol').LocalLearningRun>('learningRuns'),
       }));
     },
     async learningCheckpoint() {

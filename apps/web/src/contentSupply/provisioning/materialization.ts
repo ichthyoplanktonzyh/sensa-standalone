@@ -19,6 +19,9 @@ type PublishedEntry = InstalledPackage['content']['entries'][number];
 export function materializePublishedEntry(input: {
   learnerUserId: string;
   learningTargetId: string;
+  curriculumMembershipId:string;
+  materializationOperationId:string;
+  curriculumSource:Readonly<{curriculumEnrollmentId:string;bookId:string;bookVersionId:string|null;contentReleaseId:string|null;publicationArchiveSha256?:string}>;
   packageKey: string;
   installedPackage: InstalledPackage;
   entry: PublishedEntry;
@@ -30,7 +33,7 @@ export function materializePublishedEntry(input: {
   const snapshot = sensaLearningMaterializationSnapshotSchema.parse({
     contractVersion: sensaLearningConnectionContractVersion,
     learningMaterializationId: stableUuid(
-      `sensa-material:${input.learnerUserId}:${input.packageKey}:${input.learningTargetId}`,
+      `sensa-material:${input.learnerUserId}:${input.packageKey}:${input.learningTargetId}:${input.curriculumMembershipId}:${input.materializationOperationId}`,
     ),
     learnerUserId: input.learnerUserId,
     learningTargetId: input.learningTargetId,
@@ -42,11 +45,11 @@ export function materializePublishedEntry(input: {
     validationStatus: 'validated',
     validatorVersion: 'sensa-web-package-v1',
     provenance: {
+      ...input.curriculumSource,
+      curriculumMembershipId:input.curriculumMembershipId,
+      materializationOperationId:input.materializationOperationId,
       sourceReadyAt: input.createdAt,
       packageKey: input.packageKey,
-      bookId: packageManifest.metadata.packageId,
-      bookVersionId: null,
-      contentReleaseId: null,
       packageVersion: String(packageManifest.metadata.version),
       packageDigest: pack.digest,
       senseId: entry.senseId,

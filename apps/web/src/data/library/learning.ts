@@ -13,9 +13,10 @@ import {sensaFormalPinnedLanguageContextSchema,type SensaFormalPinnedLanguageCon
 import {readLibrary,requestCloudCheckpoint,type LibraryTransaction,type LibraryIdentity} from './store';
 import {learningCommand} from './learningAdmission';
 import {learningRunReceipt,readVerifiedLearningRunReceipt,sameLearningSessionDirection,assertLearningContinuationPurpose} from './learningCommandReceipt';
+import {publishedCurriculumSourceKey,publishedCurriculumMembershipId} from './publishedCurriculumSources';
 import {runBaselineMaterial,runStepMaterial,runMaterialDigest,pinRunStepMaterial} from '../../learning/runtime/runMaterialPins';
 import {learningOwner} from './libraryOwnership';
-import type {InstalledPackage,InstalledPackageSummary} from './packageRecords';
+import type {InstalledPackage,InstalledPackageSummary,PackageInstallation} from './packageRecords';
 import {validateLightweightInitialMaterialization,type LightweightInitialLearningMaterialization} from '../../contentSupply/provisioning/lightweightInitialContent';
 import {
   createLocalProtocolState,
@@ -111,7 +112,25 @@ async function bindCurrentStepMaterial(tx:LibraryTransaction,run:LocalLearningRu
  if(!replace&&previous)return false;
  const target=await tx.get<LocalLearningTarget>('learningTargets',targetId);if(!target)throw new Error('localFlow.enrollFirst');
  const pinnedMembership=target.curriculumMemberships.find(candidate=>candidate.id===participant.curriculumMembershipId&&sameRunLanguagePair(candidate.languageContext,participant.languageContext));
- const currentMembership=localCurriculumMembershipForContext(target,participant.languageContext);
+ const enrollmentId=pinnedMembership?.provenance.curriculumEnrollmentId;
+ const enrollment=typeof enrollmentId==='string'?await tx.get<LocalCurriculumEnrollment>('curriculumEnrollments',enrollmentId):undefined;
+ // A Book Version belongs to the pinned curriculum. A compatible publication
+ // of an independently enrolled package may still refresh unacted material.
+ const compatiblePackageLineage=pinnedMembership?.sourceKind==='sense_learning_package'&&enrollment?.source.kind==='portable_package';
+ const independentPublications=new Set<string>();
+ const directPackage=pinnedMembership?.sourceKind==='stable_sense'&&pinnedMembership.packageKey
+  ?await tx.get<PackageInstallation>('packageInstallations',pinnedMembership.packageKey):undefined;
+ const directPackageFamily=directPackage?.artifact.packageId;
+ if(pinnedMembership?.packageKey===null||directPackageFamily){
+  // Preserve explicit on-demand → independently published material updates.
+  // A different Book admission is not a compatible update of that source.
+  const sourceIds=new Set(target.curriculumMemberships.flatMap(candidate=>candidate.sourceKind==='sense_learning_package'&&typeof candidate.provenance.curriculumEnrollmentId==='string'?[candidate.provenance.curriculumEnrollmentId]:[]));
+  for(const id of sourceIds){
+   const source=(await tx.get<LocalCurriculumEnrollment>('curriculumEnrollments',id))?.source;
+   if(source?.kind==='portable_package'&&(!directPackageFamily||source.packageId===directPackageFamily))independentPublications.add(id);
+  }
+ }
+ const currentMembership=localCurriculumMembershipForContext({...target,curriculumMemberships:target.curriculumMemberships.filter(candidate=>candidate.id===pinnedMembership?.id||candidate.sourceKind==='sense_learning_package'&&(compatiblePackageLineage&&candidate.provenance.curriculumEnrollmentId===enrollmentId||independentPublications.has(String(candidate.provenance.curriculumEnrollmentId))&&(!directPackage||Number(candidate.provenance.packageVersion)>directPackage.artifact.version)))},participant.languageContext);
  const currentPack=currentMembership?.packageKey?await tx.get<InstalledPackage>('packageCache',currentMembership.packageKey):undefined;
  // Unfinished Steps may adopt material from the currently active Portable membership.
  const membership=currentPack?currentMembership:pinnedMembership;
@@ -121,6 +140,7 @@ async function bindCurrentStepMaterial(tx:LibraryTransaction,run:LocalLearningRu
  // Step to it must reuse that snapshot, not mint a timestamp-only revision.
  const adopted=Object.values(participant.materializations).find(candidate=>candidate.snapshot.learningMaterializationId===material.snapshot.learningMaterializationId);
  if(adopted){material={...material,snapshot:{...material.snapshot,createdAt:adopted.snapshot.createdAt}};if(!backupEqual(adopted,material))throw new Error('localFlow.resourceInvalid');material=structuredClone(adopted);}
+ if(replace&&previous&&backupEqual(previous,material))return false;
  assertLocalTargetMaterialIdentity(target,material);validateLightweightInitialMaterialization(material);
  const executable=localExecutableTargetForParticipant(target,participant,material),pack=executable.packageKey?await tx.get<InstalledPackage>('packageCache',executable.packageKey):undefined;
  validateLocalProtocolResources(execution,executable,pack);
@@ -167,12 +187,13 @@ type PublishedEnrollmentMember=Readonly<{
 async function admitPublishedTarget(tx:LibraryTransaction,input:{operationId:string;owner:LibraryIdentity;context:SensaFormalPinnedLanguageContext;enrollment:LocalCurriculumEnrollment;member:PublishedEnrollmentMember;pack:InstalledPackage;entry:InstalledPackage['content']['entries'][number];existing:LocalLearningTarget|undefined;at:string}):Promise<LocalLearningTarget>{
  const {operationId,owner,context,enrollment,member,pack,entry,existing,at}=input;
  const targetId=stableUuid(`sensa-learning-target:${owner.learnerId}:${entry.senseVersionId}:${entry.bindingVersionId}`);
- const material=materializePublishedEntry({learnerUserId:owner.learnerId,learningTargetId:targetId,packageKey:member.key,installedPackage:pack,entry,createdAt:at});
  const source={kind:enrollment.source.kind==='stable_sense'?'stable_sense':'sense_learning_package',curriculumEnrollmentId:enrollment.id,
   bookId:member.bookId,bookVersionId:member.bookVersionId,contentReleaseId:member.contentReleaseId,packageVersion:member.packageVersion,packageDigest:pack.digest,
   ...(member.publication?{publicationArchiveSha256:member.publication.bookArchiveSha256}:{})};
- const sourceKind=enrollment.source.kind==='stable_sense'?'stable_sense':'sense_learning_package',sourceKey=sourceKind==='stable_sense'?enrollment.id:member.key;
- const priorMembership=existing?.curriculumMemberships.find(candidate=>candidate.id===stableUuid(`local-curriculum-membership:${targetId}:${context.languageRouteId}:${sourceKind}:${sourceKey}`));
+ const sourceKind=enrollment.source.kind==='stable_sense'?'stable_sense':'sense_learning_package',sourceKey=sourceKind==='stable_sense'?enrollment.id:publishedCurriculumSourceKey(enrollment.id,member.key,context,enrollment.source.kind==='published_book'?member.publication?.bookArchiveSha256:undefined);
+ const membershipId=stableUuid(`local-curriculum-membership:${targetId}:${context.languageRouteId}:${sourceKind}:${sourceKey}`);
+ const priorMembership=existing?.curriculumMemberships.find(candidate=>candidate.id===membershipId);
+ const material=priorMembership?.material??materializePublishedEntry({learnerUserId:owner.learnerId,learningTargetId:targetId,curriculumMembershipId:membershipId,materializationOperationId:operationId,curriculumSource:source,packageKey:member.key,installedPackage:pack,entry,createdAt:at});
  const membership=curriculumMembership({operationId,targetId,sourceKey,languageContext:context,sourceKind,provenance:source,packageKey:member.key,assurancePackageKey:entry.assurancePackageKey,material,at,previous:priorMembership});
  if(existing){
   if(existing.identity.learnerUserId!==owner.learnerId||existing.identity.senseId!==entry.senseId||existing.identity.senseVersionId!==entry.senseVersionId||existing.identity.senseExpressionBindingId!==entry.bindingId||existing.identity.bindingVersionId!==entry.bindingVersionId||existing.targetLanguageTag!==pack.content.targetLanguage||existing.expression!==entry.expression)throw new Error('localFlow.invalidTarget');
@@ -308,6 +329,7 @@ async function refreshMaterializedEnrollmentMembers(
  at:string,
 ):Promise<string[]> {
  const owner=await learningOwner(tx),targets=await tx.all<LocalLearningTarget>('learningTargets');
+ const enrollment=await tx.get<LocalCurriculumEnrollment>('curriculumEnrollments',enrollmentId);if(!enrollment)throw new Error('localFlow.enrollFirst');
  const byId=new Map(targets.map(target=>[target.id,target]));
  const hydratedPackages=new Map<string,InstalledPackage>();
  const refreshed:string[]=[];
@@ -319,10 +341,12 @@ async function refreshMaterializedEnrollmentMembers(
    const hydrated=await hydratedPackage(tx,member.key,hydratedPackages);
    const hydratedEntry=hydrated.content.entries.find(candidate=>candidate.senseVersionId===entry.senseVersionId&&candidate.bindingVersionId===entry.bindingVersionId);
    if(!hydratedEntry)throw new Error('localFlow.resourceInvalid');
-   const material=materializePublishedEntry({learnerUserId:owner.learnerId,learningTargetId:targetId,packageKey:member.key,installedPackage:hydrated,entry:hydratedEntry,createdAt:at});
   const source={kind:'sense_learning_package',curriculumEnrollmentId:enrollmentId,bookId:member.bookId,bookVersionId:member.bookVersionId,contentReleaseId:member.contentReleaseId,packageVersion:member.packageVersion,packageDigest:member.pack.digest,...(member.publication?{publicationArchiveSha256:member.publication.bookArchiveSha256}:{})};
-  const prior=existing.curriculumMemberships.find(candidate=>candidate.id===stableUuid(`local-curriculum-membership:${targetId}:${context.languageRouteId}:sense_learning_package:${member.key}`));
-  const membership=curriculumMembership({operationId,targetId,sourceKey:member.key,languageContext:context,sourceKind:'sense_learning_package',provenance:source,packageKey:member.key,assurancePackageKey:entry.assurancePackageKey,material,at,previous:prior});
+  const archiveSha256=enrollment.source.kind==='published_book'?member.publication?.bookArchiveSha256:undefined;
+  const membershipId=publishedCurriculumMembershipId(targetId,context,enrollmentId,member.key,archiveSha256);
+  const prior=existing.curriculumMemberships.find(candidate=>candidate.id===membershipId);
+  const material=prior?.material??materializePublishedEntry({learnerUserId:owner.learnerId,learningTargetId:targetId,curriculumMembershipId:membershipId,materializationOperationId:operationId,curriculumSource:source,packageKey:member.key,installedPackage:hydrated,entry:hydratedEntry,createdAt:at});
+  const membership=curriculumMembership({operationId,targetId,sourceKey:publishedCurriculumSourceKey(enrollmentId,member.key,context,archiveSha256),languageContext:context,sourceKind:'sense_learning_package',provenance:source,packageKey:member.key,assurancePackageKey:entry.assurancePackageKey,material,at,previous:prior});
   const updated=upsertLocalCurriculumMembership(existing,membership);
   tx.put('learningTargets',targetId,updated);byId.set(targetId,updated);refreshed.push(targetId);
   if(hadEnrollment)await refreshCurrentStepsForMaterial(tx,targetId,at,operationId);
@@ -415,7 +439,7 @@ async function enrollInstalledPackages(
   }
  }
  const plans=await readStudyPlans(tx);
- const refreshed=changed&&previous?await refreshMaterializedEnrollmentMembers(tx,operationId,id,selected,context,now):[];
+ const refreshed=changed?await refreshMaterializedEnrollmentMembers(tx,operationId,id,selected,context,now):[];
  const materialized=await materializeCurriculumWindowUnlessReviewOnly(tx,operationId,context,plans[context.languageRouteId]?.dailyNewSenseLimit??20,now,available);
  return [...new Set([...refreshed,...materialized])];
 }

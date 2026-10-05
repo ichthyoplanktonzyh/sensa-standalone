@@ -620,6 +620,91 @@ test('shared Book sources recover their exact Manifest positions through Chromiu
  }finally{first.responses.delete(second.url);}
 });
 
+test('overlapping Book admissions and an explicit Book upgrade preserve the revealed Run source through offline OPFS reopen',async({page,context})=>{
+ const first=reviewDelivery,files=unzipSync(first.bookBytes);
+ const manifest=sensaPortableBookManifestSchema.parse({...first.manifest,book:{...first.manifest.book,bookId:randomUUID(),bookVersionId:randomUUID(),bookKey:'shared-book-admission',title:'另一册共享表达'},members:[...first.manifest.members].reverse()});
+ const secondFiles={...files,'book.json':new TextEncoder().encode(JSON.stringify(manifest))};
+ const bytes=zipSync(secondFiles),sha256=createHash('sha256').update(bytes).digest('hex');
+ const second={...first.descriptor,book:manifest.book,sha256,byteLength:bytes.byteLength,url:`${origin}/published/${sha256}.sensa-book`};
+ const nextManifest=sensaPortableBookManifestSchema.parse({...first.manifest,book:{...first.manifest.book,bookVersionId:randomUUID(),versionNumber:2},contentRelease:{...first.manifest.contentRelease,contentReleaseId:randomUUID(),versionNumber:2}});
+ const nextBytes=zipSync({...files,'book.json':new TextEncoder().encode(JSON.stringify(nextManifest))});
+ const nextSha=createHash('sha256').update(nextBytes).digest('hex');
+ const updated={...first.descriptor,book:nextManifest.book,contentRelease:nextManifest.contentRelease,sha256:nextSha,byteLength:nextBytes.byteLength,url:`${origin}/published/${nextSha}.sensa-book`};
+ first.responses.set(second.url,bytes);first.responses.set(updated.url,nextBytes);
+ setRegistry([first.descriptor,second]);
+ try{
+  const runtime=await startOrdinaryBook(page,/到期复习样本/);
+  await runtime.getByRole('button',{name:/查看表达/}).click();
+  const initial=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+  const original=await page.evaluate(()=>window.__sensaBrowserSmoke!.curriculumSourceCheckpointForTest());
+  const selected=original.targets.find(target=>target.id===initial.runtime!.targetId)!;
+  const pinned=original.runs.find(run=>run.id===initial.runtime!.runId)!.participants[selected.id]!;
+  expect(selected.curriculumMemberships).toHaveLength(1);
+  expect(pinned.curriculumMembershipId).toBe(selected.curriculumMemberships[0]!.id);
+  await runtime.getByRole('button',{name:'暂停',exact:true}).click();
+  await expect(page.locator('#s-home').getByRole('button',{name:'继续学习',exact:true})).toBeVisible();
+  const paused=await page.evaluate(()=>window.__sensaBrowserSmoke!.curriculumSourceCheckpointForTest());
+  await page.goto(`${origin}/catalog`);
+  const catalog=page.locator('#s-catalog').last(),book=page.locator('#s-catalog-book').last();
+  await catalog.getByRole('button',{name:/另一册共享表达/}).click();
+  await book.getByRole('button',{name:'下载学习包',exact:true}).click();
+  await expect(book.getByRole('button',{name:'加入学习',exact:true})).toBeEnabled();
+  await book.getByRole('button',{name:'加入学习',exact:true}).click();
+  await expect(book.getByText('已加入学习',{exact:true})).toBeVisible();
+  const shared=await page.evaluate(()=>window.__sensaBrowserSmoke!.curriculumSourceCheckpointForTest());
+  expect(shared.targets.map(target=>target.id).sort()).toEqual(original.targets.map(target=>target.id).sort());
+  expect(shared.runs).toEqual(paused.runs);
+  for(const target of shared.targets){
+   expect(target.curriculumMemberships).toHaveLength(2);
+   expect(new Set(target.curriculumMemberships.map(member=>member.provenance.curriculumEnrollmentId)).size).toBe(2);
+   expect(new Set(target.curriculumMemberships.map(member=>member.material.snapshot.learningMaterializationId)).size).toBe(2);
+   expect(target.curriculumMemberships.find(member=>member.provenance.publicationArchiveSha256===first.descriptor.sha256)).toEqual(original.targets.find(before=>before.id===target.id)!.curriculumMemberships[0]);
+   expect(target.memoryRevision).toBe(0);expect(target.completedAt).toBeNull();
+  }
+  await book.getByRole('button',{name:'去学习',exact:true}).click();
+  await page.locator('#s-home').getByRole('button',{name:'继续学习',exact:true}).click();
+  await expect(runtime.getByRole('heading',{name:selected.expression,exact:true})).toBeVisible();
+  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).runtime).toEqual(initial.runtime);
+
+  // Download and explicitly apply a new Book version while the original Run
+  // remains open. The version reuses identical Portable Package bytes.
+  setRegistry([updated,second]);
+  await page.goto(`${origin}/catalog`);
+  await catalog.getByRole('button',{name:'刷新',exact:true}).click();
+  await expect(catalog.getByRole('button',{name:'刷新',exact:true})).toBeEnabled();
+  await catalog.getByRole('button',{name:/到期复习样本/}).click();
+  const beforeUpdate=await page.evaluate(()=>window.__sensaBrowserSmoke!.curriculumSourceCheckpointForTest());
+  await book.getByRole('button',{name:'下载更新',exact:true}).click();
+  await expect(book.getByText('更新已下载',{exact:true})).toBeVisible();
+  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.curriculumSourceCheckpointForTest())).toEqual(beforeUpdate);
+  await book.getByRole('button',{name:'应用更新',exact:true}).click();
+  await expect(book.getByRole('button',{name:'去学习',exact:true})).toBeVisible();
+  const upgraded=await page.evaluate(()=>window.__sensaBrowserSmoke!.curriculumSourceCheckpointForTest());
+  expect(upgraded.runs).toEqual(beforeUpdate.runs);
+  expect(upgraded.targets.map(target=>target.id).sort()).toEqual(original.targets.map(target=>target.id).sort());
+  for(const target of upgraded.targets)expect(target.curriculumMemberships).toHaveLength(3);
+  await book.getByRole('button',{name:'去学习',exact:true}).click();
+  await page.locator('#s-home').getByRole('button',{name:'继续学习',exact:true}).click();
+  await expect(runtime.getByRole('heading',{name:selected.expression,exact:true})).toBeVisible();
+  await context.setOffline(true);
+  try{
+   await page.reload();
+   await expect(runtime.getByRole('heading',{name:selected.expression,exact:true})).toBeVisible();
+   expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).runtime).toEqual(initial.runtime);
+   await runtime.getByRole('button',{name:/还没连上/}).click();
+   await expect(runtime.getByRole('button',{name:/查看表达/})).toBeEnabled();
+   await runtime.getByRole('button',{name:/查看表达/}).click();
+   await expect(runtime.getByRole('heading',{name:selected.expression,exact:true})).toBeVisible();
+   const retried=await page.evaluate(()=>window.__sensaBrowserSmoke!.curriculumSourceCheckpointForTest());
+   const run=retried.runs.find(candidate=>candidate.id===initial.runtime!.runId)!;
+   expect(run.participants[selected.id]!.curriculumMembershipId).toBe(pinned.curriculumMembershipId);
+   for(const material of Object.values(run.participants[selected.id]!.materializations))expect(material.snapshot.provenance.publicationArchiveSha256).toBe(first.descriptor.sha256);
+   expect(retried.targets.every(target=>target.memoryRevision===0&&target.completedAt===null)).toBe(true);
+   expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records).toEqual([]);
+  }finally{await context.setOffline(false);}
+ }finally{first.responses.delete(second.url);first.responses.delete(updated.url);}
+});
+
 test('cancelling admission after complete transfer closes its Worker without installing any members',async({page})=>{
   setRegistry([scaleDelivery.descriptor]);
   await page.goto(`${origin}/catalog`);

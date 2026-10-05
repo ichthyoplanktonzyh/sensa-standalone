@@ -9,6 +9,7 @@ import {MemoryJourneyRepository} from '../../../apps/web/src/experience/personal
 import {semanticLookupPayload} from '../support/semanticLookupFixtures';
 import {learningReplica} from '../../../apps/web/src/data/library/replication/learningReplica';
 import {directPublishedFixture} from '../support/directPublishedFixture';
+import {createSensaPortableLightweightPackage,readSensaPortableLightweightPackage} from '@sensa/content-validator/portable-lightweight';
 
 test('direct enrollment persists one fixed intent without a Meaning or fabricated ready Target, fences stale input and restores coherently',async()=>{
  const built=await build({stdin:{contents:[
@@ -16,6 +17,7 @@ test('direct enrollment persists one fixed intent without a Meaning or fabricate
   `export * from './apps/web/src/data/library/language';`,
   `export {sqliteRecordAdapter} from './apps/web/src/data/library/sqliteAdapter';`,
   `export {learningSystem} from './apps/web/src/learning/system/learningSystem';`,
+  `export {installPublishedPortableBookMembers} from './apps/web/src/contentSupply/portable/portablePackage';`,
   `export {LibraryJourneyRepository} from './apps/web/src/experience/personalMeaningJourney/repository';`,
   `export {validateBackupRows} from './apps/web/src/data/library/backupValidation';`,
  ].join('\n'),resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env':'{}'},plugins:[{name:'fixture-auth',setup(builder){builder.onLoad({filter:/[/\\]account[/\\]auth\.ts$/},()=>({contents:"export const auth={getSession:async()=>({data:{session:null}})}; export {authStorageKey,cachedAuthSubject} from './authSessionHint';",loader:'ts'}));}}]});
@@ -91,19 +93,47 @@ test('direct enrollment persists one fixed intent without a Meaning or fabricate
   const wrongMaterial=structuredClone(ready);wrongMaterial.learningTargets[0].value.curriculumMemberships[0].material.snapshot.provenance.packageDigest='e'.repeat(64);
   expect(()=>api.validateBackupRows(wrongMaterial)).toThrow();
   await api.learningSystem.execute({kind:'confirm_quantity',operationId:crypto.randomUUID(),languageContext:context,dailyLimit:20});
-  await api.learningSystem.execute({kind:'enroll_package',operationId:crypto.randomUUID(),packageKey:publication.pack.key,languageContext:context});
-  const overlapped=await snapshot();expect(overlapped.learningTargets).toEqual(ready.learningTargets);
-  const workspace=await api.learningSystem.read({kind:'workspace',languageContext:context});
-  expect(workspace.targets.find((target:any)=>target.targetId===prepared.targetId).presentation.sourceKind).toBe('direct');
-  expect(workspace.queue.initialReadyTargetIds).toContain(prepared.targetId);
   await api.learningSystem.execute({kind:'start',operationId:crypto.randomUUID(),targetId:prepared.targetId,languageContext:context,dailyLimit:20});
+  const beforeOverlap=await snapshot();
+  await api.learningSystem.execute({kind:'enroll_package',operationId:crypto.randomUUID(),packageKey:publication.pack.key,languageContext:context});
+  const overlapped=await snapshot();expect(overlapped.learningTargets).toHaveLength(1);
+  const originalTarget=beforeOverlap.learningTargets[0].value,overlapTarget=overlapped.learningTargets[0].value;
+  expect({...overlapTarget,curriculumMemberships:originalTarget.curriculumMemberships}).toEqual(originalTarget);
+  expect(overlapTarget.curriculumMemberships).toHaveLength(2);
+  expect(overlapTarget.curriculumMemberships.find((member:any)=>member.id===readyTarget.curriculumMemberships[0].id)).toEqual(readyTarget.curriculumMemberships[0]);
+  expect(new Set(overlapTarget.curriculumMemberships.map((member:any)=>member.provenance.curriculumEnrollmentId)).size).toBe(2);
+  for(const table of ['learningRuns','learningEvents','semanticMeanings','personalLearning'])expect(overlapped[table]).toEqual(beforeOverlap[table]);
+  const workspace=await api.learningSystem.read({kind:'workspace',languageContext:context});
+  expect(workspace.targets.find((target:any)=>target.targetId===prepared.targetId).presentation.sourceKind).toBe('book');
+  expect(overlapped.learningRuns[0].value.participants[prepared.targetId].curriculumMembershipId).toBe(readyTarget.curriculumMemberships[0].id);
   const started=await snapshot();expect(started.learningRuns).toHaveLength(1);expect(started.semanticMeanings).toEqual([]);expect(started.learningTargets[0].value.memory).toBeNull();api.validateBackupRows(started);
+  const directRun=started.learningRuns[0].value;
+  await api.learningSystem.execute({kind:'act',operationId:crypto.randomUUID(),runId:directRun.id,expectedRevision:directRun.revision,action:{kind:'reveal'}});
+  const revealed=await snapshot(),revealedRun=revealed.learningRuns[0].value;
+  const oldParticipant=structuredClone(revealedRun.participants[prepared.targetId]);
+  for(const material of Object.values(oldParticipant.materializations) as any[])expect(material.snapshot.provenance.curriculumMembershipId).toBe(readyTarget.curriculumMemberships[0].id);
+  const originalManifest=publication.pack.portableOrigin.manifest;
+  const updateManifest={...originalManifest,metadata:{...originalManifest.metadata,version:2},resources:{...originalManifest.resources,experienceRecallCue:{...originalManifest.resources.experienceRecallCue,text:'A neighbour lends May an umbrella for the rainy afternoon.'}}};
+  const bytes=createSensaPortableLightweightPackage(updateManifest,new Map([['pronunciation',new TextEncoder().encode('ID3 direct learning fixture')]]));
+  // Preserve the fixture's admitted public semantic declaration. An ordinary
+  // untrusted standalone import deliberately assigns different local identities.
+  const publicationV1=publication.pack.portableOrigin.publications[0]!;
+  const attestation={...publicationV1,book:{...publicationV1.book,bookVersionId:crypto.randomUUID(),versionNumber:2},contentRelease:{...publicationV1.contentRelease,contentReleaseId:crypto.randomUUID(),versionNumber:2},member:{...publicationV1.member,version:2}};
+  const [updatedPackage]=await api.installPublishedPortableBookMembers([{bytes,archive:readSensaPortableLightweightPackage(bytes),publication:attestation}]);
+  await api.learningSystem.execute({kind:'enroll_package',operationId:crypto.randomUUID(),packageKey:updatedPackage.key,languageContext:context});
+  const updated=await snapshot(),updatedRun=updated.learningRuns[0].value,updatedParticipant=updatedRun.participants[prepared.targetId];
+  expect(updatedParticipant.curriculumMembershipId).toBe(oldParticipant.curriculumMembershipId);
+  expect(updatedParticipant.materializations[updatedParticipant.material]).toEqual(oldParticipant.materializations[oldParticipant.material]);
+  const actedStep=revealed.learningEvents.find((row:any)=>row.value.runId===directRun.id&&row.value.kind==='reveal').value.detail.stepId;
+  expect(updatedParticipant.materializations[updatedParticipant.presentedMaterials[actedStep]]).toEqual(oldParticipant.materializations[oldParticipant.presentedMaterials[actedStep]]);
+  expect((await api.learningSystem.read({kind:'runtime',languageContext:context})).runtime.step.materialization.snapshot.provenance.packageKey).toBe(updatedPackage.key);
+  api.validateBackupRows(updated);updated.packageCache=[];updated.operations=[];api.validateBackupRows(updated);
   const collision=directPublishedFixture(publication.reference);
   await api.restoreLibraryTransaction(async(tx:any)=>{tx.put('packageInstallations',collision.pack.key,collision.installation);tx.put('packageCache',collision.pack.key,collision.pack);});
   const collisionSource=await api.learningSystem.read({kind:'direct_source',reference:collision.reference});
   const collisionInput={...input,operationId:crypto.randomUUID(),reference:collision.reference,expectedDigest:collisionSource.sourceDigest};
   await expect(api.learningSystem.execute(collisionInput)).rejects.toThrow('invalidTarget');
   expect(await api.readLibrary((tx:any)=>tx.get('operations',collisionInput.operationId))).toBeUndefined();
-  expect((await snapshot()).learningTargets).toEqual(started.learningTargets);
+  expect((await snapshot()).learningTargets).toEqual(updated.learningTargets);
  }finally{await rm(directory,{recursive:true,force:true});}
 });
