@@ -43,7 +43,7 @@ test('[contract][local-correctness] application code uses the Learning System bo
       `${leakedQuery} is an aggregate leak, not a public Learning query`,
     );
   }
-  for (const projectionQuery of ['home', 'workspace', 'personal_enrollment_index', 'semantic_memory', 'direct_source','direct_choices']) {
+  for (const projectionQuery of ['home', 'workspace', 'runtime', 'personal_enrollment_index', 'semantic_memory', 'direct_source','direct_choices']) {
     assert(
       new RegExp(`kind:\\s*['"]${projectionQuery}['"]`, 'u').test(learningInterface),
       `${projectionQuery} must remain an explicit Learning projection`,

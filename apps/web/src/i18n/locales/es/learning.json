@@ -292,7 +292,11 @@
     "results": "{{count}} clips",
     "provider": "Clips de YouGlish"
   },
+  "learningQuestion": {"title":"Pregunta sobre la expresión","question":"Tu pregunta","send":"Preguntar","close":"Cerrar","pending":"Respondiendo…","useScene":"Usar el texto de mi escena","offline":"Sin conexión — no se puede preguntar","answer":"Respuesta de IA · sin revisar"},
+  "learningQuestionConsent": {"sharePersonal":"Compartir la escena personal y el texto de aprendizaje con {{recipient}}"},
   "runtime": {
+    "initialSaved": "{{expression}} · aprendizaje inicial guardado",
+    "actionReceiptUnavailable": "No se recibió confirmación. Se volvió a leer el progreso; comprueba el paso actual.",
     "checkpointUnreadable": "No se pueden leer los registros de aprendizaje locales. El registro original se conserva; no inicies una sesión nueva.",
     "checkpointSaveError": "No se pudo guardar el progreso de aprendizaje. Comprueba el almacenamiento local e inténtalo de nuevo.",
     "checkpointConflict": "Otra página actualizó tu progreso. Actualiza para continuar.",

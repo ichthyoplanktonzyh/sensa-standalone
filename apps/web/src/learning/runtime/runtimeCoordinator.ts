@@ -62,7 +62,7 @@ export interface ProtocolRuntimeAdapter {
 }
 
 export const LIGHTWEIGHT_LOCAL_PROTOCOL_BINDINGS=Object.freeze([
- {purpose:'initial_learning',protocolId:'lightweight-study',protocolVersion:'v3',localProtocolVersion:'sensa-lightweight-initial-v1'},
+ {purpose:'initial_learning',protocolId:'lightweight-study',protocolVersion:'v4',localProtocolVersion:'sensa-lightweight-initial-v2'},
  {purpose:'retention_review',protocolId:'learner-rated-retention-review',protocolVersion:'v1',localProtocolVersion:'sensa-lightweight-review-v1'},
  {purpose:'relearning',protocolId:'lightweight-rebinding',protocolVersion:'v1',localProtocolVersion:'sensa-lightweight-relearning-v1'},
 ] as const satisfies readonly LocalProtocolExecutionBinding[]);

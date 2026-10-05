@@ -2,6 +2,7 @@ import type {
   SensaFormalPinnedLanguageContext,
   SensaProtocolStepDefinition,
   SensaProtocolStepMaterialBinding,
+  SensaMaterializedResource,
 } from '@sensa/contracts/sensa';
 
 import type { LightweightInitialLearningMaterialization } from '../../contentSupply/provisioning/lightweightInitialContent';
@@ -197,6 +198,9 @@ export interface LearningLightweightRuntimeProjection extends LearningRuntimePro
   readonly target: LearningTargetProjection;
   readonly phase: 'experience' | 'reveal';
   readonly step: LearningLightweightStepProjection | null;
+  /** Current Step bindings plus the experience actually acted on before Reveal. */
+  readonly questionResources: readonly SensaMaterializedResource[];
+  readonly questionUsesPersonalContext: boolean;
 }
 
 export interface LearningStructuredRuntimeProjection extends LearningRuntimeProjectionBase {
@@ -304,5 +308,16 @@ export interface LearningWorkspaceProjection {
   readonly activeRunId: string | null;
   readonly dailyLimit: number | null;
   readonly records: readonly LearningRecordProjection[];
+  readonly policyOptions: readonly LearningPolicyOption[];
+}
+
+/** Active execution plus compact continuation planning, without collection
+ * material, completed Run history or study records. */
+export interface LearningRuntimeWorkspaceProjection {
+  readonly runtime: LearningRuntimeProjection | null;
+  readonly dailyLimit: number | null;
+  /** Continuation is planned only at a Run boundary, never during a Step. */
+  readonly nextTargetId: string | null;
+  readonly nextChangeAt: number | null;
   readonly policyOptions: readonly LearningPolicyOption[];
 }

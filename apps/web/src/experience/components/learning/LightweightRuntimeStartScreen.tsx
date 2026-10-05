@@ -16,6 +16,7 @@ import type {DictionaryLookup,QuickDictEntry} from '../../types';
 
 interface LightweightRuntimeStartScreenProps {
   readonly tools?: import('react').ReactNode;
+  readonly support?: import('react').ReactNode;
   readonly purpose?: 'initial_learning'|'retention_review'|'relearning';
   readonly active: boolean;
   readonly busy?: boolean;
@@ -45,6 +46,7 @@ interface LightweightRuntimeStartScreenProps {
  */
 export const LightweightRuntimeStartScreen = ({
   tools,
+  support,
   purpose='initial_learning',
   active,
   busy = false,
@@ -153,7 +155,8 @@ export const LightweightRuntimeStartScreen = ({
       onExit={onExit}
       pauseShortcut="Esc"
     >
-      {!completed && renderedStep}
+      {!completed && renderedStep && <fieldset disabled={busy} className="m-0 min-w-0 border-0 p-0">{renderedStep}</fieldset>}
+      {!completed && renderedStep && support && <div className="mt-4">{support}</div>}
       {!completed && !renderedStep && (
         <div
           role="alert"

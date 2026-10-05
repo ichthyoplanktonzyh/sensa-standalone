@@ -17,7 +17,7 @@ import {settleOperation} from './operationSettlement';
 import {createRefreshCoordinator} from './refreshCoordinator';
 import {PersonalLearningBatch} from './personalLearningBatch';
 import type {WorldLearningChoice} from '../personalMeaningJourney/worldRead';
-export function usePersonalLearning(sourceView:{kind:'library'}|{kind:'target';targetId:string}|null=null){
+export function usePersonalLearning(sourceView:{kind:'library'}|{kind:'target';targetId:string}|null=null,enabled=true){
  useTranslation();
  const [tasks,setTasks]=useState<ContentProvisioningTask[]>([]),[preparationAvailable,setPreparationAvailable]=useState(false),[notice,setNotice]=useState(''),[operationBusy,setBusy]=useState(false),[clock,setClock]=useState(Date.now());
  const [targets,setTargets]=useState<readonly LearningTargetProjection[]>([]);
@@ -33,7 +33,7 @@ export function usePersonalLearning(sourceView:{kind:'library'}|{kind:'target';t
  }),[]);
  const batch=useSyncExternalStore(batchRunner.subscribe,batchRunner.read),busy=operationBusy||batch.busy;
  const languageContext=useActiveLanguageContext();
- const sourceViewKey=JSON.stringify(sourceView),routeKey=JSON.stringify([languageContext,sourceViewKey]),currentRoute=useRef(routeKey),readGeneration=useRef(0);
+ const sourceViewKey=JSON.stringify([sourceView,enabled]),routeKey=JSON.stringify([languageContext,sourceViewKey]),currentRoute=useRef(routeKey),readGeneration=useRef(0);
  currentRoute.current=routeKey;
  const [sourceReadKey,setSourceReadKey]=useState<string|null>(null);
  const [sourceFailureKey,setSourceFailureKey]=useState<string|null>(null);
@@ -41,7 +41,7 @@ export function usePersonalLearning(sourceView:{kind:'library'}|{kind:'target';t
  const refresh=async()=>{
   // Batch events have their own bounded progress read. Do not re-read the
   // complete task/workspace projection after each of thousands of intentions.
-  if(batchRunner.read().busy)return;
+  if(!enabled||batchRunner.read().busy)return;
   const generation=++readGeneration.current;
   const [supply,learning]=await Promise.all([contentSupplySystem.read({kind:'provisioning_control'}),learningSystem.read({kind:'workspace',languageContext,clock:Date.now()})]);
   const personalTasks=supply.tasks.filter(isPersonalProvisioningTask);
@@ -57,7 +57,7 @@ export function usePersonalLearning(sourceView:{kind:'library'}|{kind:'target';t
  };
  const failedSourceRead=()=>{if(currentRoute.current===routeKey){setNotice(localFlowText('preparationReadFailed'));setSourceFailureKey(routeKey);setSourceReadKey(routeKey);setTaskSources(new Map());}};
  latestRefresh.current=()=>refresh().catch(failedSourceRead);
- useEffect(()=>{const coordinator=createRefreshCoordinator(refresh);const read=()=>void coordinator.request().catch(failedSourceRead);read();const stopSupply=contentSupplySystem.subscribe({kind:'provisioning_control'},read);const stopLearning=learningSystem.subscribe({kind:'workspace',languageContext},read);const stopJourney=worldReadRepository.subscribe(read);const focus=()=>setClock(Date.now());window.addEventListener('focus',focus);return()=>{stopSupply();stopLearning();stopJourney();readGeneration.current++;window.removeEventListener('focus',focus);};},[languageContext.languageRouteId,languageContext.languageRouteRevision,sourceViewKey]);
+ useEffect(()=>{if(!enabled)return;const coordinator=createRefreshCoordinator(refresh);const read=()=>void coordinator.request().catch(failedSourceRead);read();const stopSupply=contentSupplySystem.subscribe({kind:'provisioning_control'},read);const stopLearning=learningSystem.subscribe({kind:'workspace',languageContext},read);const stopJourney=worldReadRepository.subscribe(read);const focus=()=>setClock(Date.now());window.addEventListener('focus',focus);return()=>{stopSupply();stopLearning();stopJourney();readGeneration.current++;window.removeEventListener('focus',focus);};},[languageContext.languageRouteId,languageContext.languageRouteRevision,sourceViewKey]);
  const nextLeaseExpiry=nextPersonalLearningLeaseExpiry(tasks,clock);
  useEffect(()=>{
   if(nextLeaseExpiry===null)return;

@@ -292,7 +292,11 @@
     "results": "{{count}} klip",
     "provider": "Klip dari YouGlish"
   },
+  "learningQuestion": {"title":"Tanya tentang ungkapan ini","question":"Pertanyaan Anda","send":"Tanya","close":"Tutup","pending":"Menjawab…","useScene":"Gunakan teks situasi saya","offline":"Luring — pertanyaan tidak tersedia","answer":"Jawaban AI · belum ditinjau"},
+  "learningQuestionConsent": {"sharePersonal":"Bagikan situasi pribadi dan teks pembelajaran saat ini kepada {{recipient}}"},
   "runtime": {
+    "initialSaved": "{{expression}} · pembelajaran awal tersimpan",
+    "actionReceiptUnavailable": "Konfirmasi operasi tidak diterima. Progres telah dibaca ulang; periksa langkah saat ini.",
     "checkpointUnreadable": "Catatan belajar lokal tidak dapat dibaca. Catatan asli tetap tersimpan; jangan mulai sesi baru.",
     "checkpointSaveError": "Progres belajar tidak dapat disimpan. Periksa penyimpanan lokal lalu coba lagi.",
     "checkpointConflict": "Halaman lain memperbarui progres Anda. Muat ulang untuk melanjutkan.",

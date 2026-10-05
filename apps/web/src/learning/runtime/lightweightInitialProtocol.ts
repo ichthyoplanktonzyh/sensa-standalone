@@ -5,6 +5,7 @@ import {
   readLocalProtocolState,
   type LocalLearningMaterialization,
   type LocalLearningRun,
+  type LocalLearningRunParticipant,
   type LocalLearningTarget,
   type LocalProtocolExecution,
 } from './localProtocol';
@@ -36,7 +37,7 @@ import {
 import { protocolPolicyRegistry } from './protocolPolicies';
 
 export const LIGHTWEIGHT_STUDY_PROTOCOL_ID = 'lightweight-study' as const;
-export const LIGHTWEIGHT_STUDY_PROTOCOL_VERSION = 'v3' as const;
+export const LIGHTWEIGHT_STUDY_PROTOCOL_VERSION = 'v4' as const;
 
 export const LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_ID =
   'lightweight-study.experience-recall' as const;
@@ -107,9 +108,9 @@ export const LIGHTWEIGHT_EXPRESSION_REVEAL_STEP = parseStep({
   transitions: [
     {
       outcomeKey: 'again',
-      observationKind: 'protocol_completed',
-      effect: 'complete',
-      nextProtocolStepDefinitionId: null,
+      observationKind: 'practice_completed',
+      effect: 'advance',
+      nextProtocolStepDefinitionId: LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_ID,
     },
     {
       outcomeKey: 'hard',
@@ -337,7 +338,7 @@ export const transitionLightweightInitialProtocol = (
     observation,
     transitionDecision: transitionResult.decision,
   });
-  const completionRating = outcomeKey === 'again' || outcomeKey === 'hard' || outcomeKey === 'good'
+  const completionRating = completes && (outcomeKey === 'hard' || outcomeKey === 'good')
     ? outcomeKey
     : state.completionRating;
   const nextState: LightweightInitialProtocolRunState = Object.freeze({
@@ -357,6 +358,15 @@ const localActionSchema=z.discriminatedUnion('kind',[z.object({kind:z.literal('r
 type LocalLightweightProtocolState={phase:'recall'|'reveal';initial:LightweightInitialProtocolRunState|null};
 const localState=(run:LocalLearningRun)=>readLocalProtocolState<LocalLightweightProtocolState>(run,'lightweight');
 export const localLightweightPhase=(run:LocalLearningRun)=>localState(run).phase;
+/** Reveal support must use the experience actually acted on, not a later
+ * materialization's possibly revised recall cue. */
+export const localLightweightAdoptedExperience=(run:LocalLearningRun,participant:LocalLearningRunParticipant):LocalLearningMaterialization|null=>{
+ if(run.completedAt||localState(run).phase!=='reveal')return null;
+ const stepId=lightweightProtocolStepId(run.id,run.ordinal-1,'recall',run.protocolVersion);
+ const material=participant.presentedMaterials[stepId];
+ if(!material)throw new Error('localFlow.resourceInvalid');
+ return material;
+};
 
 /** Persistence adapter. Protocols emit settlement intent; only the library settlement module writes memory. */
 export const lightweightLocalExecution: LocalProtocolExecution = {
@@ -379,9 +389,13 @@ export const lightweightLocalExecution: LocalProtocolExecution = {
   let settlement:ReturnType<LocalProtocolExecution['unsafeTransition']>['settlement']=null;
   let sessionCompletion:ReturnType<LocalProtocolExecution['unsafeTransition']>['sessionCompletion']=null;
   if(action.kind==='rate'){
-   if(run.purpose==='initial_learning'&&next==='completed'){
-    const completion=initialCompletionContractOf(orchestrationRegistry.get(localRunBinding(run).orchestrationId));
-    settlement={kind:'initial_learning_completion',completion,relearning:action.rating==='again'?{nextEligibleAt:at,state:null}:null};
+   if(run.purpose==='initial_learning'){
+    // Again is another instructional pass in this same Initial Run, not a
+    // completed protocol, an FSRS initialization or a new Relearning purpose.
+    if(next==='completed'){
+     const completion=initialCompletionContractOf(orchestrationRegistry.get(localRunBinding(run).orchestrationId));
+     settlement={kind:'initial_learning_completion',completion,relearning:null};
+    }
    }else if(run.purpose==='retention_review'){
     const nextEligibleAt=action.rating==='again'?at:null;
     settlement={kind:'memory_outcome',schedulerEligibility:'due_review',outcome:{basis:'learner_rated',grade:action.rating,evidenceLevel:'self_report'},relearning:nextEligibleAt?{nextEligibleAt,state:null}:null};

@@ -21,13 +21,24 @@
 [ADR 0006](../adr/0006-three-product-systems.md) 的 Personal Semantic World、Learning System 与 Content
 Supply System 是产品领域划分，不与上述目录一一对应。当前 Web 的 Product Shell 位于 `experience`。
 学习应用层只通过 `apps/web/src/learning/system/learningSystem.ts` 的 deep Module interface 提交 command、
-读取 `home | workspace | personal_enrollment_index | semantic_memory` projection 并订阅对应查询失效；页面
+读取 `home | workspace | runtime | personal_enrollment_index | semantic_memory` 等显式 projection 并订阅对应查询失效；页面
 不知道 Learning 的逻辑表、事务准入、Curriculum membership、Policy registry、协议选择、重放、readiness
 或队列/调度原语。`workspace` 一次返回 Target presentation、状态集合、下一候选、历史和一个可辨识的
 Runtime presentation union；Renderer 只展示该 union 并回交 learner action。`apps/web/src/learning/runtime`、
 `engine` 与 `review` 是该系统内部的协议、评价和执行实现，`experience/learningRuntime` 只保留对公开
 presentation type 的纯呈现装配，`apps/web/src/data/library/learning*.ts` 是本机事务与 authority 实现，
 都不是页面 API。
+
+`workspace` 用于管理目标与历史；执行中的 `runtime` 只精确读取当前 Run 和参与目标，在 Run 边界才
+计算后续候选，不随每个步骤重新读取课程集合或历史。学习包目录界面在对应页面进入时加载，不进入
+恢复学习的同步模块闭包。操作未收到回执时只重读已保存事实，不以重提交来探测是否成功；读取失败
+暂时关闭操作入口并提供重读出口。
+
+揭示卡的学习问答通过 Learning System 内的独立只读服务固定 Run、目标、步骤与材料版本，使用
+当前绑定资源和前一步实际采用的经验。请求前后复验作用域，关闭或切换步骤取消请求；Content Attempt
+的原接收方授权不沿用给问答。默认不发送个人 Context 派生材料或额外场景，用户可为明确显示的当前
+teacher 单独授权文字，接收配置变化拒绝发送，不发送其媒体。回答仅在当前对话展示并标明未审核，
+没有 Semantic Acceptance、资源 admission 或学习 settlement 权限。
 内容发现、导入、下载、digest admission、安装与公共缓存恢复统一通过
 `apps/web/src/contentSupply/system/contentSupplySystem.ts`；页面不直接处理目录 HTTP、账号 session、ETag、
 目录缓存或 Package 存储。该 interface 同时拥有 learner-private provisioning task 的准备、停止、修订和
@@ -717,7 +728,8 @@ Python `content/tools/spoken_resource.py` 只属于离线 Book 制作管线。�
 合成器，保存 provider/model/voice/locale/rate、原文、摘要与时长；缓存按全部合成参数隔离，读取时检查
 媒体摘要，provider 更换不会重写既有学习材料。该管线与 Web 客户端 provider 独立。
 
-本地包源为 `content/preview/lightweight-resources-v7.json`。首次执行
+本地包源为 `content/preview/lightweight-resources-v8.json`。它修正轻量学习的流程说明，使用新 Book Version
+及新 Package Version，不覆盖原发布摘要或改写用户已采用的材料。首次执行
 `npm run content:prepare-local -- --allow-tts` 明确允许生成媒体；随后
 `npm run content:prepare-local` 仅复用经过校验的缓存。生成文件位于被 Git 忽略的
 `.sensa-local/` 和 `content/data/media/audio/speech-cache/`。

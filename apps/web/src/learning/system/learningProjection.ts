@@ -1,9 +1,10 @@
 import type { SensaFormalPinnedLanguageContext } from '@sensa/contracts/sensa';
-import {learningSupportMeaning} from '@sensa/contracts/sensa';
+import {learningSupportMeaning,lightweightStepRequirements} from '@sensa/contracts/sensa';
 
 import { contentSupplySystem, type ContentSupplyRuntimePackage } from '../../contentSupply/system';
-import { readHomeLearningRecords } from '../../data/library/store';
+import { readHomeLearningRecords,readLibrary } from '../../data/library/store';
 import { readLearningOverview } from '../../data/library/learning';
+import {readStudyPlans} from '../../data/library/studyPlans';
 import { localFlowText } from '../../i18n/localFlowText';
 import '../../i18n/learningResources';
 import i18n from '../../i18n';
@@ -21,6 +22,7 @@ import {
 } from '../runtime/localCurriculum';
 import {
   localLightweightPhase,
+  localLightweightAdoptedExperience,
   localLightweightStep,
 } from '../runtime/lightweightInitialProtocol';
 import {
@@ -56,6 +58,7 @@ import type {
   LearningReadiness,
   LearningRecordProjection,
   LearningRuntimeProjection,
+  LearningRuntimeWorkspaceProjection,
   LearningSemanticMemoryProjection,
   LearningStructuredRuntimeProjection,
   LearningTargetPresentation,
@@ -246,6 +249,9 @@ const projectRuntime = (
 
   if (surface === 'lightweight_initial' || surface === 'lightweight_retention') {
     const step = localLightweightStep(run, target, material);
+    const currentKeys=new Set(step?.materialBindings.map(binding=>binding.resourceKey)??[]);
+    const experience=localLightweightAdoptedExperience(run,participant);
+    const experienceRoles=new Set<string>(lightweightStepRequirements('pre_reveal').map(requirement=>requirement.materialRoleKey));
     return {
       ...base,
       kind: 'lightweight',
@@ -253,6 +259,11 @@ const projectRuntime = (
       target: targetView,
       phase: localLightweightPhase(run) === 'reveal' ? 'reveal' : 'experience',
       step: step ? { ...structuredClone(step), materialization: structuredClone(material) } : null,
+      questionResources:structuredClone([
+        ...material.content.resources.filter(resource=>currentKeys.has(resource.resourceKey)),
+        ...(experience?.content.resources.filter(resource=>experienceRoles.has(resource.materialRoleKey))??[]),
+      ]),
+      questionUsesPersonalContext:material.snapshot.personalAnchorUseGrantIds.length>0||(experience?.snapshot.personalAnchorUseGrantIds.length??0)>0,
     } satisfies LearningLightweightRuntimeProjection;
   }
 
@@ -430,6 +441,48 @@ export async function readLearningWorkspaceProjection(input: Readonly<{
     activeRunId: activeRun?.id ?? null,
     dailyLimit: dailyLimit ?? null,
     records: recordProjection(snapshot.runs, snapshot.targets),
+    policyOptions,
+  };
+}
+
+/** The page's current execution does not need every stored material and Run.
+ * Exact participants and compact Worker planning share the Library read lock;
+ * immutable public artifacts are obtained through Content Supply afterwards. */
+export async function readLearningRuntimeProjection(input:Readonly<{
+  languageContext:SensaFormalPinnedLanguageContext;clock:number;retries:readonly InterleavedLearningRetry[];
+}>):Promise<LearningRuntimeWorkspaceProjection>{
+  const snapshot=await readLibrary(async tx=>{
+    const activeId=await tx.get<string>('meta','learning-active');
+    const run=activeId?await tx.get<LocalLearningRun>('learningRuns',activeId):null;
+    if(activeId&&(!run||run.id!==activeId))throw new Error('localFlow.resourceInvalid');
+    const targets=run?await Promise.all(run.targetIds.map(async id=>{
+      const target=await tx.get<LocalLearningTarget>('learningTargets',id);
+      if(!target||target.id!==id)throw new Error('localFlow.resourceInvalid');
+      return target;
+    })):[];
+    // Ordinary Steps need no collection planning. Choose a continuation only
+    // at a Run boundary. The compact Worker query bypasses the page transaction
+    // chain, so it is safe under this lock without nesting a Library transaction.
+    return {run,targets,dailyLimit:(await readStudyPlans(tx))[input.languageContext.languageRouteId]?.dailyNewSenseLimit,
+      planning:!run||run.completedAt?await readHomeLearningRecords(input.languageContext.languageRouteId):null};
+  });
+  const packageKeys=snapshot.targets.flatMap(target=>{
+    const participant=snapshot.run!.participants[target.id];
+    const member=target.curriculumMemberships.find(member=>member.id===participant?.curriculumMembershipId);
+    return member?.assurancePackageKey&&member.packageKey?[member.packageKey]:[];
+  });
+  const packages=await contentSupplySystem.read({kind:'runtime_packages',packageKeys});
+  const runtime=snapshot.run?projectRuntime(snapshot.run,snapshot.targets,packages,input.clock):null;
+  if(!snapshot.planning)return {runtime,dailyLimit:snapshot.dailyLimit??null,nextTargetId:null,nextChangeAt:null,policyOptions};
+  const stored=snapshot.planning,available=new Set(stored.availablePackageKeys);
+  const readiness=Object.fromEntries(stored.targets.map(target=>[target.id,
+    homeLearningReadiness(target,localCurriculumMembershipForContext(target,input.languageContext),available)])) as Record<string,'ready'|'blocked'>;
+  const queue=resolveLearningQueue({targets:stored.targets,languageRouteId:input.languageContext.languageRouteId,readiness,clock:input.clock,dailyLimit:stored.dailyLimit});
+  const next=selectInterleavedLearningTarget({due:queue.due,initialReady:queue.initialReady,currentRunTargetIds:snapshot.run?.targetIds??[],retries:input.retries});
+  return {
+    runtime,
+    dailyLimit:stored.dailyLimit??null,nextTargetId:next?.id??null,
+    nextChangeAt:nextLearningQueueChangeAt({targets:stored.targets,languageRouteId:input.languageContext.languageRouteId,readiness,clock:input.clock,dailyLimit:stored.dailyLimit}),
     policyOptions,
   };
 }

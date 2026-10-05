@@ -194,6 +194,7 @@ test('a portable content update keeps Target progress and refreshes the unfinish
   updated.metadata.description='A revised scene under the same learning identity.';
   updated.metadata.createdAt='2026-09-25T01:00:00Z';
   updated.resources.sceneBridge.text='刚运动完，你拿起杯子，请求其中清凉的饮品。';
+  updated.resources.experienceRecallCue.text='新版经验提示；上一已操作经验步骤不应被替换。';
   const updatedBytes=createSensaPortableLightweightPackage(updated,media);
   const preview=await contentSupplySystem.execute({kind:'preview_portable_package',bytes:updatedBytes});
   assert.equal(preview.status,'update_available');
@@ -228,6 +229,12 @@ test('a portable content update keeps Target progress and refreshes the unfinish
     updated.resources.sceneBridge.text,
   );
   assert.equal(refreshEvent.kind,'current_step_material_refreshed');
+  const current=await learningSystem.read({kind:'runtime',languageContext});
+  assert.equal(current.runtime?.kind,'lightweight');
+  if(current.runtime?.kind!=='lightweight')throw new Error('expected lightweight runtime');
+  assert.equal(current.runtime.questionResources.find(item=>item.materialRoleKey==='scene_bridge')?.contentPayload.text,updated.resources.sceneBridge.text);
+  assert.equal(current.runtime.questionResources.find(item=>item.materialRoleKey==='experience_recall_cue')?.contentPayload.scene,manifest().resources.experienceRecallCue.text,'question context retains the actual previous experience version');
+  assert(!JSON.stringify(current.runtime.questionResources).includes(updated.resources.experienceRecallCue.text));
   const {estimateLibraryBackupSize}=await import('../../../apps/web/src/data/library/backup.ts');
   assert((await estimateLibraryBackupSize()).usedBytes>0,'the refreshed Step must pass complete Library replay validation');
 });

@@ -16,13 +16,6 @@ import {JourneyAlignmentLearningControls,PersonalPreparationTarget,pendingPerson
 import {LearningSetupFrame,setupButton} from '../components/learning/LearningSetupFrame';
 import {LearningPreferencesPanel} from '../components/learning/LearningPreferencesPanel';
 import {PackageTarget} from './PackageLearningViews';
-import {
- PackageBookScreen,
- PackageCatalogScreen,
- PackageLibraryScreen,
- PackageLibraryDetailScreen,
- PackagePublisherScreen,
-} from './PackageCenter';
 import {ScreenHost} from '../ui/ScreenHost';
 import {screenInstanceKey} from '../router/shellLocation';
 import type {LearningShellScreenId} from '../router/screenRegistry';
@@ -42,6 +35,13 @@ const DirectLearningScreen=lazy(()=>import('./DirectLearningScreen').then(module
 const LearningEntryScreen=lazy(()=>import('./DirectLearningScreen').then(module=>({default:module.LearningEntryScreen})));
 const ProviderPanel=lazy(()=>import('../components/ProviderPanel').then(module=>({default:module.ProviderPanel})));
 const PackageRuntime=lazy(()=>import('./PackageLearningRuntime').then(module=>({default:module.PackageRuntime})));
+// Content discovery is a separate screen lifecycle, not a synchronous cost of
+// resuming a learner's Run or opening its target/history management view.
+const PackageBookScreen=lazy(()=>import('./PackageCenter').then(module=>({default:module.PackageBookScreen})));
+const PackageCatalogScreen=lazy(()=>import('./PackageCenter').then(module=>({default:module.PackageCatalogScreen})));
+const PackageLibraryScreen=lazy(()=>import('./PackageCenter').then(module=>({default:module.PackageLibraryScreen})));
+const PackageLibraryDetailScreen=lazy(()=>import('./PackageCenter').then(module=>({default:module.PackageLibraryDetailScreen})));
+const PackagePublisherScreen=lazy(()=>import('./PackageCenter').then(module=>({default:module.PackagePublisherScreen})));
 
 type LearningWorkspaceScreenId=LearningShellScreenId|'s-lightweight-runtime';
 
@@ -53,8 +53,9 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
  const packageCenterOpen=viewMode==='main'&&mainStack.some(screen=>[
   's-learning-entry','s-catalog','s-catalog-book','s-library','s-library-package','s-publisher',
  ].includes(screen));
- const packageLearning=usePackageLearning(packageCenterOpen);
- const personalLearning=usePersonalLearning(currentScreen==='s-learning-library'?{kind:'library'}:currentScreen==='s-learning-target'&&params.targetId?{kind:'target',targetId:params.targetId}:null);
+ const executing=currentScreen==='s-lightweight-runtime';
+ const packageLearning=usePackageLearning(packageCenterOpen,executing);
+ const personalLearning=usePersonalLearning(currentScreen==='s-learning-library'?{kind:'library'}:currentScreen==='s-learning-target'&&params.targetId?{kind:'target',targetId:params.targetId}:null,!executing);
  const activeRoute={id:packageLearning.languageContext.languageRouteId,targetLanguageTag:packageLearning.languageContext.targetLanguageTag};
  const toast=useOverlayStore(state=>state.toast);
  const pendingPersonal=personalLearning.tasks.filter(task=>!packageLearning.targets.some(target=>target.targetId===task.targetId));

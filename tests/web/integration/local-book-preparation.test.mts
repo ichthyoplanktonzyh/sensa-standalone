@@ -14,7 +14,9 @@ test('local Book preparation produces strict, reusable media references without 
   const speech=join(root,'speech-fixture.mjs'),mediaRoot=join(root,'media');
   const bytes=Buffer.from([0xff,0xfb,0x90,0x64,0,0,0,0]);
   const sha256=createHash('sha256').update(bytes).digest('hex');
-  const book=JSON.parse(await readFile(resolve('content/preview/lightweight-resources-v7.json'),'utf8'));
+  const book=JSON.parse(await readFile(resolve('content/preview/lightweight-resources-v8.json'),'utf8'));
+  assert.equal(book.versionNumber,8);assert(book.entries.every((entry:{packageVersion:number})=>entry.packageVersion===2));
+  assert(!book.description.includes('完成')&&!book.description.includes('迁移'),'a lightweight resource description must not promise verified acquisition gates');
   book.entries=book.entries.slice(0,1);
   await writeFile(source,JSON.stringify(book));
   await writeFile(speech,`#!${process.execPath}\nlet input='';for await(const chunk of process.stdin)input+=chunk;const request=JSON.parse(input);console.log(JSON.stringify({surface:request.surface,languageTag:request.languageTag,audioUrl:'data:audio/mpeg;base64,${bytes.toString('base64')}',phoneticNotation:null,accentLabel:null,method:'tts',source:'synthetic local speech adapter'}));`,{mode:0o700});

@@ -238,10 +238,10 @@ const freezeContext = (input: LightweightInitialContentInput): FrozenContext => 
     senseExpressionBindingId: input.senseExpressionBindingId,
     resolvedLearningPlanRevisionId: input.resolvedLearningPlanRevisionId,
     profileId: 'lightweight',
-    profileVersion: 'lightweight-profile-v3',
+    profileVersion: 'lightweight-profile-v4',
     protocolPurpose: 'initial_learning',
     protocolId: 'lightweight-study',
-    protocolVersion: 'v3',
+    protocolVersion: 'v4',
     provisioningPath: 'on_demand',
     demandReference: {
       contentDemandKey: LIGHTWEIGHT_INITIAL_CONTENT_DEMAND_KEY,

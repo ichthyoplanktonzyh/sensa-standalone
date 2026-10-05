@@ -292,7 +292,11 @@
     "results": "{{count}} 個片段",
     "provider": "片段來自 YouGlish"
   },
+  "learningQuestion": {"title":"學習提問","question":"你的問題","send":"提問","close":"關閉","pending":"正在回答…","useScene":"使用我的場景文字","offline":"離線，暫時無法提問","answer":"AI 回答 · 未審核"},
+  "learningQuestionConsent": {"sharePersonal":"向 {{recipient}} 分享目前個人場景及其學習材料文字"},
   "runtime": {
+    "initialSaved": "{{expression}} · 首次學習已儲存",
+    "actionReceiptUnavailable": "未收到操作結果，已重新讀取進度。請核對目前步驟。",
     "checkpointUnreadable": "本機學習記錄無法讀取，已保留原記錄。請先不要開始新的學習。",
     "checkpointSaveError": "學習記錄暫時無法儲存，請檢查本機儲存後重試。",
     "checkpointConflict": "另一個頁面已更新學習記錄，請重新整理後繼續。",

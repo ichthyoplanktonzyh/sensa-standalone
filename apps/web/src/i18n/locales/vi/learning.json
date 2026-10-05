@@ -292,7 +292,11 @@
     "results": "{{count}} đoạn trích",
     "provider": "Đoạn trích từ YouGlish"
   },
+  "learningQuestion": {"title":"Hỏi về cách diễn đạt","question":"Câu hỏi của bạn","send":"Hỏi","close":"Đóng","pending":"Đang trả lời…","useScene":"Dùng văn bản tình huống của tôi","offline":"Ngoại tuyến — không thể hỏi","answer":"Câu trả lời AI · chưa thẩm định"},
+  "learningQuestionConsent": {"sharePersonal":"Chia sẻ tình huống cá nhân và văn bản học hiện tại với {{recipient}}"},
   "runtime": {
+    "initialSaved": "{{expression}} · đã lưu lần học đầu",
+    "actionReceiptUnavailable": "Chưa nhận được xác nhận. Tiến độ đã được đọc lại; hãy kiểm tra bước hiện tại.",
     "checkpointUnreadable": "Không thể đọc bản ghi học tập cục bộ. Bản ghi gốc vẫn được giữ; vui lòng đừng bắt đầu phiên mới.",
     "checkpointSaveError": "Không thể lưu tiến độ học. Kiểm tra bộ nhớ cục bộ rồi thử lại.",
     "checkpointConflict": "Trang khác đã cập nhật tiến độ. Tải lại để tiếp tục.",

@@ -292,7 +292,11 @@
     "results": "{{count}} klip",
     "provider": "YouGlish klipleri"
   },
+  "learningQuestion": {"title":"İfade hakkında soru","question":"Sorunuz","send":"Sor","close":"Kapat","pending":"Yanıtlanıyor…","useScene":"Kendi sahne metnimi kullan","offline":"Çevrimdışı — sorular kullanılamıyor","answer":"Yapay zekâ yanıtı · incelenmedi"},
+  "learningQuestionConsent": {"sharePersonal":"Mevcut kişisel sahneyi ve öğrenme metinlerini {{recipient}} ile paylaş"},
   "runtime": {
+    "initialSaved": "{{expression}} · ilk öğrenme kaydedildi",
+    "actionReceiptUnavailable": "İşlem onayı alınmadı. İlerleme yeniden okundu; mevcut adımı kontrol edin.",
     "checkpointUnreadable": "Yerel öğrenme kayıtları okunamıyor. Özgün kayıt korundu; lütfen yeni bir oturum başlatmayın.",
     "checkpointSaveError": "Öğrenme ilerlemesi kaydedilemedi. Yerel depolamayı kontrol edip yeniden deneyin.",
     "checkpointConflict": "Başka bir sayfa ilerlemenizi güncelledi. Devam etmek için sayfayı yenileyin.",

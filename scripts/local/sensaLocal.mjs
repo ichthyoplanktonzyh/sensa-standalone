@@ -217,7 +217,7 @@ async function buildLocalAssets(webOrigin) {
       ...environment,
       SENSA_WEB_ORIGIN: webOrigin,
       SENSA_PACKAGE_OUTPUT: join(root, 'apps/web/public/learning-packages'),
-      SENSA_BOOK_RELEASE_SOURCES: join(root, '.sensa-local/lightweight-resources-v7.json'),
+      SENSA_BOOK_RELEASE_SOURCES: join(root, '.sensa-local/lightweight-resources-v8.json'),
     },
    });
    catalog = readFileSync(join(root, 'release-candidate/portable-catalog.json'), 'utf8');
@@ -287,7 +287,7 @@ async function runSmoke(page, webOrigin) {
 
 async function runLocal() {
   requireIdle();
-  if (!publishedCatalogUrl && !existsSync(join(root, '.sensa-local/lightweight-resources-v7.json'))) throw Error('Prepare the local Book first: npm run content:prepare-local -- --allow-tts');
+  if (!publishedCatalogUrl && !existsSync(join(root, '.sensa-local/lightweight-resources-v8.json'))) throw Error('Prepare the local Book first: npm run content:prepare-local -- --allow-tts');
   writeFileSync(lockPath, `${JSON.stringify({ pid: process.pid, mode, startedAt: new Date().toISOString() })}\n`, { mode: 0o600 });
   const webOrigin = mode === 'preview' ? 'http://127.0.0.1:4173' : 'http://127.0.0.1:3000';
   await ensureDatabaseContainer();

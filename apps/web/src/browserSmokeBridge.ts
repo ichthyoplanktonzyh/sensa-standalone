@@ -27,6 +27,12 @@ type BrowserSmokeBridge = {
   holdDirectEnrollmentResultForTest():Promise<void>;
   releaseDirectEnrollmentResultForTest():void;
   failLearningWorkspaceReadsForTest(active:boolean):Promise<void>;
+  learningReadsForTest(reset?:boolean):Promise<Record<string,number>>;
+  learningSettlementFactsForTest():Promise<{targets:{targetId:string;memoryRevision:number;reps:number|null}[];actionEventCount:number;behavioralEvidenceCount:number}>;
+  failNextLearningCommitForTest():Promise<void>;
+  loseNextLearningActionResponseForTest():Promise<void>;
+  holdNextLearningActionResponseForTest():Promise<void>;
+  releaseLearningActionResponseForTest():void;
   holdWorldDetailReadsForTest():Promise<void>;
   releaseWorldDetailReadsForTest():void;
   holdWorldInboxReadsForTest():Promise<void>;
@@ -80,7 +86,38 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
   let releaseInboxReads:((fail?:boolean)=>void)|undefined;
   let hiddenInboxMedia:import('./data/library/media').StoredMedia|undefined;
   let releaseDirectResult:(()=>void)|undefined,restoreLearningReads:(()=>void)|undefined;
+  let releaseLearningResult:(()=>void)|undefined,learningReadCounts:Record<string,number>|undefined;
   window.__sensaBrowserSmoke = {
+    async learningSettlementFactsForTest(){
+      return readLibrary(async tx=>{
+        const targets=await tx.all<import('./learning/runtime/localProtocol').LocalLearningTarget>('learningTargets');
+        const events=await tx.all<{detail?:{formalEvaluation?:{evidence?:unknown[]}}}>('learningEvents');
+        return {targets:targets.map(target=>({targetId:target.id,memoryRevision:target.memoryRevision,reps:target.memory?.reps??null})),actionEventCount:events.length,behavioralEvidenceCount:events.reduce((count,event)=>count+(event.detail?.formalEvaluation?.evidence?.length??0),0)};
+      });
+    },
+    async learningReadsForTest(reset=false){
+      if(!learningReadCounts){
+        learningReadCounts={};const {learningSystem}=await import('./learning/system');const read=learningSystem.read;
+        learningSystem.read=(async query=>{learningReadCounts![query.kind]=(learningReadCounts![query.kind]??0)+1;return read(query);}) as typeof read;
+      }
+      const result={...learningReadCounts};if(reset)learningReadCounts={};return result;
+    },
+    async failNextLearningCommitForTest(){
+      const {sqliteRecordAdapter}=await import('./data/library/sqliteAdapter');const adapter=await sqliteRecordAdapter(),commit=adapter.commit.bind(adapter);
+      adapter.commit=async mutation=>{if(mutation.puts.some(row=>row.table==='learningEvents')){adapter.commit=commit;throw new Error('fixture learning commit failed');}return commit(mutation);};
+    },
+    async loseNextLearningActionResponseForTest(){
+      const {learningSystem}=await import('./learning/system');const execute=learningSystem.execute;
+      learningSystem.execute=(async command=>{const result=await execute(command);if(command.kind==='act'){learningSystem.execute=execute;throw new Error('fixture lost committed Action receipt');}return result;}) as typeof execute;
+    },
+    async holdNextLearningActionResponseForTest(){
+      if(releaseLearningResult)throw new Error('Action response already held');
+      const {learningSystem}=await import('./learning/system');const execute=learningSystem.execute;let release!:()=>void;
+      const held=new Promise<void>(resolve=>{release=resolve;});
+      learningSystem.execute=(async command=>{const result=await execute(command);if(command.kind==='act'){learningSystem.execute=execute;await held;}return result;}) as typeof execute;
+      releaseLearningResult=()=>{learningSystem.execute=execute;release();releaseLearningResult=undefined;};
+    },
+    releaseLearningActionResponseForTest(){releaseLearningResult?.();},
     async operatedStepMaterialsForTest(){
       return readLibrary(async tx=>(await tx.entries('learningEvents')).flatMap(({key,value})=>{
         const event=value as {runId:string;detail?:{stepId?:string;materializationId?:string}};

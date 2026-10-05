@@ -292,7 +292,11 @@
     "results": "{{count}} Clips",
     "provider": "Clips von YouGlish"
   },
+  "learningQuestion": {"title":"Frage zum Ausdruck","question":"Ihre Frage","send":"Fragen","close":"Schließen","pending":"Antwort wird erstellt…","useScene":"Meinen Szenentext verwenden","offline":"Offline — Fragen sind nicht verfügbar","answer":"KI-Antwort · ungeprüft"},
+  "learningQuestionConsent": {"sharePersonal":"Aktuelle persönliche Szene und Lerntexte mit {{recipient}} teilen"},
   "runtime": {
+    "initialSaved": "{{expression}} · erstes Lernen gespeichert",
+    "actionReceiptUnavailable": "Keine Bestätigung erhalten. Der Fortschritt wurde neu geladen; prüfen Sie den aktuellen Schritt.",
     "checkpointUnreadable": "Lokale Lernaufzeichnungen können nicht gelesen werden. Der ursprüngliche Datensatz bleibt erhalten. Beginnen Sie bitte keine neue Sitzung.",
     "checkpointSaveError": "Lernfortschritt konnte nicht gespeichert werden. Prüfen Sie den lokalen Speicher und versuchen Sie es erneut.",
     "checkpointConflict": "Eine andere Seite hat Ihren Fortschritt aktualisiert. Aktualisieren Sie die Seite, um fortzufahren.",

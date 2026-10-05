@@ -9,6 +9,7 @@ import {
   readLearningPersonalEnrollmentIndex,
   readLearningSemanticMemoryProjection,
   readLearningWorkspaceProjection,
+  readLearningRuntimeProjection,
   removeRetryTarget,
 } from './learningProjection';
 import type { LearningCommand, LearningQuery } from './learningSystem';
@@ -148,12 +149,12 @@ export const executeLearningCommand = async (command: LearningCommand): Promise<
       setRetries(routeId, removeRetryTarget(retriesFor(routeId), command.targetId));
       if (command.dailyLimit === null) return false;
       await prepareLearningQueue(command.languageContext,at,command.operationId);
-      const workspace = await readLearningWorkspaceProjection({
+      const workspace = await readLearningRuntimeProjection({
         languageContext: command.languageContext,
         clock: Date.parse(at),
         retries: retriesFor(routeId),
       });
-      const nextTargetId = workspace.queue.nextTargetId;
+      const nextTargetId = workspace.nextTargetId;
       if (!nextTargetId) return false;
       await startLearning(
         stableUuid(`${command.operationId}:start-next`),
@@ -168,12 +169,12 @@ export const executeLearningCommand = async (command: LearningCommand): Promise<
       const { continueLearning, finishLearning } = await import('../../data/library/learning');
       const at = command.at ?? new Date().toISOString();
       const routeId = command.languageContext.languageRouteId;
-      const workspace = await readLearningWorkspaceProjection({
+      const workspace = await readLearningRuntimeProjection({
         languageContext: command.languageContext,
         clock: Date.parse(at),
         retries: retriesFor(routeId),
       });
-      const nextTargetId = workspace.queue.nextTargetId;
+      const nextTargetId = workspace.nextTargetId;
       if (nextTargetId) {
         await continueLearning(
           stableUuid(`${command.operationId}:continue-next`),
@@ -193,6 +194,7 @@ export const executeLearningCommand = async (command: LearningCommand): Promise<
 
 export const readLearningQuery = async (query: LearningQuery): Promise<unknown> => {
   switch (query.kind) {
+    case 'runtime':return readLearningRuntimeProjection({languageContext:query.languageContext,clock:query.clock??Date.now(),retries:retriesFor(query.languageContext.languageRouteId)});
     case 'direct_choices': {
       const {readDirectLearningChoices}=await import('./directLearningChoices');
       return readDirectLearningChoices({query:query.query,targetLanguageTag:query.targetLanguageTag,page:query.page});

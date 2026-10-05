@@ -15,8 +15,9 @@ import {
  type LearningWorkspaceProjection,
 } from '../../learning/system';
 import {localFlowNotice,localFlowText} from '../../i18n/localFlowText';
+import i18n from '../../i18n';
 import {useActiveLanguageContext} from './useActiveLanguageContext';
-import {settleOperation} from './operationSettlement';
+import {settleReconciledOperation} from './operationSettlement';
 import {createRefreshCoordinator} from './refreshCoordinator';
 
 const emptyWorkspace:LearningWorkspaceProjection={
@@ -39,10 +40,11 @@ const measuredWorkspaceRead=async<T,>(name:string,work:()=>Promise<T>):Promise<T
  }
 };
 
-export function usePackageLearning(entryOpen:boolean){
+export function usePackageLearning(entryOpen:boolean,runtimeOnly=false){
  useTranslation();
  const languageContext=useActiveLanguageContext();
  const routeKey=`${languageContext.languageRouteId}:${languageContext.languageRouteRevision}`;
+ const currentRoute=useRef(routeKey);currentRoute.current=routeKey;
  const [packages,setPackages]=useState<InstalledPackage[]>([]);
  const [catalog,setCatalog]=useState<ContentSupplyCatalogItem[]>([]);
  const [workspace,setWorkspace]=useState<LearningWorkspaceProjection>(emptyWorkspace);
@@ -50,11 +52,13 @@ export function usePackageLearning(entryOpen:boolean){
  const [busy,setBusy]=useState(false);
  const [progress,setProgress]=useState<number|null>(null);
  const [loaded,setLoaded]=useState(false);
- const [loadState,setLoadState]=useState<{routeKey:string;status:'loading'|'ready'|'unavailable'}>(()=>({routeKey,status:'loading'}));
+ const runtimeMode=useRef(runtimeOnly);runtimeMode.current=runtimeOnly;
+ const [runtimeNextTargetId,setRuntimeNextTargetId]=useState<string|null>(null);
+ const [loadState,setLoadState]=useState<{routeKey:string;runtimeOnly:boolean;status:'loading'|'ready'|'unavailable'}>(()=>({routeKey,runtimeOnly,status:'loading'}));
  // A changed Route invalidates readiness during render, before the passive
  // reload effect can run. Old targets cannot become a new Session's scope.
- const loadStatus=loadState.routeKey===routeKey?loadState.status:'loading';
- const setLoadStatus=(status:typeof loadState.status)=>setLoadState({routeKey,status});
+ const loadStatus=loadState.routeKey===routeKey&&loadState.runtimeOnly===runtimeOnly?loadState.status:'loading';
+ const setLoadStatus=(status:typeof loadState.status)=>{if(currentRoute.current===routeKey)setLoadState({routeKey,runtimeOnly:runtimeMode.current,status});};
  const [unavailablePackageKeys,setUnavailablePackageKeys]=useState<readonly string[]>([]);
  const [catalogBusy,setCatalogBusy]=useState(false);
  const transfer=useRef<AbortController|null>(null);
@@ -65,10 +69,20 @@ export function usePackageLearning(entryOpen:boolean){
  const actInFlight=useRef(false);
 
  const refreshLearning=async()=>{
-  const current=lifecycle.current;
-  const projection=await measuredWorkspaceRead('learning',()=>learningSystem.read({kind:'workspace',languageContext,clock:Date.now()}));
-  if(current!==lifecycle.current)return;
-  setWorkspace(projection);
+  if(currentRoute.current!==routeKey)return false;
+  const current=lifecycle.current,readingRuntime=runtimeMode.current;
+  if(readingRuntime){
+   const projection=await measuredWorkspaceRead('runtime',()=>learningSystem.read({kind:'runtime',languageContext,clock:Date.now()}));
+   if(current!==lifecycle.current||currentRoute.current!==routeKey||runtimeMode.current!==readingRuntime)return false;
+   setWorkspace(previous=>({...previous,runtime:projection.runtime,activeRunId:projection.runtime?.runId??null,dailyLimit:projection.dailyLimit,policyOptions:projection.policyOptions,
+    queue:{...previous.queue,nextTargetId:projection.nextTargetId,nextChangeAt:projection.nextChangeAt}}));
+   setRuntimeNextTargetId(projection.nextTargetId);
+  }else{
+   const projection=await measuredWorkspaceRead('learning',()=>learningSystem.read({kind:'workspace',languageContext,clock:Date.now()}));
+   if(current!==lifecycle.current||currentRoute.current!==routeKey||runtimeMode.current!==readingRuntime)return false;
+   setWorkspace(projection);setRuntimeNextTargetId(null);
+  }
+  setLoadStatus('ready');return true;
  };
  const refreshSupply=async()=>{
   const current=lifecycle.current;
@@ -81,8 +95,8 @@ export function usePackageLearning(entryOpen:boolean){
  };
  const refresh=async()=>{
   const current=lifecycle.current;
-  await Promise.all([refreshLearning(),refreshSupply()]);
-  if(current!==lifecycle.current)return;
+  const [learningApplied]=await Promise.all([refreshLearning(),refreshSupply()]);
+  if(current!==lifecycle.current||!learningApplied)return;
   setLoaded(true);
   setLoadStatus('ready');
  };
@@ -111,8 +125,8 @@ export function usePackageLearning(entryOpen:boolean){
  };
 
  useEffect(()=>{
-  setLoaded(false);
-  const learningCoordinator=createRefreshCoordinator(refreshLearning);
+  setLoaded(false);setBusy(false);setProgress(null);setNotice('');
+  const learningCoordinator=createRefreshCoordinator(async()=>{await refreshLearning();});
   const supplyCoordinator=createRefreshCoordinator(refreshSupply);
   const current=lifecycle.current;
   const readFailed=()=>{if(current!==lifecycle.current)return;setLoadStatus('unavailable');setNotice(localFlowText('progressReadFailed'));};
@@ -139,6 +153,16 @@ export function usePackageLearning(entryOpen:boolean){
   };
  },[languageContext.languageRouteId,languageContext.languageRouteRevision]);
 
+ const lastRuntimeMode=useRef(runtimeOnly);
+ useEffect(()=>{
+  if(lastRuntimeMode.current===runtimeOnly)return;
+  lastRuntimeMode.current=runtimeOnly;setLoadStatus('loading');
+  // Hidden inventory/history remains untouched between Runtime Actions. Once
+  // the learner leaves execution, reload the complete management view before
+  // exposing its controls; an older asynchronous read cannot cross this mode.
+  void refresh().catch(()=>{setLoadStatus('unavailable');setNotice(localFlowText('progressReadFailed'));});
+ },[runtimeOnly]);
+
  useEffect(()=>{
   if(workspace.queue.nextChangeAt===null)return;
   const timer=window.setTimeout(
@@ -150,18 +174,21 @@ export function usePackageLearning(entryOpen:boolean){
   return()=>window.clearTimeout(timer);
  },[workspace.queue.nextChangeAt,languageContext.languageRouteId,languageContext.languageRouteRevision]);
 
- const perform=async<T,>(work:()=>Promise<T>,refreshAfter=refreshLearning)=>{
+ const perform=async<T,>(work:()=>Promise<T>,refreshAfter:()=>Promise<void>=async()=>{await refreshLearning();})=>{
+  const current=lifecycle.current;
   setBusy(true);setNotice('');
   try{
-   const outcome=await settleOperation(work,refreshAfter);
-   if(outcome.kind==='rejected'){
+   const outcome=await settleReconciledOperation(work,refreshAfter);
+   if(current!==lifecycle.current||currentRoute.current!==routeKey)return null;
+   if(outcome.projection==='stale'){setLoadStatus('unavailable');setNotice(localFlowText('progressReadFailed'));}
+   if(outcome.kind==='unconfirmed'){
+    if(outcome.projection==='stale')return null;
     const error=outcome.error;
-    setNotice(error instanceof Error&&error.message.startsWith('localFlow.')?error.message:localFlowText('retryOperation'));
+    setNotice(error instanceof Error&&error.message.startsWith('localFlow.')?error.message:'runtime.actionReceiptUnavailable');
     return null;
    }
-   if(outcome.projection==='stale')setNotice(localFlowText('progressReadFailed'));
    return outcome.value;
-  }finally{setBusy(false);setProgress(null);}
+  }finally{if(current===lifecycle.current&&currentRoute.current===routeKey){setBusy(false);setProgress(null);}}
  };
  const inspect=async<T,>(work:()=>Promise<T>)=>{
   setBusy(true);setNotice('');
@@ -174,10 +201,11 @@ export function usePackageLearning(entryOpen:boolean){
   const gen=++generation.current;
   catalogRequest.current?.abort();
   const request=new AbortController();catalogRequest.current=request;
+  setCatalogBusy(true);
   try{
    const local=await contentSupplySystem.read({kind:'catalog'});
    if(gen!==generation.current)return;
-   setCatalog([...local]);setCatalogBusy(true);
+   setCatalog([...local]);
    const result=await contentSupplySystem.execute({kind:'refresh_catalog',force:notify,signal:request.signal});
    if(gen===generation.current){
     setCatalog([...result.items]);
@@ -197,7 +225,7 @@ export function usePackageLearning(entryOpen:boolean){
  const targetById=new Map(workspace.targets.map(target=>[target.targetId,target]));
  const initialReady=workspace.queue.initialReadyTargetIds.flatMap(id=>targetById.get(id)??[]);
  const due=workspace.queue.dueTargetIds.flatMap(id=>targetById.get(id)??[]);
- const nextTarget=workspace.queue.nextTargetId?targetById.get(workspace.queue.nextTargetId)??null:null;
+ const nextTarget=runtimeOnly?(runtimeNextTargetId?{targetId:runtimeNextTargetId}:null):workspace.queue.nextTargetId?targetById.get(workspace.queue.nextTargetId)??null:null;
  const runtime=workspace.runtime;
  const dailyLimit=workspace.dailyLimit;
 
@@ -211,7 +239,7 @@ export function usePackageLearning(entryOpen:boolean){
   records:workspace.records,
   policyOptions:workspace.policyOptions,
   dailyLimit:dailyLimit??undefined,
-  notice:localFlowNotice(notice),busy,progress,loaded:loaded&&loadStatus==='ready',loadStatus,retryInitialLoad,unavailablePackageKeys,catalogBusy,reloadCatalog,refresh,
+  notice:notice==='runtime.actionReceiptUnavailable'?i18n.t(notice):localFlowNotice(notice),busy:busy||loadStatus!=='ready',progress,loaded:loaded&&loadStatus==='ready',loadStatus,retryInitialLoad,unavailablePackageKeys,catalogBusy,reloadCatalog,refresh,
   confirmQuantity:(n:number)=>perform(()=>learningSystem.execute({kind:'confirm_quantity',operationId:crypto.randomUUID(),languageContext,dailyLimit:n})),
   download:(d:ContentSupplyCatalogItem,onPhase?:(phase:ContentSupplyInstallationPhase)=>void)=>perform(async()=>{
    const c=new AbortController();transfer.current=c;
@@ -241,7 +269,7 @@ export function usePackageLearning(entryOpen:boolean){
   enrollBook:(publicationArchiveSha256:string)=>perform(()=>learningSystem.execute({kind:'enroll_book',operationId:crypto.randomUUID(),languageContext,publicationArchiveSha256})),
   start:(targetId:string,dailyLimit:number)=>perform(()=>learningSystem.execute({kind:'start',operationId:crypto.randomUUID(),targetId,languageContext,dailyLimit})),
   act:async(action:LearningAction)=>{
-   if(!runtime||actInFlight.current)return null;
+   if(!runtime||actInFlight.current||loadStatus!=='ready')return null;
    actInFlight.current=true;
    try{return await perform(()=>learningSystem.execute({kind:'act',operationId:crypto.randomUUID(),runId:runtime.runId,expectedRevision:runtime.revision,action}));}
    finally{actInFlight.current=false;}

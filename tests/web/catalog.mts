@@ -221,7 +221,7 @@ const fastWithMemory = [
   'integration/live-matrix-summary',
   'integration/language-trace-evidence',
   'integration/guest-library', 'integration/local-clear-sync', 'integration/backup-restore', 'integration/extension-local-models',
-  'integration/package-learning', 'integration/portable-package-loop', 'integration/local-learning-runtime', 'integration/media-library',
+  'integration/package-learning', 'integration/portable-package-loop', 'integration/local-learning-runtime', 'integration/learning-runtime-query', 'integration/media-library',
   'integration/learning-scene-bridge', 'integration/personal-learning', 'integration/language-route',
   'integration/language-journey', 'integration/reading-language', 'integration/reading-glossary',
   'integration/reading-skip', 'integration/extension-speech', 'integration/reading-site',
@@ -275,6 +275,7 @@ const playwrightPaths = new Set<string>([
 ]);
 
 const durabilityTests = new Set<string>([
+  'integration/learning-runtime-query',
   'integration/direct-learning-provisioning',
   'integration/direct-learning-enrollment',
   'integration/manual-meaning',
@@ -323,6 +324,7 @@ const convergenceTests = new Set<string>([
   'database/library-cloud', 'browser/web-bootstrap-budget',
 ]);
 const scaleTests = new Set<string>([
+  'integration/learning-runtime-query',
   'unit/direct-learning-choices',
   'integration/scoped-context-command',
   'unit/personal-learning-batch',
@@ -411,6 +413,25 @@ export const webTestCatalog: readonly WebTestCatalogEntry[] = [
     file: 'tests/web/unit/operation-settlement.test.ts',
     kind: 'unit',
     risks: ['local-correctness', 'durability'],
+    environment: 'node',
+    suite: 'fast',
+    runner: 'vitest',
+  },
+  {
+    id: 'learning-question',
+    file: 'tests/web/integration/learning-question.test.mts',
+    kind: 'integration',
+    risks: ['local-correctness', 'durability'],
+    environment: 'node',
+    suite: 'fast',
+    runner: 'vitest',
+    memoryLibrary: true,
+  },
+  {
+    id: 'model-disclosure-preflight',
+    file: 'tests/web/integration/model-disclosure-preflight.test.mts',
+    kind: 'integration',
+    risks: ['local-correctness'],
     environment: 'node',
     suite: 'fast',
     runner: 'vitest',

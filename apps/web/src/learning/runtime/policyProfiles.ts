@@ -192,7 +192,7 @@ export class LearningPolicyProfileRegistry<ProfileId extends string> {
 export const LEARNING_POLICY_PROFILES = [
   {
     profileId: 'lightweight',
-    profileVersion: 'lightweight-profile-v3',
+    profileVersion: 'lightweight-profile-v4',
     presentation: {
       label: '轻量学习',
       shortBadge: '更快开始',
@@ -211,8 +211,8 @@ export const LEARNING_POLICY_PROFILES = [
     protocols: {
       initial_learning: {
         protocolId: 'lightweight-study',
-        localProtocolVersion: 'sensa-lightweight-initial-v1',
-        protocolVersion: 'v3',
+        localProtocolVersion: 'sensa-lightweight-initial-v2',
+        protocolVersion: 'v4',
         runtimeAdapterId: 'lightweight',
         orchestrationId: 'lightweight_study',
         evaluationPolicyId: 'lightweight-practice-observation-v1',

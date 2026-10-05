@@ -15,6 +15,7 @@ import type {
   LearningPolicy,
   LearningSemanticMemoryProjection,
   LearningWorkspaceProjection,
+  LearningRuntimeWorkspaceProjection,
 } from './learningReadModels';
 export {
   LEARNING_LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND,
@@ -43,6 +44,7 @@ export type {
   LearningRecordProjection,
   LearningRuntimeCapability,
   LearningRuntimeProjection,
+  LearningRuntimeWorkspaceProjection,
   LearningSemanticMemoryProjection,
   LearningSourceKind,
   LearningStructuredRuntimeProjection,
@@ -161,6 +163,7 @@ export type LearningCommandResult<Command extends LearningCommand> =
       : boolean;
 
 export type LearningQuery =
+  | Readonly<{kind:'runtime';languageContext:SensaFormalPinnedLanguageContext;clock?:number}>
   | Readonly<{kind:'direct_choices';query:string;targetLanguageTag:string;page:number}>
   | Readonly<{kind:'direct_enrollment';enrollmentId:string}>
   | Readonly<{kind:'direct_source';reference:DirectLearningReference;expectedDigest?:string}>
@@ -174,7 +177,8 @@ export type LearningQuery =
   | Readonly<{ kind: 'semantic_memory' }>;
 
 export type LearningQueryResult<Query extends LearningQuery> =
-  Query['kind'] extends 'direct_choices' ? DirectLearningChoicePage
+  Query['kind'] extends 'runtime' ? LearningRuntimeWorkspaceProjection
+    : Query['kind'] extends 'direct_choices' ? DirectLearningChoicePage
     : Query['kind'] extends 'direct_enrollment' ? DirectLearningEnrollment|null
     : Query['kind'] extends 'direct_source' ? DirectLearningSource
     : Query['kind'] extends 'home' ? LearningHomeProjection
@@ -198,6 +202,7 @@ export interface LearningSystem {
 }
 
 const queryTables = {
+  runtime:['packageCache','learningTargets','learningRuns','settings','meta'],
   direct_choices: ['semanticRegistry','packageCache','packageInstallations','meta'],
   direct_enrollment: ['curriculumEnrollments','learningTargets','meta'],
   direct_source: ['semanticRegistry','packageCache','packageInstallations','meta'],

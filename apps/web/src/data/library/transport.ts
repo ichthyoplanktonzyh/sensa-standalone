@@ -18,6 +18,10 @@ async function abortable<T>(promise:Promise<T>,signal:AbortSignal):Promise<T>{
 
 export type CompleteOptions={
  responseFormat?:'json_object';
+ /** A feature's disclosure consent can pin the managed-service account. */
+ expectedSubject?:string;
+ /** Read-only disclosure preflight at actual dispatch, after queue waiting. */
+ beforeSend?:()=>Promise<void>;
  /** Raw provider text deltas. The owning feature decides what is safe to show. */
  onText?:(delta:string)=>void|Promise<void>;
 };
@@ -61,12 +65,14 @@ async function completeRequest(provider:Provider,purpose:Purpose,id:string,messa
   if(!configured||provider.endpoint!==configured.replace(/\/+$/u,''))throw new Error('localFlow.sensaEndpoint');
   if(!auth)throw new Error('localFlow.authUnavailable');
   const {data,error}=await abortable(auth.getSession(),signal);if(error||!data.session)throw new Error('localFlow.onlineLogin');
+  if(options.expectedSubject&&data.session.user.id!==options.expectedSubject)throw new Error('localFlow.staleAccountResult');
   key=data.session.access_token;subject=data.session.user.id;endpoint=provider.endpoint+(options.onText?'/sensa/model/turn/stream':'/sensa/model/turn');
   const input={id,purpose,body};payload={...input,inputDigest:await digest(input)};
  }else{
   key=await providerCredential(provider);
   payload={...body,...(options.onText?{stream:true}:{}),...(base.hostname==='api.deepseek.com'?{thinking:{type:'disabled'}}:{})};
  }
+ await options.beforeSend?.();signal.throwIfAborted();
  const response=await fetch(endpoint,{method:'POST',redirect:'error',credentials:'omit',headers:{authorization:'Bearer '+key,'content-type':'application/json',...(options.onText?{accept:provider.kind==='sensa'?'application/x-ndjson':'text/event-stream'}:{})},body:JSON.stringify(payload),signal:AbortSignal.any([signal,AbortSignal.timeout(45000)])});
  if(response.status===401||response.status===403){clearCredential(provider.id);throw new Error('localFlow.providerAccessDenied');}
  if(!response.ok){const error=await response.json().catch(()=>({}));modelFailure(error.code);}
