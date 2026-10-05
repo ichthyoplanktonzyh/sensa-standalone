@@ -19,6 +19,7 @@ interface StudyScreenProps {
   preferencesBusy?: boolean;
   preferencesStatus?: ReactNode;
   calendar?: ReactNode;
+  bookPlans?:ReactNode;
   onOpenPreferences?: () => void;
   tab: 'a' | 'b';
   onTabChange: (tab: 'a' | 'b') => void;
@@ -84,6 +85,7 @@ export const StudyScreen = (props: StudyScreenProps) => {
           <div className="mt-7 border-t border-border-subtle pt-6"><p className="text-sm text-fg-secondary">{t('study.method')}</p><p className="mt-2 font-medium">{props.policySummary??t('learningPreferences.policies.'+props.defaultPolicy)}</p></div>
         </section>
       </div>
+      {props.bookPlans}
       {props.calendar ?? <StudyCalendar/>}
       <section className="mt-12" aria-labelledby="study-history-title">
         <div className="flex flex-wrap items-center justify-between gap-4"><div className="flex items-center gap-4"><h2 id="study-history-title" className="text-xl font-medium">{t('study.history')}</h2><button type="button" className={studyButton+' text-action-primary hover:bg-accent-soft'} onClick={props.onOpenStats}>{t('statistics.title')}<ArrowRight size={16}/></button></div>

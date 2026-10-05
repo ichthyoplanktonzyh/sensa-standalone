@@ -50,11 +50,11 @@ export function RuntimeFrame({
               type="button"
               onClick={onExit}
               aria-label={t("runtime.pause")}
-              className="sensa-runtime-pause flex min-h-11 items-center gap-2 rounded-control px-3 text-sm text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus"
+              className="sensa-runtime-pause flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-control px-3 text-sm text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus"
             >
-              <Pause size={16} />
+              <Pause size={16} className="shrink-0" />
               {t("runtime.pause")}
-              {pauseShortcut && <kbd className="sensa-shortcut-hint" aria-hidden="true">{pauseShortcut}</kbd>}
+              {pauseShortcut && <kbd className="sensa-shortcut-hint hidden sm:inline" aria-hidden="true">{pauseShortcut}</kbd>}
             </button>
           </>
         ),

@@ -1,4 +1,7 @@
 {
+  "bookPlanHeading":{"title":"Sonraki çalışma planı","mode":"Sonraki öğrenme modu"},
+  "bookPlanFeedback":{"unconfirmed":"Kaydetme yanıtı doğrulanamadı. Plan yeniden okundu; yeniden işlem yapmadan önce kontrol edin.","savedReadFailed":"Plan kaydedildi, ancak yeniden okunamadı. Okumayı yeniden deneyin."},
+  "bookPlan": {"title":"Kitaplar ve kapsam","edit":"Düzenle","editNamed":"{{title}} düzenle","mode":"Öğrenme modu","active":"Yeni ve devam eden öğrenme","maintenance":"Yalnızca başlanmış öğrenme","paused":"Duraklatıldı","range":"Öğrenme kapsamı","all":"Kitabın tamamı","ordinals":"Sıraya göre seç","first":"İlk sıra","last":"Son sıra","save":"Planı kaydet","cancel":"İptal","fallback":"Eklenen kitap · v{{version}}","allLabel":"Kitabın tamamı · {{count}} öğe","rangeLabel":"{{first}}–{{last}} sıraları","selectedLabel":"{{count}} anlam seçildi","invalidRange":"Bu kitap için geçerli ilk ve son sıraları girin."},
   "directLearning": {"title":"İfade bul","search":"İfade ara","empty":"Eşleşen onaylanmış ifade yok","local":"Yerel anlamlar","published":"Kaydedilen öğrenme paketleri","previous":"Önceki","next":"Sonraki","settings":"Dil ve model ayarları","view":"Öğrenmeyi görüntüle","confirm":"Eklemeyi onayla"},
   "assurance": {
     "uk": "BK",

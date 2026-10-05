@@ -65,6 +65,20 @@ test('a Session pins its complete admitted Scope and quota across continuation; 
  expect(decodeBackupValue(partition.upload.find(row=>row.table==='learningTargets'&&row.key===beta.id)!.value).policyAssignment).toEqual(changedBeta.policyAssignment);
  expect(partition.local.some(row=>row.table==='learningSessions'&&row.key===original.session!.id)).toBe(true);
  expect(partition.upload.some(row=>row.table==='learningSessions'&&row.key===original.session!.id)).toBe(false);
+ const firstBook=(await learningSystem.read({kind:'book_plans',languageContext:context}))[0]!;
+ await learningSystem.execute({kind:'change_book_plan',operationId:id(),enrollmentId:firstBook.enrollmentId,expectedRevision:firstBook.revision,languageContext:context,mode:'paused',selection:{kind:'ordinals',first:1,last:1}});
+ expect(await state()).toEqual(original);
+ const pausedSummary=await learningSystem.read({kind:'management',languageContext:context});
+ expect(pausedSummary.targetIds.slice().sort()).toEqual([alpha.id,beta.id].sort());expect(pausedSummary.readyInitialCount).toBe(0);
+ const paused=(await learningSystem.read({kind:'book_plans',languageContext:context}))[0]!;
+ await expect(learningSystem.execute({kind:'change_book_plan',operationId:id(),enrollmentId:firstBook.enrollmentId,expectedRevision:firstBook.revision,languageContext:context,mode:'active',selection:{kind:'all'}})).rejects.toThrow('localFlow.stepChanged');
+ const cacheGet=database.get.bind(database),cacheProjection=database.packageCacheProjection.bind(database);
+ database.get=(table,key)=>table==='packageCache'?null:cacheGet(table,key);
+ database.packageCacheProjection=()=>{throw Error('Mode-only change enumerated public cache');};
+ try{await learningSystem.execute({kind:'change_book_plan',operationId:id(),enrollmentId:paused.enrollmentId,expectedRevision:paused.revision,languageContext:context,mode:'maintenance',selection:paused.selection});}
+ finally{database.get=cacheGet;database.packageCacheProjection=cacheProjection;}
+ expect((await learningSystem.read({kind:'book_plans',languageContext:context}))[0]!.selection).toEqual(paused.selection);
+ expect(await state()).toEqual(original);
  await install(['scope-later']);
  await learningSystem.execute({kind:'confirm_quantity',operationId:id(),languageContext:context,dailyLimit:30});
  expect((await state()).scope).toEqual(original.scope);

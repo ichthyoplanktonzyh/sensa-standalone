@@ -7,6 +7,7 @@ import {localFlowNotice,localFlowText} from '../../i18n/localFlowText';
 import {useShellNavigation} from '../router/useShellNavigation';
 import {useOverlayStore} from '../stores/overlayStore';
 import {usePackageLearning} from './usePackageLearning';
+import {BookPlanPanel} from './BookPlanPanel';
 import {usePersonalLearning} from './usePersonalLearning';
 import {usePracticeScope} from '../usePracticeScope';
 import {createPracticeScopeSnapshot,type PracticeScopeSnapshot} from '../practiceScope';
@@ -153,6 +154,7 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
   's-confirmed-sense':screenActive=><ConfirmedSenseDetailScreen active={screenActive} personalMeaningId={personalMeaningId} meaningFocusId={meaningFocusId} onBack={backMain} onOpenBinding={()=>goMain('s-expression-binding')} learningControls={(detail,alignment)=><JourneyAlignmentLearningControls detail={detail} alignment={alignment} c={personalLearning} onStart={id=>void startLocalLearning(id)}/>}/>,
   's-real-world-listening':screenActive=><YouGlishListeningScreen active={screenActive} targets={(activePracticeScope??practiceScopeCatalog.currentScope).targets} onBack={backMain} toast={toast}/>,
   's-study':screenActive=><StudyScreen
+    bookPlans={<BookPlanPanel active={screenActive}/>}
     availability={packageLearning.loadStatus} status={managementStatus}
     preferencesBusy={preferencesBusy} preferencesStatus={preferencesStatus}
     policySummary={[...new Set(packageLearning.management?.policies??packageLearning.targets.map(target=>target.policy))].map(policy=>t('learningPreferences.policies.'+policy)).join(' · ')||undefined}

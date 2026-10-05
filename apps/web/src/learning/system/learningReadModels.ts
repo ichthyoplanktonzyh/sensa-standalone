@@ -143,6 +143,12 @@ export interface LearningManagementProjection{
  readonly readyInitialCount:number;readonly reviewDueCount:number;
  readonly policyOptions:readonly LearningPolicyOption[];
 }
+export type LearningBookRangeSelection=import('../../data/library/bookPlans').BookRangeSelection;
+export type LearningBookMode='active'|'maintenance'|'paused';
+export type LearningBookPlanProjection=Readonly<{
+ enrollmentId:string;revision:number;title:string|null;bookVersionNumber:number;memberCount:number;
+ mode:LearningBookMode;selection:LearningBookRangeSelection;
+}>;
 export interface LearningHistoryProjection extends LearningHistorySummary{readonly records:readonly LearningRecordProjection[];readonly version:string;}
 export interface LearningPersonalEnrollmentIndex {
   readonly targets: readonly Readonly<{

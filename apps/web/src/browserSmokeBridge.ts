@@ -35,7 +35,9 @@ type BrowserSmokeBridge = {
   learningReadsForTest(reset?:boolean):Promise<Record<string,number>>;
   traceLearningReadsForTest(active:boolean):Promise<void>;
   learningSettlementFactsForTest():Promise<{targets:{targetId:string;memoryRevision:number;reps:number|null}[];actionEventCount:number;behavioralEvidenceCount:number}>;
-  failNextLearningCommitForTest(kind?:'action'|'quantity'|'finish'):Promise<void>;
+  failNextLearningCommitForTest(kind?:'action'|'quantity'|'finish'|'book_plan'):Promise<void>;
+  loseNextBookPlanResponseForTest():Promise<void>;
+  failBookPlanReadsForTest(active:boolean):Promise<void>;
   loseNextLearningActionResponseForTest():Promise<void>;
   loseNextLearningQuantityResponseForTest():Promise<void>;
   holdNextLearningActionResponseForTest():Promise<void>;
@@ -177,7 +179,19 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
     },
     async failNextLearningCommitForTest(kind='action'){
       const {sqliteRecordAdapter}=await import('./data/library/sqliteAdapter');const adapter=await sqliteRecordAdapter(),commit=adapter.commit.bind(adapter);
-      adapter.commit=async mutation=>{const reject=kind==='finish'?mutation.deletes.some(row=>row.table==='meta'&&row.key==='learning-active'):mutation.puts.some(row=>kind==='quantity'?row.table==='settings'&&row.key==='language-route-study-plans':row.table==='learningEvents');if(reject){adapter.commit=commit;throw new Error('fixture learning commit failed');}return commit(mutation);};
+      adapter.commit=async mutation=>{const reject=kind==='finish'?mutation.deletes.some(row=>row.table==='meta'&&row.key==='learning-active'):mutation.puts.some(row=>kind==='quantity'?row.table==='settings'&&row.key==='language-route-study-plans':kind==='book_plan'?row.table==='curriculumEnrollments':row.table==='learningEvents');if(reject){adapter.commit=commit;throw new Error('fixture learning commit failed');}return commit(mutation);};
+    },
+    async loseNextBookPlanResponseForTest(){
+      const {learningSystem}=await import('./learning/system');const execute=learningSystem.execute;
+      learningSystem.execute=(async command=>{const result=await execute(command);if(command.kind==='change_book_plan'){learningSystem.execute=execute;throw new Error('fixture lost Book plan response');}return result;}) as typeof execute;
+    },
+    async failBookPlanReadsForTest(active){
+      const {learningSystem}=await import('./learning/system');
+      const held=Reflect.get(learningSystem,'bookPlanReadFailureForTest') as {active:boolean}|undefined;
+      if(held){held.active=active;return;}
+      const control={active},read=learningSystem.read;
+      Reflect.set(learningSystem,'bookPlanReadFailureForTest',control);
+      learningSystem.read=(async query=>{if(query.kind==='book_plans'&&control.active)throw Error('fixture Book plan read failed');return read(query);}) as typeof read;
     },
     async loseNextLearningActionResponseForTest(){
       const {learningSystem}=await import('./learning/system');const execute=learningSystem.execute;

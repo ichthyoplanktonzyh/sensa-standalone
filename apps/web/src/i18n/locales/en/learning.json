@@ -1,4 +1,7 @@
 {
+  "bookPlanHeading":{"title":"Future study plan","mode":"Future learning mode"},
+  "bookPlanFeedback":{"unconfirmed":"The save response could not be confirmed. The plan has been reread; check it before acting again.","savedReadFailed":"The plan was saved, but could not be reread. Retry reading it."},
+  "bookPlan": {"title":"Books and range","edit":"Edit","editNamed":"Edit {{title}}","mode":"Learning mode","active":"New and ongoing learning","maintenance":"Ongoing learning only","paused":"Paused","range":"Learning range","all":"Whole book","ordinals":"Choose by position","first":"First position","last":"Last position","save":"Save plan","cancel":"Cancel","fallback":"Enrolled book · v{{version}}","allLabel":"Whole book · {{count}} entries","rangeLabel":"Positions {{first}}–{{last}}","selectedLabel":"{{count}} selected meanings","invalidRange":"Enter valid first and last positions within this book."},
   "directLearning": {"title":"Find an expression","search":"Search expressions","empty":"No matching confirmed expressions","local":"Local meanings","published":"Saved learning packages","previous":"Previous","next":"Next","settings":"Language and model settings","view":"View learning","confirm":"Confirm enrollment"},
   "assurance": {
     "uk": "UK",

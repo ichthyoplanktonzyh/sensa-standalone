@@ -1,4 +1,7 @@
 {
+  "bookPlanHeading":{"title":"次回以降の学習計画","mode":"次回以降の学習モード"},
+  "bookPlanFeedback":{"unconfirmed":"保存結果を確認できませんでした。計画を再読み込みしたので、確認してから操作してください。","savedReadFailed":"計画は保存されましたが再読み込みできませんでした。読み込みを再試行してください。"},
+  "bookPlan": {"title":"学習ブックと範囲","edit":"編集","editNamed":"「{{title}}」を編集","mode":"学習モード","active":"新規と継続学習","maintenance":"開始済みの学習のみ","paused":"一時停止","range":"学習範囲","all":"全体","ordinals":"番号で選択","first":"開始番号","last":"終了番号","save":"計画を保存","cancel":"キャンセル","fallback":"登録済みブック · v{{version}}","allLabel":"全体 · {{count}} 項目","rangeLabel":"{{first}}〜{{last}} 番","selectedLabel":"選択済みの意味 {{count}} 件","invalidRange":"ブック内の有効な開始番号と終了番号を入力してください。"},
   "directLearning": {"title":"表現を探す","search":"表現を検索","empty":"一致する確認済みの表現はありません","local":"ローカルの意味","published":"保存済み学習パッケージ","previous":"前へ","next":"次へ","settings":"言語とモデルの設定","view":"学習を表示","confirm":"学習への追加を確定"},
   "assurance": {
     "uk": "UK",

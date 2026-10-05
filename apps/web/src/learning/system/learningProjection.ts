@@ -572,6 +572,14 @@ export async function readLearningManagementProjection(input:{languageContext:Se
  const ids=new Set(summary.targetIds);
  return {...summary,policies:summary.policies as LearningPolicy[],pendingDirectCount:pending.enrollments.filter(enrollment=>enrollment.status==='active'&&enrollment.source.kind==='stable_sense'&&enrollment.languageContext.languageRouteId===input.languageContext.languageRouteId&&enrollment.languageContext.targetLanguageTag===input.languageContext.targetLanguageTag&&enrollment.languageContext.supportLanguageTag===input.languageContext.supportLanguageTag&&!ids.has(stableUuid(`sensa-learning-target:${pending.identity.learnerId}:${enrollment.source.selection.reference.senseVersionId}:${enrollment.source.selection.reference.bindingVersionId}`))).length,dailyLimit:dailyLimit??null,policyOptions};
 }
+export async function readLearningBookPlans(context:SensaFormalPinnedLanguageContext):Promise<import('./learningReadModels').LearningBookPlanProjection[]>{
+ const enrollments=await readLibrary(async tx=>(await tx.all<LocalCurriculumEnrollment>('curriculumEnrollments')).filter(enrollment=>enrollment.status==='active'&&enrollment.source.kind==='published_book'&&sameLearningSessionDirection(enrollment.languageContext,context)));
+ const catalog=enrollments.some(enrollment=>enrollment.source.kind==='published_book'&&!enrollment.source.title)?await contentSupplySystem.read({kind:'catalog'}):[];
+ return enrollments.flatMap(enrollment=>{
+  const source=enrollment.source;if(source.kind!=='published_book')return [];
+  return [{enrollmentId:enrollment.id,revision:enrollment.revision,title:source.title??catalog.find(item=>item.sha256===source.publicationArchiveSha256)?.book.title??null,bookVersionNumber:source.bookVersionNumber,memberCount:source.memberCount,mode:enrollment.bookPlan?.mode??'active',selection:structuredClone(enrollment.bookPlan?.range.selection??{kind:'all' as const})}];
+ }).sort((left,right)=>(left.mode==='active'?0:1)-(right.mode==='active'?0:1)||(left.title??left.enrollmentId).localeCompare(right.title??right.enrollmentId));
+}
 export async function readLearningHistoryProjection(input:{request:import('./learningHistoryModel').LearningHistoryRequest}):Promise<import('./learningReadModels').LearningHistoryProjection>{
  return readLibrary(async tx=>{
   const [page,identity,incarnation,revision]=await Promise.all([readLearningHistoryPage(input.request),tx.get<import('../../data/library/store').LibraryIdentity>('meta','identity'),tx.get<string>('meta','local-incarnation'),readLocalLibraryRevision(tx)]);

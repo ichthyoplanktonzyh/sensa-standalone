@@ -26,7 +26,7 @@ import {validateLearningReconciliationRows} from './learningReconciliation';
 import {applyLocalProtocolTransition} from './learningSettlement';
 import {packageInstallationSchema} from './packageRecords';
 import {assertPublishedCurriculumSource,publishedMaterialMembership} from './publishedCurriculumSources';
-import {curriculumEnrollmentSchema,assertDirectEnrollmentSource,type LocalCurriculumEnrollment} from './curriculumEnrollments';
+import {curriculumEnrollmentSchema,assertDirectEnrollmentSource,assertOneActiveBook,type LocalCurriculumEnrollment} from './curriculumEnrollments';
 import {assertResolvedBookRange} from './bookPlans';
 import {resolveDirectLearningSource,directLearningReferenceSchema} from '../../learning/system/directLearningSource';
 import {assertDirectTaskEnrollment,assertDirectAttemptSource} from './directProvisioningAssertions';
@@ -146,6 +146,7 @@ export function assertLearningSystemState(input:LearningSystemStateInput){
    if(enrollment.bookPlan)assertResolvedBookRange(enrollment.bookPlan.range,members.map(member=>member.installation),[...maps.packageCache.values()]);
   }
  }
+ assertOneActiveBook(rows.curriculumEnrollments.map(row=>curriculumEnrollmentSchema.parse(row.value)));
  for(const {value:target} of rows.learningTargets){
   learningPolicyProfileRegistry.get(localTargetPolicy(target));
   const assignment=target.policyAssignment;
@@ -622,7 +623,7 @@ async function assertCurriculumEnrollmentTransition(
 ):Promise<void>{
  if(change.after===null)reject('Curriculum Enrollments cannot be deleted.');
  const after=curriculumEnrollmentSchema.parse(change.after) as LocalCurriculumEnrollment;
- if(input.operation.kind!==(after.source.kind==='stable_sense'?'learning.enrollDirect':'learning.enroll'))reject('Only explicit Curriculum enrollment may change Enrollment facts.');
+ if(input.operation.kind!==(after.source.kind==='stable_sense'?'learning.enrollDirect':'learning.enroll')&&!(after.source.kind==='published_book'&&input.operation.kind==='learning.bookPlan'))reject('Only explicit Curriculum enrollment or Book planning may change Enrollment facts.');
  if(change.key!==after.id||after.learnerUserId!==input.identity.learnerId||after.status!=='active')reject('Curriculum Enrollment identity is invalid.');
  const route=routes.get(after.languageContext.languageRouteId);
  if(!route||route.targetLanguageTag!==after.languageContext.targetLanguageTag||after.languageContext.languageRouteRevision>route.revision)reject('Curriculum Enrollment Language Route is invalid.');
@@ -630,6 +631,20 @@ async function assertCurriculumEnrollmentTransition(
   const before=curriculumEnrollmentSchema.parse(change.before) as LocalCurriculumEnrollment;
   if(before.id!==after.id||before.learnerUserId!==after.learnerUserId||before.createdAt!==after.createdAt||before.createdByOperationId!==after.createdByOperationId||after.revision!==before.revision+1)reject('Curriculum Enrollment revision is invalid.');
   if(after.source.kind==='stable_sense')reject('A direct enrollment cannot silently replace its accepted source.');
+  if(input.operation.kind==='learning.bookPlan'){
+   const command=input.operation.input as {enrollmentId:string;expectedRevision:number;mode:string;selection:unknown;languageContext:unknown};
+   const plan=requireFact(after.bookPlan,'Book planning is missing its resolved Range.');
+   if(!unchangedExcept(before,after,['revision','bookPlan','updatedAt'])||plan.changedByOperationId!==input.operation.id||plan.revision!==(before.bookPlan?.revision??0)+1||plan.updatedAt!==after.updatedAt)reject('Book planning changed immutable source facts.');
+   if(after.id===command.enrollmentId){
+    if(command.expectedRevision!==before.revision||command.mode!==plan.mode||!backupEqual(command.selection,plan.range.selection)||!sameLearningSessionDirection(after.languageContext,sensaFormalPinnedLanguageContextSchema.parse(command.languageContext)))reject('Book planning differs from the reviewed selection.');
+    if(before.bookPlan&&backupEqual(command.selection,before.bookPlan.range.selection)&&!backupEqual(before.bookPlan.range,plan.range))reject('Mode-only changes must retain the original Range snapshot.');
+   }else{
+    const selected=curriculumEnrollmentSchema.parse(await input.read('curriculumEnrollments',command.enrollmentId));
+    if(command.mode!=='active'||selected.bookPlan?.mode!=='active'||selected.bookPlan.changedByOperationId!==input.operation.id||plan.mode!=='maintenance'||(before.bookPlan?.mode??'active')!=='active'||before.languageContext.languageRouteId!==sensaFormalPinnedLanguageContextSchema.parse(command.languageContext).languageRouteId||before.bookPlan&&!backupEqual(before.bookPlan.range,plan.range))reject('Activating a Book may only maintain the previous active source.');
+   }
+  }
+ }else if(input.operation.kind==='learning.bookPlan'){
+  reject('Book planning cannot create an Enrollment.');
  }
  if(after.source.kind==='portable_package'){
   const installation=packageInstallationSchema.parse(requireFact(await input.read('packageInstallations',after.source.packageKey),'Curriculum package installation is missing.'));

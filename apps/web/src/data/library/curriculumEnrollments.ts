@@ -15,6 +15,7 @@ const bookSourceSchema=z.object({
  bookId:z.string().uuid(),
  bookVersionId:z.string().uuid(),
  bookVersionNumber:z.number().int().positive(),
+ title:z.string().min(1).optional(),
  contentReleaseId:z.string().uuid(),
  publicationArchiveSha256:z.string().regex(/^[a-f0-9]{64}$/u),
  memberCount:z.number().int().positive(),
@@ -66,6 +67,15 @@ export const enrollmentMatchesContext=(
  &&enrollment.languageContext.languageRouteId===context.languageRouteId
  &&enrollment.languageContext.targetLanguageTag===context.targetLanguageTag
  &&enrollment.languageContext.supportLanguageTag===context.supportLanguageTag;
+
+/** One active Book per Route; maintenance/paused sources retain their facts. */
+export function assertOneActiveBook(enrollments:readonly LocalCurriculumEnrollment[]):void{
+ const routes=new Set<string>();
+ for(const enrollment of enrollments)if(enrollment.status==='active'&&enrollment.source.kind==='published_book'&&(enrollment.bookPlan?.mode??'active')==='active'){
+  if(routes.has(enrollment.languageContext.languageRouteId))throw new Error('localFlow.resourceInvalid');
+  routes.add(enrollment.languageContext.languageRouteId);
+ }
+}
 
 /** Public bytes are recoverable cache; the accepted source remains a learner fact. */
 export function assertDirectEnrollmentSource(selection:DirectLearningSource,read:Parameters<typeof resolveDirectLearningSourceSnapshot>[0]):void{

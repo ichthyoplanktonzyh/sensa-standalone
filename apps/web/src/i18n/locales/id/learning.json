@@ -1,4 +1,7 @@
 {
+  "bookPlanHeading":{"title":"Rencana belajar berikutnya","mode":"Mode belajar berikutnya"},
+  "bookPlanFeedback":{"unconfirmed":"Respons penyimpanan tidak dapat dikonfirmasi. Rencana telah dibaca ulang; periksa sebelum bertindak lagi.","savedReadFailed":"Rencana tersimpan, tetapi tidak dapat dibaca ulang. Coba baca lagi."},
+  "bookPlan": {"title":"Buku dan rentang","edit":"Edit","editNamed":"Edit {{title}}","mode":"Mode belajar","active":"Materi baru dan pembelajaran berjalan","maintenance":"Hanya pembelajaran yang sudah dimulai","paused":"Dijeda","range":"Rentang belajar","all":"Seluruh buku","ordinals":"Pilih berdasarkan urutan","first":"Urutan pertama","last":"Urutan terakhir","save":"Simpan rencana","cancel":"Batal","fallback":"Buku ditambahkan · v{{version}}","allLabel":"Seluruh buku · {{count}} entri","rangeLabel":"Urutan {{first}}–{{last}}","selectedLabel":"{{count}} makna dipilih","invalidRange":"Masukkan urutan awal dan akhir yang valid dalam buku ini."},
   "directLearning": {"title":"Cari ungkapan","search":"Cari ungkapan","empty":"Tidak ada ungkapan terkonfirmasi yang cocok","local":"Makna lokal","published":"Paket belajar tersimpan","previous":"Sebelumnya","next":"Berikutnya","settings":"Pengaturan bahasa dan model","view":"Lihat pembelajaran","confirm":"Konfirmasi penambahan"},
   "assurance": {
     "uk": "Inggris Britania",

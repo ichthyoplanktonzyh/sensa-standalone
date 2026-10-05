@@ -1,4 +1,7 @@
 {
+  "bookPlanHeading":{"title":"Künftiger Lernplan","mode":"Künftiger Lernmodus"},
+  "bookPlanFeedback":{"unconfirmed":"Die Speicherantwort konnte nicht bestätigt werden. Der Plan wurde neu gelesen; prüfe ihn vor einer weiteren Aktion.","savedReadFailed":"Der Plan wurde gespeichert, konnte aber nicht neu gelesen werden. Versuche das Lesen erneut."},
+  "bookPlan": {"title":"Bücher und Bereich","edit":"Bearbeiten","editNamed":"{{title}} bearbeiten","mode":"Lernmodus","active":"Neues und laufendes Lernen","maintenance":"Nur begonnenes Lernen fortsetzen","paused":"Pausiert","range":"Lernbereich","all":"Ganzes Buch","ordinals":"Nach Position auswählen","first":"Erste Position","last":"Letzte Position","save":"Plan speichern","cancel":"Abbrechen","fallback":"Hinzugefügtes Buch · v{{version}}","allLabel":"Ganzes Buch · {{count}} Einträge","rangeLabel":"Positionen {{first}}–{{last}}","selectedLabel":"{{count}} ausgewählte Bedeutungen","invalidRange":"Gib gültige Anfangs- und Endpositionen innerhalb dieses Buchs ein."},
   "directLearning": {"title":"Ausdruck finden","search":"Ausdrücke suchen","empty":"Keine passenden bestätigten Ausdrücke","local":"Lokale Bedeutungen","published":"Gespeicherte Lernpakete","previous":"Zurück","next":"Weiter","settings":"Sprach- und Modelleinstellungen","view":"Lernen anzeigen","confirm":"Aufnahme bestätigen"},
   "assurance": {
     "uk": "UK",

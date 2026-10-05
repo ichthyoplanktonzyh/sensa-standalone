@@ -398,6 +398,12 @@ html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-shortcut-hint {
   opacity: .65;
 }
 
+@media (max-width: 639px) {
+  html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-runtime-pause .sensa-shortcut-hint {
+    display: none;
+  }
+}
+
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-runtime-summary {
   width: min(100%, 32rem);
   margin: auto;

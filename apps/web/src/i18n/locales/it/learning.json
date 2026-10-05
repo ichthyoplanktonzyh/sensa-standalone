@@ -1,4 +1,7 @@
 {
+  "bookPlanHeading":{"title":"Piano di studio futuro","mode":"Modalità di apprendimento futura"},
+  "bookPlanFeedback":{"unconfirmed":"Non è stato possibile confermare la risposta di salvataggio. Il piano è stato riletto; controllalo prima di agire di nuovo.","savedReadFailed":"Il piano è stato salvato, ma non è stato possibile rileggerlo. Riprova la lettura."},
+  "bookPlan": {"title":"Libri e intervallo","edit":"Modifica","editNamed":"Modifica {{title}}","mode":"Modalità di apprendimento","active":"Nuovo apprendimento e prosecuzione","maintenance":"Solo apprendimento già iniziato","paused":"In pausa","range":"Intervallo di apprendimento","all":"Libro intero","ordinals":"Scegli per posizione","first":"Prima posizione","last":"Ultima posizione","save":"Salva piano","cancel":"Annulla","fallback":"Libro aggiunto · v{{version}}","allLabel":"Libro intero · {{count}} voci","rangeLabel":"Posizioni {{first}}–{{last}}","selectedLabel":"{{count}} significati selezionati","invalidRange":"Inserisci posizioni iniziale e finale valide all’interno del libro."},
   "directLearning": {"title":"Trova un’espressione","search":"Cerca espressioni","empty":"Nessuna espressione confermata corrispondente","local":"Significati locali","published":"Pacchetti salvati","previous":"Precedente","next":"Successiva","settings":"Impostazioni di lingua e modello","view":"Visualizza apprendimento","confirm":"Conferma aggiunta"},
   "assurance": {
     "uk": "Regno Unito",

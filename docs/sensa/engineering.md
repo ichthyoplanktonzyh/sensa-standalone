@@ -146,6 +146,10 @@ Package key；运行恢复、策略锁定和生成频控通过领域索引查询
 record、tombstone 与 sync baseline 的表名允许项，在同一事务内逐字节复制原编码行，
 保留 rowid、索引及共享内容所有权；中途失败全部回滚，不重编译或改变用户内容。
 Study Scope 是不可变事实，Session 独立保存固定 Scope、语言方向、数量、意图及活动生命周期；
+词书安排通过 Learning System 的 `book_plans` projection 与 `change_book_plan` command 维护，
+按 Enrollment revision 拒绝过时保存。同一 Route 至多一个 active Book；激活其他词书时原词书转为
+maintenance。模式变更复用原 Range 且不依赖包缓存；新序号／意义选择从固定 Book Version 解析。
+这些变更只更新未来安排，不改写活动 Session、Run 或进度；跨记录的双 active Book 合并进入显式冲突处理。
 后继 Run 通过同事务维护的 Scope–Target 成员投影读取精确来源，不在每次续学时取得完整 Scope。
 Scope 中重复成员和 Range 复用共享摘要；源码中的捕获见证与恢复验证保护新建和既有快照。
 历史／候选索引重建通过同一逻辑解码入口读取源记录。

@@ -10,6 +10,7 @@ import {
   type Operation,
 } from './store';
 import {hasStudyScopeCaptureWitness} from './studyScopes';
+import {assertOneActiveBook,type LocalCurriculumEnrollment} from './curriculumEnrollments';
 
 /** Storage adapter for the Learning System authority's local transition seam. */
 export async function admitLearningSystemTransaction(
@@ -23,6 +24,7 @@ export async function admitLearningSystemTransaction(
     ||change.table==='settings'&&change.key==='language-route-study-plans'
   ));
   if(!relevant.length)return;
+  if(relevant.some(change=>change.table==='curriculumEnrollments'&&((change.after as LocalCurriculumEnrollment|null)?.source?.kind==='published_book'||(change.before as LocalCurriculumEnrollment|null)?.source?.kind==='published_book')))assertOneActiveBook(await tx.all<LocalCurriculumEnrollment>('curriculumEnrollments'));
   const identity=await tx.get<LibraryIdentity>('meta','identity');
   if(!identity)throw new LearningSystemInvariantError('The local Learning System has no Library identity.');
   await assertLearningSystemTransition({

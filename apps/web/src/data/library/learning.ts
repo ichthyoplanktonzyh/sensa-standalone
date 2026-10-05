@@ -58,6 +58,7 @@ import {resolveDirectLearningSource} from '../../learning/system/directLearningS
 import {createPackageCacheSummary} from './packageCacheProjection';
 import {assertDirectTargetIdentity,directSourceAlreadyCovered} from './directLearningEnrollment';
 import {captureStudyScope,readActiveLearningSessionHeader,scopedMembership,createLearningSession,focusLearningSession,endLearningSession,type LocalStudyScope} from './studyScopes';
+import {resolveBookPlan,reviseBookMode,bookRangeSelectionSchema,type BookEnrollmentMode,type BookRangeSelection} from './bookPlans';
 import {
  curriculumEnrollmentId,
  curriculumEnrollmentSchema,
@@ -417,6 +418,7 @@ async function enrollInstalledPackages(
   bookId:reference.publication!.book.bookId,
   bookVersionId:reference.publication!.book.bookVersionId,
   bookVersionNumber:reference.publication!.book.versionNumber,
+  title:reference.publication!.book.title,
   contentReleaseId:reference.publication!.contentRelease.contentReleaseId,
   publicationArchiveSha256,
   memberCount:reference.publication!.memberCount,
@@ -431,7 +433,9 @@ async function enrollInstalledPackages(
  const previous=await tx.get<LocalCurriculumEnrollment>('curriculumEnrollments',id);
  const changed=!previous||!backupEqual(previous.source,source)||previous.status!=='active'||!backupEqual(previous.languageContext,context);
  if(changed){
-  const enrollment=curriculumEnrollmentSchema.parse({format:'sensa-curriculum-enrollment-v1',id,revision:(previous?.revision??0)+1,learnerUserId:owner.learnerId,languageContext:context,source,status:'active',createdByOperationId:previous?.createdByOperationId??operationId,createdAt:previous?.createdAt??now,updatedAt:now});
+  const bookPlan=source.kind==='published_book'?resolveBookPlan({operationId,at:now,mode:previous?.bookPlan?.mode??'active',selection:previous?.bookPlan?.range.selection??{kind:'all'},archiveSha256:source.publicationArchiveSha256,packages:available,previous:previous?.bookPlan}):undefined;
+  if(bookPlan?.mode==='active')await maintainOtherBooks(tx,id,context.languageRouteId,operationId,now);
+  const enrollment=curriculumEnrollmentSchema.parse({format:'sensa-curriculum-enrollment-v1',id,revision:(previous?.revision??0)+1,learnerUserId:owner.learnerId,languageContext:context,source,status:'active',...(bookPlan?{bookPlan}:{}),createdByOperationId:previous?.createdByOperationId??operationId,createdAt:previous?.createdAt??now,updatedAt:now});
   tx.put('curriculumEnrollments',id,enrollment);
   if(previous&&source.kind==='published_book'){
    const nextTargetIds=new Set(selected.flatMap(item=>item.pack.content.entries.map(entry=>stableUuid(`sensa-learning-target:${owner.learnerId}:${entry.senseVersionId}:${entry.bindingVersionId}`))));
@@ -483,6 +487,30 @@ export async function enrollBook(operationId:string,languageContext:SensaFormalP
  const packageKeys=packages.flatMap(pack=>pack.portableOrigin.publications.some(publication=>publication.bookArchiveSha256===publicationArchiveSha256)?[pack.key]:[]);
  return enrollInstalledPackages(tx,operationId,packageKeys,languageContext,publicationArchiveSha256,packages);
 });}
+
+async function maintainOtherBooks(tx:LibraryTransaction,selectedId:string,routeId:string,operationId:string,at:string):Promise<void>{
+ for(const other of await tx.all<LocalCurriculumEnrollment>('curriculumEnrollments')){
+  if(other.id===selectedId||other.status!=='active'||other.source.kind!=='published_book'||other.languageContext.languageRouteId!==routeId||(other.bookPlan?.mode??'active')!=='active')continue;
+  const bookPlan=reviseBookMode({operationId,at,mode:'maintenance',source:other.source,previous:other.bookPlan});
+  tx.put('curriculumEnrollments',other.id,curriculumEnrollmentSchema.parse({...other,revision:other.revision+1,updatedAt:at,bookPlan}));
+ }
+}
+
+/** Future arrangement only. Existing Sessions retain their original Scope. */
+export async function changeBookPlan(input:{operationId:string;enrollmentId:string;expectedRevision:number;languageContext:SensaFormalPinnedLanguageContext;mode:BookEnrollmentMode;selection:BookRangeSelection}){
+ return learningCommand({id:input.operationId,kind:'learning.bookPlan',input},async tx=>{
+  const owner=await learningOwner(tx),context=sensaFormalPinnedLanguageContextSchema.parse(input.languageContext);await requireLanguageRouteContext(tx,context);
+  const raw=await tx.get('curriculumEnrollments',input.enrollmentId);if(!raw)throw new Error('localFlow.enrollFirst');
+  const previous=curriculumEnrollmentSchema.parse(raw);
+  if(previous.source.kind!=='published_book'||previous.learnerUserId!==owner.learnerId||previous.status!=='active'||previous.revision!==input.expectedRevision||!sameLearningSessionDirection(previous.languageContext,context))throw new Error('localFlow.stepChanged');
+  const selection=bookRangeSelectionSchema.parse(input.selection),at=new Date().toISOString();
+  const unchanged=backupEqual(selection,previous.bookPlan?.range.selection??{kind:'all'});
+  const bookPlan=unchanged?reviseBookMode({operationId:input.operationId,at,mode:input.mode,source:previous.source,previous:previous.bookPlan}):resolveBookPlan({operationId:input.operationId,at,mode:input.mode,selection,archiveSha256:previous.source.publicationArchiveSha256,packages:await tx.packageCacheProjection({kind:'summaries'}),previous:previous.bookPlan});
+  if(input.mode==='active')await maintainOtherBooks(tx,previous.id,context.languageRouteId,input.operationId,at);
+  tx.put('curriculumEnrollments',previous.id,curriculumEnrollmentSchema.parse({...previous,revision:previous.revision+1,bookPlan,updatedAt:at}));
+  return true;
+ });
+}
 /** Small projection for callers that only need Target facts. */
 export const learningTargetsSnapshot=()=>readLibrary(tx=>tx.all<LocalLearningTarget>('learningTargets'));
 export const readLearning=()=>readLibrary(async tx=>({targets:await tx.all<LocalLearningTarget>('learningTargets'),runs:await tx.all<LocalLearningRun>('learningRuns'),events:await tx.all<LearningEvent>('learningEvents'),active:await tx.get<string>('meta','learning-active'),studyPlans:await readStudyPlans(tx)}));

@@ -26,6 +26,17 @@ function activeScopePolicyConflicts(entries:ReplicaMergeResult['entries']):strin
  }
  return conflicts;
 }
+function activeBookConflicts(entries:ReplicaMergeResult['entries']):string[]{
+ const byRoute=new Map<string,string[]>();
+ for(const entry of entries){
+  if(entry.table!=='curriculumEnrollments')continue;
+  const enrollment=record(decodeBackupValue(entry.value));
+  if(enrollment?.source?.kind!=='published_book'||enrollment.status!=='active'||(enrollment.bookPlan?.mode??'active')!=='active')continue;
+  const route=enrollment.languageContext?.languageRouteId;
+  if(typeof route==='string')byRoute.set(route,[...(byRoute.get(route)??[]),entryId(entry)]);
+ }
+ return [...byRoute.values()].filter(ids=>ids.length>1).flat();
+}
 const materialDependencies=(material:unknown)=>{
  const provenance=record(record(material)?.snapshot)?.provenance;
  return [
@@ -46,7 +57,7 @@ export const learningReplica:DomainReplicaModule={
   }
   const merged=ordinary(input);
   const reconciled=reconcileConcurrentLearningEntries({...input,merged:merged.entries,conflicts:merged.conflicts}) as ReplicaMergeResult;
-  return {...reconciled,conflicts:[...new Set([...reconciled.conflicts,...activeScopePolicyConflicts(reconciled.entries)])].sort()};
+  return {...reconciled,conflicts:[...new Set([...reconciled.conflicts,...activeScopePolicyConflicts(reconciled.entries),...activeBookConflicts(reconciled.entries)])].sort()};
  },
  conflictDependencies(entry,value){
   if(entry.table==='meta')return reference(entry.key==='learning-session-active'?'learningSessions':'learningRuns',value);

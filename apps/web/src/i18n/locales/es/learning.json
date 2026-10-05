@@ -1,4 +1,7 @@
 {
+  "bookPlanHeading":{"title":"Plan de estudio futuro","mode":"Modo de aprendizaje futuro"},
+  "bookPlanFeedback":{"unconfirmed":"No se pudo confirmar la respuesta de guardado. Se ha releído el plan; revísalo antes de actuar de nuevo.","savedReadFailed":"El plan se guardó, pero no pudo releerse. Reintenta la lectura."},
+  "bookPlan": {"title":"Libros y rango","edit":"Editar","editNamed":"Editar {{title}}","mode":"Modo de aprendizaje","active":"Aprendizaje nuevo y en curso","maintenance":"Solo aprendizaje ya iniciado","paused":"En pausa","range":"Rango de aprendizaje","all":"Libro completo","ordinals":"Elegir por posición","first":"Primera posición","last":"Última posición","save":"Guardar plan","cancel":"Cancelar","fallback":"Libro añadido · v{{version}}","allLabel":"Libro completo · {{count}} entradas","rangeLabel":"Posiciones {{first}}–{{last}}","selectedLabel":"{{count}} significados seleccionados","invalidRange":"Introduce posiciones inicial y final válidas dentro del libro."},
   "directLearning": {"title":"Buscar una expresión","search":"Buscar expresiones","empty":"No hay expresiones confirmadas coincidentes","local":"Significados locales","published":"Paquetes guardados","previous":"Anterior","next":"Siguiente","settings":"Ajustes de idioma y modelo","view":"Ver aprendizaje","confirm":"Confirmar incorporación"},
   "assurance": {
     "uk": "Reino Unido",

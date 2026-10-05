@@ -666,6 +666,23 @@ test('overlapping Book admissions and an explicit Book upgrade preserve the reve
   await expect(runtime.getByRole('heading',{name:selected.expression,exact:true})).toBeVisible();
   expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).runtime).toEqual(initial.runtime);
 
+  // Book selection is a future-plan operation, not a new competing Session.
+  await runtime.getByRole('button',{name:'暂停',exact:true}).click();
+  await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的学习',exact:true}).click();
+  const plans=page.locator('#s-study').getByRole('region',{name:'后续学习计划',exact:true});
+  await expect(plans.getByRole('listitem').filter({hasText:'另一册共享表达'})).toContainText('新学与复习');
+  await expect(plans.getByRole('listitem').filter({hasText:first.manifest.book.title})).toContainText('仅继续已开始的学习');
+  await plans.getByRole('button',{name:`编辑《${first.manifest.book.title}》`,exact:true}).click();
+  const planDialog=page.getByRole('dialog',{name:first.manifest.book.title,exact:true});
+  await planDialog.getByRole('combobox',{name:'后续学习模式',exact:true}).selectOption('active');
+  await planDialog.getByRole('button',{name:'保存计划',exact:true}).click();
+  await expect(planDialog).toHaveCount(0);
+  await expect(plans.getByRole('listitem').filter({hasText:'另一册共享表达'})).toContainText('仅继续已开始的学习');
+  await expect(plans.getByRole('listitem').filter({hasText:first.manifest.book.title})).toContainText('新学与复习');
+  await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'今日',exact:true}).click();
+  await page.locator('#s-home').getByRole('button',{name:'继续学习',exact:true}).click();
+  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).runtime).toEqual(initial.runtime);
+
   // Download and explicitly apply a new Book version while the original Run
   // remains open. The version reuses identical Portable Package bytes.
   setRegistry([updated,second]);
@@ -1311,6 +1328,68 @@ test('finishing a pinned Run after switching to an empty Route clears its resume
  const english=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
  expect(english.runtime).toBeNull();expect(english.targetIds).toEqual(pinned.targetIds);
  expect(english.records).toEqual(completed.records);
+});
+
+test('future Book mode and ordinal Range save visibly, recover from failed writes and missing responses, and preserve the open Scope through OPFS reload',async({page})=>{
+ setRegistry([reviewDelivery.descriptor]);
+ const runtime=await startOrdinaryBook(page,/到期复习样本/);
+ await runtime.getByRole('button',{name:/查看表达/}).click();
+ await page.setViewportSize({width:320,height:800});
+ const pause=runtime.getByRole('button',{name:'暂停',exact:true});
+ expect(await pause.evaluate(node=>getComputedStyle(node).whiteSpace)).toBe('nowrap');
+ await expect(pause.locator('kbd')).toBeHidden();
+ expect(await runtime.getByRole('button',{name:'声明已会',exact:true}).evaluate(node=>getComputedStyle(node).whiteSpace)).toBe('nowrap');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+ await page.setViewportSize({width:1280,height:900});
+ const pinned=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ const arrangement=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningArrangementCheckpointForTest());
+ await runtime.getByRole('button',{name:'暂停',exact:true}).click();
+ await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的学习',exact:true}).click();
+ const study=page.locator('#s-study'),plans=study.getByRole('region',{name:'后续学习计划',exact:true});
+ await expect(plans).toContainText('新学与复习');
+ await plans.getByRole('button',{name:'编辑《到期复习样本》',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'到期复习样本',exact:true});
+ await dialog.getByRole('combobox',{name:'后续学习模式',exact:true}).selectOption('paused');
+ await dialog.getByRole('combobox',{name:'学习范围',exact:true}).selectOption('ordinals');
+ await dialog.getByRole('spinbutton',{name:'起始序号',exact:true}).fill('1');
+ await dialog.getByRole('spinbutton',{name:'结束序号',exact:true}).fill('1');
+ await page.setViewportSize({width:320,height:800});
+ expect(await dialog.evaluate(node=>node.scrollWidth<=node.clientWidth+1)).toBe(true);
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.failNextLearningCommitForTest('book_plan'));
+ await dialog.getByRole('button',{name:'保存计划',exact:true}).click();
+ await expect(dialog.getByRole('alert')).toBeVisible();
+ await expect(dialog.getByRole('combobox',{name:'后续学习模式',exact:true})).toHaveValue('paused');
+ await expect(plans).toContainText('新学与复习');
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningArrangementCheckpointForTest())).toEqual(arrangement);
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.loseNextBookPlanResponseForTest());
+ await dialog.getByRole('button',{name:'保存计划',exact:true}).click();
+ await expect(dialog.getByRole('alert')).toContainText('已重新读取计划');
+ await dialog.getByRole('button',{name:'取消',exact:true}).click();
+ await expect(plans).toContainText('暂停');await expect(plans).toContainText('第 1–1 项');
+ await plans.getByRole('button',{name:'编辑《到期复习样本》',exact:true}).click();
+ await dialog.getByRole('combobox',{name:'后续学习模式',exact:true}).selectOption('maintenance');
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.failBookPlanReadsForTest(true));
+ await dialog.getByRole('button',{name:'保存计划',exact:true}).click();
+ await expect(dialog.getByRole('alert')).toContainText('计划已保存');
+ await expect(dialog.getByRole('combobox',{name:'后续学习模式',exact:true})).toBeDisabled();
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.failBookPlanReadsForTest(false));
+ await dialog.getByRole('button',{name:'重试',exact:true}).click();
+ await expect(dialog).toHaveCount(0);await expect(plans).toContainText('仅继续已开始的学习');
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).targetIds).toEqual(pinned.targetIds);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningArrangementCheckpointForTest())).toEqual(arrangement);
+ await page.reload();
+ await expect(plans).toContainText('仅继续已开始的学习');await expect(plans).toContainText('第 1–1 项');
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningArrangementCheckpointForTest())).toEqual(arrangement);
+ await page.setViewportSize({width:1280,height:900});
+ await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'今日',exact:true}).click();
+ await page.locator('#s-home').getByRole('button',{name:'继续学习',exact:true}).click();
+ await expect(runtime.getByRole('button',{name:/已经连上/})).toBeEnabled();
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).runtime).toEqual(pinned.runtime);
+ await runtime.getByRole('button',{name:/已经连上/}).click();
+ await expect.poll(async()=>(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).runtime?.targetId).not.toBe(pinned.runtime!.targetId);
+ const continued=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningArrangementCheckpointForTest());
+ expect(continued.scope).toEqual(arrangement.scope);expect(continued.session!.id).toBe(arrangement.session!.id);
+ expect(continued.session!.runIds).toHaveLength(2);
 });
 
 test('Study quantity save failure and retry preserve the full Session arrangement through OPFS reload, continuation and finish',async({page})=>{

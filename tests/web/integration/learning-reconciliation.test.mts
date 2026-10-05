@@ -64,6 +64,13 @@ assert.deepEqual(
 assert.throws(()=>mergeLibraryReplicas({base:local as any,local:local.filter(row=>row.key!==ids.localEvent) as any,remote:local as any}),/library_sync_history/u,'a local tombstone cannot erase confirmed Learning history');
 assert.throws(()=>planLibraryReplicaApply(local as any,[local[0]!,local[1]!] as any),/library_sync_history/u,'immutable Learning history cannot use generic physical deletion');
 assert.doesNotThrow(()=>planLibraryReplicaApply([entry('packageInstallations','artifact',{})] as any,[]),'Content Supply owns installation removal semantics');
+const bookRoute=crypto.randomUUID(),bookA=crypto.randomUUID(),bookB=crypto.randomUUID();
+const independentBook=(id:string)=>entry('curriculumEnrollments',id,{id,status:'active',languageContext:{languageRouteId:bookRoute},source:{kind:'published_book'},bookPlan:{mode:'active'}});
+const independent={base:[],local:[independentBook(bookA)],remote:[independentBook(bookB)]};
+const booksMerged=mergeLibraryReplicas(independent as any);
+assert.deepEqual(booksMerged.conflicts.sort(),[replicaEntryId({table:'curriculumEnrollments',key:bookA} as any),replicaEntryId({table:'curriculumEnrollments',key:bookB} as any)].sort(),'independent records must not silently create two active Books on one Route');
+const booksHeld=partitionLibraryReplicaConflicts({...independent,merged:booksMerged.entries,conflicts:booksMerged.conflicts} as any);
+assert.deepEqual(booksHeld.local.map(row=>row.key),[bookA]);assert.deepEqual(booksHeld.upload.map(row=>row.key),[bookB]);
 assert.equal(isReplicatedLibraryEntry('meta','package-catalog'),false,'Content Supply discovery cache stays device-local');
 assert.equal(isReplicatedLibraryEntry('settings','providers'),false,'provider credentials stay device-local');
 assert.equal(isReplicatedLibraryEntry('packageInstallations','artifact'),true);

@@ -34,6 +34,10 @@ export const executeLearningCommand = async (command: LearningCommand): Promise<
   // Deterministic tests and UI acceptance advance the actual injected clock.
   if('at' in command&&command.at!==undefined&&(!Number.isFinite(Date.parse(command.at))||Date.parse(command.at)>Date.now()))throw new Error('localFlow.clockChanged');
   switch (command.kind) {
+    case 'change_book_plan': {
+      const {changeBookPlan}=await import('../../data/library/learning');
+      return changeBookPlan(command);
+    }
     case 'prepare_direct': {
       const {prepareDirectPublishedLearning}=await import('../../data/library/learning');
       return prepareDirectPublishedLearning(command.operationId,command.enrollmentId);
@@ -207,6 +211,10 @@ export const executeLearningCommand = async (command: LearningCommand): Promise<
 
 export const readLearningQuery = async (query: LearningQuery): Promise<unknown> => {
   switch (query.kind) {
+    case 'book_plans': {
+      const {readLearningBookPlans}=await import('./learningProjection');
+      return readLearningBookPlans(query.languageContext);
+    }
     case 'target':return readLearningTargetDetailProjection({targetId:query.targetId,languageContext:query.languageContext,clock:query.clock??Date.now()});
     case 'history':return readLearningHistoryProjection({request:{...query.filter,activeLanguageTag:query.languageContext.targetLanguageTag,clock:query.cursor?.clock??query.clock??Date.now(),cursor:query.cursor??null,limit:query.limit??20}});
     case 'management':return readLearningManagementProjection({languageContext:query.languageContext,clock:query.clock??Date.now()});

@@ -36,6 +36,14 @@ export const bookPlanSchema=z.object({
 export type LocalBookPlan=z.infer<typeof bookPlanSchema>;
 export type BookEnrollmentMode=LocalBookPlan['mode'];
 
+/** Whole-Book selection is a fixed admitted Manifest reference. Mode changes
+ * need neither recovered public cache bytes nor a new Range snapshot. */
+export function reviseBookMode(input:{operationId:string;at:string;mode:BookEnrollmentMode;source:{bookId:string;bookVersionId:string;publicationArchiveSha256:string;memberCount:number};previous?:LocalBookPlan}):LocalBookPlan{
+ const reference={bookId:input.source.bookId,bookVersionId:input.source.bookVersionId,archiveSha256:input.source.publicationArchiveSha256,memberCount:input.source.memberCount,selection:{kind:'all' as const},members:[]};
+ const range=input.previous?.range??{...reference,rangeRevisionId:stableUuid(`local-book-range:${input.operationId}:${canonicalJsonDigest(reference)}`)};
+ return bookPlanSchema.parse({mode:input.mode,revision:(input.previous?.revision??0)+1,changedByOperationId:input.operationId,updatedAt:input.at,range});
+}
+
 /** Restore/live admission verifies the resolved snapshot against known source
  * positions; cached semantics strengthen it without making cache persistence
  * a prerequisite for preserving an already admitted Range. */

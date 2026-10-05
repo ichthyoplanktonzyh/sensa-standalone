@@ -25,7 +25,7 @@ export function RuntimeTools({content, personalContent, showSave, onUndo, canUnd
     update();
     return personalContentSystem.subscribe({ kind: 'snapshot' }, update);
   }, [content?.senseKey]);
-  const button = 'inline-flex min-h-11 min-w-11 items-center justify-center rounded-control border border-border-strong bg-surface-panel px-2 text-sm text-action-primary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-30';
+  const button = 'inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center whitespace-nowrap rounded-control border border-border-strong bg-surface-panel px-2 text-sm text-action-primary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-30';
   return <>
     {showSave && <>
       {onUndo && <button className={button} disabled={busy || !canUndo} onClick={onUndo} aria-label={t('assurance.undo')}><Undo2 size={18}/></button>}

@@ -56,15 +56,12 @@ test('actual Learning start binds the eligible old Book source, and Range-exclud
  try{await contentSupplySystem.execute({kind:'install_catalog_item',descriptor,signal:new AbortController().signal});}finally{globalThis.fetch=fetchBefore;}
  await learningSystem.execute({kind:'enroll_book',operationId:randomUUID(),languageContext:learningContext,publicationArchiveSha256:descriptor.sha256});
  const admitted=(await contentSupplySystem.read({kind:'workspace'})).packages;
- // Controlled Plan fixture, not a shipped mode/range editing command or UI.
- await restoreLibraryTransaction(async tx=>{
-  for(const enrollment of await tx.all<LocalCurriculumEnrollment>('curriculumEnrollments')){
-   if(enrollment.source.kind!=='published_book')continue;
-   const isOld=enrollment.source.publicationArchiveSha256===fixture.descriptor.sha256;
-   const bookPlan=resolveBookPlan({operationId:randomUUID(),at:new Date().toISOString(),mode:isOld?'active':'paused',selection:isOld?{kind:'ordinals',first:1,last:1}:{kind:'all'},archiveSha256:enrollment.source.publicationArchiveSha256,packages:admitted});
-   tx.put('curriculumEnrollments',enrollment.id,{...enrollment,bookPlan});
-  }
- });
+ const enrollments=await readLibrary(tx=>tx.all<LocalCurriculumEnrollment>('curriculumEnrollments'));
+ const original=enrollments.find(enrollment=>enrollment.source.kind==='published_book'&&enrollment.source.publicationArchiveSha256===fixture.descriptor.sha256)!;
+ await learningSystem.execute({kind:'change_book_plan',operationId:randomUUID(),enrollmentId:original.id,expectedRevision:original.revision,languageContext:learningContext,mode:'active',selection:{kind:'ordinals',first:1,last:1}});
+ const alternate=(await learningSystem.read({kind:'book_plans',languageContext:learningContext})).find(book=>book.enrollmentId!==original.id)!;
+ expect(alternate.mode).toBe('maintenance');
+ await learningSystem.execute({kind:'change_book_plan',operationId:randomUUID(),enrollmentId:alternate.enrollmentId,expectedRevision:alternate.revision,languageContext:learningContext,mode:'paused',selection:alternate.selection});
  await learningSystem.execute({kind:'start',operationId:randomUUID(),targetId:first.id,languageContext:learningContext,dailyLimit:20});
  const snapshot=await learningSystem.read({kind:'runtime',languageContext:learningContext});
  const run=await readLibrary(tx=>tx.get<any>('learningRuns',snapshot.runtime!.runId));

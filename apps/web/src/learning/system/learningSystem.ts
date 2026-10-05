@@ -19,12 +19,14 @@ import type {
   LearningManagementProjection,
   LearningHistoryProjection,
   LearningTargetDetailProjection,
+  LearningBookPlanProjection,
 } from './learningReadModels';
 export {
   LEARNING_LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND,
   LEARNING_LIGHTWEIGHT_EXPRESSION_REVEAL_STEP_KIND,
 } from './learningReadModels';
 export type {
+  LearningBookPlanProjection,LearningBookRangeSelection,LearningBookMode,
   FourStageInitialSessionProjection,
   FourStageReviewAnswer,
   FourStageReviewSessionProjection,
@@ -66,6 +68,7 @@ export interface PersonalLearningEnrollment {
 }
 
 export type LearningCommand =
+  | Readonly<{kind:'change_book_plan';operationId:string;enrollmentId:string;expectedRevision:number;languageContext:SensaFormalPinnedLanguageContext;mode:import('../../data/library/bookPlans').BookEnrollmentMode;selection:import('../../data/library/bookPlans').BookRangeSelection}>
   | Readonly<{kind:'prepare_direct';operationId:string;enrollmentId:string}>
   | Readonly<{kind:'enroll_direct';operationId:string;reference:DirectLearningReference;expectedDigest:string;languageContext:SensaFormalPinnedLanguageContext}>
   | Readonly<{
@@ -171,6 +174,7 @@ export type LearningCommandResult<Command extends LearningCommand> =
       : boolean;
 
 export type LearningQuery =
+  | Readonly<{kind:'book_plans';languageContext:SensaFormalPinnedLanguageContext}>
   | Readonly<{kind:'target';targetId:string;languageContext:SensaFormalPinnedLanguageContext;clock?:number}>
   | Readonly<{kind:'history';languageContext:SensaFormalPinnedLanguageContext;filter:import('./learningHistoryModel').LearningHistoryFilter;clock?:number;cursor?:import('./learningHistoryModel').LearningHistoryCursor|null;limit?:number}>
   | Readonly<{kind:'management';languageContext:SensaFormalPinnedLanguageContext;clock?:number}>
@@ -189,7 +193,8 @@ export type LearningQuery =
   | Readonly<{ kind: 'semantic_memory' }>;
 
 export type LearningQueryResult<Query extends LearningQuery> =
-  Query['kind'] extends 'target'?LearningTargetDetailProjection
+  Query['kind'] extends 'book_plans'?readonly LearningBookPlanProjection[]
+  : Query['kind'] extends 'target'?LearningTargetDetailProjection
   : Query['kind'] extends 'history'?LearningHistoryProjection
   : Query['kind'] extends 'management'?LearningManagementProjection
   : Query['kind'] extends 'preferences'?Pick<LearningManagementProjection,'dailyLimit'|'policyOptions'>
@@ -218,6 +223,7 @@ export interface LearningSystem {
 }
 
 const queryTables = {
+  book_plans:['curriculumEnrollments','packageCache','packageInstallations','meta'],
   target:['learningTargets','learningRuns','packageCache','settings','meta'],
   history:['learningRuns','learningTargets','meta'],
   management:['packageCache','packageInstallations','learningTargets','learningRuns','curriculumEnrollments','settings','meta'],
