@@ -9,6 +9,7 @@ import {
   type LibraryTransaction,
   type Operation,
 } from './store';
+import {hasStudyScopeCaptureWitness} from './studyScopes';
 
 /** Storage adapter for the Learning System authority's local transition seam. */
 export async function admitLearningSystemTransaction(
@@ -17,8 +18,8 @@ export async function admitLearningSystemTransaction(
 ):Promise<void>{
   const changes=await tx.proposedChanges(learningTransitionTables);
   const relevant=changes.filter(change=>(
-    ['curriculumEnrollments','learningTargets','learningRuns','learningEvents','learningReconciliations'].includes(change.table)
-    ||change.table==='meta'&&change.key==='learning-active'
+    ['curriculumEnrollments','studyScopes','learningSessions','learningTargets','learningRuns','learningEvents','learningReconciliations'].includes(change.table)
+    ||change.table==='meta'&&['learning-active','learning-session-active'].includes(change.key)
     ||change.table==='settings'&&change.key==='language-route-study-plans'
   ));
   if(!relevant.length)return;
@@ -29,6 +30,8 @@ export async function admitLearningSystemTransaction(
     operation,
     changes:relevant,
     read:(table,key)=>tx.get(table,key),
+    scopeMember:(scopeId,targetId)=>tx.studyScopeMember(scopeId,targetId),
+    capturedScopeIds:relevant.filter(change=>change.table==='studyScopes'&&hasStudyScopeCaptureWitness(tx,change.key)).map(change=>change.key),
   });
 }
 

@@ -29,7 +29,7 @@ export function validateBackupRows(rows:BackupRows){
  const identity=identitySchema.parse(requireRow('meta','identity'));
  const {requirePersonalSource}=validatePersonalSemanticWorldReplica({rows,maps,requireRow,fail});
 
- for(const table of ['drafts','sessions','meanings','curriculumEnrollments','learningTargets','learningRuns','learningEvents','learningReconciliations','personalLearning','contentAttempts','providers'] as Table[]){
+ for(const table of ['drafts','sessions','meanings','curriculumEnrollments','studyScopes','learningSessions','learningTargets','learningRuns','learningEvents','learningReconciliations','personalLearning','contentAttempts','providers'] as Table[]){
   for(const {key,value} of rows[table]){if(!value||key!==value.id)fail();uuid.parse(key);}
  }
  for(const {value:provider} of rows.providers){const {revision,...fields}=provider;providerInputSchema.parse({...fields,expectedRevision:revision-1});}

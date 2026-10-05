@@ -166,7 +166,8 @@ export interface LocalProtocolState {
 }
 
 /**
- * Persisted Session envelope. Each participant owns one formal Protocol Run;
+ * Persisted execution envelope within a separately stored Learning Session.
+ * Each participant owns one formal Protocol Run;
  * the envelope may interleave several of them without merging their identity,
  * progress, evidence, materialization, or settlement.
  */
@@ -175,6 +176,10 @@ export interface LocalLearningRun {
   /** Immutable creation witness; receipts reference facts, not copied Runs. */
   startedByOperationId?:string;
   continuedFromRunId?:string;
+  /** Creation activity; a paused Protocol Run can later be visited by another
+   * Session without rewriting this origin or any participant material. */
+  learningSessionId?:string;
+  studyScopeRevisionId?:string;
   /** Primary target used to enter the Run. Every actual member is in targetIds. */
   targetId: string;
   targetIds: string[];
@@ -496,6 +501,7 @@ const runContractProjection=(run:LocalLearningRun)=>({
  id:run.id,targetId:run.targetId,targetIds:run.targetIds,participants:run.participants,
  startedByOperationId:run.startedByOperationId,
  continuedFromRunId:run.continuedFromRunId,
+ learningSessionId:run.learningSessionId,studyScopeRevisionId:run.studyScopeRevisionId,
  targetCompletions:run.targetCompletions,
  languageContext:run.languageContext,sessionIntent:run.sessionIntent,
  purpose:run.purpose,policyProfileId:run.policyProfileId,policyProfileVersion:run.policyProfileVersion,
@@ -568,7 +574,7 @@ export function validateLocalProtocolResources(
  execution.validate?.(structuredClone(target),resource?structuredClone(resource):undefined);
 }
 
-/** Initialize only the opaque plugin slot; the Session envelope stays kernel-owned. */
+/** Initialize only the opaque plugin slot; the execution envelope stays kernel-owned. */
 export function initializeLocalProtocolState(input:Readonly<{
  execution:LocalProtocolExecution;
  target:LocalExecutableLearningTarget;

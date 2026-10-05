@@ -22,9 +22,9 @@ export const sqliteLibraryFile = "/sensa-local-library-v12.sqlite3";
 export const sqlitePoolDirectory = "/sensa-local-library-v12";
 /** First supported production-user baseline; prototype formats stay unsupported. */
 export const sqliteLibraryBaselineVersion = 10;
-export const sqliteLibrarySchemaVersion = 14;
+export const sqliteLibrarySchemaVersion = 15;
 /** Cross-tab RPC changes must bump this before adding or changing messages. */
-export const sqliteCoordinatorProtocolVersion = 31;
+export const sqliteCoordinatorProtocolVersion = 32;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -38,6 +38,8 @@ export const sqliteLibraryTables = [
   "packageCache",
   "packageInstallations",
   "curriculumEnrollments",
+  "studyScopes",
+  "learningSessions",
   "learningTargets",
   "learningRuns",
   "learningEvents",
@@ -105,6 +107,7 @@ export type SqliteWorkerRequest =
   | { id:number;kind:'learningHistoryPage';query:LearningHistoryRequest }
   | {id:number;kind:'learningManagementSummary';query:LearningManagementSummaryQuery}
   | {id:number;kind:'runtimeLearningCandidates';query:RuntimeLearningCandidateQuery}
+  | {id:number;kind:'studyScopeMember';scopeRevisionId:string;targetId:string}
   | { id: number; kind: "countIntroducedLearningTargets"; languageRouteId: string; startedAfter: string; startedBefore: string }
   | { id: number; kind: "learningRunIdsForTarget"; targetId: string; openOnly: boolean }
   | { id: number; kind: "openLearningRunTargets" }

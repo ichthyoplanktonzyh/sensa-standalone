@@ -20,7 +20,7 @@ export interface HomeLearningTargetRecord {
   readonly id: string;
   readonly curriculumMemberships: readonly HomeLearningMembershipRecord[];
   readonly policyAssignment: Pick<LocalLearningTarget['policyAssignment'], 'profileId'>;
-  readonly committedPolicy: Pick<NonNullable<LocalLearningTarget['committedPolicy']>, 'profileId'> | null;
+  readonly committedPolicy: Pick<NonNullable<LocalLearningTarget['committedPolicy']>, 'profileId'> & {readonly profileVersion?:string} | null;
   readonly planningOverrides: readonly Pick<LocalLearningTarget['planningOverrides'][number], 'kind'>[];
   readonly introducedLanguageRouteId: string | null;
   readonly startedAt: string | null;
@@ -60,7 +60,7 @@ export function createHomeLearningTargetRecord(
     })),
     policyAssignment: { profileId: target.policyAssignment.profileId },
     committedPolicy: target.committedPolicy
-      ? { profileId: target.committedPolicy.profileId }
+      ? { profileId: target.committedPolicy.profileId,profileVersion:target.committedPolicy.profileVersion }
       : null,
     planningOverrides: target.planningOverrides.map(({ kind }) => ({ kind })),
     introducedLanguageRouteId: target.introducedLanguageRouteId,

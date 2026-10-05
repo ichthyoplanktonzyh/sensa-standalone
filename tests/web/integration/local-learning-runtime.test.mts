@@ -146,6 +146,8 @@ async function driveAssurance(
 
 const assuranceTargetId=targetIds[0]!;
 await selectLocalLearningPolicy(id(),assuranceTargetId,languageContext,'high_assurance');
+const fourStageTargetId=targetIds[1]!;
+await selectLocalLearningPolicy(id(),fourStageTargetId,languageContext,'interleaved_four_stage');
 let run=await startLearning(id(),assuranceTargetId,languageContext,20,'2026-09-11T04:00:00.000Z');
 let state!:Awaited<ReturnType<typeof readLearning>>;
 let target!:Awaited<ReturnType<typeof readLearning>>['targets'][number];
@@ -213,8 +215,6 @@ assert.equal(state.events.filter(event=>event.runId===run.id&&event.detail.trans
 assert.equal(state.events.filter(event=>event.runId===run.id&&event.detail.transition.retention?.kind==='relearning_completion').length,1);
 });
 
-const fourStageTargetId=targetIds[1]!;
-await selectLocalLearningPolicy(id(),fourStageTargetId,languageContext,'interleaved_four_stage');
 
 async function driveFourStage(initial:LocalLearningRun,at:string,reviewAnswer:'known'|'forgotten'='known'){
   let current=initial,steps=0;

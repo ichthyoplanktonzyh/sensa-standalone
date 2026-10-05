@@ -12,6 +12,7 @@
     "types": ["node", "vite/client", "chrome"]
   },
   "files": [
+    "integration/learning-session-scope.test.mts",
     "integration/book-plan-planning.test.mts",
     "integration/book-curriculum-sources.test.mts",
     "catalog.mts",

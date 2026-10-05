@@ -70,6 +70,10 @@ type BrowserSmokeBridge = {
     targets:import('./learning/runtime/localProtocol').LocalLearningTarget[];
     runs:import('./learning/runtime/localProtocol').LocalLearningRun[];
   }>;
+  learningArrangementCheckpointForTest():Promise<{
+    session:import('./data/library/studyScopes').LocalLearningSession|null;
+    scope:import('./data/library/studyScopes').LocalStudyScope|null;
+  }>;
   learningCheckpoint(): Promise<{
     targetIds:string[];
     enrollments:{enrollmentId:string;sourceKind:string;bookVersionNumber:number|null;bookDigest:string|null}[];
@@ -360,6 +364,14 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
         targets:await tx.all<import('./learning/runtime/localProtocol').LocalLearningTarget>('learningTargets'),
         runs:await tx.all<import('./learning/runtime/localProtocol').LocalLearningRun>('learningRuns'),
       }));
+    },
+    async learningArrangementCheckpointForTest(){
+      // Read only: all arrangements being checked were created through the UI.
+      return readLibrary(async tx=>{
+        const id=await tx.get<string>('meta','learning-session-active');
+        const session=id?await tx.get<import('./data/library/studyScopes').LocalLearningSession>('learningSessions',id)??null:null;
+        return {session,scope:session?await tx.get<import('./data/library/studyScopes').LocalStudyScope>('studyScopes',session.scopeRevisionId)??null:null};
+      });
     },
     async learningCheckpoint() {
       const [{languageRoutesSnapshot},{learningSystem}]=await Promise.all([

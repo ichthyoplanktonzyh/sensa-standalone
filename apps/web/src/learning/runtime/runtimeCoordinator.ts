@@ -349,6 +349,7 @@ export function inspectLocalTargetReadiness(
   membership:LocalCurriculumMembership|undefined,
   resource:LocalLearningResource|undefined,
   purpose:LearningProtocolPurpose=localLearningPurpose(target),
+  pinnedProfileVersion?:string,
 ):LocalTargetExecutionReadiness{
  const profileId=localTargetPolicy(target);
  try{
@@ -360,7 +361,8 @@ export function inspectLocalTargetReadiness(
    membership.material.snapshot.validationStatus!=='validated'
    || membership.material.snapshot.contentDigest!==canonicalJsonDigest(membership.material.content)
   )throw new Error('material_validation_failed');
-  const profile=learningPolicyProfileRegistry.get(profileId,target.committedPolicy?.profileVersion);
+  if(target.committedPolicy&&pinnedProfileVersion&&target.committedPolicy.profileVersion!==pinnedProfileVersion)throw new Error('scope_policy_version_changed');
+  const profile=learningPolicyProfileRegistry.get(profileId,target.committedPolicy?.profileVersion??pinnedProfileVersion);
   const binding=profile.protocols[purpose];
   if(!binding.localProtocolVersion||!profile.lifecycle.schedulingPolicy)throw new Error('incomplete_binding');
   const structuredProvisioned=!!resource&&!!membership.assurancePackageKey;
@@ -373,7 +375,7 @@ export function inspectLocalTargetReadiness(
   validateLocalProtocolResources(learningRuntimeCoordinator.localExecutionForBinding(binding,purpose),executable,resource);
   return Object.freeze({status:'ready',purpose,profileId,profileVersion:profile.profileVersion,binding,materializationIds:Object.freeze([...resolved.materializationIds]),reason:null});
  }catch(error){
-  return Object.freeze({status:'blocked',purpose,profileId,profileVersion:target.committedPolicy?.profileVersion??'',binding:null,materializationIds:Object.freeze([]),reason:error instanceof Error?error.message:'content_unavailable'});
+  return Object.freeze({status:'blocked',purpose,profileId,profileVersion:target.committedPolicy?.profileVersion??pinnedProfileVersion??'',binding:null,materializationIds:Object.freeze([]),reason:error instanceof Error?error.message:'content_unavailable'});
  }
 }
 
@@ -382,8 +384,9 @@ export function requireLocalTargetReadiness(
  membership:LocalCurriculumMembership|undefined,
  resource:LocalLearningResource|undefined,
  purpose:LearningProtocolPurpose=localLearningPurpose(target),
+ pinnedProfileVersion?:string,
 ):Extract<LocalTargetExecutionReadiness,{status:'ready'}>{
- const readiness=inspectLocalTargetReadiness(target,membership,resource,purpose);
+ const readiness=inspectLocalTargetReadiness(target,membership,resource,purpose,pinnedProfileVersion);
  if(readiness.status!=='ready'||!readiness.binding)throw new Error('localFlow.resourceInvalid');
  return readiness;
 }

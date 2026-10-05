@@ -40,6 +40,7 @@ export interface SqliteRecordAdapter {
   learningHistoryPage(query:LearningHistoryRequest):Promise<StoredLearningHistoryPage>;
   learningManagementSummary(query:LearningManagementSummaryQuery):Promise<LearningManagementStorageSummary>;
   runtimeLearningCandidates(query:RuntimeLearningCandidateQuery):Promise<RuntimeLearningCandidates>;
+  studyScopeMember(scopeRevisionId:string,targetId:string):Promise<import('./studyScopes').LocalStudyScopeMember|null>;
   countIntroducedLearningTargets(languageRouteId: string, startedAfter: string, startedBefore: string): Promise<number>;
   learningRunIdsForTarget(targetId: string, openOnly: boolean): Promise<string[]>;
   openLearningRunTargets(): Promise<Array<{ runId: string; targetId: string }>>;
@@ -136,6 +137,7 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
     return this.send({ kind: "homeLearningProjection", languageRouteId,clock }) as Promise<HomeLearningStorageProjection>;
   }
   runtimeLearningCandidates(query:RuntimeLearningCandidateQuery):Promise<RuntimeLearningCandidates>{return this.send({kind:'runtimeLearningCandidates',query}) as Promise<RuntimeLearningCandidates>;}
+  studyScopeMember(scopeRevisionId:string,targetId:string):Promise<import('./studyScopes').LocalStudyScopeMember|null>{return this.send({kind:'studyScopeMember',scopeRevisionId,targetId}) as Promise<import('./studyScopes').LocalStudyScopeMember|null>;}
   learningHistoryPage(query:LearningHistoryRequest):Promise<StoredLearningHistoryPage>{return this.send({kind:'learningHistoryPage',query}) as Promise<StoredLearningHistoryPage>;}
   learningManagementSummary(query:LearningManagementSummaryQuery):Promise<LearningManagementStorageSummary>{return this.send({kind:'learningManagementSummary',query}) as Promise<LearningManagementStorageSummary>;}
 

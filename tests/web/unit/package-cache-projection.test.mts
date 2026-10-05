@@ -135,7 +135,7 @@ test('the derived index is rebuilt from the current cache without changing sourc
  for(const value of records)raw.exec({sql:'INSERT INTO sensa_records(table_name,record_key,value_json) VALUES(?,?,?)',bind:['packageCache',value.key,encoded(value)]});
  raw.exec({sql:'INSERT INTO sensa_records(table_name,record_key,value_json) VALUES(?,?,?)',bind:['meta','owner-proof',encoded({value:'preserve-me'})]});
  try{
-  assert.equal(db.initialize().schemaVersion,14);
+  assert.equal(db.initialize().schemaVersion,15);
   assert.equal(db.packageCacheProjection({kind:'identities'}).length,3);
   for(const value of records)assert.equal(db.get('packageCache',value.key),encoded(value));
   assert.equal(db.get('meta','owner-proof'),encoded({value:'preserve-me'}));

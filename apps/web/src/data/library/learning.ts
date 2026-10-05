@@ -57,6 +57,7 @@ import {backupEqual} from './backupCodec';
 import {resolveDirectLearningSource} from '../../learning/system/directLearningSource';
 import {createPackageCacheSummary} from './packageCacheProjection';
 import {assertDirectTargetIdentity,directSourceAlreadyCovered} from './directLearningEnrollment';
+import {captureStudyScope,readActiveLearningSessionHeader,scopedMembership,createLearningSession,focusLearningSession,endLearningSession,type LocalStudyScope} from './studyScopes';
 import {
  curriculumEnrollmentId,
  curriculumEnrollmentSchema,
@@ -162,9 +163,9 @@ async function refreshCurrentStepsForMaterial(tx:LibraryTransaction,targetId:str
  }
 }
 
-const commitPolicy=(target:LocalLearningTarget,protocolRunId:string,at:string):LocalCommittedLearningPolicy=>{
+const commitPolicy=(target:LocalLearningTarget,protocolRunId:string,at:string,profileVersion?:string):LocalCommittedLearningPolicy=>{
  if(target.committedPolicy)return target.committedPolicy;
- const profile=learningPolicyProfileRegistry.get(target.policyAssignment.profileId);
+ const profile=learningPolicyProfileRegistry.get(target.policyAssignment.profileId,profileVersion);
  return {commitmentId:stableUuid(`local-policy-commitment:${target.retentionId}`),revision:1,assignmentId:target.policyAssignment.assignmentId,assignmentRevision:target.policyAssignment.revision,profileId:profile.profileId,profileVersion:profile.profileVersion,committedByProtocolRunId:protocolRunId,committedAt:at};
 };
 
@@ -509,32 +510,34 @@ export async function prepareLearningQueue(languageContext:SensaFormalPinnedLang
  });
 }
 export const readActiveLearningSessionIntent=()=>readLibrary(async tx=>{const active=await tx.get<string>('meta','learning-active');const run=active?await tx.get<LocalLearningRun>('learningRuns',active):null;return run?localRunSessionIntent(run):'mixed' as const;});
-async function planningMembership(tx:LibraryTransaction,target:LocalLearningTarget,context:SensaFormalPinnedLanguageContext):Promise<LocalCurriculumMembership|undefined>{
- const ids=new Set(target.curriculumMemberships.flatMap(member=>typeof member.provenance.curriculumEnrollmentId==='string'?[member.provenance.curriculumEnrollmentId]:[]));
- const enrollments=new Map<string,LocalCurriculumEnrollment>();
- for(const id of ids){const source=await tx.get<LocalCurriculumEnrollment>('curriculumEnrollments',id);if(source)enrollments.set(id,source);}
- let members=target.curriculumMemberships;
- for(;;){
-  const membership=planningMembershipForContext({...target,curriculumMemberships:members},context,enrollments);
-  if(!membership)return undefined;
-  const pack=membership.assurancePackageKey&&membership.packageKey?await tx.get<InstalledPackage>('packageCache',membership.packageKey):undefined;
-  if(inspectLocalTargetReadiness(target,membership,pack).status==='ready')return membership;
-  members=members.filter(member=>member.id!==membership.id);
- }
-}
 async function startLearningInTransaction(tx:LibraryTransaction,operationId:string,targetId:string,languageContext:SensaFormalPinnedLanguageContext,dailyLimit:number,at:string,sessionIntent:LocalLearningSessionIntent='mixed',continuedFromRunId?:string):Promise<LocalLearningRun>{
- const context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);await requireLanguageRouteContext(tx,context);if(!Number.isInteger(dailyLimit)||dailyLimit<1||dailyLimit>100||!Number.isFinite(Date.parse(at)))throw new Error('localFlow.confirmQuantity');
- const plan=(await readStudyPlans(tx))[context.languageRouteId];if(plan?.dailyNewSenseLimit!==dailyLimit)throw new Error('localFlow.confirmNewQuantity');
+ const requested=sensaFormalPinnedLanguageContextSchema.parse(languageContext);await requireLanguageRouteContext(tx,requested);if(!Number.isInteger(dailyLimit)||dailyLimit<1||dailyLimit>100||!Number.isFinite(Date.parse(at)))throw new Error('localFlow.confirmQuantity');
+ let activity=await readActiveLearningSessionHeader(tx);
+ const active=await tx.get<string>('meta','learning-active'),activeRun=active?await tx.get<LocalLearningRun>('learningRuns',active):null;
+ if(continuedFromRunId&&activity&&(activity.activeRunId!==continuedFromRunId||active!==continuedFromRunId||activity.intent!==sessionIntent||!sameLearningSessionDirection(activity.languageContext,requested)))throw new Error('localFlow.stepChanged');
+ const resuming=!!activeRun&&!activeRun.completedAt&&localRunTargetIds(activeRun).includes(targetId)&&sameLearningSessionDirection(activeRun.languageContext,requested);
+ const reuse=!!activity&&(!!continuedFromRunId||resuming&&activity.intent===sessionIntent);
+ const context=reuse?activity!.languageContext:requested;
+ const plan=(await readStudyPlans(tx))[context.languageRouteId];
+ if((reuse?activity!.dailyNewSenseLimit:plan?.dailyNewSenseLimit)!==dailyLimit&&!resuming)throw new Error('localFlow.confirmNewQuantity');
+ const scope:LocalStudyScope|null=reuse?null:await captureStudyScope(tx,{operationId,learnerId:(await learningOwner(tx)).learnerId,context,dailyLimit,at});
+ if(!reuse&&activity){endLearningSession(tx,activity,operationId,at,'session_switch');activity=null;}
+ const scopeMembers=new Map<string,import('./studyScopes').LocalStudyScopeMember|null>();
+ const scopeMemberFor=async(targetId:string)=>{
+  if(!scopeMembers.has(targetId))scopeMembers.set(targetId,scope?scope.members.find(member=>member.targetId===targetId)??null:await tx.studyScopeMember(activity!.scopeRevisionId,targetId));
+  return scopeMembers.get(targetId)!;
+ };
+ const memberFor=async(target:LocalLearningTarget,purpose:LocalLearningRun['purpose'])=>scopedMembership(await scopeMemberFor(target.id),target,purpose);
+ const publishActivity=(run:LocalLearningRun)=>{if(reuse)focusLearningSession(tx,activity!,run);else createLearningSession(tx,scope!,run,operationId,sessionIntent,at);};
  if(!['mixed','review_only'].includes(sessionIntent))throw new Error('localFlow.resourceInvalid');
  const t=await tx.get<LocalLearningTarget>('learningTargets',targetId);if(!t)throw new Error('localFlow.enrollFirst');if(hasDeclaredMasteryOverride(t))throw new Error('localFlow.stepChanged');
- const selectedMembership=await planningMembership(tx,t,context);if(!selectedMembership)throw new Error('localFlow.routeMembershipMissing');
+ const selectedMembership=await memberFor(t,localLearningPurpose(t));if(!selectedMembership)throw new Error('localFlow.routeMembershipMissing');
  if(sessionIntent==='review_only'&&localLearningPurpose(t)==='initial_learning')throw new Error('localFlow.notDue');
- const active=await tx.get<string>('meta','learning-active'),activeRun=active?await tx.get<LocalLearningRun>('learningRuns',active):null;
  if(activeRun&&!activeRun.completedAt&&localRunTargetIds(activeRun).includes(targetId)&&activeRun.languageContext.languageRouteId===context.languageRouteId){
    if(Date.parse(at)<Date.parse(activeRun.startedAt))throw new Error('localFlow.stepChanged');
    if(!sameLearningSessionDirection(activeRun.languageContext,context))throw new Error('localFlow.stepChanged');
    activeRun.lifecycleEvents.push({runRevision:activeRun.revision,eventId:stableUuid(`local-run-intent:${activeRun.id}:${operationId}`),kind:'session_intent_selected',operationId,sessionIntent,requestedLanguageContext:context,...(continuedFromRunId?{continuedFromRunId}:{}),at});activeRun.revision++;tx.put('learningRuns',activeRun.id,activeRun);
-  return activeRun;
+  publishActivity(activeRun);return activeRun;
  }
  if(activeRun&&!activeRun.completedAt){
   if(Date.parse(at)<Date.parse(activeRun.startedAt)||localRunOpenSessionPause(activeRun)||localRunOpenPlanningInterruption(activeRun))throw new Error('localFlow.clockChanged');
@@ -550,13 +553,14 @@ async function startLearningInTransaction(tx:LibraryTransaction,operationId:stri
   if(Date.parse(at)<Date.parse((interruption??pause)!.at))throw new Error('localFlow.clockChanged');
   const selection={runRevision:unfinished.revision,eventId:stableUuid(`local-run-resume:${unfinished.id}:${operationId}`),operationId,sessionIntent,requestedLanguageContext:context,...(continuedFromRunId?{continuedFromRunId}:{}),at};
   unfinished.lifecycleEvents.push(pause?{...selection,kind:'resumed_after_session_switch',interruptionEventId:pause.eventId}:{...selection,kind:'resumed_after_planning_override',interruptionEventId:interruption!.eventId});unfinished.revision++;tx.put('learningRuns',unfinished.id,unfinished);
-  tx.put('meta','learning-active',unfinished.id);return unfinished;
+  tx.put('meta','learning-active',unfinished.id);publishActivity(unfinished);return unfinished;
  }
  const now=new Date(at),purpose=localLearningPurpose(t);
  const dayStart=new Date(now);dayStart.setHours(0,0,0,0);const dayEnd=new Date(dayStart);dayEnd.setDate(dayEnd.getDate()+1);
  const introducedToday=await tx.countIntroducedLearningTargets(context.languageRouteId,dayStart.toISOString(),dayEnd.toISOString());
  const pack=selectedMembership.packageKey?await tx.get<InstalledPackage>('packageCache',selectedMembership.packageKey):undefined;
- const readiness=requireLocalTargetReadiness(t,selectedMembership,pack,purpose);
+ const pinnedProfileVersion=(await scopeMemberFor(t.id))!.policy.profileVersion;
+ const readiness=requireLocalTargetReadiness(t,selectedMembership,pack,purpose,pinnedProfileVersion);
  const profileId=readiness.profileId,profile=learningPolicyProfileRegistry.get(profileId,readiness.profileVersion),runner=learningRuntimeCoordinator.localExecutionForBinding(readiness.binding,purpose);
  if(t.relearnAt&&now<new Date(t.relearnAt)||purpose==='retention_review'&&(!t.memory||now<t.memory.dueAt))throw new Error('localFlow.notDue');
  if(purpose==='initial_learning'&&!t.startedAt&&introducedToday>=dailyLimit)throw new Error('localFlow.dailyLimit');
@@ -569,9 +573,10 @@ async function startLearningInTransaction(tx:LibraryTransaction,operationId:stri
   const broadlyCompatible=[t,...targets.filter(v=>v.id!==t.id)].filter(v=>!hasDeclaredMasteryOverride(v)&&localTargetPolicy(v)===profileId&&localLearningPurpose(v)===purpose&&!openTargetIds.has(v.id)&&(purpose==='initial_learning'||(v.relearnAt?now>=new Date(v.relearnAt):!!v.memory&&now>=v.memory.dueAt)));
   const compatible:LocalLearningTarget[]=[];
   for(const candidate of broadlyCompatible){
-   const candidateMembership=await planningMembership(tx,candidate,context);if(!candidateMembership)continue;
+   const candidateMembership=await memberFor(candidate,purpose);if(!candidateMembership)continue;
    const candidateResource=candidateMembership.packageKey?await tx.get<InstalledPackage>('packageCache',candidateMembership.packageKey):undefined;
-   if(inspectLocalTargetReadiness(candidate,candidateMembership,candidateResource,purpose).status==='ready'){compatible.push(candidate);memberships.set(candidate.id,candidateMembership);}
+   const candidateVersion=(await scopeMemberFor(candidate.id))!.policy.profileVersion;
+   if(candidateVersion===pinnedProfileVersion&&inspectLocalTargetReadiness(candidate,candidateMembership,candidateResource,purpose,candidateVersion).status==='ready'){compatible.push(candidate);memberships.set(candidate.id,candidateMembership);}
   }
   const selected=new Set(compatible.filter(v=>!v.startedAt).slice(0,remaining).map(v=>v.id));
   const candidates=compatible.filter(v=>v.startedAt||selected.has(v.id)).map(v=>({targetId:v.id,profileId,ready:true,executable:true}));
@@ -585,7 +590,7 @@ async function startLearningInTransaction(tx:LibraryTransaction,operationId:stri
  const participantSnapshots:LocalLearningRun['participants']=Object.fromEntries(participants.map(participant=>{
   const membership=memberships.get(participant.id);if(!membership)throw new Error('localFlow.routeMembershipMissing');
   const protocolRunId=stableUuid(`local-protocol-run:${sessionId}:${participant.id}`);
-  const policyCommitment=commitPolicy(participant,protocolRunId,at);
+  const policyCommitment=commitPolicy(participant,protocolRunId,at,pinnedProfileVersion);
   if(policyCommitment.profileId!==profileId||policyCommitment.profileVersion!==profile.profileVersion)throw new Error('localFlow.resourceInvalid');
   const material=materialForProtocolRun(membership.material,purpose,protocolRunId,at);
   const resolvedPlan=resolveRunPlan(participant,policyCommitment,purpose,material,at);
@@ -594,7 +599,7 @@ async function startLearningInTransaction(tx:LibraryTransaction,operationId:stri
   return [participant.id,{protocolRunId,curriculumMembershipId:membership.id,languageContext:context,startReason:{kind:purpose==='initial_learning'?'initial_learning_ready':purpose==='retention_review'?'due_review':'relearning_ready',selectionReason:participant.id===targetId?'requested_target':'cohort_candidate',triggerAt:at,triggerMemoryRevision:participant.memoryRevision},outcomePermissions:localProtocolOutcomePermissions(purpose,binding),material:materialReference,materializations:{[materialReference]:material},presentedMaterials:{},presentationOrder:[],policyCommitment,resolvedPlan,progress:createLocalProtocolProgress(protocolRunId,binding),memoryRevision:participant.memoryRevision,dueAt:participant.memory?.dueAt.toISOString()??null,evidenceIds:[]}];
  }));
  const run:LocalLearningRun={
-  id:sessionId,startedByOperationId:operationId,...(continuedFromRunId?{continuedFromRunId}:{}),targetId,targetIds:participants.map(v=>v.id),
+  id:sessionId,startedByOperationId:operationId,...(continuedFromRunId?{continuedFromRunId}:{}),learningSessionId:reuse?activity!.id:stableUuid(`local-learning-session:${operationId}`),studyScopeRevisionId:reuse?activity!.scopeRevisionId:scope!.id,targetId,targetIds:participants.map(v=>v.id),
   participants:participantSnapshots,
   targetCompletions:{},languageContext:context,sessionIntent,purpose,policyProfileId:profileId,policyProfileVersion:profile.profileVersion,
   protocolBinding:structuredClone(binding),protocolVersion:binding.localProtocolVersion,
@@ -606,12 +611,12 @@ async function startLearningInTransaction(tx:LibraryTransaction,operationId:stri
  for(const participant of participants){
   const membership=memberships.get(participant.id)!;
   const resources=membership.packageKey?await tx.get<InstalledPackage>('packageCache',membership.packageKey):undefined;
-  requireLocalTargetReadiness(participant,membership,resources,purpose);
+  requireLocalTargetReadiness(participant,membership,resources,purpose,pinnedProfileVersion);
  }
  run.protocolState=initializeLocalProtocolState({execution:runner,target:localExecutableTarget(t,selectedMembership),resource:pack,purpose,run});
  await bindCurrentStepMaterial(tx,run,at);
  for(const participant of participants)if(!participant.startedAt){participant.startedAt=at;participant.introducedLanguageRouteId=context.languageRouteId;tx.put('learningTargets',participant.id,participant);}
- tx.put('learningRuns',run.id,run);tx.put('meta','learning-active',run.id);return run;
+ tx.put('learningRuns',run.id,run);tx.put('meta','learning-active',run.id);publishActivity(run);return run;
 }
 export async function startLearning(operationId:string,targetId:string,languageContext:SensaFormalPinnedLanguageContext,dailyLimit:number,at=new Date().toISOString(),sessionIntent:LocalLearningSessionIntent='mixed'){
  const operation={id:operationId,kind:'learning.start',input:{targetId,languageContext,dailyLimit,at,sessionIntent}};
@@ -646,7 +651,7 @@ export async function actLearning(operationId:string,runId:string,revision:numbe
  tx.put('learningEvents',operationId,{id:operationId,runId,targetId:t.id,kind:action.kind,at,detail:{runRevision:revision,nextPresentation,stepId,materializationId:presentedMaterial.snapshot.learningMaterializationId,personalLearningScene,action,formalEvaluation:executed.facts,transition:applied.record}} satisfies LearningEvent);return learningRunReceipt(nextRun);
  });return readVerifiedLearningRunReceipt(operation,receipt);
 }
-export async function finishLearning(operationId:string,runId:string){const result=await learningCommand({id:operationId,kind:'learning.finish',input:{runId}},async tx=>{await learningOwner(tx);const run=await tx.get<LocalLearningRun>('learningRuns',runId);if(!run?.completedAt)throw new Error('localFlow.finishFirst');if(await tx.get('meta','learning-active')===runId)tx.delete('meta','learning-active');return true;});requestCloudCheckpoint();return result;}
+export async function finishLearning(operationId:string,runId:string){const result=await learningCommand({id:operationId,kind:'learning.finish',input:{runId}},async tx=>{await learningOwner(tx);const run=await tx.get<LocalLearningRun>('learningRuns',runId);if(!run?.completedAt)throw new Error('localFlow.finishFirst');if(await tx.get('meta','learning-active')===runId){tx.delete('meta','learning-active');const activity=await readActiveLearningSessionHeader(tx);if(activity){if(activity.activeRunId!==runId)throw new Error('localFlow.stepChanged');endLearningSession(tx,activity,operationId,new Date().toISOString(),'learner_finished');}}return true;});requestCloudCheckpoint();return result;}
 /** Complete one Run and start its successor as one published library state.
  * Observers must never see an empty active-Run gap while the learner is moving
  * directly to the next target. */
@@ -662,7 +667,6 @@ export async function continueLearning(operationId:string,runId:string,targetId:
    const target=await tx.get<LocalLearningTarget>('learningTargets',targetId);
    if(await tx.get('meta','learning-active')!==runId||!target?.relearnAt||target.memoryRevision!==completed.participants[targetId]?.memoryRevision)throw new Error('localFlow.stepChanged');
   }
-  if(await tx.get('meta','learning-active')===runId)tx.delete('meta','learning-active');
   return learningRunReceipt(await startLearningInTransaction(tx,operationId,targetId,languageContext,dailyLimit,at,localRunSessionIntent(completed),completed.id));
  });
  requestCloudCheckpoint();return readVerifiedLearningRunReceipt(operation,result);
@@ -702,6 +706,7 @@ export async function setLocalDeclaredMastery(operationId:string,targetId:string
    if(Date.parse(at)<Date.parse(run.startedAt))throw new Error('localFlow.clockChanged');
    if(!localRunOpenPlanningInterruption(run)){run.lifecycleEvents.push({runRevision:run.revision,eventId:stableUuid(`local-run-interruption:${run.id}:${operationId}`),kind:'interrupted_by_planning_override',operationId,targetId,overrideKind:'declared_mastery',at});run.revision++;tx.put('learningRuns',run.id,run);}
    tx.delete('meta','learning-active');
+   const activity=await readActiveLearningSessionHeader(tx);if(activity)endLearningSession(tx,activity,operationId,at,'planning_override');
   }
   return true;
  });
@@ -712,6 +717,8 @@ export async function selectLocalLearningPolicy(operationId:string,targetId:stri
  return learningCommand({id:operationId,kind:'learning.policy',input:{targetId,languageContext,profileId}},async tx=>{
   await learningOwner(tx);const target=await tx.get<LocalLearningTarget>('learningTargets',targetId);
   if(!target||target.startedAt||(await tx.learningRunIdsForTarget(targetId)).length)throw new Error('localFlow.stepChanged');
+  const activity=await readActiveLearningSessionHeader(tx);
+  if(activity&&await tx.studyScopeMember(activity.scopeRevisionId,targetId))throw new Error('localFlow.stepChanged');
   const context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);await requireLanguageRouteContext(tx,context);
   const membership=localCurriculumMembershipForContext(target,context);if(!membership)throw new Error('localFlow.routeMembershipMissing');
   const profile=learningPolicyProfileRegistry.get(profileId);

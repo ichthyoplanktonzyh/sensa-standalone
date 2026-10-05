@@ -140,7 +140,8 @@ test('review-only quantity confirmation and Book enrollment do not advance new e
  const after=await backupRows();
  expect(after.learningTargets).toEqual(before.learningTargets);expect(after.learningRuns).toEqual(before.learningRuns);expect(after.learningEvents).toEqual(before.learningEvents);
  expect(after.curriculumEnrollments).toHaveLength(before.curriculumEnrollments.length+1);
- expect((await learningSystem.read({kind:'runtime',languageContext:context})).dailyLimit).toBe(40);
+ expect((await learningSystem.read({kind:'preferences',languageContext:context})).dailyLimit).toBe(40);
+ expect((await learningSystem.read({kind:'runtime',languageContext:context})).dailyLimit).toBe(20);
 });
 
 test('a protocol adapter cannot change persisted Session intent or pinned language context',async()=>{

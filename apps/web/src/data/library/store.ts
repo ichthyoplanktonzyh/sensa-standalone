@@ -333,6 +333,14 @@ export class LibraryTransaction {
     return [...new Set(links.map((link) => link.targetId))].sort();
   }
 
+  async studyScopeMember(scopeRevisionId:string,targetId:string):Promise<import('./studyScopes').LocalStudyScopeMember|null>{
+    if(this.hasPendingChanges('studyScopes')){
+      const scope=await this.get<import('./studyScopes').LocalStudyScope>('studyScopes',scopeRevisionId);
+      return scope?.members.find(member=>member.targetId===targetId)??null;
+    }
+    return storageCall(()=>this.adapter.studyScopeMember(scopeRevisionId,targetId));
+  }
+
   async countContentAttemptsSince(inputTaskId: string, createdAfter: string): Promise<number> {
     const taskId = recordKey(inputTaskId);
     if (this.hasPendingChanges('contentAttempts')) {

@@ -7,6 +7,7 @@ import {stableUuid} from '@sensa/learning-kernel';
 import type {LocalCurriculumEnrollment} from '../../data/library/curriculumEnrollments';
 import { readLearningOverview } from '../../data/library/learningOverview';
 import {readStudyPlans} from '../../data/library/studyPlans';
+import {readActiveLearningSessionHeader} from '../../data/library/studyScopes';
 import {sameLearningSessionDirection} from '../../data/library/learningCommandReceipt';
 import {planningMembershipForContext,curriculumSourceEligibility} from '../runtime/curriculumEligibility';
 import {runBaselineMaterial} from '../runtime/runMaterialPins';
@@ -505,11 +506,13 @@ export async function readLearningRuntimeProjection(input:Readonly<{
     // Ordinary Steps need no collection planning. Choose a continuation only
     // at a Run boundary. The compact Worker query bypasses the page transaction
     // chain, so it is safe under this lock without nesting a Library transaction.
-    const dailyLimit=(await readStudyPlans(tx))[input.languageContext.languageRouteId]?.dailyNewSenseLimit;
+    const activity=await readActiveLearningSessionHeader(tx);
+    if(activity&&activity.activeRunId!==activeId)throw new Error('localFlow.progressReadFailed');
+    const dailyLimit=activity?.dailyNewSenseLimit??(await readStudyPlans(tx))[input.languageContext.languageRouteId]?.dailyNewSenseLimit;
     return {run,targets,dailyLimit,
       // A pinned Run can finish after the surface Route changes. It cannot
       // continue its Session into a different direction or Route.
-      planning:(!run||run.completedAt&&sameLearningSessionDirection(run.languageContext,input.languageContext))?await readRuntimeLearningCandidates({languageContext:input.languageContext,clock:input.clock,dailyLimit,supportedPolicies:policyOptions.map(option=>option.id),currentTargetIds:run?.targetIds??[],retryTargetIds:input.retries.map(retry=>retry.id)}):null};
+      planning:(!run||run.completedAt&&sameLearningSessionDirection(run.languageContext,input.languageContext))?await readRuntimeLearningCandidates({languageContext:activity?.languageContext??input.languageContext,clock:input.clock,dailyLimit,supportedPolicies:policyOptions.map(option=>option.id),currentTargetIds:run?.targetIds??[],retryTargetIds:input.retries.map(retry=>retry.id),...(activity?{scopeRevisionId:activity.scopeRevisionId}:{})}):null};
   });
   const packageKeys=snapshot.targets.flatMap(target=>{
     const participant=snapshot.run!.participants[target.id];

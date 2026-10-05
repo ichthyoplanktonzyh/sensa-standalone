@@ -26,6 +26,7 @@ import {
   sqliteSharedRecordContentSchema,
   sqliteLibraryBaselineVersion,
   sqliteLibrarySchemaVersion,
+  sqliteLibraryTables,
   type SqliteLibraryTable,
   type SqliteMutation,
   type PortableMediaBlob,
@@ -105,7 +106,7 @@ export class SqliteRecordDatabase {
     this.worldBrowseProjection=new SqliteWorldBrowseProjection(database,(table,key)=>this.get(table,key));
     this.journeyIdentities=new SqliteJourneyIdentityProjection(database);
     this.learningHistory=new SqliteLearningHistoryProjection(database,id=>this.decoded<LocalLearningTarget>('learningTargets',id),encoded=>this.decode<LocalLearningRun>(this.logicalEncoded('learningRuns',encoded)));
-    this.runtimeCandidates=new SqliteRuntimeLearningCandidates(database,encoded=>this.decode<LocalLearningTarget>(this.logicalEncoded('learningTargets',encoded)),encoded=>this.decode<import('./curriculumEnrollments').LocalCurriculumEnrollment>(this.logicalEncoded('curriculumEnrollments',encoded)),(id,target)=>this.writeLearningTargetProjection(id,target));
+    this.runtimeCandidates=new SqliteRuntimeLearningCandidates(database,encoded=>this.decode<LocalLearningTarget>(this.logicalEncoded('learningTargets',encoded)),encoded=>this.decode<import('./curriculumEnrollments').LocalCurriculumEnrollment>(this.logicalEncoded('curriculumEnrollments',encoded)),(id,target)=>this.writeLearningTargetProjection(id,target),encoded=>this.decode<import('./studyScopes').LocalStudyScope>(this.logicalEncoded('studyScopes',encoded)));
   }
 
   initialize(): SqliteStorageDiagnostics {
@@ -140,6 +141,7 @@ export class SqliteRecordDatabase {
         this.database.exec(sqliteSharedRecordContentSchema);
         this.database.exec(sqlitePackageCacheProjectionSchema);
         this.rebuildPackageCacheProjection();
+        this.allowStudyScopeRecords();
         this.database.exec(`PRAGMA user_version=${sqliteLibrarySchemaVersion}`);
         this.database.exec('COMMIT');
       }catch(error){
@@ -154,6 +156,7 @@ export class SqliteRecordDatabase {
         this.database.exec(sqlitePackageCacheProjectionSchema);
         this.database.exec(sqliteSharedRecordContentSchema);
         this.rebuildPackageCacheProjection();
+        this.allowStudyScopeRecords();
         this.database.exec(`PRAGMA user_version=${sqliteLibrarySchemaVersion}`);
         this.database.exec('COMMIT');
       }catch(error){
@@ -166,8 +169,14 @@ export class SqliteRecordDatabase {
       // Add private representation storage only. Existing facts are neither
       // decoded nor rewritten; ordinary future writes may use shared bodies.
       this.database.exec('BEGIN IMMEDIATE');
-      try{this.database.exec(sqliteSharedRecordContentSchema);this.database.exec(`PRAGMA user_version=${sqliteLibrarySchemaVersion}`);this.database.exec('COMMIT');}
+      try{this.database.exec(sqliteSharedRecordContentSchema);this.allowStudyScopeRecords();this.database.exec(`PRAGMA user_version=${sqliteLibrarySchemaVersion}`);this.database.exec('COMMIT');}
       catch(error){try{this.database.exec('ROLLBACK');}catch{/* Preserve the migration failure. */}throw error;}
+      this.database.exec(sqliteLibrarySchema);
+    }
+    else if(before===14){
+      this.database.exec('BEGIN IMMEDIATE');
+      try{this.allowStudyScopeRecords();this.database.exec(`PRAGMA user_version=${sqliteLibrarySchemaVersion}`);this.database.exec('COMMIT');}
+      catch(error){try{this.database.exec('ROLLBACK');}catch{/* Preserve the original records and constraint. */}throw error;}
       this.database.exec(sqliteLibrarySchema);
     }
     else if (before !== sqliteLibrarySchemaVersion) {
@@ -226,6 +235,32 @@ export class SqliteRecordDatabase {
     statement.reset(true);statement.bind([table,key]);
     let value:string|null;try{value=statement.step()?String(statement.get(0)):null;}finally{statement.reset(true);}
     return value===null?null:this.logicalEncoded(table,value);
+  }
+
+  /** SQLite cannot ALTER a CHECK allow-list. Copy encoded rows byte-for-byte,
+   * preserve rowids and indexes, then replace the physical table atomically.
+   * No learner fact, content revision or shared-body ownership is rewritten. */
+  private allowStudyScopeRecords():void{
+    const exists=this.database.exec({sql:"SELECT 1 FROM sqlite_schema WHERE type='table' AND name='sensa_records'",rowMode:0,returnValue:'resultRows'}) as unknown[];
+    if(!exists.length){if(this.scalarNumber('PRAGMA user_version')===10)return;throw new Error('sqlite_source_schema_incomplete');}
+    const allowed=sqliteLibraryTables.map(table=>`'${table}'`).join(',');
+    const keyColumns=`table_name TEXT NOT NULL CHECK(table_name IN (${allowed})),record_key TEXT NOT NULL CHECK(length(record_key) BETWEEN 1 AND 2000)`;
+    const tables=[
+      {name:'sensa_records',columns:'rowid,table_name,record_key,value_json,content_revision',definition:`${keyColumns},value_json TEXT NOT NULL CHECK(json_valid(value_json)),content_revision INTEGER NOT NULL DEFAULT 0 CHECK(content_revision>=0),PRIMARY KEY(table_name,record_key)`,suffix:''},
+      {name:'sensa_record_tombstones',columns:'table_name,record_key,content_revision',definition:`${keyColumns},content_revision INTEGER NOT NULL CHECK(content_revision>0),PRIMARY KEY(table_name,record_key)`,suffix:' WITHOUT ROWID'},
+      {name:'sensa_sync_base',columns:'table_name,record_key,value_json,block_refs_json',definition:`${keyColumns},value_json TEXT NOT NULL CHECK(json_valid(value_json)),block_refs_json TEXT NOT NULL CHECK(json_valid(block_refs_json)),PRIMARY KEY(table_name,record_key)`,suffix:' WITHOUT ROWID'},
+    ];
+    for(const table of tables){
+      const present=this.database.exec({sql:"SELECT 1 FROM sqlite_schema WHERE type='table' AND name=?",bind:[table.name],rowMode:0,returnValue:'resultRows'}) as unknown[];
+      if(!present.length){if(this.scalarNumber('PRAGMA user_version')===10)continue;throw new Error('sqlite_source_schema_incomplete');}
+      const indexes=this.database.exec({sql:"SELECT sql FROM sqlite_schema WHERE type='index' AND tbl_name=? AND sql IS NOT NULL ORDER BY name",bind:[table.name],rowMode:0,returnValue:'resultRows'}) as string[];
+      const replacement=`${table.name}_v15_upgrade`;
+      this.database.exec(`CREATE TABLE ${replacement}(${table.definition})${table.suffix}`);
+      this.database.exec(`INSERT INTO ${replacement}(${table.columns}) SELECT ${table.columns} FROM ${table.name}`);
+      this.database.exec(`DROP TABLE ${table.name}`);
+      this.database.exec(`ALTER TABLE ${replacement} RENAME TO ${table.name}`);
+      for(const sql of indexes)this.database.exec(sql);
+    }
   }
 
   entries(table: SqliteLibraryTable): StoredEntry[] {
@@ -448,6 +483,8 @@ export class SqliteRecordDatabase {
     return {targets:targetRows.map(row=>this.decode<HomeLearningStorageProjection['targets'][number]>(String(row.projection_value_json))),availablePackageKeys:packageRows.map(String),activeRun:active?{id:active.id,targetId:active.targetId}:null,dailyLimit:plans?.[languageRouteId]?.dailyNewSenseLimit,sourceEligibility:this.runtimeCandidates.sourceEligibility(languageRouteId)};
   }
 
+  studyScopeMember(scopeRevisionId:string,targetId:string):import('./studyScopes').LocalStudyScopeMember|null{return this.runtimeCandidates.scopeMember(scopeRevisionId,targetId);}
+
   learningHistoryProjection():StoredLearningRecord[]{return this.learningHistory.records();}
   learningHistoryPage(query:LearningHistoryRequest):StoredLearningHistoryPage{return this.learningHistory.page(query);}
   learningManagementSummary(query:LearningManagementSummaryQuery):LearningManagementStorageSummary{return this.runtimeCandidates.management(query);}
@@ -621,6 +658,7 @@ export class SqliteRecordDatabase {
         }
         if (table === 'learningTargets'){this.database.exec('DELETE FROM sensa_learning_targets');this.runtimeCandidates.clear();}
         if(table==='curriculumEnrollments')this.runtimeCandidates.clearEnrollments();
+        if(table==='studyScopes')this.runtimeCandidates.clearScopes();
         if (table === 'learningRuns'){this.database.exec('DELETE FROM sensa_learning_runs');this.learningHistory.clear();}
         if (table === 'contentAttempts') this.database.exec('DELETE FROM sensa_content_attempts');
         if (table === 'semanticMeanings' || table === 'semanticInbox') {
@@ -656,6 +694,7 @@ export class SqliteRecordDatabase {
           });
         }
         if(item.table==='curriculumEnrollments')this.runtimeCandidates.deleteEnrollment(item.key);
+        if(item.table==='studyScopes')this.runtimeCandidates.deleteScope(item.key);
         if (item.table === 'learningRuns') {
           this.learningHistory.delete(item.key);
           this.database.exec({
@@ -727,6 +766,7 @@ export class SqliteRecordDatabase {
         }
         if(item.table==='packageCache')this.upsertPackageCacheProjection(item.key,item.encodedValue);
         if(item.table==='curriculumEnrollments')this.runtimeCandidates.upsertEnrollment(item.key,this.decode<import('./curriculumEnrollments').LocalCurriculumEnrollment>(item.encodedValue));
+        if(item.table==='studyScopes')this.runtimeCandidates.upsertScope(item.key,this.decode<import('./studyScopes').LocalStudyScope>(item.encodedValue));
         if (item.table === 'learningTargets') {
           this.upsertLearningTargetProjection(item.key, item.encodedValue);
         }

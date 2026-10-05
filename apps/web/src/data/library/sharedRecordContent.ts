@@ -14,16 +14,17 @@ export interface SharedRecordContent{readonly value:WireValue;readonly bodies:Re
  * bindings and outcomes remain caller-owned facts. Bodies have no references
  * themselves, so each record has a bounded, directly owned dependency set. */
 export function externalizeSharedRecordContent(value:WireValue):SharedRecordContent{
- decodeBackupValue(value);
+ const decoded=decodeBackupValue(value) as {format?:unknown}|null;
+ const scope=decoded?.format==='sensa-study-scope-v1';
  const bodies=new Map<string,string>();
  const visit=(node:any,field='',depth=0):any=>{
   if(depth>80||!Array.isArray(node))fail();
-  if(sharedFields.has(field)&&(node[0]==='object'||node[0]==='array')){
+  if((sharedFields.has(field)||scope&&(field==='scopeMember'||field==='range'))&&(node[0]==='object'||node[0]==='array')){
    const text=JSON.stringify(node);
    if(text.length>=512){const digest=sha256(text);bodies.set(digest,text);return [referenceTag,digest];}
   }
   if(node[0]==='object')return ['object',node[1].map(([key,item]:[string,unknown])=>[key,visit(item,key,depth+1)])];
-  if(node[0]==='array')return ['array',node[1].map((item:unknown)=>visit(item,'',depth+1))];
+  if(node[0]==='array')return ['array',node[1].map((item:unknown)=>visit(item,scope&&field==='members'?'scopeMember':'',depth+1))];
   return node;
  };
  return {value:visit(value),bodies};
@@ -75,7 +76,7 @@ export function unpackStoredRecord(text:string):string{
  return strFromU8(plain);
 }
 
-export const sharedRecordTables=new Set(['learningTargets','learningRuns','learningEvents','contentAttempts','operations','packageCache']);
+export const sharedRecordTables=new Set(['learningTargets','learningRuns','learningEvents','contentAttempts','operations','packageCache','studyScopes']);
 
 /** Compact archive wire form. Reserve one object key and escape its occurrence
  * in user objects; arrays and primitive values otherwise stay ordinary JSON. */

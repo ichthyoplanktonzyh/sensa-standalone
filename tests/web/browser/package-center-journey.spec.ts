@@ -1313,13 +1313,16 @@ test('finishing a pinned Run after switching to an empty Route clears its resume
  expect(english.records).toEqual(completed.records);
 });
 
-test('Study quantity save failure stays visible in its dialog and retry preserves the revealed Run',async({page})=>{
+test('Study quantity save failure and retry preserve the full Session arrangement through OPFS reload, continuation and finish',async({page})=>{
  setRegistry([reviewDelivery.descriptor]);
  const runtime=await startOrdinaryBook(page,/到期复习样本/);
  await runtime.getByRole('button',{name:/查看表达/}).click();
  await expect(runtime.getByRole('button',{name:/有点印象/})).toBeEnabled();
  const revealedHeadings=await runtime.getByRole('heading').allTextContents();
  const pinned=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ const arrangement=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningArrangementCheckpointForTest());
+ expect(arrangement.scope!.members.map(member=>member.targetId).sort()).toEqual(pinned.targetIds);
+ expect(arrangement.session!.dailyNewSenseLimit).toBe(20);
  await runtime.getByRole('button',{name:'暂停',exact:true}).click();
  await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的学习',exact:true}).click();
  const study=page.locator('#s-study');
@@ -1351,6 +1354,19 @@ test('Study quantity save failure stays visible in its dialog and retry preserve
  await expect(runtime.getByRole('button',{name:/有点印象/})).toBeEnabled();
  expect(await runtime.getByRole('heading').allTextContents()).toEqual(revealedHeadings);
  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).runtime).toEqual(pinned.runtime);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningArrangementCheckpointForTest())).toEqual(arrangement);
+ await runtime.getByRole('button',{name:/已经连上/}).click();
+ await expect.poll(async()=>(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).runtime?.targetId).not.toBe(pinned.runtime!.targetId);
+ await expect(runtime.getByRole('button',{name:/查看表达/})).toBeEnabled();
+ const continued=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningArrangementCheckpointForTest());
+ expect(continued.scope).toEqual(arrangement.scope);expect(continued.session!.id).toBe(arrangement.session!.id);
+ expect(continued.session!.dailyNewSenseLimit).toBe(20);expect(continued.session!.runIds).toHaveLength(2);
+ await runtime.getByRole('button',{name:/查看表达/}).click();
+ await runtime.getByRole('button',{name:/已经连上/}).click();
+ await expect(runtime.getByRole('heading',{name:'本轮完成',exact:true})).toBeVisible();
+ await runtime.getByRole('button',{name:/完成并回到首页/}).click();
+ await expect(page.locator('#s-home')).toBeVisible();
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningArrangementCheckpointForTest())).session).toBeNull();
 });
 
 test('repeated Relearning failure requires explicit retry and survives offline reopen without a second Review settlement',async()=>{

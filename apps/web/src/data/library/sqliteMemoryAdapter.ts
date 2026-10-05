@@ -3,7 +3,7 @@ import type {HomeLearningStorageProjection,PortableMediaBlob,PortableMediaStorag
 import {sqliteLibrarySchemaVersion} from './sqliteProtocol';
 import {decodeBackupValue} from './backupCodec';
 import type {PackageCacheProjectionQuery,PackageCacheProjectionResult} from './packageCacheProjection';
-import {createHomeLearningStorageProjection} from './homeLearningRecords';
+import {createHomeLearningStorageProjection,createHomeLearningTargetRecord} from './homeLearningRecords';
 import {runtimeLearningCandidatesFromRecords,learningManagementSummaryFromRecords,type RuntimeLearningCandidateQuery,type RuntimeLearningCandidates,type LearningManagementSummaryQuery,type LearningManagementStorageSummary} from './runtimeLearningCandidates';
 import {learningHistoryPageFromRecords,type StoredLearningHistoryPage} from './learningHistoryProjection';
 import type {LearningHistoryRequest} from '../../learning/system/learningHistoryModel';
@@ -180,7 +180,23 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
       languageRouteId,
     });
   }
-  async runtimeLearningCandidates(query:RuntimeLearningCandidateQuery):Promise<RuntimeLearningCandidates>{return runtimeLearningCandidatesFromRecords(await this.homeLearningProjection(query.languageContext.languageRouteId,query.clock),query);}
+  async studyScopeMember(scopeRevisionId:string,targetId:string):Promise<import('./studyScopes').LocalStudyScopeMember|null>{
+    const encoded=await this.get('studyScopes',scopeRevisionId);
+    if(!encoded)return null;
+    const scope=decodeBackupValue(JSON.parse(encoded)) as import('./studyScopes').LocalStudyScope;
+    return scope.members.find(member=>member.targetId===targetId)??null;
+  }
+  async runtimeLearningCandidates(query:RuntimeLearningCandidateQuery):Promise<RuntimeLearningCandidates>{
+    const stored=await this.homeLearningProjection(query.languageContext.languageRouteId,query.clock);
+    if(!query.scopeRevisionId)return runtimeLearningCandidatesFromRecords(stored,query);
+    const encoded=await this.get('studyScopes',query.scopeRevisionId);if(!encoded)throw new Error('localFlow.progressReadFailed');
+    const scope=decodeBackupValue(JSON.parse(encoded)) as import('./studyScopes').LocalStudyScope;
+    // The oracle must retain frozen members even when current source modes or
+    // superseded flags no longer put them in the future Home inventory.
+    const ids=new Set(scope.members.map(member=>member.targetId)),today=new Set(stored.targets.map(target=>target.id));
+    const targets=(await this.entries('learningTargets')).map(row=>decodeBackupValue(JSON.parse(row.encodedValue)) as LocalLearningTarget).filter(target=>ids.has(target.id)||today.has(target.id)).map(createHomeLearningTargetRecord);
+    return runtimeLearningCandidatesFromRecords({...stored,targets,availablePackageKeys:(await this.entries('packageCache')).map(row=>row.key)},query,scope);
+  }
   async learningManagementSummary(query:LearningManagementSummaryQuery):Promise<LearningManagementStorageSummary>{return learningManagementSummaryFromRecords(await this.homeLearningProjection(query.languageContext.languageRouteId,query.clock),query);}
   async learningHistoryPage(query:LearningHistoryRequest):Promise<StoredLearningHistoryPage>{return learningHistoryPageFromRecords(await this.learningHistoryProjection(),query);}
 

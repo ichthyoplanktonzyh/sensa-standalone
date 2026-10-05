@@ -331,6 +331,11 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  const rejected=await publish(manifest,head.revision,librarySyncBlockChars);assert.equal(rejected.status,409);assert.equal((await rejected.json() as any).code,'library_sync_history');
  const decisionManifest=JSON.parse(JSON.stringify(head.manifest)),decision=decisionManifest.rows.find((r:any)=>r.table==='learningReconciliations');assert(decision,'concurrent learning did not publish its reconciliation decision');decision.blocks=decisionManifest.rows.find((r:any)=>r.table==='drafts').blocks;
  const rejectedDecision=await publish(decisionManifest,head.revision,librarySyncBlockChars);assert.equal(rejectedDecision.status,409);assert.equal((await rejectedDecision.json() as any).code,'library_sync_history');
+ for(const table of ['studyScopes','learningSessions','learningRuns']){
+  assert(head.manifest.rows.some((row:any)=>row.table===table),'actual learning must publish '+table);
+  const omitted=JSON.parse(JSON.stringify(head.manifest));omitted.rows=omitted.rows.filter((row:any)=>row.table!==table);
+  const denied=await publish(omitted,head.revision,librarySyncBlockChars);assert.equal(denied.status,409);assert.equal((await denied.json() as any).code,'library_sync_history');
+ }
  assert.equal((await pool.query('SELECT revision FROM sensa_consumer.library_cloud WHERE account_id=$1',[accountId])).rows[0].revision,head.revision);
  const deletion=await post('account/deletion',{operationId:crypto.randomUUID(),confirmation:'delete-account'});assert.equal(deletion.status,200);
  for(const table of ['library_cloud','library_cloud_blocks','library_cloud_commits','library_cloud_snapshot_leases','library_cloud_block_refs'])assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.'+table+' WHERE account_id=$1',[accountId])).rows[0].n,0);
