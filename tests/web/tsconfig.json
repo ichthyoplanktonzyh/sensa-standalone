@@ -13,6 +13,7 @@
   },
   "files": [
     "catalog.mts",
+    "integration/book-publication-provenance.test.mts",
     "integration/relearning-loop.test.mts",
     "integration/library-sync-transport.test.mts",
     "unit/library-sync-blocks.test.mts",

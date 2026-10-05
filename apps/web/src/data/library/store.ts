@@ -185,7 +185,7 @@ export class LibraryTransaction {
 
   /** Read the derived index, including this transaction's pending cache writes. */
   async packageCacheProjection<Query extends PackageCacheProjectionQuery>(query:Query):Promise<PackageCacheProjectionResult<Query>>{
-    if(query.kind==='route_counts'||query.kind==='learning_choices'){
+    if(query.kind==='route_counts'||query.kind==='learning_choices'||query.kind==='publication_identities'){
       if(this.wrote)throw new Error('library_projection_requires_snapshot');
       return storageCall(()=>this.adapter.packageCacheProjection(query));
     }

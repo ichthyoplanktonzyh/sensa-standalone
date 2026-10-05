@@ -7,7 +7,7 @@ import {stableUuid} from '@sensa/learning-kernel';
 import {z} from 'zod';
 
 import type {BackupRows} from '../backupValidation';
-import {packageInstallationSchema,portablePackageKey} from '../packageRecords';
+import {packageInstallationSchema,portablePackageKey,publicationBookMembership} from '../packageRecords';
 import {validateInstalledLearningContent} from '../../../contentSupply/portable/installedLearningContent';
 import type {LibraryIdentity,Table} from '../store';
 import {isDirectProvisioningReference,provisioningTaskId,provisioningMembershipId} from '../../../contentSupply/provisioning/contracts';
@@ -45,6 +45,10 @@ export function validateContentSupplyReplica(input:{
    ||installation.artifact.targetLanguage!==p.content.targetLanguage
    ||installation.artifact.supportLanguage!==p.content.supportLanguage
   )fail();
+  for(const publication of p.portableOrigin.publications){
+   const member=publicationBookMembership(publication);
+   if(member&&!installation.artifact.bookMemberships?.some(value=>backupEqual(value,member)))fail();
+  }
  }
  for(const {value:task} of rows.personalLearning){
   const direct=isDirectProvisioningReference(task.source);

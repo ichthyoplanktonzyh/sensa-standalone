@@ -17,7 +17,7 @@ import {extname,join,resolve} from 'node:path';
 import {chromium,expect,test,type Page} from '@playwright/test';
 import {unzipSync,zipSync} from 'fflate';
 import {portableBookMemberPath,readSensaPortableBook} from '@sensa/content-validator/portable-book';
-import {canonicalConsumerJson} from '@sensa/contracts/sensa';
+import {canonicalConsumerJson,sensaPortableBookManifestSchema} from '@sensa/contracts/sensa';
 import {portableBookDeliveryFixture} from '../../../scripts/support/portablePackageFixture.mts';
 import {serve} from '@hono/node-server';
 import {Hono} from 'hono';
@@ -569,6 +569,55 @@ test('a cached public catalog refreshes across origins with its exact revision',
   expect(catalogValidators.at(-1)).toBe(`"${(registry as {revision:string}).revision}"`);
   await page.reload();
   await expect(catalog.getByRole('button',{name:/English route essentials/})).toBeVisible({timeout:15_000});
+});
+
+test('shared Book sources recover their exact Manifest positions through Chromium OPFS without enrolling',async({page})=>{
+ const first=reviewDelivery,files=unzipSync(first.bookBytes);
+ const manifest=sensaPortableBookManifestSchema.parse({...first.manifest,book:{...first.manifest.book,bookId:randomUUID(),bookVersionId:randomUUID(),bookKey:'shared-book-recovery',title:'共享表达的另一册'},members:[...first.manifest.members].reverse()});
+ files['book.json']=new TextEncoder().encode(JSON.stringify(manifest));
+ const bytes=zipSync(files),sha256=createHash('sha256').update(bytes).digest('hex');
+ const second={...first.descriptor,book:manifest.book,sha256,byteLength:bytes.byteLength,url:`${origin}/published/${sha256}.sensa-book`};
+ first.responses.set(second.url,bytes);
+ setRegistry([first.descriptor,second]);
+ try{
+  await page.goto(`${origin}/catalog`);
+  const catalog=page.locator('#s-catalog').last(),book=page.locator('#s-catalog-book').last();
+  for(const title of [first.descriptor.book.title,second.book.title]){
+   await catalog.getByRole('button',{name:new RegExp(title)}).click();
+   await book.getByRole('button',{name:'下载学习包',exact:true}).click();
+   await expect(book.getByText('已下载',{exact:true})).toBeVisible();
+   await expect(book.getByRole('button',{name:'加入学习',exact:true})).toBeEnabled();
+   await book.getByRole('button',{name:'返回',exact:true}).click();
+  }
+  const original=await page.evaluate(()=>window.__sensaBrowserSmoke!.bookProvenanceCheckpointForTest());
+  expect(original.installations).toHaveLength(2);
+  for(const installation of original.installations){
+   expect(installation.artifact.bookMemberships).toHaveLength(2);
+   for(const reference of installation.artifact.bookMemberships!){
+    const bookManifest=reference.archiveSha256===first.descriptor.sha256?first.manifest:manifest;
+    expect(reference.memberIndex).toBe(bookManifest.members.findIndex(member=>member.packageId===installation.artifact.packageId&&member.version===installation.artifact.version));
+   }
+  }
+  const learning=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+  expect(learning.targetIds).toEqual([]);expect(learning.enrollments).toEqual([]);expect(learning.records).toEqual([]);
+  await page.evaluate(()=>window.__sensaBrowserSmoke!.discardPackageCacheForRecoveryTest());
+  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.bookProvenanceCheckpointForTest())).cache).toEqual([]);
+  delivered.length=0;
+  await page.reload();
+  await expect.poll(async()=>(await page.evaluate(()=>window.__sensaBrowserSmoke!.bookProvenanceCheckpointForTest())).cache.flatMap(pack=>pack.publications).length).toBe(4);
+  const recovered=await page.evaluate(()=>window.__sensaBrowserSmoke!.bookProvenanceCheckpointForTest());
+  expect(recovered).toEqual(original);
+  expect(delivered.filter(path=>path.endsWith('.sensa-book')).sort()).toEqual([new URL(first.descriptor.url).pathname,new URL(second.url).pathname].sort());
+  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(learning);
+  delivered.length=0;
+  await page.reload();
+  await expect(catalog.getByRole('button',{name:/共享表达的另一册/})).toBeVisible();
+  await catalog.getByRole('button',{name:/共享表达的另一册/}).click();
+  await expect(book.getByText('已下载',{exact:true})).toBeVisible();
+  await expect(book.getByRole('button',{name:'加入学习',exact:true})).toBeEnabled();
+  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.bookProvenanceCheckpointForTest())).toEqual(original);
+  expect(delivered.filter(path=>path.endsWith('.sensa-book'))).toEqual([]);
+ }finally{first.responses.delete(second.url);}
 });
 
 test('cancelling admission after complete transfer closes its Worker without installing any members',async({page})=>{

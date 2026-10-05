@@ -69,9 +69,10 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
     return [...new Set(keys)].filter(key=>this.records.has(`${table}\u0000${key}`)).sort();
   }
   async packageCacheProjection<Query extends PackageCacheProjectionQuery>(query:Query):Promise<PackageCacheProjectionResult<Query>>{
-    const {createPackageCacheSummary,isPackageCacheProjectionSource,learningExpressionForm,validateLearningPackageQuery}=await import('./packageCacheProjection');
+    const {createPackageCacheSummary,createPackagePublicationIdentity,isPackageCacheProjectionSource,learningExpressionForm,validateLearningPackageQuery}=await import('./packageCacheProjection');
     const values=(await this.entries('packageCache')).map(row=>
       decodeBackupValue(JSON.parse(row.encodedValue))).filter(isPackageCacheProjectionSource);
+    if(query.kind==='publication_identities')return values.map(createPackagePublicationIdentity).sort((a,b)=>a.key.localeCompare(b.key)) as PackageCacheProjectionResult<Query>;
     if(query.kind==='learning_choices'){
       validateLearningPackageQuery(query);
       return values.filter(value=>value.content.targetLanguage===query.languageTag&&learningExpressionForm(value.content.entries[0]?.expression,query.languageTag)?.startsWith(query.normalizedPrefix)&&value.portableOrigin.publications.length>0&&value.content.entries[0]?.semantic?.relation==='realizes'&&value.content.entries[0]?.semantic?.semanticCoverage==='exact')

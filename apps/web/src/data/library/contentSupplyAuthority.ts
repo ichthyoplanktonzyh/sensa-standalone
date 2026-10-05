@@ -16,7 +16,9 @@ import {readPersonalProvisioningSource} from './personalProvisioningSource';
 import {assertPersonalContextPin} from '../../experience/personalMeaningJourney/learningSource';
 import {
   packageInstallationSchema,
-  samePackageInstallationArtifact,
+  mergePackageInstallationRecovery,
+  publicationBookMembership,
+  type InstalledPackage,
 } from './packageRecords';
 import type {
   LibraryIdentity,
@@ -72,10 +74,17 @@ export async function assertContentSupplyTransition(input: {
       if (change.key !== installation.key) reject('Package installation identity changed.');
       if (change.before !== null && !backupEqual(change.before, change.after)) {
         const before=packageInstallationSchema.parse(change.before);
-        if(!samePackageInstallationArtifact(before,installation)
-          ||before.artifact.bookArchiveSha256!==undefined
-          ||installation.artifact.bookArchiveSha256===undefined){
+        if(!backupEqual(mergePackageInstallationRecovery(before,installation),installation)){
           reject('An exact package installation fact is immutable.');
+        }
+      }
+      const previous=change.before===null?undefined:packageInstallationSchema.parse(change.before);
+      const additions=(installation.artifact.bookMemberships??[]).filter(member=>!previous?.artifact.bookMemberships?.some(prior=>backupEqual(prior,member)));
+      if(additions.length){
+        const cached=await read('packageCache',installation.key) as InstalledPackage|undefined;
+        for(const member of additions){
+          const publication=cached?.portableOrigin.publications.find(value=>value.bookArchiveSha256===member.archiveSha256);
+          if(!publication||!backupEqual(publicationBookMembership(publication),member))reject('Book membership is missing its admitted publication position.');
         }
       }
       continue;

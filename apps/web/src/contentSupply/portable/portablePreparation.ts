@@ -7,7 +7,7 @@ import {
 import {createSensaPortableLightweightPackage,readSensaPortableLightweightPackage,type SensaPortableLightweightPackageArchive} from '@sensa/content-validator/portable-lightweight';
 import {readSensaPortableBook,type SensaPortableBookPackage} from '@sensa/content-validator/portable-book';
 import {canonicalJsonDigest,stableUuid} from '@sensa/learning-kernel';
-import {portablePackageInstallationFor,type PackageInstallation,type PortablePublicationAttestation} from '../../data/library/packageRecords';
+import {portablePackageInstallationFor,publicationBookMembership,type PackageInstallation,type PortablePublicationAttestation} from '../../data/library/packageRecords';
 import {validateInstalledLearningContent} from './installedLearningContent';
 
 const invalidPortablePackage=(cause:unknown):never=>{throw new Error('localFlow.resourceInvalid',{cause});};
@@ -226,6 +226,7 @@ export const preparePortablePackage=(
     canonical.packageDigest,
     canonicalBytes.byteLength,
     publication?.bookArchiveSha256,
+    publication?publicationBookMembership(publication):undefined,
   );
   return {canonical:{package:canonical.package,archiveDigest:canonical.archiveDigest,packageDigest:canonical.packageDigest},content,installation,...(publication?{publication}:{})};
 };
@@ -249,10 +250,10 @@ export function readPublishedBook(bytes:Uint8Array,raw:SensaPortableBookDescript
 
 export function preparePublishedBook(bytes:Uint8Array,descriptor:SensaPortableBookDescriptor):readonly PreparedPortableInstallation[]{
  const archive=readPublishedBook(bytes,descriptor),manifest=archive.manifest;
- return archive.members.map(({bytes,archive:memberArchive,member})=>preparePortablePackage(bytes,memberArchive,{
+ return archive.members.map(({bytes,archive:memberArchive,member},memberIndex)=>preparePortablePackage(bytes,memberArchive,{
   format:'sensa-portable-publication-attestation-v2',publisher:manifest.publisher,book:manifest.book,
   contentRelease:manifest.contentRelease,route:manifest.route,publishedAt:manifest.publishedAt,
   changeSummary:manifest.changeSummary,bookArchiveSha256:archive.archiveDigest,
-  memberCount:manifest.members.length,member,
+  memberCount:manifest.members.length,memberIndex,member,
  }));
 }

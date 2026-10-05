@@ -44,6 +44,7 @@ export type WebTestCatalogEntry = Readonly<{
  * split into named behavior scenarios.
  */
 const foundationTests = [
+  {id:'book-publication-provenance',file:'tests/web/integration/book-publication-provenance.test.mts',kind:'integration',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
   {id:'relearning-loop',file:'tests/web/integration/relearning-loop.test.mts',kind:'integration',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
   {id:'library-sync-transport',file:'tests/web/integration/library-sync-transport.test.mts',kind:'integration',risks:['local-correctness','durability','convergence'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
   {id:'library-sync-blocks',file:'tests/web/unit/library-sync-blocks.test.mts',kind:'unit',risks:['local-correctness','durability','scale'],environment:'node',suite:'fast',runner:'vitest'},

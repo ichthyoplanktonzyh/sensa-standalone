@@ -13,12 +13,13 @@ import {ensureSqliteSchemaIndexes} from './sqliteSchemaIndexes';
 import {registryFieldReader,registrySelectionSql,registrySelectionResult,type RegistrySelectionQuery,type RegistrySelection} from './semanticRegistrySelection';
 import type {WorldBrowseQuery,WorldBrowsePage,WorldLearningChoiceQuery,WorldLearningChoicePage} from '../../experience/personalMeaningJourney/worldRead';
 import type {MeaningLookupResult} from '../../experience/personalMeaningJourney/meaningLookup';
-import {createPackageCacheSummary,isPackageCacheProjectionSource,packageCacheKeyPrefix,sqlitePackageCacheProjectionSchema,type PackageCacheProjectionQuery,type PackageCacheProjectionResult} from './packageCacheProjection';
+import {createPackageCacheSummary,isPackageCacheProjectionSource,packageCacheKeyPrefix,sqlitePackageCacheProjectionSchema,type PackageCacheProjectionQuery,type PackageCacheProjectionResult,type PackagePublicationIdentity} from './packageCacheProjection';
 import {
   createHomeLearningTargetRecord,
   type HomeLearningStorageProjection,
 } from './homeLearningRecords';
 import type {LocalLearningRun,LocalLearningTarget} from '../../learning/runtime/localProtocol';
+import type {PackageBookMembership} from './packageRecords';
 import {
   sqliteLibrarySchema,
   sqlitePortableMediaSchema,
@@ -261,6 +262,21 @@ export class SqliteRecordDatabase {
   }
 
   packageCacheProjection<Query extends PackageCacheProjectionQuery>(query:Query):PackageCacheProjectionResult<Query>{
+    if(query.kind==='publication_identities'){
+      const rows=this.database.exec({sql:`SELECT package_key,digest,
+        (SELECT json_group_array(json_extract(publication.value,'$.bookArchiveSha256')) FROM json_each(summary_json,'$.portableOrigin.publications') AS publication) AS publications,
+        (SELECT json_group_array(json_object(
+          'archiveSha256',json_extract(publication.value,'$.bookArchiveSha256'),
+          'bookId',json_extract(publication.value,'$.book.bookId'),
+          'bookVersionId',json_extract(publication.value,'$.book.bookVersionId'),
+          'memberIndex',json_extract(publication.value,'$.memberIndex'),
+          'memberCount',json_extract(publication.value,'$.memberCount')))
+          FROM json_each(summary_json,'$.portableOrigin.publications') AS publication
+          WHERE json_extract(publication.value,'$.memberIndex') IS NOT NULL) AS memberships
+        FROM sensa_package_cache_projection ORDER BY package_key`,rowMode:'object',returnValue:'resultRows'}) as {package_key:string;digest:string;publications:string;memberships:string}[];
+      const identities:PackagePublicationIdentity[]=rows.map(row=>({key:row.package_key,digest:row.digest,bookArchiveSha256s:(JSON.parse(row.publications) as string[]).sort(),bookMemberships:(JSON.parse(row.memberships) as PackageBookMembership[]).sort((a,b)=>a.archiveSha256.localeCompare(b.archiveSha256))}));
+      return identities as PackageCacheProjectionResult<Query>;
+    }
     if(query.kind==='learning_choices'){
       validateLearningPackageQuery(query);
       const rows=this.database.exec({sql:learningPackageChoicesSql,bind:[query.languageTag,query.normalizedPrefix,query.normalizedPrefix+'\u{10ffff}',query.limit,query.offset],rowMode:'object',returnValue:'resultRows'}) as Array<{summary_json:string}>;

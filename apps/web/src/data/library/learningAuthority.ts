@@ -126,8 +126,17 @@ export function assertLearningSystemState(input:LearningSystemStateInput){
    assertDirectEnrollmentSource(enrollment.source.selection,(table,key)=>maps[table].get(key));
   }else{
    const archiveSha256=enrollment.source.publicationArchiveSha256;
-   const members=rows.packageInstallations.map(row=>packageInstallationSchema.parse(row.value)).filter(item=>item.artifact.bookArchiveSha256===archiveSha256);
-   if(members.length!==enrollment.source.memberCount)fail();
+   const source=enrollment.source;
+   const members=rows.packageInstallations.map(row=>packageInstallationSchema.parse(row.value)).flatMap(item=>{
+    const reference=item.artifact.bookMemberships?.find(member=>member.archiveSha256===archiveSha256);
+    return reference||item.artifact.bookArchiveSha256===archiveSha256?[{installation:item,reference}]:[];
+   });
+   if(members.length!==source.memberCount||members.some(({installation,reference})=>
+    installation.artifact.targetLanguage!==enrollment.languageContext.targetLanguageTag
+    ||installation.artifact.supportLanguage!==enrollment.languageContext.supportLanguageTag
+    ||reference&&(reference.bookId!==source.bookId||reference.bookVersionId!==source.bookVersionId||reference.memberCount!==source.memberCount)))fail();
+   const positions=members.flatMap(({reference})=>reference?[reference.memberIndex]:[]);
+   if(new Set(positions).size!==positions.length)fail();
   }
  }
  for(const {value:target} of rows.learningTargets){

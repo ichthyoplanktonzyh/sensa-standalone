@@ -1,12 +1,15 @@
-import type {InstalledPackage,InstalledPackageSummary} from './packageRecords';
+import type {InstalledPackage,InstalledPackageSummary,PackageBookMembership} from './packageRecords';
 
 /** Derived, device-local reads. The admitted packageCache record remains authoritative. */
 export type PackageCacheIdentity=Readonly<{key:string;digest:string}>;
+/** Source digest set in canonical order, independent of download/recovery order. */
+export type PackagePublicationIdentity=PackageCacheIdentity&Readonly<{bookArchiveSha256s:readonly string[];bookMemberships:readonly PackageBookMembership[]}>;
 export type PackageRouteCount=Readonly<{targetLanguage:string;supportLanguage:string;packageCount:number}>;
 
 export type PackageCacheProjectionQuery=
  |Readonly<{kind:'learning_choices';languageTag:string;normalizedPrefix:string;offset:number;limit:number}>
  |Readonly<{kind:'identities'}>
+ |Readonly<{kind:'publication_identities'}>
  |Readonly<{kind:'route_counts'}>
  |Readonly<{kind:'summaries';packageId?:string}>;
 
@@ -30,6 +33,7 @@ export const learningPackageChoicesSql=`SELECT summary_json FROM sensa_package_c
 
 export type PackageCacheProjectionResult<Query extends PackageCacheProjectionQuery>=
  Query['kind'] extends 'identities'?PackageCacheIdentity[]:
+ Query['kind'] extends 'publication_identities'?PackagePublicationIdentity[]:
  Query['kind'] extends 'route_counts'?PackageRouteCount[]:InstalledPackageSummary[];
 
 /** Generic record fixtures/corrupt cache rows must never become installed evidence. */
@@ -65,6 +69,14 @@ export const createPackageCacheSummary=(value:InstalledPackage):InstalledPackage
   manifest:{metadata:value.portableOrigin.manifest.metadata},
   publications:value.portableOrigin.publications,
  },
+});
+
+export const createPackagePublicationIdentity=(value:InstalledPackage):PackagePublicationIdentity=>({
+ key:value.key,digest:value.digest,
+ bookArchiveSha256s:value.portableOrigin.publications.map(publication=>publication.bookArchiveSha256).sort(),
+ bookMemberships:value.portableOrigin.publications.flatMap(publication=>publication.memberIndex===undefined?[]:[{
+  archiveSha256:publication.bookArchiveSha256,bookId:publication.book.bookId,bookVersionId:publication.book.bookVersionId,memberIndex:publication.memberIndex,memberCount:publication.memberCount,
+ }]).sort((a,b)=>a.archiveSha256.localeCompare(b.archiveSha256)),
 });
 
 export const sqlitePackageCacheProjectionSchema=`

@@ -4,7 +4,7 @@ import sqlite3InitModule from '@sqlite.org/sqlite-wasm';
 import {sensaPortableLightweightPackageValidatorVersion} from '@sensa/content-validator/portable-lightweight';
 import {portableBookDeliveryFixture} from '../../../scripts/support/portablePackageFixture.mts';
 import {preparePublishedBook} from '../../../apps/web/src/contentSupply/portable/portablePreparation.ts';
-import {createPackageCacheSummary} from '../../../apps/web/src/data/library/packageCacheProjection.ts';
+import {createPackageCacheSummary,createPackagePublicationIdentity} from '../../../apps/web/src/data/library/packageCacheProjection.ts';
 import {SqliteRecordDatabase} from '../../../apps/web/src/data/library/sqliteDatabase.ts';
 import {sqliteLibrarySchema} from '../../../apps/web/src/data/library/sqliteProtocol.ts';
 import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec.ts';
@@ -39,6 +39,7 @@ test('SQLite summary projection excludes execution/media and follows atomic cach
   assert(!JSON.stringify(summaries).includes('data:audio/'),'inventory must not transport Runtime media');
   assert(summaries.every(value=>!('resources' in value.content)&&!('assurance' in value.content)));
   assert.equal(summaries.flatMap(value=>value.content.entries).length,3);
+  assert.deepEqual(db.packageCacheProjection({kind:'publication_identities'}),records.map(createPackagePublicationIdentity).sort((a,b)=>a.key.localeCompare(b.key)));
   assert.deepEqual(db.packageCacheProjection({kind:'route_counts'}),[{
    targetLanguage:records[0]!.content.targetLanguage,supportLanguage:records[0]!.content.supportLanguage,packageCount:3,
   }]);

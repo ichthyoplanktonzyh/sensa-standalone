@@ -60,6 +60,11 @@ type BrowserSmokeBridge = {
   storageDiagnostics(options?:Readonly<{verifyIntegrity?:boolean}>): ReturnType<typeof readLibraryStorageDiagnostics>;
   transactionConcurrency(): Promise<{readersOverlap:boolean;writerWaited:boolean}>;
   supplyCheckpoint(): Promise<{key:string;packageId:string;version:number;bookDigests:string[]}[]>;
+  bookProvenanceCheckpointForTest():Promise<{
+    installations:import('./data/library/packageRecords').PackageInstallation[];
+    cache:{key:string;publications:{archiveSha256:string;memberIndex:number|null}[]}[];
+    identities:import('./data/library/packageCacheProjection').PackagePublicationIdentity[];
+  }>;
   discardPackageCacheForRecoveryTest():Promise<void>;
   learningCheckpoint(): Promise<{
     targetIds:string[];
@@ -337,6 +342,13 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
         version:pack.portableOrigin.manifest.metadata.version,
         bookDigests:pack.portableOrigin.publications.map(publication=>publication.bookArchiveSha256),
       })).sort((left,right)=>left.key.localeCompare(right.key));
+    },
+    async bookProvenanceCheckpointForTest(){
+      return readLibrary(async tx=>({
+        installations:(await tx.all<import('./data/library/packageRecords').PackageInstallation>('packageInstallations')).sort((a,b)=>a.key.localeCompare(b.key)),
+        cache:(await tx.packageCacheProjection({kind:'summaries'})).map(pack=>({key:pack.key,publications:pack.portableOrigin.publications.map(publication=>({archiveSha256:publication.bookArchiveSha256,memberIndex:publication.memberIndex??null})).sort((a,b)=>a.archiveSha256.localeCompare(b.archiveSha256))})),
+        identities:await tx.packageCacheProjection({kind:'publication_identities'}),
+      }));
     },
     async learningCheckpoint() {
       const [{languageRoutesSnapshot},{learningSystem}]=await Promise.all([

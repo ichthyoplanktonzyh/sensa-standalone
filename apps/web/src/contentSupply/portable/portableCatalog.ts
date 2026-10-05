@@ -11,11 +11,13 @@ import {
 } from '@sensa/content-validator/portable-book';
 
 import {
+  portablePackageKey,
   type InstalledPackage,
   type PackageInstallation,
   type PortablePublicationAttestation,
 } from '../../data/library/packageRecords';
 import {readLibrary,writeLibraryCache} from '../../data/library/store';
+import type {PackagePublicationIdentity} from '../../data/library/packageCacheProjection';
 import {installPreparedPortablePackages,installPublishedPortableBookMembers} from './portablePackage';
 import {readPublishedBook} from './portablePreparation';
 import {preparePublishedBookOffThread} from './portablePreparationClient';
@@ -80,6 +82,7 @@ const attestationFor=(
   manifest:SensaPortableBookManifest,
   bookArchiveSha256:string,
   member:SensaPortableBookMember,
+  memberIndex:number,
 ):PortablePublicationAttestation=>({
   format:'sensa-portable-publication-attestation-v2',
   publisher:manifest.publisher,
@@ -90,6 +93,7 @@ const attestationFor=(
   changeSummary:manifest.changeSummary,
   bookArchiveSha256,
   memberCount:manifest.members.length,
+  memberIndex,
   member,
 });
 
@@ -97,14 +101,14 @@ const installBookMembers=(
   archive:SensaPortableBookPackage,
   members:readonly SensaPortableBookPackageMember[],
   signal:AbortSignal,
-):Promise<readonly InstalledPackage[]>=>installPublishedPortableBookMembers(
-  members.map(({member,bytes,archive:memberArchive})=>({
-    bytes,
-    archive:memberArchive,
-    publication:attestationFor(archive.manifest,archive.archiveDigest,member),
-  })),
-  signal,
-);
+):Promise<readonly InstalledPackage[]>=>{
+  const positions=new Map(archive.manifest.members.map((member,index)=>[portablePackageKey(member.packageId,member.version),index]));
+  return installPublishedPortableBookMembers(members.map(({member,bytes,archive:memberArchive})=>{
+    const memberIndex=positions.get(portablePackageKey(member.packageId,member.version));
+    if(memberIndex===undefined)throw new Error('localFlow.catalogMismatch');
+    return {bytes,archive:memberArchive,publication:attestationFor(archive.manifest,archive.archiveDigest,member,memberIndex)};
+  }),signal);
+};
 
 export const downloadPublishedBook=async(
   raw:SensaPortableBookDescriptor,
@@ -133,15 +137,34 @@ const installationMatchesMember=(
   installation:PackageInstallation,
   archive:SensaPortableBookPackage,
   member:SensaPortableBookPackageMember,
-):boolean=>installation.artifact.kind==='portable_package'
-  &&installation.artifact.bookArchiveSha256===archive.archiveDigest
-  &&installation.artifact.packageId===member.member.packageId
+):boolean=>{
+ const reference=installation.artifact.bookMemberships?.find(value=>value.archiveSha256===archive.archiveDigest);
+ const matchesSource=reference
+  ?reference.bookId===archive.manifest.book.bookId
+   &&reference.bookVersionId===archive.manifest.book.bookVersionId
+   &&reference.memberCount===archive.manifest.members.length
+   &&archive.manifest.members[reference.memberIndex]?.packageId===member.member.packageId
+   &&archive.manifest.members[reference.memberIndex]?.version===member.member.version
+  :installation.artifact.bookArchiveSha256===archive.archiveDigest;
+ return matchesSource&&installation.artifact.packageId===member.member.packageId
   &&installation.artifact.version===member.member.version
   &&installation.artifact.digest===member.archive.archiveDigest
   &&installation.artifact.packageDigest===member.archive.packageDigest
   &&installation.artifact.byteLength===member.bytes.byteLength
   &&installation.artifact.targetLanguage===archive.manifest.route.targetLanguage
   &&installation.artifact.supportLanguage===archive.manifest.route.supportLanguage;
+};
+
+const recoverySourceDigests=(installation:PackageInstallation)=>[...new Set([
+ ...(installation.artifact.bookMemberships??[]).map(member=>member.archiveSha256),
+ ...(installation.artifact.bookArchiveSha256?[installation.artifact.bookArchiveSha256]:[]),
+])];
+
+const hasRecoveredPublication=(installation:PackageInstallation,cached:PackagePublicationIdentity|undefined,digest:string):boolean=>{
+ if(!cached||cached.digest!==installation.artifact.digest)return false;
+ const required=installation.artifact.bookMemberships?.find(member=>member.archiveSha256===digest);
+ return required?cached.bookMemberships.some(member=>member.archiveSha256===digest&&member.bookId===required.bookId&&member.bookVersionId===required.bookVersionId&&member.memberIndex===required.memberIndex&&member.memberCount===required.memberCount):cached.bookArchiveSha256s.includes(digest);
+};
 
 export type PortableRehydrationResult=Readonly<{
   ready:string[];
@@ -156,33 +179,33 @@ export const rehydratePublishedPortableInstallations=async(
 ):Promise<PortableRehydrationResult>=>{
   const snapshot=await readLibrary(async tx=>({
     installations:(await tx.all<PackageInstallation>('packageInstallations')),
-    cache:await tx.packageCacheProjection({kind:'identities'}),
+    cache:await tx.packageCacheProjection({kind:'publication_identities'}),
   }));
   const facts=new Map(snapshot.installations.map(value=>[value.key,value]));
   const stale=snapshot.cache.filter(value=>facts.get(value.key)?.artifact.digest!==value.digest);
   if(stale.length)await writeLibraryCache(async tx=>{
     for(const item of stale)tx.delete('packageCache',item.key);
   });
-  const ready=snapshot.cache
-    .filter(value=>facts.get(value.key)?.artifact.digest===value.digest)
-    .map(value=>value.key);
-  const cached=new Set(ready);
-  const blocked:string[]=[];
-  const failed:string[]=[];
-  const missing=snapshot.installations.filter(installation=>!cached.has(installation.key));
-  if(!missing.length)return {ready:ready.sort(),blocked,failed};
-
+  const cached=new Map(snapshot.cache.filter(value=>facts.get(value.key)?.artifact.digest===value.digest).map(value=>[value.key,value]));
+  const required=new Map(snapshot.installations.map(installation=>[installation.key,recoverySourceDigests(installation)]));
+  const blocked=new Set<string>();
+  const failed=new Set<string>();
+  const descriptorByDigest=new Map<string,SensaPortableBookDescriptor>();
+  for(const descriptor of descriptors)if(!descriptorByDigest.has(descriptor.sha256))descriptorByDigest.set(descriptor.sha256,descriptor);
   const groups=new Map<string,PackageInstallation[]>();
-  for(const installation of missing){
-    const digest=installation.artifact.bookArchiveSha256;
-    if(!digest){blocked.push(installation.key);continue;}
-    let group=groups.get(digest);
-    if(!group){group=[];groups.set(digest,group);}
-    group.push(installation);
+  for(const installation of snapshot.installations){
+    const wanted=required.get(installation.key)!;
+    if(!wanted.length&&!cached.has(installation.key)){blocked.add(installation.key);continue;}
+    for(const digest of wanted){
+      if(hasRecoveredPublication(installation,cached.get(installation.key),digest))continue;
+      let group=groups.get(digest);
+      if(!group){group=[];groups.set(digest,group);}
+      group.push(installation);
+    }
   }
   for(const [bookArchiveSha256,installations] of groups){
-    const descriptor=descriptors.find(item=>item.sha256===bookArchiveSha256);
-    if(!descriptor){blocked.push(...installations.map(item=>item.key));continue;}
+    const descriptor=descriptorByDigest.get(bookArchiveSha256);
+    if(!descriptor){for(const installation of installations)blocked.add(installation.key);continue;}
     try{
       const archive=await fetchPublishedBook(descriptor,signal);
       const selected:SensaPortableBookPackageMember[]=[];
@@ -199,16 +222,22 @@ export const rehydratePublishedPortableInstallations=async(
           archive,
           member,
         ))selected.push(member);
-        else blocked.push(installation.key);
+        else blocked.add(installation.key);
       }
       if(selected.length){
-        const restored=await installBookMembers(archive,selected,signal);
-        ready.push(...restored.map(item=>item.key));
+        await installBookMembers(archive,selected,signal);
       }
     }catch{
       if(signal.aborted)throw new Error('localFlow.downloadCancelled');
-      failed.push(...installations.map(item=>item.key).filter(key=>!blocked.includes(key)));
+      for(const installation of installations)if(!blocked.has(installation.key))failed.add(installation.key);
     }
   }
-  return {ready:ready.sort(),blocked:blocked.sort(),failed:failed.sort()};
+  // Sync can admit another cacheless source while a download is pending.
+  // Judge the final result against one current, coherent fact/cache snapshot.
+  const current=await readLibrary(async tx=>({installations:await tx.all<PackageInstallation>('packageInstallations'),cache:await tx.packageCacheProjection({kind:'publication_identities'})}));
+  const recovered=new Map(current.cache.map(value=>[value.key,value]));
+  const ready=new Set(current.installations.filter(installation=>recovered.get(installation.key)?.digest===installation.artifact.digest&&recoverySourceDigests(installation).every(digest=>hasRecoveredPublication(installation,recovered.get(installation.key),digest))).map(value=>value.key));
+  const pending=current.installations.filter(installation=>!ready.has(installation.key)).map(value=>value.key);
+  const unresolved=new Set(pending.filter(key=>blocked.has(key)||!failed.has(key)));
+  return {ready:[...ready].sort(),blocked:[...unresolved].sort(),failed:pending.filter(key=>failed.has(key)&&!unresolved.has(key)).sort()};
 };
