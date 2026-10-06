@@ -1,4 +1,4 @@
-import {afterAll,test,expect} from 'vitest';
+import {afterAll,test,expect,vi} from 'vitest';
 import {createHash,randomUUID} from 'node:crypto';
 import {unzipSync,zipSync} from 'fflate';
 import {sensaPortableBookManifestSchema,defaultSensaLanguageRoute,sensaPinnedLanguageContext} from '@sensa/contracts/sensa';
@@ -84,7 +84,13 @@ test('validated Book installation retains exact Manifest positions for shared me
    }
   }
   requested.length=0;
-  expect(await rehydratePublishedPortableInstallations([])).toEqual(restored);
+  const warmAdapter=await sqliteRecordAdapter();
+  const warmEntries=vi.spyOn(warmAdapter,'entries'),warmProjection=vi.spyOn(warmAdapter,'packageCacheProjection');
+  try{
+   expect(await rehydratePublishedPortableInstallations([])).toEqual(restored);
+   expect(warmEntries.mock.calls.filter(([table])=>table==='packageInstallations')).toHaveLength(1);
+   expect(warmProjection.mock.calls.filter(([query])=>query.kind==='publication_identities')).toHaveLength(1);
+  }finally{warmEntries.mockRestore();warmProjection.mockRestore();}
   expect(requested).toEqual([]);
   // A receiving device can have an older local publication while synchronized
   // installation facts already know its exact position. SHA alone is not enough.

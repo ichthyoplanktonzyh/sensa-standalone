@@ -1,5 +1,13 @@
 {
   "localFlow": {
+    "outsideLearningPlan": "不在後續學習計畫中",
+    "supplementalEmpty":"尚無單獨加入的內容","supplementalLearning": "補充學習",
+    "removeFromLearning": "移出學習",
+    "restoreToLearning": "重新加入學習",
+    "membershipRemoved": "已移出後續學習",
+    "membershipChanged": "學習來源已變更，請重新查看後操作。",
+    "membershipSavedReadFailed": "修改已儲存，暫時無法讀取。請重試讀取。",
+    "membershipUnconfirmed": "未能確認儲存結果，請核對目前狀態後再操作。",
     "clarificationSourceChanged": "請繼續對話，核對目前材料後再確認。",
     "packageAuthor": "作者",
     "packageFilesUnavailable": "有 {{count}} 個學習包缺少本機檔案。請重新匯入原檔案，或從目錄重新下載。",

@@ -55,6 +55,7 @@ export function DirectLearningScreen({active,languageContext,enrollmentId,onEnro
    const [saved,current]=await Promise.all([learningSystem.read({kind:'direct_enrollment',enrollmentId}),contentSupplySystem.read({kind:'direct_provisioning_task',enrollmentId})]);
    if(!live||sequence!==generation)return;
    if(!saved)throw new Error('localFlow.enrollFirst');setEnrollment(saved);setSelection(saved.selection);setTask(current);
+   if(saved.status==='removed')controller.current?.abort();
   }catch(error){if(live&&sequence===generation)setNotice(localFlowErrorKey(error,'localFlow.preparationReadFailed'));}
    finally{if(live&&sequence===generation)setLoading(false);}};
   void read();const stop=learningSystem.subscribe({kind:'direct_enrollment',enrollmentId},()=>void read()),stopTask=contentSupplySystem.subscribe({kind:'direct_provisioning_task',enrollmentId},()=>void read());
@@ -108,6 +109,7 @@ export function DirectLearningScreen({active,languageContext,enrollmentId,onEnro
    {task?.notice&&task.notice!==notice&&task.status!=='ready'&&<p role="status">{localFlowNotice(task.notice)}</p>}
    <div className="flex flex-wrap gap-3">
     {!enrollment&&!enrollmentId?<><button className={setupPrimary} disabled={busy||loading} onClick={()=>void confirm()}>{label('confirm')}</button><button className={setupButton} disabled={busy} onClick={()=>{readSequence.current++;setSelection(null);operation.current=null;}}>{localFlowText('cancel')}</button></>
+     :enrollment?.status==='removed'?<button className={setupPrimary} disabled={busy||loading||routeChanged} onClick={()=>void run(async()=>{await learningSystem.execute({kind:'change_supplemental_membership',operationId:crypto.randomUUID(),source:{kind:'stable_sense',id:enrollment.enrollmentId!},expectedRevision:enrollment.membershipRevision??0,active:true,languageContext});})}>{localFlowText('restoreToLearning')}</button>
      :enrollment?.status==='already_in_scope'?<button className={setupPrimary} disabled={busy||loading||routeChanged} onClick={()=>onTarget(enrollment.targetId)}>{label('view')}</button>
       :running?<><p role="status">{localFlowText(task?.status==='reviewing'?'reviewing':'generating')}</p><button className={setupButton} disabled={stopping} onClick={()=>void stop()}>{localFlowText('stopPreparation')}</button></>
        :<button className={setupPrimary} disabled={busy||loading||routeChanged} onClick={()=>void prepare()}>{localFlowText(task&&task.status!=='waiting'?'retryPreparation':'prepareResources')}</button>}

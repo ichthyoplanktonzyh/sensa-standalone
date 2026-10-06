@@ -13,7 +13,7 @@ import type {JourneyState} from './experience/personalMeaningJourney/store';
 
 type BrowserSmokeBridge = {
   copyVerifiedLearningCapacityForTest(manifestPath:string):Promise<{targets:number;runs:number;events:number}>;
-  learningCapacityCheckpointForTest(targetId:string):Promise<{memoryRevision:number;runs:number;events:number;activeRunId:string|null;activeTargetId:string|null}>;
+  learningCapacityCheckpointForTest(targetId:string):Promise<{targets:number;memoryRevision:number;runs:number;events:number;activeRunId:string|null;activeTargetId:string|null}>;
   setSpeechFixtureForTest(unavailable:boolean):Promise<void>;
   operatedStepMaterialsForTest():Promise<{eventId:string;runId:string;stepId:string;materializationId:string}[]>;
   meaningPinsForTest(id:string):Promise<Array<{senseId:string;senseVersionId:string}>>;
@@ -35,7 +35,10 @@ type BrowserSmokeBridge = {
   learningReadsForTest(reset?:boolean):Promise<Record<string,number>>;
   traceLearningReadsForTest(active:boolean):Promise<void>;
   learningSettlementFactsForTest():Promise<{targets:{targetId:string;memoryRevision:number;reps:number|null}[];actionEventCount:number;behavioralEvidenceCount:number}>;
-  failNextLearningCommitForTest(kind?:'action'|'quantity'|'finish'|'book_plan'):Promise<void>;
+  failNextLearningCommitForTest(kind?:'action'|'quantity'|'finish'|'book_plan'|'supplemental'):Promise<void>;
+  loseNextSupplementalResponseForTest():Promise<void>;
+  failSupplementalReadsForTest(active:boolean):Promise<void>;
+  supplementalDecisionsForTest():Promise<{states:import('./data/library/supplementalMemberships').SupplementalMembershipState[];commandCount:number}>;
   loseNextBookPlanResponseForTest():Promise<void>;
   failBookPlanReadsForTest(active:boolean):Promise<void>;
   loseNextLearningActionResponseForTest():Promise<void>;
@@ -65,6 +68,7 @@ type BrowserSmokeBridge = {
   storageDiagnostics(options?:Readonly<{verifyIntegrity?:boolean}>): ReturnType<typeof readLibraryStorageDiagnostics>;
   transactionConcurrency(): Promise<{readersOverlap:boolean;writerWaited:boolean}>;
   supplyCheckpoint(): Promise<{key:string;packageId:string;version:number;bookDigests:string[]}[]>;
+  portablePackageDigestForTest(packageKey:string):Promise<{sha256:string;byteLength:number}>;
   bookProvenanceCheckpointForTest():Promise<{
     installations:import('./data/library/packageRecords').PackageInstallation[];
     cache:{key:string;publications:{archiveSha256:string;memberIndex:number|null}[]}[];
@@ -78,6 +82,7 @@ type BrowserSmokeBridge = {
   learningArrangementCheckpointForTest():Promise<{
     session:import('./data/library/studyScopes').LocalLearningSession|null;
     scope:import('./data/library/studyScopes').LocalStudyScope|null;
+    runScope:import('./data/library/studyScopes').LocalStudyScope|null;
   }>;
   learningActivityRecordForTest(runId:string):Promise<{run:import('./learning/runtime/localProtocol').LocalLearningRun|null;originSession:import('./data/library/studyScopes').LocalLearningSession|null}>;
   learningCheckpoint(): Promise<{
@@ -119,7 +124,7 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
       if(!manifestPath.startsWith('/__capacity_fixture/'))throw new Error('Invalid capacity fixture path');
       const [{libraryTables},{decodeBackupValue,encodeBackupValue},{sqliteRecordAdapter}]=await Promise.all([import('./data/library/store'),import('./data/library/backupCodec'),import('./data/library/sqliteAdapter')]);
       const manifest=await fetch(manifestPath).then(response=>response.json()) as {format:string;targets:number;runs:number;events:number;batches:{table:string;file:string;rowCount:number;sha256:string}[]};
-      if(manifest.format!=='sensa-retention-capacity-facts-v1'||manifest.targets<1||manifest.targets>10000)throw new Error('Invalid capacity fixture manifest');
+      if(!['sensa-retention-capacity-facts-v1','sensa-learning-capacity-facts-v1'].includes(manifest.format)||manifest.targets<1||manifest.targets>10000)throw new Error('Invalid capacity fixture manifest');
       const adapter=await sqliteRecordAdapter();
       // Specialized fixture transport, not a product backup/atomic-restore
       // path. The Node producer fully replay-validates these exact facts before
@@ -152,7 +157,7 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
         const target=await tx.get<import('./learning/runtime/localProtocol').LocalLearningTarget>('learningTargets',targetId),activeRunId=await tx.get<string>('meta','learning-active');
         const run=activeRunId?await tx.get<import('./learning/runtime/localProtocol').LocalLearningRun>('learningRuns',activeRunId):null;
         if(!target)throw new Error('Capacity Target missing');
-        return {memoryRevision:target.memoryRevision,runs:await tx.count('learningRuns'),events:await tx.count('learningEvents'),activeRunId:activeRunId??null,activeTargetId:run?.targetId??null};
+        return {targets:await tx.count('learningTargets'),memoryRevision:target.memoryRevision,runs:await tx.count('learningRuns'),events:await tx.count('learningEvents'),activeRunId:activeRunId??null,activeTargetId:run?.targetId??null};
       });
     },
     async learningSettlementFactsForTest(){
@@ -183,7 +188,19 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
     },
     async failNextLearningCommitForTest(kind='action'){
       const {sqliteRecordAdapter}=await import('./data/library/sqliteAdapter');const adapter=await sqliteRecordAdapter(),commit=adapter.commit.bind(adapter);
-      adapter.commit=async mutation=>{const reject=kind==='finish'?mutation.deletes.some(row=>row.table==='meta'&&row.key==='learning-active'):mutation.puts.some(row=>kind==='quantity'?row.table==='settings'&&row.key==='language-route-study-plans':kind==='book_plan'?row.table==='curriculumEnrollments':row.table==='learningEvents');if(reject){adapter.commit=commit;throw new Error('fixture learning commit failed');}return commit(mutation);};
+      adapter.commit=async mutation=>{const reject=kind==='finish'?mutation.deletes.some(row=>row.table==='meta'&&row.key==='learning-active'):mutation.puts.some(row=>kind==='quantity'?row.table==='settings'&&row.key==='language-route-study-plans':kind==='book_plan'?row.table==='curriculumEnrollments':kind==='supplemental'?row.table==='supplementalMembershipStates':row.table==='learningEvents');if(reject){adapter.commit=commit;throw new Error('fixture learning commit failed');}return commit(mutation);};
+    },
+    async loseNextSupplementalResponseForTest(){
+      const {learningSystem}=await import('./learning/system');const execute=learningSystem.execute;
+      learningSystem.execute=(async command=>{const result=await execute(command);if(command.kind==='change_supplemental_membership'){learningSystem.execute=execute;throw new Error('fixture lost supplemental response');}return result;}) as typeof execute;
+    },
+    async failSupplementalReadsForTest(active){
+      const {learningSystem}=await import('./learning/system'),held=Reflect.get(learningSystem,'supplementalReadFailureForTest') as {active:boolean}|undefined;
+      if(held){held.active=active;return;}const control={active},read=learningSystem.read;Reflect.set(learningSystem,'supplementalReadFailureForTest',control);
+      learningSystem.read=(async query=>{if(query.kind==='supplemental_memberships'&&control.active)throw Error('fixture supplemental read failed');return read(query);}) as typeof read;
+    },
+    async supplementalDecisionsForTest(){
+      return readLibrary(async tx=>({states:await tx.all<import('./data/library/supplementalMemberships').SupplementalMembershipState>('supplementalMembershipStates'),commandCount:(await tx.all<{input:string}>('operations')).filter(row=>JSON.parse(row.input).kind==='learning.changeSupplementalMembership').length}));
     },
     async loseNextBookPlanResponseForTest(){
       const {learningSystem}=await import('./learning/system');const execute=learningSystem.execute;
@@ -379,6 +396,14 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
         bookDigests:pack.portableOrigin.publications.map(publication=>publication.bookArchiveSha256),
       })).sort((left,right)=>left.key.localeCompare(right.key));
     },
+    async portablePackageDigestForTest(packageKey){
+      // Read-only roundtrip through the public export boundary: this hydrates
+      // the real stored media and validates the original Portable identity.
+      const {contentSupplySystem}=await import('./contentSupply/system');
+      const {bytes}=await contentSupplySystem.execute({kind:'export_portable_package',packageKey});
+      const digest=await crypto.subtle.digest('SHA-256',new Uint8Array(bytes));
+      return {sha256:Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join(''),byteLength:bytes.byteLength};
+    },
     async bookProvenanceCheckpointForTest(){
       return readLibrary(async tx=>({
         installations:(await tx.all<import('./data/library/packageRecords').PackageInstallation>('packageInstallations')).sort((a,b)=>a.key.localeCompare(b.key)),
@@ -398,7 +423,8 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
       return readLibrary(async tx=>{
         const id=await tx.get<string>('meta','learning-session-active');
         const session=id?await tx.get<import('./data/library/studyScopes').LocalLearningSession>('learningSessions',id)??null:null;
-        return {session,scope:session?await tx.get<import('./data/library/studyScopes').LocalStudyScope>('studyScopes',session.scopeRevisionId)??null:null};
+        const active=await tx.get<string>('meta','learning-active'),run=active?await tx.get<import('./learning/runtime/localProtocol').LocalLearningRun>('learningRuns',active):null;
+        return {session,scope:session?await tx.get<import('./data/library/studyScopes').LocalStudyScope>('studyScopes',session.scopeRevisionId)??null:null,runScope:run?.studyScopeRevisionId?await tx.get<import('./data/library/studyScopes').LocalStudyScope>('studyScopes',run.studyScopeRevisionId)??null:null};
       });
     },
     async learningActivityRecordForTest(runId){

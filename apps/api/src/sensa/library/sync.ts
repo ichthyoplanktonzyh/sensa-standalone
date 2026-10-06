@@ -82,7 +82,7 @@ export function registerLibrarySync(app:Hono,access:Access){
    const byKey=new Map(next.rows.map(r=>[JSON.stringify([r.table,r.key]),r]));
    // Session focus and endings evolve, but their historical identity may not
    // disappear while Runs retain references to the frozen arrangement.
-   if(old.rows.some(row=>['learningSessions','learningRuns'].includes(row.table)&&!byKey.has(JSON.stringify([row.table,row.key]))))throw conflict('library_sync_history');
+   if(old.rows.some(row=>['learningSessions','learningRuns','supplementalMembershipStates'].includes(row.table)&&!byKey.has(JSON.stringify([row.table,row.key]))))throw conflict('library_sync_history');
    // Original Events and the decisions that reconcile concurrent histories are
    // durable Personal Library Facts. Neither may be deleted or rewritten by a
    // later materialized checkpoint.

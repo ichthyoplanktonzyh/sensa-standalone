@@ -5,6 +5,8 @@ export {
   learningSystem,
 } from './learningSystem';
 export type {
+  SupplementalMembershipProjection,
+  SupplementalMembershipPage,
   LearningBookPlanProjection,LearningBookRangeSelection,LearningBookMode,
   DirectLearningChoice,
   DirectLearningChoicePage,

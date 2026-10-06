@@ -1,5 +1,13 @@
 {
   "localFlow": {
+    "outsideLearningPlan": "Ngoài kế hoạch học sau này",
+    "supplementalEmpty":"Chưa có nội dung được thêm riêng","supplementalLearning": "Học bổ sung",
+    "removeFromLearning": "Loại khỏi nội dung học",
+    "restoreToLearning": "Thêm lại vào nội dung học",
+    "membershipRemoved": "Đã loại khỏi các buổi học sau",
+    "membershipChanged": "Nguồn học đã thay đổi. Hãy kiểm tra trạng thái hiện tại trước khi tiếp tục.",
+    "membershipSavedReadFailed": "Thay đổi đã được lưu nhưng không thể đọc lại. Hãy thử đọc lại.",
+    "membershipUnconfirmed": "Không thể xác nhận việc lưu. Hãy kiểm tra trạng thái hiện tại trước khi tiếp tục.",
     "clarificationSourceChanged": "Hãy tiếp tục trò chuyện để kiểm tra nội dung hiện tại trước khi xác nhận.",
     "packageAuthor": "Tác giả",
     "packageFilesUnavailable": "Gói thiếu tệp trên thiết bị này: {{count}}. Nhập lại tệp gốc hoặc tải lại từ danh mục.",

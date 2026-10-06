@@ -232,9 +232,10 @@ export const rehydratePublishedPortableInstallations=async(
       for(const installation of installations)if(!blocked.has(installation.key))failed.add(installation.key);
     }
   }
-  // Sync can admit another cacheless source while a download is pending.
-  // Judge the final result against one current, coherent fact/cache snapshot.
-  const current=await readLibrary(async tx=>({installations:await tx.all<PackageInstallation>('packageInstallations'),cache:await tx.packageCacheProjection({kind:'publication_identities'})}));
+  // A complete warm cache has no asynchronous work after its coherent snapshot;
+  // do not decode the entire installation set twice. Downloads/cache repairs
+  // do await other work, so sync may have admitted another source meanwhile.
+  const current=stale.length===0&&groups.size===0?snapshot:await readLibrary(async tx=>({installations:await tx.all<PackageInstallation>('packageInstallations'),cache:await tx.packageCacheProjection({kind:'publication_identities'})}));
   const recovered=new Map(current.cache.map(value=>[value.key,value]));
   const ready=new Set(current.installations.filter(installation=>recovered.get(installation.key)?.digest===installation.artifact.digest&&recoverySourceDigests(installation).every(digest=>hasRecoveredPublication(installation,recovered.get(installation.key),digest))).map(value=>value.key));
   const pending=current.installations.filter(installation=>!ready.has(installation.key)).map(value=>value.key);

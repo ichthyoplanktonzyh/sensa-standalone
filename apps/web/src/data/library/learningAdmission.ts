@@ -19,7 +19,7 @@ export async function admitLearningSystemTransaction(
 ):Promise<void>{
   const changes=await tx.proposedChanges(learningTransitionTables);
   const relevant=changes.filter(change=>(
-    ['curriculumEnrollments','studyScopes','learningSessions','learningTargets','learningRuns','learningEvents','learningReconciliations'].includes(change.table)
+    ['curriculumEnrollments','supplementalMembershipStates','studyScopes','learningSessions','learningTargets','learningRuns','learningEvents','learningReconciliations'].includes(change.table)
     ||change.table==='meta'&&['learning-active','learning-session-active'].includes(change.key)
     ||change.table==='settings'&&change.key==='language-route-study-plans'
   ));

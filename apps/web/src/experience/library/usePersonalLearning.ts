@@ -56,6 +56,7 @@ export function usePersonalLearning(sourceView:{kind:'library'}|{kind:'target';t
   setSourceReadKey(routeKey);
   setSourceFailureKey(null);
   setTargets(learning.targets);setTasks(personalTasks);setPreparationAvailable(supply.preparationAvailable);setClock(Date.now());
+  for(const task of personalTasks)if(task.curriculumActive===false)backgroundPreparation.cancel(task.id);
  };
  const failedSourceRead=()=>{if(currentRoute.current===routeKey){setNotice(localFlowText('preparationReadFailed'));setSourceFailureKey(routeKey);setSourceReadKey(routeKey);setTaskSources(new Map());}};
  latestRefresh.current=()=>refresh().catch(failedSourceRead);
@@ -84,6 +85,7 @@ export function usePersonalLearning(sourceView:{kind:'library'}|{kind:'target';t
   enroll:(source:PersonalMeaningLearningSource,useContext:boolean)=>perform(async()=>{const enrollment=await learningSystem.execute({kind:'enroll_personal',operationId:crypto.randomUUID(),source,languageContext,useContext});if(enrollment.provisioningStatus!=='ready')await prepare(enrollment.provisioningTaskId,source);}),
   update:(taskId:string,source:PersonalMeaningLearningSource,useContext:boolean)=>perform(async()=>{const revised=await contentSupplySystem.execute({kind:'revise_provisioning',operationId:crypto.randomUUID(),taskId,source,languageContext,useContext});if(revised.status!=='covered')await prepare(taskId,source);}),
   prepare:(id:string)=>perform(()=>prepare(id)),
+  restore:(task:ContentProvisioningTask)=>perform(()=>learningSystem.execute({kind:'change_supplemental_membership',operationId:crypto.randomUUID(),source:{kind:'personal_meaning_alignment',id:task.id},expectedRevision:task.curriculumRevision??0,active:true,languageContext})),
   stop:(taskId:string)=>{backgroundPreparation.cancel(taskId);void contentSupplySystem.execute({kind:'stop_provisioning',operationId:crypto.randomUUID(),taskId}).catch(()=>setNotice(localFlowText('preparationPreserved')));},
   exportPackage:(taskId:string)=>perform(()=>contentSupplySystem.execute({kind:'export_personal_portable_package',taskId})),
  };

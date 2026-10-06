@@ -71,6 +71,21 @@ const booksMerged=mergeLibraryReplicas(independent as any);
 assert.deepEqual(booksMerged.conflicts.sort(),[replicaEntryId({table:'curriculumEnrollments',key:bookA} as any),replicaEntryId({table:'curriculumEnrollments',key:bookB} as any)].sort(),'independent records must not silently create two active Books on one Route');
 const booksHeld=partitionLibraryReplicaConflicts({...independent,merged:booksMerged.entries,conflicts:booksMerged.conflicts} as any);
 assert.deepEqual(booksHeld.local.map(row=>row.key),[bookA]);assert.deepEqual(booksHeld.upload.map(row=>row.key),[bookB]);
+// Metadata-only merge boundary fixture, not admitted learning content or an
+// outcome. A historical full-inventory Scope must not freeze future policies.
+const activeSessionId=crypto.randomUUID(),historicalScopeId=crypto.randomUUID(),futureTargetId=crypto.randomUUID();
+const activeFacts=[
+ entry('meta','learning-session-active',activeSessionId),
+ entry('learningSessions',activeSessionId,{id:activeSessionId,activeRunId:ids.localRun,scopeRevisionId:historicalScopeId,endedAt:null}),
+ entry('learningRuns',ids.localRun,{id:ids.localRun,targetIds:[ids.target],studyScopeRevisionId:historicalScopeId,policyProfileId:'lightweight',policyProfileVersion:'1',completedAt:null}),
+ entry('studyScopes',historicalScopeId,{id:historicalScopeId,members:[{targetId:ids.target,policy:{profileId:'lightweight',profileVersion:'1'}},{targetId:futureTargetId,policy:{profileId:'lightweight',profileVersion:'1'}}]}),
+ entry('learningTargets',ids.target,{id:ids.target,committedPolicy:{profileId:'lightweight',profileVersion:'1'}}),
+ entry('learningTargets',futureTargetId,{id:futureTargetId,committedPolicy:null,policyAssignment:{profileId:'four_stage'}}),
+];
+const mergeActive=(facts:Entry[])=>learningReplica.merge({base:facts,local:facts,remote:facts} as any,()=>({entries:facts,conflicts:[]}));
+assert.deepEqual(mergeActive(activeFacts).conflicts,[],'unstarted targets in a legacy Scope remain outside the active Run policy lock');
+const driftedActive=activeFacts.map(row=>row.table==='learningTargets'&&row.key===ids.target?entry('learningTargets',row.key,{id:row.key,committedPolicy:{profileId:'four_stage',profileVersion:'1'}}):row);
+assert.deepEqual(mergeActive(driftedActive).conflicts,[conflict],'the actual started participant remains protected');
 assert.equal(isReplicatedLibraryEntry('meta','package-catalog'),false,'Content Supply discovery cache stays device-local');
 assert.equal(isReplicatedLibraryEntry('settings','providers'),false,'provider credentials stay device-local');
 assert.equal(isReplicatedLibraryEntry('packageInstallations','artifact'),true);

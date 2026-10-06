@@ -11,6 +11,7 @@ export type PackageCacheProjectionQuery=
  |Readonly<{kind:'identities'}>
  |Readonly<{kind:'publication_identities'}>
  |Readonly<{kind:'route_counts'}>
+ |Readonly<{kind:'summaries_by_keys';keys:readonly string[]}>
  |Readonly<{kind:'summaries';packageId?:string}>;
 
 /** All versions of one package share this prefix in the primary-key index. */

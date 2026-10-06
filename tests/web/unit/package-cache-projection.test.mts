@@ -34,6 +34,10 @@ test('SQLite summary projection excludes execution/media and follows atomic cach
   assert.deepEqual(summaries,records.map(createPackageCacheSummary).sort((a,b)=>a.key.localeCompare(b.key)));
   assert.deepEqual(db.packageCacheProjection({kind:'summaries',packageId:records[0]!.portableOrigin.manifest.metadata.packageId}),[createPackageCacheSummary(records[0]!)]);
   assert.deepEqual(db.packageCacheProjection({kind:'summaries',packageId:'missing-package'}),[]);
+  assert.deepEqual(db.packageCacheProjection({kind:'summaries_by_keys',keys:[records[0]!.key,records[0]!.key,'missing-package']}),[createPackageCacheSummary(records[0]!)]);
+  assert.deepEqual(db.packageCacheProjection({kind:'summaries_by_keys',keys:[]}),[]);
+  const exactPlan=raw.exec({sql:'EXPLAIN QUERY PLAN SELECT summary_json FROM sensa_package_cache_projection WHERE package_key IN (SELECT value FROM json_each(?)) ORDER BY package_key',bind:[JSON.stringify([records[0]!.key])],rowMode:'object',returnValue:'resultRows'}) as {detail:string}[];
+  assert(exactPlan.some(row=>/SEARCH.*sensa_package_cache_projection.*INDEX/u.test(row.detail)),'explicit source keys must use the summary primary-key index');
   const plan=raw.exec({sql:'EXPLAIN QUERY PLAN SELECT summary_json FROM sensa_package_cache_projection WHERE package_key>=? AND package_key<?',bind:['a','b'],rowMode:'object',returnValue:'resultRows'}) as {detail:string}[];
   assert(plan.some(row=>/SEARCH.*INDEX/u.test(row.detail)),'a single-package preview must use a bounded index range, not scan the inventory');
   assert(!JSON.stringify(summaries).includes('data:audio/'),'inventory must not transport Runtime media');
@@ -135,7 +139,7 @@ test('the derived index is rebuilt from the current cache without changing sourc
  for(const value of records)raw.exec({sql:'INSERT INTO sensa_records(table_name,record_key,value_json) VALUES(?,?,?)',bind:['packageCache',value.key,encoded(value)]});
  raw.exec({sql:'INSERT INTO sensa_records(table_name,record_key,value_json) VALUES(?,?,?)',bind:['meta','owner-proof',encoded({value:'preserve-me'})]});
  try{
-  assert.equal(db.initialize().schemaVersion,15);
+  assert.equal(db.initialize().schemaVersion,16);
   assert.equal(db.packageCacheProjection({kind:'identities'}).length,3);
   for(const value of records)assert.equal(db.get('packageCache',value.key),encoded(value));
   assert.equal(db.get('meta','owner-proof'),encoded({value:'preserve-me'}));

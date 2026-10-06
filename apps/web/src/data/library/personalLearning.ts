@@ -23,6 +23,7 @@ import {defaultSensaProvider,type Provider,type ProviderSettings} from './provid
 import {complete,digest} from './transport';
 import {requireLanguageRouteContext} from './language';
 import {assertPersonalProvisioningSource} from './personalProvisioningSource';
+import {assertSupplementalMembershipActive} from './supplementalMemberships';
 export type PersonalLearning=ContentProvisioningTask;
 export type ContentAttempt={fixedInput:Pick<ContentProvisioningTask,'source'|'languageContext'|'planRevision'|'useContext'>;contextPin?:string[];generationCheckpoint?:ContentAgentCheckpoint;generationSteps?:ContentGenerationStep[];id:string;taskId:string;createdAt:string;readyAt:string|null;contentProvider:Provider;reviewProvider:Provider|null;request:SensaContentGenerationRequest|null;bundle:SensaMaterialCandidateBundle|null;review:Awaited<ReturnType<ContentReviewer>>|null;validation:Awaited<ReturnType<typeof validateBundle>>|null;status:string;resumedFrom:string|null;grant:{id:string;contextDigest:string;recipients:string[]}|null};
 const contentSupplyLearningCommand=<T>(operation:Parameters<typeof command>[0],work:(tx:LibraryTransaction)=>Promise<T>)=>command(operation,async tx=>{const result=await work(tx);await admitContentSupplyTransaction(tx,operation);await admitLearningSystemTransaction(tx,operation);return result;});
@@ -52,6 +53,7 @@ export async function enrollPersonal(operationId:string,source:PersonalMeaningLe
  if(source.targetLanguageTag!==context.targetLanguageTag)throw new Error('localFlow.routeLanguageMismatch');
  const sourceKey=personalLearningSourceKey(source.reference),taskId=stableUuid(`sensa-personal-learning:${sourceKey}:${context.languageRouteId}`),existing=await tx.get<PersonalLearning>('personalLearning',taskId);if(existing){
   currentSource(existing,source);
+  await assertSupplementalMembershipActive(tx,existing.curriculumMembershipId);
   if(!existing.replacing&&!['generating','reviewing'].includes(existing.status)){
    const coverage=await provisioningCoverage(tx,existing,source);
    if(coverage&&coverage.id!==existing.curriculumMembershipId){existing.status='covered';existing.coveredByMembershipId=coverage.id;existing.notice='';existing.leaseUntil=0;tx.put('personalLearning',existing.id,existing);}
@@ -72,6 +74,7 @@ async function checkReviewPolicy(tx:LibraryTransaction,review:Provider|null){
 async function active(tx:LibraryTransaction,id:string,attemptId:string,source:ContentProvisioningSource,content:Provider,review:Provider|null){
  const owner=await learningOwner(tx),task=await tx.get<PersonalLearning>('personalLearning',id);
  if(!task||task.attemptId!==attemptId||!['generating','reviewing'].includes(task.status)||task.leaseUntil<Date.now())throw new Error('localFlow.preparationExpired');
+ await assertSupplementalMembershipActive(tx,task.curriculumMembershipId);
  currentSource(task,source);if(isDirectProvisioningReference(task.source)){
   await assertDirectProvisioningReference(tx,task.source);
   if(source.sourceKind!=='stable_sense')throw new Error('localFlow.meaningChanged');
@@ -89,6 +92,7 @@ export async function preparePersonal(id:string,source:ContentProvisioningSource
  const attemptId=crypto.randomUUID();
  const begun=await contentSupplyCommand({id:attemptId,kind:'personal.prepare',input:{id,contentProvider,reviewProvider}},async tx=>{
   const owner=await learningOwner(tx),task=await tx.get<PersonalLearning>('personalLearning',id);if(!task)throw new Error('localFlow.enrollFirst');currentSource(task,source);
+  await assertSupplementalMembershipActive(tx,task.curriculumMembershipId);
   if(source.sourceKind==='personal_meaning_alignment'){
    await assertPersonalProvisioningSource(tx,source,task.useContext?task.contextPin:source.context.personalSemanticAnchorRevisionIds);
    task.contextPin??=[...source.context.personalSemanticAnchorRevisionIds];

@@ -1,4 +1,4 @@
-import {lazy,Suspense,useEffect,useRef,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import '../../i18n/accountResources';
 import {useTranslation} from 'react-i18next';
 import {HomeScreen} from '../components/HomeScreen';
@@ -10,7 +10,6 @@ import {useAccountExperience} from '../account/AccountContext';
 import {settleOperation} from './operationSettlement';
 import {createRefreshCoordinator} from './refreshCoordinator';
 
-const LearningPreferencesPanel=lazy(()=>import('../components/learning/LearningPreferencesPanel').then(module=>({default:module.LearningPreferencesPanel})));
 const loadLearningSystem=()=>import('../../learning/system/learningSystem').then(module=>module.learningSystem);
 
 export function HomeLearningController({active=true}:{active?:boolean}){
@@ -28,9 +27,6 @@ export function HomeLearningController({active=true}:{active?:boolean}){
  const summaryReady=summaryEpoch===viewEpoch.current.version;
  const [busy,setBusy]=useState(false);
  const [notice,setNotice]=useState('');
- const [quantityTarget,setQuantityTarget]=useState<string|null>(null);
- const [quantityChoice,setQuantityChoice]=useState(20);
- const [quantityIntent,setQuantityIntent]=useState<'mixed'|'review_only'>('mixed');
  const refresh=async()=>{
   const version=viewEpoch.current.version;
   if(!active||viewEpoch.current.key!==viewKey)return;
@@ -102,8 +98,7 @@ export function HomeLearningController({active=true}:{active?:boolean}){
   const targetId=reviewOnly?projection?.nextReviewTargetId:projection?.nextTargetId;
   if(!targetId){goMain('s-learning-entry');return;}
   const intent=reviewOnly?'review_only':'mixed';
-  if(projection?.dailyLimit==null){setQuantityChoice(20);setQuantityIntent(intent);setQuantityTarget(targetId);return;}
-  await begin(targetId,projection.dailyLimit,intent);
+  await begin(targetId,projection?.dailyLimit??20,intent);
  };
  const authoritativeSummary=summaryReady&&libraryAvailability==='authoritative';
  const status=notice
@@ -119,14 +114,7 @@ export function HomeLearningController({active=true}:{active?:boolean}){
    onResume={projection?.activeRunId?()=>setViewMode('lightweight'):undefined}
    onStartMixed={()=>void start()} onStartReview={()=>void start(true)}
    reviewDueN={projection?.reviewDueCount??0} newAvailable={projection?.readyInitialCount??0}
-   onRecordContext={()=>goMain('s-semantic-world',{worldAction:'create'})}
+   onRecordContext={()=>goMain('s-semantic-world',{worldAction:'add'})}
    mixedReadyN={projection?.mixedReadyCount??0}/>
-  {quantityTarget&&projection?.nextTargetPolicy&&<Suspense fallback={null}><LearningPreferencesPanel policyOptions={projection.policyOptions} fixedPolicy defaultPolicy={projection.nextTargetPolicy} dailyNewCount={quantityChoice} onPolicyChange={()=>{}} onDailyNewCountChange={setQuantityChoice} busy={busy} status={notice&&<p role="status">{localFlowNotice(notice)}</p>} onClose={()=>setQuantityTarget(null)} closeLabel={localFlowText('confirmAndStart')} onConfirm={()=>void (async()=>{
-   const learningSystem=await loadLearningSystem();
-   const confirmed=await perform(()=>learningSystem.execute({kind:'confirm_quantity',operationId:crypto.randomUUID(),languageContext,dailyLimit:quantityChoice}));
-   if(!confirmed)return;
-   const targetId=quantityTarget;setQuantityTarget(null);await begin(targetId,quantityChoice,quantityIntent);
-  })()}
-  /></Suspense>}
  </>;
 }

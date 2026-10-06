@@ -67,13 +67,14 @@ export function BookPlanPanel({active}:{active:boolean}){
   setBusy(false);
  };
  return <>
-  {state.key===key&&state.error?<div role="alert" className="mt-7"><p>{localFlowText('progressReadFailed')}</p><button className={button+' mt-3'} onClick={()=>retry.current()}>{t('reliability.retry')}</button></div>:books===null?<p role="status" aria-busy="true" className="mt-7 text-sm text-fg-tertiary">{localFlowText('loadingSensa')}</p>:books.length>0?<section className="mt-7 rounded-overlay border border-border-subtle bg-surface-panel p-6" aria-labelledby="study-books-title">
+  {state.key===key&&state.error?<div role="alert" className="mt-7"><p>{localFlowText('progressReadFailed')}</p><button className={button+' mt-3'} onClick={()=>retry.current()}>{t('reliability.retry')}</button></div>:books===null?<p role="status" aria-busy="true" className="mt-7 text-sm text-fg-tertiary">{localFlowText('loadingSensa')}</p>:<section className="mt-7 rounded-overlay border border-border-subtle bg-surface-panel p-6" aria-labelledby="study-books-title">
    <h2 id="study-books-title" className="text-lg font-medium">{t('bookPlanHeading.title')}</h2>
+   {books.length===0&&<p className="mt-3 text-sm text-fg-secondary">{t('bookPlanHeading.empty')}</p>}
    <ul className="mt-3 divide-y divide-border-subtle">{books.map(book=><li key={book.enrollmentId} className="flex flex-wrap items-center justify-between gap-4 py-4">
     <div className="min-w-0 flex-1"><h3 className="font-medium">{title(book)}</h3><p className="mt-1 text-sm text-fg-secondary">v{book.bookVersionNumber} · {t('bookPlan.'+book.mode)} · {range(book)}</p></div>
     <button className={button} onClick={()=>edit(book)} aria-label={t('bookPlan.editNamed',{title:title(book)})}>{t('bookPlan.edit')}</button>
    </li>)}</ul>
-  </section>:null}
+  </section>}
   {editing&&<SensaOverlayLayout variant="sheet" measure="compact" className="z-[150]" labelledBy="book-plan-title" onDismiss={()=>{if(!busy)setEditing(null);}} dismissOnBackdrop regions={{
    header:<div className="flex items-center justify-between gap-4"><div className="min-w-0 flex-1"><h2 id="book-plan-title" className="break-words text-lg font-medium">{title(editing)}</h2><p className="text-sm text-fg-tertiary">v{editing.bookVersionNumber}</p></div><button className={button} disabled={busy} onClick={()=>setEditing(null)}>{t('bookPlan.cancel')}</button></div>,
    primary:<div className="space-y-6">

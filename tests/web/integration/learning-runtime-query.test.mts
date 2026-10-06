@@ -1,4 +1,4 @@
-import {test,expect} from 'vitest';
+import {test,expect,afterAll} from 'vitest';
 import {defaultSensaLanguageRoute,sensaPinnedLanguageContext} from '@sensa/contracts/sensa';
 import {portablePackageFixture} from '../../../scripts/support/portablePackageFixture.mts';
 import {contentSupplySystem} from '../../../apps/web/src/contentSupply/system';
@@ -7,6 +7,11 @@ import {command,openLibrary} from '../../../apps/web/src/data/library/store';
 import {sqliteRecordAdapter} from '../../../apps/web/src/data/library/sqliteAdapter';
 import {addLanguageRoute,updateLanguageRouteSupport} from '../../../apps/web/src/data/library/language';
 import {readLibrary} from '../../../apps/web/src/data/library/store';
+import {useNodeLearningCapacityStorage} from '../../../scripts/support/nodeLearningCapacity.mts';
+import {readLearningRuntimeProjection} from '../../../apps/web/src/learning/system/learningProjection';
+
+Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined});
+const database=await useNodeLearningCapacityStorage();afterAll(()=>database.close());
 
 test('Runtime and Target detail use exact reads, plan only at a Run boundary, and never enumerate collection material or history',async()=>{
  Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined});
@@ -36,6 +41,21 @@ test('Runtime and Target detail use exact reads, plan only at a Run boundary, an
   expect(current.nextTargetId).toBeNull();
   expect(current.dailyLimit).toBe(20);
   expect(targetReads).toEqual([targetId]);
+  if(current.runtime?.kind!=='lightweight'||!current.runtime.target.packageKey)throw new Error('Fixture must have a current published package');
+  const sourceKey=current.runtime.target.packageKey;
+  const sourceGet=adapter.get.bind(adapter),sourceMedia=adapter.portableMedia.bind(adapter);
+  adapter.get=async(table,key)=>{if(table==='packageCache')throw new Error('Source summary hydrated a full Package');return sourceGet(table,key);};
+  adapter.portableMedia=async()=>{throw new Error('Source summary hydrated Runtime audio');};
+  let sources:Awaited<ReturnType<typeof contentSupplySystem.read<{kind:'package_summaries';packageKeys:readonly string[]}>>>;
+  try{sources=await contentSupplySystem.read({kind:'package_summaries',packageKeys:[sourceKey,sourceKey,'missing-source']});}
+  finally{adapter.get=sourceGet;adapter.portableMedia=sourceMedia;}
+  expect(sources).toHaveLength(1);expect(sources[0]!.key).toBe(sourceKey);
+  expect(sources[0]!.hasAssurance).toBe(false);
+  expect(sources[0]!.content.entries).toHaveLength(1);
+  expect(sources[0]!.content).not.toHaveProperty('resources');
+  expect(sources[0]!.content).not.toHaveProperty('assurance');
+  expect(JSON.stringify(sources)).not.toContain('data:audio/');
+  expect(await contentSupplySystem.read({kind:'package_summaries',packageKeys:[]})).toEqual([]);
   targetReads.length=0;
   const detail=await learningSystem.read({kind:'target',targetId,languageContext:context,clock:Date.parse(at)});
   expect(detail.target).toEqual(expected.targets.find(target=>target.targetId===targetId));
@@ -78,6 +98,16 @@ test('Runtime and Target detail use exact reads, plan only at a Run boundary, an
  expect(completed.runtime?.completed).toBe(true);expect(completed.nextTargetId).not.toBe(targetId);expect(completed.nextTargetId).not.toBeNull();
  const saved=await learningSystem.read({kind:'workspace',languageContext:context,clock:Date.parse(at)});
  expect(saved.records).toHaveLength(1);expect(saved.targets.find(target=>target.targetId===targetId)?.nextReviewAt).toBeTruthy();
+ await learningSystem.execute({kind:'finish',operationId:id(),runId:completed.runtime!.runId,at});
+ const dueClock=Date.parse(saved.targets.find(target=>target.targetId===targetId)!.nextReviewAt!);
+ const readTarget=adapter.get.bind(adapter);adapter.get=async(table,key)=>{
+  if(table==='learningTargets'&&key!==targetId)throw Error('Unselected initial content must not delay a ready review');
+  return readTarget(table,key);
+ };
+ try{
+  const reviewOnly=await readLearningRuntimeProjection({languageContext:context,clock:dueClock,retries:[],sessionIntent:'review_only'});
+  expect(reviewOnly.nextTargetId).toBe(targetId);
+ }finally{adapter.get=readTarget;}
 });
 
 test('Home plans the current exact language pair after a support revision without rebinding the open Run',async()=>{
@@ -96,6 +126,9 @@ test('Home plans the current exact language pair after a support revision withou
   targets.push((await learningSystem.execute({kind:'enroll_package',operationId:id(),packageKey:key,languageContext:context}))[0]!);
  }
  await learningSystem.execute({kind:'confirm_quantity',operationId:id(),languageContext:context,dailyLimit:20});
+ const adapter=await sqliteRecordAdapter(),allHome=adapter.homeLearningProjection.bind(adapter);
+ adapter.homeLearningProjection=async()=>{throw Error('Home must use indexed counts rather than decoding every Target');};
+ try{
  expect((await learningSystem.read({kind:'home',languageContext:context})).readyInitialCount).toBe(2);
  await learningSystem.execute({kind:'start',operationId:id(),targetId:targets[0]!,languageContext:context,dailyLimit:20});
  const before=await learningSystem.read({kind:'runtime',languageContext:context});
@@ -113,4 +146,5 @@ test('Home plans the current exact language pair after a support revision withou
  const next=await learningSystem.read({kind:'home',languageContext:revised});
  expect(next.readyInitialCount).toBe(1);expect(next.activeRunId).toBe(run.id);
  expect((await learningSystem.read({kind:'workspace',languageContext:revised})).queue.initialReadyTargetIds).toEqual([current]);
+ }finally{adapter.homeLearningProjection=allHome;}
 });

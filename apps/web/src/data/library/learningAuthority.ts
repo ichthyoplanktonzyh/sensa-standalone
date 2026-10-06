@@ -37,6 +37,8 @@ import {runMaterial,runBaselineMaterial,runStepMaterial,runMaterialById,pinRunSt
 import {studyScopeSchema,learningSessionSchema,activeLearningSessionKey,type LocalStudyScope,type LocalStudyScopeMember,type LocalLearningSession} from './studyScopes';
 import type {LearningPolicyId} from '../../learning/runtime/policyProfiles';
 import {curriculumSourceEligibility} from '../../learning/runtime/curriculumEligibility';
+import {supplementalMembershipStateSchema,supplementalSourceDescriptor,assertSupplementalStateSource,type SupplementalMembershipState} from './supplementalMemberships';
+import {DEFAULT_DAILY_NEW_SENSE_LIMIT} from './studyPlans';
 
 type RequireRow=(table:Table,id:string)=>any;
 
@@ -118,6 +120,15 @@ export type LearningSystemStateInput={
 export function assertLearningSystemState(input:LearningSystemStateInput){
  const {rows,maps,identity,routes,requireRow,requirePersonalSource,validateLanguageContext,operationInput,fail}=input;
  const uuid=z.string().uuid(),timestamp=z.string().datetime({offset:true});
+ for(const {key,value} of rows.supplementalMembershipStates){
+  const state=supplementalMembershipStateSchema.parse(value);
+  if(key!==state.id||state.learnerUserId!==identity.learnerId)fail();
+  validateLanguageContext(state.languageContext);
+  assertSupplementalStateSource(state,supplementalSourceDescriptor(state.source,requireRow(state.source.kind==='stable_sense'?'curriculumEnrollments':'personalLearning',state.source.id),identity.learnerId));
+  const creation=operationInput(state.createdByOperationId),latest=operationInput(state.changedByOperationId);
+  if(creation&&(creation.kind!=='learning.changeSupplementalMembership'||creation.input.active!==false||creation.input.expectedRevision!==0||!backupEqual(creation.input.source,state.source)))fail();
+  if(latest&&(latest.kind!=='learning.changeSupplementalMembership'||latest.input.active!==(state.status==='active')||latest.input.expectedRevision!==state.revision-1||!backupEqual(latest.input.source,state.source)))fail();
+ }
  for(const {key,value:raw} of rows.curriculumEnrollments){
   const enrollment=curriculumEnrollmentSchema.parse(raw);
   if(key!==enrollment.id||enrollment.learnerUserId!==identity.learnerId)fail();
@@ -406,7 +417,7 @@ export function assertLearningSystemState(input:LearningSystemStateInput){
 }
 
 const learningTransitionTables=[
- 'curriculumEnrollments','studyScopes','learningSessions','learningTargets','learningRuns','learningEvents','learningReconciliations','meta','settings',
+ 'curriculumEnrollments','supplementalMembershipStates','studyScopes','learningSessions','learningTargets','learningRuns','learningEvents','learningReconciliations','meta','settings',
 ] as const satisfies readonly Table[];
 type LearningTransitionTable=(typeof learningTransitionTables)[number];
 
@@ -431,6 +442,7 @@ function assertScopeMember(member:LocalStudyScopeMember,scope:LocalStudyScope,ta
   const original=requireFact(target.curriculumMemberships.find(item=>item.id===source.membershipId),'Study Scope source is missing.');
   if(original.sourceKind!==source.sourceKind||original.packageKey!==source.packageKey||original.revision<source.membershipRevision||!sameLearningSessionDirection(original.languageContext,scope.languageContext)||source.enrollmentId!==(typeof original.provenance.curriculumEnrollmentId==='string'?original.provenance.curriculumEnrollmentId:null)||original.revision===source.membershipRevision&&!backupEqual(original.provenance,source.provenance))reject('Study Scope source identity is inconsistent.');
   const snapshot={...original,status:source.membershipStatus,provenance:source.provenance};
+  if(source.supplementalState&&(source.supplementalState.id!==source.membershipId||source.supplementalState.targetId!==target.id||source.supplementalState.status!=='active'||source.supplementalState.languageContext.languageRouteId!==scope.languageContext.languageRouteId||source.supplementalState.languageContext.targetLanguageTag!==scope.languageContext.targetLanguageTag))reject('Study Scope supplemental decision is inconsistent.');
   const caps=curriculumSourceEligibility(snapshot,source.enrollmentId?scope.enrollments.find(enrollment=>enrollment.id===source.enrollmentId):undefined,!!target.startedAt&&Date.parse(target.startedAt)<=Date.parse(scope.createdAt));
   if(source.introduce!==caps.introduce||source.ongoing!==(caps.introduce||caps.ongoing))reject('Study Scope source purpose is inconsistent.');
   for(const plan of source.plans){
@@ -441,20 +453,30 @@ function assertScopeMember(member:LocalStudyScopeMember,scope:LocalStudyScope,ta
  }
 }
 
+/** The origin selection proves why the first Run was selected or resumed.
+ * Later Runs have their own selection and must not inherit this inventory. */
+function validSessionOrigin(session:LocalLearningSession,scope:LocalStudyScope,run:LocalLearningRun):boolean{
+ return sameLearningSessionDirection(run.languageContext,session.languageContext)
+  &&(session.intent!=='review_only'||run.purpose!=='initial_learning')
+  &&run.targetIds.every(id=>scope.members.some(member=>member.targetId===id&&member.policy.profileId===run.policyProfileId&&member.policy.profileVersion===run.policyProfileVersion&&member.sources.some(source=>source.plans.some(plan=>plan.purpose===run.purpose&&plan.readiness==='ready'))))
+  &&(run.startedByOperationId===session.startedByOperationId&&run.startedAt===session.startedAt&&run.sessionIntent===session.intent
+   ||run.lifecycleEvents.some(event=>event.operationId===session.startedByOperationId&&event.at===session.startedAt&&'sessionIntent' in event&&event.sessionIntent===session.intent&&'requestedLanguageContext' in event&&backupEqual(event.requestedLanguageContext,session.languageContext)&&['session_intent_selected','resumed_after_session_switch','resumed_after_session_end','resumed_after_planning_override'].includes(event.kind)));
+}
+
 function assertStudyScopeState(input:LearningSystemStateInput):void{
  const {rows,maps,identity,requireRow,validateLanguageContext,fail}=input;
  for(const row of rows.studyScopes){
   const scope=studyScopeSchema.parse(row.value);
   if(row.key!==scope.id||scope.learnerUserId!==identity.learnerId)fail();validateLanguageContext(scope.languageContext);
   for(const source of scope.enrollments){const current=curriculumEnrollmentSchema.parse(requireRow('curriculumEnrollments',source.id));if(source.learnerUserId!==identity.learnerId||current.revision<source.revision||current.revision===source.revision&&!backupEqual(current,source))fail();}
+  for(const source of scope.members.flatMap(member=>member.sources))if(source.supplementalState){const current=supplementalMembershipStateSchema.parse(requireRow('supplementalMembershipStates',source.supplementalState.id)),saved=source.supplementalState;if(current.revision<saved.revision||current.revision===saved.revision&&!backupEqual(current,saved)||current.createdByOperationId!==saved.createdByOperationId||!backupEqual(current.source,saved.source))fail();}
   for(const member of scope.members)assertScopeMember(member,scope,requireRow('learningTargets',member.targetId));
  }
  for(const row of rows.learningSessions){
   const session=learningSessionSchema.parse(row.value),scope=studyScopeSchema.parse(requireRow('studyScopes',session.scopeRevisionId));
   if(row.key!==session.id||session.learnerUserId!==identity.learnerId||scope.learnerUserId!==session.learnerUserId||!backupEqual(session.languageContext,scope.languageContext)||session.dailyNewSenseLimit!==scope.dailyNewSenseLimit||Date.parse(session.startedAt)<Date.parse(scope.createdAt))fail();
-  for(const id of session.runIds){const run=requireRow('learningRuns',id) as LocalLearningRun;if(!sameLearningSessionDirection(run.languageContext,session.languageContext))fail();for(const targetId of run.targetIds)if(!scope.members.some(member=>member.targetId===targetId))fail();}
-  const witness=session.runIds.map(id=>requireRow('learningRuns',id) as LocalLearningRun).some(run=>run.startedByOperationId===session.startedByOperationId&&run.startedAt===session.startedAt||run.lifecycleEvents.some(event=>event.operationId===session.startedByOperationId&&event.at===session.startedAt&&['session_intent_selected','resumed_after_session_switch','resumed_after_session_end','resumed_after_planning_override'].includes(event.kind)));
-  if(!witness)fail();
+  for(const id of session.runIds){const run=requireRow('learningRuns',id) as LocalLearningRun;if(!sameLearningSessionDirection(run.languageContext,session.languageContext))fail();const selected=run.studyScopeRevisionId?studyScopeSchema.parse(requireRow('studyScopes',run.studyScopeRevisionId)):scope;for(const targetId of run.targetIds)if(!selected.members.some(member=>member.targetId===targetId))fail();}
+  if(!validSessionOrigin(session,scope,requireRow('learningRuns',session.runIds[0]!) as LocalLearningRun))fail();
   if(session.endedAt){
    if(session.endReason==='learner_finished'){
     const last=requireRow('learningRuns',session.runIds.at(-1)!) as LocalLearningRun;
@@ -471,18 +493,14 @@ function assertStudyScopeState(input:LearningSystemStateInput):void{
  for(const {value:run} of rows.learningRuns){
   if(!run.learningSessionId&&!run.studyScopeRevisionId)continue;
   const session=learningSessionSchema.parse(requireRow('learningSessions',run.learningSessionId)),scope=studyScopeSchema.parse(requireRow('studyScopes',run.studyScopeRevisionId));
-  if(session.scopeRevisionId!==scope.id||!session.runIds.includes(run.id)||!backupEqual(run.languageContext,session.languageContext))fail();
+  if(!session.runIds.includes(run.id)||!backupEqual(run.languageContext,session.languageContext)||!backupEqual(scope.languageContext,run.languageContext)||scope.dailyNewSenseLimit!==session.dailyNewSenseLimit)fail();
   for(const [targetId,participant] of Object.entries(run.participants as LocalLearningRun['participants'])){const member=scope.members.find(member=>member.targetId===targetId),source=member?.sources.find(source=>source.membershipId===participant.curriculumMembershipId);if(!source||member!.policy.profileId!==run.policyProfileId||member!.policy.profileVersion!==run.policyProfileVersion||!source.plans.some(plan=>plan.purpose===run.purpose&&plan.readiness==='ready'))fail();}
  }
  const active=maps.meta.get(activeLearningSessionKey);
  if(active){
   const session=learningSessionSchema.parse(requireRow('learningSessions',active));if(session.endedAt||session.activeRunId!==maps.meta.get('learning-active'))fail();
-  const scope=studyScopeSchema.parse(requireRow('studyScopes',session.scopeRevisionId));
-  for(const member of scope.members){
-   const target=requireRow('learningTargets',member.targetId) as LocalLearningTarget;
-   if(!target.startedAt&&(target.policyAssignment.profileId!==member.policy.profileId||target.policyAssignment.revision!==member.policy.assignmentRevision))fail();
-   if(target.committedPolicy&&(target.committedPolicy.profileId!==member.policy.profileId||target.committedPolicy.profileVersion!==member.policy.profileVersion))fail();
-  }
+  const run=requireRow('learningRuns',session.activeRunId!) as LocalLearningRun;
+  for(const id of run.targetIds){const target=requireRow('learningTargets',id) as LocalLearningTarget;if(!target.committedPolicy||target.committedPolicy.profileId!==run.policyProfileId||target.committedPolicy.profileVersion!==run.policyProfileVersion)fail();}
  }
  else {const activeRun=maps.meta.get('learning-active');if(activeRun&&(requireRow('learningRuns',activeRun) as LocalLearningRun).learningSessionId)fail();}
 }
@@ -834,10 +852,13 @@ async function assertLifecycleRunTransition(input:LearningSystemTransitionInput,
 
 function assertStudyPlanTransition(change:LibraryRecordTransition<readonly LearningTransitionTable[]>,operation:Operation,routes:Awaited<ReturnType<typeof transitionRoutes>>):void{
  const before=(change.before??{}) as Record<string,any>,after=requireFact(change.after as Record<string,any>|null,'Study Plans cannot be deleted.');
- if(operation.kind!=='learning.quantity')reject('Only the quantity command may change Study Plans.');
  const changed=Object.keys(after).filter(routeId=>!backupEqual(before[routeId],after[routeId]));
  if(changed.length!==1||Object.keys(before).some(routeId=>!Object.hasOwn(after,routeId)))reject('Study Plan history is inconsistent.');
  const routeId=changed[0]!,plan=after[routeId],previous=before[routeId],route=routes.get(routeId);
+ if(operation.kind!=='learning.quantity'){
+  const command=operation.input as {languageContext:z.infer<typeof sensaFormalPinnedLanguageContextSchema>;dailyLimit:number;at:string};
+  if(!['learning.start','learning.continue'].includes(operation.kind)||previous!==undefined||command.dailyLimit!==DEFAULT_DAILY_NEW_SENSE_LIMIT||plan.dailyNewSenseLimit!==DEFAULT_DAILY_NEW_SENSE_LIMIT||routeId!==command.languageContext.languageRouteId||plan.routeRevision!==command.languageContext.languageRouteRevision||plan.updatedAt!==command.at)reject('A start may only initialize its missing default Study Plan.');
+ }
  if(!route||plan.languageRouteId!==routeId||plan.routeRevision>route.revision||plan.revision!==(previous?.revision??0)+1||!Number.isInteger(plan.dailyNewSenseLimit)||plan.dailyNewSenseLimit<1||plan.dailyNewSenseLimit>100||!Number.isFinite(Date.parse(plan.updatedAt)))reject('Study Plan revision is invalid.');
 }
 
@@ -854,6 +875,17 @@ export async function assertLearningSystemTransition(input:LearningSystemTransit
   if(!Number.isFinite(at)||at>Date.now())reject('Learning commands cannot manufacture future eligibility.');
  }
  const routes=await transitionRoutes(input);
+ const decisions=changedByTable({...input,changes:relevant},'supplementalMembershipStates');
+ if(decisions.length){
+  if(input.operation.kind!=='learning.changeSupplementalMembership'||decisions.length!==1||relevant.length!==1)reject('Supplemental governance may change only its explicit source decision.');
+  const command=input.operation.input as {source:SupplementalMembershipState['source'];expectedRevision:number;active:boolean;languageContext:SupplementalMembershipState['languageContext']};
+  const change=decisions[0]!,after=supplementalMembershipStateSchema.parse(change.after),before=change.before?supplementalMembershipStateSchema.parse(change.before):null;
+  const descriptor=supplementalSourceDescriptor(after.source,await input.read(after.source.kind==='stable_sense'?'curriculumEnrollments':'personalLearning',after.source.id),input.identity.learnerId);
+  assertSupplementalStateSource(after,descriptor);const route=routes.get(after.languageContext.languageRouteId);if(!route||route.targetLanguageTag!==after.languageContext.targetLanguageTag||after.languageContext.languageRouteRevision>route.revision)reject('Supplemental Membership Language Route is invalid.');
+  if(change.after===null||change.key!==after.id||after.learnerUserId!==input.identity.learnerId||!backupEqual(command.source,after.source)||command.expectedRevision!==(before?.revision??0)||after.revision!==command.expectedRevision+1||after.status!==(command.active?'active':'removed')||!sameLearningSessionDirection(command.languageContext,after.languageContext)||after.changedByOperationId!==input.operation.id||Date.parse(after.updatedAt)>Date.now())reject('Supplemental governance has no explicit learner witness.');
+  if(before){if(!unchangedExcept(before,after,['revision','status','languageContext','changedByOperationId','updatedAt'])||before.languageContext.languageRouteId!==after.languageContext.languageRouteId||before.languageContext.targetLanguageTag!==after.languageContext.targetLanguageTag||before.status===after.status)reject('Supplemental source identity is immutable.');}
+  else if(after.createdByOperationId!==input.operation.id)reject('Supplemental withdrawal has no creation witness.');
+ }
  const targets=changedByTable({...input,changes:relevant},'learningTargets');
  const enrollments=changedByTable({...input,changes:relevant},'curriculumEnrollments');
  const runs=changedByTable({...input,changes:relevant},'learningRuns');
@@ -868,7 +900,7 @@ export async function assertLearningSystemTransition(input:LearningSystemTransit
  for(const change of scopes){
   if(change.after===null||change.before!==null&&!backupEqual(change.before,change.after))reject('Study Scopes are immutable.');
   const scope=studyScopeSchema.parse(change.after);
-  if(change.key!==scope.id||scope.learnerUserId!==input.identity.learnerId||change.before===null&&(!['learning.start','learning.continue'].includes(input.operation.kind)||scope.createdByOperationId!==input.operation.id||scope.createdAt!==(input.operation.input as {at:string}).at||!input.capturedScopeIds?.includes(scope.id)))reject('Study Scope has no complete capture witness.');
+  if(change.key!==scope.id||scope.learnerUserId!==input.identity.learnerId||change.before===null&&(!['learning.start','learning.continue'].includes(input.operation.kind)||scope.createdByOperationId!==input.operation.id||scope.createdAt!==(input.operation.input as {at:string}).at||!input.capturedScopeIds?.includes(scope.id)))reject('Study Scope has no selected-Run capture witness.');
  }
  for(const change of sessions){
   if(change.after===null||!['learning.start','learning.continue','learning.finish','learning.endSession','learning.declareMastery'].includes(input.operation.kind))reject('Learning Session lifecycle authority is invalid.');
@@ -877,6 +909,8 @@ export async function assertLearningSystemTransition(input:LearningSystemTransit
   if(change.before===null){
    const scope=studyScopeSchema.parse(await input.read('studyScopes',session.scopeRevisionId));
    if(!['learning.start','learning.continue'].includes(input.operation.kind)||session.revision!==1||session.startedByOperationId!==input.operation.id||session.startedAt!==(input.operation.input as {at:string}).at||session.endedAt||session.runIds.length!==1||session.activeRunId!==session.runIds[0]||!backupEqual(session.languageContext,scope.languageContext)||session.dailyNewSenseLimit!==scope.dailyNewSenseLimit)reject('Learning Session creation is invalid.');
+   const firstRun=await input.read('learningRuns',session.runIds[0]!) as LocalLearningRun|undefined;
+   if(!firstRun||!validSessionOrigin(session,scope,firstRun))reject('Learning Session origin selection is invalid.');
   }else{
    const before=learningSessionSchema.parse(change.before);
    if(before.endedAt||session.revision!==before.revision+1||!unchangedExcept(before,session,['revision','runIds','activeRunId','endedAt','endedByOperationId','endReason'])||!backupEqual(session.runIds.slice(0,before.runIds.length),before.runIds)||session.runIds.length>before.runIds.length+1)reject('Learning Session changed its frozen arrangement.');
@@ -907,14 +941,6 @@ export async function assertLearningSystemTransition(input:LearningSystemTransit
    if(added.length!==1||added[0]!.sourceKind!=='stable_sense'||added[0]!.provenance.curriculumEnrollmentId!==request.enrollmentId||added[0]!.createdByOperationId!==input.operation.id)reject('Direct preparation may admit only its selected Curriculum connection.');
   }
   await validateTransitionTarget(input,change.key,after,routes);
-  if(input.operation.kind==='learning.policy'){
-   const active=await input.read('meta',activeLearningSessionKey) as string|undefined;
-   if(active){
-    const session=learningSessionSchema.parse(await input.read('learningSessions',active));
-    const member=input.scopeMember?await input.scopeMember(session.scopeRevisionId,after.id):studyScopeSchema.parse(await input.read('studyScopes',session.scopeRevisionId)).members.find(member=>member.targetId===after.id);
-    if(member)reject('An active Study Scope freezes its Policy assignment.');
-   }
-  }
   assertTargetTransition(change.before as LocalLearningTarget|null,after,input.operation,events.length>0,newRunTargetIds);
  }
  for(const change of runs)await validateTransitionRun(input,change.key,requireFact(change.after as LocalLearningRun|null,'Learning Run is missing.'),routes);
@@ -965,9 +991,11 @@ export async function assertLearningSystemTransition(input:LearningSystemTransit
  for(const change of runs){
   const run=change.after as LocalLearningRun;if(!run.learningSessionId&&!run.studyScopeRevisionId)continue;
   const origin=learningSessionSchema.parse(await input.read('learningSessions',run.learningSessionId!));
-  if(origin.scopeRevisionId!==run.studyScopeRevisionId||!origin.runIds.includes(run.id)||!backupEqual(origin.languageContext,run.languageContext))reject('Learning Run lost its Session origin.');
+  if(!origin.runIds.includes(run.id)||!backupEqual(origin.languageContext,run.languageContext))reject('Learning Run lost its Session origin.');
   if(change.before===null)for(const [targetId,participant] of Object.entries(run.participants)){
-   const member=input.scopeMember?await input.scopeMember(origin.scopeRevisionId,targetId):(studyScopeSchema.parse(await input.read('studyScopes',origin.scopeRevisionId)).members.find(member=>member.targetId===targetId)??null);
+   const selected=studyScopeSchema.parse(await input.read('studyScopes',run.studyScopeRevisionId!));
+   if(!backupEqual(selected.languageContext,run.languageContext)||selected.dailyNewSenseLimit!==origin.dailyNewSenseLimit)reject('Learning Run selection changed its Session context or quota.');
+   const member=input.scopeMember?await input.scopeMember(selected.id,targetId):(selected.members.find(member=>member.targetId===targetId)??null);
    if(!member||member.policy.profileId!==run.policyProfileId||member.policy.profileVersion!==run.policyProfileVersion||!member.sources.some(source=>source.membershipId===participant.curriculumMembershipId&&source.plans.some(plan=>plan.purpose===run.purpose&&plan.readiness==='ready')))reject('Learning Run is outside its frozen Study Scope.');
   }
  }

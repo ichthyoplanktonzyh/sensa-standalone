@@ -216,6 +216,8 @@ export const readContentSupplyQuery = async (query: ContentSupplyQuery): Promise
     case 'route_counts':return readLibrary(tx=>tx.packageCacheProjection({kind:'route_counts'}));
     case 'runtime_packages':
       return readLibrary(async tx=>Promise.all([...new Set(query.packageKeys)].map(key=>tx.get<InstalledPackage>('packageCache',key))).then(values=>values.filter((value):value is InstalledPackage=>!!value)));
+    case 'package_summaries':
+      return readLibrary(tx=>tx.packageCacheProjection({kind:'summaries_by_keys',keys:query.packageKeys}));
     case 'provisioning_tasks': {
       const { personalLearningSnapshot } = await import('../../data/library/personalLearning');
       return personalLearningSnapshot();

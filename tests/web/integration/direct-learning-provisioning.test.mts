@@ -143,5 +143,19 @@ test('direct on-demand preparation preserves fixed facts, never sends personal C
   await api.learningSystem.execute({kind:'act',operationId:crypto.randomUUID(),runId:projection.runtime.runId,expectedRevision:projection.runtime.revision,action:{kind:'rate',rating:'good'}});
   expect((await workspace()).records[0].meaning).toBe(target.presentation.meaning);
   saved=await snapshot();expect(saved.learningRuns).toHaveLength(1);expect(saved.semanticMeanings).toEqual([]);api.validateBackupRows(saved);
+  // A late model response cannot materialize a withdrawn Curriculum intent.
+  const withdrawn=await enroll();mode='hold';entered=false;
+  const generating=prepare(withdrawn.enrollmentId);await expect.poll(()=>entered).toBe(true);
+  const heldTask=await task(withdrawn.enrollmentId),callsAtWithdrawal=calls.length;
+  const withdraw=(expectedRevision:number,active:boolean)=>api.learningSystem.execute({kind:'change_supplemental_membership',operationId:crypto.randomUUID(),source:{kind:'stable_sense',id:withdrawn.enrollmentId},expectedRevision,active,languageContext});
+  await withdraw(0,false);release!();await expect(generating).rejects.toThrow('localFlow.membershipRemoved');
+  expect(calls).toHaveLength(callsAtWithdrawal);
+  expect((await task(withdrawn.enrollmentId)).curriculumActive).toBe(false);
+  expect((await snapshot()).learningTargets.some((row:any)=>row.key===withdrawn.targetId)).toBe(false);
+  await expect(prepare(withdrawn.enrollmentId)).rejects.toThrow('localFlow.membershipRemoved');
+  expect(calls).toHaveLength(callsAtWithdrawal);
+  expect((await task(withdrawn.enrollmentId)).id).toBe(heldTask.id);
+  await withdraw(1,true);mode='good';expect((await prepare(withdrawn.enrollmentId)).status).toBe('ready');
+  saved=await snapshot();expect(saved.learningTargets.filter((row:any)=>row.key===withdrawn.targetId)).toHaveLength(1);api.validateBackupRows(saved);
  }finally{restoreSpeech();globalThis.fetch=realFetch;await rm(directory,{recursive:true,force:true});}
 });

@@ -87,6 +87,8 @@ export interface LearningTargetProjection {
   readonly declaredMastery: boolean;
   readonly nextReviewAt: string | null;
   readonly curriculumMembershipId: string;
+  /** Future-source governance, distinct from material readiness and open work. */
+  readonly planningActive?:boolean;
   readonly languageContext: SensaFormalPinnedLanguageContext;
   readonly packageKey: string | null;
   readonly publicationArchiveSha256: string | null;
@@ -331,6 +333,8 @@ export interface LearningWorkspaceProjection {
 export interface LearningRuntimeWorkspaceProjection {
   readonly runtime: LearningRuntimeProjection | null;
   readonly dailyLimit: number | null;
+  /** Editable future preference, distinct from this activity's fixed quota. */
+  readonly preferencesDailyLimit: number | null;
   /** Continuation is planned only at a Run boundary, never during a Step. */
   readonly nextTargetId: string | null;
   readonly nextChangeAt: number | null;

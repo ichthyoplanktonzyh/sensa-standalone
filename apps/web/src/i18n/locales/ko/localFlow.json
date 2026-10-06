@@ -1,5 +1,13 @@
 {
   "localFlow": {
+    "outsideLearningPlan": "향후 학습 계획에서 제외됨",
+    "supplementalEmpty":"아직 개별 추가한 콘텐츠가 없습니다","supplementalLearning": "보충 학습",
+    "removeFromLearning": "학습에서 제외",
+    "restoreToLearning": "학습에 다시 추가",
+    "membershipRemoved": "향후 학습에서 제외됨",
+    "membershipChanged": "학습 출처가 변경되었습니다. 현재 상태를 확인한 후 다시 진행하세요.",
+    "membershipSavedReadFailed": "변경은 저장되었지만 읽을 수 없습니다. 읽기를 다시 시도하세요.",
+    "membershipUnconfirmed": "저장 결과를 확인하지 못했습니다. 현재 상태를 확인한 후 다시 진행하세요.",
     "clarificationSourceChanged": "대화를 이어가며 현재 자료를 다시 확인한 뒤 확정해 주세요.",
     "packageAuthor": "작성자",
     "packageFilesUnavailable": "이 기기에 파일이 없는 학습 패키지: {{count}}. 원본 파일을 다시 가져오거나 목록에서 다시 다운로드하세요.",

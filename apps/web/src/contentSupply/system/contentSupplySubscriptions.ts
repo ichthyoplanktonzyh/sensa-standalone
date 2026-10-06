@@ -2,14 +2,15 @@ import {observeLibrary,type Table} from '../../data/library/store';
 import type {ContentSupplyQuery} from './contentSupplySystem';
 
 const queryTables = {
-  direct_provisioning_task:['personalLearning','learningTargets','meta'],
+  direct_provisioning_task:['personalLearning','learningTargets','supplementalMembershipStates','curriculumEnrollments','meta'],
   workspace: ['packageCache', 'packageInstallations', 'meta'],
   catalog:['meta'],
   route_counts:['packageCache'],
   runtime_packages:['packageCache'],
-  provisioning_control: ['personalLearning', 'learningTargets', 'providers', 'settings'],
-  provisioning_tasks: ['personalLearning','learningTargets'],
-  provisioning_task: ['personalLearning','learningTargets'],
+  package_summaries:['packageCache'],
+  provisioning_control: ['personalLearning', 'learningTargets','supplementalMembershipStates','curriculumEnrollments', 'providers', 'settings'],
+  provisioning_tasks: ['personalLearning','learningTargets','supplementalMembershipStates','curriculumEnrollments'],
+  provisioning_task: ['personalLearning','learningTargets','supplementalMembershipStates','curriculumEnrollments'],
 } as const satisfies Record<ContentSupplyQuery['kind'], readonly Table[]>;
 
 export const subscribeContentSupply=(query:ContentSupplyQuery,listener:()=>void):(()=>void)=>

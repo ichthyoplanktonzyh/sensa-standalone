@@ -74,6 +74,17 @@ function RuntimeOverlays({c,policy,onViewLearningLibrary,onExit}:{c:Controller;p
  const toast=useOverlayStore(state=>state.toast);
  useEffect(()=>personalContentSystem.subscribe({kind:'snapshot'},()=>setAnnotationRevision(value=>value+1)),[]);
  useEffect(()=>()=>closeMenus(),[closeMenus]);
+ useEffect(()=>{
+  if(!menuMoreOpen&&!menuBookOpen)return;
+  const trigger=document.activeElement instanceof HTMLElement?document.activeElement:null;
+  const frame=requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>(`${menuMoreOpen?'#menu-more':'#menu-book'} button:not(:disabled)`)?.focus());
+  const dismiss=(event:KeyboardEvent)=>{
+   if(event.key!=='Escape'||event.defaultPrevented)return;
+   event.preventDefault();closeMenus();if(trigger?.isConnected)trigger.focus();
+  };
+  document.addEventListener('keydown',dismiss);
+  return()=>{cancelAnimationFrame(frame);document.removeEventListener('keydown',dismiss);};
+ },[menuMoreOpen,menuBookOpen,closeMenus]);
  const contexts=menuPersonalContent?personalContentSystem.read({kind:'sense',senseId:menuPersonalContent.senseKey}).contexts:[];
  const closeLearningPreferences=()=>{
   setLearningPreferencesOpen(false);
@@ -98,7 +109,7 @@ function RuntimeOverlays({c,policy,onViewLearningLibrary,onExit}:{c:Controller;p
    primary:c.notice?<p role="alert">{c.notice}</p>:null,
    controls:<div className="flex flex-wrap gap-3"><button className={runtimePrimary} disabled={c.busy} onClick={()=>void c.endSession(ending.runId,ending.revision).then(ended=>{if(ended)onExit();})}>{t('sessionEnd.action')}</button><button className="min-h-11 rounded-control px-4 text-sm focus-visible:outline-2 focus-visible:outline-focus" disabled={c.busy} onClick={()=>setEnding(null)}>{t('sessionEnd.cancel')}</button></div>,
   }}/>}
-  {learningPreferencesOpen&&<LearningPreferencesPanel policyOptions={c.policyOptions} fixedPolicy busy={c.busy||c.loadStatus!=='ready'} status={c.notice&&<p role="alert">{localFlowNotice(c.notice)}</p>} defaultPolicy={policy} dailyNewCount={c.dailyLimit??20} onPolicyChange={()=>{}} onDailyNewCountChange={value=>void c.confirmQuantity(value)} onClose={closeLearningPreferences}/>}
+  {learningPreferencesOpen&&<LearningPreferencesPanel policyOptions={c.policyOptions} fixedPolicy busy={c.busy||c.loadStatus!=='ready'} status={c.notice&&<p role="alert">{localFlowNotice(c.notice)}</p>} defaultPolicy={policy} dailyNewCount={c.preferencesDailyLimit??20} onPolicyChange={()=>{}} onDailyNewCountChange={value=>void c.confirmQuantity(value)} onClose={closeLearningPreferences}/>}
   {menuBookOpen&&<SensaOverlayLayout variant="popover" measure="compact" className="z-[80]" id="menu-book" label={localFlowText('chooseRange')} onDismiss={closeMenus} dismissOnBackdrop regions={{primary:
    <div className="p-2 [&>button]:flex [&>button]:min-h-12 [&>button]:w-full [&>button]:items-center [&>button]:gap-3 [&>button]:rounded-control [&>button]:border-0 [&>button]:bg-transparent [&>button]:px-3 [&>button]:text-left [&>button]:text-control-label [&>button]:hover:bg-surface-subtle [&>button]:focus-visible:outline-2 [&>button]:focus-visible:outline-focus">
     <button onClick={()=>{closeMenus();toast(localFlowText('chooseRangeHint'));}}><svg className={iconClass} aria-hidden="true"><use href="#i-filter"/></svg>{localFlowText('chooseRange')}</button>

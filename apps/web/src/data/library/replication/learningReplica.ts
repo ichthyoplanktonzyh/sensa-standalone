@@ -2,27 +2,25 @@ import {reconcileConcurrentLearningEntries} from '../learningReconciliation';
 import {decodeBackupValue} from '../backupCodec';
 import type {DomainReplicaModule,ReplicaMergeResult,ReplicaRecordReference} from './domainReplica';
 
-const tables=new Set(['curriculumEnrollments','studyScopes','learningSessions','learningTargets','learningRuns','learningEvents','learningReconciliations']);
+const tables=new Set(['curriculumEnrollments','supplementalMembershipStates','studyScopes','learningSessions','learningTargets','learningRuns','learningEvents','learningReconciliations']);
 const immutableHistory=new Set(['studyScopes','learningSessions','learningRuns','learningEvents','learningReconciliations']);
 const entryId=(entry:{table:string;key:string})=>JSON.stringify([entry.table,entry.key]);
 const record=(value:unknown):Record<string,any>|undefined=>value&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,any>:undefined;
 const values=(value:unknown):unknown[]=>Array.isArray(value)?value:[];
 const reference=(table:ReplicaRecordReference['table'],key:unknown):ReplicaRecordReference[]=>typeof key==='string'&&key.length?[{table,key}]:[];
 const references=(table:ReplicaRecordReference['table'],keys:unknown):ReplicaRecordReference[]=>values(keys).flatMap(key=>reference(table,key));
-/** A Scope and a stale device's Policy edit may occupy different record keys.
- * Hold both coherent sides as a conflict instead of producing a merged queue
- * that silently loses members or only fails later at restore admission. */
-function activeScopePolicyConflicts(entries:ReplicaMergeResult['entries']):string[]{
+/** A stale device cannot change a committed participant's Policy. Future,
+ * unstarted candidates are not frozen by the Session's origin selection. */
+function activeRunPolicyConflicts(entries:ReplicaMergeResult['entries']):string[]{
  const facts=new Map(entries.map(entry=>[entryId(entry),entry.value]));
  const read=(table:string,key:string)=>{const value=facts.get(JSON.stringify([table,key]));return value===undefined?undefined:decodeBackupValue(value);};
  const active=read('meta','learning-session-active');if(typeof active!=='string')return [];
  const session=record(read('learningSessions',active));if(!session||session.endedAt)return [];
- const scope=record(read('studyScopes',session.scopeRevisionId)),conflicts:string[]=[];
- for(const raw of values(scope?.members)){
-  const member=record(raw),target=record(read('learningTargets',member?.targetId));if(!member||!target)continue;
-  const assignment=record(target.policyAssignment),committed=record(target.committedPolicy),pinned=record(member.policy);
-  if(!target.startedAt&&(assignment?.profileId!==pinned?.profileId||assignment?.revision!==pinned?.assignmentRevision)
-   ||committed&&(committed.profileId!==pinned?.profileId||committed.profileVersion!==pinned?.profileVersion))conflicts.push(JSON.stringify(['learningTargets',member.targetId]));
+ const activeRun=record(read('learningRuns',session.activeRunId)),conflicts:string[]=[];
+ for(const id of values(activeRun?.targetIds)){
+  if(typeof id!=='string')continue;
+  const target=record(read('learningTargets',id)),committed=record(target?.committedPolicy);
+  if(!committed||committed.profileId!==activeRun?.policyProfileId||committed.profileVersion!==activeRun?.policyProfileVersion)conflicts.push(JSON.stringify(['learningTargets',id]));
  }
  return conflicts;
 }
@@ -57,14 +55,15 @@ export const learningReplica:DomainReplicaModule={
   }
   const merged=ordinary(input);
   const reconciled=reconcileConcurrentLearningEntries({...input,merged:merged.entries,conflicts:merged.conflicts}) as ReplicaMergeResult;
-  return {...reconciled,conflicts:[...new Set([...reconciled.conflicts,...activeScopePolicyConflicts(reconciled.entries),...activeBookConflicts(reconciled.entries)])].sort()};
+  return {...reconciled,conflicts:[...new Set([...reconciled.conflicts,...activeRunPolicyConflicts(reconciled.entries),...activeBookConflicts(reconciled.entries)])].sort()};
  },
  conflictDependencies(entry,value){
   if(entry.table==='meta')return reference(entry.key==='learning-session-active'?'learningSessions':'learningRuns',value);
   const fact=record(value);if(!fact)return [];
+  if(entry.table==='supplementalMembershipStates')return reference(fact.source?.kind==='stable_sense'?'curriculumEnrollments':'personalLearning',fact.source?.id);
   if(entry.table==='studyScopes')return [
    ...values(fact.enrollments).flatMap(enrollment=>reference('curriculumEnrollments',record(enrollment)?.id)),
-   ...values(fact.members).flatMap(member=>[...reference('learningTargets',record(member)?.targetId),...values(record(member)?.sources).flatMap(source=>reference('packageInstallations',record(source)?.packageKey))]),
+   ...values(fact.members).flatMap(member=>[...reference('learningTargets',record(member)?.targetId),...values(record(member)?.sources).flatMap(source=>[...reference('packageInstallations',record(source)?.packageKey),...reference('supplementalMembershipStates',record(source)?.supplementalState?.id)])]),
   ];
   if(entry.table==='learningSessions')return [...reference('studyScopes',fact.scopeRevisionId),...references('learningRuns',fact.runIds)];
   if(entry.table==='learningTargets')return [
@@ -120,6 +119,6 @@ export const learningReplica:DomainReplicaModule={
   return [];
  },
  assertDelete(entry){
-  if(immutableHistory.has(entry.table))throw new Error('library_sync_history');
+  if(immutableHistory.has(entry.table)||entry.table==='supplementalMembershipStates')throw new Error('library_sync_history');
  },
 };

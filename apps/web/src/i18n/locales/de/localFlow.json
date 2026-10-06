@@ -1,5 +1,13 @@
 {
   "localFlow": {
+    "outsideLearningPlan": "Nicht im künftigen Lernplan",
+    "supplementalEmpty":"Noch keine einzeln hinzugefügten Inhalte","supplementalLearning": "Ergänzendes Lernen",
+    "removeFromLearning": "Aus dem Lernen entfernen",
+    "restoreToLearning": "Wieder zum Lernen hinzufügen",
+    "membershipRemoved": "Aus künftigem Lernen entfernt",
+    "membershipChanged": "Die Lernquelle wurde geändert. Prüfe den aktuellen Stand vor einer weiteren Aktion.",
+    "membershipSavedReadFailed": "Die Änderung wurde gespeichert, konnte aber nicht gelesen werden. Versuche das Lesen erneut.",
+    "membershipUnconfirmed": "Das Speicherergebnis konnte nicht bestätigt werden. Prüfe den aktuellen Stand vor einer weiteren Aktion.",
     "clarificationSourceChanged": "Setze das Gespräch fort und prüfe das aktuelle Material vor dem Bestätigen.",
     "packageAuthor": "Autor",
     "packageFilesUnavailable": "Lernpakete ohne lokale Datei: {{count}}. Importieren Sie die Originaldateien oder laden Sie sie erneut aus dem Katalog herunter.",

@@ -722,7 +722,7 @@ Personal Meaning、Scene Bridge 或另一来源再次加入而创建竞争目标
 - 已开始 Run 不增删 participants；已操作 Step 保留当时材料；
 - 暂停可继续原 Session；明确结束本次学习不产生完成或调度，之后开始按新计划建立 Session，
   并在当前范围允许时恢复原 Run 的已保存步骤。保存失败留在原步骤，丢回执只重读不重提交；
-- Enrollment `active / maintenance / paused` 保留进度并支持恢复；词书安排从后续会话生效。
+- Enrollment `active / maintenance / paused` 保留进度并支持恢复；词书与范围安排影响下一条尚未开始的内容，每日数量仍从后续会话生效。
   不得用删除 Package 或删除历史替代暂停；
 - 用户“声明已会”是可撤销的 planning override：可以排除目标并中断非终态 Run，但不产生 Evidence、Outcome
   或 FSRS 更新；撤销只恢复计划资格，不自动恢复旧 Run；

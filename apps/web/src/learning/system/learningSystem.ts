@@ -6,6 +6,8 @@ import type {DirectLearningChoicePage} from './directLearningChoices';
 export type {DirectLearningChoice,DirectLearningChoicePage} from './directLearningChoices';
 export type {DirectLearningReference,DirectLearningSource} from './directLearningSource';
 import type {DirectLearningEnrollment} from '../../data/library/directLearningEnrollment';
+import type {ChangeSupplementalMembershipInput,SupplementalMembershipPage} from '../../data/library/supplementalMemberships';
+export type {SupplementalMembershipProjection,SupplementalMembershipPage} from '../../data/library/supplementalMemberships';
 export type {DirectLearningEnrollment} from '../../data/library/directLearningEnrollment';
 import { observeLibrary, type Table } from '../../data/library/store';
 import type {
@@ -68,6 +70,7 @@ export interface PersonalLearningEnrollment {
 }
 
 export type LearningCommand =
+  | Readonly<ChangeSupplementalMembershipInput&{kind:'change_supplemental_membership'}>
   | Readonly<{kind:'end_session';operationId:string;runId:string;expectedRevision:number;at?:string}>
   | Readonly<{kind:'change_book_plan';operationId:string;enrollmentId:string;expectedRevision:number;languageContext:SensaFormalPinnedLanguageContext;mode:import('../../data/library/bookPlans').BookEnrollmentMode;selection:import('../../data/library/bookPlans').BookRangeSelection}>
   | Readonly<{kind:'prepare_direct';operationId:string;enrollmentId:string}>
@@ -175,6 +178,7 @@ export type LearningCommandResult<Command extends LearningCommand> =
       : boolean;
 
 export type LearningQuery =
+  | Readonly<{kind:'supplemental_memberships';languageContext:SensaFormalPinnedLanguageContext;cursor?:string|null}>
   | Readonly<{kind:'book_plans';languageContext:SensaFormalPinnedLanguageContext}>
   | Readonly<{kind:'target';targetId:string;languageContext:SensaFormalPinnedLanguageContext;clock?:number}>
   | Readonly<{kind:'history';languageContext:SensaFormalPinnedLanguageContext;filter:import('./learningHistoryModel').LearningHistoryFilter;clock?:number;cursor?:import('./learningHistoryModel').LearningHistoryCursor|null;limit?:number}>
@@ -194,7 +198,8 @@ export type LearningQuery =
   | Readonly<{ kind: 'semantic_memory' }>;
 
 export type LearningQueryResult<Query extends LearningQuery> =
-  Query['kind'] extends 'book_plans'?readonly LearningBookPlanProjection[]
+  Query['kind'] extends 'supplemental_memberships'?SupplementalMembershipPage
+  : Query['kind'] extends 'book_plans'?readonly LearningBookPlanProjection[]
   : Query['kind'] extends 'target'?LearningTargetDetailProjection
   : Query['kind'] extends 'history'?LearningHistoryProjection
   : Query['kind'] extends 'management'?LearningManagementProjection
@@ -224,17 +229,18 @@ export interface LearningSystem {
 }
 
 const queryTables = {
+  supplemental_memberships:['supplementalMembershipStates','curriculumEnrollments','personalLearning','learningTargets','meta'],
   book_plans:['curriculumEnrollments','packageCache','packageInstallations','meta'],
-  target:['learningTargets','learningRuns','packageCache','settings','meta'],
+  target:['learningTargets','learningRuns','curriculumEnrollments','supplementalMembershipStates','packageCache','settings','meta'],
   history:['learningRuns','learningTargets','meta'],
-  management:['packageCache','packageInstallations','learningTargets','learningRuns','curriculumEnrollments','settings','meta'],
+  management:['packageCache','packageInstallations','learningTargets','learningRuns','curriculumEnrollments','supplementalMembershipStates','settings','meta'],
   preferences:['settings','meta'],
-  runtime:['packageCache','learningTargets','learningRuns','settings','meta'],
+  runtime:['packageCache','learningTargets','learningRuns','curriculumEnrollments','supplementalMembershipStates','settings','meta'],
   direct_choices: ['semanticRegistry','packageCache','packageInstallations','meta'],
-  direct_enrollment: ['curriculumEnrollments','learningTargets','meta'],
+  direct_enrollment: ['curriculumEnrollments','supplementalMembershipStates','learningTargets','meta'],
   direct_source: ['semanticRegistry','packageCache','packageInstallations','meta'],
-  home: ['packageCache', 'packageInstallations', 'curriculumEnrollments', 'learningTargets', 'learningRuns', 'settings', 'meta'],
-  workspace: ['packageCache', 'packageInstallations', 'curriculumEnrollments', 'learningTargets', 'learningRuns', 'learningEvents', 'settings', 'meta'],
+  home: ['packageCache', 'packageInstallations', 'curriculumEnrollments','supplementalMembershipStates', 'learningTargets', 'learningRuns', 'settings', 'meta'],
+  workspace: ['packageCache', 'packageInstallations', 'curriculumEnrollments','supplementalMembershipStates', 'learningTargets', 'learningRuns', 'learningEvents', 'settings', 'meta'],
   personal_enrollment_index: ['learningTargets'],
   semantic_memory: ['learningTargets'],
 } as const satisfies Record<LearningQuery['kind'], readonly Table[]>;

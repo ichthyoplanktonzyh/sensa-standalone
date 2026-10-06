@@ -103,6 +103,27 @@ const facts=async(page:Page)=>{
 const input=(page:Page)=>page.getByLabel('你想表达什么？',{exact:true});
 async function send(page:Page){await input(page).fill('上班前我给家里的植物浇水，这个动作英语怎么说？');await page.getByRole('button',{name:'发送',exact:true}).click();}
 
+test('Today personal-content entry offers non-AI recording without reopening the consumed chooser',async({page})=>{
+ requests=[];plans=[];
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ await page.getByRole('button',{name:'添加个人内容',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'添加内容',exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'手动创建',exact:true})).toBeVisible();
+ const chooser=page.getByRole('dialog').filter({has:page.getByRole('heading',{name:'添加内容',exact:true})});
+ await expect(chooser.getByRole('button',{name:/和 Sensa 聊聊/})).toBeVisible();
+ await expect(chooser.getByRole('button',{name:/记录场景/})).toBeVisible();
+ await page.getByRole('button',{name:'手动创建',exact:true}).click();
+ const form=page.locator('.sensa-manual-meaning');
+ await expect(form.getByLabel('情境或原句',{exact:true})).toBeEnabled();
+ await form.getByRole('button',{name:'关闭',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'添加内容',exact:true})).toHaveCount(0);
+ await page.reload();
+ await expect(page.getByRole('heading',{name:'我的语义世界',exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'添加内容',exact:true})).toHaveCount(0);
+ expect(requests).toEqual([]);
+});
+
 for(const size of [0,10_000])test(`manual authoring at ${size} Meanings needs Context and explicit acceptance, stays offline, and reopens`,async({page},testInfo)=>{
  test.setTimeout(180_000);
  page.setDefaultTimeout(15_000);
@@ -477,7 +498,7 @@ test('personal preparation pins explicit Context updates, preserves the active R
  expect(requests).toHaveLength(1);expect(JSON.stringify(requests[0])).toContain(oldContext);
  const initial=await facts(page);expect(initial.provisioning[0]).toMatchObject({status:'ready',useContext:true});expect(initial.learning.targetIds).toHaveLength(1);
  await preparation.getByRole('button',{name:'开始 / 继续学习',exact:true}).click();
- await page.getByRole('dialog',{name:'学习偏好',exact:true}).getByRole('button',{name:'确认数量并开始',exact:true}).click();
+ await expect(page.getByRole('dialog',{name:'学习偏好',exact:true})).toHaveCount(0);
  await page.locator('#s-lightweight-runtime').getByRole('button',{name:/查看表达/}).click();
  const active=(await facts(page)).learning;expect(active.runtime).not.toBeNull();
  await page.locator('#s-lightweight-runtime').getByRole('button',{name:'暂停',exact:true}).click();

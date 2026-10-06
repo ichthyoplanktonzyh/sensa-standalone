@@ -3,6 +3,7 @@ import {test,expect} from 'vitest';
 import {registrySelectionSql,type RegistrySelectionQuery} from '../../../apps/web/src/data/library/semanticRegistrySelection';
 import init from '@sqlite.org/sqlite-wasm';
 import {SqliteRecordDatabase} from '../../../apps/web/src/data/library/sqliteDatabase.ts';
+import {isFatalSqliteConnectionFailure,sqliteRollbackFailure} from '../../../apps/web/src/data/library/sqliteConnectionFailure';
 import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec.ts';
 import {MemoryJourneyRepository} from '../../../apps/web/src/experience/personalMeaningJourney/repository.ts';
 import {createJourneyModules} from '../../../apps/web/src/experience/personalMeaningJourney/gateway.ts';
@@ -112,6 +113,19 @@ test('registry selectors use source expression indexes, historical forms and fix
  }finally{database.close();}
 });
 
+test('fatal SQLite primary and extended results are distinct from recoverable command failures',()=>{
+ for(const resultCode of [10,11,26,10|256,11|512,26|256])expect(isFatalSqliteConnectionFailure(Object.assign(new Error('SQLite failure'),{resultCode}))).toBe(true);
+ for(const resultCode of [1,5,6,19,19|256])expect(isFatalSqliteConnectionFailure(Object.assign(new Error('Rejected operation'),{resultCode}))).toBe(false);
+ expect(isFatalSqliteConnectionFailure(new Error('sqlite_integrity_failed'))).toBe(true);
+ expect(isFatalSqliteConnectionFailure(new Error('fixture-wal-maintenance-failed'))).toBe(false);
+ expect(isFatalSqliteConnectionFailure({resultCode:10})).toBe(false);
+ const primary=new Error('original command failure'),fatal=Object.assign(new Error('rollback I/O failure'),{resultCode:10});
+ const rollback=sqliteRollbackFailure(primary,fatal);
+ expect(rollback.message).toBe(primary.message);expect(rollback.errors).toEqual([primary,fatal]);
+ expect(isFatalSqliteConnectionFailure(new Error('wrapped',{cause:rollback}))).toBe(true);
+ const cycle=new Error('ordinary');Reflect.set(cycle,'cause',cycle);expect(isFatalSqliteConnectionFailure(cycle)).toBe(false);
+});
+
 test('post-commit WAL maintenance bounds reopen work and cannot turn a durable commit into a reported failure',()=>{
  // Named Wasm VFS file exercises actual WAL/FULL SQL semantics, not browser
  // OPFS. The real Chromium close/relaunch test covers that physical adapter.
@@ -123,7 +137,7 @@ test('post-commit WAL maintenance bounds reopen work and cannot turn a durable c
   database.commit(mutation);expect(database.diagnostics().walMaintenance?.status).toBe('ok');expect(database.entries('drafts')).toHaveLength(300);
   const exec=raw.exec.bind(raw);raw.exec=((input:any)=>{const sql=typeof input==='string'?input:input.sql;if(sql==='PRAGMA wal_checkpoint(TRUNCATE)')throw new Error('fixture-wal-maintenance-failed');return exec(input);}) as typeof raw.exec;
   expect(()=>database.commit({...mutation,contentRevision:2,puts:mutation.puts.map(row=>({...row,key:'second-'+row.key}))})).not.toThrow();
-  expect(database.diagnostics().walMaintenance).toMatchObject({status:'failed',reason:'fixture-wal-maintenance-failed'});expect(database.entries('drafts')).toHaveLength(600);raw.exec=exec;
+  expect(database.diagnostics().walMaintenance).toMatchObject({status:'failed',reason:'fixture-wal-maintenance-failed'});expect(database.connectionFailed).toBe(false);expect(database.entries('drafts')).toHaveLength(600);raw.exec=exec;
  }finally{database.close();}
  const reopenRaw=new sqlite.oo1.DB(path),reopened=new SqliteRecordDatabase(sqlite,reopenRaw,'opfs');
  let checkpoints=0;const reopenExec=reopenRaw.exec.bind(reopenRaw);

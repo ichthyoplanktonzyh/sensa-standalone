@@ -48,7 +48,8 @@ interface ContentScreenProps {
   notice?:import("react").ReactNode;
   active: boolean;
   screenId?: string;
-  initialAction?: "create" | "inbox";
+  initialAction?: "create" | "inbox" | "add";
+  onInitialActionConsumed?:()=>void;
   onStartConversation?:()=>void;
   onBrowseExisting: () => void;
   onOpenPersonalMeaning: (id: string, focusId?: string) => void;
@@ -105,6 +106,7 @@ function ContentScreenView({
   active,
   screenId = "s-content",
   initialAction,
+  onInitialActionConsumed,
   onBrowseExisting,onStartConversation,
   onOpenPersonalMeaning,
   onOpenConfirmedSense,
@@ -136,6 +138,7 @@ function ContentScreenView({
   useEffect(() => {
     if (active && initialAction === "inbox") setInboxOpen(true);
     if (active && initialAction === "create") {if(onStartConversation)onStartConversation();else setComposerOpen(true);}
+    if (active && initialAction === "add") {setAdding(true);onInitialActionConsumed?.();}
   }, [active, initialAction]);
   useEffect(() => {
     if (!adding) return;

@@ -7,6 +7,7 @@ import {createHash} from 'node:crypto';
 import {performance} from 'node:perf_hooks';
 
 const count=Number(process.argv.find(arg=>arg.startsWith('--targets='))?.slice('--targets='.length)??1000);
+const readyOnly=process.argv.includes('--ready-only');
 if(!Number.isSafeInteger(count)||count<1||count>10000)throw new Error('--targets must be an integer from 1 to 10000');
 if(process.env.SENSA_TEST_MEMORY_LIBRARY!=='true')throw new Error('Isolated Node fixture storage must be explicitly enabled');
 const NativeDate=Date;
@@ -26,14 +27,20 @@ const database=await useNodeLearningCapacityStorage();
 try{
  await store.openLibrary();
  const context=sensaPinnedLanguageContext(defaultSensaLanguageRoute),id=()=>crypto.randomUUID();
- const book=portableBookDeliveryFixture({memberExpressions:Array.from({length:count},(_,index)=>index?'capacity-'+String(index).padStart(5,'0'):'borrow'),title:'成熟复习容量样本'});
+ const book=portableBookDeliveryFixture({memberExpressions:Array.from({length:count},(_,index)=>index?'capacity-'+String(index).padStart(5,'0'):'borrow'),title:readyOnly?'未开始学习的词书容量样本':'成熟复习容量样本'});
  const fetchBefore=globalThis.fetch;
  try{
   globalThis.fetch=async input=>{const body=book.responses.get(String(input));if(!body)throw new Error('Capacity fixture attempted external network');return new Response(Uint8Array.from(body).buffer);};
   await contentSupplySystem.execute({kind:'install_catalog_item',descriptor:book.descriptor,signal:new AbortController().signal});
  }finally{globalThis.fetch=fetchBefore;}
- await learningSystem.execute({kind:'confirm_quantity',operationId:id(),languageContext:context,dailyLimit:100});
+ await learningSystem.execute({kind:'confirm_quantity',operationId:id(),languageContext:context,dailyLimit:readyOnly?20:100});
  await learningSystem.execute({kind:'enroll_book',operationId:id(),languageContext:context,publicationArchiveSha256:book.descriptor.sha256});
+ let targetId:string,probeRunId:string|null;
+ if(readyOnly){
+  const home=await store.readHomeLearningRecords(context.languageRouteId,clock);
+  if(!home.targets.length)throw new Error('Ready fixture has no admitted Target');
+  targetId=home.targets[0]!.id;probeRunId=null;
+ }else{
  let introduced=0;
  while(introduced<count){
   await learningSystem.execute({kind:'prepare_queue',languageContext:context});
@@ -71,8 +78,10 @@ try{
  clock=Math.max(clock,Math.max(...home.targets.map(target=>target.memory!.dueAt.getTime()))+60_000);
  // The probe starts from an actual due Review, while all previous initial
  // completions, memory handoffs and history remain genuine command results.
- const targetId=home.targets[0]!.id;
+ targetId=home.targets[0]!.id;
  await learningSystem.execute({kind:'start',operationId:id(),targetId,languageContext:context,dailyLimit:100,sessionIntent:'review_only'});
+ probeRunId=(await learningSystem.read({kind:'runtime',languageContext:context})).runtime!.runId;
+ }
  const rows=await store.readLibrary(async tx=>Object.fromEntries(await Promise.all(store.libraryTables.map(async table=>[table,await tx.entries(table)])))) as import('../../apps/web/src/data/library/backupValidation').BackupRows;
  rows.packageCache=[];
  validateBackupRows(rows);
@@ -91,7 +100,7 @@ try{
    batches.push({table,file,rowCount:chunk.length,sha256:createHash('sha256').update(bytes).digest('hex')});
   }
  }
- const metadata={format:'sensa-retention-capacity-facts-v1',source:'LearningSystem commands over SQLite/Wasm, no model/TTS, no direct Target/Run/Event field seeds',clock:new Date(clock).toISOString(),targets:count,runs:rows.learningRuns.length,events:rows.learningEvents.length,bytes:totalBytes,storedFactBytes,sharedArchiveBytes:archive.bytes.length,sharedArchiveRoundtrip:'full authority validation; no encryption, destination restore, OPFS file size or UI latency claim',batches,bookDescriptor:book.descriptor,probeTargetId:targetId,probeRunId:(await learningSystem.read({kind:'runtime',languageContext:context})).runtime!.runId,setupSeconds:Math.round((performance.now()-begin)/1000)};
+ const metadata={format:readyOnly?'sensa-learning-capacity-facts-v1':'sensa-retention-capacity-facts-v1',source:'LearningSystem commands over SQLite/Wasm, no model/TTS, no direct Target/Run/Event field seeds',mode:readyOnly?'ready_inventory':'mature_retention',clock:new Date(clock).toISOString(),bookMemberCount:count,targets:rows.learningTargets.length,runs:rows.learningRuns.length,events:rows.learningEvents.length,bytes:totalBytes,storedFactBytes,sharedArchiveBytes:archive.bytes.length,sharedArchiveRoundtrip:'full authority validation; no encryption, destination restore, OPFS file size or UI latency claim',batches,bookDescriptor:book.descriptor,probeTargetId:targetId,probeRunId,setupSeconds:Math.round((performance.now()-begin)/1000)};
  await writeFile(join(directory,'manifest.json'),JSON.stringify(metadata,null,2));
- console.info(JSON.stringify({stage:'validated_snapshot',directory,targets:count,runs:metadata.runs,events:metadata.events,bytes:totalBytes,storedFactBytes,sharedArchiveBytes:archive.bytes.length,setupSeconds:metadata.setupSeconds}));
+ console.info(JSON.stringify({stage:'validated_snapshot',directory,bookMemberCount:count,targets:metadata.targets,runs:metadata.runs,events:metadata.events,bytes:totalBytes,storedFactBytes,sharedArchiveBytes:archive.bytes.length,setupSeconds:metadata.setupSeconds}));
 }finally{database.close();Object.assign(globalThis,{Date:NativeDate});}

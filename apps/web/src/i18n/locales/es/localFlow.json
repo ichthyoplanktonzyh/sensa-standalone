@@ -1,5 +1,13 @@
 {
   "localFlow": {
+    "outsideLearningPlan": "Fuera del plan de aprendizaje futuro",
+    "supplementalEmpty":"Aún no hay contenido añadido por separado","supplementalLearning": "Aprendizaje complementario",
+    "removeFromLearning": "Retirar del aprendizaje",
+    "restoreToLearning": "Volver a añadir al aprendizaje",
+    "membershipRemoved": "Retirado del aprendizaje futuro",
+    "membershipChanged": "La fuente de aprendizaje ha cambiado. Revisa su estado actual antes de continuar.",
+    "membershipSavedReadFailed": "El cambio se guardó, pero no pudo leerse. Reintenta la lectura.",
+    "membershipUnconfirmed": "No se pudo confirmar el guardado. Revisa el estado actual antes de continuar.",
     "clarificationSourceChanged": "Continúa la conversación para revisar el material actual antes de confirmar.",
     "packageAuthor": "Autor",
     "packageFilesUnavailable": "Paquetes sin archivo en este dispositivo: {{count}}. Importa los originales o vuelve a descargarlos del catálogo.",

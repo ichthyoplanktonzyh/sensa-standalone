@@ -51,6 +51,7 @@ export function expandSharedRecordContent(value:WireValue,read:(digest:string)=>
  return visit(value);
 }
 
+
 const base64=(bytes:Uint8Array)=>{
  let text='';for(let offset=0;offset<bytes.length;offset+=16384)text+=String.fromCharCode(...bytes.subarray(offset,offset+16384));
  return btoa(text);

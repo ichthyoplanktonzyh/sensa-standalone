@@ -58,3 +58,16 @@ test('continuations read scalar indexed rows rather than Target/material JSON, a
   expect(statements.some(sql=>sql.includes('sensa_runtime_learning_candidate_sources'))).toBe(true);
  }finally{raw.exec=exec;}
 });
+
+test('rejected indexed candidates refill the new-learning prefix without consuming the daily quota in either adapter',()=>{
+ const isolated={...context,languageRouteId:crypto.randomUUID()},fresh=[1,2,3].map(index=>({
+  ...targets[1]!,id:`readiness-prefix-${index}`,startedAt:null,introducedLanguageRouteId:null,completedAt:null,memory:null,relearnAt:null,planningOverrides:[],
+  policyAssignment:{...targets[1]!.policyAssignment,profileId:'lightweight'},
+  curriculumMemberships:[{...targets[1]!.curriculumMemberships[0]!,languageContext:isolated}],
+ } as LocalLearningTarget));
+ for(const target of fresh)candidates.upsert(target.id,target);
+ const projection=createHomeLearningStorageProjection({targets:fresh,availablePackageKeys:['available'],activeRun:null,studyPlans:{},languageRouteId:isolated.languageRouteId,clock});
+ const query:RuntimeLearningCandidateQuery={languageContext:isolated,clock,dailyLimit:1,supportedPolicies:['lightweight'],currentTargetIds:[],retryTargetIds:[],excludedTargetIds:fresh.slice(0,2).map(target=>target.id)};
+ const expected={due:[],initialReady:[{id:fresh[2]!.id,relearnAt:null}],nextChangeAt:null};
+ expect(candidates.read(query)).toEqual(expected);expect(runtimeLearningCandidatesFromRecords(projection,query)).toEqual(expected);
+});

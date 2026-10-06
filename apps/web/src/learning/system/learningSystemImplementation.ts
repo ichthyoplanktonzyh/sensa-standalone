@@ -34,6 +34,10 @@ export const executeLearningCommand = async (command: LearningCommand): Promise<
   // Deterministic tests and UI acceptance advance the actual injected clock.
   if('at' in command&&command.at!==undefined&&(!Number.isFinite(Date.parse(command.at))||Date.parse(command.at)>Date.now()))throw new Error('localFlow.clockChanged');
   switch (command.kind) {
+    case 'change_supplemental_membership': {
+      const {changeSupplementalMembership}=await import('../../data/library/supplementalMemberships');
+      return changeSupplementalMembership(command);
+    }
     case 'change_book_plan': {
       const {changeBookPlan}=await import('../../data/library/learning');
       return changeBookPlan(command);
@@ -215,6 +219,10 @@ export const executeLearningCommand = async (command: LearningCommand): Promise<
 
 export const readLearningQuery = async (query: LearningQuery): Promise<unknown> => {
   switch (query.kind) {
+    case 'supplemental_memberships': {
+      const {readSupplementalMemberships}=await import('../../data/library/supplementalMemberships');
+      return readSupplementalMemberships(query.languageContext,query.cursor??null);
+    }
     case 'book_plans': {
       const {readLearningBookPlans}=await import('./learningProjection');
       return readLearningBookPlans(query.languageContext);

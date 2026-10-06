@@ -2,9 +2,10 @@
 
 import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
 import sqliteWasmUrl from "@sqlite.org/sqlite-wasm/sqlite3.wasm?url";
-import type {SAHPoolUtil} from '@sqlite.org/sqlite-wasm';
+import type {SAHPoolUtil,Database} from '@sqlite.org/sqlite-wasm';
 
 import { SqliteRecordDatabase } from "./sqliteDatabase";
+import {isFatalSqliteConnectionFailure} from './sqliteConnectionFailure';
 import {
   assertSahPoolAccessHandlesFree,
   acquireSqliteSahPoolLease,
@@ -32,10 +33,12 @@ let store:Promise<WorkerStore>|undefined;
 let activeLease:SqliteSahPoolLease|undefined;
 let activePool:SAHPoolUtil|undefined;
 let activeDatabase:SqliteRecordDatabase|undefined;
+let activeRawDatabase:Database|undefined;
 let installerStarted=false;
 let closing=false;
 let closed=false;
 let cleanupUnconfirmed=false;
+let failedConnection=false;
 let requestQueue:Promise<void>=Promise.resolve();
 
 const verifyPoolHandles=()=>assertSahPoolAccessHandlesFree(navigator.storage,sqlitePoolDirectory);
@@ -73,8 +76,9 @@ async function database():Promise<WorkerStore>{
         });
         const poolReady=performance.now();
         activePool=pool;
-        const database=new pool.OpfsSAHPoolDb(sqliteLibraryFile);
+        const database=activeRawDatabase=new pool.OpfsSAHPoolDb(sqliteLibraryFile);
         activeDatabase=new SqliteRecordDatabase(sqlite3,database,'opfs');
+        activeRawDatabase=undefined; // The wrapper now owns the native handle.
         return {pool,database:activeDatabase,initialized:false,startupTimingsMs:{lease:Math.round(leased-started),nativeProbe:Math.round(probed-leased),wasm:Math.round(wasmReady-probed),pool:Math.round(poolReady-wasmReady),databaseOpen:Math.round(performance.now()-poolReady),total:Math.round(performance.now()-started)}};
       }catch(cause){
         try{
@@ -82,6 +86,7 @@ async function database():Promise<WorkerStore>{
             await releaseLease();
           }else{
             if(activeDatabase){activeDatabase.close(false);activeDatabase=undefined;}
+            else if(activeRawDatabase){activeRawDatabase.close();activeRawDatabase=undefined;}
             if(activePool){activePool.pauseVfs();activePool=undefined;}
             // The bundled 3.53.4 init-failure backport pauses rather than
             // removes the pool. Verify every native handle before unlocking.
@@ -108,15 +113,17 @@ async function closeStorage():Promise<void>{
   try{
     const initializedStore=store?await store.catch(()=>undefined):undefined;
     const databaseValue=initializedStore?.database??activeDatabase;
+    const rawDatabase=activeRawDatabase;
     const pool=initializedStore?.pool??activePool;
-    if(databaseValue&&pool){
+    if((databaseValue||rawDatabase)&&pool){
       await closeSqliteSahPoolSafely({
-        closeDatabase:()=>databaseValue.close(initializedStore?.initialized??false),
+        closeDatabase:()=>databaseValue?databaseValue.close(!failedConnection&&(initializedStore?.initialized??false)):rawDatabase!.close(),
         pauseVfs:()=>pool.pauseVfs(),
         verifyAccessHandlesFree:verifyPoolHandles,
         releaseLease,
       });
       activeDatabase=undefined;
+      activeRawDatabase=undefined;
       activePool=undefined;
     }else if(activePool){
       activePool.pauseVfs();
@@ -156,6 +163,7 @@ const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
     return null;
   }
   if(closed||closing||cleanupUnconfirmed)throw new Error('sqlite_worker_closing');
+  if(failedConnection)throw new Error('sqlite_storage_connection_failed');
   const current=await database();
   switch(request.kind){
     case 'initialize':{
@@ -213,7 +221,17 @@ const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
 };
 
 worker.addEventListener('message',(event:MessageEvent<SqliteWorkerRequest>)=>{
-  const response=requestQueue.then(()=>message(event.data));
+  const response=requestQueue.then(()=>message(event.data)).finally(()=>{
+    // Post-COMMIT maintenance retains a successful receipt. Quarantine before
+    // the queue advances, even though that request did not reject.
+    if(activeDatabase?.connectionFailed)failedConnection=true;
+  }).catch(cause=>{
+    // An I/O/corruption failure is not an ordinary rejected user operation.
+    // Stop every queued/future SQL request on this connection, retaining the
+    // original failure and files. Only explicit close may settle its handles.
+    if(isFatalSqliteConnectionFailure(cause))failedConnection=true;
+    throw cause;
+  });
   requestQueue=response.then(()=>undefined,()=>undefined);
   void response.then(
     value=>worker.postMessage({id:event.data.id,ok:true,value} satisfies SqliteWorkerResult),

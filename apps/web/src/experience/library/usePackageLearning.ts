@@ -62,6 +62,7 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
  if(viewEpoch.current.routeKey!==routeKey||viewEpoch.current.mode!==mode||viewEpoch.current.targetId!==targetId)viewEpoch.current={routeKey,mode,targetId,version:viewEpoch.current.version+1};
  const [targetDetail,setTargetDetail]=useState<{activeRunTargetIds:readonly string[];exportPackageKey:string|null}>({activeRunTargetIds:[],exportPackageKey:null});
  const [runtimeNextTargetId,setRuntimeNextTargetId]=useState<string|null>(null);
+ const [runtimePreferencesDailyLimit,setRuntimePreferencesDailyLimit]=useState<number|null>(null);
  const [loadState,setLoadState]=useState<{routeKey:string;version:number;status:'loading'|'ready'|'unavailable'}>(()=>({routeKey,version:viewEpoch.current.version,status:'loading'}));
  // A changed Route invalidates readiness during render, before the passive
  // reload effect can run. Old targets cannot become a new Session's scope.
@@ -99,7 +100,14 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
   }
   if(readingRuntime){
    const projection=await measuredWorkspaceRead('runtime',()=>learningSystem.read({kind:'runtime',languageContext,clock:Date.now()}));
+   // The current Run already pins its executable material. Only its current
+   // published source is needed for the optional save-to-meaning action;
+   // collection recovery and catalog inventory are not Runtime prerequisites.
+   const sourceKey=projection.runtime?.kind==='lightweight'?projection.runtime.target.packageKey:null;
+   const sources=await measuredWorkspaceRead('runtimeSource',()=>contentSupplySystem.read({kind:'package_summaries',packageKeys:sourceKey?[sourceKey]:[]}));
    if(current!==lifecycle.current||version!==viewEpoch.current.version||currentRoute.current!==routeKey)return false;
+   setPackages([...sources]);
+   setRuntimePreferencesDailyLimit(projection.preferencesDailyLimit);
    setWorkspace(previous=>({...previous,runtime:projection.runtime,activeRunId:projection.runtime?.runId??null,dailyLimit:projection.dailyLimit,policyOptions:projection.policyOptions,
     queue:{...previous.queue,nextTargetId:projection.nextTargetId,nextChangeAt:projection.nextChangeAt}}));
    setRuntimeNextTargetId(projection.nextTargetId);
@@ -121,7 +129,7 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
  };
  const refresh=async()=>{
   const current=lifecycle.current,version=viewEpoch.current.version;
-  const [learningApplied]=await Promise.all([refreshLearning(),managementMode.current||viewEpoch.current.mode==='target'?Promise.resolve():refreshSupply()]);
+  const [learningApplied]=await Promise.all([refreshLearning(),runtimeMode.current||managementMode.current||viewEpoch.current.mode==='target'?Promise.resolve():refreshSupply()]);
   if(current!==lifecycle.current||version!==viewEpoch.current.version||!learningApplied)return;
   setLoaded(true);
   setLoadStatus('ready');
@@ -134,7 +142,7 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
   setNotice(current=>[localFlowText('learningReadFailed'),localFlowText('progressReadFailed')].includes(current)?'':current);
   const request=(async()=>{
    try{
-    if(managementMode.current||viewEpoch.current.mode==='target'){await refresh();return;}
+    if(runtimeMode.current||managementMode.current||viewEpoch.current.mode==='target'){await refresh();return;}
     const result=await measuredWorkspaceRead('rehydrate',()=>contentSupplySystem.execute({kind:'rehydrate'}));
     if(current!==lifecycle.current||version!==viewEpoch.current.version)return;
     setUnavailablePackageKeys(result.blocked);
@@ -158,9 +166,9 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
   const current=lifecycle.current;
   const readFailed=(version:number)=>{if(current!==lifecycle.current||version!==viewEpoch.current.version)return;setLoadStatus('unavailable');setNotice(previous=>previous==='sessionEnd.savedReadFailed'?previous:localFlowText('progressReadFailed'));};
   const reloadLearning=()=>{const version=viewEpoch.current.version;void learningCoordinator.request().catch(()=>readFailed(version));};
-  const reloadSupply=()=>{const version=viewEpoch.current.version;void Promise.all([learningCoordinator.request(),managementMode.current||viewEpoch.current.mode==='target'?Promise.resolve():supplyCoordinator.request()]).catch(()=>readFailed(version));};
+  const reloadSupply=()=>{const version=viewEpoch.current.version;void Promise.all([learningCoordinator.request(),runtimeMode.current||managementMode.current||viewEpoch.current.mode==='target'?Promise.resolve():supplyCoordinator.request()]).catch(()=>readFailed(version));};
   const prepare=async()=>{
-   if(managementMode.current||viewEpoch.current.mode==='target'){await learningCoordinator.request();return;}
+   if(runtimeMode.current||managementMode.current||viewEpoch.current.mode==='target'){await learningCoordinator.request();return;}
    await measuredWorkspaceRead('prepare',()=>learningSystem.execute({kind:'prepare_queue',languageContext,at:new Date().toISOString()}));
    await learningCoordinator.request();
   };
@@ -197,7 +205,7 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
   if(managementOnly||mode==='target')return;
   if(workspace.queue.nextChangeAt===null)return;
   const timer=window.setTimeout(
-   ()=>void learningSystem.execute({kind:'prepare_queue',languageContext,at:new Date().toISOString()})
+   ()=>void (runtimeOnly?Promise.resolve():learningSystem.execute({kind:'prepare_queue',languageContext,at:new Date().toISOString()}))
     .then(refreshLearning)
     .catch(()=>setNotice(localFlowText('progressReadFailed'))),
    Math.min(2_147_483_647,Math.max(20,workspace.queue.nextChangeAt-Date.now()+20)),
@@ -273,6 +281,7 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
   records:workspace.records,
   policyOptions:workspace.policyOptions,
   dailyLimit:dailyLimit??undefined,
+  preferencesDailyLimit:runtimeOnly?runtimePreferencesDailyLimit:dailyLimit,
   notice:notice==='runtime.actionReceiptUnavailable'||notice==='learningPreferences.quantitySaveUnconfirmed'||notice.startsWith('sessionEnd.')?i18n.t(notice):localFlowNotice(notice),busy:busy||loadStatus!=='ready',progress,loaded:loaded&&loadStatus==='ready',loadStatus,retryInitialLoad,unavailablePackageKeys,catalogBusy,reloadCatalog,refresh,
   endedStateNeedsRead:notice==='sessionEnd.savedReadFailed',
   retryEndedStateRead:async()=>{

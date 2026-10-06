@@ -11,7 +11,6 @@ import { useScreenState } from '../ui/ScreenHost';
 import {useLearningHistory} from '../library/useLearningHistory';
 
 interface StudyScreenProps {
-  policySummary?: string;
   fixedPolicy?: boolean;
   active: boolean;
   status?: ReactNode;
@@ -43,6 +42,8 @@ export const StudyScreen = (props: StudyScreenProps) => {
   const {t,i18n}=useTranslation();
   const [filter,setFilter]=useScreenState<'all'|LearningRecordKind>('study:history-filter','all');
   const [limit,setLimit]=useScreenState('study:history-limit',10);
+  const [managementOpen,setManagementOpen]=useScreenState('study:management-open',false);
+  const [calendarOpen,setCalendarOpen]=useScreenState('study:calendar-open',false);
   const history=useLearningHistory({surface:'study',range:'all',start:'',end:'',kind:filter,languageChoice:null},props.active,limit);
   const records=history.projection?.records??[];
   const closePreferences=()=>{
@@ -62,38 +63,30 @@ export const StudyScreen = (props: StudyScreenProps) => {
         primary: <>
       {props.status}
       {(!props.availability||props.availability==='ready')&&<>
-      <div className="sensa-study-overview grid gap-5 lg:grid-cols-[1.4fr_1fr]">
+      <div className="sensa-study-overview grid gap-5">
         <section className="flex flex-col rounded-overlay bg-surface-subtle p-6 sm:p-8">
           <div className="flex items-center gap-2 text-sm text-fg-secondary"><BookOpen size={18}/>{t('study.scope')}</div>
           <h2 className="mt-5 text-3xl font-medium tracking-tight">{props.learningTargetCount?t('study.count',{count:props.learningTargetCount}):t('study.empty')}</h2>
           <p className="mt-2 text-xs text-fg-tertiary">{t('study.currentLanguage',{language:props.languageLabel})}</p>
-          {!props.learningTargetCount&&<p className="mt-3 text-sm text-fg-secondary">{t('study.emptyHint')}</p>}
-          <dl className="my-7 grid grid-cols-2 divide-x divide-border-subtle">
+          {props.learningTargetCount>0&&<dl className="my-7 grid grid-cols-2 divide-x divide-border-subtle">
             {([['ready',props.readyInitialCount],['review',props.reviewCount]] as const).map(([key,value])=><div key={key} className="last:pl-6"><dt className="text-sm text-fg-secondary">{t('study.'+key)}</dt><dd className="mt-2 text-2xl tabular-nums">{value.toLocaleString(i18n.language)}</dd></div>)}
-          </dl>
-          <div className="mt-auto flex flex-wrap gap-2">
+          </dl>}
+          <div className="mt-7 flex flex-wrap gap-2">
             {props.learningTargetCount>0&&<button className={`${studyButton} bg-action-primary text-action-on-primary hover:bg-action-primary-hover`} onClick={props.onOpenTargetLibrary}>{t('study.browse')}<ArrowRight size={16}/></button>}
             <button className={`${studyButton} border border-border-strong hover:bg-surface-panel`} onClick={props.onAddLearning}><Plus size={16}/>{t('study.add')}</button>
           </div>
         </section>
-        <section className="rounded-overlay border border-border-subtle bg-surface-panel p-6 sm:p-8">
-          <h2 className="text-lg font-medium">{t('study.plan')}</h2>
-          <button className="mt-7 block w-full rounded-control text-left focus-visible:outline-2 focus-visible:outline-focus" onClick={()=>props.onOpenPreferences ? props.onOpenPreferences() : props.onTabChange('b')}>
-            <span className="text-sm text-fg-secondary">{t('study.daily')}</span><span className="mt-2 flex items-center justify-between gap-3 text-2xl">{t('study.count',{count:props.dailyNewCount})}<ArrowRight size={18}/></span>
-          </button>
-          <p className="mt-3 text-xs leading-6 text-fg-tertiary">{t('study.dailyNote')}</p>
-          <div className="mt-7 border-t border-border-subtle pt-6"><p className="text-sm text-fg-secondary">{t('study.method')}</p><p className="mt-2 font-medium">{props.policySummary??t('learningPreferences.policies.'+props.defaultPolicy)}</p></div>
-        </section>
       </div>
-      {props.bookPlans}
-      {props.calendar ?? <StudyCalendar/>}
+      {props.bookPlans&&<details open={managementOpen} onToggle={event=>setManagementOpen(event.currentTarget.open)} className="mt-6 rounded-overlay border border-border-subtle bg-surface-panel p-4 sm:p-6">
+        <summary className="min-h-11 cursor-pointer rounded-control py-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-focus">{t('study.manageContent')}</summary>
+        {managementOpen&&props.bookPlans}
+      </details>}
       <section className="mt-12" aria-labelledby="study-history-title">
         <div className="flex flex-wrap items-center justify-between gap-4"><div className="flex items-center gap-4"><h2 id="study-history-title" className="text-xl font-medium">{t('study.history')}</h2><button type="button" className={studyButton+' text-action-primary hover:bg-accent-soft'} onClick={props.onOpenStats}>{t('statistics.title')}<ArrowRight size={16}/></button></div>
           <div className="flex flex-wrap gap-1" aria-label={t('study.history')}>
             {(['all','initial_learning','retention_review','relearning'] as const).map(kind=><button key={kind} aria-pressed={filter===kind} className={`${studyButton} ${filter===kind?'bg-surface-selected text-action-primary':'text-fg-secondary hover:bg-surface-subtle'}`} onClick={()=>{setFilter(kind);setLimit(10);}}>{t('study.'+kind)}</button>)}
           </div>
         </div>
-        <p className="mt-3 text-xs leading-6 text-fg-tertiary">{t('study.historyNote')}</p>
         {history.availability==='unavailable'?<div role="alert"><p>{localFlowText('progressReadFailed')}</p><button className={studyButton} onClick={history.retry}>{t('reliability.retry')}</button></div>:!history.projection?<p role="status" aria-busy="true">{localFlowText('loadingSensa')}</p>:records.length===0?<div className="py-16 text-center"><p className="font-medium">{t(history.projection.hasRecords?'study.noMatches':'study.noRecords')}</p>{!history.projection.hasRecords&&<p className="mt-2 text-sm text-fg-tertiary">{t('study.noRecordsHint')}</p>}</div>:<ol className="mt-5 divide-y divide-border-subtle">
           {records.slice(0,limit).map(record=><li key={record.recordId}><button className="flex w-full flex-wrap items-center gap-4 rounded-control py-5 text-left hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus sm:flex-nowrap" onClick={()=>props.onOpenTarget(record.targetId)}>
             <span className="min-w-0 flex-1"><strong className="font-medium">{record.expression}</strong><span className="mt-1 block text-sm text-fg-secondary">{record.meaning ?? record.detail}</span></span>
@@ -103,6 +96,10 @@ export const StudyScreen = (props: StudyScreenProps) => {
         </ol>}
         {history.projection&&history.projection.total>limit&&<button disabled={history.busy} className={`${studyButton} mt-4 border border-border-subtle`} onClick={()=>setLimit(value=>value+10)}>{t('study.more')}</button>}
       </section>
+      <details open={calendarOpen} onToggle={event=>setCalendarOpen(event.currentTarget.open)} className="mt-8 border-t border-border-subtle pt-4">
+        <summary className="min-h-11 cursor-pointer rounded-control py-3 text-sm text-fg-secondary focus-visible:outline-2 focus-visible:outline-focus">{t('study.calendar.title')}</summary>
+        {calendarOpen&&(props.calendar??<StudyCalendar/>)}
+      </details>
       </>}
         </>,
       }}

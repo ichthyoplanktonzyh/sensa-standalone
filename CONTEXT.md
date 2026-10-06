@@ -1,7 +1,7 @@
 # Sensa product context
 
 > Status: canonical ubiquitous language  
-> Updated: 2026-09-21
+> Updated: 2026-10-06
 > Domain document index: [`docs/sensa/README.md`](docs/sensa/README.md)
 
 Sensa is a sense-first language-learning product. Its durable learning identity
@@ -541,13 +541,11 @@ Resolved Learning Plan is preparing or blocked; it is neither a Book, a Personal
 Collection nor a Saved list and is not runtime-eligible until ready.
 
 **Study Scope / Study Scope Revision**:  
-The resolved, mode-aware set of Learning Targets currently in one Language Learning
-Route, de-duplicated by Retention Target and carrying source, Effective Learning Policy
-and plan-readiness provenance in an immutable revision. Only purpose-ready members are
-executable; a Session pins one revision so later changes cannot silently alter work
-already acted on. A newer material revision for the same Curriculum Membership,
-Learning Target and pinned language pair may still be resolved for a current
-not-yet-acted or future Step without rebinding the Session scope.
+The immutable selection of Learning Targets and Curriculum sources actually admitted
+to a Protocol Run, carrying its effective Policy and purpose-readiness provenance.
+It preserves that Run's selected work, not the entire Route inventory; future Runs
+are selected from the current Study Plan. Compatible material revisions may still
+refresh an unacted Step without changing target, source or language identity.
 
 **Learner Sense Progress**:  
 The learner-by-Sense roll-up over all Retention Targets and explicitly Sense-
@@ -748,9 +746,10 @@ The service that selects among due Review, ready protocol work and eligible new
 Retention-Target work while respecting Study Plan and the pinned Learning Protocol.
 
 **Learning Session**:  
-A bounded period of learner activity containing ordered Encounters. It pins one
-Study Scope Revision and one Pinned Language Context; its intent is `mixed` or
-`review_only`, and it is not itself a learning or FSRS result.
+A bounded period of learner activity containing ordered Encounters, with a fixed
+Pinned Language Context, intent and daily-new limit. Its starting Study Scope records
+the origin selection; each later Run pins its own selection from the current queue.
+A Session is not itself a learning or FSRS result.
 
 **Pinned Language Context**:
 The immutable Language Tags and contextual roles resolved when a language-dependent

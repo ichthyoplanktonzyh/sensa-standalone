@@ -293,7 +293,7 @@ Book Enrollment 固定一个不可变 Book Version、一个已解析 Book Range 
 
 Book 的新版本不会静默替换 Enrollment 已固定的 Book Version。升级必须是显式 Curriculum 操作：
 stable Sense 复用原进度，新加入成员获得新资格，被移除成员不删除历史，active Session 继续使用
-其已固定的旧 Scope/Content revisions。
+当前 Run 的旧 Scope/Content revisions；后续未开始 Run 按已明确应用的当前版本选择。
 
 ### Book Range
 
@@ -373,7 +373,7 @@ Example 只能通过其绑定 Sense 发起“学习这个意思”，Example
 本身不能成为 Curriculum member。unsave 不移除 Supplemental Membership；移除 Membership 也不
 unsave、不删除 Note/Anchor/Collection Membership、Retention Target 或 Learner Sense Progress。若同一 target 仍由
 其他 active/maintenance source 覆盖，它继续在有效 Study Scope 中；若已无任何有效 source，它从
-后续 Session 的正式候选中退出，但保留 phase、Protocol Run、Evidence 与 FSRS，重新加入时从原状态恢复。
+后续未开始 Run 的正式候选中退出，但保留 phase、Protocol Run、Evidence 与 FSRS，重新加入时从原状态恢复。
 
 ### On-demand Content Provisioning lifecycle
 
@@ -417,21 +417,21 @@ Provisioning Batch 是多个 Task 的非原子调度/观测容器。一个 Task 
 
 ### Study Scope Revision 与每日额度
 
-Study Scope 是固定一条 Language Learning Route revision、mode-aware、source-aware、policy-resolved
-的去重 scope snapshot：active Enrollment 提供
+正式学习队列是按当前 Language Learning Route、mode、来源、策略、readiness 与调度状态查询的可重建候选视图：active Enrollment 提供
 当前 Range 的新 Sense 与既有工作，maintenance Enrollment 只提供已经开始或进入长期保持的 Sense，
 paused Enrollment 不提供候选，active Supplemental Membership 提供对应 Learning Target。每个成员同时保留
 Curriculum source 与 Learning Entry Provenance、Effective Learning Policy、Resolved Learning Plan 与已解析 target/provisioning/protocol reference，
 只有当前 purpose 为 `ready` 时才提供运行候选，并按 Retention Target 去重。同一
 Retention Target 无论来自多少 Book、Range 或 Supplemental Membership，都只有一个 active
 Protocol Run 和一个 FSRS State；同一 Sense 的不同 target expressions 不得因此合并。
-换词书、调整 Range、切换 Enrollment mode、接纳或移除 Supplemental Membership 都产生新的不可变
-Study Scope Revision。
+Study Scope Revision 只固定实际选入一条 Protocol Run 的 Target、来源与已解析策略／计划，
+不复制整个候选库存，也不为未选中的目标预先建立执行快照。
 
-Learning Session 固定开始时的 Study Scope Revision 与 Pinned Language Context。Curriculum、Route 或
-Active Route Selection 变更从后续 Session 生效，不能
-静默改变正在进行的 Encounter 或队列；如果产品允许在 active Session 中修改 Plan，必须先明确
-结束/中断该 Session，而不是把它重绑定到新 Scope。
+Learning Session 固定开始时的 Pinned Language Context、intent 与每日新学上限，并保存起点选择及有序 Run。
+每条新 Run 固定自己的 Study Scope。换词书、调整 Range、切换 Enrollment mode、接纳或移除
+Supplemental Membership，以及未开始目标的合法 Policy Assignment 变更，都影响下一条尚未开始 Run 的候选，
+不要求先结束 Session。它们不增删当前 Run 的 participant，不改写已选来源、Committed Policy、已发生记录或调度结果。
+Route 与 Active Route Selection 不重绑定当前活动的固定语言上下文；数量偏好变更从后续 Session 生效。
 
 同一 Curriculum Membership 在固定 Target 与语言方向内发布新的不可变 Learning Materialization，
 不属于 Scope 重绑定。当前 Step 尚未接受 Action 时，Runtime 可以用新版替换其绑定并使旧界面 revision
@@ -464,8 +464,8 @@ Curriculum 只提供这些事实摘要，不据此生成维度处方、欠账或
 
 ## 5. Learning Session 与 Session intent
 
-Learning Session 是一次有开始和结束边界的用户活动容器。它固定 intent、Study Scope Revision 与
-Pinned Language Context：
+Learning Session 是一次有开始和结束边界的用户活动容器。它固定 intent、每日新学上限与 Pinned Language Context，
+保存起点 Study Scope，并允许后继 Run 从当前队列选择、各自固定实际来源：
 
 Pinned Language Context 固定 Route revision、Target Language 与 Support Language；具体 Step/Action
 再声明 Input Language 与 Output Language。阅读中的 target-language input 与 support-language explanation、
@@ -797,7 +797,8 @@ NewEligible
 
 具体优先级、fairness、cooldown 和每天是否保留新学容量属于 Planning Policy，但必须满足：
 
-- 所有 candidate 必须来自 Session-pinned Study Scope Revision；`active` Enrollment 可以提供新与
+- 所有 candidate 必须按 Session 的语言方向与 intent 从当前来源安排中选择，而不是受其起点 Scope
+  库存限制；入选 Run 单独固定实际 participants 与来源。`active` Enrollment 可以提供新与
   既有工作，`maintenance` 只提供已经开始或 retaining/relearning 的工作，`paused` 不提供候选；
 - candidate 对应的 Resolved Learning Plan 必须为当前 purpose 提供 `ready` protocol/provisioning
   reference；`preparing/blocked` 只进入状态读取和恢复操作，不得被 Planner 当作可执行 Encounter；

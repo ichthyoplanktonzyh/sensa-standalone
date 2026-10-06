@@ -515,7 +515,9 @@ const runCapacityJourney=async(count:number,browser:import('@playwright/test').B
       await page!.reload();
       const documentLoaded=performance.now();
       await expect(detail.getByRole('heading',{name:title,exact:true})).toBeVisible({timeout:180_000});
-      await expect(detail.getByText('已加入学习',{exact:true})).toBeVisible();
+      // This baseline records restoration latency; the surrounding stage is
+      // the finite stuck-operation guard, not an implicit 5s UX pass budget.
+      await expect(detail.getByText('已加入学习',{exact:true})).toBeVisible({timeout:defaultStageWaitMs});
       report.restoreBreakdown={documentReloadMs:Math.round(documentLoaded-started),afterDocumentLoadedMs:Math.round(performance.now()-documentLoaded)};
     });
     report.unexpectedRestoredStates=await page.evaluate(()=>
@@ -548,13 +550,17 @@ const runCapacityJourney=async(count:number,browser:import('@playwright/test').B
     const home=page.locator('#s-home');
     await stage('startLearningSession',async()=>{
       await home.getByRole('button',{name:'开始学习',exact:true}).click();
-      const preferences=page!.getByRole('dialog',{name:'学习偏好',exact:true});
-      await preferences.getByRole('button',{name:'确认数量并开始',exact:true}).click();
+      await expect(page!.getByRole('dialog',{name:'学习偏好',exact:true})).toHaveCount(0);
       await expect(page!.locator('#s-lightweight-runtime').getByRole('button',{name:/查看表达/})).toBeVisible();
     });
     const runtime=page.locator('#s-lightweight-runtime');
     const runtimeBeforeReveal=await stage('readRuntimeBeforeReveal',()=>page!.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint()));
     assert(runtimeBeforeReveal.runtime,'the learning workspace must contain an actual active runtime');
+    assert.equal(runtimeBeforeReveal.records.length,0,'starting must not manufacture a learning outcome');
+    const firstArrangement=await stage('verifyFirstSessionArrangement',()=>page!.evaluate(()=>window.__sensaBrowserSmoke!.learningArrangementCheckpointForTest()));
+    assert.equal(firstArrangement.session?.dailyNewSenseLimit,20,'an unconfigured learner starts with the default daily limit');
+    assert(firstArrangement.scope,'the first learning activity must have an actual captured Scope');
+    assert.deepEqual(firstArrangement.scope.members.map(member=>member.targetId).sort(),learningAfterEnrollment.targetIds.slice().sort());
     await stage('revealSense',async()=>{
       await runtime.getByRole('button',{name:/查看表达/}).click();
       await expect(runtime.getByRole('button',{name:/已经连上/})).toBeVisible();
@@ -581,7 +587,11 @@ const runCapacityJourney=async(count:number,browser:import('@playwright/test').B
       return after;
     });
     report.learning={
+      bookMemberCount:count,
       enrollmentWindowTargetCount:learningAfterEnrollment.targetIds.length,
+      firstScopeMemberCount:firstArrangement.scope.members.length,
+      firstSessionDailyLimit:firstArrangement.session!.dailyNewSenseLimit,
+      capacityAxis:'large Book, bounded admitted learning window; not a fully admitted collection of this size',
       runtimeTargetBeforeReveal:runtimeBeforeReveal.runtime.targetId,
       recordedTarget:afterRating.records[0]!.targetId,
       recordCount:afterRating.records.length,

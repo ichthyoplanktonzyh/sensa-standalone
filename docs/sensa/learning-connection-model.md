@@ -859,8 +859,10 @@ origin=`relearning` 的 Memory Outcome。两者都不覆盖 forgotten Outcome。
 - Learning Entry Provenance 只记录来源，不改变 Learning/Retention Target identity；同一连接跨来源去重；
 - Language Learning Route 固定 Target Language、可与其相同的 default Support Language 与 route-scoped
   Study Plan；Learner 可拥有多条 Route，但不由此产生全局母语或 known-language/proficiency 事实；
-- Curriculum Membership、Study Scope Revision 与 Resolved Learning Plan 固定适用 Route revision；
+- Curriculum Membership、Run 的 Study Scope Revision 与 Resolved Learning Plan 固定适用 Route revision；
   target binding 必须与 Route 兼容，而 Support Language 与 Interface Locale 不进入 Retention identity；
+- Session 固定语言上下文、intent 和每日新学上限，不冻结全部尚未开始的库存；后继 Run 按当前安排选择，
+  已开始 Run 的 participant、来源、Committed Policy、已发生步骤与学习结果保持不变；
 - Session、Sense Construction 与 Content Provisioning Task 固定 Pinned Language Context；Input/Output
   Language 由操作意图决定，Active Route Selection 的后续变化不得重绑进行中的操作；
 - 同一 Retention Target 跨兼容 Route 仍共享一份正式进度、Evidence 与 FSRS State；只改变 Support

@@ -1,6 +1,8 @@
 # Sensa Web 工程说明
 
 本文是当前 Web 工程、验证和发布的唯一长期说明。产品行为见 [Web 产品说明](product-requirements-v1.md)，领域规则见[领域文档索引](README.md)。代码、迁移和 CI 配置始终是实现细节的最终来源。
+通用基础能力先对照成熟模式：学习状态、队列、限制与历史参考 Anki，本地事实与可重建索引参考 Obsidian；
+只为 Web 平台和 Sensa 的真实语义差异增加机制。领域设计与测试结构可以协调修订，用户价值、数据正确性和安全保障是判断标准。
 生产支持与数据恢复按[支持与恢复手册](support-recovery.md)执行；其中没有把未经验证的基础设施备份写成已有能力。
 
 ## 活跃代码边界
@@ -35,7 +37,9 @@ presentation type 的纯呈现装配，`apps/web/src/data/library/learning*.ts` 
 与源事实同一 SQLite 事务维护，并在所有源 rows 写入后更新，不能依赖云恢复的表顺序。读取失败时不显示虚假空状态。
 紧凑历史当前仍返回全部可用摘要，不等于无限历史的有界读取或容量通过。执行中的 `runtime` 只精确读取当前 Run 和参与目标，在 Run 边界才
 计算后续候选，不随每个步骤重新读取课程集合或历史。学习包目录界面在对应页面进入时加载，不进入
-恢复学习的同步模块闭包。Learning 操作回执只保存有界的 Run identity、原始 revision 与时间/语言元数据，
+恢复学习的同步模块闭包。Runtime 进入、恢复和重新获得焦点不执行整库资源恢复或完整内容库存读取；
+个人场景保存需要的来源摘要只按当前固定内容的 Package key 读取，不向页面运输其他内容或执行、媒体结构。
+Learning 操作回执只保存有界的 Run identity、原始 revision 与时间/语言元数据，
 不重复保存材料和协议状态；重放返回原收据，并核对其创建、Action 或 resume witness。续学绑定已完成的前序 Run、
 时间顺序、原 Session intent 与语言方向；无 device operation ledger 的云恢复也从 Run/lifecycle facts 验证这些关系。
 操作未收到回执时只重读已保存事实，不以重提交来探测是否成功；读取失败
@@ -131,10 +135,13 @@ Package key；运行恢复、策略锁定和生成频控通过领域索引查询
 维护触发考虑实际 SQL 行变更和大段已编码值／媒体，不只统计逻辑 `puts`；同步基线替换和启动时派生索引
 重建也包括在内。它是维护策略，不是 WAL 字节数的硬上限；普通未变结构的重开不执行 checkpoint。
 提交后的维护失败仅进入独立诊断，不撤销既有收据或把已保存事实误报为未保存（[SQLite WAL](https://sqlite.org/wal.html)）。
+其中物理 I/O、数据库损坏或文件不是数据库（NOTADB）的错误会隔离当前连接，在下一条排队请求执行前停止后续 SQL；约束、忙碌与普通命令失败不按损坏处理。提交后的维护故障仍保留原成功回执，显式关闭不再追加优化查询。
+普通命令或诊断修复失败后的回滚错误保留在 cause 链中，不能因原错误不致命而掩盖回滚的 I/O／损坏错误。包装器构造成功前也持有原生数据库引用，构造失败须先关闭原生句柄，再暂停池、验证并释放租约；未确认清理成功时保留引用和锁供重试，不创建新库。
 普通重开复用已有结构与统计，不重放 DDL、重写版本或制造缺失的空源表。Book 版本替换和媒体引用完整性检查同样通过事务内
 关系投影完成。承载大 JSON 的逻辑 record 与 Target 投影使用普通 rowid 表，紧凑关系投影使用
 `WITHOUT ROWID`；内容事务维护记录级 revision 与删除 tombstone，供账号同步只读取上次收敛后变化的记录。云端确认的逐记录基线和 block refs 保存在内部 `sensa_sync_base` 表；未变化记录不再重新编码、分块或下载。`packageInstallations` 保存可跨设备复制的精确 `.sensa` identity、语言方向、长度、digest 与来源 Book archive digest；完整 Portable artifact 与编译后的设备 Runtime content 只进入本地 `packageCache`，缓存写入不增加个人内容 revision。恢复后由 Content Supply 使用 Registry 中的 `.sensa-book` 位置一次重新取得，验证外层摘要及全部成员，再只恢复已有安装事实对应的缓存；解析或下载失败时 Learning Target 保留但 readiness 为 blocked。状态只保存小型幂等 commit receipt，不重复保存整库或待发布记录。`npm run benchmark:cloud-sync` 使用受控传输在真实 Chromium/OPFS 上执行 1k/10k 合成 Draft 的同步，检查单记录变化只上传记录块与受影响的 manifest 分片；它不是成熟学习历史、真实 API/网络或账号容量验收。
 内容摘要、key/digest 和语言方向数量使用同事务维护的设备侧投影；它们不进入备份或账号同步，可以从真实缓存重建。
+已完整恢复的内容缓存复用一次一致的安装／来源快照；下载或缓存修复后重新读取当前快照，避免把期间新增但未恢复的来源误报为就绪。
 学习状态变化只刷新学习投影，语言选择只读取当前语言方向；通知按记录 key 过滤，当前页面不重复处理自己发出的跨页通知。
 数据结构调整不要求保留历史格式兼容层；当前源事实和可重建索引分开处理，不通过清空用户库恢复初始化错误。
 物理 schema 15 沿用共享摘要存储材料内容、协议绑定和步骤定义，记录仍独立保存身份、版本、时间、provenance
@@ -145,17 +152,31 @@ Package key；运行恢复、策略锁定和生成频控通过领域索引查询
 13→14 的共享表示不改写已有逻辑事实；15 为 `studyScopes` 与 `learningSessions` 扩展
 record、tombstone 与 sync baseline 的表名允许项，在同一事务内逐字节复制原编码行，
 保留 rowid、索引及共享内容所有权；中途失败全部回滚，不重编译或改变用户内容。
-Study Scope 是不可变事实，Session 独立保存固定 Scope、语言方向、数量、意图及活动生命周期；
+Study Scope 是实际选入 Run 的不可变来源／策略快照，不是整个库的候选副本。Session 独立保存起点 Scope、
+固定语言方向、数量、意图和活动生命周期；后继 Run 各自保存当前选择的 Scope，候选继续查询当前来源索引。
 词书安排通过 Learning System 的 `book_plans` projection 与 `change_book_plan` command 维护，
 按 Enrollment revision 拒绝过时保存。同一 Route 至多一个 active Book；激活其他词书时原词书转为
 maintenance。模式变更复用原 Range 且不依赖包缓存；新序号／意义选择从固定 Book Version 解析。
-这些变更只更新未来安排，不改写活动 Session、Run 或进度；跨记录的双 active Book 合并进入显式冲突处理。
+这些变更更新下一条未开始 Run 的队列资格，不改写当前 Run、已提交策略或进度；跨记录的双 active Book 合并进入显式冲突处理。
 未完成活动通过 `end_session` 使用已查看的 Run revision 明确结束：同一事务保存 Session 终点、
 Run 的可配对暂停见证并清除两个 active pointers，不写 Action、Target 或调度事实。再次开始创建
 新的 Scope/Session，并用配对恢复见证保留原 Run/pins。按 Run 索引的已接受 Action 时间查询及
 完整恢复校验都拒绝早于既有作答的结束；提交后重读失败单独报告已保存状态，不自动重提交。
-后继 Run 通过同事务维护的 Scope–Target 成员投影读取精确来源，不在每次续学时取得完整 Scope。
+Run 来源验证通过同事务维护的 Scope–Target 成员投影读取精确历史引用。新选择只读取实际 Target 的来源，
+不枚举完整 Target／Enrollment／移除决定表，也不保存全库三用途计划。当前 Run 恢复不重新核定未来队列资格。
 Scope 中重复成员和 Range 复用共享摘要；源码中的捕获见证与恢复验证保护新建和既有快照。
+实际选择 Scope 的每个来源共用一次身份、材料及 Profile capability 校验（含失败结果），各 purpose 的协议资源
+仍独立检查 detached 输入；返回的 binding 也独立于 Registry。普通单目的探测使用同一 Module，不削弱守卫。
+实际选中来源仍校验 Target、材料、Profile 和 purpose 的准入条件；其正文缺失或损坏时失败，不从新版或缓存猜测修复。
+运行时候选先读索引前缀并按 intent 与穿插规则选下一条，随后只检查该候选当前来源的 purpose readiness；
+协议拒绝的候选被排除并补取前缀，无关类别与确定排除的当前 participants 不做资源探测；
+不消耗新学额度，也不把候选索引当作学习准入。Session 起点必须绑定首个实际选择／恢复的 Run 与操作见证；
+后继 Run 使用自己的 Scope，不受起点库存限制。
+恢复时可由该 Target 的另一个当前合法来源提供覆盖，但不会替换旧 Run 的执行来源和材料；
+Session 起点证明实际目标、策略版本和 purpose 资格，不另建逐次恢复选源的审计历史。
+首页复用调度索引汇总待新学／到期数量，并精确读取当前 Run 和下一条候选；不为显示计数解码全部 Target。
+同方向活动仍使用已固定的每日上限；偏好修改不重设本轮额度。
+全库存 Scope admission cache 已移除；初始化只删除该退役派生表，保留现有 Scope、Target、共享正文和 owner 事实。
 历史／候选索引重建通过同一逻辑解码入口读取源记录。
 不支持的物理版本会停止并保留原库，不创建空库冒充首次访问。跨标签页协调协议独立版本化，版本不一致
 时旧/新页面不交换记录，并要求用户关闭其他标签页。Service Worker 安装新 shell 后等待用户确认再接管，
@@ -576,8 +597,16 @@ node --import tsx tests/web/run.mts --journey=LJ-01 --suite=browser
 `SENSA_TEST_MEMORY_LIBRARY=true`。它使用正式 Learning commands 和 SQLite/Wasm，在受控时钟下产生初学、
 到期复习及历史，完整 replay validation 后才保存到忽略的 `.tmp/retention-capacity-facts-*`，不直接填造完成或调度字段。
 `retention-review-capacity` Playwright 用例可通过 `SENSA_RETENTION_CAPACITY_FIXTURE` 复用该目录，未提供时生成 1k 样本。
+实现变化后复用缓存前，可用 `SENSA_TEST_MEMORY_LIBRARY=true node --import tsx scripts/verifyRetentionCapacity.mts --fixture=目录`
+重新核对全部 digest、数量和当前完整领域 replay；它不改写夹具，也不补造缺少的 Scope 或 Session。
 测试只在空的隔离 guest 中按 digest 分批复制这些已验证的原始事实；复制是测试准备，不是产品备份恢复或其原子性证据。
+通过目标详情实际开始复习后核实实际选择的 Scope 与 Session，确认库内 Target 数量保持完整，再测评分和下一条；
+后继 Run 固定自己的当前选择，Session 起点与数量仍不变。首次活动建立不能混入普通续学耗时。
 生成、复制、逻辑记录体积与 UI 交互分别报告；万条规模需显式选择，不能从 1k 或零历史的合成调度行外推通过。
+
+`sqlite-runtime-failure` 的无故障 idle 对照默认等待 2 秒，专项长空闲验证可设置 `SENSA_OPFS_IDLE_MS`
+（最多 30 分钟）。它并行检查隔离上下文和持久资料夹的文件名、原始字节及重开完整性，报告实际等待时长；
+短等待通过不能认领长空闲可靠性，原始存储对照也不能替代完整页面验收。
 
 Learning continuation 的 Worker 查询返回有界候选前缀和实际 retry 候选，不传输整条 Route 的 Target 摘要。
 本机候选索引只保存可重建的调度标量，与 Target 的正式写入同事务更新；额度仍计入已被 supersede 的当日 introduction，

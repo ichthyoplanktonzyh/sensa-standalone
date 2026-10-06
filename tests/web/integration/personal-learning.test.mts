@@ -74,11 +74,13 @@ globalThis.fetch=async(_url,input)=>{
   if(!input?.body)return new Response('[]',{headers:{'content-type':'application/json'}});
   const body=JSON.parse(String(input?.body));calls.push(body);
   const review=String(body.messages?.[0]?.content).includes('independent Sensa');
+  const prompt=typeof body.messages[1].content==='string'?body.messages[1].content:body.messages[1].content.filter((part:any)=>part.type==='text').map((part:any)=>part.text).join('\n');
+  const japanese=!review&&JSON.parse(prompt).sense.supportLanguageTag==='ja';
   if(!review&&mode==='hold'){generationEntered?.();await new Promise<void>(resolve=>{releaseGeneration=resolve;});}
   if(review&&mode==='review-fail')throw Error('Offline');
   const result=review
     ?{accepted:mode!=='reject',reason:mode==='reject'?'场景改变了原意':'符合固定含义与来源'}
-    :{resources:[{role:'experience_recall_cue',payload:{scene:mode==='leak'?'一个人想要 borrow 一把雨伞。':'一个人向同伴临时借用一把雨伞，约好之后归还。',senseFocus:'临时使用并预期归还'}},{role:'scene_bridge',payload:{text:'从取得者的视角表达临时使用并准备归还。',meaningRendering:{meaning:'从取得者的视角表达临时使用并准备归还。',languageTag:'zh-CN'}}},{role:'scene_realization',payload:{example:'May asked to borrow an umbrella.',targetStart:13,targetEnd:19,experienceResourceKey:'experience_recall_cue:0'}}]};
+    :{resources:[{role:'experience_recall_cue',payload:{scene:mode==='leak'?'一个人想要 borrow 一把雨伞。':japanese?'ある人が友人の傘を一時的に使い、後で返す約束をした。':'一个人向同伴临时借用一把雨伞，约好之后归还。',senseFocus:japanese?'一時的に使い、後で返すこと':'临时使用并预期归还'}},{role:'scene_bridge',payload:{text:japanese?'受け取る側から、一時的に使って返すことを表す。':'从取得者的视角表达临时使用并准备归还。',meaningRendering:{meaning:japanese?'他人の物を一時的に使い、後で返すこと。':'从取得者的视角表达临时使用并准备归还。',languageTag:japanese?'ja':'zh-CN'}}},{role:'scene_realization',payload:{example:'May asked to borrow an umbrella.',targetStart:13,targetEnd:19,experienceResourceKey:'experience_recall_cue:0'}}]};
   return new Response(JSON.stringify({model:'fixture',choices:[{finish_reason:'stop',message:{content:JSON.stringify(result)}}]}),{headers:{'content-type':'application/json'}});
 };
 
@@ -115,6 +117,15 @@ try{
   const task:any=await withoutWorldScan(()=>api.enrollPersonal(enrollOperation,slowSource,languageContext,false));
   assert.deepEqual(await api.enrollPersonal(enrollOperation,slowSource,languageContext,false),task,'replaying a lost enrollment response returns the same durable intention');
   await assert.rejects(()=>api.enrollPersonal(enrollOperation,slowSource,languageContext,true),/operationConflict/,'the same operation cannot silently acquire new Context consent');
+  const changeMembership=(expectedRevision:number,active:boolean)=>api.learningSystem.execute({kind:'change_supplemental_membership',operationId:id(),source:{kind:'personal_meaning_alignment',id:task.id},expectedRevision,active,languageContext});
+  await changeMembership(0,false);
+  const callsBeforeRemoved=calls.length;
+  await assert.rejects(()=>api.preparePersonal(task.id,slowSource,provider,null,new AbortController().signal,()=>{}),/membershipRemoved/);
+  assert.equal(calls.length,callsBeforeRemoved,'withdrawn personal intent cannot initiate paid preparation');
+  assert.equal((await api.personalLearningTaskSnapshot(task.id)).curriculumActive,false);
+  assert.deepEqual((await api.readLibrary((tx:any)=>tx.all('learningTargets'))),[]);
+  await changeMembership(1,true);
+  assert.equal((await api.personalLearningTaskSnapshot(task.id)).curriculumActive,true);
   await api.enrollPersonal(id(),slowSource,languageContext,false);
   assert.equal((await api.personalLearningSnapshot()).length,1);
   assert.deepEqual(Object.keys(task).includes('meaning'),false);
@@ -388,6 +399,25 @@ try{
   assert(generationSystem(true,spanish).includes('Spanish target-expression'));
   assert(generationSystem(false,spanish).includes('Chinese (Simplified) recall cue'));
   assert(independentReviewSystem(spanish).includes('Spanish target-expression leakage'));
+
+  // A membership decision is Route-owned, not bound to a Content Task's old
+  // support language. A real in-place support update must admit a new Scope.
+  const pairInput=canonicalIntake(true);pairInput.sense!.senseKey='supplemental-pair-update';
+  pairInput.sense!.semanticSpec.coreMeaningFocus='临时取得一把雨伞并预期归还（辅助语言更新案例）。';
+  const pairMeaning=await intake.submit(pairInput),pairSource=(await api.worldReadRepository.detail(pairMeaning.personalMeaningId)).sources[0];
+  const pairTask=await api.enrollPersonal(id(),pairSource,languageContext,false);
+  const decide=(expectedRevision:number,active:boolean)=>api.learningSystem.execute({kind:'change_supplemental_membership',operationId:id(),source:{kind:'personal_meaning_alignment',id:pairTask.id},expectedRevision,active,languageContext});
+  await decide(0,false);await decide(1,true);
+  await api.updateLanguageRouteSupport(id(),languageContext.languageRouteId,'ja');
+  const revisedContext=(await api.languageRoutesSnapshot()).context;
+  await api.requestPersonalResourceUpdate(id(),pairTask.id,pairSource,revisedContext,false);
+  mode='good';await api.preparePersonal(pairTask.id,pairSource,provider,await api.selectedReviewProvider(),new AbortController().signal,()=>{});
+  assert.equal((await api.personalLearningTaskSnapshot(pairTask.id)).status,'ready');
+  await api.learningSystem.execute({kind:'start',operationId:id(),targetId:pairTask.targetId,languageContext:revisedContext,dailyLimit:20});
+  const activeScope=await api.readLibrary(async(tx:any)=>tx.get('studyScopes',(await tx.get('learningSessions',await tx.get('meta','learning-session-active'))).scopeRevisionId));
+  const scopedSource=activeScope.members.find((member:any)=>member.targetId===pairTask.targetId).sources.find((source:any)=>source.membershipId===pairTask.curriculumMembershipId);
+  assert.equal(activeScope.languageContext.supportLanguageTag,'ja');assert.equal(scopedSource.supplementalState.languageContext.supportLanguageTag,'zh-CN');
+  api.validateBackupRows(await api.readLibrary(async(tx:any)=>Object.fromEntries(await Promise.all(api.libraryTables.map(async(table:string)=>[table,await tx.entries(table)])))));
 
   const dump=JSON.stringify(await api.readLibrary(async(tx:any)=>({attempts:await tx.all('contentAttempts'),tasks:await tx.all('personalLearning')})));
   assert(!dump.includes('fixture-secret'));

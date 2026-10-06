@@ -1,5 +1,13 @@
 {
   "localFlow": {
+    "outsideLearningPlan": "Di luar rencana pembelajaran berikutnya",
+    "supplementalEmpty":"Belum ada konten yang ditambahkan secara terpisah","supplementalLearning": "Pembelajaran tambahan",
+    "removeFromLearning": "Keluarkan dari pembelajaran",
+    "restoreToLearning": "Tambahkan kembali ke pembelajaran",
+    "membershipRemoved": "Dikeluarkan dari pembelajaran berikutnya",
+    "membershipChanged": "Sumber pembelajaran berubah. Periksa status saat ini sebelum melanjutkan.",
+    "membershipSavedReadFailed": "Perubahan tersimpan, tetapi tidak dapat dibaca. Coba baca lagi.",
+    "membershipUnconfirmed": "Penyimpanan tidak dapat dikonfirmasi. Periksa status saat ini sebelum melanjutkan.",
     "clarificationSourceChanged": "Lanjutkan percakapan untuk memeriksa materi saat ini sebelum mengonfirmasi.",
     "packageAuthor": "Penulis",
     "packageFilesUnavailable": "Paket tanpa berkas di perangkat ini: {{count}}. Impor berkas asli atau unduh lagi dari katalog.",

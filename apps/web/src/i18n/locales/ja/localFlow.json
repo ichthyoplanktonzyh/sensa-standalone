@@ -1,5 +1,13 @@
 {
   "localFlow": {
+    "outsideLearningPlan": "今後の学習計画の対象外",
+    "supplementalEmpty":"個別に追加した内容はまだありません","supplementalLearning": "補助学習",
+    "removeFromLearning": "学習から外す",
+    "restoreToLearning": "学習に再追加",
+    "membershipRemoved": "今後の学習から外しました",
+    "membershipChanged": "学習元が変更されました。現在の状態を確認してから操作してください。",
+    "membershipSavedReadFailed": "変更は保存されましたが、読み取れませんでした。読み取りを再試行してください。",
+    "membershipUnconfirmed": "保存結果を確認できませんでした。現在の状態を確認してから操作してください。",
     "clarificationSourceChanged": "会話を続けて現在の資料を確認してから、確定してください。",
     "packageAuthor": "作者",
     "packageFilesUnavailable": "この端末にファイルがない学習パッケージ：{{count}}。元のファイルを再インポートするか、カタログから再ダウンロードしてください。",

@@ -1,14 +1,16 @@
 import {z} from 'zod';
 import {canonicalJsonDigest,stableUuid} from '@sensa/learning-kernel';
 import {sensaFormalPinnedLanguageContextSchema,type SensaFormalPinnedLanguageContext} from '@sensa/contracts/sensa';
-import {LEARNING_PROTOCOL_PURPOSES,learningPolicyProfileRegistry,type LearningProtocolPurpose} from '../../learning/runtime/policyProfiles';
+import {LEARNING_PROTOCOL_PURPOSES,type LearningProtocolPurpose} from '../../learning/runtime/policyProfiles';
+import {studyScopeMemberIdentity,studyScopeSourceSnapshot} from './studyScopeSources';
 import {inspectLocalTargetReadiness} from '../../learning/runtime/runtimeCoordinator';
-import {curriculumSourceEligibility} from '../../learning/runtime/curriculumEligibility';
+import {curriculumSourceEligibility,planningMembershipForContext} from '../../learning/runtime/curriculumEligibility';
 import {hasDeclaredMasteryOverride} from '../../learning/runtime/targetPlanningOverrides';
 import type {LocalLearningTarget,LocalLearningRun,LocalCurriculumMembership} from '../../learning/runtime/localProtocol';
 import type {InstalledPackage} from './packageRecords';
 import {curriculumEnrollmentSchema,type LocalCurriculumEnrollment} from './curriculumEnrollments';
 import type {LibraryTransaction} from './store';
+import {supplementalMembershipStateSchema,type SupplementalMembershipState} from './supplementalMemberships';
 
 const uuid=z.string().uuid(),timestamp=z.string().datetime({offset:true});
 const planSchema=z.object({
@@ -23,6 +25,7 @@ const sourceSchema=z.object({
  membershipStatus:z.enum(['active','superseded']),
  enrollmentId:uuid.nullable(),packageKey:z.string().nullable(),assurancePackageKey:z.string().optional(),
  provenance:z.record(z.string(),z.unknown()),introduce:z.boolean(),ongoing:z.boolean(),
+ supplementalState:supplementalMembershipStateSchema.optional(),
  plans:z.array(planSchema).length(LEARNING_PROTOCOL_PURPOSES.length),
 }).strict();
 const memberSchema=z.object({
@@ -58,45 +61,44 @@ const persistedScopes=new WeakSet<object>();
 const captureWitnesses=new WeakMap<LibraryTransaction,Set<string>>();
 export const hasStudyScopeCaptureWitness=(tx:LibraryTransaction,id:string)=>captureWitnesses.get(tx)?.has(id)??false;
 
-/** Resolve the entire admitted Target inventory, not the next-card prefix.
- * An unmaterialized Book member remains an Enrollment intent, not a fabricated
- * ready Target. Purpose readiness and source/policy references are frozen here;
- * actual Encounter material is resolved separately when its Run starts. */
-export async function captureStudyScope(tx:LibraryTransaction,input:{operationId:string;learnerId:string;context:SensaFormalPinnedLanguageContext;dailyLimit:number;at:string}):Promise<LocalStudyScope>{
+/** Read only the selected Target's actual sources. The rest of the inventory
+ * stays in the indexed, rebuildable queue and is not a Session snapshot. */
+export async function currentStudyMembership(tx:LibraryTransaction,target:LocalLearningTarget,context:SensaFormalPinnedLanguageContext,purpose:LearningProtocolPurpose):Promise<LocalCurriculumMembership|undefined>{
+ const enrollments=new Map<string,LocalCurriculumEnrollment>(),removed:Record<string,{introduce:boolean;ongoing:boolean}>={},resources=new Map<string,InstalledPackage|undefined>();
+ for(const member of target.curriculumMemberships){
+  const id=member.provenance.curriculumEnrollmentId;
+  if(typeof id==='string'&&!enrollments.has(id)){const enrollment=await tx.get<LocalCurriculumEnrollment>('curriculumEnrollments',id);if(enrollment)enrollments.set(id,enrollment);}
+  if((await tx.get<SupplementalMembershipState>('supplementalMembershipStates',member.id))?.status==='removed')removed[member.id]={introduce:false,ongoing:false};
+  if(member.assurancePackageKey&&member.packageKey&&!resources.has(member.packageKey))resources.set(member.packageKey,await tx.get<InstalledPackage>('packageCache',member.packageKey));
+ }
+ return planningMembershipForContext(target,context,enrollments,member=>inspectLocalTargetReadiness(target,member,member.packageKey?resources.get(member.packageKey):undefined,purpose).status==='ready',removed);
+}
+
+/** Freeze only the participants and sources actually selected for a Run.
+ * This is not an inventory cap: future candidates use the current queue. */
+export async function captureStudyScope(tx:LibraryTransaction,input:{operationId:string;learnerId:string;context:SensaFormalPinnedLanguageContext;dailyLimit:number;at:string;targets:readonly LocalLearningTarget[];memberships:ReadonlyMap<string,LocalCurriculumMembership>}):Promise<LocalStudyScope>{
  const context=sensaFormalPinnedLanguageContextSchema.parse(input.context);
- const enrollments=await tx.all<LocalCurriculumEnrollment>('curriculumEnrollments');
- const byEnrollment=new Map(enrollments.map(enrollment=>[enrollment.id,enrollment]));
- const usedEnrollments=new Set<string>(),members:LocalStudyScope['members']=[];
+ const enrollments=new Map<string,LocalCurriculumEnrollment>(),members:LocalStudyScope['members']=[];
  const resources=new Map<string,InstalledPackage|undefined>();
- let until=performance.now()+8;
- for await(const batch of tx.entryBatches('learningTargets'))for(const row of batch){
-  const target=row.value as LocalLearningTarget;
-  if(hasDeclaredMasteryOverride(target))continue;
-  const profile=learningPolicyProfileRegistry.get(target.committedPolicy?.profileId??target.policyAssignment.profileId,target.committedPolicy?.profileVersion);
-  const sources:StudyScopeSource[]=[];
-  for(const membership of target.curriculumMemberships){
+ for(const target of input.targets){
+  if(hasDeclaredMasteryOverride(target))throw new Error('localFlow.stepChanged');
+  const membership=input.memberships.get(target.id);if(!membership)throw new Error('localFlow.routeMembershipMissing');
    const pair=membership.languageContext;
-   if(pair.languageRouteId!==context.languageRouteId||pair.targetLanguageTag!==context.targetLanguageTag||pair.supportLanguageTag!==context.supportLanguageTag)continue;
+   if(pair.languageRouteId!==context.languageRouteId||pair.targetLanguageTag!==context.targetLanguageTag||pair.supportLanguageTag!==context.supportLanguageTag)throw new Error('localFlow.routeMembershipMissing');
    const enrollmentId=typeof membership.provenance.curriculumEnrollmentId==='string'?membership.provenance.curriculumEnrollmentId:null;
-   const eligibility=curriculumSourceEligibility(membership,enrollmentId?byEnrollment.get(enrollmentId):undefined,!!target.startedAt);
-   if(!eligibility.introduce&&!eligibility.ongoing)continue;
+   if(enrollmentId&&!enrollments.has(enrollmentId)){const enrollment=await tx.get<LocalCurriculumEnrollment>('curriculumEnrollments',enrollmentId);if(enrollment)enrollments.set(enrollmentId,enrollment);}
+   const decision=await tx.get<SupplementalMembershipState>('supplementalMembershipStates',membership.id);if(decision?.status==='removed')throw new Error('localFlow.routeMembershipMissing');
+   const eligibility=curriculumSourceEligibility(membership,enrollmentId?enrollments.get(enrollmentId):undefined,!!target.startedAt);
+   if(!eligibility.introduce&&!eligibility.ongoing)throw new Error('localFlow.routeMembershipMissing');
    let resource:InstalledPackage|undefined;
    if(membership.assurancePackageKey&&membership.packageKey){
     if(!resources.has(membership.packageKey))resources.set(membership.packageKey,await tx.get<InstalledPackage>('packageCache',membership.packageKey));
     resource=resources.get(membership.packageKey);
    }
-   const plans=LEARNING_PROTOCOL_PURPOSES.map(purpose=>{
-    const ready=inspectLocalTargetReadiness(target,membership,resource,purpose),binding=profile.protocols[purpose];
-    const reference={purpose,readiness:ready.status,profileId:profile.profileId,profileVersion:profile.profileVersion,protocolId:binding.protocolId,protocolVersion:binding.protocolVersion,runtimeAdapterId:binding.runtimeAdapterId,contentDemands:[...structuredClone(binding.contentDemands)],materializationIds:[...ready.materializationIds],reason:ready.reason};
-    return {...reference,revisionId:stableUuid(`local-scope-plan:${target.id}:${membership.id}:${canonicalJsonDigest(reference)}`)};
-   });
-   if(enrollmentId)usedEnrollments.add(enrollmentId);
-   sources.push({membershipId:membership.id,membershipRevision:membership.revision,membershipStatus:membership.status??'active',sourceKind:membership.sourceKind,enrollmentId,packageKey:membership.packageKey,...(membership.assurancePackageKey?{assurancePackageKey:membership.assurancePackageKey}:{}),provenance:structuredClone(membership.provenance),introduce:eligibility.introduce,ongoing:eligibility.ongoing||eligibility.introduce,plans});
-  }
-  if(sources.length)members.push({targetId:target.id,retentionTargetId:target.retentionId,senseId:target.identity.senseId,senseVersionId:target.identity.senseVersionId,bindingId:target.identity.senseExpressionBindingId,bindingVersionId:target.identity.bindingVersionId,policy:{assignmentId:target.policyAssignment.assignmentId,assignmentRevision:target.policyAssignment.revision,profileId:profile.profileId,profileVersion:profile.profileVersion},sources});
-  if(performance.now()>=until){await new Promise<void>(resolve=>setTimeout(resolve,0));until=performance.now()+8;}
+   const source=studyScopeSourceSnapshot(target,membership,resource);
+   members.push({...studyScopeMemberIdentity(target),sources:[{...source,...(decision?{supplementalState:structuredClone(decision)}:{}),introduce:eligibility.introduce,ongoing:eligibility.ongoing||eligibility.introduce}]});
  }
- const body={format:'sensa-study-scope-v1' as const,learnerUserId:input.learnerId,languageContext:context,dailyNewSenseLimit:input.dailyLimit,enrollments:enrollments.filter(enrollment=>usedEnrollments.has(enrollment.id)||enrollment.languageContext.languageRouteId===context.languageRouteId&&enrollment.languageContext.targetLanguageTag===context.targetLanguageTag&&enrollment.languageContext.supportLanguageTag===context.supportLanguageTag),members};
+ const body={format:'sensa-study-scope-v1' as const,learnerUserId:input.learnerId,languageContext:context,dailyNewSenseLimit:input.dailyLimit,enrollments:[...enrollments.values()],members};
  const definitionDigest=canonicalJsonDigest(body),cacheKey=`study-scope-definition:${definitionDigest}`;
  const cachedId=await tx.get<string>('meta',cacheKey),existing=cachedId?await tx.get('studyScopes',cachedId):undefined;
  if(existing){const scope=studyScopeSchema.parse(existing);if(scope.definitionDigest!==definitionDigest)throw new Error('localFlow.progressReadFailed');if(Date.parse(scope.createdAt)<=Date.parse(input.at)){persistedScopes.add(scope);return scope;}}
@@ -104,6 +106,7 @@ export async function captureStudyScope(tx:LibraryTransaction,input:{operationId
  tx.put('meta',cacheKey,id);
  const scope=studyScopeSchema.parse({...body,id,definitionDigest,createdByOperationId:input.operationId,createdAt:input.at});
  const captured=captureWitnesses.get(tx)??new Set<string>();captured.add(scope.id);captureWitnesses.set(tx,captured);
+ tx.put('studyScopes',scope.id,scope);
  return scope;
 }
 

@@ -10,6 +10,7 @@ import {readLibrary,type LibraryTransaction} from './store';
 import type {LocalLearningTarget} from '../../learning/runtime/localProtocol';
 import {localCurriculumMembershipForContext} from '../../learning/runtime/localCurriculum';
 import {assertDirectTargetIdentity} from './directLearningEnrollment';
+import {assertSupplementalMembershipActive,currentPlanningMembership,supplementalSourceDescriptor} from './supplementalMemberships';
 
 export const directProvisioningTaskId=(enrollmentId:string)=>stableUuid(`sensa-direct-provisioning:${enrollmentId}`);
 
@@ -40,11 +41,12 @@ export async function enrollDirectProvisioning(operationId:string,enrollmentId:s
  return contentSupplyCommand({id:operationId,kind:'direct.enroll',input:{enrollmentId}},async tx=>{
   const {owner,enrollment,selection,source}=await directProvisioningSource(tx,enrollmentId),context=enrollment.languageContext;
   await requireLanguageRouteContext(tx,context);
+  await assertSupplementalMembershipActive(tx,supplementalSourceDescriptor({kind:'stable_sense',id:enrollmentId},enrollment,owner.learnerId).id);
   const id=provisioningTaskId(source.reference,context.languageRouteId),existing=await tx.get<ContentProvisioningTask<DirectProvisioningReference>>('personalLearning',id);
   if(existing){if(canonicalConsumerJson(existing.source)!==canonicalConsumerJson(source.reference))throw new Error('localFlow.meaningChanged');return existing;}
   const targetId=stableUuid(`sensa-learning-target:${owner.learnerId}:${source.reference.senseVersionId}:${source.reference.bindingVersionId}`),target=await tx.get<LocalLearningTarget>('learningTargets',targetId);
   if(target)assertDirectTargetIdentity(target,selection,owner.learnerId);
-  const covered=target&&localCurriculumMembershipForContext(target,context);
+  const covered=target&&await currentPlanningMembership(tx,target,context);
   const task:ContentProvisioningTask<DirectProvisioningReference>={id,source:source.reference,targetId,curriculumMembershipId:provisioningMembershipId(source.reference,targetId,context.languageRouteId),languageContext:context,planRevision:crypto.randomUUID(),useContext:false,status:covered?'covered':'waiting',...(covered?{coveredByMembershipId:covered.id}:{}),attemptId:null,leaseUntil:0,notice:'',createdAt:new Date().toISOString()};
   tx.put('personalLearning',id,task);return task;
  });

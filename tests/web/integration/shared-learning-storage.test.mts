@@ -55,6 +55,79 @@ test('actual Initial and due Review facts share one exact content body across Ta
  }finally{vi.useRealTimers();}
 });
 
+test('retiring the full-inventory admission cache preserves exact source rows and shared-body ownership',async()=>{
+ const sqlite=await sqlite3InitModule(),storage=new sqlite.oo1.DB(':memory:','c');let copy=new SqliteRecordDatabase(sqlite,storage,'memory');
+ try{
+  copy.initialize();copy.commit({clears:[],deletes:[],puts:[{table:'learningTargets',...database.entries('learningTargets')[0]!}]});
+  const facts=()=>['sensa_records','sensa_shared_record_content','sensa_shared_record_content_owners'].map(table=>storage.exec({sql:`SELECT * FROM ${table} ORDER BY 1,2`,rowMode:'object',returnValue:'resultRows'}));
+  const before=facts();storage.exec('CREATE TABLE sensa_study_scope_target_snapshots(retired_derived_value TEXT)');
+  copy=new SqliteRecordDatabase(sqlite,storage,'memory');copy.initialize();
+  expect(storage.exec({sql:"SELECT name FROM sqlite_schema WHERE name='sensa_study_scope_target_snapshots'",rowMode:0,returnValue:'resultRows'})).toEqual([]);
+  expect(facts()).toEqual(before);expect(copy.get('learningTargets',targetId)).toBe(database.get('learningTargets',targetId));
+ }finally{copy.close();}
+});
+
+test('Scope member pointers read only their owned immutable body, fail drift, and rebuild without rewriting source facts',async()=>{
+ const original=database.entries('studyScopes')[0]!;
+ const scope=decodeBackupValue(JSON.parse(original.encodedValue)) as import('../../../apps/web/src/data/library/studyScopes').LocalStudyScope;
+ const member=scope.members.find(member=>member.targetId===targetId)!;
+ const digest=sha256(JSON.stringify(encodeBackupValue(member)));
+ expect(database.studyScopeMember(scope.id,targetId)).toEqual(member);
+ const columns=raw.exec({sql:'PRAGMA table_info(sensa_study_scope_members)',rowMode:'object',returnValue:'resultRows'}) as {name:string}[];
+ expect(columns.map(column=>column.name)).toEqual(['scope_key','target_key','body_digest']);
+ const stored=String((raw.exec({sql:'SELECT value_json FROM sensa_shared_record_content WHERE digest=?',bind:[digest],rowMode:0,returnValue:'resultRows'}) as string[])[0]);
+ raw.exec({sql:'UPDATE sensa_shared_record_content SET value_json=? WHERE digest=?',bind:['["string","wrong Scope member"]',digest]});
+ try{expect(()=>database.studyScopeMember(scope.id,targetId)).toThrow('localFlow.progressReadFailed');}
+ finally{raw.exec({sql:'UPDATE sensa_shared_record_content SET value_json=? WHERE digest=?',bind:[stored,digest]});}
+ raw.exec({sql:"DELETE FROM sensa_shared_record_content_owners WHERE owner_kind='record' AND table_name='studyScopes' AND record_key=? AND digest=?",bind:[scope.id,digest]});
+ try{expect(()=>database.studyScopeMember(scope.id,targetId)).toThrow('localFlow.progressReadFailed');}
+ finally{raw.exec({sql:'INSERT INTO sensa_shared_record_content_owners VALUES(?,?,?,?)',bind:['record','studyScopes',scope.id,digest]});}
+ expect(database.studyScopeMember(scope.id,targetId)).toEqual(member);expect(database.get('studyScopes',scope.id)).toBe(original.encodedValue);
+ raw.exec({sql:'DELETE FROM sensa_study_scope_members WHERE scope_key=? AND target_key=?',bind:[scope.id,targetId]});
+ expect(database.studyScopeMember(scope.id,targetId)).toEqual(member);
+ expect(database.studyScopeMember(scope.id,id())).toBeNull();
+ expect(()=>database.studyScopeMember(id(),targetId)).toThrow('localFlow.progressReadFailed');
+ expect(database.get('studyScopes',scope.id)).toBe(original.encodedValue);
+
+ // A failed repair must not leave an apparently valid member pointer with
+ // only part of its frozen qualification rows, even inside a transaction.
+ raw.exec({sql:'DELETE FROM sensa_study_scope_members WHERE scope_key=? AND target_key=?',bind:[scope.id,targetId]});
+ const repairState=()=>['sensa_records','sensa_shared_record_content','sensa_shared_record_content_owners','sensa_study_scope_members','sensa_study_scope_sources'].map(table=>raw.exec({sql:`SELECT * FROM ${table} ORDER BY 1,2`,rowMode:'object',returnValue:'resultRows'}));
+ const beforeRepair=repairState(),exec=raw.exec.bind(raw);let injected=false;
+ raw.exec=((input:any)=>{
+  const sql=typeof input==='string'?input:input.sql;
+  if(!injected&&sql.startsWith('INSERT INTO sensa_study_scope_sources')){injected=true;throw Error('fixture Scope repair interrupted');}
+  return exec(input);
+ }) as typeof raw.exec;
+ raw.exec('BEGIN');
+ try{
+  expect(()=>database.studyScopeMember(scope.id,targetId)).toThrow('fixture Scope repair interrupted');
+  expect(injected).toBe(true);expect(repairState()).toEqual(beforeRepair);
+  expect(database.studyScopeMember(scope.id,targetId)).toEqual(member);
+  expect(database.get('studyScopes',scope.id)).toBe(original.encodedValue);
+ }finally{raw.exec=exec;raw.exec('ROLLBACK');}
+ expect(repairState()).toEqual(beforeRepair);
+ expect(database.studyScopeMember(scope.id,targetId)).toEqual(member);
+
+ // Copy an exact command-generated Scope into an isolated storage kernel.
+ // This exercises rebuildable indexes, not product backup/restore validity.
+ const sqlite=await sqlite3InitModule(),storage=new sqlite.oo1.DB(':memory:','c');
+ let copy=new SqliteRecordDatabase(sqlite,storage,'memory');
+ try{
+  copy.initialize();copy.commit({clears:[],deletes:[],puts:[{table:'studyScopes',key:scope.id,encodedValue:original.encodedValue}]});
+  const factsBefore=storage.exec({sql:'SELECT * FROM sensa_records ORDER BY table_name,record_key',rowMode:'object',returnValue:'resultRows'});
+  const bodiesBefore=storage.exec({sql:'SELECT * FROM sensa_shared_record_content ORDER BY digest',rowMode:'object',returnValue:'resultRows'});
+  const ownersBefore=storage.exec({sql:'SELECT * FROM sensa_shared_record_content_owners ORDER BY owner_kind,table_name,record_key,digest',rowMode:'object',returnValue:'resultRows'});
+  storage.exec('DROP TABLE sensa_study_scope_members');
+  storage.exec("UPDATE sensa_runtime_learning_meta SET value='invalid-derived-format' WHERE key='format'");
+  copy=new SqliteRecordDatabase(sqlite,storage,'memory');copy.initialize();
+  expect(copy.studyScopeMember(scope.id,targetId)).toEqual(member);expect(copy.get('studyScopes',scope.id)).toBe(original.encodedValue);
+  expect(storage.exec({sql:'SELECT * FROM sensa_records ORDER BY table_name,record_key',rowMode:'object',returnValue:'resultRows'})).toEqual(factsBefore);
+  expect(storage.exec({sql:'SELECT * FROM sensa_shared_record_content ORDER BY digest',rowMode:'object',returnValue:'resultRows'})).toEqual(bodiesBefore);
+  expect(storage.exec({sql:'SELECT * FROM sensa_shared_record_content_owners ORDER BY owner_kind,table_name,record_key,digest',rowMode:'object',returnValue:'resultRows'})).toEqual(ownersBefore);
+ }finally{copy.close();}
+});
+
 test('an actual compatible publication rollback preserves every fact, derived projection, receipt and shared body ownership',async()=>{
  const fixture=portablePackageFixture({packageId,version:2,expression:'retain',scene:'A new compatible scene for keeping the same object.',audioByteLength:8192});
  const pack=await contentSupplySystem.execute({kind:'install_portable_package',bytes:fixture.bytes,expectedArchiveDigest:fixture.archiveDigest});
@@ -118,11 +191,11 @@ test('encrypted backup preview and actual empty-destination restore retain the c
 
 test('v14 upgrades all fact, tombstone and sync-base constraints atomically without changing encoded bytes or body ownership',async()=>{
  const sqlite=await sqlite3InitModule();
- for(const interrupt of [false,true]){
+ for(const version of [14,15])for(const interrupt of [false,true]){
   const storage=new sqlite.oo1.DB(':memory:','c'),copy=new SqliteRecordDatabase(sqlite,storage,'memory');
   try{
-   storage.exec(sqliteLibrarySchema.replaceAll("'studyScopes',",'').replaceAll("'learningSessions',",''));
-   storage.exec('PRAGMA user_version=14');
+   storage.exec((version===14?sqliteLibrarySchema.replaceAll("'studyScopes',",'').replaceAll("'learningSessions',",''):sqliteLibrarySchema).replaceAll("'supplementalMembershipStates',",''));
+   storage.exec(`PRAGMA user_version=${version}`);
    const records=raw.exec({sql:"SELECT rowid,* FROM sensa_records WHERE table_name NOT IN ('studyScopes','learningSessions') ORDER BY rowid",rowMode:'object',returnValue:'resultRows'}) as {rowid:number;table_name:string;record_key:string;value_json:string;content_revision:number}[];
    for(const row of records)storage.exec({sql:'INSERT INTO sensa_records(rowid,table_name,record_key,value_json,content_revision) VALUES(?,?,?,?,?)',bind:[row.rowid,row.table_name,row.record_key,row.value_json,row.content_revision]});
    const bodies=raw.exec({sql:'SELECT * FROM sensa_shared_record_content',rowMode:'object',returnValue:'resultRows'}) as {digest:string;value_json:string}[];
@@ -136,9 +209,9 @@ test('v14 upgrades all fact, tombstone and sync-base constraints atomically with
    if(interrupt){
     const exec=storage.exec.bind(storage);storage.exec=((input:any)=>{if((typeof input==='string'?input:input.sql).startsWith('CREATE TABLE sensa_sync_base_v15_upgrade'))throw Error('fixture upgrade interrupted');return exec(input);}) as typeof storage.exec;
     try{expect(()=>copy.initialize()).toThrow('fixture upgrade interrupted');}finally{storage.exec=exec;}
-    expect(snapshot()).toEqual(before);expect(storage.exec({sql:'PRAGMA user_version',rowMode:0,returnValue:'resultRows'})).toEqual([14]);
+    expect(snapshot()).toEqual(before);expect(storage.exec({sql:'PRAGMA user_version',rowMode:0,returnValue:'resultRows'})).toEqual([version]);
    }
-   expect(copy.initialize().schemaVersion).toBe(15);expect(snapshot()).toEqual(before);
+   expect(copy.initialize().schemaVersion).toBe(16);expect(snapshot()).toEqual(before);
    expect(storage.exec({sql:"SELECT name,sql FROM sqlite_schema WHERE type='index' AND tbl_name IN ('sensa_records','sensa_record_tombstones','sensa_sync_base') ORDER BY name",rowMode:'object',returnValue:'resultRows'})).toEqual(indexes);
    const scope=database.entries('studyScopes')[0]!,session=database.entries('learningSessions')[0]!;
    copy.commit({clears:[],deletes:[],puts:[{table:'studyScopes',...scope},{table:'learningSessions',...session}],syncBaseReplacement:[{table:'studyScopes',key:scope.key,valueJson:scope.encodedValue,blockRefs:[]},{table:'learningSessions',key:session.key,valueJson:session.encodedValue,blockRefs:[]}]});
@@ -156,7 +229,7 @@ test('schema 13 upgrade creates only representation storage and does not rewrite
   const sources=[...database.entries('learningTargets').map(row=>({table:'learningTargets',...row})),...database.entries('learningRuns').map(row=>({table:'learningRuns',...row}))];
   for(const row of sources)legacyRaw.exec({sql:'INSERT INTO sensa_records(table_name,record_key,value_json) VALUES(?,?,?)',bind:[row.table,row.key,row.encodedValue]});
   const before=legacyRaw.exec({sql:'SELECT * FROM sensa_records ORDER BY table_name,record_key',rowMode:'object',returnValue:'resultRows'});
-  expect(legacy.initialize().schemaVersion).toBe(15);
+  expect(legacy.initialize().schemaVersion).toBe(16);
   expect(legacyRaw.exec({sql:'SELECT * FROM sensa_records ORDER BY table_name,record_key',rowMode:'object',returnValue:'resultRows'})).toEqual(before);
   expect(legacyRaw.exec({sql:'SELECT COUNT(*) FROM sensa_shared_record_content',rowMode:0,returnValue:'resultRows'})).toEqual([0]);
   expect(legacy.learningHistoryProjection()).toEqual(database.learningHistoryProjection());

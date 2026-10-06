@@ -1,4 +1,5 @@
 import type { Database, Sqlite3Static } from "@sqlite.org/sqlite-wasm";
+import {isFatalSqliteConnectionFailure,sqliteRollbackFailure} from './sqliteConnectionFailure';
 
 import {decodeBackupValue,encodeBackupValue} from './backupCodec';
 import {externalizeSharedRecordContent,expandSharedRecordContent,packStoredRecord,unpackStoredRecord,sharedRecordTables} from './sharedRecordContent';
@@ -86,6 +87,7 @@ export class SqliteRecordDatabase {
   private initializationTimingsMs:Record<string,number>|undefined;
   private integrityCheck:SqliteStorageDiagnostics['integrityCheck'];
   private integrityFailed=false;
+  private fatalStorageFailure:Error|undefined;
   private meaningLookup:SqliteMeaningLookupProjection;
   private worldBrowseProjection:SqliteWorldBrowseProjection;
   private walMaintenance:SqliteStorageDiagnostics['walMaintenance'];
@@ -93,6 +95,9 @@ export class SqliteRecordDatabase {
   private learningHistory:SqliteLearningHistoryProjection;
   private runtimeCandidates:SqliteRuntimeLearningCandidates;
   private recordGet:ReturnType<Database['prepare']>|undefined;
+
+  /** The Worker must stop queued requests even if the durable COMMIT succeeded. */
+  get connectionFailed():boolean{return this.integrityFailed||this.fatalStorageFailure!==undefined;}
 
   constructor(
     private readonly sqlite3: Sqlite3Static,
@@ -117,6 +122,7 @@ export class SqliteRecordDatabase {
 
   initialize(): SqliteStorageDiagnostics {
     if(this.closed)throw new Error('sqlite_database_closed');
+    if(this.fatalStorageFailure)throw this.fatalStorageFailure;
     if(this.integrityFailed)throw new Error('sqlite_integrity_failed');
     if(this.initialized)return this.diagnostics();
     const started=performance.now();
@@ -179,7 +185,7 @@ export class SqliteRecordDatabase {
       catch(error){try{this.database.exec('ROLLBACK');}catch{/* Preserve the migration failure. */}throw error;}
       this.database.exec(sqliteLibrarySchema);
     }
-    else if(before===14){
+    else if(before===14||before===15){
       this.database.exec('BEGIN IMMEDIATE');
       try{this.allowStudyScopeRecords();this.database.exec(`PRAGMA user_version=${sqliteLibrarySchemaVersion}`);this.database.exec('COMMIT');}
       catch(error){try{this.database.exec('ROLLBACK');}catch{/* Preserve the original records and constraint. */}throw error;}
@@ -207,6 +213,10 @@ export class SqliteRecordDatabase {
       this.journeyIdentities.initialize();
       this.learningHistory.initialize();
       this.runtimeCandidates.initialize();
+      // Retire only the obsolete device-local full-inventory admission cache.
+      // Source facts, shared bodies and their ownership are untouched.
+      const retired=this.database.exec({sql:"SELECT 1 FROM sqlite_schema WHERE type='table' AND name='sensa_study_scope_target_snapshots'",rowMode:0,returnValue:'resultRows'}) as unknown[];
+      if(retired.length)this.database.exec('DROP TABLE sensa_study_scope_target_snapshots');
       this.database.exec('COMMIT');
     }catch(error){try{this.database.exec('ROLLBACK');}catch{/* Preserve initialization failure. */}throw error;}
     const schemaReady=performance.now();
@@ -310,6 +320,10 @@ export class SqliteRecordDatabase {
   }
 
   packageCacheProjection<Query extends PackageCacheProjectionQuery>(query:Query):PackageCacheProjectionResult<Query>{
+    if(query.kind==='summaries_by_keys'){
+      const rows=this.database.exec({sql:'SELECT summary_json FROM sensa_package_cache_projection WHERE package_key IN (SELECT value FROM json_each(?)) ORDER BY package_key',bind:[JSON.stringify([...new Set(query.keys)])],rowMode:'object',returnValue:'resultRows'}) as {summary_json:string}[];
+      return rows.map(row=>JSON.parse(row.summary_json)) as PackageCacheProjectionResult<Query>;
+    }
     if(query.kind==='publication_identities'){
       const rows=this.database.exec({sql:`SELECT package_key,digest,
         (SELECT json_group_array(json_extract(publication.value,'$.bookArchiveSha256')) FROM json_each(summary_json,'$.portableOrigin.publications') AS publication) AS publications,
@@ -616,6 +630,7 @@ export class SqliteRecordDatabase {
   }
 
   commit(mutation: SqliteMutation): void {
+    if(this.fatalStorageFailure)throw this.fatalStorageFailure;
     if(this.integrityFailed)throw new Error('sqlite_integrity_failed');
     if (
       !mutation.clears.length
@@ -668,6 +683,7 @@ export class SqliteRecordDatabase {
         }
         if (table === 'learningTargets'){this.database.exec('DELETE FROM sensa_learning_targets');this.runtimeCandidates.clear();}
         if(table==='curriculumEnrollments')this.runtimeCandidates.clearEnrollments();
+        if(table==='supplementalMembershipStates')this.runtimeCandidates.clearSupplementalStates();
         if(table==='studyScopes')this.runtimeCandidates.clearScopes();
         if (table === 'learningRuns'){this.database.exec('DELETE FROM sensa_learning_runs');this.learningHistory.clear();}
         if (table === 'contentAttempts') this.database.exec('DELETE FROM sensa_content_attempts');
@@ -704,6 +720,7 @@ export class SqliteRecordDatabase {
           });
         }
         if(item.table==='curriculumEnrollments')this.runtimeCandidates.deleteEnrollment(item.key);
+        if(item.table==='supplementalMembershipStates')this.runtimeCandidates.deleteSupplementalState(item.key);
         if(item.table==='studyScopes')this.runtimeCandidates.deleteScope(item.key);
         if (item.table === 'learningRuns') {
           this.learningHistory.delete(item.key);
@@ -776,6 +793,7 @@ export class SqliteRecordDatabase {
         }
         if(item.table==='packageCache')this.upsertPackageCacheProjection(item.key,item.encodedValue);
         if(item.table==='curriculumEnrollments')this.runtimeCandidates.upsertEnrollment(item.key,this.decode<import('./curriculumEnrollments').LocalCurriculumEnrollment>(item.encodedValue));
+        if(item.table==='supplementalMembershipStates')this.runtimeCandidates.upsertSupplementalState(item.key,this.decode<import('./supplementalMemberships').SupplementalMembershipState>(item.encodedValue));
         if(item.table==='studyScopes')this.runtimeCandidates.upsertScope(item.key,this.decode<import('./studyScopes').LocalStudyScope>(item.encodedValue));
         if (item.table === 'learningTargets') {
           this.upsertLearningTargetProjection(item.key, item.encodedValue);
@@ -819,7 +837,11 @@ export class SqliteRecordDatabase {
       this.database.exec("COMMIT");
       this.integrityCheck=undefined;
     } catch (error) {
-      try { this.database.exec("ROLLBACK"); } catch { /* Preserve the original failure. */ }
+      try { this.database.exec("ROLLBACK"); } catch (rollbackCause) {
+        const failure=sqliteRollbackFailure(error,rollbackCause);
+        if(isFatalSqliteConnectionFailure(failure))this.fatalStorageFailure??=failure;
+        throw failure;
+      }
       throw error;
     }
     // A completed large transaction can leave a large reusable WAL. Bound its
@@ -832,13 +854,22 @@ export class SqliteRecordDatabase {
     try{
       const result=this.database.exec({sql:'PRAGMA wal_checkpoint(TRUNCATE)',rowMode:'object',returnValue:'resultRows'}) as Array<{busy:number}>;
       this.walMaintenance={status:result[0]?.busy===0?'ok':'deferred',checkedAt,durationMs:Math.round(performance.now()-started)};
-    }catch(cause){this.walMaintenance={status:'failed',checkedAt,durationMs:Math.round(performance.now()-started),reason:cause instanceof Error?cause.message:String(cause)};}
+    }catch(cause){
+      this.walMaintenance={status:'failed',checkedAt,durationMs:Math.round(performance.now()-started),reason:cause instanceof Error?cause.message:String(cause)};
+      // A maintenance failure cannot deny an already durable COMMIT, but a
+      // physical I/O/corruption failure cannot leave this connection usable.
+      if(isFatalSqliteConnectionFailure(cause))this.fatalStorageFailure??=cause as Error;
+    }
   }
 
   diagnostics(options?:Readonly<{verifyIntegrity?:boolean}>): SqliteStorageDiagnostics {
+    if(this.fatalStorageFailure)throw this.fatalStorageFailure;
     if(options?.verifyIntegrity)this.verifyIntegrity();
-    const journeyIdentityCheck=options?.verifyIntegrity?this.journeyIdentities.checkAndRepair():undefined;
+    let journeyIdentityCheck:ReturnType<SqliteJourneyIdentityProjection['checkAndRepair']>|undefined;
+    try{journeyIdentityCheck=options?.verifyIntegrity?this.journeyIdentities.checkAndRepair():undefined;}
+    catch(cause){if(isFatalSqliteConnectionFailure(cause))this.fatalStorageFailure??=cause as Error;throw cause;}
     if(journeyIdentityCheck?.status==='rebuilt'&&this.persistence==='opfs')this.maintainWal();
+    if(this.fatalStorageFailure)throw this.fatalStorageFailure;
     return {
       ...(this.walMaintenance?{walMaintenance:this.walMaintenance}:{}),
       ...(journeyIdentityCheck?{journeyIdentityCheck}:{}),
@@ -870,7 +901,7 @@ export class SqliteRecordDatabase {
     if(this.closed)return;
     let optimizeFailed=false;
     let optimizeFailure:unknown;
-    if(optimize){
+    if(optimize&&!this.connectionFailed){
       try{this.database.exec("PRAGMA optimize");}
       catch(cause){optimizeFailed=true;optimizeFailure=cause;}
     }
@@ -919,6 +950,22 @@ export class SqliteRecordDatabase {
     if(!sharedRecordTables.has(table))return encoded;
     this.detachSharedContent(kind,table,key,removed);
     const shared=externalizeSharedRecordContent(JSON.parse(encoded));
+    if(shared.bodies.size>32){
+      const entries=[...shared.bodies];
+      for(let offset=0;offset<entries.length;offset+=128){
+        const batch=entries.slice(offset,offset+128),digests=batch.map(([digest])=>digest);
+        const current=new Map((this.database.exec({sql:'SELECT digest,value_json FROM sensa_shared_record_content WHERE digest IN (SELECT value FROM json_each(?))',bind:[JSON.stringify(digests)],rowMode:'object',returnValue:'resultRows'}) as {digest:string;value_json:string}[]).map(row=>[row.digest,row.value_json]));
+        const missing:[string,string][]=[];
+        for(const [digest,body] of batch){
+          const stored=current.get(digest);
+          if(stored!==undefined){if(unpackStoredRecord(stored)!==body)throw new Error('sqlite_shared_content_invalid');}
+          else missing.push([digest,packStoredRecord(body)]);
+        }
+        if(missing.length)this.database.exec({sql:"INSERT INTO sensa_shared_record_content SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]') FROM json_each(?)",bind:[JSON.stringify(missing)]});
+        this.database.exec({sql:'INSERT INTO sensa_shared_record_content_owners(owner_kind,table_name,record_key,digest) SELECT ?,?,?,value FROM json_each(?)',bind:[kind,table,key,JSON.stringify(digests)]});
+      }
+      return packStoredRecord(JSON.stringify(shared.value));
+    }
     for(const [digest,body] of shared.bodies){
       const current=this.database.exec({sql:'SELECT value_json FROM sensa_shared_record_content WHERE digest=?',bind:[digest],rowMode:0,returnValue:'resultRows'}) as string[];
       if(current.length){if(unpackStoredRecord(String(current[0]))!==body)throw new Error('sqlite_shared_content_invalid');}

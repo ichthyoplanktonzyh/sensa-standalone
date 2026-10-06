@@ -34,6 +34,16 @@ test('direct learning intent and ready membership survive cloud restore without 
     meanings:await c.readLibrary((tx:any)=>tx.entries('semanticMeanings')),packages:await c.installedPackages()};
   },intent.enrollmentId);
   const pending=await inspect(pendingReceiver);assert.deepEqual(pending.intent,intent);assert.deepEqual(pending.targets,[]);assert.deepEqual(pending.meanings,[]);assert.deepEqual(pending.packages,[]);
+  const change=async(expectedRevision:number,active:boolean)=>sender.evaluate(async({enrollmentId,expectedRevision,active})=>{const c=(window as any).core;return c.learningSystem.execute({kind:'change_supplemental_membership',operationId:crypto.randomUUID(),source:{kind:'stable_sense',id:enrollmentId},expectedRevision,active,languageContext:(await c.languageRoutesSnapshot()).context});},{enrollmentId:intent.enrollmentId,expectedRevision,active});
+  await change(0,false);await sender.evaluate(()=>(window as any).sync());
+  await pendingReceiver.evaluate(()=>(window as any).sync());
+  assert.equal((await inspect(pendingReceiver)).intent.status,'removed');
+  const blocked=await pendingReceiver.evaluate(async enrollmentId=>{try{await (window as any).core.learningSystem.execute({kind:'prepare_direct',operationId:crypto.randomUUID(),enrollmentId});return null;}catch(error){return (error as Error).message;}},intent.enrollmentId);
+  assert.equal(blocked,'localFlow.membershipRemoved');assert.deepEqual((await inspect(pendingReceiver)).targets,[]);
+  await change(1,true);await sender.evaluate(()=>(window as any).sync());
+  await pendingReceiver.evaluate(()=>(window as any).sync());
+  assert.equal((await inspect(pendingReceiver)).intent.status,'awaiting_content');
+  assert.equal((await inspect(pendingReceiver)).intent.membershipRevision,2);
   assert.equal((await sender.evaluate(enrollmentId=>(window as any).core.learningSystem.execute({kind:'prepare_direct',operationId:crypto.randomUUID(),enrollmentId}),intent.enrollmentId)).status,'ready');
   await sender.evaluate(()=>(window as any).sync());
   const receiver=await fixture.createClient(account);await receiver.evaluate(()=>(window as any).sync());

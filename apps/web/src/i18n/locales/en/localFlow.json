@@ -1,5 +1,13 @@
 {
   "localFlow": {
+    "outsideLearningPlan": "Outside the future learning plan",
+    "supplementalEmpty":"No individually added content yet","supplementalLearning": "Supplemental learning",
+    "removeFromLearning": "Remove from learning",
+    "restoreToLearning": "Rejoin learning",
+    "membershipRemoved": "Removed from future learning",
+    "membershipChanged": "The learning source changed. Check its current state before acting again.",
+    "membershipSavedReadFailed": "The change was saved, but could not be read. Retry reading it.",
+    "membershipUnconfirmed": "The save response could not be confirmed. Check the current state before acting again.",
     "clarificationSourceChanged": "Continue the conversation to recheck the current material before confirming.",
     "packageAuthor": "Author",
     "packageFilesUnavailable": "Package files unavailable on this device: {{count}}. Import the originals or download them again from the catalog.",

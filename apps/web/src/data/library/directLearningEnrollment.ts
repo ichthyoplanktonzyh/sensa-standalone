@@ -9,13 +9,15 @@ import {learningOwner} from './libraryOwnership';
 import {requireLanguageRouteContext} from './language';
 import {readLibrary,assertCurrentLibrary,type LibraryTransaction} from './store';
 import {backupEqual} from './backupCodec';
+import {currentPlanningMembership,assertSupplementalMembershipActive,supplementalSourceDescriptor,type SupplementalMembershipState} from './supplementalMemberships';
 
 export interface DirectLearningEnrollment {
   enrollmentId:string|null;
   targetId:string;
-  status:'awaiting_content'|'already_in_scope';
+  status:'awaiting_content'|'already_in_scope'|'removed';
   languageContext:SensaFormalPinnedLanguageContext;
   selection:DirectLearningSource;
+  membershipRevision?:number;
 }
 const targetIdFor=(learnerId:string,reference:DirectLearningReference)=>stableUuid(`sensa-learning-target:${learnerId}:${reference.senseVersionId}:${reference.bindingVersionId}`);
 export function assertDirectTargetIdentity(target:LocalLearningTarget,selection:DirectLearningSource,learnerId:string):void{
@@ -28,10 +30,7 @@ export async function directSourceAlreadyCovered(tx:LibraryTransaction,targetId:
   const target=await tx.get<LocalLearningTarget>('learningTargets',targetId);
   if(!target)return false;
   assertDirectTargetIdentity(target,selection,learnerId);
-  const enrollments=new Map<string,LocalCurriculumEnrollment>();
-  const ids=new Set(target.curriculumMemberships.flatMap(member=>typeof member.provenance.curriculumEnrollmentId==='string'?[member.provenance.curriculumEnrollmentId]:[]));
-  for(const id of ids){const enrollment=await tx.get<LocalCurriculumEnrollment>('curriculumEnrollments',id);if(enrollment)enrollments.set(id,enrollment);}
-  return !!planningMembershipForContext(target,context,enrollments);
+  return !!await currentPlanningMembership(tx,target,context);
 }
 
 /** Explicit Curriculum intent. Content readiness is never inferred from a click. */
@@ -46,6 +45,7 @@ export function enrollDirectSense(input:{operationId:string;reference:DirectLear
     const source={kind:'stable_sense' as const,selection},id=curriculumEnrollmentId(owner.learnerId,languageContext.languageRouteId,source);
     const existing=await tx.get<LocalCurriculumEnrollment>('curriculumEnrollments',id);
     if(existing){
+      await assertSupplementalMembershipActive(tx,supplementalSourceDescriptor({kind:'stable_sense',id},existing,owner.learnerId).id);
       if(existing.source.kind!=='stable_sense'||existing.status!=='active')throw new Error('localFlow.meaningChanged');
       const pinned=existing.source.selection;
       if(pinned.reference.senseId!==selection.reference.senseId||pinned.reference.bindingId!==selection.reference.bindingId
@@ -68,6 +68,7 @@ export function readDirectLearningEnrollment(enrollmentId:string):Promise<Direct
     if(!raw)return null;const enrollment=curriculumEnrollmentSchema.parse(raw);
     if(enrollment.id!==enrollmentId||enrollment.learnerUserId!==owner.learnerId||enrollment.source.kind!=='stable_sense'||enrollment.status!=='active')return null;
     const selection=enrollment.source.selection,targetId=targetIdFor(owner.learnerId,selection.reference);
-    return {enrollmentId,targetId,status:await directSourceAlreadyCovered(tx,targetId,enrollment.languageContext,selection,owner.learnerId)?'already_in_scope':'awaiting_content',languageContext:enrollment.languageContext,selection};
+    const state=await tx.get<SupplementalMembershipState>('supplementalMembershipStates',supplementalSourceDescriptor({kind:'stable_sense',id:enrollmentId},enrollment,owner.learnerId).id);
+    return {enrollmentId,targetId,...(state?{membershipRevision:state.revision}:{}),status:state?.status==='removed'?'removed':await directSourceAlreadyCovered(tx,targetId,enrollment.languageContext,selection,owner.learnerId)?'already_in_scope':'awaiting_content',languageContext:enrollment.languageContext,selection};
   });
 }

@@ -1,5 +1,13 @@
 {
   "localFlow": {
+    "outsideLearningPlan": "Gelecekteki öğrenme planının dışında",
+    "supplementalEmpty":"Henüz ayrı içerik eklenmedi","supplementalLearning": "Ek öğrenme",
+    "removeFromLearning": "Öğrenmeden çıkar",
+    "restoreToLearning": "Öğrenmeye yeniden ekle",
+    "membershipRemoved": "Gelecekteki öğrenmeden çıkarıldı",
+    "membershipChanged": "Öğrenme kaynağı değişti. İşleme devam etmeden önce güncel durumu kontrol edin.",
+    "membershipSavedReadFailed": "Değişiklik kaydedildi ancak okunamadı. Okumayı yeniden deneyin.",
+    "membershipUnconfirmed": "Kayıt doğrulanamadı. İşleme devam etmeden önce güncel durumu kontrol edin.",
     "clarificationSourceChanged": "Onaylamadan önce mevcut içeriği kontrol etmek için konuşmaya devam edin.",
     "packageAuthor": "Yazar",
     "packageFilesUnavailable": "Bu cihazda dosyası bulunmayan paketler: {{count}}. Özgün dosyaları içe aktarın veya katalogdan yeniden indirin.",

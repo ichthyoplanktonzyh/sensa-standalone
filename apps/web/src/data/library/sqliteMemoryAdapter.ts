@@ -70,6 +70,15 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
   }
   async packageCacheProjection<Query extends PackageCacheProjectionQuery>(query:Query):Promise<PackageCacheProjectionResult<Query>>{
     const {createPackageCacheSummary,createPackagePublicationIdentity,isPackageCacheProjectionSource,learningExpressionForm,validateLearningPackageQuery}=await import('./packageCacheProjection');
+    if(query.kind==='summaries_by_keys'){
+      const values=await Promise.all([...new Set(query.keys)].map(async key=>{
+        // Emulate the purpose-specific storage projection, not the public
+        // source-record/hydration interface. Production uses its SQL index.
+        const encoded=this.records.get(`packageCache\u0000${key}`);
+        return encoded===undefined?null:decodeBackupValue(JSON.parse(encoded));
+      }));
+      return values.filter(isPackageCacheProjectionSource).map(createPackageCacheSummary).sort((a,b)=>a.key.localeCompare(b.key)) as PackageCacheProjectionResult<Query>;
+    }
     const values=(await this.entries('packageCache')).map(row=>
       decodeBackupValue(JSON.parse(row.encodedValue))).filter(isPackageCacheProjectionSource);
     if(query.kind==='publication_identities')return values.map(createPackagePublicationIdentity).sort((a,b)=>a.key.localeCompare(b.key)) as PackageCacheProjectionResult<Query>;
@@ -182,7 +191,7 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
   }
   async studyScopeMember(scopeRevisionId:string,targetId:string):Promise<import('./studyScopes').LocalStudyScopeMember|null>{
     const encoded=await this.get('studyScopes',scopeRevisionId);
-    if(!encoded)return null;
+    if(!encoded)throw new Error('localFlow.progressReadFailed');
     const scope=decodeBackupValue(JSON.parse(encoded)) as import('./studyScopes').LocalStudyScope;
     return scope.members.find(member=>member.targetId===targetId)??null;
   }

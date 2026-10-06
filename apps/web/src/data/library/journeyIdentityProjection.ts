@@ -2,6 +2,7 @@
 import type {Database,PreparedStatement,SqlValue} from '@sqlite.org/sqlite-wasm';
 import {decodeBackupValue} from './backupCodec';
 import {ensureSqliteSchemaIndexes} from './sqliteSchemaIndexes';
+import {sqliteRollbackFailure} from './sqliteConnectionFailure';
 import type {SqliteMutation} from './sqliteProtocol';
 import {journeyIdentityTables,journeyReservedIdentities,type JourneyIdentityTable} from '../../experience/personalMeaningJourney/reservedIdentities';
 import {isUuid} from '../../experience/personalMeaningJourney/ids';
@@ -69,7 +70,7 @@ export class SqliteJourneyIdentityProjection{
     this.sourceRows((table,row)=>this.replace(table,row.record_key,row.value_json));
     this.rows('INSERT INTO sensa_journey_identity_meta VALUES(1,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version',[version]);this.database.exec('COMMIT');this.invalid=false;
    }catch(cause){
-    try{this.database.exec('ROLLBACK');}catch{/* Preserve the diagnostic repair failure. */}
+    try{this.database.exec('ROLLBACK');}catch(rollbackCause){throw sqliteRollbackFailure(cause,rollbackCause);}
     throw cause;
    }
   }

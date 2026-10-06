@@ -8,6 +8,7 @@ import {useShellNavigation} from '../router/useShellNavigation';
 import {useOverlayStore} from '../stores/overlayStore';
 import {usePackageLearning} from './usePackageLearning';
 import {BookPlanPanel} from './BookPlanPanel';
+import {SupplementalPlanPanel} from './SupplementalPlanPanel';
 import {usePersonalLearning} from './usePersonalLearning';
 import {usePracticeScope} from '../usePracticeScope';
 import {createPracticeScopeSnapshot,type PracticeScopeSnapshot} from '../practiceScope';
@@ -15,7 +16,6 @@ import {contentSenseForId,type ContentSectionId} from '../../learnerSemanticProj
 import type {PracticeSenseItem} from '../practiceData';
 import {JourneyAlignmentLearningControls,PersonalPreparationTarget,pendingPersonalTargetView} from './PersonalLearningControls';
 import {LearningSetupFrame,setupButton} from '../components/learning/LearningSetupFrame';
-import {LearningPreferencesPanel} from '../components/learning/LearningPreferencesPanel';
 import {PackageTarget} from './PackageLearningViews';
 import {ScreenHost} from '../ui/ScreenHost';
 import {screenInstanceKey} from '../router/shellLocation';
@@ -104,23 +104,19 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
  const openPersonalLearningSource=useCallback((task:typeof personalLearning.tasks[number])=>goMain('s-confirmed-sense',{meaningId:task.source.personalMeaningId,focusId:task.source.meaningFocusId??task.source.personalMeaningAlignmentId}),[goMain]);
  const [studyTab,setStudyTab]=useState<'a'|'b'>('a');
  const dailyNewCount=packageLearning.dailyLimit??20;
- const [quantityTarget,setQuantityTarget]=useState<string|null>(null);
- const [quantityChoice,setQuantityChoice]=useState(20);
- const [quantityIntent,setQuantityIntent]=useState<'mixed'|'review_only'>('mixed');
- const quantityTargetRecord=quantityTarget?packageLearning.targets.find(target=>target.targetId===quantityTarget):undefined;
  const updateLocalQuantity=(value:number)=>{void packageLearning.confirmQuantity(value);};
  const startLocalLearning=async(id?:string,reviewOnly=false)=>{
   const targetId=id??packageLearning.runtime?.currentTargetId??packageLearning.due[0]?.targetId??(!reviewOnly?packageLearning.initialReady[0]?.targetId:undefined);
   if(!targetId){setMainStack(['s-catalog']);return;}
   const intent=reviewOnly?'review_only':'mixed';
-  if(packageLearning.dailyLimit===undefined){setQuantityChoice(dailyNewCount);setQuantityIntent(intent);setQuantityTarget(targetId);return;}
   if(await packageLearning.start(targetId,dailyNewCount,intent))setViewMode('lightweight');
  };
  const personalMeaningId=params.meaningId??null,meaningFocusId=params.focusId??null;
  const renderContentScreen=(screenId:'s-content'|'s-semantic-world',screenActive:boolean)=><ContentScreen
     bulkLearning={(items,list,query)=><BatchPersonalLearning items={items} query={query} c={personalLearning}>{list}</BatchPersonalLearning>}
     active={screenActive} screenId={screenId}
-    initialAction={params.worldAction==='create'||params.worldAction==='inbox'?params.worldAction:undefined}
+    initialAction={params.worldAction==='create'||params.worldAction==='inbox'||params.worldAction==='add'?params.worldAction:undefined}
+    onInitialActionConsumed={()=>goMain(screenId,{worldAction:undefined})}
     onStartConversation={startSensaConversation}
     onBrowseExisting={()=>setMainStack(['s-catalog'])} onOpenPersonalMeaning={openPersonalMeaning}
     onOpenConfirmedSense={openConfirmedSense} onOpenSense={openSemanticWorldSense}
@@ -134,6 +130,7 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
    const exportPackageKey=packageLearning.targetExportPackageKey;
    const onExport=personalTask?()=>personalLearning.exportPackage(personalTask.id):exportPackageKey?()=>packageLearning.exportPackage(exportPackageKey):undefined;
    return <PackageTarget active={screenActive} target={localSelectedTarget} c={packageLearning}
+    onManage={()=>setMainStack(['s-study'])}
     onExport={onExport} exportBusy={personalTask?personalLearning.busy:packageLearning.busy} exportNotice={personalTask?personalLearning.notice:undefined}
     onSource={()=>{const provenance=localSelectedTarget.material.snapshot.provenance;if('personalMeaningId' in provenance&&typeof provenance.personalMeaningId==='string')openPersonalMeaning(provenance.personalMeaningId);else backMain();}} onBack={backMain} onHome={resetMain} onStart={()=>void startLocalLearning(localSelectedTarget.targetId,localSelectedTarget.completed)}/>;
   }
@@ -154,10 +151,9 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
   's-confirmed-sense':screenActive=><ConfirmedSenseDetailScreen active={screenActive} personalMeaningId={personalMeaningId} meaningFocusId={meaningFocusId} onBack={backMain} onOpenBinding={()=>goMain('s-expression-binding')} learningControls={(detail,alignment)=><JourneyAlignmentLearningControls detail={detail} alignment={alignment} c={personalLearning} onStart={id=>void startLocalLearning(id)}/>}/>,
   's-real-world-listening':screenActive=><YouGlishListeningScreen active={screenActive} targets={(activePracticeScope??practiceScopeCatalog.currentScope).targets} onBack={backMain} toast={toast}/>,
   's-study':screenActive=><StudyScreen
-    bookPlans={<BookPlanPanel active={screenActive}/>}
+    bookPlans={<><BookPlanPanel active={screenActive}/><SupplementalPlanPanel active={screenActive}/></>}
     availability={packageLearning.loadStatus} status={managementStatus}
     preferencesBusy={preferencesBusy} preferencesStatus={preferencesStatus}
-    policySummary={[...new Set(packageLearning.management?.policies??packageLearning.targets.map(target=>target.policy))].map(policy=>t('learningPreferences.policies.'+policy)).join(' · ')||undefined}
     active={screenActive} tab={studyTab} onTabChange={setStudyTab} onAddLearning={()=>goMain('s-learning-entry')}
     onOpenTargetLibrary={()=>goMain('s-learning-library')} onOpenTarget={openLocalTarget}
     onPolicyChange={()=>{}} defaultPolicy="lightweight" policyOptions={packageLearning.policyOptions} fixedPolicy
@@ -206,18 +202,5 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
  const fallback=<section id={currentScreen} className="screen active absolute inset-0 grid place-content-center bg-surface-canvas text-fg-primary" role="status">{localFlowText('loadingSensa')}</section>;
  return <>
   <ScreenHost screenKey={screenInstanceKey(currentScreen,params)} active={active} fallback={fallback}>{renderScreen}</ScreenHost>
-  {quantityTarget&&quantityTargetRecord&&<LearningPreferencesPanel
-   fixedPolicy defaultPolicy={quantityTargetRecord.policy} policyOptions={packageLearning.policyOptions}
-   dailyNewCount={quantityChoice} onPolicyChange={()=>{}}
-   onDailyNewCountChange={setQuantityChoice} busy={packageLearning.busy}
-   status={packageLearning.notice&&<p role="status">{packageLearning.notice}</p>}
-   onClose={()=>setQuantityTarget(null)} closeLabel={localFlowText('confirmAndStart')}
-   onConfirm={()=>void packageLearning.confirmQuantity(quantityChoice).then(async ok=>{
-    if(!ok)return;
-    const target=quantityTarget;
-    setQuantityTarget(null);
-    if(await packageLearning.start(target,quantityChoice,quantityIntent))setViewMode('lightweight');
-   })}
-  />}
  </>;
 }

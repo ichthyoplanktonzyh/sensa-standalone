@@ -129,9 +129,8 @@ export class LibraryTransaction {
   }
 
   /** Bounded transport/decode batches for a coherent large semantic snapshot. */
-  async *entryBatches(table:Table):AsyncGenerator<Array<{key:string;value:unknown}>>{
+  async *entryBatches(table:Table,afterKey:string|null=null):AsyncGenerator<Array<{key:string;value:unknown}>>{
     if(this.wrote)throw new Error('library_entries_require_snapshot');
-    let afterKey:string|null=null;
     for(;;){
       const rows=await storageCall(()=>this.adapter.entriesPage(table,afterKey,128));
       if(!rows.length)return;
@@ -185,7 +184,7 @@ export class LibraryTransaction {
 
   /** Read the derived index, including this transaction's pending cache writes. */
   async packageCacheProjection<Query extends PackageCacheProjectionQuery>(query:Query):Promise<PackageCacheProjectionResult<Query>>{
-    if(query.kind==='route_counts'||query.kind==='learning_choices'||query.kind==='publication_identities'){
+    if(query.kind==='route_counts'||query.kind==='learning_choices'||query.kind==='publication_identities'||query.kind==='summaries_by_keys'){
       if(this.wrote)throw new Error('library_projection_requires_snapshot');
       return storageCall(()=>this.adapter.packageCacheProjection(query));
     }

@@ -70,6 +70,9 @@ export type ContentProvisioningStatus =
 
 /** Learner-private Content Supply task. It is not a Curriculum or progress record. */
 export interface ContentProvisioningTask<Reference extends ContentProvisioningReference=ContentProvisioningReference> {
+  /** Read projection only, never persisted as Content Supply authority. */
+  curriculumActive?:boolean;
+  curriculumRevision?:number;
   replacing?: boolean;
   id: string;
   source: Reference;
