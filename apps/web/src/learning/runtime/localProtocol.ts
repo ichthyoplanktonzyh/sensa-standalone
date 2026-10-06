@@ -216,7 +216,14 @@ export type LocalLearningRunLifecycleEvent = Readonly<{runRevision:number}> & (
     }>
   | Readonly<{
       eventId:string;
-      kind:'resumed_after_session_switch';
+      kind:'paused_for_session_end';
+      operationId:string;
+      learningSessionId:string;
+      at:string;
+    }>
+  | Readonly<{
+      eventId:string;
+      kind:'resumed_after_session_switch'|'resumed_after_session_end';
       operationId:string;
       interruptionEventId:string;
       sessionIntent:LocalLearningSessionIntent;
@@ -268,9 +275,9 @@ export const localRunSessionIntent=(run:Pick<LocalLearningRun,'sessionIntent'|'l
   return selection&&'sessionIntent' in selection?selection.sessionIntent??run.sessionIntent??'mixed':run.sessionIntent??'mixed';
 };
 
-export const localRunOpenSessionPause=(run:Pick<LocalLearningRun,'lifecycleEvents'>):Extract<LocalLearningRunLifecycleEvent,{kind:'paused_for_session_switch'}>|null=>{
-  const resumed=new Set(run.lifecycleEvents.flatMap(event=>event.kind==='resumed_after_session_switch'?[event.interruptionEventId]:[]));
-  return [...run.lifecycleEvents].reverse().find((event):event is Extract<LocalLearningRunLifecycleEvent,{kind:'paused_for_session_switch'}>=>event.kind==='paused_for_session_switch'&&!resumed.has(event.eventId))??null;
+export const localRunOpenSessionPause=(run:Pick<LocalLearningRun,'lifecycleEvents'>):Extract<LocalLearningRunLifecycleEvent,{kind:'paused_for_session_switch'|'paused_for_session_end'}>|null=>{
+  const resumed=new Set(run.lifecycleEvents.flatMap(event=>event.kind==='resumed_after_session_switch'||event.kind==='resumed_after_session_end'?[event.interruptionEventId]:[]));
+  return [...run.lifecycleEvents].reverse().find((event):event is Extract<LocalLearningRunLifecycleEvent,{kind:'paused_for_session_switch'|'paused_for_session_end'}> => (event.kind==='paused_for_session_switch'||event.kind==='paused_for_session_end')&&!resumed.has(event.eventId))??null;
 };
 
 /** The latest interruption remains open until a matching resume fact exists. */

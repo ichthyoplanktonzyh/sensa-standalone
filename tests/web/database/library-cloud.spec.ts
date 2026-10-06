@@ -46,6 +46,39 @@ test('direct learning intent and ready membership survive cloud restore without 
   assert.deepEqual((await inspect(receiver)).targets,ready.targets);
  }finally{await fixture.close();}
 });
+test('an explicitly ended unfinished Session restores through Cloud without an active pointer, completion or public package bytes',async({browser})=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount('unfinished-session-end'),sender=await fixture.createClient(account),publication=await libraryCloudPackageFixture();
+  const ids=await sender.evaluate(async({bookBytes,descriptor})=>{
+   const c=(window as any).core,fetch=window.fetch;window.fetch=async input=>String(input)===descriptor.url?new Response(new Uint8Array(bookBytes)):new Response(null,{status:404});
+   try{
+    await c.contentSupplySystem.execute({kind:'install_catalog_item',descriptor,signal:new AbortController().signal});
+    const languageContext=(await c.languageRoutesSnapshot()).context;
+    const targetIds=await c.learningSystem.execute({kind:'enroll_book',operationId:crypto.randomUUID(),languageContext,publicationArchiveSha256:descriptor.sha256});
+    await c.learningSystem.execute({kind:'confirm_quantity',operationId:crypto.randomUUID(),languageContext,dailyLimit:20});
+    await c.learningSystem.execute({kind:'start',operationId:crypto.randomUUID(),targetId:targetIds[0],languageContext,dailyLimit:20});
+    let {runtime}=await c.learningSystem.read({kind:'runtime',languageContext});
+    await c.learningSystem.execute({kind:'act',operationId:crypto.randomUUID(),runId:runtime.runId,expectedRevision:runtime.revision,action:{kind:'reveal'}});
+    ({runtime}=await c.learningSystem.read({kind:'runtime',languageContext}));
+    const run=await c.readLibrary((tx:any)=>tx.get('learningRuns',runtime.runId));
+    await c.learningSystem.execute({kind:'end_session',operationId:crypto.randomUUID(),runId:run.id,expectedRevision:run.revision});
+    return {runId:run.id,sessionId:run.learningSessionId,scopeId:run.studyScopeRevisionId};
+   }finally{window.fetch=fetch;}
+  },{bookBytes:Array.from(publication.bookBytes),descriptor:publication.descriptor});
+  const inspect=(page:import('@playwright/test').Page)=>page.evaluate(async ids=>{
+   const c=(window as any).core;return c.readLibrary(async(tx:any)=>({run:await tx.get('learningRuns',ids.runId),session:await tx.get('learningSessions',ids.sessionId),scope:await tx.get('studyScopes',ids.scopeId),activeRun:await tx.get('meta','learning-active')??null,activeSession:await tx.get('meta','learning-session-active')??null,targets:await tx.all('learningTargets'),events:await tx.all('learningEvents')}));
+  },ids);
+  const original=await inspect(sender);assert.equal(original.session.endReason,'learner_ended');assert.equal(original.run.completedAt,null);assert.equal(original.events.length,1);
+  assert(original.targets.every((target:any)=>target.memoryRevision===0&&!target.memory));assert.equal(original.activeRun,null);assert.equal(original.activeSession,null);
+  await sender.evaluate(()=>(window as any).sync());
+  const receiver=await fixture.createClient(account);await receiver.evaluate(()=>(window as any).sync());
+  assert.deepEqual(await inspect(receiver),original);assert.equal((await receiver.evaluate(()=>(window as any).core.installedPackages())).length,0);
+  await receiver.reload();await receiver.evaluate(async()=>{const path='/core.js';(window as any).core=await import(/* @vite-ignore */ path);await (window as any).core.openLibrary();});
+  assert.deepEqual(await inspect(receiver),original);
+ }finally{await fixture.close();}
+});
+
 test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres', async({browser})=>{
  const fixture=await createLibraryCloudBrowserFixture(browser);
  const {origin,pool}=fixture;

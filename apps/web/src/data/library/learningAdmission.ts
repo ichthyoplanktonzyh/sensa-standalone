@@ -33,6 +33,7 @@ export async function admitLearningSystemTransaction(
     changes:relevant,
     read:(table,key)=>tx.get(table,key),
     scopeMember:(scopeId,targetId)=>tx.studyScopeMember(scopeId,targetId),
+    latestActionAt:runId=>tx.latestLearningActionAt(runId),
     capturedScopeIds:relevant.filter(change=>change.table==='studyScopes'&&hasStudyScopeCaptureWitness(tx,change.key)).map(change=>change.key),
   });
 }

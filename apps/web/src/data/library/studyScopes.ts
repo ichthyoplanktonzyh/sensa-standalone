@@ -125,7 +125,7 @@ export const learningSessionSchema=z.object({
  scopeRevisionId:uuid,languageContext:sensaFormalPinnedLanguageContextSchema,intent:z.enum(['mixed','review_only']),
  dailyNewSenseLimit:z.number().int().min(1).max(100),
  startedByOperationId:uuid,startedAt:timestamp,runIds:z.array(uuid).min(1),activeRunId:uuid.nullable(),
- endedAt:timestamp.nullable(),endedByOperationId:uuid.nullable(),endReason:z.enum(['learner_finished','session_switch','planning_override','plan_change']).nullable(),
+ endedAt:timestamp.nullable(),endedByOperationId:uuid.nullable(),endReason:z.enum(['learner_finished','learner_ended','session_switch','planning_override','plan_change']).nullable(),
 }).strict().superRefine((session,context)=>{
  if(session.id!==stableUuid(`local-learning-session:${session.startedByOperationId}`)||new Set(session.runIds).size!==session.runIds.length||session.activeRunId&&!session.runIds.includes(session.activeRunId)||!!session.endedAt!==!!session.endedByOperationId||!!session.endedAt!==!!session.endReason||session.endedAt&&(Date.parse(session.endedAt)<Date.parse(session.startedAt)||session.activeRunId!==null))context.addIssue({code:'custom',message:'Learning Session lifecycle is inconsistent'});
 });

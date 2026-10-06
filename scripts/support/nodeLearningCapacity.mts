@@ -12,7 +12,7 @@ export async function useNodeLearningCapacityStorage(){
  const methods=[
   'get','entries','entriesPage','existingRecordKeys','packageCacheProjection','lookupMeanings','worldBrowse','registrySelection','worldLearningChoices','existingJourneyIdentities',
   'changesSince','hasChangesSince','syncBaseEntries','count','estimateRecordBytes','homeLearningProjection','countIntroducedLearningTargets','learningRunIdsForTarget','openLearningRunTargets',
-  'countContentAttemptsSince','learningTargetIdsForBookUpgrade','isMediaReferenced','portableMedia','portableMediaDiagnostics','commit','diagnostics','learningHistoryPage','learningManagementSummary','runtimeLearningCandidates','studyScopeMember',
+  'countContentAttemptsSince','learningTargetIdsForBookUpgrade','isMediaReferenced','portableMedia','portableMediaDiagnostics','commit','diagnostics','learningHistoryPage','learningManagementSummary','runtimeLearningCandidates','studyScopeMember','latestLearningActionAt',
  ] as const satisfies readonly (keyof SqliteRecordAdapter)[];
  for(const name of methods){
   const method=Reflect.get(database,name);

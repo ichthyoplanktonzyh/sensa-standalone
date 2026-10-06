@@ -1,4 +1,5 @@
 {
+  "sessionEnd":{"action":"이번 학습 종료","title":"이번 학습을 종료할까요?","cancel":"학습 계속","savedReadFailed":"이번 학습은 종료되었지만 저장 상태를 읽지 못했습니다. 다시 읽어 주세요.","unconfirmed":"종료 확인을 받지 못했습니다. 저장 상태를 다시 읽었으니 확인 후 조작해 주세요."},
   "bookPlanHeading":{"title":"향후 학습 계획","mode":"향후 학습 모드"},
   "bookPlanFeedback":{"unconfirmed":"저장 응답을 확인하지 못했습니다. 계획을 다시 읽었으니 확인 후 다시 진행하세요.","savedReadFailed":"계획은 저장되었지만 다시 읽지 못했습니다. 읽기를 다시 시도하세요."},
   "bookPlan": {"title":"학습 책과 범위","edit":"편집","editNamed":"{{title}} 편집","mode":"학습 모드","active":"새 학습 및 진행 중 학습","maintenance":"시작한 학습만 계속","paused":"일시 중지","range":"학습 범위","all":"책 전체","ordinals":"번호로 선택","first":"시작 번호","last":"끝 번호","save":"계획 저장","cancel":"취소","fallback":"등록된 책 · v{{version}}","allLabel":"전체 · {{count}}개 항목","rangeLabel":"{{first}}–{{last}}번","selectedLabel":"선택한 의미 {{count}}개","invalidRange":"책 범위 안에서 올바른 시작 번호와 끝 번호를 입력하세요."},

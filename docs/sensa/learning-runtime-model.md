@@ -499,6 +499,11 @@ daily-new quota。尚未到期的 retaining Sense 也不因进入该模式被提
 Session 不是 FSRS 复习单位，也不聚合出一个总掌握结果。完成 Review-only 后，learner 仍可
 回到首页开始或继续 Mixed Session。
 
+普通暂停保留同一 Session 供继续；learner 明确结束当前活动则关闭该 Session，但保留未完成
+Protocol work、已保存 Step/材料和已经发生的 Introduction，不产生 Completion、Evidence 或 Memory
+Outcome。结束时间不得早于该活动中已接受的 Action。之后明确开始时重新解析当前 Study Plan/Scope，
+未完成 Run 只有在当前范围允许时才能明确恢复；恢复不改写 Run 的原 Scope、材料或历史。
+
 ## 6. Lexical Reference 与 Contextual Lookup
 
 Lexical Reference 是读取型运行链，既不是 Learning Session intent，也不是 Free Practice Session：

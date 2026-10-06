@@ -207,6 +207,9 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
       .map(({ key }) => key)
       .sort();
   }
+  async latestLearningActionAt(runId:string):Promise<string|null>{
+    return (await this.entries('learningEvents')).map(row=>decodeBackupValue(JSON.parse(row.encodedValue)) as {runId:string;at:string}).filter(event=>event.runId===runId).sort((left,right)=>Date.parse(right.at)-Date.parse(left.at))[0]?.at??null;
+  }
   async learningHistoryProjection():Promise<import('./learningHistoryProjection').StoredLearningRecord[]>{
     const targets=new Map((await this.entries('learningTargets')).map(row=>[row.key,decodeBackupValue(JSON.parse(row.encodedValue)) as LocalLearningTarget]));
     return (await this.entries('learningRuns')).flatMap(row=>{const run=decodeBackupValue(JSON.parse(row.encodedValue)) as LocalLearningRun;if(!run.completedAt||run.completionKind==='wait_relearning')return [];

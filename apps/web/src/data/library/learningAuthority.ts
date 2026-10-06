@@ -228,16 +228,20 @@ export function assertLearningSystemState(input:LearningSystemStateInput){
   for(const event of saved.lifecycleEvents){
    uuid.parse(event.eventId);uuid.parse(event.operationId);timestamp.parse(event.at);if(lifecycleEventIds.has(event.eventId)||Date.parse(event.at)<Date.parse(saved.startedAt)||!Number.isSafeInteger(event.runRevision)||event.runRevision<=previousLifecycleRevision)fail();lifecycleEventIds.add(event.eventId);previousLifecycleRevision=event.runRevision;
    const operation=operationInput(event.operationId);
-   if(['resumed_after_session_switch','session_intent_selected','resumed_after_planning_override'].includes(event.kind)){
-    const selection=event as Extract<LocalLearningRun['lifecycleEvents'][number],{kind:'resumed_after_session_switch'|'session_intent_selected'|'resumed_after_planning_override'}>;
+   if(['resumed_after_session_switch','resumed_after_session_end','session_intent_selected','resumed_after_planning_override'].includes(event.kind)){
+    const selection=event as Extract<LocalLearningRun['lifecycleEvents'][number],{kind:'resumed_after_session_switch'|'resumed_after_session_end'|'session_intent_selected'|'resumed_after_planning_override'}>;
     try{verifyLearningSelectionWitness(saved,selection,selection.continuedFromRunId?requireRow('learningRuns',selection.continuedFromRunId):undefined);validateLanguageContext(selection.requestedLanguageContext);}catch{fail();}
     if(operation&&(!backupEqual(selection.requestedLanguageContext,operation.input.languageContext)||selection.continuedFromRunId!==(operation.kind==='learning.continue'?operation.input.runId:undefined)))fail();
    }
    if(event.kind==='paused_for_session_switch'){
     if(openPause||openInterruption||ids.includes(event.selectedTargetId)||operation&&(!['learning.start','learning.continue'].includes(operation.kind)||operation.input.targetId!==event.selectedTargetId||operation.input.at!==event.at))fail();
     openPause=event;
-   }else if(event.kind==='resumed_after_session_switch'){
-    if(!openPause||event.interruptionEventId!==openPause.eventId||!['mixed','review_only'].includes(event.sessionIntent)||event.sessionIntent==='review_only'&&saved.purpose==='initial_learning'||Date.parse(event.at)<Date.parse(openPause.at)||operation&&(!['learning.start','learning.continue'].includes(operation.kind)||!ids.includes(operation.input.targetId)||operation.input.at!==event.at||(operation.input.sessionIntent??event.sessionIntent)!==event.sessionIntent))fail();
+   }else if(event.kind==='paused_for_session_end'){
+    const session=learningSessionSchema.parse(requireRow('learningSessions',event.learningSessionId));
+    if(openPause||openInterruption||event.eventId!==stableUuid(`local-run-session-end:${saved.id}:${event.operationId}`)||!session.runIds.includes(saved.id)||session.endReason!=='learner_ended'||session.endedByOperationId!==event.operationId||session.endedAt!==event.at||(eventsByRun.get(saved.id)??[]).some(action=>action.detail.runRevision<event.runRevision&&Date.parse(action.at)>Date.parse(event.at))||saved.lifecycleEvents.some(previous=>previous.runRevision<event.runRevision&&Date.parse(previous.at)>Date.parse(event.at))||operation&&(operation.kind!=='learning.endSession'||operation.input.runId!==saved.id||operation.input.expectedRevision!==event.runRevision||operation.input.at!==event.at))fail();
+    openPause=event;
+   }else if(event.kind==='resumed_after_session_switch'||event.kind==='resumed_after_session_end'){
+    if(!openPause||event.kind!==(openPause.kind==='paused_for_session_end'?'resumed_after_session_end':'resumed_after_session_switch')||event.interruptionEventId!==openPause.eventId||!['mixed','review_only'].includes(event.sessionIntent)||event.sessionIntent==='review_only'&&saved.purpose==='initial_learning'||Date.parse(event.at)<Date.parse(openPause.at)||operation&&(!['learning.start','learning.continue'].includes(operation.kind)||!ids.includes(operation.input.targetId)||operation.input.at!==event.at||(operation.input.sessionIntent??event.sessionIntent)!==event.sessionIntent))fail();
     openPause=null;
    }else if(event.kind==='session_intent_selected'){
     if(openPause||openInterruption||!['mixed','review_only'].includes(event.sessionIntent)||event.sessionIntent==='review_only'&&saved.purpose==='initial_learning'||operation&&(operation.kind!=='learning.start'||!ids.includes(operation.input.targetId)||operation.input.at!==event.at||operation.input.sessionIntent!==event.sessionIntent))fail();
@@ -416,6 +420,7 @@ export type LearningSystemTransitionInput={
  changes:readonly LibraryRecordTransition<readonly LearningTransitionTable[]>[];
  read:(table:Table,key:string)=>Promise<unknown|undefined>;
  scopeMember?:(scopeId:string,targetId:string)=>Promise<LocalStudyScopeMember|null>;
+ latestActionAt?:(runId:string)=>Promise<string|null>;
  capturedScopeIds?:readonly string[];
 };
 
@@ -448,12 +453,14 @@ function assertStudyScopeState(input:LearningSystemStateInput):void{
   const session=learningSessionSchema.parse(row.value),scope=studyScopeSchema.parse(requireRow('studyScopes',session.scopeRevisionId));
   if(row.key!==session.id||session.learnerUserId!==identity.learnerId||scope.learnerUserId!==session.learnerUserId||!backupEqual(session.languageContext,scope.languageContext)||session.dailyNewSenseLimit!==scope.dailyNewSenseLimit||Date.parse(session.startedAt)<Date.parse(scope.createdAt))fail();
   for(const id of session.runIds){const run=requireRow('learningRuns',id) as LocalLearningRun;if(!sameLearningSessionDirection(run.languageContext,session.languageContext))fail();for(const targetId of run.targetIds)if(!scope.members.some(member=>member.targetId===targetId))fail();}
-  const witness=session.runIds.map(id=>requireRow('learningRuns',id) as LocalLearningRun).some(run=>run.startedByOperationId===session.startedByOperationId&&run.startedAt===session.startedAt||run.lifecycleEvents.some(event=>event.operationId===session.startedByOperationId&&event.at===session.startedAt&&['session_intent_selected','resumed_after_session_switch','resumed_after_planning_override'].includes(event.kind)));
+  const witness=session.runIds.map(id=>requireRow('learningRuns',id) as LocalLearningRun).some(run=>run.startedByOperationId===session.startedByOperationId&&run.startedAt===session.startedAt||run.lifecycleEvents.some(event=>event.operationId===session.startedByOperationId&&event.at===session.startedAt&&['session_intent_selected','resumed_after_session_switch','resumed_after_session_end','resumed_after_planning_override'].includes(event.kind)));
   if(!witness)fail();
   if(session.endedAt){
    if(session.endReason==='learner_finished'){
     const last=requireRow('learningRuns',session.runIds.at(-1)!) as LocalLearningRun;
     if(!last.completedAt||Date.parse(session.endedAt)<Date.parse(last.completedAt))fail();
+   }else if(session.endReason==='learner_ended'){
+    if(!session.runIds.some(id=>(requireRow('learningRuns',id) as LocalLearningRun).lifecycleEvents.some(event=>event.kind==='paused_for_session_end'&&event.learningSessionId===session.id&&event.operationId===session.endedByOperationId&&event.at===session.endedAt)))fail();
    }else if(session.endReason==='session_switch'){
     if(!rows.learningSessions.some(({value:next})=>next.id!==session.id&&next.startedByOperationId===session.endedByOperationId&&next.startedAt===session.endedAt))fail();
    }else if(session.endReason==='planning_override'){
@@ -778,8 +785,8 @@ async function assertLifecycleRunTransition(input:LearningSystemTransitionInput,
  if(after.revision!==before.revision+1||after.ordinal!==before.ordinal||after.lifecycleEvents.length!==before.lifecycleEvents.length+1||!backupEqual(before.lifecycleEvents,after.lifecycleEvents.slice(0,-1)))reject('Learning Run lifecycle revision is invalid.');
  const event=after.lifecycleEvents.at(-1)!;
  if(event.runRevision!==before.revision)reject('Learning lifecycle fact differs from its causal Run revision.');
- if(['resumed_after_session_switch','session_intent_selected','resumed_after_planning_override'].includes(event.kind)){
-  const selection=event as Extract<LocalLearningRun['lifecycleEvents'][number],{kind:'resumed_after_session_switch'|'session_intent_selected'|'resumed_after_planning_override'}>,command=input.operation.input as any;
+ if(['resumed_after_session_switch','resumed_after_session_end','session_intent_selected','resumed_after_planning_override'].includes(event.kind)){
+  const selection=event as Extract<LocalLearningRun['lifecycleEvents'][number],{kind:'resumed_after_session_switch'|'resumed_after_session_end'|'session_intent_selected'|'resumed_after_planning_override'}>,command=input.operation.input as any;
   verifyLearningSelectionWitness(after,selection,selection.continuedFromRunId?await input.read('learningRuns',selection.continuedFromRunId) as LocalLearningRun|undefined:undefined);
   if(!backupEqual(selection.requestedLanguageContext,command.languageContext)||selection.continuedFromRunId!==(input.operation.kind==='learning.continue'?command.runId:undefined))reject('Learning Session selection witness differs from its entry command.');
  }
@@ -787,9 +794,16 @@ async function assertLifecycleRunTransition(input:LearningSystemTransitionInput,
  if(event.kind==='paused_for_session_switch'){
   const command=input.operation.input as any;
   if(event.operationId!==input.operation.id||!['learning.start','learning.continue'].includes(input.operation.kind)||command.targetId!==event.selectedTargetId||event.at!==command.at||localRunTargetIds(before).includes(event.selectedTargetId)||localRunOpenSessionPause(before)||localRunOpenPlanningInterruption(before)||!backupEqual(before.participants,after.participants))reject('Learning Session pause is invalid.');
- }else if(event.kind==='resumed_after_session_switch'){
+ }else if(event.kind==='paused_for_session_end'){
+  const command=input.operation.input as {runId:string;expectedRevision:number;at:string};
+  const session=learningSessionSchema.parse(await input.read('learningSessions',event.learningSessionId));
+  const readLatestActionAt=input.latestActionAt??reject('Ending a Session requires its accepted Action time.');
+  const latestActionAt=await readLatestActionAt(before.id);
+  if(latestActionAt&&Date.parse(event.at)<Date.parse(latestActionAt)||before.lifecycleEvents.some(previous=>Date.parse(previous.at)>Date.parse(event.at)))reject('A Session cannot end before its accepted work.');
+  if(event.operationId!==input.operation.id||input.operation.kind!=='learning.endSession'||command.runId!==before.id||command.expectedRevision!==before.revision||event.eventId!==stableUuid(`local-run-session-end:${before.id}:${input.operation.id}`)||event.at!==command.at||session.endedByOperationId!==input.operation.id||session.endedAt!==event.at||session.endReason!=='learner_ended'||!session.runIds.includes(before.id)||localRunOpenSessionPause(before)||localRunOpenPlanningInterruption(before)||!backupEqual(before.participants,after.participants))reject('Explicit Learning Session end is invalid.');
+ }else if(event.kind==='resumed_after_session_switch'||event.kind==='resumed_after_session_end'){
   const command=input.operation.input as any,open=localRunOpenSessionPause(before);
-  if(event.operationId!==input.operation.id||!['learning.start','learning.continue'].includes(input.operation.kind)||!open||event.interruptionEventId!==open.eventId||event.at!==command.at||Date.parse(event.at)<Date.parse(open.at)||!localRunTargetIds(before).includes(command.targetId)||event.sessionIntent!==(command.sessionIntent??event.sessionIntent)||!backupEqual(before.participants,after.participants))reject('Learning Session resume is invalid.');
+  if(event.operationId!==input.operation.id||!['learning.start','learning.continue'].includes(input.operation.kind)||!open||event.kind!==(open.kind==='paused_for_session_end'?'resumed_after_session_end':'resumed_after_session_switch')||event.interruptionEventId!==open.eventId||event.at!==command.at||Date.parse(event.at)<Date.parse(open.at)||!localRunTargetIds(before).includes(command.targetId)||event.sessionIntent!==(command.sessionIntent??event.sessionIntent)||!backupEqual(before.participants,after.participants))reject('Learning Session resume is invalid.');
  }else if(event.kind==='session_intent_selected'){
   const command=input.operation.input as any;
   if(event.operationId!==input.operation.id||input.operation.kind!=='learning.start'||!localRunTargetIds(before).includes(command.targetId)||event.at!==command.at||event.sessionIntent!==command.sessionIntent||localRunOpenSessionPause(before)||localRunOpenPlanningInterruption(before)||!backupEqual(before.participants,after.participants))reject('Learning Session intent selection is invalid.');
@@ -835,7 +849,7 @@ function assertStudyPlanTransition(change:LibraryRecordTransition<readonly Learn
 export async function assertLearningSystemTransition(input:LearningSystemTransitionInput):Promise<void>{
  const relevant=input.changes.filter(change=>change.table!=='meta'||['learning-active',activeLearningSessionKey].includes(change.key)).filter(change=>change.table!=='settings'||change.key==='language-route-study-plans');
  if(!relevant.length)return;
- if(['learning.start','learning.continue','learning.act'].includes(input.operation.kind)){
+ if(['learning.start','learning.continue','learning.act','learning.endSession'].includes(input.operation.kind)){
   const at=Date.parse((input.operation.input as {at?:string}).at??'');
   if(!Number.isFinite(at)||at>Date.now())reject('Learning commands cannot manufacture future eligibility.');
  }
@@ -846,13 +860,18 @@ export async function assertLearningSystemTransition(input:LearningSystemTransit
  const events=changedByTable({...input,changes:relevant},'learningEvents');
  const reconciliations=changedByTable({...input,changes:relevant},'learningReconciliations');
  const scopes=changedByTable({...input,changes:relevant},'studyScopes'),sessions=changedByTable({...input,changes:relevant},'learningSessions');
+ if(input.operation.kind==='learning.endSession'){
+  const command=input.operation.input as {runId:string;expectedRevision:number;at:string};
+  const runFocus=relevant.find(change=>change.table==='meta'&&change.key==='learning-active'),sessionFocus=relevant.find(change=>change.table==='meta'&&change.key===activeLearningSessionKey);
+  if(runs.length!==1||sessions.length!==1||scopes.length||targets.length||events.length||enrollments.length||reconciliations.length||relevant.some(change=>change.table==='settings')||runs[0]!.key!==command.runId||runFocus?.before!==command.runId||runFocus.after!==null||sessionFocus?.before!==sessions[0]!.key||sessionFocus.after!==null)reject('Ending a Session must preserve work and atomically clear both active pointers.');
+ }
  for(const change of scopes){
   if(change.after===null||change.before!==null&&!backupEqual(change.before,change.after))reject('Study Scopes are immutable.');
   const scope=studyScopeSchema.parse(change.after);
   if(change.key!==scope.id||scope.learnerUserId!==input.identity.learnerId||change.before===null&&(!['learning.start','learning.continue'].includes(input.operation.kind)||scope.createdByOperationId!==input.operation.id||scope.createdAt!==(input.operation.input as {at:string}).at||!input.capturedScopeIds?.includes(scope.id)))reject('Study Scope has no complete capture witness.');
  }
  for(const change of sessions){
-  if(change.after===null||!['learning.start','learning.continue','learning.finish','learning.declareMastery'].includes(input.operation.kind))reject('Learning Session lifecycle authority is invalid.');
+  if(change.after===null||!['learning.start','learning.continue','learning.finish','learning.endSession','learning.declareMastery'].includes(input.operation.kind))reject('Learning Session lifecycle authority is invalid.');
   const session=learningSessionSchema.parse(change.after);
   if(change.key!==session.id||session.learnerUserId!==input.identity.learnerId)reject('Learning Session identity is invalid.');
   if(change.before===null){
@@ -864,8 +883,9 @@ export async function assertLearningSystemTransition(input:LearningSystemTransit
    if(session.endedAt){
     if(session.endedByOperationId!==input.operation.id||!backupEqual(before.runIds,session.runIds)||!before.activeRunId)reject('Learning Session end witness is invalid.');
     const last=await input.read('learningRuns',before.activeRunId!) as LocalLearningRun|undefined;
-    const command=input.operation.input as {runId?:string;targetId?:string;at?:string};
+    const command=input.operation.input as {runId?:string;targetId?:string;expectedRevision?:number;at?:string};
     if(session.endReason==='learner_finished'&&(input.operation.kind!=='learning.finish'||command.runId!==before.activeRunId||!last?.completedAt||Date.parse(session.endedAt)<Date.parse(last.completedAt))
+     ||session.endReason==='learner_ended'&&(input.operation.kind!=='learning.endSession'||command.runId!==before.activeRunId||session.endedAt!==command.at||!last||last.completedAt||last.revision!==Number(command.expectedRevision)+1||!last.lifecycleEvents.some(event=>event.kind==='paused_for_session_end'&&event.learningSessionId===session.id&&event.operationId===input.operation.id&&event.at===session.endedAt))
      ||session.endReason==='session_switch'&&(!['learning.start','learning.continue'].includes(input.operation.kind)||session.endedAt!==command.at)
      ||session.endReason==='planning_override'&&(input.operation.kind!=='learning.declareMastery'||!last||!command.targetId||!localRunTargetIds(last).includes(command.targetId)||!last.lifecycleEvents.some(event=>event.kind==='interrupted_by_planning_override'&&event.operationId===input.operation.id&&event.at===session.endedAt))
      ||session.endReason==='plan_change')reject('Learning Session end reason lacks its command witness.');
@@ -935,7 +955,7 @@ export async function assertLearningSystemTransition(input:LearningSystemTransit
   const previous=requireFact(await input.read('learningRuns',String(activeChange.before)) as LocalLearningRun|undefined,'Previous Learning Run is missing.');
   if(!previous.completedAt&&!localRunOpenPlanningInterruption(previous)&&localRunOpenSessionPause(previous)?.operationId!==input.operation.id)reject('Changing Session focus must preserve a lawful pause of the previous Run.');
  }
- if(activeChange?.after===null&&!['learning.finish','learning.continue','learning.declareMastery'].includes(input.operation.kind))reject('Only Learning lifecycle commands may clear the active Run.');
+ if(activeChange?.after===null&&!['learning.finish','learning.continue','learning.endSession','learning.declareMastery'].includes(input.operation.kind))reject('Only Learning lifecycle commands may clear the active Run.');
  if(activeChange&&activeChange.after!==null){
   if(!['learning.start','learning.continue'].includes(input.operation.kind))reject('Only Learning start commands may select an active Run.');
   const run=requireFact(await input.read('learningRuns',String(activeChange.after)) as LocalLearningRun|undefined,'Active Learning Run is missing.');

@@ -103,6 +103,10 @@ export const executeLearningCommand = async (command: LearningCommand): Promise<
       }
       return true;
     }
+    case 'end_session': {
+      const {endLearningActivity}=await import('../../data/library/learning');
+      return endLearningActivity(command.operationId,command.runId,command.expectedRevision,command.at);
+    }
     case 'finish': {
       const { finishLearning } = await import('../../data/library/learning');
       await finishLearning(command.operationId, command.runId);

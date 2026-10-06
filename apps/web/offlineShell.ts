@@ -28,8 +28,12 @@ export function offlineShell():Plugin{let output='dist';return {configResolved(c
  const paths=[...coreFiles,...optionalFiles];const hash=createHash('sha256');for(const path of paths)hash.update(await readFile(resolve(output,'.'+path)));
  const version=hash.digest('hex').slice(0,20),coreCache='sensa-shell-core-'+version,optionalCache='sensa-shell-optional-'+version;
  await writeFile(resolve(output,'sw.js'),`const VERSION=${JSON.stringify(version)},CORE_CACHE=${JSON.stringify(coreCache)},OPTIONAL_CACHE=${JSON.stringify(optionalCache)},CORE_FILES=${JSON.stringify(coreFiles)},OPTIONAL_FILES=${JSON.stringify(optionalFiles)};
+const OFFLINE_CODE_FILES=OPTIONAL_FILES.filter(path=>/\\.(?:js|css|wasm)$/.test(path));
 self.addEventListener('install',event=>event.waitUntil((async()=>{
  const core=await caches.open(CORE_CACHE);await core.addAll(CORE_FILES);
+ // Code fetched before first control was never intercepted. Cache executable
+ // application files before reporting readiness; media/Books stay on demand.
+ const optional=await caches.open(OPTIONAL_CACHE);await optional.addAll(OFFLINE_CODE_FILES);
 })()));
 self.addEventListener('message',event=>{if(event.data?.type==='SKIP_WAITING')void self.skipWaiting();});
 self.addEventListener('activate',event=>event.waitUntil((async()=>{

@@ -1,6 +1,6 @@
 import {test} from 'vitest';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
+import {readFile,readdir} from 'node:fs/promises';
 import {runInNewContext} from 'node:vm';
 import {offlineBrandFiles} from '../../../apps/web/offlineShell.ts';
 
@@ -17,9 +17,10 @@ const manifest=JSON.parse(await readFile(new URL('../../../apps/web/dist/manifes
 let online=true;
 let claimed=0,skipWaiting=0;
 const failedOptional=offlineBrandFiles[0],failedRequests=new Set<string>();
+const failedInstallPaths=new Set<string>();
 const cacheFor=(name:string)=>{
  const stored=stores.get(name)??new Map<string,Response>();stores.set(name,stored);
- const add=async(path:string)=>{const bytes=await readFile(new URL('../../../apps/web/dist'+path,import.meta.url));stored.set(path,new Response(bytes));};
+ const add=async(path:string)=>{if(failedInstallPaths.has(path))throw Error('fixture install code unavailable');const bytes=await readFile(new URL('../../../apps/web/dist'+path,import.meta.url));stored.set(path,new Response(bytes));};
  return {add,addAll:async(paths:string[])=>{for(const path of paths)await add(path);},match:async(path:string)=>stored.get(path)?.clone(),put:async(path:string,response:Response)=>{stored.set(path,response.clone());}};
 };
 runInNewContext(source,{URL,self:{
@@ -43,11 +44,15 @@ assert.equal(manifest.display,'standalone');
 assert.equal(manifest.start_url,'/');
 assert((manifest.icons?.length??0)>=2);
 for(const path of offlineBrandFiles)assert(!stored(path),`optional resource ${path} should be cached on demand`);
+const codeFiles=(await readdir(new URL('../../../apps/web/dist/assets/',import.meta.url))).filter(name=>/\.(?:js|css|wasm)$/u.test(name)).map(name=>'/assets/'+name);
+assert(codeFiles.length>1);for(const path of codeFiles)assert(stored(path),`application code ${path} must be cached before offline readiness`);
 assert.equal([...stores.keys()].filter(name=>name.startsWith('sensa-shell-core-')).length,2);
-assert.equal([...stores.keys()].filter(name=>name.startsWith('sensa-shell-optional-')).length,1);
+assert.equal([...stores.keys()].filter(name=>name.startsWith('sensa-shell-optional-')).length,2);
 assert.deepEqual(deleted,['sensa-shell-core-ancient','sensa-shell-optional-ancient']);
 assert.equal(claimed,1);
 assert.equal(skipWaiting,1);
+failedInstallPaths.add(codeFiles[0]!);let failedInstall:Promise<unknown>|undefined;listeners.get('install')!({waitUntil:(work:Promise<unknown>)=>failedInstall=work});
+await assert.rejects(failedInstall!,/fixture install code unavailable/u);assert(stored('/assets/previous.js'),'a failed new install must preserve the previous release');failedInstallPaths.clear();
 function dispatch(path:string,mode='cors',method='GET'){let response:Promise<Response>|undefined;listeners.get('fetch')!({request:{url:new URL(path,'https://sensa.test').href,mode,method},respondWith:(p:Promise<Response>)=>response=p});return response;}
 assert.equal(await (await dispatch('/profile','navigate'))!.text(),'network');online=false;
 assert.match(await (await dispatch('/profile','navigate'))!.text(),/<html/);

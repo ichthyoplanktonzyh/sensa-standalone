@@ -68,6 +68,7 @@ export interface PersonalLearningEnrollment {
 }
 
 export type LearningCommand =
+  | Readonly<{kind:'end_session';operationId:string;runId:string;expectedRevision:number;at?:string}>
   | Readonly<{kind:'change_book_plan';operationId:string;enrollmentId:string;expectedRevision:number;languageContext:SensaFormalPinnedLanguageContext;mode:import('../../data/library/bookPlans').BookEnrollmentMode;selection:import('../../data/library/bookPlans').BookRangeSelection}>
   | Readonly<{kind:'prepare_direct';operationId:string;enrollmentId:string}>
   | Readonly<{kind:'enroll_direct';operationId:string;reference:DirectLearningReference;expectedDigest:string;languageContext:SensaFormalPinnedLanguageContext}>

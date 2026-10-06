@@ -46,6 +46,7 @@ export interface CoordinatedSqliteBackend {
   learningManagementSummary(query:LearningManagementSummaryQuery):Promise<LearningManagementStorageSummary>;
   runtimeLearningCandidates(query:RuntimeLearningCandidateQuery):Promise<RuntimeLearningCandidates>;
   studyScopeMember(scopeRevisionId:string,targetId:string):Promise<import('./studyScopes').LocalStudyScopeMember|null>;
+  latestLearningActionAt(runId:string):Promise<string|null>;
   countIntroducedLearningTargets(languageRouteId: string, startedAfter: string, startedBefore: string): Promise<number>;
   learningRunIdsForTarget(targetId: string, openOnly: boolean): Promise<string[]>;
   openLearningRunTargets(): Promise<Array<{ runId: string; targetId: string }>>;
@@ -162,6 +163,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
   }
   runtimeLearningCandidates(query:RuntimeLearningCandidateQuery):Promise<RuntimeLearningCandidates>{return this.call({kind:'runtimeLearningCandidates',query}) as Promise<RuntimeLearningCandidates>;}
   studyScopeMember(scopeRevisionId:string,targetId:string):Promise<import('./studyScopes').LocalStudyScopeMember|null>{return this.call({kind:'studyScopeMember',scopeRevisionId,targetId}) as Promise<import('./studyScopes').LocalStudyScopeMember|null>;}
+  latestLearningActionAt(runId:string):Promise<string|null>{return this.call({kind:'latestLearningActionAt',runId}) as Promise<string|null>;}
   learningHistoryPage(query:LearningHistoryRequest):Promise<StoredLearningHistoryPage>{return this.call({kind:'learningHistoryPage',query}) as Promise<StoredLearningHistoryPage>;}
   learningManagementSummary(query:LearningManagementSummaryQuery):Promise<LearningManagementStorageSummary>{return this.call({kind:'learningManagementSummary',query}) as Promise<LearningManagementStorageSummary>;}
 
@@ -533,6 +535,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       case 'homeLearningProjection': return backend.homeLearningProjection(input.languageRouteId,input.clock);
       case 'runtimeLearningCandidates':return backend.runtimeLearningCandidates(input.query);
       case 'studyScopeMember':return backend.studyScopeMember(input.scopeRevisionId,input.targetId);
+      case 'latestLearningActionAt':return backend.latestLearningActionAt(input.runId);
       case 'learningHistoryPage':return backend.learningHistoryPage(input.query);
       case 'learningManagementSummary':return backend.learningManagementSummary(input.query);
       case 'countIntroducedLearningTargets': return backend.countIntroducedLearningTargets(

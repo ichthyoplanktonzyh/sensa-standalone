@@ -573,14 +573,14 @@ async function startLearningInTransaction(tx:LibraryTransaction,operationId:stri
  }
  const unfinishedId=(await tx.learningRunIdsForTarget(targetId,{openOnly:true}))[0];
  const unfinished=unfinishedId?await tx.get<LocalLearningRun>('learningRuns',unfinishedId):undefined;if(unfinished){
-  for(const id of localRunTargetIds(unfinished)){const member=await tx.get<LocalLearningTarget>('learningTargets',id);if(member&&hasDeclaredMasteryOverride(member))throw new Error('localFlow.stepChanged');}
+  for(const id of localRunTargetIds(unfinished)){const member=await tx.get<LocalLearningTarget>('learningTargets',id);if(!member||hasDeclaredMasteryOverride(member)||!await memberFor(member,unfinished.purpose))throw new Error('localFlow.stepChanged');}
   const interruption=localRunOpenPlanningInterruption(unfinished);
   const pause=localRunOpenSessionPause(unfinished);
   if(!interruption&&!pause)throw new Error('localFlow.stepChanged');
   if(!sameLearningSessionDirection(unfinished.languageContext,context))throw new Error('localFlow.stepChanged');
   if(Date.parse(at)<Date.parse((interruption??pause)!.at))throw new Error('localFlow.clockChanged');
   const selection={runRevision:unfinished.revision,eventId:stableUuid(`local-run-resume:${unfinished.id}:${operationId}`),operationId,sessionIntent,requestedLanguageContext:context,...(continuedFromRunId?{continuedFromRunId}:{}),at};
-  unfinished.lifecycleEvents.push(pause?{...selection,kind:'resumed_after_session_switch',interruptionEventId:pause.eventId}:{...selection,kind:'resumed_after_planning_override',interruptionEventId:interruption!.eventId});unfinished.revision++;tx.put('learningRuns',unfinished.id,unfinished);
+  unfinished.lifecycleEvents.push(pause?{...selection,kind:pause.kind==='paused_for_session_end'?'resumed_after_session_end':'resumed_after_session_switch',interruptionEventId:pause.eventId}:{...selection,kind:'resumed_after_planning_override',interruptionEventId:interruption!.eventId});unfinished.revision++;tx.put('learningRuns',unfinished.id,unfinished);
   tx.put('meta','learning-active',unfinished.id);publishActivity(unfinished);return unfinished;
  }
  const now=new Date(at),purpose=localLearningPurpose(t);
@@ -680,6 +680,18 @@ export async function actLearning(operationId:string,runId:string,revision:numbe
  });return readVerifiedLearningRunReceipt(operation,receipt);
 }
 export async function finishLearning(operationId:string,runId:string){const result=await learningCommand({id:operationId,kind:'learning.finish',input:{runId}},async tx=>{await learningOwner(tx);const run=await tx.get<LocalLearningRun>('learningRuns',runId);if(!run?.completedAt)throw new Error('localFlow.finishFirst');if(await tx.get('meta','learning-active')===runId){tx.delete('meta','learning-active');const activity=await readActiveLearningSessionHeader(tx);if(activity){if(activity.activeRunId!==runId)throw new Error('localFlow.stepChanged');endLearningSession(tx,activity,operationId,new Date().toISOString(),'learner_finished');}}return true;});requestCloudCheckpoint();return result;}
+/** End this activity, not its Protocol work or Introduction. A later explicit
+ * start resumes the saved Run within a newly captured future arrangement. */
+export async function endLearningActivity(operationId:string,runId:string,expectedRevision:number,at=new Date().toISOString()){
+ const result=await learningCommand({id:operationId,kind:'learning.endSession',input:{runId,expectedRevision,at}},async tx=>{
+  await learningOwner(tx);const run=await tx.get<LocalLearningRun>('learningRuns',runId),activity=await readActiveLearningSessionHeader(tx);
+  if(!run||run.completedAt||run.revision!==expectedRevision||await tx.get('meta','learning-active')!==runId||!activity||activity.activeRunId!==runId||localRunOpenSessionPause(run)||localRunOpenPlanningInterruption(run))throw new Error('localFlow.stepChanged');
+  const latestActionAt=await tx.latestLearningActionAt(runId);
+  if(!Number.isFinite(Date.parse(at))||Date.parse(at)<Math.max(Date.parse(activity.startedAt),Date.parse(run.startedAt),latestActionAt?Date.parse(latestActionAt):0,...run.lifecycleEvents.map(event=>Date.parse(event.at))))throw new Error('localFlow.clockChanged');
+  run.lifecycleEvents.push({runRevision:run.revision,eventId:stableUuid(`local-run-session-end:${run.id}:${operationId}`),kind:'paused_for_session_end',operationId,learningSessionId:activity.id,at});run.revision++;
+  tx.put('learningRuns',run.id,run);endLearningSession(tx,activity,operationId,at,'learner_ended');tx.delete('meta','learning-active');return true;
+ });requestCloudCheckpoint();return result;
+}
 /** Complete one Run and start its successor as one published library state.
  * Observers must never see an empty active-Run gap while the learner is moving
  * directly to the next target. */

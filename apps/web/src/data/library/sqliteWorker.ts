@@ -186,6 +186,7 @@ const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
     case 'homeLearningProjection': return current.database.homeLearningProjection(request.languageRouteId,request.clock);
     case 'runtimeLearningCandidates':return current.database.runtimeLearningCandidates(request.query);
     case 'studyScopeMember':return current.database.studyScopeMember(request.scopeRevisionId,request.targetId);
+    case 'latestLearningActionAt':return current.database.latestLearningActionAt(request.runId);
     case 'learningHistoryPage':return current.database.learningHistoryPage(request.query);
     case 'learningManagementSummary':return current.database.learningManagementSummary(request.query);
     case 'countIntroducedLearningTargets': return current.database.countIntroducedLearningTargets(

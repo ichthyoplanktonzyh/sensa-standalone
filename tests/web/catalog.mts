@@ -45,6 +45,7 @@ export type WebTestCatalogEntry = Readonly<{
  */
 const foundationTests = [
   {id:'learning-session-scope',file:'tests/web/integration/learning-session-scope.test.mts',kind:'integration',risks:['local-correctness','durability','convergence'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
+  {id:'learning-session-end',file:'tests/web/integration/learning-session-end.test.mts',kind:'integration',risks:['local-correctness','durability','convergence'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
   {id:'book-plan-planning',file:'tests/web/integration/book-plan-planning.test.mts',kind:'integration',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
   {id:'book-curriculum-sources',file:'tests/web/integration/book-curriculum-sources.test.mts',kind:'integration',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
   {id:'book-publication-provenance',file:'tests/web/integration/book-publication-provenance.test.mts',kind:'integration',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},

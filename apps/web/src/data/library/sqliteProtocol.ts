@@ -24,7 +24,7 @@ export const sqlitePoolDirectory = "/sensa-local-library-v12";
 export const sqliteLibraryBaselineVersion = 10;
 export const sqliteLibrarySchemaVersion = 15;
 /** Cross-tab RPC changes must bump this before adding or changing messages. */
-export const sqliteCoordinatorProtocolVersion = 32;
+export const sqliteCoordinatorProtocolVersion = 33;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -108,6 +108,7 @@ export type SqliteWorkerRequest =
   | {id:number;kind:'learningManagementSummary';query:LearningManagementSummaryQuery}
   | {id:number;kind:'runtimeLearningCandidates';query:RuntimeLearningCandidateQuery}
   | {id:number;kind:'studyScopeMember';scopeRevisionId:string;targetId:string}
+  | {id:number;kind:'latestLearningActionAt';runId:string}
   | { id: number; kind: "countIntroducedLearningTargets"; languageRouteId: string; startedAfter: string; startedBefore: string }
   | { id: number; kind: "learningRunIdsForTarget"; targetId: string; openOnly: boolean }
   | { id: number; kind: "openLearningRunTargets" }
@@ -202,6 +203,9 @@ CREATE TABLE IF NOT EXISTS sensa_records(
 );
 CREATE INDEX IF NOT EXISTS sensa_records_content_revision
   ON sensa_records(content_revision,table_name,record_key);
+CREATE INDEX IF NOT EXISTS sensa_learning_events_clock_v1
+  ON sensa_records(sensa_learning_event_field(value_json,'runId'),julianday(sensa_learning_event_field(value_json,'at')) DESC)
+  WHERE table_name='learningEvents';
 ${sqlitePackageCacheProjectionSchema}
 ${sqliteRegistrySelectionSchema}
 CREATE TABLE IF NOT EXISTS sensa_record_tombstones(

@@ -102,6 +102,12 @@ export class SqliteRecordDatabase {
     const field=registryFieldReader();
     this.database.createFunction({name:'sensa_expression_form',arity:2,deterministic:true,innocuous:true,xFunc:(_context,text,language)=>learningExpressionForm(text,language)});
     this.database.createFunction({name:'sensa_registry_field',arity:2,deterministic:true,innocuous:true,xFunc:(_context,encoded,key)=>field(encoded,key)});
+    let previousEvent:string|null=null,eventFields:Map<string,unknown>|null=null;
+    this.database.createFunction({name:'sensa_learning_event_field',arity:2,deterministic:true,innocuous:true,xFunc:(_context,encoded,key)=>{
+      if(typeof encoded!=='string'||key!=='runId'&&key!=='at')throw Error('learning_event_clock_invalid');
+      if(previousEvent!==encoded){const wire=JSON.parse(unpackStoredRecord(encoded));if(wire[0]!=='object'||!Array.isArray(wire[1]))throw Error('learning_event_clock_invalid');eventFields=new Map(wire[1]);previousEvent=encoded;}
+      const value=decodeBackupValue(eventFields!.get(key));if(typeof value!=='string'||key==='at'&&!Number.isFinite(Date.parse(value)))throw Error('learning_event_clock_invalid');return value;
+    }});
     this.meaningLookup=new SqliteMeaningLookupProjection(database,(table,key)=>this.get(table,key));
     this.worldBrowseProjection=new SqliteWorldBrowseProjection(database,(table,key)=>this.get(table,key));
     this.journeyIdentities=new SqliteJourneyIdentityProjection(database);
@@ -484,6 +490,10 @@ export class SqliteRecordDatabase {
   }
 
   studyScopeMember(scopeRevisionId:string,targetId:string):import('./studyScopes').LocalStudyScopeMember|null{return this.runtimeCandidates.scopeMember(scopeRevisionId,targetId);}
+  latestLearningActionAt(runId:string):string|null{
+    const rows=this.database.exec({sql:"SELECT sensa_learning_event_field(value_json,'at') AS at FROM sensa_records WHERE table_name='learningEvents' AND sensa_learning_event_field(value_json,'runId')=? ORDER BY julianday(sensa_learning_event_field(value_json,'at')) DESC LIMIT 1",bind:[runId],rowMode:'object',returnValue:'resultRows'}) as Array<{at:string}>;
+    return rows[0]?.at??null;
+  }
 
   learningHistoryProjection():StoredLearningRecord[]{return this.learningHistory.records();}
   learningHistoryPage(query:LearningHistoryRequest):StoredLearningHistoryPage{return this.learningHistory.page(query);}

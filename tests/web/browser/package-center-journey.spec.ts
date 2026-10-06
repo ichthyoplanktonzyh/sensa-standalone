@@ -370,8 +370,9 @@ test('review-only retains a paused initial Step through failed writes, two-tab H
   await page.reload();await expect(runtime.getByRole('heading',{name:'本轮完成',exact:true})).toBeVisible();
   expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(saved);
   await runtime.getByRole('button',{name:/完成并回到首页/}).click();
-  await expect(home.getByRole('button',{name:'继续学习',exact:true})).toBeEnabled();
-  await home.getByRole('button',{name:'继续学习',exact:true}).click();
+  await expect(home.getByRole('button',{name:'继续学习',exact:true})).toHaveCount(0);
+  await expect(home.getByRole('button',{name:'开始学习',exact:true})).toBeEnabled();
+  await home.getByRole('button',{name:'开始学习',exact:true}).click();
   await expect(runtime.getByRole('button',{name:/有点印象/})).toBeEnabled();
   expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).runtime).toEqual(paused.runtime);
  }finally{await context.setOffline(false);}
@@ -397,7 +398,7 @@ test('review-only Again survives a lost receipt and reload as a separate Relearn
  expect(saved.records.map(record=>record.kind).sort()).toEqual(['initial_learning','relearning','retention_review']);
  const after=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest());
  expect(after.targets).toEqual(facts.targets);expect(after.behavioralEvidenceCount).toBe(0);
- await runtime.getByRole('button',{name:/完成并回到首页/}).click();await expect(home.getByRole('button',{name:'继续学习',exact:true})).toBeEnabled();
+ await runtime.getByRole('button',{name:/完成并回到首页/}).click();await expect(home.getByRole('button',{name:'继续学习',exact:true})).toHaveCount(0);await expect(home.getByRole('button',{name:'开始学习',exact:true})).toBeEnabled();
 });
 
 test('initial Again retries the same Run, failed writes do not advance, and a lost receipt rereads saved progress',async({page})=>{
@@ -1390,6 +1391,106 @@ test('future Book mode and ordinal Range save visibly, recover from failed write
  const continued=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningArrangementCheckpointForTest());
  expect(continued.scope).toEqual(arrangement.scope);expect(continued.session!.id).toBe(arrangement.session!.id);
  expect(continued.session!.runIds).toHaveLength(2);
+});
+
+test('explicitly ending unfinished learning preserves its saved Step and uses the future plan only on a new Session, through failure and OPFS reopen',async()=>{
+ const profile=await mkdtemp(join(tmpdir(),'sensa-session-end-user-'));
+ let context=await chromium.launchPersistentContext(profile,{headless:true,viewport:{width:1280,height:900},locale:'zh-CN'});
+ try{
+ let page=context.pages()[0]!;
+ setRegistry([reviewDelivery.descriptor]);
+ let runtime=await startOrdinaryBook(page,/到期复习样本/);
+ await runtime.getByRole('button',{name:/查看表达/}).click();
+ const pinned=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ const arrangement=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningArrangementCheckpointForTest());
+ const original=await page.evaluate(runId=>window.__sensaBrowserSmoke!.learningActivityRecordForTest(runId),pinned.runtime!.runId);
+ const currentPin=original.run!.participants[pinned.runtime!.targetId]!,packageKey=currentPin.materializations[currentPin.material]!.snapshot.provenance.packageKey;
+ const publication=(await page.evaluate(()=>window.__sensaBrowserSmoke!.bookProvenanceCheckpointForTest())).cache.find(pack=>pack.key===packageKey)!.publications.find(publication=>publication.archiveSha256===reviewDelivery.descriptor.sha256)!;
+ expect(publication.memberIndex).not.toBeNull();const ordinal=publication.memberIndex!+1;
+ await runtime.getByRole('button',{name:'暂停',exact:true}).click();
+ await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的学习',exact:true}).click();
+ const study=page.locator('#s-study');await study.getByRole('button',{name:'学习偏好',exact:true}).click();
+ const preferences=page.getByRole('dialog',{name:'学习偏好',exact:true});
+ await preferences.getByRole('combobox',{name:'每日新学数量',exact:true}).selectOption('30');
+ await preferences.getByRole('button',{name:'完成',exact:true}).click();
+ const plans=study.getByRole('region',{name:'后续学习计划',exact:true});
+ await plans.getByRole('button',{name:'编辑《到期复习样本》',exact:true}).click();
+ const plan=page.getByRole('dialog',{name:'到期复习样本',exact:true});
+ await plan.getByRole('combobox',{name:'学习范围',exact:true}).selectOption('ordinals');
+ await plan.getByRole('spinbutton',{name:'起始序号',exact:true}).fill(String(ordinal));
+ await plan.getByRole('spinbutton',{name:'结束序号',exact:true}).fill(String(ordinal));
+ await plan.getByRole('button',{name:'保存计划',exact:true}).click();await expect(plan).toHaveCount(0);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningArrangementCheckpointForTest())).toEqual(arrangement);
+ await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'今日',exact:true}).click();
+ await page.locator('#s-home').getByRole('button',{name:/继续学习/}).click();
+ const requestEnd=async()=>{await runtime.locator('[data-learning-more]').click();await page.getByRole('button',{name:'结束本次学习',exact:true}).click();};
+ let ending=page.getByRole('dialog',{name:'结束本次学习？',exact:true});
+ await requestEnd();await ending.getByRole('button',{name:'继续本次学习',exact:true}).click();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(pinned);
+ await page.setViewportSize({width:320,height:800});await requestEnd();
+ expect(await ending.evaluate(node=>node.scrollWidth<=node.clientWidth+1)).toBe(true);
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.failNextLearningCommitForTest('finish'));
+ await ending.getByRole('button',{name:'结束本次学习',exact:true}).click();await expect(ending.getByRole('alert')).toBeVisible();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(pinned);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningArrangementCheckpointForTest())).toEqual(arrangement);
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.loseNextSessionEndResponseForTest());
+ await ending.getByRole('button',{name:'结束本次学习',exact:true}).click();
+ await expect(runtime.getByRole('status').filter({hasText:'未收到结束确认'})).toBeVisible();
+ const ended=await page.evaluate(runId=>window.__sensaBrowserSmoke!.learningActivityRecordForTest(runId),pinned.runtime!.runId);
+ expect(ended.run!.completedAt).toBeNull();expect(ended.run!.participants).toEqual(original.run!.participants);expect(ended.run!.protocolState).toEqual(original.run!.protocolState);
+ expect(ended.originSession!.endReason).toBe('learner_ended');expect(ended.run!.lifecycleEvents.at(-1)!.kind).toBe('paused_for_session_end');
+ const idle=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());expect(idle.runtime).toBeNull();expect(idle.records).toEqual([]);expect(idle.completedTargets).toEqual([]);expect(idle.targetIds).toEqual(pinned.targetIds);
+ await expect.poll(()=>page.evaluate(()=>document.documentElement.dataset.offlineShell),{timeout:30_000}).toBe('ready');
+ await page.context().setOffline(true);await page.reload();
+ await expect(runtime).toBeVisible();await runtime.getByRole('button',{name:'暂停',exact:true}).click();
+ await expect(page.locator('#s-home')).toBeVisible();await expect(page.locator('#s-home').getByRole('button',{name:/继续学习/})).toHaveCount(0);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningArrangementCheckpointForTest())).toEqual({session:null,scope:null});
+ expect(await page.evaluate(runId=>window.__sensaBrowserSmoke!.learningActivityRecordForTest(runId),pinned.runtime!.runId)).toEqual(ended);
+ await context.setOffline(false);await context.close();
+ context=await chromium.launchPersistentContext(profile,{headless:true,viewport:{width:320,height:800},locale:'zh-CN'});
+ page=context.pages()[0]!;runtime=page.locator('#s-lightweight-runtime');ending=page.getByRole('dialog',{name:'结束本次学习？',exact:true});await page.goto(origin);
+ await expect(page.locator('#s-home').getByRole('button',{name:/继续学习/})).toHaveCount(0);
+ expect(await page.evaluate(runId=>window.__sensaBrowserSmoke!.learningActivityRecordForTest(runId),pinned.runtime!.runId)).toEqual(ended);
+ await page.locator('#s-home').getByRole('button',{name:'开始学习',exact:true}).click();
+ await expect(runtime.getByRole('button',{name:/有点印象/})).toBeEnabled();
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).runtime).toEqual(pinned.runtime);
+ const resumed=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningArrangementCheckpointForTest());
+ expect(resumed.session!.id).not.toBe(arrangement.session!.id);expect(resumed.session!.dailyNewSenseLimit).toBe(30);expect(resumed.scope!.members.map(member=>member.targetId)).toEqual([pinned.runtime!.targetId]);
+ const resumedRun=await page.evaluate(runId=>window.__sensaBrowserSmoke!.learningActivityRecordForTest(runId),pinned.runtime!.runId);
+ expect(resumedRun.run!.studyScopeRevisionId).toBe(arrangement.scope!.id);expect(resumedRun.run!.lifecycleEvents.at(-1)!.kind).toBe('resumed_after_session_end');
+ await requestEnd();await page.evaluate(()=>window.__sensaBrowserSmoke!.failReadsAfterSessionEndForTest());
+ await ending.getByRole('button',{name:'结束本次学习',exact:true}).click();
+ await expect(runtime.getByRole('alert')).toContainText('本次学习已结束');
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningWorkspaceReadsForTest(false));
+ await runtime.getByRole('button',{name:'重试',exact:true}).click();
+ await expect(runtime.getByRole('alert')).toHaveCount(0);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.commandsAfterSessionEndForTest())).toEqual([]);
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records).toEqual([]);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningArrangementCheckpointForTest())).toEqual({session:null,scope:null});
+ }finally{await context.close();await rm(profile,{recursive:true,force:true});}
+});
+
+test('a stale end confirmation cannot end the successor selected by another OPFS tab',async({page})=>{
+ setRegistry([reviewDelivery.descriptor]);const runtime=await startOrdinaryBook(page,/到期复习样本/);
+ await runtime.getByRole('button',{name:/查看表达/}).click();
+ const original=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ const originalActivity=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningArrangementCheckpointForTest());
+ const peer=await page.context().newPage();await peer.addInitScript(()=>{(window as any).__name=(fn:unknown)=>fn;});await peer.goto(`${origin}/?flow=lightweight`);
+ const peerRuntime=peer.locator('#s-lightweight-runtime');await expect(peerRuntime.getByRole('button',{name:/有点印象/})).toBeEnabled();
+ await runtime.locator('[data-learning-more]').click();await page.getByRole('button',{name:'结束本次学习',exact:true}).click();
+ const ending=page.getByRole('dialog',{name:'结束本次学习？',exact:true});
+ await peerRuntime.getByRole('button',{name:/有点印象/}).click();
+ await expect.poll(async()=>(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).runtime?.targetId).not.toBe(original.runtime!.targetId);
+ const successor=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());expect(successor.records).toHaveLength(1);
+ await ending.getByRole('button',{name:'结束本次学习',exact:true}).click();await expect(ending.getByRole('alert')).toBeVisible();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(successor);
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningArrangementCheckpointForTest())).session!.id).toBe(originalActivity.session!.id);
+ await ending.getByRole('button',{name:'继续本次学习',exact:true}).click();
+ await runtime.locator('[data-learning-more]').click();await page.getByRole('button',{name:'结束本次学习',exact:true}).click();
+ await ending.getByRole('button',{name:'结束本次学习',exact:true}).click();await expect(page.locator('#s-home')).toBeVisible();
+ await expect.poll(async()=>(await peer.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).runtime).toBeNull();
+ const preserved=await peer.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());expect(preserved.records).toEqual(successor.records);expect(preserved.completedTargets).toEqual(successor.completedTargets);expect(preserved.targetIds).toEqual(successor.targetIds);
+ expect(await peer.evaluate(()=>window.__sensaBrowserSmoke!.learningArrangementCheckpointForTest())).toEqual({session:null,scope:null});await peer.close();
 });
 
 test('Study quantity save failure and retry preserve the full Session arrangement through OPFS reload, continuation and finish',async({page})=>{

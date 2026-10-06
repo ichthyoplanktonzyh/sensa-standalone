@@ -282,6 +282,12 @@ export class LibraryTransaction {
     return storageCall(() => this.adapter.count(table));
   }
 
+  async latestLearningActionAt(inputRunId:string):Promise<string|null>{
+    const runId=recordKey(inputRunId);
+    if(this.hasPendingChanges('learningEvents'))return (await this.entries('learningEvents')).map(row=>row.value as {runId:string;at:string}).filter(event=>event.runId===runId).sort((left,right)=>Date.parse(right.at)-Date.parse(left.at))[0]?.at??null;
+    return storageCall(()=>this.adapter.latestLearningActionAt(runId));
+  }
+
   async learningRunIdsForTarget(
     inputTargetId: string,
     options: Readonly<{ openOnly?: boolean }> = {},

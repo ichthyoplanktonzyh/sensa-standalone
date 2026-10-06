@@ -13,9 +13,11 @@ import {selectLocalLearningPolicy} from '../../../apps/web/src/data/library/lear
 import {learningPolicyProfileRegistry} from '../../../apps/web/src/learning/runtime/policyProfiles';
 import {encodeBackupValue,decodeBackupValue} from '../../../apps/web/src/data/library/backupCodec';
 import {isReplicatedLibraryEntry,mergeLibraryReplicas,partitionLibraryReplicaConflicts} from '../../../apps/web/src/data/library/replication/libraryReplica';
+import {sqliteRecordAdapter} from '../../../apps/web/src/data/library/sqliteAdapter';
 
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined,location:new URL('https://session-scope.fixture.invalid/')});
 const database=await useNodeLearningCapacityStorage();afterAll(()=>database.close());await openLibrary();
+const adapter=await sqliteRecordAdapter();
 const context=sensaPinnedLanguageContext(defaultSensaLanguageRoute);
 const {validateBackupRows}=await import('../../../apps/web/src/data/library/backupValidation');
 const id=()=>randomUUID();
@@ -72,11 +74,11 @@ test('a Session pins its complete admitted Scope and quota across continuation; 
  expect(pausedSummary.targetIds.slice().sort()).toEqual([alpha.id,beta.id].sort());expect(pausedSummary.readyInitialCount).toBe(0);
  const paused=(await learningSystem.read({kind:'book_plans',languageContext:context}))[0]!;
  await expect(learningSystem.execute({kind:'change_book_plan',operationId:id(),enrollmentId:firstBook.enrollmentId,expectedRevision:firstBook.revision,languageContext:context,mode:'active',selection:{kind:'all'}})).rejects.toThrow('localFlow.stepChanged');
- const cacheGet=database.get.bind(database),cacheProjection=database.packageCacheProjection.bind(database);
- database.get=(table,key)=>table==='packageCache'?null:cacheGet(table,key);
- database.packageCacheProjection=()=>{throw Error('Mode-only change enumerated public cache');};
+ const cacheGet=adapter.get.bind(adapter),cacheProjection=adapter.packageCacheProjection.bind(adapter);
+ adapter.get=async(table,key)=>table==='packageCache'?null:cacheGet(table,key);
+ adapter.packageCacheProjection=async()=>{throw Error('Mode-only change enumerated public cache');};
  try{await learningSystem.execute({kind:'change_book_plan',operationId:id(),enrollmentId:paused.enrollmentId,expectedRevision:paused.revision,languageContext:context,mode:'maintenance',selection:paused.selection});}
- finally{database.get=cacheGet;database.packageCacheProjection=cacheProjection;}
+ finally{adapter.get=cacheGet;adapter.packageCacheProjection=cacheProjection;}
  expect((await learningSystem.read({kind:'book_plans',languageContext:context}))[0]!.selection).toEqual(paused.selection);
  expect(await state()).toEqual(original);
  await install(['scope-later']);
@@ -96,13 +98,13 @@ test('a Session pins its complete admitted Scope and quota across continuation; 
  });
  database.commit({clears:[],deletes:[],puts:[{table:'learningTargets',key:beta.id,encodedValue:JSON.stringify(encodeBackupValue(beta))}]});
 
- const get=database.get.bind(database),entries=database.entries.bind(database),page=database.entriesPage.bind(database);
- database.get=(table,key)=>{if(table==='studyScopes')throw new Error('Continuation decoded the whole Scope');return get(table,key);};
- database.entries=table=>{if(['learningTargets','learningRuns','learningEvents','studyScopes'].includes(table))throw new Error('Continuation enumerated collection facts');return entries(table);};
- database.entriesPage=(table,after,limit)=>{if(['learningTargets','learningRuns','learningEvents','studyScopes'].includes(table))throw new Error('Continuation paged collection facts');return page(table,after,limit);};
+ const get=adapter.get.bind(adapter),entries=adapter.entries.bind(adapter),page=adapter.entriesPage.bind(adapter);
+ adapter.get=async(table,key)=>{if(table==='studyScopes')throw new Error('Continuation decoded the whole Scope');return get(table,key);};
+ adapter.entries=async table=>{if(['learningTargets','learningRuns','learningEvents','studyScopes'].includes(table))throw new Error('Continuation enumerated collection facts');return entries(table);};
+ adapter.entriesPage=async(table,after,limit)=>{if(['learningTargets','learningRuns','learningEvents','studyScopes'].includes(table))throw new Error('Continuation paged collection facts');return page(table,after,limit);};
  try{
   expect(await learningSystem.execute({kind:'advance',operationId:id(),runId:boundary.runtime!.runId,languageContext:context,dailyLimit:20})).toBe(true);
- }finally{database.get=get;database.entries=entries;database.entriesPage=page;profileSpy.mockRestore();}
+ }finally{adapter.get=get;adapter.entries=entries;adapter.entriesPage=page;profileSpy.mockRestore();}
  const second=await state();
  expect(second.run!.targetId).toBe(beta.id);expect(second.session!.id).toBe(original.session!.id);
  expect(second.run!.policyProfileVersion).toBe(frozenVersion);

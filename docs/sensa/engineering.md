@@ -150,11 +150,17 @@ Study Scope 是不可变事实，Session 独立保存固定 Scope、语言方向
 按 Enrollment revision 拒绝过时保存。同一 Route 至多一个 active Book；激活其他词书时原词书转为
 maintenance。模式变更复用原 Range 且不依赖包缓存；新序号／意义选择从固定 Book Version 解析。
 这些变更只更新未来安排，不改写活动 Session、Run 或进度；跨记录的双 active Book 合并进入显式冲突处理。
+未完成活动通过 `end_session` 使用已查看的 Run revision 明确结束：同一事务保存 Session 终点、
+Run 的可配对暂停见证并清除两个 active pointers，不写 Action、Target 或调度事实。再次开始创建
+新的 Scope/Session，并用配对恢复见证保留原 Run/pins。按 Run 索引的已接受 Action 时间查询及
+完整恢复校验都拒绝早于既有作答的结束；提交后重读失败单独报告已保存状态，不自动重提交。
 后继 Run 通过同事务维护的 Scope–Target 成员投影读取精确来源，不在每次续学时取得完整 Scope。
 Scope 中重复成员和 Range 复用共享摘要；源码中的捕获见证与恢复验证保护新建和既有快照。
 历史／候选索引重建通过同一逻辑解码入口读取源记录。
 不支持的物理版本会停止并保留原库，不创建空库冒充首次访问。跨标签页协调协议独立版本化，版本不一致
 时旧/新页面不交换记录，并要求用户关闭其他标签页。Service Worker 安装新 shell 后等待用户确认再接管，
+安装会先缓存应用 JS/CSS/Wasm，避免首个页面在接管前加载的代码遗漏；品牌与媒体仍按需缓存，
+API 响应和学习包不进入 shell cache。代码缓存未完成或失败时不报告离线就绪。
 接管时保留上一发布版本的静态资源窗口，使仍在运行的旧页面能够完成或安全退出。
 
 Web 应用层的逻辑表与 Personal Semantic World Journey 共用这一物理事务 authority。Journey 的

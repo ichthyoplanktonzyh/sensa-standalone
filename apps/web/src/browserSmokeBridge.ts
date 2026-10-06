@@ -40,6 +40,9 @@ type BrowserSmokeBridge = {
   failBookPlanReadsForTest(active:boolean):Promise<void>;
   loseNextLearningActionResponseForTest():Promise<void>;
   loseNextLearningQuantityResponseForTest():Promise<void>;
+  loseNextSessionEndResponseForTest():Promise<void>;
+  failReadsAfterSessionEndForTest():Promise<void>;
+  commandsAfterSessionEndForTest():Promise<string[]>;
   holdNextLearningActionResponseForTest():Promise<void>;
   releaseLearningActionResponseForTest():void;
   holdWorldDetailReadsForTest():Promise<void>;
@@ -76,6 +79,7 @@ type BrowserSmokeBridge = {
     session:import('./data/library/studyScopes').LocalLearningSession|null;
     scope:import('./data/library/studyScopes').LocalStudyScope|null;
   }>;
+  learningActivityRecordForTest(runId:string):Promise<{run:import('./learning/runtime/localProtocol').LocalLearningRun|null;originSession:import('./data/library/studyScopes').LocalLearningSession|null}>;
   learningCheckpoint(): Promise<{
     targetIds:string[];
     enrollments:{enrollmentId:string;sourceKind:string;bookVersionNumber:number|null;bookDigest:string|null}[];
@@ -201,6 +205,16 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
       const {learningSystem}=await import('./learning/system');const execute=learningSystem.execute;
       learningSystem.execute=(async command=>{const result=await execute(command);if(command.kind==='confirm_quantity'){learningSystem.execute=execute;throw new Error('fixture lost committed quantity receipt');}return result;}) as typeof execute;
     },
+    async loseNextSessionEndResponseForTest(){
+      const {learningSystem}=await import('./learning/system');const execute=learningSystem.execute;
+      learningSystem.execute=(async command=>{const result=await execute(command);if(command.kind==='end_session'){learningSystem.execute=execute;throw Error('fixture lost committed Session end receipt');}return result;}) as typeof execute;
+    },
+    async failReadsAfterSessionEndForTest(){
+      const {learningSystem}=await import('./learning/system');const execute=learningSystem.execute;
+      if(restoreLearningReads)throw Error('Learning read fault already active');
+      learningSystem.execute=(async command=>{const result=await execute(command);if(command.kind==='end_session'){const commands:string[]=[];Reflect.set(learningSystem,'commandsAfterSessionEndForTest',commands);learningSystem.execute=(async next=>{commands.push(next.kind);return execute(next);}) as typeof execute;const read=learningSystem.read;learningSystem.read=(async query=>{if(query.kind==='runtime')throw Error('fixture post-end read failed');return read(query);}) as typeof read;restoreLearningReads=()=>{learningSystem.read=read;};}return result;}) as typeof execute;
+    },
+    async commandsAfterSessionEndForTest(){const {learningSystem}=await import('./learning/system');return [...(Reflect.get(learningSystem,'commandsAfterSessionEndForTest') as string[]??[])];},
     async holdNextLearningActionResponseForTest(){
       if(releaseLearningResult)throw new Error('Action response already held');
       const {learningSystem}=await import('./learning/system');const execute=learningSystem.execute;let release!:()=>void;
@@ -386,6 +400,9 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
         const session=id?await tx.get<import('./data/library/studyScopes').LocalLearningSession>('learningSessions',id)??null:null;
         return {session,scope:session?await tx.get<import('./data/library/studyScopes').LocalStudyScope>('studyScopes',session.scopeRevisionId)??null:null};
       });
+    },
+    async learningActivityRecordForTest(runId){
+      return readLibrary(async tx=>{const run=await tx.get<import('./learning/runtime/localProtocol').LocalLearningRun>('learningRuns',runId)??null;return {run,originSession:run?.learningSessionId?await tx.get<import('./data/library/studyScopes').LocalLearningSession>('learningSessions',run.learningSessionId)??null:null};});
     },
     async learningCheckpoint() {
       const [{languageRoutesSnapshot},{learningSystem}]=await Promise.all([

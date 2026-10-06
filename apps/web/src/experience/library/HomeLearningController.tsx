@@ -116,7 +116,7 @@ export function HomeLearningController({active=true}:{active?:boolean}){
  return <>
   <HomeScreen active={active} onGo={goMain}
    busy={busy} summaryReady={authoritativeSummary} status={status}
-   onResume={projection?.activeRunId?()=>setViewMode('lightweight'):projection?.resumeTargetId&&projection.dailyLimit!=null?()=>void begin(projection.resumeTargetId!,projection.dailyLimit!):undefined}
+   onResume={projection?.activeRunId?()=>setViewMode('lightweight'):undefined}
    onStartMixed={()=>void start()} onStartReview={()=>void start(true)}
    reviewDueN={projection?.reviewDueCount??0} newAvailable={projection?.readyInitialCount??0}
    onRecordContext={()=>goMain('s-semantic-world',{worldAction:'create'})}

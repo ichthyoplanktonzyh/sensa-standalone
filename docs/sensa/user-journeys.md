@@ -144,7 +144,7 @@ Sensa 的长旅程分成三层：
 | `LJ-07` | 完成首次正式学习 | Ready Plan → Initial Learning Run → Completion → Scheduling Handoff | 只有 Runtime 可产生正式完成事实 |
 | `LJ-08` | 完成一次到期复习 | Due Retention Target → Review Run → Memory Outcome → 新调度 | 每次 Review 至多结算一次 |
 | `LJ-09` | 在遗忘或薄弱后重新建立连接 | Relearning Eligible → 独立 Run → Completion → 返回 Retention | 不重复结算触发它的 Review |
-| `LJ-10` | 长期维护学习范围和计划 | Route/Book/补充目标 → Scope、每日数量、更新、暂停/恢复 → 可解释的未来计划 | Book 模式与整本／序号范围可维护；完整补充目标移除、会话结束与规模验收仍有缺口 |
+| `LJ-10` | 长期维护学习范围和计划 | Route/Book/补充目标 → Scope、每日数量、更新、暂停/恢复 → 可解释的未来计划 | Book 模式与整本／序号范围及明确结束活动可维护；完整补充目标移除、规模与跨设备冲突验收仍有缺口 |
 | `LJ-11` | 回看和治理个人语义内容 | Personal Semantic World/Markers → 搜索、查看、修订、标记或移除 → 新 revision/明确终态 | 删除/恢复语义已定义，Web 用户入口尚未完整交付 |
 | `LJ-12` | 把学习中的个人场景长期保存 | Runtime Scene → Scene Revision → 明确接受 → Personal Meaning Anchor | 编辑场景不会自动改写已接受 Meaning |
 | `LJ-13` | 在网页中阅读、解释、写作或朗读 | Extension 阅读/写作入口 → 真实结果或准确不可用状态 | 保存到 Sensa 是可选分支，不制造学习事实 |
@@ -720,6 +720,8 @@ Personal Meaning、Scene Bridge 或另一来源再次加入而创建竞争目标
 - 只发现 Book 新版、下载新版和显式应用新版必须分开；
 - 新增成员只进入未来计划，删除成员只退出未来计划，未变化目标保留历史与 Retention；
 - 已开始 Run 不增删 participants；已操作 Step 保留当时材料；
+- 暂停可继续原 Session；明确结束本次学习不产生完成或调度，之后开始按新计划建立 Session，
+  并在当前范围允许时恢复原 Run 的已保存步骤。保存失败留在原步骤，丢回执只重读不重提交；
 - Enrollment `active / maintenance / paused` 保留进度并支持恢复；词书安排从后续会话生效。
   不得用删除 Package 或删除历史替代暂停；
 - 用户“声明已会”是可撤销的 planning override：可以排除目标并中断非终态 Run，但不产生 Evidence、Outcome

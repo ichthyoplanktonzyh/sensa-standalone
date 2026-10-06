@@ -126,7 +126,6 @@ export interface LearningQueueProjection {
 
 export interface LearningHomeProjection {
   readonly activeRunId: string | null;
-  readonly resumeTargetId:string|null;
   readonly dailyLimit: number | null;
   readonly readyInitialCount: number;
   readonly reviewDueCount: number;

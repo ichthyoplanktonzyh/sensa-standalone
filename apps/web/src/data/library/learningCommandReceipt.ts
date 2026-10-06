@@ -52,7 +52,7 @@ export function verifyLearningRunReceiptFacts(operation:Operation,raw:unknown,ru
   if(run.startedByOperationId===operation.id){
    if(receipt.revision!==1||receipt.completedAt!==null||run.startedAt!==input.at||!(run.learningSessionId?sameLearningSessionDirection(run.languageContext,requested):backupEqual(run.languageContext,input.languageContext))||(run.sessionIntent??'mixed')!==intent||run.continuedFromRunId!==(continuing?input.runId:undefined))throw new Error('localFlow.progressReadFailed');
   }else{
-   const selection=run.lifecycleEvents.find(event=>event.operationId===operation.id&&['resumed_after_planning_override','resumed_after_session_switch','session_intent_selected'].includes(event.kind));
+   const selection=run.lifecycleEvents.find(event=>event.operationId===operation.id&&['resumed_after_planning_override','resumed_after_session_switch','resumed_after_session_end','session_intent_selected'].includes(event.kind));
    if(!selection||receipt.revision!==selection.runRevision+1||receipt.completedAt!==null||!('sessionIntent' in selection)||selection.sessionIntent!==intent||selection.at!==input.at||!backupEqual(selection.requestedLanguageContext,input.languageContext)||selection.continuedFromRunId!==(continuing?input.runId:undefined))throw new Error('localFlow.progressReadFailed');
   }
  }

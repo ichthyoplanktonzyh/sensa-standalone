@@ -156,7 +156,7 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
   const learningCoordinator=createRefreshCoordinator(async()=>{await refreshLearning();});
   const supplyCoordinator=createRefreshCoordinator(refreshSupply);
   const current=lifecycle.current;
-  const readFailed=(version:number)=>{if(current!==lifecycle.current||version!==viewEpoch.current.version)return;setLoadStatus('unavailable');setNotice(localFlowText('progressReadFailed'));};
+  const readFailed=(version:number)=>{if(current!==lifecycle.current||version!==viewEpoch.current.version)return;setLoadStatus('unavailable');setNotice(previous=>previous==='sessionEnd.savedReadFailed'?previous:localFlowText('progressReadFailed'));};
   const reloadLearning=()=>{const version=viewEpoch.current.version;void learningCoordinator.request().catch(()=>readFailed(version));};
   const reloadSupply=()=>{const version=viewEpoch.current.version;void Promise.all([learningCoordinator.request(),managementMode.current||viewEpoch.current.mode==='target'?Promise.resolve():supplyCoordinator.request()]).catch(()=>readFailed(version));};
   const prepare=async()=>{
@@ -273,7 +273,14 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
   records:workspace.records,
   policyOptions:workspace.policyOptions,
   dailyLimit:dailyLimit??undefined,
-  notice:notice==='runtime.actionReceiptUnavailable'||notice==='learningPreferences.quantitySaveUnconfirmed'?i18n.t(notice):localFlowNotice(notice),busy:busy||loadStatus!=='ready',progress,loaded:loaded&&loadStatus==='ready',loadStatus,retryInitialLoad,unavailablePackageKeys,catalogBusy,reloadCatalog,refresh,
+  notice:notice==='runtime.actionReceiptUnavailable'||notice==='learningPreferences.quantitySaveUnconfirmed'||notice.startsWith('sessionEnd.')?i18n.t(notice):localFlowNotice(notice),busy:busy||loadStatus!=='ready',progress,loaded:loaded&&loadStatus==='ready',loadStatus,retryInitialLoad,unavailablePackageKeys,catalogBusy,reloadCatalog,refresh,
+  endedStateNeedsRead:notice==='sessionEnd.savedReadFailed',
+  retryEndedStateRead:async()=>{
+   if(actInFlight.current)return;const current=lifecycle.current;actInFlight.current=true;setBusy(true);
+   try{if(await refreshLearning()&&current===lifecycle.current&&currentRoute.current===routeKey)setNotice('');}
+   catch{if(current===lifecycle.current&&currentRoute.current===routeKey){setLoadStatus('unavailable');setNotice('sessionEnd.savedReadFailed');}}
+   finally{actInFlight.current=false;if(current===lifecycle.current&&currentRoute.current===routeKey)setBusy(false);}
+  },
   confirmQuantity:(n:number)=>perform(()=>learningSystem.execute({kind:'confirm_quantity',operationId:crypto.randomUUID(),languageContext,dailyLimit:n}),undefined,'learningPreferences.quantitySaveUnconfirmed'),
   download:(d:ContentSupplyCatalogItem,onPhase?:(phase:ContentSupplyInstallationPhase)=>void)=>perform(async()=>{
    const c=new AbortController();transfer.current=c;
@@ -324,6 +331,17 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
    }finally{actInFlight.current=false;}
   },
   declareKnown:(targetId:string,active=true)=>perform(()=>learningSystem.execute({kind:'set_declared_mastery',operationId:crypto.randomUUID(),targetId,active,languageContext})),
+  endSession:async(runId:string,expectedRevision:number)=>{
+   if(actInFlight.current||loadStatus!=='ready')return null;
+   const current=lifecycle.current;actInFlight.current=true;setBusy(true);setNotice('');
+   try{
+    const outcome=await settleReconciledOperation(()=>learningSystem.execute({kind:'end_session',operationId:crypto.randomUUID(),runId,expectedRevision}),async()=>{await refreshLearning();});
+    if(current!==lifecycle.current||currentRoute.current!==routeKey)return null;
+    if(outcome.projection==='stale'){setLoadStatus('unavailable');setNotice(outcome.kind==='committed'?'sessionEnd.savedReadFailed':localFlowText('progressReadFailed'));return null;}
+    if(outcome.kind==='unconfirmed'){setNotice(outcome.error instanceof Error&&outcome.error.message.startsWith('localFlow.')?outcome.error.message:'sessionEnd.unconfirmed');return null;}
+    return true;
+   }finally{actInFlight.current=false;if(current===lifecycle.current&&currentRoute.current===routeKey)setBusy(false);}
+  },
   advance:()=>runtime?perform(()=>learningSystem.execute({kind:'advance',operationId:crypto.randomUUID(),runId:runtime.runId,languageContext,dailyLimit})):Promise.resolve(null),
  };
 }

@@ -59,9 +59,10 @@ function useRuntimeHost():AssuranceSupportHost{
  }),[toast,openDict,openNoteEditor,openSceneEditor,closeMenus,setMenuPersonalContent,setMenuMoreOpen]);
 }
 
-function RuntimeOverlays({c,policy,onViewLearningLibrary}:{c:Controller;policy:LearningPolicy;onViewLearningLibrary:()=>void}){
+function RuntimeOverlays({c,policy,onViewLearningLibrary,onExit}:{c:Controller;policy:LearningPolicy;onViewLearningLibrary:()=>void;onExit:()=>void}){
  const {t}=useTranslation();
  const [learningPreferencesOpen,setLearningPreferencesOpen]=useState(false);
+ const [ending,setEnding]=useState<{runId:string;revision:number}|null>(null);
  const [,setAnnotationRevision]=useState(0);
  const menuMoreOpen=useOverlayStore(state=>state.menuMoreOpen);
  const menuBookOpen=useOverlayStore(state=>state.menuBookOpen);
@@ -79,7 +80,7 @@ function RuntimeOverlays({c,policy,onViewLearningLibrary}:{c:Controller;policy:L
   requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>('.screen.active [data-learning-more]')?.focus());
  };
  return <>
-  {menuMoreOpen&&<SensaOverlayLayout variant="popover" measure="compact" className="z-[80]" id="menu-more" label={t('assurance.preferences')} onDismiss={closeMenus} dismissOnBackdrop regions={{primary:
+  {menuMoreOpen&&<SensaOverlayLayout variant="popover" measure="compact" className="z-[80]" id="menu-more" label={t('assurance.more')} onDismiss={closeMenus} dismissOnBackdrop regions={{primary:
    <div className="p-2 [&>button]:flex [&>button]:min-h-12 [&>button]:w-full [&>button]:items-center [&>button]:gap-3 [&>button]:rounded-control [&>button]:border-0 [&>button]:bg-transparent [&>button]:px-3 [&>button]:text-left [&>button]:text-control-label [&>button]:hover:bg-surface-subtle [&>button]:focus-visible:outline-2 [&>button]:focus-visible:outline-focus">
     {menuPersonalContent&&<>
      <div className="mb-2 rounded-control bg-accent-soft p-3"><span className="block text-metadata text-fg-tertiary">{t('assurance.currentMeaning')}</span><strong className="mt-1 block font-language text-lg text-action-primary">{menuPersonalContent.lemma}</strong><small>{menuPersonalContent.guideLabelL1}</small></div>
@@ -90,7 +91,13 @@ function RuntimeOverlays({c,policy,onViewLearningLibrary}:{c:Controller;policy:L
      <div className="my-2 border-t border-border-subtle"/>
     </>}
     <button onClick={()=>{closeMenus();setLearningPreferencesOpen(true);}}><svg className={iconClass} aria-hidden="true"><use href="#i-sliders"/></svg>{t('assurance.preferences')}</button>
+    {c.runtime&&!c.runtime.completed&&<button disabled={c.busy} onClick={()=>{const runtime=c.runtime!;closeMenus();setEnding({runId:runtime.runId,revision:runtime.revision});}}>{t('sessionEnd.action')}</button>}
    </div>}}/>}
+  {ending&&<SensaOverlayLayout variant="sheet" measure="compact" className="z-[160] [&_[data-sensa-overlay-region=primary]:empty]:hidden" labelledBy="session-end-title" onDismiss={()=>{if(!c.busy)setEnding(null);}} dismissOnBackdrop regions={{
+   header:<h2 id="session-end-title" className="text-lg font-medium">{t('sessionEnd.title')}</h2>,
+   primary:c.notice?<p role="alert">{c.notice}</p>:null,
+   controls:<div className="flex flex-wrap gap-3"><button className={runtimePrimary} disabled={c.busy} onClick={()=>void c.endSession(ending.runId,ending.revision).then(ended=>{if(ended)onExit();})}>{t('sessionEnd.action')}</button><button className="min-h-11 rounded-control px-4 text-sm focus-visible:outline-2 focus-visible:outline-focus" disabled={c.busy} onClick={()=>setEnding(null)}>{t('sessionEnd.cancel')}</button></div>,
+  }}/>}
   {learningPreferencesOpen&&<LearningPreferencesPanel policyOptions={c.policyOptions} fixedPolicy busy={c.busy||c.loadStatus!=='ready'} status={c.notice&&<p role="alert">{localFlowNotice(c.notice)}</p>} defaultPolicy={policy} dailyNewCount={c.dailyLimit??20} onPolicyChange={()=>{}} onDailyNewCountChange={value=>void c.confirmQuantity(value)} onClose={closeLearningPreferences}/>}
   {menuBookOpen&&<SensaOverlayLayout variant="popover" measure="compact" className="z-[80]" id="menu-book" label={localFlowText('chooseRange')} onDismiss={closeMenus} dismissOnBackdrop regions={{primary:
    <div className="p-2 [&>button]:flex [&>button]:min-h-12 [&>button]:w-full [&>button]:items-center [&>button]:gap-3 [&>button]:rounded-control [&>button]:border-0 [&>button]:bg-transparent [&>button]:px-3 [&>button]:text-left [&>button]:text-control-label [&>button]:hover:bg-surface-subtle [&>button]:focus-visible:outline-2 [&>button]:focus-visible:outline-focus">
@@ -164,7 +171,7 @@ function StructuredPackageRuntime({active,runtime,c,host,onExit,onFinish}:{activ
 export function PackageRuntime(props:PackageRuntimeProps){
  const host=useRuntimeHost();
  const runtime=props.c.runtime;
- if(props.c.loadStatus==='unavailable')return <RuntimeFrame id="s-lightweight-runtime" active={props.active} title={i18n.t('runtime.learning')} stepLabel={localFlowText('progressReadFailed')} progress={0} onExit={props.onExit}><section role="alert" className="space-y-5 py-10"><p>{props.c.notice||localFlowText('progressReadFailed')}</p><button className={runtimePrimary} onClick={()=>void props.c.retryInitialLoad()}>{i18n.t('reliability.retry')}</button></section></RuntimeFrame>;
+ if(props.c.loadStatus==='unavailable'||props.c.endedStateNeedsRead)return <RuntimeFrame id="s-lightweight-runtime" active={props.active} title={i18n.t('runtime.learning')} stepLabel={localFlowText('progressReadFailed')} progress={0} onExit={props.onExit}><section role="alert" className="space-y-5 py-10"><p>{props.c.notice||localFlowText('progressReadFailed')}</p><button className={runtimePrimary} onClick={()=>void (props.c.endedStateNeedsRead?props.c.retryEndedStateRead():props.c.retryInitialLoad())}>{i18n.t('reliability.retry')}</button></section></RuntimeFrame>;
  if(!runtime)return <RuntimeFrame id="s-lightweight-runtime" active={props.active} title={i18n.t('runtime.learning')} stepLabel={localFlowText(props.c.busy?'runtimeSwitching':props.c.nextTarget?'startLearning':'runtimeNoPending')} progress={0} onExit={props.onExit}><section className="py-10 text-center"><h1 role="status" className="text-2xl">{localFlowText(props.c.busy?'runtimeSwitching':props.c.nextTarget?'startLearning':'runtimeNoPending')}</h1>{props.c.notice&&<p role="status" className="mt-4">{props.c.notice}</p>}{!props.c.busy&&<button className={`${runtimePrimary} mt-8`} onClick={()=>{if(props.c.nextTarget)void props.c.start(props.c.nextTarget.targetId,props.c.dailyLimit??20);else props.onExit();}}>{props.c.nextTarget?localFlowText('startLearning'):i18n.t('runtime.home')}</button>}</section></RuntimeFrame>;
  const surface=runtime.kind==='lightweight'
   ?<LightweightPackageRuntime active={props.active} runtime={runtime} c={props.c} host={host} onExit={props.onExit} onFinish={props.onFinish}/>
@@ -173,5 +180,5 @@ export function PackageRuntime(props:PackageRuntimeProps){
    :runtime.kind==='four_stage_initial'
     ?<FourStageInitialPackageRuntime active={props.active} runtime={runtime} c={props.c} onExit={props.onExit} onFinish={props.onFinish}/>
     :<FourStageReviewPackageRuntime active={props.active} runtime={runtime} c={props.c} onExit={props.onExit} onFinish={props.onFinish}/>;
- return <>{surface}<RuntimeOverlays c={props.c} policy={runtime.policy} onViewLearningLibrary={props.onViewLearningLibrary}/></>;
+ return <>{surface}<RuntimeOverlays c={props.c} policy={runtime.policy} onViewLearningLibrary={props.onViewLearningLibrary} onExit={props.onExit}/></>;
 }

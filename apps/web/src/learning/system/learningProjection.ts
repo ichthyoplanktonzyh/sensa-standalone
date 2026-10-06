@@ -613,7 +613,6 @@ export async function readLearningHomeProjection(input: Readonly<{
   const nextTarget = queue.due[0] ?? queue.initialReady[0] ?? null;
   return {
     activeRunId: stored.activeRun?.id ?? null,
-    resumeTargetId:queue.initialReady.find(target=>target.startedAt)?.id??null,
     dailyLimit: stored.dailyLimit ?? null,
     readyInitialCount: queue.initialReady.length,
     reviewDueCount: queue.due.length,

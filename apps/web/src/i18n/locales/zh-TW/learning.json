@@ -1,4 +1,5 @@
 {
+  "sessionEnd":{"action":"結束本次學習","title":"結束本次學習？","cancel":"繼續本次學習","savedReadFailed":"本次學習已結束，但無法讀取儲存狀態。請重試讀取。","unconfirmed":"未收到結束確認，已重新讀取儲存狀態。請確認後再操作。"},
   "bookPlanHeading":{"title":"後續學習計畫","mode":"後續學習模式"},
   "bookPlanFeedback":{"unconfirmed":"未能確認儲存結果，已重新讀取計畫。請核對後再操作。","savedReadFailed":"計畫已儲存，但未能重新讀取。請重試讀取。"},
   "bookPlan": {"title":"詞書與範圍","edit":"編輯","editNamed":"編輯《{{title}}》","mode":"學習模式","active":"新學與複習","maintenance":"僅繼續已開始的學習","paused":"暫停","range":"學習範圍","all":"整本","ordinals":"依序號選擇","first":"起始序號","last":"結束序號","save":"儲存計畫","cancel":"取消","fallback":"已加入詞書 · v{{version}}","allLabel":"整本 · {{count}} 個項目","rangeLabel":"第 {{first}}–{{last}} 項","selectedLabel":"已選 {{count}} 個意義","invalidRange":"請填寫詞書範圍內有效的起始與結束序號。"},
