@@ -423,7 +423,7 @@ export const longJourneyMappings: readonly Readonly<{
   {"journeyId":"LJ-11","legacyJourneyIds":["JRN-04","JRN-06"],"capabilityIds":["CAP-PSW-06","CAP-PSW-07","CAP-PSW-12","CAP-PSW-13","CAP-PSW-15","CAP-PSW-16"]},
   {"journeyId":"LJ-12","legacyJourneyIds":["JRN-15"],"capabilityIds":["CAP-LRN-16","CAP-LRN-17"]},
   {"journeyId":"LJ-13","legacyJourneyIds":["JRN-07"],"capabilityIds":["CAP-EXT-01","CAP-EXT-04","CAP-EXT-05","CAP-EXT-07","CAP-EXT-08","CAP-EXT-09","CAP-EXT-10","CAP-EXT-14","CAP-EXT-15","CAP-LNG-03","CAP-LNG-08"]},
-  {"journeyId":"LJ-14","legacyJourneyIds":["JRN-06"],"capabilityIds":["CAP-PSW-14"]},
+  {"journeyId":"LJ-14","legacyJourneyIds":["JRN-06"],"capabilityIds":["CAP-PSW-14"],"gap":"Current closure covers delivered online read-only lookup, exact source and return. Fixed Reference Release/offline index and learning AI Q&A remain unimplemented; online evidence does not complete them."},
   {"journeyId":"LJ-15","legacyJourneyIds":["JRN-16"],"capabilityIds":["CAP-LRN-18","CAP-LRN-19"],"gap":"The legacy audit has no Scenario for delivered Listening; full Practice Profile remains a separate future scope."},
   {"journeyId":"LJ-16","legacyJourneyIds":["JRN-17"],"capabilityIds":["CAP-DAT-02","CAP-DAT-03","CAP-DAT-04","CAP-DAT-05","CAP-DAT-06","CAP-DAT-07","CAP-DAT-08","CAP-DAT-09","CAP-DAT-10","CAP-DAT-11","CAP-DAT-12","CAP-DAT-21","CAP-CSU-13"]},
   {"journeyId":"LJ-17","legacyJourneyIds":["JRN-18"],"capabilityIds":["CAP-DAT-14","CAP-DAT-15","CAP-DAT-18","CAP-DAT-20"]},
