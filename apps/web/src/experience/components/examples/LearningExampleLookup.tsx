@@ -61,7 +61,7 @@ export function LearningExampleLookup({ entry, onClose, onViewDetail, toast }: {
 
   return <SensaOverlayLayout variant="dialog" mode="container" measure="compact" className="z-[120]" labelledBy={titleId} panelRef={dialog} onDismiss={onClose} dismissOnBackdrop aria-busy={loading} regions={{
     header: <div className="flex items-start justify-between gap-4">
-        <div><p className="text-xs text-fg-secondary">{cardText('lookUpAWord')}</p><h2 id={titleId} className="mt-2 break-words text-2xl font-medium">{entry.word}</h2></div>
+        <div><p className="text-xs text-fg-secondary">{cardText('lookUpAWord')}</p><h2 id={titleId} lang={entry.referenceLookup?.release.targetLanguage??'und'} dir="auto" className="mt-2 break-words text-2xl font-medium">{entry.word}</h2></div>
         <button type="button" className={setupButton + ' size-11 px-0 hover:bg-surface-selected'} aria-label={cardText('closeWordLookup')} onClick={onClose}><X size={20}/></button>
       </div>,
     primary: <div>
@@ -70,7 +70,7 @@ export function LearningExampleLookup({ entry, onClose, onViewDetail, toast }: {
         {(loading || failed) && <p role="status" className="rounded-card bg-surface-subtle p-4 text-sm leading-7 text-fg-secondary">{entry.lookupMessage}{entry.lookupState==='error' && cardText('closeAndTapTheWordToTryAgain')}</p>}
         {!loading && !failed && entry.senses.map((sense, index) => <div key={sense.referenceSenseId ?? index} className={'rounded-card p-4 text-sm leading-7 ' + (selected && sense.referenceSenseId === selected ? 'bg-surface-selected text-action-primary' : 'border border-border-subtle')}>
           {selected && sense.referenceSenseId === selected && <p className="mb-1 text-xs">{resolution?.status === 'model_confident' ? cardText('inferredFromContext') : cardText('meaningInThisSentence')}</p>}
-          <span className="mr-2 text-fg-secondary">{sense.pos}</span>{sense.text}
+          <span className="mr-2 text-fg-secondary">{sense.pos}</span><span lang={sense.languageTag} dir="auto">{sense.text}</span>
         </div>)}
         {!loading && !failed && entry.senses.length === 0 && <p role="status" className="text-sm text-fg-secondary">{cardText('noBriefDefinitionIsAvailableOpenTheFull')}</p>}
       </div>

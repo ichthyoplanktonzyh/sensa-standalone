@@ -21,7 +21,8 @@ import {ReferenceExampleViewer} from './apps/web/src/experience/components/Refer
 import {QuickDictPopup} from './apps/web/src/experience/components/QuickDictPopup';
 import {LearningExampleLookup} from './apps/web/src/experience/components/examples/LearningExampleLookup';
 import {projectReferenceEntryToQuick} from './apps/web/src/experience/reference/referenceDictionary';
-const sense={referenceSenseId:'fixture-sense',order:1,partOfSpeech:'interjection',glossL1:'打招呼用语',definitionL2:'hello or hi',examples:[{exampleId:'fixture-example',textL2:'¡Hola! ¿Cómo estás?',textL1:'你好！你怎么样？',sourceLabel:'Fixture'}]};
+const sourceOnly=new URL(location.href).searchParams.has('sourceOnly');
+const sense={referenceSenseId:'fixture-sense',order:1,partOfSpeech:'interjection',glossL1:sourceOnly?undefined:'打招呼用语',definition:{text:'hello or hi',languageTag:'en'},examples:[{exampleId:'fixture-example',textL2:'¡Hola! ¿Cómo estás?',textL1:'你好！你怎么样？',sourceLabel:'Fixture'}]};
 const release={releaseId:'fixture-release',provider:'Fixture',edition:'2026',targetLanguage:'es',learnerLocale:'zh-CN',rightsLabel:'Fixture only',status:'prototype'};
 const result={release,entry:{referenceLexicalUnitId:'fixture-entry',releaseId:release.releaseId,headword:'hola',visibility:'reference_visible',pronunciations:[{pronunciationId:'fixture-pronunciation',accent:'es',ipa:'/ˈola/'}],forms:['hola','holas'],senses:[sense],usageNotes:[{noteId:'fixture-note',title:'用法',bodyL1:'用于友好问候。',sourceLabel:'Fixture'}],attribution:'Fixture'}};
 await i18n.changeLanguage('zh-CN');
@@ -34,7 +35,7 @@ if(surface){
  const supplied=surface==='dictionary'?{...result,entry:{...result.entry,pronunciations:[{...result.entry.pronunciations[0],audioUrl:'https://media.fixture.invalid/hola.mp3'}]}}:result;
  const wordData={word:'hola',referenceLookup:supplied};
  function PronunciationSurface(){const [open,setOpen]=React.useState(true),[active,setActive]=React.useState(true),[notice,setNotice]=React.useState('');const close=React.useCallback(()=>setOpen(false),[]);
-  return <>{open&&(surface==='quick'?<QuickDictPopup entry={projectReferenceEntryToQuick(supplied)} onClose={close} toast={setNotice}/>:surface==='learning'?<LearningExampleLookup entry={projectReferenceEntryToQuick(supplied)} onClose={close} toast={setNotice}/>:<ReferenceDictionaryScreen active={active} wordData={wordData} onClose={close} onOpenExamples={()=>setActive(false)}/>)}{!active&&<button onClick={()=>setActive(true)}>返回词典夹具</button>}{notice&&<p role="status">{notice}</p>}</>;
+  return <>{open&&(surface==='quick'?<QuickDictPopup entry={projectReferenceEntryToQuick(supplied)} onClose={close} toast={setNotice}/>:surface==='learning'?<LearningExampleLookup entry={projectReferenceEntryToQuick(supplied)} onClose={close} toast={setNotice}/>:surface==='viewer'?<ReferenceExampleViewer active deck={{headword:'hola',forms:['hola','holas'],sense,release}} onClose={close}/>:<ReferenceDictionaryScreen active={active} wordData={wordData} onClose={close} onOpenExamples={()=>setActive(false)}/>)}{!active&&<button onClick={()=>setActive(true)}>返回词典夹具</button>}{notice&&<p role="status">{notice}</p>}</>;
  }
  createRoot(document.getElementById('root')!).render(<PronunciationSurface/>);
 }else createRoot(document.getElementById('root')!).render(<>
@@ -63,7 +64,7 @@ test('dictionary and examples expose source and learner languages with accessibl
   const dictionary=page.locator('#s-reference-dictionary');
   await expect(dictionary.getByRole('heading',{name:'hola'})).toHaveAttribute('lang','es');
   await expect(dictionary.getByText('打招呼用语',{exact:true})).toHaveAttribute('lang','zh-CN');
-  await expect(dictionary.getByText('hello or hi',{exact:true})).toHaveAttribute('lang','es');
+  await expect(dictionary.getByText('hello or hi',{exact:true})).toHaveAttribute('lang','en');
   await expect(dictionary.getByText('holas',{exact:true})).toHaveAttribute('lang','es');
   await expect(dictionary.getByText('用于友好问候。',{exact:true})).toHaveAttribute('lang','zh-CN');
   const viewer=page.locator('#s-reference-example');
@@ -73,6 +74,16 @@ test('dictionary and examples expose source and learner languages with accessibl
   await expect(viewer.locator('p[lang="zh-CN"]').filter({hasText:'打招呼用语'})).toHaveAttribute('lang','zh-CN');
   assert.equal(await viewer.locator('button').first().evaluate(element=>element===document.activeElement),true,'the active detail screen moves focus to its close control');
   assert.deepEqual(errors,[]);
+});
+
+for(const surface of ['quick','learning','dictionary','viewer'] as const)test.describe(surface,()=>{
+ test('English source definitions stay English for a Spanish headword when no learner gloss is available',async({page})=>{
+  await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
+  await page.goto(`http://127.0.0.1:${port}/?surface=${surface}&sourceOnly=1`);
+  await expect(page.getByRole('heading',{name:'hola',exact:true})).toHaveAttribute('lang','es');
+  const definition=surface==='viewer'?page.locator('p').filter({hasText:'hello or hi'}):page.getByText('hello or hi',{exact:true});
+  await expect(definition).toHaveAttribute('lang','en');await expect(page.getByText('打招呼用语',{exact:true})).toHaveCount(0);
+ });
 });
 
 for(const surface of ['quick','learning'] as const)test.describe(surface,()=>{

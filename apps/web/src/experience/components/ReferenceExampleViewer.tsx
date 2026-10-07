@@ -8,6 +8,7 @@ import type {
   ReferenceRelease,
   ReferenceSense,
 } from '../reference/referenceDictionary';
+import {referenceSenseText} from '../reference/referenceDictionary';
 import { resolveLookupLemma } from '../reference/resolveClickedLemma';
 import { sensaLanguage, type SensaLanguage } from '@sensa/contracts/sensa';
 import { ExampleCardCarousel } from './examples/ExampleCardCarousel';
@@ -145,7 +146,7 @@ export function ReferenceExampleViewer({ active, deck, onClose }: ReferenceExamp
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [active, exampleIndex, examples.length]);
 
-  const definition = deck?.sense.glossL1 || deck?.sense.definitionL2 || t('referenceExample.noDefinition');
+  const definition = deck?referenceSenseText(deck.sense,deck.release.learnerLocale):undefined;
 
   return <section
     className={`screen absolute inset-0 z-[40] flex flex-col overflow-hidden bg-surface-canvas font-product text-fg-primary ${active ? 'active' : 'invisible pointer-events-none'}`}
@@ -178,7 +179,7 @@ export function ReferenceExampleViewer({ active, deck, onClose }: ReferenceExamp
             </section>
             <section className="mx-6 mb-6 rounded-card bg-accent-soft p-6 text-action-primary">
               <h2 className="text-xs">{t('referenceExample.sense')}</h2>
-              <p className="mt-3 text-base leading-7" lang={deck.sense.glossL1 ? learnerLanguage : targetLanguage}><span className="mr-2 text-sm text-fg-secondary">{deck.sense.partOfSpeech}</span>{definition}</p>
+              <p className="mt-3 text-base leading-7" lang={definition?.languageTag??'und'}><span className="mr-2 text-sm text-fg-secondary">{deck.sense.partOfSpeech}</span>{definition?.text??t('referenceExample.noDefinition')}</p>
             </section>
           </article>
         </ExampleCardCarousel> : <section role="status" className="rounded-overlay border border-dashed border-border-strong bg-surface-panel p-8 text-center">

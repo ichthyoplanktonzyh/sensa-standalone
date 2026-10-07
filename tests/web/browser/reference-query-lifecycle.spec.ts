@@ -12,7 +12,7 @@ import {QuickDictPopup} from './apps/web/src/experience/components/QuickDictPopu
 import {LearningExampleLookup} from './apps/web/src/experience/components/examples/LearningExampleLookup';
 await i18n.changeLanguage('zh-CN');const fixture={pending:[]};window.fixture=fixture;
 function QuerySurface(){const {activeLookup,openLookup,clearLookup}=useImmediateDictionaryLookup();
- const open=()=>openLookup({tokenIdx:0,displayWord:'borrow',load:signal=>new Promise(resolve=>fixture.pending.push({signal,resolve:label=>resolve({word:'borrow',phonetic:'',senses:[{pos:'verb',text:label}],hasFullDetail:true})}))});
+ const open=()=>openLookup({tokenIdx:0,displayWord:'borrow',load:signal=>new Promise(resolve=>fixture.pending.push({signal,resolve:label=>resolve({word:'borrow',phonetic:'',senses:[{pos:'verb',text:label,languageTag:'en'}],hasFullDetail:true})}))});
  return <><button onClick={open}>打开 borrow 查询</button>{activeLookup&&(new URL(location.href).searchParams.get('surface')==='quick'?<QuickDictPopup entry={activeLookup.entry} onClose={clearLookup} toast={()=>{}}/>:<LearningExampleLookup entry={activeLookup.entry} onClose={clearLookup} toast={()=>{}}/>)}</>;
 }createRoot(document.getElementById('root')).render(<QuerySurface/>);
 `},bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env':'{}'}})).outputFiles[0]!.text;

@@ -48,7 +48,7 @@ const MODEL='https://fixture.invalid/v1/chat/completions';
  * asserted. */
 const groups:Record<string,{pos:string;glosses:string[];examples?:string[];ipa?:string;sounds?:{ipa?:string;audio?:string;tags?:string[]}[]}>={};
 /** Canned payloads for the official endpoint, keyed by word. */
-const restPayloads:Record<string,Record<string,{partOfSpeech:string;language:string;definitions:{definition:string}[]}[]>>={};
+const restPayloads:Record<string,Record<string,{partOfSpeech:string;language:string;definitions:{definition:string;parsedExamples?:{example:string}[]}[]}[]>>={};
 const requested:string[]=[];
 const unavailableRestWords=new Set<string>();
 const modelPrompts:{system:string;user:any}[]=[];
@@ -106,7 +106,7 @@ try{
   for(const purpose of ['teacher','content','review','reference']){const {settings}=await api.providerSnapshot();await api.assignProvider(id(),purpose,provider.id,settings.revision);}
 
   groups['es:hola']={pos:'intj',glosses:['hello, hi, hey'],examples:['¡Hola! ¿Cómo estás?'],ipa:'/ˈola/'};
-  groups['fr:hola']={pos:'intj',glosses:['bonjour']};
+  groups['fr:hola']={pos:'intj',glosses:['French greeting']};
 
   const spanishResult=await api.lookupReference('hola',{languages:spanish});
   const spanishRequestsEnd=requested.length;
@@ -114,7 +114,9 @@ try{
   assert.equal(spanishResult.release.targetLanguage,'es','the release belongs to the target language, not to English');
   assert.equal(spanishResult.release.learnerLocale,'zh-CN','the release locale follows the Support Language');
   assert.ok(spanishResult.release.provider.includes('Spanish'),'the release names the language the entry is in');
-  assert.equal(spanishResult.entry.senses[0]!.definitionL2,'hello, hi, hey');
+  assert.deepEqual(spanishResult.entry.senses[0]!.definition,{text:'hello, hi, hey',languageTag:'en'},'English Wiktionary defines a Spanish headword in its source language');
+  assert.equal(spanishResult.entry.attribution,'English Wiktionary via WiktAPI (CC BY-SA)','source attribution names the edition, not the headword language');
+  assert.equal(spanishResult.entry.senses[0]!.examples[0]!.sourceLabel,'English Wiktionary','an uncited Spanish example keeps its actual dictionary edition');
   assert.equal(spanishResult.entry.pronunciations[0]?.accent,'es','a non-English recording is never relabelled as an English accent');
   assert.equal(spanishResult.entry.pronunciations[0]?.ipa,'/ˈola/','pronunciation evidence the provider returned is kept');
 
@@ -142,7 +144,7 @@ try{
       assert.ok(result,`${language.tag} → ${support.tag} returns its canned target-language group`);
       assert.equal(result?.release.targetLanguage,language.tag,`${language.tag} release identifies the requested target`);
       assert.equal(result?.release.learnerLocale,support.tag,`${support.tag} remains the declared Support Language`);
-      assert.equal(result?.entry.senses[0]?.definitionL2,`fixture for ${language.tag}`,`${language.tag} keeps its own Wiktionary group`);
+      assert.deepEqual(result?.entry.senses[0]?.definition,{text:`fixture for ${language.tag}`,languageTag:'en'},`${language.tag} keeps its word group without relabelling the English definition`);
       assert.ok(requested.some(href=>href.includes(`lang=${encodeURIComponent(language.wiktionaryCode)}`)),`${language.tag} requests its Wiktionary code`);
     }
   }
@@ -168,13 +170,15 @@ try{
   assert.equal(prompt.user.targetLanguage,'es');
   assert.equal(prompt.user.supportLanguage,'zh-CN');
   assert.equal(prompt.user.sentence,'¡Hola! ¿Cómo estás?','the clicked sentence travels unchanged');
+  assert.equal(prompt.user.candidates[0].definitionLanguage,'en','word and source-definition language are distinct model inputs');
+  assert.ok(prompt.system.includes('Source definitions need not be in the headword or sentence language'));
 
   assert.equal(contextual.contextualResolution?.status,'model_confident');
   assert.equal(contextual.contextualResolution?.glossL1,'打招呼用语','the Support-Language rendering is recorded with the decision');
   assert.equal(contextual.contextualResolution?.modelId,'fixture','the rendering keeps the model that produced it');
   const selectedSense=contextual.entry.senses.find((sense:any)=>sense.referenceSenseId===contextual.contextualResolution?.referenceSenseId);
   assert.equal(selectedSense.glossL1,'打招呼用语','the selected sense carries the rendering for display');
-  assert.equal(selectedSense.definitionL2,'hello, hi, hey','the provider wording is not rewritten');
+  assert.deepEqual(selectedSense.definition,{text:'hello, hi, hey',languageTag:'en'},'learner gloss never rewrites source wording or language');
   assert.equal(contextual.entry.senses.filter((sense:any)=>sense.glossL1).length,1,'only the selected sense is rendered');
 
   // A rendering the model will not keep short is dropped instead of shown.
@@ -194,7 +198,7 @@ try{
   const frenchResult=await api.lookupReference('hola',{languages:{supportLanguageTag:'zh-CN',targetLanguageTag:'fr'}});
   assert.ok(requested.slice(beforeCache).some(href=>href.includes('lang=fr')),'a second language is fetched instead of answered from the first language cache');
   assert.equal(frenchResult?.release.targetLanguage,'fr','the cached Spanish entry never answers a French lookup');
-  assert.equal(frenchResult?.entry.senses[0]?.definitionL2,'bonjour');
+  assert.deepEqual(frenchResult?.entry.senses[0]?.definition,{text:'French greeting',languageTag:'en'});
 
   // A real miss is empty; a miss from one source plus an unavailable eligible
   // source is reported as unavailable because absence cannot be established.
@@ -218,12 +222,14 @@ try{
 
   // The official endpoint answers a language the aggregators do not carry, and
   // its rendered HTML is stripped to the sentence a learner reads.
-  restPayloads['agua']={es:[{partOfSpeech:'Noun',language:'Spanish',definitions:[{definition:'<a href="/wiki/water">water</a>, <span>H<sub>2</sub>O</span> &amp; more'}]}]};
+  restPayloads['agua']={es:[{partOfSpeech:'Noun',language:'Spanish',definitions:[{definition:'<a href="/wiki/water">water</a>, <span>H<sub>2</sub>O</span> &amp; more',parsedExamples:[{example:'El agua está fría.'}]}]}]};
   const official=await api.lookupReference('agua',{languages:spanish});
   assert.ok(official,'the official Wiktionary endpoint answers when the aggregators have no group');
   assert.ok(official.release.provider.includes('Wiktionary REST'));
   assert.equal(official.release.targetLanguage,'es');
-  assert.equal(official.entry.senses[0]!.definitionL2,'water, H2O & more','the rendered HTML is stripped to readable text');
+  assert.deepEqual(official.entry.senses[0]!.definition,{text:'water, H2O & more',languageTag:'en'},'English-edition REST wording is stripped without relabelling it Spanish');
+  assert.equal(official.entry.attribution,'English Wiktionary (CC BY-SA 4.0)','REST attribution also identifies the actual source edition');
+  assert.equal(official.entry.senses[0]!.examples[0]!.sourceLabel,'English Wiktionary','REST example source is the edition, not its Spanish language group');
   assert.equal(official.entry.pronunciations.length,0,'an endpoint without pronunciation evidence yields no guessed IPA');
 
   // English keeps the aggregator that actually indexes English entries, and the
@@ -234,7 +240,7 @@ try{
   assert.equal(englishResult?.release.targetLanguage,'en');
   assert.equal(englishResult?.release.learnerLocale,'zh-CN');
   assert.ok(requested.some(href=>href.startsWith(FREE)),'the English-only provider is asked for an English target');
-  assert.equal(englishResult?.entry.senses[0]?.definitionL2,'easily broken');
+  assert.deepEqual(englishResult?.entry.senses[0]?.definition,{text:'easily broken',languageTag:'en'});
   assert.equal(englishResult?.entry.pronunciations[0]?.ipa,'/ˈfɪkʃən/','English pronunciation evidence still comes from the aggregator');
   assert.equal(englishResult?.entry.pronunciations[0]?.accent,'en','a phonetic without regional evidence is not labelled American');
 

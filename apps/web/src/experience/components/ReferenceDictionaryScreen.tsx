@@ -10,6 +10,7 @@ import type { QuickDictEntry, Word } from '../types';
 import { audioService } from '../services/audioService';
 import {
   referenceSensesForDisplay,
+  referenceSenseText,
   type ReferenceLookupResult,
   type ReferencePronunciation,
   type ReferenceSense,
@@ -81,25 +82,24 @@ function partOfSpeechGroups(senses: readonly ReferenceSense[]): Array<{
 function SenseRow({
   sense,
   isContextual,
-  targetLanguage,
   learnerLanguage,
   onOpenExamples,
 }: {
   sense: ReferenceSense;
   isContextual: boolean;
-  targetLanguage: string;
   learnerLanguage: string;
   onOpenExamples: (sense: ReferenceSense) => void;
 }) {
   const examples = sense.examples ?? [];
+  const display=referenceSenseText(sense,learnerLanguage);
   return (
     <article className={`grid gap-4 rounded-card border p-5 sm:grid-cols-[1fr_auto] ${isContextual ? 'border-border-strong bg-surface-selected' : 'border-border-subtle bg-surface-panel'}`}>
       <div className="min-w-0">
         {isContextual && <span className="mb-3 inline-flex rounded-pill bg-accent-soft px-3 py-1 text-metadata font-semibold text-action-primary">{cardText('dictCurrent')}</span>}
-        <p className="text-body leading-7" lang={sense.glossL1 ? learnerLanguage : targetLanguage} dir="auto">
-          {sense.glossL1 ?? sense.definitionL2 ?? cardText('dictDefinitionMissing')}
+        <p className="text-body leading-7" lang={display?.languageTag??i18n.language} dir="auto">
+          {display?.text ?? cardText('dictDefinitionMissing')}
         </p>
-        {sense.glossL1 && sense.definitionL2 && <small className="mt-2 block text-body-support leading-6 text-fg-secondary" lang={targetLanguage} dir="auto">{sense.definitionL2}</small>}
+        {sense.glossL1 && sense.definition && <small className="mt-2 block text-body-support leading-6 text-fg-secondary" lang={sense.definition.languageTag} dir="auto">{sense.definition.text}</small>}
         {sense.labels && sense.labels.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
             {sense.labels.map((label) => <span className="rounded-pill bg-surface-subtle px-2 py-1 text-metadata text-fg-secondary" key={label}>{label}</span>)}
@@ -353,7 +353,7 @@ export function ReferenceDictionaryScreen({
                 <div className="mb-3 mt-5 flex items-center justify-between text-metadata font-bold uppercase tracking-wide text-fg-tertiary">
                   <span>{contextualSense.partOfSpeech}</span>
                 </div>
-                <SenseRow sense={contextualSense} isContextual targetLanguage={targetLanguage} learnerLanguage={learnerLanguage} onOpenExamples={openExamples} />
+                <SenseRow sense={contextualSense} isContextual learnerLanguage={learnerLanguage} onOpenExamples={openExamples} />
               </section>
             )}
 
@@ -371,7 +371,6 @@ export function ReferenceDictionaryScreen({
                         key={sense.referenceSenseId}
                         sense={sense}
                         isContextual={false}
-                        targetLanguage={targetLanguage}
                         learnerLanguage={learnerLanguage}
                         onOpenExamples={openExamples}
                       />

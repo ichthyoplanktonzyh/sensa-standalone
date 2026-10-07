@@ -25,7 +25,6 @@ export function QuickDictPopup({ entry, onClose, onViewDetail, toast }: QuickDic
   const hasError = entry.lookupState === 'error';
   const isMissing = entry.lookupState === 'missing';
   const targetLanguage = entry.referenceLookup?.release.targetLanguage;
-  const learnerLanguage = entry.referenceLookup?.release.learnerLocale;
   const resolution = entry.referenceLookup?.contextualResolution;
   const selectedSenseId = resolution && (
     resolution.status === 'authored_target'
@@ -110,7 +109,7 @@ export function QuickDictPopup({ entry, onClose, onViewDetail, toast }: QuickDic
               <span className="text-metadata font-semibold text-fg-tertiary">{sense.pos || '—'}</span>
               <p
                 className="text-body-support leading-6"
-                lang={entry.referenceLookup?.entry.senses.find((source) => source.referenceSenseId === sense.referenceSenseId)?.glossL1 ? learnerLanguage : targetLanguage}
+                lang={sense.languageTag}
                 dir="auto"
               >
                 {sense.text}

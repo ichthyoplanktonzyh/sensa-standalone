@@ -112,7 +112,8 @@ export type FormalLearningStage =
  */
 export interface QuickDictSense {
   pos: string;      // 词性，如 "conj.", "n.", "vi. vt.", "adj."
-  text: string;     // 中文简明释义，如 "和，与，又；加上；然后；那么"
+  text: string;     // 简明释义，保留其实际语言，不默认中文或目标语言。
+  languageTag: string;
   /** Stable identity from the normalized Reference entry, when available. */
   referenceSenseId?: string;
 }
@@ -158,7 +159,7 @@ export interface ContextualSenseResolution {
   modelId?: string;
   /** The selected sense rendered in the operation's Support Language. It is a
    * display layer over a provider-owned definition, never a revision of it: the
-   * provider's own wording stays in `ReferenceSense.definitionL2`, and the
+   * provider's own wording and language stay in `ReferenceSense.definition`, and the
    * rendering is recorded here so it keeps the model that produced it. */
   glossL1?: string;
 }

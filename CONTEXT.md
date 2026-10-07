@@ -1,7 +1,7 @@
 # Sensa product context
 
 > Status: canonical ubiquitous language  
-> Updated: 2026-10-06
+> Updated: 2026-10-08
 > Domain document index: [`docs/sensa/README.md`](docs/sensa/README.md)
 
 Sensa is a sense-first language-learning product. Its durable learning identity
@@ -462,6 +462,8 @@ Content Release. It is neither a Book nor a claim to be a universal ontology.
 A broad, versioned lookup corpus of source-backed words, multiword expressions,
 Reference Senses and licensed enrichment. It may contain meanings that Sensa
 does not teach and is neither a Book nor the Learning Catalog.
+Its lexical-form language, source-definition language and learner rendering
+language are distinct facts; one never relabels another.
 
 **Reference Context**:  
 The version anchor used for one lookup, including at least a Reference Release

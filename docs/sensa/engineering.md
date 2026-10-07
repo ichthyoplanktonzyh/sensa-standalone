@@ -507,6 +507,7 @@ YouGlish 使用官方 Widget 直接嵌入真实语境聆听页面；提供方脚
 模型输出只是候选。语义接受、学习资源校验、加入学习和运行时结算仍由对应应用与领域模块完成。常规测试使用替身，不调用付费模型或 TTS。
 
 Reference 的公共查询接口接受显式 pinned languages；正式 Runtime host 从实际 Target 绑定该语对，例句页复用同一查询回调，详情 overlay 与后续手动搜索保留其来源语言。快速查询的 `missing` 与 `error` 分开，不把确认未命中改报服务故障。例句 viewer 只暂停字典，不重置查询词；assessment 提交前无题面 Reference 动作，golden resource 的实际 React 渲染回归保护此边界，不代表公开 Structured 旅程或学习结算验收。
+Reference 来源定义使用 `definition: {text, languageTag}`，不默认与词条语言相同；英语版Wiktionary的西语词条仍保留英语定义，归属及例句缺省来源也标注实际词典版本，而非词条语言组。`referenceSenseText`统一选择独立Support-Language gloss或原定义，Quick投影携带实际文本语言，四个面据此渲染；closed-set模型输入也声明每个candidate的`definitionLanguage`。学习内容合同中的目标语言定义不受这项Reference修正影响。
 Reference 发音通过同一 `AudioService.playReferencePronunciation` 接收原文语言与可选源录音；不读取当前Route来替代来源语言。源录音失败准确不可用，不静默换声；无源录音时只用匹配来源标签的本机声音，明确变体不猜另一地区。首次本机voice列表为空时最多等待一秒的`voiceschanged`，关闭／停止立即取消等待并阻止迟到播放；打开例句停止录音，返回词典不保留播放中状态。缺声音、合成失败与停止分别按实际终态处理，录音／设备声音与发音标签使用同一来源。
 词典适配器仅从来源标签或明确录音命名识别发音地区；无地区声明的英语音标保留`en`，不默认标为美式。
 Target 来源页复用已保存的 `publicationArchiveSha256` 与 exact Package key，`projectPackageSource` 从已安装 publication metadata 投影原版本和 memberIndex；不使用 Catalog 最新版或第一册共享成员替代来源。该 URL 参数仅归属来源页，返回原 Target 时移除。来源页隐藏安装／加入／更新操作；正常 Library listKey 入口保持管理行为。

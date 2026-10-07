@@ -386,6 +386,10 @@ Reference Lexicon 是独立于 Learning Catalog 的宽覆盖查询语料。一�
 - 可公开的 Lexical Enrichment、资源可见性、review status 与内容 digest；
 - 可重建 search index 与 contextual resolver 所需的 release/version metadata。
 
+词条／表达的语言、来源定义的语言和 learner-facing rendering 的 Support Language 是三个独立事实。
+来源定义保留原文及其实际 Language Tag，不因词条语言或当前 Route 改标；例如英语版词典可用英语解释
+西语词条。模型生成的辅助语言 gloss 是独立呈现，不改写来源定义及其语言。
+
 Reference Lexical Unit 可以是单词，也可以是 phrasal verb、idiom 或其他 multiword expression。它不应
 被强行压入“一个 lemma 一条记录”；同形异源、不同词性或词典供应商的意义划分必须按 Reference
 Release 的真实结构保存。Reference Sense 的 provider order 用于完整词典展示，但不是课程顺序。
