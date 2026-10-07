@@ -1,4 +1,5 @@
 {
+  "videoCaptionLimit": "Die Untertiteldaten sind zu groß, um vollständig geladen zu werden.",
   "openInbox": "Sensa-Posteingang öffnen",
   "deliveryHint": "Öffnen Sie nach dem Speichern Sensa in diesem Browser. Der Inhalt erscheint automatisch im Posteingang.",
   "savedInbox": "An den Sensa-Posteingang übergeben.",
@@ -167,7 +168,7 @@
   "videoTranslation": "Nur Übersetzung (automatisch)",
   "videoHint": "Laden Sie Untertitel und wählen Sie einen Ausdruck aus, um ihn zu erklären oder zu speichern. Die Auswahl pausiert das Video.",
   "videoOwnFile": "Eigene Untertiteldatei verwenden",
-  "videoFileHint": "Wenn keine Untertitel verfügbar sind, laden Sie eine VTT- oder SRT-Datei für dieses Video. Eine KI-Transkription in der Cloud ist noch nicht verfügbar.",
+  "videoFileHint": "Wenn keine Untertitel verfügbar sind, laden Sie eine VTT- oder SRT-Datei für dieses Video.",
   "videoLoadFile": "Untertiteldatei laden",
   "videoRetry": "Übersetzung erneut versuchen",
   "videoAd": "Werbung läuft. Das Erfassen von Untertiteln ist pausiert.",

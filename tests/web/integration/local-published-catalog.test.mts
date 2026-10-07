@@ -14,10 +14,20 @@ import {createConsumerRoutes} from '../../../apps/api/src/sensa/access/consumer.
 import {readLearningContentRegistry} from '../../../apps/api/src/sensa/access/learningContentRegistry.ts';
 import {Hono} from 'hono';
 import {cors} from 'hono/cors';
-import {localSensaCorsOptions} from '../../../scripts/local/localCors.mts';
+import {localSensaCorsOptions,localExtensionOrigins} from '../../../scripts/local/localCors.mts';
 
 const snapshot={format:'sensa-learning-content-registry-v3' as const,publishedAt:'2026-09-30T00:00:00Z',items:[portableBookDeliveryFixture().descriptor]};
 const catalog={...snapshot,revision:createHash('sha256').update(canonicalConsumerJson(snapshot)).digest('hex')};
+
+test('local API grants only an explicitly named development extension origin',async()=>{
+ const origin='chrome-extension://'+'a'.repeat(32);
+ assert.deepEqual(localExtensionOrigins(undefined),[]);
+ assert.deepEqual(localExtensionOrigins(origin+','+origin),[origin]);
+ for(const invalid of ['*','chrome-extension://*','https://foreign.fixture.invalid',origin+'/'])assert.throws(()=>localExtensionOrigins(invalid));
+ const app=new Hono();app.use('*',cors(localSensaCorsOptions(['http://127.0.0.1:3000',...localExtensionOrigins(origin)])));app.get('/fixture',c=>c.json({ok:true}));
+ const preflight=await app.request('/fixture',{method:'OPTIONS',headers:{origin,'access-control-request-method':'GET'}});assert.equal(preflight.headers.get('access-control-allow-origin'),origin);
+ const foreign=await app.request('/fixture',{method:'OPTIONS',headers:{origin:'chrome-extension://'+'b'.repeat(32),'access-control-request-method':'GET'}});assert.equal(foreign.headers.get('access-control-allow-origin'),null);
+});
 
 test('local preview preserves the exact published identities and artifact digests',async()=>{
  let options:RequestInit|undefined;

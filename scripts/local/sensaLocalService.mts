@@ -11,20 +11,21 @@ import { createConsumerRoutes } from '../../apps/api/src/sensa/access/consumer.t
 import { readLearningContentRegistry } from '../../apps/api/src/sensa/access/learningContentRegistry.ts';
 import { ConsumerError, type ConsumerPrincipal } from '../../apps/api/src/sensa/access/auth.ts';
 import type { DatabaseExecutor } from '../../apps/api/src/database/index.ts';
-import {localSensaCorsOptions} from './localCors.mts';
+import {localSensaCorsOptions,localExtensionOrigins} from './localCors.mts';
 
 const host = '127.0.0.1';
 const port = Number(process.env.SENSA_LOCAL_SERVICE_PORT ?? 4319);
 if (!Number.isInteger(port) || port < 1024 || port > 65_535) throw new Error('Invalid local service port');
 const serviceOrigin = `http://${host}:${port}`;
-const allowedOrigins = (process.env.SENSA_LOCAL_WEB_ORIGINS ?? '')
+const allowedWebOrigins = (process.env.SENSA_LOCAL_WEB_ORIGINS ?? '')
   .split(',').map(value => value.trim()).filter(Boolean);
-if (!allowedOrigins.length || allowedOrigins.some(value => {
+if (!allowedWebOrigins.length || allowedWebOrigins.some(value => {
   try {
     const url = new URL(value);
     return url.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(url.hostname);
   } catch { return true; }
 })) throw new Error('Local Web origins must be explicit loopback HTTP origins');
+const allowedOrigins=[...allowedWebOrigins,...localExtensionOrigins(process.env.SENSA_LOCAL_EXTENSION_ORIGINS)];
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl || new URL(databaseUrl).hostname !== host || !new URL(databaseUrl).pathname.startsWith('/sensa_m1a_')) {
   throw new Error('A disposable loopback Sensa database is required');

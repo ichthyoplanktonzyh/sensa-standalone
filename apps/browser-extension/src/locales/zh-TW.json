@@ -1,4 +1,5 @@
 {
+  "videoCaptionLimit": "字幕資料過大，無法完整載入。",
   "openInbox": "開啟 Sensa 收件匣",
   "deliveryHint": "儲存後開啟同一瀏覽器中的 Sensa，內容會自動進入收件匣。",
   "savedInbox": "已進入 Sensa 收件匣。",
@@ -167,7 +168,7 @@
   "videoTranslation": "僅顯示譯文（自動翻譯）",
   "videoHint": "載入字幕後，選取表達即可進行解釋或儲存；選取時影片會暫停。",
   "videoOwnFile": "使用自己的字幕檔",
-  "videoFileHint": "若沒有可讀取的字幕，可以載入此影片的 VTT / SRT 字幕檔。目前尚未提供雲端 AI 轉錄。",
+  "videoFileHint": "若沒有可讀取的字幕，可以載入此影片的 VTT / SRT 字幕檔。",
   "videoLoadFile": "載入字幕檔",
   "videoRetry": "重試翻譯",
   "videoAd": "廣告播放中，字幕擷取已暫停。",

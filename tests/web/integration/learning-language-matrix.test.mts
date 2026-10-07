@@ -67,6 +67,10 @@ test('learning-language-matrix', async () => {
       `semantic prompt names the requested pair ${pair.targetLanguageTag}←${pair.supportLanguageTag}`);
     assert.ok(prompt.includes(`The explanation and semantic spec must be in ${supportName} (${pair.supportLanguageTag})`),
       'the explanation and semantic specification use the route support language');
+    assert.ok(prompt.includes('one or two short, natural sentences')&&prompt.includes('not as a checklist or full dictionary entry'),
+      'reading explanation is brief contextual help, not a dictionary or grammar checklist');
+    assert.ok(prompt.includes('Do not add unstated incidental facts or universal claims about all usages or plural forms'),
+      'the prompt does not license invented context or universal grammar claims');
 
     if (pair.targetLanguageTag !== 'en' && pair.supportLanguageTag !== 'en') {
       assert.ok(!prompt.includes('English (en)'), 'unrequested English must not be injected into the prompt');

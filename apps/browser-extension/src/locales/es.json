@@ -1,4 +1,5 @@
 {
+  "videoCaptionLimit": "Los datos de subtítulos son demasiado grandes para cargarlos por completo.",
   "openInbox": "Abrir la bandeja de entrada de Sensa",
   "deliveryHint": "Después de guardar, abre Sensa en este navegador. El contenido aparecerá automáticamente en la bandeja de entrada.",
   "savedInbox": "El contenido se envió a la bandeja de entrada de Sensa.",
@@ -167,7 +168,7 @@
   "videoTranslation": "Solo traducción (automática)",
   "videoHint": "Carga los subtítulos y selecciona una expresión para explicarla o guardarla. Al seleccionar texto, el vídeo se pausa.",
   "videoOwnFile": "Usar tu propio archivo de subtítulos",
-  "videoFileHint": "Si no hay subtítulos disponibles, carga un archivo VTT o SRT del vídeo. La transcripción con IA en la nube aún no está disponible.",
+  "videoFileHint": "Si no hay subtítulos disponibles, carga un archivo VTT o SRT del vídeo.",
   "videoLoadFile": "Cargar archivo de subtítulos",
   "videoRetry": "Reintentar traducción",
   "videoAd": "Se está reproduciendo un anuncio. La captura de subtítulos está en pausa.",

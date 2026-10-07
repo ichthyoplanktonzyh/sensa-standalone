@@ -507,6 +507,14 @@ YouGlish 使用官方 Widget 直接嵌入真实语境聆听页面；提供方脚
 模型输出只是候选。语义接受、学习资源校验、加入学习和运行时结算仍由对应应用与领域模块完成。常规测试使用替身，不调用付费模型或 TTS。
 
 阅读请求由扩展的 background 在一个地方补齐学习者状态（语对与术语表），流式端口与普通消息共用这一步；模型连接测试与模型列表只带各自的问题。服务端的阅读、测试与列表三个入口只接受合同里声明的那三种请求体，`tests/web/integration/reading-glossary.test.mts` 在快速测试里逐个核对扩展实际发出的 body。
+整页阅读复用一次按块语言观察来决定跳过与请求的 source language；不把第三语言段落重标为页面语言。
+扩展语言识别直接使用 Chrome 本机 CLD，不再附带自建统计语言表。可靠观察保留来源代码和浏览器报告的文字占比；未知、不可靠或接口不可用时保留未知，不按当前 Route 猜语言。短文本块和明确标注语言的选区使用其来源声明；较长段落检测不确定时不得继承整页语言而跳过翻译，`und` 声明也保持未知。
+翻译缓存与在途合并按正文、相邻 Context、实际输入语言隔离。恢复原文或销毁阅读面会断开端口并取消请求，
+异步语言观察结束后仍复查当前 generation 与原节点，不能在已恢复的网页插入新占位或启动模型。
+Route、术语表、模型或阅读偏好的实际 storage 变化通过已有阅读面 lifecycle 重建正在开启的标签页，
+清除旧语言结果与缓存；不向页面传递私有 glossary，也不新增独立缓存版本协议。原网页标题／相邻文字变化
+同样淘汰旧 Context 的请求与结果。
+写作预览固定当前输入；继续编辑会取消旧预览，替换时再核对可写性与原文，不覆盖更新后的用户草稿。
 
 内容制作的命令、安全边界和无成本检查由 [`content/README.md`](../../content/README.md) 维护。生成数据、发布 JSON 和运行媒体不提交 Git。
 
@@ -753,11 +761,15 @@ npm run test:db
 
 ```sh
 npm run build -w @sensa/browser-extension
-node --import tsx tests/web/run.mts --suite=manual --id=browser-port
-node --import tsx tests/web/run.mts --suite=manual --id=extension-popup
+node --import tsx tests/web/run.mts --suite=browser --id=browser-port
+node --import tsx tests/web/run.mts --suite=browser --id=extension-popup
+node --import tsx tests/web/run.mts --suite=browser --id=extension-reading-surface
+node --import tsx tests/web/run.mts --suite=browser --id=extension-subtitle-surface
 ```
 
-脚本成功只能证明它覆盖的边界；真实账号、真实 Provider、浏览器商店和生产环境需要各自的验收证据。
+上述受控 browser 用例默认单独构建当前扩展到临时目录，不读取或覆盖已安装的 `dist`；显式设置
+`SENSA_EXTENSION_TEST_DIR` 时只读核对该候选。它们注入 content script 或 popup 并使用受控 transport／voice，
+不代表真实安装权限或真实声音。脚本成功只能证明它覆盖的边界；真实账号、真实 Provider、浏览器商店和生产环境需要各自的验收证据。
 
 获得真实模型与 TTS 验收授权后，可为人工或 Agent 浏览器使用启动一次性隔离环境：
 

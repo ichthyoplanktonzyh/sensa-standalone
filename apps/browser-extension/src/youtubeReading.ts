@@ -2,8 +2,9 @@ import {captureSnapshotSchema,sensaCanonicalLanguageTag} from '@sensa/contracts/
 import type {CaptureSnapshot} from '@sensa/contracts/sensa';
 import {runReading,readingError} from './readingClient';
 import {t,extensionLanguage} from './i18n';
+import {interfaceLanguageName} from './interfaceLanguageName';
 import {parseYoutubeCaptions,parseSubtitleFile} from './subtitleCues';
-import {declaredCaptureLanguage,detectCaptureLanguage,readerLanguage,unknownCaptureLanguage} from './language';
+import {detectCaptureLanguage,readerLanguage,unknownCaptureLanguage} from './language';
 import {speakText,speechFailureText} from './speech';
 import {defaultPreferences} from './preferences';
 import type {ReadingPreferences} from './preferences';
@@ -36,10 +37,11 @@ export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,o
    * answer covers every cue, unlike a page whose paragraphs can differ. */
   let trackReadable=false;
   const translations=new Map<string,string>(),errors=new Map<string,string>();
-  type TranslationJob={cue:Cue;generation:number;manual:boolean};
+  type TranslationJob={cue:Cue;generation:number;manual:boolean;controller:AbortController};
   let pending:TranslationJob|null=null,running:TranslationJob|null=null;
   /** How to stop the current reading, or nothing when this panel is silent. */
   let speaking:(()=>void)|null=null;
+  let speechGeneration=0;
   /** This panel writes its own labels in one language, as its neighbours do. */
   const speakLabel=t('videoSpeak');
   const translateButton=root.querySelector<HTMLButtonElement>('[data-action="translate"]')!;
@@ -73,7 +75,7 @@ export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,o
     }
   }
   function show(cue:Cue|null){
-    if(current===cue)return;current=cue;pending=null;original.textContent=cue?.text??'';
+    if(current===cue)return;cancelTranslations();stopSpeaking();current=cue;original.textContent=cue?.text??'';
     if(cue&&display.value!=='original')queueTranslation(cue);else renderTranslation();
   }
   function queueTranslation(cue:Cue,manual=false){
@@ -83,25 +85,26 @@ export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,o
     // Automatic translation is what a track in the learner's own language does
     // not need; asking for it by name still gets it.
     if(!manual&&trackReadable){renderTranslation();return;}
-    errors.delete(key);pending={cue,generation:run,manual};renderTranslation();void drainTranslations();
+    errors.delete(key);pending={cue,generation:run,manual,controller:new AbortController()};renderTranslation();void drainTranslations();
   }
+  function cancelTranslations(){pending?.controller.abort();pending=null;const old=running;running=null;old?.controller.abort();}
   async function drainTranslations(){
     if(running)return;
-    while(pending&&valid()){
+    while(pending&&valid()&&!running){
       const job:TranslationJob=pending;pending=null;
       if(job.generation!==run||job.cue!==current||(!job.manual&&display.value==='original'))continue;
       running=job;renderTranslation();const key=keyOf(job.cue);
       try{
-        const text=await runReading(accountId,'subtitles',job.cue.text,contextFor(job.cue),'',crypto.randomUUID(),partial=>{if(valid()&&job.generation===run&&current===job.cue)translated.textContent=partial;},undefined,captionLanguage.language);
-        if(valid()&&job.generation===run){
+        const text=await runReading(accountId,'subtitles',job.cue.text,contextFor(job.cue),'',crypto.randomUUID(),partial=>{if(valid()&&!job.controller.signal.aborted&&job.generation===run&&current===job.cue)translated.textContent=partial;},job.controller.signal,captionLanguage.language);
+        if(valid()&&!job.controller.signal.aborted&&job.generation===run&&current===job.cue){
           translations.set(key,text);if(translations.size>150)translations.delete(translations.keys().next().value!);
         }
-      }catch(e){if(valid()&&job.generation===run)errors.set(key,readingError(e));}
-      finally{running=null;if(valid())renderTranslation();}
+      }catch(e){if(valid()&&!job.controller.signal.aborted&&job.generation===run&&current===job.cue)errors.set(key,readingError(e));}
+      finally{if(running===job)running=null;if(valid())renderTranslation();}
     }
   }
-  function resetCues(){run++;pending=null;cues=[];pinned=false;trackReadable=false;stopSpeaking();translations.clear();errors.clear();original.removeAttribute('lang');translated.removeAttribute('lang');show(null);renderTranslation();}
-  function stopSpeaking(){speaking?.();speaking=null;root.querySelector('[data-action="speak"]')!.textContent=speakLabel;}
+  function resetCues(){run++;cancelTranslations();cues=[];captionLanguage=unknownCaptureLanguage;pinned=false;trackReadable=false;stopSpeaking();translations.clear();errors.clear();original.removeAttribute('lang');translated.removeAttribute('lang');show(null);renderTranslation();}
+  function stopSpeaking(){speechGeneration++;speaking?.();speaking=null;root.querySelector('[data-action="speak"]')!.textContent=speakLabel;}
   /**
    * Read the cue aloud in the track's own language.
    *
@@ -113,8 +116,9 @@ export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,o
   async function speakCue(){
     if(!valid()||!current)return;
     if(speaking){stopSpeaking();return;}
-    const attempt=await speakText(current.text,captionLanguage.language,{rate:preferences?.speechRate??defaultPreferences.speechRate,voice:preferences?.speechVoice,onEnd:()=>{if(!disposed)stopSpeaking();}});
-    if(!valid()){if(attempt.ok)attempt.stop();return;}
+    const cue=current,generation=++speechGeneration;let ended=false;
+    const attempt=await speakText(cue.text,captionLanguage.language,{rate:preferences?.speechRate??defaultPreferences.speechRate,voice:preferences?.speechVoice,onEnd:()=>{ended=true;if(!disposed&&generation===speechGeneration)stopSpeaking();}});
+    if(!valid()||current!==cue||generation!==speechGeneration||ended){if(attempt.ok)attempt.stop();return;}
     if(!attempt.ok){status.textContent=speechFailureText(attempt);return;}
     speaking=attempt.stop;root.querySelector('[data-action="speak"]')!.textContent=t('pageStopSpeaking');
   }
@@ -163,16 +167,18 @@ export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,o
       const response=await chrome.runtime.sendMessage({kind:'youtube-captions',accountId,pageUrl:location.href,videoId:id});
       if(response.error)throw new Error(response.error);if(!valid()||generation!==run)return;
       const data=response.value;
+      if(data?.error){status.textContent=t(data.error==='live_unsupported'?'videoLiveUnsupported':data.error==='captions_too_large'?'videoCaptionLimit':data.error==='no_captions'?'videoNoCaptions':'videoLoadFailed');return;}
       const track=typeof data?.language==='string'?data.language:'';
       const declared=track?sensaCanonicalLanguageTag(track):null;
-      captionLanguage=declared?{language:declared,languageSource:'declared',languageConfidence:1}:declaredCaptureLanguage();
-      cues=data?.json?parseYoutubeCaptions(data.json,captionLanguage.language??undefined):[];
+      const candidate:CaptureLanguage=declared?{language:declared,languageSource:'declared',languageConfidence:1}:unknownCaptureLanguage;
+      const parsed=data?.json?parseYoutubeCaptions(data.json,candidate.language??undefined):[];
+      captionLanguage=candidate;cues=parsed;
       await placeLanguages(generation);
       if(!valid()||generation!==run)return;
       if(cues.length)continuity?.onLoaded();
-      status.textContent=cues.length?t(trackReadable?'videoLoadedReadable':'videoLoaded',{count:cues.length,language:captionLanguage.language??t('videoUnknownLanguage')}):t(data?.error==='live_unsupported'?'videoLiveUnsupported':'videoNoCaptions');
+      status.textContent=cues.length?t(trackReadable?'videoLoadedReadable':'videoLoaded',{count:cues.length,language:captionLanguage.language?interfaceLanguageName(captionLanguage.language):t('videoUnknownLanguage')}):t(data?.error==='live_unsupported'?'videoLiveUnsupported':'videoNoCaptions');
       tick();renderTranslation();
-    }catch{if(valid()&&generation===run)status.textContent=t('videoLoadFailed');}
+    }catch(error){if(valid()&&generation===run)status.textContent=t(error instanceof Error&&error.message==='captions_too_large'?'videoCaptionLimit':'videoLoadFailed');}
     finally{if(valid()&&generation===run){loading=false;loadButton.disabled=false;}}
   }
   root.querySelector('[data-action="load"]')!.addEventListener('click',()=>void load());
@@ -182,13 +188,13 @@ export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,o
   for(const [action,delta] of [['previous',-1],['next',1],['replay',0]] as const)root.querySelector(`[data-action="${action}"]`)!.addEventListener('click',()=>{const index=current?cues.indexOf(current):-1;const cue=cues[Math.max(0,index+delta)];const element=video();if(!cue||!element)return;pause();element.currentTime=cue.start;show(cue);});
   translateButton.addEventListener('click',()=>{translated.hidden=false;if(current)queueTranslation(current,true);});
   root.querySelector('[data-action="collapse"]')!.addEventListener('click',event=>{const collapsed=root.querySelector('section')!.classList.toggle('collapsed');(event.target as HTMLElement).textContent=t(collapsed?'videoExpand':'panelCollapse');});
-  display.onchange=()=>{original.hidden=display.value==='translation';translated.hidden=display.value==='original';if(display.value==='original')pending=null;else if(current)queueTranslation(current);renderTranslation();};
+  display.onchange=()=>{original.hidden=display.value==='translation';translated.hidden=display.value==='original';if(display.value==='original')cancelTranslations();else if(current)queueTranslation(current);renderTranslation();};
   root.querySelector('input')!.addEventListener('change',async event=>{
     const file=(event.target as HTMLInputElement).files?.[0];if(!file)return;
     if(file.size>2000000){status.textContent=t('videoFileTooLarge');return;}
     resetCues();loading=false;loadButton.disabled=false;const generation=run;
-    try{const contents=await file.text();captionLanguage=await detectCaptureLanguage(contents);const parsed=parseSubtitleFile(contents,captionLanguage.language??undefined);if(!valid()||generation!==run)return;if(!parsed.length)throw new Error('invalid_subtitles');cues=parsed;await placeLanguages(generation);if(!valid()||generation!==run)return;status.textContent=t('videoFileLoaded',{count:cues.length,suffix:trackReadable?t('videoReadableSuffix'):''});tick();renderTranslation();}
-    catch{if(valid()&&generation===run)status.textContent=t('videoInvalidFile');}
+    try{const contents=await file.text();if(!valid()||generation!==run)return;const candidate=await detectCaptureLanguage(contents,{documentElement:null});if(!valid()||generation!==run)return;const parsed=parseSubtitleFile(contents,candidate.language??undefined);if(!parsed.length)throw new Error('invalid_subtitles');captionLanguage=candidate;cues=parsed;await placeLanguages(generation);if(!valid()||generation!==run)return;status.textContent=t('videoFileLoaded',{count:cues.length,suffix:trackReadable?t('videoReadableSuffix'):''});tick();renderTranslation();}
+    catch(error){if(valid()&&generation===run)status.textContent=t(error instanceof Error&&error.message==='captions_too_large'?'videoCaptionLimit':'videoInvalidFile');}
   });
   // Native player controls must resume following too, not just our own button.
   const resumed=(event:Event)=>{if(event.target===video()&&valid()){pinned=false;status.textContent=t('videoFollowing');tick();}};
@@ -198,5 +204,5 @@ export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,o
   renderTranslation();
   const timer=setInterval(tick,250);
   if(continuity?.autoLoad)void load();
-  return {host,destroy(){disposed=true;run++;pending=null;stopSpeaking();clearInterval(timer);document.removeEventListener('play',resumed,true);document.removeEventListener('seeked',seeked,true);host.remove();}};
+  return {host,destroy(){disposed=true;run++;cancelTranslations();stopSpeaking();clearInterval(timer);document.removeEventListener('play',resumed,true);document.removeEventListener('seeked',seeked,true);host.remove();}};
 }

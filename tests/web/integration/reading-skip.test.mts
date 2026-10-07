@@ -14,7 +14,6 @@ import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 import vm from 'node:vm';
-import {franc} from 'franc';
 import {sensaLanguageRolesForTag} from '@sensa/contracts/sensa';
 
 test("reading-skip", async () => {
@@ -22,7 +21,9 @@ test("reading-skip", async () => {
 const routeContext=(supportLanguageTag:string,targetLanguageTag:string)=>({supportLanguageTag,targetLanguageTag,languageRouteId:'00000000-0000-4000-8000-000000000099',languageRouteRevision:1});
 const routeCollection=(supportLanguageTag:string,targetLanguageTag:string)=>({revision:1,routes:[{id:routeContext(supportLanguageTag,targetLanguageTag).languageRouteId,revision:1,targetLanguageTag,defaultSupportLanguageTag:supportLanguageTag,status:'active'}]});
 let listener:any,storage:Record<string,unknown>={readingLanguageRoutes:routeCollection('zh-CN','en'),readingActiveLanguageRouteId:routeContext('zh-CN','en').languageRouteId},asleep=false;
+let nativeOverride:{isReliable:boolean;languages:Array<{language:string;percentage:number}>}|undefined,nativeFailed=false;
 const chromeMock={
+  i18n:{detectLanguage:async(text:string)=>{if(nativeFailed)throw new Error('native unavailable');return nativeOverride??{isReliable:true,languages:[{language:text.startsWith('这')?'zh':text.startsWith('Ella')?'es':'en',percentage:100}]};}},
   storage:{local:{get:async(key:string)=>structuredClone({[key]:storage[key]}),set:async(value:Record<string,unknown>)=>{Object.assign(storage,structuredClone(value));},setAccessLevel:async()=>{}},session:{get:async()=>({}),set:async()=>{}}},
   runtime:{id:'fixture',getURL:(path:string)=>'chrome-extension://fixture/'+path,onMessage:{addListener:(fn:unknown)=>{listener=fn;}}},
   tabs:{onUpdated:{addListener:()=>{}},onRemoved:{addListener:()=>{}},sendMessage:async()=>{}},
@@ -48,11 +49,11 @@ const page=(lang:string)=>({documentElement:{lang}} as Pick<Document,'documentEl
 const english='She took her time and looked up at the sky before answering the question that had been waiting for her all afternoon.';
 const chinese='这段话本身就是学习者已经能读的语言，把它再翻译一遍没有任何意义，所以这一整段都不应该被送去翻译，也不该占用今天的学习额度。';
 const spanish='Ella se tomó su tiempo y miró al cielo antes de responder a la pregunta que había estado esperando toda la tarde.';
-// The detector stays open-set. Its imperfect Scots observation for this English
-// fixture is retained with confidence instead of coerced to a supported tag.
-assert.equal(franc(english),'sco','if this ever stops being true, the candidate list is no longer earning its place');
+const french="Bonjour à tous. Aujourd'hui nous allons prendre le train ensemble parce que la pluie est trop forte pour rentrer à pied.";
+// The native detector is controlled here; installed Chromium has a separate
+// regression for this ordinary English sample that the old detector mislabeled.
 const detectedEnglish=await detectCaptureLanguage(english);
-assert.equal(detectedEnglish.language,'sco');assert.equal(detectedEnglish.languageSource,'detector');assert(detectedEnglish.languageConfidence!>0);
+assert.equal(detectedEnglish.language,'en');assert.equal(detectedEnglish.languageSource,'detector');assert.equal(detectedEnglish.languageConfidence,1);
 const detectedChinese=await detectCaptureLanguage(chinese);
 assert.deepEqual(detectedChinese,{language:'zh-CN',languageSource:'detector',languageConfidence:1});
 const detectedSpanish=await detectCaptureLanguage(spanish);
@@ -60,9 +61,9 @@ assert.equal(detectedSpanish.language,'es');assert.equal(detectedSpanish.languag
 
 // What the learner already reads: their own language, and nothing else. The
 // third language is not theirs to skip — it is still worth translating.
-assert.deepEqual(await readerLanguage(english),{supportLanguageTag:'zh-CN',alreadyReadable:false});
-assert.deepEqual(await readerLanguage(chinese),{supportLanguageTag:'zh-CN',alreadyReadable:true});
-assert.deepEqual(await readerLanguage(spanish),{supportLanguageTag:'zh-CN',alreadyReadable:false});
+assert.deepEqual(await readerLanguage(english),{supportLanguageTag:'zh-CN',sourceLanguageTag:'en',alreadyReadable:false});
+assert.deepEqual(await readerLanguage(chinese),{supportLanguageTag:'zh-CN',sourceLanguageTag:'zh-CN',alreadyReadable:true});
+assert.deepEqual(await readerLanguage(spanish),{supportLanguageTag:'zh-CN',sourceLanguageTag:'es',alreadyReadable:false});
 
 // Text too short to detect is answered by the surface it came from, which is the
 // only evidence there is: a short paragraph of a page that declares Chinese is a
@@ -70,6 +71,7 @@ assert.deepEqual(await readerLanguage(spanish),{supportLanguageTag:'zh-CN',alrea
 const short='是的。';
 assert.equal((await readerLanguage(short,'zh-CN')).alreadyReadable,true);
 assert.equal((await readerLanguage(short,'en')).alreadyReadable,false);
+assert.equal((await readerLanguage('Bonjour.','fr')).sourceLanguageTag,'fr','a short block inherits its own declaration, not a Route role');
 assert.equal((await readerLanguage(short,'yue')).alreadyReadable,false,'a declaration this release cannot place is not the learner\'s language');
 assert.equal((await readerLanguage(short)).alreadyReadable,false,'nothing to go on is not an answer');
 // …and a short paragraph is still asked about rather than assumed, while a long
@@ -77,14 +79,34 @@ assert.equal((await readerLanguage(short)).alreadyReadable,false,'nothing to go 
 assert.equal((await readerLanguage(english,'zh-CN')).alreadyReadable,false,'a claim about the page is not a claim about the paragraph');
 
 // The other direction: a learner reading English.
-assert.deepEqual(await chrome.storage.local.set({readingLanguageRoutes:routeCollection('en','es')}).then(()=>readerLanguage(chinese)),{supportLanguageTag:'en',alreadyReadable:false});
-assert.deepEqual(await readerLanguage(english),{supportLanguageTag:'en',alreadyReadable:false},'an unsupported detector observation is not coerced to English merely because the Route supports English');
+assert.deepEqual(await chrome.storage.local.set({readingLanguageRoutes:routeCollection('en','es')}).then(()=>readerLanguage(chinese)),{supportLanguageTag:'en',sourceLanguageTag:'zh-CN',alreadyReadable:false});
+assert.deepEqual(await readerLanguage(english),{supportLanguageTag:'en',sourceLanguageTag:'en',alreadyReadable:true});
+nativeOverride={isReliable:true,languages:[{language:'sco',percentage:100}]};
+assert.equal((await detectCaptureLanguage(english)).language,'sco','unsupported native observations remain unsupported, not restricted to a Sensa candidate set');
+assert.deepEqual(await readerLanguage(english),{supportLanguageTag:'en',sourceLanguageTag:'sco',alreadyReadable:false},'an unsupported observation is not coerced to English merely because the Route supports English');
+nativeOverride={isReliable:true,languages:[{language:'pt-BR',percentage:100}]};
+assert.equal((await detectCaptureLanguage(english)).language,'pt-BR');assert.equal((await readerLanguage(english)).sourceLanguageTag,'pt-BR','a reliable regional observation retains its exact tag');
+nativeOverride={isReliable:false,languages:[{language:'en',percentage:100}]};
+assert.equal((await detectCaptureLanguage(english)).language,null,'unreliable native guesses are not asserted as a detected language');
+assert.deepEqual(await readerLanguage(english),{supportLanguageTag:'en',sourceLanguageTag:null,alreadyReadable:false});
+assert.deepEqual(await readerLanguage(french,'en'),{supportLanguageTag:'en',sourceLanguageTag:null,alreadyReadable:false},'an unreliable foreign paragraph does not inherit the English page and skip translation');
+assert.equal((await detectCaptureLanguage(french,page('en'))).language,null,'capture also keeps a longer uncertain paragraph distinct from its page declaration');
+nativeOverride={isReliable:true,languages:[{language:'und',percentage:90},{language:'en',percentage:10}]};
+assert.equal((await detectCaptureLanguage(english)).language,null,'a dominant unknown result is not filtered away to claim English');
+assert.equal((await readerLanguage(french,'en')).alreadyReadable,false,'a dominant unknown result cannot become readable through the page declaration');
+nativeOverride=undefined;nativeFailed=true;
+assert.equal((await detectCaptureLanguage(english)).language,null);
+assert.deepEqual(await readerLanguage(french,'en'),{supportLanguageTag:'en',sourceLanguageTag:null,alreadyReadable:false},'native failure does not assert the page language for a longer foreign paragraph');
+assert.equal((await detectCaptureLanguage(french,page('en'))).language,null);
+assert.deepEqual(await detectCaptureLanguage('Bonjour.',page('fr')),{language:'fr',languageSource:'declared',languageConfidence:1},'a short selection can still use an actual source declaration');
+assert.equal((await readerLanguage('','fr')).sourceLanguageTag,'fr','an explicitly declared subtitle track remains usable without a text sample');
+nativeFailed=false;
 storage.readingLanguageRoutes=routeCollection('zh-CN','en');
 
 // A surface the learner is reading for a language nobody has published a pair
 // for falls back to the pair the product ships, the same one the library uses.
 storage.readingLanguageRoutes=undefined;
-assert.deepEqual(await readerLanguage(english),{supportLanguageTag:'zh-CN',alreadyReadable:false});
+assert.deepEqual(await readerLanguage(english),{supportLanguageTag:'zh-CN',sourceLanguageTag:'en',alreadyReadable:false});
 storage.readingLanguageRoutes=routeCollection('es','es');
 assert.equal((await readerLanguage(chinese)).supportLanguageTag,'es','the same language may be both Target and Support');
 storage.readingLanguageRoutes=routeCollection('zh-CN','en');
@@ -104,6 +126,9 @@ assert.deepEqual(sensaLanguageRolesForTag('zh-CN',{supportLanguageTag:'zh-CN',ta
 assert.deepEqual(sensaLanguageRolesForTag('en',{supportLanguageTag:'zh-CN',targetLanguageTag:'en'}),['target']);
 assert.deepEqual(sensaLanguageRolesForTag('es',{supportLanguageTag:'zh-CN',targetLanguageTag:'en'}),[]);
 assert.deepEqual(declaredCaptureLanguage(page('zh-Hans-CN')),{language:'zh-Hans-CN',languageSource:'declared',languageConfidence:1},'a declaration keeps its exact canonical tag');
+assert.equal((await readerLanguage(short,'zh-Hans-CN')).sourceLanguageTag,'zh-Hans-CN','reading transport does not fold a source declaration to a catalog primary tag');
+assert.equal(declaredCaptureLanguage(page('und')).language,null,'an unknown declaration is not an observed language');
+assert.equal((await readerLanguage(short,'und')).sourceLanguageTag,null);
 
 console.log('PASS: reading skips only exact Support-Language observations, preserves unsupported detector answers and confidence, keeps exact declared tags, permits same-language Target/Support, and never withholds a translation when the answer is uncertain.');
 

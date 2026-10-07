@@ -251,6 +251,9 @@ const fastWithMemory = [
 ] as const;
 
 const browserTests = [
+  'browser/extension-subtitle-surface',
+  'browser/extension-reading-surface',
+  'browser/browser-port', 'browser/extension-popup',
   'browser/retention-review-capacity',
   'browser/extension-intake-journey',
   'browser/practice-source-loading',
@@ -273,10 +276,12 @@ const databaseTests = [
 ] as const;
 
 const manualTests = [
-  'browser/browser-port', 'browser/extension-popup', 'integration/local-book',
+  'integration/local-book',
 ] as const;
 
 const playwrightPaths = new Set<string>([
+  'browser/extension-subtitle-surface',
+  'browser/extension-reading-surface',
   'browser/retention-review-capacity',
   'browser/extension-intake-journey',
   'browser/practice-source-loading',

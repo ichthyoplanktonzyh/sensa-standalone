@@ -1,4 +1,5 @@
 {
+  "videoCaptionLimit": "Dane napisów są zbyt duże, aby wczytać je w całości.",
   "openInbox": "Otwórz skrzynkę odbiorczą Sensa",
   "deliveryHint": "Po zapisaniu otwórz Sensa w tej samej przeglądarce. Zapisany materiał automatycznie pojawi się w skrzynce odbiorczej.",
   "savedInbox": "Przekazano do skrzynki odbiorczej Sensa.",
@@ -167,7 +168,7 @@
   "videoTranslation": "Tylko tłumaczenie (automatyczne)",
   "videoHint": "Wczytaj napisy, a następnie zaznacz wyrażenie, aby je wyjaśnić lub zapisać. Zaznaczenie wstrzymuje wideo.",
   "videoOwnFile": "Użyj własnego pliku z napisami",
-  "videoFileHint": "Jeśli napisy nie są dostępne, wczytaj plik VTT lub SRT bieżącego wideo. Transkrypcja AI w chmurze nie jest jeszcze dostępna.",
+  "videoFileHint": "Jeśli napisy nie są dostępne, wczytaj plik VTT lub SRT bieżącego wideo.",
   "videoLoadFile": "Wczytaj plik z napisami",
   "videoRetry": "Ponów tłumaczenie",
   "videoAd": "Trwa reklama. Przechwytywanie napisów jest wstrzymane.",

@@ -47,7 +47,10 @@ if (!installed.__sensaCaptureInstalled) {
   }
   chrome.runtime.onMessage.addListener(message => {
     if (message.kind !== 'reading') return;
-    const changed=accountId!==message.accountId||JSON.stringify(preferences)!==JSON.stringify(message.preferences??defaultPreferences);
+    // A refresh is invalidation, not a new permission to read. A delayed
+    // storage notification must never reopen a mode the learner just stopped.
+    if(message.refresh===true&&(!enabled||accountId!==message.accountId))return;
+    const changed=message.refresh===true||accountId!==message.accountId||JSON.stringify(preferences)!==JSON.stringify(message.preferences??defaultPreferences);
     if(changed){close();stopSurfaces();subtitlesRequested=false;}
     preferences=message.preferences??defaultPreferences;
     accountId = message.accountId ?? null;

@@ -4,7 +4,7 @@
  * container, local API, and local Web server. This deliberately does not reuse
  * scripts/local/sensaLocal.mjs's long-lived owner database.
  */
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
@@ -36,6 +36,10 @@ const webLog = join(logDirectory, 'web.log');
 const migrationLog = join(logDirectory, 'migration.log');
 const modelRuntimeBuildLog = join(logDirectory, 'model-runtime-build.log');
 const extensionBuildLog = join(logDirectory, 'extension-build.log');
+const extensionPath=selectedSuites.includes('extension')?join(runDirectory,'extension'):'';
+// Chromium's unpacked ID on the supported Unix hosts is SHA256(path), first
+// 16 bytes mapped from hex to a–p. Authorize only this run's exact extension.
+const extensionOrigin=extensionPath?'chrome-extension://'+createHash('sha256').update(extensionPath).digest('hex').slice(0,32).replace(/[0-9a-f]/gu,char=>String.fromCharCode(97+parseInt(char,16))):'';
 const mediaPrepareLog = join(logDirectory, 'media-prepare.log');
 const testLogs = {};
 const children = new Set();
@@ -208,7 +212,9 @@ async function createDisposableDatabase() {
   const databaseUrl = `postgresql://postgres:${password}@127.0.0.1:${port}/${database}`;
 
   for (let attempt = 0; attempt < 90; attempt += 1) {
-    const ready = result('docker', ['exec', container, 'pg_isready', '-U', 'postgres', '-d', database]);
+    // The official image's initialization server accepts local sockets before
+    // its final TCP server starts. Migrations use TCP, so readiness must too.
+    const ready = result('docker', ['exec', container, 'pg_isready', '-h', '127.0.0.1', '-U', 'postgres', '-d', database]);
     if (ready.status === 0) return { container, database, databaseUrl };
     await new Promise(resolveDelay => setTimeout(resolveDelay, 1000));
   }
@@ -356,6 +362,7 @@ async function main() {
     DATABASE_URL: database.databaseUrl,
     SENSA_LOCAL_SERVICE_PORT: String(servicePort),
     SENSA_LOCAL_WEB_ORIGINS: webOrigin,
+    ...(extensionOrigin?{SENSA_LOCAL_EXTENSION_ORIGINS:extensionOrigin}:{}),
     SENSA_REGISTRATION_POLICY: 'registered',
     SENSA_LOCAL_MATRIX_ACCEPTANCE: '1',
     SENSA_UNLIMITED_MODEL_USAGE: 'true',
@@ -398,9 +405,7 @@ async function main() {
     return;
   }
 
-  let extensionPath = '';
   if (selectedSuites.includes('extension')) {
-    extensionPath = join(runDirectory, 'extension');
     mkdirSync(extensionPath, { recursive: true, mode: 0o700 });
     runLogged(process.execPath, ['build.mjs'], extensionBuildLog, {
       cwd: join(root, 'apps/browser-extension'),
@@ -429,6 +434,7 @@ async function main() {
     SENSA_LIVE_CASE_START: caseStart,
     ...(limit ? { SENSA_LIVE_CASE_LIMIT: limit } : {}),
     ...(extensionPath ? { SENSA_LIVE_EXTENSION_PATH: extensionPath } : {}),
+    ...(extensionOrigin ? { SENSA_LIVE_EXTENSION_ORIGIN: extensionOrigin } : {}),
   };
 
   writeResults(state, { status: 'running' });

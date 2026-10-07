@@ -1,11 +1,11 @@
 import {runReading,readingError} from './readingClient';
-import {declaredCaptureLanguage,detectCaptureLanguage,readerLanguage} from './language';
+import {declaredCaptureLanguage,detectBlockLanguage,minSkimmableCharacters,readerLanguage} from './language';
 import {speakText,speechFailureText} from './speech';
 import {t,extensionLanguage} from './i18n';
 import {defaultPreferences,type ReadingPreferences} from './preferences';
 const blocks='p,li,blockquote,td,th,dt,dd,h1,h2,h3,h4,h5,h6,figcaption,div';
 const excluded='input,textarea,select,button,nav,pre,code,script,style,[contenteditable]:not([contenteditable="false"]),[translate="no"],[data-sensa-ui]';
-type Item={source:HTMLElement;text:string;context:string;translation:HTMLElement;hidden:boolean;state:'waiting'|'running'|'ready'|'failed'|'skipped';forced:boolean};
+type Item={source:HTMLElement;text:string;context:string;sourceLanguage:string|null;translation:HTMLElement;hidden:boolean;state:'waiting'|'running'|'ready'|'failed'|'skipped';forced:boolean};
 /**
  * The nearest text before `element` that matches `selector`.
  *
@@ -66,7 +66,7 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean,pref
    * actually in rather than with the one this panel's own buttons are written in. */
   let supportLanguage:string|null=null;
   const cache=new Map<string,string>();
-  const requests=new Map<string,Promise<string>>();
+  const requests=new Map<string,{promise:Promise<string>;controller:AbortController}>();
   let hovered:HTMLElement|null=null,scanTimer:ReturnType<typeof setTimeout>|null=null;
   const url=location.href;
   const valid=()=>!disposed&&isAuthorized()&&location.href===url;
@@ -90,15 +90,16 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean,pref
     // test quietly refused to translate whole languages.
     if(text.trim().length<2||text.length>12000||!/\p{L}{2}/u.test(text))return;
     const translation=document.createElement('div');translation.dataset.sensaUi='translation';translation.style.cssText='white-space:pre-wrap;line-height:1.7;padding:8px 0;color:#405176;font-family:system-ui';
-    const item:Item={source:element,text,context:surroundingText(element),translation,hidden:false,state:'waiting',forced};items.set(element,item);visibility.observe(element);
+    const item:Item={source:element,text,context:surroundingText(element),sourceLanguage:null,translation,hidden:false,state:'waiting',forced};items.set(element,item);visibility.observe(element);
   }
   function nearby(source:HTMLElement){const rect=source.getBoundingClientRect();return rect.bottom>=-200&&rect.top<=innerHeight+200;}
   function scan(){
     if(!valid())return;
     for(const [source,item] of items){
-      if(!source.isConnected||source.textContent!==item.text){restoreItem(item);items.delete(source);}
+      if(!source.isConnected||source.textContent!==item.text||surroundingText(source)!==item.context){restoreItem(item);items.delete(source);}
       else if(item.state==='waiting'&&!nearby(source)){visibility.unobserve(source);items.delete(source);}
     }
+    for(const [key,request] of requests)if(![...items.values()].some(item=>requestKey(item.text,item.context,item.sourceLanguage)===key)){request.controller.abort();requests.delete(key);}
     if(active)document.querySelectorAll<HTMLElement>(blocks).forEach(element=>add(element));
     drain();
   }
@@ -125,16 +126,18 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean,pref
    * it is what a paragraph too short to detect inherits, and it is what this
    * panel tells the request the quoted text is in.
    */
-  const pageLanguage=()=>declaredCaptureLanguage().language;
-  async function translationFor(text:string,context:string){
-    const cached=cache.get(text);if(cached!==undefined)return cached;
-    const existing=requests.get(text);if(existing)return existing;
-    const run=generation;
+  const surfaceLanguage=(element:HTMLElement)=>declaredCaptureLanguage({documentElement:element.closest<HTMLElement>('[lang]')??document.documentElement}).language;
+  const requestKey=(text:string,context:string,language:string|null)=>JSON.stringify([text,context,language]);
+  async function translationFor(text:string,context:string,language:string|null){
+    const key=requestKey(text,context,language),cached=cache.get(key);if(cached!==undefined)return cached;
+    const existing=requests.get(key);if(existing)return existing.promise;
+    const run=generation,controller=new AbortController();
     const request=runReading(accountId,'page',text,context,'',crypto.randomUUID(),partial=>{
       if(!valid()||run!==generation)return;
-      for(const item of items.values())if(item.text===text&&item.state==='running'&&item.source.isConnected&&item.source.textContent===text)item.translation.textContent=partial;
-    },undefined,pageLanguage());requests.set(text,request);
-    try{return await request;}finally{if(requests.get(text)===request)requests.delete(text);}
+      for(const item of items.values())if(requestKey(item.text,item.context,item.sourceLanguage)===key&&item.state==='running'&&item.source.isConnected&&item.source.textContent===text&&surroundingText(item.source)===context)item.translation.textContent=partial;
+    },controller.signal,language);requests.set(key,{promise:request,controller});
+    try{const translated=await request;if(valid()&&run===generation){cache.delete(key);cache.set(key,translated);if(cache.size>150)cache.delete(cache.keys().next().value!);}return translated;}
+    finally{if(requests.get(key)?.promise===request)requests.delete(key);}
   }
   async function translateItem(item:Item,run:number){
     /**
@@ -151,27 +154,26 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean,pref
       // Asked per paragraph, not per page: an article that quotes another
       // language holds paragraphs in two of them, and skipping is a decision
       // about the paragraph in hand.
-      if(!item.forced){
-        const reader=await readerLanguage(item.text,pageLanguage());
-        if(reader)supportLanguage=reader.supportLanguageTag;
-        if(reader?.alreadyReadable){item.state='skipped';return;}
-      }
+      const declared=surfaceLanguage(item.source),reader=await readerLanguage(item.text,declared);
+      if(!valid()||run!==generation||items.get(item.source)!==item||!item.source.isConnected||item.source.textContent!==item.text||surroundingText(item.source)!==item.context)return;
+      item.sourceLanguage=reader?reader.sourceLanguageTag:item.text.trim().length<minSkimmableCharacters?declared:null;
+      if(reader)supportLanguage=reader.supportLanguageTag;
+      if(!item.forced&&reader?.alreadyReadable){item.state='skipped';return;}
       if(supportLanguage)item.translation.setAttribute('lang',supportLanguage);
       placeholder=setTimeout(()=>{if(item.state==='running'&&!item.translation.textContent){item.translation.textContent=t('pageTranslating');item.translation.setAttribute('aria-busy','true');}},200);
       item.source.after(item.translation);feedback();
-      const translated=await translationFor(item.text,item.context);
-      if(!valid()||run!==generation||items.get(item.source)!==item||!item.source.isConnected||item.source.textContent!==item.text){item.translation.remove();return;}
-      cache.delete(item.text);cache.set(item.text,translated);if(cache.size>150)cache.delete(cache.keys().next().value!);
+      const translated=await translationFor(item.text,item.context,item.sourceLanguage);
+      if(!valid()||run!==generation||items.get(item.source)!==item||!item.source.isConnected||item.source.textContent!==item.text||surroundingText(item.source)!==item.context){item.translation.remove();return;}
       item.translation.textContent=translated;item.state='ready';setMode(item);
     }catch(e){
       if(valid()&&run===generation&&items.get(item.source)===item&&item.source.isConnected&&item.source.textContent===item.text){item.state='failed';item.translation.textContent=readingError(e);}
     }finally{
       if(placeholder!==null)clearTimeout(placeholder);
-      running--;item.translation.removeAttribute('aria-busy');
-      if(valid()){if(items.size)feedback();drain();}
+      item.translation.removeAttribute('aria-busy');
+      if(run===generation){running--;if(valid()){if(items.size)feedback();drain();}}
     }
   }
-  function restore(){generation++;active=false;for(const item of items.values())restoreItem(item);items.clear();retry.hidden=true;status.textContent=t('pageRestored');}
+  function restore(){generation++;active=false;for(const request of requests.values())request.controller.abort();requests.clear();running=0;for(const item of items.values())restoreItem(item);items.clear();retry.hidden=true;status.textContent=t('pageRestored');}
   root.querySelector('[data-action="translate"]')!.addEventListener('click',()=>{active=true;scan();});
   root.querySelector('[data-action="mode"]')!.addEventListener('click',()=>{only=!only;root.querySelector('[data-action="mode"]')!.textContent=t(only?'pageBilingual':'pageOnlyTranslation');for(const item of items.values())setMode(item);});
   root.querySelector('[data-action="restore"]')!.addEventListener('click',restore);
@@ -211,8 +213,8 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean,pref
   /** The language of one block: what the detector says, and the page's own
    * declaration only for text too short to detect — the order the skip rule uses,
    * because a sentence quoted in another language deserves its own voice. */
-  async function spokenLanguage(text:string){
-    return (await detectCaptureLanguage(text))?.language ?? pageLanguage();
+  async function spokenLanguage(text:string,element:HTMLElement){
+    return (await detectBlockLanguage(text,{documentElement:element.closest<HTMLElement>('[lang]')??document.documentElement})).language;
   }
   async function readAloud(){
     const queue=spokenBlocks();
@@ -222,16 +224,18 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean,pref
     for(let index=0;index<queue.length;index++){
       if(run!==speechRun)return;
       const element=queue[index]!,text=(element.textContent??'').trim();
-      const language=await spokenLanguage(text);
+      const language=await spokenLanguage(text,element);
       if(run!==speechRun)return;
-      if(!language)continue;
+      if(!language){stopReadingAloud(speechFailureText({ok:false,reason:'no_language',languageTag:null}));return;}
       element.setAttribute('data-sensa-speaking','');element.scrollIntoView({block:'center'});
       speechStatus.textContent=t('pageSpeakingParagraph',{index:index+1,total:queue.length,preview:text.slice(0,40)+(text.length>40?'…':'')});
-      const attempt=await speakText(text,language,{rate:preferences.speechRate,voice:preferences.speechVoice,onEnd:()=>finish?.()});
-      if(run!==speechRun)return;
-      if(!attempt.ok){speechStatus.textContent=speechFailureText(attempt);stopReadingAloud();return;}
+      let end!:()=>void;const ended=new Promise<void>(resolve=>{end=resolve;});finish=end;
+      const attempt=await speakText(text,language,{rate:preferences.speechRate,voice:preferences.speechVoice,onEnd:end});
+      if(run!==speechRun){if(attempt.ok)attempt.stop();return;}
+      if(!attempt.ok){stopReadingAloud(speechFailureText(attempt));return;}
       speaking=attempt;
-      await new Promise<void>(resolve=>{finish=resolve;});
+      await ended;
+      if(run!==speechRun)return;
       speaking=null;finish=null;
       element.removeAttribute('data-sensa-speaking');
     }
@@ -240,7 +244,7 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean,pref
   /** Stopping clears the highlight with the speech: a page left with one paragraph
    * outlined looks like something is still happening. */
   function stopReadingAloud(message=''){
-    speechRun++;reading=false;speaking?.stop();speaking=null;finish=null;
+    speechRun++;reading=false;speaking?.stop();speaking=null;finish?.();finish=null;
     for(const element of document.querySelectorAll('[data-sensa-speaking]'))element.removeAttribute('data-sensa-speaking');
     speak.textContent=t('pageSpeak');
     speechStatus.hidden=message==='';speechStatus.textContent=message;
@@ -267,6 +271,6 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean,pref
     // Translation feedback is our own mutation, not new host content to rescan.
     if(records.some(record=>!owned(record.target)&&(record.type==='characterData'||[...record.addedNodes,...record.removedNodes].some(node=>!owned(node)))))scheduleScan();
   });
-  observer.observe(document.body,{childList:true,subtree:true,characterData:true});
+  observer.observe(document.documentElement,{childList:true,subtree:true,characterData:true});
   return {host,destroy(){disposed=true;restore();cache.clear();observer.disconnect();visibility.disconnect();if(scanTimer)clearTimeout(scanTimer);document.removeEventListener('pointerover',mouse);document.removeEventListener('keydown',key);document.removeEventListener('scroll',scroll,true);stopReadingAloud();host.remove();hideStyle.remove();}};
 }
