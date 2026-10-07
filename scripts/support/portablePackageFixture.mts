@@ -23,6 +23,7 @@ export type PortablePackageFixtureOptions=Readonly<{
   targetLanguage?:string;
   supportLanguage?:string;
   expression?:string;
+  example?:string;
   expressionKind?:SensaPortableLightweightPackage['targetExpression']['expressionKind'];
   meaning?:string;
   scene?:string;
@@ -130,10 +131,10 @@ export const portablePackageFixture=(options:PortablePackageFixtureOptions={})=>
       },
       sceneBridge:{text:'把刚才的经验放进下面这句话。'},
       sceneRealization:{
-        example:expression,
+        example:options.example??expression,
         translation:meaning,
-        targetStart:0,
-        targetEnd:expression.length,
+        targetStart:(options.example??expression).indexOf(expression),
+        targetEnd:(options.example??expression).indexOf(expression)+expression.length,
       },
       optional:{},
     },

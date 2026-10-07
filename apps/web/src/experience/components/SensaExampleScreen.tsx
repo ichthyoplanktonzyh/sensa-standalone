@@ -31,6 +31,7 @@ export function SensaExampleScreen({
   screenId = 's-example',
   onClose,
   onOpenDict,
+  lookupDictionary,
   toast,
 }: ExampleScreenProps) {
   const senseDetails = useMemo(() => (
@@ -251,7 +252,7 @@ export function SensaExampleScreen({
                       displayWord: token.cleanWord,
                       load: async (signal) => {
                         const { lookupDictionaryEntry } = await import('../services/quickDict');
-                        const entry = await lookupDictionaryEntry(request, { signal });
+                        const entry = await (lookupDictionary??lookupDictionaryEntry)(request, { signal });
                         if (!entry) toast(cardText('thisWordIsNotInTheDictionary'));
                         return entry;
                       },

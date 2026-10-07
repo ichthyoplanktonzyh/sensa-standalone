@@ -251,6 +251,8 @@ const fastWithMemory = [
 ] as const;
 
 const browserTests = [
+  'browser/reference-query-lifecycle',
+  'browser/reference-assessment-boundary',
   'browser/extension-subtitle-surface',
   'browser/extension-reading-surface',
   'browser/browser-port', 'browser/extension-popup',
@@ -280,6 +282,8 @@ const manualTests = [
 ] as const;
 
 const playwrightPaths = new Set<string>([
+  'browser/reference-query-lifecycle',
+  'browser/reference-assessment-boundary',
   'browser/extension-subtitle-surface',
   'browser/extension-reading-surface',
   'browser/retention-review-capacity',

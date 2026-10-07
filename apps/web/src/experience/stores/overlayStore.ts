@@ -2,6 +2,7 @@ import { create } from 'zustand';
 export interface RuntimePersonalContent { senseKey: string; lemma: string; guideLabelL1: string; }
 import type { ReferenceExampleDeck } from '../components/ReferenceExampleViewer';
 import type { QuickDictEntry, Word } from '../types';
+import type { SensaPinnedLanguageContext } from '@sensa/contracts/sensa';
 
 /**
  * Every overlay that floats above the shell: the dictionary sheet, the note
@@ -45,8 +46,9 @@ export interface LearningSceneEditorTarget {
 export interface OverlayState {
   /** Lexical Reference detail. */
   readonly dictModalWord: DictSubject | null;
+  readonly dictModalLanguages: SensaPinnedLanguageContext | null;
   readonly referenceExampleDeck: ReferenceExampleDeck | null;
-  openDictModal: (word: DictSubject) => void;
+  openDictModal: (word: DictSubject,languages?:SensaPinnedLanguageContext) => void;
   closeDictModal: () => void;
   setReferenceExampleDeck: (deck: ReferenceExampleDeck | null) => void;
 
@@ -94,9 +96,10 @@ let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
 export const useOverlayStore = create<OverlayState>((set) => ({
   dictModalWord: null,
+  dictModalLanguages: null,
   referenceExampleDeck: null,
-  openDictModal: (word) => set({ dictModalWord: word }),
-  closeDictModal: () => set({ referenceExampleDeck: null, dictModalWord: null }),
+  openDictModal: (word,languages) => set({ dictModalWord: word,dictModalLanguages:languages??null,referenceExampleDeck:null }),
+  closeDictModal: () => set({ referenceExampleDeck: null, dictModalWord: null,dictModalLanguages:null }),
   setReferenceExampleDeck: (referenceExampleDeck) => set({ referenceExampleDeck }),
 
   noteModalWord: null,

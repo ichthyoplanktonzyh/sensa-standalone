@@ -256,27 +256,12 @@ export function NovelTransferCard({
                 <p className="mt-3 text-body-support leading-6">{scenario.setupL1}</p>
               </div>
               <div className="rounded-control bg-surface-subtle p-4">
-                <span className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary">{cardText('englishContext')}<small className="ml-2 font-normal">{cardText('tapWordsForDefinitions')}</small></span>
+                <span className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary">{cardText('englishContext')}</span>
                 <div className="mt-3 space-y-2 font-language text-body leading-7">
                   {setupClauses.map((clause, clauseIndex) => (
                     <span key={`${scenario.id}:clause:${clauseIndex}`}>
                       <ClickableSentence
                         sentenceHtml={clause}
-                        activeTokenIdx={null}
-                        onWordClick={(token, tokenIdx) => {
-                          openLookup({
-                            tokenIdx,
-                            displayWord: token.cleanWord,
-                            load: (signal) => lookupToken(
-                              token,
-                              {
-                                exampleKey: `${scenario.id}:setup:${clauseIndex}`,
-                                textL2: clause,
-                              },
-                              { signal },
-                            ),
-                          });
-                        }}
                       />
                     </span>
                   ))}

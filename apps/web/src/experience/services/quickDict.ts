@@ -27,7 +27,7 @@ export async function lookupDictionary(
   input: DictionaryLookupInput,
   options: DictionaryLookupOptions = {},
 ): Promise<DictionaryLookupResponse> {
-  const referenceResult = await lookupReference(input, { signal: options.signal });
+  const referenceResult = await lookupReference(input, options);
 
   return {
     input,

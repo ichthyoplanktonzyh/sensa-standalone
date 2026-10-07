@@ -36,12 +36,13 @@ const spoken:{text:string;lang:string;voice:string|undefined}[]=[];
 /** Every audio element the service tried to play. */
 const played:string[]=[];
 const voices=[
-  {name:'Samantha',lang:'en-US'},
-  {name:'Daniel',lang:'en-GB'},
-  {name:'Mónica',lang:'es-ES'},
-  {name:'Google español',lang:'es-ES'},
-  {name:'Kyoko',lang:'ja-JP'},
+  {name:'Samantha',lang:'en-US',localService:true},
+  {name:'Daniel',lang:'en-GB',localService:true},
+  {name:'Mónica',lang:'es-ES',localService:true},
+  {name:'Google español',lang:'es-ES',localService:true},
+  {name:'Kyoko',lang:'ja-JP',localService:true},
 ];
+let speechFails=false,speechHeld=false;
 
 class FakeUtterance {
   text:string;lang='';rate=1;pitch=1;voice:{name:string;lang:string}|null=null;
@@ -54,15 +55,15 @@ class FakeAudio {
   play(){return Promise.reject(new Error('fixture audio cannot play'));}
   pause(){}
 }
-const speechSynthesis={
+const speechSynthesis=Object.assign(new EventTarget(),{
   getVoices:()=>voices,
-  speak:(utterance:FakeUtterance)=>{spoken.push({text:utterance.text,lang:utterance.lang,voice:utterance.voice?.name});queueMicrotask(()=>utterance.onend?.());},
+  speak:(utterance:FakeUtterance)=>{spoken.push({text:utterance.text,lang:utterance.lang,voice:utterance.voice?.name});queueMicrotask(()=>{if(speechFails)utterance.onerror?.();else if(!speechHeld)utterance.onend?.();});},
   cancel(){},
   pause(){},
   resume(){},
   speaking:false,
   paused:false,
-};
+});
 /** The library broadcasts on `window`, so the stub has to be a real event
  * target as well as the synthesizer holder. */
 const fakeWindow=new EventTarget() as EventTarget&{speechSynthesis:typeof speechSynthesis};
@@ -148,6 +149,45 @@ try{
   await api.audioService.playAudioUrl('https://example.invalid/hola.mp3','hola','us');
   assert.ok(played.at(-1)?.endsWith('/hola.mp3'),'a recorded asset is played as given');
   assert.equal(spoken.at(-1)!.lang,'es-ES','the fallback voice follows the target language too');
+
+  // Reference carries its own language. Changing the Route cannot change that
+  // source, or silently turn a broken provider recording into another voice.
+  await api.audioService.playReferencePronunciation({text:'hello',languageTag:'en'});
+  assert.equal(spoken.at(-1)!.lang,'en-US');assert.equal(spoken.at(-1)!.voice,'Samantha');
+  assert.equal((await api.activeSpeechLanguage()).speechLocale,'es-ES','Reference playback never changes the Route');
+  await api.audioService.playReferencePronunciation({text:'hello',languageTag:'en-GB'});assert.equal(spoken.at(-1)!.lang,'en-GB');assert.equal(spoken.at(-1)!.voice,'Daniel');
+  const beforeMissing=spoken.length;
+  await assert.rejects(api.audioService.playReferencePronunciation({text:'bonjour',languageTag:'fr'}),/reference_pronunciation_unavailable/u);
+  await assert.rejects(api.audioService.playReferencePronunciation({text:'unknown',languageTag:'xx-unknown'}),/reference_pronunciation_unavailable/u);
+  const savedVoices=voices.splice(0);
+  try{await assert.rejects(api.audioService.playReferencePronunciation({text:'hello',languageTag:'en'}),/reference_pronunciation_unavailable/u);}
+  finally{voices.push(...savedVoices);}
+  assert.equal(spoken.length,beforeMissing,'missing source voices never ask the browser to guess a voice');
+  const delayedVoices=voices.splice(0);
+  try{
+    const reading=api.audioService.playReferencePronunciation({text:'hello',languageTag:'en'});
+    assert.equal(spoken.length,beforeMissing,'an initially empty inventory does not guess a voice');
+    voices.push(...delayedVoices);speechSynthesis.dispatchEvent(new Event('voiceschanged'));
+    await reading;
+    assert.equal(spoken.at(-1)!.voice,'Samantha','voiceschanged enables the actual source voice');
+    voices.splice(0);
+    const cancelled=api.audioService.playReferencePronunciation({text:'never speak',languageTag:'en'});
+    api.audioService.stop();await cancelled;
+    const beforeCancelled=spoken.length;
+    voices.push(...delayedVoices);speechSynthesis.dispatchEvent(new Event('voiceschanged'));
+    await Promise.resolve();assert.equal(spoken.length,beforeCancelled,'stop settles the inventory wait without late speech');
+    voices.splice(0);
+    const readyThenStopped=api.audioService.playReferencePronunciation({text:'also never speak',languageTag:'en'});
+    voices.push(...delayedVoices);speechSynthesis.dispatchEvent(new Event('voiceschanged'));api.audioService.stop();
+    await readyThenStopped;assert.equal(spoken.length,beforeCancelled,'stop also wins after inventory arrival but before the playback continuation');
+  }finally{voices.splice(0,voices.length,...delayedVoices);}
+  const beforeBrokenRecording=spoken.length;
+  await assert.rejects(api.audioService.playReferencePronunciation({text:'hello',languageTag:'en',audioUrl:'https://example.invalid/broken-reference.mp3'}),/reference_pronunciation_unavailable/u);
+  assert.equal(spoken.length,beforeBrokenRecording,'a failed source recording is not silently replaced with TTS');
+  speechFails=true;
+  try{await assert.rejects(api.audioService.playReferencePronunciation({text:'hello',languageTag:'en'}),/reference_pronunciation_unavailable/u);}finally{speechFails=false;}
+  speechHeld=true;
+  try{const reading=api.audioService.playReferencePronunciation({text:'hello',languageTag:'en'});api.audioService.stop();await reading;}finally{speechHeld=false;}
 
   // Back to English: nothing about the switch is cached past a playback.
   await api.setActiveLanguageRoute(id(),englishRoute.id);

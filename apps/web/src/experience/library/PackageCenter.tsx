@@ -248,7 +248,8 @@ export function PackageLibraryDetailScreen({active,packageKey,c,onBack,onLearnin
  active:boolean;packageKey:string|null;c:Controller;onBack:()=>void;onLearning:()=>void;onTarget:(id:string)=>void;
 }){
  const projection=useMemo(()=>buildPackageCenterItems(c),[c.catalog,c.packages,c.enrollments,c.languageContext.targetLanguageTag,c.languageContext.supportLanguageTag]);
- return <PackageDetail screenId="s-library-package" active={active} item={projection.library.find(item=>item.listKey===packageKey)} c={c} onBack={onBack} onLearning={onLearning} onTarget={onTarget}/>;
+ const item=projection.library.find(item=>item.listKey===packageKey)??projection.library.find(item=>item.installed.some(pack=>pack.key===packageKey));
+ return <PackageDetail screenId="s-library-package" active={active} item={item} c={c} onBack={onBack} onLearning={onLearning} onTarget={onTarget}/>;
 }
 
 export function PackageLibraryScreen({active,c,onBack,onCatalog,onOpenBook,onOpenPackage,onPublisher}:{

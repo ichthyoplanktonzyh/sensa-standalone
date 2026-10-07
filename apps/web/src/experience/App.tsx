@@ -45,6 +45,7 @@ export default function App(){
  const openContentExample=useCallback((item:PracticeSenseItem)=>goMain('s-content-example',{exampleId:item.senseId}),[goMain]);
 
  const dictModalWord=useOverlayStore(state=>state.dictModalWord);
+ const dictModalLanguages=useOverlayStore(state=>state.dictModalLanguages);
  const referenceExampleDeck=useOverlayStore(state=>state.referenceExampleDeck);
  const openDictModal=useOverlayStore(state=>state.openDictModal);
  const closeDictModal=useOverlayStore(state=>state.closeDictModal);
@@ -76,7 +77,7 @@ export default function App(){
   's-content-sense':active=>params.meaningId&&params.alignmentId?<ContentPersonalReferenceDetailScreen active={active} meaningId={params.meaningId} alignmentId={params.alignmentId} onBack={backMain} onEditNote={openNoteEditor} toast={toast}/>:params.targetId?<ContentLearningDetailScreen active={active} targetId={params.targetId} onBack={backMain} onEditNote={openNoteEditor} toast={toast}/>:<ContentSenseDetailScreen
     active={active} senseId={params.senseId??null} onBack={backMain} onOpenExample={openContentExample}
     onOpenSense={openContentSense}
-    onOpenDictionary={item=>openDictModal(item.sourceWord)}
+    onOpenDictionary={item=>openDictModal(item.sourceWord,item.referenceLanguages)}
     onEditNote={item=>openNoteEditor(item.sourceWord,item.senseId,item.meaning)} toast={toast}/>,
   's-content-example':active=><ContentExampleDetailScreen
     active={active} exampleId={params.exampleId??null} onBack={backMain}
@@ -99,7 +100,7 @@ export default function App(){
     </ScreenHost>
     <EdgeSwipeBack enabled={viewMode==='main'&&mainStack.length>0&&!overlayOpen} onBack={backMain}/>
     <Suspense fallback={null}>
-    {dictModalWord&&<ReferenceDictionaryScreen active={!referenceExampleDeck} wordData={dictModalWord} onClose={closeDictModal} onOpenExamples={setReferenceExampleDeck}/>}
+    {dictModalWord&&<ReferenceDictionaryScreen active={!referenceExampleDeck} wordData={dictModalWord} languages={dictModalLanguages??undefined} onClose={closeDictModal} onOpenExamples={setReferenceExampleDeck}/>}
     {referenceExampleDeck&&<ReferenceExampleViewer active deck={referenceExampleDeck} onClose={()=>setReferenceExampleDeck(null)}/>}
     {noteModalWord&&noteModalSense&&<NoteEditorModal active wordData={noteModalWord} senseId={noteModalSense.senseId} senseMeaning={noteModalSense.meaning} onClose={closeNoteEditor} toast={toast}/>}
     {sceneEditorTarget&&<SceneEditorModal

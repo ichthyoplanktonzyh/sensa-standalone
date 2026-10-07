@@ -4,6 +4,8 @@ import type { QuickDictEntry } from '../types';
 import { audioService } from '../services/audioService';
 import { SensaOverlayLayout } from '../ui/SensaComponents';
 import {useTranslation} from 'react-i18next';
+import {cardText} from '../../i18n/originalCards';
+import {referencePronunciationPresentation} from '../reference/referencePronunciation';
 
 interface QuickDictPopupProps {
   entry: QuickDictEntry;
@@ -17,8 +19,11 @@ export function QuickDictPopup({ entry, onClose, onViewDetail, toast }: QuickDic
   const {t}=useTranslation('learning');
   const [isPlaying, setIsPlaying] = useState(false);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const playback=useRef(0);
+  const pronunciation=referencePronunciationPresentation(entry);
   const isLoading = entry.lookupState === 'loading';
   const hasError = entry.lookupState === 'error';
+  const isMissing = entry.lookupState === 'missing';
   const targetLanguage = entry.referenceLookup?.release.targetLanguage;
   const learnerLanguage = entry.referenceLookup?.release.learnerLocale;
   const resolution = entry.referenceLookup?.contextualResolution;
@@ -42,20 +47,23 @@ export function QuickDictPopup({ entry, onClose, onViewDetail, toast }: QuickDic
     return () => {
       cancelAnimationFrame(frame);
       window.removeEventListener('keydown', handleKeyDown);
+      playback.current+=1;audioService.stop();
       previousFocus?.focus();
     };
   }, [onClose]);
 
   const handlePlayAudio = (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-    if (isLoading || hasError) return;
+    if (isLoading || hasError || isMissing || !pronunciation) return;
+    if(isPlaying){playback.current+=1;audioService.stop();setIsPlaying(false);return;}
+    const token=++playback.current;
     setIsPlaying(true);
-    audioService.playWord(entry.word, 'us').finally(() => setIsPlaying(false));
+    void audioService.playReferencePronunciation(pronunciation.input).catch(()=>{if(token===playback.current)toast(cardText('pronunciationIsUnavailableTryAgain'));}).finally(()=>{if(token===playback.current)setIsPlaying(false);});
   };
 
   const handleDetailClick = (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-    if (isLoading || hasError) return;
+    if (isLoading || hasError || isMissing) return;
     if (onViewDetail) {
       onViewDetail(entry.word, entry);
       return;
@@ -77,19 +85,19 @@ export function QuickDictPopup({ entry, onClose, onViewDetail, toast }: QuickDic
             type="button"
             className={`inline-flex min-h-11 items-center gap-2 rounded-control border-0 px-4 text-control-label font-semibold focus-visible:outline-2 focus-visible:outline-focus ${isPlaying ? 'bg-action-primary text-action-on-primary' : 'bg-accent-soft text-action-primary hover:bg-surface-selected'}`}
             onClick={handlePlayAudio}
-            disabled={isLoading || hasError}
-            aria-label={t('quickDict.playUs',{word:entry.word})}
+            disabled={isLoading || hasError || isMissing || !pronunciation}
+            aria-label={isPlaying?cardText('stopPronunciation'):pronunciation?cardText('play',{accent:pronunciation.label,ipa:pronunciation.ipa}):t('quickDict.unavailable')}
           >
             <svg className={iconClass} aria-hidden="true"><use href="#i-vol-fill" /></svg>
-            <span>{t('quickDict.us')} {entry.phonetic}</span>
+            <span>{isPlaying?cardText('stopPronunciation'):pronunciation?`${pronunciation.label} ${pronunciation.ipa}`:t(isLoading?'quickDict.querying':'quickDict.unavailable')}</span>
           </button>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5" aria-label={t('quickDict.briefMeanings')}>
-          {(isLoading || hasError) && (
+          {(isLoading || hasError || isMissing) && (
             <div className={`mb-4 flex items-center gap-3 rounded-control p-3 text-body-support ${hasError ? 'bg-surface-subtle text-feedback-danger' : 'bg-accent-soft text-fg-secondary'}`} role="status">
               {isLoading && <i className="size-3 animate-pulse rounded-full bg-progress motion-reduce:animate-none" aria-hidden="true" />}
-              <p>{t(isLoading?'quickDict.loading':'quickDict.error')}</p>
+              <p>{entry.lookupMessage??t(isLoading?'quickDict.loading':'quickDict.error')}</p>
             </div>
           )}
           {entry.senses.map((sense, index) => {
@@ -110,7 +118,7 @@ export function QuickDictPopup({ entry, onClose, onViewDetail, toast }: QuickDic
             </div>
             );
           })}
-          {entry.senses.length === 0 && !isLoading && !hasError && (
+          {entry.senses.length === 0 && !isLoading && !hasError && !isMissing && (
             <p className="rounded-control border border-dashed border-border-strong p-5 text-body-support leading-6 text-fg-secondary">
               {t('quickDict.noBriefMeanings')}
             </p>
@@ -118,7 +126,7 @@ export function QuickDictPopup({ entry, onClose, onViewDetail, toast }: QuickDic
         </div>
       </div>,
       controls:
-          <button className="flex min-h-12 w-full items-center justify-center gap-2 rounded-control border-0 bg-action-primary px-5 text-control-label font-semibold text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-45" type="button" onClick={handleDetailClick} disabled={isLoading || hasError}>
+          <button className="flex min-h-12 w-full items-center justify-center gap-2 rounded-control border-0 bg-action-primary px-5 text-control-label font-semibold text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-45" type="button" onClick={handleDetailClick} disabled={isLoading || hasError || isMissing} hidden={isMissing}>
             {t(isLoading?'quickDict.querying':hasError?'quickDict.unavailable':'quickDict.viewDetails')}
             <svg className={iconClass} aria-hidden="true"><use href="#i-chev-r" /></svg>
           </button>

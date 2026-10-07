@@ -1,4 +1,4 @@
-import type { Word, QuickDictEntry } from '../types';
+import type { Word, QuickDictEntry,DictionaryLookup } from '../types';
 import { SensaExampleScreen } from './SensaExampleScreen';
 
 export interface ExampleScreenProps {
@@ -11,6 +11,7 @@ export interface ExampleScreenProps {
   sentenceSequence?: number[];
   onClose: () => void;
   onOpenDict?: (word: Word | QuickDictEntry | string) => void;
+  lookupDictionary?:DictionaryLookup;
   onNextWord: () => void;
   nextLabel?: string;
   toast: (msg: string) => void;

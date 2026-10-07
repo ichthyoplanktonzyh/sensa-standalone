@@ -27,16 +27,18 @@ import {iconClass} from '../ui/primitives';
 import {useOverlayStore} from '../stores/overlayStore';
 import {localFlowNotice,localFlowText} from '../../i18n/localFlowText';
 import i18n from '../../i18n';
+import type {SensaPinnedLanguageContext} from '@sensa/contracts/sensa';
 
 type Controller=ReturnType<typeof usePackageLearning>;
 type PackageRuntimeProps={active:boolean;c:Controller;onExit:()=>void;onFinish:()=>void;onViewLearningLibrary:()=>void};
+const runtimeLookupLanguages=(runtime:Controller['runtime']):SensaPinnedLanguageContext|undefined=>runtime&&(runtime.kind==='lightweight'||runtime.kind==='structured')?runtime.target.languageContext:undefined;
 
 const lookupRuntimeDictionary:AssuranceSupportHost['lookupDictionary']=async(input,options)=>{
  const {lookupDictionaryEntry}=await import('../services/quickDict');
  return lookupDictionaryEntry(input,options);
 };
 
-function useRuntimeHost():AssuranceSupportHost{
+function useRuntimeHost(languages:SensaPinnedLanguageContext|undefined):AssuranceSupportHost{
  const toast=useOverlayStore(state=>state.toast);
  const openDict=useOverlayStore(state=>state.openDictModal);
  const openNoteEditor=useOverlayStore(state=>state.openNoteEditor);
@@ -46,17 +48,17 @@ function useRuntimeHost():AssuranceSupportHost{
  const closeMenus=useOverlayStore(state=>state.closeMenus);
  return useMemo(()=>({
   toast,
-  openDict,
+  openDict:word=>openDict(word,languages),
   openNoteEditor,
   openSceneEditor:(content,contextId,learningTarget)=>openSceneEditor({content,contextId,learningTarget}),
-  lookupDictionary:lookupRuntimeDictionary,
+  lookupDictionary:(input,options)=>lookupRuntimeDictionary(input,{...options,languages:languages??options?.languages}),
   onOpenMenuMore:(event,content)=>{
    event.stopPropagation();
    closeMenus();
    setMenuPersonalContent(content);
    setMenuMoreOpen(true);
   },
- }),[toast,openDict,openNoteEditor,openSceneEditor,closeMenus,setMenuPersonalContent,setMenuMoreOpen]);
+ }),[toast,openDict,openNoteEditor,openSceneEditor,closeMenus,setMenuPersonalContent,setMenuMoreOpen,languages]);
 }
 
 function RuntimeOverlays({c,policy,onViewLearningLibrary,onExit}:{c:Controller;policy:LearningPolicy;onViewLearningLibrary:()=>void;onExit:()=>void}){
@@ -68,7 +70,8 @@ function RuntimeOverlays({c,policy,onViewLearningLibrary,onExit}:{c:Controller;p
  const menuBookOpen=useOverlayStore(state=>state.menuBookOpen);
  const menuPersonalContent=useOverlayStore(state=>state.menuPersonalContent);
  const closeMenus=useOverlayStore(state=>state.closeMenus);
- const openDict=useOverlayStore(state=>state.openDictModal);
+ const openDictModal=useOverlayStore(state=>state.openDictModal);
+ const openDict=(word:string)=>openDictModal(word,runtimeLookupLanguages(c.runtime));
  const openNoteEditor=useOverlayStore(state=>state.openNoteEditor);
  const openSceneEditor=useOverlayStore(state=>state.openSceneEditor);
  const toast=useOverlayStore(state=>state.toast);
@@ -194,7 +197,7 @@ function StructuredPackageRuntime({active,runtime,c,host,onExit,onFinish}:{activ
 }
 
 export function PackageRuntime(props:PackageRuntimeProps){
- const host=useRuntimeHost();
+ const host=useRuntimeHost(runtimeLookupLanguages(props.c.runtime));
  const runtime=props.c.runtime;
  if(props.c.loadStatus==='unavailable'||props.c.endedStateNeedsRead)return <RuntimeFrame id="s-lightweight-runtime" active={props.active} title={i18n.t('runtime.learning')} stepLabel={localFlowText('progressReadFailed')} progress={0} onExit={props.onExit}><section role="alert" className="space-y-5 py-10"><p>{props.c.notice||localFlowText('progressReadFailed')}</p><button className={runtimePrimary} onClick={()=>void (props.c.endedStateNeedsRead?props.c.retryEndedStateRead():props.c.retryInitialLoad())}>{i18n.t('reliability.retry')}</button></section></RuntimeFrame>;
  if(!runtime)return <RuntimeFrame id="s-lightweight-runtime" active={props.active} title={i18n.t('runtime.learning')} stepLabel={localFlowText(props.c.busy?'runtimeSwitching':props.c.nextTarget?'startLearning':'runtimeNoPending')} progress={0} onExit={props.onExit}><section className="py-10 text-center"><h1 role="status" className="text-2xl">{localFlowText(props.c.busy?'runtimeSwitching':props.c.nextTarget?'startLearning':'runtimeNoPending')}</h1>{props.c.notice&&<p role="status" className="mt-4">{props.c.notice}</p>}{!props.c.busy&&<button className={`${runtimePrimary} mt-8`} onClick={()=>{if(props.c.nextTarget)void props.c.start(props.c.nextTarget.targetId,props.c.dailyLimit??20);else props.onExit();}}>{props.c.nextTarget?localFlowText('startLearning'):i18n.t('runtime.home')}</button>}</section></RuntimeFrame>;

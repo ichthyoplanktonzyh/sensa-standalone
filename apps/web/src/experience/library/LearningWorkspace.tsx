@@ -133,7 +133,12 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
    return <PackageTarget active={screenActive} target={localSelectedTarget} c={packageLearning}
     onManage={()=>setMainStack(['s-study'])}
     onExport={onExport} exportBusy={personalTask?personalLearning.busy:packageLearning.busy} exportNotice={personalTask?personalLearning.notice:undefined}
-    onSource={()=>{const provenance=localSelectedTarget.material.snapshot.provenance;if('personalMeaningId' in provenance&&typeof provenance.personalMeaningId==='string')openPersonalMeaning(provenance.personalMeaningId);else backMain();}} onBack={backMain} onHome={resetMain} onStart={()=>void startLocalLearning(localSelectedTarget.targetId,localSelectedTarget.completed)}/>;
+    onSource={()=>{
+     const provenance=localSelectedTarget.material.snapshot.provenance;
+     if('personalMeaningId' in provenance&&typeof provenance.personalMeaningId==='string')openPersonalMeaning(provenance.personalMeaningId);
+     else if(localSelectedTarget.packageKey)goMain('s-library-package',{packageKey:localSelectedTarget.packageKey});
+     else backMain();
+    }} onBack={backMain} onHome={resetMain} onStart={()=>void startLocalLearning(localSelectedTarget.targetId,localSelectedTarget.completed)}/>;
   }
   if(selectedPersonalTask)return <PersonalPreparationTarget task={selectedPersonalTask} c={personalLearning} onSource={()=>openPersonalLearningSource(selectedPersonalTask)} active={screenActive} onBack={backMain} onHome={resetMain} onStart={id=>void startLocalLearning(id)}/>;
   return <LearningSetupFrame id="s-learning-target" active={screenActive} title={localFlowText('learningTarget')} onBack={backMain}><p role="status">{packageLearning.loaded?localFlowText('targetMissing'):localFlowText('targetLoading')}</p></LearningSetupFrame>;

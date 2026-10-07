@@ -23,6 +23,7 @@ const compiled=await build({
   stdin:{
     contents:[
       `export {lookupReference} from './apps/web/src/experience/reference/referenceLookup';`,
+      `export {lookupDictionaryEntry} from './apps/web/src/experience/services/quickDict';`,
       `export {ReferenceLookupUnavailableError} from './apps/web/src/experience/reference/referenceLookup';`,
       `export {resolveLookupLemma} from './apps/web/src/experience/reference/resolveClickedLemma';`,
       ...['store','providers','language'].map(n=>`export * from './apps/web/src/data/library/${n}';`),
@@ -45,7 +46,7 @@ const MODEL='https://fixture.invalid/v1/chat/completions';
 /** One canned Wiktionary group per (language, word). A missing pair answers 404
  * the way the live API does, so provider fallthrough is exercised rather than
  * asserted. */
-const groups:Record<string,{pos:string;glosses:string[];examples?:string[];ipa?:string}>={};
+const groups:Record<string,{pos:string;glosses:string[];examples?:string[];ipa?:string;sounds?:{ipa?:string;audio?:string;tags?:string[]}[]}>={};
 /** Canned payloads for the official endpoint, keyed by word. */
 const restPayloads:Record<string,Record<string,{partOfSpeech:string;language:string;definitions:{definition:string}[]}[]>>={};
 const requested:string[]=[];
@@ -74,11 +75,11 @@ globalThis.fetch=async(url:string|URL|Request,init?:RequestInit)=>{
     const word=decodeURIComponent(href.slice(WIKT.length).split('/')[0]!);
     const group=new URL(href).searchParams.get('lang')!;
     const source=groups[`${group}:${word}`];
-    if(!source||!href.includes('/definitions')&&!source.ipa)return json({},404);
+    if(!source||!href.includes('/definitions')&&!source.ipa&&!source.sounds)return json({},404);
     if(href.includes('/definitions')){
       return json({word,edition:'en',definitions:[{pos:source.pos,lang_code:group,senses:[{glosses:source.glosses,examples:(source.examples??[]).map(text=>({text})),tags:[]}]}]});
     }
-    return json({word,edition:'en',pronunciations:[{lang_code:group,sounds:[{ipa:source.ipa,audio:null,tags:[]}]}]});
+    return json({word,edition:'en',pronunciations:[{lang_code:group,sounds:source.sounds??[{ipa:source.ipa,audio:null,tags:[]}]}]});
   }
   if(href.startsWith(FREE)){
     const word=decodeURIComponent(href.slice(FREE.length));
@@ -116,6 +117,16 @@ try{
   assert.equal(spanishResult.entry.senses[0]!.definitionL2,'hello, hi, hey');
   assert.equal(spanishResult.entry.pronunciations[0]?.accent,'es','a non-English recording is never relabelled as an English accent');
   assert.equal(spanishResult.entry.pronunciations[0]?.ipa,'/ˈola/','pronunciation evidence the provider returned is kept');
+
+  groups['en:qzxaccent']={pos:'noun',glosses:['controlled regional evidence'],sounds:[
+    {ipa:'/us/',audio:'en-us-qzxaccent.ogg',tags:['US']},
+    {ipa:'/rp/',tags:['Received-Pronunciation']},
+    {ipa:'/scot/',tags:['Scotland']},
+    {ipa:'/au/',tags:['Australia']},
+    {ipa:'/unplaced/',tags:[]},
+  ]};
+  const accents=await api.lookupReference('qzxaccent',{languages:english});
+  assert.deepEqual(accents.entry.pronunciations.map((source:any)=>source.accent),['en-US','en-GB','en-GB','en-AU','en'],'only source-declared regions receive regional pronunciation labels');
 
   // The exact configured 18 targets each select their own Wiktionary group;
   // no target is inferred from the English fallback provider.
@@ -225,6 +236,7 @@ try{
   assert.ok(requested.some(href=>href.startsWith(FREE)),'the English-only provider is asked for an English target');
   assert.equal(englishResult?.entry.senses[0]?.definitionL2,'easily broken');
   assert.equal(englishResult?.entry.pronunciations[0]?.ipa,'/ˈfɪkʃən/','English pronunciation evidence still comes from the aggregator');
+  assert.equal(englishResult?.entry.pronunciations[0]?.accent,'en','a phonetic without regional evidence is not labelled American');
 
   // The lemma engine is English-only, so another language keeps its surface form.
   const spanishLemma=api.resolveLookupLemma('se tomó',sensaLanguage('es'));
@@ -250,6 +262,10 @@ try{
   assert.equal(routeSnapshot.activeRoute.id,germanRoute.id);
   assert.deepEqual(routeSnapshot.context,{targetLanguageTag:'de',supportLanguageTag:'zh-CN',languageRouteId:germanRoute.id,languageRouteRevision:1});
   assert.deepEqual(routeSnapshot.collection.routes.map((route:any)=>[route.targetLanguageTag,route.defaultSupportLanguageTag,route.status]),[['en','zh-CN','active'],['de','zh-CN','active']]);
+  const pinnedEntry=await api.lookupDictionaryEntry({...occurrence,exampleId:'fixture.pinned-spanish-run'},{languages:spanish});
+  assert.equal(pinnedEntry.referenceLookup.release.targetLanguage,'es','the public quick lookup keeps a material source language after another Route becomes active');
+  assert.equal(modelPrompts.at(-1)!.user.targetLanguage,'es');assert.equal(modelPrompts.at(-1)!.user.sentence,occurrence.textL2);
+  assert.equal((await api.languageRoutesSnapshot()).activeRoute.id,germanRoute.id,'a pinned lookup does not change the active Route');
 
   console.log('PASS: Reference lookups are scoped to the pinned language context — provider group, cache identity, prompt languages and the Support-Language rendering all follow it, and an unplaceable language answers nothing.');
 }finally{

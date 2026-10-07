@@ -15,13 +15,9 @@ import type {
 import { resolveReviewMemoryOutcome } from '../../../../learning/review/types';
 import type {
   DictionaryLookup,
-  DictionaryLookupRequest,
   QuickDictEntry,
-  SentenceToken,
 } from '../../../types';
 import { ClickableSentence } from '../../ClickableSentence';
-import { QuickDictPopup } from '../../QuickDictPopup';
-import { useImmediateDictionaryLookup } from '../../useImmediateDictionaryLookup';
 import { RecognitionCard } from '../RecognitionCard';
 import { RecallCard } from '../RecallCard';
 import { NovelTransferCard } from '../NovelTransferCard';
@@ -64,47 +60,18 @@ function emphasizeTarget(spec: ReviewBoundaryContrastSpec): string {
 }
 
 function SensaBoundaryAssessment({
-  content,
   spec,
   purpose,
   onSubmit,
-  onOpenDictionary,
-  lookupDictionary,
   onViewChange,
-  toast,
 }: Omit<SensaReviewAssessmentCardProps, 'spec' | 'onOpenExample' | 'onOpenNote' | 'onOpenScene'> & {
   spec: ReviewBoundaryContrastSpec;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const { activeLookup, openLookup, clearLookup } = useImmediateDictionaryLookup();
   const selectedOption = useMemo(
     () => spec.options.find((option) => option.id === selectedId) ?? null,
     [selectedId, spec.options],
   );
-
-  const lookupToken = (token: SentenceToken, tokenIdx: number) => {
-    if (token.cleanWord.toLocaleLowerCase(content.accentLocale) === content.lemma.toLocaleLowerCase(content.accentLocale)) {
-      toast(cardText('submitYourAnswerBeforeOpeningThisWordS'));
-      return;
-    }
-    const request: DictionaryLookupRequest = {
-      rawClickedForm: token.text,
-      exampleId: spec.example.exampleKey,
-      textL2: spec.example.textL2,
-      clickedStart: token.charStart,
-      clickedEnd: token.charEnd,
-      clickedSurface: token.text,
-    };
-    openLookup({
-      tokenIdx,
-      displayWord: token.cleanWord,
-      load: async (signal) => {
-        const entry = await lookupDictionary(request, { signal });
-        if (!entry) toast(cardText('thisWordIsNotInTheDictionary'));
-        return entry;
-      },
-    });
-  };
 
   return (
     <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-6 py-8 text-fg-primary sm:px-10">
@@ -130,13 +97,10 @@ function SensaBoundaryAssessment({
       <section className="mt-6 rounded-card border border-border-subtle bg-surface-panel p-5">
         <div className="flex items-center justify-between gap-4">
           <span className="text-control-label font-semibold">{cardText('boundaryContext')}</span>
-          <small className="text-metadata text-fg-tertiary">{cardText('tapOtherWordsForDefinitions')}</small>
         </div>
         <div className="mt-5 font-language text-xl leading-9">
           <ClickableSentence
             sentenceHtml={emphasizeTarget(spec)}
-            activeTokenIdx={activeLookup?.tokenIdx ?? null}
-            onWordClick={lookupToken}
           />
         </div>
         <div className="mt-5 flex min-h-11 items-center gap-2 rounded-control bg-surface-subtle px-4 text-metadata text-fg-secondary">
@@ -176,24 +140,12 @@ function SensaBoundaryAssessment({
           disabled={!selectedOption}
           onClick={() => {
             if (!selectedOption) return;
-            clearLookup();
             onViewChange();
             onSubmit(reviewResult(spec, selectedOption.isCorrect, selectedOption.id));
           }}
         >{cardText('submitThisCheck')}</button>
       </footer>
 
-      {activeLookup && (
-        <QuickDictPopup
-          entry={activeLookup.entry}
-          onClose={clearLookup}
-          toast={toast}
-          onViewDetail={(word, contextualEntry) => {
-            clearLookup();
-            onOpenDictionary(contextualEntry ?? word);
-          }}
-        />
-      )}
     </div>
   );
 }

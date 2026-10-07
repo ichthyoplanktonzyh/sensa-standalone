@@ -1,4 +1,5 @@
 import type { ReferenceLookupResult } from './reference/referenceDictionary';
+import type { SensaPinnedLanguageContext } from '@sensa/contracts/sensa';
 
 /**
  * 4 选 1 干扰项定义
@@ -174,7 +175,7 @@ export interface QuickDictEntry {
   hasFullDetail?: boolean;    // 是否在词库中有完整卡片，支持「查看详细释义 >」
   isStarred?: boolean;        // 是否加入生词本/收藏
   /** Transient UI state used while an asynchronous Reference lookup settles. */
-  lookupState?: 'loading' | 'ready' | 'error';
+  lookupState?: 'loading' | 'ready' | 'missing' | 'error';
   lookupMessage?: string;
   /** The exact normalized result that produced this quick projection. */
   referenceLookup?: ReferenceLookupResult;
@@ -192,6 +193,9 @@ export type DictionaryLookup = (
 
 export interface DictionaryLookupOptions {
   signal?: AbortSignal;
+  /** Formal material queries keep their source/learner pair, independently of
+   * another tab's currently selected Route. */
+  languages?: SensaPinnedLanguageContext;
 }
 
 /**

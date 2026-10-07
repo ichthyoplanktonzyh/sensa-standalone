@@ -46,6 +46,7 @@ let origin='';
 let storageKey='';
 let delivery:ReturnType<typeof portableBookDeliveryFixture>;
 let learningDelivery:ReturnType<typeof portableBookDeliveryFixture>;
+let referenceDelivery:ReturnType<typeof portableBookDeliveryFixture>;
 let reviewDelivery:ReturnType<typeof portableBookDeliveryFixture>;
 let updateDelivery:ReturnType<typeof portableBookDeliveryFixture>;
 let scaleDelivery:ReturnType<typeof portableBookDeliveryFixture>;
@@ -162,7 +163,7 @@ test.beforeAll(async()=>{
       }
 
       const deliveryUrl=new URL(url.pathname,origin).href;
-      const bytes=delivery.responses.get(deliveryUrl)??learningDelivery.responses.get(deliveryUrl)??reviewDelivery.responses.get(deliveryUrl)
+      const bytes=delivery.responses.get(deliveryUrl)??learningDelivery.responses.get(deliveryUrl)??referenceDelivery.responses.get(deliveryUrl)??reviewDelivery.responses.get(deliveryUrl)
         ??updateDelivery.responses.get(deliveryUrl)??mismatchedDelivery.responses.get(deliveryUrl)
         ??scaleDelivery.responses.get(deliveryUrl)
         ??(deliveryUrl===invalidMemberDelivery.descriptor.url?invalidMemberDelivery.bytes:undefined);
@@ -235,6 +236,7 @@ test.beforeAll(async()=>{
     expression:'borrow',
     title:'雨天借伞',
   });
+  referenceDelivery=portableBookDeliveryFixture({baseUrl:`${origin}/published/`,packageId:randomUUID(),expression:'borrow',example:'May asked to borrow an umbrella.',title:'只读查词样本'});
   reviewDelivery=portableBookDeliveryFixture({baseUrl:`${origin}/published/`,packageId:randomUUID(),expression:'borrow',title:'到期复习样本',memberExpressions:['borrow','lend']});
   updateDelivery=portableBookDeliveryFixture({
     baseUrl:`${origin}/published/`,expression:'borrow',title:'English route essentials',
@@ -312,6 +314,105 @@ async function startOrdinaryBook(page:Page,title=/雨天借伞/){
  await expect(page.locator('#s-home')).toHaveCount(0);
  return runtime;
 }
+
+/** Controlled Reference payloads only; real UI/OPFS, never live quality evidence. */
+async function referenceProviders(page:Page){
+ const state={mode:'ready' as 'ready'|'missing'|'error',requests:[] as string[],holdWord:null as string|null,pending:[] as Array<()=>void>,aborted:[] as string[]};
+ // Reference resolution stays no-cost even if fixture authentication changes.
+ await page.route('**/sensa/model/turn',route=>route.fulfill({status:503,json:{code:'fixture_model_unavailable'}}));
+ page.on('requestfailed',request=>{if(new URL(request.url()).hostname==='api.wiktapi.dev'&&request.failure()?.errorText.includes('ERR_ABORTED'))state.aborted.push(request.url());});
+ for(const host of ['api.wiktapi.dev','api.dictionaryapi.dev','en.wiktionary.org'])await page.route(`https://${host}/**`,async route=>{
+  const url=new URL(route.request().url());state.requests.push(url.href);
+  if(state.mode!=='ready'||host!=='api.wiktapi.dev'||!url.pathname.endsWith('/definitions')){await route.fulfill({status:state.mode==='error'?503:404,json:{}});return;}
+  const word=decodeURIComponent(url.pathname.match(/\/word\/([^/]+)/u)![1]!);
+  if(state.holdWord===word)await new Promise<void>(resolve=>state.pending.push(resolve));
+  try{await route.fulfill({json:{word,edition:'en',definitions:[{pos:'verb',lang_code:url.searchParams.get('lang'),senses:[{glosses:[`Fixture definition for ${word}.`],examples:[{text:`May asked to ${word} an umbrella.`,ref:'Controlled reference fixture'}]}]}]}});}
+  catch(error){if(!route.request().failure())throw error;}
+ });
+ return state;
+}
+
+test('reference lookup, manual search and example return preserve the same real learning Step and stored learner facts',async({page})=>{
+ setRegistry([referenceDelivery.descriptor]);const sources=await referenceProviders(page),runtime=await startOrdinaryBook(page,/只读查词样本/);await runtime.getByRole('button',{name:/查看表达/}).click();
+ const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint()),facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest());
+ const location=page.url();await runtime.getByRole('button',{name:'查词：borrow',exact:true}).click();
+ const quick=page.getByRole('dialog',{name:/borrow/});await expect(quick.getByText('Fixture definition for borrow.')).toBeVisible();
+ await quick.getByRole('button',{name:'查看详细释义',exact:true}).click();
+ const dictionary=page.locator('#s-reference-dictionary');await expect(dictionary.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
+ await expect(dictionary.locator('footer')).toContainText('WiktAPI');
+ const search=dictionary.getByRole('searchbox');await search.fill('lend');await dictionary.getByRole('button',{name:'搜索',exact:true}).click();
+ await expect(dictionary.getByRole('heading',{name:'lend',exact:true})).toBeVisible();
+ await dictionary.getByRole('button',{name:/例句/}).click();const examples=page.locator('#s-reference-example');
+ await expect(examples.getByText('May asked to lend an umbrella.',{exact:true})).toBeVisible();await expect(examples).toContainText('Controlled reference fixture');
+ await examples.locator('header').getByRole('button',{name:'返回词典',exact:true}).click();
+ await expect(dictionary.getByRole('heading',{name:'lend',exact:true})).toBeVisible();await expect(search).toHaveValue('lend');
+ await dictionary.getByRole('button',{name:'返回上一页',exact:true}).click();
+ await expect(runtime.getByRole('button',{name:/已经连上/})).toBeVisible();expect(page.url()).toBe(location);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(before);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest())).toEqual(facts);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.intakeInboxCount())).toBe(0);
+ expect(sources.requests.some(url=>url.includes('/word/lend/definitions'))).toBe(true);
+});
+
+test('closing quick or full reference cancels held browser requests and late results cannot replace a newer lookup',async({page})=>{
+ setRegistry([referenceDelivery.descriptor]);const sources=await referenceProviders(page),runtime=await startOrdinaryBook(page,/只读查词样本/);await runtime.getByRole('button',{name:/查看表达/}).click();
+ await expect(runtime.getByRole('button',{name:'查词：borrow',exact:true})).toBeVisible();
+ const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest());sources.holdWord='borrow';
+ try{
+  await runtime.getByRole('button',{name:'查词：borrow',exact:true}).click();const quick=page.getByRole('dialog',{name:/borrow/});
+  await expect.poll(()=>sources.pending.length).toBe(1);await expect(quick.getByRole('status')).toContainText('正在查询词典');await quick.getByRole('button',{name:'关闭快速查词',exact:true}).click();
+  await expect.poll(()=>sources.aborted.some(url=>url.includes('/word/borrow/definitions'))).toBe(true);await expect(quick).toHaveCount(0);
+  sources.holdWord=null;await runtime.getByRole('button',{name:'查词：umbrella',exact:true}).click();const current=page.getByRole('dialog',{name:/umbrella/});
+  await expect(current.getByText('Fixture definition for umbrella.')).toBeVisible();sources.pending.splice(0).forEach(resolve=>resolve());await page.evaluate(()=>new Promise(resolve=>setTimeout(resolve,0)));
+  await expect(current.getByText('Fixture definition for umbrella.')).toBeVisible();await current.getByRole('button',{name:'查看详细释义',exact:true}).click();
+  const dictionary=page.locator('#s-reference-dictionary'),search=dictionary.getByRole('searchbox');sources.holdWord='anchor';
+  await search.fill('anchor');await dictionary.getByRole('button',{name:'搜索',exact:true}).click();await expect.poll(()=>sources.pending.length).toBe(1);
+  await dictionary.getByRole('button',{name:'返回上一页',exact:true}).click();await expect(dictionary).toHaveCount(0);
+  await expect.poll(()=>sources.aborted.some(url=>url.includes('/word/anchor/definitions'))).toBe(true);sources.holdWord=null;sources.pending.splice(0).forEach(resolve=>resolve());
+  await expect(runtime.getByRole('button',{name:/已经连上/})).toBeVisible();expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest())).toEqual(before);
+  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);
+ }finally{sources.pending.splice(0).forEach(resolve=>resolve());}
+});
+
+test('another tab selecting a German Route does not change the English material lookup or its stored learning facts',async({page,context})=>{
+ setRegistry([referenceDelivery.descriptor]);const sources=await referenceProviders(page),runtime=await startOrdinaryBook(page,/只读查词样本/);await runtime.getByRole('button',{name:/查看表达/}).click();
+ await expect(runtime.getByRole('button',{name:'查词：borrow',exact:true})).toBeVisible();const original=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest());
+ const preferences=await context.newPage();await preferences.goto(origin+'/profile');await preferences.locator('#settings-preferences').click();await preferences.locator('#account-languages').click();
+ const languages=preferences.getByRole('dialog',{name:'语言路线',exact:true});await languages.getByLabel('选择目标语言',{exact:true}).selectOption('de');await languages.getByLabel('选择辅助语言',{exact:true}).selectOption('fr');
+ await languages.getByRole('button',{name:'添加路线',exact:true}).click();const german=languages.getByRole('radio',{name:/Deutsch/});await expect(german).toBeEnabled();await german.click();await expect(german).toHaveAttribute('aria-checked','true');
+ const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest());expect(before.targets).toEqual(original.targets);expect(before.behavioralEvidenceCount).toBe(original.behavioralEvidenceCount);
+ await page.bringToFront();await runtime.getByRole('button',{name:'查词：borrow',exact:true}).click();const quick=page.getByRole('dialog',{name:/borrow/});await expect(quick.getByText('Fixture definition for borrow.')).toBeVisible();
+ expect(sources.requests.filter(url=>url.includes('/definitions')).every(url=>new URL(url).searchParams.get('lang')==='en')).toBe(true);
+ await quick.getByRole('button',{name:'查看详细释义',exact:true}).click();const dictionary=page.locator('#s-reference-dictionary');await expect(dictionary.getByRole('heading',{name:'borrow',exact:true})).toHaveAttribute('lang','en');
+ await dictionary.getByRole('searchbox').fill('lend');await dictionary.getByRole('button',{name:'搜索',exact:true}).click();await expect(dictionary.getByRole('heading',{name:'lend',exact:true})).toHaveAttribute('lang','en');
+ expect(sources.requests.filter(url=>url.includes('/definitions'))).toHaveLength(2);
+ expect(sources.requests.filter(url=>url.includes('/definitions')).every(url=>new URL(url).searchParams.get('lang')==='en')).toBe(true);await dictionary.getByRole('button',{name:'返回上一页',exact:true}).click();
+ await expect(runtime.getByRole('button',{name:/已经连上/})).toBeVisible();expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest())).toEqual(before);
+ await expect(german).toHaveAttribute('aria-checked','true');expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);
+});
+
+test('reference quick lookup distinguishes confirmed missing from provider failure and retries without learning writes',async({page})=>{
+ setRegistry([referenceDelivery.descriptor]);const sources=await referenceProviders(page),runtime=await startOrdinaryBook(page,/只读查词样本/);await runtime.getByRole('button',{name:/查看表达/}).click();
+ const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());sources.mode='missing';
+ await runtime.getByRole('button',{name:'查词：borrow',exact:true}).click();const quick=page.getByRole('dialog',{name:/borrow/});
+ await expect(quick.getByRole('status')).toContainText('词典');await expect(quick.getByRole('status')).not.toContainText('暂时不可用');await expect(quick.getByRole('button',{name:'查看详细释义',exact:true})).toBeDisabled();
+ await quick.getByRole('button',{name:'关闭快速查词',exact:true}).click();sources.mode='error';await runtime.getByRole('button',{name:'查词：borrow',exact:true}).click();
+ await expect(quick.getByRole('status')).toContainText('暂时没有取得');await expect(quick.getByRole('status')).toContainText(/再试|重试/u);
+ await quick.getByRole('button',{name:'关闭快速查词',exact:true}).click();sources.mode='ready';await runtime.getByRole('button',{name:'查词：borrow',exact:true}).click();
+ await expect(quick.getByText('Fixture definition for borrow.')).toBeVisible();await quick.getByRole('button',{name:'关闭快速查词',exact:true}).click();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(before);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);
+});
+
+test('a downloaded target opens its actual installed source and returns to the same target without changing learning',async({page})=>{
+ setRegistry([referenceDelivery.descriptor]);const runtime=await startOrdinaryBook(page,/只读查词样本/);await runtime.getByRole('button',{name:'暂停',exact:true}).click();
+ const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());await page.goto(`${origin}/catalog`);
+ await page.locator('#s-catalog').last().getByRole('button',{name:/只读查词样本/}).click();const book=page.locator('#s-catalog-book').last();
+ await book.getByRole('button',{name:/borrow/}).click();const target=page.locator('#s-learning-target');
+ await expect(target.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();const targetId=new URL(page.url()).searchParams.get('targetId');
+ await target.getByRole('button',{name:/内容来源/}).click();const source=page.locator('#s-library-package');
+ await expect(source.getByRole('heading',{name:'只读查词样本',exact:true})).toBeVisible();await expect(source.getByRole('button',{name:/borrow/})).toBeVisible();
+ await source.getByRole('button',{name:'返回',exact:true}).click();await expect(target.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();expect(new URL(page.url()).searchParams.get('targetId')).toBe(targetId);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(before);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);
+});
 
 async function startDueReviewWithPausedInitial(page:Page){
  setRegistry([reviewDelivery.descriptor]);

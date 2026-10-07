@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { QuickDictEntry } from '../types';
 import i18n from '../../i18n';
 import '../../i18n/learningResources';
+import {cardText} from '../../i18n/originalCards';
 
 export interface ActiveQuickDictionaryLookup {
   tokenIdx: number;
@@ -28,17 +29,17 @@ function pendingEntry(displayWord: string): QuickDictEntry {
   };
 }
 
-function failedEntry(displayWord: string): QuickDictEntry {
+function emptyEntry(displayWord: string,state:'missing'|'error'): QuickDictEntry {
   const word = displayWord.trim() || '—';
   return {
-    id: `reference-error:${word.toLocaleLowerCase()}`,
+    id: `reference-${state}:${word.toLocaleLowerCase()}`,
     word,
     phonetic: '',
     senses: [],
     hasFullDetail: false,
     isStarred: false,
-    lookupState: 'error',
-    lookupMessage: i18n.t('quickDict.error',{ns:'learning'}),
+    lookupState: state,
+    lookupMessage: state==='missing'?cardText('thisWordIsNotInTheDictionary'):i18n.t('quickDict.error',{ns:'learning'}),
   };
 }
 
@@ -75,14 +76,14 @@ export function useImmediateDictionaryLookup() {
         if (requestSequenceRef.current !== sequence || controller.signal.aborted) return;
         setActiveLookup({
           tokenIdx: request.tokenIdx,
-          entry: entry ? { ...entry, lookupState: 'ready' } : failedEntry(request.displayWord),
+          entry: entry ? { ...entry, lookupState: 'ready' } : emptyEntry(request.displayWord,'missing'),
         });
       })
       .catch(() => {
         if (requestSequenceRef.current !== sequence || controller.signal.aborted) return;
         setActiveLookup({
           tokenIdx: request.tokenIdx,
-          entry: failedEntry(request.displayWord),
+          entry: emptyEntry(request.displayWord,'error'),
         });
       });
   }, []);

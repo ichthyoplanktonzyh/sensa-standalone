@@ -255,16 +255,20 @@ function wiktAudioUrl(filename: string | null): string | undefined {
   return `https://commons.wikimedia.org/wiki/Special:Redirect/file/${encodeURIComponent(filename)}`;
 }
 
-/** An accent id for evidence the source did not place by region. English keeps
- * the two variants the product already labels; every other language reports its
- * own tag, because calling a Spanish recording `en-US` would be a claim the
- * provider never made. */
+/** Keep a region only when the source tags or recording filename declare it.
+ * Unplaced English evidence is English, not an invented American accent. */
 function pronunciationAccent(
   rawAccent: string,
   language: SensaLanguage,
 ): string {
   if (language.wiktionaryCode !== 'en') return language.tag;
-  return rawAccent.includes('uk') || rawAccent.includes('british') ? 'en-GB' : 'en-US';
+  const declaration=rawAccent.toLowerCase().replace(/[^a-z]+/gu,' ');
+  if(/\b(?:us|united states|american)\b/u.test(declaration))return 'en-US';
+  if(/\b(?:uk|british|received pronunciation|england|scotland|scottish)\b/u.test(declaration))return 'en-GB';
+  if(/\b(?:au|australia|australian)\b/u.test(declaration))return 'en-AU';
+  if(/\b(?:ca|canada|canadian)\b/u.test(declaration))return 'en-CA';
+  if(/\b(?:nz|new zealand)\b/u.test(declaration))return 'en-NZ';
+  return language.tag;
 }
 
 function normalizeWiktPronunciations(
@@ -443,7 +447,7 @@ function normalizeFreeDictionaryEntry(
     seenPronunciations.add(identity);
     pronunciations.push({
       pronunciationId: `ref.free-dictionary.pronunciation.${stableHash(identity)}`,
-      accent: audioUrl?.toLocaleLowerCase().includes('-uk') ? 'en-GB' : 'en-US',
+      accent: pronunciationAccent(audioUrl??'',language),
       ipa,
       audioUrl,
     });
@@ -451,7 +455,7 @@ function normalizeFreeDictionaryEntry(
   if (pronunciations.length === 0 && sourceEntry.phonetic) {
     pronunciations.push({
       pronunciationId: `ref.free-dictionary.pronunciation.${stableHash(sourceEntry.phonetic)}`,
-      accent: 'en-US',
+      accent: language.tag,
       ipa: sourceEntry.phonetic,
     });
   }
