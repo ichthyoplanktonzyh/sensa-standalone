@@ -1,5 +1,5 @@
 import {RuntimeFrame,runtimePrimary} from '../components/learning/RuntimeFrame';
-import {useEffect,useMemo,useRef,useState} from 'react';
+import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {useTranslation} from 'react-i18next';
 
 import {InterleavedFourStageRuntimeScreen} from '../components/learning/InterleavedFourStageRuntimeScreen';
@@ -28,6 +28,7 @@ import {useOverlayStore} from '../stores/overlayStore';
 import {localFlowNotice,localFlowText} from '../../i18n/localFlowText';
 import i18n from '../../i18n';
 import type {SensaPinnedLanguageContext} from '@sensa/contracts/sensa';
+import {projectPackageSource,type PackageCenterItem} from './packageCenterProjection';
 
 type Controller=ReturnType<typeof usePackageLearning>;
 type PackageRuntimeProps={active:boolean;c:Controller;onExit:()=>void;onFinish:()=>void;onViewLearningLibrary:()=>void};
@@ -64,6 +65,8 @@ function useRuntimeHost(languages:SensaPinnedLanguageContext|undefined):Assuranc
 function RuntimeOverlays({c,policy,onViewLearningLibrary,onExit}:{c:Controller;policy:LearningPolicy;onViewLearningLibrary:()=>void;onExit:()=>void}){
  const {t}=useTranslation();
  const [learningPreferencesOpen,setLearningPreferencesOpen]=useState(false);
+ const [sourceReference,setSourceReference]=useState<{target:LearningLightweightRuntimeProjection['target'];item:PackageCenterItem|undefined}|null>(null);
+ const sourceBack=useRef<HTMLButtonElement>(null);
  const [ending,setEnding]=useState<{runId:string;revision:number}|null>(null);
  const [,setAnnotationRevision]=useState(0);
  const menuMoreOpen=useOverlayStore(state=>state.menuMoreOpen);
@@ -75,6 +78,18 @@ function RuntimeOverlays({c,policy,onViewLearningLibrary,onExit}:{c:Controller;p
  const openNoteEditor=useOverlayStore(state=>state.openNoteEditor);
  const openSceneEditor=useOverlayStore(state=>state.openSceneEditor);
  const toast=useOverlayStore(state=>state.toast);
+ const sourceTarget=c.runtime?.kind==='lightweight'&&c.runtime.phase==='reveal'?c.runtime.target:null;
+ const closeSource=useCallback(()=>{
+  setSourceReference(null);
+  requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>('.screen.active [data-learning-more]')?.focus());
+ },[]);
+ useEffect(()=>{
+  if(!sourceReference)return;
+  const frame=requestAnimationFrame(()=>sourceBack.current?.focus());
+  const dismiss=(event:KeyboardEvent)=>{if(event.key==='Escape'&&!event.defaultPrevented){event.preventDefault();closeSource();}};
+  document.addEventListener('keydown',dismiss);
+  return()=>{cancelAnimationFrame(frame);document.removeEventListener('keydown',dismiss);};
+ },[sourceReference,closeSource]);
  useEffect(()=>personalContentSystem.subscribe({kind:'snapshot'},()=>setAnnotationRevision(value=>value+1)),[]);
  useEffect(()=>()=>closeMenus(),[closeMenus]);
  useEffect(()=>{
@@ -102,6 +117,7 @@ function RuntimeOverlays({c,policy,onViewLearningLibrary,onExit}:{c:Controller;p
      <button onClick={()=>{const content=menuPersonalContent;closeMenus();openSceneEditor({content,contextId:contexts[0]?.contextId});}}><svg className={iconClass} aria-hidden="true"><use href="#i-bulb"/></svg>{t('assurance.personalScene')}</button>
      {contexts.length>0&&<button onClick={()=>{const content=menuPersonalContent;closeMenus();openSceneEditor({content});}}><svg className={iconClass} aria-hidden="true"><use href="#i-penplus"/></svg>{t('assurance.addScene')}</button>}
      <button onClick={()=>{const content=menuPersonalContent;closeMenus();openDict(content.lemma);}}><svg className={iconClass} aria-hidden="true"><use href="#i-search"/></svg>{t('originalCards.dictionary')}</button>
+     {sourceTarget?.packageKey&&<button disabled={c.busy} onClick={()=>{closeMenus();setSourceReference({target:sourceTarget,item:projectPackageSource(c,sourceTarget.packageKey,sourceTarget.publicationArchiveSha256??undefined)});}}><svg className={iconClass} aria-hidden="true"><use href="#i-list"/></svg>{t('learningSetup.source')}</button>}
      <div className="my-2 border-t border-border-subtle"/>
     </>}
     <button onClick={()=>{closeMenus();setLearningPreferencesOpen(true);}}><svg className={iconClass} aria-hidden="true"><use href="#i-sliders"/></svg>{t('assurance.preferences')}</button>
@@ -113,6 +129,11 @@ function RuntimeOverlays({c,policy,onViewLearningLibrary,onExit}:{c:Controller;p
    controls:<div className="flex flex-wrap gap-3"><button className={runtimePrimary} disabled={c.busy} onClick={()=>void c.endSession(ending.runId,ending.revision).then(ended=>{if(ended)onExit();})}>{t('sessionEnd.action')}</button><button className="min-h-11 rounded-control px-4 text-sm focus-visible:outline-2 focus-visible:outline-focus" disabled={c.busy} onClick={()=>setEnding(null)}>{t('sessionEnd.cancel')}</button></div>,
   }}/>}
   {learningPreferencesOpen&&<LearningPreferencesPanel policyOptions={c.policyOptions} fixedPolicy busy={c.busy||c.loadStatus!=='ready'} status={c.notice&&<p role="alert">{localFlowNotice(c.notice)}</p>} defaultPolicy={policy} dailyNewCount={c.preferencesDailyLimit??20} onPolicyChange={()=>{}} onDailyNewCountChange={value=>void c.confirmQuantity(value)} onClose={closeLearningPreferences}/>}
+  {sourceReference&&<SensaOverlayLayout variant="sheet" measure="compact" className="z-[140]" id="learning-source-reference" labelledBy="learning-source-title" onDismiss={closeSource} dismissOnBackdrop regions={{
+   header:<h2 id="learning-source-title" className="text-lg font-medium">{t('learningSetup.source')}</h2>,
+   primary:sourceReference.item?<div className="space-y-4"><h3 className="text-xl font-medium">{sourceReference.item.title}</h3><p className="text-metadata text-fg-secondary">v{sourceReference.item.sourceVersion}</p><p className="font-language text-xl" lang={sourceReference.target.presentation.targetLanguageTag} dir="auto">{sourceReference.target.presentation.expression}</p><p className="text-body-support" lang={sourceReference.target.languageContext.supportLanguageTag} dir="auto">{sourceReference.target.presentation.meaning}</p></div>:<p role="status">{localFlowText('packageNoResults')}</p>,
+   controls:<button type="button" ref={sourceBack} className={runtimePrimary} onClick={closeSource}>{t('learningSetup.back')}</button>,
+  }}/>}
   {menuBookOpen&&<SensaOverlayLayout variant="popover" measure="compact" className="z-[80]" id="menu-book" label={localFlowText('chooseRange')} onDismiss={closeMenus} dismissOnBackdrop regions={{primary:
    <div className="p-2 [&>button]:flex [&>button]:min-h-12 [&>button]:w-full [&>button]:items-center [&>button]:gap-3 [&>button]:rounded-control [&>button]:border-0 [&>button]:bg-transparent [&>button]:px-3 [&>button]:text-left [&>button]:text-control-label [&>button]:hover:bg-surface-subtle [&>button]:focus-visible:outline-2 [&>button]:focus-visible:outline-focus">
     <button onClick={()=>{closeMenus();toast(localFlowText('chooseRangeHint'));}}><svg className={iconClass} aria-hidden="true"><use href="#i-filter"/></svg>{localFlowText('chooseRange')}</button>

@@ -374,7 +374,9 @@ test('closing quick or full reference cancels held browser requests and late res
 });
 
 test('another tab selecting a German Route does not change the English material lookup or its stored learning facts',async({page,context})=>{
- setRegistry([referenceDelivery.descriptor]);const sources=await referenceProviders(page),runtime=await startOrdinaryBook(page,/只读查词样本/);await runtime.getByRole('button',{name:/查看表达/}).click();
+ setRegistry([referenceDelivery.descriptor]);const sources=await referenceProviders(page),runtime=await startOrdinaryBook(page,/只读查词样本/);
+ await runtime.locator('[data-learning-more]').click();await expect(page.locator('#menu-more').getByRole('button',{name:'内容来源',exact:true})).toHaveCount(0);await page.keyboard.press('Escape');
+ await runtime.getByRole('button',{name:/查看表达/}).click();
  await expect(runtime.getByRole('button',{name:'查词：borrow',exact:true})).toBeVisible();const original=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest());
  const preferences=await context.newPage();await preferences.goto(origin+'/profile');await preferences.locator('#settings-preferences').click();await preferences.locator('#account-languages').click();
  const languages=preferences.getByRole('dialog',{name:'语言路线',exact:true});await languages.getByLabel('选择目标语言',{exact:true}).selectOption('de');await languages.getByLabel('选择辅助语言',{exact:true}).selectOption('fr');
@@ -387,6 +389,14 @@ test('another tab selecting a German Route does not change the English material 
  expect(sources.requests.filter(url=>url.includes('/definitions'))).toHaveLength(2);
  expect(sources.requests.filter(url=>url.includes('/definitions')).every(url=>new URL(url).searchParams.get('lang')==='en')).toBe(true);await dictionary.getByRole('button',{name:'返回上一页',exact:true}).click();
  await expect(runtime.getByRole('button',{name:/已经连上/})).toBeVisible();expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest())).toEqual(before);
+ const location=page.url(),checkpoint=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ await runtime.locator('[data-learning-more]').click();await page.locator('#menu-more').getByRole('button',{name:'内容来源',exact:true}).click();
+ const source=page.locator('#learning-source-reference');await expect(source.getByRole('heading',{name:'只读查词样本',exact:true})).toBeVisible();await expect(source.getByText('borrow',{exact:true})).toHaveAttribute('lang','en');
+ await expect(source.getByRole('button',{name:/加入|更新|下载/u})).toHaveCount(0);await expect(source.getByRole('button',{name:'返回',exact:true})).toBeFocused();
+ await source.getByRole('button',{name:'返回',exact:true}).click();await expect(source).toHaveCount(0);await expect(runtime.locator('[data-learning-more]')).toBeFocused();expect(page.url()).toBe(location);
+ await runtime.locator('[data-learning-more]').click();await page.locator('#menu-more').getByRole('button',{name:'内容来源',exact:true}).click();await expect(source.getByRole('heading',{name:'只读查词样本',exact:true})).toBeVisible();await page.keyboard.press('Escape');
+ await expect(source).toHaveCount(0);await expect(runtime.locator('[data-learning-more]')).toBeFocused();expect(page.url()).toBe(location);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(checkpoint);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest())).toEqual(before);
  await expect(german).toHaveAttribute('aria-checked','true');expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);
 });
 
