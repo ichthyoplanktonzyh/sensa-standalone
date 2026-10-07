@@ -414,6 +414,41 @@ test('a downloaded target opens its actual installed source and returns to the s
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(before);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);
 });
 
+test('target source lookup keeps its exact publication when another Book shares the member and a newer edition is installed',async({page,context})=>{
+ const first=reviewDelivery,files=unzipSync(first.bookBytes);
+ const sharedManifest=sensaPortableBookManifestSchema.parse({...first.manifest,book:{...first.manifest.book,bookId:randomUUID(),bookVersionId:randomUUID(),bookKey:'reference-shared-source',title:'另一册来源'},members:[...first.manifest.members].reverse()});
+ const nextManifest=sensaPortableBookManifestSchema.parse({...first.manifest,book:{...first.manifest.book,bookVersionId:randomUUID(),versionNumber:2,title:'新版来源'},contentRelease:{...first.manifest.contentRelease,contentReleaseId:randomUUID(),versionNumber:2}});
+ const release=(manifest:typeof first.manifest)=>{
+  const bytes=zipSync({...files,'book.json':new TextEncoder().encode(JSON.stringify(manifest))}),sha256=createHash('sha256').update(bytes).digest('hex');
+  const descriptor={...first.descriptor,book:manifest.book,contentRelease:manifest.contentRelease,sha256,byteLength:bytes.byteLength,url:`${origin}/published/${sha256}.sensa-book`};
+  first.responses.set(descriptor.url,bytes);return descriptor;
+ };
+ const shared=release(sharedManifest),next=release(nextManifest);
+ setRegistry([shared,first.descriptor]);
+ try{
+  const runtime=await startOrdinaryBook(page,/到期复习样本/);await runtime.getByRole('button',{name:'暂停',exact:true}).click();
+  const checkpoint=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint()),targetId=checkpoint.runtime!.targetId;
+  await page.goto(`${origin}/catalog`);const catalog=page.locator('#s-catalog').last(),book=page.locator('#s-catalog-book').last();
+  await catalog.getByRole('button',{name:/另一册来源/}).click();await book.getByRole('button',{name:'下载学习包',exact:true}).click();await expect(book.getByRole('button',{name:'加入学习',exact:true})).toBeEnabled();
+  const verifySource=async(offline=false)=>{
+   await page.goto(`${origin}/study/learning-target?targetId=${targetId}`);const target=page.locator('#s-learning-target');
+   await expect(target.getByRole('button',{name:/内容来源/})).toBeVisible();const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+   if(offline)await context.setOffline(true);
+   try{
+   await target.getByRole('button',{name:/内容来源/}).click();const source=page.locator('#s-library-package');
+   await expect(source.getByRole('heading',{name:first.manifest.book.title,exact:true})).toBeVisible();
+   await expect(source.getByText(/v1/u)).toBeVisible();await expect(source.getByRole('button',{name:/加入学习|应用更新|下载更新/u})).toHaveCount(0);
+   await source.getByRole('button',{name:'返回',exact:true}).click();await expect(target.getByRole('button',{name:/内容来源/})).toBeVisible();expect(new URL(page.url()).searchParams.get('targetId')).toBe(targetId);
+   expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(before);
+   }finally{if(offline)await context.setOffline(false);}
+  };
+  await verifySource();
+  setRegistry([shared,next]);await page.goto(`${origin}/catalog`);await catalog.getByRole('button',{name:'刷新',exact:true}).click();await expect(catalog.getByRole('button',{name:/新版来源/})).toBeVisible();
+  await catalog.getByRole('button',{name:/新版来源/}).click();await book.getByRole('button',{name:'下载更新',exact:true}).click();await expect(book.getByRole('button',{name:'应用更新',exact:true})).toBeEnabled();
+  await verifySource(true);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(checkpoint);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);
+ }finally{first.responses.delete(shared.url);first.responses.delete(next.url);}
+});
+
 async function startDueReviewWithPausedInitial(page:Page){
  setRegistry([reviewDelivery.descriptor]);
  const runtime=await startOrdinaryBook(page,/到期复习样本/);

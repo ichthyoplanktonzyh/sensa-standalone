@@ -6,6 +6,7 @@ import {
  buildPackageCenterItems,
  indexPackageTargets,
  projectPackageContentWindow,
+ projectPackageSource,
 } from '../../../apps/web/src/experience/library/packageCenterProjection';
 
 type Controller=ReturnType<typeof usePackageLearning>;
@@ -184,4 +185,23 @@ test('Book content windows retain the full count while projecting only visible r
  assert.equal(projection.entries[0]?.entry.expression,'entry-0');
  assert.equal(projection.entries[0]?.target?.targetId,'target-0');
  assert.equal(projection.entries[49]?.entry.expression,'entry-49');
+});
+
+test('learning source lookup resolves the exact admitted publication instead of a shared Book or latest edition',()=>{
+ const source=publication({namespace:'publisher',bookId:uuid('601'),bookKey:'original',version:1,title:'Original edition',archive:digest('1'),memberCount:2,targetLanguage:'en',supportLanguage:'zh-CN'});
+ const other=publication({...source.book,namespace:'other',bookId:uuid('602'),bookKey:'other',version:1,title:'Other Book',archive:digest('2'),memberCount:1,targetLanguage:'en',supportLanguage:'zh-CN'});
+ const newer=publication({namespace:'publisher',bookId:uuid('601'),bookKey:'original',version:2,title:'Latest edition',archive:digest('3'),memberCount:1,targetLanguage:'en',supportLanguage:'zh-CN'});
+ const first=packageSummary({key:'old-first',packageId:uuid('701'),title:'First expression',version:1,targetLanguage:'en',supportLanguage:'zh-CN',publications:[other,{...source,memberIndex:0},newer]});
+ const second=packageSummary({key:'old-second',packageId:uuid('702'),title:'Second expression',version:1,targetLanguage:'en',supportLanguage:'zh-CN',publications:[{...source,memberIndex:1}]});
+ const controller={packages:[second,first],enrollments:[],languageContext:{targetLanguageTag:'de',supportLanguageTag:'fr'}} as unknown as Pick<Controller,'packages'|'enrollments'|'languageContext'>;
+ const result=projectPackageSource(controller,first.key,source.bookArchiveSha256);
+ assert.equal(result?.title,'Original edition');assert.equal(result?.sourceVersion,1);assert.equal(result?.publicationArchiveSha256,digest('1'));
+ assert.deepEqual(result?.installed.map(pack=>pack.key),['old-first','old-second'],'original Manifest positions are preserved');
+ assert.equal(result?.routeMatchesActive,false,'a different active Route does not erase the original source');
+ assert.equal(result?.descriptor,undefined);assert.equal(result?.updateAvailable,false);assert.equal(result?.updateDownloaded,false);
+ assert.equal(projectPackageSource(controller,first.key,digest('9')),undefined,'an absent recorded release never falls back to another publication');
+ assert.equal(projectPackageSource(controller,'absent',source.bookArchiveSha256),undefined,'missing source content is not fabricated');
+ const portable=projectPackageSource(controller,first.key);
+ assert.equal(portable?.title,'First expression','without a Book identity show the exact Portable source rather than choosing a Book');
+ assert.equal(portable?.sourceVersion,1);
 });

@@ -28,6 +28,7 @@ import {
  buildPackageCenterItems,
  indexPackageTargets,
  projectPackageContentWindow,
+ projectPackageSource,
  type PackageCenterItem,
 } from './packageCenterProjection';
 import type {ContentSupplyInstallationPhase} from '../../contentSupply/system';
@@ -90,7 +91,7 @@ function PackageCards({items,onOpen,emptyKey,loaded}:{
  </>;
 }
 
-function PackageDetail({active,item,c,onBack,onLearning,onTarget,screenId='s-catalog-book'}:{
+function PackageDetail({active,item,c,onBack,onLearning,onTarget,screenId='s-catalog-book',referenceOnly=false}:{
  screenId?:string;
  active:boolean;
  item:PackageCenterItem|undefined;
@@ -98,6 +99,7 @@ function PackageDetail({active,item,c,onBack,onLearning,onTarget,screenId='s-cat
  onBack:()=>void;
  onLearning:()=>void;
  onTarget:(id:string)=>void;
+ referenceOnly?:boolean;
 }){
  const {t,i18n}=useTranslation();
  const locale=resolveInterfaceLocale(i18n.resolvedLanguage??i18n.language);
@@ -147,15 +149,16 @@ function PackageDetail({active,item,c,onBack,onLearning,onTarget,screenId='s-cat
   ||(item.installed.length>0&&!item.enrolled&&!item.routeMatchesActive);
  const routeMismatch=item.installed.length>0&&!item.enrolled&&!item.routeMatchesActive;
  const redundantRouteNotice=routeMismatch&&[localFlowText('routeLanguageMismatch'),localFlowText('routeSupportMismatch')].includes(c.notice);
+ const version=item.sourceVersion??item.descriptor?.book.versionNumber??(item.kind==='local'?item.installed[0]?.portableOrigin.manifest.metadata.version:undefined);
  return <LearningSetupFrame id={screenId} active={active} onBack={onBack} title={localFlowText('packageCatalogTitle')}>
   <div className="mb-8 space-y-4">
    {c.loaded?<span className="inline-flex items-center gap-2 rounded-lg bg-accent-soft px-3 py-2 text-sm text-action-primary">{item.enrolled?<Check size={16}/>:<BookOpen size={16}/>} {itemState(item)}</span>:<span role="status" aria-label={t('reliability.loading')} className="inline-block h-9 w-24 animate-pulse rounded-lg bg-surface-subtle"/>}
    <h1 className="break-words text-3xl font-medium tracking-tight outline-none sm:text-4xl">{item.title}</h1>
    {item.description&&<p className="max-w-2xl text-sm leading-7 text-fg-secondary">{item.description}</p>}
-   <p className="text-sm text-fg-secondary">{interfaceLanguageDisplayName(item.targetLanguage,locale)} / {interfaceLanguageDisplayName(item.supportLanguage,locale)} · {localFlowText('packageExpressionCount',{count:item.count})}{item.descriptor?` · v${item.descriptor.book.versionNumber}`:item.kind==='local'?` · v${item.installed[0]?.portableOrigin.manifest.metadata.version}`:''}</p>
+   <p className="text-sm text-fg-secondary">{interfaceLanguageDisplayName(item.targetLanguage,locale)} / {interfaceLanguageDisplayName(item.supportLanguage,locale)} · {localFlowText('packageExpressionCount',{count:item.count})}{version===undefined?'':` · v${version}`}</p>
    {item.updateAvailable&&item.descriptor?.changeSummary&&<p className="max-w-2xl text-sm leading-6 text-fg-secondary">{item.descriptor.changeSummary}</p>}
   </div>
-  <section aria-label={localFlowText('packageActions')} className="mb-8 space-y-4 rounded-2xl border border-border-strong bg-surface-panel p-5 sm:p-6">
+  {!referenceOnly&&<section aria-label={localFlowText('packageActions')} className="mb-8 space-y-4 rounded-2xl border border-border-strong bg-surface-panel p-5 sm:p-6">
    {c.notice&&!redundantRouteNotice&&<p role="status" className="rounded-xl border border-border-subtle bg-surface-subtle p-4 text-sm leading-6">{localFlowNotice(c.notice)}</p>}
    {item.installed.length>0&&!item.enrolled&&!item.routeMatchesActive&&<p role="status" className="text-sm leading-6 text-fg-secondary">{localFlowText('packageRouteMismatchHint')}</p>}
    {!c.loaded?<div role="status" aria-label={t('reliability.loading')} className="h-11 w-40 animate-pulse rounded-control bg-surface-subtle"/>:downloadKey===item.key&&installationPhase==='committing'?<p role="status" className="text-sm">{t('composer.saving')}</p>:downloadKey===item.key&&installationPhase==='preparing'?<>
@@ -172,7 +175,7 @@ function PackageDetail({active,item,c,onBack,onLearning,onTarget,screenId='s-cat
     </button>
     {item.installed.length===1&&<button className={setupButton} disabled={c.busy} onClick={()=>void c.exportPackage(item.installed[0]!.key).then(result=>{if(result)downloadPortablePackage(result);})}><Download size={18}/>{localFlowText('exportPortablePackage')}</button>}
    </div>}
-  </section>
+  </section>}
   <section aria-label={localFlowText('packageContents')}>
    <h2 className="mb-4 text-lg font-medium">{localFlowText('packageContents')}</h2>
    {!c.loaded?<div role="status" aria-label={t('reliability.loading')} className="h-40 animate-pulse rounded-2xl bg-surface-subtle"/>:installedEntries.length?<><ul className="divide-y divide-border-subtle overflow-hidden rounded-2xl border border-border-subtle bg-surface-panel">{installedEntries.map(({pack,entry,target})=><li key={`${pack.key}:${entry.bindingVersionId}:${entry.senseVersionId}`} className="flex flex-wrap items-center justify-between gap-4 p-5">
@@ -244,12 +247,15 @@ export function PackageBookScreen({active,bookKey,c,onBack,onLearning,onTarget}:
  return <PackageDetail active={active} item={item} c={c} onBack={onBack} onLearning={onLearning} onTarget={onTarget}/>;
 }
 
-export function PackageLibraryDetailScreen({active,packageKey,c,onBack,onLearning,onTarget}:{
- active:boolean;packageKey:string|null;c:Controller;onBack:()=>void;onLearning:()=>void;onTarget:(id:string)=>void;
+export function PackageLibraryDetailScreen({active,packageKey,publicationArchiveSha256,c,onBack,onLearning,onTarget}:{
+ active:boolean;packageKey:string|null;publicationArchiveSha256?:string;c:Controller;onBack:()=>void;onLearning:()=>void;onTarget:(id:string)=>void;
 }){
- const projection=useMemo(()=>buildPackageCenterItems(c),[c.catalog,c.packages,c.enrollments,c.languageContext.targetLanguageTag,c.languageContext.supportLanguageTag]);
- const item=projection.library.find(item=>item.listKey===packageKey)??projection.library.find(item=>item.installed.some(pack=>pack.key===packageKey));
- return <PackageDetail screenId="s-library-package" active={active} item={item} c={c} onBack={onBack} onLearning={onLearning} onTarget={onTarget}/>;
+ const selection=useMemo(()=>{
+  if(publicationArchiveSha256)return {item:projectPackageSource(c,packageKey,publicationArchiveSha256),referenceOnly:true};
+  const libraryItem=buildPackageCenterItems(c).library.find(item=>item.listKey===packageKey);
+  return {item:libraryItem??projectPackageSource(c,packageKey),referenceOnly:!libraryItem};
+ },[c.catalog,c.packages,c.enrollments,c.languageContext.targetLanguageTag,c.languageContext.supportLanguageTag,packageKey,publicationArchiveSha256]);
+ return <PackageDetail screenId="s-library-package" active={active} {...selection} c={c} onBack={onBack} onLearning={onLearning} onTarget={onTarget}/>;
 }
 
 export function PackageLibraryScreen({active,c,onBack,onCatalog,onOpenBook,onOpenPackage,onPublisher}:{

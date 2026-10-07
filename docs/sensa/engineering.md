@@ -509,6 +509,7 @@ YouGlish 使用官方 Widget 直接嵌入真实语境聆听页面；提供方脚
 Reference 的公共查询接口接受显式 pinned languages；正式 Runtime host 从实际 Target 绑定该语对，例句页复用同一查询回调，详情 overlay 与后续手动搜索保留其来源语言。快速查询的 `missing` 与 `error` 分开，不把确认未命中改报服务故障。例句 viewer 只暂停字典，不重置查询词；assessment 提交前无题面 Reference 动作，golden resource 的实际 React 渲染回归保护此边界，不代表公开 Structured 旅程或学习结算验收。
 Reference 发音通过同一 `AudioService.playReferencePronunciation` 接收原文语言与可选源录音；不读取当前Route来替代来源语言。源录音失败准确不可用，不静默换声；无源录音时只用匹配来源标签的本机声音，明确变体不猜另一地区。首次本机voice列表为空时最多等待一秒的`voiceschanged`，关闭／停止立即取消等待并阻止迟到播放；打开例句停止录音，返回词典不保留播放中状态。缺声音、合成失败与停止分别按实际终态处理，录音／设备声音与发音标签使用同一来源。
 词典适配器仅从来源标签或明确录音命名识别发音地区；无地区声明的英语音标保留`en`，不默认标为美式。
+Target 来源页复用已保存的 `publicationArchiveSha256` 与 exact Package key，`projectPackageSource` 从已安装 publication metadata 投影原版本和 memberIndex；不使用 Catalog 最新版或第一册共享成员替代来源。该 URL 参数仅归属来源页，返回原 Target 时移除。来源页隐藏安装／加入／更新操作；正常 Library listKey 入口保持管理行为。
 
 阅读请求由扩展的 background 在一个地方补齐学习者状态（语对与术语表），流式端口与普通消息共用这一步；模型连接测试与模型列表只带各自的问题。服务端的阅读、测试与列表三个入口只接受合同里声明的那三种请求体，`tests/web/integration/reading-glossary.test.mts` 在快速测试里逐个核对扩展实际发出的 body。
 整页阅读复用一次按块语言观察来决定跳过与请求的 source language；不把第三语言段落重标为页面语言。

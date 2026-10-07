@@ -136,7 +136,7 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
     onSource={()=>{
      const provenance=localSelectedTarget.material.snapshot.provenance;
      if('personalMeaningId' in provenance&&typeof provenance.personalMeaningId==='string')openPersonalMeaning(provenance.personalMeaningId);
-     else if(localSelectedTarget.packageKey)goMain('s-library-package',{packageKey:localSelectedTarget.packageKey});
+     else if(localSelectedTarget.packageKey)goMain('s-library-package',{packageKey:localSelectedTarget.packageKey,publicationArchiveSha256:localSelectedTarget.publicationArchiveSha256??undefined});
      else backMain();
     }} onBack={backMain} onHome={resetMain} onStart={()=>void startLocalLearning(localSelectedTarget.targetId,localSelectedTarget.completed)}/>;
   }
@@ -192,7 +192,7 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
     onOpenBook={bookKey=>setMainStack(['s-catalog','s-catalog-book'],{bookKey})}
     onOpenPackage={packageKey=>setMainStack(['s-library','s-library-package'],{packageKey})}
     onPublisher={()=>setMainStack(['s-publisher'])} onLearning={returnHome} onTarget={openLocalTarget}/>,
-  's-library-package':screenActive=><PackageLibraryDetailScreen active={screenActive} packageKey={params.packageKey??null} c={packageLearning}
+  's-library-package':screenActive=><PackageLibraryDetailScreen active={screenActive} packageKey={params.packageKey??null} publicationArchiveSha256={params.publicationArchiveSha256} c={packageLearning}
     onBack={backMain} onLearning={returnHome} onTarget={openLocalTarget}/>,
   's-publisher':screenActive=><PackagePublisherScreen active={screenActive} c={packageLearning} onBack={backMain}
     onCatalog={()=>setMainStack(['s-catalog'])} onLibrary={()=>setMainStack(['s-library'])}/>,

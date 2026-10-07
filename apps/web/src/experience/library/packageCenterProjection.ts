@@ -22,6 +22,7 @@ export type PackageCenterItem=Readonly<{
  updateDownloaded:boolean;
  enrolled:boolean;
  routeMatchesActive:boolean;
+ sourceVersion?:number;
 }>;
 
 type ReleaseGroup=Readonly<{
@@ -245,6 +246,45 @@ export function buildPackageCenterItems(c:Pick<Controller,'catalog'|'packages'|'
   });
  }
  return {catalog,library:[...catalog.filter(item=>item.installed.length),...retired,...local]};
+}
+
+/** A learning source is the exact admitted publication, not whichever latest
+ * Book happens to contain the same Portable member. No source is inferred when
+ * its recorded identity is missing. This projection never offers admission. */
+export function projectPackageSource(
+ c:Pick<Controller,'packages'|'enrollments'|'languageContext'>,
+ packageKey:string|null,
+ publicationArchiveSha256?:string,
+):PackageCenterItem|undefined{
+ const pack=c.packages.find(pack=>pack.key===packageKey);
+ if(!pack)return undefined;
+ if(!publicationArchiveSha256)return {
+  key:pack.key,listKey:pack.key,kind:'local',title:pack.portableOrigin.manifest.metadata.title,
+  description:pack.portableOrigin.manifest.metadata.description,count:pack.content.entries.length,
+  targetLanguage:pack.content.targetLanguage,supportLanguage:pack.content.supportLanguage,installed:[pack],
+  updateAvailable:false,updateDownloaded:false,enrolled:false,
+  routeMatchesActive:routeMatches(pack.content.targetLanguage,pack.content.supportLanguage,c),
+  sourceVersion:pack.portableOrigin.manifest.metadata.version,
+ };
+ const publication=pack.portableOrigin.publications.find(source=>source.bookArchiveSha256===publicationArchiveSha256);
+ if(!publication)return undefined;
+ const group={packages:[] as InstalledPackage[],memberIndices:new Map<string,number>()};
+ for(const candidate of c.packages){
+  const member=candidate.portableOrigin.publications.find(source=>source.bookArchiveSha256===publicationArchiveSha256);
+  if(!member)continue;
+  group.packages.push(candidate);
+  if(typeof member.memberIndex==='number')group.memberIndices.set(candidate.key,member.memberIndex);
+ }
+ orderAdmittedMembers(group);
+ return {
+  key:publication.book.bookKey,listKey:`source:${publicationArchiveSha256}`,kind:'published',
+  title:publication.book.title,description:publication.book.description,count:publication.memberCount,
+  targetLanguage:publication.route.targetLanguage,supportLanguage:publication.route.supportLanguage,
+  publicationArchiveSha256,installed:group.packages,updateAvailable:false,updateDownloaded:false,
+  enrolled:c.enrollments.some(enrollment=>enrollment.source.kind==='published_book'&&enrollment.source.publicationArchiveSha256===publicationArchiveSha256),
+  routeMatchesActive:routeMatches(publication.route.targetLanguage,publication.route.supportLanguage,c),
+  sourceVersion:publication.book.versionNumber,
+ };
 }
 
 export type PackageContentRow=Readonly<{
