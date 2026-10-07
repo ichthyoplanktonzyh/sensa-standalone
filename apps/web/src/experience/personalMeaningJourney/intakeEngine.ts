@@ -188,6 +188,9 @@ export const executeFastTrack = (
     expressionWordingSource?:PersonalProvenanceKind;
     /** Published scene adoption supplies its own inline-media Anchor. */
     materializeContextMedia?:boolean;
+    /** Scene adoption has one cross-device owner identity. Other Intake
+     * creation keeps the ordinary allocated identity. */
+    personalMeaningId?:string;
     /** Correction reuses a real owned Context, never an invented capture. */
     existingMeaning?:{record:MeaningJourneyRecord;contextAnchorRevisionId:string};
   },
@@ -217,7 +220,7 @@ export const executeFastTrack = (
   const existingContext=previous?.personalSemanticAnchorRevisions.find(row=>row.personalSemanticAnchorRevisionId===input.existingMeaning!.contextAnchorRevisionId);
   if(previous&&!existingContext)throw Error('localFlow.meaningChanged');
   if(occurrence.locator.kind==='personal_meaning'&&(!previous||occurrence.locator.personalMeaningId!==previous.personalMeaning.personalMeaningId||occurrence.locator.personalSemanticAnchorRevisionIds[0]!==existingContext?.personalSemanticAnchorRevisionId))throw Error('localFlow.annotationInvalid');
-  const personalMeaningId = previous?.personalMeaning.personalMeaningId??ports.newId();
+  const personalMeaningId = previous?.personalMeaning.personalMeaningId??input.personalMeaningId??ports.newId();
   const personalMeaningRevisionId = ports.newId();
 
   // 1) Semantic Anchor: the captured context itself.

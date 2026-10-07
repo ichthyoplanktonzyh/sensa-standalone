@@ -35,6 +35,12 @@
     "utterance_strategy": "表达策略"
   }
 },
+  "sceneEditor": {
+    "saveUnconfirmed": "未能确认保存，草稿仍保留。请重试。",
+    "readFailed": "无法读取我的场景。",
+    "changed": "场景已在别处更新，你的草稿仍保留。",
+    "useLatest": "使用最新场景"
+  },
   "noteEditor": {
     "loading": "正在读取笔记…",
     "readFailed": "未能读取这条笔记。",

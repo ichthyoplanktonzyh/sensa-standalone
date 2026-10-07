@@ -35,6 +35,12 @@
     "utterance_strategy": "Stratégie d’expression"
   }
 },
+  "sceneEditor": {
+    "saveUnconfirmed": "Impossible de confirmer l’enregistrement. Votre brouillon est conservé ; réessayez.",
+    "readFailed": "Impossible de lire cette scène.",
+    "changed": "Cette scène a été modifiée ailleurs. Votre brouillon est conservé.",
+    "useLatest": "Utiliser la dernière scène"
+  },
   "noteEditor": {
     "loading": "Chargement de la note…",
     "readFailed": "Impossible de lire cette note.",

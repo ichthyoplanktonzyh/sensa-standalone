@@ -11,6 +11,7 @@ import {createSeededClock} from '../../../apps/web/src/experience/personalMeanin
 import {MemoryJourneyRepository} from '../../../apps/web/src/experience/personalMeaningJourney/repository.ts';
 import type {PublishedLearningSceneAcceptanceInput} from '../../../apps/web/src/experience/personalMeaningJourney/types.ts';
 import {worldItemFromRegistry} from '../../../apps/web/src/experience/personalMeaningJourney/worldRead';
+import {assertPersonalSemanticWorldState} from '../../../apps/web/src/experience/personalMeaningJourney/authority';
 
 test("learning-scene-bridge", async () => {
 
@@ -84,6 +85,34 @@ assert.equal(state.registry.expressions.length,1);
 assert.equal(state.registry.bindings.length,1);
 detail=gateway.getDetail(accepted.personalMeaningId)!;
 assert.equal(detail.materialBlocks.find(block=>block.kind==='text')?.bodyText,second.scene.body);
+const beforeConfirmation=await read(),confirmationInput={...second,operationId:id()};
+const confirmation=await gateway.acceptPublishedLearningScene(confirmationInput);
+assert.equal(confirmation.personalSemanticAnchorRevisionId,updated.personalSemanticAnchorRevisionId);
+assert.equal(confirmation.acceptedByOperationId,second.operationId);
+assert.deepEqual((await read()).meanings,beforeConfirmation.meanings,'a fresh user intent confirms the already-current Scene without another Anchor revision');
+assert.equal((await gateway.acceptPublishedLearningScene(confirmationInput)).replayed,true);
+
+const authoredContext='我在语义详情单独整理的早餐经历，应保留。';
+await gateway.reviseContext({operationId:id(),personalMeaningId:accepted.personalMeaningId,expectedRevision:detail.revision,blocks:[{kind:'text',bodyText:authoredContext}]});
+const beforeReaccept=await read(),retired=beforeReaccept.meanings[0].personalSemanticAnchors.find((anchor:any)=>anchor.personalSemanticAnchorId===accepted.personalSemanticAnchorId);
+assert.equal(retired.status,'deleted');
+const third={...second,operationId:id(),existingPersonalMeaningId:accepted.personalMeaningId,scene:{...second.scene,revisionId:id(),revision:3,body:'学习页里另一次明确保存的蓝盘子经历。'}};
+const reintroduced=await gateway.acceptPublishedLearningScene(third);
+assert.equal(reintroduced.personalMeaningId,accepted.personalMeaningId);
+assert.notEqual(reintroduced.personalSemanticAnchorId,accepted.personalSemanticAnchorId,'a retired Context anchor must not be revived in place');
+state=await read();record=state.meanings[0];
+assert.deepEqual(record.personalSemanticAnchors.find((anchor:any)=>anchor.personalSemanticAnchorId===accepted.personalSemanticAnchorId),retired);
+assert.deepEqual(gateway.getDetail(accepted.personalMeaningId)!.materialBlocks.filter(block=>block.kind==='text').map(block=>block.bodyText),[authoredContext,third.scene.body],'explicit reacceptance preserves the independently authored current Context and adds the reviewed scene');
+const fourth=await gateway.acceptPublishedLearningScene({...third,operationId:id(),scene:{...third.scene,revisionId:id(),revision:4,body:'这次更新同一条新场景锚点。'}});
+assert.equal(fourth.personalSemanticAnchorId,reintroduced.personalSemanticAnchorId);
+assert.deepEqual(gateway.getDetail(accepted.personalMeaningId)!.materialBlocks.filter(block=>block.kind==='text').map(block=>block.bodyText),[authoredContext,'这次更新同一条新场景锚点。']);
+
+const foreignRepository=new MemoryJourneyRepository(),foreignGateway=createJourneyGateway({repository:foreignRepository});
+await foreignGateway.acceptPublishedLearningScene({...first,operationId:id(),scene:{...first.scene,sceneId:id(),revisionId:id()}});
+const forged=(await foreignRepository.load()).meanings[0]!;
+(forged.personalSemanticAnchorRevisions[0]!.structuredPayload.learningScene as {sceneId:string}).sceneId=sceneId;
+const duplicateOwner={...await read(),meanings:[...(await read()).meanings,forged]};
+assert.throws(()=>assertPersonalSemanticWorldState(duplicateOwner),/同一 Personal Learning Scene/,'full owner/restore admission rejects two different Meanings for one Scene, not just later indexed reads');
 
 console.log('PASS: a published Learning Target accepts one learner scene into the exact pinned Sense/Expression/Binding, replays safely, and updates the same Personal Meaning only after explicit re-acceptance.');
 

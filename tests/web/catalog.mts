@@ -209,6 +209,7 @@ const fastBeforeMemory = [
 ] as const;
 
 const fastWithMemory = [
+  'integration/personal-learning-scene',
   'integration/personal-meaning-correction',
   'integration/learner-library-projection',
   'integration/direct-learning-provisioning',
@@ -294,6 +295,7 @@ const playwrightPaths = new Set<string>([
 ]);
 
 const durabilityTests = new Set<string>([
+  'integration/personal-learning-scene',
   'integration/personal-meaning-correction',
   'integration/learner-library-projection',
   'integration/learning-material-pins',

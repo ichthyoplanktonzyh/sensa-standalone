@@ -16,6 +16,101 @@ test.setTimeout(300_000);
  * provenance references remain untouched; their order has separate oracles. */
 const meaningFactIds:Record<string,string>={personalMeaningRevisions:'personalMeaningRevisionId',personalSemanticAnchors:'personalSemanticAnchorId',personalSemanticAnchorRevisions:'personalSemanticAnchorRevisionId',personalExpressionAnchors:'personalExpressionAnchorId',personalExpressionAnchorRevisions:'personalExpressionAnchorRevisionId',focuses:'meaningFocusId',focusRevisions:'meaningFocusRevisionId',focusAcceptances:'meaningFocusAcceptanceId',constructions:'senseConstructionId',constructionTurns:'constructionTurnId',proposals:'senseProposalId',proposalVersions:'senseProposalVersionId',senseConfirmations:'senseProposalConfirmationId',semanticAcceptances:'semanticAcceptanceId',alignments:'personalMeaningAlignmentId',alignmentEvents:'personalMeaningAlignmentEventId',bindingConfirmations:'expressionBindingConfirmationId'};
 const retainedMeaningFacts=(record:any)=>Object.fromEntries(Object.entries(record).map(([key,value])=>[key,Array.isArray(value)&&meaningFactIds[key]?[...value].sort((a,b)=>a[meaningFactIds[key]!].localeCompare(b[meaningFactIds[key]!])):value]));
+test('personal scenes and original action pins restore while offline first acceptance forks remain explicit',async({browser})=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount('personal-scene'),a=await fixture.createClient(account),publication=await libraryCloudPackageFixture();
+  const createScene=(page:import('@playwright/test').Page)=>page.evaluate(async({bookBytes,descriptor})=>{
+   const c=(window as any).core,id=()=>crypto.randomUUID(),fetch=window.fetch;
+   window.fetch=async input=>String(input)===descriptor.url?new Response(new Uint8Array(bookBytes)):new Response(null,{status:404});
+   try{await c.contentSupplySystem.execute({kind:'install_catalog_item',descriptor,signal:new AbortController().signal});}finally{window.fetch=fetch;}
+   const languageContext=(await c.languageRoutesSnapshot()).context;
+   await c.learningSystem.execute({kind:'enroll_book',operationId:id(),languageContext,publicationArchiveSha256:descriptor.sha256});
+   const target=(await c.readLearning()).targets[0];await c.learningSystem.execute({kind:'start',operationId:id(),targetId:target.id,languageContext,dailyLimit:20});
+   const runtime=(await c.learningSystem.read({kind:'runtime',languageContext})).runtime,t=runtime.target;
+   const input={kind:'save_learning_scene',learningTargetId:t.targetId,languageRouteId:languageContext.languageRouteId,curriculumMembershipId:t.curriculumMembershipId,senseId:t.identity.senseId,senseVersionId:t.identity.senseVersionId,bindingVersionId:t.identity.bindingVersionId};
+   const media=[{mediaId:id(),kind:'image',dataUrl:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII=',mimeType:'image/png',fileName:'private.png',altText:'私有借伞场景'}];
+   const {scene}=await c.personalContentSystem.execute({...input,operationId:id(),body:'两台设备共同拥有、尚未接受的借伞场景。',media,expected:null});
+   await c.learningSystem.execute({kind:'act',operationId:id(),runId:runtime.runId,expectedRevision:runtime.revision,action:{kind:'reveal'}});
+   const pack=(await c.contentSupplySystem.read({kind:'workspace'})).packages[0],p=pack.portableOrigin.publications[0],entry=pack.content.entries[0];
+   const acceptance={existingPersonalMeaningId:null,source:{packageKey:pack.key,bookId:p.book.bookId,bookVersionId:p.book.bookVersionId,contentReleaseId:p.contentRelease.contentReleaseId,publishedAt:p.publishedAt,title:p.book.title},target:{learningTargetId:t.targetId,curriculumMembershipId:t.curriculumMembershipId,senseId:t.identity.senseId,senseVersionId:t.identity.senseVersionId,bindingId:t.identity.bindingId,bindingVersionId:t.identity.bindingVersionId,expression:t.presentation.expression,targetLanguageTag:t.presentation.targetLanguageTag},semantic:entry.semantic};
+   return {input,acceptance,scene,languageContext};
+  },{bookBytes:Array.from(publication.bookBytes),descriptor:publication.descriptor});
+  const seed=await createScene(a);
+  await a.evaluate(()=>(window as any).sync());const b=await fixture.createClient(account);await b.evaluate(()=>(window as any).sync());
+  const query={kind:'learning_scene',learningTargetId:seed.input.learningTargetId,languageRouteId:seed.input.languageRouteId};
+  const inspect=(page:import('@playwright/test').Page)=>page.evaluate(async query=>{const c=(window as any).core;return {scene:await c.personalContentSystem.readScene(query),meanings:await c.readLibrary((tx:any)=>tx.entries('semanticMeanings')),learning:await c.readLibrary(async(tx:any)=>Object.fromEntries(await Promise.all(['learningTargets','learningRuns','learningEvents','learningSessions','studyScopes'].map(async table=>[table,await tx.entries(table)]))))};},query);
+  assert.deepEqual((await inspect(b)).scene,seed.scene);assert.equal((await inspect(b)).meanings.length,0);
+  const editAndAccept=(page:import('@playwright/test').Page,body:string)=>page.evaluate(async({seed,body,query})=>{
+   const c=(window as any).core,prior=await c.personalContentSystem.readScene(query),old=prior.revisions.find((r:any)=>r.revision===prior.currentRevision);
+   const expected=c.personalLearningSceneEditBase(prior);
+   const {scene}=await c.personalContentSystem.execute({...seed.input,operationId:crypto.randomUUID(),body,media:old.media,expected});
+   const revision=scene.revisions.find((r:any)=>r.revision===scene.currentRevision),operationId=crypto.randomUUID();
+   const accepted=await c.createJourneyModules().personalMeaningJourney.acceptPublishedLearningScene({...seed.acceptance,operationId,existingPersonalMeaningId:scene.acceptedPersonalMeaningId,scene:{...revision,sceneId:scene.sceneId}});
+   await c.personalContentSystem.execute({kind:'mark_learning_scene_accepted',operationId:crypto.randomUUID(),sceneId:scene.sceneId,revisionId:revision.revisionId,personalMeaningId:accepted.personalMeaningId});
+   return {accepted,request:{...seed.acceptance,operationId,existingPersonalMeaningId:scene.acceptedPersonalMeaningId,scene:{...revision,sceneId:scene.sceneId}}};
+  },{seed,body,query});
+  const branchA=await editAndAccept(a,'设备 A 明确接受的借伞经历。'),branchB=await editAndAccept(b,'设备 B 离线独立接受的借伞经历。'),acceptedA=branchA.accepted,acceptedB=branchB.accepted;assert.equal(acceptedA.personalMeaningId,acceptedB.personalMeaningId,'the same Scene has one owner identity even before devices meet');
+  const beforeB=await inspect(b);await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());
+  const conflict=await b.evaluate(()=>(window as any).core.readCloudSync());assert.equal(conflict.status,'conflict');
+  assert.deepEqual((await inspect(b)).scene,beforeB.scene);assert.equal((await inspect(b)).meanings.length,1,'a conflicting annotation must not auto-merge its two independently accepted Meanings');
+  await b.evaluate(async()=>{const c=(window as any).core;await c.resolveCloudSyncConflicts('remote');await (window as any).sync();});
+  const settled=await inspect(b);assert.equal(settled.scene.acceptedPersonalMeaningId,acceptedA.personalMeaningId);assert.equal(settled.meanings.length,1);assert.equal(settled.meanings[0].key,acceptedA.personalMeaningId);
+  assert.deepEqual(retainedMeaningFacts(settled.meanings[0].value),retainedMeaningFacts((await inspect(a)).meanings[0].value));
+  assert.deepEqual(settled.learning,beforeB.learning,'scene fork decisions cannot invent rating, completion or scheduling');
+  assert(settled.learning.learningEvents.some((row:any)=>row.value.detail.personalLearningScene?.revisionId===seed.scene.revisions[0].revisionId),'the original actual reveal still pins the pre-fork Scene');
+  const retained=await b.evaluate(()=>(window as any).core.readLibrary((tx:any)=>tx.entries('semanticReceipts')));assert(retained.some((row:any)=>row.key===branchA.request.operationId));assert(retained.some((row:any)=>row.key===branchB.request.operationId));
+  await assert.rejects(b.evaluate(request=>(window as any).core.createJourneyModules().personalMeaningJourney.acceptPublishedLearningScene(request),branchB.request),/meaningChanged/,'a retained but superseded branch receipt cannot replay a nonexistent Anchor as current success');
+  assert.deepEqual((await inspect(b)).scene,settled.scene);assert.deepEqual((await inspect(b)).learning,settled.learning);
+  await b.reload();await b.evaluate(async()=>{const path='/core.js';(window as any).core=await import(/* @vite-ignore */ path);await (window as any).core.openLibrary();});
+  assert.deepEqual((await inspect(b)).scene,settled.scene);
+  // A new user intent after choosing a branch is not the discarded operation.
+  // Confirming the selected Scene must neither duplicate nor rewrite its facts.
+  const confirmed=await b.evaluate(async({request,scene})=>{
+   const revision=scene.revisions.find((r:any)=>r.revision===scene.currentRevision);
+   return (window as any).core.createJourneyModules().personalMeaningJourney.acceptPublishedLearningScene({...request,operationId:crypto.randomUUID(),existingPersonalMeaningId:scene.acceptedPersonalMeaningId,scene:{...revision,sceneId:scene.sceneId}});
+  },{request:branchA.request,scene:settled.scene});
+  assert.equal(confirmed.personalMeaningId,acceptedA.personalMeaningId);assert.equal(confirmed.personalSemanticAnchorRevisionId,acceptedA.personalSemanticAnchorRevisionId);assert.equal(confirmed.acceptedByOperationId,branchA.request.operationId);
+  assert.deepEqual((await inspect(b)).meanings,settled.meanings);assert.deepEqual((await inspect(b)).learning,settled.learning);
+  await b.evaluate(()=>(window as any).core.exportLibraryBackup('scene-fixture-backup-password'));
+  // A different conflict sharing immutable registry dependencies must not
+  // make an untouched Scene's fixed-ID command replay unusable. The UI now
+  // creates a fresh ID per intent; these callers deliberately retain their IDs.
+  const ghostAccount=await fixture.createAccount('scene-note-closure'),gA=await fixture.createClient(ghostAccount),gSeed=await createScene(gA);
+  const note=async(page:import('@playwright/test').Page,body:string)=>page.evaluate(async({senseId,body})=>{const c=(window as any).core;await c.personalContentSystem.execute({kind:'set_sense_note',operationId:crypto.randomUUID(),senseId,body,expected:await c.personalContentSystem.readSenseNote(senseId)});},{senseId:gSeed.input.senseId,body});
+  await note(gA,'共同笔记基线');await gA.evaluate(()=>(window as any).sync());const gB=await fixture.createClient(ghostAccount);await gB.evaluate(()=>(window as any).sync());
+  await note(gA,'远端笔记分叉');await note(gB,'明确选择保留的本机笔记分叉');
+  const fixedRequest=await gA.evaluate(async seed=>{
+   const c=(window as any).core,revision=seed.scene.revisions[0],ids=c.learningSceneSemanticOperationIds(revision.revisionId),request={...seed.acceptance,operationId:ids.accept,existingPersonalMeaningId:null,scene:{...revision,sceneId:seed.scene.sceneId}};
+   const accepted=await c.createJourneyModules().personalMeaningJourney.acceptPublishedLearningScene(request);
+   await c.personalContentSystem.execute({kind:'mark_learning_scene_accepted',operationId:ids.link,sceneId:seed.scene.sceneId,revisionId:revision.revisionId,personalMeaningId:accepted.personalMeaningId});return request;
+  },gSeed);
+  await gA.evaluate(()=>(window as any).sync());await gB.evaluate(()=>(window as any).sync());
+  assert.equal((await gB.evaluate(()=>(window as any).core.readCloudSync())).status,'conflict');
+  await gB.evaluate(async()=>{const c=(window as any).core;await c.resolveCloudSyncConflicts('local');await (window as any).sync();});
+  const resumed=await gB.evaluate(async({request,seed})=>{
+   const c=(window as any).core,result=await c.createJourneyModules().personalMeaningJourney.acceptPublishedLearningScene(request),revision=seed.scene.revisions[0],ids=c.learningSceneSemanticOperationIds(revision.revisionId);
+   await c.personalContentSystem.execute({kind:'mark_learning_scene_accepted',operationId:ids.link,sceneId:seed.scene.sceneId,revisionId:revision.revisionId,personalMeaningId:result.personalMeaningId});return {result,note:await c.personalContentSystem.readSenseNote(seed.input.senseId),meanings:await c.readLibrary((tx:any)=>tx.entries('semanticMeanings'))};
+  },{request:fixedRequest,seed:gSeed});
+  assert.equal(resumed.result.replayed,true);assert.equal(resumed.meanings.length,1);assert.equal(resumed.note.body,'明确选择保留的本机笔记分叉');
+  await gB.evaluate(()=>(window as any).sync());await gA.evaluate(()=>(window as any).sync());
+  const laterScene=await gB.evaluate(async seed=>{
+   const c=(window as any).core,query={kind:'learning_scene',learningTargetId:seed.input.learningTargetId,languageRouteId:seed.input.languageRouteId},prior=await c.personalContentSystem.readScene(query),revision=prior.revisions.find((r:any)=>r.revision===prior.currentRevision);
+   return (await c.personalContentSystem.execute({...seed.input,operationId:crypto.randomUUID(),body:'已有意义之后，在两台设备共同保存的新还伞场景。',media:revision.media,expected:c.personalLearningSceneEditBase(prior)})).scene;
+  },gSeed);
+  await gB.evaluate(()=>(window as any).sync());await gA.evaluate(()=>(window as any).sync());
+  await note(gA,'后续更新时的远端笔记分叉');await note(gB,'后续更新时保留的本机笔记分叉');
+  const laterRequest=await gA.evaluate(async({seed,scene})=>{
+   const c=(window as any).core,revision=scene.revisions.find((r:any)=>r.revision===scene.currentRevision),ids=c.learningSceneSemanticOperationIds(revision.revisionId),request={...seed.acceptance,operationId:ids.accept,existingPersonalMeaningId:scene.acceptedPersonalMeaningId,scene:{...revision,sceneId:scene.sceneId}};
+   const accepted=await c.createJourneyModules().personalMeaningJourney.acceptPublishedLearningScene(request);await c.personalContentSystem.execute({kind:'mark_learning_scene_accepted',operationId:ids.link,sceneId:scene.sceneId,revisionId:revision.revisionId,personalMeaningId:accepted.personalMeaningId});return request;
+  },{seed:gSeed,scene:laterScene});
+  await gA.evaluate(()=>(window as any).sync());await gB.evaluate(()=>(window as any).sync());assert.equal((await gB.evaluate(()=>(window as any).core.readCloudSync())).status,'conflict');
+  await gB.evaluate(async()=>{const c=(window as any).core;await c.resolveCloudSyncConflicts('local');await (window as any).sync();});
+  const laterReplay=await gB.evaluate(async request=>{const c=(window as any).core,result=await c.createJourneyModules().personalMeaningJourney.acceptPublishedLearningScene(request),ids=c.learningSceneSemanticOperationIds(request.scene.revisionId);await c.personalContentSystem.execute({kind:'mark_learning_scene_accepted',operationId:ids.link,sceneId:request.scene.sceneId,revisionId:request.scene.revisionId,personalMeaningId:result.personalMeaningId});return result;},laterRequest);assert.equal(laterReplay.replayed,true);assert.equal(laterReplay.personalMeaningId,resumed.result.personalMeaningId);
+  const latest=await gB.evaluate(async id=>(window as any).core.worldReadRepository.detail(id),resumed.result.personalMeaningId);assert(latest.detail.materialBlocks.some((block:any)=>block.bodyText===laterRequest.scene.body));
+  await gB.evaluate(()=>(window as any).core.exportLibraryBackup('scene-note-fixture-backup-password'));
+ }finally{await fixture.close();}
+});
 test('ordered Context paragraphs survive Cloud fact reordering, correction and later material append',async({browser})=>{
  const fixture=await createLibraryCloudBrowserFixture(browser);
  try{

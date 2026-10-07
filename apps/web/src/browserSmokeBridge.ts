@@ -20,6 +20,9 @@ type BrowserSmokeBridge = {
   retainExampleForTest(unavailable?:boolean):Promise<{exampleId:string;word:string|null;text:string|null}>;
   retainedExampleIdsForTest():Promise<string[]>;
   failAnnotationReadsForTest(active:boolean):Promise<void>;
+  failLearningSceneReadsForTest(active:boolean):Promise<void>;
+  failNextSceneLinkCommitForTest():Promise<void>;
+  personalLearningScenesForTest():Promise<import('./personalContent/system').PersonalLearningScene[]>;
   seedInboxForTest(payload:import('@sensa/contracts/sensa').SensaIntakePayload,media?:import('./data/library/media').StoredMedia):Promise<string>;
   appendInboxContextForTest(intakeId:string,text:string):Promise<void>;
   failNextInboxCommitForTest(intakeId:string):Promise<void>;
@@ -119,7 +122,7 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
   let releaseWorldReads:(()=>void)|undefined;
   let releaseInboxReads:((fail?:boolean)=>void)|undefined;
   let hiddenInboxMedia:import('./data/library/media').StoredMedia|undefined;
-  let releaseDirectResult:(()=>void)|undefined,restoreLearningReads:(()=>void)|undefined,restoreAnnotationReads:(()=>void)|undefined;
+  let releaseDirectResult:(()=>void)|undefined,restoreLearningReads:(()=>void)|undefined,restoreAnnotationReads:(()=>void)|undefined,restoreSceneReads:(()=>void)|undefined;
   let releaseLearningResult:(()=>void)|undefined,learningReadCounts:Record<string,number>|undefined;
   let restoreLearningTrace:(()=>void)|undefined;
   window.__sensaBrowserSmoke = {
@@ -311,6 +314,28 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
     async retainedExampleIdsForTest(){
       const {personalContentSystem}=await import('./personalContent/system');await personalContentSystem.refresh();
       return [...personalContentSystem.read({kind:'snapshot'}).savedExampleIds].sort();
+    },
+    async personalLearningScenesForTest(){
+      return readLibrary(async tx=>(await tx.all<import('./personalContent/system/personalContentSystem').PersonalContentRecord>('annotations')).filter((row):row is import('./personalContent/system').PersonalLearningScene=>row.kind==='learning_scene'));
+    },
+    async failNextSceneLinkCommitForTest(){
+      const {sqliteRecordAdapter}=await import('./data/library/sqliteAdapter');
+      const adapter=await sqliteRecordAdapter(),commit=adapter.commit.bind(adapter);
+      adapter.commit=async mutation=>{
+        if(mutation.puts.some(row=>row.table==='operations'&&row.encodedValue.includes('personal_content.learning_scene.accepted'))){
+          adapter.commit=commit;throw Error('fixture scene link commit failed');
+        }
+        return commit(mutation);
+      };
+    },
+    async failLearningSceneReadsForTest(active){
+      if(!active){restoreSceneReads?.();restoreSceneReads=undefined;return;}
+      if(restoreSceneReads)throw Error('Scene read fault already active');
+      const [{sqliteRecordAdapter},{personalContentSystem}]=await Promise.all([import('./data/library/sqliteAdapter'),import('./personalContent/system')]);
+      const adapter=await sqliteRecordAdapter(),get=adapter.get.bind(adapter);
+      adapter.get=async(table,key)=>{if(table==='annotations'&&key.startsWith('learning_scene:'))throw Error('fixture exact scene read failed');return get(table,key);};
+      restoreSceneReads=()=>{adapter.get=get;};
+      await personalContentSystem.refresh();
     },
     async failAnnotationReadsForTest(active){
       if(!active){restoreAnnotationReads?.();restoreAnnotationReads=undefined;return;}

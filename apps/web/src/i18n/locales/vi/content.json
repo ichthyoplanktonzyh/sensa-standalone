@@ -35,6 +35,12 @@
     "utterance_strategy": "Chiến lược phát ngôn"
   }
 },
+  "sceneEditor": {
+    "saveUnconfirmed": "Chưa thể xác nhận đã lưu. Bản nháp được giữ lại; hãy thử lại.",
+    "readFailed": "Không thể đọc cảnh này.",
+    "changed": "Cảnh này đã được sửa ở nơi khác. Bản nháp của bạn được giữ lại.",
+    "useLatest": "Dùng cảnh mới nhất"
+  },
   "noteEditor": {
     "loading": "Đang đọc ghi chú…",
     "readFailed": "Không thể đọc ghi chú này.",

@@ -535,7 +535,10 @@ Sense Version + target Binding + Expression presentation
 ### 10.4 后续更新
 
 - 编辑“我的场景”只产生新的 scene revision，不自动修改已接受的 Personal Meaning。
+- 并发编辑不静默覆盖当前场景；保留草稿并明确选择最新内容或自己的版本。读取失败不冒充场景不存在。
 - 用户可以再次明确提交新 revision，更新同一个 Personal Meaning 的 Anchor revision。
+- 若用户已在语义详情独立替换情境，再次存入学习场景会保留其现有整理，并把新场景追加到同一意义；
+  不复活已退役素材、不创建第二条意义，也不覆盖用户的新情境。
 - 删除或更新 Book 不删除 Personal Meaning；删除 Personal Meaning 也不影响场景历史、Learning Target、
   Retention、Protocol history 或 Evidence。
 

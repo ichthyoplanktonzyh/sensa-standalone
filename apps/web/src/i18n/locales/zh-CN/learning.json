@@ -342,7 +342,7 @@
     "updateSemanticWorld": "更新到我的语义世界",
     "savedToSemanticWorld": "已存入我的语义世界",
     "semanticWorldSaved": "已存入我的语义世界",
-    "semanticWorldSaveFailed": "暂时无法存入，请重试",
+    "semanticWorldSaveFailed": "未能确认存入，请重试",
     "cues": "意义线索",
     "thinkFirst": "先在心里说出来，再核对表达。",
     "reveal": "查看表达",

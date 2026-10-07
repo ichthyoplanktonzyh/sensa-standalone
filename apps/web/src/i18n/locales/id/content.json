@@ -35,6 +35,12 @@
     "utterance_strategy": "Strategi tuturan"
   }
 },
+  "sceneEditor": {
+    "saveUnconfirmed": "Penyimpanan belum dapat dipastikan. Draf tetap tersimpan; coba lagi.",
+    "readFailed": "Adegan ini tidak dapat dibaca.",
+    "changed": "Adegan ini diubah di tempat lain. Draf Anda tetap tersimpan.",
+    "useLatest": "Gunakan adegan terbaru"
+  },
   "noteEditor": {
     "loading": "Memuat catatan…",
     "readFailed": "Catatan ini tidak dapat dibaca.",

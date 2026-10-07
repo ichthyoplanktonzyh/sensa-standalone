@@ -89,6 +89,29 @@ export interface PersonalLearningScene {
   updatedAt: number;
 }
 
+/** The editor's exact read base, without copying media into command metadata. */
+export type PersonalLearningSceneEditBase = Readonly<{revisionId:string;contentDigest:string}> | null;
+
+export const personalLearningSceneEditBase = (scene:PersonalLearningScene|null):PersonalLearningSceneEditBase => {
+  const revision=scene?.revisions.find(row=>row.revision===scene.currentRevision);
+  return revision?{revisionId:revision.revisionId,contentDigest:canonicalJsonDigest({body:revision.body,media:revision.media})}:null;
+};
+
+export interface PersonalLearningSceneEditSnapshot {
+  readonly expected:PersonalLearningSceneEditBase;
+  readonly body:string;
+  readonly media:PersonalContentImage[];
+}
+
+export class PersonalLearningSceneConflictError extends Error {
+  constructor(readonly current:PersonalLearningSceneEditSnapshot|null) {super('personalContent.sceneChanged');}
+}
+
+export interface PersonalLearningSceneSaveResult {
+  readonly scene:PersonalLearningScene;
+  readonly projectionUpdated:boolean;
+}
+
 export type PersonalContentRecord =
   | SenseNote
   | Readonly<{
@@ -164,6 +187,7 @@ export type PersonalContentCommand =
       bindingVersionId: string;
       body: string;
       media: readonly PersonalContentImage[];
+      expected: PersonalLearningSceneEditBase;
     }>
   | Readonly<{
       kind: 'mark_learning_scene_accepted';
@@ -177,7 +201,8 @@ export type PersonalContentCommandResult<Command extends PersonalContentCommand>
   Command['kind'] extends 'set_saved_sense' | 'set_saved_example' ? boolean
     : Command['kind'] extends 'set_sense_note' ? SenseNoteSaveResult
       : Command['kind'] extends 'save_sense_context' ? string
-        : PersonalLearningScene;
+        : Command['kind'] extends 'save_learning_scene' ? PersonalLearningSceneSaveResult
+          : PersonalLearningScene;
 
 export interface PersonalContentSystem {
   execute<Command extends PersonalContentCommand>(
@@ -389,6 +414,12 @@ async function saveSenseContext(
 async function saveLearningScene(
   input: Extract<PersonalContentCommand, { kind: 'save_learning_scene' }>,
 ) {
+  if(input.expected===undefined)throw new Error('localFlow.annotationInvalid');
+  // Capture one request before waiting on the transaction. Caller aliases
+  // cannot change either the receipt digest or the material that is committed.
+  input={...input,media:cloneImages(input.media),expected:input.expected&&{...input.expected}};
+  if(input.expected&&(typeof input.expected.revisionId!=='string'||!input.expected.revisionId
+    ||typeof input.expected.contentDigest!=='string'||!input.expected.contentDigest))throw new Error('localFlow.annotationInvalid');
   const body = input.body.trim();
   if (!body && input.media.length === 0) throw new Error('localFlow.annotationInvalid');
   const id = personalLearningSceneRowId(input.learningTargetId, input.languageRouteId);
@@ -402,6 +433,7 @@ async function saveLearningScene(
       senseId: input.senseId,
       senseVersionId: input.senseVersionId,
       bindingVersionId: input.bindingVersionId,
+      expected: input.expected,
       contentDigest: canonicalJsonDigest({ body, media: input.media }),
     },
   }, async (tx) => {
@@ -414,6 +446,9 @@ async function saveLearningScene(
       || current.bindingVersionId !== input.bindingVersionId
     )) throw new Error('localFlow.annotationInvalid');
     const currentValue = current?.revisions.find((revision) => revision.revision === current.currentRevision);
+    if(canonicalJsonDigest(personalLearningSceneEditBase(current??null))!==canonicalJsonDigest(input.expected)) {
+      throw new PersonalLearningSceneConflictError(currentValue?{expected:personalLearningSceneEditBase(current!),body:currentValue.body,media:cloneImages(currentValue.media)}:null);
+    }
     if (currentValue && canonicalJsonDigest({ body: currentValue.body, media: currentValue.media })
       === canonicalJsonDigest({ body, media: input.media })) return current;
     const now = Date.now();
@@ -445,8 +480,9 @@ async function saveLearningScene(
     await assertChangedPersonalContent(tx);
     return next;
   });
-  await reload();
-  return scene;
+  // A list refresh cannot undo the durable scene+receipt commit.
+  try {await reload();return {scene,projectionUpdated:readStatus==='ready'};}
+  catch {return {scene,projectionUpdated:false};}
 }
 
 async function markLearningSceneAccepted(

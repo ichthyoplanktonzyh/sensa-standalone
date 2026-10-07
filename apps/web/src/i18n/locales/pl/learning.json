@@ -342,7 +342,7 @@
     "updateSemanticWorld": "Zaktualizuj mój świat znaczeń",
     "savedToSemanticWorld": "Zapisano w moim świecie znaczeń",
     "semanticWorldSaved": "Zapisano w moim świecie znaczeń",
-    "semanticWorldSaveFailed": "Nie udało się zapisać. Spróbuj ponownie.",
+    "semanticWorldSaveFailed": "Nie można potwierdzić zapisu. Spróbuj ponownie.",
     "cues": "Wskazówki dotyczące znaczenia",
     "thinkFirst": "Powiedz to sobie w myślach, zanim sprawdzisz wyrażenie.",
     "reveal": "Pokaż wyrażenie",

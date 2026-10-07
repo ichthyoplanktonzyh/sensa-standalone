@@ -344,6 +344,8 @@ test('personal meaning favorites and notes survive explicit recycle-bin deletion
 
 test('personal correction preserves the Meaning and original capture, blocks an unreviewed cross-tab Context, and saves offline with a readable history after reload',async({page,context})=>{
  page.setDefaultTimeout(15_000);
+ page.on('pageerror',error=>console.log('Correction browser page error:',error.message));
+ page.on('console',message=>{if(message.type()==='error')console.log('Correction browser console error:',message.text());});
  requests=[];plans=[];
  await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
  await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
@@ -374,8 +376,17 @@ test('personal correction preserves the Meaning and original capture, blocks an 
  await editor.getByRole('button',{name:'重试读取',exact:true}).click();await expect(editor.getByText(revised,{exact:true})).toBeVisible();await expect(editor.getByLabel('表达',{exact:true})).toBeEnabled();await expect(editor.getByLabel('表达',{exact:true})).toHaveValue('lend');await expect(editor.getByLabel('这里表达的意思',{exact:true})).toHaveValue('把自己的物品暂时交给别人使用，之后收回。');
  await write();await page.setViewportSize({width:390,height:844});await editor.getByText('语言与表达类型',{exact:true}).click();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:test.info().outputPath('correction-mobile.png'),fullPage:true});
+ await editor.getByRole('button',{name:'关闭',exact:true}).click();await expect(editor).toHaveCount(0);await open();await expect(editor.getByLabel('表达',{exact:true})).toHaveValue('lend');
  await context.setOffline(true);await editor.getByRole('button',{name:'确认并保存',exact:true}).click();await expect(editor).toHaveCount(0);await expect(page.getByRole('heading',{name:'lend',exact:true})).toBeVisible();await context.setOffline(false);
- expect(new URL(page.url()).searchParams.get('meaningId')).toBe(meaningId);await page.reload();await expect(page.getByRole('heading',{name:'lend',exact:true})).toBeVisible();
+ expect(new URL(page.url()).searchParams.get('meaningId')).toBe(meaningId);await page.reload();
+ try{await expect(page.getByRole('heading',{name:'lend',exact:true})).toBeVisible();}
+ catch(error){
+  console.log('Correction reload DOM state:',await page.evaluate(()=>({url:location.href,inert:document.querySelector<HTMLElement>('[data-sensa-page-layout="application-shell"]')?.inert,headings:[...document.querySelectorAll('h1,h2')].map(row=>row.textContent)})));
+  console.log('Correction reload lock state:',await page.evaluate(()=>navigator.locks.query()));
+  const probes=[['storage',page.evaluate(()=>window.__sensaBrowserSmoke!.storageDiagnostics())],['meaning',page.evaluate(()=>window.__sensaBrowserSmoke!.firstMeaningId())]] as const;
+  console.log('Correction reload storage state:',await Promise.all(probes.map(async([kind,probe])=>({kind,result:await Promise.race([probe.catch(error=>({error:String(error)})),new Promise(resolve=>setTimeout(()=>resolve('bounded diagnostic did not settle'),2000))])}))));
+  throw error;
+ }
  await page.getByRole('button',{name:'更多',exact:true}).click();await page.getByRole('dialog',{name:'更多',exact:true}).getByRole('button',{name:'过去的意思和表达',exact:true}).click();
  const history=page.getByRole('dialog',{name:'过去的意思和表达',exact:true});await expect(history.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();await expect(history.getByText('暂时取得别人的物品，之后归还。',{exact:true})).toBeVisible();await expect(history.getByRole('button',{name:/加入学习|修改意思/})).toHaveCount(0);await history.getByRole('button',{name:'关闭',exact:true}).click();
  await page.locator('summary').filter({hasText:'查看来源'}).click();await expect(page.getByText(capture,{exact:true})).toBeVisible();

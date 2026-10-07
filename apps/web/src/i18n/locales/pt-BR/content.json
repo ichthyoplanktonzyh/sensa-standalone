@@ -35,6 +35,12 @@
     "utterance_strategy": "Estratégia de expressão"
   }
 },
+  "sceneEditor": {
+    "saveUnconfirmed": "Não foi possível confirmar o salvamento. Seu rascunho foi preservado; tente novamente.",
+    "readFailed": "Não foi possível ler esta cena.",
+    "changed": "Esta cena foi alterada em outro lugar. Seu rascunho foi preservado.",
+    "useLatest": "Usar a cena mais recente"
+  },
   "noteEditor": {
     "loading": "Carregando nota…",
     "readFailed": "Não foi possível ler esta nota.",

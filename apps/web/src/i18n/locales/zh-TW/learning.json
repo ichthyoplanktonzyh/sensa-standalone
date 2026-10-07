@@ -342,7 +342,7 @@
     "updateSemanticWorld": "更新到我的語意世界",
     "savedToSemanticWorld": "已存入我的語意世界",
     "semanticWorldSaved": "已存入我的語意世界",
-    "semanticWorldSaveFailed": "暫時無法存入，請重試",
+    "semanticWorldSaveFailed": "未能確認存入，請重試",
     "cues": "意義線索",
     "thinkFirst": "先在心裡說出來，再核對表達。",
     "reveal": "檢視錶達",

@@ -23,5 +23,8 @@ export type DomainReplicaModule={
  merge?(input:ReplicaMergeInput,ordinary:(input:ReplicaMergeInput)=>ReplicaMergeResult):ReplicaMergeResult;
  /** Records that must remain on the same side when this record conflicts. */
  conflictDependencies?(entry:ReplicaEntry,decodedValue:unknown):readonly ReplicaRecordReference[];
+ /** Preserve domain-owned audit records and uncontested additions after the
+  * learner has explicitly selected a complete conflicting branch. */
+ afterConflictChoice?(selected:ReplicaEntry[],merged:ReplicaEntry[],context:{base:ReplicaEntry[];conflicts:readonly string[]}):ReplicaEntry[];
  assertDelete?(entry:ReplicaEntry):void;
 };

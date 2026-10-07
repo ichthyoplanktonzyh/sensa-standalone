@@ -342,7 +342,7 @@
     "updateSemanticWorld": "Actualizar mi mundo semántico",
     "savedToSemanticWorld": "Guardado en mi mundo semántico",
     "semanticWorldSaved": "Guardado en mi mundo semántico",
-    "semanticWorldSaveFailed": "No se pudo guardar. Inténtalo de nuevo.",
+    "semanticWorldSaveFailed": "No se pudo confirmar el guardado. Inténtalo de nuevo.",
     "cues": "Pistas del significado",
     "thinkFirst": "Dilo mentalmente antes de comprobar la expresión.",
     "reveal": "Ver la expresión",

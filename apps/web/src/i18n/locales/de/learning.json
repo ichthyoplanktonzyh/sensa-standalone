@@ -342,7 +342,7 @@
     "updateSemanticWorld": "Meine Bedeutungswelt aktualisieren",
     "savedToSemanticWorld": "In meiner Bedeutungswelt gespeichert",
     "semanticWorldSaved": "In meiner Bedeutungswelt gespeichert",
-    "semanticWorldSaveFailed": "Speichern fehlgeschlagen. Versuchen Sie es erneut.",
+    "semanticWorldSaveFailed": "Speichern konnte nicht bestätigt werden. Versuchen Sie es erneut.",
     "cues": "Bedeutungshinweise",
     "thinkFirst": "Sagen Sie es sich im Kopf, bevor Sie den Ausdruck prüfen.",
     "reveal": "Ausdruck anzeigen",

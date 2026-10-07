@@ -7,6 +7,7 @@ import {
  mergeLibraryReplicas,
  normalizeLibraryReplicaEntry,
  partitionLibraryReplicaConflicts,
+ finalizeLibraryReplicaConflictChoice,
  replicaEntriesEqual,
  replicaEntryId,
  type LibraryReplicaEntry,
@@ -269,7 +270,7 @@ export async function synchronizeLibrary(request:SyncRequest,options:{publishEmp
   if(merged.conflicts.length){
    const partition=partitionLibraryReplicaConflicts({base:initial.base,local:initial.entries,remote,merged:merged.entries,conflicts:merged.conflicts});
    conflict=conflictSnapshot(initial.base,initial.entries,remote,merged.conflicts,partition.affectedRecordIds,head);
-   if(state.resolution?.expectedRemoteRevision===head.revision){localEntries=uploadEntries=state.resolution.choice==='local'?partition.local:partition.upload;activeConflicts=[];conflict=undefined;}
+   if(state.resolution?.expectedRemoteRevision===head.revision){localEntries=uploadEntries=finalizeLibraryReplicaConflictChoice(state.resolution.choice==='local'?partition.local:partition.upload,merged.entries,{base:initial.base,conflicts:merged.conflicts});activeConflicts=[];conflict=undefined;}
    else{localEntries=partition.local;uploadEntries=partition.upload;nextBase=partition.base;}
   }
   // Cloud Checkpoints replicate the recoverable Package installation fact, not

@@ -129,7 +129,7 @@ test('deleting and restoring an accepted personal learning scene does not cascad
  if(runtime.kind!=='lightweight')throw Error('Fixture must use the shipped lightweight policy');
  const selected=runtime.target,pack=await readLibrary(tx=>tx.get<InstalledPackage>('packageCache',selected.packageKey!));
  const entry=pack!.content.entries.find(entry=>entry.senseVersionId===selected.identity.senseVersionId&&entry.bindingVersionId===selected.identity.bindingVersionId)!,publication=pack!.portableOrigin.publications[0]!;
- const scene=await personalContentSystem.execute({kind:'save_learning_scene',operationId:id(),learningTargetId:target.id,languageRouteId:context.languageRouteId,curriculumMembershipId:selected.curriculumMembershipId,senseId:selected.identity.senseId,senseVersionId:selected.identity.senseVersionId,bindingVersionId:selected.identity.bindingVersionId,body:'忘带钱包时，向朋友借钱，并约定归还。',media:[]});
+ const {scene}=await personalContentSystem.execute({kind:'save_learning_scene',operationId:id(),learningTargetId:target.id,languageRouteId:context.languageRouteId,curriculumMembershipId:selected.curriculumMembershipId,senseId:selected.identity.senseId,senseVersionId:selected.identity.senseVersionId,bindingVersionId:selected.identity.bindingVersionId,body:'忘带钱包时，向朋友借钱，并约定归还。',media:[],expected:null});
  const sceneRead={kind:'learning_scene' as const,learningTargetId:target.id,languageRouteId:context.languageRouteId},sceneAdapter=await sqliteRecordAdapter(),sceneEntries=sceneAdapter.entries.bind(sceneAdapter);
  try{
   sceneAdapter.entries=async table=>{if(table==='annotations')throw Error('exact scene editor must not scan annotations/media');return sceneEntries(table);};

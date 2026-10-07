@@ -35,6 +35,12 @@
     "utterance_strategy": "Äußerungsstrategie"
   }
 },
+  "sceneEditor": {
+    "saveUnconfirmed": "Speichern konnte nicht bestätigt werden. Dein Entwurf bleibt erhalten. Versuche es erneut.",
+    "readFailed": "Diese Szene konnte nicht gelesen werden.",
+    "changed": "Diese Szene wurde anderswo geändert. Dein Entwurf bleibt erhalten.",
+    "useLatest": "Neueste Szene verwenden"
+  },
   "noteEditor": {
     "loading": "Notiz wird geladen…",
     "readFailed": "Diese Notiz konnte nicht gelesen werden.",

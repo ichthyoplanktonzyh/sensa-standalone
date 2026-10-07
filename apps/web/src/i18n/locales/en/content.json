@@ -35,6 +35,12 @@
     "utterance_strategy": "Utterance strategy"
   }
 },
+  "sceneEditor": {
+    "saveUnconfirmed": "Could not confirm the save. Your draft is kept; try again.",
+    "readFailed": "Could not read this scene.",
+    "changed": "This scene changed elsewhere. Your draft is kept.",
+    "useLatest": "Use latest scene"
+  },
   "noteEditor": {
     "loading": "Loading note…",
     "readFailed": "Could not read this note.",

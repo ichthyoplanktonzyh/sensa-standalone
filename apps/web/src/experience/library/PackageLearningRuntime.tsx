@@ -1,5 +1,5 @@
 import {RuntimeFrame,runtimePrimary} from '../components/learning/RuntimeFrame';
-import {useEffect,useMemo,useState} from 'react';
+import {useEffect,useMemo,useRef,useState} from 'react';
 import {useTranslation} from 'react-i18next';
 
 import {InterleavedFourStageRuntimeScreen} from '../components/learning/InterleavedFourStageRuntimeScreen';
@@ -9,7 +9,6 @@ import {LightweightRuntimeStartScreen} from '../components/learning/LightweightR
 import {LearningQuestion} from '../components/learning/LearningQuestion';
 import {learningQuestionScope} from '../../learning/system/learningQuestion';
 import {
- learningSceneSemanticOperationIds,
  type LearningFourStageInitialRuntimeProjection,
  type LearningFourStageReviewRuntimeProjection,
  type LearningLightweightRuntimeProjection,
@@ -18,7 +17,8 @@ import {
  type LearningStructuredRuntimeProjection,
 } from '../../learning/system';
 import {currentPersonalLearningSceneRevision,personalContentSystem} from '../../personalContent/system';
-import {useJourneyGateway} from '../personalMeaningJourney';
+import {usePersonalLearningScene} from './usePersonalLearningScene';
+import {createJourneyGateway} from '../personalMeaningJourney/gateway';
 import {AssuranceRuntime,type AssuranceSupportHost} from './AssuranceLearningViews';
 import type {usePackageLearning} from './usePackageLearning';
 import {LearningPreferencesPanel} from '../components/learning/LearningPreferencesPanel';
@@ -123,17 +123,20 @@ function RuntimeOverlays({c,policy,onViewLearningLibrary,onExit}:{c:Controller;p
 
 function LightweightPackageRuntime({active,runtime,c,host,onExit,onFinish}:{active:boolean;runtime:LearningLightweightRuntimeProjection;c:Controller;host:AssuranceSupportHost;onExit:()=>void;onFinish:()=>void}){
  useTranslation();
- const journeyGateway=useJourneyGateway();
- const [,setAnnotationRevision]=useState(0),[savingWorld,setSavingWorld]=useState(false);
- useEffect(()=>personalContentSystem.subscribe({kind:'snapshot'},()=>setAnnotationRevision(value=>value+1)),[]);
+ // This command frame must not inherit a previously opened global World or
+ // Practice read snapshot. SQLite receipts/indexed dependencies own races.
+ const journeyGateway=useMemo(()=>createJourneyGateway(),[]);
+ const pendingWorldIntent=useRef<{signature:string;operations:{accept:string;link:string}}|null>(null);
+ const [savingWorld,setSavingWorld]=useState(false);
  const target=runtime.target;
+ const {scene,status:sceneStatus,retry:retryScene}=usePersonalLearningScene(target.targetId,target.languageContext.languageRouteId);
  const rate=async(rating:LearningLightweightRating)=>{
+  if(sceneStatus!=='ready')return;
   const accepted=await c.act({kind:'rate',rating});
   if(accepted&&runtime.purpose==='initial_learning'&&rating!=='again')host.toast(i18n.t('runtime.initialSaved',{expression:target.presentation.expression}));
  };
  const material=target.material;
  const content={senseKey:target.identity.senseId,lemma:target.presentation.expression,guideLabelL1:target.presentation.meaning};
- const scene=personalContentSystem.read({kind:'learning_scene',learningTargetId:target.targetId,languageRouteId:target.languageContext.languageRouteId});
  const sceneRevision=scene?currentPersonalLearningSceneRevision(scene):null;
  const pack=target.packageKey?c.packages.find(candidate=>candidate.key===target.packageKey):undefined;
  const entry=pack?.content.entries.find(candidate=>candidate.senseVersionId===target.identity.senseVersionId&&candidate.bindingVersionId===target.identity.bindingVersionId);
@@ -147,22 +150,33 @@ function LightweightPackageRuntime({active,runtime,c,host,onExit,onFinish}:{acti
   publishedAt:publication.publishedAt,
   title:publication.book.title,
  }:null;
- const canAccept=!!scene&&!!sceneRevision&&!!pack&&!!publishedSource&&!!entry?.semantic;
+ const canAccept=sceneStatus==='ready'&&!!scene&&!!sceneRevision&&!!pack&&!!publishedSource&&!!entry?.semantic;
  const worldState=!canAccept?null:savingWorld?'saving':scene.acceptedRevisionId===sceneRevision.revisionId?'saved':scene.acceptedPersonalMeaningId?'update':'available';
  const openPersonalScene=()=>host.openSceneEditor(content,undefined,{learningTargetId:target.targetId,languageRouteId:target.languageContext.languageRouteId,curriculumMembershipId:target.curriculumMembershipId,senseId:target.identity.senseId,senseVersionId:target.identity.senseVersionId,bindingVersionId:target.identity.bindingVersionId});
  const acceptPersonalScene=async()=>{
   if(!canAccept||!scene||!sceneRevision||!pack||!publishedSource||!entry?.semantic)return;
   setSavingWorld(true);
   try{
-   const operationIds=learningSceneSemanticOperationIds(sceneRevision.revisionId);
+   const signature=JSON.stringify([scene.sceneId,sceneRevision.revisionId,scene.acceptedPersonalMeaningId,pack.key,publishedSource.bookVersionId,target.curriculumMembershipId]);
+   if(pendingWorldIntent.current?.signature!==signature)pendingWorldIntent.current={signature,operations:{accept:crypto.randomUUID(),link:crypto.randomUUID()}};
+   const operationIds=pendingWorldIntent.current.operations;
    const result=await journeyGateway.acceptPublishedLearningScene({operationId:operationIds.accept,existingPersonalMeaningId:scene.acceptedPersonalMeaningId,source:{packageKey:pack.key,...publishedSource},target:{learningTargetId:target.targetId,curriculumMembershipId:target.curriculumMembershipId,senseId:target.identity.senseId,senseVersionId:target.identity.senseVersionId,bindingId:target.identity.bindingId,bindingVersionId:target.identity.bindingVersionId,expression:target.presentation.expression,targetLanguageTag:target.presentation.targetLanguageTag},semantic:entry.semantic,scene:{...sceneRevision,sceneId:scene.sceneId}});
    await personalContentSystem.execute({kind:'mark_learning_scene_accepted',operationId:operationIds.link,sceneId:scene.sceneId,revisionId:sceneRevision.revisionId,personalMeaningId:result.personalMeaningId});
+   pendingWorldIntent.current=null;
    host.toast(i18n.t('runtime.semanticWorldSaved'));
-  }catch{host.toast(i18n.t('runtime.semanticWorldSaveFailed'));}
+  }catch(cause){if(cause instanceof Error&&cause.name==='JourneyConflictError')pendingWorldIntent.current=null;host.toast(i18n.t('runtime.semanticWorldSaveFailed'));}
   finally{setSavingWorld(false);}
  };
- const markKnown=()=>void c.declareKnownAndContinue(target.targetId).then(continued=>{if(continued===false)onExit();});
- return <><LightweightRuntimeStartScreen support={active&&!c.busy&&runtime.phase==='reveal'&&<LearningQuestion key={`${learningQuestionScope(runtime)}:${sceneRevision?.revisionId??''}`} runtime={runtime} personalScene={sceneRevision?.body}/>} tools={!runtime.completed&&<RuntimeTools content={content} personalContent={runtime.phase==='reveal'?content:null} showSave={runtime.phase==='reveal'} onMarkKnown={markKnown} onOpenMenuMore={host.onOpenMenuMore} toast={host.toast} busy={c.busy||savingWorld}/>} active={active} busy={c.busy||savingWorld} completionKey={runtime.completed?`${runtime.runId}:${runtime.revision}`:null} target={target.presentation} materialization={material} step={runtime.completed?null:runtime.step} completed={runtime.completed} needsRelearning={runtime.needsRelearning} onRetryRelearning={()=>void c.retryRelearning()} hasNextTarget={!!c.nextTarget} onExit={onExit} onReveal={()=>void c.act({kind:'reveal'})} onRate={rating=>void rate(rating)} onFinish={onFinish} personalScene={sceneRevision} onOpenPersonalScene={runtime.purpose==='initial_learning'?openPersonalScene:undefined} semanticWorldState={runtime.phase==='reveal'?worldState:null} onSaveToSemanticWorld={acceptPersonalScene} onOpenDictionary={host.openDict} lookupDictionary={host.lookupDictionary} toast={host.toast} purpose={runtime.purpose}/>{active&&c.notice&&<p role="status" className="fixed bottom-4 left-4 right-4 z-[100] rounded-xl bg-accent-soft p-3">{localFlowNotice(c.notice)}</p>}</>;
+ const markKnown=()=>{if(sceneStatus==='ready')void c.declareKnownAndContinue(target.targetId).then(continued=>{if(continued===false)onExit();});};
+ const sceneBusy=c.busy||savingWorld||sceneStatus!=='ready';
+ const support=<>
+  {active&&sceneStatus!=='ready'&&<section role={sceneStatus==='error'?'alert':'status'} className="space-y-3 py-4">
+   <p>{sceneStatus==='error'?i18n.t('sceneEditor.readFailed'):localFlowText('loadingSensa')}</p>
+   {sceneStatus==='error'&&<button className="min-h-11 underline" onClick={retryScene}>{i18n.t('reliability.retry')}</button>}
+  </section>}
+  {active&&!c.busy&&sceneStatus==='ready'&&runtime.phase==='reveal'&&<LearningQuestion key={`${learningQuestionScope(runtime)}:${sceneRevision?.revisionId??''}`} runtime={runtime} personalScene={sceneRevision?.body}/>}
+ </>;
+ return <><LightweightRuntimeStartScreen support={support} tools={!runtime.completed&&<RuntimeTools content={content} personalContent={runtime.phase==='reveal'?content:null} showSave={runtime.phase==='reveal'} onMarkKnown={markKnown} onOpenMenuMore={host.onOpenMenuMore} toast={host.toast} busy={sceneBusy}/>} active={active} busy={sceneBusy} completionKey={runtime.completed?`${runtime.runId}:${runtime.revision}`:null} target={target.presentation} materialization={material} step={runtime.completed?null:runtime.step} completed={runtime.completed} needsRelearning={runtime.needsRelearning} onRetryRelearning={()=>void c.retryRelearning()} hasNextTarget={!!c.nextTarget} onExit={onExit} onReveal={()=>{if(sceneStatus==='ready')void c.act({kind:'reveal'});}} onRate={rating=>void rate(rating)} onFinish={onFinish} personalScene={sceneRevision} onOpenPersonalScene={runtime.purpose==='initial_learning'&&sceneStatus==='ready'?openPersonalScene:undefined} semanticWorldState={runtime.phase==='reveal'?worldState:null} onSaveToSemanticWorld={acceptPersonalScene} onOpenDictionary={host.openDict} lookupDictionary={host.lookupDictionary} toast={host.toast} purpose={runtime.purpose}/>{active&&c.notice&&<p role="status" className="fixed bottom-4 left-4 right-4 z-[100] rounded-xl bg-accent-soft p-3">{localFlowNotice(c.notice)}</p>}</>;
 }
 
 function FourStageInitialPackageRuntime({active,runtime,c,onExit,onFinish}:{active:boolean;runtime:LearningFourStageInitialRuntimeProjection;c:Controller;onExit:()=>void;onFinish:()=>void}){

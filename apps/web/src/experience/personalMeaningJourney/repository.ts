@@ -1,5 +1,6 @@
 import {canonicalConsumerJson,type SensaIntakePayload} from '@sensa/contracts/sensa';
 import {digestOf} from './digest';
+import {learningScenePersonalMeaningId} from '../../data/library/personalSceneIdentity';
 import type {ResolveSemanticIntakeCommand,DismissSemanticIntakeCommand} from '../intake/semanticIntakeModule';
 import {resolvedIntakePayload} from '../intake/resolvedIntake';
 import {
@@ -18,7 +19,7 @@ import {StorageUnavailableError} from './ports';
 import type {MeaningLookupResult} from './meaningLookup';
 import {sourceWitnessFromState,type ClarificationSourceKind,type ClarificationSourceWitness} from './clarificationSource';
 import {worldReadRepository,readWorldFrame,readMeaningRegistry,readRegistryRecords} from './worldRepository';
-import type {CompleteClarificationDraftInput,CorrectPersonalMeaningInput} from './types';
+import type {CompleteClarificationDraftInput,CorrectPersonalMeaningInput,PublishedLearningSceneAcceptanceInput} from './types';
 import type {RegistrySelectionQuery,RegistrySelection} from '../../data/library/semanticRegistrySelection';
 import {isUuid,type RandomIdPort} from './ids';
 import {
@@ -51,6 +52,11 @@ type SemanticRecordChange={
 
 const emptyRecords=():Records=>Object.fromEntries(semanticJourneyTables.map(table=>[table,new Map()])) as Records;
 const clone=<T,>(value:T):T=>structuredClone(value);
+function assertSceneReceiptWitness(receipt:CommandReceipt,meaning:MeaningJourneyRecord|undefined){
+  if(receipt.command!=='AcceptPublishedLearningScene')return;
+  const result=receipt.result;
+  if(!meaning||meaning.personalMeaning.personalMeaningId!==result.personalMeaningId||!meaning.personalSemanticAnchorRevisions.some(revision=>revision.personalSemanticAnchorId===result.personalSemanticAnchorId&&revision.personalSemanticAnchorRevisionId===result.personalSemanticAnchorRevisionId&&revision.provenance.createdByOperationId===(result.acceptedByOperationId??receipt.operationId)))throw new JourneyConflictError();
+}
 
 type RegistryKind=keyof SenseRegistryState;
 const registryIds:{[K in RegistryKind]:(value:SenseRegistryState[K][number])=>string}={
@@ -195,11 +201,11 @@ export interface JourneyReadCondition{
 export interface JourneyCommitResult{committedMediaIds:string[];state?:JourneyState}
 
 type JourneyCommandScope={operationId:string;allocatedIds:Set<string>}&(
-  {kind:'meaning';personalMeaningId:string}|{kind:'correction';input:CorrectPersonalMeaningInput}|{kind:'draft_creation'}|{kind:'clarification';input:CompleteClarificationDraftInput}|{kind:'intake';input:SensaIntakePayload}|{kind:'inbox';input:ResolveSemanticIntakeCommand|DismissSemanticIntakeCommand}
+  {kind:'meaning';personalMeaningId:string}|{kind:'published_scene';input:PublishedLearningSceneAcceptanceInput;matchedMeaningId:string|null}|{kind:'correction';input:CorrectPersonalMeaningInput}|{kind:'draft_creation'}|{kind:'clarification';input:CompleteClarificationDraftInput}|{kind:'intake';input:SensaIntakePayload}|{kind:'inbox';input:ResolveSemanticIntakeCommand|DismissSemanticIntakeCommand}
 );
 type ScopedCommandExecutor<T>=(repository:JourneyRepository,ids:RandomIdPort)=>Promise<T>;
 type RegistrySelectionCondition={query:RegistrySelectionQuery;expected:RegistrySelection};
-type LibrarySnapshotStamp={revision:number;frameRevision:number;incarnation:string;dependencies?:JourneyReadCondition[];selections?:RegistrySelectionCondition[]};
+type LibrarySnapshotStamp={revision:number;frameRevision:number;incarnation:string;dependencies?:JourneyReadCondition[];selections?:RegistrySelectionCondition[];sceneOwner?:{sceneId:string;meaningId:string|null}};
 
 export interface JourneyRepository{
   load():Promise<JourneyState>;
@@ -214,6 +220,9 @@ export interface JourneyRepository{
   /** Isolated single-Meaning command frame. It cannot become a full World
    * snapshot or mutate registry facts, Inbox or other operation receipts. */
   withMeaningCommand?<T>(input:{personalMeaningId:string;operationId:string;identityCount:number;reservedIds?:readonly string[]},ids:RandomIdPort,execute:(repository:JourneyRepository,ids:RandomIdPort)=>Promise<T>):Promise<T>;
+  /** One scene owner and its exact published registry closure, with the owner
+   * lookup rechecked in the writer transaction even when its marker is absent. */
+  withPublishedSceneCommand?<T>(input:PublishedLearningSceneAcceptanceInput,ids:RandomIdPort,execute:ScopedCommandExecutor<T>):Promise<T>;
   /** Append only one new Inbox item, its draft hint and this operation's
    * receipt. It cannot read or mutate existing Meaning/registry facts. */
   withDraftCreation?<T>(input:{operationId:string;reservedIds?:readonly string[]},ids:RandomIdPort,execute:ScopedCommandExecutor<T>):Promise<T>;
@@ -240,7 +249,11 @@ export class MemoryJourneyRepository implements JourneyRepository{
   async load():Promise<JourneyState>{const state=clone(stateFromRecords(this.records));this.snapshots.set(state,{semantic:this.semanticGeneration,frame:this.generation});return state;}
   async refresh(state:JourneyState,scope:'semantic'|'frame'='semantic'):Promise<JourneyState>{const prior=this.snapshots.get(state);return prior&&(scope==='frame'?prior.frame===this.generation:prior.semantic===this.semanticGeneration)?state:this.load();}
   subscribe(listener:()=>void):()=>void{this.listeners.add(listener);return ()=>{this.listeners.delete(listener);};}
-  async readReceipt(operationId:string):Promise<CommandReceipt|null>{return clone(this.records.semanticReceipts.get(operationId) as CommandReceipt|undefined)??null;}
+  async readReceipt(operationId:string):Promise<CommandReceipt|null>{
+    const receipt=clone(this.records.semanticReceipts.get(operationId) as CommandReceipt|undefined);
+    if(receipt)assertSceneReceiptWitness(receipt,this.records.semanticMeanings.get(String(receipt.result.personalMeaningId)) as MeaningJourneyRecord|undefined);
+    return receipt??null;
+  }
   async captureSource(kind:ClarificationSourceKind,id:string):Promise<ClarificationSourceWitness>{return sourceWitnessFromState(await this.load(),this.incarnation,kind,id);}
   async commit(input:JourneyCommit):Promise<JourneyCommitResult>{
     const changes=recordChanges(input.before,input.after);
@@ -286,6 +299,7 @@ const same=(left:unknown,right:unknown):boolean=>left===undefined||right===undef
 
 const matchesCondition=(current:unknown,condition:JourneyReadCondition):boolean=>{
   if(condition.table!=='semanticRegistry')return same(current,condition.expected);
+  if(condition.expected===undefined)return current===undefined;
   const actual=current as RegistryRow|undefined,expected=condition.expected as RegistryRow;
   // Row ordering is an adapter detail, not part of the fixed semantic contract.
   return actual?.kind===expected.kind&&same(actual.value,expected.value);
@@ -303,6 +317,10 @@ export class LibraryJourneyRepository implements JourneyRepository{
   async withMeaningCommand<T>(input:{personalMeaningId:string;operationId:string;identityCount:number;reservedIds?:readonly string[]},ids:RandomIdPort,execute:(repository:JourneyRepository,ids:RandomIdPort)=>Promise<T>):Promise<T>{
     if(!isUuid(input.personalMeaningId))throw new Error('journey_command_scope_invalid');
     return this.withCommand({kind:'meaning',personalMeaningId:input.personalMeaningId,operationId:input.operationId,allocatedIds:new Set()},input.identityCount,[input.personalMeaningId,...(input.reservedIds??[])],ids,execute);
+  }
+  async withPublishedSceneCommand<T>(input:PublishedLearningSceneAcceptanceInput,ids:RandomIdPort,execute:ScopedCommandExecutor<T>):Promise<T>{
+    const reserved=[learningScenePersonalMeaningId(input.scene.sceneId),input.scene.sceneId,input.scene.revisionId,input.target.senseId,input.target.senseVersionId,input.semantic.expressionId,input.semantic.expressionVersionId,input.target.bindingId,input.target.bindingVersionId];
+    return this.withCommand({kind:'published_scene',operationId:input.operationId,allocatedIds:new Set(),input,matchedMeaningId:null},64,reserved,ids,execute);
   }
   async withDraftCreation<T>(input:{operationId:string;reservedIds?:readonly string[]},ids:RandomIdPort,execute:ScopedCommandExecutor<T>):Promise<T>{
     return this.withCommand({kind:'draft_creation',operationId:input.operationId,allocatedIds:new Set()},1,input.reservedIds??[],ids,execute);
@@ -409,12 +427,18 @@ export class LibraryJourneyRepository implements JourneyRepository{
       const records=emptyRecords();
       let dependencies:JourneyReadCondition[]|undefined;
       let selections:RegistrySelectionCondition[]|undefined;
+      let sceneOwner:LibrarySnapshotStamp['sceneOwner'];
       if(this.commandScope){
         const {operationId}=this.commandScope;
         const root=await tx.get('semanticState','root');if(root)records.semanticState.set('root',root);
-        if(this.commandScope.kind==='meaning'||this.commandScope.kind==='correction'){
-          const personalMeaningId=this.commandScope.kind==='meaning'?this.commandScope.personalMeaningId:this.commandScope.input.personalMeaningId;
-          const meaning=await tx.get<MeaningJourneyRecord>('semanticMeanings',personalMeaningId);
+        if(this.commandScope.kind==='published_scene'){
+          const sceneId=this.commandScope.input.scene.sceneId,meaningId=await tx.worldSceneMeaning(sceneId);
+          sceneOwner={sceneId,meaningId};this.commandScope.matchedMeaningId=this.commandScope.input.existingPersonalMeaningId??meaningId;
+          if(!this.commandScope.matchedMeaningId)this.commandScope.allocatedIds.add(learningScenePersonalMeaningId(sceneId));
+        }
+        if(this.commandScope.kind==='meaning'||this.commandScope.kind==='correction'||this.commandScope.kind==='published_scene'){
+          const personalMeaningId=this.commandScope.kind==='meaning'?this.commandScope.personalMeaningId:this.commandScope.kind==='correction'?this.commandScope.input.personalMeaningId:this.commandScope.matchedMeaningId;
+          const meaning=personalMeaningId?await tx.get<MeaningJourneyRecord>('semanticMeanings',personalMeaningId):undefined;
           if(meaning){
             if(meaning.personalMeaning.personalMeaningId!==personalMeaningId)throw new StoreCorruptedError('个人意义身份与存储记录不一致。');
             records.semanticMeanings.set(personalMeaningId,meaning);
@@ -434,6 +458,17 @@ export class LibraryJourneyRepository implements JourneyRepository{
         }
         if(this.commandScope.kind==='clarification')({dependencies,selections}=await this.clarificationRecords(tx,this.commandScope.input,records));
         if(this.commandScope.kind==='intake')({dependencies,selections}=await this.intakeRecords(tx,this.commandScope.input,records));
+        if(this.commandScope.kind==='published_scene'){
+          const {input}=this.commandScope;
+          const query={kind:'senseKey' as const,senseKey:input.semantic.senseKey},expected=await tx.registrySelection(query);selections=[{query,expected}];
+          const exact=[`senses:${input.target.senseId}`,`senseVersions:${input.target.senseVersionId}`,`expressions:${input.semantic.expressionId}`,`expressionVersions:${input.semantic.expressionVersionId}`,`bindings:${input.target.bindingId}`,`bindingVersions:${input.target.bindingVersionId}`];
+          const present=await tx.existingRecordKeys('semanticRegistry',exact);
+          const closure=await readRegistryRecords(tx,[...expected.keys,...present]);dependencies??=[];
+          for(const key of new Set([...exact,...closure.records.keys()])){
+            const value=closure.records.get(key);if(value)records.semanticRegistry.set(key,value);
+            dependencies.push({table:'semanticRegistry',key,expected:value});
+          }
+        }
         if(this.commandScope.kind==='correction'){
           const selected=await this.intakeRecords(tx,this.commandScope.input.payload,records,this.commandScope.input.reuseSense);
           dependencies=[...(dependencies??[]),...selected.dependencies];selections=selected.selections;
@@ -446,7 +481,7 @@ export class LibraryJourneyRepository implements JourneyRepository{
       const authorityStarted=performance.now();
       try{await assertPersonalSemanticWorldStateCooperatively(state);if(!this.commandScope)assertMeaningLifecycleReceipts(state.meanings,state.commandReceipts);}catch(cause){throw new StoreCorruptedError('本机的个人意义数据违反领域不变量。',cause);}
       finally{if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure(this.commandScope?'sensa.journey.scoped-authority':'sensa.journey.authority',{start:authorityStarted,end:performance.now()});}
-      this.snapshots.set(state,{revision,frameRevision:revision,incarnation,dependencies,selections});return state;
+      this.snapshots.set(state,{revision,frameRevision:revision,incarnation,dependencies,selections,sceneOwner});return state;
     });
   }
   async load():Promise<JourneyState>{
@@ -470,6 +505,7 @@ export class LibraryJourneyRepository implements JourneyRepository{
     return readLibrary(async tx=>{
       await assertCurrentLibrary(tx);const receipt=await tx.get<CommandReceipt>('semanticReceipts',operationId);
       if(receipt&&receipt.operationId!==operationId)throw new StoreCorruptedError('操作凭据身份与存储记录不一致。');
+      if(receipt?.command==='AcceptPublishedLearningScene')assertSceneReceiptWitness(receipt,await tx.get<MeaningJourneyRecord>('semanticMeanings',String(receipt.result.personalMeaningId)));
       if(receipt?.command==='ChangeMeaningLifecycle'){
         const key=receipt.result.personalMeaningId;
         assertMeaningLifecycleOperationReceipt(typeof key==='string'?await tx.get<MeaningJourneyRecord>('semanticMeanings',key):undefined,receipt);
@@ -490,6 +526,14 @@ export class LibraryJourneyRepository implements JourneyRepository{
       if(changes.some(change=>{
         if(change.table==='semanticReceipts')return change.key!==scope.operationId||change.before!==undefined||change.after===undefined;
         if(scope.kind==='meaning')return change.table!=='semanticMeanings'||change.key!==scope.personalMeaningId||change.before===undefined||change.after===undefined;
+        if(scope.kind==='published_scene'){
+          if(change.table==='semanticMeanings')return change.after===undefined||(scope.matchedMeaningId?change.key!==scope.matchedMeaningId||change.before===undefined:!scope.allocatedIds.has(change.key)||change.before!==undefined);
+          if(change.table==='semanticRegistry'){
+            const {input}=scope,keys=[`senses:${input.target.senseId}`,`senseVersions:${input.target.senseVersionId}`,`expressions:${input.semantic.expressionId}`,`expressionVersions:${input.semantic.expressionVersionId}`,`bindings:${input.target.bindingId}`,`bindingVersions:${input.target.bindingVersionId}`];
+            return !keys.includes(change.key)||change.after===undefined;
+          }
+          return true;
+        }
         if(scope.kind==='correction'){
           if(change.table==='semanticMeanings')return change.key!==scope.input.personalMeaningId||change.before===undefined||change.after===undefined;
           if(change.table==='semanticRegistry')return change.after===undefined||(change.before!==undefined?(change.before as RegistryRow).kind!=='bindings':!scope.allocatedIds.has(change.key.slice(change.key.indexOf(':')+1)));
@@ -506,6 +550,11 @@ export class LibraryJourneyRepository implements JourneyRepository{
       }))throw new Error('journey_command_scope_exceeded');
       if(scope.kind==='clarification'&&changes.length&&(changes.filter(change=>change.table==='semanticMeanings').length!==1||!changes.some(change=>change.table==='semanticInbox'&&change.after===undefined)||!changes.some(change=>change.table==='semanticReceipts')))throw new Error('journey_command_scope_exceeded');
       if(scope.kind==='intake'&&changes.length&&(changes.filter(change=>change.table==='semanticMeanings').length!==1||!changes.some(change=>change.table==='semanticReceipts')))throw new Error('journey_command_scope_exceeded');
+      if(scope.kind==='published_scene'&&changes.length){
+        const count=changes.filter(change=>change.table==='semanticMeanings').length;
+        const confirmation=scope.matchedMeaningId&&input.after.commandReceipts.some(receipt=>receipt.operationId===scope.operationId&&typeof receipt.result.acceptedByOperationId==='string');
+        if((count!==1&&!(count===0&&confirmation))||!changes.some(change=>change.table==='semanticReceipts'))throw new Error('journey_command_scope_exceeded');
+      }
       if(scope.kind==='correction'&&changes.length&&(changes.filter(change=>change.table==='semanticMeanings').length!==1||!changes.some(change=>change.table==='semanticReceipts')))throw Error('journey_command_scope_exceeded');
       if(scope.kind==='inbox'&&changes.length&&(!changes.some(change=>change.table==='semanticInbox'&&change.after===undefined)||!changes.some(change=>change.table==='semanticReceipts')||changes.filter(change=>change.table==='semanticMeanings').length!==('sense'in scope.input?1:0)))throw new Error('journey_command_scope_exceeded');
     }
@@ -526,6 +575,7 @@ export class LibraryJourneyRepository implements JourneyRepository{
         const {incarnation,revision}=await readWorldFrame(tx);
         const prior=this.snapshots.get(input.before);
         if(!prior||prior.incarnation!==incarnation)throw new JourneyConflictError();
+        if(prior.sceneOwner&&(await tx.worldSceneMeaning(prior.sceneOwner.sceneId))!==prior.sceneOwner.meaningId)throw new JourneyConflictError();
         const foreignChanges=!this.commandScope&&prior.frameRevision!==revision&&await tx.hasChangesSince(prior.frameRevision,semanticJourneyTables);
         for(const condition of [...(prior.dependencies??[]),...(input.preconditions??[])]){
           const started=performance.now();

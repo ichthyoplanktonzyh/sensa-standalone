@@ -24,7 +24,7 @@ export const sqlitePoolDirectory = "/sensa-local-library-v12";
 export const sqliteLibraryBaselineVersion = 10;
 export const sqliteLibrarySchemaVersion = 16;
 /** Cross-tab RPC changes must bump this before adding or changing messages. */
-export const sqliteCoordinatorProtocolVersion = 42;
+export const sqliteCoordinatorProtocolVersion = 43;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -96,6 +96,7 @@ export type SqliteWorkerRequest =
   | { id:number;kind:'packageCacheProjection';query:PackageCacheProjectionQuery }
   | {id:number;kind:'meaningLookup';query:string}
   | {id:number;kind:'worldBrowse';query:WorldBrowseQuery}
+  | {id:number;kind:'worldSceneMeaning';sceneId:string}
   | {id:number;kind:'registrySelection';query:RegistrySelectionQuery}
   | {id:number;kind:'learningSemanticMemory';targetId?:string}
   | {id:number;kind:'worldLearningChoices';query:WorldLearningChoiceQuery}

@@ -35,6 +35,12 @@
     "utterance_strategy": "Söylem stratejisi"
   }
 },
+  "sceneEditor": {
+    "saveUnconfirmed": "Kayıt doğrulanamadı. Taslağınız korunuyor; tekrar deneyin.",
+    "readFailed": "Bu sahne okunamadı.",
+    "changed": "Bu sahne başka bir yerde değiştirildi. Taslağınız korunuyor.",
+    "useLatest": "En güncel sahneyi kullan"
+  },
   "noteEditor": {
     "loading": "Not okunuyor…",
     "readFailed": "Bu not okunamadı.",

@@ -35,6 +35,12 @@
     "utterance_strategy": "Strategia espressiva"
   }
 },
+  "sceneEditor": {
+    "saveUnconfirmed": "Impossibile confermare il salvataggio. La bozza è conservata; riprova.",
+    "readFailed": "Impossibile leggere questa scena.",
+    "changed": "Questa scena è stata modificata altrove. La bozza è conservata.",
+    "useLatest": "Usa la scena più recente"
+  },
   "noteEditor": {
     "loading": "Caricamento della nota…",
     "readFailed": "Impossibile leggere questa nota.",

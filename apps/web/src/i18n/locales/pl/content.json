@@ -35,6 +35,12 @@
     "utterance_strategy": "Strategia wypowiedzi"
   }
 },
+  "sceneEditor": {
+    "saveUnconfirmed": "Nie można potwierdzić zapisu. Twój szkic jest zachowany; spróbuj ponownie.",
+    "readFailed": "Nie można odczytać tej sceny.",
+    "changed": "Scena została zmieniona w innym miejscu. Twój szkic jest zachowany.",
+    "useLatest": "Użyj najnowszej sceny"
+  },
   "noteEditor": {
     "loading": "Wczytywanie notatki…",
     "readFailed": "Nie można odczytać tej notatki.",

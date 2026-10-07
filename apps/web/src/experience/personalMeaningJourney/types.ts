@@ -504,6 +504,8 @@ export interface PublishedLearningSceneAcceptanceInput {
 }
 
 export interface PublishedLearningSceneAcceptanceResult {
+  /** A new confirmation intent may refer to the already-current acceptance. */
+  acceptedByOperationId?: string;
   personalMeaningId: string;
   personalSemanticAnchorId: string;
   personalSemanticAnchorRevisionId: string;

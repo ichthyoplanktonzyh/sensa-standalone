@@ -102,6 +102,15 @@ export function partitionLibraryReplicaConflicts(input:ReplicaMergeInput&{merged
  };
 }
 
+/** The owner may retain immutable audit history; it cannot silently choose a
+ * different content branch or turn a conflict into an automatic merge. */
+export function finalizeLibraryReplicaConflictChoice(selected:ReplicaEntry[],merged:ReplicaEntry[],context:{base:ReplicaEntry[];conflicts:readonly string[]}):ReplicaEntry[]{
+ return modules.flatMap(module=>{
+  const slice=(entries:ReplicaEntry[])=>entries.filter(entry=>module.owns(entry.table,entry.key));
+  const chosen=slice(selected);return module.afterConflictChoice?.(chosen,slice(merged),{base:slice(context.base),conflicts:context.conflicts})??chosen;
+ }).sort((a,b)=>replicaEntryId(a).localeCompare(replicaEntryId(b)));
+}
+
 function assertLibraryReplicaDelete(entry:ReplicaEntry){
  const module=moduleFor(entry.table,entry.key);
  if(!module)throw new Error('library_sync_format');

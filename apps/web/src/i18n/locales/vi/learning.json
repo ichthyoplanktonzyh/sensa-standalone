@@ -342,7 +342,7 @@
     "updateSemanticWorld": "Cập nhật thế giới ngữ nghĩa",
     "savedToSemanticWorld": "Đã lưu vào thế giới ngữ nghĩa",
     "semanticWorldSaved": "Đã lưu vào thế giới ngữ nghĩa",
-    "semanticWorldSaveFailed": "Không thể lưu. Thử lại.",
+    "semanticWorldSaveFailed": "Chưa thể xác nhận đã lưu. Hãy thử lại.",
     "cues": "Gợi ý về nghĩa",
     "thinkFirst": "Hãy tự nói trong đầu trước khi xem cách diễn đạt.",
     "reveal": "Xem cách diễn đạt",

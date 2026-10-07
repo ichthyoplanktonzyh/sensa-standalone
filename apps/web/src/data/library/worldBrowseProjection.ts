@@ -7,6 +7,7 @@ import {isWorldRecordVisible,summarizeWorldItem,validateWorldQuery,worldItemFrom
 import type {MeaningJourneyRecord} from '../../experience/personalMeaningJourney/store';
 import {buildPersonalMeaningLearningSources} from '../../experience/personalMeaningJourney/learningSource';
 import {indexRegistry} from '../../experience/personalMeaningJourney/registryRead';
+import {isUuid} from '../../experience/personalMeaningJourney/ids';
 
 const schema=`
 CREATE TABLE IF NOT EXISTS sensa_world_browse(
@@ -21,6 +22,8 @@ CREATE INDEX IF NOT EXISTS sensa_world_browse_pending ON sensa_world_browse(upda
 CREATE TABLE IF NOT EXISTS sensa_world_learning_choices(choice_key TEXT PRIMARY KEY,meaning_id TEXT NOT NULL,language_tag TEXT NOT NULL,choice_json TEXT NOT NULL CHECK(json_valid(choice_json))) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS sensa_world_learning_choice_language ON sensa_world_learning_choices(language_tag,meaning_id,choice_key);
 CREATE INDEX IF NOT EXISTS sensa_world_learning_choice_meaning ON sensa_world_learning_choices(meaning_id);
+CREATE TABLE IF NOT EXISTS sensa_world_scene_meanings(scene_id TEXT NOT NULL,meaning_id TEXT NOT NULL,PRIMARY KEY(scene_id,meaning_id)) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS sensa_world_scene_meaning_owner ON sensa_world_scene_meanings(meaning_id);
 CREATE TABLE IF NOT EXISTS sensa_world_browse_dependencies(meaning_id TEXT NOT NULL,registry_key TEXT NOT NULL,PRIMARY KEY(meaning_id,registry_key)) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS sensa_world_browse_dependency_key ON sensa_world_browse_dependencies(registry_key,meaning_id);
 CREATE VIRTUAL TABLE IF NOT EXISTS sensa_world_browse_search USING fts5(text,tokenize='trigram');
@@ -28,7 +31,7 @@ CREATE TABLE IF NOT EXISTS sensa_world_browse_grams(gram TEXT NOT NULL,document_
 CREATE INDEX IF NOT EXISTS sensa_world_browse_gram_document ON sensa_world_browse_grams(document_id,gram);
 CREATE TABLE IF NOT EXISTS sensa_world_browse_meta(id INTEGER PRIMARY KEY CHECK(id=1),version INTEGER NOT NULL);
 `;
-const version=9,tables=[...['search','grams','dependencies','meta',''].map(name=>`sensa_world_browse${name?'_'+name:''}`),'sensa_world_learning_choices'];
+const version=10,tables=[...['search','grams','dependencies','meta',''].map(name=>`sensa_world_browse${name?'_'+name:''}`),'sensa_world_learning_choices','sensa_world_scene_meanings'];
 type Row=Record<string,any>;
 export class SqliteWorldBrowseProjection{
  private statements=new Map<string,PreparedStatement>();
@@ -56,6 +59,7 @@ export class SqliteWorldBrowseProjection{
    if(old){this.write('DELETE FROM sensa_world_browse_search WHERE rowid=?',[old.id]);this.write('DELETE FROM sensa_world_browse_grams WHERE document_id=?',[old.id]);}
    this.write('DELETE FROM sensa_world_browse WHERE meaning_id=?',[id]);this.write('DELETE FROM sensa_world_browse_dependencies WHERE meaning_id=?',[id]);
    this.write('DELETE FROM sensa_world_learning_choices WHERE meaning_id=?',[id]);
+   this.write('DELETE FROM sensa_world_scene_meanings WHERE meaning_id=?',[id]);
    const record=this.read('semanticMeanings',id) as MeaningJourneyRecord|undefined;if(!record)continue;
    const dependencies=new Set<string>();
    let derived:{summary:WorldBrowseItem;text:string;visible:boolean;choices:WorldLearningChoice[]}|undefined;
@@ -69,6 +73,8 @@ export class SqliteWorldBrowseProjection{
     if(!(cause instanceof WorldSourceInvalidError))throw cause;
    }
    if(derived){
+    const sceneIds=new Set(record.personalSemanticAnchorRevisions.map(revision=>(revision.structuredPayload.learningScene as {sceneId?:unknown}|undefined)?.sceneId).filter(isUuid));
+    for(const sceneId of sceneIds)this.write('INSERT INTO sensa_world_scene_meanings VALUES(?,?)',[sceneId,id]);
     const {summary,text,visible,choices}=derived;
     const row=this.rows('INSERT INTO sensa_world_browse(meaning_id,updated_at,formation,binding,valid,visible,status,summary_json,search_text) VALUES(?,?,?,?,1,?,?,?,?) RETURNING id',
      [id,summary.updatedAt,summary.senseFormation.phase,summary.expressionBinding.phase,visible?1:0,summary.status,JSON.stringify(summary),text])[0]!;
@@ -113,6 +119,15 @@ export class SqliteWorldBrowseProjection{
    else{join='JOIN sensa_world_browse_grams AS gram ON gram.document_id=world.id';clauses.push('gram.gram=?');bind.push(query.query);}
   }
   return {join,clauses,bind};
+ }
+ sceneMeaning(sceneId:string):string|null{
+  if(!isUuid(sceneId))throw new Error('scene_identity_invalid');
+  if(this.rows('SELECT 1 FROM sensa_world_browse WHERE valid=0 LIMIT 1').length)throw new Error('world_source_invalid');
+  // Include recycled owners: a missing local link must not manufacture a new
+  // identity for a scene whose original Meaning has been explicitly deleted.
+  const owners=this.rows('SELECT meaning_id FROM sensa_world_scene_meanings WHERE scene_id=? LIMIT 2',[sceneId]);
+  if(owners.length>1)throw new Error('scene_owner_ambiguous');
+  return owners[0]?.meaning_id??null;
  }
  learningChoices(raw:WorldLearningChoiceQuery):WorldLearningChoicePage{
   const query=validateWorldLearningChoiceQuery(raw),{join,clauses,bind}=this.selection(query);

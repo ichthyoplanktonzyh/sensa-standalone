@@ -342,7 +342,7 @@
     "updateSemanticWorld": "내 시맨틱 월드 업데이트",
     "savedToSemanticWorld": "내 시맨틱 월드에 저장됨",
     "semanticWorldSaved": "내 시맨틱 월드에 저장됨",
-    "semanticWorldSaveFailed": "저장하지 못했습니다. 다시 시도하세요.",
+    "semanticWorldSaveFailed": "저장을 확인할 수 없습니다. 다시 시도하세요.",
     "cues": "의미 단서",
     "thinkFirst": "표현을 확인하기 전에 마음속으로 먼저 말해 보세요.",
     "reveal": "표현 보기",

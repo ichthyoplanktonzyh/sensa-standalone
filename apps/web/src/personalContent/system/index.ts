@@ -1,6 +1,8 @@
 export {
   currentPersonalLearningSceneRevision,
   personalContentSystem,
+  personalLearningSceneEditBase,
+  PersonalLearningSceneConflictError,
   SenseNoteConflictError,
 } from './personalContentSystem';
 export type {
@@ -14,6 +16,9 @@ export type {
   PersonalSceneQuery,
   PersonalLearningScene,
   PersonalLearningSceneRevision,
+  PersonalLearningSceneEditBase,
+  PersonalLearningSceneEditSnapshot,
+  PersonalLearningSceneSaveResult,
   PersonalSenseContent,
   SenseContextNote,
   SenseNote,

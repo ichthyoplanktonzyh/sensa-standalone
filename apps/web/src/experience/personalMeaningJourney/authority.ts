@@ -352,12 +352,24 @@ function requireStateShape(state:JourneyState){
  requireInvariant(Array.isArray(state.meanings)&&Array.isArray(state.inboxItems)&&Array.isArray(state.clarificationDrafts)&&Array.isArray(state.commandReceipts),'Personal Semantic World store 结构无效。');
 }
 
+function assertSceneOwner(meaning:MeaningJourneyRecord,owners:Map<string,string>){
+ const meaningId=meaning.personalMeaning.personalMeaningId;
+ for(const revision of meaning.personalSemanticAnchorRevisions){
+  const scene=record(revision.structuredPayload.learningScene);if(!scene)continue;
+  const sceneId=scene.sceneId;
+  requireInvariant(typeof sceneId==='string'&&sceneId.length>0,'Personal Learning Scene identity 缺失。');
+  requireInvariant(!owners.has(sceneId)||owners.get(sceneId)===meaningId,'同一 Personal Learning Scene 不能属于多个 Personal Meanings。');
+  owners.set(sceneId,meaningId);
+ }
+}
+
 /** Validate every Personal Semantic World fact and internal reference. */
 export function assertPersonalSemanticWorldState(state:JourneyState):void{
  requireStateShape(state);
  const registry=validateRegistry(state.registry);
  unique(state.meanings,meaning=>meaning.personalMeaning.personalMeaningId,'Personal Meaning');
- for(const meaning of state.meanings)validateMeaning(meaning,registry);
+ const owners=new Map<string,string>();
+ for(const meaning of state.meanings){validateMeaning(meaning,registry);assertSceneOwner(meaning,owners);}
  validateAuxiliaryState(state);
 }
 
@@ -371,7 +383,8 @@ export async function assertPersonalSemanticWorldStateCooperatively(state:Journe
  requireStateShape(state);
  const registry=await runCooperatively(validateRegistrySteps(state.registry));
  unique(state.meanings,meaning=>meaning.personalMeaning.personalMeaningId,'Personal Meaning');
- await runCooperatively((function*(){for(const meaning of state.meanings){validateMeaning(meaning,registry);yield;}})());
+ const owners=new Map<string,string>();
+ await runCooperatively((function*(){for(const meaning of state.meanings){validateMeaning(meaning,registry);assertSceneOwner(meaning,owners);yield;}})());
  validateAuxiliaryState(state);
 }
 

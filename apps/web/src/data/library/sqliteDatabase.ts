@@ -298,6 +298,7 @@ export class SqliteRecordDatabase {
   learningSemanticMemory(targetId?:string):import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection{return this.semanticMemoryProjection.read(targetId);}
   lookupMeanings(query:string):MeaningLookupResult{return this.meaningLookup.query(query);}
   worldBrowse(query:WorldBrowseQuery):WorldBrowsePage{return this.worldBrowseProjection.query(query);}
+  worldSceneMeaning(sceneId:string):string|null{return this.worldBrowseProjection.sceneMeaning(sceneId);}
   registrySelection(query:RegistrySelectionQuery):RegistrySelection{
     const {sql,bind}=registrySelectionSql(query);
     const rows=this.database.exec({sql,bind:bind as import('@sqlite.org/sqlite-wasm').SqlValue[],rowMode:'object',returnValue:'resultRows'}) as Record<string,any>[];

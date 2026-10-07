@@ -342,7 +342,7 @@
     "updateSemanticWorld": "Update my semantic world",
     "savedToSemanticWorld": "Saved to my semantic world",
     "semanticWorldSaved": "Saved to my semantic world",
-    "semanticWorldSaveFailed": "Could not save. Try again.",
+    "semanticWorldSaveFailed": "Could not confirm the save. Try again.",
     "cues": "Meaning cues",
     "thinkFirst": "Say it in your mind before checking the expression.",
     "reveal": "See the expression",

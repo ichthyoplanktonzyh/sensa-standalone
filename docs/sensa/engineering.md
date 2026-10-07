@@ -72,6 +72,14 @@ Sense Note 编辑通过 Personal Content 的精确读取取得 edit base；写�
 Personal Content 的 snapshot/sense 读取区分 loading、ready 与 error；重新读取失败不成为空库成功。
 界面只在 ready 时使用收藏、笔记和例句状态，精确笔记编辑仍独立读取其 edit base。场景／Context 编辑器
 也精确读取原内容，失败时禁用编辑和保存并允许重读或退出，不以未加载的空缓存覆盖已有场景。
+Personal Learning Scene 的写入以实际读到的 revision 与正文／图片 digest 为基线，在同一事务中拒绝陈旧
+编辑；精确重试复用原操作，失败保留草稿。Runtime 单独读取当前 Target×Route 场景，不因无关 annotation
+列表失败而隐藏已有场景；本条读取失败时暂停依赖它的动作并允许重读。
+Scene→World 接受使用独立 command frame，按可重建的 Scene→Meaning 索引与固定发布 Registry 闭包读取，
+不继承全库浏览／练习 snapshot。写锁内复查场景 owner（包括确切不存在）、已占用身份与发布事实；已回收
+Meaning 与退役 Anchor 的归属仍保留。新 Scene 的首次 Meaning identity 按 Scene 固定，跨设备不同 revision
+不会生成第二身份；已保存的 owner identity 优先，不做数据迁移。独立替换个人 Context 后再接受场景，保留
+其当前整理并引入新的活动场景 Anchor，不改写旧 tombstone 或学习历史。
 `apps/web/src/learnerSemanticProjection/system` 只有 read/subscribe，
 通过 Personal Content、Personal Semantic World、Learning 和 published-content 接口生成可重建读取模型，
 没有 command，也不直接取得其他领域存储表的所有权。
@@ -96,6 +104,8 @@ App Shell、轻量首页、完整学习工作区和 Learning Runtime 的增量�
 事实；Package/Personal 完整控制器在相关 URL sheet 打开后加载。正式 Learning Runtime renderer 在进入 Run
 时按需加载，Runtime/Protocol/Policy 选择已经由 Learning System 封装在 presentation union 中；首页学习队列与内容准备只在真实表变化、到期时间点或页面
 恢复焦点时刷新，不使用固定频率轮询。
+viewport 级弹层挂到 document body，避免 App Shell 的 transform／裁剪改变其固定定位；container 与
+specimen 弹层仍在原宿主内。主题和方向仍来自 html，保持相同关闭、焦点与返回语义。
 `test:browser` 使用生产构建和真实 Chromium 记录匿名 Landing、已登录 App Shell/首次本机库打开，并在 4x CPU throttle 下记录 Personal Meaning、学习入口和 Reference 覆盖层的 cold/warm 交互时间；静态闭包测试同时保证这些重模块不回流到匿名入口或首页。这里的 CI 时长是回归预算，不冒充真实设备的 LCP、INP 或 CLS。
 
 TanStack Router 拥有合法路径、search 校验、公开 `/welcome` 和 not-found 恢复；动态 Sheet Stack 仍以一个
@@ -119,6 +129,8 @@ Origin Private File System。SQLite 在专用 Worker 中运行，使用不要求
 复用 owner 的记录接口，owner 关闭后由剩余页面重新选举，绝不打开竞争连接。跨页共享/排他事务锁覆盖
 完整 `LibraryTransaction`，因此多次读取到一次 commit 的 read/modify/write 序列不会在标签页之间交错。
 关闭时先排空 Worker 请求、关闭数据库、暂停 VFS 并确认原生句柄可再次打开，再释放所有权；无法确认时停止而不创建空库。
+接入页等待 owner 时继续尝试同一规范锁，不依赖已经关闭页面再次广播。确认 owner 更换后，立即结束发往
+旧 owner 的挂起请求；只读请求可向新 owner 重读，提交结果不确定时不自动重放底层写入，仍由原命令回执恢复。
 SDK 初始化失败不得删除 pool 数据，构建中的版本和源片段检查必须阻止未审核依赖绕过保护。真实句柄冲突与 Worker 突然终止另由隔离 Chromium 回归验证。
 pool 关联头的摘要或读取长度异常、无路径却仍含数据时，初始化拒绝打开并保留原文件，不能通过截断槽位
 创建新空库。合法临时文件只在完整关联头通过校验后按 SDK 语义回收。隔离 OPFS 回归通过单字节故障注入、
@@ -280,7 +292,18 @@ Replica Module 显式声明的记录依赖；learner prose 和其他任意字符
 扩大冲突范围。Personal Semantic World 使用专用三方 merge：不可变 facts 按稳定 identity 合并，
 同一 revision 槽分叉和 delete-vs-edit 停为冲突；其 v3 facts / v5 Journey store 用单调 lifecycle revision、
 删除 operation 与时间保存 tombstone，稳定语义记录不允许以缺行表达删除。手动备份恢复也通过同一
-Replica Module 的 normalize/restore seam，不另写领域状态修复分支。本地 Journey Repository 在计算
+Replica Module 的 normalize/restore seam，不另写领域状态修复分支。
+Scene 首次接受的离线分叉明确选择内容后，Personal Semantic World 保留双方未冲突的 immutable command
+receipt，而非物理删除原操作。重放先核对选中 Meaning 中实际存在的 Anchor revision witness；非选中
+分支的旧收据不能返回虚假接受成功，也不能覆盖当前内容。该保留策略由领域 Replica Module 在明确选择后
+实施，不提前发布挂起分叉的收据来制造新的 head 或自动选择内容。
+共享注册表依赖导致 Scene Meaning 被另一条笔记冲突连带扣留时，选择笔记分支仍保留该 Meaning 的
+未冲突普通合并结果（首次接受或后续更新），仅补齐缺失且未冲突的新依赖；不把相关选择扩大为撤销
+无关的场景接受。直接冲突的 Meaning 与所选同 key 注册表值不被该保留策略替换。
+正式 Runtime 为每次明确保存意图生成操作身份，未确认结果的重试保留原身份；新的意图不永久绑定 scene
+revision。重开后确认同一版场景时，网关核对当前活动 Anchor 的实际内容并只写确认收据，不重复追加材料。
+确认收据引用原接受操作，在写锁内复验 Meaning；被明确弃用的旧分支不能因重放伪称成功。
+本地 Journey Repository 在计算
 任何逻辑行变更前，通过同一个 Personal Semantic World authority 校验发生变化的 facts、内部引用以及
 before→after transition；未变化聚合按对象 identity 跳过，加载、同步和备份重建才执行完整状态校验。
 因此 Gateway 提议的非法 revision 改写、tombstone 复活或物理删除不会进入 SQLite；记录级提交本身

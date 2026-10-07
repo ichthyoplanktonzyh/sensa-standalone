@@ -35,6 +35,12 @@
     "utterance_strategy": "Estrategia de expresión"
   }
 },
+  "sceneEditor": {
+    "saveUnconfirmed": "No se pudo confirmar el guardado. Tu borrador se conserva; inténtalo de nuevo.",
+    "readFailed": "No se pudo leer esta escena.",
+    "changed": "Esta escena cambió en otro lugar. Tu borrador se conserva.",
+    "useLatest": "Usar la escena más reciente"
+  },
   "noteEditor": {
     "loading": "Cargando nota…",
     "readFailed": "No se pudo leer esta nota.",

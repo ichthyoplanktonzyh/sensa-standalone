@@ -342,7 +342,7 @@
     "updateSemanticWorld": "私の意味世界を更新",
     "savedToSemanticWorld": "私の意味世界に保存済み",
     "semanticWorldSaved": "私の意味世界に保存済み",
-    "semanticWorldSaveFailed": "保存できませんでした。もう一度お試しください。",
+    "semanticWorldSaveFailed": "保存を確認できませんでした。もう一度お試しください。",
     "cues": "意味の手がかり",
     "thinkFirst": "表現を確認する前に、まず心の中で言ってみてください。",
     "reveal": "表現を見る",

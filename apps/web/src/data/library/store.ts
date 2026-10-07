@@ -152,6 +152,10 @@ export class LibraryTransaction {
     if(this.wrote)throw new Error('library_projection_requires_snapshot');
     return storageCall(()=>this.adapter.worldBrowse(query));
   }
+  async worldSceneMeaning(sceneId:string):Promise<string|null>{
+    if(this.wrote)throw new Error('library_projection_requires_snapshot');
+    return storageCall(()=>this.adapter.worldSceneMeaning(sceneId));
+  }
   async registrySelection(query:import('./sqliteProtocol').RegistrySelectionQuery):Promise<import('./sqliteProtocol').RegistrySelection>{
     if(this.wrote)throw new Error('library_projection_requires_snapshot');
     return storageCall(()=>this.adapter.registrySelection(query));

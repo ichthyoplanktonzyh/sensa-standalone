@@ -35,6 +35,12 @@
     "utterance_strategy": "表達策略"
   }
 },
+  "sceneEditor": {
+    "saveUnconfirmed": "未能確認儲存，草稿仍保留。請重試。",
+    "readFailed": "無法讀取我的場景。",
+    "changed": "場景已在別處更新，你的草稿仍保留。",
+    "useLatest": "使用最新場景"
+  },
   "noteEditor": {
     "loading": "正在讀取筆記…",
     "readFailed": "無法讀取這則筆記。",

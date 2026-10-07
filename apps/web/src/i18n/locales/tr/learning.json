@@ -342,7 +342,7 @@
     "updateSemanticWorld": "Anlamsal Dünyamı güncelle",
     "savedToSemanticWorld": "Anlamsal Dünyama kaydedildi",
     "semanticWorldSaved": "Anlamsal Dünyama kaydedildi",
-    "semanticWorldSaveFailed": "Kaydedilemedi. Yeniden deneyin.",
+    "semanticWorldSaveFailed": "Kayıt doğrulanamadı. Yeniden deneyin.",
     "cues": "Anlam ipuçları",
     "thinkFirst": "İfadeyi kontrol etmeden önce içinizden söyleyin.",
     "reveal": "İfadeyi gör",

@@ -44,6 +44,7 @@ import {applyClarificationFacts} from './clarificationFacts';
 import {isAlignmentActive} from './alignmentLifecycle';
 import {meaningCorrectionContext,meaningCorrectionPayload,meaningCorrectionBinding,correctionReason} from './meaningCorrection';
 import {installPublishedLearningFacts,learningSceneAnchorRevision} from './publishedSceneFacts';
+import {learningScenePersonalMeaningId} from '../../data/library/personalSceneIdentity';
 import {settleExpressionBinding} from './expressionBindingFacts';
 import {appendMeaningRevision,latestMeaningRevision} from './meaningRecords';
 import {assertClarificationSource,sourceWitnessFromState,sameClarificationSource,ClarificationSourceChangedError,type ClarificationSourceKind,type ClarificationSourceWitness} from './clarificationSource';
@@ -1194,6 +1195,12 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
   async acceptPublishedLearningScene(
     input: PublishedLearningSceneAcceptanceInput,
   ): Promise<PublishedLearningSceneAcceptanceResult> {
+    input=structuredClone(input);
+    if(this.deps.repository.withPublishedSceneCommand){
+      return this.isolatedCommand(input.operationId,'AcceptPublishedLearningScene',digestOf(input),()=>
+        this.deps.repository.withPublishedSceneCommand!(input,this.deps.ids,
+          (repository,ids)=>new JourneyGatewayImpl({...this.deps,repository,ids}).acceptPublishedLearningScene(input)));
+    }
     return this.exclusive(async () => {
       const requestDigest = digestOf(input);
       const replay = await this.replay<PublishedLearningSceneAcceptanceResult>(
@@ -1214,8 +1221,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
       const matchedRecord = input.existingPersonalMeaningId
         ? this.findRecord(input.existingPersonalMeaningId)
         : this.requireState().meanings.find((candidate) => (
-            candidate.personalMeaning.status === 'active'
-            && candidate.personalSemanticAnchorRevisions.some((revision) => (
+            candidate.personalSemanticAnchorRevisions.some((revision) => (
               (revision.structuredPayload.learningScene as {sceneId?:string}|undefined)?.sceneId
               === input.scene.sceneId
             ))
@@ -1236,23 +1242,44 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
           confirmation.senseVersionId === input.target.senseVersionId
           && confirmation.bindingVersionId === input.target.bindingVersionId
         ))) throw new Error('个人场景不能更新到另一个意思或表达。');
-        const currentRevision = record.personalSemanticAnchorRevisions.find((candidate) => (
+        const sceneRevisions = record.personalSemanticAnchorRevisions.filter((candidate) => (
           (candidate.structuredPayload.learningScene as {sceneId?:string}|undefined)?.sceneId === input.scene.sceneId
         ));
-        if (!currentRevision) throw new Error('找不到已接受的个人场景。');
-        const anchor = record.personalSemanticAnchors.find((candidate) => (
-          candidate.personalSemanticAnchorId === currentRevision.personalSemanticAnchorId
-        ));
-        if (!anchor) throw new Error('找不到已接受的个人场景。');
+        if (!sceneRevisions.length) throw new Error('找不到已接受的个人场景。');
+        let anchor = record.personalSemanticAnchors.find((candidate) => candidate.status==='active'&&sceneRevisions.some(revision=>revision.personalSemanticAnchorId===candidate.personalSemanticAnchorId));
+        const current=anchor&&sceneRevisions.find(revision=>revision.personalSemanticAnchorId===anchor!.personalSemanticAnchorId&&revision.revision===anchor!.currentRevision);
+        const pin=current?.structuredPayload.learningScene as {revisionId?:string;learningTargetId?:string}|undefined;
+        if(current&&pin?.revisionId===input.scene.revisionId&&pin.learningTargetId===input.target.learningTargetId&&current.bodyText===(input.scene.body.trim()||null)&&digestOf(current.structuredPayload.media??[])===digestOf(input.scene.media)){
+          // A fresh user intent or a reopened page confirms existing content;
+          // it does not append the same Scene version again. Keep the actual
+          // accepting operation as the witness for this confirmation receipt.
+          this.transaction!.preconditions.push({table:'semanticMeanings',key:record.personalMeaning.personalMeaningId,expected:this.transaction!.before.meanings.find(meaning=>meaning.personalMeaning.personalMeaningId===record.personalMeaning.personalMeaningId)});
+          const result={personalMeaningId:record.personalMeaning.personalMeaningId,personalSemanticAnchorId:current.personalSemanticAnchorId,personalSemanticAnchorRevisionId:current.personalSemanticAnchorRevisionId,acceptedByOperationId:current.provenance.createdByOperationId};
+          this.recordReceipt(input.operationId,'AcceptPublishedLearningScene',result,requestDigest);await this.persist();return {...result,replayed:false};
+        }
+        const introduced=!anchor;
+        if(!anchor){
+          // A separately authored Context replacement retired the old anchor.
+          // Keep that tombstone and the new Context untouched; the learner's
+          // explicit scene acceptance introduces an additional current anchor.
+          const at=this.now();
+          anchor={contractVersion:'sensa-personal-semantic-world-v3',personalSemanticAnchorId:this.id(),personalMeaningId:record.personalMeaning.personalMeaningId,currentRevision:1,lifecycleRevision:1,status:'active',createdAt:at,updatedAt:at,deletedAt:null,deletedByOperationId:null};
+          record.personalSemanticAnchors.push(anchor);
+        }
         const nextRevision = learningSceneAnchorRevision(this.enginePorts(),
           anchor.personalSemanticAnchorId,
-          anchor.currentRevision + 1,
+          introduced?1:anchor.currentRevision + 1,
           input,
         );
         anchor.currentRevision = nextRevision.revision;
         anchor.updatedAt = nextRevision.createdAt;
         record.personalSemanticAnchorRevisions.push(nextRevision);
         record.personalMeaning.updatedAt = nextRevision.createdAt;
+        if(introduced){
+          const previous=latestMeaningRevision(record)!;
+          appendMeaningRevision(this.enginePorts(),record,input.operationId,[anchor.personalSemanticAnchorId]);
+          latestMeaningRevision(record)!.displayLabel=previous.displayLabel;
+        }
         const result = {
           personalMeaningId: record.personalMeaning.personalMeaningId,
           personalSemanticAnchorId: anchor.personalSemanticAnchorId,
@@ -1319,6 +1346,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
           operationId: input.operationId,
           authority,
           materializeContextMedia:false,
+          personalMeaningId:learningScenePersonalMeaningId(input.scene.sceneId),
           pinnedSense: {
             senseId: input.target.senseId,
             senseVersionId: input.target.senseVersionId,

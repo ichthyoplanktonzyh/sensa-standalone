@@ -108,6 +108,11 @@ Personal Learning Scene 与其已经接受的 Personal Meaning 各自演进。�
 revision，不自动改写已接受的 Personal Semantic Anchor；用户可以再次明确提交当前 revision，以更新
 同一个 Personal Meaning 的 Anchor revision。移除 Book、结束学习或删除学习来源不能删除 Personal
 Meaning；删除 Personal Meaning 也不改变 Learning Target、Retention、Protocol history 或 scene history。
+如果 learner 已独立替换 Personal Context Composition，使原 scene Anchor 退役，再次明确接受 scene
+不得复活该 tombstone 或覆盖新整理的 Context；它在同一 Personal Meaning 的当前组合末尾引入新的
+scene Anchor，后续 scene 更新沿该活动 Anchor 追加 revision。删除的 Personal Meaning 仍须先明确恢复。
+同一 scene identity 只能沿一个 Personal Meaning 演进，包括其退役素材与删除历史；离线分叉不自动
+合并成两条长期意义，涉及同一 scene 的分叉必须保留两侧事实并显式处理。
 
 ### Personal Expression Anchor
 

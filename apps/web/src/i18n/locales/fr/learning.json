@@ -342,7 +342,7 @@
     "updateSemanticWorld": "Mettre à jour mon monde sémantique",
     "savedToSemanticWorld": "Enregistré dans mon monde sémantique",
     "semanticWorldSaved": "Enregistré dans mon monde sémantique",
-    "semanticWorldSaveFailed": "Impossible d’enregistrer. Réessayez.",
+    "semanticWorldSaveFailed": "Impossible de confirmer l’enregistrement. Réessayez.",
     "cues": "Indices de sens",
     "thinkFirst": "Dites-le mentalement avant de vérifier l’expression.",
     "reveal": "Voir l’expression",

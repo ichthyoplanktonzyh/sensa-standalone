@@ -1,5 +1,6 @@
-import type {DomainReplicaModule,ReplicaRecordReference} from './domainReplica';
+import type {DomainReplicaModule,ReplicaRecordReference,ReplicaEntry} from './domainReplica';
 import {mergePersonalSemanticWorldReplica,requiresPersonalSemanticWorldTombstone} from './personalSemanticWorldMerge';
+import {decodeBackupValue} from '../backupCodec';
 
 const tables=new Set([
  'drafts','sessions','meanings','identities',
@@ -61,6 +62,24 @@ export const personalSemanticWorldReplica:DomainReplicaModule={
   return {...entry,value};
  },
  merge(input,ordinary){return mergePersonalSemanticWorldReplica(input,ordinary);},
+ afterConflictChoice(selected,merged,context){
+  const id=(entry:ReplicaRecordReference)=>JSON.stringify([entry.table,entry.key]);
+  const chosen=new Map(selected.map(entry=>[id(entry),entry])),base=new Set(context.base.map(id)),conflicts=new Set(context.conflicts),rows=new Map(merged.map(entry=>[id(entry),entry]));
+  // A shared immutable registry node may hold an otherwise independent first
+  // acceptance behind a note conflict. Selecting the note must not discard
+  // that uncontested new Meaning and leave an orphan revision-stable receipt.
+  const meanings=merged.filter(entry=>entry.table==='semanticMeanings'&&!conflicts.has(id(entry))&&values(record(decodeBackupValue(entry.value))?.personalSemanticAnchorRevisions).some(revision=>record(revision.structuredPayload?.learningScene)));
+  // Uncontested re-acceptance of an existing Meaning is equally independent:
+  // retain the owner's validated ordinary merge, including baseline facts.
+  const queue:ReplicaEntry[]=[];
+  for(const entry of meanings){chosen.set(id(entry),entry);for(const dependency of meaningDependencies(decodeBackupValue(entry.value))){const row=rows.get(id(dependency));if(row)queue.push(row);}}
+  for(let at=0;at<queue.length;at++){
+   const entry=queue[at]!,key=id(entry);if(chosen.has(key)||base.has(key)||conflicts.has(key))continue;
+   chosen.set(key,entry);
+   for(const dependency of this.conflictDependencies?.(entry,decodeBackupValue(entry.value))??[]){const row=rows.get(id(dependency));if(row)queue.push(row);}
+  }
+  return [...chosen.values(),...merged.filter(entry=>entry.table==='semanticReceipts'&&record(decodeBackupValue(entry.value))?.command==='AcceptPublishedLearningScene'&&!chosen.has(id(entry)))];
+ },
  conflictDependencies(entry,value){
   const fact=record(value);
   if(entry.table==='sessions')return [

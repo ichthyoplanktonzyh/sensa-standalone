@@ -63,6 +63,14 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
       pending:visible.filter(row=>row.item.senseFormation.phase!=='sense_confirmed'||row.item.expressionBinding.phase!=='bound').length,
       next:visible.find(row=>row.item.senseFormation.phase!=='sense_confirmed'||row.item.expressionBinding.phase!=='bound')?.item??null};
   }
+  async worldSceneMeaning(sceneId:string):Promise<string|null>{
+    if(!isUuid(sceneId))throw new Error('scene_identity_invalid');
+    const owners=[...this.records].filter(([key])=>key.startsWith('semanticMeanings\u0000')).flatMap(([,encoded])=>{
+      const record=decodeBackupValue(JSON.parse(encoded)) as MeaningJourneyRecord;
+      return record.personalSemanticAnchorRevisions.some(revision=>(revision.structuredPayload.learningScene as {sceneId?:string}|undefined)?.sceneId===sceneId)?[record.personalMeaning.personalMeaningId]:[];
+    });
+    if(owners.length>1)throw new Error('scene_owner_ambiguous');return owners[0]??null;
+  }
   async lookupMeanings(query:string):Promise<MeaningLookupResult>{
     const state=emptyJourneyState();
     state.meanings=(await this.entries('semanticMeanings')).map(row=>decodeBackupValue(JSON.parse(row.encodedValue)) as MeaningJourneyRecord);

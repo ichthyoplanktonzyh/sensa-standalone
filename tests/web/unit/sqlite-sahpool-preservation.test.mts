@@ -5,6 +5,7 @@ import {dirname,join} from 'node:path';
 import {test} from 'vitest';
 import {CoordinatedSqliteAdapter,type CoordinatedSqliteBackend} from '../../../apps/web/src/data/library/sqliteCoordinator.ts';
 import type {SqliteStorageDiagnostics} from '../../../apps/web/src/data/library/sqliteProtocol.ts';
+import {sqliteCoordinatorProtocolVersion,sqliteLibrarySchemaVersion} from '../../../apps/web/src/data/library/sqliteProtocol.ts';
 
 import {
   closeSahPoolHandles,
@@ -350,6 +351,75 @@ test('a failed native verification retains the physical lock; pagehide triggers 
   assert.equal(closed,1);
   assert.equal(locked,false);
   remove();
+});
+
+test('a new owner retires lost old read requests promptly without blindly retrying ambiguous commits',async()=>{
+ const previous=Object.fromEntries(['navigator','window','BroadcastChannel'].map(name=>[name,Object.getOwnPropertyDescriptor(globalThis,name)]));
+ let channel!:TestChannel,leader='old-owner',requests=0,lastRequest:any,signalRead!:()=>void,signalCommit!:()=>void;
+ const readSent=new Promise<void>(resolve=>{signalRead=resolve;}),commitSent=new Promise<void>(resolve=>{signalCommit=resolve;});
+ class TestChannel extends EventTarget{
+  constructor(){super();channel=this;}
+  receive(payload:unknown){this.dispatchEvent(new MessageEvent('message',{data:{protocol:sqliteCoordinatorProtocolVersion,schemaVersion:sqliteLibrarySchemaVersion,...payload as object}}));}
+  postMessage(message:any){
+   if(message.kind==='probe')queueMicrotask(()=>this.receive({kind:'leader',sender:leader}));
+   if(message.kind==='request'){
+    requests++;lastRequest=message;
+    if(message.input.kind==='commit'){signalCommit();return;}
+    if(leader==='old-owner'){signalRead();return;}
+    queueMicrotask(()=>this.receive({kind:'response',recipient:message.sender,requestId:message.requestId,ok:true,value:'preserved sentinel'}));
+   }
+  }
+ }
+ Object.defineProperty(globalThis,'navigator',{configurable:true,value:{locks:{request:async(_name:string,_options:unknown,callback:(lock:null)=>unknown)=>callback(null)}}});
+ Object.defineProperty(globalThis,'window',{configurable:true,value:new EventTarget()});
+ Object.defineProperty(globalThis,'BroadcastChannel',{configurable:true,value:TestChannel});
+ const adapter=new CoordinatedSqliteAdapter(()=>{throw Error('An occupied owner lock cannot create a second backend');});
+ let timer:ReturnType<typeof setTimeout>|undefined;
+ try{
+  const read=adapter.get('meta','sentinel');await readSent;
+  const stale=lastRequest;leader='replacement-owner';channel.receive({kind:'leader',sender:leader});
+  const deadline=new Promise<never>((_resolve,reject)=>{timer=setTimeout(()=>reject(Error('old remote read was not retired')),1500);});
+  assert.equal(await Promise.race([read,deadline]),'preserved sentinel');assert.equal(requests,2);
+  channel.receive({kind:'response',recipient:stale.sender,requestId:stale.requestId,ok:true,value:'late old reply'});
+  const write=adapter.commit({clears:[],deletes:[],puts:[]});
+  const rejected=assert.rejects(write,/sqlite_owner_changed/);await commitSent;
+  const before=requests;leader='third-owner';channel.receive({kind:'leader',sender:leader});await rejected;
+  assert.equal(requests,before,'an ambiguous commit belongs to receipt recovery, not an automatic raw replay');
+ }finally{
+  clearTimeout(timer);await adapter.close();
+  for(const name of ['navigator','window','BroadcastChannel']){const descriptor=previous[name];if(descriptor)Object.defineProperty(globalThis,name,descriptor);else Reflect.deleteProperty(globalThis,name);}
+ }
+});
+
+test('initial coordination retries ownership after a closing leader releases its lock without a new announcement',async()=>{
+ const previous=Object.fromEntries(['navigator','window','BroadcastChannel'].map(name=>[name,Object.getOwnPropertyDescriptor(globalThis,name)]));
+ class SilentChannel extends EventTarget{postMessage(_message:unknown):void{}}
+ let ownerLocked=true,attempts=0,firstAttempt!:()=>void;
+ const initialAttempt=new Promise<void>(resolve=>{firstAttempt=resolve;});
+ const locks={request:async(name:string,options:{ifAvailable?:boolean;mode?:string},callback:(lock:unknown)=>Promise<unknown>|unknown)=>{
+  attempts++;
+  if(options.ifAvailable&&ownerLocked){firstAttempt();return callback(null);}
+  ownerLocked=true;try{return await callback({name,mode:options.mode??'exclusive'});}finally{ownerLocked=false;}
+ }};
+ Object.defineProperty(globalThis,'navigator',{configurable:true,value:{locks}});
+ Object.defineProperty(globalThis,'window',{configurable:true,value:new EventTarget()});
+ Object.defineProperty(globalThis,'BroadcastChannel',{configurable:true,value:SilentChannel});
+ const diagnostics:SqliteStorageDiagnostics={engine:'sqlite-wasm',persistence:'opfs',sqliteVersion:'fixture',schemaVersion:16,journalMode:'wal',synchronous:2,lockingMode:'exclusive'};
+ let created=0,timer:ReturnType<typeof setTimeout>|undefined;
+ const adapter=new CoordinatedSqliteAdapter(()=>{created++;return {initialize:async()=>diagnostics,close:async()=>{}} as unknown as CoordinatedSqliteBackend;});
+ const startup=adapter.initialize();
+ try{
+  await initialAttempt;
+  // A graceful old-document close releases the lock, but cannot announce a
+  // new owner. A surviving idle follower also has no backend to announce.
+  ownerLocked=false;
+  const deadline=new Promise<never>((_resolve,reject)=>{timer=setTimeout(()=>reject(Error('initial handoff waited for an absent leader instead of retrying the released lock')),1500);});
+  assert.deepEqual(await Promise.race([startup,deadline]),diagnostics);
+  assert(attempts>=2);assert.equal(created,1);
+ }finally{
+  clearTimeout(timer);await adapter.close();await startup.catch(()=>undefined);
+  for(const name of ['navigator','window','BroadcastChannel']){const descriptor=previous[name];if(descriptor)Object.defineProperty(globalThis,name,descriptor);else Reflect.deleteProperty(globalThis,name);}
+ }
 });
 
 test('pagehide cancels startup waiters and a later lifecycle reconnects without dispatching the old request',async()=>{
