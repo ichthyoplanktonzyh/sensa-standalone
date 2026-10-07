@@ -35,6 +35,40 @@
     "utterance_strategy": "Strategia espressiva"
   }
 },
+  "noteEditor": {
+    "loading": "Caricamento della nota…",
+    "readFailed": "Impossibile leggere questa nota.",
+    "changed": "La nota è stata modificata altrove. La tua bozza è conservata.",
+    "latest": "Ultima nota salvata",
+    "empty": "Nota vuota",
+    "useLatest": "Usa l’ultima nota",
+    "saveMine": "Salva la mia versione",
+    "unconfirmed": "Salvataggio non confermato. Riprova per verificare questo salvataggio.",
+    "savedReadFailed": "Nota salvata, ma l’elenco non si è aggiornato. Riprova la lettura."
+  },
+  "meaningGovernance": {
+    "correct": "Modifica significato ed espressione",
+    "history": "Significati ed espressioni precedenti",
+    "expression": "Espressione",
+    "formSettings": "Lingua e tipo di espressione",
+    "changed": "Il contenuto è cambiato. Riapri l’ultima versione prima di riprovare.",
+    "more": "Altro",
+    "favorite": "Salva il significato",
+    "unfavorite": "Rimuovi dai preferiti",
+    "note": "Scrivi una nota",
+    "remove": "Elimina contenuto",
+    "restore": "Ripristina contenuto",
+    "deleted": "Eliminato",
+    "deleteTitle": "Eliminare questo contenuto?",
+    "consequence": "Sposta nel cestino. Fonti, note e registri di apprendimento vengono conservati.",
+    "cancel": "Annulla",
+    "trash": "Cestino",
+    "emptyTrash": "Il cestino è vuoto",
+    "all": "Tutti i contenuti",
+    "unconfirmed": "Risultato non confermato. Il contenuto è stato riletto; controllalo prima di riprovare.",
+    "savedReadFailed": "La modifica è salvata, ma non è stato possibile rileggere il contenuto. Riprova la lettura.",
+    "retryRead": "Rileggi"
+  },
   "content": {
     "manual": "Crea manualmente",
     "findExpression": "Parla con Sensa",

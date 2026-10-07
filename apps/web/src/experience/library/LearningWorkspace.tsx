@@ -120,6 +120,7 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
     onStartConversation={startSensaConversation}
     onBrowseExisting={()=>setMainStack(['s-catalog'])} onOpenPersonalMeaning={openPersonalMeaning}
     onOpenConfirmedSense={openConfirmedSense} onOpenSense={openSemanticWorldSense}
+    onOpenLearningContent={targetId=>goMain('s-content-sense',{targetId,senseId:undefined})}
     onOpenSection={openContentSection} toast={toast}/>;
  const renderLearningTarget=(screenActive:boolean):ReactNode=>{
   // A failed detail read is not evidence that the Target is absent or that a

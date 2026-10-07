@@ -35,6 +35,40 @@
     "utterance_strategy": "Äußerungsstrategie"
   }
 },
+  "noteEditor": {
+    "loading": "Notiz wird geladen…",
+    "readFailed": "Diese Notiz konnte nicht gelesen werden.",
+    "changed": "Die Notiz wurde anderswo geändert. Dein Entwurf bleibt erhalten.",
+    "latest": "Zuletzt gespeicherte Notiz",
+    "empty": "Leere Notiz",
+    "useLatest": "Aktuelle Notiz verwenden",
+    "saveMine": "Meine Version speichern",
+    "unconfirmed": "Speichern nicht bestätigt. Erneut versuchen, um diesen Speichervorgang zu prüfen.",
+    "savedReadFailed": "Notiz gespeichert, aber die Liste konnte nicht aktualisiert werden. Lesen erneut versuchen."
+  },
+  "meaningGovernance": {
+    "correct": "Bedeutung und Ausdruck bearbeiten",
+    "history": "Frühere Bedeutungen und Ausdrücke",
+    "expression": "Ausdruck",
+    "formSettings": "Sprache und Ausdruckstyp",
+    "changed": "Der Inhalt wurde geändert. Öffne den aktuellen Inhalt vor einem neuen Versuch.",
+    "more": "Mehr",
+    "favorite": "Bedeutung merken",
+    "unfavorite": "Nicht mehr merken",
+    "note": "Notiz schreiben",
+    "remove": "Inhalt löschen",
+    "restore": "Inhalt wiederherstellen",
+    "deleted": "Gelöscht",
+    "deleteTitle": "Diesen Inhalt löschen?",
+    "consequence": "In den Papierkorb verschieben. Quellen, Notizen und Lernaufzeichnungen bleiben erhalten.",
+    "cancel": "Abbrechen",
+    "trash": "Papierkorb",
+    "emptyTrash": "Der Papierkorb ist leer",
+    "all": "Alle Inhalte",
+    "unconfirmed": "Das Ergebnis konnte nicht bestätigt werden. Der Inhalt wurde neu gelesen; bitte vor dem erneuten Versuch prüfen.",
+    "savedReadFailed": "Die Änderung wurde gespeichert, der Inhalt konnte aber nicht neu gelesen werden. Lesen erneut versuchen.",
+    "retryRead": "Erneut lesen"
+  },
   "content": {
     "manual": "Manuell erstellen",
     "findExpression": "Mit Sensa sprechen",

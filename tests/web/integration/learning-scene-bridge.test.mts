@@ -10,6 +10,7 @@ import {createJourneyGateway} from '../../../apps/web/src/experience/personalMea
 import {createSeededClock} from '../../../apps/web/src/experience/personalMeaningJourney/ports.ts';
 import {MemoryJourneyRepository} from '../../../apps/web/src/experience/personalMeaningJourney/repository.ts';
 import type {PublishedLearningSceneAcceptanceInput} from '../../../apps/web/src/experience/personalMeaningJourney/types.ts';
+import {worldItemFromRegistry} from '../../../apps/web/src/experience/personalMeaningJourney/worldRead';
 
 test("learning-scene-bridge", async () => {
 
@@ -51,6 +52,10 @@ assert.equal(record.personalSemanticAnchorRevisions[0].anchorKind,'scene');
 assert.equal(record.personalSemanticAnchorRevisions[0].bodyText,first.scene.body);
 assert.equal(record.personalSemanticAnchorRevisions[0].structuredPayload.learningScene.revisionId,firstRevisionId);
 assert.equal(record.personalSemanticAnchorRevisions[0].structuredPayload.media[0].dataUrl,first.scene.media[0]!.dataUrl);
+assert(record.personalMeaningRevisions[0].provenance.sourceReferenceIds.includes(record.personalSemanticAnchors[0].personalSemanticAnchorId),'published-scene acceptance retains the Context introduction as well as its Scene/release provenance');
+const existingSingleContext=structuredClone(record);
+existingSingleContext.personalMeaningRevisions[0].provenance.sourceReferenceIds=[first.scene.revisionId,first.source.contentReleaseId];
+assert.equal(worldItemFromRegistry(existingSingleContext,state.registry).detail.materialBlocks.find(block=>block.kind==='text')?.bodyText,first.scene.body,'the sole Context has an unambiguous birth even when existing Scene provenance does not list its Anchor ID');
 let detail=gateway.getDetail(accepted.personalMeaningId)!;
 assert.equal(detail.materialBlocks.find(block=>block.kind==='text')?.bodyText,first.scene.body);
 assert.equal(detail.materialBlocks.find(block=>block.kind==='image')?.inlineDataUrl,first.scene.media[0]!.dataUrl,'the semantic-world projection renders accepted inline scene media');

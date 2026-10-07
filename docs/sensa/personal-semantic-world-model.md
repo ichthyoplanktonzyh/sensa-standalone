@@ -76,6 +76,10 @@ Personal Meaning 是稳定的 learner-owned identity，表示 learner 直接或�
 它的原始个人来源。删除稳定 identity 必须保留 Personal Semantic Tombstone、已有 revisions 与
 provenance，不能通过物理移除记录表达。离线旧副本不得让 tombstone 对象复活；删除与同一对象的并发
 编辑必须成为显式冲突，而不是依赖设备时间戳选择一端。
+删除采用可恢复移除：用户可明确恢复同一 identity；删除和恢复各自追加不可变 revision 中的生命周期
+事实，并推进内容 head 与 lifecycle revision。恢复不重做 Semantic Acceptance，也不抹除原删除事实。
+同一后继 revision 槽的并发删除、恢复或内容修订必须显式处理冲突；旧 active 副本没有新的恢复事实，
+不能成为恢复依据。被删除的成员只能查看与恢复，不能继续修订、解析或新增材料。
 
 ### Meaning Focus
 
@@ -90,6 +94,8 @@ Personal Semantic Anchor 用文本、图片、音频、场景、动作、感受�
 Meaning 可以被 learner 重新进入。它说明“这个意义对我如何有根”，不是标准例句、语言学事实、
 评分答案或成功 Evidence。它必须保留来源与捕获 provenance；同一素材可以直接支撑一个已解析
 Context–Expression–Sense 关系，也可以在需要时被多个 Meaning Focus 复用。
+多块材料组成 Personal Context Composition 时保留 learner 保存的文字／媒体次序。替换情境形成新的有序
+组合，新增材料追加到组合末尾；纠正解释、修改 Binding、删除／恢复 Meaning 或同步事实集合不重排材料。
 
 学习运行时中的 Personal Learning Scene 先属于 learner-owned learning scaffold，而不是尚未接受的
 Personal Meaning。它按 Learning Target + Language Learning Route 保持一份 current scene，并以不可变
@@ -121,6 +127,15 @@ Sense Expression Binding。它首先由 Context 与被定位 Expression 的解�
 - learner 直接接受或 Agent 委托接受的 Semantic Acceptance provenance；
 - 当时固定的 Context、Expression occurrence、Sense Version 与 Binding；
 - 后续撤销、重新解析或版本迁移事实。
+
+用户可以明确纠正同一 Personal Meaning 当前的解释或表达。纠正使用用户这次实际审阅的当前真实 Context
+组合，并固定参与的所有 Context revisions；不会无提示地挑选其中第一个素材。此前 Context 修订仍保留在历史中。
+用户在此 Context 旁明确填写的 Expression 可以定位到这个个人意义的 Context revision，不要求把表达
+硬写进原始叙述。它不是脱离 Context 的独立 Sense 创建，也不把用户编辑误记为模型建议。
+纠正追加新的 Semantic Acceptance 和 Alignment，并以不可变事件撤回被替换的连接；原接受、Context、
+Expression、Sense Version、Binding 和旧学习引用不改写。Alignment 的接受快照保持不可变，当前有效性
+由它的确认／撤回／恢复事件推导；已固定的学习来源引用接受快照，而不是当前有效性。
+新的连接只有经独立 Add-to-Learning 才进入学习，不转移或重置旧 Target 的记忆与历史。
 
 模型置信度可以帮助排序或决定 UI，但不能自己构成 acceptance。反过来，只要 Agent 持有 learner
 明确授予的正式提交权限，它对一个完整解析的调用本身就是 delegated acceptance，不需要 learner
@@ -430,8 +445,8 @@ Intake/Construction draft 可以长期保持未确认 Sense 或没有自然的�
 - Personal Semantic World 的稳定 identity 以 revisioned tombstone 表达删除；同一 revision 槽分叉、
   删除与同一对象的并发编辑必须停止为冲突，独立子对象的不可变事实追加才可自动合并；
 - 本地 command、Repository commit、跨设备同步和备份恢复必须经过同一个领域 authority；合法 JSON
-  结构本身不足以获得写入资格，immutable fact 改写、断裂引用、revision 跳号、物理删除与 tombstone
-  复活都必须在事务提交前被拒绝；
+  结构本身不足以获得写入资格，immutable fact 改写、断裂引用、revision 跳号、物理删除与没有明确
+  恢复事实的 tombstone 复活都必须在事务提交前被拒绝；
 - Meaning Focus 是可选解析桥梁，不是 Personal Meaning、Alignment 或快轨的必要字段；不得从 Sense
   definition 合成伪 Focus，也不得为快轨伪造零轮 Sense Construction/Proposal 链；
 - LLM 提议本身不是 learner 意图；受授权 Agent 的 commit operation 可以表达 delegated learner

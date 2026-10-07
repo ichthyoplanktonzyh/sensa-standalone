@@ -4,6 +4,39 @@ import type {MeaningJourneyRecord} from './store';
 import type {JourneyFactPorts} from './ports';
 const PSW='sensa-personal-semantic-world-v3' as const;
 
+/** Context order comes from its recorded introductions, not a replica's fact
+ * array order. Replacement retires all previous anchors and introduces fresh
+ * IDs; appends introduce only the new ID. Later references to an existing
+ * anchor (correction, binding, lifecycle) must never move it. */
+export function orderedMeaningContextAnchors(record:MeaningJourneyRecord,introducedAnchorIds:readonly string[]=[]){
+  const anchors=new Map(record.personalSemanticAnchors.map(anchor=>[anchor.personalSemanticAnchorId,anchor]));
+  const births=new Map<string,string[]>();
+  for(const anchor of anchors.values()){
+    const first=record.personalSemanticAnchorRevisions.find(revision=>revision.personalSemanticAnchorId===anchor.personalSemanticAnchorId&&revision.revision===1);
+    if(first){const group=births.get(first.provenance.createdByOperationId)??[];group.push(anchor.personalSemanticAnchorId);births.set(first.provenance.createdByOperationId,group);}
+  }
+  const ordered=new Set<string>();
+  for(const revision of [...record.personalMeaningRevisions].sort((a,b)=>a.revision-b.revision)){
+    for(const id of revision.provenance.sourceReferenceIds)if(anchors.has(id))ordered.add(id);
+    // A sole Context introduced by this revision has an unambiguous position
+    // even when its provenance lists a published Scene/release rather than its
+    // own ID. Multiple materials require their recorded input order.
+    const born=births.get(revision.provenance.createdByOperationId);
+    if(born?.length===1)ordered.add(born[0]!);
+  }
+  for(const id of introducedAnchorIds)if(anchors.has(id))ordered.add(id);
+  if(ordered.size!==anchors.size)throw Error('localFlow.meaningChanged');
+  return [...ordered].map(id=>anchors.get(id)!);
+}
+
+export function currentMeaningContextRevisions(record:MeaningJourneyRecord){
+  const revisions=new Map(record.personalSemanticAnchorRevisions.map(revision=>[`${revision.personalSemanticAnchorId}:${revision.revision}`,revision]));
+  return orderedMeaningContextAnchors(record).filter(anchor=>anchor.status==='active').map(anchor=>{
+    const revision=revisions.get(`${anchor.personalSemanticAnchorId}:${anchor.currentRevision}`);
+    if(!revision)throw Error('localFlow.meaningChanged');return revision;
+  });
+}
+
 export function activeExpressionAnchors(record: MeaningJourneyRecord) {
   return record.personalExpressionAnchors.filter((anchor) => anchor.status === 'active');
 }
@@ -30,11 +63,11 @@ export function activeSourceExpressionAnchors(record: MeaningJourneyRecord) {
   });
 }
 
-export function activeExperienceAnchors(record: MeaningJourneyRecord) {
-  return record.personalSemanticAnchors.filter((anchor) => anchor.status === 'active');
+export function activeExperienceAnchors(record: MeaningJourneyRecord,introducedAnchorIds:readonly string[]=[]) {
+  return orderedMeaningContextAnchors(record,introducedAnchorIds).filter((anchor) => anchor.status === 'active');
 }
 
-export function displayLabel(record: MeaningJourneyRecord): string | null {
+export function displayLabel(record: MeaningJourneyRecord,introducedAnchorIds:readonly string[]=[]): string | null {
   const familiar = activeSourceExpressionAnchors(record)
     .map((anchor) => record.personalExpressionAnchorRevisions.find(
       (revision) =>
@@ -43,7 +76,7 @@ export function displayLabel(record: MeaningJourneyRecord): string | null {
     )?.surfaceForm)
     .find(Boolean);
   if (familiar) return familiar;
-  const experience = activeExperienceAnchors(record)
+  const experience = activeExperienceAnchors(record,introducedAnchorIds)
     .map((anchor) => record.personalSemanticAnchorRevisions.find(
       (revision) =>
         revision.personalSemanticAnchorId === anchor.personalSemanticAnchorId
@@ -76,7 +109,7 @@ export function appendMeaningRevision(
     personalMeaningRevisionId: revisionId,
     personalMeaningId: record.personalMeaning.personalMeaningId,
     revision: nextRevision,
-    displayLabel: displayLabel(record),
+    displayLabel: displayLabel(record,sourceReferenceIds),
     learnerIntentNote: latestMeaningRevision(record)?.learnerIntentNote ?? null,
     provenance: {
       kind: 'learner_authored',

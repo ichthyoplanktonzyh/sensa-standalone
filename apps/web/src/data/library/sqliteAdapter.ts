@@ -21,6 +21,7 @@ import type {StoredLearningHistoryPage} from './learningHistoryProjection';
 import {CoordinatedSqliteAdapter,type CoordinatedSqliteBackend} from './sqliteCoordinator';
 
 export interface SqliteRecordAdapter {
+  learningSemanticMemory(targetId?:string):Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>;
   get(table: SqliteLibraryTable, key: string): Promise<string | null>;
   entries(table: SqliteLibraryTable): Promise<Array<{ key: string; encodedValue: string }>>;
   entriesPage(table:SqliteLibraryTable,afterKey:string|null,limit:number):Promise<Array<{key:string;encodedValue:string}>>;
@@ -129,6 +130,8 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
   count(table: SqliteLibraryTable): Promise<number> {
     return this.send({ kind: "count", table }) as Promise<number>;
   }
+
+  learningSemanticMemory(targetId?:string):Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>{return this.send({kind:'learningSemanticMemory',targetId}) as Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>;}
 
   estimateRecordBytes(tables: readonly SqliteLibraryTable[]): Promise<number> {
     return this.send({kind:'estimateRecordBytes',tables:[...tables]}) as Promise<number>;

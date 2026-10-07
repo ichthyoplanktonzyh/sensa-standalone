@@ -12,6 +12,10 @@
     "types": ["node", "vite/client", "chrome"]
   },
   "files": [
+    "integration/personal-meaning-correction.test.mts",
+    "unit/scene-editor-read.test.mts",
+    "integration/personal-meaning-lifecycle.test.mts",
+    "integration/learner-library-projection.test.mts",
     "integration/learning-session-scope.test.mts",
     "integration/supplemental-membership.test.mts",
     "integration/book-plan-planning.test.mts",

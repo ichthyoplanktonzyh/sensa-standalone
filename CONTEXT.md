@@ -659,6 +659,9 @@ into Curriculum, but is neither a learning prerequisite nor a progress owner.
 A durable lifecycle fact marking a Personal Semantic World identity as deleted while
 retaining its revisions and provenance. It prevents an offline older replica from
 resurrecting the identity and does not cascade into Learning or published content.
+An explicit learner restoration advances the same identity to a new lifecycle
+revision while retaining the earlier deletion fact; an old active replica is not
+a restoration intent.
 _Avoid_: Physical deletion, last-write-wins deletion
 
 **Personal Content**:  
@@ -690,6 +693,11 @@ A provenance-bearing text, image, audio, scene or other real Context intentional
 committed for a Personal Meaning by the learner or an authorized delegate. It may
 remain useful after Sense confirmation but is a private optional learning scaffold,
 not reviewed content, learner progress or Evidence.
+
+**Personal Context Composition**:
+The learner-ordered combination of currently active Personal Semantic Anchors for one
+Personal Meaning. Its material sequence is independent of storage or synchronization
+order and does not prescribe Sense, Curriculum or learning order.
 
 **Personal Semantic Region**:
 
@@ -727,6 +735,12 @@ The explicit relation from one Personal Meaning to one stable Sense Version, gro
 in its Context and located Expression and optionally qualified by a Meaning Focus.
 It preserves resolution and direct/delegated acceptance provenance. Acceptance
 preserves the Personal Meaning and does not by itself add the Sense to formal learning.
+
+**Personal Meaning Correction**:
+
+The learner's explicit replacement of an accepted interpretation or expression,
+grounded in an existing real Context of the same Personal Meaning. It retains the
+original acceptance and learning history; it is not public Sense revision or new learning.
 
 **Personal Collection / Collection Membership**:  
 A learner-named ordered organization of Sense and Example targets, plus one typed

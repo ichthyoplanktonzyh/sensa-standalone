@@ -35,6 +35,40 @@
     "utterance_strategy": "Utterance strategy"
   }
 },
+  "noteEditor": {
+    "loading": "Loading note…",
+    "readFailed": "Could not read this note.",
+    "changed": "This note changed elsewhere. Your draft is kept.",
+    "latest": "Latest saved note",
+    "empty": "Empty note",
+    "useLatest": "Use latest note",
+    "saveMine": "Save my version",
+    "unconfirmed": "Could not confirm the save. Retry to check the same save.",
+    "savedReadFailed": "Note saved, but the list could not refresh. Retry reading."
+  },
+  "meaningGovernance": {
+    "correct": "Edit meaning and expression",
+    "history": "Previous meanings and expressions",
+    "expression": "Expression",
+    "formSettings": "Language and expression type",
+    "changed": "Content changed. Reopen the latest content before trying again.",
+    "more": "More",
+    "favorite": "Save meaning",
+    "unfavorite": "Unsave meaning",
+    "note": "Write a note",
+    "remove": "Delete content",
+    "restore": "Restore content",
+    "deleted": "Deleted",
+    "deleteTitle": "Delete this content?",
+    "consequence": "Move to trash. Original sources, notes and learning records are kept.",
+    "cancel": "Cancel",
+    "trash": "Trash",
+    "emptyTrash": "Trash is empty",
+    "all": "All content",
+    "unconfirmed": "Could not confirm the result. Content was re-read; check it before retrying.",
+    "savedReadFailed": "The change is saved, but the content could not be re-read. Retry reading.",
+    "retryRead": "Retry reading"
+  },
   "content": {
     "manual": "Create manually",
     "findExpression": "Talk to Sensa",

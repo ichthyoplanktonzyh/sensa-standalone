@@ -184,6 +184,7 @@ const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
     case 'meaningLookup':return current.database.lookupMeanings(request.query);
     case 'worldBrowse':return current.database.worldBrowse(request.query);
     case 'registrySelection':return current.database.registrySelection(request.query);
+    case 'learningSemanticMemory':return current.database.learningSemanticMemory(request.targetId);
     case 'worldLearningChoices':return current.database.worldLearningChoices(request.query);
     case 'existingJourneyIdentities':return current.database.existingJourneyIdentities(request.ids);
     case 'changesSince': return current.database.changesSince(request.contentRevision,request.tables);

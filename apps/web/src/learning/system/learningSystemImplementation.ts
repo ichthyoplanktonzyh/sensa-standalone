@@ -263,7 +263,7 @@ export const readLearningQuery = async (query: LearningQuery): Promise<unknown> 
       return readLearningPersonalEnrollmentIndex();
     }
     case 'semantic_memory': {
-      return readLearningSemanticMemoryProjection();
+      return readLearningSemanticMemoryProjection(query.targetId);
     }
   }
 };

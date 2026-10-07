@@ -12,9 +12,22 @@ export class ClarificationSourceChangedError extends Error{
 export function clarificationSourceWitness(incarnation:string,kind:ClarificationSourceKind,id:string,value:unknown):ClarificationSourceWitness{
  return {kind,id,incarnation,digest:sha256Hex(canonicalConsumerJson(value))};
 }
+const meaningFactCollections=[
+ 'personalMeaningRevisions','personalSemanticAnchors','personalSemanticAnchorRevisions','personalExpressionAnchors','personalExpressionAnchorRevisions',
+ 'focuses','focusRevisions','focusAcceptances','constructions','constructionTurns','proposals','proposalVersions',
+ 'senseConfirmations','semanticAcceptances','alignments','alignmentEvents','bindingConfirmations',
+] as const satisfies readonly (keyof MeaningJourneyRecord)[];
 export function meaningSourceValue(record:MeaningJourneyRecord|undefined){
  if(!record||record.personalMeaning.status!=='active')throw new ClarificationSourceChangedError();
- return record;
+ // Only top-level fact collections are unordered. Bind every complete fact,
+ // including duplicates and nested user/provenance sequences, without writing
+ // a normalized record back or invalidating review on replica array ordering.
+ const source:Record<string,unknown>={...record};
+ for(const field of meaningFactCollections)source[field]=record[field]
+  .map(fact=>({fact,encoded:canonicalConsumerJson(fact)}))
+  .sort((left,right)=>left.encoded<right.encoded?-1:left.encoded>right.encoded?1:0)
+  .map(row=>row.fact);
+ return source;
 }
 export function intakeSourceValue(item:JourneyState['inboxItems'][number]|undefined,metadata:JourneyState['clarificationDrafts'][number]|undefined){
  if(!item)throw new ClarificationSourceChangedError();

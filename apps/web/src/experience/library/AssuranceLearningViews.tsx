@@ -16,7 +16,9 @@ export type AssuranceSupportHost = Pick<StepRendererHost, 'toast' | 'openDict' |
 export function AssuranceRuntime(props:{active:boolean;runtime:LearningStructuredRuntimeProjection;busy:boolean;notice:string;host:AssuranceSupportHost;onMarkKnown:()=>void;onAction:(action:LearningAction)=>void;onExit:()=>void;onFinish:()=>void}){
  useTranslation();
  const {runtime,host}=props;
- const {content,resource,state}=runtime;
+ const {content:packageContent,resource,state}=runtime;
+ // Personal actions use the Target's stable identity, never a release's lookup key.
+ const content=packageContent?{...packageContent,senseKey:runtime.target.identity.senseId}:null;
  const [exampleIndex,setExampleIndex]=useState<number|null>(null);
  const resetScroll=()=>{document.getElementById('s-lightweight-runtime')?.scrollTo({top:0});};
  const [phase,setPhase]=useState<'experience'|'reveal'>(state.revealed?'reveal':'experience');

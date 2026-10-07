@@ -9,6 +9,7 @@ import { classNames } from '../ui/primitives';
 import { SensaDetailWorkspaceLayout } from '../ui/SensaPageLayouts';
 import { SensaOverlayLayout } from '../ui/SensaComponents';
 import './PersonalMeaningDetailScreen.css';
+import {PersonalMeaningGovernance} from './PersonalMeaningGovernance';
 /**
  * The AI clarification workspace.
  *
@@ -94,6 +95,7 @@ export interface MeaningConversationController {
  onSend:(text:string,images:ConversationImage[])=>Promise<void>;onContinue:()=>Promise<void>;onStop:()=>void;onConfirm:()=>Promise<void>;
 }
 interface PersonalMeaningDetailScreenProps {
+ governanceControls?:import('react').ReactNode;
  learningControls?:import('react').ReactNode;
  alignmentLearningControls?:(detail:JourneyDetailView,alignment:JourneyAlignmentView)=>import('react').ReactNode;
  conversation?:MeaningConversationController;
@@ -367,11 +369,31 @@ const ExpressionsCard = ({
 
 export const PersonalMeaningDetailScreen=(props:PersonalMeaningDetailScreenProps)=>{
  useMediaStoreVersion();
+ const {t}=useTranslation(),snapshot=useJourneyDetail(props.personalMeaningId);
+ const [governanceNotice,setGovernanceNotice]=useState('');
+ const detail=snapshot.detail;
+ const actions=detail?<PersonalMeaningGovernance key={detail.personalMeaningId} detail={detail} disabled={!snapshot.status.ok||!!snapshot.status.loading} readCurrent={snapshot.readCurrent} reload={snapshot.reload} onNotice={setGovernanceNotice}/>:null;
+ const controls=<>{actions}{governanceNotice&&<p role="alert" className="mb-4 text-sm text-feedback-danger">{governanceNotice.startsWith('localFlow.')?localFlowNotice(governanceNotice):t(governanceNotice)}<button className="ml-3 min-h-11 underline" onClick={()=>{setGovernanceNotice('');snapshot.reload();}}>{t('meaningGovernance.retryRead')}</button></p>}</>;
+ if(props.personalMeaningId&&!snapshot.status.ok)return <MeaningWorkspaceFrame active={props.active} onBack={props.onBack} materialOpen={false} onToggleMaterial={()=>{}} showMaterialToggle={false}><div role="alert" className="px-5 py-6"><p>{localFlowText('progressReadFailed')}</p>{controls}<button className="min-h-11 underline" onClick={snapshot.reload}>{t('meaningGovernance.retryRead')}</button></div></MeaningWorkspaceFrame>;
+ if(detail?.status==='deleted')return <MeaningWorkspaceFrame active={props.active} onBack={props.onBack} materialOpen={false} onToggleMaterial={()=>{}} title={t('meaningGovernance.deleted')} showMaterialToggle={false}>
+  <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+   <article className="mb-5 space-y-4" aria-label={localFlowText('expressionDetails')}>
+    <h2 className="text-3xl font-semibold">{detail.directAlignments[0]?.confirmedBindings[0]?.surfaceForm??detail.displayLabel}</h2>
+    {[...detail.directAlignments,...detail.focuses.flatMap(focus=>focus.alignment?[focus.alignment]:[])].map(alignment=><p key={alignment.personalMeaningAlignmentId}>{alignment.coreMeaningFocus}</p>)}
+    {detail.materialBlocks.map(block=>{
+     const image=block.inlineDataUrl??(block.personalMediaObjectId?getMedia(block.personalMediaObjectId)?.dataUrl:null);
+     return <div key={block.anchorId}>{block.bodyText&&<p className="whitespace-pre-wrap leading-7">{block.bodyText}</p>}{image&&<img src={image} alt={localFlowText('context')} className="max-h-64 max-w-full object-contain"/>}</div>;
+    })}
+    {(detail.capturedSources??detail.materialBlocks.flatMap(block=>block.capturedSource?[{anchorId:block.anchorId,...block.capturedSource}]:[])).map(captured=><CapturedMaterialSource key={captured.anchorId} captured={captured} currentText={detail.materialBlocks.flatMap(block=>block.bodyText?[block.bodyText]:[]).join('\n\n')}/>)}
+   </article>{controls}
+  </div>
+ </MeaningWorkspaceFrame>;
+ const governed={...props,governanceControls:controls};
  return props.conversation
-  ? <ConnectedMeaningConversation {...props} conversation={props.conversation}/>
+  ? <ConnectedMeaningConversation {...governed} conversation={props.conversation}/>
   : !props.personalMeaningId && props.onConversationCreated
     ? <NewMeaningConversationScreen {...props} onConversationCreated={props.onConversationCreated}/>
-    : <PreviewPersonalMeaningDetailScreen {...props}/>;
+    : <PreviewPersonalMeaningDetailScreen {...governed}/>;
 };
 
 const persistPreparedImages = async (images: ConversationImage[]): Promise<string[]> => {
@@ -486,6 +508,7 @@ const ConfirmedExpressionDetail = ({
           inputLabel={localFlowText('context')}
           inputHint={localFlowText('context')}
           initialImages={editing.images}
+          imageUse="scene"
           maxImages={MAX_SCENE_IMAGES}
           submitLabel={localFlowText('saveContext')}
           onSend={async (text, images) => {
@@ -578,7 +601,7 @@ const NewMeaningConversationScreen = ({
           <p className="mt-3 text-sm leading-6 text-fg-secondary">{localFlowText('chatWelcomeHint')}</p>
         </div>
         {error && <div className={classNames('pmw-inline-error')} role="alert">{localFlowNotice(error)}</div>}
-        <ExpressionChatInput busy={busy} maxImages={MAX_SCENE_IMAGES} onSend={begin}/>
+        <ExpressionChatInput busy={busy} imageUse="scene" maxImages={MAX_SCENE_IMAGES} onSend={begin}/>
       </div>
     </MeaningWorkspaceFrame>
   );
@@ -590,6 +613,7 @@ const PreviewPersonalMeaningDetailScreen = ({
   onConversationCreated,
   toast,
   alignmentLearningControls,
+  governanceControls,
 }: PersonalMeaningDetailScreenProps) => {
   useTranslation();
   const gateway = useJourneyGateway();
@@ -1137,7 +1161,7 @@ const PreviewPersonalMeaningDetailScreen = ({
       busy={busy||!!status.loading}
       error={error}
       onSaveContext={saveConfirmedContext}
-      learningControls={alignmentLearningControls?.(detail,alignment)}
+      learningControls={<>{alignmentLearningControls?.(detail,alignment)}{governanceControls}</>}
     />
   ) : (
     <>
@@ -1346,7 +1370,7 @@ const PreviewPersonalMeaningDetailScreen = ({
         </div>
       </div>
 
-      <ExpressionChatInput busy={imageInputUnavailable} onStop={busy ? stopTurn : undefined} maxImages={Math.max(0, MAX_SCENE_IMAGES-materialImageCount)} onSend={sendConversationMessage}/>
+      <ExpressionChatInput busy={imageInputUnavailable} imageUse="scene" onStop={busy ? stopTurn : undefined} maxImages={Math.max(0, MAX_SCENE_IMAGES-materialImageCount)} onSend={sendConversationMessage}/>
 
       {panelOpen && (
         <SensaOverlayLayout variant="sheet" mode="container" measure="standard" className="z-20" label={uiText('currentUnderstanding')} onDismiss={() => setPanelOpen(false)} dismissOnBackdrop regions={{
@@ -1556,7 +1580,7 @@ function MeaningWorkspaceFrame({active,onBack,materialOpen,onToggleMaterial,scre
   }}
  />;
 }
-function ConnectedMeaningConversation({active,onBack,conversation:c,learningControls}:PersonalMeaningDetailScreenProps & {conversation:MeaningConversationController}){
+function ConnectedMeaningConversation({active,onBack,conversation:c,learningControls,governanceControls}:PersonalMeaningDetailScreenProps & {conversation:MeaningConversationController}){
  useTranslation();
  const [materialOpen,setMaterialOpen]=useState(false),[editing,setEditing]=useState(false);
  const transcript=useRef<HTMLDivElement>(null);
@@ -1570,9 +1594,10 @@ function ConnectedMeaningConversation({active,onBack,conversation:c,learningCont
     <div><h3 className="text-sm text-fg-secondary">{localFlowText('context')}</h3><p className="mt-2 whitespace-pre-wrap leading-7">{candidate.context}</p>{c.images?.map(image=><img key={image.id} src={image.dataUrl} alt={image.name} className="mt-3 max-h-64 max-w-full rounded-control object-contain"/>)}</div>
    </article>
    {c.onUpdateContext&&<button className="mb-4 rounded-control border border-border-strong bg-surface-subtle px-4 py-3 focus-visible:outline-2 focus-visible:outline-focus" onClick={()=>setEditing(v=>!v)}>{localFlowText(editing?'cancelEdit':'editContext')}</button>}
-   {editing&&<ExpressionChatInput busy={c.busy} initialText={candidate.context} inputLabel={localFlowText('context')} inputHint={localFlowText('context')} initialImages={c.images??[]} submitLabel={localFlowText('saveContext')} onSend={async(text,images)=>{await c.onUpdateContext!(text,images);setEditing(false);}}/>}
+   {editing&&<ExpressionChatInput busy={c.busy} imageUse="scene" initialText={candidate.context} inputLabel={localFlowText('context')} inputHint={localFlowText('context')} initialImages={c.images??[]} submitLabel={localFlowText('saveContext')} onSend={async(text,images)=>{await c.onUpdateContext!(text,images);setEditing(false);}}/>}
    {c.notice&&<p role="status">{c.notice}</p>}
    {learningControls}
+   {governanceControls}
    <details className="mt-5" open={materialOpen||undefined}><summary className="cursor-pointer py-3 text-sm text-fg-secondary">{localFlowText('conversationHistory')}</summary><div className="space-y-4 text-sm leading-7"><p>{c.material}</p>{c.messages.map((m,i)=><div key={i}><p>{m.body}</p>{m.images?.map(image=><img key={image.id} src={image.dataUrl} alt={image.name} className="max-h-64 max-w-full"/>)}</div>)}</div></details>
   </div>
  </MeaningWorkspaceFrame>;

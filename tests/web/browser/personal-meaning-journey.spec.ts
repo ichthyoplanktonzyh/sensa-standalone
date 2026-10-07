@@ -197,6 +197,246 @@ for(const size of [0,10_000])test(`manual authoring at ${size} Meanings needs Co
  await page.screenshot({path:testInfo.outputPath('manual-meaning-detail.png'),fullPage:true});
 });
 
+test('empty example favorites stay out of the default World while retained examples remain findable and cancellable after OPFS reload',async({page})=>{
+ requests=[];plans=[];await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ const worldButton=page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true});
+ await worldButton.click();await page.getByRole('button',{name:'收藏与笔记',exact:true}).click();
+ const examples=page.getByRole('button',{name:/^收藏的例句\s/u});
+ await expect(page.getByRole('button',{name:/^收藏的意思\s+0$/u})).toBeVisible();await expect(examples).toHaveCount(0);
+ const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ const retained=await page.evaluate(()=>window.__sensaBrowserSmoke!.retainExampleForTest());if(!retained.text)throw Error('Missing actual bundled Example');
+ await expect(examples).toHaveText('收藏的例句1');await page.evaluate(()=>window.__sensaBrowserSmoke!.failAnnotationReadsForTest(true));await expect(examples).toHaveText('收藏的例句—');await examples.click();
+ const library=page.locator('#s-content-library');await expect(library.getByRole('alert')).toBeVisible();await expect(library.getByText('还没有收藏例句',{exact:true})).toHaveCount(0);
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.failAnnotationReadsForTest(false));await library.getByRole('button',{name:'重试',exact:true}).click();await expect(library.getByRole('button').filter({hasText:retained.text})).toBeVisible();
+ await worldButton.click();await page.getByRole('button',{name:'收藏与笔记',exact:true}).click();await expect(examples).toHaveText('收藏的例句1');await page.reload();await page.getByRole('button',{name:'收藏与笔记',exact:true}).click();await expect(examples).toHaveText('收藏的例句1');await examples.click();
+ await library.getByRole('button').filter({hasText:retained.text}).click();
+ const detail=page.locator('#s-content-example');await expect(detail.locator('blockquote')).toHaveText(retained.text);
+ await page.reload();await expect(detail.locator('blockquote')).toHaveText(retained.text);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.retainedExampleIdsForTest())).toEqual([retained.exampleId]);
+ await detail.getByRole('button',{name:'取消收藏例句',exact:true}).click();await expect(detail.getByRole('button',{name:'收藏例句',exact:true}).first()).toBeEnabled();
+ await worldButton.click();await page.getByRole('button',{name:'收藏与笔记',exact:true}).click();await expect(examples).toHaveCount(0);
+ await page.reload();await page.getByRole('button',{name:'收藏与笔记',exact:true}).click();await expect(examples).toHaveCount(0);await expect(page.getByRole('button',{name:/^收藏的意思\s+0$/u})).toBeVisible();expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.retainedExampleIdsForTest())).toEqual([]);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(before);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);expect(requests).toEqual([]);
+});
+
+test('a retained Example with unavailable source stays visible as owned data and never becomes a false empty collection',async({page})=>{
+ requests=[];plans=[];await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
+ await page.getByRole('button',{name:'收藏与笔记',exact:true}).click();await expect(page.getByRole('button',{name:/^收藏的意思\s+0$/u})).toBeVisible();
+ const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint()),retained=await page.evaluate(()=>window.__sensaBrowserSmoke!.retainExampleForTest(true));
+ const examples=page.getByRole('button',{name:/^收藏的例句\s/u});await expect(examples).toHaveText('收藏的例句1');await examples.click();
+ const library=page.locator('#s-content-library');await expect(library.getByRole('alert')).toContainText('语义材料无法读取');await expect(library.getByText('还没有收藏例句',{exact:true})).toHaveCount(0);
+ await page.reload();await expect(library.getByRole('alert')).toContainText('语义材料无法读取');await library.getByRole('button',{name:'重试',exact:true}).click();await expect(library.getByRole('alert')).toContainText('语义材料无法读取');expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.retainedExampleIdsForTest())).toEqual([retained.exampleId]);
+ const available=await page.evaluate(()=>window.__sensaBrowserSmoke!.retainExampleForTest());if(!available.text)throw Error('Missing actual bundled Example');
+ await expect(library.getByRole('alert')).toContainText('语义材料无法读取');await library.getByRole('button').filter({hasText:available.text}).click();await expect(page.locator('#s-content-example blockquote')).toHaveText(available.text);
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();await page.getByRole('button',{name:'收藏与笔记',exact:true}).click();await expect(examples).toHaveText('收藏的例句2');expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.retainedExampleIdsForTest())).toEqual([retained.exampleId,available.exampleId].sort());
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(before);expect(requests).toEqual([]);
+});
+
+test('confirmed Context image limits preserve editing input and saved sources, then valid images persist without learning',async({page})=>{
+ requests=[];plans=[];
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
+ await page.getByRole('button',{name:'添加内容',exact:true}).click();await page.getByRole('button',{name:'手动创建',exact:true}).click();
+ const form=page.locator('.sensa-manual-meaning'),originalText='I water the plants before work.';
+ await form.getByLabel('情境或原句',{exact:true}).fill(originalText);await form.getByLabel('原文中的表达（可在上方选中）',{exact:true}).fill('water');
+ await form.getByLabel('表达语言',{exact:true}).selectOption('en');await form.getByLabel('这里表达的意思',{exact:true}).fill('给植物供水。');
+ await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('上班前给家中的植物浇水。');await form.getByRole('button',{name:'确认并保存',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'water',exact:true})).toBeVisible();
+ const meaningId=await page.evaluate(()=>window.__sensaBrowserSmoke!.firstMeaningId()),pins=await page.evaluate(id=>window.__sensaBrowserSmoke!.meaningPinsForTest(id!),meaningId);
+ const before=await facts(page);await page.getByRole('button',{name:'编辑场景',exact:true}).click();
+ const editor=page.locator('.pmw-screen.active form'),input=editor.locator('input[type="file"][multiple]'),text=editor.getByRole('textbox',{name:'场景',exact:true}),editedText='编辑中的场景，图片被拒绝时仍应保留这段文字。';
+ await text.fill(editedText);
+ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII=','base64');
+ // A decodable PNG with trailing bytes exercises the raw 8 MiB policy before
+ // compression, not a malformed-image failure masquerading as a size guard.
+ const oversized=Buffer.concat([png,Buffer.alloc(8*1024*1024+1-png.length)]);
+ await input.setInputFiles({name:'oversized-valid.png',mimeType:'image/png',buffer:oversized});
+ await expect(editor.getByRole('status')).toContainText('8 MB');await expect(editor.locator('img')).toHaveCount(0);await expect(text).toHaveValue(editedText);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMediaCheckpoint())).toEqual([]);expect(await facts(page)).toEqual(before);
+ await input.setInputFiles({name:'not-an-image.txt',mimeType:'text/plain',buffer:Buffer.from('synthetic unsupported content')});
+ await expect(editor.getByRole('status')).toContainText('JPG、PNG');await expect(editor.locator('img')).toHaveCount(0);await expect(text).toHaveValue(editedText);
+ const images=Array.from({length:4},(_,index)=>({name:`scene-${index+1}.png`,mimeType:'image/png',buffer:png}));
+ await input.setInputFiles(images);await expect(editor.getByRole('status')).toContainText('最多添加 3 张');await expect(editor.locator('img')).toHaveCount(0);
+ expect(await facts(page)).toEqual(before);await input.setInputFiles(images.slice(0,3));await expect(editor.locator('img')).toHaveCount(3);
+ await editor.getByRole('button',{name:'保存场景',exact:true}).click();await expect(editor).toHaveCount(0);
+ const detail=page.getByRole('article',{name:'表达详情'});await expect(detail.getByText(editedText,{exact:true})).toBeVisible();await expect(detail.locator('img')).toHaveCount(3);
+ const media=await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMediaCheckpoint());expect(media).toHaveLength(3);
+ await page.reload();await expect(page.getByRole('heading',{name:'water',exact:true})).toBeVisible();await expect(detail.getByText(editedText,{exact:true})).toBeVisible();await expect(detail.locator('img')).toHaveCount(3);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMediaCheckpoint())).toEqual(media);expect(await page.evaluate(id=>window.__sensaBrowserSmoke!.meaningPinsForTest(id!),meaningId)).toEqual(pins);
+ await detail.locator('details').first().locator('summary').click();await expect(detail.getByText(originalText,{exact:true})).toBeVisible();
+ expect(requests).toEqual([]);expect((await facts(page)).learning).toEqual(before.learning);
+});
+
+test('personal meaning favorites and notes survive explicit recycle-bin deletion and same-identity restoration through OPFS reload',async({page,context})=>{
+ requests=[];plans=[];
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
+ await page.getByRole('button',{name:'添加内容',exact:true}).click();await page.getByRole('button',{name:'手动创建',exact:true}).click();
+ const form=page.locator('.sensa-manual-meaning');
+ await form.getByLabel('情境或原句',{exact:true}).fill('I forgot my wallet and asked to borrow money.');
+ await form.getByLabel('原文中的表达（可在上方选中）',{exact:true}).fill('borrow');
+ await form.getByLabel('表达语言',{exact:true}).selectOption('en');await form.getByLabel('表达类型',{exact:true}).selectOption('word');
+ await form.getByLabel('这里表达的意思',{exact:true}).fill('暂时借用他人的东西，之后归还。');
+ await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('向朋友暂借钱，并会归还。');
+ await form.getByRole('button',{name:'确认并保存',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();const originalUrl=page.url();
+ const more=page.getByRole('button',{name:'更多',exact:true}),menu=page.getByRole('dialog',{name:'更多',exact:true});
+ await more.click();await menu.getByRole('button',{name:'收藏',exact:true}).click();
+ await more.click();await expect(menu.getByRole('button',{name:'取消收藏',exact:true})).toBeVisible();
+ await menu.getByRole('button',{name:'写笔记',exact:true}).click();
+ const note=page.locator('.sensa-note-editor');await note.locator('textarea').fill('忘带钱包时，向朋友暂借钱；之后归还。');
+ await note.getByRole('button',{name:'保存笔记',exact:true}).click();await expect(note).toHaveCount(0);
+ await page.reload();await expect(page.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
+ await more.click();await expect(menu.getByRole('button',{name:'取消收藏',exact:true})).toBeVisible();
+ await menu.getByRole('button',{name:'写笔记',exact:true}).click();await expect(note.locator('textarea')).toHaveValue('忘带钱包时，向朋友暂借钱；之后归还。');
+ await note.locator('textarea').press('Escape');await expect(note).toHaveCount(0);
+ // An already-open delete confirmation retains its original intent. A real
+ // Context edit in another tab must reject it, dismiss the stale confirmation,
+ // and leave an actionable notice rather than an endless old-request retry.
+ const other=await context.newPage();await other.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await other.goto(originalUrl);await expect(other.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
+ await more.click();await menu.getByRole('button',{name:'删除内容',exact:true}).click();
+ const staleDelete=page.getByRole('dialog',{name:'删除这条内容？',exact:true});await expect(staleDelete).toBeVisible();
+ await other.getByRole('button',{name:'编辑场景',exact:true}).click();await other.getByRole('textbox',{name:'场景',exact:true}).fill('I forgot my wallet and asked to borrow money. I will return it tomorrow.');
+ await other.getByRole('button',{name:'保存场景',exact:true}).click();await expect(other.getByRole('textbox',{name:'场景',exact:true})).toHaveCount(0);
+ await expect(staleDelete.getByRole('button',{name:'删除内容',exact:true})).toBeEnabled();await staleDelete.getByRole('button',{name:'删除内容',exact:true}).click();
+ await expect(staleDelete).toHaveCount(0);await expect(page.getByRole('alert')).toContainText('原内容已改变，请重新打开最新内容后再操作。');await expect(more).toBeEnabled();
+ await expect(page.getByRole('button',{name:'恢复内容',exact:true})).toHaveCount(0);
+ await other.getByRole('button',{name:'编辑场景',exact:true}).click();await other.getByRole('textbox',{name:'场景',exact:true}).fill('I forgot my wallet and asked to borrow money.');
+ await other.getByRole('button',{name:'保存场景',exact:true}).click();await expect(other.getByRole('textbox',{name:'场景',exact:true})).toHaveCount(0);await other.close();
+ // Detail state alone is insufficient: a user must be able to find the saved
+ // meaning and note through their actual collection entry points after reload.
+ await page.getByRole('button',{name:'返回我的语义世界',exact:true}).click();
+ await page.getByRole('button',{name:'收藏与笔记',exact:true}).click();
+ const saved=page.getByRole('button',{name:/^收藏的意思\s+1$/u});await expect(saved).toBeVisible();await saved.click();
+ const library=page.locator('#s-content-library');await expect(library.getByRole('button',{name:/borrow/u})).toBeVisible();
+ await library.getByRole('button',{name:/borrow/u}).click();await expect(page.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();expect(new URL(page.url()).searchParams.get('meaningId')).toBe(new URL(originalUrl).searchParams.get('meaningId'));
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
+ await page.getByRole('button',{name:'收藏与笔记',exact:true}).click();
+ await page.getByRole('button',{name:'我的笔记 1',exact:true}).click();
+ await expect(library.getByRole('button',{name:/borrow.*忘带钱包/u})).toBeVisible();await library.getByRole('button',{name:/borrow.*忘带钱包/u}).click();await expect(page.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();expect(new URL(page.url()).searchParams.get('meaningId')).toBe(new URL(originalUrl).searchParams.get('meaningId'));
+ await more.click();await menu.getByRole('button',{name:'删除内容',exact:true}).click();
+ const confirmation=page.getByRole('dialog',{name:'删除这条内容？',exact:true});await confirmation.getByRole('button',{name:'取消',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
+ await more.click();await menu.getByRole('button',{name:'删除内容',exact:true}).click();await confirmation.getByRole('button',{name:'删除内容',exact:true}).click();
+ await expect(page.getByRole('button',{name:'恢复内容',exact:true})).toBeEnabled();
+ await page.reload();await expect(page.getByRole('button',{name:'恢复内容',exact:true})).toBeEnabled();
+ await expect(page.getByText('I forgot my wallet and asked to borrow money.',{exact:true})).toBeVisible();
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
+ await page.getByRole('button',{name:'收藏与笔记',exact:true}).click();
+ await expect(page.getByRole('button',{name:/^收藏的意思\s+0$/u})).toBeVisible();await expect(page.getByRole('button',{name:'我的笔记 0',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'我的意思',exact:true}).click();
+ await expect(page.locator('.sensa-world-row').filter({hasText:'borrow'})).toHaveCount(0);
+ await page.getByRole('button',{name:'回收站',exact:true}).click();await page.locator('.sensa-world-row').filter({hasText:'borrow'}).click();
+ expect(page.url()).toBe(originalUrl);await page.getByRole('button',{name:'恢复内容',exact:true}).click();
+ await expect(more).toBeEnabled();await page.reload();await expect(page.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
+ await more.click();await expect(menu.getByRole('button',{name:'取消收藏',exact:true})).toBeVisible();
+ await menu.getByRole('button',{name:'写笔记',exact:true}).click();await expect(note.locator('textarea')).toHaveValue('忘带钱包时，向朋友暂借钱；之后归还。');
+ await note.locator('textarea').press('Escape');await expect(note).toHaveCount(0);
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();await page.getByRole('button',{name:'收藏与笔记',exact:true}).click();
+ await expect(page.getByRole('button',{name:/^收藏的意思\s+1$/u})).toBeVisible();await expect(page.getByRole('button',{name:'我的笔记 1',exact:true})).toBeVisible();
+ expect(requests).toEqual([]);expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records).toEqual([]);
+});
+
+test('personal correction preserves the Meaning and original capture, blocks an unreviewed cross-tab Context, and saves offline with a readable history after reload',async({page,context})=>{
+ page.setDefaultTimeout(15_000);
+ requests=[];plans=[];
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
+ await page.getByRole('button',{name:'添加内容',exact:true}).click();await page.getByRole('button',{name:'手动创建',exact:true}).click();
+ const initial=page.locator('.sensa-manual-meaning'),capture='Jo asked to borrow my umbrella. I gave it to her.';
+ await initial.getByLabel('情境或原句',{exact:true}).fill(capture);await initial.getByLabel('原文中的表达（可在上方选中）',{exact:true}).fill('borrow');
+ await initial.getByLabel('表达语言',{exact:true}).selectOption('en');await initial.getByLabel('这里表达的意思',{exact:true}).fill('暂时取得别人的物品，之后归还。');await initial.getByLabel('这个意思适用的典型场景',{exact:true}).fill('向朋友暂借雨伞。');
+ await initial.getByRole('button',{name:'确认并保存',exact:true}).click();await expect(page.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
+ const meaningId=new URL(page.url()).searchParams.get('meaningId'),originalUrl=page.url();
+ await page.getByRole('button',{name:'更多',exact:true}).click();await page.getByRole('dialog',{name:'更多',exact:true}).getByRole('button',{name:'收藏',exact:true}).click();
+ await page.getByRole('button',{name:'更多',exact:true}).click();await page.getByRole('dialog',{name:'更多',exact:true}).getByRole('button',{name:'写笔记',exact:true}).click();
+ const note=page.locator('.sensa-note-editor');await note.locator('textarea').fill('起初理解为从别人那里借入。');await note.getByRole('button',{name:'保存笔记',exact:true}).click();await expect(note).toHaveCount(0);
+ const open=async()=>{await page.getByRole('button',{name:'更多',exact:true}).click();await page.getByRole('dialog',{name:'更多',exact:true}).getByRole('button',{name:'修改意思和表达',exact:true}).click();};
+ await open();const editor=page.locator('.sensa-meaning-correction');await expect(editor.getByLabel('表达',{exact:true})).toHaveValue('borrow');await expect(editor.getByText(capture,{exact:true})).toBeVisible();
+ const write=async()=>{await editor.getByLabel('表达',{exact:true}).fill('lend');await editor.getByLabel('这里表达的意思',{exact:true}).fill('把自己的物品暂时交给别人使用，之后收回。');await editor.getByLabel('这个意思适用的典型场景',{exact:true}).fill('把雨伞暂借给同事，用完后收回。');};
+ await write();await editor.getByRole('button',{name:'关闭',exact:true}).click();
+ // A corrupt UI-only pending request must not lock the valid typed draft into
+ // an endless retry. Recovery is explicit and cannot accept the old request.
+ await page.evaluate(meaningId=>{const key=Object.keys(localStorage).find(key=>key.includes('meaning-correction:')&&key.includes(meaningId!));if(!key)throw Error('correction draft missing');const stored=JSON.parse(localStorage.getItem(key)!);localStorage.setItem(key,JSON.stringify({...stored,pending:{payload:null}}));},meaningId);
+ await page.reload();await expect(page.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
+ await open();await expect(editor.getByRole('alert')).toBeVisible();await expect(editor.getByLabel('表达',{exact:true})).toHaveValue('lend');await expect(editor.getByLabel('表达',{exact:true})).toBeDisabled();await editor.getByRole('button',{name:'重试读取',exact:true}).click();await expect(editor.getByLabel('表达',{exact:true})).toBeEnabled();await expect(editor.getByLabel('表达',{exact:true})).toHaveValue('lend');await editor.getByRole('button',{name:'关闭',exact:true}).click();
+ await open();await expect(editor.getByLabel('表达',{exact:true})).toHaveValue('lend');await expect(editor.getByLabel('这里表达的意思',{exact:true})).toHaveValue('把自己的物品暂时交给别人使用，之后收回。');
+ const other=await context.newPage();await other.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());await other.goto(originalUrl);
+ await other.getByRole('button',{name:'编辑场景',exact:true}).click();const revised='Jo asked to borrow my umbrella. I gave it to her and expect it back tomorrow.';
+ await other.getByRole('textbox',{name:'场景',exact:true}).fill(revised);await other.getByRole('button',{name:'保存场景',exact:true}).click();await expect(other.getByRole('textbox',{name:'场景',exact:true})).toHaveCount(0);
+ await editor.getByRole('button',{name:'确认并保存',exact:true}).click();await expect(editor.getByRole('alert')).toContainText('原内容已改变');await expect(editor.getByLabel('表达',{exact:true})).toHaveValue('lend');await expect(other.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
+ await editor.getByRole('button',{name:'重试读取',exact:true}).click();await expect(editor.getByText(revised,{exact:true})).toBeVisible();await expect(editor.getByLabel('表达',{exact:true})).toBeEnabled();await expect(editor.getByLabel('表达',{exact:true})).toHaveValue('lend');await expect(editor.getByLabel('这里表达的意思',{exact:true})).toHaveValue('把自己的物品暂时交给别人使用，之后收回。');
+ await write();await page.setViewportSize({width:390,height:844});await editor.getByText('语言与表达类型',{exact:true}).click();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:test.info().outputPath('correction-mobile.png'),fullPage:true});
+ await context.setOffline(true);await editor.getByRole('button',{name:'确认并保存',exact:true}).click();await expect(editor).toHaveCount(0);await expect(page.getByRole('heading',{name:'lend',exact:true})).toBeVisible();await context.setOffline(false);
+ expect(new URL(page.url()).searchParams.get('meaningId')).toBe(meaningId);await page.reload();await expect(page.getByRole('heading',{name:'lend',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'更多',exact:true}).click();await page.getByRole('dialog',{name:'更多',exact:true}).getByRole('button',{name:'过去的意思和表达',exact:true}).click();
+ const history=page.getByRole('dialog',{name:'过去的意思和表达',exact:true});await expect(history.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();await expect(history.getByText('暂时取得别人的物品，之后归还。',{exact:true})).toBeVisible();await expect(history.getByRole('button',{name:/加入学习|修改意思/})).toHaveCount(0);await history.getByRole('button',{name:'关闭',exact:true}).click();
+ await page.locator('summary').filter({hasText:'查看来源'}).click();await expect(page.getByText(capture,{exact:true})).toBeVisible();
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();await page.getByRole('button',{name:'收藏与笔记',exact:true}).click();
+ await page.getByRole('button',{name:/^收藏的意思\s+1$/u}).click();await page.locator('#s-content-library').getByRole('button',{name:/borrow/u}).click();
+ await expect(page.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();await expect(page.getByText('暂时取得别人的物品，之后归还。',{exact:true})).toBeVisible();
+ expect(new URL(page.url()).searchParams.get('meaningId')).toBe(meaningId);expect(new URL(page.url()).searchParams.get('alignmentId')).toBeTruthy();
+ const historicalUrl=page.url();await page.reload();await expect(page.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();expect(page.url()).toBe(historicalUrl);
+ await page.locator('#s-content-sense').getByRole('button',{name:/我的笔记/u}).click();await expect(note.locator('textarea')).toHaveValue('起初理解为从别人那里借入。');await note.locator('textarea').fill('旧笔记仍属于借入这个意思。');await note.getByRole('button',{name:'保存笔记',exact:true}).click();await expect(note).toHaveCount(0);
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();await page.getByRole('button',{name:'收藏与笔记',exact:true}).click();await page.getByRole('button',{name:'我的笔记 1',exact:true}).click();
+ await page.locator('#s-content-library').getByRole('button',{name:/borrow.*旧笔记仍属于/u}).click();await expect(page.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
+ await page.goto(originalUrl);await expect(page.getByRole('heading',{name:'lend',exact:true})).toBeVisible();await page.getByRole('button',{name:'更多',exact:true}).click();await page.getByRole('dialog',{name:'更多',exact:true}).getByRole('button',{name:'写笔记',exact:true}).click();await expect(note.locator('textarea')).toHaveValue('');await note.getByRole('button',{name:'关闭',exact:true}).click();
+ expect(requests).toEqual([]);expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records).toEqual([]);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(1);await other.close();
+});
+
+test('note editors preserve stale drafts and require an explicit choice after another tab updates or clears the note',async({page,context})=>{
+ requests=[];plans=[];
+ await context.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
+ await page.getByRole('button',{name:'添加内容',exact:true}).click();await page.getByRole('button',{name:'手动创建',exact:true}).click();
+ const form=page.locator('.sensa-manual-meaning');
+ await form.getByLabel('情境或原句',{exact:true}).fill('I forgot my wallet and asked to borrow money.');
+ await form.getByLabel('原文中的表达（可在上方选中）',{exact:true}).fill('borrow');
+ await form.getByLabel('表达语言',{exact:true}).selectOption('en');await form.getByLabel('表达类型',{exact:true}).selectOption('word');
+ await form.getByLabel('这里表达的意思',{exact:true}).fill('暂时借用他人的东西，之后归还。');
+ await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('向朋友暂借钱，并会归还。');
+ await form.getByRole('button',{name:'确认并保存',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();const url=page.url();
+ const openNote=async(tab:Page)=>{
+  await tab.getByRole('button',{name:'更多',exact:true}).click();
+  await tab.getByRole('dialog',{name:'更多',exact:true}).getByRole('button',{name:'写笔记',exact:true}).click();
+  const editor=tab.locator('.sensa-note-editor');await expect(editor.locator('textarea')).toBeEnabled();return editor;
+ };
+ let editor=await openNote(page);await editor.locator('textarea').fill('最初的笔记');
+ await editor.getByRole('button',{name:'保存笔记',exact:true}).click();await expect(editor).toHaveCount(0);
+ const other=await context.newPage();await other.goto(url);await expect(other.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
+ editor=await openNote(page);const otherEditor=await openNote(other);
+ await expect(editor.locator('textarea')).toHaveValue('最初的笔记');await expect(otherEditor.locator('textarea')).toHaveValue('最初的笔记');
+ await editor.locator('textarea').fill('尚未保存的本机草稿');await otherEditor.locator('textarea').fill('另一窗口更新后的笔记');
+ await otherEditor.getByRole('button',{name:'保存笔记',exact:true}).click();await expect(otherEditor).toHaveCount(0);
+ await editor.getByRole('button',{name:'保存笔记',exact:true}).click();
+ await expect(editor.getByRole('alert')).toContainText('另一窗口更新后的笔记');await expect(editor.locator('textarea')).toHaveValue('尚未保存的本机草稿');
+ await expect(editor.getByRole('button',{name:'保存笔记',exact:true})).toBeDisabled();
+ await editor.getByRole('button',{name:'使用最新笔记',exact:true}).click();await expect(editor.locator('textarea')).toHaveValue('另一窗口更新后的笔记');
+ await editor.locator('textarea').press('Escape');await expect(editor).toHaveCount(0);
+ editor=await openNote(page);await editor.locator('textarea').fill('明确选择保留的本机版本');
+ const clearing=await openNote(other);await clearing.locator('textarea').fill('');await clearing.getByRole('button',{name:'保存笔记',exact:true}).click();await expect(clearing).toHaveCount(0);
+ await editor.getByRole('button',{name:'保存笔记',exact:true}).click();await expect(editor.getByRole('alert')).toContainText('笔记已清空');
+ await expect(editor.locator('textarea')).toHaveValue('明确选择保留的本机版本');
+ await editor.getByRole('button',{name:'保存我的版本',exact:true}).click();await expect(editor).toHaveCount(0);
+ await other.reload();await expect(other.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
+ const persisted=await openNote(other);await expect(persisted.locator('textarea')).toHaveValue('明确选择保留的本机版本');
+ await persisted.getByRole('button',{name:'保存笔记',exact:true}).dblclick();await expect(persisted).toHaveCount(0);
+ await other.close();await page.reload();await expect(page.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
+ editor=await openNote(page);await expect(editor.locator('textarea')).toHaveValue('明确选择保留的本机版本');
+ await page.setViewportSize({width:390,height:844});await expect(editor.getByRole('button',{name:'关闭',exact:true})).toBeInViewport();
+ await expect(editor.getByRole('button',{name:'保存笔记',exact:true})).toBeInViewport();await editor.getByRole('button',{name:'关闭',exact:true}).click();await expect(editor).toHaveCount(0);
+ expect(requests).toEqual([]);expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records).toEqual([]);
+});
+
 async function manualInboxCompletion(page:Page,missing:'context'|'expression'|'sense'|'image'){
  page.setDefaultTimeout(15_000);requests=[];plans=[];
  await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
@@ -365,8 +605,8 @@ test('a saved draft can explicitly continue with a newly configured teacher afte
 });
 /** Start at the actual browser click, not Playwright's preceding stability
  * wait. Require readable, stable detail and a reachable editing action. */
-async function clickToMeaningReady(page:Page,action:Locator,label:string){
- await page.evaluate(label=>{
+async function clickToMeaningReady(page:Page,action:Locator,label:string,readyAction='编辑场景'){
+ await page.evaluate(({label,readyAction})=>{
   window.semanticDetailPaint={startedAt:0,elapsedMs:null};
   document.addEventListener('click',()=>{
    const measure=window.semanticDetailPaint!;measure.startedAt=performance.now();
@@ -374,7 +614,7 @@ async function clickToMeaningReady(page:Page,action:Locator,label:string){
    const painted=()=>{
     const heading=document.querySelector<HTMLElement>('.pmw-screen.active article[aria-label="表达详情"] h2');
     const article=heading?.closest('article');
-    const edit=[...article?.parentElement?.querySelectorAll<HTMLButtonElement>('button')??[]].find(button=>button.textContent?.trim()==='编辑场景');
+    const edit=[...article?.parentElement?.querySelectorAll<HTMLButtonElement>('button')??[]].find(button=>button.textContent?.trim()===readyAction);
     const readable=(element:HTMLElement|undefined)=>{
      if(!element||element.closest('[inert],[aria-hidden="true"]')||!element.checkVisibility({checkOpacity:true,checkVisibilityCSS:true}))return false;
      const rect=element.getBoundingClientRect();
@@ -391,8 +631,8 @@ async function clickToMeaningReady(page:Page,action:Locator,label:string){
    };
    requestAnimationFrame(painted);
   },{once:true,capture:true});
- },label);
- await action.click();await expect(page.getByRole('heading',{name:label,exact:true})).toBeVisible();
+ },{label,readyAction});
+ await action.click();await expect(page.getByRole('heading',{name:label,exact:true})).toBeVisible({timeout:30_000});
  await expect.poll(()=>page.evaluate(()=>window.semanticDetailPaint?.elapsedMs)).not.toBeNull();
  return (await page.evaluate(()=>window.semanticDetailPaint!.elapsedMs))!;
 }
@@ -418,6 +658,9 @@ test('reply streams before candidate disclosure, explicit acceptance persists, a
  await page.getByRole('button',{name:'就是这个意思',exact:true}).click();
  await page.getByRole('dialog').getByRole('button',{name:'确认',exact:true}).click();
  await expect(page.getByRole('heading',{name:'water',exact:true})).toBeVisible();
+ await expect(workspace.getByRole('textbox',{name:'你想表达什么？',exact:true})).toHaveCount(0);
+ await expect(workspace.getByRole('button',{name:'就是这个意思',exact:true})).toHaveCount(0);
+ await expect(page.getByRole('article',{name:'表达详情'}).getByText(proposal.sense,{exact:true}).first()).toBeVisible();
  await expect(page.getByRole('button',{name:'加入学习',exact:true})).toBeEnabled();
  expect((await facts(page)).contains).toBe(true);expect((await facts(page)).inbox).toBe(0);
  const saved=await facts(page);expect(saved.learning.targetIds).toEqual([]);expect(saved.learning.records).toEqual([]);
@@ -870,6 +1113,24 @@ test('10k personal meanings keep the shipped World bounded and searchable, with 
  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).targetIds).toEqual([]);
  expect(searchMs).toBeLessThan(500);expect(detailMs).toBeLessThan(500);expect(saveMs).toBeLessThan(500);
 
+ // Lifecycle operations at the same heavy-user scale must touch one Meaning,
+ // not hydrate the 10k inventory. Measure actual stable actionable paint.
+ const meaningId=new URL(page.url()).searchParams.get('meaningId');
+ await page.getByRole('button',{name:'更多',exact:true}).click();
+ await page.getByRole('dialog',{name:'更多',exact:true}).getByRole('button',{name:'删除内容',exact:true}).click();
+ const lifecycleStart=await page.evaluate(()=>performance.now());
+ const deleteMs=await clickToMeaningReady(page,page.getByRole('dialog',{name:'删除这条内容？',exact:true}).getByRole('button',{name:'删除内容',exact:true}),'borrow-9999','恢复内容');
+ const deletePhases=await page.evaluate(start=>performance.getEntriesByType('measure').filter(entry=>entry.startTime>=start&&['sensa.journey.records','sensa.journey.authority'].includes(entry.name)).map(entry=>entry.name),lifecycleStart);
+ expect(deletePhases).toEqual([]);
+ await page.reload();await expect(page.getByRole('button',{name:'恢复内容',exact:true})).toBeEnabled();
+ expect(new URL(page.url()).searchParams.get('meaningId')).toBe(meaningId);
+ const restoreStart=await page.evaluate(()=>performance.now());
+ const restoreMs=await clickToMeaningReady(page,page.getByRole('button',{name:'恢复内容',exact:true}),'borrow-9999');
+ const lifecyclePhases=await page.evaluate(start=>performance.getEntriesByType('measure').filter(entry=>entry.startTime>=start&&['sensa.journey.records','sensa.journey.authority'].includes(entry.name)).map(entry=>entry.name),restoreStart);
+ console.log('Shipped recycle bin / Chromium+OPFS / synthetic 10k / 1x CPU / loopback / low media / no model:',JSON.stringify({deleteMs,restoreMs,fullGatewayPhases:lifecyclePhases}));
+ expect(lifecyclePhases).toEqual([]);expect(deleteMs).toBeLessThan(500);expect(restoreMs).toBeLessThan(500);
+ await expect(page.getByRole('article',{name:'表达详情'}).getByText('验收修改：借用同伴的雨伞，用完后归还。',{exact:true})).toBeVisible();
+
  // After a genuine reload, neither a new capture nor its explicit acceptance
  // may hydrate the existing World. Hold the controlled teacher reply so the
  // first learner-message timing measures local persistence, not generation.
@@ -891,10 +1152,10 @@ test('10k personal meanings keep the shipped World bounded and searchable, with 
  await expect(page.getByRole('button',{name:'就是这个意思',exact:true})).toBeEnabled().catch(async cause=>{console.log('Controlled 10k teacher failure:',JSON.stringify({alerts:await page.getByRole('alert').allTextContents(),requests:requests.length,assistant:await page.locator('.pmw-message.is-assistant').allTextContents()}));throw cause;});
  await page.getByRole('button',{name:'就是这个意思',exact:true}).click();
  const acceptanceStart=await page.evaluate(()=>performance.now());
- const acceptanceMs=await clickToMeaningReady(page,page.getByRole('dialog').getByRole('button',{name:'确认',exact:true}),'water');
+ const acceptanceMs=await clickToMeaningReady(page,page.getByRole('dialog').getByRole('button',{name:'确认',exact:true}),'water').catch(async cause=>{console.log('10k post-governance acceptance diagnostics:',JSON.stringify({alerts:await page.getByRole('alert').allTextContents(),phases:await page.evaluate(start=>performance.getEntriesByType('measure').filter(entry=>entry.startTime>=start&&entry.name.startsWith('sensa.journey.')).map(entry=>({name:entry.name,durationMs:entry.duration})),acceptanceStart)}));throw cause;});
  const automationElapsedMs=await page.evaluate(start=>performance.now()-start,acceptanceStart);
  const acceptancePhases=await page.evaluate(start=>performance.getEntriesByType('measure').filter(entry=>entry.startTime>=start&&['sensa.journey.records','sensa.journey.authority'].includes(entry.name)).map(entry=>entry.name),acceptanceStart);
- console.log('Shipped acceptance / real Chromium+OPFS / existing synthetic 10k / new Sense+Expression / controlled teacher, excluding reply:',JSON.stringify({clickToReadyMs:acceptanceMs,automationElapsedMs,fullGatewayPhases:acceptancePhases}));
+ console.log('Shipped acceptance / real Chromium+OPFS / existing synthetic 10k / new Sense+Expression / controlled teacher, excluding reply:',JSON.stringify({clickToReadyMs:acceptanceMs,automationElapsedMs,fullGatewayPhases:acceptancePhases,commandPhases:await page.evaluate(start=>performance.getEntriesByType('measure').filter(entry=>entry.startTime>=start&&(entry.name.startsWith('sensa.journey.')||entry.name==='sensa.library.sqlite-commit')).map(entry=>({name:entry.name,durationMs:entry.duration})),acceptanceStart),walMaintenance:(await page.evaluate(()=>window.__sensaBrowserSmoke!.storageDiagnostics({verifyIntegrity:false}))).walMaintenance}));
  expect(acceptancePhases).toEqual([]);expect(acceptanceMs).toBeLessThan(500);
  await page.reload();await expect(page.getByRole('heading',{name:'water',exact:true})).toBeVisible();
  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).targetIds).toEqual([]);

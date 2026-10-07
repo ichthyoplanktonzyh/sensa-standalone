@@ -22,6 +22,11 @@ import {memoryRegistrySelection,type RegistrySelectionQuery,type RegistrySelecti
 
 /** Test/non-browser Adapter. Production never selects this path. */
 export class MemoryRecordAdapter implements SqliteRecordAdapter {
+  async learningSemanticMemory(targetId?:string):Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>{
+    const {learningSemanticMemoryTarget}=await import('./learningSemanticMemoryProjection');
+    const rows=targetId===undefined?await this.entries('learningTargets'):[{key:targetId,encodedValue:await this.get('learningTargets',targetId)}];
+    return {targets:rows.flatMap(row=>row.encodedValue?[learningSemanticMemoryTarget(decodeBackupValue(JSON.parse(row.encodedValue)),targetId!==undefined)]:[])};
+  }
   async registrySelection(query:RegistrySelectionQuery):Promise<RegistrySelection>{
     // This test adapter has no SQL planner. Do not call the public source-read
     // interface while emulating a purpose-specific selector internally.
@@ -38,7 +43,7 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
     const choices=(await this.entries('semanticMeanings')).flatMap(row=>{
       const record=decodeBackupValue(JSON.parse(row.encodedValue)) as MeaningJourneyRecord;
       const registry=worldRegistryClosure(record,read),item=worldItemFromRecord(record,read);
-      return isWorldRecordVisible(record,registry)&&matchesWorldFilter(item,query.filter)&&worldSearchText(item).includes(query.query)
+      return query.filter!=='deleted'&&isWorldRecordVisible(record,registry)&&matchesWorldFilter(item,query.filter)&&worldSearchText(item).includes(query.query)&&(query.senseIds===undefined||summarizeWorldItem(item).senseIds?.some(id=>query.senseIds!.includes(id)))
         ?buildPersonalMeaningLearningSources(record,indexRegistry(registry)).filter(source=>source.targetLanguageTag===query.targetLanguageTag).map(source=>({choice:worldLearningChoice(source),updatedAt:item.updatedAt})):[];
     }).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt)||(a.choice.reference.personalMeaningId<b.choice.reference.personalMeaningId?-1:a.choice.reference.personalMeaningId>b.choice.reference.personalMeaningId?1:a.choice.key<b.choice.key?-1:1));
     return {items:choices.slice(query.offset,query.offset+query.limit).map(row=>row.choice),total:choices.length};
@@ -46,12 +51,14 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
   async worldBrowse(raw:WorldBrowseQuery):Promise<WorldBrowsePage>{
     const query=validateWorldQuery(raw);
     const read:WorldRecordRead=(table,key)=>{const encoded=this.records.get(`${table}\u0000${key}`);return encoded===undefined?undefined:decodeBackupValue(JSON.parse(encoded));};
-    const visible=(await this.entries('semanticMeanings')).flatMap(row=>{
+    const records=(await this.entries('semanticMeanings')).map(row=>{
       const record=decodeBackupValue(JSON.parse(row.encodedValue)) as MeaningJourneyRecord;
       const registry=worldRegistryClosure(record,read),item=worldItemFromRecord(record,read);
-      return isWorldRecordVisible(record,registry)?[{item:summarizeWorldItem(item),search:worldSearchText(item)}]:[];
+      return {item:summarizeWorldItem(item),search:worldSearchText(item),visible:isWorldRecordVisible(record,registry)};
     }).sort((a,b)=>b.item.updatedAt.localeCompare(a.item.updatedAt)||(a.item.personalMeaningId<b.item.personalMeaningId?-1:1));
-    const selected=visible.filter(row=>matchesWorldFilter(row.item,query.filter)&&row.search.includes(query.query));
+    const visible=records.filter(row=>row.visible);
+    const partition=query.filter==='deleted'?records.filter(row=>row.item.status==='deleted'):visible;
+    const selected=partition.filter(row=>matchesWorldFilter(row.item,query.filter)&&row.search.includes(query.query)&&(query.senseIds===undefined||row.item.references?.some(reference=>query.senseIds!.includes(reference.senseId))));
     return {items:selected.slice(query.offset,query.offset+query.limit).map(row=>row.item),total:selected.length,
       pending:visible.filter(row=>row.item.senseFormation.phase!=='sense_confirmed'||row.item.expressionBinding.phase!=='bound').length,
       next:visible.find(row=>row.item.senseFormation.phase!=='sense_confirmed'||row.item.expressionBinding.phase!=='bound')?.item??null};

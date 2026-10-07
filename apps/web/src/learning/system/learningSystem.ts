@@ -195,7 +195,7 @@ export type LearningQuery =
       clock?: number;
     }>
   | Readonly<{ kind: 'personal_enrollment_index' }>
-  | Readonly<{ kind: 'semantic_memory' }>;
+  | Readonly<{ kind: 'semantic_memory'; targetId?: string }>;
 
 export type LearningQueryResult<Query extends LearningQuery> =
   Query['kind'] extends 'supplemental_memberships'?SupplementalMembershipPage

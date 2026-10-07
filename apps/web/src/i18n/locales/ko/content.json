@@ -35,6 +35,40 @@
     "utterance_strategy": "발화 전략"
   }
 },
+  "noteEditor": {
+    "loading": "메모를 읽는 중…",
+    "readFailed": "이 메모를 읽을 수 없습니다.",
+    "changed": "다른 곳에서 메모가 변경되었습니다. 작성 중인 내용은 유지됩니다.",
+    "latest": "최근 저장된 메모",
+    "empty": "빈 메모",
+    "useLatest": "최신 메모 사용",
+    "saveMine": "내 내용 저장",
+    "unconfirmed": "저장 결과를 확인할 수 없습니다. 다시 시도해 이 저장을 확인하세요.",
+    "savedReadFailed": "메모는 저장되었지만 목록을 새로 고치지 못했습니다. 다시 읽어 주세요."
+  },
+  "meaningGovernance": {
+    "correct": "의미와 표현 수정",
+    "history": "이전 의미와 표현",
+    "expression": "표현",
+    "formSettings": "언어와 표현 유형",
+    "changed": "내용이 변경되었습니다. 최신 내용을 다시 연 뒤 시도하세요.",
+    "more": "더 보기",
+    "favorite": "즐겨찾기",
+    "unfavorite": "즐겨찾기 해제",
+    "note": "메모 작성",
+    "remove": "내용 삭제",
+    "restore": "내용 복원",
+    "deleted": "삭제됨",
+    "deleteTitle": "이 내용을 삭제할까요?",
+    "consequence": "휴지통으로 이동합니다. 원본 자료, 메모와 학습 기록은 유지됩니다.",
+    "cancel": "취소",
+    "trash": "휴지통",
+    "emptyTrash": "휴지통이 비어 있습니다",
+    "all": "모든 내용",
+    "unconfirmed": "결과를 확인하지 못했습니다. 내용을 다시 읽었으니 확인 후 재시도하세요.",
+    "savedReadFailed": "변경 사항은 저장됐지만 내용을 다시 읽지 못했습니다. 읽기를 재시도하세요.",
+    "retryRead": "다시 읽기"
+  },
   "content": {
     "manual": "직접 만들기",
     "findExpression": "Sensa와 대화하기",

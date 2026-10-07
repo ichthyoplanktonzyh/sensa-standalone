@@ -35,6 +35,40 @@
     "utterance_strategy": "発話方略"
   }
 },
+  "noteEditor": {
+    "loading": "メモを読み込み中…",
+    "readFailed": "このメモを読み込めませんでした。",
+    "changed": "メモが別の場所で更新されました。下書きは保持されています。",
+    "latest": "最新の保存済みメモ",
+    "empty": "メモは空です",
+    "useLatest": "最新のメモを使用",
+    "saveMine": "自分の内容を保存",
+    "unconfirmed": "保存結果を確認できませんでした。再試行して同じ保存を確認してください。",
+    "savedReadFailed": "メモは保存済みですが、一覧を更新できませんでした。読み込みを再試行してください。"
+  },
+  "meaningGovernance": {
+    "correct": "意味と表現を編集",
+    "history": "以前の意味と表現",
+    "expression": "表現",
+    "formSettings": "言語と表現の種類",
+    "changed": "内容が変更されました。最新の内容を開き直してから操作してください。",
+    "more": "その他",
+    "favorite": "お気に入り",
+    "unfavorite": "お気に入り解除",
+    "note": "メモを書く",
+    "remove": "内容を削除",
+    "restore": "内容を復元",
+    "deleted": "削除済み",
+    "deleteTitle": "この内容を削除しますか？",
+    "consequence": "ゴミ箱に移動します。元の資料、メモ、学習記録は保持されます。",
+    "cancel": "キャンセル",
+    "trash": "ゴミ箱",
+    "emptyTrash": "ゴミ箱は空です",
+    "all": "すべての内容",
+    "unconfirmed": "結果を確認できませんでした。内容を再読み込みしたので、確認してから再試行してください。",
+    "savedReadFailed": "変更は保存されましたが、内容を再読み込みできません。読み込みを再試行してください。",
+    "retryRead": "読み込みを再試行"
+  },
   "content": {
     "manual": "手動で作成",
     "findExpression": "Sensaに相談",

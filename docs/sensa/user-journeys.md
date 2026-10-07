@@ -145,7 +145,7 @@ Sensa 的长旅程分成三层：
 | `LJ-08` | 完成一次到期复习 | Due Retention Target → Review Run → Memory Outcome → 新调度 | 每次 Review 至多结算一次 |
 | `LJ-09` | 在遗忘或薄弱后重新建立连接 | Relearning Eligible → 独立 Run → Completion → 返回 Retention | 不重复结算触发它的 Review |
 | `LJ-10` | 长期维护学习范围和计划 | Route/Book/补充目标 → Scope、每日数量、更新、暂停/恢复 → 可解释的未来计划 | Book 模式与整本／序号范围及明确结束活动可维护；完整补充目标移除、规模与跨设备冲突验收仍有缺口 |
-| `LJ-11` | 回看和治理个人语义内容 | Personal Semantic World/Markers → 搜索、查看、修订、标记或移除 → 新 revision/明确终态 | 删除/恢复语义已定义，Web 用户入口尚未完整交付 |
+| `LJ-11` | 回看和治理个人语义内容 | Personal Semantic World/Markers → 搜索、查看、修订、标记或移除 → 新 revision/明确终态 | 删除进入回收站；明确恢复原身份，历史与学习互不级联 |
 | `LJ-12` | 把学习中的个人场景长期保存 | Runtime Scene → Scene Revision → 明确接受 → Personal Meaning Anchor | 编辑场景不会自动改写已接受 Meaning |
 | `LJ-13` | 在网页中阅读、解释、写作或朗读 | Extension 阅读/写作入口 → 真实结果或准确不可用状态 | 保存到 Sensa 是可选分支，不制造学习事实 |
 | `LJ-14` | 只读查询表达、Sense、例句或来源 | 固定 occurrence/context → Reference Lookup → 返回原任务 | 查询不自动保存、不自动加入学习 |
@@ -731,6 +731,10 @@ Personal Meaning、Scene Bridge 或另一来源再次加入而创建竞争目标
 
 ## 18. `LJ-11`：个人语义世界的持续治理
 
+当前 Web checkpoint 覆盖个人内容的回看、修订、收藏／笔记、资源更新及回收站闭环。
+公共 Sense 的 revision／split／relation 审查、轻量主线新增例句收藏入口保留待建设，不以个人纠正或内部
+Structured 分支认领完成。默认界面收起已确认空的例句收藏；已有收藏及其可用回看入口保留，来源缺失不冒充空库。
+
 Personal Semantic World 不是只写不读的 Intake 终点。用户可以反复回到已积累内容：
 
 ```text
@@ -745,12 +749,18 @@ Personal / Learning / Markers / Inbox
 ```
 
 - Context 或 Anchor 更新产生新 revision，不抹除原 Semantic Acceptance 或 provenance。
+- 纠正意思或表达需审阅当前 Context 并明确保存；原材料、原解释和学习历史保留。旧解释的收藏与笔记仍可
+  从 Markers 找回并编辑原 Sense 的笔记，不跳到修改后的意思，也不自动重新加入学习。
 - Personal Meaning 删除必须使用 tombstone；旧离线副本不得把它复活。删除不能级联删除 Learning Target、
   Run、Evidence、Retention、FSRS 或 Personal Learning Scene。
+  回收站恢复必须追加明确的新生命周期事实并保留原删除修订；删除项只读，恢复不重做 Semantic Acceptance。
 - Inbox 是待处理区，不是稳定内容库；处理完成后必须进入 Personal Meaning 或明确 discarded 终态。
 - 不同 operation id 的相似捕获不能仅凭表面形式或 Sense 自动合并。精确重试幂等与跨捕获语义去重是两个
   问题；在产品规则明确前，应保留来源和用户选择，不能静默覆盖。
 - Scenes/Collections 等尚未交付的 UI 不因存在占位页面而成为已完成旅程。
+- 从实际学习包收藏、记笔记后，用户无需先创建 Personal Meaning 或完成学习，也能在 Markers 找回
+  原内容。实际学习连接按 Target 保留；共享 Sense 的不同表达不合并学习状态。读取失败不冒充空列表，
+  重读恢复原引用且不创建学习结果。
 
 ## 19. `LJ-13` 至 `LJ-15`：阅读、参考与练习
 
@@ -914,7 +924,7 @@ OPFS、Extension、Edge、Database、Content 或 Release 边界复现。诊断�
 
 - direct stable-Sense 的完整用户入口；
 - Curriculum Enrollment 的 maintenance/paused、整本退出与恢复；
-- Personal Meaning 和 Personal Learning Scene 的用户可见删除/恢复；
+- Personal Learning Scene 的用户可见删除/恢复（Personal Meaning 的回收站与明确恢复已进入当前 Web 范围）；
 - 学习揭示阶段 AI Q&A；
 - 完整 Free Practice Profile 及 speaking/reading/writing activities；
 - Account Recovery Point、服务端历史恢复和账号范围 Data Export Request；

@@ -35,6 +35,40 @@
     "utterance_strategy": "Strategia wypowiedzi"
   }
 },
+  "noteEditor": {
+    "loading": "Wczytywanie notatki…",
+    "readFailed": "Nie można odczytać tej notatki.",
+    "changed": "Notatka została zmieniona w innym miejscu. Twój szkic został zachowany.",
+    "latest": "Ostatnio zapisana notatka",
+    "empty": "Pusta notatka",
+    "useLatest": "Użyj najnowszej notatki",
+    "saveMine": "Zapisz moją wersję",
+    "unconfirmed": "Nie potwierdzono zapisu. Spróbuj ponownie, aby sprawdzić ten zapis.",
+    "savedReadFailed": "Notatka zapisana, ale nie odświeżono listy. Ponów odczyt."
+  },
+  "meaningGovernance": {
+    "correct": "Edytuj znaczenie i wyrażenie",
+    "history": "Poprzednie znaczenia i wyrażenia",
+    "expression": "Wyrażenie",
+    "formSettings": "Język i typ wyrażenia",
+    "changed": "Treść została zmieniona. Otwórz najnowszą wersję przed ponowną próbą.",
+    "more": "Więcej",
+    "favorite": "Zapisz znaczenie",
+    "unfavorite": "Usuń z ulubionych",
+    "note": "Napisz notatkę",
+    "remove": "Usuń treść",
+    "restore": "Przywróć treść",
+    "deleted": "Usunięto",
+    "deleteTitle": "Usunąć tę treść?",
+    "consequence": "Przenieś do kosza. Źródła, notatki i historia nauki zostaną zachowane.",
+    "cancel": "Anuluj",
+    "trash": "Kosz",
+    "emptyTrash": "Kosz jest pusty",
+    "all": "Cała treść",
+    "unconfirmed": "Nie potwierdzono wyniku. Treść odczytano ponownie; sprawdź ją przed ponowieniem.",
+    "savedReadFailed": "Zmiana została zapisana, ale nie można było odczytać treści. Ponów odczyt.",
+    "retryRead": "Ponów odczyt"
+  },
   "content": {
     "manual": "Utwórz ręcznie",
     "findExpression": "Porozmawiaj z Sensa",

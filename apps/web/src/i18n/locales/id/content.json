@@ -35,6 +35,40 @@
     "utterance_strategy": "Strategi tuturan"
   }
 },
+  "noteEditor": {
+    "loading": "Memuat catatan…",
+    "readFailed": "Catatan ini tidak dapat dibaca.",
+    "changed": "Catatan diubah di tempat lain. Draf Anda tetap tersimpan.",
+    "latest": "Catatan tersimpan terbaru",
+    "empty": "Catatan kosong",
+    "useLatest": "Gunakan catatan terbaru",
+    "saveMine": "Simpan versi saya",
+    "unconfirmed": "Penyimpanan belum terkonfirmasi. Coba lagi untuk memeriksa penyimpanan ini.",
+    "savedReadFailed": "Catatan tersimpan, tetapi daftar gagal diperbarui. Coba baca lagi."
+  },
+  "meaningGovernance": {
+    "correct": "Edit makna dan ungkapan",
+    "history": "Makna dan ungkapan sebelumnya",
+    "expression": "Ungkapan",
+    "formSettings": "Bahasa dan jenis ungkapan",
+    "changed": "Konten berubah. Buka kembali konten terbaru sebelum mencoba lagi.",
+    "more": "Lainnya",
+    "favorite": "Simpan makna",
+    "unfavorite": "Hapus dari favorit",
+    "note": "Tulis catatan",
+    "remove": "Hapus konten",
+    "restore": "Pulihkan konten",
+    "deleted": "Dihapus",
+    "deleteTitle": "Hapus konten ini?",
+    "consequence": "Pindahkan ke sampah. Sumber, catatan, dan riwayat belajar tetap disimpan.",
+    "cancel": "Batal",
+    "trash": "Sampah",
+    "emptyTrash": "Sampah kosong",
+    "all": "Semua konten",
+    "unconfirmed": "Hasil belum dapat dikonfirmasi. Konten telah dibaca ulang; periksa sebelum mencoba lagi.",
+    "savedReadFailed": "Perubahan disimpan, tetapi konten tidak dapat dibaca ulang. Coba baca lagi.",
+    "retryRead": "Baca ulang"
+  },
   "content": {
     "manual": "Buat secara manual",
     "findExpression": "Berbicara dengan Sensa",

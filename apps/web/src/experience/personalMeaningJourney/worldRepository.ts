@@ -12,6 +12,12 @@ import type {PersonalMeaningLearningSource} from '../../contentSupply/system';
 import {clarificationSourceWitness,meaningSourceValue,intakeSourceValue,type ClarificationSourceWitness,type ClarificationSourceKind} from './clarificationSource';
 import type {JourneyState,SenseRegistryState} from './store';
 import {canonicalConsumerJson} from '@sensa/contracts/sensa';
+import {meaningCorrectionPayload} from './meaningCorrection';
+export interface PersonalMeaningCorrectionSeed extends WorldReadStamp{
+ personalMeaningId:string;personalMeaningAlignmentId:string;source:ClarificationSourceWitness;
+ payload:import('@sensa/contracts/sensa').SensaIntakePayload;reuseSense:{senseId:string;senseVersionId:string};
+ images:import('@sensa/contracts/sensa').SensaContextImage[];
+}
 
 export interface WorldReadStamp{incarnation:string;revision:number}
 export type WorldInboxSnapshot=WorldReadStamp&{items:JourneyState['inboxItems'];drafts:Array<{personalMeaningId:string;label:string}>};
@@ -82,6 +88,17 @@ export const worldReadRepository={
   return {...stamp,items,drafts};
  });},
  page(query:WorldBrowseQuery):Promise<WorldPageSnapshot>{return readLibrary(async tx=>({...await readWorldFrame(tx),...await tx.worldBrowse(query),inboxCount:await tx.count('semanticInbox')}));},
+ references(senseIds:readonly string[]):Promise<WorldBrowsePage['items']>{return readLibrary(async tx=>{
+  await readWorldFrame(tx);
+  const ids=[...new Set(senseIds)],items=new Map<string,WorldBrowsePage['items'][number]>();
+  for(let at=0;at<ids.length;at+=256)for(let offset=0;;offset+=256){
+   const page=await tx.worldBrowse({query:'',filter:'all',offset,limit:256,senseIds:ids.slice(at,at+256)});
+   for(const item of page.items)items.set(item.personalMeaningId,item);
+   if(offset+page.items.length>=page.total)break;
+   if(!page.items.length)throw new StoreCorruptedError('个人意义引用的分页不完整。');
+  }
+  return [...items.values()];
+ });},
  learningChoices(query:WorldLearningChoiceQuery):Promise<WorldLearningChoiceSnapshot>{return readLibrary(async tx=>{
   const stamp=await readWorldFrame(tx),page=await tx.worldLearningChoices(query);
   return {...stamp,...page,items:page.items.map(choice=>({...choice,incarnation:stamp.incarnation}))};
@@ -102,6 +119,20 @@ export const worldReadRepository={
    return clarificationSourceWitness(stamp.incarnation,kind,id,value);
   });
  },
+ correction(id:string,alignmentId:string):Promise<PersonalMeaningCorrectionSeed>{
+  if(!isUuid(id)||!isUuid(alignmentId))return Promise.reject(Error('world_meaning_id_invalid'));
+  return readLibrary(async tx=>{
+   const stamp=await readWorldFrame(tx),record=await tx.get<MeaningJourneyRecord>('semanticMeanings',id);
+   if(!record||record.personalMeaning.personalMeaningId!==id)throw Error('localFlow.meaningChanged');
+   const {registry}=await readMeaningRegistry(tx,record);worldItemFromRegistry(record,registry);
+   const payload=meaningCorrectionPayload(record,indexRegistry(registry),alignmentId),alignment=record.alignments.find(row=>row.personalMeaningAlignmentId===alignmentId)!;
+   const locator=payload.expression!.occurrence!.locator;if(locator.kind!=='personal_meaning')throw Error('localFlow.meaningChanged');
+   const inline=locator.personalSemanticAnchorRevisionIds.map(id=>record.personalSemanticAnchorRevisions.find(row=>row.personalSemanticAnchorRevisionId===id)!).flatMap(context=>Array.isArray(context.structuredPayload.media)?context.structuredPayload.media:[]);
+   const byId=new Map(inline.map((item:any)=>[item.mediaId,{id:item.mediaId,name:item.fileName??'personal-scene',dataUrl:item.dataUrl}]));
+   const images=await Promise.all(payload.context!.mediaReferenceIds.map(async mediaId=>{const available=byId.get(mediaId);if(available)return available;const media=parseStoredMedia(await tx.get('media',mediaId));if(media.mediaId!==mediaId)throw Error('localFlow.meaningChanged');return {id:mediaId,name:'personal-context',dataUrl:media.dataUrl};}));
+   return {...stamp,personalMeaningId:id,personalMeaningAlignmentId:alignmentId,source:clarificationSourceWitness(stamp.incarnation,'personal_meaning',id,meaningSourceValue(record)),payload,images,reuseSense:{senseId:alignment.senseId,senseVersionId:alignment.senseVersionId}};
+  });
+ },
  detail(id:string):Promise<WorldDetailSnapshot>{
   if(!isUuid(id))return Promise.reject(new Error('world_meaning_id_invalid'));
   return readLibrary(async tx=>{
@@ -120,9 +151,9 @@ export const worldReadRepository={
      startingPoint:metadata?.startingPoint??(item.status==='pending_context'?item.payload.expression?'from_expression':'from_experience':item.status==='pending_expression'?'from_experience':'from_expression')};
     return {...stamp,detail:null,draft,sources:[],source:clarificationSourceWitness(stamp.incarnation,'intake',id,intakeSourceValue(item,metadata))};
    }
-   if(record.personalMeaning.status==='deleted')return {...stamp,detail:null,draft:null,sources:[],source:null};
    if(record.personalMeaning.personalMeaningId!==id)throw new StoreCorruptedError('个人意义身份与存储记录不一致。');
    const {registry}=await readMeaningRegistry(tx,record),item=worldItemFromRegistry(record,registry);
+   if(record.personalMeaning.status==='deleted')return {...stamp,detail:item.detail,draft:null,sources:[],source:null};
    const sources=await hydratePersonalLearningImages(record,buildPersonalMeaningLearningSources(record,indexRegistry(registry)),async mediaId=>{
     const media=parseStoredMedia(await tx.get('media',mediaId));if(media.mediaId!==mediaId)throw new StoreCorruptedError('Context 图片引用不一致。');
     return {id:mediaId,name:'personal-context-image',dataUrl:media.dataUrl};

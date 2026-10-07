@@ -25,6 +25,7 @@ const remoteTimeoutMs = 15_000;
 const leaderWaitMs = 10_000;
 
 export interface CoordinatedSqliteBackend {
+  learningSemanticMemory(targetId?:string):Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>;
   existingRecordKeys(table:SqliteLibraryTable,keys:readonly string[]):Promise<string[]>;
   packageCacheProjection<Query extends PackageCacheProjectionQuery>(query:Query):Promise<PackageCacheProjectionResult<Query>>;
   initialize(): Promise<SqliteStorageDiagnostics>;
@@ -131,6 +132,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
     return this.call({ kind: 'changesSince', contentRevision, tables: [...tables] }) as Promise<SqliteRecordChange[]>;
   }
   lookupMeanings(query:string):Promise<import('./sqliteProtocol').MeaningLookupResult>{return this.call({kind:'meaningLookup',query}) as Promise<import('./sqliteProtocol').MeaningLookupResult>;}
+  learningSemanticMemory(targetId?:string):Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>{return this.call({kind:'learningSemanticMemory',targetId}) as Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>;}
   worldBrowse(query:import('./sqliteProtocol').WorldBrowseQuery):Promise<import('./sqliteProtocol').WorldBrowsePage>{return this.call({kind:'worldBrowse',query}) as Promise<import('./sqliteProtocol').WorldBrowsePage>;}
   registrySelection(query:import('./sqliteProtocol').RegistrySelectionQuery):Promise<import('./sqliteProtocol').RegistrySelection>{return this.call({kind:'registrySelection',query}) as Promise<import('./sqliteProtocol').RegistrySelection>;}
   worldLearningChoices(query:import('./sqliteProtocol').WorldLearningChoiceQuery):Promise<import('./sqliteProtocol').WorldLearningChoicePage>{return this.call({kind:'worldLearningChoices',query}) as Promise<import('./sqliteProtocol').WorldLearningChoicePage>;}
@@ -525,6 +527,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       case 'meaningLookup':return backend.lookupMeanings(input.query);
       case 'worldBrowse':return backend.worldBrowse(input.query);
       case 'registrySelection':return backend.registrySelection(input.query);
+      case 'learningSemanticMemory':return backend.learningSemanticMemory(input.targetId);
       case 'worldLearningChoices':return backend.worldLearningChoices(input.query);
       case 'existingJourneyIdentities':return backend.existingJourneyIdentities(input.ids);
       case 'changesSince': return backend.changesSince(input.contentRevision, input.tables);

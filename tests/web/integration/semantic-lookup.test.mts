@@ -234,9 +234,14 @@ test('only active confirmed connections are reusable and their original version 
   state.registry.senseVersions.push(nextVersion);
   state.registry.senses[0]={...state.registry.senses[0]!,currentSenseVersionId:nextVersion.senseVersionId,currentVersionNumber:2};
   assert.equal(createMeaningLookup(state).query('borrow').meanings[0]!.senseVersionId,version.senseVersionId,'an Alignment is not the registry head');
-  record.alignments[0]!.status='withdrawn';
+  // A projection fixture: current lifecycle comes from events, while the
+  // original accepted snapshot stays immutable. Real correction admission is
+  // covered by personal-meaning-correction, not by this direct fixture change.
+  const originalEvent=record.alignmentEvents[0]!;
+  record.alignmentEvents.push({...originalEvent,personalMeaningAlignmentEventId:crypto.randomUUID(),ordinal:2,eventType:'withdrawn',operationId:crypto.randomUUID(),reason:'personal_meaning_correction'});
   assert.deepEqual(createMeaningLookup(state).query('borrow').meanings,[]);
-  record.alignments[0]!.status='active';record.bindingConfirmations=[];
+  assert.equal(record.alignments[0]!.status,'active');
+  record.alignmentEvents.pop();record.bindingConfirmations=[];
   assert.deepEqual(createMeaningLookup(state).query('borrow').meanings,[]);
 });
 
@@ -261,6 +266,7 @@ test('backup/sync resolve a pinned learning source after head advancement and or
     const rows=Object.fromEntries(libraryTables.map(table=>[table,[]])) as unknown as BackupRows;
     rows.semanticState.push({key:'root',value:{version:state.version}});
     rows.semanticMeanings=state.meanings.map(value=>({key:value.personalMeaning.personalMeaningId,value}));
+    rows.semanticReceipts=state.commandReceipts.map(value=>({key:value.operationId,value}));
     const idFields={senses:'senseId',senseVersions:'senseVersionId',expressions:'expressionId',expressionVersions:'expressionVersionId',bindings:'senseExpressionBindingId',bindingVersions:'bindingVersionId'} as const;
     for(const kind of Object.keys(idFields) as Array<keyof typeof idFields>)state.registry[kind].forEach((value,ordinal)=>rows.semanticRegistry.push({
       key:`${kind}:${(value as unknown as Record<string,string>)[idFields[kind]]}`,value:{kind,ordinal,value},

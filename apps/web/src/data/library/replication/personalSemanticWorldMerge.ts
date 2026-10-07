@@ -1,5 +1,9 @@
 import {backupEqual,decodeBackupValue,encodeBackupValue} from '../backupCodec';
 import type {ReplicaEntry,ReplicaMergeInput,ReplicaMergeResult} from './domainReplica';
+import {assertMeaningLifecycle,assertMeaningLifecycleReceipts,assertMeaningLifecycleOperationReceipt,validMeaningLifecycleDescendant,type MeaningLifecycleRecord} from '../../../experience/personalMeaningJourney/meaningLifecycle';
+import type {CommandReceipt} from '../../../experience/personalMeaningJourney/store';
+import type {MeaningJourneyRecord} from '../../../experience/personalMeaningJourney/store';
+import {assertMeaningCorrectionReceipts} from '../../../experience/personalMeaningJourney/meaningCorrection';
 
 type JsonRecord=Record<string,any>;
 type ValueResult={ok:true;value:any}|{ok:false};
@@ -121,10 +125,12 @@ function mergeMockState(base:unknown,local:unknown,remote:unknown):ValueResult{
 
 function mergeMeaning(base:unknown,local:unknown,remote:unknown):ValueResult{
  const prior=record(base),ours=record(local),theirs=record(remote);if(!prior||!ours||!theirs)return failed;
- const personalMeaning=mergeLifecycle(prior.personalMeaning,ours.personalMeaning,theirs.personalMeaning);if(!personalMeaning.ok)return failed;
+ if(!validMeaningLifecycleDescendant(prior as MeaningLifecycleRecord,ours as MeaningLifecycleRecord)||!validMeaningLifecycleDescendant(prior as MeaningLifecycleRecord,theirs as MeaningLifecycleRecord))return failed;
+ const personalMeaning=threeWay(prior.personalMeaning,ours.personalMeaning,theirs.personalMeaning);if(!personalMeaning.ok)return failed;
  const merged:JsonRecord={personalMeaning:structuredClone(personalMeaning.value)};
  for(const spec of arraySpecs){const result=mergeArray(spec,prior[spec.name],ours[spec.name],theirs[spec.name]);if(!result.ok)return failed;merged[spec.name]=result.value;}
  const mockState=mergeMockState(prior.mockState,ours.mockState,theirs.mockState);if(!mockState.ok)return failed;merged.mockState=mockState.value;
+ try{assertMeaningLifecycle(merged as MeaningLifecycleRecord);}catch{return failed;}
  return {ok:true,value:merged};
 }
 
@@ -187,6 +193,30 @@ export function mergePersonalSemanticWorldReplica(
 ):ReplicaMergeResult{
  const result=ordinary(input),entries=new Map(result.entries.map(entry=>[entryId(entry),entry])),conflicts=new Set(result.conflicts);
  const base=byId(input.base),local=byId(input.local),remote=byId(input.remote);
+ const admissionConflicts=new Set<string>();
+ // Validate each branch against its own durable operation facts, before any
+ // ordinary three-way choice can import a well-shaped but unwitnessed restore.
+ for(const side of [input.base,input.local,input.remote]){
+  const receipts=side.filter(entry=>entry.table==='semanticReceipts').map(entry=>decodeBackupValue(entry.value) as CommandReceipt);
+  const lifecycleReceipts=new Map<string,CommandReceipt[]>();
+  const correctionReceipts=new Map<string,CommandReceipt[]>();
+  for(const receipt of receipts)if(receipt.command==='CorrectPersonalMeaning'){const id=String(receipt.result.personalMeaningId),group=correctionReceipts.get(id)??[];group.push(receipt);correctionReceipts.set(id,group);}
+  for(const receipt of receipts)if(receipt.command==='ChangeMeaningLifecycle'){
+   const id=String(receipt.result.personalMeaningId),group=lifecycleReceipts.get(id)??[];
+   group.push(receipt);lifecycleReceipts.set(id,group);
+  }
+  const meanings=new Map(side.filter(entry=>entry.table==='semanticMeanings').map(entry=>[entry.key,decodeBackupValue(entry.value) as MeaningLifecycleRecord]));
+  for(const entry of side)if(entry.table==='semanticMeanings')try{
+   const meaning=meanings.get(entry.key)!;
+   assertMeaningLifecycle(meaning);assertMeaningLifecycleReceipts([meaning],lifecycleReceipts.get(entry.key)??[]);
+   assertMeaningCorrectionReceipts(meaning as MeaningJourneyRecord,correctionReceipts.get(entry.key)??[]);
+  }catch{conflicts.add(entryId(entry));admissionConflicts.add(entryId(entry));}
+  for(const entry of side)if(entry.table==='semanticReceipts')try{
+   const receipt=decodeBackupValue(entry.value) as CommandReceipt;
+   assertMeaningLifecycleOperationReceipt(meanings.get(String(receipt.result.personalMeaningId)),receipt);
+   if(receipt.command==='CorrectPersonalMeaning'){const meaning=meanings.get(String(receipt.result.personalMeaningId));if(!meaning)throw Error('meaning_correction_invalid');assertMeaningCorrectionReceipts(meaning as MeaningJourneyRecord,correctionReceipts.get(String(receipt.result.personalMeaningId))??[]);}
+  }catch{conflicts.add(entryId(entry));admissionConflicts.add(entryId(entry));}
+ }
  for(const id of new Set([...base.keys(),...local.keys(),...remote.keys()])){
   const prior=base.get(id),ours=local.get(id),theirs=remote.get(id),sample=ours??theirs??prior!;
   if(prior&&durableTables.has(sample.table)&&(!ours||!theirs)){conflicts.add(id);continue;}
@@ -195,7 +225,9 @@ export function mergePersonalSemanticWorldReplica(
   const merge=sample.table==='semanticMeanings'?mergeMeaning:mergeRegistry;
   const merged=merge(decodeBackupValue(prior.value),decodeBackupValue(ours.value),decodeBackupValue(theirs.value));
   if(!merged.ok){if(!equal(ours.value,theirs.value))conflicts.add(id);continue;}
-  entries.set(id,mergedEntry(merged.value,ours,theirs,prior));conflicts.delete(id);
+  entries.set(id,mergedEntry(merged.value,ours,theirs,prior));
+  // A successful content merge cannot erase failed branch admission above.
+  if(!admissionConflicts.has(id))conflicts.delete(id);
  }
  const slots=new Map<string,string>();
  for(const entry of entries.values())if(entry.table==='semanticRegistry'){

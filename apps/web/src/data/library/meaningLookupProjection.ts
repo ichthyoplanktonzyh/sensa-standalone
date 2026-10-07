@@ -33,7 +33,7 @@ CREATE INDEX IF NOT EXISTS sensa_meaning_lookup_gram_document ON sensa_meaning_l
 CREATE VIRTUAL TABLE IF NOT EXISTS sensa_meaning_lookup_search USING fts5(sense_version_id UNINDEXED,text,tokenize='trigram');
 CREATE TABLE IF NOT EXISTS sensa_meaning_lookup_meta(id INTEGER PRIMARY KEY CHECK(id=1),version INTEGER NOT NULL);
 `;
-export const meaningLookupProjectionVersion=4;
+export const meaningLookupProjectionVersion=5;
 const registryIds={senses:'senseId',senseVersions:'senseVersionId',expressions:'expressionId',expressionVersions:'expressionVersionId',bindings:'senseExpressionBindingId',bindingVersions:'bindingVersionId'} as const;
 function lookupFacts(encoded:string):MeaningLookupFacts{
   const wire=JSON.parse(encoded);

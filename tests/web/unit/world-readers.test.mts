@@ -5,7 +5,7 @@ import type {WorldPageSnapshot,WorldDetailSnapshot} from '../../../apps/web/src/
 import type {WorldLearningChoice,WorldLearningChoiceQuery} from '../../../apps/web/src/experience/personalMeaningJourney/worldRead';
 import type {WorldLearningChoiceSnapshot} from '../../../apps/web/src/experience/personalMeaningJourney/worldRepository';
 
-const item=(index:number):WorldBrowseItem=>({personalMeaningId:`meaning-${index}`,label:`label-${index}`,primaryLabel:'private preview',updatedAt:'2026-10-04',
+const item=(index:number):WorldBrowseItem=>({personalMeaningId:`meaning-${index}`,status:'active',label:`label-${index}`,primaryLabel:'private preview',updatedAt:'2026-10-04',
  senseFormation:{phase:'sense_confirmed',focusCount:0,acceptedFocusCount:0,pendingFocusCount:0,clarifyingFocusCount:0,proposalPendingCount:0,confirmedSenseCount:1,nextFocusId:null},
  expressionBinding:{phase:'bound',confirmedSenseCount:1,boundSenseCount:1,confirmedBindingCount:1,pendingBindingCount:0,nextFocusId:null}});
 const page=(offset=0,revision=1,incarnation='one'):WorldPageSnapshot=>({incarnation,revision,total:10_000,pending:0,inboxCount:2,next:null,items:Array.from({length:64},(_,index)=>item(offset+index))});

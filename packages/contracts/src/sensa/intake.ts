@@ -181,7 +181,7 @@ const validateOccurrence = (
     }
     return;
   }
-  if (locator.kind === "learning_target") return;
+  if (locator.kind === "learning_target" || locator.kind === "personal_meaning") return;
   const text = value.context.textSegment;
   if (!text || locator.end > text.length
     || text.slice(locator.start, locator.end) !== occurrence.surfaceForm) {

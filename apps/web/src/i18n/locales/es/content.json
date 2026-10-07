@@ -35,6 +35,40 @@
     "utterance_strategy": "Estrategia de expresión"
   }
 },
+  "noteEditor": {
+    "loading": "Cargando nota…",
+    "readFailed": "No se pudo leer esta nota.",
+    "changed": "La nota cambió en otro lugar. Tu borrador se conserva.",
+    "latest": "Última nota guardada",
+    "empty": "Nota vacía",
+    "useLatest": "Usar la nota más reciente",
+    "saveMine": "Guardar mi versión",
+    "unconfirmed": "No se pudo confirmar el guardado. Reintenta para comprobarlo.",
+    "savedReadFailed": "Nota guardada, pero no se pudo actualizar la lista. Reintenta la lectura."
+  },
+  "meaningGovernance": {
+    "correct": "Editar significado y expresión",
+    "history": "Significados y expresiones anteriores",
+    "expression": "Expresión",
+    "formSettings": "Idioma y tipo de expresión",
+    "changed": "El contenido cambió. Abre la versión más reciente antes de intentarlo de nuevo.",
+    "more": "Más",
+    "favorite": "Guardar significado",
+    "unfavorite": "Quitar de favoritos",
+    "note": "Escribir una nota",
+    "remove": "Eliminar contenido",
+    "restore": "Restaurar contenido",
+    "deleted": "Eliminado",
+    "deleteTitle": "¿Eliminar este contenido?",
+    "consequence": "Mover a la papelera. Se conservan fuentes, notas y registros de aprendizaje.",
+    "cancel": "Cancelar",
+    "trash": "Papelera",
+    "emptyTrash": "La papelera está vacía",
+    "all": "Todo el contenido",
+    "unconfirmed": "No se pudo confirmar el resultado. Se volvió a leer el contenido; revísalo antes de reintentar.",
+    "savedReadFailed": "El cambio está guardado, pero no se pudo volver a leer el contenido. Reintenta la lectura.",
+    "retryRead": "Volver a leer"
+  },
   "content": {
     "manual": "Crear manualmente",
     "findExpression": "Hablar con Sensa",

@@ -4,6 +4,8 @@ import type { RuntimeLearningContent } from '../../learning/content/learningCata
 import { BUNDLED_PACKAGE_BY_SENSE } from '../../learning/content/bundledLearningContent';
 import { PRACTICE_SENSES, type PracticeSenseItem } from '../../experience/practiceData';
 import { journeyGateway } from '../../experience/personalMeaningJourney/gateway';
+import {worldReadRepository} from '../../experience/personalMeaningJourney/worldRepository';
+import type {WorldBrowseItem} from '../../experience/personalMeaningJourney/worldRead';
 import type { PersonalMeaningJourneyPhase } from '../../experience/personalMeaningJourney/types';
 import { subscribeAll } from '../../experience/services/createSnapshotStore';
 import {
@@ -26,7 +28,7 @@ export interface SemanticGroundProjection {
 }
 
 export interface SemanticWordExpressionProjection {
-  kind: 'word';
+  kind: 'word' | 'expression';
   formL2: string;
   partOfSpeech: string;
   ipa: string;
@@ -46,6 +48,7 @@ export interface SemanticPersonalProjection {
 }
 
 export interface SemanticSenseItem {
+  targetId?: string;
   senseId: string;
   status: SemanticStatus;
   lastReview: number;
@@ -89,7 +92,7 @@ export interface ContentNoteItem {
   noteId: string;
   word: string;
   body: string;
-  sense: PracticeSenseItem;
+  reference: ContentSenseReference;
 }
 
 export interface SavedExampleItem {
@@ -97,13 +100,39 @@ export interface SavedExampleItem {
   sense: PracticeSenseItem;
 }
 
+export interface PersonalMeaningReferenceItem {
+  personalMeaningId: string;
+  personalMeaningAlignmentId?: string;
+  historical?: boolean;
+  primary?: boolean;
+  senseId: string;
+  word: string;
+  meaning: string;
+}
+
+export interface LearningContentReference {
+  targetId: string;
+  senseId: string;
+  word: string;
+  meaning: string;
+}
+export type ContentSenseReference =
+  | (PersonalMeaningReferenceItem & {kind:'personal_meaning'})
+  | (LearningContentReference & {kind:'learning_target'})
+  | {kind:'practice';senseId:string;word:string;meaning:string;practice:PracticeSenseItem};
+
 export interface LearnerSemanticProjectionSnapshot {
-  recent: PracticeSenseItem[];
-  learned: PracticeSenseItem[];
-  known: PracticeSenseItem[];
-  savedSenses: PracticeSenseItem[];
+  recent: ContentSenseReference[];
+  learned: ContentSenseReference[];
+  known: ContentSenseReference[];
+  savedSenses: ContentSenseReference[];
   savedExamples: SavedExampleItem[];
+  /** Retained owner annotations, including unavailable original sources. */
+  savedExampleCount: number;
   notes: ContentNoteItem[];
+  learningStatus: 'loading' | 'ready' | 'error';
+  annotationStatus: 'loading' | 'ready' | 'error';
+  personalReferenceStatus: 'loading' | 'ready' | 'error';
   semanticSenses: SemanticSenseItem[];
   personalSemanticRegions: PersonalSemanticRegionItem[];
   personalMeanings: PersonalMeaningItem[];
@@ -153,14 +182,16 @@ const projectSemanticSense = (
   content: RuntimeLearningContent,
   schedule: ReviewSchedule,
   now: number,
+  senseId: string,
+  targetId: string,
 ): SemanticSenseItem => {
-  const personal = personalContentSystem.read({ kind: 'sense', senseId: content.senseKey });
+  const personal = personalContentSystem.read({ kind: 'sense', senseId });
   const latestContext = personal.contexts[0] ?? null;
   const latestMedia = latestContext?.media[0] ?? null;
   const note = personal.note.trim();
 
   return {
-    senseId: content.senseKey,
+    senseId, targetId,
     status: semanticStatusFor(schedule, now),
     lastReview: schedule.fsrsLastReviewedAt.getTime(),
     ground: {
@@ -197,10 +228,19 @@ const projectSemanticSense = (
  */
 export const buildLearnerSemanticProjection = (
   targets: readonly SemanticMemoryTarget[] = [],
+  references: readonly WorldBrowseItem[] = [],
+  personalReferenceStatus: LearnerSemanticProjectionSnapshot['personalReferenceStatus'] = 'ready',
+  learningStatus: LearnerSemanticProjectionSnapshot['learningStatus'] = 'ready',
 ): LearnerSemanticProjectionSnapshot => {
   const now = Date.now();
 
-  const learnedWithState = targets
+  const sortedTargets=[...targets].sort((a,b)=>(b.memory?.fsrsLastReviewedAt.getTime()??0)-(a.memory?.fsrsLastReviewedAt.getTime()??0)||a.targetId.localeCompare(b.targetId));
+  const uniqueTargets=new Map<string,SemanticMemoryTarget>();
+  for(const target of sortedTargets){
+    if(!uniqueTargets.has(target.senseId))uniqueTargets.set(target.senseId,target);
+  }
+  const learnedTargets=sortedTargets.filter(target=>!!target.memory);
+  const learnedWithState = learnedTargets
     .flatMap((target) => {
       if (!target.memory) return [];
       const item = unambiguousSense(target.senseId);
@@ -210,17 +250,23 @@ export const buildLearnerSemanticProjection = (
       right.schedule.fsrsLastReviewedAt.getTime()
       - left.schedule.fsrsLastReviewedAt.getTime()
     ))
-    .filter((entry, index, all) => (
-      all.findIndex((candidate) => candidate.item.senseId === entry.item.senseId) === index
-    ));
+    ;
 
-  const learned = learnedWithState.map((entry) => entry.item);
   const semanticSenses = learnedWithState
     .flatMap(({ target, schedule }) => {
       const pkg = BUNDLED_PACKAGE_BY_SENSE.get(target.senseId);
-      return pkg ? [projectSemanticSense(pkg.content, schedule, now)] : [];
+      return pkg ? [projectSemanticSense(pkg.content, schedule, now, target.senseId, target.targetId)] : [];
     })
-    .sort((left, right) => right.lastReview - left.lastReview);
+    ;
+  for(const target of learnedTargets){
+    if(unambiguousSense(target.senseId))continue;
+    const personal=personalContentSystem.read({kind:'sense',senseId:target.senseId}),latest=personal.contexts[0],media=latest?.media[0],presentation=target.presentation;
+    semanticSenses.push({senseId:target.senseId,targetId:target.targetId,status:semanticStatusFor(target.memory!,now),lastReview:target.memory!.fsrsLastReviewedAt.getTime(),
+      ground:{labelL1:presentation.meaning,bridgeL1:presentation.meaning,experienceL1:presentation.scene,featureLabelsL1:[]},
+      expression:{kind:'expression',formL2:presentation.expression,partOfSpeech:'',ipa:''},
+      personal:{contextCount:personal.contexts.length,notePreview:personal.note||null,latestContext:latest?{contextId:latest.contextId,body:latest.body,imageDataUrl:media?.dataUrl??null,imageAltText:media?.altText??''}:null}});
+  }
+  semanticSenses.sort((a,b)=>b.lastReview-a.lastReview||a.senseId.localeCompare(b.senseId));
   // v2 Personal Meanings are not assigned to legacy prototype regions. Keep
   // the region projection empty until a server-owned grouping contract exists;
   // the map will place all gateway items in its explicit ungrouped zone.
@@ -248,38 +294,46 @@ export const buildLearnerSemanticProjection = (
     confirmedExpressionCount: item.confirmedExpressionCount,
     updatedAt: Date.parse(item.updatedAt),
   }));
-  const declaredMasterySenseIds = new Set(
-    targets.filter((target) => target.declaredMastery).map((target) => target.senseId),
-  );
-  const known = PRACTICE_SENSES.filter((item) => declaredMasterySenseIds.has(item.senseId));
 
   const personalContent = personalContentSystem.read({ kind: 'snapshot' });
   const savedSenseIds = personalContent.savedSenseIds;
   const savedExampleIds = personalContent.savedExampleIds;
-  const savedSenses = PRACTICE_SENSES.filter((item) => savedSenseIds.has(item.senseId));
   const savedExamples = PRACTICE_SENSES
     .map((sense) => ({ exampleId: exampleIdForSense(sense), sense }))
     .filter((item) => savedExampleIds.has(item.exampleId));
 
-  const senseNotes: ContentNoteItem[] = Object.entries(personalContent.senseNotes)
-    .flatMap(([senseId, body]) => {
-      const sense = sensesById.get(senseId);
-      if (!sense || !body.trim()) return [];
-      return [{
-        noteId: `sense-note:${senseId}`,
-        word: sense.word,
-        body,
-        sense,
-      }];
-    });
+  // Personal meanings are not practice items: no fabricated Example, Word or
+  // Memory State. Resolve only annotated IDs through the indexed World read.
+  const personalReferences = new Map<string, PersonalMeaningReferenceItem>();
+  for (const item of references) for (const [index,reference] of (item.references ?? (item.senseIds??[]).map(senseId=>({senseId,word:item.label,meaning:item.primaryLabel,historical:false}))).entries()) {
+    if (item.status !== 'active' || sensesById.has(reference.senseId)) continue;
+    const previous=personalReferences.get(reference.senseId);
+    if(previous&&!previous.historical)continue;
+    personalReferences.set(reference.senseId, {personalMeaningId:item.personalMeaningId,...reference,primary:index===0&&!reference.historical});
+  }
+  const learningReference=(target:SemanticMemoryTarget):ContentSenseReference=>({kind:'learning_target',targetId:target.targetId,senseId:target.senseId,word:target.presentation.expression,meaning:target.presentation.meaning});
+  const referenceFor=(senseId:string):ContentSenseReference|null=>{
+    const practice=sensesById.get(senseId);if(practice)return {kind:'practice',senseId,word:practice.word,meaning:practice.meaning,practice};
+    const personal=personalReferences.get(senseId);if(personal)return {kind:'personal_meaning',...personal};
+    const target=uniqueTargets.get(senseId);
+    // A retained historical personal Target must not reconstruct a deleted
+    // Meaning in the default markers list. Learning history remains separate.
+    return target&&!target.presentation.personalMeaningId?learningReference(target):null;
+  };
+  const savedSenses=[...savedSenseIds].flatMap(id=>{const reference=referenceFor(id);return reference?[reference]:[];});
+  const notes:ContentNoteItem[]=Object.entries(personalContent.senseNotes).flatMap(([senseId,body])=>{const reference=referenceFor(senseId);return reference&&body.trim()?[{noteId:`sense-note:${senseId}`,word:reference.word,body,reference}]:[];});
+  const learned=learnedTargets.map(learningReference);
+  const known=sortedTargets.filter(target=>target.declaredMastery).map(learningReference);
 
   return {
-    recent: learned.slice(0, 8),
+    recent: learned.slice(0,8),
     learned,
     known,
     savedSenses,
     savedExamples,
-    notes: senseNotes,
+    savedExampleCount:savedExampleIds.size,
+    notes,learningStatus,annotationStatus:personalContent.status,
+    personalReferenceStatus:personalContent.status!=='ready'?personalContent.status:personalReferenceStatus==='ready'?learningStatus:personalReferenceStatus,
     semanticSenses,
     personalSemanticRegions,
     personalMeanings: personalMeaningItems,
@@ -305,30 +359,55 @@ export interface LearnerSemanticProjectionSystem {
   /** A stable, derived snapshot. It never accepts commands or owns source facts. */
   read(): LearnerSemanticProjectionSnapshot;
   subscribe(listener: () => void): () => void;
+  retryReferences(): void;
 }
 
 const projectionStore = (() => {
   let targets: readonly SemanticMemoryTarget[] = [];
-  let snapshot = buildLearnerSemanticProjection(targets);
+  let references: readonly WorldBrowseItem[] = [];
+  let referenceStatus: LearnerSemanticProjectionSnapshot['personalReferenceStatus'] = 'loading';
+  let learningStatus: LearnerSemanticProjectionSnapshot['learningStatus'] = 'loading';
+  let snapshot = buildLearnerSemanticProjection(targets, [], referenceStatus, learningStatus);
   let stopSources: (() => void) | null = null;
   let loadRevision = 0;
+  let referenceRevision = 0;
   const listeners = new Set<() => void>();
 
   const publish = () => {
-    snapshot = buildLearnerSemanticProjection(targets);
+    snapshot = buildLearnerSemanticProjection(targets, references, referenceStatus, learningStatus);
     for (const listener of listeners) listener();
+  };
+
+  const loadReferences = async () => {
+    const revision=++referenceRevision;
+    const personal=personalContentSystem.read({kind:'snapshot'});
+    if(personal.status!=='ready'){referenceStatus=personal.status;publish();return;}
+    const ids=[...new Set([...personal.savedSenseIds,...Object.keys(personal.senseNotes)])].filter(id=>!sensesById.has(id));
+    referenceStatus=ids.length?'loading':'ready';
+    if(!ids.length){references=[];publish();return;}
+    publish();
+    try {
+      const result=await worldReadRepository.references(ids);
+      if(revision!==referenceRevision)return;
+      references=result;referenceStatus='ready';publish();
+    } catch {
+      if(revision!==referenceRevision)return;
+      referenceStatus='error';publish();
+    }
   };
 
   const loadLearningTargets = async () => {
     const revision = ++loadRevision;
+    learningStatus='loading';publish();
     try {
       const nextTargets = await learningSystem.read({ kind: 'semantic_memory' });
       if (revision !== loadRevision) return;
       targets = nextTargets.targets;
+      learningStatus='ready';
       publish();
     } catch {
-      // Bootstrap surfaces may mount before SQLite is ready. Keep the last
-      // coherent projection; a later Library notification retries the read.
+      if(revision!==loadRevision)return;
+      learningStatus='error';publish();
     }
   };
 
@@ -340,10 +419,12 @@ const projectionStore = (() => {
           { kind: 'semantic_memory' },
           () => { void loadLearningTargets(); },
         ),
-        (onChange) => personalContentSystem.subscribe({ kind: 'snapshot' }, onChange),
+        () => personalContentSystem.subscribe({ kind: 'snapshot' }, () => {void loadReferences();}),
+        () => worldReadRepository.subscribe(() => {void loadReferences();}),
         (onChange) => journeyGateway.subscribe(onChange),
       ])(publish);
       void loadLearningTargets();
+      void loadReferences();
     }
     return () => {
       listeners.delete(listener);
@@ -354,7 +435,7 @@ const projectionStore = (() => {
     };
   };
 
-  return { read: () => snapshot, subscribe };
+  return { read: () => snapshot, subscribe, retryReferences: () => {void personalContentSystem.refresh().then(()=>{void loadReferences();void loadLearningTargets();}).catch(()=>undefined);} };
 })();
 
 export const learnerSemanticProjectionSystem: LearnerSemanticProjectionSystem = projectionStore;

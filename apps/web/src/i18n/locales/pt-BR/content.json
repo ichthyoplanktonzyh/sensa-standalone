@@ -35,6 +35,40 @@
     "utterance_strategy": "Estratégia de expressão"
   }
 },
+  "noteEditor": {
+    "loading": "Carregando nota…",
+    "readFailed": "Não foi possível ler esta nota.",
+    "changed": "A nota foi alterada em outro lugar. Seu rascunho foi mantido.",
+    "latest": "Última nota salva",
+    "empty": "Nota vazia",
+    "useLatest": "Usar a nota mais recente",
+    "saveMine": "Salvar minha versão",
+    "unconfirmed": "Não foi possível confirmar o salvamento. Tente novamente para verificá-lo.",
+    "savedReadFailed": "Nota salva, mas a lista não foi atualizada. Tente ler novamente."
+  },
+  "meaningGovernance": {
+    "correct": "Editar significado e expressão",
+    "history": "Significados e expressões anteriores",
+    "expression": "Expressão",
+    "formSettings": "Idioma e tipo de expressão",
+    "changed": "O conteúdo mudou. Reabra a versão mais recente antes de tentar novamente.",
+    "more": "Mais",
+    "favorite": "Salvar significado",
+    "unfavorite": "Remover dos favoritos",
+    "note": "Escrever nota",
+    "remove": "Excluir conteúdo",
+    "restore": "Restaurar conteúdo",
+    "deleted": "Excluído",
+    "deleteTitle": "Excluir este conteúdo?",
+    "consequence": "Mover para a lixeira. Fontes, notas e registros de estudo são mantidos.",
+    "cancel": "Cancelar",
+    "trash": "Lixeira",
+    "emptyTrash": "A lixeira está vazia",
+    "all": "Todo o conteúdo",
+    "unconfirmed": "Não foi possível confirmar o resultado. O conteúdo foi relido; confira antes de tentar novamente.",
+    "savedReadFailed": "A alteração foi salva, mas não foi possível reler o conteúdo. Tente a leitura novamente.",
+    "retryRead": "Reler"
+  },
   "content": {
     "manual": "Criar manualmente",
     "findExpression": "Converse com o Sensa",

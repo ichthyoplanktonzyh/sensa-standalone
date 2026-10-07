@@ -47,6 +47,7 @@ const foundationTests = [
   {id:'sqlite-runtime-failure',file:'tests/web/browser/sqlite-runtime-failure.spec.ts',kind:'integration',risks:['durability'],environment:'chromium',suite:'browser',runner:'playwright'},
   {id:'supplemental-membership',file:'tests/web/integration/supplemental-membership.test.mts',kind:'integration',risks:['local-correctness','durability','convergence'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
   {id:'learning-session-scope',file:'tests/web/integration/learning-session-scope.test.mts',kind:'integration',risks:['local-correctness','durability','convergence'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
+  {id:'personal-meaning-lifecycle',file:'tests/web/integration/personal-meaning-lifecycle.test.mts',kind:'integration',risks:['local-correctness','durability','convergence'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
   {id:'learning-session-end',file:'tests/web/integration/learning-session-end.test.mts',kind:'integration',risks:['local-correctness','durability','convergence'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
   {id:'book-plan-planning',file:'tests/web/integration/book-plan-planning.test.mts',kind:'integration',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
   {id:'book-curriculum-sources',file:'tests/web/integration/book-curriculum-sources.test.mts',kind:'integration',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
@@ -57,6 +58,7 @@ const foundationTests = [
   {id:'shared-learning-storage',file:'tests/web/integration/shared-learning-storage.test.mts',kind:'integration',risks:['local-correctness','durability','scale'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
   {id:'study-scope-storage',file:'tests/web/integration/study-scope-storage.test.mts',kind:'integration',risks:['local-correctness','durability','scale'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
   {id:'learning-target-view',file:'tests/web/unit/learning-target-view.test.mts',kind:'unit',risks:['local-correctness'],environment:'node',suite:'fast',runner:'vitest'},
+  {id:'scene-editor-read',file:'tests/web/unit/scene-editor-read.test.mts',kind:'unit',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
   {
     id: 'learning-language-matrix',
     file: 'tests/web/integration/learning-language-matrix.test.mts',
@@ -153,7 +155,7 @@ const foundationTests = [
     id: 'personal-content-system',
     file: 'tests/web/integration/personal-content-system.test.mts',
     kind: 'integration',
-    risks: ['local-correctness', 'durability'],
+    risks: ['local-correctness', 'durability', 'convergence'],
     environment: 'node',
     suite: 'foundation',
     runner: 'vitest',
@@ -207,6 +209,8 @@ const fastBeforeMemory = [
 ] as const;
 
 const fastWithMemory = [
+  'integration/personal-meaning-correction',
+  'integration/learner-library-projection',
   'integration/direct-learning-provisioning',
   'integration/direct-learning-enrollment',
   'integration/direct-learning-source',
@@ -290,6 +294,8 @@ const playwrightPaths = new Set<string>([
 ]);
 
 const durabilityTests = new Set<string>([
+  'integration/personal-meaning-correction',
+  'integration/learner-library-projection',
   'integration/learning-material-pins',
   'integration/learning-management-query',
   'integration/learning-command-receipt',
@@ -331,6 +337,7 @@ const durabilityTests = new Set<string>([
   'integration/english-lightweight-release',
 ]);
 const convergenceTests = new Set<string>([
+  'integration/personal-meaning-correction',
   'integration/direct-learning-provisioning',
   'integration/direct-learning-enrollment',
   'browser/personal-meaning-journey',
@@ -343,6 +350,7 @@ const convergenceTests = new Set<string>([
   'database/library-cloud', 'browser/web-bootstrap-budget',
 ]);
 const scaleTests = new Set<string>([
+  'integration/learner-library-projection',
   'integration/learning-history-page',
   'integration/runtime-learning-candidates',
   'integration/learning-material-pins',

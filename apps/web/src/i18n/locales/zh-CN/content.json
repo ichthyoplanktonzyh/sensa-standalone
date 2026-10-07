@@ -35,6 +35,40 @@
     "utterance_strategy": "表达策略"
   }
 },
+  "noteEditor": {
+    "loading": "正在读取笔记…",
+    "readFailed": "未能读取这条笔记。",
+    "changed": "笔记已在其他地方更新，你的草稿已保留。",
+    "latest": "最新保存的笔记",
+    "empty": "笔记已清空",
+    "useLatest": "使用最新笔记",
+    "saveMine": "保存我的版本",
+    "unconfirmed": "未能确认保存结果。请重试检查这次保存。",
+    "savedReadFailed": "笔记已保存，但列表未能刷新。请重试读取。"
+  },
+  "meaningGovernance": {
+    "correct": "修改意思和表达",
+    "history": "过去的意思和表达",
+    "expression": "表达",
+    "formSettings": "语言与表达类型",
+    "changed": "原内容已改变，请重新打开最新内容后再操作。",
+    "more": "更多",
+    "favorite": "收藏",
+    "unfavorite": "取消收藏",
+    "note": "写笔记",
+    "remove": "删除内容",
+    "restore": "恢复内容",
+    "deleted": "已删除",
+    "deleteTitle": "删除这条内容？",
+    "consequence": "移入回收站。原始来源、笔记和学习记录保留。",
+    "cancel": "取消",
+    "trash": "回收站",
+    "emptyTrash": "回收站为空",
+    "all": "全部内容",
+    "unconfirmed": "未能确认操作结果，已重读内容。请核对后重试。",
+    "savedReadFailed": "操作已保存，但内容暂时无法重读。请重试读取。",
+    "retryRead": "重试读取"
+  },
   "content": {
     "manual": "手动创建",
     "findExpression": "和 Sensa 聊聊",

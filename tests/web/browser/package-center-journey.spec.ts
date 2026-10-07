@@ -938,6 +938,35 @@ test('direct published discovery enrolls only the selected expression and resume
  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).targetIds).toEqual(added.targetIds);
 });
 
+test('nonbundled Book favorites and notes remain findable without a Personal Meaning or rating, then real learning appears after OPFS reload',async({page})=>{
+ const providers:string[]=[];page.on('request',request=>{if(/\/model\/|chat\/completions|\/speech\//.test(request.url()))providers.push(request.url());});
+ await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ const runtime=await startOrdinaryBook(page);await runtime.getByRole('button',{name:/查看表达/}).click();await expect(runtime.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
+ const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint()),targetId=before.runtime!.targetId;
+ await runtime.getByRole('button',{name:'收藏',exact:true}).click();await expect(runtime.getByRole('button',{name:'收藏',exact:true})).toHaveAttribute('aria-pressed','true');
+ await runtime.getByRole('button',{name:'更多',exact:true}).click();await page.getByRole('dialog',{name:'更多',exact:true}).getByRole('button',{name:'笔记',exact:true}).click();
+ const note=page.locator('.sensa-note-editor');await note.locator('textarea').fill('下雨时向朋友暂借雨伞，用完归还。');await note.getByRole('button',{name:'保存笔记',exact:true}).click();await expect(note).toHaveCount(0);
+ await runtime.getByRole('button',{name:'暂停',exact:true}).click();
+ await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的语义世界',exact:true}).click();await page.getByRole('button',{name:'收藏与笔记',exact:true}).click();
+ await expect(page.getByRole('button',{name:/^收藏的意思\s+1$/u})).toBeVisible();await expect(page.getByRole('button',{name:'我的笔记 1',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:/^收藏的意思\s+1$/u}).click();const list=page.locator('#s-content-library');await list.getByRole('button',{name:/borrow/}).click();
+ const detail=page.locator('#s-content-sense');await expect(detail.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();expect(new URL(page.url()).searchParams.get('targetId')).toBe(targetId);
+ await expect(detail.getByText('下雨时向朋友暂借雨伞，用完归还。',{exact:true})).toBeVisible();await expect(detail.getByRole('button',{name:'取消收藏这个意思',exact:true})).toHaveAttribute('aria-pressed','true');
+ await page.reload();await expect(detail.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();expect(new URL(page.url()).searchParams.get('targetId')).toBe(targetId);
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).runtime).toEqual(before.runtime);expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records).toEqual([]);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);
+ await detail.getByRole('button',{name:'返回上一页',exact:true}).click();await expect(list.getByRole('button',{name:/borrow/})).toBeVisible();
+ await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的语义世界',exact:true}).click();await page.getByRole('button',{name:'收藏与笔记',exact:true}).click();await page.getByRole('button',{name:'我的笔记 1',exact:true}).click();
+ await list.getByRole('button',{name:/borrow.*下雨时/u}).click();await expect(note.locator('textarea')).toHaveValue('下雨时向朋友暂借雨伞，用完归还。');await note.locator('textarea').press('Escape');
+ await page.goto(origin);await page.locator('#s-home').getByRole('button',{name:/继续学习/}).click();
+ await expect(runtime.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();await runtime.getByRole('button',{name:/已经连上/}).click();
+ await expect.poll(async()=>(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records.length).toBe(1);
+ if(await runtime.getByRole('button',{name:'暂停',exact:true}).isVisible())await runtime.getByRole('button',{name:'暂停',exact:true}).click();
+ await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的语义世界',exact:true}).click();
+ await page.getByRole('button',{name:'学习连接',exact:true}).click();await page.getByRole('button',{name:/borrow/}).click();await expect(detail.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();expect(new URL(page.url()).searchParams.get('targetId')).toBe(targetId);
+ await page.reload();await expect(detail.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records).toHaveLength(1);expect(providers).toEqual([]);
+});
+
 test('a personal meaning created from a learning scene reuses its Book target without generation or replacing the active material',async({page})=>{
  const providerRequests:string[]=[];
  page.on('request',request=>{if(/\/model\/|chat\/completions|\/speech\//.test(request.url()))providerRequests.push(request.url());});

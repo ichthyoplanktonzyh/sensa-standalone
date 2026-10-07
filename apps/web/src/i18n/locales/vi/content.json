@@ -35,6 +35,40 @@
     "utterance_strategy": "Chiến lược phát ngôn"
   }
 },
+  "noteEditor": {
+    "loading": "Đang đọc ghi chú…",
+    "readFailed": "Không thể đọc ghi chú này.",
+    "changed": "Ghi chú đã thay đổi ở nơi khác. Bản nháp của bạn được giữ lại.",
+    "latest": "Ghi chú được lưu mới nhất",
+    "empty": "Ghi chú trống",
+    "useLatest": "Dùng ghi chú mới nhất",
+    "saveMine": "Lưu phiên bản của tôi",
+    "unconfirmed": "Không thể xác nhận đã lưu. Thử lại để kiểm tra lần lưu này.",
+    "savedReadFailed": "Ghi chú đã lưu nhưng danh sách chưa làm mới được. Hãy thử đọc lại."
+  },
+  "meaningGovernance": {
+    "correct": "Sửa nghĩa và cách diễn đạt",
+    "history": "Nghĩa và cách diễn đạt trước đây",
+    "expression": "Cách diễn đạt",
+    "formSettings": "Ngôn ngữ và loại diễn đạt",
+    "changed": "Nội dung đã thay đổi. Hãy mở lại nội dung mới nhất trước khi thử lại.",
+    "more": "Thêm",
+    "favorite": "Lưu ý nghĩa",
+    "unfavorite": "Bỏ lưu ý nghĩa",
+    "note": "Viết ghi chú",
+    "remove": "Xóa nội dung",
+    "restore": "Khôi phục nội dung",
+    "deleted": "Đã xóa",
+    "deleteTitle": "Xóa nội dung này?",
+    "consequence": "Chuyển vào thùng rác. Nguồn, ghi chú và lịch sử học được giữ lại.",
+    "cancel": "Hủy",
+    "trash": "Thùng rác",
+    "emptyTrash": "Thùng rác trống",
+    "all": "Tất cả nội dung",
+    "unconfirmed": "Chưa xác nhận được kết quả. Nội dung đã được đọc lại; hãy kiểm tra trước khi thử lại.",
+    "savedReadFailed": "Thay đổi đã lưu nhưng không đọc lại được nội dung. Hãy thử đọc lại.",
+    "retryRead": "Đọc lại"
+  },
   "content": {
     "manual": "Tạo thủ công",
     "findExpression": "Trò chuyện với Sensa",

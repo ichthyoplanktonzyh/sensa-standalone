@@ -419,6 +419,19 @@ try{
   assert.equal(activeScope.languageContext.supportLanguageTag,'ja');assert.equal(scopedSource.supplementalState.languageContext.supportLanguageTag,'zh-CN');
   api.validateBackupRows(await api.readLibrary(async(tx:any)=>Object.fromEntries(await Promise.all(api.libraryTables.map(async(table:string)=>[table,await tx.entries(table)])))));
 
+  // A correction retires the current personal connection, not the accepted
+  // preparation attempts, real Memory/Run history or their historical pins.
+  const historicalBefore=await api.readLibrary(async(tx:any)=>Object.fromEntries(await Promise.all(api.libraryTables.map(async(table:string)=>[table,await tx.entries(table)]))));
+  assert(historicalBefore.contentAttempts.some((row:any)=>row.value.fixedInput?.source.personalMeaningId===completed.personalMeaningId));
+  assert(historicalBefore.learningTargets.some((row:any)=>row.value.memory),'this is actual saved learning, not empty-table no-cascade evidence');
+  const correctionSeed=await api.worldReadRepository.correction(completed.personalMeaningId,slowSource.reference.personalMeaningAlignmentId),correctionId=id();
+  const correctedSense={...correctionSeed.payload.sense,senseKey:null,wordingSource:'learner_authored',resolutionProvenance:{resolverKind:'learner',provider:'sensa-web-manual',model:null,policyVersion:null,sourceReferenceIds:[]},semanticSpec:{...correctionSeed.payload.sense.semanticSpec,coreMeaningFocus:'把自己的物品暂时交给别人使用，之后收回。'}};
+  await gateway.correctPersonalMeaning({operationId:correctionId,personalMeaningId:completed.personalMeaningId,personalMeaningAlignmentId:slowSource.reference.personalMeaningAlignmentId,source:correctionSeed.source,payload:{...correctionSeed.payload,operationId:correctionId,acceptance:{mode:'learner_direct'},sense:correctedSense,expression:{...correctionSeed.payload.expression,surfaceForm:'lend',occurrence:{...correctionSeed.payload.expression.occurrence,surfaceForm:'lend'}}}});
+  const historicalAfter=await api.readLibrary(async(tx:any)=>Object.fromEntries(await Promise.all(api.libraryTables.map(async(table:string)=>[table,await tx.entries(table)]))));
+  for(const table of api.libraryTables as string[])if(!table.startsWith('semantic')&&table!=='meta')assert.deepEqual(historicalAfter[table],historicalBefore[table],`${table} is independent of personal correction`);
+  api.validateBackupRows(historicalAfter);
+  assert(!(await api.worldReadRepository.detail(completed.personalMeaningId)).sources.some((source:any)=>source.reference.personalMeaningAlignmentId===slowSource.reference.personalMeaningAlignmentId));
+
   const dump=JSON.stringify(await api.readLibrary(async(tx:any)=>({attempts:await tx.all('contentAttempts'),tasks:await tx.all('personalLearning')})));
   assert(!dump.includes('fixture-secret'));
   console.log('PASS: incomplete canonical Intake → one Inbox → clarified Personal Meaning; complete Intake → direct Personal Meaning; both expose the same explicit Add-to-Learning path and authoritative Alignment references.');

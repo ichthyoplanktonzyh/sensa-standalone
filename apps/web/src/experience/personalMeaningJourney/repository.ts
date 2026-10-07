@@ -12,11 +12,13 @@ import {
 } from '../../data/library/store';
 import {parseStoredMedia,type StoredMedia} from '../../data/library/media';
 import {assertPersonalSemanticWorldState,assertPersonalSemanticWorldStateCooperatively,assertPersonalSemanticWorldTransition} from './authority';
+import {assertMeaningLifecycleReceipts,assertMeaningLifecycleOperationReceipt} from './meaningLifecycle';
+import {assertMeaningCorrectionReceipts} from './meaningCorrection';
 import {StorageUnavailableError} from './ports';
 import type {MeaningLookupResult} from './meaningLookup';
 import {sourceWitnessFromState,type ClarificationSourceKind,type ClarificationSourceWitness} from './clarificationSource';
 import {worldReadRepository,readWorldFrame,readMeaningRegistry,readRegistryRecords} from './worldRepository';
-import type {CompleteClarificationDraftInput} from './types';
+import type {CompleteClarificationDraftInput,CorrectPersonalMeaningInput} from './types';
 import type {RegistrySelectionQuery,RegistrySelection} from '../../data/library/semanticRegistrySelection';
 import {isUuid,type RandomIdPort} from './ids';
 import {
@@ -167,7 +169,8 @@ const stateFromRecords=(records:Records,validate=true):JourneyState=>{
     clarificationDrafts:[...records.semanticDrafts.values()],
     commandReceipts:[...records.semanticReceipts.values()] as CommandReceipt[],
   });
-  try{if(validate)assertPersonalSemanticWorldState(state);}catch(cause){
+  for(const [key,value] of records.semanticReceipts)if((value as CommandReceipt).operationId!==key)throw new StoreCorruptedError('操作凭据身份与存储记录不一致。');
+  try{if(validate){assertPersonalSemanticWorldState(state);assertMeaningLifecycleReceipts(state.meanings,state.commandReceipts);}}catch(cause){
     throw new StoreCorruptedError('本机的个人意义数据违反领域不变量。',cause);
   }
   return state;
@@ -192,7 +195,7 @@ export interface JourneyReadCondition{
 export interface JourneyCommitResult{committedMediaIds:string[];state?:JourneyState}
 
 type JourneyCommandScope={operationId:string;allocatedIds:Set<string>}&(
-  {kind:'meaning';personalMeaningId:string}|{kind:'draft_creation'}|{kind:'clarification';input:CompleteClarificationDraftInput}|{kind:'intake';input:SensaIntakePayload}|{kind:'inbox';input:ResolveSemanticIntakeCommand|DismissSemanticIntakeCommand}
+  {kind:'meaning';personalMeaningId:string}|{kind:'correction';input:CorrectPersonalMeaningInput}|{kind:'draft_creation'}|{kind:'clarification';input:CompleteClarificationDraftInput}|{kind:'intake';input:SensaIntakePayload}|{kind:'inbox';input:ResolveSemanticIntakeCommand|DismissSemanticIntakeCommand}
 );
 type ScopedCommandExecutor<T>=(repository:JourneyRepository,ids:RandomIdPort)=>Promise<T>;
 type RegistrySelectionCondition={query:RegistrySelectionQuery;expected:RegistrySelection};
@@ -219,6 +222,7 @@ export interface JourneyRepository{
   withClarificationCommand?<T>(input:CompleteClarificationDraftInput,ids:RandomIdPort,execute:ScopedCommandExecutor<T>):Promise<T>;
   /** A complete accepted tuple reads only its natural-key registry dependencies. */
   withIntakeCommand?<T>(input:SensaIntakePayload,ids:RandomIdPort,execute:ScopedCommandExecutor<T>):Promise<T>;
+  withCorrectionCommand?<T>(input:CorrectPersonalMeaningInput,ids:RandomIdPort,execute:ScopedCommandExecutor<T>):Promise<T>;
   withInboxCommand?<T>(input:ResolveSemanticIntakeCommand|DismissSemanticIntakeCommand,ids:RandomIdPort,execute:ScopedCommandExecutor<T>):Promise<T>;
   commit(change:JourneyCommit):Promise<JourneyCommitResult>;
 }
@@ -312,6 +316,10 @@ export class LibraryJourneyRepository implements JourneyRepository{
     if(!input.context||!input.expression?.languageTag||!input.expression.occurrence||!input.sense||!input.acceptance)throw new Error('journey_command_scope_invalid');
     return this.withCommand({kind:'intake',operationId:input.operationId,allocatedIds:new Set(),input},64,input.context.mediaReferenceIds,ids,execute);
   }
+  async withCorrectionCommand<T>(input:CorrectPersonalMeaningInput,ids:RandomIdPort,execute:ScopedCommandExecutor<T>):Promise<T>{
+    if(!isUuid(input.personalMeaningId)||!isUuid(input.personalMeaningAlignmentId))throw Error('journey_command_scope_invalid');
+    return this.withCommand({kind:'correction',input,operationId:input.operationId,allocatedIds:new Set()},68,[input.personalMeaningId],ids,execute);
+  }
   async withInboxCommand<T>(input:ResolveSemanticIntakeCommand|DismissSemanticIntakeCommand,ids:RandomIdPort,execute:ScopedCommandExecutor<T>):Promise<T>{
     if(!isUuid(input.intakeId)||!/^[a-f0-9]{64}$/u.test(input.expectedItemDigest))throw new Error('journey_command_scope_invalid');
     return this.withCommand({kind:'inbox',operationId:input.operationId,allocatedIds:new Set(),input},'sense'in input?64:1,[input.intakeId],ids,execute);
@@ -367,6 +375,7 @@ export class LibraryJourneyRepository implements JourneyRepository{
     return {dependencies,selections};
   }
   private async withCommand<T>(scope:JourneyCommandScope,identityCount:number,reservedIds:readonly string[],ids:RandomIdPort,execute:ScopedCommandExecutor<T>):Promise<T>{
+    const allocationStarted=performance.now();
     if(!isUuid(scope.operationId)||!Number.isSafeInteger(identityCount)||identityCount<1)throw new Error('journey_command_scope_invalid');
     const scoped=new LibraryJourneyRepository(scope),available:string[]=[],proposed=new Set<string>(),reserved=new Set([scope.operationId,...reservedIds]);
     while(available.length<identityCount){
@@ -380,6 +389,7 @@ export class LibraryJourneyRepository implements JourneyRepository{
       available.push(...candidates.filter(id=>!occupied.has(id)));
     }
     let cursor=0;
+    if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.journey.scoped-allocation',{start:allocationStarted,end:performance.now()});
     // No subscription: this frame lives only for one command. Creating a
     // permanent observer per saved Meaning would leak both caches and listeners.
     const repository:JourneyRepository={load:()=>scoped.load(),refresh:(state,scope)=>scoped.refresh(state,scope),commit:change=>scoped.commit(change),readReceipt:id=>scoped.readReceipt(id),captureSource:(kind,id)=>scoped.captureSource(kind,id)};
@@ -402,25 +412,39 @@ export class LibraryJourneyRepository implements JourneyRepository{
       if(this.commandScope){
         const {operationId}=this.commandScope;
         const root=await tx.get('semanticState','root');if(root)records.semanticState.set('root',root);
-        if(this.commandScope.kind==='meaning'){
-          const {personalMeaningId}=this.commandScope;
+        if(this.commandScope.kind==='meaning'||this.commandScope.kind==='correction'){
+          const personalMeaningId=this.commandScope.kind==='meaning'?this.commandScope.personalMeaningId:this.commandScope.input.personalMeaningId;
           const meaning=await tx.get<MeaningJourneyRecord>('semanticMeanings',personalMeaningId);
           if(meaning){
             if(meaning.personalMeaning.personalMeaningId!==personalMeaningId)throw new StoreCorruptedError('个人意义身份与存储记录不一致。');
             records.semanticMeanings.set(personalMeaningId,meaning);
+            // The aggregate's own lifecycle witnesses are exact dependencies,
+            // not a reason to enumerate the World or all operation receipts.
+            for(const stamp of meaning.personalMeaningRevisions)if(stamp.lifecycle){
+              const key=stamp.provenance.createdByOperationId,receipt=await tx.get('semanticReceipts',key);
+              if(!receipt)throw new StoreCorruptedError('个人意义的生命周期操作凭据缺失。');
+              records.semanticReceipts.set(key,receipt);
+            }
+            assertMeaningLifecycleReceipts([meaning],[...records.semanticReceipts.values()] as CommandReceipt[]);
+            for(const event of meaning.alignmentEvents)if(event.ordinal>1){const receipt=await tx.get('semanticReceipts',event.operationId);if(!receipt)throw Error('meaning_correction_invalid');records.semanticReceipts.set(event.operationId,receipt);}
+            assertMeaningCorrectionReceipts(meaning,[...records.semanticReceipts.values()] as CommandReceipt[]);
             const closure=await readMeaningRegistry(tx,meaning);dependencies=[];
             for(const [key,value] of closure.records){records.semanticRegistry.set(key,value);dependencies.push({table:'semanticRegistry',key,expected:value});}
           }
         }
         if(this.commandScope.kind==='clarification')({dependencies,selections}=await this.clarificationRecords(tx,this.commandScope.input,records));
         if(this.commandScope.kind==='intake')({dependencies,selections}=await this.intakeRecords(tx,this.commandScope.input,records));
+        if(this.commandScope.kind==='correction'){
+          const selected=await this.intakeRecords(tx,this.commandScope.input.payload,records,this.commandScope.input.reuseSense);
+          dependencies=[...(dependencies??[]),...selected.dependencies];selections=selected.selections;
+        }
         if(this.commandScope.kind==='inbox')({dependencies,selections}=await this.inboxRecords(tx,this.commandScope.input,records));
         const receipt=await tx.get('semanticReceipts',operationId);if(receipt)records.semanticReceipts.set(operationId,receipt);
       }else for(const table of semanticJourneyTables)for await(const batch of tx.entryBatches(table))for(const row of batch)records[table].set(row.key,row.value);
       const state=stateFromRecords(records,false);
       if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure(this.commandScope?'sensa.journey.scoped-records':'sensa.journey.records',{start:recordsStarted,end:performance.now()});
       const authorityStarted=performance.now();
-      try{await assertPersonalSemanticWorldStateCooperatively(state);}catch(cause){throw new StoreCorruptedError('本机的个人意义数据违反领域不变量。',cause);}
+      try{await assertPersonalSemanticWorldStateCooperatively(state);if(!this.commandScope)assertMeaningLifecycleReceipts(state.meanings,state.commandReceipts);}catch(cause){throw new StoreCorruptedError('本机的个人意义数据违反领域不变量。',cause);}
       finally{if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure(this.commandScope?'sensa.journey.scoped-authority':'sensa.journey.authority',{start:authorityStarted,end:performance.now()});}
       this.snapshots.set(state,{revision,frameRevision:revision,incarnation,dependencies,selections});return state;
     });
@@ -443,15 +467,34 @@ export class LibraryJourneyRepository implements JourneyRepository{
     });
   }
   async readReceipt(operationId:string):Promise<CommandReceipt|null>{
-    return readLibrary(async tx=>{await assertCurrentLibrary(tx);return await tx.get<CommandReceipt>('semanticReceipts',operationId)??null;});
+    return readLibrary(async tx=>{
+      await assertCurrentLibrary(tx);const receipt=await tx.get<CommandReceipt>('semanticReceipts',operationId);
+      if(receipt&&receipt.operationId!==operationId)throw new StoreCorruptedError('操作凭据身份与存储记录不一致。');
+      if(receipt?.command==='ChangeMeaningLifecycle'){
+        const key=receipt.result.personalMeaningId;
+        assertMeaningLifecycleOperationReceipt(typeof key==='string'?await tx.get<MeaningJourneyRecord>('semanticMeanings',key):undefined,receipt);
+      }
+      if(receipt?.command==='CorrectPersonalMeaning'){
+        const meaning=await tx.get<MeaningJourneyRecord>('semanticMeanings',String(receipt.result.personalMeaningId));if(!meaning)throw Error('meaning_correction_invalid');
+        const receipts=await Promise.all(meaning.alignmentEvents.filter(event=>event.ordinal>1).map(event=>tx.get<CommandReceipt>('semanticReceipts',event.operationId)));
+        if(receipts.some(row=>!row))throw Error('meaning_correction_invalid');assertMeaningCorrectionReceipts(meaning,receipts as CommandReceipt[]);
+      }
+      return receipt??null;
+    });
   }
   async commit(input:JourneyCommit):Promise<JourneyCommitResult>{
+    const commitStarted=performance.now();
     const changes=recordChanges(input.before,input.after);
     if(this.commandScope){
       const scope=this.commandScope;
       if(changes.some(change=>{
         if(change.table==='semanticReceipts')return change.key!==scope.operationId||change.before!==undefined||change.after===undefined;
         if(scope.kind==='meaning')return change.table!=='semanticMeanings'||change.key!==scope.personalMeaningId||change.before===undefined||change.after===undefined;
+        if(scope.kind==='correction'){
+          if(change.table==='semanticMeanings')return change.key!==scope.input.personalMeaningId||change.before===undefined||change.after===undefined;
+          if(change.table==='semanticRegistry')return change.after===undefined||(change.before!==undefined?(change.before as RegistryRow).kind!=='bindings':!scope.allocatedIds.has(change.key.slice(change.key.indexOf(':')+1)));
+          return true;
+        }
         if(scope.kind==='clarification'||scope.kind==='intake'||scope.kind==='inbox'){
           if(change.table==='semanticInbox'||change.table==='semanticDrafts')return scope.kind==='intake'||change.key!==scope.input.intakeId||change.before===undefined||change.after!==undefined;
           if(scope.kind==='inbox'&&!('sense'in scope.input))return true;
@@ -463,6 +506,7 @@ export class LibraryJourneyRepository implements JourneyRepository{
       }))throw new Error('journey_command_scope_exceeded');
       if(scope.kind==='clarification'&&changes.length&&(changes.filter(change=>change.table==='semanticMeanings').length!==1||!changes.some(change=>change.table==='semanticInbox'&&change.after===undefined)||!changes.some(change=>change.table==='semanticReceipts')))throw new Error('journey_command_scope_exceeded');
       if(scope.kind==='intake'&&changes.length&&(changes.filter(change=>change.table==='semanticMeanings').length!==1||!changes.some(change=>change.table==='semanticReceipts')))throw new Error('journey_command_scope_exceeded');
+      if(scope.kind==='correction'&&changes.length&&(changes.filter(change=>change.table==='semanticMeanings').length!==1||!changes.some(change=>change.table==='semanticReceipts')))throw Error('journey_command_scope_exceeded');
       if(scope.kind==='inbox'&&changes.length&&(!changes.some(change=>change.table==='semanticInbox'&&change.after===undefined)||!changes.some(change=>change.table==='semanticReceipts')||changes.filter(change=>change.table==='semanticMeanings').length!==('sense'in scope.input?1:0)))throw new Error('journey_command_scope_exceeded');
     }
     const prepared=new Map((input.preparedMedia??[]).map(raw=>{
@@ -475,6 +519,8 @@ export class LibraryJourneyRepository implements JourneyRepository{
     let mergedState:JourneyState|undefined;
     try{
       await restoreLibraryTransaction(async tx=>{
+        const writerStarted=performance.now();
+        if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.journey.writer-wait',{start:commitStarted,end:writerStarted});
         // Validate the root again under the writer lock. A root disappearing
         // after the read must not be manufactured over existing source facts.
         const {incarnation,revision}=await readWorldFrame(tx);
@@ -482,24 +528,37 @@ export class LibraryJourneyRepository implements JourneyRepository{
         if(!prior||prior.incarnation!==incarnation)throw new JourneyConflictError();
         const foreignChanges=!this.commandScope&&prior.frameRevision!==revision&&await tx.hasChangesSince(prior.frameRevision,semanticJourneyTables);
         for(const condition of [...(prior.dependencies??[]),...(input.preconditions??[])]){
+          const started=performance.now();
           if(!matchesCondition(await tx.get(condition.table,condition.key),condition))throw new JourneyConflictError();
+          if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.journey.admit-dependency',{start:started,end:performance.now()});
         }
-        for(const condition of prior.selections??[])if(!same(await tx.registrySelection(condition.query),condition.expected))throw new JourneyConflictError();
+        for(const condition of prior.selections??[]){
+          const started=performance.now();
+          if(!same(await tx.registrySelection(condition.query),condition.expected))throw new JourneyConflictError();
+          if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure(`sensa.journey.admit-query-${condition.query.kind}`,{start:started,end:performance.now()});
+        }
         const registryConditions=new Map((prior.dependencies??[]).filter(condition=>condition.table==='semanticRegistry').map(condition=>[condition.key,condition.expected as RegistryRow]));
         const nextOrdinals=new Map<RegistryKind,number>();
         for(const change of changes)if(change.table==='semanticRegistry'){
           if(change.before!==undefined){const original=this.commandScope?registryConditions.get(change.key):await tx.get<RegistryRow>('semanticRegistry',change.key);if(!original||!matchesCondition(original,{table:'semanticRegistry',key:change.key,expected:change.before}))throw new JourneyConflictError();change.before=original;change.after={...(change.after as RegistryRow),ordinal:original.ordinal};}
-          else{const kind=(change.after as RegistryRow).kind;if(!nextOrdinals.has(kind))nextOrdinals.set(kind,(await tx.registrySelection({kind:'ordinal',registryKind:kind})).nextOrdinal!);const ordinal=nextOrdinals.get(kind)!;nextOrdinals.set(kind,ordinal+1);change.after={...(change.after as RegistryRow),ordinal};}
+          else{const kind=(change.after as RegistryRow).kind;if(!nextOrdinals.has(kind)){
+            const started=performance.now();nextOrdinals.set(kind,(await tx.registrySelection({kind:'ordinal',registryKind:kind})).nextOrdinal!);
+            if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure(`sensa.journey.admit-ordinal-${kind}`,{start:started,end:performance.now()});
+          }const ordinal=nextOrdinals.get(kind)!;nextOrdinals.set(kind,ordinal+1);change.after={...(change.after as RegistryRow),ordinal};}
         }
         if(this.commandScope){
+          const started=performance.now();
           const allocated=[...this.commandScope.allocatedIds];
           for(let offset=0;offset<allocated.length;offset+=256)if((await tx.existingJourneyIdentities(allocated.slice(offset,offset+256))).size)throw new JourneyConflictError();
+          if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.journey.admit-identity',{start:started,end:performance.now()});
         }
         const root=await tx.get<{version?:unknown}>('semanticState','root');
         if(!root)tx.put('semanticState','root',{version:JOURNEY_STORE_VERSION});
         else if(root.version!==JOURNEY_STORE_VERSION){
           throw new StoreCorruptedError('本机的个人意义数据版本不匹配。');
         }
+        const stagingStarted=performance.now();
+        if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.journey.writer-admission',{start:writerStarted,end:stagingStarted});
         for(const mediaId of mediaIds){
           const current=await tx.get<StoredMedia>('media',mediaId);
           const candidate=prepared.get(mediaId);
@@ -528,10 +587,12 @@ export class LibraryJourneyRepository implements JourneyRepository{
           for(const table of semanticJourneyTables)for(const row of await tx.entries(table))records[table].set(row.key,row.value);
           mergedState=stateFromRecords(records);
         }
+        if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.journey.writer-staging',{start:stagingStarted,end:performance.now()});
       });
     }catch(cause){translate(cause,'无法保存本机的个人意义数据。');}
     if(!mergedState)this.snapshots.set(input.after,committedSnapshot!);
     if(mergedState)this.snapshots.set(mergedState,committedSnapshot!);
+    if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.journey.commit',{start:commitStarted,end:performance.now()});
     return {committedMediaIds,...(mergedState?{state:mergedState}: {})};
   }
 }

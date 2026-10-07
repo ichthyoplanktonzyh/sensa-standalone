@@ -10,6 +10,7 @@ import type {
   SensaExpressionBindingRelation,
   SensaExpressionType,
   SensaIntakeContext,
+  SensaIntakePayload,
   SensaPersonalMeaningAlignmentSnapshot,
   SensaPinnedLanguageContext,
   PublishedLearningSemanticFacts,
@@ -24,6 +25,7 @@ import type {
   SemanticAgentMessage,
 } from './semanticAgent';
 import type { SemanticLlmProvenance } from './semanticLlm';
+import type {ClarificationSourceWitness} from './clarificationSource';
 
 type SensaSenseProposalStatus = SensaSenseProposalSnapshot['status'];
 type SensaPersonalMeaningAlignmentStatus =
@@ -183,6 +185,7 @@ export interface JourneyFocusView {
 
 export interface JourneyDetailView {
   personalMeaningId: string;
+  status:'active'|'deleted';
   shortId: string;
   /** Current optimistic-concurrency revision of this Personal Meaning. */
   revision: number;
@@ -202,6 +205,7 @@ export interface JourneyDetailView {
   focuses: JourneyFocusView[];
   /** Active Sense resolutions that never needed a Meaning Focus. */
   directAlignments: JourneyAlignmentView[];
+  alignmentHistory?:JourneyAlignmentView[];
   createdAt: string;
   updatedAt: string;
 }
@@ -294,6 +298,23 @@ export interface CreatePersonalMeaningInput {
   startingPoint?: ClarificationStartingPoint | null;
 }
 
+export interface CorrectPersonalMeaningInput {
+  operationId:string;
+  personalMeaningId:string;
+  personalMeaningAlignmentId:string;
+  source:ClarificationSourceWitness;
+  payload:SensaIntakePayload;
+  reuseSense?:{senseId:string;senseVersionId:string};
+}
+export interface CorrectPersonalMeaningResult {
+  personalMeaningId:string;
+  personalMeaningRevisionId:string;
+  revision:number;
+  replacedAlignmentId:string;
+  personalMeaningAlignmentId:string;
+  replayed:boolean;
+}
+
 export interface AddMaterialBlockInput {
   operationId: string;
   personalMeaningId: string;
@@ -317,6 +338,21 @@ export interface ReviseContextResult {
   personalMeaningRevisionId: string;
   revision: number;
   replayed: boolean;
+}
+
+export interface ChangeMeaningLifecycleInput {
+  operationId:string;
+  personalMeaningId:string;
+  expectedRevision:number;
+  action:'delete'|'restore';
+}
+export interface ChangeMeaningLifecycleResult {
+  personalMeaningId:string;
+  personalMeaningRevisionId:string;
+  revision:number;
+  lifecycleRevision:number;
+  status:'active'|'deleted';
+  replayed:boolean;
 }
 
 export interface CreatePersonalMeaningResult {

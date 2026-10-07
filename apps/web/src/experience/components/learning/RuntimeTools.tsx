@@ -20,8 +20,9 @@ export interface RuntimeToolsProps {
 export function RuntimeTools({content, personalContent, showSave, onUndo, canUndo, onMarkKnown, onOpenMenuMore, toast, busy}: RuntimeToolsProps) {
   const {t} = useTranslation();
   const [starred, setStarred] = useState(false);
+  const [annotationReady,setAnnotationReady]=useState(false);
   useEffect(() => {
-    const update = () => setStarred(!!content && personalContentSystem.read({ kind: 'sense', senseId: content.senseKey }).saved);
+    const update = () => {const value=content?personalContentSystem.read({kind:'sense',senseId:content.senseKey}):null;setStarred(value?.status==='ready'&&value.saved);setAnnotationReady(value?.status==='ready');};
     update();
     return personalContentSystem.subscribe({ kind: 'snapshot' }, update);
   }, [content?.senseKey]);
@@ -29,7 +30,7 @@ export function RuntimeTools({content, personalContent, showSave, onUndo, canUnd
   return <>
     {showSave && <>
       {onUndo && <button className={button} disabled={busy || !canUndo} onClick={onUndo} aria-label={t('assurance.undo')}><Undo2 size={18}/></button>}
-      <button className={button} disabled={busy || !content} aria-label={t('assurance.save')} aria-pressed={starred} onClick={() => {
+      <button className={button} disabled={busy || !content || !annotationReady} aria-label={t('assurance.save')} aria-pressed={annotationReady?starred:undefined} onClick={() => {
         if (content) void personalContentSystem.execute({kind:'set_saved_sense',operationId:crypto.randomUUID(),senseId:content.senseKey,saved:!starred}).then((saved) => {
           toast(t(saved ? 'assurance.saved' : 'assurance.unsaved'));
         }).catch(() => {

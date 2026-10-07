@@ -31,6 +31,16 @@ export function capturedMediaOccurrence(draft:ManualMeaningDraft,original?:Sensa
   &&original?.payload.context?.mediaReferenceIds.includes(occurrence.locator.mediaReferenceId)?occurrence:null;
 }
 
+/** Same learner-authored Sense construction for initial acceptance and correction. */
+export function manualMeaningSense(draft:ManualMeaningDraft,prior?:SensaIntakePayload):NonNullable<SensaIntakePayload['sense']>{
+ if(!draft.meaning.trim()||!draft.usage.trim())throw Error('manualMeaning.meaningRequired');
+ const selected=draft.existingSense,priorSpec=prior?.sense?.semanticSpec;
+ if(selected&&(draft.meaning.trim()!==selected.semanticSpec.coreMeaningFocus||draft.usage.trim()!==selected.semanticSpec.prototypeScenes[0]?.summary))throw Error('manualMeaning.invalid');
+ if(selected)return {senseKey:selected.senseKey,semanticSpec:selected.semanticSpec,wordingSource:'imported',resolutionProvenance:{resolverKind:'external_tool',provider:'sensa-local-registry',model:null,policyVersion:null,sourceReferenceIds:[selected.senseVersionId]}};
+ if(priorSpec&&draft.meaning.trim()===priorSpec.coreMeaningFocus&&draft.usage.trim()===priorSpec.prototypeScenes[0]?.summary)return prior!.sense!;
+ return {senseKey:null,semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1',coreMeaningFocus:draft.meaning.trim(),prototypeScenes:[{summary:draft.usage.trim(),participantRoles:[],states:[],directionOrCausality:null}],includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[]},wordingSource:'learner_authored',resolutionProvenance:{resolverKind:'learner',provider:'sensa-web-manual',model:null,policyVersion:null,sourceReferenceIds:[]}};
+}
+
 /** Called only by the explicit Save action. No model, invented example, or learning command. */
 export function manualMeaningPayload(draft:ManualMeaningDraft,original?:SensaIntakeItem):SensaIntakePayload{
   const context=draft.context.trim(),occurrence=draft.occurrence.trim();
@@ -41,16 +51,13 @@ export function manualMeaningPayload(draft:ManualMeaningDraft,original?:SensaInt
   if(!mediaOccurrence&&(start===null||!positions.includes(start)))throw new Error('manualMeaning.occurrenceRequired');
   if(!draft.languageTag)throw new Error('manualMeaning.languageRequired');
   if(!draft.meaning.trim()||!draft.usage.trim())throw new Error('manualMeaning.meaningRequired');
-  const prior=original?.payload,priorSpec=prior?.sense?.semanticSpec;
-  const retainSense=priorSpec&&draft.meaning.trim()===priorSpec.coreMeaningFocus&&draft.usage.trim()===priorSpec.prototypeScenes[0]?.summary;
+  const prior=original?.payload;
   const retainContext=!!mediaOccurrence||prior?.context?.textSegment===context;
-  const selected=draft.existingSense;
-  if(selected&&(draft.meaning.trim()!==selected.semanticSpec.coreMeaningFocus||draft.usage.trim()!==selected.semanticSpec.prototypeScenes[0]?.summary))throw new Error('manualMeaning.invalid');
   return sensaIntakePayloadSchema.parse({
     contractVersion:'sensa-intake-v3',operationId:draft.operationId,capturedAt:draft.capturedAt,
     context:retainContext?prior!.context:{modality:prior?.context?.mediaReferenceIds.length?'mixed':'text',textSegment:context,mediaReferenceIds:prior?.context?.mediaReferenceIds??[],languageTag:null,languageObservation:null,source:null},
     expression:{surfaceForm:draft.canonicalForm.trim()||occurrence,languageTag:draft.languageTag,expressionTypeHint:draft.expressionType,occurrence:mediaOccurrence??{surfaceForm:occurrence,locator:{kind:'text_span',start:start!,end:start!+occurrence.length}}},
-    sense:selected?{senseKey:selected.senseKey,semanticSpec:selected.semanticSpec,wordingSource:'imported',resolutionProvenance:{resolverKind:'external_tool',provider:'sensa-local-registry',model:null,policyVersion:null,sourceReferenceIds:[selected.senseVersionId]}}:retainSense?prior!.sense:{senseKey:null,semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1',coreMeaningFocus:draft.meaning.trim(),prototypeScenes:[{summary:draft.usage.trim(),participantRoles:[],states:[],directionOrCausality:null}],includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[]},wordingSource:'learner_authored',resolutionProvenance:{resolverKind:'learner',provider:'sensa-web-manual',model:null,policyVersion:null,sourceReferenceIds:[]}},
+    sense:manualMeaningSense(draft,prior),
     acceptance:{mode:'learner_direct'},
   });
 }

@@ -26,6 +26,9 @@ import {
   sensaSenseSnapshotSchema,
   sensaSenseVersionSnapshotSchema,
 } from '@sensa/contracts/sensa';
+import {assertMeaningLifecycle,assertMeaningLifecycleReceipt,assertMeaningLifecycleOperationReceipt,validMeaningLifecycleDescendant} from './meaningLifecycle';
+import {assertAlignmentHistory} from './alignmentLifecycle';
+import {assertMeaningCorrectionReceipts,meaningCorrectionFacts} from './meaningCorrection';
 import type {z} from 'zod';
 import {runCooperatively,runSynchronously} from './cooperative';
 
@@ -211,6 +214,7 @@ function validateMeaning(meaning:MeaningJourneyRecord,registry:RegistryIndex){
 
  requireRevisionSeries({facts:meaning.personalMeaningRevisions,parentField:'personalMeaningId',parentId:meaningId,revisionField:'revision',current:meaning.personalMeaning.currentRevision,label:'Personal Meaning'});
  for(const revision of meaning.personalMeaningRevisions)requireInvariant(revision.personalMeaningId===meaningId,'Personal Meaning revision 属于错误的 Meaning。');
+ try{assertMeaningLifecycle(meaning);}catch{requireInvariant(false,'Personal Meaning lifecycle 缺少有效的删除／恢复事实。');}
  for(const anchor of meaning.personalSemanticAnchors){
   requireInvariant(anchor.personalMeaningId===meaningId,'Semantic Anchor 属于错误的 Meaning。');
   requireRevisionSeries({facts:meaning.personalSemanticAnchorRevisions,parentField:'personalSemanticAnchorId',parentId:anchor.personalSemanticAnchorId,revisionField:'revision',current:anchor.currentRevision,label:'Semantic Anchor'});
@@ -225,6 +229,10 @@ function validateMeaning(meaning:MeaningJourneyRecord,registry:RegistryIndex){
   if(revision.contextAnchorRevisionId){
    const context=requireFact(semanticAnchorRevisions,revision.contextAnchorRevisionId,'Expression Anchor revision');
    const locator=revision.occurrence;
+   if(locator?.kind==='personal_meaning'){
+    requireInvariant(locator.personalMeaningId===meaningId&&locator.personalSemanticAnchorRevisionIds[0]===context.personalSemanticAnchorRevisionId&&new Set(locator.personalSemanticAnchorRevisionIds).size===locator.personalSemanticAnchorRevisionIds.length,'个人表达必须引用同一 Meaning 的真实 Context。');
+    for(const id of locator.personalSemanticAnchorRevisionIds)requireFact(semanticAnchorRevisions,id,'个人表达 Context');
+   }
    if(locator?.kind==='text_span'){
     requireInvariant(typeof context.bodyText==='string'&&locator.end<=context.bodyText.length,'Expression occurrence 越出了原始 Context。');
     const intake=context.structuredPayload.intake as {expression?:{occurrence?:{surfaceForm?:unknown}}}|undefined;
@@ -297,9 +305,10 @@ function validateMeaning(meaning:MeaningJourneyRecord,registry:RegistryIndex){
    requireInvariant(confirmation.senseId===alignment.senseId&&confirmation.senseVersionId===alignment.senseVersionId,'Alignment 与 Sense confirmation 的 Sense Version 不一致。');
    if(alignment.basis.meaningFocusId){const focus=requireFact(focuses,alignment.basis.meaningFocusId,'Alignment basis');const focusRevision=requireFact(focusRevisions,alignment.basis.meaningFocusRevisionId!,'Alignment basis');requireInvariant(focusRevision.meaningFocusId===focus.meaningFocusId,'Alignment basis 引用了错误的 Focus revision。');}
   }
-  requireInvariant(meaning.alignmentEvents.some(event=>event.personalMeaningAlignmentId===alignment.personalMeaningAlignmentId&&event.ordinal===alignment.revision),'Alignment revision 没有对应事件。');
+  assertAlignmentHistory(meaning,alignment);
  }
  for(const event of meaning.alignmentEvents)requireFact(alignments,event.personalMeaningAlignmentId,'Alignment event');
+ meaningCorrectionFacts(meaning);
  for(const confirmation of meaning.bindingConfirmations){
   requireInvariant(confirmation.learnerUserId===meaning.personalMeaning.learnerUserId,'Binding confirmation 属于错误的 learner。');
   if(confirmation.senseProposalVersionId)requireFact(proposalVersions,confirmation.senseProposalVersionId,'Binding confirmation');
@@ -330,6 +339,12 @@ function validateAuxiliaryState(state:JourneyState){
   requireInvariant(receipt.requestDigest===undefined||/^[0-9a-f]{64}$/u.test(receipt.requestDigest),'Command receipt digest 无效。');
   const result=record(receipt.result);requireInvariant(result!==undefined&&Object.values(result).every(value=>value===null||['string','number','boolean'].includes(typeof value)),'Command receipt result 无效。');
  }
+ const corrections=new Map<string,JourneyState['commandReceipts']>();
+ for(const receipt of state.commandReceipts)if(receipt.command==='CorrectPersonalMeaning'){
+  const id=String(receipt.result.personalMeaningId),group=corrections.get(id)??[];group.push(receipt);corrections.set(id,group);
+ }
+ for(const meaning of state.meanings){const id=meaning.personalMeaning.personalMeaningId;assertMeaningCorrectionReceipts(meaning,corrections.get(id)??[]);corrections.delete(id);}
+ requireInvariant(corrections.size===0,'纠正操作缺少对应个人意义。');
 }
 
 function requireStateShape(state:JourneyState){
@@ -344,6 +359,11 @@ export function assertPersonalSemanticWorldState(state:JourneyState):void{
  unique(state.meanings,meaning=>meaning.personalMeaning.personalMeaningId,'Personal Meaning');
  for(const meaning of state.meanings)validateMeaning(meaning,registry);
  validateAuxiliaryState(state);
+}
+
+/** Read-only aggregate validation; commit/restore also verify operation witnesses. */
+export function assertPersonalSemanticWorldRecord(meaning:MeaningJourneyRecord,registry:SenseRegistryState):void{
+ validateMeaning(meaning,validateRegistry(registry));
 }
 
 /** Same authority checks, cooperatively scheduled during a large browser read. */
@@ -394,7 +414,16 @@ function assertRegistryHeadTransition(before:Fact,after:Fact,pointer:string,revi
 }
 
 function assertMeaningTransition(before:MeaningJourneyRecord,after:MeaningJourneyRecord){
- assertLifecycleTransition(before.personalMeaning,after.personalMeaning,'Personal Meaning');
+ const prior=before.personalMeaning,next=after.personalMeaning;
+ if(next.lifecycleRevision!==prior.lifecycleRevision){
+  requireInvariant(validMeaningLifecycleDescendant(before,after)&&next.lifecycleRevision===prior.lifecycleRevision+1&&next.currentRevision===prior.currentRevision+1,'Personal Meaning lifecycle 必须以一个明确操作前进一位。');
+  const stamp=after.personalMeaningRevisions.find(row=>row.revision===next.currentRevision);
+  requireInvariant(stamp?.lifecycle?.revision===next.lifecycleRevision&&stamp.createdAt===next.updatedAt,'Personal Meaning lifecycle head 与新 revision 不一致。');
+  for(const key of Object.keys(before) as Array<keyof MeaningJourneyRecord>)if(key!=='personalMeaning'&&key!=='personalMeaningRevisions')requireInvariant(equal(before[key],after[key]),'删除／恢复不能同时改写个人意义内容。');
+ }else{
+  if(prior.status==='deleted')requireInvariant(equal(before,after),'已删除的个人意义只能明确恢复，不能继续修改。');
+  assertLifecycleTransition(prior,next,'Personal Meaning');
+ }
  assertAppendOnly(before.personalMeaningRevisions,after.personalMeaningRevisions,fact=>fact.personalMeaningRevisionId,'Personal Meaning revision');
  assertLifecycleCollection(before.personalSemanticAnchors,after.personalSemanticAnchors,fact=>fact.personalSemanticAnchorId,'Semantic Anchor');
  assertAppendOnly(before.personalSemanticAnchorRevisions,after.personalSemanticAnchorRevisions,fact=>fact.personalSemanticAnchorRevisionId,'Semantic Anchor revision');
@@ -443,8 +472,17 @@ export function assertPersonalSemanticWorldTransition(before:JourneyState,after:
  for(const meaning of after.meanings)if(!previousIds.has(meaning.personalMeaning.personalMeaningId))changed.push({after:meaning});
  const registryChanged=!sameRegistryReferences(before.registry,after.registry);
  const registry=registryChanged?validateRegistry(after.registry):changed.length?indexRegistry(after.registry):undefined;
- for(const change of changed){validateMeaning(change.after,registry!);if(change.before)assertMeaningTransition(change.before,change.after);}
+ for(const change of changed){
+  validateMeaning(change.after,registry!);if(change.before)assertMeaningTransition(change.before,change.after);
+  const oldRevision=change.before?.personalMeaning.currentRevision??0;
+  for(const stamp of change.after.personalMeaningRevisions)if(stamp.revision>oldRevision&&stamp.lifecycle){
+   requireInvariant(!before.commandReceipts.some(receipt=>receipt.operationId===stamp.provenance.createdByOperationId),'Lifecycle 必须使用本次新增的操作凭据。');
+   assertMeaningLifecycleReceipt(change.after.personalMeaning.personalMeaningId,stamp,new Map(after.commandReceipts.map(receipt=>[receipt.operationId,receipt])));
+  }
+ }
  if(registryChanged)assertRegistryTransition(before.registry,after.registry);
  validateAuxiliaryState(after);
  assertAppendOnly(before.commandReceipts,after.commandReceipts,receipt=>receipt.operationId,'Command receipt');
+ const previousReceipts=new Set(before.commandReceipts.map(receipt=>receipt.operationId));
+ for(const receipt of after.commandReceipts)if(!previousReceipts.has(receipt.operationId)&&receipt.command==='ChangeMeaningLifecycle')assertMeaningLifecycleOperationReceipt(meanings.get(String(receipt.result.personalMeaningId)),receipt);
 }

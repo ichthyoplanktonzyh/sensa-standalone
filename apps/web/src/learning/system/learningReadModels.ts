@@ -162,6 +162,14 @@ export interface LearningSemanticMemoryProjection {
   readonly targets: readonly Readonly<{
     targetId: string;
     senseId: string;
+    presentation: Readonly<{
+      expression: string;
+      meaning: string;
+      scene: string;
+      targetLanguageTag: string;
+      supportLanguageTag: string;
+      personalMeaningId: string | null;
+    }>;
     declaredMastery: boolean;
     memory: Readonly<{
       dueAt: Date;

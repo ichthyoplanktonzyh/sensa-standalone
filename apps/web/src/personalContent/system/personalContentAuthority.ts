@@ -36,7 +36,7 @@ const assertRecord = async (
   switch (record.kind) {
     case 'sense_note': {
       senseReference.parse(record.senseId);
-      z.string().min(1).max(1000).parse(record.body);
+      z.string().max(1000).parse(record.body);
       z.number().int().positive().parse(record.revision);
       timestamp.parse(record.createdAt);
       timestamp.parse(record.updatedAt);
@@ -156,7 +156,7 @@ export async function assertPersonalContentChanges(tx: LibraryTransaction) {
   for (const change of changes) {
     if (change.after === null) {
       const previous = change.before as PersonalContentRecord | null;
-      if (previous?.kind === 'learning_scene') throw new Error('localFlow.annotationInvalid');
+      if (previous?.kind === 'learning_scene' || previous?.kind === 'sense_note') throw new Error('localFlow.annotationInvalid');
       continue;
     }
     await assertRecord(

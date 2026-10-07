@@ -64,9 +64,22 @@ Saved references、Sense Note、Sense Context Note 与 Personal Learning Scene �
 `apps/web/src/personalContent/system/personalContentSystem.ts` 的 command/query/subscribe interface；页面不再
 读取 `annotations` 表或维护另一份 annotation service。Personal Content 写入在同一 Library transaction
 提交前经过增量 authority admission，其 Replica Module 单独拥有 `annotations`；`media` 由 Personal
-Semantic World/Media 边界拥有。`apps/web/src/learnerSemanticProjection/system` 只有 read/subscribe，
+Semantic World/Media 边界拥有。
+Sense Note 编辑通过 Personal Content 的精确读取取得 edit base；写入在同一事务中检查 revision 和原正文，
+防止 Cloud 明确选择另一同 revision 分支后，旧编辑器仍可覆盖。
+清空保留空正文及递增 revision，默认笔记投影排除空正文，避免 clear/recreate 的 ABA 覆盖。确切 operation
+重试复用原输入及 receipt，不重新覆盖中间更新；已确认提交后的投影读取失败与写入失败分开报告。
+Personal Content 的 snapshot/sense 读取区分 loading、ready 与 error；重新读取失败不成为空库成功。
+界面只在 ready 时使用收藏、笔记和例句状态，精确笔记编辑仍独立读取其 edit base。场景／Context 编辑器
+也精确读取原内容，失败时禁用编辑和保存并允许重读或退出，不以未加载的空缓存覆盖已有场景。
+`apps/web/src/learnerSemanticProjection/system` 只有 read/subscribe，
 通过 Personal Content、Personal Semantic World、Learning 和 published-content 接口生成可重建读取模型，
 没有 command，也不直接取得其他领域存储表的所有权。
+跨来源列表采用 Practice、Personal Meaning 或 Learning Target 的可辨识 reference，不伪造 Word/Example。
+`semantic_memory` 的全局列表只返回表达、释义/场景预览、实际 Memory 与 declaration；精确 targetId
+读取返回该目标的完整展示，不加载其他 Target、Run、包或媒体。SQLite 只持有同事务维护、可从 Target
+重建的紧凑本机投影，不形成第二事实源；缺行或无效来源为读取失败，初始化重建不改写原事实。
+学习连接按 Target 身份保留，Sense 级收藏和笔记才按 Sense 解析回看入口；列表复用虚拟化控件。
 `packages/learning-kernel` 只显式导出可复用的确定性纯规则和值类型，不导出 Web 持久化、Curriculum、
 协议 registry 或 UI composition。公共内容合同、校验与制作分别位于 `packages/contracts`、
 `packages/content-validator` 与 `content`。目录位置不转移领域事实所有权；页面、SQLite record、HTTP route
@@ -176,6 +189,32 @@ Scope 中重复成员和 Range 复用共享摘要；源码中的捕获见证与�
 Session 起点证明实际目标、策略版本和 purpose 资格，不另建逐次恢复选源的审计历史。
 首页复用调度索引汇总待新学／到期数量，并精确读取当前 Run 和下一条候选；不为显示计数解码全部 Target。
 同方向活动仍使用已固定的每日上限；偏好修改不重设本轮额度。
+
+Personal Meaning 回收站复用原 Meaning revisions：每次明确删除／恢复追加带 lifecycle stamp 的
+不可变修订，同事务更新 Meaning head 与幂等回执；不引入第二套历史表或对 Learning 做级联修改。
+删除项拒绝普通内容命令；冷启动治理命令和材料追加只读取该 Meaning 的精确依赖，不枚举 World。
+本次写入校验新 lifecycle stamp 与同事务新增的精确 `ChangeMeaningLifecycle` 回执；完整载入、备份准入及
+复制分支校验保留的每个 stamp 与其原回执。单条 World 只读不重载整库回执，也不能授权恢复。
+同步先检查保留的生命周期修订与凭据，再合并 head；没有 restore stamp 或精确回执的 active 副本不能复活 tombstone，
+同一后继修订槽的并发意图进入冲突。World 读取索引记录 active/deleted，回收站沿用有界检索／分页，
+不通过全库网关构造已删除清单。索引格式更新只重建派生数据，不改写 Source、原始接受或 Learning facts。
+个人意思与表达的纠正也是精确单条命令：先展示该 Meaning 当前完整 Context 组合，保存时复查所有 Context
+revision pins 和来源见证，同事务追加新 Meaning revision、接受、Expression／Binding 与 Alignment，
+再通过 Alignment event 撤回被替换的连接并写入 `CorrectPersonalMeaning` 回执。原接受及 Alignment snapshot
+保持不变；当前列表／候选按事件状态读取，已准备或已学习内容按原固定 ordinal 验证历史连接，不要求其仍为当前连接。
+纠正不级联修改 Target、Run、Content Attempt 或 Memory。收藏／笔记仍属于原 Sense；World 私有索引携带
+已接受解释的轻量引用，旧解释从 Markers 打开固定 Meaning／Alignment 详情，不借新意思显示旧笔记，
+也不制造学习目标。该索引及查询只含表达／意思摘要，不传输 Context 或媒体。
+Context 组合读取沿 Meaning revision 顺序、按已记录的来源引用取得 Anchor 首次引入次序，然后解析 active
+Anchor 的当前 revision。替换使用新 ID，追加只引入新 ID，后续纠正／Binding／生命周期引用不移动已有材料。
+详情、纠正和学习来源共用这一读取；同步的 fact-array 归一化排序不作为用户段落或图片顺序，历史准备仍
+按自身固定的 Context revision 列表读取。不引入并行排序缓存，也不为显示顺序改写原始事实。
+个人 Meaning 的乐观来源见证对顶层事实集合使用完整事实的确定性排列，只忽略复制器的数组编码次序；
+Meaning head、每个事实的所有字段、重复项、嵌套材料／来源引用顺序及库 incarnation 仍进入校验。
+该排列只用于计算见证，不写回 owner 数据；真正的 Context、接受或生命周期修改仍使旧审阅失效。
+例句收藏入口沿实际 owner 注释数量判断，不以当前可解析的资料数覆盖存量计数；确认空库后才收起默认入口。
+读取中／失败仍保留未知状态。缺失来源的收藏保留原 ID 并显示读取风险，其他可读条目仍可打开；回看和重试
+只读，不补造 Example、Meaning 或学习记录，也不为尚未交付的轻量新增入口扩大默认操作。
 全库存 Scope admission cache 已移除；初始化只删除该退役派生表，保留现有 Scope、Target、共享正文和 owner 事实。
 历史／候选索引重建通过同一逻辑解码入口读取源记录。
 不支持的物理版本会停止并保留原库，不创建空库冒充首次访问。跨标签页协调协议独立版本化，版本不一致
@@ -246,11 +285,13 @@ Replica Module 的 normalize/restore seam，不另写领域状态修复分支。
 before→after transition；未变化聚合按对象 identity 跳过，加载、同步和备份重建才执行完整状态校验。
 因此 Gateway 提议的非法 revision 改写、tombstone 复活或物理删除不会进入 SQLite；记录级提交本身
 不会扫描未变化聚合的完整 facts。普通详情的首次 Context 保存使用独立单 Meaning 命令快照，沿用原领域命令，
-只读该聚合、固定注册表依赖和当前 operation receipt；其 delta 不得修改注册表、Inbox 或其他收据。依赖、
+只读该聚合、固定注册表依赖、当前 operation receipt 及该聚合历史生命周期引用的精确收据；其 delta
+不得修改注册表、Inbox 或其他收据。依赖、
 版本与 Library incarnation 在写锁内再次检查。首次 Inbox 最终确认也沿用原领域命令，只读这条材料、
 会话提示和所需注册表闭包；不初始化已有 Meaning 聚合。Sense key、历史 Expression Version 的 normalized form、
 Binding relation／精确版本 pins 与追加 ordinal 由源记录上的 SQLite expression index 查询，字段读取函数使用
 本机实际的 tagged codec、只返回确定性的原始参数字段，不引入第二份注册表权威。缺失索引可重建，不改动源事实。
+追加 ordinal 沿 kind／ordinal 索引降序只取末条；空类别从零开始，不对全部编码正文求最大值。
 选中候选与空结果、固定依赖、材料见证及新 ID 都在写锁内复查；Meaning、注册表 delta、原 Inbox／提示删除与收据
 一次提交。全量网关视图与其他命令仍有完整初始化路径，不能用这些命令的结果证明所有写入已满足规模性能要求。
 完整 Intake 的首次保存（包括 Web 手动创建）使用同样的有界注册表查询与提交前校验，只追加本次 Meaning、

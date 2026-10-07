@@ -85,6 +85,7 @@ test('identity projection failure rolls back source facts, receipts and all othe
 test('registry selectors use source expression indexes, historical forms and fixed pins without scanning Meaning aggregates',async()=>{
  const raw=new sqlite.oo1.DB(':memory:'),database=new SqliteRecordDatabase(sqlite,raw,'memory');database.initialize();
  try{
+  expect(database.registrySelection({kind:'ordinal',registryKind:'senses'})).toEqual({keys:[],nextOrdinal:0});
   const state=await fixture();database.commit({clears:[],deletes:[],puts:rows(state),contentRevision:1});
   const sense=state.registry.senses[0]!,expression=state.registry.expressions[0]!,version=state.registry.expressionVersions[0]!,binding=state.registry.bindings[0]!,bindingVersion=state.registry.bindingVersions[0]!;
   const cases:Array<{query:RegistrySelectionQuery;keys:string[];index:string}>=[
@@ -92,6 +93,7 @@ test('registry selectors use source expression indexes, historical forms and fix
    {query:{kind:'expression',normalizedForm:'borrow',languageTag:'en',expressionType:'word'},keys:[`expressions:${expression.expressionId}`,`expressionVersions:${version.expressionVersionId}`],index:'sensa_registry_expression_form'},
    {query:{kind:'binding',senseId:sense.senseId,expressionId:expression.expressionId,relation:'realizes'},keys:[`bindings:${binding.senseExpressionBindingId}`],index:'sensa_registry_binding_pair'},
    {query:{kind:'bindingVersion',bindingId:binding.senseExpressionBindingId,senseVersionId:bindingVersion.senseVersionId,expressionVersionId:version.expressionVersionId,coverage:'exact'},keys:[`bindingVersions:${bindingVersion.bindingVersionId}`],index:'sensa_registry_binding_versions'},
+   {query:{kind:'ordinal',registryKind:'senses'},keys:[],index:'sensa_registry_kind_ordinal'},
   ];
   for(const {query,keys,index} of cases){
    expect(database.registrySelection(query).keys).toEqual(keys);

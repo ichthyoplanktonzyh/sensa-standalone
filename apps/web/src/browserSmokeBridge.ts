@@ -17,6 +17,9 @@ type BrowserSmokeBridge = {
   setSpeechFixtureForTest(unavailable:boolean):Promise<void>;
   operatedStepMaterialsForTest():Promise<{eventId:string;runId:string;stepId:string;materializationId:string}[]>;
   meaningPinsForTest(id:string):Promise<Array<{senseId:string;senseVersionId:string}>>;
+  retainExampleForTest(unavailable?:boolean):Promise<{exampleId:string;word:string|null;text:string|null}>;
+  retainedExampleIdsForTest():Promise<string[]>;
+  failAnnotationReadsForTest(active:boolean):Promise<void>;
   seedInboxForTest(payload:import('@sensa/contracts/sensa').SensaIntakePayload,media?:import('./data/library/media').StoredMedia):Promise<string>;
   appendInboxContextForTest(intakeId:string,text:string):Promise<void>;
   failNextInboxCommitForTest(intakeId:string):Promise<void>;
@@ -116,7 +119,7 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
   let releaseWorldReads:(()=>void)|undefined;
   let releaseInboxReads:((fail?:boolean)=>void)|undefined;
   let hiddenInboxMedia:import('./data/library/media').StoredMedia|undefined;
-  let releaseDirectResult:(()=>void)|undefined,restoreLearningReads:(()=>void)|undefined;
+  let releaseDirectResult:(()=>void)|undefined,restoreLearningReads:(()=>void)|undefined,restoreAnnotationReads:(()=>void)|undefined;
   let releaseLearningResult:(()=>void)|undefined,learningReadCounts:Record<string,number>|undefined;
   let restoreLearningTrace:(()=>void)|undefined;
   window.__sensaBrowserSmoke = {
@@ -295,6 +298,29 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
     async meaningPinsForTest(id){
       const {worldReadRepository}=await import('./experience/personalMeaningJourney/worldRepository');
       return (await worldReadRepository.detail(id)).detail?.directAlignments.map(({senseId,senseVersionId})=>({senseId,senseVersionId}))??[];
+    },
+    async retainExampleForTest(unavailable=false){
+      // Seed an existing owner bookmark through the real command, not a new
+      // public acquisition path, fabricated Meaning or learning outcome.
+      const [{PRACTICE_SENSES},{personalContentSystem}]=await Promise.all([import('./experience/practiceData'),import('./personalContent/system')]);
+      const item=unavailable?null:PRACTICE_SENSES[0];if(!unavailable&&!item)throw Error('Missing bundled Example fixture');
+      const exampleId=item?.example.exampleId??crypto.randomUUID();
+      await personalContentSystem.execute({kind:'set_saved_example',operationId:crypto.randomUUID(),exampleId,saved:true});
+      return {exampleId,word:item?.word??null,text:item?.example.text??null};
+    },
+    async retainedExampleIdsForTest(){
+      const {personalContentSystem}=await import('./personalContent/system');await personalContentSystem.refresh();
+      return [...personalContentSystem.read({kind:'snapshot'}).savedExampleIds].sort();
+    },
+    async failAnnotationReadsForTest(active){
+      if(!active){restoreAnnotationReads?.();restoreAnnotationReads=undefined;return;}
+      if(restoreAnnotationReads)throw Error('Annotation read fault already active');
+      const [{sqliteRecordAdapter},{personalContentSystem}]=await Promise.all([import('./data/library/sqliteAdapter'),import('./personalContent/system')]);
+      const adapter=await sqliteRecordAdapter(),entries=adapter.entries.bind(adapter);
+      adapter.entries=async table=>{if(table==='annotations')throw Error('fixture annotation read failed');return entries(table);};
+      restoreAnnotationReads=()=>{adapter.entries=entries;};
+      await personalContentSystem.refresh().catch(()=>undefined);
+      if(personalContentSystem.read({kind:'snapshot'}).status!=='error')throw Error('Annotation read fault was not exercised');
     },
     async failNextInboxCommitForTest(intakeId){
       const {sqliteRecordAdapter}=await import('./data/library/sqliteAdapter');

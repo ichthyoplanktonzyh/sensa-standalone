@@ -2,7 +2,7 @@ import type { SensaFormalPinnedLanguageContext } from '@sensa/contracts/sensa';
 import {learningSupportMeaning,lightweightStepRequirements} from '@sensa/contracts/sensa';
 
 import { contentSupplySystem, type ContentSupplyRuntimePackage } from '../../contentSupply/system';
-import { readHomeLearningRecords,readLibrary,readLearningHistoryPage,readRuntimeLearningCandidates,readLearningManagementSummary,readLocalLibraryRevision } from '../../data/library/store';
+import { readHomeLearningRecords,readLibrary,readLearningHistoryPage,readRuntimeLearningCandidates,readLearningManagementSummary,readLocalLibraryRevision,readLearningSemanticMemoryRecords } from '../../data/library/store';
 import {stableUuid} from '@sensa/learning-kernel';
 import type {LocalCurriculumEnrollment} from '../../data/library/curriculumEnrollments';
 import { readLearningOverview } from '../../data/library/learningOverview';
@@ -650,22 +650,8 @@ export async function readLearningPersonalEnrollmentIndex(): Promise<LearningPer
   };
 }
 
-export async function readLearningSemanticMemoryProjection(): Promise<LearningSemanticMemoryProjection> {
-  const snapshot = await readLearningOverview();
-  return {
-    targets: snapshot.targets.map((target) => ({
-      targetId: target.id,
-      senseId: target.identity.senseId,
-      declaredMastery: hasDeclaredMasteryOverride(target),
-      memory: target.memory ? {
-        dueAt: target.memory.dueAt,
-        fsrsCardState: target.memory.fsrsCardState,
-        fsrsLastReviewedAt: target.memory.fsrsLastReviewedAt,
-        fsrsStability: target.memory.fsrsStability,
-        reps: target.memory.reps,
-      } : null,
-    })),
-  };
+export async function readLearningSemanticMemoryProjection(targetId?:string): Promise<LearningSemanticMemoryProjection> {
+  return readLearningSemanticMemoryRecords(targetId);
 }
 
 export const currentLearningPolicyOptions = () => policyOptions;

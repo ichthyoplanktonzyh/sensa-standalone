@@ -1,6 +1,7 @@
 /** The eligibility rule shared by in-memory and durable search projections. */
 import type {MeaningJourneyRecord,SenseRegistryState} from './store';
 import type {MeaningLookupMatch} from './meaningLookup';
+import {isAlignmentActive} from './alignmentLifecycle';
 type Fact<K extends keyof MeaningJourneyRecord>=MeaningJourneyRecord[K] extends Array<infer T>?T:never;
 export type MeaningLookupFacts={
  personalMeaning:Pick<MeaningJourneyRecord['personalMeaning'],'personalMeaningId'|'learnerUserId'|'status'>;
@@ -16,7 +17,8 @@ export type MeaningLookupFacts={
  proposalVersions:Array<Pick<Fact<'proposalVersions'>,'senseProposalVersionId'|'senseProposalId'|'meaningFocusRevisionId'>>;
  senseConfirmations:Array<Pick<Fact<'senseConfirmations'>,'senseProposalConfirmationId'|'senseProposalVersionId'|'learnerUserId'|'senseId'|'senseVersionId'>>;
  semanticAcceptances:Array<Pick<Fact<'semanticAcceptances'>,'semanticAcceptanceId'|'learnerUserId'|'senseId'|'senseVersionId'|'personalSemanticAnchorRevisionId'|'personalExpressionAnchorRevisionId'>>;
- alignments:Array<Pick<Fact<'alignments'>,'personalMeaningId'|'personalMeaningRevisionId'|'learnerUserId'|'senseId'|'senseVersionId'|'status'|'basis'>>;
+ alignments:Array<Pick<Fact<'alignments'>,'personalMeaningAlignmentId'|'personalMeaningId'|'personalMeaningRevisionId'|'learnerUserId'|'senseId'|'senseVersionId'|'status'|'basis'>>;
+ alignmentEvents:Array<Pick<Fact<'alignmentEvents'>,'personalMeaningAlignmentId'|'ordinal'|'eventType'>>;
  bindingConfirmations:Array<Pick<Fact<'bindingConfirmations'>,'senseVersionId'|'learnerUserId'|'senseProposalVersionId'|'personalExpressionAnchorRevisionId'|'bindingVersionId'|'expressionVersionId'>>;
 };
 /** Metadata witnesses only: no learner prose, original material, media or provenance. */
@@ -28,7 +30,8 @@ export const meaningLookupFactFields:Record<keyof MeaningLookupFacts,readonly st
  constructions:['senseConstructionId','personalMeaningId','personalMeaningRevisionId','meaningFocusId','meaningFocusRevisionId'],proposals:['senseProposalId','senseConstructionId'],
  proposalVersions:['senseProposalVersionId','senseProposalId','meaningFocusRevisionId'],senseConfirmations:['senseProposalConfirmationId','senseProposalVersionId','learnerUserId','senseId','senseVersionId'],
  semanticAcceptances:['semanticAcceptanceId','learnerUserId','senseId','senseVersionId','personalSemanticAnchorRevisionId','personalExpressionAnchorRevisionId'],
- alignments:['personalMeaningId','personalMeaningRevisionId','learnerUserId','senseId','senseVersionId','status','basis'],
+ alignments:['personalMeaningAlignmentId','personalMeaningId','personalMeaningRevisionId','learnerUserId','senseId','senseVersionId','status','basis'],
+ alignmentEvents:['personalMeaningAlignmentId','ordinal','eventType'],
  bindingConfirmations:['senseVersionId','learnerUserId','senseProposalVersionId','personalExpressionAnchorRevisionId','bindingVersionId','expressionVersionId'],
 };
 export type LookupRegistryRead=<K extends keyof SenseRegistryState>(kind:K,id:string)=>SenseRegistryState[K][number]|undefined;
@@ -40,8 +43,8 @@ export function validateMeaningQuery(raw:string):string{
   if(typeof raw!=='string'||!raw.trim()||raw.length>200)throw new Error('invalid_tool_arguments');
   const normalized=normalizeMeaningQuery(raw);if(!normalized)throw new Error('invalid_tool_arguments');return normalized;
 }
-export function confirmedLookupConnections(record:MeaningLookupFacts,read:LookupRegistryRead):ConfirmedLookupConnection[]{
-  if(record.personalMeaning?.status!=='active')return [];
+export function confirmedLookupConnections(record:MeaningLookupFacts,read:LookupRegistryRead,includeDeleted=false):ConfirmedLookupConnection[]{
+  if(record.personalMeaning?.status!=='active'&&!(includeDeleted&&record.personalMeaning?.status==='deleted'))return [];
   const meaningId=record.personalMeaning.personalMeaningId;
   const revisions=new Set(record.personalMeaningRevisions.filter(row=>row.personalMeaningId===meaningId).map(row=>row.personalMeaningRevisionId));
   const contexts=new Set(record.personalSemanticAnchors.filter(row=>row.personalMeaningId===meaningId).map(row=>row.personalSemanticAnchorId));
@@ -62,7 +65,7 @@ export function confirmedLookupConnections(record:MeaningLookupFacts,read:Lookup
   const result:ConfirmedLookupConnection[]=[],seen=new Set<string>();
   for(const alignment of record.alignments){
     const sense=read('senses',alignment.senseId),version=read('senseVersions',alignment.senseVersionId);
-    if(alignment.status!=='active'||alignment.personalMeaningId!==meaningId||alignment.learnerUserId!==record.personalMeaning.learnerUserId
+    if(!isAlignmentActive(record,alignment)||alignment.personalMeaningId!==meaningId||alignment.learnerUserId!==record.personalMeaning.learnerUserId
       ||!revisions.has(alignment.personalMeaningRevisionId)||!sense||!version||version.senseId!==sense.senseId)continue;
     const basis=alignment.basis;
     const construction=basis.kind==='sense_construction'?confirmations.get(basis.senseProposalConfirmationId):null;

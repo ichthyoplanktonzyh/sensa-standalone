@@ -66,12 +66,14 @@ export function registrySelectionSql(query:RegistrySelectionQuery):{sql:string;b
    ORDER BY sensa_registry_field(expression.value_json,'ordinal'),sensa_registry_field(version.value_json,'ordinal'),expression.record_key,version.record_key LIMIT 1`,bind:[query.normalizedForm,query.languageTag,query.expressionType]};
   case 'binding':return {sql:`SELECT record_key FROM sensa_records WHERE ${source} AND sensa_registry_field(value_json,'kind')='bindings' AND ${value('senseId')}=? AND ${value('expressionId')}=? AND ${value('relation')}=? ${order} LIMIT 1`,bind:[query.senseId,query.expressionId,query.relation]};
   case 'bindingVersion':return {sql:`SELECT record_key FROM sensa_records WHERE ${source} AND sensa_registry_field(value_json,'kind')='bindingVersions' AND ${value('senseExpressionBindingId')}=? AND ${value('senseVersionId')}=? AND ${value('expressionVersionId')}=? AND ${value('semanticCoverage')}=? ${order} LIMIT 1`,bind:[query.bindingId,query.senseVersionId,query.expressionVersionId,query.coverage]};
-  case 'ordinal':return {sql:`SELECT COALESCE(MAX(sensa_registry_field(value_json,'ordinal')),-1)+1 AS next_ordinal FROM sensa_records WHERE ${source} AND sensa_registry_field(value_json,'kind')=?`,bind:[query.registryKind]};
+  // An explicit indexed tail read stays bounded after cold OPFS reopen. MAX
+  // over this decoded expression can choose a source scan despite the index.
+  case 'ordinal':return {sql:`SELECT sensa_registry_field(value_json,'ordinal')+1 AS next_ordinal FROM sensa_records INDEXED BY sensa_registry_kind_ordinal WHERE ${source} AND sensa_registry_field(value_json,'kind')=? ORDER BY sensa_registry_field(value_json,'ordinal') DESC LIMIT 1`,bind:[query.registryKind]};
  }
 }
 export function registrySelectionResult(query:RegistrySelectionQuery,rows:Record<string,any>[]):RegistrySelection{
  if(query.kind==='ordinal'){
-  const nextOrdinal=rows[0]?.next_ordinal;if(!Number.isSafeInteger(nextOrdinal)||nextOrdinal<0)throw new Error('semantic_registry_ordinal_invalid');return {keys:[],nextOrdinal};
+  const nextOrdinal=rows.length?rows[0]?.next_ordinal:0;if(!Number.isSafeInteger(nextOrdinal)||nextOrdinal<0)throw new Error('semantic_registry_ordinal_invalid');return {keys:[],nextOrdinal};
  }
  return {keys:query.kind==='expression'?rows.flatMap(row=>[String(row.expression_key),String(row.version_key)]):rows.map(row=>String(row.record_key))};
 }

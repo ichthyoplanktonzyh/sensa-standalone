@@ -35,6 +35,40 @@
     "utterance_strategy": "Söylem stratejisi"
   }
 },
+  "noteEditor": {
+    "loading": "Not okunuyor…",
+    "readFailed": "Bu not okunamadı.",
+    "changed": "Not başka bir yerde değiştirildi. Taslağınız korundu.",
+    "latest": "En son kaydedilen not",
+    "empty": "Boş not",
+    "useLatest": "En son notu kullan",
+    "saveMine": "Benim sürümümü kaydet",
+    "unconfirmed": "Kayıt doğrulanamadı. Bu kaydı kontrol etmek için yeniden deneyin.",
+    "savedReadFailed": "Not kaydedildi, ancak liste yenilenemedi. Okumayı yeniden deneyin."
+  },
+  "meaningGovernance": {
+    "correct": "Anlamı ve ifadeyi düzenle",
+    "history": "Önceki anlamlar ve ifadeler",
+    "expression": "İfade",
+    "formSettings": "Dil ve ifade türü",
+    "changed": "İçerik değişti. Yeniden denemeden önce en son içeriği tekrar açın.",
+    "more": "Diğer",
+    "favorite": "Anlamı kaydet",
+    "unfavorite": "Kaydedileni kaldır",
+    "note": "Not yaz",
+    "remove": "İçeriği sil",
+    "restore": "İçeriği geri yükle",
+    "deleted": "Silindi",
+    "deleteTitle": "Bu içerik silinsin mi?",
+    "consequence": "Çöp kutusuna taşı. Kaynaklar, notlar ve öğrenme kayıtları korunur.",
+    "cancel": "İptal",
+    "trash": "Çöp kutusu",
+    "emptyTrash": "Çöp kutusu boş",
+    "all": "Tüm içerik",
+    "unconfirmed": "Sonuç doğrulanamadı. İçerik yeniden okundu; tekrar denemeden önce kontrol edin.",
+    "savedReadFailed": "Değişiklik kaydedildi ancak içerik yeniden okunamadı. Okumayı tekrar deneyin.",
+    "retryRead": "Yeniden oku"
+  },
   "content": {
     "manual": "Elle oluştur",
     "findExpression": "Sensa ile konuş",

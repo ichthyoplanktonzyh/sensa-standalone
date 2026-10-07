@@ -14,8 +14,7 @@ import {isDirectProvisioningReference,provisioningTaskId,provisioningMembershipI
 import {curriculumEnrollmentSchema} from '../curriculumEnrollments';
 import {assertDirectTaskEnrollment,assertDirectAttemptSource} from '../directProvisioningAssertions';
 import {assertPersonalAttemptSource} from '../personalProvisioningAssertions';
-import {assertPersonalContextPin,buildPersonalMeaningLearningSources} from '../../../experience/personalMeaningJourney/learningSource';
-import {canonicalConsumerJson} from '@sensa/contracts/sensa';
+import {assertPersonalContextPin,resolvePinnedPersonalMeaningLearningSource,orderPersonalContextImages} from '../../../experience/personalMeaningJourney/learningSource';
 import {parseStoredMedia} from '../media';
 import {backupEqual} from '../backupCodec';
 import {assertReadyContentAttempt} from '../contentAttemptEvidence';
@@ -85,13 +84,12 @@ export function validateContentSupplyReplica(input:{
    validateLanguageContext(attempt.fixedInput.languageContext);
    requirePersonalSource(attempt.fixedInput.source);
    const record=requireRow('semanticMeanings',attempt.fixedInput.source.personalMeaningId);
-   const source=buildPersonalMeaningLearningSources(record,(kind,id)=>requireRow('semanticRegistry',`${kind}:${id}`).value,attempt.fixedInput.source.personalMeaningAlignmentId,attempt.contextPin)
-    .find(candidate=>canonicalConsumerJson(candidate.reference)===canonicalConsumerJson(attempt.fixedInput.source));
+   const source=resolvePinnedPersonalMeaningLearningSource(record,(kind,id)=>requireRow('semanticRegistry',`${kind}:${id}`).value,attempt.fixedInput.source,attempt.contextPin);
    if(!source)throw new Error('Personal preparation has a different accepted source.');
    const ids=new Set(source.context.personalSemanticAnchorRevisionIds);
    const mediaIds=[...new Set<string>(record.personalSemanticAnchorRevisions.filter((revision:any)=>ids.has(revision.personalSemanticAnchorRevisionId)).flatMap((revision:any)=>revision.personalMediaObjectId?[revision.personalMediaObjectId]:[]))];
    const images=mediaIds.map(mediaId=>({id:mediaId,name:'personal-context-image',dataUrl:parseStoredMedia(requireRow('media',mediaId)).dataUrl}));
-   source.context.images=[...new Map([...source.context.images,...images].map(image=>[image.id,image])).values()];
+   source.context.images=orderPersonalContextImages(record,source.context.personalSemanticAnchorRevisionIds,[...source.context.images,...images]);
    assertPersonalAttemptSource(attempt,task,source,identity.learnerId);
   }
   if(attempt.request)sensaContentGenerationRequestSchema.parse(attempt.request);

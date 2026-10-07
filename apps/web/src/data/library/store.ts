@@ -609,7 +609,9 @@ async function transaction<T>(
       const mutation = await library.mutation();
       mutation.contentRevision = contentRevision;
       library.beginCommit();
+      const storageStarted=performance.now();
       await storageCall(() => adapter.commit(mutation));
+      if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.library.sqlite-commit',{start:storageStarted,end:performance.now()});
       if (kind === "state") window.dispatchEvent(new Event("sensa-sync-state-changed"));
       else {
         const tables = [...new Set([
@@ -671,6 +673,7 @@ export const readHomeLearningRecords = async (
   return storageCall(() => adapter.homeLearningProjection(languageRouteId,clock));
 };
 export const readLearningHistoryPage=async(query:import('../../learning/system/learningHistoryModel').LearningHistoryRequest)=>{const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');return storageCall(()=>adapter.learningHistoryPage(query));};
+export const readLearningSemanticMemoryRecords=async(targetId?:string)=>{const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');return storageCall(()=>adapter.learningSemanticMemory(targetId));};
 export const readLearningManagementSummary=async(query:import('./runtimeLearningCandidates').LearningManagementSummaryQuery)=>{const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');return storageCall(()=>adapter.learningManagementSummary(query));};
 export const readRuntimeLearningCandidates=async(query:import('./runtimeLearningCandidates').RuntimeLearningCandidateQuery)=>{const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');return storageCall(()=>adapter.runtimeLearningCandidates(query));};
 

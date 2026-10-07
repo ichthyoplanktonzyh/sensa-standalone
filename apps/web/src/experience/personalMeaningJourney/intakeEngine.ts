@@ -60,6 +60,7 @@ export interface FastTrackOutcome {
     languageTag: string;
     surfaceForm: string;
     provenanceKind: PersonalProvenanceKind;
+    personalExpressionAnchorRevisionId:string;
   };
   bindingInput: {
     senseVersionId: string;
@@ -187,6 +188,8 @@ export const executeFastTrack = (
     expressionWordingSource?:PersonalProvenanceKind;
     /** Published scene adoption supplies its own inline-media Anchor. */
     materializeContextMedia?:boolean;
+    /** Correction reuses a real owned Context, never an invented capture. */
+    existingMeaning?:{record:MeaningJourneyRecord;contextAnchorRevisionId:string};
   },
   ports: IntakeEnginePorts,
 ): FastTrackOutcome => {
@@ -210,12 +213,16 @@ export const executeFastTrack = (
   const provenanceKind: PersonalProvenanceKind = sense.wordingSource;
   const expressionProvenanceKind=input.expressionWordingSource??provenanceKind;
 
-  const personalMeaningId = ports.newId();
+  const previous=input.existingMeaning?.record;
+  const existingContext=previous?.personalSemanticAnchorRevisions.find(row=>row.personalSemanticAnchorRevisionId===input.existingMeaning!.contextAnchorRevisionId);
+  if(previous&&!existingContext)throw Error('localFlow.meaningChanged');
+  if(occurrence.locator.kind==='personal_meaning'&&(!previous||occurrence.locator.personalMeaningId!==previous.personalMeaning.personalMeaningId||occurrence.locator.personalSemanticAnchorRevisionIds[0]!==existingContext?.personalSemanticAnchorRevisionId))throw Error('localFlow.annotationInvalid');
+  const personalMeaningId = previous?.personalMeaning.personalMeaningId??ports.newId();
   const personalMeaningRevisionId = ports.newId();
 
   // 1) Semantic Anchor: the captured context itself.
-  const semanticAnchorId = ports.newId();
-  const semanticAnchorRevisionId = ports.newId();
+  const semanticAnchorId = existingContext?.personalSemanticAnchorId??ports.newId();
+  const semanticAnchorRevisionId = existingContext?.personalSemanticAnchorRevisionId??ports.newId();
   const contextAnchorProvenanceKind: PersonalProvenanceKind =
     context.source?.client === 'sensa-web' || !context.source
       ? 'learner_authored'
@@ -347,7 +354,7 @@ export const executeFastTrack = (
     createdAt: now,
   };
 
-  const record: MeaningJourneyRecord = {
+  let record: MeaningJourneyRecord = {
     personalMeaning: {
       contractVersion: PSW,
       personalMeaningId,
@@ -489,8 +496,21 @@ export const executeFastTrack = (
     },
   };
 
+  if(previous){
+    const revision=previous.personalMeaning.currentRevision+1;
+    record={...previous,
+      personalMeaning:{...previous.personalMeaning,currentRevision:revision,updatedAt:now},
+      personalMeaningRevisions:[...previous.personalMeaningRevisions,{...record.personalMeaningRevisions[0]!,revision,learnerIntentNote:previous.personalMeaningRevisions.at(-1)?.learnerIntentNote??null}],
+      personalExpressionAnchors:[...previous.personalExpressionAnchors,...record.personalExpressionAnchors],
+      personalExpressionAnchorRevisions:[...previous.personalExpressionAnchorRevisions,...record.personalExpressionAnchorRevisions],
+      semanticAcceptances:[...previous.semanticAcceptances,...record.semanticAcceptances],
+      alignments:[...previous.alignments,...record.alignments],
+      alignmentEvents:[...previous.alignmentEvents,...record.alignmentEvents],
+    };
+  }
+
   const primaryMediaId=record.personalSemanticAnchorRevisions[0]!.personalMediaObjectId;
-  for(const mediaId of input.materializeContextMedia===false?[]:context.mediaReferenceIds){
+  for(const mediaId of previous||input.materializeContextMedia===false?[]:context.mediaReferenceIds){
     if(mediaId===primaryMediaId)continue;
     const {anchorId}=appendMaterialAnchor(ports,record,operationId,{kind:'image',personalMediaObjectId:mediaId},null,context);
     record.personalMeaningRevisions[0]!.provenance.sourceReferenceIds.push(anchorId);
@@ -498,20 +518,21 @@ export const executeFastTrack = (
   const nextState: JourneyState = {
     ...state,
     registry,
-    meanings: [...state.meanings, record],
+    meanings: previous?state.meanings.map(value=>value.personalMeaning.personalMeaningId===personalMeaningId?record:value):[...state.meanings, record],
   };
 
   return {
     nextState,
     record,
     personalMeaningId,
-    alignment: record.alignments[0]!,
+    alignment: record.alignments.at(-1)!,
     bindingCandidate: {
       candidateId: semanticAcceptanceId,
       expressionType,
       languageTag,
       surfaceForm: expression.surfaceForm.trim(),
       provenanceKind:expressionProvenanceKind,
+      personalExpressionAnchorRevisionId:expressionAnchorRevisionId,
     },
     bindingInput: {
       senseVersionId,

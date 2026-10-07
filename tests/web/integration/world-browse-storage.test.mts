@@ -2,6 +2,7 @@
 import {test,expect} from 'vitest';
 import init from '@sqlite.org/sqlite-wasm';
 import {SqliteRecordDatabase} from '../../../apps/web/src/data/library/sqliteDatabase';
+import {MemoryRecordAdapter} from '../../../apps/web/src/data/library/sqliteMemoryAdapter';
 import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec';
 import {MemoryJourneyRepository} from '../../../apps/web/src/experience/personalMeaningJourney/repository';
 import {createJourneyModules} from '../../../apps/web/src/experience/personalMeaningJourney/gateway';
@@ -24,6 +25,31 @@ async function seed(){
  await modules.semanticIntake.submit(semanticLookupPayload());return {repository,modules,state:await repository.load()};
 }
 const query={query:'',filter:'all' as const,offset:0,limit:20};
+
+test('memory and SQLite World reads agree on a deleted unbound Meaning and keep active continuation independent of the selected partition',async()=>{
+ const {repository,modules}=await seed(),gateway=modules.personalMeaningJourney,id=()=>crypto.randomUUID();
+ const meaningId=(await repository.load()).meanings[0]!.personalMeaning.personalMeaningId;
+ const {schemaVersion:_schema,...spec}=semanticLookupSpec;
+ const clarification={languageContext:{targetLanguageTag:'en',supportLanguageTag:'zh-CN'},sense:{proposedSenseKey:'pending-loan-perspective',...spec,unresolvedQuestions:[]},expression:null,confirmExpression:false,transcript:[],provenance:{provider:'fixture',model:'fixture',promptVersion:'fixture'},semanticPolicyVersion:'fixture'};
+ await gateway.confirmClarification({...clarification,operationId:id(),personalMeaningId:meaningId,source:await gateway.captureClarificationSource('personal_meaning',meaningId),focus:{statement:'另一条尚未确认表达的借用视角',distinguishingNotes:[],aspectLabel:''}});
+ const accepted=await modules.semanticIntake.submit(semanticLookupPayload());if(accepted.route!=='fast_track')throw Error('Expected a complete accepted source');
+ await gateway.changeMeaningLifecycle({operationId:id(),personalMeaningId:accepted.personalMeaningId,expectedRevision:gateway.getDetail(accepted.personalMeaningId)!.revision,action:'delete'});
+ const raw=new sqlite.oo1.DB(':memory:'),database=new SqliteRecordDatabase(sqlite,raw,'memory'),memory=new MemoryRecordAdapter();database.initialize();
+ try{
+  const state=await repository.load();
+  // Read-adapter parity fixture only: represent a valid historical deleted
+  // Meaning with no currently confirmed binding. This is not a public create
+  // command permitting incomplete Meaning acceptance.
+  state.meanings.find(record=>record.personalMeaning.personalMeaningId===accepted.personalMeaningId)!.bindingConfirmations=[];
+  const mutation={clears:[],deletes:[],puts:rows(state),contentRevision:1};database.commit(mutation);await memory.commit(mutation);
+  const trash=database.worldBrowse({...query,filter:'deleted'});
+  expect(trash.items).toMatchObject([{personalMeaningId:accepted.personalMeaningId,status:'deleted'}]);
+  expect(trash.pending).toBe(1);expect(trash.next?.personalMeaningId).toBe(meaningId);
+  for(const filter of ['all','pending','deleted','binding','complete'] as const)for(const term of ['', 'borrow', 'no such context']){
+   const selection={...query,filter,query:term};expect(await memory.worldBrowse(selection)).toEqual(database.worldBrowse(selection));
+  }
+ }finally{database.close();}
+});
 
 test('World pages preserve exact labels/phases, search private Context, and never change the public model lookup',async()=>{
  const raw=new sqlite.oo1.DB(':memory:'),database=new SqliteRecordDatabase(sqlite,raw,'memory');database.initialize();

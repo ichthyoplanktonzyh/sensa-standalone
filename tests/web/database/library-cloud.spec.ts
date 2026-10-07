@@ -8,8 +8,266 @@ import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec.
 import {librarySyncBlockChars,librarySyncBlockStoreBatch} from '../../../packages/contracts/src/sensa/librarySync.ts';
 import {decodeLibrarySyncBlock,encodeLibrarySyncBlock} from '../../../packages/contracts/src/sensa/librarySyncBlocks.ts';
 import {createLibraryCloudBrowserFixture} from '../../../tests/web/support/libraryCloudBrowserFixture.mts';
-import type {LearningHistoryProjection} from '../../../apps/web/src/learning/system';
+import type {LearningHistoryProjection,LearningRuntimeProjection} from '../../../apps/web/src/learning/system';
+import {manualMeaningPayload,newManualMeaningDraft} from '../../../apps/web/src/experience/intake/manualMeaning';
 test.setTimeout(300_000);
+/** Fact collections are identity/ordinal sets, not an ordered text document.
+ * Compare every full fact by identity. Nested user materials, pins and ordered
+ * provenance references remain untouched; their order has separate oracles. */
+const meaningFactIds:Record<string,string>={personalMeaningRevisions:'personalMeaningRevisionId',personalSemanticAnchors:'personalSemanticAnchorId',personalSemanticAnchorRevisions:'personalSemanticAnchorRevisionId',personalExpressionAnchors:'personalExpressionAnchorId',personalExpressionAnchorRevisions:'personalExpressionAnchorRevisionId',focuses:'meaningFocusId',focusRevisions:'meaningFocusRevisionId',focusAcceptances:'meaningFocusAcceptanceId',constructions:'senseConstructionId',constructionTurns:'constructionTurnId',proposals:'senseProposalId',proposalVersions:'senseProposalVersionId',senseConfirmations:'senseProposalConfirmationId',semanticAcceptances:'semanticAcceptanceId',alignments:'personalMeaningAlignmentId',alignmentEvents:'personalMeaningAlignmentEventId',bindingConfirmations:'expressionBindingConfirmationId'};
+const retainedMeaningFacts=(record:any)=>Object.fromEntries(Object.entries(record).map(([key,value])=>[key,Array.isArray(value)&&meaningFactIds[key]?[...value].sort((a,b)=>a[meaningFactIds[key]!].localeCompare(b[meaningFactIds[key]!])):value]));
+test('ordered Context paragraphs survive Cloud fact reordering, correction and later material append',async({browser})=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount('ordered-context'),sender=await fixture.createClient(account);
+  const payload=manualMeaningPayload({...newManualMeaningDraft(),context:'I asked to borrow an umbrella.',occurrence:'borrow',languageTag:'en',meaning:'暂时借用别人的物品，之后归还。',usage:'向同事暂借雨伞。'});
+  const identity=await sender.evaluate(async payload=>{const c=(window as any).core,accepted=await c.createJourneyModules().semanticIntake.submit(payload);return {meaningId:accepted.personalMeaningId,alignmentId:(await c.worldReadRepository.detail(accepted.personalMeaningId)).sources[0].reference.personalMeaningAlignmentId};},payload);
+  await sender.evaluate(()=>(window as any).sync());const receiver=await fixture.createClient(account);await receiver.evaluate(()=>(window as any).sync());
+  const paragraphs=['第一段：出门时下雨，先向同事暂借一把雨伞。','第二段：回家之后，约好次日把伞归还。'];
+  await sender.evaluate(async({meaningId,paragraphs})=>{
+   const c=(window as any).core,detail=(await c.worldReadRepository.detail(meaningId)).detail,at=new Date().toISOString(),prefix=crypto.randomUUID().slice(0,8);let ordinal=0xffff;
+   // Actual commands, controlled identity/clock ports: simultaneous paragraphs
+   // have descending UUIDs so the historical Cloud ID sort must reorder them.
+   const gateway=c.createJourneyModules({clock:{nowIso:()=>at},ids:{next:()=>`${prefix}-${(ordinal--).toString(16).padStart(4,'0')}-4000-8000-000000000000`}}).personalMeaningJourney;
+   await gateway.reviseContext({operationId:crypto.randomUUID(),personalMeaningId:meaningId,expectedRevision:detail.revision,blocks:paragraphs.map(bodyText=>({kind:'text',bodyText}))});
+  },{meaningId:identity.meaningId,paragraphs});
+  const inspect=(page:import('@playwright/test').Page)=>page.evaluate(async({meaningId,alignmentId})=>{
+   const c=(window as any).core,record=await c.readLibrary((tx:any)=>tx.get('semanticMeanings',meaningId)),detail=await c.worldReadRepository.detail(meaningId),seed=await c.worldReadRepository.correction(meaningId,alignmentId);
+   return {rawActiveIds:record.personalSemanticAnchors.filter((row:any)=>row.status==='active').map((row:any)=>row.personalSemanticAnchorId),label:record.personalMeaningRevisions.find((row:any)=>row.revision===record.personalMeaning.currentRevision).displayLabel,detailText:detail.detail.materialBlocks.filter((row:any)=>row.kind==='text').map((row:any)=>row.bodyText),learningText:detail.sources[0].context.text,correctionText:seed.payload.context.textSegment};
+  },identity);
+  const before=await inspect(sender);assert.deepEqual(before.detailText,paragraphs);assert.equal(before.learningText,paragraphs.join('\n\n'));assert.equal(before.correctionText,paragraphs.join('\n\n'));
+  const reviewed=await sender.evaluate(async({meaningId,alignmentId})=>(window as any).core.worldReadRepository.correction(meaningId,alignmentId),identity);
+  await sender.evaluate(()=>(window as any).sync());await receiver.evaluate(()=>(window as any).sync());
+  const restored=await inspect(receiver);assert.notDeepEqual(restored.rawActiveIds,before.rawActiveIds,'fixture must exercise actual aggregate-array reordering, not a no-op transport');
+  assert.deepEqual(restored.detailText,paragraphs);assert.equal(restored.learningText,paragraphs.join('\n\n'));assert.equal(restored.correctionText,paragraphs.join('\n\n'));
+  // Another device adds only a note. Its canonical fact arrays return to the
+  // original device without changing the reviewed Meaning or user Context.
+  await receiver.evaluate(async({meaningId})=>{const c=(window as any).core,senseId=(await c.worldReadRepository.detail(meaningId)).sources[0].reference.senseId;await c.personalContentSystem.execute({kind:'set_sense_note',operationId:crypto.randomUUID(),senseId,body:'补充笔记，但没有修改已审阅的情境。',expected:{body:'',revision:0}});},{meaningId:identity.meaningId});
+  await receiver.evaluate(()=>(window as any).sync());await sender.evaluate(()=>(window as any).sync());
+  assert.notDeepEqual((await inspect(sender)).rawActiveIds,before.rawActiveIds,'the reviewed device must actually receive reordered facts');
+  const newAlignment=await sender.evaluate(async({identity,reviewed})=>{
+   const c=(window as any).core,operationId=crypto.randomUUID();
+   return c.createJourneyModules().personalMeaningJourney.correctPersonalMeaning({operationId,personalMeaningId:identity.meaningId,personalMeaningAlignmentId:identity.alignmentId,source:reviewed.source,reuseSense:reviewed.reuseSense,payload:{...reviewed.payload,operationId,capturedAt:new Date().toISOString(),acceptance:{mode:'learner_direct'}}});
+  },{identity,reviewed});
+  await sender.evaluate(()=>(window as any).sync());await receiver.evaluate(()=>(window as any).sync());
+  identity.alignmentId=newAlignment.personalMeaningAlignmentId;
+  const third='第三段：第二天按约定还伞，并感谢同事。';
+  await receiver.evaluate(async({meaningId,bodyText})=>{const c=(window as any).core;await c.createJourneyModules().personalMeaningJourney.addMaterialBlock({operationId:crypto.randomUUID(),personalMeaningId:meaningId,block:{kind:'text',bodyText}});},{meaningId:identity.meaningId,bodyText:third});
+  await receiver.evaluate(()=>(window as any).sync());await sender.evaluate(()=>(window as any).sync());
+  const fresh=await fixture.createClient(account);await fresh.evaluate(()=>(window as any).sync());
+  for(const page of [sender,receiver,fresh]){const value=await inspect(page);assert.deepEqual(value.detailText,[...paragraphs,third]);assert.equal(value.learningText,[...paragraphs,third].join('\n\n'));assert.equal(value.correctionText,[...paragraphs,third].join('\n\n'));assert.equal(value.label,paragraphs[0]!.length>24?paragraphs[0]!.slice(0,24)+'…':paragraphs[0]);}
+  await fresh.reload();await fresh.evaluate(async()=>{const path='/core.js';(window as any).core=await import(/* @vite-ignore */ path);await (window as any).core.openLibrary();});assert.deepEqual((await inspect(fresh)).detailText,[...paragraphs,third]);
+ }finally{await fixture.close();}
+});
+test('correcting a learned personal meaning preserves prepared attempts, audio and real learning history across Cloud restore and OPFS reload',async({browser})=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount('learned-personal-correction'),sender=await fixture.createClient(account);
+  const payload=manualMeaningPayload({...newManualMeaningDraft(),context:'I wore my raincoat in the rain.',occurrence:'raincoat',languageTag:'en',meaning:'防雨时穿在身上的衣服。',usage:'一个人在雨中穿着防水的外衣。'});
+  const identity=await sender.evaluate(async payload=>{
+   const c=(window as any).core,id=()=>crypto.randomUUID(),at=new Date().toISOString(),prefix=id().slice(0,8);let ordinal=0xffff;
+   const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII=',mediaIds=[id(),id()];
+   // Synthetic uploaded assets, not learning outcomes. Controlled ports make
+   // the Context heads/revisions tie so canonical replica order is adversarial.
+   await c.writeLibraryState((tx:any)=>{for(const mediaId of mediaIds)tx.put('media',mediaId,{mediaId,mediaKind:'image',mimeType:'image/png',dataUrl:'data:image/png;base64,'+png,sizeBytes:atob(png).length,createdAt:at});});
+   const accepted=await c.createJourneyModules({clock:{nowIso:()=>at},ids:{next:()=>`${prefix}-${(ordinal--).toString(16).padStart(4,'0')}-4000-8000-000000000000`}}).semanticIntake.submit({...payload,context:{...payload.context,modality:'mixed',mediaReferenceIds:mediaIds}});
+   if(accepted.route!=='fast_track')throw Error('Expected actual accepted Meaning');
+   const source=(await c.worldReadRepository.detail(accepted.personalMeaningId)).sources[0];if(!source)throw Error('Missing accepted source');
+   const provider=await c.saveProvider(id(),{id:id(),expectedRevision:0,name:'Controlled history fixture',kind:'compatible',endpoint:'https://correction-history-model.invalid/v1',model:'synthetic'},'synthetic-fixture-device-secret');
+   await c.assignProvider(id(),'content',provider.id,(await c.providerSnapshot()).settings.revision);
+   // Controlled provider/speech validate durability, not paid model quality or
+   // real audio playback. Learning facts still come from actual owner commands.
+   const restoreSpeech=c.replaceClientSpeechProvider({id:'fixture',revision:1,displayName:'Fixture',synthesize:async(input:any)=>({...input,audioUrl:'data:audio/mpeg;base64,UklGRg==',phoneticNotation:null,accentLabel:'en-US',source:'synthetic history fixture',method:'tts'})});
+   const original=window.fetch;window.fetch=async(url:any,init:any)=>{
+    const address=String(url);
+    if(address.endsWith('/sensa/resource-facts'))return new Response(JSON.stringify({input:JSON.parse(String(init?.body)),references:[]}),{headers:{'content-type':'application/json'}});
+    if(address.startsWith(provider.endpoint))return new Response(JSON.stringify({model:'synthetic',choices:[{finish_reason:'stop',message:{content:JSON.stringify({resources:[
+     {role:'experience_recall_cue',payload:{scene:'下雨时，一个人穿了防水外衣来挡住雨水。',senseFocus:'防雨时穿在身上的衣服。'}},
+     {role:'scene_bridge',payload:{text:'回想雨中穿着防水外衣的体验。',meaningRendering:{meaning:'在下雨时穿在身上、用来挡雨的外衣。',languageTag:'zh-CN'}}},
+     {role:'scene_realization',payload:{example:'I wore my raincoat in the rain.',targetStart:10,targetEnd:18,experienceResourceKey:'experience_recall_cue:0'}},
+    ]})}}]}),{headers:{'content-type':'application/json'}});
+    return original(url,init);
+   };
+   let task:any;const languageContext=(await c.languageRoutesSnapshot()).context;
+   try{task=await c.enrollPersonal(id(),source,languageContext,true);await c.preparePersonal(task.id,source,provider,null,new AbortController().signal,()=>{});}
+   finally{restoreSpeech();window.fetch=original;}
+   if((await c.personalLearningTaskSnapshot(task.id)).status!=='ready')throw Error('Preparation did not actually become ready');
+   await c.learningSystem.execute({kind:'start',operationId:id(),targetId:task.targetId,languageContext,dailyLimit:20});
+   let runtime=(await c.learningSystem.read({kind:'runtime',languageContext})).runtime as LearningRuntimeProjection;
+   await c.learningSystem.execute({kind:'act',operationId:id(),runId:runtime.runId,expectedRevision:runtime.revision,action:{kind:'reveal'}});
+   runtime=(await c.learningSystem.read({kind:'runtime',languageContext})).runtime;
+   await c.learningSystem.execute({kind:'act',operationId:id(),runId:runtime.runId,expectedRevision:runtime.revision,action:{kind:'rate',rating:'good'}});
+   await c.learningSystem.execute({kind:'finish',operationId:id(),runId:runtime.runId});
+   return {meaningId:accepted.personalMeaningId,alignmentId:source.reference.personalMeaningAlignmentId,targetId:task.targetId,taskId:task.id};
+  },payload);
+  const inspect=(page:import('@playwright/test').Page)=>page.evaluate(async identity=>{
+   const c=(window as any).core,rows=await c.readLibrary(async(tx:any)=>Object.fromEntries(await Promise.all(c.libraryTables.map(async(table:string)=>[table,await tx.entries(table)]))));
+   // Raw local rows include service-local receipts that are intentionally not
+   // portable. Exercise the real export admission instead of inventing a raw
+   // snapshot format that the product does not offer to users.
+   const backupSummary=(await c.exportLibraryBackup('learned-personal-correction-fixture-password')).summary;
+   const learningTables=['curriculumEnrollments','supplementalMembershipStates','studyScopes','learningSessions','learningTargets','learningRuns','learningEvents','learningReconciliations','personalLearning','contentAttempts','media'];
+   const encode=(table:string)=>rows[table].map((row:any)=>({key:row.key,value:c.encodeBackupValue(row.value)})).sort((a:any,b:any)=>a.key.localeCompare(b.key));
+   return {learning:Object.fromEntries(learningTables.map(table=>[table,encode(table)])),nonsemantic:Object.fromEntries(c.libraryTables.filter((table:string)=>!table.startsWith('semantic')&&table!=='meta').map((table:string)=>[table,encode(table)])),record:rows.semanticMeanings.find((row:any)=>row.key===identity.meaningId).value,memory:await c.learningSystem.read({kind:'semantic_memory',targetId:identity.targetId}),sources:(await c.worldReadRepository.detail(identity.meaningId)).sources,backupSummary,hasReadyAttempt:rows.contentAttempts.some((row:any)=>row.value.status==='ready'),hasRating:rows.learningEvents.some((row:any)=>row.value.kind==='rate'),hasCompletedRun:rows.learningRuns.some((row:any)=>row.value.completedAt)};
+  },identity);
+  const learned=await inspect(sender);
+  assert(learned.hasReadyAttempt,'not an empty attempts fixture');
+  assert.equal(learned.learning.media.length,2,'actual uploaded Context images must remain available for frozen historical grants');
+  assert(JSON.stringify(learned.learning.learningTargets).includes('data:audio/mpeg;base64,UklGRg=='),'the actual admitted material must contain the persisted synthetic audio; media-table emptiness alone is not an audio oracle');
+  assert.equal(learned.memory.targets[0].targetId,identity.targetId);assert(learned.memory.targets[0].memory,'actual rating must have created Memory');
+  assert(learned.hasRating);assert(learned.hasCompletedRun);assert.equal(learned.backupSummary.targets,1);assert.equal(learned.backupSummary.runs,1);
+  await sender.evaluate(()=>(window as any).sync());const existing=await fixture.createClient(account);await existing.evaluate(()=>(window as any).sync());assert.deepEqual((await inspect(existing)).learning,learned.learning);
+  // Historical attempts must retain their own Context pins, not the Context
+  // later reviewed for a new acceptance of the corrected meaning/expression.
+  await sender.evaluate(async meaningId=>{const c=(window as any).core,detail=(await c.worldReadRepository.detail(meaningId)).detail;await c.createJourneyModules().personalMeaningJourney.reviseContext({operationId:crypto.randomUUID(),personalMeaningId:meaningId,expectedRevision:detail.revision,blocks:[{kind:'text',bodyText:'现在重新核对：雨天穿的是一件普通外套，并不能保证防水。'}]});},identity.meaningId);
+  const before=await inspect(sender);
+  assert.deepEqual(before.learning,learned.learning);
+  await sender.evaluate(async({meaningId,alignmentId})=>{
+   const c=(window as any).core,seed=await c.worldReadRepository.correction(meaningId,alignmentId),operationId=crypto.randomUUID();
+   const payload={...seed.payload,operationId,capturedAt:new Date().toISOString(),acceptance:{mode:'learner_direct'},expression:{surfaceForm:'jacket',languageTag:'en',expressionTypeHint:'word',occurrence:{surfaceForm:'jacket',locator:seed.payload.expression.occurrence.locator}},sense:{...seed.payload.sense,senseKey:null,wordingSource:'learner_authored',semanticSpec:{...seed.payload.sense.semanticSpec,coreMeaningFocus:'穿在身上的普通外套，不要求能够防雨。',prototypeScenes:[{summary:'天气转凉时穿上一件普通外套。',participantRoles:[],states:[],directionOrCausality:null}]}}};
+   await c.createJourneyModules().personalMeaningJourney.correctPersonalMeaning({operationId,personalMeaningId:meaningId,personalMeaningAlignmentId:alignmentId,source:seed.source,payload});
+  },identity);
+  const corrected=await inspect(sender);
+  assert.deepEqual(corrected.nonsemantic,before.nonsemantic,'correction must not rewrite any independent owner table');
+  assert(!corrected.sources.some((source:any)=>source.reference.personalMeaningAlignmentId===identity.alignmentId));
+  assert.equal(corrected.sources[0].expression.surfaceForm,'jacket');assert.equal(corrected.memory.targets[0].presentation.expression,'raincoat');assert.deepEqual(corrected.memory,learned.memory);
+  assert.deepEqual(corrected.record.semanticAcceptances[0],learned.record.semanticAcceptances[0]);assert.deepEqual(corrected.record.alignments[0],learned.record.alignments[0]);
+  await sender.evaluate(()=>(window as any).sync());await existing.evaluate(()=>(window as any).sync());
+  const fresh=await fixture.createClient(account);await fresh.evaluate(()=>(window as any).sync());
+  for(const page of [existing,fresh]){const restored=await inspect(page);assert.deepEqual(restored.learning,learned.learning);assert.deepEqual(restored.memory,learned.memory);assert.deepEqual(retainedMeaningFacts(restored.record),retainedMeaningFacts(corrected.record));assert.deepEqual(restored.sources,corrected.sources);}
+  const backup=await fresh.evaluate(()=>(window as any).core.exportLibraryBackup('learned-personal-correction-fixture-password'));assert(backup.summary);
+  await fresh.reload();await fresh.evaluate(async()=>{const path='/core.js';(window as any).core=await import(/* @vite-ignore */ path);await (window as any).core.openLibrary();});
+  const reopened=await inspect(fresh);assert.deepEqual(reopened.learning,learned.learning);assert.deepEqual(reopened.memory,learned.memory);assert.deepEqual(retainedMeaningFacts(reopened.record),retainedMeaningFacts(corrected.record));
+  // Returning later must use the retained admitted Target, not the corrected
+  // current Meaning or an invented new target. Advance only this isolated
+  // browser's trusted clock to its actual due instant before normal commands.
+  await fresh.clock.setFixedTime(new Date(new Date(learned.memory.targets[0].memory.dueAt).getTime()+60_000));
+  await fresh.evaluate(async targetId=>{
+   const c=(window as any).core,id=()=>crypto.randomUUID(),languageContext=(await c.languageRoutesSnapshot()).context;
+   await c.learningSystem.execute({kind:'start',operationId:id(),targetId,languageContext,dailyLimit:20});
+   let runtime=(await c.learningSystem.read({kind:'runtime',languageContext})).runtime as LearningRuntimeProjection;
+   if(runtime.currentTargetId!==targetId)throw Error('Review selected another Target');
+   await c.learningSystem.execute({kind:'act',operationId:id(),runId:runtime.runId,expectedRevision:runtime.revision,action:{kind:'reveal'}});
+   runtime=(await c.learningSystem.read({kind:'runtime',languageContext})).runtime;
+   await c.learningSystem.execute({kind:'act',operationId:id(),runId:runtime.runId,expectedRevision:runtime.revision,action:{kind:'rate',rating:'good'}});
+   await c.learningSystem.execute({kind:'finish',operationId:id(),runId:runtime.runId});
+  },identity.targetId);
+  const reviewed=await inspect(fresh);assert.equal(reviewed.memory.targets[0].presentation.expression,'raincoat');assert.equal(reviewed.memory.targets[0].memory.reps,learned.memory.targets[0].memory.reps+1);
+  assert.equal(reviewed.learning.learningTargets.length,1);assert.equal(reviewed.learning.learningRuns.length,2);
+  for(const table of ['contentAttempts','personalLearning','media'])assert.deepEqual(reviewed.learning[table],learned.learning[table],'review must not silently prepare another meaning');
+  for(const table of ['learningRuns','learningEvents'])for(const original of learned.learning[table])assert.deepEqual(reviewed.learning[table].find((row:any)=>row.key===original.key),original,'original completed learning remains immutable history');
+  assert.deepEqual(retainedMeaningFacts(reviewed.record),retainedMeaningFacts(corrected.record));
+ }finally{await fixture.close();}
+});
+test('personal correction and old Sense annotations survive Cloud restore while an unchanged offline Meaning cannot reactivate the replaced interpretation',async({browser})=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount('personal-correction-history'),sender=await fixture.createClient(account);
+  const payload=manualMeaningPayload({...newManualMeaningDraft(),context:'Jo asked to borrow my umbrella. I gave it to her.',occurrence:'borrow',languageTag:'en',meaning:'暂时取得他人的物品，之后归还。',usage:'向朋友暂借雨伞。'});
+  const identity=await sender.evaluate(async payload=>{
+   const c=(window as any).core,accepted=await c.createJourneyModules().semanticIntake.submit(payload),record=await c.readLibrary((tx:any)=>tx.get('semanticMeanings',accepted.personalMeaningId)),alignment=record.alignments[0];
+   await c.personalContentSystem.execute({kind:'set_saved_sense',operationId:crypto.randomUUID(),senseId:alignment.senseId,saved:true});
+   await c.personalContentSystem.execute({kind:'set_sense_note',operationId:crypto.randomUUID(),senseId:alignment.senseId,body:'旧笔记对应借入。',expected:{body:'',revision:0}});
+   return {meaningId:accepted.personalMeaningId,senseId:alignment.senseId,alignmentId:alignment.personalMeaningAlignmentId};
+  },payload);
+  const inspect=(page:import('@playwright/test').Page)=>page.evaluate(async({meaningId,senseId})=>{
+   const c=(window as any).core;await c.personalContentSystem.refresh();
+   const personal=c.personalContentSystem.read({kind:'snapshot'});
+   return {record:await c.readLibrary((tx:any)=>tx.get('semanticMeanings',meaningId)),references:await c.worldReadRepository.references([senseId]),saved:[...personal.savedSenseIds],note:await c.personalContentSystem.readSenseNote(senseId),receipts:await c.readLibrary((tx:any)=>tx.entries('semanticReceipts')),targets:(await c.readLearning()).targets,runs:await c.readLibrary((tx:any)=>tx.entries('learningRuns'))};
+  },identity);
+  await sender.evaluate(()=>(window as any).sync());const offline=await fixture.createClient(account);await offline.evaluate(()=>(window as any).sync());const original=await inspect(offline);
+  await offline.evaluate(()=>{(window as any).offline=true;});
+  const correction=await sender.evaluate(async({meaningId,alignmentId})=>{
+   const c=(window as any).core,seed=await c.worldReadRepository.correction(meaningId,alignmentId),operationId=crypto.randomUUID();
+   const payload={...seed.payload,operationId,capturedAt:new Date().toISOString(),acceptance:{mode:'learner_direct'},expression:{...seed.payload.expression,surfaceForm:'lend',occurrence:{...seed.payload.expression.occurrence,surfaceForm:'lend'}},sense:{...seed.payload.sense,senseKey:null,wordingSource:'learner_authored',semanticSpec:{...seed.payload.sense.semanticSpec,coreMeaningFocus:'把自己的物品暂时交给别人使用，之后收回。',prototypeScenes:[{summary:'把雨伞暂借给同事，用完后收回。',participantRoles:[],states:[],directionOrCausality:null}]}}};
+   return c.createJourneyModules().personalMeaningJourney.correctPersonalMeaning({operationId,personalMeaningId:meaningId,personalMeaningAlignmentId:alignmentId,source:seed.source,payload});
+  },identity);
+  await sender.evaluate(()=>(window as any).sync());assert.deepEqual((await inspect(offline)).record,original.record,'the old device has not received the correction');
+  await offline.evaluate(async senseId=>{const c=(window as any).core;await c.personalContentSystem.execute({kind:'set_sense_note',operationId:crypto.randomUUID(),senseId,body:'离线修改的旧笔记仍对应借入。',expected:await c.personalContentSystem.readSenseNote(senseId)});(window as any).offline=false;await (window as any).sync();},identity.senseId);
+  await sender.evaluate(()=>(window as any).sync());const corrected=await inspect(sender);
+  const compare=(value:Awaited<ReturnType<typeof inspect>>)=>({...value,record:retainedMeaningFacts(value.record)});
+  assert.deepEqual(compare(await inspect(offline)),compare(corrected));
+  assert.equal(corrected.record.personalMeaning.personalMeaningId,identity.meaningId);assert.equal(corrected.record.personalMeaning.currentRevision,correction.revision);
+  assert.deepEqual(corrected.record.alignments[0],original.record.alignments[0]);assert.deepEqual(corrected.record.semanticAcceptances[0],original.record.semanticAcceptances[0]);assert.deepEqual(corrected.record.personalSemanticAnchorRevisions,original.record.personalSemanticAnchorRevisions);
+  assert.equal(corrected.record.alignmentEvents.find((row:any)=>row.personalMeaningAlignmentId===identity.alignmentId&&row.ordinal===2)?.eventType,'withdrawn');
+  assert(corrected.references[0].references.some((row:any)=>row.personalMeaningAlignmentId===identity.alignmentId&&row.senseId===identity.senseId&&row.word==='borrow'&&row.historical));
+  assert.deepEqual(corrected.saved,[identity.senseId]);assert.deepEqual(corrected.note,{body:'离线修改的旧笔记仍对应借入。',revision:2});assert.deepEqual(corrected.targets,[]);assert.deepEqual(corrected.runs,[]);
+  const fresh=await fixture.createClient(account);await fresh.evaluate(()=>(window as any).sync());assert.deepEqual(compare(await inspect(fresh)),compare(corrected));
+  const backup=await fresh.evaluate(()=>(window as any).core.exportLibraryBackup('correction-history-fixture-password'));assert(backup.summary);
+  await fresh.reload();await fresh.evaluate(async()=>{const path='/core.js';(window as any).core=await import(/* @vite-ignore */ path);await (window as any).core.openLibrary();});assert.deepEqual(compare(await inspect(fresh)),compare(corrected));
+ }finally{await fixture.close();}
+});
+test('personal meaning recycle-bin deletion beats an unchanged offline replica and explicit same-identity restoration survives Cloud reload',async({browser})=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount('personal-meaning-recycle-bin'),sender=await fixture.createClient(account);
+  const payload=manualMeaningPayload({...newManualMeaningDraft(),context:'I asked to borrow an umbrella and promised to return it.',occurrence:'borrow',canonicalForm:'borrow',languageTag:'en',meaning:'临时借用物品，之后归还。',usage:'下雨时向同伴暂借雨伞。'});
+  const accepted=await sender.evaluate(payload=>(window as any).core.createJourneyModules().semanticIntake.submit(payload),payload);
+  assert.equal(accepted.route,'fast_track');const meaningId=accepted.personalMeaningId;
+  const inspect=(page:import('@playwright/test').Page)=>page.evaluate(async meaningId=>{
+   const c=(window as any).core;
+   return {record:await c.readLibrary((tx:any)=>tx.get('semanticMeanings',meaningId)),receipts:await c.readLibrary((tx:any)=>tx.entries('semanticReceipts')),active:(await c.worldReadRepository.page({query:'',filter:'all',offset:0,limit:64})).items,trash:(await c.worldReadRepository.page({query:'',filter:'deleted',offset:0,limit:64})).items,targets:(await c.readLearning()).targets,runs:await c.readLibrary((tx:any)=>tx.entries('learningRuns'))};
+  },meaningId);
+  await sender.evaluate(()=>(window as any).sync());
+  const offline=await fixture.createClient(account);await offline.evaluate(()=>(window as any).sync());
+  const original=await inspect(offline);assert.equal(original.record.personalMeaning.status,'active');
+  await offline.evaluate(async()=>{const c=(window as any).core;(window as any).offline=true;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'unrelated offline material must survive'});});
+  const remove=await sender.evaluate(async meaningId=>(window as any).core.createJourneyModules().personalMeaningJourney.changeMeaningLifecycle({operationId:crypto.randomUUID(),personalMeaningId:meaningId,expectedRevision:1,action:'delete'}),meaningId);
+  await sender.evaluate(()=>(window as any).sync());
+  assert.equal((await inspect(offline)).record.personalMeaning.status,'active','the old device is genuinely still offline');
+  await offline.evaluate(async()=>{(window as any).offline=false;return (window as any).sync();});
+  const deleted=await inspect(offline);assert.equal(deleted.record.personalMeaning.status,'deleted');assert.equal(deleted.active.length,0);assert.equal(deleted.trash.length,1);assert.deepEqual(deleted.targets,[]);assert.deepEqual(deleted.runs,[]);
+  await sender.evaluate(()=>(window as any).sync());
+  assert.equal((await sender.evaluate(()=>(window as any).core.listDrafts())).length,1,'merging the tombstone does not discard unrelated offline content');
+  const fresh=await fixture.createClient(account);await fresh.evaluate(()=>(window as any).sync());assert.deepEqual((await inspect(fresh)).record,deleted.record);
+  const restore=await sender.evaluate(async({meaningId,revision})=>(window as any).core.createJourneyModules().personalMeaningJourney.changeMeaningLifecycle({operationId:crypto.randomUUID(),personalMeaningId:meaningId,expectedRevision:revision,action:'restore'}),{meaningId,revision:remove.revision});
+  assert.equal(restore.personalMeaningId,meaningId);await sender.evaluate(()=>(window as any).sync());await offline.evaluate(()=>(window as any).sync());await fresh.evaluate(()=>(window as any).sync());
+  const restored=await inspect(fresh);assert.equal(restored.record.personalMeaning.status,'active');assert.equal(restored.record.personalMeaning.lifecycleRevision,3);assert.equal(restored.active.length,1);assert.equal(restored.trash.length,0);
+  assert.deepEqual(restored.record.personalMeaningRevisions.slice(0,2),deleted.record.personalMeaningRevisions);assert.deepEqual(restored.record.semanticAcceptances,original.record.semanticAcceptances);
+  await fresh.reload();await fresh.evaluate(async()=>{const path='/core.js';(window as any).core=await import(/* @vite-ignore */ path);await (window as any).core.openLibrary();});
+  assert.deepEqual((await inspect(fresh)).record,restored.record);assert.deepEqual((await inspect(fresh)).receipts,restored.receipts);
+ }finally{await fixture.close();}
+});
+test('note edits reject a same-revision Cloud fork replacement and an unchanged offline copy cannot resurrect a cleared note',async({browser})=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount('personal-note-fork'),a=await fixture.createClient(account);
+  const payload=manualMeaningPayload({...newManualMeaningDraft(),context:'I asked to borrow an umbrella and promised to return it.',occurrence:'borrow',canonicalForm:'borrow',languageTag:'en',meaning:'临时借用物品，之后归还。',usage:'下雨时向同伴暂借雨伞。'});
+  const senseId=await a.evaluate(async payload=>{
+   const c=(window as any).core,accepted=await c.createJourneyModules().semanticIntake.submit(payload);
+   const record=await c.readLibrary((tx:any)=>tx.get('semanticMeanings',accepted.personalMeaningId));return record.alignments[0].senseId as string;
+  },payload);
+  const read=(page:import('@playwright/test').Page)=>page.evaluate(senseId=>(window as any).core.personalContentSystem.readSenseNote(senseId),senseId);
+  const save=(page:import('@playwright/test').Page,body:string,expected:{body:string;revision:number})=>page.evaluate(({senseId,body,expected})=>(window as any).core.personalContentSystem.execute({kind:'set_sense_note',operationId:crypto.randomUUID(),senseId,body,expected}),{senseId,body,expected});
+  await save(a,'original note',await read(a));await a.evaluate(()=>(window as any).sync());
+  const b=await fixture.createClient(account);await b.evaluate(()=>(window as any).sync());assert.deepEqual(await read(b),{body:'original note',revision:1});
+  await save(a,'device A branch',await read(a));await save(b,'device B branch',await read(b));
+  const staleBase=await read(b);assert.equal(staleBase.revision,2);
+  await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());
+  assert.equal((await b.evaluate(()=>(window as any).core.readCloudSync())).status,'conflict');
+  assert.deepEqual(await read(b),staleBase,'unresolved conflict must not silently replace the local note');
+  await b.evaluate(async()=>{await (window as any).core.resolveCloudSyncConflicts('remote');await (window as any).sync();});
+  assert.deepEqual(await read(b),{body:'device A branch',revision:2},'explicit resolution selects the other legitimate branch without renumbering it');
+  const staleOperationId=crypto.randomUUID();
+  const rejection=await b.evaluate(async({senseId,expected,operationId})=>{
+   const c=(window as any).core;
+   try{await c.personalContentSystem.execute({kind:'set_sense_note',operationId,senseId,body:'stale editing draft',expected});return {error:null};}
+   catch(error){return {error:(error as Error).message,current:(error as any).current,receipt:await c.readLibrary((tx:any)=>tx.get('operations',operationId))??null};}
+  },{senseId,expected:staleBase,operationId:staleOperationId});
+  assert.deepEqual(rejection,{error:'personalContent.noteChanged',current:{body:'device A branch',revision:2},receipt:null});
+  await save(b,'explicitly reviewed replacement',await read(b));await b.evaluate(()=>(window as any).sync());await a.evaluate(()=>(window as any).sync());assert.deepEqual(await read(a),{body:'explicitly reviewed replacement',revision:3});
+  const old=await fixture.createClient(account);await old.evaluate(()=>(window as any).sync());await old.evaluate(()=>{(window as any).offline=true;});
+  await save(a,'',await read(a));await a.evaluate(()=>(window as any).sync());
+  assert.deepEqual(await read(old),{body:'explicitly reviewed replacement',revision:3},'the old replica is actually still offline');
+  await old.evaluate(async()=>{(window as any).offline=false;await (window as any).sync();});assert.deepEqual(await read(old),{body:'',revision:4});
+  await a.evaluate(()=>(window as any).sync());assert.deepEqual(await read(a),{body:'',revision:4},'unchanged offline text cannot resurrect the cleared note');
+  const fresh=await fixture.createClient(account);await fresh.evaluate(()=>(window as any).sync());assert.deepEqual(await read(fresh),{body:'',revision:4});
+  const backup=await fresh.evaluate(()=>(window as any).core.exportLibraryBackup('personal-note-fixture-password'));assert(backup.summary);
+  await fresh.reload();await fresh.evaluate(async()=>{const path='/core.js';(window as any).core=await import(/* @vite-ignore */ path);await (window as any).core.openLibrary();});
+  assert.deepEqual(await read(fresh),{body:'',revision:4});
+ }finally{await fixture.close();}
+});
+
 test('direct learning intent and ready membership survive cloud restore without a Personal Meaning or package cache',async({browser})=>{
  const fixture=await createLibraryCloudBrowserFixture(browser);
  try{
@@ -30,7 +288,9 @@ test('direct learning intent and ready membership survive cloud restore without 
   const pendingReceiver=await fixture.createClient(account);await pendingReceiver.evaluate(()=>(window as any).sync());
   const inspect=(page:import('@playwright/test').Page)=>page.evaluate(async(enrollmentId)=>{
    const c=(window as any).core;
+   await c.personalContentSystem.refresh();const annotations=c.personalContentSystem.read({kind:'snapshot'});
    return {intent:await c.learningSystem.read({kind:'direct_enrollment',enrollmentId}),targets:(await c.readLearning()).targets,
+    semanticMemory:await c.learningSystem.read({kind:'semantic_memory'}),annotations:{savedSenseIds:[...annotations.savedSenseIds],senseNotes:annotations.senseNotes},
     meanings:await c.readLibrary((tx:any)=>tx.entries('semanticMeanings')),packages:await c.installedPackages()};
   },intent.enrollmentId);
   const pending=await inspect(pendingReceiver);assert.deepEqual(pending.intent,intent);assert.deepEqual(pending.targets,[]);assert.deepEqual(pending.meanings,[]);assert.deepEqual(pending.packages,[]);
@@ -45,15 +305,21 @@ test('direct learning intent and ready membership survive cloud restore without 
   assert.equal((await inspect(pendingReceiver)).intent.status,'awaiting_content');
   assert.equal((await inspect(pendingReceiver)).intent.membershipRevision,2);
   assert.equal((await sender.evaluate(enrollmentId=>(window as any).core.learningSystem.execute({kind:'prepare_direct',operationId:crypto.randomUUID(),enrollmentId}),intent.enrollmentId)).status,'ready');
+  await sender.evaluate(async()=>{const c=(window as any).core,target=(await c.learningSystem.read({kind:'semantic_memory'})).targets[0];await c.personalContentSystem.execute({kind:'set_saved_sense',operationId:crypto.randomUUID(),senseId:target.senseId,saved:true});await c.personalContentSystem.execute({kind:'set_sense_note',operationId:crypto.randomUUID(),senseId:target.senseId,body:'Saved nonbundled source survives cacheless Cloud restore.',expected:await c.personalContentSystem.readSenseNote(target.senseId)});});
   await sender.evaluate(()=>(window as any).sync());
   const receiver=await fixture.createClient(account);await receiver.evaluate(()=>(window as any).sync());
   const ready=await inspect(receiver),original=await inspect(sender);
   assert.deepEqual(ready.targets,original.targets);assert.equal(ready.targets.length,1);assert.equal(ready.targets[0].curriculumMemberships[0].sourceKind,'stable_sense');
   assert.deepEqual(ready.meanings,[]);assert.deepEqual(ready.packages,[]);
+  assert.deepEqual(ready.semanticMemory,original.semanticMemory,'restored Target facts rebuild the compact read projection without package bytes');
+  assert.deepEqual(ready.annotations,original.annotations);
+  assert.equal(ready.semanticMemory.targets[0].targetId,ready.targets[0].id);assert.equal(ready.semanticMemory.targets[0].memory,null,'bookmarking and notes never fabricate memory');
+  assert.deepEqual(ready.annotations.savedSenseIds,[ready.targets[0].identity.senseId]);assert.equal(ready.annotations.senseNotes[ready.targets[0].identity.senseId],'Saved nonbundled source survives cacheless Cloud restore.');
+  assert.deepEqual(await receiver.evaluate(targetId=>(window as any).core.learningSystem.read({kind:'semantic_memory',targetId}),ready.targets[0].id),ready.semanticMemory,'an exact restored reference remains readable without public cache');
   const backup=await receiver.evaluate(async()=>{const c=(window as any).core;return (await c.exportLibraryBackup('direct-fixture-backup-password')).summary;});
   assert.equal(backup.targets,1);assert.equal(backup.runs,0,'restoration never fabricates a Run');
   await receiver.reload();await receiver.evaluate(async()=>{const path='/core.js';(window as any).core=await import(/* @vite-ignore */ path);await (window as any).core.openLibrary();});
-  assert.deepEqual((await inspect(receiver)).targets,ready.targets);
+  const reopened=await inspect(receiver);assert.deepEqual(reopened.targets,ready.targets);assert.deepEqual(reopened.semanticMemory,ready.semanticMemory);assert.deepEqual(reopened.annotations,ready.annotations);
  }finally{await fixture.close();}
 });
 test('an explicitly ended unfinished Session restores through Cloud without an active pointer, completion or public package bytes',async({browser})=>{

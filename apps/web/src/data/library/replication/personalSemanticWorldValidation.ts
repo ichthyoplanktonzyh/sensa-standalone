@@ -6,6 +6,7 @@ import {backupEqual} from '../backupCodec';
 import type {BackupRows} from '../backupValidation';
 import {conversationImagesSchema} from '../conversationImages';
 import {parseStoredMedia} from '../media';
+import {alignmentStatusAt} from '../../../experience/personalMeaningJourney/alignmentLifecycle';
 import type {Table} from '../store';
 
 type RequireRow=(table:Table,id:string)=>any;
@@ -46,8 +47,9 @@ export function validatePersonalSemanticWorldReplica(input:{
   // Tombstoning the personal origin must not invalidate already accepted learning.
   const record=semantic.meanings?.find((candidate:any)=>candidate.personalMeaning?.personalMeaningId===source.personalMeaningId)??fail();
   if(!record.personalMeaningRevisions.some((candidate:any)=>candidate.personalMeaningRevisionId===source.personalMeaningRevisionId))fail();
-  const alignment=record.alignments.find((candidate:any)=>candidate.personalMeaningAlignmentId===source.personalMeaningAlignmentId&&candidate.status==='active')??fail();
+  const alignment=record.alignments.find((candidate:any)=>candidate.personalMeaningAlignmentId===source.personalMeaningAlignmentId)??fail();
   if(alignment.personalMeaningRevisionId!==source.personalMeaningRevisionId||alignment.revision!==source.alignmentRevision||alignment.senseId!==source.senseId||alignment.senseVersionId!==source.senseVersionId)fail();
+  if(alignmentStatusAt(record.alignmentEvents,alignment.personalMeaningAlignmentId,source.alignmentRevision)!=='active')fail();
   const basisReferenceId=alignment.basis.kind==='contextual_resolution'?alignment.basis.semanticAcceptanceId:alignment.basis.senseProposalConfirmationId;
   if(basisReferenceId!==source.alignmentBasisReferenceId||(alignment.basis.kind==='sense_construction'?alignment.basis.meaningFocusId:null)!==source.meaningFocusId)fail();
   const bindingVersion=semantic.registry?.bindingVersions?.find((candidate:any)=>candidate.bindingVersionId===source.bindingVersionId)??fail();

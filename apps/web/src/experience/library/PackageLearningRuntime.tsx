@@ -132,7 +132,7 @@ function LightweightPackageRuntime({active,runtime,c,host,onExit,onFinish}:{acti
   if(accepted&&runtime.purpose==='initial_learning'&&rating!=='again')host.toast(i18n.t('runtime.initialSaved',{expression:target.presentation.expression}));
  };
  const material=target.material;
- const content={senseKey:String(material.snapshot.provenance.senseId),lemma:target.presentation.expression,guideLabelL1:target.presentation.meaning};
+ const content={senseKey:target.identity.senseId,lemma:target.presentation.expression,guideLabelL1:target.presentation.meaning};
  const scene=personalContentSystem.read({kind:'learning_scene',learningTargetId:target.targetId,languageRouteId:target.languageContext.languageRouteId});
  const sceneRevision=scene?currentPersonalLearningSceneRevision(scene):null;
  const pack=target.packageKey?c.packages.find(candidate=>candidate.key===target.packageKey):undefined;

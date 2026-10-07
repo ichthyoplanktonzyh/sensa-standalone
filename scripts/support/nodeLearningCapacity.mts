@@ -10,7 +10,7 @@ export async function useNodeLearningCapacityStorage(){
  database.initialize();
  const adapter=await sqliteRecordAdapter();
  const methods=[
-  'get','entries','entriesPage','existingRecordKeys','packageCacheProjection','lookupMeanings','worldBrowse','registrySelection','worldLearningChoices','existingJourneyIdentities',
+  'get','entries','entriesPage','existingRecordKeys','packageCacheProjection','lookupMeanings','worldBrowse','registrySelection','learningSemanticMemory','worldLearningChoices','existingJourneyIdentities',
   'changesSince','hasChangesSince','syncBaseEntries','count','estimateRecordBytes','homeLearningProjection','countIntroducedLearningTargets','learningRunIdsForTarget','openLearningRunTargets',
   'countContentAttemptsSince','learningTargetIdsForBookUpgrade','isMediaReferenced','portableMedia','portableMediaDiagnostics','commit','diagnostics','learningHistoryPage','learningManagementSummary','runtimeLearningCandidates','studyScopeMember','latestLearningActionAt',
  ] as const satisfies readonly (keyof SqliteRecordAdapter)[];

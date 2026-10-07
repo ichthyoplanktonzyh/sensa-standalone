@@ -11,6 +11,7 @@ import {SqliteLearningHistoryProjection,type StoredLearningRecord,type StoredLea
 import type {LearningHistoryRequest} from '../../learning/system/learningHistoryModel';
 import {SqliteRuntimeLearningCandidates,type RuntimeLearningCandidateQuery,type RuntimeLearningCandidates,type LearningManagementSummaryQuery,type LearningManagementStorageSummary} from './runtimeLearningCandidates';
 import {ensureSqliteSchemaIndexes} from './sqliteSchemaIndexes';
+import {SqliteLearningSemanticMemoryProjection} from './learningSemanticMemoryProjection';
 import {registryFieldReader,registrySelectionSql,registrySelectionResult,type RegistrySelectionQuery,type RegistrySelection} from './semanticRegistrySelection';
 import type {WorldBrowseQuery,WorldBrowsePage,WorldLearningChoiceQuery,WorldLearningChoicePage} from '../../experience/personalMeaningJourney/worldRead';
 import type {MeaningLookupResult} from '../../experience/personalMeaningJourney/meaningLookup';
@@ -94,6 +95,7 @@ export class SqliteRecordDatabase {
   private journeyIdentities:SqliteJourneyIdentityProjection;
   private learningHistory:SqliteLearningHistoryProjection;
   private runtimeCandidates:SqliteRuntimeLearningCandidates;
+  private semanticMemoryProjection:SqliteLearningSemanticMemoryProjection;
   private recordGet:ReturnType<Database['prepare']>|undefined;
 
   /** The Worker must stop queued requests even if the durable COMMIT succeeded. */
@@ -116,6 +118,7 @@ export class SqliteRecordDatabase {
     this.meaningLookup=new SqliteMeaningLookupProjection(database,(table,key)=>this.get(table,key));
     this.worldBrowseProjection=new SqliteWorldBrowseProjection(database,(table,key)=>this.get(table,key));
     this.journeyIdentities=new SqliteJourneyIdentityProjection(database);
+    this.semanticMemoryProjection=new SqliteLearningSemanticMemoryProjection(database,encoded=>this.decode<LocalLearningTarget>(this.logicalEncoded('learningTargets',encoded)),id=>{const encoded=this.get('learningTargets',id);return encoded===null?null:this.decode<LocalLearningTarget>(encoded);});
     this.learningHistory=new SqliteLearningHistoryProjection(database,id=>this.decoded<LocalLearningTarget>('learningTargets',id),encoded=>this.decode<LocalLearningRun>(this.logicalEncoded('learningRuns',encoded)));
     this.runtimeCandidates=new SqliteRuntimeLearningCandidates(database,encoded=>this.decode<LocalLearningTarget>(this.logicalEncoded('learningTargets',encoded)),encoded=>this.decode<import('./curriculumEnrollments').LocalCurriculumEnrollment>(this.logicalEncoded('curriculumEnrollments',encoded)),(id,target)=>this.writeLearningTargetProjection(id,target),encoded=>this.decode<import('./studyScopes').LocalStudyScope>(this.logicalEncoded('studyScopes',encoded)));
   }
@@ -212,6 +215,7 @@ export class SqliteRecordDatabase {
       worldReady=performance.now();
       this.journeyIdentities.initialize();
       this.learningHistory.initialize();
+      this.semanticMemoryProjection.initialize();
       this.runtimeCandidates.initialize();
       // Retire only the obsolete device-local full-inventory admission cache.
       // Source facts, shared bodies and their ownership are untouched.
@@ -291,6 +295,7 @@ export class SqliteRecordDatabase {
       encodedValue: this.logicalEncoded(table,String(row.value_json)),
     }));
   }
+  learningSemanticMemory(targetId?:string):import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection{return this.semanticMemoryProjection.read(targetId);}
   lookupMeanings(query:string):MeaningLookupResult{return this.meaningLookup.query(query);}
   worldBrowse(query:WorldBrowseQuery):WorldBrowsePage{return this.worldBrowseProjection.query(query);}
   registrySelection(query:RegistrySelectionQuery):RegistrySelection{
@@ -681,7 +686,7 @@ export class SqliteRecordDatabase {
           this.database.exec('DELETE FROM sensa_portable_package_media');
           this.database.exec('DELETE FROM sensa_package_cache_projection');
         }
-        if (table === 'learningTargets'){this.database.exec('DELETE FROM sensa_learning_targets');this.runtimeCandidates.clear();}
+        if (table === 'learningTargets'){this.database.exec('DELETE FROM sensa_learning_targets');this.runtimeCandidates.clear();this.semanticMemoryProjection.clear();}
         if(table==='curriculumEnrollments')this.runtimeCandidates.clearEnrollments();
         if(table==='supplementalMembershipStates')this.runtimeCandidates.clearSupplementalStates();
         if(table==='studyScopes')this.runtimeCandidates.clearScopes();
@@ -713,6 +718,7 @@ export class SqliteRecordDatabase {
           this.database.exec({sql:'DELETE FROM sensa_package_cache_projection WHERE package_key=?',bind:[item.key]});
         }
         if (item.table === 'learningTargets') {
+          this.semanticMemoryProjection.delete(item.key);
           this.runtimeCandidates.delete(item.key);
           this.database.exec({
             sql: 'DELETE FROM sensa_learning_targets WHERE record_key=?',
@@ -1011,6 +1017,7 @@ export class SqliteRecordDatabase {
   }
 
   private writeLearningTargetProjection(key:string,target:LocalLearningTarget):void{
+    this.semanticMemoryProjection.upsert(key,target);
     const projection = createHomeLearningTargetRecord(target);
     this.database.exec({
       sql: `INSERT INTO sensa_learning_targets(

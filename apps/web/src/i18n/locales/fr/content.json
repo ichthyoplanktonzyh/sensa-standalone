@@ -35,6 +35,40 @@
     "utterance_strategy": "Stratégie d’expression"
   }
 },
+  "noteEditor": {
+    "loading": "Chargement de la note…",
+    "readFailed": "Impossible de lire cette note.",
+    "changed": "La note a été modifiée ailleurs. Votre brouillon est conservé.",
+    "latest": "Dernière note enregistrée",
+    "empty": "Note vide",
+    "useLatest": "Utiliser la dernière note",
+    "saveMine": "Enregistrer ma version",
+    "unconfirmed": "Enregistrement non confirmé. Réessayez pour vérifier cet enregistrement.",
+    "savedReadFailed": "Note enregistrée, mais la liste n’a pas pu être actualisée. Réessayez la lecture."
+  },
+  "meaningGovernance": {
+    "correct": "Modifier le sens et l’expression",
+    "history": "Sens et expressions précédents",
+    "expression": "Expression",
+    "formSettings": "Langue et type d’expression",
+    "changed": "Le contenu a changé. Rouvrez le contenu actuel avant de réessayer.",
+    "more": "Plus",
+    "favorite": "Enregistrer le sens",
+    "unfavorite": "Retirer des favoris",
+    "note": "Écrire une note",
+    "remove": "Supprimer le contenu",
+    "restore": "Restaurer le contenu",
+    "deleted": "Supprimé",
+    "deleteTitle": "Supprimer ce contenu ?",
+    "consequence": "Déplacer vers la corbeille. Les sources, notes et historiques restent conservés.",
+    "cancel": "Annuler",
+    "trash": "Corbeille",
+    "emptyTrash": "La corbeille est vide",
+    "all": "Tout le contenu",
+    "unconfirmed": "Résultat non confirmé. Le contenu a été relu ; vérifiez-le avant de réessayer.",
+    "savedReadFailed": "La modification est enregistrée, mais la relecture a échoué. Réessayez la lecture.",
+    "retryRead": "Relire"
+  },
   "content": {
     "manual": "Créer manuellement",
     "findExpression": "Parler à Sensa",

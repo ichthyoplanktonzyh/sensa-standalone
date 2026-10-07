@@ -229,7 +229,9 @@ export function settleExpressionBinding(
     (confirmation) =>
       confirmation.senseVersionId === input.senseVersionId
       && confirmation.expressionVersionId === expressionVersion.expressionVersionId
-      && confirmation.bindingVersionId === bindingVersion!.bindingVersionId,
+      && confirmation.bindingVersionId === bindingVersion!.bindingVersionId
+      && confirmation.senseProposalVersionId === senseProposalVersionId
+      && (senseProposalVersionId!==null||confirmation.personalExpressionAnchorRevisionId===candidate.personalExpressionAnchorRevisionId),
   );
   if (existingConfirmation) {
     return {

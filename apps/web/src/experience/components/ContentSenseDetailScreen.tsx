@@ -1,6 +1,7 @@
 import '../../i18n/contentResources';
 import { useTranslation } from 'react-i18next';
 import { uiText } from '../../i18n/uiText';
+import { localFlowText } from '../../i18n/localFlowText';
 import { useEffect, useMemo, useState } from 'react';
 import { personalContentSystem } from '../../personalContent/system';
 import {contentSenseForId,semanticStatusLabel,type SemanticStatus} from '../../learnerSemanticProjection/system';
@@ -39,18 +40,16 @@ export const ContentSenseDetailScreen = ({
   useTranslation();
   const item=useMemo(()=>senseId?contentSenseForId(senseId):null,[senseId]);
   const projection = useLearnerSemanticProjection();
-  const [saved, setSaved] = useState(false);
-  const [note, setNote] = useState('');
+  const [, redraw] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const personal = item ? personalContentSystem.read({kind:'sense',senseId:item.senseId}) : null;
+  const annotationReady = personal?.status === 'ready';
+  const saved = annotationReady && personal.saved;
+  const note = annotationReady ? personal.note : '';
 
   useEffect(() => {
     if (!item) return;
-    const refresh = () => {
-      const personal = personalContentSystem.read({ kind: 'sense', senseId: item.senseId });
-      setSaved(personal.saved);
-      setNote(personal.note);
-    };
-    refresh();
-    return personalContentSystem.subscribe({ kind: 'sense', senseId: item.senseId }, refresh);
+    return personalContentSystem.subscribe({ kind: 'sense', senseId: item.senseId }, () => redraw(value => value + 1));
   }, [item]);
 
   const siblings = useMemo(() => item
@@ -63,6 +62,8 @@ export const ContentSenseDetailScreen = ({
   if (!item) return null;
 
   const toggleSaved = async () => {
+    if (!annotationReady || busy) return;
+    setBusy(true);
     try {
       const next = await personalContentSystem.execute({
         kind: 'set_saved_sense',
@@ -70,10 +71,11 @@ export const ContentSenseDetailScreen = ({
         senseId: item.senseId,
         saved: !saved,
       });
-      setSaved(next);
       toast(next ? uiText('meaningSaved') : uiText('meaningRemovedFromSaved'));
     } catch {
       toast(uiText('saveFailed'));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -89,7 +91,7 @@ export const ContentSenseDetailScreen = ({
           <svg className={iconClass} aria-hidden="true"><use href="#i-chev-l" /></svg>
         </button>
         <span className="text-center text-section-title font-medium">{uiText('meaning3')}</span>
-        <button className={`grid size-11 place-items-center justify-self-end rounded-control border-0 focus-visible:outline-2 focus-visible:outline-focus ${saved ? 'bg-accent-soft text-action-primary' : 'bg-transparent text-fg-secondary hover:bg-surface-subtle'}`} onClick={() => void toggleSaved()} aria-pressed={saved} aria-label={saved ? uiText('unsaveThisMeaning') : uiText('saveThisMeaning')}>
+        <button disabled={!annotationReady || busy} className={`grid size-11 place-items-center justify-self-end rounded-control border-0 focus-visible:outline-2 focus-visible:outline-focus ${saved ? 'bg-accent-soft text-action-primary' : 'bg-transparent text-fg-secondary hover:bg-surface-subtle'}`} onClick={() => void toggleSaved()} aria-pressed={annotationReady ? saved : undefined} aria-label={saved ? uiText('unsaveThisMeaning') : uiText('saveThisMeaning')}>
           <svg className={`${iconClass} ${saved ? 'fill-current' : ''}`} aria-hidden="true"><use href="#i-star" /></svg>
         </button>
       </div>,
@@ -137,11 +139,12 @@ export const ContentSenseDetailScreen = ({
           <button className="grid w-full grid-cols-[2.75rem_1fr_auto] items-center gap-3 rounded-card border border-border-subtle bg-surface-panel p-5 text-left hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" onClick={() => onEditNote(item)}>
             <span className="grid size-11 place-items-center rounded-control bg-accent-soft text-action-primary"><svg className={iconClass} aria-hidden="true"><use href="#i-pen" /></svg></span>
             <span className="flex min-w-0 flex-col gap-1">
-              <b className="text-body">{note ? uiText('myNotes') : uiText('writeANoteOnThisMeaning')}</b>
-              <small className="line-clamp-2 text-body-support text-fg-secondary">{note || uiText('addYourUnderstandingAssociationsOrReminders')}</small>
+              <b className="text-body">{!annotationReady || note ? uiText('myNotes') : uiText('writeANoteOnThisMeaning')}</b>
+              {annotationReady && <small className="line-clamp-2 text-body-support text-fg-secondary">{note || uiText('addYourUnderstandingAssociationsOrReminders')}</small>}
             </span>
             <svg className="size-4 text-fg-tertiary" aria-hidden="true"><use href="#i-chev-r" /></svg>
           </button>
+          {!annotationReady && <p className="mt-3 text-body-support" role={personal?.status === 'error' ? 'alert' : 'status'}>{localFlowText(personal?.status === 'error' ? 'progressReadFailed' : 'loadingSensa')}{personal?.status === 'error' && <button className="ml-3 min-h-11 underline" onClick={() => void personalContentSystem.refresh().catch(() => undefined)}>{uiText('retry')}</button>}</p>}
         </section>
 
         {siblings.length > 0 && (

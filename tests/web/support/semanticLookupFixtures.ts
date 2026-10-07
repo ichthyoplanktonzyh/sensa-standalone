@@ -1,6 +1,7 @@
 /** Synthetic accepted facts for deterministic scale/concurrency checks; no paid service. */
 import {sensaIntakePayloadSchema,type SensaSenseSemanticSpec} from '@sensa/contracts/sensa';
 import {emptyJourneyState,type JourneyState} from '../../../apps/web/src/experience/personalMeaningJourney/store';
+import {digestOf} from '../../../apps/web/src/experience/personalMeaningJourney/digest';
 
 export const semanticLookupSpec:SensaSenseSemanticSpec={schemaVersion:'sensa-sense-semantic-spec-v1',coreMeaningFocus:'临时取得他人物品，并预期归还。',
   prototypeScenes:[{summary:'一个人借用同伴的物品，之后归还。',participantRoles:['借用者','所有者'],states:['临时使用'],directionOrCausality:null}],
@@ -48,8 +49,15 @@ export function advanceSemanticHeads(state:JourneyState):JourneyState{
 }
 
 export function deleteFirstMeaning(state:JourneyState):JourneyState{
+  // Typed projection fixture only; the actual command/receipt is tested through
+  // PersonalMeaningJourney.changeMeaningLifecycle rather than claimed here.
   const record=structuredClone(state.meanings[0]!);
   Object.assign(record.personalMeaning,{status:'deleted',lifecycleRevision:record.personalMeaning.lifecycleRevision+1,
     updatedAt:'2026-10-03T01:00:00.000Z',deletedAt:'2026-10-03T01:00:00.000Z',deletedByOperationId:crypto.randomUUID()});
-  return {...state,meanings:[record,...state.meanings.slice(1)]};
+  record.personalMeaning.currentRevision++;
+  record.personalMeaningRevisions.push({...record.personalMeaningRevisions.at(-1)!,personalMeaningRevisionId:crypto.randomUUID(),revision:record.personalMeaning.currentRevision,createdAt:record.personalMeaning.updatedAt,
+    provenance:{kind:'learner_authored',sourceReferenceIds:[record.personalMeaning.personalMeaningId],createdByOperationId:record.personalMeaning.deletedByOperationId!},lifecycle:{kind:'delete',revision:record.personalMeaning.lifecycleRevision}});
+  const stamp=record.personalMeaningRevisions.at(-1)!,operationId=stamp.provenance.createdByOperationId;
+  const receipt={operationId,command:'ChangeMeaningLifecycle',requestDigest:digestOf({operationId,personalMeaningId:record.personalMeaning.personalMeaningId,expectedRevision:stamp.revision-1,action:'delete'}),result:{personalMeaningId:record.personalMeaning.personalMeaningId,personalMeaningRevisionId:stamp.personalMeaningRevisionId,revision:stamp.revision,lifecycleRevision:stamp.lifecycle!.revision,status:'deleted'}};
+  return {...state,meanings:[record,...state.meanings.slice(1)],commandReceipts:[...state.commandReceipts,receipt]};
 }
