@@ -116,6 +116,8 @@ try{
   assert.ok(spanishResult.release.provider.includes('Spanish'),'the release names the language the entry is in');
   assert.deepEqual(spanishResult.entry.senses[0]!.definition,{text:'hello, hi, hey',languageTag:'en'},'English Wiktionary defines a Spanish headword in its source language');
   assert.equal(spanishResult.entry.attribution,'English Wiktionary via WiktAPI (CC BY-SA)','source attribution names the edition, not the headword language');
+  assert.equal(spanishResult.release.edition,'实时查询','live lookup is not advertised as a fixed snapshot');
+  assert.equal(spanishResult.release.rightsLabel,'Wiktionary 内容遵循 CC BY-SA','visible rights retain licensing without engineering roadmap notes');
   assert.equal(spanishResult.entry.senses[0]!.examples[0]!.sourceLabel,'English Wiktionary','an uncited Spanish example keeps its actual dictionary edition');
   assert.equal(spanishResult.entry.pronunciations[0]?.accent,'es','a non-English recording is never relabelled as an English accent');
   assert.equal(spanishResult.entry.pronunciations[0]?.ipa,'/ˈola/','pronunciation evidence the provider returned is kept');
@@ -229,6 +231,7 @@ try{
   assert.equal(official.release.targetLanguage,'es');
   assert.deepEqual(official.entry.senses[0]!.definition,{text:'water, H2O & more',languageTag:'en'},'English-edition REST wording is stripped without relabelling it Spanish');
   assert.equal(official.entry.attribution,'English Wiktionary (CC BY-SA 4.0)','REST attribution also identifies the actual source edition');
+  assert.equal(official.release.rightsLabel,'Wiktionary 内容遵循 CC BY-SA 4.0','REST visible rights likewise retain licensing without roadmap notes');
   assert.equal(official.entry.senses[0]!.examples[0]!.sourceLabel,'English Wiktionary','REST example source is the edition, not its Spanish language group');
   assert.equal(official.entry.pronunciations.length,0,'an endpoint without pronunciation evidence yields no guessed IPA');
 

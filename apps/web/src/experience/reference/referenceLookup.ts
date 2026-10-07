@@ -244,10 +244,10 @@ function makeWiktRelease(language: SensaLanguage, supportLanguageTag: string): R
   return Object.freeze({
     releaseId: `wiktapi.${sensaLexiconEdition}-wiktionary.${language.wiktionaryCode}-${supportLanguageTag}.current.prototype`,
     provider: `WiktAPI · ${sensaLexiconEdition} Wiktionary · ${language.names.en}`,
-    edition: '公开实时快照',
+    edition: '实时查询',
     targetLanguage: language.tag,
     learnerLocale: supportLanguageTag,
-    rightsLabel: 'Wiktionary 内容遵循 CC BY-SA；当前实时源仅用于 MVP，生产版需固定快照',
+    rightsLabel: 'Wiktionary 内容遵循 CC BY-SA',
     status: 'prototype',
   });
 }
@@ -520,7 +520,7 @@ function makeWiktRestRelease(language: SensaLanguage, supportLanguageTag: string
     edition: '公开实时结果',
     targetLanguage: language.tag,
     learnerLocale: supportLanguageTag,
-    rightsLabel: 'Wiktionary 内容遵循 CC BY-SA 4.0；当前实时源仅用于 MVP，生产版需固定快照',
+    rightsLabel: 'Wiktionary 内容遵循 CC BY-SA 4.0',
     status: 'prototype',
   });
 }
