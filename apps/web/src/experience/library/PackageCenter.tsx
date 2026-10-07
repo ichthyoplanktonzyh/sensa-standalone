@@ -112,7 +112,7 @@ function PackageDetail({active,item,c,onBack,onLearning,onTarget,screenId='s-cat
  const contentProjection=useMemo(()=>item
   ?projectPackageContentWindow(item.installed,targetByEntry,contentLimit)
   :{entries:[],total:0},[item?.installed,targetByEntry,contentLimit]);
- if(!item)return <LearningSetupFrame id={screenId} active={active} onBack={onBack} title={localFlowText('packageCatalogTitle')}>{!c.loaded||c.catalogBusy?<div role="status" aria-label={t('reliability.loading')} className="h-32 animate-pulse rounded-2xl bg-surface-subtle"/>:<p role="status">{localFlowText('packageNoResults')}</p>}</LearningSetupFrame>;
+ if(!item)return <LearningSetupFrame id={screenId} active={active} onBack={onBack} title={localFlowText('packageCatalogTitle')}>{!c.loaded||c.catalogBusy?<div role="status" aria-label={t('reliability.loading')} className="h-32 animate-pulse rounded-2xl bg-surface-subtle"/>:<p role="status">{referenceOnly?t('reliability.errorTitle'):localFlowText('packageNoResults')}</p>}</LearningSetupFrame>;
  const installedEntryCount=contentProjection.total;
  const installedEntries=contentProjection.entries;
  const enrollInstalled=()=>{

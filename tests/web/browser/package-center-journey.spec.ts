@@ -424,6 +424,46 @@ test('a downloaded target opens its actual installed source and returns to the s
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(before);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);
 });
 
+test('missing source cache stays unavailable offline and returning preserves the revealed learning Step without recovery writes',async({page,context})=>{
+ setRegistry([referenceDelivery.descriptor]);const runtime=await startOrdinaryBook(page,/只读查词样本/);await runtime.getByRole('button',{name:/查看表达/}).click();
+ await expect(runtime.getByRole('button',{name:'查词：borrow',exact:true})).toBeVisible();
+ const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint()),facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest());
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.discardPackageCacheForRecoveryTest());await context.setOffline(true);
+ try{
+  await page.reload();await expect(runtime.getByRole('button',{name:'查词：borrow',exact:true})).toBeVisible();
+  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(before);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.supplyCheckpoint())).toEqual([]);
+  await runtime.locator('[data-learning-more]').click();await page.locator('#menu-more').getByRole('button',{name:'内容来源',exact:true}).click();const source=page.locator('#learning-source-reference');
+  await expect(source.getByRole('status')).toHaveText('这里暂时没有正常打开');await expect(source.getByRole('heading',{name:'只读查词样本',exact:true})).toHaveCount(0);
+  await expect(source.getByRole('button',{name:/下载|加入|更新/u})).toHaveCount(0);await source.getByRole('button',{name:'返回',exact:true}).click();
+  await expect(source).toHaveCount(0);await expect(runtime.getByRole('button',{name:'查词：borrow',exact:true})).toBeVisible();
+  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(before);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest())).toEqual(facts);
+  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.supplyCheckpoint())).toEqual([]);
+  const reads=await page.evaluate(()=>performance.getEntriesByType('measure').map(entry=>entry.name));
+  for(const collectionRead of ['sensa.workspace.rehydrate','sensa.workspace.supply','sensa.workspace.prepare'])expect(reads).not.toContain(collectionRead);
+ }finally{await context.setOffline(false);}
+});
+
+test('offline quick and full dictionary failures remain retryable and never change the current learning Step',async({page,context})=>{
+ setRegistry([referenceDelivery.descriptor]);const runtime=await startOrdinaryBook(page,/只读查词样本/);await runtime.getByRole('button',{name:/查看表达/}).click();await expect(runtime.getByRole('button',{name:'查词：borrow',exact:true})).toBeVisible();
+ // Native Chromium transport errors rather than synthetic HTTP status errors.
+ const transportFailures:string[]=[];page.on('requestfailed',request=>{if(['api.wiktapi.dev','api.dictionaryapi.dev','en.wiktionary.org'].includes(new URL(request.url()).hostname)&&request.failure()?.errorText.includes('ERR_INTERNET_DISCONNECTED'))transportFailures.push(request.url());});
+ await page.route('**/sensa/model/turn',route=>route.fulfill({status:503,json:{code:'fixture_model_unavailable'}}));
+ const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint()),facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest());await context.setOffline(true);
+ try{
+  await runtime.getByRole('button',{name:'查词：borrow',exact:true}).click();const quick=page.getByRole('dialog',{name:/borrow/u});await expect(quick.getByRole('status')).toContainText('暂时没有取得');await expect(quick.getByRole('button',{name:'查看详细释义',exact:true})).toBeDisabled();
+  await quick.getByRole('button',{name:'关闭快速查词',exact:true}).click();
+  await context.setOffline(false);const sources=await referenceProviders(page);
+  await runtime.getByRole('button',{name:'查词：borrow',exact:true}).click();await expect(quick.getByText('Fixture definition for borrow.')).toBeVisible();await quick.getByRole('button',{name:'查看详细释义',exact:true}).click();
+  const dictionary=page.locator('#s-reference-dictionary');await expect(dictionary.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
+  await page.unroute('https://api.wiktapi.dev/**');await page.unroute('https://api.dictionaryapi.dev/**');await page.unroute('https://en.wiktionary.org/**');await context.setOffline(true);
+  await dictionary.getByRole('searchbox').fill('anchor');await dictionary.getByRole('button',{name:'搜索',exact:true}).click();await expect(dictionary.getByRole('status')).toContainText('词典服务暂时不可用');await expect(dictionary.getByRole('heading',{name:'anchor',exact:true})).toHaveCount(0);
+  expect(transportFailures.some(url=>url.includes('anchor')),'native transport failure reaches the actual dictionary host').toBe(true);
+  await context.setOffline(false);await referenceProviders(page);await dictionary.getByRole('button',{name:'搜索',exact:true}).click();await expect(dictionary.getByRole('heading',{name:'anchor',exact:true})).toBeVisible();
+  await dictionary.getByRole('button',{name:'返回上一页',exact:true}).click();await expect(runtime.getByRole('button',{name:'查词：borrow',exact:true})).toBeVisible();
+  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(before);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest())).toEqual(facts);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);expect(sources.requests.some(url=>url.includes('/word/borrow/definitions'))).toBe(true);
+ }finally{await context.setOffline(false);}
+});
+
 test('target source lookup keeps its exact publication when another Book shares the member and a newer edition is installed',async({page,context})=>{
  const first=reviewDelivery,files=unzipSync(first.bookBytes);
  const sharedManifest=sensaPortableBookManifestSchema.parse({...first.manifest,book:{...first.manifest.book,bookId:randomUUID(),bookVersionId:randomUUID(),bookKey:'reference-shared-source',title:'另一册来源'},members:[...first.manifest.members].reverse()});
