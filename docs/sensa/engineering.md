@@ -788,6 +788,7 @@ SENSA_LIVE_ACCEPTANCE=1 node scripts/live/runLanguageMatrix.mjs --interactive --
 它不自动执行语言矩阵或调用模型；费用由实际用户操作触发。使用新的浏览器上下文，不复用 owner profile。
 `ready` 仅表示环境就绪，不是产品验收通过；实际结果、模型/TTS 调用和下载产物需另行留证。
 Ctrl-C 关闭该次运行的服务并删除其临时数据库，诊断产物保留在被 Git 忽略的运行目录；不清理 owner 数据。
+主动停止记录为 `stopped`，不因清理中的子进程退出改写为 `failed`，也不代表验收通过；未主动停止时的服务意外退出仍为失败。
 `--dry-run --interactive` 只检查参数并说明计划，既不启动服务，也不调用模型或 TTS。
 
 ## CI 与生产发布

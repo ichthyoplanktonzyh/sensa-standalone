@@ -12,6 +12,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadLocalModelEnvironment } from '../local/sensaLocalModelEnvironment.mjs';
 import { summarizeRunDirectory } from './summarizeLanguageMatrix.mjs';
+import { waitForInteractiveServices } from './interactiveServiceLifecycle.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const args = parseArguments(process.argv.slice(2));
@@ -395,13 +396,7 @@ async function main() {
     writeResults(state, { status: 'ready', preflight, webOrigin, serviceOrigin });
     console.log(`READY interactive acceptance: ${webOrigin}; API ${serviceOrigin}; artifacts ${runDirectory}`);
     console.log('No automatic model/TTS requests or tests. Use an isolated browser; Ctrl-C stops these services and removes only this temporary database.');
-    await new Promise((_, reject) => {
-      for (const [name, child] of [['API', serviceChild], ['Web', webChild]]) {
-        const failed = (code, signal) => reject(new Error(`Interactive ${name} exited (${code ?? signal}); acceptance is not complete.`));
-        if (child.exitCode !== null || child.signalCode !== null) failed(child.exitCode, child.signalCode);
-        else child.once('exit', failed);
-      }
-    });
+    await waitForInteractiveServices([['API', serviceChild], ['Web', webChild]], () => stopping);
     return;
   }
 
