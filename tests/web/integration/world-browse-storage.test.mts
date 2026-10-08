@@ -27,6 +27,23 @@ async function seed(){
 }
 const query={query:'',filter:'all' as const,offset:0,limit:20};
 
+test('a transaction changing Meaning and Registry derives practice material once per affected owner',async()=>{
+ const raw=new sqlite.oo1.DB(':memory:'),database=new SqliteRecordDatabase(sqlite,raw,'memory');database.initialize();
+ try{
+  const {state}=await seed(),get=database.get.bind(database);let meaningReads=0;
+  database.get=(table,key)=>{if(table==='semanticMeanings')meaningReads++;return get(table,key);};
+  database.commit({clears:[],deletes:[],puts:rows(state),contentRevision:1});
+  database.get=get;
+  // Public lookup, private World and practice material each need this owner;
+  // newly written Registry dependencies must not trigger a second pass.
+  expect(meaningReads).toBeGreaterThan(0);expect(meaningReads).toBeLessThanOrEqual(3);
+  expect(database.practiceExpressions({source:'personal',languageTag:'en',query:'',offset:0,limit:20}).items.map(item=>item.text)).toEqual(['borrow']);
+  expect(database.worldBrowse(query).total).toBe(1);expect(database.lookupMeanings('临时').meanings).toHaveLength(1);
+  const identities=state.meanings[0]!.personalExpressionAnchors.map(anchor=>anchor.personalExpressionAnchorId);
+  expect(database.existingJourneyIdentities(identities).sort()).toEqual(identities.sort());
+ }finally{database.close();}
+});
+
 test('memory and SQLite World reads agree on a deleted unbound Meaning and keep active continuation independent of the selected partition',async()=>{
  const {repository,modules}=await seed(),gateway=modules.personalMeaningJourney,id=()=>crypto.randomUUID();
  const meaningId=(await repository.load()).meanings[0]!.personalMeaning.personalMeaningId;

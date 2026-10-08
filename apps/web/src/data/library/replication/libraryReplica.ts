@@ -47,6 +47,12 @@ export function restoreLibraryReplicaValue(entry:ReplicaEntry,value:unknown,iden
  return module.restore?.(entry,value,identity)??value;
 }
 
+/** Exact validated bytes are copyable only when their owner has no restore
+ * transform. Future domain transforms automatically retain the value path. */
+export function canCopyLibraryReplicaValue(entry:Pick<ReplicaEntry,'table'|'key'>):boolean{
+ const module=moduleFor(entry.table,entry.key);if(!module)throw Error('library_sync_format');return module.restore===undefined;
+}
+
 function ordinaryMerge(input:ReplicaMergeInput):ReplicaMergeResult{
  const base=new Map(input.base.map(entry=>[replicaEntryId(entry),entry]));
  const local=new Map(input.local.map(entry=>[replicaEntryId(entry),entry]));

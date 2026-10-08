@@ -1,6 +1,7 @@
 /** Worker-private, rebuildable identity reservations, not semantic authority. */
 import type {Database,PreparedStatement,SqlValue} from '@sqlite.org/sqlite-wasm';
 import {decodeBackupValue} from './backupCodec';
+import {unpackStoredRecord} from './sharedRecordContent';
 import {ensureSqliteSchemaIndexes} from './sqliteSchemaIndexes';
 import {sqliteRollbackFailure} from './sqliteConnectionFailure';
 import type {SqliteMutation} from './sqliteProtocol';
@@ -50,7 +51,7 @@ export class SqliteJourneyIdentityProjection{
   const started=performance.now();let recordsChecked=0,stale=this.rows('SELECT version FROM sensa_journey_identity_meta WHERE id=1')[0]?.version!==version;
   this.sourceRows((table,row)=>{
    recordsChecked++;
-   const expected=journeyReservedIdentities(table,decodeBackupValue(JSON.parse(row.value_json))).sort();
+   const expected=journeyReservedIdentities(table,decodeBackupValue(JSON.parse(unpackStoredRecord(row.value_json)))).sort();
    const actual=this.rows('SELECT identity.identity_id FROM sensa_journey_identities AS identity JOIN sensa_journey_identity_records AS owner ON owner.id=identity.record_id WHERE owner.table_name=? AND owner.record_key=? ORDER BY identity.identity_id',[table,row.record_key]).map(row=>uuidString(row.identity_id));
    if(expected.length!==actual.length||expected.some((id,index)=>id!==actual[index]))stale=true;
   });
@@ -80,8 +81,8 @@ export class SqliteJourneyIdentityProjection{
  private replace(table:JourneyIdentityTable,key:string,encoded:string){
   const recordId=this.rows('INSERT INTO sensa_journey_identity_records(table_name,record_key) VALUES(?,?) ON CONFLICT(table_name,record_key) DO UPDATE SET record_key=excluded.record_key RETURNING id',[table,key])[0]!.id;
   this.rows('DELETE FROM sensa_journey_identities WHERE record_id=?',[recordId]);
-  const ids=journeyReservedIdentities(table,decodeBackupValue(JSON.parse(encoded)));
-  for(const id of ids)this.rows('INSERT INTO sensa_journey_identities VALUES(?,?)',[recordId,uuidBytes(id)]);
+  const ids=journeyReservedIdentities(table,decodeBackupValue(JSON.parse(unpackStoredRecord(encoded))));
+  if(ids.length)this.rows('INSERT INTO sensa_journey_identities SELECT ?,unhex(value) FROM json_each(?)',[recordId,JSON.stringify(ids.map(id=>id.replaceAll('-','')))]);
  }
  update(mutation:SqliteMutation){
   const relevant=(table:string)=>journeyIdentityTables.includes(table as JourneyIdentityTable);

@@ -4,6 +4,7 @@ import {sensaExpressionTypeSchema} from '@sensa/contracts/sensa';
 import type {SenseRegistryState} from '../../experience/personalMeaningJourney/store';
 import {isUuid} from '../../experience/personalMeaningJourney/ids';
 import {decodeBackupValue} from './backupCodec';
+import {unpackStoredRecord} from './sharedRecordContent';
 
 export type RegistrySelectionQuery=
  |{kind:'learningChoices';normalizedPrefix:string;languageTag:string;offset:number;limit:number}
@@ -22,7 +23,7 @@ export function registryFieldReader(){
  return (encoded:unknown,field:unknown):string|number|null=>{
   if(typeof encoded!=='string'||typeof field!=='string')throw new Error('semantic_registry_field_invalid');
   if(previous!==encoded){
-   const value=decodeBackupValue(JSON.parse(encoded));
+   const value=decodeBackupValue(JSON.parse(unpackStoredRecord(encoded)));
    if(!value||!kinds.includes(value.kind)||!Number.isSafeInteger(value.ordinal)||value.ordinal<0||!value.value||typeof value.value!=='object'||Array.isArray(value.value))throw new Error('semantic_registry_record_invalid');
    row=value;previous=encoded;
   }

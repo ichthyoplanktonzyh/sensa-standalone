@@ -1,5 +1,5 @@
 import {z} from 'zod';
-import {libraryTables,readLibrary,restoreLibraryTransaction,assertCurrentLibrary,estimateLibraryRecordBytes,type LibraryTransaction,type LibraryIdentity} from './store';
+import {libraryTables,readLibrary,restoreLibraryTransaction,assertCurrentLibrary,type LibraryTransaction,type LibraryIdentity} from './store';
 import {learningOwner} from './libraryOwnership';
 import {cachedAuthSubject} from '../account/authSessionHint';
 import {markLocalLibraryPresent} from './localLibraryHint';
@@ -19,7 +19,6 @@ async function keyFor(password:string,salt:Uint8Array){const base=await crypto.s
 const localBackupOwnerSchema=backupOwnerSchema.extend({accountId:z.string().uuid().optional()});
 const envelopeSchema=z.object({format:z.literal('sensa-web-library-backup-v2'),compression:z.literal('gzip'),kdf:z.literal('PBKDF2-SHA256'),iterations:z.literal(600000),cipher:z.literal('AES-256-GCM'),salt:z.string().max(24),iv:z.string().max(16),data:z.string().max(MAX_FILE)}).strict();
 export type BackupSummary={createdAt:string;account:string|null;libraryId:string;drafts:number;meanings:number;packages:number;targets:number;runs:number;events:number;preparations:number;interrupted:number};
-export type BackupSizeEstimate={usedBytes:number;capacityBytes:number};
 export type BackupRestoreResult={summary:BackupSummary;resourceRefresh:'complete'|'deferred'};
 function summary(payload:BackupArchiveHeader,rows:BackupRows):BackupSummary{const identity=rows.meta.find(r=>r.key==='identity')!.value;return {createdAt:payload.createdAt,account:payload.owner?.email??payload.owner?.subject??null,libraryId:identity.id,drafts:rows.drafts.length,meanings:rows.meanings.length+rows.semanticMeanings.length,packages:rows.packageInstallations.length,targets:rows.learningTargets.length,runs:rows.learningRuns.length,events:rows.learningEvents.length,preparations:rows.personalLearning.length,interrupted:rows.sessions.filter(r=>r.value.status==='inflight').length+rows.personalLearning.filter(r=>['generating','reviewing'].includes(r.value.status)).length};}
 async function decode(file:Uint8Array,password:string){
@@ -35,12 +34,6 @@ async function encodeCurrentLibrary(){
  validateBackupRows(snapshot.rows);
  const archive=await encodeBackupArchive(snapshot.rows,snapshot.owner),payload=archive.header,plaintext=archive.bytes;
  return {payload,rows:snapshot.rows,plaintext};
-}
-export async function estimateLibraryBackupSize():Promise<BackupSizeEstimate>{
- // Row framing plus the fixed envelope is intentionally conservative. Export
- // remains the only path that performs full authority validation and encoding.
- const encodedBytes=await estimateLibraryRecordBytes(libraryBackupTables);
- return {usedBytes:encodedBytes+2048,capacityBytes:MAX_PLAIN};
 }
 export async function exportLibraryBackup(password:string){
  passSchema.parse(password);

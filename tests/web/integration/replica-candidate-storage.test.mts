@@ -40,6 +40,8 @@ const discard=(id:string)=>database.replicaCandidate({kind:'discard',id});
 test('filling and validated generations stay outside ordinary facts and the confirmed baseline',async()=>{
  const records=rows(),id=await begin(records),before=await original();
  try{
+  const raw=Reflect.get(database,'database');
+  expect(raw.exec({sql:'PRAGMA main.synchronous',rowMode:0,returnValue:'resultRows'})).toEqual([2]);
   await append(id,records);expect(await original()).toEqual(before);
   const result=await validate(id);expect(result.kind).toBe('validated');
   if(result.kind!=='validated')throw Error('Expected validation');expect(result.candidate.records).toBe(records.length);expect(result.candidate.identity).toEqual(identity);

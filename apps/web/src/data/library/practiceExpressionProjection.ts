@@ -109,18 +109,21 @@ export class SqlitePracticeExpressionProjection {
  }
  update(mutation:import('./sqliteProtocol').SqliteMutation){
   let changed=false;
+  // Capture all affected owners before replacing any of them. Registry writes
+  // and Meaning writes in the same transaction must not index one owner twice.
+  const personal=new Set([...mutation.puts,...mutation.deletes].filter(row=>row.table==='semanticMeanings').map(row=>row.key));
+  const registryKeys=[...mutation.puts,...mutation.deletes].filter(row=>row.table==='semanticRegistry').map(row=>row.key);
+  const affected=mutation.clears.includes('semanticRegistry')?this.rows("SELECT owner_key FROM sensa_practice_expression_owners WHERE source='personal'")
+   :registryKeys.length?this.rows('SELECT DISTINCT owner_key FROM sensa_practice_expression_dependencies WHERE registry_key IN (SELECT value FROM json_each(?))',[JSON.stringify(registryKeys)]):[];
+  for(const row of affected)personal.add(row.owner_key);
   for(const [table,source] of [['semanticMeanings','personal'],['packageCache','books']] as const){
    if(mutation.clears.includes(table)){
     this.database.exec({sql:'DELETE FROM sensa_practice_expressions WHERE source=?',bind:[source]});this.database.exec({sql:'DELETE FROM sensa_practice_expression_owners WHERE source=?',bind:[source]});changed=true;
     if(source==='personal')this.database.exec('DELETE FROM sensa_practice_expression_dependencies');
    }
-   const keys=new Set([...mutation.puts,...mutation.deletes].filter(row=>row.table===table).map(row=>row.key));
+   const keys=source==='personal'?personal:new Set([...mutation.puts,...mutation.deletes].filter(row=>row.table===table).map(row=>row.key));
    for(const key of keys)changed=this.replace(source,key)||changed;
   }
-  const registryKeys=[...mutation.puts,...mutation.deletes].filter(row=>row.table==='semanticRegistry').map(row=>row.key);
-  const affected=mutation.clears.includes('semanticRegistry')?this.rows("SELECT owner_key FROM sensa_practice_expression_owners WHERE source='personal'")
-   :registryKeys.length?this.rows('SELECT DISTINCT owner_key FROM sensa_practice_expression_dependencies WHERE registry_key IN (SELECT value FROM json_each(?))',[JSON.stringify(registryKeys)]):[];
-  for(const row of affected)changed=this.replace('personal',row.owner_key)||changed;
   if(changed)this.database.exec('UPDATE sensa_practice_expression_meta SET revision=revision+1 WHERE id=1');
  }
  query(raw:PracticeExpressionQuery):PracticeExpressionPage {

@@ -6,7 +6,7 @@ import {portableBookDeliveryFixture} from '../../../scripts/support/portablePack
 import {preparePublishedBook} from '../../../apps/web/src/contentSupply/portable/portablePreparation.ts';
 import {createPackageCacheSummary,createPackagePublicationIdentity} from '../../../apps/web/src/data/library/packageCacheProjection.ts';
 import {SqliteRecordDatabase} from '../../../apps/web/src/data/library/sqliteDatabase.ts';
-import {sqliteLibrarySchema} from '../../../apps/web/src/data/library/sqliteProtocol.ts';
+import {sqliteLibrarySchema,sqliteLibrarySchemaVersion} from '../../../apps/web/src/data/library/sqliteProtocol.ts';
 import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec.ts';
 import type {InstalledPackage} from '../../../apps/web/src/data/library/packageRecords.ts';
 
@@ -139,7 +139,7 @@ test('the derived index is rebuilt from the current cache without changing sourc
  for(const value of records)raw.exec({sql:'INSERT INTO sensa_records(table_name,record_key,value_json) VALUES(?,?,?)',bind:['packageCache',value.key,encoded(value)]});
  raw.exec({sql:'INSERT INTO sensa_records(table_name,record_key,value_json) VALUES(?,?,?)',bind:['meta','owner-proof',encoded({value:'preserve-me'})]});
  try{
-  assert.equal(db.initialize().schemaVersion,16);
+  assert.equal(db.initialize().schemaVersion,sqliteLibrarySchemaVersion);
   assert.equal(db.packageCacheProjection({kind:'identities'}).length,3);
   for(const value of records)assert.equal(db.get('packageCache',value.key),encoded(value));
   assert.equal(db.get('meta','owner-proof'),encoded({value:'preserve-me'}));

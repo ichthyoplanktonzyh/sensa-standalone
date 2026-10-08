@@ -190,10 +190,12 @@ Package key；运行恢复、策略锁定和生成频控通过领域索引查询
 已完整恢复的内容缓存复用一次一致的安装／来源快照；下载或缓存修复后重新读取当前快照，避免把期间新增但未恢复的来源误报为就绪。
 学习状态变化只刷新学习投影，语言选择只读取当前语言方向；通知按记录 key 过滤，当前页面不重复处理自己发出的跨页通知。
 数据结构调整不要求保留历史格式兼容层；当前源事实和可重建索引分开处理，不通过清空用户库恢复初始化错误。
-物理 schema 15 沿用共享摘要存储材料内容、协议绑定和步骤定义，记录仍独立保存身份、版本、时间、provenance
+物理 schema 17 沿用共享摘要存储材料内容、协议绑定和步骤定义，记录仍独立保存身份、版本、时间、provenance
 及结算事实。`sharedRecordContent.ts` 只改变无损存储表示；普通 record 接口读取还原后的原值，页面和协议
 不解析存储引用。共享 body 与 record／sync baseline 的直接 owner 关系同事务写入；只回收本次事务解除引用
-后确实无 owner 的 body，不在日常评分时扫描全部 body。压缩覆盖剩余记录 framing，摘要验证还原的精确字节。
+后确实无 owner 的 body，不在日常评分时扫描全部 body。同一无损压缩 envelope 也用于普通记录与基线，
+所有逻辑读取先还原精确字节；Registry scalar UDF、identity 冷重建／诊断及 supplemental 冷重建同样解包。
+16→17 只在完整源结构上原子推进存储版本，保留已有编码行和索引，不批量重写 owner 数据；失败保留原版本与字节。
 这些 body 是源事实表示的一部分，不是可猜测重建的缓存；缺失或损坏必须失败，不从当前包、模型或材料新版替代。
 13→14 的共享表示不改写已有逻辑事实；15 为 `studyScopes` 与 `learningSessions` 扩展
 record、tombstone 与 sync baseline 的表名允许项，在同一事务内逐字节复制原编码行，
@@ -365,7 +367,13 @@ Worker 按 ES module 分块构建，完整 validator 延迟加载；离线 shell
 单行保留既有 90 MiB 例外，因此不能称每条 RPC／单行峰值始终只有 4 MiB。
 长时 candidate 校验不持有 live Library Web Lock，本机保存可以使其 fence 失效而不是等待完整校验。
 新设备应用在 source SQLite commit 内重验 owner、identity、revision、空 facts 和空 baseline，惰性读取单行
-正文并复用既有 restore／索引／媒体引用管线，与 baseline、同步状态、deviceId、本机建库回执和候选清理同事务。
+正文并复用既有 restore／索引／媒体引用管线。没有 owner restore transform、也不涉及共享正文的表，
+可在同一事务以 INSERT SELECT 直接复制候选已校验的存储字节到 facts 与对应 baseline，不再逐行解压／对象化／
+重编码。一个表内任一 key 需要转换则整表保留原值路径；身份和共享学习正文仍复用既有 owner／共享存储处理。
+派生索引与媒体引用继续从已应用的精确事实更新，与同步状态、deviceId、本机建库回执和候选清理同事务。
+未确认基线的本机 deletion witness 命中 incoming key 时，暂存应用与常规收敛均拒绝自动复活，保留原资料与
+墓碑并报告 history conflict；重试不能绕过。明确全库 reset 在同一事务清除旧 baseline／共享 owner 和墓碑，
+新 incarnation 不继承旧同步副本或负状态；它不是普通同步的隐式清库出口。
 同事务 restoreOperationId 回执确认协调器丢失 ACK／候选重放后的实际提交，确认后才发送资料变化通知；
 无法读取该回执时不能冒充成功。候选、live、baseline 和 WAL 可同时占磁盘；256 MiB 暂存估计不是峰值磁盘证明。
 已有资料仍须接入领域防倒退、不可改写历史和显式冲突的有界三方 merge，不能因为“本机无未同步更改”就直接
@@ -378,6 +386,12 @@ Worker 按 ES module 分块构建，完整 validator 延迟加载；离线 shell
 字段名、UUID、时间和合同版本是正文内的重叠计数，不可再加到编码总量上；逻辑正文也不是 SQLite 文件、
 压缩传输或运行时内存大小。存储设计须区分真实 Context／接受事实／不可变历史、可重建投影与序列化元数据，
 不能用增加容量、删除来源或丢弃旧学习引用替代这一审查。
+`SENSA_TEST_MEMORY_LIBRARY=true node --import tsx scripts/benchmarkMeaningRestore.mts --meanings=1000`
+可剖析正常 synchronizer 在 Node SQLite/Wasm 内存库上的暂存、校验、应用、各派生索引及 SQL 耗时；
+它不证明 OPFS、真实账号 UI、峰值内存或容量。`SENSA_RESTORE_SQL_PROFILE=true` 启用
+`replica-candidate-worker` 中的可选 1k Meaning Chromium/OPFS 诊断；包装仅存在于测试 Worker，
+与未修改生产 Worker 的 10k 恢复验收分开。索引写入将每条文档的短查询 gram 与每条记录的 UUID
+reservation 分别以 SQLite 集合写入；同一事务的 Meaning／Registry 更改只重建一次对应练习材料。
 v6 发布仍组装整份 key/block-ref manifest 元数据；它不再解码所有未变正文，但不能宣称整条路径严格 O(变化数)。
 完整恢复／收敛在同一 SQLite commit 应用已校验候选、对应基线和同步状态；基线或事实写入失败都回滚身份、
 资料及建库回执，不留下半恢复。应用前以捕获的本机 revision、identity、owner/incarnation 重查，提交后在写锁内

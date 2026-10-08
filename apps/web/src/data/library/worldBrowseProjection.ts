@@ -80,7 +80,7 @@ export class SqliteWorldBrowseProjection{
      [id,summary.updatedAt,summary.senseFormation.phase,summary.expressionBinding.phase,visible?1:0,summary.status,JSON.stringify(summary),text])[0]!;
     this.write('INSERT INTO sensa_world_browse_search(rowid,text) VALUES(?,?)',[row.id,text]);
     const characters=Array.from(text),grams=new Set(characters);for(let index=1;index<characters.length;index++)grams.add(characters[index-1]!+characters[index]!);
-    for(const gram of grams)this.write('INSERT INTO sensa_world_browse_grams VALUES(?,?)',[gram,row.id]);
+    this.write('INSERT INTO sensa_world_browse_grams SELECT value,? FROM json_each(?)',[row.id,JSON.stringify([...grams])]);
     if(visible)for(const choice of choices)this.write('INSERT INTO sensa_world_learning_choices VALUES(?,?,?,?,?)',[choice.key,id,choice.targetLanguageTag,summary.updatedAt,JSON.stringify(choice)]);
    }else{
     // Record corruption is a visible read failure, never a fabricated empty

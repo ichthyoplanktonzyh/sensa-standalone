@@ -1,5 +1,6 @@
-/** Real unmodified production Worker/OPFS, synthetic candidate transport.
- * No HTTP checkpoint, promotion, account UI or capacity-equivalence claim. */
+/** Production Worker/OPFS lifecycle and controlled-HTTP fresh restoration.
+ * Optional instrumented diagnostics are labelled separately. No account UI
+ * or mature-product capacity/latency-equivalence claim. */
 import {once} from 'node:events';
 import {createServer,type Server} from 'node:http';
 import {resolve} from 'node:path';
@@ -8,7 +9,7 @@ import {createServer as createViteServer,type ViteDevServer} from 'vite';
 import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec';
 import type {SqliteWorkerInput,SqliteWorkerResult} from '../../../apps/web/src/data/library/sqliteProtocol';
 import type {ReplicaCandidateRecord} from '../../../apps/web/src/data/library/replicaCandidateProtocol';
-import {candidateExpected,candidateBlocksFor} from '../support/replicaCandidateFixture.mts';
+import {candidateExpected,candidateBlocksFor,candidateFixture} from '../support/replicaCandidateFixture.mts';
 import {librarySyncBlockFetch} from '@sensa/contracts/sensa';
 
 for(const scenario of ['reads','close','native-failure','crash'] as const)test(`private OPFS candidate lifecycle: ${scenario}`,async({browser},testInfo)=>{
@@ -106,20 +107,27 @@ for(const scenario of ['reads','close','native-failure','crash'] as const)test(`
  }
 });
 
-for(const scenario of ['restore','write-during-validation'] as const)test(`normal staged OPFS sync over 64 MiB: ${scenario}`,async({browser},testInfo)=>{
- test.setTimeout(240_000);
+for(const scenario of ['restore','write-during-validation','meaning-scale','meaning-profile'] as const)test(scenario==='meaning-profile'?'instrumented 1k Meaning OPFS restore diagnostic':`normal staged OPFS sync over 64 MiB: ${scenario}`,async({browser},testInfo)=>{
+ test.skip(scenario==='meaning-profile'&&process.env.SENSA_RESTORE_SQL_PROFILE!=='true','Optional CPU/SQL diagnostic, not an unmodified-Worker latency guarantee');
+ test.setTimeout(scenario==='meaning-scale'?420_000:240_000);
  let vite:ViteDevServer|undefined,http:Server|undefined;
  const context=await browser.newContext(),page=await context.newPage();
  const id=crypto.randomUUID(),identity={id,learnerId:crypto.randomUUID(),deviceId:id,createdAt:'2026-10-03T00:00:00.000Z',schemaVersion:2 as const},owner={subject:crypto.randomUUID(),accountId:crypto.randomUUID()};
- const fixture=(()=>{
+ const fixture=await(async()=>{
   const records:ReplicaCandidateRecord[]=[{table:'meta',key:'identity',valueJson:JSON.stringify(encodeBackupValue(identity)),blockRefs:[]}];
-  let first:unknown,last:unknown,logicalBytes=0;
-  for(let index=0;index<5000;index++){
+  let first:any,last:any,table:'drafts'|'semanticMeanings'='drafts',count=5000;
+  if(scenario==='meaning-scale'||scenario==='meaning-profile'){
+   const [{MemoryJourneyRepository},{createJourneyModules},{createSeededClock},{semanticLookupPayload,syntheticSemanticWorld},{semanticRecords}]=await Promise.all([import('../../../apps/web/src/experience/personalMeaningJourney/repository'),import('../../../apps/web/src/experience/personalMeaningJourney/gateway'),import('../../../apps/web/src/experience/personalMeaningJourney/ports'),import('../support/semanticLookupFixtures'),import('../support/semanticWorldRecordFixture.mts')]);
+   const repository=new MemoryJourneyRepository();await createJourneyModules({repository,clock:createSeededClock('2026-10-03T00:00:00Z')}).semanticIntake.submit(semanticLookupPayload());
+   count=scenario==='meaning-profile'?1000:10000;
+   const world=syntheticSemanticWorld(await repository.load(),count);table='semanticMeanings';first=world.meanings[0]!;last=world.meanings.at(-1)!;
+   for(const row of semanticRecords(world))records.push({...row,valueJson:JSON.stringify(encodeBackupValue(row.value)),blockRefs:[]});
+  }else for(let index=0;index<5000;index++){
    const value={id:crypto.randomUUID(),revision:1,text:`Synthetic remote draft ${index}: `+'x'.repeat(15000),createdAt:identity.createdAt,updatedAt:identity.createdAt};
-   first??=value;last=value;const valueJson=JSON.stringify(encodeBackupValue(value));logicalBytes+=Buffer.byteLength(valueJson,'utf8');records.push({table:'drafts',key:value.id,valueJson,blockRefs:[]});
+   first??=value;last=value;records.push({table:'drafts',key:value.id,valueJson:JSON.stringify(encodeBackupValue(value)),blockRefs:[]});
   }
-  const expected=candidateExpected(records,identity),wire=new Map([...expected.manifestBlocks,...candidateBlocksFor(records)].map(block=>[block.hash,block.data]));
-  return {expected,wire,first,last,logicalBytes};
+  const {expected,blocks}=candidateFixture(records,identity),wire=new Map([...expected.manifestBlocks,...blocks].map(block=>[block.hash,block.data]));
+  return {expected,wire,first,last,table,count,recordCount:records.length,firstKey:table==='drafts'?first.id:first.personalMeaning.personalMeaningId,lastKey:table==='drafts'?last.id:last.personalMeaning.personalMeaningId,logicalBytes:records.reduce((sum,row)=>sum+Buffer.byteLength(row.valueJson,'utf8'),0)};
  })();
  // Use Vite's canonical /src URLs so the synchronizer and the instrumented
  // adapter share one module instance rather than /@fs aliases of that file.
@@ -142,8 +150,18 @@ for(const scenario of ['restore','write-during-validation'] as const)test(`norma
    if(new URL(route.request().url()).origin!==origin){await route.abort('blockedbyclient');return;}
    if(route.request().resourceType()==='document'){await route.fulfill({contentType:'text/html',body:'<!doctype html><html><body>Isolated normal sync regression</body></html>'});return;}await route.continue();
   });
+  if(scenario==='meaning-profile')await page.addInitScript(profilePath=>{
+   const OriginalWorker=globalThis.Worker;
+   globalThis.Worker=class extends OriginalWorker{
+    constructor(url:string|URL,options?:WorkerOptions){
+     const target=new URL(url,location.href);
+     super(target.pathname.endsWith('/sqliteWorker.ts')?new URL(profilePath,location.href):url,options);
+     this.addEventListener('message',event=>{if(event.data.sensaRestoreProfile)Reflect.set(globalThis,'sensaRestoreProfile',event.data.sensaRestoreProfile);});
+    }
+   };
+  },`/@fs/${resolve('scripts/support/sqliteRestoreProfileWorker.ts')}`);
   await page.goto(origin);
-  const measured=await page.evaluate(async({storeUrl,syncUrl,adapterUrl,draftUrl,owner,scenario})=>{
+  const measured=await page.evaluate(async({storeUrl,syncUrl,adapterUrl,draftUrl,owner,scenario,table})=>{
    const store=await import(/* @vite-ignore */ storeUrl),sync=await import(/* @vite-ignore */ syncUrl),adapters=await import(/* @vite-ignore */ adapterUrl),drafts=await import(/* @vite-ignore */ draftUrl);
    const originalIdentity=await store.openLibrary();await store.writeLibraryState(async(tx:any)=>tx.put('meta','service-owner',owner));
    const adapter=await adapters.sqliteRecordAdapter(),original=adapter.replicaCandidate.bind(adapter),originalCommit=adapter.commit.bind(adapter);
@@ -157,24 +175,26 @@ for(const scenario of ['restore','write-during-validation'] as const)test(`norma
     let settled=false;const validation=timedReplica(message).then((result:any)=>{settled=true;return {result};},(error:Error)=>{settled=true;return {error};});
     localDraftId=crypto.randomUUID();const started=performance.now();
     await drafts.saveDraft(crypto.randomUUID(),{id:localDraftId,expectedRevision:0,text:'A user write while cloud validation runs.'});writeMs=performance.now()-started;writingDuringValidation=!settled;
-    const outcome=await validation;validationInvalidatedByWrite=outcome.error?.message==='library_sync_local_changed';if(outcome.error)throw outcome.error;return outcome.result;
+    const outcome=await validation;if('error' in outcome){validationInvalidatedByWrite=outcome.error.message==='library_sync_local_changed';throw outcome.error;}return outcome.result;
    };
    let tick=performance.now(),maxMainThreadGapMs=0;const timer=setInterval(()=>{const now=performance.now();maxMainThreadGapMs=Math.max(maxMainThreadGapMs,now-tick);tick=now;},16),started=performance.now();
    let error:string|undefined;
    try{await sync.synchronizeLibrary(async(path:string,body?:unknown)=>{const response=await fetch('/candidate'+path,{method:body?'POST':'GET',headers:{'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});if(!response.ok)throw Error('controlled_transport_failed');return response.json();});}catch(cause){error=cause instanceof Error?cause.message:String(cause);}
    finally{clearInterval(timer);adapter.replicaCandidate=original;adapter.commit=originalCommit;}
-   return {originalIdentity,error,validationRequests,writingDuringValidation,validationInvalidatedByWrite,writeMs,localDraftId,phaseMs,phaseCalls,durationMs:performance.now()-started,maxMainThreadGapMs,state:await sync.readCloudSync(),count:await store.readLibrary((tx:any)=>tx.count('drafts')),identity:await store.readLibrary((tx:any)=>tx.get('meta','identity'))};
-  },{storeUrl,syncUrl,adapterUrl,draftUrl,owner,scenario});
-  expect(fixture.logicalBytes).toBeGreaterThan(64*1024*1024);
-  await testInfo.attach('normal-staged-restore-evidence',{contentType:'application/json',body:JSON.stringify({scenario,browser:browser.version(),fixture:'5000 valid synthetic Drafts; controlled loopback HTTP; real normal synchronizer/Worker/OPFS, no PostgreSQL or account UI',logicalBytes:fixture.logicalBytes,...measured,paidCalls:0})});
-  if(scenario==='restore'){
-   expect(measured.error).toBeUndefined();expect(measured.count).toBe(5000);expect(measured.state.status).toBe('synced');expect(measured.identity).toEqual({...identity,deviceId:measured.originalIdentity.deviceId});
+   return {originalIdentity,error,validationRequests,writingDuringValidation,validationInvalidatedByWrite,writeMs,localDraftId,phaseMs,phaseCalls,durationMs:performance.now()-started,maxMainThreadGapMs,state:await sync.readCloudSync(),count:await store.readLibrary((tx:any)=>tx.count(table)),identity:await store.readLibrary((tx:any)=>tx.get('meta','identity')),storage:await navigator.storage.estimate(),workerProfile:Reflect.get(globalThis,'sensaRestoreProfile')};
+  },{storeUrl,syncUrl,adapterUrl,draftUrl,owner,scenario,table:fixture.table});
+  if(scenario==='meaning-profile')expect(measured.workerProfile?.phases.promotion.calls).toBe(1);
+  else expect(fixture.logicalBytes).toBeGreaterThan(64*1024*1024);
+  await testInfo.attach('normal-staged-restore-evidence',{contentType:'application/json',body:JSON.stringify({scenario,browser:browser.version(),fixture:fixture.table==='semanticMeanings'?`${fixture.count} accepted synthetic Meanings, unique initial Registry, no media/Learning history; controlled HTTP, ${scenario==='meaning-profile'?'instrumented diagnostic':'unmodified'} Worker/OPFS; no PostgreSQL/account UI`:'5000 valid synthetic Drafts; controlled loopback HTTP; real normal synchronizer/Worker/OPFS, no PostgreSQL or account UI',recordCount:fixture.recordCount,logicalBytes:fixture.logicalBytes,...measured,paidCalls:0})});
+  if(scenario!=='write-during-validation'){
+   expect(measured.error).toBeUndefined();expect(measured.count).toBe(fixture.count);expect(measured.state.status).toBe('synced');expect(measured.identity).toEqual({...identity,deviceId:measured.originalIdentity.deviceId});
    await page.reload();
-   const restored=await page.evaluate(async({storeUrl,syncUrl,first,last})=>{
+   const restored=await page.evaluate(async({storeUrl,syncUrl,firstKey,lastKey,table})=>{
     const store=await import(/* @vite-ignore */ storeUrl),sync=await import(/* @vite-ignore */ syncUrl);const identity=await store.openLibrary();
-    return {identity,state:await sync.readCloudSync(),count:await store.readLibrary((tx:any)=>tx.count('drafts')),first:await store.readLibrary((tx:any)=>tx.get('drafts',(first as any).id)),last:await store.readLibrary((tx:any)=>tx.get('drafts',(last as any).id))};
-   },{storeUrl,syncUrl,first:fixture.first,last:fixture.last});
-   expect(restored.identity).toEqual(measured.identity);expect(restored.count).toBe(5000);expect(restored.first).toEqual(fixture.first);expect(restored.last).toEqual(fixture.last);expect(restored.state.status).toBe('synced');
+    return {identity,state:await sync.readCloudSync(),count:await store.readLibrary((tx:any)=>tx.count(table)),first:await store.readLibrary((tx:any)=>tx.get(table,firstKey)),last:await store.readLibrary((tx:any)=>tx.get(table,lastKey)),lookup:table==='semanticMeanings'?await store.readLibrary((tx:any)=>tx.lookupMeanings('借用编号0')):undefined};
+   },{storeUrl,syncUrl,firstKey:fixture.firstKey,lastKey:fixture.lastKey,table:fixture.table});
+   expect(restored.identity).toEqual(measured.identity);expect(restored.count).toBe(fixture.count);expect(restored.first).toEqual(fixture.first);expect(restored.last).toEqual(fixture.last);expect(restored.state.status).toBe('synced');
+   if(fixture.table==='semanticMeanings')expect(restored.lookup.meanings).toHaveLength(1);
   }else{
    // The write can invalidate and finish validation before its own Promise
    // resolves. A rejected fence proves concurrent progress, unlike waiting for

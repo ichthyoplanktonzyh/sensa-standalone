@@ -3,7 +3,7 @@
 import {createHash} from 'node:crypto';
 import {afterEach,beforeEach,expect,test} from 'vitest';
 import {useNodeLearningCapacityStorage} from '../../../scripts/support/nodeLearningCapacity.mts';
-import {openLibrary,readLibrary,writeLibraryState,readLocalLibraryRevision,type LibraryIdentity} from '../../../apps/web/src/data/library/store';
+import {openLibrary,readLibrary,writeLibraryState,restoreLibraryTransaction,readLocalLibraryRevision,type LibraryIdentity} from '../../../apps/web/src/data/library/store';
 import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec';
 import {saveDraft} from '../../../apps/web/src/data/library/drafts';
 import {sqliteRecordAdapter} from '../../../apps/web/src/data/library/sqliteAdapter';
@@ -28,6 +28,9 @@ const blocks=new Map<string,string>();let revision=0,manifest:string[]=[];
 function block(text:string){const data=encodeLibrarySyncBlock(text),id=createHash('sha256').update(data).digest('hex');blocks.set(id,data);return id;}
 function publish(drafts:typeof first[]){
  const entries=[{table:'meta',key:'identity',value:remoteIdentity},...drafts.map(value=>({table:'drafts',key:value.id,value}))];
+ publishEntries(entries);
+}
+function publishEntries(entries:Array<{table:string;key:string;value:unknown}>){
  const rows=entries.map(row=>({table:row.table,key:row.key,blocks:[block(JSON.stringify(encodeBackupValue(row.value)))]}));
  manifest=splitLibrarySyncText(JSON.stringify({version:6,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows})).map(block);revision++;
 }
@@ -194,4 +197,48 @@ for(const kind of ['compressed','high-entropy'] as const)test(`large ${kind} sin
  };
  try{await synchronizeLibrary(request);}finally{adapter.replicaCandidate=original;}
  expect(proofs).toBeGreaterThanOrEqual(2);expect(await readLibrary(tx=>tx.get('settings','large-opaque'))).toBe(setting);expect((await readCloudSync())?.status).toBe('synced');
+});
+
+test('a pre-checkpoint local deletion is not resurrected by fresh promotion or a conflicted fallback retry',async()=>{
+ const {clearLocalLibrary,inspectLocalClear}=await import('../../../apps/web/src/data/library/dataControl');
+ await saveDraft(crypto.randomUUID(),{id:first.id,expectedRevision:0,text:'Locally discarded material.'});
+ await restoreLibraryTransaction(async tx=>tx.delete('drafts',first.id));publish([first]);const before=await facts();
+ for(let attempt=0;attempt<2;attempt++){
+  // Attempt two takes the existing-world fallback because the first operation
+  // is now conflicted; neither application seam may erase the deletion witness.
+  await expect(synchronizeLibrary(request)).rejects.toThrow();expect(await facts()).toEqual(before);expect((await readCloudSync())?.status).toBe('conflict');expect((await readCloudSync())?.error).toBe('library_sync_history');
+ }
+ const preview=await inspectLocalClear();await clearLocalLibrary(preview);
+ expect(database.syncBaseEntries()).toEqual([]);expect(database.changesSince(0,['drafts'])).toEqual([]);expect(database.count('drafts')).toBe(0);
+ // The product asks the old page to reopen after an explicit new incarnation.
+ await expect(synchronizeLibrary(request)).rejects.toThrow('localFlow.libraryReplaced');
+});
+
+test('copied accepted Meanings retain every fact and Registry lookup through compressed-source cold index rebuild',async()=>{
+ const [{MemoryJourneyRepository},{createJourneyModules},{createSeededClock},{semanticLookupPayload,syntheticSemanticWorld},{semanticRecords},{default:sqlite3InitModule},{SqliteRecordDatabase},{sqliteLibrarySchema}]=await Promise.all([
+  import('../../../apps/web/src/experience/personalMeaningJourney/repository'),import('../../../apps/web/src/experience/personalMeaningJourney/gateway'),import('../../../apps/web/src/experience/personalMeaningJourney/ports'),import('../support/semanticLookupFixtures'),import('../support/semanticWorldRecordFixture.mts'),import('@sqlite.org/sqlite-wasm'),import('../../../apps/web/src/data/library/sqliteDatabase'),import('../../../apps/web/src/data/library/sqliteProtocol'),
+ ]);
+ const repository=new MemoryJourneyRepository();await createJourneyModules({repository,clock:createSeededClock('2026-10-03T00:00:00Z')}).semanticIntake.submit(semanticLookupPayload());
+ const world=syntheticSemanticWorld(await repository.load(),16);remoteIdentity={...localIdentity,deviceId:localIdentity.id};
+ publishEntries([{table:'meta',key:'identity',value:remoteIdentity},...[...semanticRecords(world)]]);await synchronizeLibrary(request);
+ const firstMeaning=world.meanings[0]!,sense=world.registry.senses[0]!,expectedKey=`senses:${sense.senseId}`,wire=JSON.stringify(encodeBackupValue(firstMeaning));
+ expect(database.get('semanticMeanings',firstMeaning.personalMeaning.personalMeaningId)).toBe(wire);expect(database.count('semanticMeanings')).toBe(16);
+ expect(database.registrySelection({kind:'senseKey',senseKey:sense.senseKey}).keys).toEqual([expectedKey]);expect(database.lookupMeanings('借用编号0').meanings).toHaveLength(1);
+ const source=Reflect.get(database,'database') as import('@sqlite.org/sqlite-wasm').Database;
+ const stored=source.exec({sql:'SELECT * FROM sensa_records ORDER BY table_name,record_key',rowMode:'object',returnValue:'resultRows'}) as Array<{table_name:string;record_key:string;value_json:string;content_revision:number}>;
+ expect(stored.find(row=>row.record_key===firstMeaning.personalMeaning.personalMeaningId)!.value_json.length).toBeLessThan(wire.length);
+ const baseline=source.exec({sql:'SELECT * FROM sensa_sync_base ORDER BY table_name,record_key',rowMode:'object',returnValue:'resultRows'}) as Array<{table_name:string;record_key:string;value_json:string;block_refs_json:string}>;
+ const sqlite=await sqlite3InitModule(),raw=new sqlite.oo1.DB(':memory:','c'),cold=new SqliteRecordDatabase(sqlite,raw,'memory');
+ try{
+  // The new kernel begins with no derived cache. Seed exact physical bytes,
+  // not decoded facts, so direct Registry/identity rebuild paths are exercised.
+  raw.exec(sqliteLibrarySchema);
+  for(const row of stored)raw.exec({sql:'INSERT INTO sensa_records(table_name,record_key,value_json,content_revision) VALUES(?,?,?,?)',bind:[row.table_name,row.record_key,row.value_json,row.content_revision]});
+  for(const row of baseline)raw.exec({sql:'INSERT INTO sensa_sync_base VALUES(?,?,?,?)',bind:[row.table_name,row.record_key,row.value_json,row.block_refs_json]});
+  cold.initialize();expect(cold.get('semanticMeanings',firstMeaning.personalMeaning.personalMeaningId)).toBe(wire);
+  expect(cold.registrySelection({kind:'senseKey',senseKey:sense.senseKey}).keys).toEqual([expectedKey]);expect(cold.lookupMeanings('借用编号0').meanings).toHaveLength(1);
+  expect(cold.existingJourneyIdentities([firstMeaning.personalMeaning.personalMeaningId])).toEqual([firstMeaning.personalMeaning.personalMeaningId]);expect(cold.diagnostics({verifyIntegrity:true}).journeyIdentityCheck?.status).toBe('ok');
+  expect(raw.exec({sql:'SELECT * FROM sensa_records ORDER BY table_name,record_key',rowMode:'object',returnValue:'resultRows'})).toEqual(stored);
+  expect(cold.syncBaseEntries().find(row=>row.table==='semanticMeanings'&&row.key===firstMeaning.personalMeaning.personalMeaningId)?.valueJson).toBe(wire);
+ }finally{cold.close(false);}
 });

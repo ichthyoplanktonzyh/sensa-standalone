@@ -404,7 +404,7 @@ test('initial coordination retries ownership after a closing leader releases its
  Object.defineProperty(globalThis,'navigator',{configurable:true,value:{locks}});
  Object.defineProperty(globalThis,'window',{configurable:true,value:new EventTarget()});
  Object.defineProperty(globalThis,'BroadcastChannel',{configurable:true,value:SilentChannel});
- const diagnostics:SqliteStorageDiagnostics={engine:'sqlite-wasm',persistence:'opfs',sqliteVersion:'fixture',schemaVersion:16,journalMode:'wal',synchronous:2,lockingMode:'exclusive'};
+ const diagnostics:SqliteStorageDiagnostics={engine:'sqlite-wasm',persistence:'opfs',sqliteVersion:'fixture',schemaVersion:sqliteLibrarySchemaVersion,journalMode:'wal',synchronous:2,lockingMode:'exclusive'};
  let created=0,timer:ReturnType<typeof setTimeout>|undefined;
  const adapter=new CoordinatedSqliteAdapter(()=>{created++;return {initialize:async()=>diagnostics,close:async()=>{}} as unknown as CoordinatedSqliteBackend;});
  const startup=adapter.initialize();

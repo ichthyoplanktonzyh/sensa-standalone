@@ -25,9 +25,9 @@ export const sqliteLibraryFile = "/sensa-local-library-v12.sqlite3";
 export const sqlitePoolDirectory = "/sensa-local-library-v12";
 /** First supported production-user baseline; prototype formats stay unsupported. */
 export const sqliteLibraryBaselineVersion = 10;
-export const sqliteLibrarySchemaVersion = 16;
+export const sqliteLibrarySchemaVersion = 17;
 /** Cross-tab RPC changes must bump this before adding or changing messages. */
-export const sqliteCoordinatorProtocolVersion = 51;
+export const sqliteCoordinatorProtocolVersion = 52;
 
 export const sqliteLibraryTables = [
   "meta",

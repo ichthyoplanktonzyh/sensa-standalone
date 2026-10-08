@@ -88,7 +88,7 @@ export class SqliteMeaningLookupProjection{
   // Chinese short queries (and literal punctuation) off the full-text scan path.
   const characters=Array.from(text),grams=new Set(characters);
   for(let index=1;index<characters.length;index++)grams.add(characters[index-1]!+characters[index]!);
-  for(const gram of grams)this.write('INSERT INTO sensa_meaning_lookup_grams VALUES(?,?)',[gram,row.id]);
+  this.write('INSERT INTO sensa_meaning_lookup_grams SELECT value,? FROM json_each(?)',[row.id,JSON.stringify([...grams])]);
  }
  private releaseDocument(versionId:string,text:string):void{
   const row=this.rows('SELECT id,reference_count FROM sensa_meaning_lookup_documents WHERE sense_version_id=? AND text=?',[versionId,text])[0];

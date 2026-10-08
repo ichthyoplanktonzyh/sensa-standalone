@@ -244,8 +244,6 @@ test('a portable content update keeps Target progress and refreshes the unfinish
   assert.deepEqual(Object.values(newestParticipant.materializations).map(material=>material.snapshot.provenance.packageVersion).sort(),['1','2','3'],'successive unacted refreshes retain every frozen material body and the acted v1 Step');
   assert.equal(current.runtime.questionResources.find(item=>item.materialRoleKey==='experience_recall_cue')?.contentPayload.scene,manifest().resources.experienceRecallCue.text,'question context retains the actual previous experience version');
   assert(!JSON.stringify(current.runtime.questionResources).includes(updated.resources.experienceRecallCue.text));
-  const {estimateLibraryBackupSize}=await import('../../../apps/web/src/data/library/backup.ts');
-  assert((await estimateLibraryBackupSize()).usedBytes>0,'the refreshed Step must pass complete Library replay validation');
   const {validateBackupRows}=await import('../../../apps/web/src/data/library/backupValidation.ts');
   const rows=await readLibrary(async tx=>Object.fromEntries(await Promise.all(libraryTables.map(async table=>[table,await tx.entries(table)])))) as import('../../../apps/web/src/data/library/backupValidation.ts').BackupRows;
   rows.packageCache=[];

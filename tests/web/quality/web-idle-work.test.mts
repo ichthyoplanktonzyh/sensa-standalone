@@ -51,7 +51,6 @@ const accountExperience=await readFile('apps/web/src/experience/account/AccountE
 const home=await readFile('apps/web/src/experience/library/HomeLearningController.tsx','utf8');
 const workspace=await readFile('apps/web/src/experience/library/LearningWorkspace.tsx','utf8');
 const contentSupply=await readFile('apps/web/src/contentSupply/system/contentSupplySystemImplementation.ts','utf8');
-const backup=await readFile('apps/web/src/data/library/backup.ts','utf8');
 const shell=await readFile('apps/web/src/experience/ui/WebShell.tsx','utf8');
 const screenHost=await readFile('apps/web/src/experience/ui/ScreenHost.tsx','utf8');
 assert(/lazy\(\(\)=>import\('\.\/library\/HomeLearningController'\)/u.test(app),'the lightweight Home controller must remain outside the shell chunk');
@@ -61,8 +60,9 @@ assert(!accountExperience.includes('await preloadMedia()'),'product startup must
 assert(!home.includes('usePackageLearning')&&!home.includes('usePersonalLearning'),'Home must use its small read projection instead of full learning controllers');
 assert(home.includes('useActiveLanguageContext')&&!home.includes('useLanguageRoutes'),'Home must not load Route management and availability discovery for one pinned context');
 assert(contentSupply.includes("packageCacheProjection({kind:'summaries'})"),'content inventory must read the derived summary index without transporting full Runtime package records');
-assert(/estimateLibraryBackupSize\(\)[\s\S]*estimateLibraryRecordBytes\(libraryBackupTables\)/u.test(backup),'backup size estimation must remain a storage aggregate');
-assert(!/estimateLibraryBackupSize\(\)[\s\S]{0,300}encodeCurrentLibrary\(/u.test(backup),'backup size estimation must not encode the complete Library');
+const backupPanel=await readFile('apps/web/src/experience/components/LibraryBackupPanel.tsx','utf8');
+assert(!backupPanel.includes('estimateLibraryBackupSize'),'the backup panel must not compare stored record bytes with an unrelated archive limit');
+assert(!backupPanel.includes('encodeCurrentLibrary'),'opening the backup panel must not encode the complete Library');
 assert(/lazy\(\(\)=>import\('\.\/PackageLearningRuntime'\)/u.test(workspace),'formal learning Runtime must remain outside the learning workspace graph');
 assert(app.includes('<ScreenHost')&&workspace.includes('<ScreenHost'),'both shell levels must delegate screen ownership to ScreenHost');
 assert(!shell.includes('MutationObserver'),'WebShell must not infer route ownership by observing DOM mutations');

@@ -104,7 +104,7 @@ export class SqliteRuntimeLearningCandidates {
   this.database.exec(schema);this.database.exec(supplementalSchema);this.clear();this.clearSupplementalStates();
   this.database.exec('DELETE FROM sensa_runtime_learning_enrollments');this.database.exec('DELETE FROM sensa_runtime_learning_ranges');
   for(const row of this.database.exec({sql:"SELECT record_key,value_json FROM sensa_records WHERE table_name='curriculumEnrollments'",rowMode:'object',returnValue:'resultRows'}) as {record_key:string;value_json:string}[])this.upsertEnrollment(row.record_key,this.decodeEnrollment(row.value_json));
-  for(const row of this.database.exec({sql:"SELECT record_key,value_json FROM sensa_records WHERE table_name='supplementalMembershipStates'",rowMode:'object',returnValue:'resultRows'}) as {record_key:string;value_json:string}[])this.upsertSupplementalState(row.record_key,decodeBackupValue(JSON.parse(row.value_json)) as SupplementalMembershipState);
+  for(const row of this.database.exec({sql:"SELECT record_key,value_json FROM sensa_records WHERE table_name='supplementalMembershipStates'",rowMode:'object',returnValue:'resultRows'}) as {record_key:string;value_json:string}[])this.upsertSupplementalState(row.record_key,decodeBackupValue(JSON.parse(unpackStoredRecord(row.value_json))) as SupplementalMembershipState);
   for(const row of this.database.exec({sql:"SELECT record_key,value_json FROM sensa_records WHERE table_name='studyScopes'",rowMode:'object',returnValue:'resultRows'}) as {record_key:string;value_json:string}[])this.upsertScope(row.record_key,this.decodeScope(row.value_json));
   let after='';
   for(;;){

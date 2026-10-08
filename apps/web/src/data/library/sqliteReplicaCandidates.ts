@@ -1,10 +1,10 @@
-import type {Database} from '@sqlite.org/sqlite-wasm';
+import type {Database,PreparedStatement} from '@sqlite.org/sqlite-wasm';
 import {z} from 'zod';
 import {librarySyncHead,librarySyncBlockChars,canonicalConsumerJson} from '@sensa/contracts/sensa';
 import {sha256} from '@sensa/learning-kernel';
 import {decodeBackupValue,encodeBackupValue} from './backupCodec';
-import {packStoredRecord,unpackStoredRecord} from './sharedRecordContent';
-import {isReplicatedLibraryEntry,restoreLibraryReplicaValue,type LibraryReplicaEntry} from './replication/libraryReplica';
+import {packStoredRecord,unpackStoredRecord,sharedRecordTables} from './sharedRecordContent';
+import {isReplicatedLibraryEntry,restoreLibraryReplicaValue,canCopyLibraryReplicaValue,type LibraryReplicaEntry} from './replication/libraryReplica';
 import type {SqliteMutation,SqliteLibraryTable} from './sqliteProtocol';
 import type {LibraryRecordReader} from './libraryRecordReader';
 import {isFatalSqliteConnectionFailure,sqliteRollbackFailure} from './sqliteConnectionFailure';
@@ -25,6 +25,7 @@ type StoredRow={record_key:string;value_json:string};
  * validation may yield while ordinary local reads and writes continue. */
 export class SqliteReplicaCandidates{
  private ready=false;
+ private readonly statements=new Map<string,PreparedStatement>();
  private readonly validations=new Map<string,{controller:AbortController;result:Promise<ReplicaCandidateValidation>}>();
  constructor(private readonly database:Database,private readonly assertFence:(fence:ReplicaCandidateFence)=>void,private readonly assertHealthy:()=>void){}
  private ensure(){
@@ -37,7 +38,13 @@ export class SqliteReplicaCandidates{
    this.ready=true;
   }
  }
- private rows<T>(sql:string,bind:readonly (string|number|null)[]=[]):T[]{this.assertHealthy();return this.database.exec({sql,bind:[...bind],rowMode:'object',returnValue:'resultRows'}) as T[];}
+ private rows<T>(sql:string,bind:readonly (string|number|null)[]=[]):T[]{
+  this.assertHealthy();
+  let statement=this.statements.get(sql);if(!statement){statement=this.database.prepare(sql);this.statements.set(sql,statement);}
+  statement.reset(true);if(bind.length)statement.bind([...bind]);
+  const rows:T[]=[];try{while(statement.step())rows.push(statement.get({}) as T);return rows;}finally{statement.reset(true);}
+ }
+ close():void{for(const statement of this.statements.values())statement.finalize();this.statements.clear();}
  private header(id:string):Header{uuid.parse(id);this.ensure();return this.rows<Header>('SELECT * FROM sensa_replica_candidates_v1 WHERE id=?',[id])[0]??this.fail();}
  private fail():never{throw Error('library_sync_candidate_invalid');}
  private check(header:Header){this.assertFence(fenceSchema.parse(JSON.parse(header.fence_json)));}
@@ -212,11 +219,14 @@ export class SqliteReplicaCandidates{
  /** Called only inside the source transaction. Bodies remain in the private
   * SQLite generation; existing commit/projection code reads one on demand.
   * This is not a shortcut for merging an existing or previously synced world. */
- prepareFreshRestore(id:string,mutation:SqliteMutation):Pick<SqliteMutation,'puts'|'syncBaseReplacement'>{
+ prepareFreshRestore(id:string,mutation:SqliteMutation):Pick<SqliteMutation,'puts'|'syncBaseReplacement'>&{copiedTables:ReadonlySet<SqliteLibraryTable>;copyOrdinary:()=>void;logicalBytes:number}{
   if(mutation.clears.length||mutation.deletes.length||mutation.portablePackages?.length||mutation.syncBaseReplacement!==undefined||mutation.syncBasePatch!==undefined||mutation.puts.some(row=>row.table!=='meta'||!['cloud-sync','local-content-revision'].includes(row.key)))this.fail();
   const header=this.header(id);this.check(header);const receipt=this.receipt(header),fence=fenceSchema.parse(JSON.parse(header.fence_json));
   if(mutation.contentRevision!==fence.localRevision+1)this.fail();
   if(this.rows('SELECT 1 FROM sensa_sync_base LIMIT 1').length)throw Error('library_sync_local_changed');
+  if(this.rows(`SELECT 1 FROM sensa_replica_candidate_records_v1 AS candidate
+   JOIN sensa_record_tombstones AS deleted ON deleted.table_name=candidate.table_name AND deleted.record_key=candidate.record_key
+   WHERE candidate.candidate_id=? LIMIT 1`,[id]).length)throw Error('library_sync_history');
   for(const row of this.rows<{table_name:string;record_key:string}>('SELECT table_name,record_key FROM sensa_records')){
    if(isReplicatedLibraryEntry(row.table_name,row.record_key)&&!(row.table_name==='meta'&&row.record_key==='identity'))throw Error('library_sync_local_changed');
   }
@@ -226,17 +236,35 @@ export class SqliteReplicaCandidates{
   const state=decodeBackupValue(JSON.parse(stateRow.encodedValue)) as {restoreOperationId?:string;owner?:{subject:string;accountId:string};incarnation?:string;revision?:number;syncedLocalRevision?:number;status?:string};
   if(state.restoreOperationId!==id||state.owner?.subject!==fence.owner.subject||state.owner.accountId!==fence.owner.accountId||state.incarnation!==fence.incarnation||state.revision!==receipt.head.revision||state.syncedLocalRevision!==mutation.contentRevision||state.status!=='synced')this.fail();
   const rows=this.rows<{table_name:LibraryReplicaEntry['table'];record_key:string;refs_json:string}>('SELECT table_name,record_key,refs_json FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? ORDER BY table_name,record_key',[id]);
+  const excluded=new Set(rows.filter(row=>sharedRecordTables.has(row.table_name)||!canCopyLibraryReplicaValue({table:row.table_name,key:row.record_key})).map(row=>row.table_name));
+  // Whole-table admission is conservative when ownership differs by key: one
+  // transformed row keeps that entire table on its existing owner value path.
+  const copiedTables=new Set(rows.map(row=>row.table_name).filter(table=>!excluded.has(table)));
   const read=(table:string,key:string)=>{
    const row=this.rows<{value_json:string}>('SELECT value_json FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,table,key])[0];if(!row)this.fail();return unpackStoredRecord(row.value_json);
   };
   const puts:SqliteMutation['puts']=rows.map(row=>({table:row.table_name,key:row.record_key,get encodedValue(){
+   if(copiedTables.has(row.table_name))return read(row.table_name,row.record_key);
    const value=decodeBackupValue(JSON.parse(read(row.table_name,row.record_key)));
    return JSON.stringify(encodeBackupValue(restoreLibraryReplicaValue({table:row.table_name,key:row.record_key,value:undefined},value,fence.identity)));
   }}));
   const restoredIdentity=restoreLibraryReplicaValue({table:'meta',key:'identity',value:undefined},receipt.identity,fence.identity);
   puts.push({table:'operations',key:'00000000-0000-4000-8000-000000000001',encodedValue:JSON.stringify(encodeBackupValue({input:canonicalConsumerJson({kind:'library.create',input:{}}),result:restoredIdentity,committedAt:receipt.identity.createdAt}))});
   const syncBaseReplacement:NonNullable<SqliteMutation['syncBaseReplacement']>=rows.map(row=>({table:row.table_name,key:row.record_key,blockRefs:JSON.parse(row.refs_json),get valueJson(){return read(row.table_name,row.record_key);}}));
-  return {puts,syncBaseReplacement};
+  const copyOrdinary=()=>{
+   this.check(this.header(id));const tables=JSON.stringify([...copiedTables]);
+   this.database.exec({sql:`INSERT INTO sensa_sync_base(table_name,record_key,value_json,block_refs_json)
+    SELECT table_name,record_key,value_json,refs_json FROM sensa_replica_candidate_records_v1
+    WHERE candidate_id=? AND table_name IN(SELECT value FROM json_each(?))`,bind:[id,tables]});
+   this.database.exec({sql:`INSERT INTO sensa_records(table_name,record_key,value_json,content_revision)
+    SELECT table_name,record_key,value_json,? FROM sensa_replica_candidate_records_v1
+    WHERE candidate_id=? AND table_name IN(SELECT value FROM json_each(?))
+    ON CONFLICT(table_name,record_key) DO UPDATE SET value_json=excluded.value_json,content_revision=excluded.content_revision`,bind:[mutation.contentRevision!,id,tables]});
+   this.database.exec({sql:`DELETE FROM sensa_record_tombstones WHERE(table_name,record_key) IN(
+    SELECT table_name,record_key FROM sensa_replica_candidate_records_v1
+    WHERE candidate_id=? AND table_name IN(SELECT value FROM json_each(?)))`,bind:[id,tables]});
+  };
+  return {puts,syncBaseReplacement,copiedTables,copyOrdinary,logicalBytes:receipt.logicalBytes};
  }
  discard(id:string):void{uuid.parse(id);this.ensure();this.validations.get(id)?.controller.abort(Error('library_sync_candidate_discarded'));this.database.exec({sql:'DELETE FROM sensa_replica_candidates_v1 WHERE id=?',bind:[id]});}
  abortAll(reason:Error):void{for(const validation of this.validations.values())validation.controller.abort(reason);}

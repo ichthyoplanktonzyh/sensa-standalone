@@ -201,6 +201,19 @@ export class SqliteRecordDatabase {
       catch(error){try{this.database.exec('ROLLBACK');}catch{/* Preserve the original records and constraint. */}throw error;}
       this.database.exec(sqliteLibrarySchema);
     }
+    else if(before===16){
+      // Keep existing source bytes and indexes. Only future record writes or
+      // verified copies may use the already-supported compression envelope.
+      this.database.exec(sqliteRuntimePragmas);
+      this.database.exec('BEGIN IMMEDIATE');
+      try{
+        const present=this.database.exec({sql:"SELECT name FROM sqlite_schema WHERE type='table' AND name IN (SELECT value FROM json_each(?))",bind:[JSON.stringify(sqliteRequiredTables)],rowMode:'object',returnValue:'resultRows'}) as unknown[];
+        if(present.length!==sqliteRequiredTables.length)throw new Error('sqlite_source_schema_incomplete');
+        ensureSqliteSchemaIndexes(this.database,sqliteLibrarySchema);
+        this.database.exec(`PRAGMA user_version=${sqliteLibrarySchemaVersion}`);this.database.exec('COMMIT');
+      }
+      catch(cause){try{this.database.exec('ROLLBACK');}catch(rollbackCause){throw sqliteRollbackFailure(cause,rollbackCause);}throw cause;}
+    }
     else if (before !== sqliteLibrarySchemaVersion) {
       throw new Error(`sqlite_schema_migration_missing:${before}`);
     } else {
@@ -731,6 +744,7 @@ export class SqliteRecordDatabase {
     let encodedWriteSize=0;
     let bulkMaintenance=false;
     const removedContent=new Set<string>();
+    let staged:ReturnType<import('./sqliteReplicaCandidates').SqliteReplicaCandidates['prepareFreshRestore']>|undefined;
     const ownerKeys=new Set(['identity','service-owner','local-incarnation','signed-out']);
     let discardCandidates=mutation.clears.includes('meta')
       ||mutation.deletes.some(item=>item.table==='meta'&&ownerKeys.has(item.key))
@@ -741,9 +755,21 @@ export class SqliteRecordDatabase {
       if (contentRevision !== undefined && (!Number.isSafeInteger(contentRevision) || contentRevision <= 0)) {
         throw new Error('sqlite_content_revision_invalid');
       }
+      const wholeReset=sqliteLibraryTables.every(table=>mutation.clears.includes(table));
+      if(wholeReset&&mutation.syncBaseReplacement===undefined)mutation={...mutation,syncBaseReplacement:[]};
+      // A first checkpoint has no positive baseline witness for a local
+      // deletion. Do not silently restore that key from an older Cloud copy.
+      // Explicit whole-library/backup resets are a different admitted intent.
+      if(!wholeReset&&mutation.syncBaseReplacement!==undefined&&mutation.puts.some(row=>row.table==='meta'&&row.key==='cloud-sync')){
+        const imported=mutation.puts.filter(row=>row.table!=='operations'&&!(row.table==='meta'&&['cloud-sync','local-content-revision'].includes(row.key))).map(({table,key})=>[table,key]);
+        if(imported.length&&this.database.exec({sql:`SELECT 1 FROM json_each(?) AS incoming
+          JOIN sensa_record_tombstones AS deleted ON deleted.table_name=json_extract(incoming.value,'$[0]') AND deleted.record_key=json_extract(incoming.value,'$[1]')
+          LEFT JOIN sensa_sync_base AS prior ON prior.table_name=deleted.table_name AND prior.record_key=deleted.record_key
+          WHERE prior.record_key IS NULL LIMIT 1`,bind:[JSON.stringify(imported)],rowMode:0,returnValue:'resultRows'}).length)throw Error('library_sync_history');
+      }
       if(mutation.replicaCandidateRestore){
         if(!this.replicaCandidateStore)throw Error('library_sync_candidate_invalid');
-        const staged=this.replicaCandidateStore.prepareFreshRestore(mutation.replicaCandidateRestore.id,mutation);
+        staged=this.replicaCandidateStore.prepareFreshRestore(mutation.replicaCandidateRestore.id,mutation);
         mutation={...mutation,puts:[...staged.puts,...mutation.puts],syncBaseReplacement:staged.syncBaseReplacement};
         discardCandidates=true;
       }
@@ -751,7 +777,9 @@ export class SqliteRecordDatabase {
         for(const row of this.database.exec({sql:"SELECT DISTINCT digest FROM sensa_shared_record_content_owners WHERE owner_kind='sync'",rowMode:0,returnValue:'resultRows'}) as string[])removedContent.add(row);
         this.database.exec("DELETE FROM sensa_shared_record_content_owners WHERE owner_kind='sync'");
         this.database.exec('DELETE FROM sensa_sync_base');
+        if(staged){staged.copyOrdinary();encodedWriteSize+=staged.logicalBytes;}
         for (const entry of mutation.syncBaseReplacement) {
+          if(staged?.copiedTables.has(entry.table))continue;
           const blockRefsJson=JSON.stringify(entry.blockRefs),valueJson=entry.valueJson;
           encodedWriteSize+=valueJson.length+blockRefsJson.length;
           this.database.exec({
@@ -876,9 +904,14 @@ export class SqliteRecordDatabase {
         }
       }
       for (const item of mutation.puts) {
-        const encodedValue=item.encodedValue;
-        encodedWriteSize+=encodedValue.length;
-        const stored=this.storedEncoded('record',item.table,item.key,encodedValue,removedContent);
+        const copied=staged?.copiedTables.has(item.table)??false;
+        // Copied ordinary rows already live in this transaction. Read their
+        // body only for a derived projection that actually consumes it.
+        const needsBody=!copied||['packageCache','curriculumEnrollments','supplementalMembershipStates','studyScopes','learningTargets','learningRuns','contentAttempts','semanticMeanings','semanticInbox'].includes(item.table);
+        const encodedValue=needsBody?item.encodedValue:undefined;
+        if(!copied){
+        encodedWriteSize+=encodedValue!.length;
+        const stored=this.storedEncoded('record',item.table,item.key,encodedValue!,removedContent);
         if (contentRevision === undefined) {
           this.database.exec({
             sql: `INSERT INTO sensa_records(table_name,record_key,value_json,content_revision) VALUES(?,?,?,0)
@@ -898,21 +931,22 @@ export class SqliteRecordDatabase {
             bind: [item.table, item.key],
           });
         }
-        if(item.table==='packageCache')this.upsertPackageCacheProjection(item.key,encodedValue);
-        if(item.table==='curriculumEnrollments')this.runtimeCandidates.upsertEnrollment(item.key,this.decode<import('./curriculumEnrollments').LocalCurriculumEnrollment>(encodedValue));
-        if(item.table==='supplementalMembershipStates')this.runtimeCandidates.upsertSupplementalState(item.key,this.decode<import('./supplementalMemberships').SupplementalMembershipState>(encodedValue));
-        if(item.table==='studyScopes')this.runtimeCandidates.upsertScope(item.key,this.decode<import('./studyScopes').LocalStudyScope>(encodedValue));
+        }
+        if(item.table==='packageCache')this.upsertPackageCacheProjection(item.key,encodedValue!);
+        if(item.table==='curriculumEnrollments')this.runtimeCandidates.upsertEnrollment(item.key,this.decode<import('./curriculumEnrollments').LocalCurriculumEnrollment>(encodedValue!));
+        if(item.table==='supplementalMembershipStates')this.runtimeCandidates.upsertSupplementalState(item.key,this.decode<import('./supplementalMemberships').SupplementalMembershipState>(encodedValue!));
+        if(item.table==='studyScopes')this.runtimeCandidates.upsertScope(item.key,this.decode<import('./studyScopes').LocalStudyScope>(encodedValue!));
         if (item.table === 'learningTargets') {
-          this.upsertLearningTargetProjection(item.key, encodedValue);
+          this.upsertLearningTargetProjection(item.key, encodedValue!);
         }
         if (item.table === 'learningRuns') {
-          this.upsertLearningRunProjection(item.key, encodedValue);
+          this.upsertLearningRunProjection(item.key, encodedValue!);
         }
         if (item.table === 'contentAttempts') {
-          this.upsertContentAttemptProjection(item.key, encodedValue);
+          this.upsertContentAttemptProjection(item.key, encodedValue!);
         }
         if (item.table === 'semanticMeanings' || item.table === 'semanticInbox') {
-          this.replaceMediaReferences(item.table, item.key, encodedValue);
+          this.replaceMediaReferences(item.table, item.key, encodedValue!);
         }
       }
       // Replica mutations are ordered by record identity, not dependency:
@@ -935,6 +969,9 @@ export class SqliteRecordDatabase {
       // Only dependencies detached by this mutation can become orphaned. An
       // ordinary rating must not sweep all immutable bodies in the library.
       for(const digest of removedContent)this.database.exec({sql:'DELETE FROM sensa_shared_record_content WHERE digest=? AND NOT EXISTS(SELECT 1 FROM sensa_shared_record_content_owners WHERE digest=?)',bind:[digest,digest]});
+      // A new explicit whole-library incarnation inherits neither the old
+      // checkpoint's private bodies nor deletion journal. Both reset atomically.
+      if(wholeReset)this.database.exec('DELETE FROM sensa_record_tombstones');
       // Rapid bulk growth is a maintenance point. Persist useful statistics
       // with that import instead of making the next page's reopen pay for it.
       // Count actual SQL writes, including sync baselines, normalized media
@@ -1022,7 +1059,7 @@ export class SqliteRecordDatabase {
       try{this.purgeReplicaCandidates();}
       catch(cause){if(isFatalSqliteConnectionFailure(cause))this.quarantineConnection(cause as Error);optimizeFailed=true;optimizeFailure??=cause;}
     }
-    this.meaningLookup.close();this.worldBrowseProjection.close();this.journeyIdentities.close();this.recordGet?.finalize();this.recordGet=undefined;
+    this.replicaCandidateStore?.close();this.meaningLookup.close();this.worldBrowseProjection.close();this.journeyIdentities.close();this.recordGet?.finalize();this.recordGet=undefined;
     this.database.close();
     this.closed=true;
     if(optimizeFailed)throw optimizeFailure;
@@ -1047,8 +1084,8 @@ export class SqliteRecordDatabase {
   }
 
   private logicalEncoded(table:SqliteLibraryTable,encoded:string):string{
-    if(!sharedRecordTables.has(table))return encoded;
     const plain=unpackStoredRecord(encoded);
+    if(!sharedRecordTables.has(table))return plain;
     if(!plain.includes('sensa-shared-content-v1'))return plain;
     return JSON.stringify(expandSharedRecordContent(JSON.parse(plain),digest=>{
       const rows=this.database.exec({sql:'SELECT value_json FROM sensa_shared_record_content WHERE digest=?',bind:[digest],rowMode:0,returnValue:'resultRows'}) as string[];
@@ -1064,7 +1101,7 @@ export class SqliteRecordDatabase {
   }
 
   private storedEncoded(kind:'record'|'sync',table:SqliteLibraryTable,key:string,encoded:string,removed:Set<string>):string{
-    if(!sharedRecordTables.has(table))return encoded;
+    if(!sharedRecordTables.has(table))return packStoredRecord(encoded);
     this.detachSharedContent(kind,table,key,removed);
     const shared=externalizeSharedRecordContent(JSON.parse(encoded));
     if(shared.bodies.size>32){

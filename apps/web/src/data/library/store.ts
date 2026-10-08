@@ -71,6 +71,7 @@ const storageCall = async <T>(
       throw new Error("localFlow.storageBusy", { cause });
     }
     if (message.startsWith("localFlow.")) throw cause;
+    if(['library_sync_history','library_sync_local_changed','account_changed'].includes(message))throw cause;
     throw new Error(fallback, { cause });
   }
 };

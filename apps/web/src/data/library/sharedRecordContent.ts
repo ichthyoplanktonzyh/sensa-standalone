@@ -67,6 +67,9 @@ export function packStoredRecord(text:string):string{
  return packed.length<text.length?packed:text;
 }
 export function unpackStoredRecord(text:string):string{
+ // Writers use this exact envelope. Ordinary tagged facts need not be parsed
+ // merely to discover that they are not compressed records.
+ if(!text.startsWith(`["${compressedTag}",`))return text;
  const value=JSON.parse(text);
  if(!Array.isArray(value)||value[0]!==compressedTag)return text;
  if(value.length!==3||typeof value[1]!=='string'||!hashPattern.test(value[1])||typeof value[2]!=='string')fail();
