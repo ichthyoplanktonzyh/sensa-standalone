@@ -39,7 +39,7 @@ export const practiceAreaLabel: Record<PracticeArea, string> = {
 
 const AREA_ORDER: readonly PracticeArea[] = ['listening', 'speaking', 'reading', 'writing'];
 
-/** The first profile deliberately contains one activity in each area. */
+/** Future profile definition, not a list of delivered product actions. */
 export const INITIAL_FREE_PRACTICE_PROFILE = {
   version: 'sensa-initial-free-practice-v2',
   activityIds: [
@@ -105,34 +105,33 @@ export const practiceTargetSupportsActivity = (
 };
 
 /**
- * Resolve the page from the profile and the prototype's actual capabilities.
+ * Resolve only delivered activities against the source's actual capabilities.
  * YouGlish is provider-backed, so it only needs an Expression-bearing scope;
- * the other three definitions stay visible but cannot pretend their runtimes exist.
+ * future profile definitions must not become disabled product placeholders.
  */
 export const resolvePracticeActivities = (
   scope: ResolvedPracticeScope,
 ): readonly ResolvedPracticeActivity[] => {
-  return AREA_ORDER.map((area) => {
+  return AREA_ORDER.flatMap((area) => {
     const definition = PRACTICE_ACTIVITY_DEFINITIONS.find(
       (candidate) => candidate.primaryArea === area,
     );
     if (!definition) throw new Error(`Missing activity definition for ${area}`);
+    if (!DELIVERED_ACTIVITY_IDS.has(definition.id)) return [];
 
     const targetCount = scope.targets.filter(
       (target) => practiceTargetSupportsActivity(target, definition.id),
     ).length;
 
-    const status: PracticeActivityStatus = !DELIVERED_ACTIVITY_IDS.has(definition.id)
-      ? 'not_yet_delivered'
-      : targetCount > 0
-        ? 'available'
-        : 'unavailable_in_scope';
+    const status: PracticeActivityStatus = targetCount > 0
+      ? 'available'
+      : 'unavailable_in_scope';
 
-    return {
+    return [{
       ...definition,
       areaLabel: practiceAreaLabel[area],
       status,
       targetCount,
-    };
+    }];
   });
 };

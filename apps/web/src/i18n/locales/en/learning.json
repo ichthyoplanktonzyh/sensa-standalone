@@ -286,6 +286,7 @@
     "retry": "Reload",
     "captions": "Captions",
     "captionEmpty": "Captions appear as the clip plays",
+    "skipToControls": "Skip to playback controls",
     "play": "Play",
     "pause": "Pause",
     "previous": "Previous clip",

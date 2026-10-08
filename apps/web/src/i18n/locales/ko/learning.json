@@ -286,6 +286,7 @@
     "retry": "다시 불러오기",
     "captions": "자막",
     "captionEmpty": "클립이 재생되면 자막이 표시됩니다",
+    "skipToControls": "재생 컨트롤로 건너뛰기",
     "play": "재생",
     "pause": "일시 정지",
     "previous": "이전 클립",

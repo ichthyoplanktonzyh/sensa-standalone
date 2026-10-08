@@ -32,6 +32,8 @@ test('a saved Personal scope cannot start from a loading or unavailable Current 
  const availability=page.getByTestId('scope-availability');
  await expect(availability).toHaveText('loading');
  const listening=page.locator('.sensa-practice-activities').getByRole('button').first();
+ await expect(page.locator('.sensa-practice-activities').getByRole('button')).toHaveCount(1);
+ for(const title of ['情境口语排演','语境推义','情境书面表达'])await expect(page.getByRole('heading',{name:title,exact:true})).toHaveCount(0);
  await expect(listening).toBeDisabled();await expect(page.getByText('study-only',{exact:true})).toHaveCount(0);
  expect(await page.evaluate(()=>window.practiceScopeFixture.preference())).toEqual(preference);
  expect(await page.evaluate(()=>window.practiceScopeFixture.snapshot())).toBeNull();

@@ -133,7 +133,11 @@ assert.equal(invalidPersonal.currentScope.sourceId, CURRENT_STUDY_SCOPE_ID);
 
 const activities = resolvePracticeActivities(personal.currentScope);
 assert.equal(activities.find((activity) => activity.id === 'real_world_speech_variation')?.status, 'available');
-assert.equal(activities.find((activity) => activity.id === 'oral_scenario_rehearsal')?.targetCount, 1);
+assert.deepEqual(activities.map(activity=>activity.id), ['real_world_speech_variation'], 'undelivered profile definitions are not product actions');
+const emptyActivities=resolvePracticeActivities(empty.currentScope);
+assert.equal(emptyActivities.length,1,'the delivered activity retains an honest empty-scope state');
+assert.equal(emptyActivities[0]?.status,'unavailable_in_scope');
+assert.equal(emptyActivities[0]?.targetCount,0);
 
 const snapshot = createPracticeScopeSnapshot(
   current.currentScope,

@@ -28,14 +28,17 @@ function ListeningPlayer({targets,onBack,retry}:YouGlishListeningScreenProps&{re
  // A filter the target language does not offer is never sent to the provider.
  const activeAccent=accents.includes(accent)?accent:'all';
  const mountRef=useRef<HTMLDivElement>(null);
+ const controlsRef=useRef<HTMLDivElement>(null);
  const widget=useYouglishWidget({mountRef,components:0,query:current?.expression.surfaceForm,lang:languageTag?clipLanguageFor(languageTag):'',accent:activeAccent==='all'?undefined:activeAccent,active:!!current});
  const ready=widget.status==='ready';
- useEffect(()=>{if(ready)widget.setSpeed(preferredRate.current);},[ready,widget.setSpeed]);
+ const canControl=widget.controlsReady;
+ useEffect(()=>{if(canControl)widget.setSpeed(preferredRate.current);},[canControl,widget.setSpeed]);
  return <main className="mx-auto w-full max-w-[1040px] px-4 py-5 sm:px-8 sm:py-8 lg:px-10">
   <header className="mb-7 flex items-center gap-3">
    <button onClick={onBack} className="grid size-11 shrink-0 place-items-center rounded-pill text-fg-secondary hover:bg-surface-selected focus-visible:outline-2 focus-visible:outline-focus" aria-label={t('practice.back')}><ArrowLeft size={19}/></button>
    <h1 className="text-sm font-medium text-fg-secondary">{t('practice.names.listening')}</h1>
   </header>
+  {current&&<a href="#real-world-listening-controls" onClick={event=>{event.preventDefault();controlsRef.current?.focus();controlsRef.current?.scrollIntoView({block:'nearest'});}} className="sr-only focus:not-sr-only focus:mb-4 focus:inline-block focus:rounded-control focus:p-3 focus:text-action-primary focus:outline-2 focus:outline-focus">{t('practice.skipToControls')}</a>}
   {!current?<p className="py-24 text-center text-fg-tertiary">{t('practice.empty')}</p>:<>
    <div className="mb-6 flex flex-wrap items-end justify-between gap-4 px-1">
     <label className="flex min-w-0 flex-col gap-1.5 text-xs text-fg-tertiary">{t('practice.expression')}
@@ -57,18 +60,18 @@ function ListeningPlayer({targets,onBack,retry}:YouGlishListeningScreenProps&{re
      <span className="text-[11px] font-medium tracking-wide text-fg-tertiary">{t('practice.captions')}</span>
      <p lang={languageTag} dir="auto" className="mt-3 min-h-16 break-words text-lg leading-relaxed text-fg-primary sm:text-[22px]" aria-live="polite">{ready&&widget.caption?widget.caption.split(/\[\[\[|\]\]\]/).map((part,index)=>index%2?<mark className="rounded-control bg-accent-soft px-1 py-0.5 font-medium text-action-primary" key={index}>{part}</mark>:<span key={index}>{part}</span>):<span className="text-sm text-fg-tertiary">{t('practice.captionEmpty')}</span>}</p>
     </div>
-    <div className="grid grid-cols-1 items-center gap-3 border-t border-border-subtle bg-surface-subtle px-4 py-4 sm:grid-cols-[1fr_auto_1fr] sm:px-6">
-     <button disabled={!ready} onClick={widget.replay} aria-label={t('practice.replay')} className={`${practiceButton} hidden justify-self-start text-fg-secondary sm:inline-flex`}><RotateCcw size={17}/></button>
+    <div ref={controlsRef} id="real-world-listening-controls" tabIndex={-1} role="group" aria-label={t('practice.play')} className="grid grid-cols-1 items-center gap-3 border-t border-border-subtle bg-surface-subtle px-4 py-4 focus-visible:outline-2 focus-visible:outline-focus sm:grid-cols-[1fr_auto_1fr] sm:px-6">
+     <div className="hidden justify-self-start sm:block"><button disabled={!canControl} onClick={widget.replay} aria-label={t('practice.replay')} className={`${practiceButton} text-fg-secondary`}><RotateCcw size={17}/></button></div>
      <div className="flex items-center justify-center gap-1 sm:gap-2">
-      <button disabled={!ready} onClick={widget.previous} aria-label={t('practice.previous')} className={`${practiceButton} px-3 text-fg-secondary`}><SkipBack size={18}/></button>
-      <button disabled={!ready} onClick={()=>widget.move(-5)} aria-label={t('practice.rewind')} className={`${practiceButton} px-3 text-xs tabular-nums text-fg-secondary`}>−5s</button>
-      <button disabled={!ready} onClick={widget.toggle} aria-label={t(widget.isPlaying?'practice.pause':'practice.play')} className={`${practiceButton} mx-2 size-14 rounded-pill bg-action-primary text-action-on-primary shadow-raised hover:bg-action-primary-hover`}>{widget.isPlaying?<Pause size={21}/>:<Play size={21}/>}</button>
-      <button disabled={!ready} onClick={()=>widget.move(5)} aria-label={t('practice.forward')} className={`${practiceButton} px-3 text-xs tabular-nums text-fg-secondary`}>+5s</button>
-      <button disabled={!ready} onClick={widget.next} aria-label={t('practice.next')} className={`${practiceButton} px-3 text-fg-secondary`}><SkipForward size={18}/></button>
+      <button disabled={!canControl} onClick={widget.previous} aria-label={t('practice.previous')} className={`${practiceButton} px-3 text-fg-secondary`}><SkipBack size={18}/></button>
+      <button disabled={!canControl} onClick={()=>widget.move(-5)} aria-label={t('practice.rewind')} className={`${practiceButton} px-3 text-xs tabular-nums text-fg-secondary`}>−5s</button>
+      <button disabled={!canControl} onClick={widget.toggle} aria-label={t(widget.isPlaying?'practice.pause':'practice.play')} className={`${practiceButton} mx-2 size-14 rounded-pill bg-action-primary text-action-on-primary shadow-raised hover:bg-action-primary-hover`}>{widget.isPlaying?<Pause size={21}/>:<Play size={21}/>}</button>
+      <button disabled={!canControl} onClick={()=>widget.move(5)} aria-label={t('practice.forward')} className={`${practiceButton} px-3 text-xs tabular-nums text-fg-secondary`}>+5s</button>
+      <button disabled={!canControl} onClick={widget.next} aria-label={t('practice.next')} className={`${practiceButton} px-3 text-fg-secondary`}><SkipForward size={18}/></button>
      </div>
      <div className="flex items-center justify-center gap-4 sm:justify-end">
-      <button disabled={!ready} onClick={widget.replay} aria-label={t('practice.replay')} className={`${practiceButton} text-fg-secondary sm:hidden`}><RotateCcw size={16}/></button>
-      <select aria-label={t('practice.speed')} disabled={!ready} value={widget.speed} onChange={event=>{const requested=Number(event.target.value);setRate(requested);widget.setSpeed(requested);}} className="min-h-11 rounded-control bg-transparent px-2 text-xs tabular-nums text-fg-secondary focus-visible:outline-2 focus-visible:outline-focus">{[0.5,0.75,1,1.25].includes(widget.speed)?null:<option value={widget.speed}>{widget.speed}×</option>}{[0.5,0.75,1,1.25].map(value=><option value={value} key={value}>{value}×</option>)}</select>
+      <button disabled={!canControl} onClick={widget.replay} aria-label={t('practice.replay')} className={`${practiceButton} text-fg-secondary sm:hidden`}><RotateCcw size={16}/></button>
+      <select aria-label={t('practice.speed')} disabled={!canControl} value={widget.speed} onChange={event=>{const requested=Number(event.target.value);setRate(requested);widget.setSpeed(requested);}} className="min-h-11 rounded-control bg-transparent px-2 text-xs tabular-nums text-fg-secondary focus-visible:outline-2 focus-visible:outline-focus">{[0.5,0.75,1,1.25].includes(widget.speed)?null:<option value={widget.speed}>{widget.speed}×</option>}{[0.5,0.75,1,1.25].map(value=><option value={value} key={value}>{value}×</option>)}</select>
      </div>
     </div>
    </div>

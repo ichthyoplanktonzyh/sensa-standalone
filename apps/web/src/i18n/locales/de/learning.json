@@ -286,6 +286,7 @@
     "retry": "Neu laden",
     "captions": "Untertitel",
     "captionEmpty": "Untertitel erscheinen beim Abspielen des Clips",
+    "skipToControls": "Zu den Wiedergabesteuerelementen springen",
     "play": "Abspielen",
     "pause": "Pausieren",
     "previous": "Vorheriger Clip",

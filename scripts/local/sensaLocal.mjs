@@ -301,7 +301,7 @@ async function runLocal() {
       DATABASE_URL: databaseUrl,
       SENSA_LOCAL_SERVICE_PORT: '4319',
       ...(process.env.SENSA_TTS_PYTHON ? {SENSA_TTS_PYTHON:process.env.SENSA_TTS_PYTHON} : {}),
-      SENSA_LOCAL_WEB_ORIGINS: 'http://127.0.0.1:3000,http://127.0.0.1:4173',
+      SENSA_LOCAL_WEB_ORIGINS: 'http://127.0.0.1:3000,http://localhost:3000,http://127.0.0.1:4173,http://localhost:4173',
       SENSA_REGISTRATION_POLICY: 'registered',
       ...modelEnvironment,
       SENSA_LOCAL_PACKAGE_CATALOG_PATH: catalogPath,

@@ -286,6 +286,7 @@
     "retry": "Volver a cargar",
     "captions": "Subtítulos",
     "captionEmpty": "Los subtítulos aparecerán mientras se reproduce el clip",
+    "skipToControls": "Saltar a los controles de reproducción",
     "play": "Reproducir",
     "pause": "Pausar",
     "previous": "Clip anterior",

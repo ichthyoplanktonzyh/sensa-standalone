@@ -18,8 +18,28 @@ export type ScenarioId = `SCN-${string}`;
 export type EvidenceLayer = 'unit' | 'contract' | 'integration' | 'database'
   | 'browser' | 'browser-db' | 'extension-browser' | 'artifact' | 'external';
 
+/** Current product requirements absent from the historical audit. No run verdicts. */
+export const currentJourneyScenarios: readonly Readonly<{
+  id:ScenarioId; journeyIds:readonly LongJourneyId[]; capabilityIds:readonly CapabilityId[];
+  branches:readonly string[]; phase:string; oracle:string; minimumLayers:readonly EvidenceLayer[];
+}>[] = [
+  {id:'SCN-LISTEN-001',journeyIds:['LJ-15'],capabilityIds:['CAP-LRN-18'],branches:['H','A','F'],phase:'practice-content',oracle:'默认练习入口只展示已交付活动；真实学习／个人内容可选，无内容、载入中及读取失败不制造可练目标，保留内容选择、重试与返回出口。',minimumLayers:['browser']},
+  {id:'SCN-LISTEN-002',journeyIds:['LJ-15'],capabilityIds:['CAP-LRN-18','CAP-XFN-08'],branches:['H','D'],phase:'listening-playback',oracle:'选择表达、口音、播放／暂停、前后片段与速度作用于当前播放器；表达语言不随其他标签的Route重标，准备和速度以实际供应商事件为准，画面／字幕／操作可达。',minimumLayers:['browser']},
+  {id:'SCN-LISTEN-003',journeyIds:['LJ-15'],capabilityIds:['CAP-LRN-18','CAP-XFN-01','CAP-XFN-02'],branches:['F','R'],phase:'provider-recovery',oracle:'无结果与SDK／播放器故障及超时分别呈现；重试、重连或更换表达可继续，迟到事件不能复活失败播放器。',minimumLayers:['browser']},
+  {id:'SCN-LISTEN-004',journeyIds:['LJ-15'],capabilityIds:['CAP-LRN-18','CAP-SHL-09'],branches:['I','R','D'],phase:'practice-lifecycle',oracle:'切换表达、退出、刷新和重开终止旧媒体及其事件，返回合法内容入口，不伪造需要恢复的正式学习Session或练习完成。',minimumLayers:['browser']},
+  {id:'SCN-LISTEN-005',journeyIds:['LJ-15'],capabilityIds:['CAP-LRN-18'],branches:['H','F','R'],phase:'learner-fact-isolation',oracle:'聆听及失败恢复不写入正式Action／Evidence／Completion／Memory或调度；既有学习Run、资料和当前路线均保留。',minimumLayers:['browser']},
+  {id:'SCN-LISTEN-006',journeyIds:['LJ-15'],capabilityIds:['CAP-LRN-18','CAP-XFN-09'],branches:['N'],phase:'practice-capacity',oracle:'重度个人库下内容入口、选择和开始仍响应；明确记录对象数量、媒体、浏览器、CPU、网络与查询范围，不以供应商网络时间代替本机处理性能。',minimumLayers:['browser']},
+  {id:'SCN-LISTEN-007',journeyIds:['LJ-15'],capabilityIds:['CAP-LRN-18','CAP-XFN-14'],branches:['N'],phase:'provider-release-permission',oracle:'商业发布前核对YouGlish明确许可；本地实际播放和确定性测试不能代替供应商授权。',minimumLayers:['external']},
+];
+
 /** Shared guards run with a journey; they do not replace its user-facing evidence. */
 export const journeySupportingTests: readonly Readonly<{journeyIds:readonly LongJourneyId[];testId:string;scope:string}>[] = [
+  {journeyIds:['LJ-15'],testId:'spoken-language',scope:'All 18 catalog tags map to the official clip corpus identifiers and only configured accents; unsupported tags fail rather than become English. Controlled module/device fixtures, not live results or quality in all languages.'},
+  {journeyIds:['LJ-15'],testId:'web-bundle-budget',scope:'Production artifact/lazy import budgets retain the external player outside startup; not practice latency or real-device CWV.'},
+  {journeyIds:['LJ-15'],testId:'web-bootstrap-budget',scope:'Shared real-browser Shell responsiveness and request/idle budgets during slow cloud restore; not large practice-source projection or YouGlish latency.'},
+  {journeyIds:['LJ-15'],testId:'sqlite-opfs-benchmark',scope:'Shared Chromium/OPFS storage/query baseline; not complete practice scope selection, external media or end-to-end capacity.'},
+  {journeyIds:['LJ-15'],testId:'practice-scope',scope:'Pure source projection, capability filtering, detached selection and delivered activity inventory; no OPFS, UI or provider result.'},
+  {journeyIds:['LJ-15'],testId:'practice-source-loading',scope:'Actual source hooks, practice screens and OPFS under controlled read barriers/faults: saved Personal choice is not overwritten by a loading fallback; Route changes and initial workspace failures disable start until real read recovery. Not full shipped navigation, live playback or capacity.'},
   {journeyIds:['LJ-15'],testId:'youglish-caption',scope:'Pure provider-caption decoder with observed legacy byte samples, UTF-8 and Unicode fixtures; one transport layer, literal percentages and query markers retained. Not online media, interpretation or full user journey.'},
   {journeyIds:['LJ-15'],testId:'youglish-lifecycle',scope:'Actual React Widget hook and listening renderer under controlled SDK callbacks in Chromium: lazy loading, expression language, old-instance retirement, player readiness, confirmed speed, caption decoding and empty/error terminal protection. Not real YouGlish playback, full Web/OPFS facts or real device performance.'},
   {journeyIds:['LJ-15'],testId:'package-center-journey',scope:'Shipped Web and OPFS with compiled Book plus controlled Widget: captured English practice remains English after another tab selects Spanish; playback controls, natural provider iframe height and return preserve existing learning checkpoint, settlement facts and zero Meaning/Inbox. No actual online clip or audible playback claim.'},
@@ -181,6 +201,21 @@ export function journeyTestIds(journeyId:LongJourneyId):readonly string[]{
  * Historical baseline verdicts never change merely because a test is linked.
  */
 export const scenarioEvidenceContributions: readonly ScenarioEvidenceContribution[] = [
+  {scenarioId:'SCN-LISTEN-003',journeyIds:['LJ-15'],phase:'provider-recovery',branch:'unstarted-media-stall-without-provider-error',oracle:'受控但真实renderer中的API ready／7883结果不冒充媒体成功；只有未开始状态时保持可手动播放的加载态，15秒后关闭并显示重试；重复−1不延长期限，晚到playing不能复活。',testId:'youglish-lifecycle',testCase:'API-ready unstarted media is still loading and repeated states cannot postpone its retry deadline',claimedLayers:['browser'],coverage:'partial',remainingGaps:['SDK事件及可控时钟模拟实际503观察，不代替真实视频流故障复验。']},
+  {scenarioId:'SCN-LISTEN-003',journeyIds:['LJ-15'],phase:'provider-recovery',branch:'buffering-recovery-and-command-deadline',oracle:'实际hook进入缓冲时有界等待，恢复播放取消旧期限；请求重播却无供应商状态确认时到期失败，不一直显示成功。',testId:'youglish-lifecycle',testCase:'buffering recovery cancels the deadline but an unacknowledged replay still times out',claimedLayers:['browser'],coverage:'partial',remainingGaps:['受控SDK与浏览器时钟；不是全部在线播放器、手动暂停策略或音质。']},
+  {scenarioId:'SCN-LISTEN-001',journeyIds:['LJ-15'],phase:'practice-content',branch:'shipped-empty-content-and-return',oracle:'正式Web／OPFS空访客库只显示一项不可开始的聆听；可打开范围与来源确认均无内容并返回，也可直接进入目录或个人创建入口再返回；不加载SDK，不制造学习、Meaning或Inbox事实。',testId:'package-center-journey',testCase:'an empty practice scope offers content selection and return without loading a player or inventing learner facts',claimedLayers:['browser'],coverage:'partial',remainingGaps:['空库正常读取分支；实际加入或保存内容的独立旅程、不为空的来源选择与规模另需证据。']},
+  {scenarioId:'SCN-LISTEN-003',journeyIds:['LJ-15'],phase:'provider-recovery',branch:'native-sdk-offline-and-explicit-retry',oracle:'Chromium真实断网使SDK请求以ERR_INTERNET_DISCONNECTED失败，播放禁用并有重新加载；恢复网络后点击真实重试动作，新Widget等待实际ready事件才可操作。',testId:'youglish-lifecycle',testCase:'native offline SDK failure remains retryable and online retry creates a fresh player',claimedLayers:['browser'],coverage:'partial',remainingGaps:['恢复后的SDK与播放器受控，非真实网络恢复品质或OPFS故障事实隔离。']},
+  {scenarioId:'SCN-LISTEN-003',journeyIds:['LJ-15'],phase:'provider-recovery',branch:'readiness-timeout-retires-player',oracle:'供应商有结果但不ready时保持禁用；到15秒截止显示真实失败及重试并关闭媒体，晚到ready不恢复。',testId:'youglish-lifecycle',testCase:'player readiness timeout closes media and late readiness cannot remove the retry exit',claimedLayers:['browser'],coverage:'partial',remainingGaps:['浏览器可控时钟／SDK，非真实供应商延迟SLA、整站离线或所有媒体错误。']},
+  {scenarioId:'SCN-LISTEN-003',journeyIds:['LJ-15'],phase:'provider-recovery',branch:'confirmed-no-clips-change-accent',oracle:'实际聆听renderer区分无片段与失败，不将前者标重试错误；选择另一口音建立新查询并等待该播放器ready。',testId:'youglish-lifecycle',testCase:'no clips is not a provider failure and changing accent starts a new query',claimedLayers:['browser'],coverage:'partial',remainingGaps:['受控零结果与新结果，非真实检索命中或所有语言口音。']},
+  {scenarioId:'SCN-LISTEN-004',journeyIds:['LJ-15'],phase:'practice-lifecycle',branch:'screen-exit-and-reopen',oracle:'真实聆听renderer退出时pause并close旧Widget；重开为新播放器，旧字幕与播放事件不进入新屏幕。',testId:'youglish-lifecycle',testCase:'returning from listening closes the current player and reopening ignores its late events',claimedLayers:['browser'],coverage:'partial',remainingGaps:['返回目的由小型harness控制，非完整路由、刷新或实际浏览器关闭重开／媒体音质证明。']},
+  {scenarioId:'SCN-LISTEN-001',journeyIds:['LJ-15'],phase:'practice-content',branch:'saved-personal-read-failure-and-delivered-actions',oracle:'真实练习renderer仅显示已交付聆听；Personal来源读取未完成／失败时禁止开始，不用Study备用目标替换已存选择；恢复读取后选择及合法目标保留。',testId:'practice-source-loading',testCase:'a saved Personal scope cannot start from a loading or unavailable Current Study fallback',claimedLayers:['browser'],coverage:'partial',remainingGaps:['受控读取故障与小型Personal来源；完整公开空库入口与来源选择、规模由其他证据承担。']},
+  {scenarioId:'SCN-LISTEN-001',journeyIds:['LJ-15'],phase:'practice-content',branch:'workspace-read-retry',oracle:'初次Learning读取失败诚实不可用而不是永久loading；修复后明确重试可用且不改已存Personal选择。',testId:'practice-source-loading',testCase:'initial Learning workspace failure exposes retry and cannot leave Personal practice permanently loading',claimedLayers:['browser'],coverage:'partial',remainingGaps:['受控module读取失败，非真实磁盘损坏或完整公开入口。']},
+  {scenarioId:'SCN-LISTEN-001',journeyIds:['LJ-15'],phase:'practice-content',branch:'route-revision-waits-for-its-own-read',oracle:'Route revision变化后不以旧workspace冒充ready；真实读取屏障期间禁用开始，保留选择，读完后才可用。',testId:'practice-source-loading',testCase:'a Route revision is not ready with the preceding workspace even before reload effects finish',claimedLayers:['browser'],coverage:'partial',remainingGaps:['source hook／renderer范围，非全应用Route设置流程或已打开播放器。']},
+  {scenarioId:'SCN-LISTEN-002',journeyIds:['LJ-15'],phase:'listening-playback',branch:'actual-ready-and-speed-events',oracle:'真实React hook等待非零结果与playerReady才可操作，媒体未确认时仍加载；速度请求未被供应商确认时不显示为已执行。',testId:'youglish-lifecycle',testCase:'result count alone is not player readiness and speed follows the actual provider event',claimedLayers:['browser'],coverage:'partial',remainingGaps:['受控SDK事件，非真实视频、音质或所有控制命令。']},
+  {scenarioId:'SCN-LISTEN-002',journeyIds:['LJ-15'],phase:'listening-playback',branch:'expression-language-and-provider-layout',oracle:'正式Web／OPFS与受控SDK：英语内容开始后另一标签选西语，播放器重查仍英语；播放／暂停响应，iframe保留640px实际高度，返回时底层学习事实及原Route恢复后的checkpoint不变。',testId:'package-center-journey',testCase:'delivered listening preserves learner facts and provider layout after another tab changes Route',claimedLayers:['browser'],coverage:'partial',remainingGaps:['小型编译Book、受控播放；不是实际在线片段、可听质量、所有语言与容量证明。']},
+  {scenarioId:'SCN-LISTEN-003',journeyIds:['LJ-15'],phase:'provider-recovery',branch:'empty-and-error-cannot-revive',oracle:'供应商旧式字幕编码正确显示；无结果或失败后退役播放器，晚到ready／playing不能恢复成功。',testId:'youglish-lifecycle',testCase:'legacy caption transport is readable and empty or failed playback cannot revive from late events',claimedLayers:['browser'],coverage:'partial',remainingGaps:['SDK受控；用户重试、网络断线及真实服务不可用另需证据。']},
+  {scenarioId:'SCN-LISTEN-004',journeyIds:['LJ-15'],phase:'practice-lifecycle',branch:'old-expression-event-retirement',oracle:'换表达退役旧Widget并关闭媒体；旧结果、字幕、速度、播放与失败事件均不能改新查询。',testId:'youglish-lifecycle',testCase:'replacing a listening expression retires all old Widget callbacks and playback',claimedLayers:['browser'],coverage:'partial',remainingGaps:['直接hook与受控SDK；公开退出、刷新、关闭重开及真实媒体另需证据。']},
+  {scenarioId:'SCN-LISTEN-005',journeyIds:['LJ-15'],phase:'learner-fact-isolation',branch:'shipped-read-only-practice',oracle:'正式安装／加入／暂停后的学习数据作基线；聆听控制、跨标签Route和返回不改变Action/Evidence/Memory、Target/Run或学习安排，不创建Meaning／Inbox；切回英语保留原workspace checkpoint。',testId:'package-center-journey',testCase:'delivered listening preserves learner facts and provider layout after another tab changes Route',claimedLayers:['browser'],coverage:'partial',remainingGaps:['受控SDK正常返回分支，不代替故障／刷新隔离或跨设备证据。']},
   {scenarioId:'SCN-REF-003',journeyIds:['LJ-14'],phase:'reference',branch:'controlled-language-and-occurrence-context',oracle:'实际查询模块按指定或当前 Route 选择原文语言组并隔离辅助语言缓存；来源定义语言与词条语言分开，归属与例句缺省来源标注实际词典版本；精确 Example、句子及点击片段进入只在候选 ID 中选择的模型请求，原词典定义不被 learner gloss 改写。',testId:'reference-language',testCase:'reference-language',claimedLayers:['integration'],coverage:'partial',remainingGaps:['字典与模型均受控；不是实际用户点词、详情／例句往返、OPFS学习事实不变或线上内容品质证明。']},
   {scenarioId:'SCN-REF-003',journeyIds:['LJ-14'],phase:'reference',branch:'shipped-lookup-query-example-and-learning-return',oracle:'实际安装／加入编译 Book 并进入揭示步骤，从句中点词打开真实查询结果；手动查询另一个词并进入其来源例句后返回仍保留该词，最后回原 Run／Step，原 Learning checkpoint、settlement facts、Meaning／Inbox数量不变。',testId:'package-center-journey',testCase:'reference lookup, manual search and example return preserve the same real learning Step and stored learner facts',claimedLayers:['browser'],coverage:'partial',remainingGaps:['词典响应与小型 Book 为受控夹具，未覆盖在线词义品质、固定离线词典或完整语对／规模。']},
   {scenarioId:'SCN-REF-003',journeyIds:['LJ-14'],phase:'reference',branch:'installed-target-source-and-return',oracle:'真实 Web／OPFS目标的来源动作按实际安装包key打开其内容，不以返回历史代替来源；返回保留同一targetId、Learning checkpoint、零个人意义。',testId:'package-center-journey',testCase:'a downloaded target opens its actual installed source and returns to the same target without changing learning',claimedLayers:['browser'],coverage:'partial',remainingGaps:['当前单版本Book夹具；多个集合共享成员、已更新来源／历史版本和离线缓存缺失的准确来源尚未在此证明。']},
@@ -349,6 +384,8 @@ export const scenarioEvidenceContributions: readonly ScenarioEvidenceContributio
 ];
 
 export function scenarioLongJourneyIds(scenarioId: ScenarioId): readonly LongJourneyId[] {
+  const current=currentJourneyScenarios.find(item=>item.id===scenarioId);
+  if(current)return current.journeyIds;
   const scenario=auditedScenarios.find(item=>item.id===scenarioId);
   if(!scenario)throw new Error(`Unknown Scenario: ${scenarioId}`);
   return longJourneyMappings.filter(journey=>journey.capabilityIds.some(id=>scenario.capabilityIds.includes(id))).map(journey=>journey.journeyId);
@@ -357,19 +394,20 @@ export function scenarioLongJourneyIds(scenarioId: ScenarioId): readonly LongJou
 /** Validate identity and execution-boundary links, never infer coverage from filenames. */
 export function validateJourneyMapping(tests: readonly Readonly<{id:string;environment:string;runner:string}>[]): void {
   const capabilities=new Set(auditedCapabilities.map(item=>item.id));
-  const scenarios=new Map(auditedScenarios.map(item=>[item.id,item]));
+  const definitions=[...auditedScenarios,...currentJourneyScenarios];
+  const scenarios=new Map(definitions.map(item=>[item.id,item]));
   const journeys=new Set(longJourneyMappings.map(item=>item.journeyId));
   for(const support of journeySupportingTests){
     if(!support.scope.trim()||!tests.some(test=>test.id===support.testId))throw new Error(`Unknown or unscoped journey supporting Test: ${support.testId}`);
     for(const id of support.journeyIds)if(!journeys.has(id))throw new Error(`Unknown supporting Journey: ${id}`);
   }
-  if(capabilities.size!==auditedCapabilities.length || scenarios.size!==auditedScenarios.length || journeys.size!==longJourneyMappings.length){
+  if(capabilities.size!==auditedCapabilities.length || scenarios.size!==definitions.length || journeys.size!==longJourneyMappings.length){
     throw new Error('Duplicate journey audit identity');
   }
   const mapped=new Set([...longJourneyMappings.flatMap(item=>item.capabilityIds),...crosscuttingCapabilityIds]);
   for(const capability of auditedCapabilities){
     if(!mapped.has(capability.id))throw new Error(`Unmapped Capability: ${capability.id}`);
-    if(capability.baselineScope==='current'&&!auditedScenarios.some(scenario=>scenario.capabilityIds.includes(capability.id))){
+    if(capability.baselineScope==='current'&&!definitions.some(scenario=>scenario.capabilityIds.includes(capability.id))){
       throw new Error(`Current Capability without Scenario: ${capability.id}`);
     }
   }
@@ -378,9 +416,15 @@ export function validateJourneyMapping(tests: readonly Readonly<{id:string;envir
     if(!scenario.auditOracle.trim()||!scenario.phase||!scenario.minimumLayers.length)throw new Error(`Incomplete Scenario: ${scenario.id}`);
     for(const id of scenario.capabilityIds)if(!capabilities.has(id))throw new Error(`Unknown Scenario Capability: ${id}`);
   }
+  for(const scenario of currentJourneyScenarios){
+    if(!scenario.oracle.trim()||!scenario.phase||!scenario.minimumLayers.length||!scenario.journeyIds.length||!scenario.branches.length)throw new Error(`Incomplete current Scenario: ${scenario.id}`);
+    for(const id of scenario.journeyIds)if(!journeys.has(id))throw new Error(`Unknown current Scenario Journey: ${id}`);
+    for(const id of scenario.capabilityIds)if(!capabilities.has(id))throw new Error(`Unknown Scenario Capability: ${id}`);
+  }
   for(const evidence of scenarioEvidenceContributions){
     const scenario=scenarios.get(evidence.scenarioId),test=tests.find(item=>item.id===evidence.testId);
     if(!scenario||!test)throw new Error(`Unknown Scenario/Test evidence: ${evidence.scenarioId}/${evidence.testId}`);
+    if('journeyIds'in scenario&&(evidence.phase!==scenario.phase||evidence.journeyIds.some(id=>!scenario.journeyIds.includes(id))))throw new Error(`Current Scenario evidence outside declared journey/phase: ${evidence.scenarioId}`);
     if(!evidence.oracle.trim()||!evidence.testCase.trim())throw new Error('Evidence needs an assertion scope and named test case');
     for(const id of evidence.journeyIds)if(!journeys.has(id))throw new Error(`Unknown evidence Journey: ${id}`);
     if(evidence.coverage==='partial'&&!evidence.remainingGaps.length)throw new Error(`Partial evidence without gap: ${evidence.scenarioId}`);
@@ -427,7 +471,7 @@ export const longJourneyMappings: readonly Readonly<{
   {"journeyId":"LJ-12","legacyJourneyIds":["JRN-15"],"capabilityIds":["CAP-LRN-16","CAP-LRN-17"]},
   {"journeyId":"LJ-13","legacyJourneyIds":["JRN-07"],"capabilityIds":["CAP-EXT-01","CAP-EXT-04","CAP-EXT-05","CAP-EXT-07","CAP-EXT-08","CAP-EXT-09","CAP-EXT-10","CAP-EXT-14","CAP-EXT-15","CAP-LNG-03","CAP-LNG-08"]},
   {"journeyId":"LJ-14","legacyJourneyIds":["JRN-06"],"capabilityIds":["CAP-PSW-14"],"gap":"Current closure covers delivered online read-only lookup, exact source and return. Fixed Reference Release/offline index and learning AI Q&A remain unimplemented; online evidence does not complete them."},
-  {"journeyId":"LJ-15","legacyJourneyIds":["JRN-16"],"capabilityIds":["CAP-LRN-18","CAP-LRN-19"],"gap":"The legacy audit has no Scenario for delivered Listening; full Practice Profile remains a separate future scope."},
+  {"journeyId":"LJ-15","legacyJourneyIds":["JRN-16"],"capabilityIds":["CAP-LRN-18","CAP-LRN-19"],"gap":"Delivered Listening uses current SCN-LISTEN requirements alongside unchanged legacy audit; linked assertions are not run verdicts. Full Practice Profile/feedback/history remains future scope."},
   {"journeyId":"LJ-16","legacyJourneyIds":["JRN-17"],"capabilityIds":["CAP-DAT-02","CAP-DAT-03","CAP-DAT-04","CAP-DAT-05","CAP-DAT-06","CAP-DAT-07","CAP-DAT-08","CAP-DAT-09","CAP-DAT-10","CAP-DAT-11","CAP-DAT-12","CAP-DAT-21","CAP-CSU-13"]},
   {"journeyId":"LJ-17","legacyJourneyIds":["JRN-18"],"capabilityIds":["CAP-DAT-14","CAP-DAT-15","CAP-DAT-18","CAP-DAT-20"]},
   {"journeyId":"LJ-18","legacyJourneyIds":["JRN-17"],"capabilityIds":["CAP-DAT-13"]},

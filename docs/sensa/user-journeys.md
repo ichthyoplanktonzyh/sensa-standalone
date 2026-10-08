@@ -800,6 +800,7 @@ Reference Release 和离线索引尚未交付，在线结果及其测试不能�
 
 完整 Free Practice Profile 的 listening、speaking、reading、writing 活动、Practice Turn/Feedback 和历史属于
 后续能力。可见但禁用的 tile 不是已交付旅程。
+未交付活动不进入默认练习入口；当前活动的无内容状态仍需让用户能选择内容或返回原任务。
 
 ## 20. `LJ-16`：账号、设备、同步与冲突
 

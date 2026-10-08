@@ -286,6 +286,7 @@
     "retry": "重新加载",
     "captions": "字幕",
     "captionEmpty": "字幕随播放逐句显示",
+    "skipToControls": "跳到播放控制",
     "play": "播放",
     "pause": "暂停",
     "previous": "上一段",

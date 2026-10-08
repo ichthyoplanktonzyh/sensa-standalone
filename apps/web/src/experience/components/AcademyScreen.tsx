@@ -7,6 +7,8 @@ export interface AcademyScreenProps {
   onBack: () => void;
   onOpenPracticeScope: () => void;
   onOpenRealWorldListening: () => void;
+  onBrowseContent: () => void;
+  onRecordContext: () => void;
   practiceScope: ResolvedPracticeScope;
   scopeAvailability?: PracticeScopeAvailability;
   onRetryScope?:()=>void;

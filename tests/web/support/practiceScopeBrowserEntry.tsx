@@ -35,6 +35,7 @@ let root:Root|undefined,session:PracticeScopeSnapshot|null=null;
 let release:(()=>void)|undefined,barrier:Promise<unknown>|undefined;
 let version:{key:string;value:unknown}|undefined;
 let failWorkspaceRead=false;
+let repairWorkspaceOnRetry=false;
 let holdWorkspaceRead=false;
 let pendingWorkspaceReads:Array<()=>Promise<void>>=[];
 const routeFrames:Array<{revision:number;status:string}>=[];
@@ -64,7 +65,7 @@ function Probe(){
  const [view,setView]=useState<'academy'|'scope'>('academy');
  return <ScreenMemoryProvider>
   <output data-testid="scope-availability">{scope.availability}</output>
-  {view==='academy'?<AcademyScreen active onBack={()=>{}} practiceScope={scope.catalog.currentScope}
+  {view==='academy'?<AcademyScreen active onBack={()=>{}} onBrowseContent={()=>{}} onRecordContext={()=>{}} practiceScope={scope.catalog.currentScope}
    scopeAvailability={scope.availability} onRetryScope={scope.reload} onOpenPracticeScope={()=>setView('scope')}
    onOpenRealWorldListening={()=>{if(scope.availability!=='ready')return;session=createPracticeScopeSnapshot(scope.catalog.currentScope,crypto.randomUUID(),new Date().toISOString());}}/>
    :<PracticeScopeScreen active catalog={scope.catalog} scopeAvailability={scope.availability}
@@ -80,8 +81,13 @@ function PackageProbe(){
  useLayoutEffect(()=>{routeFrames.push({revision:learning.languageContext.languageRouteRevision,status:learning.loadStatus});},[learning.languageContext.languageRouteRevision,learning.loadStatus]);
  return <>
   <output data-testid="scope-availability">{availability}</output>
-  <AcademyScreen active onBack={()=>{}} practiceScope={scope.catalog.currentScope}
-   scopeAvailability={availability} onRetryScope={()=>{scope.reload();void learning.retryInitialLoad();}} onOpenPracticeScope={()=>{}}
+  <AcademyScreen active onBack={()=>{}} onBrowseContent={()=>{}} onRecordContext={()=>{}} practiceScope={scope.catalog.currentScope}
+   scopeAvailability={availability} onRetryScope={()=>{
+    // Release the controlled fault at the actual retry gesture. An unrelated
+    // OPFS notification must not win the race and remove the button beforehand.
+    if(repairWorkspaceOnRetry){failWorkspaceRead=false;repairWorkspaceOnRetry=false;}
+    scope.reload();void learning.retryInitialLoad();
+   }} onOpenPracticeScope={()=>{}}
    onOpenRealWorldListening={()=>{if(availability!=='ready')return;session=createPracticeScopeSnapshot(scope.catalog.currentScope,crypto.randomUUID(),new Date().toISOString());}}/>
  </>;
 }
@@ -121,7 +127,7 @@ export async function breakLearningAndMount(){
  failWorkspaceRead=true;
  root=createRoot(document.getElementById('root')!);root.render(<PackageProbe/>);
 }
-export function repairLearning(){failWorkspaceRead=false;}
+export function repairLearning(){repairWorkspaceOnRetry=true;}
 export function mountLearning(){root=createRoot(document.getElementById('root')!);root.render(<PackageProbe/>);}
 export async function changeRouteWhileHoldingRead(){
  holdWorkspaceRead=true;

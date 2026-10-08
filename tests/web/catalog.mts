@@ -1,5 +1,5 @@
 export {
-  longJourneyMappings, auditedCapabilities, auditedScenarios,
+  longJourneyMappings, auditedCapabilities, auditedScenarios,currentJourneyScenarios,
   scenarioEvidenceContributions, scenarioLongJourneyIds,
   journeySupportingTests,journeyTestIds,
 } from './journeyMapping.mts';

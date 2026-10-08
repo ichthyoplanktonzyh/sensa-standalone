@@ -496,6 +496,8 @@ YouGlish 使用官方 Widget 直接嵌入真实语境聆听页面；提供方脚
 不构成 Sense 判定或学习事实；提供方不可用时只影响该练习页面，不阻止个人库保存或其他学习流程。
 
 每组表达／语言／口音拥有独立 Widget 生命周期，退役后忽略其全部事件并关闭媒体。结果非零与 `onPlayerReady` 同时成立才开放控制，速度使用 `onSpeedChange` 确认值；载入失败或超时退役该 Widget，不接受晚到成功。字幕适配器保留高亮标记，并分别处理实际观察到的旧式字节编码及 UTF-8。嵌入 DOM 按供应商高度参与正常布局，仅约束最大宽度，不以 `height:100% !important` 覆盖供应商像素高度。
+控件可接收命令不代表媒体已载入：未开始／缓冲仍显示加载，播放状态确认后才撤下加载层；初次媒体等待、换片段与请求重播等操作使用有界的媒体等待期限，重复供应商状态不延长同一次等待。超时关闭旧媒体并开放显式重试，不依赖供应商一定发出 `onError`。键盘跳转可绕过第三方 iframe 的推荐链接直接到达自有播放控制。
+YouGlish 商业使用须在发布前取得并核对供应商明确许可；本地非发布验收不代表已取得许可。参见[官方开发者政策](https://youglish.com/api/doc/js-api)。
 
 资源 schema、生成指导和基础展示字段集中在 `packages/contracts/src/sensa/learningResourceDefinitions.ts`；
 轻量 Demand 与两阶段用途组合由 `lightweightLearningContent.ts` 声明。生成循环消费请求中的资源合同，
@@ -661,6 +663,7 @@ SENSA_TEST_DATABASE_URL=postgresql://... npm run test:web:db
 长旅程是产品收敛与验收 checkpoint 的基本单位。`user-journeys.md` 定义目标和合法出口；
 `tests/web/journeyMapping.mts` 保存稳定的 Journey → Phase → Scenario → Test Evidence 关联及共享风险检查。
 旧审计结论只作为历史输入，关联到测试不表示场景通过，更不表示整条旅程完成。
+历史审计未包含的当前产品场景使用同一文件的 `currentJourneyScenarios` 补充，明确旅程、阶段、分支、验收条件与最小证据层；不改写历史 verdict，也不把需求定义当作执行结果。
 旅程的关闭需要同时核对用户价值与页面衔接、必要异常和恢复分支、真实持久状态、相关性能和容量风险，
 以及独立使用验收。单个真实用户顺利走完不能替代其他证据；缺口仍在时不关闭 checkpoint。
 测试继续按现有 CI 环境执行，共享底层 Module 不按旅程复制。可在已构建产物的前提下集中列出或运行证据：

@@ -332,13 +332,28 @@ async function referenceProviders(page:Page){
  return state;
 }
 
+test('an empty practice scope offers content selection and return without loading a player or inventing learner facts',async({page})=>{
+ let sdkRequests=0;await page.route('https://youglish.com/public/emb/widget.js',route=>{sdkRequests++;return route.abort();});
+ await page.goto(origin+'/academy');const practice=page.locator('#s-academy').last(),activities=practice.locator('.sensa-practice-activities').getByRole('button');
+ await expect(practice.getByText('当前没有可练内容',{exact:true})).toBeVisible();await expect(activities).toHaveCount(1);await expect(activities).toBeDisabled();
+ const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint()),facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest());
+ await practice.getByRole('button',{name:/练习范围.*当前学习内容/u}).click();const scope=page.locator('#s-practice-scope');
+ await expect(scope.getByText('当前没有可练内容',{exact:true})).toBeVisible();await scope.getByRole('button',{name:'更换范围',exact:true}).click();
+ await expect(scope.getByRole('button',{name:/当前学习内容/u})).toBeDisabled();await expect(scope.getByRole('button',{name:/我的语义世界/u})).toBeDisabled();
+ await scope.getByRole('button',{name:'返回',exact:true}).click();await scope.getByRole('button',{name:'返回',exact:true}).click();await expect(practice).toBeVisible();
+ await practice.getByRole('button',{name:'学习包目录',exact:true}).click();await expect(page.locator('#s-catalog').last()).toBeVisible();await page.goBack();await expect(practice).toBeVisible();
+ await practice.getByRole('button',{name:'添加个人内容',exact:true}).click();await expect(page.locator('#s-personal-meaning')).toBeVisible();await page.goBack();await expect(practice).toBeVisible();
+ expect(sdkRequests).toBe(0);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(before);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest())).toEqual(facts);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.intakeInboxCount())).toBe(0);
+});
+
 test('delivered listening preserves learner facts and provider layout after another tab changes Route',async({page,context})=>{
  setRegistry([referenceDelivery.descriptor]);await page.route('**/sensa/model/turn',route=>route.fulfill({status:503,json:{code:'fixture_model_unavailable'}}));
  await page.route('https://youglish.com/public/emb/widget.js',route=>route.fulfill({contentType:'text/javascript',body:`
  window.__listeningFixture={requests:[],closed:0};
  window.YG={Widget:class{
   constructor(id,options){this.events=options.events;const root=document.getElementById(id),wrapper=document.createElement('div'),frame=document.createElement('iframe');wrapper.style.cssText='display:flex;flex-direction:column;align-items:center';frame.title='Controlled provider layout';frame.style.cssText='position:static;height:640px;width:'+options.width+'px';frame.srcdoc='<html><body style="margin:0;background:#dddddd">Controlled layout, not real playback</body></html>';wrapper.append(frame);root.append(wrapper);this.root=root;}
-  fetch(query,lang,accent){window.__listeningFixture.requests.push({query,lang,accent});queueMicrotask(()=>{this.events.onFetchDone({totalResult:3});this.events.onPlayerReady();this.events.onCaptionChange({caption:'Controlled [[[clip]]]'});});}
+  fetch(query,lang,accent){window.__listeningFixture.requests.push({query,lang,accent});queueMicrotask(()=>{this.events.onFetchDone({totalResult:3});this.events.onPlayerReady();this.events.onPlayerStateChange({state:2});this.events.onCaptionChange({caption:'Controlled [[[clip]]]'});});}
   play(){this.events.onPlayerStateChange({state:1});}pause(){this.events.onPlayerStateChange({state:2});}
   next(){}previous(){}replay(){}move(){}setSpeed(speed){this.events.onSpeedChange({speed});}
   close(){window.__listeningFixture.closed++;this.root.replaceChildren();}
@@ -362,8 +377,13 @@ test('delivered listening preserves learner facts and provider layout after anot
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.curriculumSourceCheckpointForTest())).toEqual(stored);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningArrangementCheckpointForTest())).toEqual(arrangement);
  // The workspace lists are Route-filtered; the existing run and stored facts are not.
  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).runtime).toEqual(checkpoint.runtime);
+ await expect(routes.getByRole('radio').filter({hasText:'Español'})).toHaveAttribute('aria-checked','true');
  await routes.getByRole('radio').filter({hasText:'English'}).click();await expect(routes.getByRole('radio').filter({hasText:'English'})).toHaveAttribute('aria-checked','true');
  await expect.poll(()=>page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(checkpoint);
+ await start.click();await expect(listening.getByRole('button',{name:'重播',exact:true})).toHaveCount(1);await page.setViewportSize({width:390,height:844});await expect(listening.getByRole('button',{name:'重播',exact:true})).toHaveCount(1);
+ const location=page.url(),skip=listening.getByRole('link',{name:'跳到播放控制',exact:true});await skip.focus();await skip.press('Enter');await expect(listening.getByRole('group',{name:'播放',exact:true})).toBeFocused();expect(page.url()).toBe(location);
+ await page.keyboard.press('Tab');await expect(listening.getByRole('button',{name:'上一段',exact:true})).toBeFocused();
+ await listening.locator('header').getByRole('button').click();await expect(practice).toBeVisible();
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.intakeInboxCount())).toBe(0);await peer.close();
 });
 

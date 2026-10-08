@@ -36,13 +36,14 @@ test('replacing a listening expression retires all old Widget callbacks and play
  await page.evaluate(()=>{window.youglishFixture.emit(0,'onFetchDone',{query:'alpha',lang:'english',totalResult:9});window.youglishFixture.emit(0,'onCaptionChange',{caption:'late alpha'});window.youglishFixture.emit(0,'onPlayerStateChange',{state:1});window.youglishFixture.emit(0,'onSpeedChange',{speed:1.25});window.youglishFixture.emit(0,'onError');});
  await expect(page.getByTestId('status')).toHaveText('loading');await expect(page.getByTestId('caption')).toHaveText('');await expect(page.getByTestId('playing')).toHaveText('false');
  expect((await page.evaluate(()=>window.youglishFixture.records()))[0]!.calls.some(call=>call.kind==='close')).toBe(true);
- await page.evaluate(()=>{window.youglishFixture.emit(1,'onFetchDone',{query:'beta',lang:'english',totalResult:2});window.youglishFixture.emit(1,'onPlayerReady');window.youglishFixture.emit(1,'onCaptionChange',{caption:'beta caption'});});
+ await page.evaluate(()=>{window.youglishFixture.emit(1,'onFetchDone',{query:'beta',lang:'english',totalResult:2});window.youglishFixture.emit(1,'onPlayerReady');window.youglishFixture.emit(1,'onPlayerStateChange',{state:1});window.youglishFixture.emit(1,'onCaptionChange',{caption:'beta caption'});});
  await expect(page.getByTestId('status')).toHaveText('ready');await expect(page.getByTestId('caption')).toHaveText('beta caption');
 });
 test('result count alone is not player readiness and speed follows the actual provider event',async({page})=>{
  await open(page);await page.evaluate(()=>window.youglishFixture.mountProbe());await expect.poll(()=>page.evaluate(()=>window.youglishFixture.records().length)).toBe(1);
  await page.evaluate(()=>window.youglishFixture.emit(0,'onFetchDone',{query:'alpha',lang:'english',totalResult:3}));await expect(page.getByTestId('status')).toHaveText('loading');
- await page.evaluate(()=>window.youglishFixture.emit(0,'onPlayerReady'));await expect(page.getByTestId('status')).toHaveText('ready');await expect(page.getByTestId('speed')).toHaveText('1');
+ await page.evaluate(()=>window.youglishFixture.emit(0,'onPlayerReady'));await expect(page.getByTestId('status')).toHaveText('loading');await expect(page.getByTestId('controls-ready')).toHaveText('true');
+ await page.evaluate(()=>window.youglishFixture.emit(0,'onPlayerStateChange',{state:5}));await expect(page.getByTestId('status')).toHaveText('ready');await expect(page.getByTestId('speed')).toHaveText('1');
  await page.getByRole('button',{name:'Request speed'}).click();await expect(page.getByTestId('speed')).toHaveText('1');
  await page.evaluate(()=>window.youglishFixture.emit(0,'onSpeedChange',{speed:1.25}));await expect(page.getByTestId('speed')).toHaveText('1.25');
 });
@@ -60,4 +61,67 @@ test('legacy caption transport is readable and empty or failed playback cannot r
  await page.evaluate(()=>window.youglishFixture.setQuery('failed'));await expect.poll(()=>page.evaluate(()=>window.youglishFixture.records().length)).toBe(3);
  await page.evaluate(()=>{window.youglishFixture.emit(2,'onError');window.youglishFixture.emit(2,'onFetchDone',{totalResult:4});window.youglishFixture.emit(2,'onPlayerReady');});
  await expect(page.getByTestId('status')).toHaveText('error');expect((await page.evaluate(()=>window.youglishFixture.records()))[2]!.calls.some(call=>call.kind==='close')).toBe(true);
+});
+
+test('native offline SDK failure remains retryable and online retry creates a fresh player',async({page,context})=>{
+ await open(page);await page.unroute('**/*');const failures:string[]=[];
+ page.on('requestfailed',request=>{if(request.url()===sdk)failures.push(request.failure()?.errorText??'unknown');});
+ await context.setOffline(true);
+ try{
+  await page.evaluate(()=>window.youglishFixture.mountSpanish());await expect(page.getByRole('status').locator('p')).toHaveText('片段加载失败，请重试。');
+  expect(failures.some(error=>error.includes('ERR_INTERNET_DISCONNECTED'))).toBe(true);
+  await expect(page.getByRole('button',{name:'播放',exact:true})).toBeDisabled();expect(await page.evaluate(()=>window.youglishFixture.records())).toEqual([]);
+  await context.setOffline(false);await page.route(sdk,route=>route.fulfill({contentType:'text/javascript',body:'window.youglishFixture.installApi();window.onYouglishAPIReady?.();'}));
+  await page.getByRole('button',{name:'重新加载',exact:true}).click();await expect.poll(()=>page.evaluate(()=>window.youglishFixture.records().length)).toBe(1);
+  await page.evaluate(()=>{window.youglishFixture.emit(0,'onFetchDone',{totalResult:2});window.youglishFixture.emit(0,'onPlayerReady');});
+  await expect(page.getByRole('button',{name:'播放',exact:true})).toBeEnabled();await expect(page.getByRole('button',{name:'重新加载',exact:true})).toHaveCount(0);
+ }finally{await context.setOffline(false);}
+});
+
+test('player readiness timeout closes media and late readiness cannot remove the retry exit',async({page})=>{
+ await open(page);await page.clock.install();await page.evaluate(()=>window.youglishFixture.mountSpanish());await expect.poll(()=>page.evaluate(()=>window.youglishFixture.records().length)).toBe(1);
+ await page.evaluate(()=>window.youglishFixture.emit(0,'onFetchDone',{totalResult:3}));await expect(page.getByRole('button',{name:'播放',exact:true})).toBeDisabled();
+ await page.clock.fastForward(15_001);await expect(page.getByRole('status').locator('p')).toHaveText('片段加载失败，请重试。');
+ expect((await page.evaluate(()=>window.youglishFixture.records()))[0]!.calls.some(call=>call.kind==='close')).toBe(true);
+ await page.evaluate(()=>{window.youglishFixture.emit(0,'onPlayerReady');window.youglishFixture.emit(0,'onPlayerStateChange',{state:1});});
+ await expect(page.getByRole('button',{name:'播放',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'重新加载',exact:true})).toBeVisible();
+});
+
+test('returning from listening closes the current player and reopening ignores its late events',async({page})=>{
+ await open(page);await page.evaluate(()=>window.youglishFixture.mountPlayerJourney());await expect.poll(()=>page.evaluate(()=>window.youglishFixture.records().length)).toBe(1);
+ await page.evaluate(()=>{window.youglishFixture.emit(0,'onFetchDone',{totalResult:3});window.youglishFixture.emit(0,'onPlayerReady');window.youglishFixture.emit(0,'onCaptionChange',{caption:'before leaving'});window.youglishFixture.emit(0,'onPlayerStateChange',{state:1});});
+ await expect(page.getByRole('button',{name:'暂停',exact:true})).toBeEnabled();await page.getByRole('button',{name:'返回',exact:true}).click();await expect(page.getByRole('button',{name:'Open listening',exact:true})).toBeVisible();
+ const calls=(await page.evaluate(()=>window.youglishFixture.records()))[0]!.calls;expect(calls.some(call=>call.kind==='pause')).toBe(true);expect(calls.some(call=>call.kind==='close')).toBe(true);
+ await page.getByRole('button',{name:'Open listening',exact:true}).click();await expect.poll(()=>page.evaluate(()=>window.youglishFixture.records().length)).toBe(2);
+ await page.evaluate(()=>{window.youglishFixture.emit(0,'onPlayerReady');window.youglishFixture.emit(0,'onCaptionChange',{caption:'late closed caption'});window.youglishFixture.emit(0,'onPlayerStateChange',{state:1});});
+ await expect(page.getByText('late closed caption',{exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'播放',exact:true})).toBeDisabled();
+ await page.evaluate(()=>{window.youglishFixture.emit(1,'onFetchDone',{totalResult:2});window.youglishFixture.emit(1,'onPlayerReady');window.youglishFixture.emit(1,'onPlayerStateChange',{state:1});window.youglishFixture.emit(1,'onCaptionChange',{caption:'new caption'});});
+ await expect(page.getByText('new caption',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'暂停',exact:true})).toBeEnabled();
+});
+
+test('no clips is not a provider failure and changing accent starts a new query',async({page})=>{
+ await open(page);await page.evaluate(()=>window.youglishFixture.mountPlayerJourney());await expect.poll(()=>page.evaluate(()=>window.youglishFixture.records().length)).toBe(1);
+ await page.evaluate(()=>window.youglishFixture.emit(0,'onFetchDone',{totalResult:0}));await expect(page.getByRole('status').locator('p')).toHaveText('没有找到片段，试试其他口音或表达。');
+ await expect(page.getByRole('button',{name:'重新加载',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'播放',exact:true})).toBeDisabled();
+ await page.getByRole('button',{name:'英式',exact:true}).click();await expect.poll(()=>page.evaluate(()=>window.youglishFixture.records().length)).toBe(2);
+ await page.evaluate(()=>{window.youglishFixture.emit(0,'onPlayerStateChange',{state:1});window.youglishFixture.emit(1,'onFetchDone',{totalResult:3});window.youglishFixture.emit(1,'onPlayerReady');});
+ await expect(page.getByRole('button',{name:'播放',exact:true})).toBeEnabled();expect((await page.evaluate(()=>window.youglishFixture.records()))[1]!.calls.find(call=>call.kind==='fetch')?.args).toEqual(['borrow','english','uk']);
+});
+
+test('API-ready unstarted media is still loading and repeated states cannot postpone its retry deadline',async({page})=>{
+ await open(page);await page.clock.install();await page.evaluate(()=>window.youglishFixture.mountSpanish());await expect.poll(()=>page.evaluate(()=>window.youglishFixture.records().length)).toBe(1);
+ await page.evaluate(()=>{window.youglishFixture.emit(0,'onFetchDone',{totalResult:7883});window.youglishFixture.emit(0,'onPlayerReady');window.youglishFixture.emit(0,'onPlayerStateChange',{state:-1});});
+ await expect(page.getByRole('status').locator('p')).toHaveText('正在加载片段…');await expect(page.getByRole('button',{name:'播放',exact:true})).toBeEnabled();
+ await page.clock.fastForward(10_000);await page.evaluate(()=>window.youglishFixture.emit(0,'onPlayerStateChange',{state:-1}));await page.clock.fastForward(5_001);
+ await expect(page.getByRole('status').locator('p')).toHaveText('片段加载失败，请重试。');await expect(page.getByRole('button',{name:'播放',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'重新加载',exact:true})).toBeVisible();
+ await page.evaluate(()=>window.youglishFixture.emit(0,'onPlayerStateChange',{state:1}));await expect(page.getByRole('button',{name:'播放',exact:true})).toBeDisabled();
+});
+
+test('buffering recovery cancels the deadline but an unacknowledged replay still times out',async({page})=>{
+ await open(page);await page.clock.install();await page.evaluate(()=>window.youglishFixture.mountProbe());await expect.poll(()=>page.evaluate(()=>window.youglishFixture.records().length)).toBe(1);
+ await page.evaluate(()=>{window.youglishFixture.emit(0,'onFetchDone',{totalResult:3});window.youglishFixture.emit(0,'onPlayerReady');window.youglishFixture.emit(0,'onPlayerStateChange',{state:1});});await expect(page.getByTestId('status')).toHaveText('ready');
+ await page.evaluate(()=>window.youglishFixture.emit(0,'onPlayerStateChange',{state:3}));await expect(page.getByTestId('status')).toHaveText('loading');await page.clock.fastForward(10_000);
+ await page.evaluate(()=>window.youglishFixture.emit(0,'onPlayerStateChange',{state:1}));await expect(page.getByTestId('status')).toHaveText('ready');await page.clock.fastForward(6_000);await expect(page.getByTestId('status')).toHaveText('ready');
+ // Same production handle, no SDK acknowledgement after the replay command.
+ await page.evaluate(()=>window.youglishFixture.replay());await expect(page.getByTestId('status')).toHaveText('loading');await page.clock.fastForward(15_001);await expect(page.getByTestId('status')).toHaveText('error');
 });

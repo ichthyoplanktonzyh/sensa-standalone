@@ -286,6 +286,7 @@
     "retry": "再読み込み",
     "captions": "字幕",
     "captionEmpty": "クリップの再生中に字幕が表示されます",
+    "skipToControls": "再生コントロールへ移動",
     "play": "再生",
     "pause": "一時停止",
     "previous": "前のクリップ",

@@ -147,7 +147,7 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
  const preferencesStatus=managementStatus??(packageLearning.notice?<p role="alert">{localFlowNotice(packageLearning.notice)}</p>:null);
  const preferencesBusy=packageLearning.busy||packageLearning.loadStatus!=='ready';
  const learningScreenRenderers:Record<LearningWorkspaceScreenId,(active:boolean)=>ReactNode>={
-  's-academy':screenActive=><AcademyScreen active={screenActive} onBack={backMain} onOpenPracticeScope={()=>goMain('s-practice-scope')} onOpenRealWorldListening={openRealWorldListening} practiceScope={practiceScopeCatalog.currentScope} scopeAvailability={practiceScopeAvailability} onRetryScope={retryPracticeScope}/>,
+  's-academy':screenActive=><AcademyScreen active={screenActive} onBack={backMain} onOpenPracticeScope={()=>goMain('s-practice-scope')} onOpenRealWorldListening={openRealWorldListening} onBrowseContent={()=>goMain('s-catalog')} onRecordContext={startSensaConversation} practiceScope={practiceScopeCatalog.currentScope} scopeAvailability={practiceScopeAvailability} onRetryScope={retryPracticeScope}/>,
   's-practice-scope':screenActive=><PracticeScopeScreen active={screenActive} catalog={practiceScopeCatalog} onBack={backMain} onSelectScope={selectScope} scopeAvailability={practiceScopeAvailability} onRetryScope={retryPracticeScope}/>,
   's-content':screenActive=>renderContentScreen('s-content',screenActive),
   's-semantic-world':screenActive=>renderContentScreen('s-semantic-world',screenActive),

@@ -286,6 +286,7 @@
     "retry": "Recharger",
     "captions": "Sous-titres",
     "captionEmpty": "Les sous-titres apparaîtront pendant la lecture de l’extrait",
+    "skipToControls": "Aller aux commandes de lecture",
     "play": "Lire",
     "pause": "Pause",
     "previous": "Extrait précédent",
