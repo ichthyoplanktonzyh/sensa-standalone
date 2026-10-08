@@ -50,4 +50,5 @@ test('local clearance checkpoints pending account records or requires a current 
  assert.equal(syncCalls,3);assert.deepEqual(await listDrafts(),[]);
  assert.notEqual((await readLibrary(tx=>tx.get<{id:string}>('meta','identity')))!.id,priorIdentity);
  assert.deepEqual(await readLibrary(tx=>tx.get('meta','service-owner')),owner,'local clearance must retain the account connection without deleting its cloud copy');
+ assert.equal(await readLibrary(tx=>tx.get('meta','local-reset')),'local-clear','automatic boot must not repopulate the explicitly cleared world');
 });

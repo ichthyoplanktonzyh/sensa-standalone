@@ -1,12 +1,21 @@
 import {auth} from '../account/auth';
-import {readLibrary} from './store';
-import {synchronizeLibrary} from './cloudSync';
+import {readLibrary,assertCurrentLibrary} from './store';
+import {synchronizeLibrary,readCloudReconnectRequired,type LibrarySyncOptions} from './cloudSync';
 let running:Promise<void>|undefined;
 export const accountLibrarySyncFinishedEvent='sensa-account-library-sync-finished';
-export function syncAccountLibrary(options:{publishEmptyIdentity?:boolean}={}):Promise<void>{
+export function syncAccountLibrary(options:LibrarySyncOptions={}):Promise<void>{
  // An explicit connection must not be swallowed by a concurrent ordinary empty pull.
- if(running)return options.publishEmptyIdentity?running.then(()=>syncAccountLibrary(options)):running;
+ const explicit=options.publishEmptyIdentity||options.restoreAfterLocalClear;
+ if(running&&!explicit)return running;
+ const previous=running;
+ // Capture before either queue, and verify inside the cross-tab lock. An old
+ // click cannot authorize a world cleared while it was waiting for that lock.
+ const scope=explicit?readLibrary(async tx=>({owner:await tx.get<{subject:string;accountId:string}>('meta','service-owner'),incarnation:await assertCurrentLibrary(tx)})):undefined;
+ let expected:Awaited<NonNullable<typeof scope>>|undefined;
  const work=async()=>{
+  const intent=expected;
+  if(intent)await readLibrary(async tx=>{const owner=await tx.get<{subject:string;accountId:string}>('meta','service-owner');if(!owner||owner.subject!==intent.owner?.subject||owner.accountId!==intent.owner.accountId||(await assertCurrentLibrary(tx))!==intent.incarnation)throw Error('account_changed');});
+  if(!options.restoreAfterLocalClear&&await readCloudReconnectRequired())return;
   const owner=await readLibrary(tx=>tx.get<{subject:string;accountId:string}>('meta','service-owner'));
   if(!owner)throw new Error('authentication_required');
   const passSignal=AbortSignal.timeout(90000);
@@ -27,5 +36,10 @@ export function syncAccountLibrary(options:{publishEmptyIdentity?:boolean}={}):P
   const {contentSupplySystem}=await import('../../contentSupply/system/contentSupplySystem');
   await contentSupplySystem.execute({kind:'rehydrate',signal:passSignal}).catch(()=>undefined);
  };
- running=(navigator.locks?navigator.locks.request('sensa-account-library-sync',work):work()).finally(()=>{running=undefined;window.dispatchEvent(new Event(accountLibrarySyncFinishedEvent));});return running;
+ const start=async()=>{
+  if(scope)expected=await scope;
+  if(previous)await previous.catch(()=>undefined);
+  await (navigator.locks?navigator.locks.request('sensa-account-library-sync',work):work());
+ };
+ const task=start().finally(()=>{if(running===task)running=undefined;window.dispatchEvent(new Event(accountLibrarySyncFinishedEvent));});running=task;return task;
 }

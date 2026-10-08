@@ -109,7 +109,7 @@ export async function createLibraryCloudBrowserFixture(providedBrowser?: Browser
       enforce: 'pre',
       load(id) {
         if (id.endsWith('/apps/web/src/data/account/auth.ts')) {
-          return "export const auth={getSession:async()=>({data:{session:{access_token:'fixture',user:{id:'fixture'}}}})}; export {authStorageKey,cachedAuthSubject} from './authSessionHint';";
+          return "export const auth={getSession:async()=>({data:{session:window.__fixtureAuthSession??{access_token:'fixture',user:{id:'fixture'}}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),signOut:async()=>({error:null})}; export const cachedAuthSubject=()=>window.__fixtureAuthSession?.user.id??null; export {authStorageKey} from './authSessionHint';";
         }
       },
     }],

@@ -17,6 +17,7 @@ import {applyLibraryReplicaMutation} from './replication/libraryReplicaApplicati
 import {validateLibraryReplicaCooperatively,libraryReplicaValidationVersion,type ValidatedLibraryReplica} from './replication/libraryReplicaValidation';
 import type {ReplicaCandidateFence,ReplicaCandidateRequest,ReplicaCandidateResponse,ReplicaCandidateRecord,ReplicaCandidateValidation} from './replicaCandidateProtocol';
 export type SyncRequest=(path:string,body?:unknown)=>Promise<any>;
+export type LibrarySyncOptions={publishEmptyIdentity?:boolean;restoreAfterLocalClear?:boolean};
 export type CloudSyncEntry=LibraryReplicaEntry;
 type Entry=CloudSyncEntry;
 type Owner={subject:string;accountId:string};
@@ -47,7 +48,7 @@ const rejectedPublication=(cause:unknown)=>cause instanceof Error&&['library_syn
 async function captureHeader(tx:LibraryTransaction){
  const incarnation=await assertCurrentLibrary(tx),owner=await tx.get<Owner>('meta','service-owner'),identity=await tx.get<LibraryIdentity>('meta','identity');
  if(!owner?.accountId||!identity||await tx.get('meta','signed-out'))throw new Error('authentication_required');
- return {owner,incarnation,identity,state:await tx.get<State>('meta',STATE),localRevision:await readLocalLibraryRevision(tx)};
+ return {owner,incarnation,identity,state:await tx.get<State>('meta',STATE),localRevision:await readLocalLibraryRevision(tx),reconnectRequired:await cloudReconnectRequired(tx)};
 }
 /** Only a complete, confirmed checkpoint may stand in for an unchanged head.
  * Conflict baselines may deliberately contain different branches. */
@@ -90,7 +91,7 @@ async function captureDelta(tx:LibraryTransaction,expected:Awaited<ReturnType<ty
  return {...current,puts,deletes,references};
 }
 async function capture(tx:LibraryTransaction){
- const {owner,incarnation,identity,state,localRevision}=await captureHeader(tx),entries:Entry[]=[];
+ const {owner,incarnation,identity,state,localRevision,reconnectRequired}=await captureHeader(tx),entries:Entry[]=[];
  const base:Entry[]=(await tx.syncBaseEntries<typeof librarySyncTables>()).map(row=>({table:row.table,key:row.key,value:row.value,blocks:row.blocks}));
  base.sort((a,b)=>entryId(a).localeCompare(entryId(b)));
  if(state?.syncedLocalRevision!==undefined&&state.syncedLocalRevision<=localRevision){
@@ -119,7 +120,7 @@ async function capture(tx:LibraryTransaction){
   }
  }
  entries.sort((a,b)=>entryId(a).localeCompare(entryId(b)));
- return {owner,incarnation,identity,entries,base,localRevision,state};
+ return {owner,incarnation,identity,entries,base,localRevision,state,reconnectRequired};
 }
 function sameOwner(a:Owner,b:Owner){return a.subject===b.subject&&a.accountId===b.accountId;}
 function empty(entries:Entry[]){return entries.every(r=>r.table==='meta'&&r.key==='identity');}
@@ -159,14 +160,16 @@ export async function inspectPendingCloudSync(tx:LibraryTransaction):Promise<Pen
  return {accountLinked:true,canSync:!signedOut,localRevision,records:await pendingCloudSyncRecords(tx,state,identity)};
 }
 async function localDiffersFromBase(tx:LibraryTransaction,state:State,identity:LibraryIdentity){return (await pendingCloudSyncRecords(tx,state,identity)).length>0;}
+const cloudReconnectRequired=async(tx:LibraryTransaction)=>(await tx.get('meta','local-reset'))==='local-clear';
+export const readCloudReconnectRequired=()=>readLibrary(cloudReconnectRequired);
 export const readCloudSync=()=>readLibrary(async tx=>{const state=await tx.get<State>('meta',STATE);if(state?.status==='syncing'&&(!state.syncStartedAt||Date.now()-Date.parse(state.syncStartedAt)>120000))return {...state,status:'pending' as const,syncStartedAt:undefined};if(state?.status==='synced'&&!await tx.get('meta','signed-out')){const localRevision=await readLocalLibraryRevision(tx);if(localRevision!==state.syncedLocalRevision){const identity=await tx.get<LibraryIdentity>('meta','identity');if(!identity||await localDiffersFromBase(tx,state,identity))return {...state,status:'pending' as const};}}return state;});
 export async function resolveCloudSyncConflicts(choice:CloudSyncConflictChoice){
  await writeLibraryState(async tx=>{await assertCurrentLibrary(tx);if(await tx.get('meta','signed-out'))throw new Error('authentication_required');const state=await tx.get<State>('meta',STATE);if(state?.status!=='conflict'||!state.conflict)throw new Error('library_sync_no_conflict');tx.put('meta',STATE,{...state,status:'pending',resolution:{choice,expectedRemoteRevision:state.conflict.remoteRevision},error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});});
 }
-async function saveState(expected:{owner:Owner;incarnation:string},work:(old:State|undefined)=>State,base?:Entry[]){
- await writeLibraryState(async tx=>{const owner=await tx.get<Owner>('meta','service-owner');if(!owner||!sameOwner(owner,expected.owner)||await tx.get('meta','signed-out')||(await assertCurrentLibrary(tx))!==expected.incarnation)throw new Error('account_changed');tx.put('meta',STATE,work(await tx.get<State>('meta',STATE)));if(base!==undefined)tx.replaceSyncBase(base);});
+async function saveState(expected:{owner:Owner;incarnation:string},work:(old:State|undefined)=>State,base?:Entry[],consumeReconnect=false){
+ await writeLibraryState(async tx=>{const owner=await tx.get<Owner>('meta','service-owner');if(!owner||!sameOwner(owner,expected.owner)||await tx.get('meta','signed-out')||(await assertCurrentLibrary(tx))!==expected.incarnation)throw new Error('account_changed');tx.put('meta',STATE,work(await tx.get<State>('meta',STATE)));if(base!==undefined)tx.replaceSyncBase(base);if(consumeReconnect)tx.delete('meta','local-reset');});
 }
-async function applyEntries(expected:Awaited<ReturnType<typeof capture>>,entries:Entry[],rows:ValidatedLibraryReplica,state:State,base:Entry[]){
+async function applyEntries(expected:Awaited<ReturnType<typeof capture>>,entries:Entry[],rows:ValidatedLibraryReplica,state:State,base:Entry[],consumeReconnect=false){
  const changesContent=!entriesEqual(expected.entries,entries);
  // One SQLite commit makes facts and their corresponding baseline visible
  // together. An unchanged candidate remains bookkeeping, not a learner edit.
@@ -176,6 +179,7 @@ async function applyEntries(expected:Awaited<ReturnType<typeof capture>>,entries
   if(current.localRevision!==expected.localRevision||!equal(current.identity,expected.identity))throw new Error('library_sync_local_changed');
   applyLibraryReplicaMutation({tx,current:expected.entries,desired:entries,records:rows.records,identity:current.identity});
   tx.put('meta',STATE,state);tx.replaceSyncBase(base);
+  if(consumeReconnect)tx.delete('meta','local-reset');
   return current.localRevision+(changesContent?1:0);
  });
 }
@@ -354,8 +358,12 @@ async function canRestoreFreshLibrary(tx:LibraryTransaction){
 }
 
 /** Injected transport permits offline/idempotency/restore tests without real accounts. */
-export async function synchronizeLibrary(request:SyncRequest,options:{publishEmptyIdentity?:boolean}={}){
+export async function synchronizeLibrary(request:SyncRequest,options:LibrarySyncOptions={}){
  const header=await readLibrary(captureHeader),expected={owner:header.owner,incarnation:header.incarnation};
+ // Apply to both staged restoration and the ordinary empty-library fallback.
+ // No request/status is manufactured while the learner keeps the cleared world.
+ if(header.reconnectRequired&&!options.restoreAfterLocalClear)return;
+ const consumeReconnect=header.reconnectRequired&&options.restoreAfterLocalClear===true;
  const prior=header.state;
  const initiallyConflicted=prior?.status==='conflict'||!!prior?.conflicts?.length||!!prior?.conflict||!!prior?.resolution;
  if(prior&&(!sameOwner(prior.owner,header.owner)||prior.incarnation!==header.incarnation))throw new Error('account_changed');
@@ -438,6 +446,7 @@ export async function synchronizeLibrary(request:SyncRequest,options:{publishEmp
        if(!sameOwner(current.owner,header.owner)||current.incarnation!==header.incarnation)throw Error('account_changed');
        if(current.localRevision!==header.localRevision||!equal(current.identity,header.identity))throw Error('library_sync_local_changed');
        const completedAt=new Date().toISOString();tx.restoreReplicaCandidate(selected);
+       if(consumeReconnect)tx.delete('meta','local-reset');
        tx.put('meta',STATE,{...current.state!,restoreOperationId:selected.id,checkpointVersion:6,validationVersion:libraryReplicaValidationVersion,revision:selected.head.revision,storage:selected.head.storage,status:'synced',syncedLocalRevision:header.localRevision+1,pending:undefined,conflicts:undefined,conflict:undefined,resolution:undefined,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
       });
       return;
@@ -464,7 +473,7 @@ export async function synchronizeLibrary(request:SyncRequest,options:{publishEmp
   if(head.manifest===null&&empty(initial.entries)&&!options.publishEmptyIdentity){
    await validateLibraryReplicaCooperatively(initial.entries);
    const completedAt=new Date().toISOString();
-   await saveState(expected,old=>({...old!,checkpointVersion:6,validationVersion:libraryReplicaValidationVersion,revision:head.revision,storage:head.storage,status:'synced',syncedLocalRevision:initial.localRevision,pending:undefined,conflicts:undefined,conflict:undefined,resolution:undefined,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined}),[]);
+   await saveState(expected,old=>({...old!,checkpointVersion:6,validationVersion:libraryReplicaValidationVersion,revision:head.revision,storage:head.storage,status:'synced',syncedLocalRevision:initial.localRevision,pending:undefined,conflicts:undefined,conflict:undefined,resolution:undefined,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined}),[],consumeReconnect);
    return;
   }
   let merged:ReturnType<typeof mergeLibraryReplicas>;
@@ -495,7 +504,7 @@ export async function synchronizeLibrary(request:SyncRequest,options:{publishEmp
   // and must not manufacture another publication during a pure restore.
   const publicationRequired=!entriesEqual(uploadEntries,remote);
   let confirmedBase=nextBase(remote);
-  const appliedLocalRevision=await applyEntries(initial,localEntries,localRows,{...state,revision:head.revision,storage:head.storage,status:'pending',conflicts:activeConflicts.length?activeConflicts:undefined,conflict,resolution:activeConflicts.length?undefined:state.resolution,pending:undefined},confirmedBase);
+  const appliedLocalRevision=await applyEntries(initial,localEntries,localRows,{...state,revision:head.revision,storage:head.storage,status:'pending',conflicts:activeConflicts.length?activeConflicts:undefined,conflict,resolution:activeConflicts.length?undefined:state.resolution,pending:undefined},confirmedBase,consumeReconnect);
   if(publicationRequired){
    // Only changed facts need a newly encoded manifest. Confirmed row references
    // remain reusable even when the server repacked its immutable transport.

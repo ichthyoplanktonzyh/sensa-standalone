@@ -374,6 +374,14 @@ Worker 按 ES module 分块构建，完整 validator 延迟加载；离线 shell
 未确认基线的本机 deletion witness 命中 incoming key 时，暂存应用与常规收敛均拒绝自动复活，保留原资料与
 墓碑并报告 history conflict；重试不能绕过。明确全库 reset 在同一事务清除旧 baseline／共享 owner 和墓碑，
 新 incarnation 不继承旧同步副本或负状态；它不是普通同步的隐式清库出口。
+明确清除本机库写入 device-only `local-reset=local-clear`，保留账号在线能力但暂停普通同步。
+启动与自动 Checkpoint 不发请求或制造成功状态；现有手动同步入口携带 `restoreAfterLocalClear`。
+手动意图在排队前捕获账号与 incarnation，取得跨标签同步锁后核对；同步 header 继续使用本机页面
+incarnation fence，清除后的旧点击不能变成新授权。普通尝试失败不吞掉同库的已排队显式重试。
+清除通知使已暂停的空库成为本机 authoritative，不请求云端或继续阻挡资料页；准入失败后的手动重连
+只重试准入，真正成功后才允许同步。
+暂存应用、完整回退应用或空账号确认在同一源事务内解除暂停；失败不消费，新的本机资料仍须走身份冲突。
+候选应用只额外允许删除这一确切的现存 marker，不开放其他 metadata 或删除操作；协调协议为 53。
 同事务 restoreOperationId 回执确认协调器丢失 ACK／候选重放后的实际提交，确认后才发送资料变化通知；
 无法读取该回执时不能冒充成功。候选、live、baseline 和 WAL 可同时占磁盘；256 MiB 暂存估计不是峰值磁盘证明。
 已有资料仍须接入领域防倒退、不可改写历史和显式冲突的有界三方 merge，不能因为“本机无未同步更改”就直接

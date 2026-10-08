@@ -156,6 +156,30 @@ test('only a validated generation can promote and its commit cannot bundle indep
  }finally{fixture.database.close(false);}
 });
 
+for(const reset of [undefined,'account-deletion','local-clear'] as const)test(`fresh promotion consumes only an existing local-clear marker (${reset??'absent'})`,async()=>{
+ const fixture=isolatedDatabase();
+ try{
+  if(reset)fixture.database.commit({clears:[],deletes:[],puts:[{table:'meta',key:'local-reset',encodedValue:JSON.stringify(encodeBackupValue(reset))}]});
+  const id=await fixture.stage(1),validated=await fixture.request({kind:'validate',id});
+  if(validated.kind!=='validated')throw Error('Expected validation');
+  const mutation={clears:[],deletes:[],contentRevision:1,replicaCandidateRestore:{id,tables:validated.candidate.tables},puts:[
+   {table:'meta' as const,key:'cloud-sync',encodedValue:JSON.stringify(encodeBackupValue({restoreOperationId:id,owner,incarnation:'initial',revision:validated.candidate.head.revision,syncedLocalRevision:1,status:'synced'}))},
+   {table:'meta' as const,key:'local-content-revision',encodedValue:JSON.stringify(encodeBackupValue(1))},
+  ]};
+  const deletion={table:'meta' as const,key:'local-reset'};
+  expect(()=>fixture.database.commit({...mutation,deletes:[{table:'meta',key:'sentinel'}]})).toThrow('library_sync_candidate_invalid');
+  expect(()=>fixture.database.commit({...mutation,deletes:[deletion,deletion]})).toThrow('library_sync_candidate_invalid');
+  if(reset==='local-clear')expect(()=>fixture.database.commit(mutation)).toThrow('library_sync_candidate_invalid');
+  else expect(()=>fixture.database.commit({...mutation,deletes:[deletion]})).toThrow('library_sync_candidate_invalid');
+  expect(fixture.database.get('meta','local-reset')).toBe(reset?JSON.stringify(encodeBackupValue(reset)):null);
+  expect(fixture.database.count('semanticMeanings')).toBe(0);expect(fixture.database.syncBaseEntries()).toEqual([]);
+  fixture.database.commit({...mutation,deletes:reset==='local-clear'?[deletion]:[]});
+  expect(fixture.database.count('semanticMeanings')).toBe(1);expect(fixture.database.syncBaseEntries().length).toBeGreaterThan(0);
+  expect(fixture.database.get('meta','local-reset')).toBe(reset==='account-deletion'?JSON.stringify(encodeBackupValue(reset)):null);
+  expect(fixture.database.get('meta','sentinel')).toBe(JSON.stringify(encodeBackupValue('Existing owner data')));
+ }finally{fixture.database.close(false);}
+});
+
 test('proof-only batches are tied to one manifest row and cannot seal or expose a partial body',async()=>{
  const records=rows(),id=await begin(records),before=await original();
  try{

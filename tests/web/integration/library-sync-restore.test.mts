@@ -13,7 +13,7 @@ import type {SyncRequest} from '../../../apps/web/src/data/library/cloudSync';
 
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined,location:new URL('http://restore-atomicity.fixture.invalid/')});
 Object.defineProperty(globalThis,'navigator',{value:{onLine:true},configurable:true});
-const {synchronizeLibrary,readCloudSync}=await import('../../../apps/web/src/data/library/cloudSync');
+const {synchronizeLibrary,readCloudSync,readCloudReconnectRequired}=await import('../../../apps/web/src/data/library/cloudSync');
 let database:Awaited<ReturnType<typeof useNodeLearningCapacityStorage>>,sql:{exec:(statement:string)=>unknown},localIdentity:LibraryIdentity,remoteIdentity:LibraryIdentity;
 beforeEach(async()=>{
  database=await useNodeLearningCapacityStorage();sql=Reflect.get(database,'database');
@@ -45,6 +45,46 @@ const request:SyncRequest=async(path,body)=>{
  throw new Error(`unexpected_restore_request:${path}`);
 };
 const facts=()=>readLibrary(async tx=>({identity:await tx.get('meta','identity'),creation:await tx.get<{result:LibraryIdentity}>('operations','00000000-0000-4000-8000-000000000001'),drafts:await tx.entries('drafts'),base:await tx.syncBaseEntries(),localRevision:await readLocalLibraryRevision(tx)}));
+
+for(const path of ['staged','fallback'] as const)test(`a cleared device waits for explicit reconnect through ${path} restoration`,async()=>{
+ // Persisted post-clear state; the actual clear + page reload is exercised by
+ // the Chromium/Postgres UI test rather than simulated by resetting JS globals.
+ await writeLibraryState(async tx=>tx.put('meta','local-reset','local-clear'));
+ publish([first]);const before=await facts();let requests=0;
+ const transport:SyncRequest=async(...args)=>{requests++;return request(...args);};
+ const adapter=await sqliteRecordAdapter(),candidate=adapter.replicaCandidate.bind(adapter);
+ if(path==='fallback')adapter.replicaCandidate=async()=>{throw Error('sqlite_replica_candidate_unavailable');};
+ try{
+  await synchronizeLibrary(transport);expect(requests).toBe(0);expect(await facts()).toEqual(before);expect(await readCloudSync()).toBeUndefined();
+  expect(await readCloudReconnectRequired()).toBe(true);
+  await synchronizeLibrary(transport,{restoreAfterLocalClear:true});
+  expect(requests).toBeGreaterThan(0);expect((await facts()).identity).toEqual({...remoteIdentity,deviceId:localIdentity.deviceId});
+  expect((await facts()).drafts.map(row=>row.value)).toEqual([first]);expect((await readCloudSync())?.status).toBe('synced');
+  expect(await readCloudReconnectRequired()).toBe(false);
+ }finally{adapter.replicaCandidate=candidate;}
+});
+
+test('a failed explicit promotion keeps the reconnect intent and automatic retry cannot restore its old Cloud facts',async()=>{
+ await writeLibraryState(async tx=>tx.put('meta','local-reset','local-clear'));publish([first]);const before=await facts();
+ sql.exec(`CREATE TEMP TRIGGER deny_cleared_fact BEFORE INSERT ON sensa_records WHEN NEW.table_name='drafts' BEGIN SELECT RAISE(ABORT,'fixture reconnect fact rejected'); END`);
+ try{await expect(synchronizeLibrary(request,{restoreAfterLocalClear:true})).rejects.toThrow();}finally{sql.exec('DROP TRIGGER deny_cleared_fact');}
+ expect(await facts()).toEqual(before);expect(await readCloudReconnectRequired()).toBe(true);
+ let requests=0;await synchronizeLibrary(async(...args)=>{requests++;return request(...args);});expect(requests).toBe(0);expect(await facts()).toEqual(before);
+ await synchronizeLibrary(request,{restoreAfterLocalClear:true});expect(await readCloudReconnectRequired()).toBe(false);expect((await facts()).drafts.map(row=>row.value)).toEqual([first]);
+});
+
+test('explicit reconnect to an empty account consumes the pause without inventing facts or a content revision',async()=>{
+ await writeLibraryState(async tx=>tx.put('meta','local-reset','local-clear'));const before=await facts();
+ await synchronizeLibrary(async path=>{expect(path).toBe('/head');return {revision:0,manifest:null};},{restoreAfterLocalClear:true});
+ expect(await readCloudReconnectRequired()).toBe(false);expect((await readCloudSync())?.status).toBe('synced');expect(await facts()).toEqual(before);
+});
+
+test('explicit reconnect cannot overwrite new local content created after a device clear',async()=>{
+ await writeLibraryState(async tx=>tx.put('meta','local-reset','local-clear'));
+ await saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'New work in the cleared local world.'});publish([first]);const before=await facts();
+ await expect(synchronizeLibrary(request,{restoreAfterLocalClear:true})).rejects.toThrow('library_sync_identity');
+ expect(await facts()).toEqual(before);expect(await readCloudReconnectRequired()).toBe(true);expect((await readCloudSync())?.status).toBe('conflict');
+});
 
 test('a failed baseline write cannot partially restore cloud identity or learner facts',async()=>{
  publish([first]);const before=await facts();

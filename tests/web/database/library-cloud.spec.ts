@@ -16,6 +16,152 @@ test.setTimeout(300_000);
  * provenance references remain untouched; their order has separate oracles. */
 const meaningFactIds:Record<string,string>={personalMeaningRevisions:'personalMeaningRevisionId',personalSemanticAnchors:'personalSemanticAnchorId',personalSemanticAnchorRevisions:'personalSemanticAnchorRevisionId',personalExpressionAnchors:'personalExpressionAnchorId',personalExpressionAnchorRevisions:'personalExpressionAnchorRevisionId',focuses:'meaningFocusId',focusRevisions:'meaningFocusRevisionId',focusAcceptances:'meaningFocusAcceptanceId',constructions:'senseConstructionId',constructionTurns:'constructionTurnId',proposals:'senseProposalId',proposalVersions:'senseProposalVersionId',senseConfirmations:'senseProposalConfirmationId',semanticAcceptances:'semanticAcceptanceId',alignments:'personalMeaningAlignmentId',alignmentEvents:'personalMeaningAlignmentEventId',bindingConfirmations:'expressionBindingConfirmationId'};
 const retainedMeaningFacts=(record:any)=>Object.fromEntries(Object.entries(record).map(([key,value])=>[key,Array.isArray(value)&&meaningFactIds[key]?[...value].sort((a,b)=>a[meaningFactIds[key]!].localeCompare(b[meaningFactIds[key]!])):value]));
+
+test('clearing a device through the UI survives reload until explicit Cloud restoration',async({browser},testInfo)=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount('clear-reconnect'),page=await fixture.createClient(account);
+  const payload=manualMeaningPayload({...newManualMeaningDraft(),context:'Could I borrow your umbrella?',occurrence:'borrow',languageTag:'en',meaning:'暂时借用对方的物品，之后归还。',usage:'下雨时借朋友的雨伞。'});
+  const original=await page.evaluate(async payload=>{const c=(window as any).core;await c.createJourneyModules().semanticIntake.submit(payload);await (window as any).sync();return {identity:await c.openLibrary(),meanings:await c.readLibrary((tx:any)=>tx.entries('semanticMeanings')),state:await c.readCloudSync()};},payload);
+  expect(original.meanings).toHaveLength(1);expect(original.state.status).toBe('synced');
+  await page.evaluate(async()=>{const path='/local-clear.js';const ui=await import(/* @vite-ignore */ path);ui.mountLocalDataControl();});
+  await page.getByRole('button',{name:'Review local content',exact:true}).click();
+  await expect(page.getByText(/1 meanings/)).toBeVisible();
+  await page.getByRole('checkbox',{name:'I have saved any backup I need and confirm erasing this local content.'}).check();
+  await page.getByRole('button',{name:'Erase local content',exact:true}).click();
+  await expect(page.getByText('Local content cleared. Reopen the app to use the empty library.',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Reopen app',exact:true}).click();
+  // Real reload retires the old module incarnation instead of changing JS
+  // globals to pretend a newly cleared device is still the old world.
+  await page.evaluate(async token=>{const path='/core.js',c=await import(/* @vite-ignore */ path);(window as any).core=c;(window as any).token=token;await c.openLibrary();(window as any).request=async(path:string,body?:unknown)=>{const response=await fetch('/sensa/library-sync'+path,{method:body===undefined?'GET':'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const value=await response.json();if(!response.ok)throw Error(value.code);return value;};},account.token);
+  const inspect=()=>page.evaluate(async()=>{const c=(window as any).core;return {identity:await c.openLibrary(),paused:await c.readCloudReconnectRequired(),state:await c.readCloudSync(),meanings:await c.readLibrary((tx:any)=>tx.entries('semanticMeanings')),base:await c.readLibrary((tx:any)=>tx.syncBaseReferences())};});
+  const cleared=await inspect();expect(cleared.identity.id).not.toBe(original.identity.id);expect(cleared.paused).toBe(true);expect(cleared.meanings).toEqual([]);expect(cleared.base).toEqual([]);
+  fixture.clearRequests();let serviceRequests=0;
+  await page.route('https://service.fixture.invalid/**',async route=>{serviceRequests++;const url=new URL(route.request().url());const response=await route.fetch({url:fixture.origin+url.pathname+url.search});await route.fulfill({response});});
+  await page.clock.install();
+  await page.evaluate(async account=>{(window as any).__fixtureAuthSession={access_token:account.token,user:{id:account.subject}};const path='/local-clear.js',ui=await import(/* @vite-ignore */ path);ui.mountCloudSyncControl();},account);
+  await expect(page.getByRole('status')).toHaveText('Saved locally; cloud sync is not enabled');
+  await page.clock.fastForward(300000);
+  expect(serviceRequests).toBe(0);expect(fixture.requests()).toEqual([]);expect(await inspect()).toEqual(cleared);
+  // Failure preserves the user's cleared world and cannot enable auto retry.
+  await page.route('**/sensa/library-sync/head',route=>route.fulfill({status:503,json:{code:'fixture_server_unavailable'}}));
+  await page.getByRole('button',{name:'Sync now',exact:true}).click();
+  await expect(page.getByRole('status')).toHaveText('Sync did not finish. Your local data is still saved. Check the connection and retry.');
+  await page.unroute('**/sensa/library-sync/head');const failed=await inspect();expect(failed.paused).toBe(true);expect(failed.identity).toEqual(cleared.identity);expect(failed.meanings).toEqual([]);expect(failed.base).toEqual([]);
+  fixture.clearRequests();const failedRequests=serviceRequests;await page.clock.fastForward(300000);expect(serviceRequests).toBe(failedRequests);expect(fixture.requests()).toEqual([]);
+  await page.getByRole('button',{name:'Sync now',exact:true}).click();
+  await expect.poll(()=>page.evaluate(()=>(window as any).core.readCloudSync())).toMatchObject({status:'synced'});
+  const restored=await inspect();expect(restored.paused).toBe(false);expect(restored.identity).toEqual({...original.identity,deviceId:cleared.identity.deviceId});expect(restored.state.status).toBe('synced');expect(restored.meanings).toEqual(original.meanings);
+  await testInfo.attach('clear-reconnect-evidence',{contentType:'application/json',body:JSON.stringify({originalIdentity:original.identity,clearedIdentity:cleared.identity,restoredIdentity:restored.identity,meanings:restored.meanings.length,paidCalls:0,scope:'actual LocalDataControlPanel/CloudSyncPanel/automatic scheduler, OPFS reload and Hono/PostgreSQL; controlled auth, not full AccountExperience login'})});
+ }finally{await fixture.close();}
+});
+
+test('a manual sync queued behind another tab cannot authorize restoration after a later local clear',async({browser})=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount('queued-clear'),source=await fixture.createClient(account);
+  await source.evaluate(async()=>{const c=(window as any).core;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'This old Cloud material must not return from a queued click.'});await (window as any).sync();});
+  const holder=await source.context().newPage();await holder.goto(fixture.origin);
+  await holder.evaluate(()=>{(window as any).__held=false;void navigator.locks.request('sensa-account-library-sync',()=>new Promise<void>(resolve=>{(window as any).__release=resolve;(window as any).__held=true;}));});
+  await expect.poll(()=>holder.evaluate(()=>(window as any).__held)).toBe(true);
+  const waiter=await source.context().newPage();await waiter.goto(fixture.origin);
+  let serviceRequests=0;
+  await waiter.route('https://service.fixture.invalid/**',async route=>{serviceRequests++;const url=new URL(route.request().url());const response=await route.fetch({url:fixture.origin+url.pathname+url.search});await route.fulfill({response});});
+  // Do not open the library through core on this fresh tab. The user's click
+  // itself must bind its world before waiting for the cross-tab sync lock.
+  await waiter.evaluate(async account=>{(window as any).__fixtureAuthSession={access_token:account.token,user:{id:account.subject}};(window as any).__finished=0;window.addEventListener('sensa-account-library-sync-finished',()=>{(window as any).__finished++;});const path='/local-clear.js',ui=await import(/* @vite-ignore */ path);ui.mountCloudSyncControl({automatic:false});},account);
+  await waiter.getByRole('button',{name:'Sync now',exact:true}).click();
+  await expect.poll(()=>waiter.evaluate(async()=>{const state=await navigator.locks.query();return (state.pending??[]).filter(lock=>lock.name==='sensa-account-library-sync').length;})).toBe(1);
+  await source.evaluate(async()=>{const c=(window as any).core;await c.clearLocalLibrary(await c.inspectLocalClear());});
+  const cleared=await source.evaluate(()=>(window as any).core.readLibrary(async(tx:any)=>({identity:await tx.get('meta','identity'),marker:await tx.get('meta','local-reset'),drafts:await tx.entries('drafts'),base:await tx.syncBaseReferences()})));
+  expect(cleared.marker).toBe('local-clear');expect(cleared.drafts).toEqual([]);expect(cleared.base).toEqual([]);fixture.clearRequests();
+  await holder.evaluate(()=>(window as any).__release());
+  await expect.poll(()=>waiter.evaluate(()=>(window as any).__finished)).toBe(1);
+  await expect(waiter.getByRole('button',{name:'Sync now',exact:true})).toBeEnabled();
+  expect(serviceRequests).toBe(0);expect(fixture.requests()).toEqual([]);
+  expect(await source.evaluate(()=>(window as any).core.readLibrary(async(tx:any)=>({identity:await tx.get('meta','identity'),marker:await tx.get('meta','local-reset'),drafts:await tx.entries('drafts'),base:await tx.syncBaseReferences()})))).toEqual(cleared);
+ }finally{await fixture.close();}
+});
+
+test('local clear releases a live failed restoration gate without an automatic Cloud request',async({browser})=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount('live-clear'),page=await fixture.createClient(account);
+  await page.evaluate(async()=>{const c=(window as any).core;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Explicitly disposable local material.'});await (window as any).sync();});
+  let attempts=0;
+  await page.route('https://service.fixture.invalid/**',route=>{attempts++;return route.fulfill({status:503,json:{code:'fixture_server_unavailable'}});});
+  await page.clock.install();
+  await page.evaluate(async account=>{(window as any).__fixtureAuthSession={access_token:account.token,user:{id:account.subject}};const path='/local-clear.js',ui=await import(/* @vite-ignore */ path);ui.mountCloudSyncControl({initialAvailability:'restoring'});},account);
+  await expect(page.getByTestId('library-availability')).toHaveText('failed');await expect(page.locator('#restore-fixture')).toBeVisible();
+  const beforeClear=attempts;
+  await page.evaluate(async()=>{const c=(window as any).core;await c.clearLocalLibrary(await c.inspectLocalClear());});
+  await expect(page.getByTestId('library-availability')).toHaveText('authoritative');await expect(page.locator('#restore-fixture')).toHaveCount(0);
+  await page.clock.fastForward(300000);expect(attempts).toBe(beforeClear);
+  expect(await page.evaluate(()=>(window as any).core.readLibrary(async(tx:any)=>({marker:await tx.get('meta','local-reset'),drafts:await tx.entries('drafts')})))).toEqual({marker:'local-clear',drafts:[]});
+ }finally{await fixture.close();}
+});
+
+test('a clear after the account lock check still retires the old click before sync header capture',async({browser})=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount('capture-clear'),source=await fixture.createClient(account);
+  await source.evaluate(async()=>{const c=(window as any).core;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Do not resurrect this from a pre-clear click.'});await (window as any).sync();});
+  const waiter=await source.context().newPage();await waiter.goto(fixture.origin);let serviceRequests=0;
+  await waiter.route('https://service.fixture.invalid/**',route=>{serviceRequests++;return route.fulfill({status:503,json:{code:'unexpected_sync'}});});
+  await waiter.evaluate(async account=>{
+   (window as any).__fixtureAuthSession={access_token:account.token,user:{id:account.subject}};
+   const path='/core.js',c=await import(/* @vite-ignore */ path);
+   const request=navigator.locks.request.bind(navigator.locks) as any;let insideSync=false,reads=0;
+   // Hold only the shared Library read immediately before header capture.
+   // Every actual acquire still uses native Web Locks; no storage is replaced.
+   (navigator.locks as any).request=(name:string,...args:any[])=>{
+    const callback=args.pop();
+    if(name==='sensa-account-library-sync')return request(name,...args,(lock:Lock)=>{insideSync=true;return callback(lock);});
+    if(insideSync&&name.includes('sensa-library-transaction-v1')&&args[0]?.mode==='shared'&&++reads===3){
+     (window as any).__beforeHeader=true;
+     return new Promise<void>(resolve=>{(window as any).__releaseHeader=resolve;}).then(()=>request(name,...args,callback));
+    }
+    return request(name,...args,callback);
+   };
+   (window as any).__outcome=c.syncAccountLibrary({restoreAfterLocalClear:true}).then(()=>true,(cause:Error)=>cause.message);
+  },account);
+  await expect.poll(()=>waiter.evaluate(()=>(window as any).__beforeHeader)).toBe(true);
+  await source.evaluate(async()=>{const c=(window as any).core;await c.clearLocalLibrary(await c.inspectLocalClear());});
+  fixture.clearRequests();await waiter.evaluate(()=>(window as any).__releaseHeader());
+  expect(await waiter.evaluate(()=>(window as any).__outcome)).toBe('localFlow.libraryReplaced');
+  expect(serviceRequests).toBe(0);expect(fixture.requests()).toEqual([]);
+  expect(await source.evaluate(()=>(window as any).core.readLibrary(async(tx:any)=>({marker:await tx.get('meta','local-reset'),drafts:await tx.entries('drafts'),state:await tx.get('meta','cloud-sync')})))).toEqual({marker:'local-clear',drafts:[],state:undefined});
+ }finally{await fixture.close();}
+});
+
+test('a manual restoration retry never bypasses a rejected account admission',async({browser})=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount('retry-admission'),page=await fixture.createClient(account);let admissions=0,syncRequests=0;
+  await page.route('https://service.fixture.invalid/**',route=>{if(new URL(route.request().url()).pathname==='/sensa/web/access/session'){admissions++;return route.fulfill({status:403,json:{code:'access_rejected'}});}syncRequests++;return route.fulfill({status:503,json:{code:'unexpected_online_request'}});});
+  await page.evaluate(async account=>{(window as any).__fixtureAuthSession={access_token:account.token,user:{id:account.subject}};const path='/local-clear.js',ui=await import(/* @vite-ignore */ path);ui.mountAccountConnectionControl();},account);
+  await expect(page.getByTestId('connection-online')).toHaveText('false');await expect.poll(()=>admissions).toBe(1);await expect(page.getByTestId('connection-notice')).not.toBeEmpty();
+  await page.locator('#account-restore-fixture button').first().click();
+  await expect.poll(()=>admissions).toBe(2);await expect(page.locator('#account-restore-fixture button').first()).toBeEnabled();
+  expect(syncRequests).toBe(0);await expect(page.getByTestId('connection-online')).toHaveText('false');expect(await page.evaluate(()=>(window as any).core.readCloudSync())).toBeUndefined();
+ }finally{await fixture.close();}
+});
+
+test('an explicit sync queued behind a failed ordinary attempt retains its own retry intent',async({browser})=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount('queued-retry'),page=await fixture.createClient(account);let attempts=0,release:()=>void=()=>{};
+  await page.evaluate(async()=>{const c=(window as any).core;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Keep this fact across failed ordinary sync and queued explicit retry.'});await (window as any).sync();});
+  await page.route('https://service.fixture.invalid/**',async route=>{const url=new URL(route.request().url());if(url.pathname.endsWith('/head')&&++attempts===1){await new Promise<void>(resolve=>{release=resolve;});await route.fulfill({status:503,json:{code:'fixture_server_unavailable'}});return;}const response=await route.fetch({url:fixture.origin+url.pathname+url.search});await route.fulfill({response});});
+  await page.evaluate(async account=>{(window as any).__fixtureAuthSession={access_token:account.token,user:{id:account.subject}};const path='/local-clear.js',ui=await import(/* @vite-ignore */ path);ui.mountCloudSyncControl();},account);
+  await expect.poll(()=>attempts).toBe(1);
+  await page.evaluate(()=>{(window as any).__queuedOutcome=(window as any).core.syncAccountLibrary({restoreAfterLocalClear:true}).then(()=>true,(cause:Error)=>cause.message);});release();
+  expect(await page.evaluate(()=>(window as any).__queuedOutcome)).toBe(true);
+  await expect.poll(()=>page.evaluate(()=>(window as any).core.readCloudSync())).toMatchObject({status:'synced'});expect(attempts).toBe(2);
+  expect(await page.evaluate(()=>(window as any).core.readLibrary((tx:any)=>tx.entries('drafts')))).toHaveLength(1);
+ }finally{await fixture.close();}
+});
+
 test('personal scenes and original action pins restore while offline first acceptance forks remain explicit',async({browser})=>{
  const fixture=await createLibraryCloudBrowserFixture(browser);
  try{

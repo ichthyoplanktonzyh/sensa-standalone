@@ -1,6 +1,7 @@
 /** Production-shaped browser entry for the PostgreSQL library integration smoke. */
 export * from '../../apps/web/src/data/library/store';
 export * from '../../apps/web/src/data/library/cloudSync';
+export {syncAccountLibrary} from '../../apps/web/src/data/library/cloudSyncService';
 export * from '../../apps/web/src/data/library/providers';
 export * from '../../apps/web/src/data/library/personalLearning';
 export * from '../../apps/web/src/data/library/drafts';

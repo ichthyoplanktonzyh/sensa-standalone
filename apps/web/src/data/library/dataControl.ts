@@ -10,7 +10,8 @@ export type LocalClearPreview={libraryId:string;incarnation:string;localRevision
 async function inspectLocalClearTransaction(tx:LibraryTransaction):Promise<LocalClearPreview>{
  const owner=await learningOwner(tx),incarnation=await assertCurrentLibrary(tx);
  const [operations,drafts,meanings,packages,targets,events,sessions,tasks,cloud]=await Promise.all([
-  tx.count('operations'),tx.count('drafts'),tx.count('meanings'),tx.count('packageInstallations'),
+  tx.count('operations'),Promise.all([tx.count('drafts'),tx.count('semanticInbox')]).then(counts=>counts.reduce((sum,count)=>sum+count,0)),
+  Promise.all([tx.count('meanings'),tx.count('semanticMeanings')]).then(counts=>counts.reduce((sum,count)=>sum+count,0)),tx.count('packageInstallations'),
   tx.count('learningTargets'),tx.count('learningEvents'),
   tx.all<any>('sessions'),tx.all<any>('personalLearning'),inspectPendingCloudSync(tx),
  ]);
@@ -46,6 +47,9 @@ export async function clearLocalLibrary(preview:LocalClearPreview,options:{disca
   tx.put('meta','identity',identity);if(owner)tx.put('meta','service-owner',owner);
   if(installation)tx.put('meta','service-installation',installation);
   tx.put('meta','local-incarnation',crypto.randomUUID());
+  // Clearing a device is not permission to restore the old Cloud world on
+  // its next boot. The existing manual sync action reconnects explicitly.
+  tx.put('meta','local-reset','local-clear');
   tx.put('operations','00000000-0000-4000-8000-000000000001',{input:canonicalConsumerJson({kind:'library.create',input:{}}),result:identity,committedAt:identity.createdAt});
  });clearAllCredentials();
 }

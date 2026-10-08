@@ -55,7 +55,7 @@ export default function AccountExperience({children,onReturnToLanding}:{children
    const session=(await auth?.getSession())?.data.session;
    if(gen!==generation.current)return;
    const cachedSubject=cachedAuthSubject();
-   const inspect=()=>readLibrary(async tx=>{const checkpoint=await tx.get<{status?:string}>('meta','cloud-sync');return {owner:await tx.get<Owner>('meta','service-owner'),identity:await tx.get('meta','identity'),signedOut:await tx.get<boolean>('meta','signed-out'),usable:checkpoint?.status==='synced'||await hasGuestLibraryContent(tx)};});
+   const inspect=()=>readLibrary(async tx=>{const checkpoint=await tx.get<{status?:string}>('meta','cloud-sync');return {owner:await tx.get<Owner>('meta','service-owner'),identity:await tx.get('meta','identity'),signedOut:await tx.get<boolean>('meta','signed-out'),usable:checkpoint?.status==='synced'||await tx.get('meta','local-reset')==='local-clear'||await hasGuestLibraryContent(tx)};});
    let stored=await inspect();
    if(!stored.identity){await openLibrary();stored=await inspect();}
    setLibraryMissing(false);
@@ -132,6 +132,7 @@ export default function AccountExperience({children,onReturnToLanding}:{children
    // summary projections unknown until its first account restore settles. The App
    // Shell stays open throughout; AccountLibrarySync advances that availability.
    setOwner(next);setLocal(true);setOnlineService(true);setPublisherAccess(access.capabilities?.publishLearningContent??false);setConnectionConflict(false);setLoginOpen(false);setNotice('');
+   return true;
   }catch(cause){if(gen===generation.current){if(cause instanceof Error&&(cause.message==='localFlow.libraryMissing'||(hasLocalLibraryHint()||hasLocalLibrarySelection())&&storageRecoveryCodes.has(cause.message))){setLibraryMissing(true);setLocal(false);setOnlineService(false);setPublisherAccess(false);setLoginOpen(false);}if(needsInitialRestore)setLibraryAvailability(guestAttempt&&usableLocalFacts?'authoritative':'failed');if(cause instanceof Error&&cause.message==='localFlow.accountLibraryConflict'){setConnectionConflict(true);setLoginOpen(false);}setNotice(localFlowErrorKey(cause,'localFlow.networkRetry'));}}
   finally{if(gen===generation.current)setReady(true);}
  };
@@ -147,7 +148,7 @@ export default function AccountExperience({children,onReturnToLanding}:{children
  });const online=()=>void recover();const storage=(event:StorageEvent)=>{if(event.key===null||event.key===authStorageKey)void recover();};window.addEventListener('online',online);window.addEventListener('storage',storage);return()=>{generation.current++;sub?.data.subscription.unsubscribe();window.removeEventListener('online',online);window.removeEventListener('storage',storage);};},[]);
  useEffect(()=>{if(!sent||now>=retryAt)return;const timer=window.setTimeout(()=>setNow(Date.now()),Math.max(0,retryAt-Date.now())+20);return()=>window.clearTimeout(timer);},[now,retryAt,sent]);
  useEffect(()=>{if(!local)return;return observeLibrary(()=>{void readLibrary(async tx=>({signedOut:await tx.get('meta','signed-out')})).then(state=>{if(state.signedOut&&localRef.current){void clearAllCredentials();setOnlineService(false);}}).catch(()=>setNotice(localFlowText('localStatusFailed')));},['meta']);},[local]);
- const perform=useCallback(async(work:()=>Promise<void>)=>{callbackDismissed.current=true;setBusy(true);setNotice('');try{await work();}catch{setNotice(localFlowText('tryLater'));}finally{setBusy(false);}},[]);
+ const perform=useCallback(async(work:()=>Promise<unknown>)=>{callbackDismissed.current=true;setBusy(true);setNotice('');try{await work();}catch{setNotice(localFlowText('tryLater'));}finally{setBusy(false);}},[]);
  const send=async()=>{if(!auth)return;const {error}=await auth.signInWithOtp({email:email.trim(),options:{shouldCreateUser:true,emailRedirectTo:emailLinkRedirect()}});if(error){setNotice(error.status===429?localFlowText('otpRateLimit'):localFlowText('emailLinkSendFailed'));return;}setSent(true);setRetryAt(Date.now()+60000);};
  const logout=useCallback(async()=>{const extensionModule=await import('./extensionConnection');extensionModule.notifyExtensionSignout(owner?.accountId);await clearAllCredentials();await command({id:crypto.randomUUID(),kind:'service.signout',input:{}},async tx=>{tx.put('meta','signed-out',true);return null;});generation.current++;setLocal(false);setOnlineService(false);setPublisherAccess(false);setLoginOpen(false);setSent(false);setCode('');setUseCode(false);const result=await auth?.signOut({scope:'local'});if(result?.error)setNotice(localFlowText('signoutIncomplete'));},[owner?.accountId]);
  const updateLibraryAvailability=useCallback((value:LibraryAvailability)=>setLibraryAvailability(current=>current==='authoritative'?current:value),[]);
@@ -161,11 +162,11 @@ export default function AccountExperience({children,onReturnToLanding}:{children
   libraryAvailability,
   login:()=>setLoginOpen(true),
   retryConnection:()=>perform(async()=>{
-   if(!onlineService){await recover();return;}
+   if(!onlineService&&await recover()!==true)return;
    // Admission already succeeded. A manual retry must actually rerun the
    // failed sync, including terminal failures, not only repeat auth/preflight.
    updateLibraryAvailability('restoring');
-   try{await import('../../data/library/cloudSyncService').then(module=>module.syncAccountLibrary());
+   try{await import('../../data/library/cloudSyncService').then(module=>module.syncAccountLibrary({restoreAfterLocalClear:true}));
     const state=await import('../../data/library/cloudSync').then(module=>module.readCloudSync());
     updateLibraryAvailability(state?.status==='synced'?'authoritative':'failed');
    }catch(cause){updateLibraryAvailability('failed');throw cause;}
