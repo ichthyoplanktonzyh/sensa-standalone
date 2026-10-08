@@ -94,7 +94,7 @@
     "feedbackText": "產品反饋與內容糾錯請使用“關於與支援”中的聯絡入口。",
     "done": "完成"
   },
-  "cloudSync": {
+  "cloudSync": {"restoreTitle": "帳號資料",
     "title": "帳號雲同步",
     "pending": "有本地更改等待同步",
     "syncing": "正在同步…",

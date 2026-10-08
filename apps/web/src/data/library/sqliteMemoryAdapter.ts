@@ -156,6 +156,13 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
       .filter(row=>afterKey===null||row.key>afterKey).sort((a,b)=>a.key<b.key?-1:a.key>b.key?1:0).slice(0,limit);
   }
 
+  async recordKeysPage(table:SqliteLibraryTable,afterKey:string|null,limit:number):Promise<string[]>{
+    if(!Number.isSafeInteger(limit)||limit<1||limit>256)throw new Error('sqlite_invalid_page_size');
+    const prefix=`${table}\u0000`;
+    return [...this.records.keys()].filter(id=>id.startsWith(prefix)).map(id=>id.slice(prefix.length))
+      .filter(key=>afterKey===null||key>afterKey).sort().slice(0,limit);
+  }
+
   async changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]> {
     const selected = new Set(tables);
     return [...this.changes.values()]

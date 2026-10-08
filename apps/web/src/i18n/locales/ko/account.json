@@ -94,7 +94,7 @@
     "feedbackText": "의견이나 콘텐츠 수정을 요청하려면 소개 및 지원의 연락처를 이용하세요.",
     "done": "완료"
   },
-  "cloudSync": {
+  "cloudSync": {"restoreTitle": "계정 자료",
     "title": "계정 동기화",
     "pending": "로컬 변경 사항이 동기화를 기다리고 있습니다",
     "syncing": "동기화 중…",

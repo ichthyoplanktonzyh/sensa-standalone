@@ -145,6 +145,17 @@ export class LibraryTransaction {
       if(rows.length<128)return;
     }
   }
+  /** Coherent, bounded key-only projection; no record/media decoding. */
+  async *recordKeyBatches(table:Table):AsyncGenerator<string[]>{
+    if(this.wrote)throw new Error('library_entries_require_snapshot');
+    let afterKey:string|null=null;
+    for(;;){
+      const keys=await storageCall(()=>this.adapter.recordKeysPage(table,afterKey,128));
+      if(!keys.length)return;
+      yield keys;afterKey=keys.at(-1)!;
+      if(keys.length<128)return;
+    }
+  }
   async lookupMeanings(query:string):Promise<import('./sqliteProtocol').MeaningLookupResult>{
     if(this.wrote)throw new Error('library_projection_requires_snapshot');
     return storageCall(()=>this.adapter.lookupMeanings(query));

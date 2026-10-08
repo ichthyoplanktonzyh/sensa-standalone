@@ -187,6 +187,7 @@ const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
     case 'get': return current.database.get(request.table,request.key);
     case 'entries': return current.database.entries(request.table);
     case 'entriesPage':return current.database.entriesPage(request.table,request.afterKey,request.limit);
+    case 'recordKeysPage':return current.database.recordKeysPage(request.table,request.afterKey,request.limit);
     case 'existingRecordKeys':return current.database.existingRecordKeys(request.table,request.keys);
     case 'packageCacheProjection':return current.database.packageCacheProjection(request.query);
     case 'meaningLookup':return current.database.lookupMeanings(request.query);

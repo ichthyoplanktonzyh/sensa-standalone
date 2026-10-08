@@ -85,6 +85,7 @@ type BrowserSmokeBridge = {
   removeLibraryIdentityForRecoveryTest():Promise<void>;
   closeLibraryStorageForRecoveryTest():Promise<void>;
   libraryBootstrapFactsForTest():Promise<{identity:unknown;creationReceipt:unknown;settings:number}>;
+  localReplicaContentPresentForTest():Promise<boolean>;
   curriculumSourceCheckpointForTest():Promise<{
     targets:import('./learning/runtime/localProtocol').LocalLearningTarget[];
     runs:import('./learning/runtime/localProtocol').LocalLearningRun[];
@@ -430,6 +431,7 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
     async seedSemanticWorld(state){
       // Browser-test setup only: validate actual domain facts and use the same
       // atomic repository as the application. Never overwrite a populated World.
+      if(!await readLibrary(tx=>tx.get('meta','identity')))throw new Error('semantic test setup requires an opened isolated library');
       const [{LibraryJourneyRepository},{assertPersonalSemanticWorldState}]=await Promise.all([
         import('./experience/personalMeaningJourney/repository'),import('./experience/personalMeaningJourney/authority'),
       ]);
@@ -449,6 +451,7 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
       await restoreLibraryTransaction(async tx=>{for(const table of libraryTables)tx.clear(table);});
     },
     async libraryBootstrapFactsForTest(){return readLibrary(async tx=>({identity:await tx.get('meta','identity')??null,creationReceipt:await tx.get('operations','00000000-0000-4000-8000-000000000001')??null,settings:await tx.count('settings')}));},
+    async localReplicaContentPresentForTest(){const {hasGuestLibraryContent}=await import('./experience/account/guestLibraryConnection');return readLibrary(hasGuestLibraryContent);},
     async removeLibraryIdentityForRecoveryTest(){await restoreLibraryTransaction(async tx=>tx.delete('meta','identity'));},
     async closeLibraryStorageForRecoveryTest(){await import('./data/library/sqliteAdapter').then(module=>module.closeLocalLibraryStorage());},
     async supplyCheckpoint() {

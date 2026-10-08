@@ -94,7 +94,7 @@
     "feedbackText": "Use the contact entry in About & support for feedback and content corrections.",
     "done": "Done"
   },
-  "cloudSync": {
+  "cloudSync": {"restoreTitle": "Account data",
     "title": "Account sync",
     "pending": "Local changes are waiting to sync",
     "syncing": "Syncing…",

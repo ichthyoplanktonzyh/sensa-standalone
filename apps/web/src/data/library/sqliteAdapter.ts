@@ -27,6 +27,7 @@ export interface SqliteRecordAdapter {
   get(table: SqliteLibraryTable, key: string): Promise<string | null>;
   entries(table: SqliteLibraryTable): Promise<Array<{ key: string; encodedValue: string }>>;
   entriesPage(table:SqliteLibraryTable,afterKey:string|null,limit:number):Promise<Array<{key:string;encodedValue:string}>>;
+  recordKeysPage(table:SqliteLibraryTable,afterKey:string|null,limit:number):Promise<string[]>;
   existingRecordKeys(table:SqliteLibraryTable,keys:readonly string[]):Promise<string[]>;
   packageCacheProjection<Query extends PackageCacheProjectionQuery>(query:Query):Promise<PackageCacheProjectionResult<Query>>;
   lookupMeanings(query:string):Promise<MeaningLookupResult>;
@@ -101,6 +102,9 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
   }
   entriesPage(table:SqliteLibraryTable,afterKey:string|null,limit:number):Promise<Array<{key:string;encodedValue:string}>>{
     return this.send({kind:'entriesPage',table,afterKey,limit}) as Promise<Array<{key:string;encodedValue:string}>>;
+  }
+  recordKeysPage(table:SqliteLibraryTable,afterKey:string|null,limit:number):Promise<string[]>{
+    return this.send({kind:'recordKeysPage',table,afterKey,limit}) as Promise<string[]>;
   }
 
   existingRecordKeys(table:SqliteLibraryTable,keys:readonly string[]):Promise<string[]>{

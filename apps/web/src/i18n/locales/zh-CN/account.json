@@ -94,7 +94,7 @@
     "feedbackText": "产品反馈与内容纠错请使用“关于与支持”中的联系入口。",
     "done": "完成"
   },
-  "cloudSync": {
+  "cloudSync": {"restoreTitle": "账号资料",
     "title": "账号云同步",
     "pending": "有本地更改等待同步",
     "syncing": "正在同步…",

@@ -10,6 +10,7 @@ import {completeEmailLink,emailLinkRedirect} from '../../data/consumer/emailLink
 import {command,readLibrary,openLibrary,observeLibrary,type LibraryTransaction} from '../../data/library/store';
 import {hasLocalLibraryHint} from '../../data/library/localLibraryHint';
 import {hasLocalLibrarySelection} from '../../data/library/localLibraryLocation';
+import {hasGuestLibraryContent} from './guestLibraryConnection';
 import {setupButton,setupPrimary} from '../components/learning/LearningSetupFrame';
 import {SensaLogo} from '../brand/SensaLogo';
 import type {LibraryAvailability} from './AccountLibrarySync';
@@ -45,6 +46,7 @@ export default function AccountExperience({children,onReturnToLanding}:{children
   if(deletionRef.current)return;
   const gen=++generation.current;
   let needsInitialRestore=false,guestAttempt=false;
+  let usableLocalFacts=false;
   let recheckGuestContent:((tx:LibraryTransaction)=>Promise<boolean>)|undefined;
   try{
    const callback=await completeEmailLink();
@@ -53,10 +55,11 @@ export default function AccountExperience({children,onReturnToLanding}:{children
    const session=(await auth?.getSession())?.data.session;
    if(gen!==generation.current)return;
    const cachedSubject=cachedAuthSubject();
-   const inspect=()=>readLibrary(async tx=>{const checkpoint=await tx.get<{status?:string}>('meta','cloud-sync');return {owner:await tx.get<Owner>('meta','service-owner'),identity:await tx.get('meta','identity'),signedOut:await tx.get<boolean>('meta','signed-out'),usable:checkpoint?.status==='synced'||!!(await tx.get('semanticState','root'))||await tx.count('drafts')>0||await tx.count('packageInstallations')>0||await tx.count('learningTargets')>0};});
+   const inspect=()=>readLibrary(async tx=>{const checkpoint=await tx.get<{status?:string}>('meta','cloud-sync');return {owner:await tx.get<Owner>('meta','service-owner'),identity:await tx.get('meta','identity'),signedOut:await tx.get<boolean>('meta','signed-out'),usable:checkpoint?.status==='synced'||await hasGuestLibraryContent(tx)};});
    let stored=await inspect();
    if(!stored.identity){await openLibrary();stored=await inspect();}
    setLibraryMissing(false);
+   usableLocalFacts=stored.usable;
    if(gen!==generation.current)return;
    if(stored.identity)warmMedia();
    if(gen!==generation.current)return;
@@ -79,12 +82,12 @@ export default function AccountExperience({children,onReturnToLanding}:{children
    if(!stored.owner){
     guestAttempt=true;
     const endpoint=import.meta.env.VITE_SENSA_API_URL;
-    if(!endpoint){setLibraryAvailability('authoritative');setNotice(localFlowText('onlineUnavailable'));setLoginOpen(false);return;}
+    if(!endpoint){setLibraryAvailability(usableLocalFacts?'authoritative':'failed');setNotice(localFlowText('onlineUnavailable'));setLoginOpen(false);return;}
     const installationId=await readLibrary(tx=>tx.get<string>('meta','service-installation'))??crypto.randomUUID();
     const guestConnection=await import('./guestLibraryConnection');
     const admission=await guestConnection.preflightGuestLibrary(endpoint,session.access_token,installationId);
     if(gen!==generation.current)return;
-    if(admission.kind!=='ready'){setLibraryAvailability('authoritative');setNotice(localFlowText(admission.kind==='access-failed'&&admission.status===403?'contactSupport':'serviceRetry'));setLoginOpen(false);return;}
+    if(admission.kind!=='ready'){setLibraryAvailability(usableLocalFacts?'authoritative':'failed');setNotice(localFlowText(admission.kind==='access-failed'&&admission.status===403?'contactSupport':'serviceRetry'));setLoginOpen(false);return;}
     if(admission.cloudHasContent&&admission.localHasContent){setLibraryAvailability('authoritative');setConnectionConflict(true);setNotice(localFlowText('accountLibraryConflict'));setLoginOpen(false);return;}
     if(admission.cloudHasContent)recheckGuestContent=guestConnection.hasGuestLibraryContent;
     setConnectionConflict(false);
@@ -129,7 +132,7 @@ export default function AccountExperience({children,onReturnToLanding}:{children
    // summary projections unknown until its first account restore settles. The App
    // Shell stays open throughout; AccountLibrarySync advances that availability.
    setOwner(next);setLocal(true);setOnlineService(true);setPublisherAccess(access.capabilities?.publishLearningContent??false);setConnectionConflict(false);setLoginOpen(false);setNotice('');
-  }catch(cause){if(gen===generation.current){if(cause instanceof Error&&(cause.message==='localFlow.libraryMissing'||(hasLocalLibraryHint()||hasLocalLibrarySelection())&&storageRecoveryCodes.has(cause.message))){setLibraryMissing(true);setLocal(false);setOnlineService(false);setPublisherAccess(false);setLoginOpen(false);}if(needsInitialRestore)setLibraryAvailability(guestAttempt?'authoritative':'failed');if(cause instanceof Error&&cause.message==='localFlow.accountLibraryConflict'){setConnectionConflict(true);setLoginOpen(false);}setNotice(localFlowErrorKey(cause,'localFlow.networkRetry'));}}
+  }catch(cause){if(gen===generation.current){if(cause instanceof Error&&(cause.message==='localFlow.libraryMissing'||(hasLocalLibraryHint()||hasLocalLibrarySelection())&&storageRecoveryCodes.has(cause.message))){setLibraryMissing(true);setLocal(false);setOnlineService(false);setPublisherAccess(false);setLoginOpen(false);}if(needsInitialRestore)setLibraryAvailability(guestAttempt&&usableLocalFacts?'authoritative':'failed');if(cause instanceof Error&&cause.message==='localFlow.accountLibraryConflict'){setConnectionConflict(true);setLoginOpen(false);}setNotice(localFlowErrorKey(cause,'localFlow.networkRetry'));}}
   finally{if(gen===generation.current)setReady(true);}
  };
  useEffect(()=>{void recover();const sub=auth?.onAuthStateChange((event,session)=>{
@@ -157,6 +160,16 @@ export default function AccountExperience({children,onReturnToLanding}:{children
   connectionConflict,
   libraryAvailability,
   login:()=>setLoginOpen(true),
+  retryConnection:()=>perform(async()=>{
+   if(!onlineService){await recover();return;}
+   // Admission already succeeded. A manual retry must actually rerun the
+   // failed sync, including terminal failures, not only repeat auth/preflight.
+   updateLibraryAvailability('restoring');
+   try{await import('../../data/library/cloudSyncService').then(module=>module.syncAccountLibrary());
+    const state=await import('../../data/library/cloudSync').then(module=>module.readCloudSync());
+    updateLibraryAvailability(state?.status==='synced'?'authoritative':'failed');
+   }catch(cause){updateLibraryAvailability('failed');throw cause;}
+  }),
   logout:()=>perform(logout),
  }),[notice,onlineService,publisherAccess,connectionConflict,libraryAvailability,owner?.email,perform,logout]);
  if(deletionOpen)return <Suspense fallback={<main role="status">{localFlowText('loadingSensa')}</main>}><AccountDeletion onClose={()=>{location.assign('/profile');}}/></Suspense>;

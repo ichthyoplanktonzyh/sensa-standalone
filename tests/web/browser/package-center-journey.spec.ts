@@ -14,7 +14,7 @@ import {once} from 'node:events';
 import {mkdir,mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
 import {cpus,tmpdir} from 'node:os';
 import {extname,join,resolve} from 'node:path';
-import {chromium,expect,test,type Page} from '@playwright/test';
+import {chromium,expect,test,type Page,type BrowserContext,type TestInfo} from '@playwright/test';
 import {unzipSync,zipSync} from 'fflate';
 import {portableBookMemberPath,readSensaPortableBook} from '@sensa/content-validator/portable-book';
 import {canonicalConsumerJson,sensaPortableBookManifestSchema} from '@sensa/contracts/sensa';
@@ -351,6 +351,7 @@ test('a missing local identity opens recovery without an empty replacement, and 
  test.setTimeout(90_000);
  await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
  await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ await expect(page.locator('#s-home')).toBeVisible();
  const repository=new MemoryJourneyRepository();await createJourneyModules({repository}).semanticIntake.submit(semanticLookupPayload());
  // Synthetic accepted source setup, not a claim of manual/model authoring.
  expect(await page.evaluate(state=>window.__sensaBrowserSmoke!.seedSemanticWorld(state),await repository.load())).toBe(1);
@@ -392,10 +393,92 @@ test('a missing local identity opens recovery without an empty replacement, and 
  await page.locator('.sensa-world-row').first().click();await expect(page.getByText('Private source: May asked to borrow an umbrella.',{exact:true}).first()).toBeVisible();
 });
 
+const emptySignedInPreflightRetry=(failure:'http-error'|'network-error')=>async({page,context}:{page:Page;context:BrowserContext},testInfo:TestInfo)=>{
+ test.setTimeout(90_000);
+ await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.fallback():route.abort());
+ await page.addInitScript(({key,value})=>localStorage.setItem(key,JSON.stringify(value)),{key:storageKey,value:session()});
+ let fail=true,heads=0,writes=0;
+ context.on('request',request=>{if(/\/sensa\/library-sync\/(?:commit|blocks\/store)$/u.test(new URL(request.url()).pathname))writes++;});
+ await context.route(apiOrigin+'/sensa/library-sync/head',route=>{heads++;return fail?(failure==='network-error'?route.abort():route.fulfill({status:503,json:{code:'fixture_preflight_unavailable'}})):route.fulfill({json:{revision:0,manifest:null}});});
+ await page.goto(origin);await expect(page.locator('#s-home').getByRole('button',{name:'重试恢复',exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'暂无可开始的学习',exact:true})).toHaveCount(0);
+ await expect(page.locator('#s-home').getByText('正在加载 Sensa…',{exact:true})).toHaveCount(0);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);expect(writes).toBe(0);
+ for(const label of ['我的语义世界','我的学习','练习']){
+  await page.getByRole('button',{name:label,exact:true}).first().click();
+  await expect(page.getByRole('button',{name:'重试恢复',exact:true})).toBeVisible();
+  await expect(page.locator('.sensa-world-row')).toHaveCount(0);await expect(page.getByRole('button',{name:'开始聆听',exact:true})).toHaveCount(0);
+ }
+ const screenshot=testInfo.outputPath('unverified-account-data.png');await page.screenshot({path:screenshot});await testInfo.attach('unverified-account-data',{path:screenshot,contentType:'image/png'});
+ // Settings stays reachable. Merely viewing it cannot claim account restoration.
+ await page.locator('#s-academy').getByRole('button',{name:'账号与设置',exact:true}).click();await expect(page.locator('#s-profile')).toBeVisible();
+ await page.getByRole('button',{name:'今日',exact:true}).first().click();await expect(page.getByRole('button',{name:'重试恢复',exact:true})).toBeVisible();
+ fail=false;await page.getByRole('button',{name:'重试恢复',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'暂无可开始的学习',exact:true})).toBeVisible();
+ expect(heads).toBeGreaterThan(1);expect(writes).toBe(0);
+ await expect.poll(()=>page.evaluate(()=>window.__sensaBrowserSmoke!.syncStatus())).toBe('synced');
+};
+test('an empty signed-in device keeps account data unknown after http-error preflight and explicitly retries',emptySignedInPreflightRetry('http-error'));
+test('an empty signed-in device keeps account data unknown after network-error preflight and explicitly retries',emptySignedInPreflightRetry('network-error'));
+
+test('a saved normalized personal Meaning remains usable when optional account preflight fails',async({page,context})=>{
+ test.setTimeout(90_000);
+ await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.fallback():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ await expect(page.locator('#s-home')).toBeVisible();
+ const repository=new MemoryJourneyRepository();await createJourneyModules({repository}).semanticIntake.submit(semanticLookupPayload());
+ expect(await page.evaluate(state=>window.__sensaBrowserSmoke!.seedSemanticWorld(state),await repository.load())).toBe(1);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.localReplicaContentPresentForTest())).toBe(true);
+ const bootstrap=await page.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest());
+ expect(bootstrap.identity).not.toBeNull();
+ await context.route(apiOrigin+'/sensa/library-sync/head',route=>route.fulfill({status:503,json:{code:'fixture_preflight_unavailable'}}));
+ await page.evaluate(({key,value})=>localStorage.setItem(key,JSON.stringify(value)),{key:storageKey,value:session()});await page.reload();
+ await expect.poll(()=>page.evaluate(()=>!!window.__sensaBrowserSmoke)).toBe(true);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest())).toEqual(bootstrap);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.localReplicaContentPresentForTest())).toBe(true);
+ await expect(page.locator('#s-home')).toBeVisible();await expect(page.locator('#s-home').getByRole('button',{name:'重试恢复',exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'我的语义世界',exact:true}).first().click();await expect(page.locator('.sensa-world-row')).toHaveCount(1);
+ await page.locator('.sensa-world-row').first().click();await expect(page.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(1);
+});
+
+test('an annotation-only local library remains usable when optional account preflight fails',async({page,context})=>{
+ test.setTimeout(90_000);
+ await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.fallback():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();await expect(page.locator('#s-home')).toBeVisible();
+ const bookmark=await page.evaluate(()=>window.__sensaBrowserSmoke!.retainExampleForTest(true));
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);
+ await context.route(apiOrigin+'/sensa/library-sync/head',route=>route.fulfill({status:503,json:{code:'fixture_preflight_unavailable'}}));
+ await page.evaluate(({key,value})=>localStorage.setItem(key,JSON.stringify(value)),{key:storageKey,value:session()});await page.reload();
+ await expect(page.locator('#s-home')).toBeVisible();await expect(page.getByRole('button',{name:'重试恢复',exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'我的语义世界',exact:true}).first().click();await expect(page.getByRole('button',{name:'重试恢复',exact:true})).toHaveCount(0);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.retainedExampleIdsForTest())).toEqual([bookmark.exampleId]);
+});
+
+test('initial sync failure after admission actually reruns sync on the restoration retry',async({page,context})=>{
+ test.setTimeout(90_000);
+ await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.fallback():route.abort());
+ await page.addInitScript(({key,value})=>localStorage.setItem(key,JSON.stringify(value)),{key:storageKey,value:session()});
+ let failSync=true,heads=0;
+ await context.route(apiOrigin+'/sensa/library-sync/head',route=>{
+  heads++;
+  // Admission sees nonempty remote data, but the actual sync fails before fetching it.
+  // A later confirmed empty head exercises manual retry, not cloud payload restoration.
+  if(heads===1)return route.fulfill({json:{revision:1,manifest:['0'.repeat(64)]}});
+  return !failSync?route.fulfill({json:{revision:2,manifest:null}}):route.fulfill({json:{revision:'invalid controlled head',manifest:null}});
+ });
+ await page.goto(origin);await expect(page.getByRole('button',{name:'重试恢复',exact:true})).toBeVisible();
+ await expect.poll(()=>page.evaluate(()=>window.__sensaBrowserSmoke!.syncStatus())).toBe('failed');
+ const failedHeads=heads;failSync=false;await page.getByRole('button',{name:'重试恢复',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>window.__sensaBrowserSmoke!.syncStatus())).toBe('synced');
+ await expect(page.getByRole('heading',{name:'暂无可开始的学习',exact:true})).toBeVisible();expect(heads).toBeGreaterThan(failedHeads);
+});
+
 test('explicit fresh start uses a separate OPFS pool, fences old tabs, and preserves the old files and facts',async({page,context},testInfo)=>{
  test.setTimeout(90_000);
  await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
  await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ await expect(page.locator('#s-home')).toBeVisible();
  const repository=new MemoryJourneyRepository();await createJourneyModules({repository}).semanticIntake.submit(semanticLookupPayload());
  expect(await page.evaluate(state=>window.__sensaBrowserSmoke!.seedSemanticWorld(state),await repository.load())).toBe(1);
  const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest());
@@ -1430,6 +1513,7 @@ test('practice content selection and listening start stay bounded with 10000 per
  }};window.onYouglishAPIReady();
  `}));
  await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ await expect(page.locator('#s-home')).toBeVisible();
  expect(await page.evaluate(async()=>window.__sensaBrowserSmoke!.seedSemanticWorld(await(await fetch('/semantic-scale-fixture')).json()))).toBe(10_000);
  const runtime=await startOrdinaryBook(page,/只读查词样本/);await runtime.getByRole('button',{name:'暂停',exact:true}).click();
  const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest());
@@ -1490,6 +1574,7 @@ test('explicit personal scene acceptance and update stay bounded with 10000 unre
  semanticScaleFixture=syntheticSemanticWorld(await repository.load(),10_000);
  await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
  await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ await expect(page.locator('#s-home')).toBeVisible();
  expect(await page.evaluate(async()=>window.__sensaBrowserSmoke!.seedSemanticWorld(await(await fetch('/semantic-scale-fixture')).json()))).toBe(10_000);
  await page.goto(`${origin}/content`);
  await expect(page.locator('.sensa-world.active').last().locator('.sensa-world-row').first()).toBeVisible();

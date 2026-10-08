@@ -10,6 +10,7 @@ export type AccountAccess={
  connectionConflict:boolean;
  libraryAvailability:LibraryAvailability;
  login:()=>void;
+ retryConnection:()=>Promise<void>;
  logout:()=>Promise<void>;
 };
 
@@ -22,6 +23,7 @@ export const AccountContext=createContext<AccountAccess>({
  connectionConflict:false,
  libraryAvailability:'restoring',
  login:()=>{},
+ retryConnection:async()=>{},
  logout:async()=>{},
 });
 

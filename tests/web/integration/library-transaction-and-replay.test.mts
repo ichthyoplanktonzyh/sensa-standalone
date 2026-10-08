@@ -61,6 +61,7 @@ await store.restoreLibraryTransaction(async tx=>{
   tx.put('drafts','revision-probe',{text:'no payload required for invalidation'});
   await assert.rejects(tx.hasChangesSince(probeRevision,['drafts']),/library_changes_require_snapshot/u);
   await assert.rejects(tx.entryBatches('drafts').next(),/library_entries_require_snapshot/u);
+  await assert.rejects(tx.recordKeyBatches('drafts').next(),/library_entries_require_snapshot/u);
 });
 assert.equal(await store.readLibrary(tx=>tx.hasChangesSince(probeRevision,['drafts'])),true);
 assert.equal(await store.readLibrary(tx=>tx.hasChangesSince(probeRevision,['semanticMeanings'])),false);
@@ -269,6 +270,11 @@ assert.deepEqual(database.entriesPage('drafts',null,1),[database.entries('drafts
 assert.deepEqual(database.entriesPage('drafts','changed-b',1),[]);
 assert.throws(()=>database.entriesPage('drafts',null,0),/sqlite_invalid_page_size/u);
 assert.throws(()=>database.entriesPage('drafts',null,257),/sqlite_invalid_page_size/u);
+assert.deepEqual(database.recordKeysPage('drafts',null,1),['changed-b']);
+assert.deepEqual(database.recordKeysPage('drafts','changed-b',1),[]);
+assert.throws(()=>database.recordKeysPage('drafts',null,0),/sqlite_invalid_page_size/u);
+assert.throws(()=>database.recordKeysPage('drafts',null,257),/sqlite_invalid_page_size/u);
+assert((rawDatabase.exec({sql:'EXPLAIN QUERY PLAN SELECT record_key FROM sensa_records WHERE table_name=? AND record_key>? ORDER BY record_key LIMIT ?',bind:['drafts','',128],rowMode:'object',returnValue:'resultRows'}) as Array<{detail:string}>).some(row=>/COVERING INDEX/iu.test(row.detail)),'key-only presence must read the existing covering index, not large fact bodies');
 database.commit({
   clears: [],
   deletes: [],

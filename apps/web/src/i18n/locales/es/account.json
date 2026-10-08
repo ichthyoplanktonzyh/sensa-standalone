@@ -94,7 +94,7 @@
     "feedbackText": "Usa la opción de contacto de Acerca de y ayuda para enviar comentarios y correcciones de contenido.",
     "done": "Listo"
   },
-  "cloudSync": {
+  "cloudSync": {"restoreTitle": "Datos de la cuenta",
     "title": "Sincronización de la cuenta",
     "pending": "Hay cambios locales pendientes de sincronización",
     "syncing": "Sincronizando…",

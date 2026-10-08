@@ -25,7 +25,7 @@ const channelName = 'sensa-sqlite-coordinator-v1';
 const remoteTimeoutMs = 15_000;
 const leaderWaitMs = 10_000;
 const retryableOwnerReads=new Set<SqliteWorkerInput['kind']>([
-  'initialize','get','entries','entriesPage','changesSince','diagnostics',
+  'initialize','get','entries','entriesPage','recordKeysPage','changesSince','diagnostics',
   'meaningLookup','registrySelection','worldBrowse','worldSceneMeaning','worldLearningChoices','practiceExpressions',
   'existingRecordKeys','existingJourneyIdentities','packageCacheProjection',
   'learningSemanticMemory','hasChangesSince','syncBaseEntries','count','estimateRecordBytes',
@@ -43,6 +43,7 @@ export interface CoordinatedSqliteBackend {
   get(table: SqliteLibraryTable, key: string): Promise<string | null>;
   entries(table: SqliteLibraryTable): Promise<Array<{ key: string; encodedValue: string }>>;
   entriesPage(table:SqliteLibraryTable,afterKey:string|null,limit:number):Promise<Array<{key:string;encodedValue:string}>>;
+  recordKeysPage(table:SqliteLibraryTable,afterKey:string|null,limit:number):Promise<string[]>;
   lookupMeanings(query:string):Promise<import('./sqliteProtocol').MeaningLookupResult>;
   worldBrowse(query:import('./sqliteProtocol').WorldBrowseQuery):Promise<import('./sqliteProtocol').WorldBrowsePage>;
   worldSceneMeaning(sceneId:string):Promise<string|null>;
@@ -158,6 +159,9 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
   existingJourneyIdentities(ids:readonly string[]):Promise<string[]>{return this.call({kind:'existingJourneyIdentities',ids:[...ids]}) as Promise<string[]>;}
   entriesPage(table:SqliteLibraryTable,afterKey:string|null,limit:number):Promise<Array<{key:string;encodedValue:string}>>{
     return this.call({kind:'entriesPage',table,afterKey,limit}) as Promise<Array<{key:string;encodedValue:string}>>;
+  }
+  recordKeysPage(table:SqliteLibraryTable,afterKey:string|null,limit:number):Promise<string[]>{
+    return this.call({kind:'recordKeysPage',table,afterKey,limit}) as Promise<string[]>;
   }
 
   hasChangesSince(contentRevision:number,tables:readonly SqliteLibraryTable[]):Promise<boolean>{
@@ -584,6 +588,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       case 'get': return backend.get(input.table, input.key);
       case 'entries': return backend.entries(input.table);
       case 'entriesPage':return backend.entriesPage(input.table,input.afterKey,input.limit);
+      case 'recordKeysPage':return backend.recordKeysPage(input.table,input.afterKey,input.limit);
       case 'existingRecordKeys':return backend.existingRecordKeys(input.table,input.keys);
       case 'packageCacheProjection':return backend.packageCacheProjection(input.query);
       case 'meaningLookup':return backend.lookupMeanings(input.query);

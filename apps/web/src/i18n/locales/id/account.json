@@ -94,7 +94,7 @@
     "feedbackText": "Gunakan kontak di Tentang & dukungan untuk memberikan masukan dan koreksi konten.",
     "done": "Selesai"
   },
-  "cloudSync": {
+  "cloudSync": {"restoreTitle": "Data akun",
     "title": "Sinkronisasi akun",
     "pending": "Perubahan lokal menunggu untuk disinkronkan",
     "syncing": "Menyinkronkan…",

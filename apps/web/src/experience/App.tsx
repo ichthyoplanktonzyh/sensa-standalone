@@ -10,6 +10,8 @@ import type {ContentNoteItem,SavedExampleItem} from '../learnerSemanticProjectio
 import {useShellNavigation} from './router/useShellNavigation';
 import {screenInstanceKey} from './router/shellLocation';
 import {shellScreenHost,type AppShellScreenId} from './router/screenRegistry';
+import {useAccountExperience} from './account/AccountContext';
+import {LibraryRestorationScreen} from './account/LibraryRestorationScreen';
 import {useOverlayStore} from './stores/overlayStore';
 
 const HomeLearningController=lazy(()=>import('./library/HomeLearningController').then(module=>({default:module.HomeLearningController})));
@@ -37,7 +39,8 @@ type AppScreenId=AppShellScreenId|'s-home';
 
 export default function App(){
  const {t}=useTranslation();
- const {viewMode,mainStack,params,goMain,backMain,setMainStack}=useShellNavigation();
+ const account=useAccountExperience();
+ const {viewMode,mainStack,params,goMain,backMain,setMainStack,leaveRuntime}=useShellNavigation();
  const contentSection:ContentSectionId=isContentSectionId(params.section)?params.section:'recent';
  const contentComingKind:'scenes'|'collections'=params.coming==='collections'?'collections':'scenes';
  const personalMeaningId=params.meaningId??null;
@@ -90,6 +93,7 @@ export default function App(){
   's-content-coming':active=><ContentComingSoonScreen active={active} kind={contentComingKind} onBack={backMain}/>,
  };
  const renderScreen=(active:boolean)=>{
+  if(account.libraryAvailability!=='authoritative'&&!['s-profile','s-publisher'].includes(currentScreen))return <LibraryRestorationScreen id={currentScreen} active={active} failed={account.libraryAvailability==='failed'} onRetry={account.retryConnection} onSettings={()=>leaveRuntime('s-profile')}/>;
   if(learningWorkspaceActive)return <LearningWorkspace active={active}/>;
   if(practiceWorkspaceActive)return <PracticeWorkspace active={active}/>;
   return appScreenRenderers[currentScreen as AppScreenId]?.(active)??null;

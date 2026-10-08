@@ -367,6 +367,7 @@ const migratedSurfaces = [
   "apps/web/src/experience/ui/WebShell.tsx",
   "apps/web/src/experience/account/AccountExperience.tsx",
   "apps/web/src/experience/account/LocalLibraryRecovery.tsx",
+  "apps/web/src/experience/account/LibraryRestorationScreen.tsx",
   "apps/web/src/experience/components/HomeScreen.tsx",
   "apps/web/src/experience/components/ProfileScreen.tsx",
   "apps/web/src/experience/components/StudyScreen.tsx",

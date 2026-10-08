@@ -94,7 +94,7 @@
     "feedbackText": "製品へのフィードバックとコンテンツの訂正には、「概要とサポート」の連絡先を使用してください。",
     "done": "完了"
   },
-  "cloudSync": {
+  "cloudSync": {"restoreTitle": "アカウントのデータ",
     "title": "アカウント同期",
     "pending": "ローカルの変更が同期を待っています",
     "syncing": "同期中…",

@@ -321,6 +321,15 @@ export class SqliteRecordDatabase {
     return rows.map(row=>({key:String(row.record_key),encodedValue:this.logicalEncoded(table,String(row.value_json))}));
   }
 
+  /** Presence/ownership checks only need indexed keys, never decoded fact bodies. */
+  recordKeysPage(table:SqliteLibraryTable,afterKey:string|null,limit:number):string[]{
+    if(!Number.isSafeInteger(limit)||limit<1||limit>256)throw new Error('sqlite_invalid_page_size');
+    return this.database.exec({
+      sql:`SELECT record_key FROM sensa_records WHERE table_name=? ${afterKey===null?'':'AND record_key>?'} ORDER BY record_key LIMIT ?`,
+      bind:afterKey===null?[table,limit]:[table,afterKey,limit],rowMode:0,returnValue:'resultRows',
+    }) as string[];
+  }
+
   existingRecordKeys(table:SqliteLibraryTable,keys:readonly string[]):string[]{
     if(!keys.length)return [];
     return this.database.exec({
