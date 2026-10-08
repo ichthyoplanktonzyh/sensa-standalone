@@ -6,7 +6,7 @@ import {openLibrary,readLibrary,writeLibraryState,readLocalLibraryRevision,asser
 import {saveDraft,listDrafts} from '../../../apps/web/src/data/library/drafts';
 import {sqliteRecordAdapter} from '../../../apps/web/src/data/library/sqliteAdapter';
 import type {SyncRequest} from '../../../apps/web/src/data/library/cloudSync';
-import {librarySyncManifest} from '@sensa/contracts/sensa';
+import {librarySyncManifest,librarySyncBlockMissing,librarySyncBlockStore,librarySyncBlockFetch,librarySyncCommit} from '@sensa/contracts/sensa';
 import {decodeLibrarySyncBlock} from '@sensa/contracts/sensa/library-sync-blocks';
 import {decodeBackupValue} from '../../../apps/web/src/data/library/backupCodec';
 
@@ -14,18 +14,19 @@ Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined,lo
 Object.defineProperty(globalThis,'navigator',{value:{onLine:true},configurable:true});
 const database=await useNodeLearningCapacityStorage();afterAll(()=>database.close());
 const {synchronizeLibrary,readCloudSync}=await import('../../../apps/web/src/data/library/cloudSync');
+const {libraryReplicaValidationVersion}=await import('../../../apps/web/src/data/library/replication/libraryReplicaValidation');
 const blocks=new Map<string,string>(),receipts=new Map<string,{revision:number;manifest:string[]}>(),calls:string[]=[];
 let revision=0,manifest:string[]|null=null,hook:((path:string,body:any)=>Promise<void>)|undefined;
 const request:SyncRequest=async(path,body)=>{
  calls.push(path);await hook?.(path,body);
  if(path==='/head')return {revision,manifest};
- if(path==='/blocks/missing')return {missing:body.hashes.filter((hash:string)=>!blocks.has(hash))};
- if(path==='/blocks/store'){for(const row of body.blocks)blocks.set(row.hash,row.data);return {stored:true};}
- if(path==='/blocks/fetch')return {blocks:body.hashes.filter((hash:string)=>blocks.has(hash)).map((hash:string)=>({hash,data:blocks.get(hash)})),missing:body.hashes.filter((hash:string)=>!blocks.has(hash)),deferred:[]};
+ if(path==='/blocks/missing'){const input=librarySyncBlockMissing.parse(body);return {missing:input.hashes.filter(hash=>!blocks.has(hash))};}
+ if(path==='/blocks/store'){for(const row of librarySyncBlockStore.parse(body).blocks)blocks.set(row.hash,row.data);return {stored:true};}
+ if(path==='/blocks/fetch'){const input=librarySyncBlockFetch.parse(body);return {blocks:input.hashes.filter(hash=>blocks.has(hash)).map(hash=>({hash,data:blocks.get(hash)})),missing:input.hashes.filter(hash=>!blocks.has(hash)),deferred:[]};}
  if(path==='/commit'){
-  const previous=receipts.get(body.operationId);if(previous)return previous;
-  if(body.baseRevision!==revision)throw new Error('library_sync_conflict');
-  revision++;manifest=[...body.manifest];const receipt={revision,manifest:[...body.manifest]};receipts.set(body.operationId,receipt);return receipt;
+  const input=librarySyncCommit.parse(body),previous=receipts.get(input.operationId);if(previous)return previous;
+  if(input.baseRevision!==revision)throw new Error('library_sync_conflict');
+  revision++;manifest=[...input.manifest];const receipt={revision,manifest:[...input.manifest]};receipts.set(input.operationId,receipt);return receipt;
  }
  throw new Error('Unexpected fixture transport request');
 };
@@ -37,8 +38,8 @@ const published=()=>{
 test('a validated checkpoint checks only metadata when unchanged and publishes only changed fact bodies',async()=>{
  await openLibrary();const owner={subject:crypto.randomUUID(),accountId:crypto.randomUUID()};
  await writeLibraryState(async tx=>tx.put('meta','service-owner',owner));
- const drafts=[];for(let index=0;index<256;index++)drafts.push(await saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:`Private draft ${index}: `+'a'.repeat(8000)}));
- await synchronizeLibrary(request);expect((await readCloudSync())?.validationVersion).toBe(1);
+ const drafts:Awaited<ReturnType<typeof saveDraft>>[]=[];for(let index=0;index<256;index++)drafts.push(await saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:`Private draft ${index}: `+'a'.repeat(8000)}));
+ await synchronizeLibrary(request);expect((await readCloudSync())?.validationVersion).toBe(libraryReplicaValidationVersion);
  const adapter=await sqliteRecordAdapter(),base=adapter.syncBaseEntries.bind(adapter),commit=adapter.commit.bind(adapter);
  const read=vi.spyOn(adapter,'entries').mockImplementation(async()=>{throw new Error('incremental sync read a whole source table');});
  const baseline=vi.spyOn(adapter,'syncBaseEntries').mockImplementation(async keys=>{if(keys===undefined)throw new Error('incremental sync read all baseline bodies');return base(keys);});
@@ -97,7 +98,7 @@ test('an owner-approved removal patches one tombstone without removing unrelated
 test('a definite pre-commit history rejection releases its failed receipt without discarding local facts or the baseline',async()=>{
  const first=(await listDrafts())[0]!,before=revision,changed=await saveDraft(crypto.randomUUID(),{id:first.id,expectedRevision:first.revision,text:'Retained after a definitive rejection.'});
  const base=await readLibrary(tx=>tx.syncBaseEntries()),rejectedIds:string[]=[];
- const rejected:SyncRequest=async(path,body)=>{if(path==='/commit'){rejectedIds.push(body.operationId);throw new Error('library_sync_history');}return request(path,body);};
+ const rejected:SyncRequest=async(path,body)=>{if(path==='/commit'){rejectedIds.push(librarySyncCommit.parse(body).operationId);throw new Error('library_sync_history');}return request(path,body);};
  await expect(synchronizeLibrary(rejected)).rejects.toThrow('library_sync_history');
  expect(revision).toBe(before);expect((await readCloudSync())?.pending).toBeUndefined();expect((await readCloudSync())?.status).toBe('conflict');
  expect(await readLibrary(tx=>tx.syncBaseEntries())).toEqual(base);expect((await listDrafts()).find(row=>row.id===first.id)).toEqual(changed);
@@ -112,7 +113,7 @@ test('a malformed acknowledgement retains its operation for an idempotent confir
 });
 
 test('conflict markers and an unknown validation version cannot use an unchanged-head shortcut',async()=>{
- for(const patch of [{status:'conflict' as const},{conflict:{detectedAt:new Date().toISOString(),remoteRevision:revision,remoteManifest:manifest,records:[],affectedRecordIds:[]}},{resolution:{choice:'local' as const,expectedRemoteRevision:revision}},{validationVersion:undefined}]){
+ for(const patch of [{status:'conflict' as const},{conflict:{detectedAt:new Date().toISOString(),remoteRevision:revision,remoteManifest:manifest,records:[],affectedRecordIds:[]}},{resolution:{choice:'local' as const,expectedRemoteRevision:revision}},{validationVersion:undefined},{validationVersion:libraryReplicaValidationVersion-1}]){
   const state=await readCloudSync();await writeLibraryState(async tx=>tx.put('meta','cloud-sync',{...state,...patch}));
   calls.length=0;const adapter=await sqliteRecordAdapter(),reads=vi.spyOn(adapter,'syncBaseEntries');
   try{await synchronizeLibrary(request);expect(reads.mock.calls.some(([keys])=>keys===undefined)).toBe(true);}finally{reads.mockRestore();}

@@ -8,7 +8,7 @@ const invalid=():never=>{throw new Error('personal_meaning_lifecycle_invalid');}
 
 /** Admission proof for mutations/full replicas. Exact World reads can validate
  * the aggregate alone; they cannot authorize restoration or ingest new facts. */
-export function assertMeaningLifecycleReceipt(meaningId:string,stamp:SensaPersonalMeaningRevisionSnapshot,receipts:ReadonlyMap<string,CommandReceipt>):void{
+export function assertMeaningLifecycleReceipt(meaningId:string,stamp:SensaPersonalMeaningRevisionSnapshot,receipts:Pick<ReadonlyMap<string,CommandReceipt>,'get'>):void{
  const life=stamp.lifecycle;if(!life)return;
  const receipt=receipts.get(stamp.provenance.createdByOperationId),result=receipt?.result;
  if(receipt?.command!=='ChangeMeaningLifecycle'||!receipt.requestDigest

@@ -58,8 +58,19 @@ export function meaningCorrectionFacts(record:MeaningJourneyRecord){
  return facts;
 }
 /** Tie every structural replacement to its exact durable operation receipt. */
+export function assertMeaningCorrectionReceiptFacts(record:MeaningJourneyRecord,read:(operationId:string)=>CommandReceipt|undefined){
+ for(const fact of meaningCorrectionFacts(record)){
+  const receipt=read(fact.operationId);if(receipt?.command!=='CorrectPersonalMeaning'||digestOf(receipt.result)!==digestOf(fact.result))throw Error('meaning_correction_invalid');
+ }
+}
+/** Reverse witness check also rejects an orphan receipt in a streamed replica. */
+export function assertMeaningCorrectionOperationReceipt(record:MeaningJourneyRecord|undefined,receipt:CommandReceipt){
+ if(receipt.command!=='CorrectPersonalMeaning')return;
+ const fact=record&&meaningCorrectionFacts(record).find(fact=>fact.operationId===receipt.operationId);
+ if(!fact||receipt.result.personalMeaningId!==record!.personalMeaning.personalMeaningId||digestOf(receipt.result)!==digestOf(fact.result))throw Error('meaning_correction_invalid');
+}
 export function assertMeaningCorrectionReceipts(record:MeaningJourneyRecord,receipts:readonly CommandReceipt[]){
- const facts=meaningCorrectionFacts(record),byId=new Map(receipts.map(row=>[row.operationId,row]));
- for(const fact of facts){const receipt=byId.get(fact.operationId);if(receipt?.command!=='CorrectPersonalMeaning'||digestOf(receipt.result)!==digestOf(fact.result))throw Error('meaning_correction_invalid');}
- for(const receipt of receipts)if(receipt.command==='CorrectPersonalMeaning'&&receipt.result.personalMeaningId===record.personalMeaning.personalMeaningId&&!facts.some(fact=>fact.operationId===receipt.operationId))throw Error('meaning_correction_invalid');
+ const byId=new Map(receipts.map(row=>[row.operationId,row]));
+ assertMeaningCorrectionReceiptFacts(record,id=>byId.get(id));
+ for(const receipt of receipts)if(receipt.command==='CorrectPersonalMeaning'&&receipt.result.personalMeaningId===record.personalMeaning.personalMeaningId)assertMeaningCorrectionOperationReceipt(record,receipt);
 }

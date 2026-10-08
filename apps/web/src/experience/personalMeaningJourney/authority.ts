@@ -28,7 +28,7 @@ import {
 } from '@sensa/contracts/sensa';
 import {assertMeaningLifecycle,assertMeaningLifecycleReceipt,assertMeaningLifecycleOperationReceipt,validMeaningLifecycleDescendant} from './meaningLifecycle';
 import {assertAlignmentHistory} from './alignmentLifecycle';
-import {assertMeaningCorrectionReceipts,meaningCorrectionFacts} from './meaningCorrection';
+import {assertMeaningCorrectionReceipts,assertMeaningCorrectionReceiptFacts,assertMeaningCorrectionOperationReceipt,meaningCorrectionFacts} from './meaningCorrection';
 import type {z} from 'zod';
 import {runCooperatively,runSynchronously} from './cooperative';
 
@@ -37,6 +37,7 @@ import {
   type JourneyState,
   type MeaningJourneyRecord,
   type SenseRegistryState,
+  type CommandReceipt,
 } from './store';
 
 type Fact=Record<string,any>;
@@ -64,7 +65,8 @@ function unique<T>(items:readonly T[],id:(item:T)=>string,label:string,slot?:(it
 }
 
 function indexed<T>(items:readonly T[],id:(item:T)=>string){return new Map(items.map(item=>[id(item),item]));}
-function requireFact<T>(facts:Map<string,T>,id:string,label:string):T{return facts.get(id)??reject(`${label} 引用了不存在的事实。`);}
+type FactLookup<T>=Pick<ReadonlyMap<string,T>,'get'>;
+function requireFact<T>(facts:FactLookup<T>,id:string,label:string):T{return facts.get(id)??reject(`${label} 引用了不存在的事实。`);}
 
 function requireRevisionSeries<T extends Fact>(input:{
  facts:readonly T[];
@@ -81,12 +83,7 @@ function requireRevisionSeries<T extends Fact>(input:{
 }
 
 type RegistryIndex={
- senses:Map<string,SenseRegistryState['senses'][number]>;
- senseVersions:Map<string,SenseRegistryState['senseVersions'][number]>;
- expressions:Map<string,SenseRegistryState['expressions'][number]>;
- expressionVersions:Map<string,SenseRegistryState['expressionVersions'][number]>;
- bindings:Map<string,SenseRegistryState['bindings'][number]>;
- bindingVersions:Map<string,SenseRegistryState['bindingVersions'][number]>;
+ [Kind in keyof SenseRegistryState]:FactLookup<SenseRegistryState[Kind][number]>;
 };
 
 function indexRegistry(registry:SenseRegistryState):RegistryIndex{return {
@@ -98,8 +95,7 @@ function indexRegistry(registry:SenseRegistryState):RegistryIndex{return {
  bindingVersions:indexed(registry.bindingVersions,fact=>fact.bindingVersionId),
 };}
 
-function* validateRegistrySteps(registry:SenseRegistryState):Generator<void,RegistryIndex>{
- const specs=[
+const registrySpecs=[
   ['senses',sensaSenseSnapshotSchema,'senseId'],
   ['senseVersions',sensaSenseVersionSnapshotSchema,'senseVersionId'],
   ['expressions',sensaExpressionSnapshotSchema,'expressionId'],
@@ -107,37 +103,42 @@ function* validateRegistrySteps(registry:SenseRegistryState):Generator<void,Regi
   ['bindings',sensaSenseExpressionBindingSnapshotSchema,'senseExpressionBindingId'],
   ['bindingVersions',sensaSenseExpressionBindingVersionSnapshotSchema,'bindingVersionId'],
  ] as const;
- for(const [field,schema,id] of specs){for(const fact of registry[field]){parse(schema,fact,`Semantic Registry ${field}`);yield;}unique(registry[field] as Fact[],fact=>fact[id],`Semantic Registry ${field}`);yield;}
+
+/** Shared reference rules for in-memory snapshots and indexed restore readers. */
+function validateRegistryReference(kind:keyof SenseRegistryState,fact:Fact,registry:RegistryIndex):void{
+ switch(kind){
+  case 'senses':{
+   const version=requireFact(registry.senseVersions,fact.currentSenseVersionId,'Sense head');
+   requireInvariant(version.senseId===fact.senseId&&version.versionNumber===fact.currentVersionNumber,'Sense head 指针无效。');break;
+  }
+  case 'senseVersions':requireFact(registry.senses,fact.senseId,'Sense Version');break;
+  case 'expressions':{
+   const version=requireFact(registry.expressionVersions,fact.currentExpressionVersionId,'Expression head');
+   requireInvariant(version.expressionId===fact.expressionId&&version.versionNumber===fact.currentVersionNumber,'Expression head 指针无效。');break;
+  }
+  case 'expressionVersions':requireFact(registry.expressions,fact.expressionId,'Expression Version');break;
+  case 'bindings':{
+   requireFact(registry.senses,fact.senseId,'Binding');requireFact(registry.expressions,fact.expressionId,'Binding');
+   const version=requireFact(registry.bindingVersions,fact.currentBindingVersionId,'Binding head');
+   requireInvariant(version.senseExpressionBindingId===fact.senseExpressionBindingId&&version.versionNumber===fact.currentVersionNumber,'Binding head 指针无效。');break;
+  }
+  case 'bindingVersions':{
+   const binding=requireFact(registry.bindings,fact.senseExpressionBindingId,'Binding Version');
+   const senseVersion=requireFact(registry.senseVersions,fact.senseVersionId,'Binding Version');
+   const expressionVersion=requireFact(registry.expressionVersions,fact.expressionVersionId,'Binding Version');
+   requireInvariant(senseVersion.senseId===binding.senseId&&expressionVersion.expressionId===binding.expressionId,'Binding Version 跨越了错误的 Sense 或 Expression。');break;
+  }
+ }
+}
+
+function* validateRegistrySteps(registry:SenseRegistryState):Generator<void,RegistryIndex>{
+ for(const [field,schema,id] of registrySpecs){for(const fact of registry[field]){parse(schema,fact,`Semantic Registry ${field}`);yield;}unique(registry[field] as Fact[],fact=>fact[id],`Semantic Registry ${field}`);yield;}
  unique(registry.senseVersions,fact=>fact.senseVersionId,'Sense Version',fact=>`${fact.senseId}:${fact.versionNumber}`);
  unique(registry.expressionVersions,fact=>fact.expressionVersionId,'Expression Version',fact=>`${fact.expressionId}:${fact.versionNumber}`);
  unique(registry.bindingVersions,fact=>fact.bindingVersionId,'Binding Version',fact=>`${fact.senseExpressionBindingId}:${fact.versionNumber}`);
  unique(registry.senses,fact=>fact.senseId,'Sense key',fact=>fact.senseKey);
  const result=indexRegistry(registry);
- for(const sense of registry.senses){
-  const version=requireFact(result.senseVersions,sense.currentSenseVersionId,'Sense head');
-  requireInvariant(version.senseId===sense.senseId&&version.versionNumber===sense.currentVersionNumber,'Sense head 指针无效。');
-  yield;
- }
- for(const version of registry.senseVersions)requireFact(result.senses,version.senseId,'Sense Version');
- for(const expression of registry.expressions){
-  const version=requireFact(result.expressionVersions,expression.currentExpressionVersionId,'Expression head');
-  requireInvariant(version.expressionId===expression.expressionId&&version.versionNumber===expression.currentVersionNumber,'Expression head 指针无效。');
-  yield;
- }
- for(const version of registry.expressionVersions)requireFact(result.expressions,version.expressionId,'Expression Version');
- for(const binding of registry.bindings){
-  requireFact(result.senses,binding.senseId,'Binding');requireFact(result.expressions,binding.expressionId,'Binding');
-  const version=requireFact(result.bindingVersions,binding.currentBindingVersionId,'Binding head');
-  requireInvariant(version.senseExpressionBindingId===binding.senseExpressionBindingId&&version.versionNumber===binding.currentVersionNumber,'Binding head 指针无效。');
-  yield;
- }
- for(const version of registry.bindingVersions){
-  const binding=requireFact(result.bindings,version.senseExpressionBindingId,'Binding Version');
-  const senseVersion=requireFact(result.senseVersions,version.senseVersionId,'Binding Version');
-  const expressionVersion=requireFact(result.expressionVersions,version.expressionVersionId,'Binding Version');
-  requireInvariant(senseVersion.senseId===binding.senseId&&expressionVersion.expressionId===binding.expressionId,'Binding Version 跨越了错误的 Sense 或 Expression。');
-  yield;
- }
+ for(const [kind] of registrySpecs)for(const fact of registry[kind]){validateRegistryReference(kind,fact,result);yield;}
  return result;
 }
 const validateRegistry=(registry:SenseRegistryState):RegistryIndex=>runSynchronously(validateRegistrySteps(registry));
@@ -323,22 +324,24 @@ function validateMeaning(meaning:MeaningJourneyRecord,registry:RegistryIndex){
  requireInvariant(mock.startingPoint===undefined||mock.startingPoint===null||['from_experience','from_sense','from_expression'].includes(mock.startingPoint),'Meaning starting point 无效。');
 }
 
+function validateClarificationDraft(draft:JourneyState['clarificationDrafts'][number],hasInbox:(id:string)=>boolean){
+ requireInvariant(hasInbox(draft.intakeId),'Clarification Draft 缺少对应 Inbox Item。');
+ requireInvariant(draft.startingPoint===null||['from_experience','from_sense','from_expression'].includes(draft.startingPoint),'Clarification Draft starting point 无效。');
+}
+function validateReceipt(receipt:CommandReceipt){
+ requireInvariant(typeof receipt.operationId==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(receipt.operationId),'Command receipt operationId 无效。');
+ requireInvariant(typeof receipt.command==='string'&&receipt.command.trim().length>0,'Command receipt command 无效。');
+ requireInvariant(receipt.requestDigest===undefined||/^[0-9a-f]{64}$/u.test(receipt.requestDigest),'Command receipt digest 无效。');
+ const result=record(receipt.result);requireInvariant(result!==undefined&&Object.values(result).every(value=>value===null||['string','number','boolean'].includes(typeof value)),'Command receipt result 无效。');
+}
 function validateAuxiliaryState(state:JourneyState){
  for(const item of state.inboxItems)parse(sensaIntakeItemSchema,item,'Intake Item');
  unique(state.inboxItems,item=>item.intakeId,'Intake Item');
  unique(state.clarificationDrafts,draft=>draft.intakeId,'Clarification Draft');
  const inboxIds=new Set(state.inboxItems.map(item=>item.intakeId));
- for(const draft of state.clarificationDrafts){
-  requireInvariant(inboxIds.has(draft.intakeId),'Clarification Draft 缺少对应 Inbox Item。');
-  requireInvariant(draft.startingPoint===null||['from_experience','from_sense','from_expression'].includes(draft.startingPoint),'Clarification Draft starting point 无效。');
- }
+ for(const draft of state.clarificationDrafts)validateClarificationDraft(draft,id=>inboxIds.has(id));
  unique(state.commandReceipts,receipt=>receipt.operationId,'Command receipt');
- for(const receipt of state.commandReceipts){
-  requireInvariant(typeof receipt.operationId==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(receipt.operationId),'Command receipt operationId 无效。');
-  requireInvariant(typeof receipt.command==='string'&&receipt.command.trim().length>0,'Command receipt command 无效。');
-  requireInvariant(receipt.requestDigest===undefined||/^[0-9a-f]{64}$/u.test(receipt.requestDigest),'Command receipt digest 无效。');
-  const result=record(receipt.result);requireInvariant(result!==undefined&&Object.values(result).every(value=>value===null||['string','number','boolean'].includes(typeof value)),'Command receipt result 无效。');
- }
+ for(const receipt of state.commandReceipts)validateReceipt(receipt);
  const corrections=new Map<string,JourneyState['commandReceipts']>();
  for(const receipt of state.commandReceipts)if(receipt.command==='CorrectPersonalMeaning'){
   const id=String(receipt.result.personalMeaningId),group=corrections.get(id)??[];group.push(receipt);corrections.set(id,group);
@@ -360,6 +363,89 @@ function assertSceneOwner(meaning:MeaningJourneyRecord,owners:Map<string,string>
   requireInvariant(typeof sceneId==='string'&&sceneId.length>0,'Personal Learning Scene identity 缺失。');
   requireInvariant(!owners.has(sceneId)||owners.get(sceneId)===meaningId,'同一 Personal Learning Scene 不能属于多个 Personal Meanings。');
   owners.set(sceneId,meaningId);
+ }
+}
+
+export const semanticWorldRecordTables=['semanticState','semanticMeanings','semanticRegistry','semanticInbox','semanticDrafts','semanticReceipts'] as const;
+export type SemanticWorldRecordTable=typeof semanticWorldRecordTables[number];
+/** Complete, immutable validation snapshot. Iterate every stored row exactly
+ * once (including its key); get resolves the exact key in the same snapshot.
+ * Synchronous indexed access runs inside SQLite's Worker, not network I/O. */
+export interface SemanticWorldRecordReader{
+ get(table:SemanticWorldRecordTable,key:string):unknown|undefined;
+ entries(table:SemanticWorldRecordTable):Iterable<{key:string;value:unknown}>;
+}
+
+function* checkedWorldRecords(reader:SemanticWorldRecordReader,table:SemanticWorldRecordTable){
+ const keys=new Set<string>();
+ for(const row of reader.entries(table)){
+  requireInvariant(typeof row.key==='string'&&row.key.length>0&&!keys.has(row.key),`${table} storage key 重复或缺失。`);keys.add(row.key);
+  yield row;
+ }
+}
+
+/** Same domain rules as complete World validation, without constructing a
+ * JourneyState or retaining Meaning/Registry/Inbox/receipt bodies. Only compact
+ * uniqueness and scene-owner metadata survives each row. Restore also checks
+ * lifecycle and correction witnesses in both directions. */
+export function assertPersonalSemanticWorldRecords(reader:SemanticWorldRecordReader):void{
+ const root=record(reader.get('semanticState','root'));
+ if(!root){
+  for(const table of semanticWorldRecordTables){
+   const iterator=reader.entries(table)[Symbol.iterator]();
+   try{requireInvariant(iterator.next().done,'Personal Semantic World 缺少版本记录。');}finally{iterator.return?.();}
+  }
+  return;
+ }
+ requireInvariant(root.version===JOURNEY_STORE_VERSION,'Personal Semantic World store version 不匹配。');
+ for(const _row of checkedWorldRecords(reader,'semanticState')){ /* validate all stored keys, not just root */ }
+ // One aggregate may reference the same immutable version several times.
+ // Reuse those point reads only within this row, never across a World refresh.
+ const references=new Map<string,Fact|undefined>();
+ const registry=Object.fromEntries(registrySpecs.map(([kind])=>[kind,{get:(id:string)=>{
+  const key=`${kind}:${id}`;if(references.has(key))return references.get(key);
+  const row=record(reader.get('semanticRegistry',key)),fact=row?.kind===kind?record(row.value):undefined;
+  references.set(key,fact);return fact;
+ }}])) as RegistryIndex;
+ const ids=new Set<string>(),slots=new Set<string>(),senseKeys=new Set<string>();
+ for(const {key,value} of checkedWorldRecords(reader,'semanticRegistry')){
+  references.clear();
+  const row=record(value),spec=registrySpecs.find(([kind])=>kind===row?.kind);
+  requireInvariant(row&&spec,'Semantic Registry row kind 无效。');
+  const [kind,schema,idField]=spec,fact=record(row.value);parse(schema,fact,`Semantic Registry ${kind}`);
+  const id=fact![idField],identity=`${kind}:${id}`;
+  requireInvariant(key===identity&&!ids.has(identity),'Semantic Registry identity 与 storage key 不一致。');ids.add(identity);
+  requireInvariant(Number.isSafeInteger(row.ordinal)&&row.ordinal>=0,'Semantic Registry ordinal 无效。');
+  if(kind==='senses'){requireInvariant(!senseKeys.has(fact!.senseKey),'Sense key 重复。');senseKeys.add(fact!.senseKey);}
+  const parent=kind==='senseVersions'?'senseId':kind==='expressionVersions'?'expressionId':kind==='bindingVersions'?'senseExpressionBindingId':null;
+  if(parent){const slot=JSON.stringify([kind,fact![parent],fact!.versionNumber]);requireInvariant(!slots.has(slot),'Semantic Registry version 槽重复。');slots.add(slot);}
+  validateRegistryReference(kind,fact!,registry);
+ }
+ const owners=new Map<string,string>(),readReceipt=(id:string)=>reader.get('semanticReceipts',id) as CommandReceipt|undefined;
+ for(const {key,value} of checkedWorldRecords(reader,'semanticMeanings')){
+  references.clear();
+  const meaning=value as MeaningJourneyRecord;validateMeaning(meaning,registry);
+  requireInvariant(key===meaning.personalMeaning.personalMeaningId,'Personal Meaning identity 与 storage key 不一致。');assertSceneOwner(meaning,owners);
+  for(const stamp of meaning.personalMeaningRevisions)assertMeaningLifecycleReceipt(key,stamp,{get:readReceipt});
+  assertMeaningCorrectionReceiptFacts(meaning,readReceipt);
+ }
+ references.clear();
+ for(const {key,value} of checkedWorldRecords(reader,'semanticInbox')){
+  const item=value as JourneyState['inboxItems'][number];parse(sensaIntakeItemSchema,item,'Intake Item');
+  requireInvariant(key===item.intakeId,'Inbox identity 与 storage key 不一致。');
+ }
+ for(const {key,value} of checkedWorldRecords(reader,'semanticDrafts')){
+  const draft=value as JourneyState['clarificationDrafts'][number];
+  requireInvariant(key===draft?.intakeId,'Clarification Draft identity 与 storage key 不一致。');
+  validateClarificationDraft(draft,id=>reader.get('semanticInbox',id)!==undefined);
+ }
+ for(const {key,value} of checkedWorldRecords(reader,'semanticReceipts')){
+  const receipt=value as CommandReceipt;validateReceipt(receipt);
+  requireInvariant(key===receipt.operationId,'Command receipt identity 与 storage key 不一致。');
+  if(['ChangeMeaningLifecycle','CorrectPersonalMeaning'].includes(receipt.command)){
+   const id=receipt.result.personalMeaningId,meaning=typeof id==='string'?reader.get('semanticMeanings',id) as MeaningJourneyRecord|undefined:undefined;
+   assertMeaningLifecycleOperationReceipt(meaning,receipt);assertMeaningCorrectionOperationReceipt(meaning,receipt);
+  }
  }
 }
 

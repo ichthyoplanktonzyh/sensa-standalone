@@ -312,6 +312,18 @@ Personal Anchor media 与 Practice Artifact 仍按各自 learner-owned 表进入
 `validationVersion` 是设备内完整性合同版本，不是 wire version；该版本缺失/过期、首次发布、远端 head 变化、
 pending commit 恢复或冲突均保留完整 capture／merge／领域验证。验证合同变更时须更新其版本；泛型 store 写口
 是内部接口，生产事实仍必须经各 owner 准入或已完整校验的恢复入口，不把同步当作语义/学习事实创建者。
+PSW 完整副本验证复用 `SemanticWorldRecordReader` 的逐行规则与精确键查询，不再为校验重建完整 JourneyState；
+Registry head/parent、Meaning 内部历史、全局 scene owner，以及 lifecycle/correction 的正反向凭据检查均保留。
+非空 PSW 缺失 root 必须拒绝，不能当成空世界；校验合同版本已相应推进，旧设备 stamp 要重新完整验证。
+当前云端调用方仍构造完整 BackupRows；SQLite/Wasm 候选 reader 的分页验证不等于生产恢复已流式化，
+也不证明 Learning history、下载、合并或整个进程的内存上界。Registry 引用只在当前记录内复用，不建长期缓存。
+`node --import tsx scripts/benchmarkSemanticReplicaValidation.mts` 在 Node 的 SQLite/Wasm 候选库上度量完整 PSW
+规则校验；准备数据不计入耗时，采样的 V8 heap 不包括 SQLite/Wasm 内存。加 `--storage-profile` 可只重现逻辑
+正文的体积分解，分别输出普通 JSON、tagged 编码、表／Registry 类型，以及字符串字段的 UTF-8 字节计数。
+该合成集为每个 Meaning 创建六条独有 Registry 初版，不含媒体、学习历史或意义纠正；它不是实际用户均值。
+字段名、UUID、时间和合同版本是正文内的重叠计数，不可再加到编码总量上；逻辑正文也不是 SQLite 文件、
+压缩传输或运行时内存大小。存储设计须区分真实 Context／接受事实／不可变历史、可重建投影与序列化元数据，
+不能用增加容量、删除来源或丢弃旧学习引用替代这一审查。
 v6 发布仍组装整份 key/block-ref manifest 元数据；它不再解码所有未变正文，但不能宣称整条路径严格 O(变化数)。
 完整恢复／收敛在同一 SQLite commit 应用已校验候选、对应基线和同步状态；基线或事实写入失败都回滚身份、
 资料及建库回执，不留下半恢复。应用前以捕获的本机 revision、identity、owner/incarnation 重查，提交后在写锁内

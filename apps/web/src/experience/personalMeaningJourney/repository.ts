@@ -12,7 +12,7 @@ import {
   type LibraryTransaction,
 } from '../../data/library/store';
 import {parseStoredMedia,type StoredMedia} from '../../data/library/media';
-import {assertPersonalSemanticWorldState,assertPersonalSemanticWorldStateCooperatively,assertPersonalSemanticWorldTransition} from './authority';
+import {assertPersonalSemanticWorldState,assertPersonalSemanticWorldStateCooperatively,assertPersonalSemanticWorldTransition,semanticWorldRecordTables} from './authority';
 import {assertMeaningLifecycleReceipts,assertMeaningLifecycleOperationReceipt} from './meaningLifecycle';
 import {assertMeaningCorrectionReceipts} from './meaningCorrection';
 import {StorageUnavailableError} from './ports';
@@ -33,14 +33,7 @@ import {
   type SenseRegistryState,
 } from './store';
 
-export const semanticJourneyTables = [
-  'semanticState',
-  'semanticMeanings',
-  'semanticRegistry',
-  'semanticInbox',
-  'semanticDrafts',
-  'semanticReceipts',
-] as const satisfies readonly Table[];
+export const semanticJourneyTables=semanticWorldRecordTables satisfies readonly Table[];
 type SemanticTable=(typeof semanticJourneyTables)[number];
 type Records=Record<SemanticTable,Map<string,unknown>>;
 type SemanticRecordChange={

@@ -7,6 +7,7 @@ import {openLibrary,readLibrary,writeLibraryState,readLocalLibraryRevision,type 
 import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec';
 import {saveDraft} from '../../../apps/web/src/data/library/drafts';
 import {sqliteRecordAdapter} from '../../../apps/web/src/data/library/sqliteAdapter';
+import {librarySyncBlockFetch} from '@sensa/contracts/sensa';
 import type {SyncRequest} from '../../../apps/web/src/data/library/cloudSync';
 
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined,location:new URL('http://restore-atomicity.fixture.invalid/')});
@@ -34,11 +35,12 @@ const request:SyncRequest=async(path,body)=>{
  if(path==='/head')return {revision,manifest};
  if(path==='/blocks/fetch'){
   await onFetch?.();
-  return {blocks:body.hashes.filter((id:string)=>blocks.has(id)).map((hash:string)=>({hash,data:blocks.get(hash)!})),missing:body.hashes.filter((id:string)=>!blocks.has(id)),deferred:[]};
+  const input=librarySyncBlockFetch.parse(body);
+  return {blocks:input.hashes.filter(id=>blocks.has(id)).map(hash=>({hash,data:blocks.get(hash)!})),missing:input.hashes.filter(id=>!blocks.has(id)),deferred:[]};
  }
  throw new Error(`unexpected_restore_request:${path}`);
 };
-const facts=()=>readLibrary(async tx=>({identity:await tx.get('meta','identity'),creation:await tx.get('operations','00000000-0000-4000-8000-000000000001'),drafts:await tx.entries('drafts'),base:await tx.syncBaseEntries(),localRevision:await readLocalLibraryRevision(tx)}));
+const facts=()=>readLibrary(async tx=>({identity:await tx.get('meta','identity'),creation:await tx.get<{result:LibraryIdentity}>('operations','00000000-0000-4000-8000-000000000001'),drafts:await tx.entries('drafts'),base:await tx.syncBaseEntries(),localRevision:await readLocalLibraryRevision(tx)}));
 
 test('a failed baseline write cannot partially restore cloud identity or learner facts',async()=>{
  publish([first]);const before=await facts();

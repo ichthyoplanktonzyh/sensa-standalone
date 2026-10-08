@@ -1,12 +1,13 @@
 import {semanticProposalSchema} from '@sensa/contracts/sensa';
 import {z} from 'zod';
 
-import {journeyStateFromRows,semanticJourneyTables} from '../../../experience/personalMeaningJourney/repository';
+import {assertPersonalSemanticWorldRecords} from '../../../experience/personalMeaningJourney/authority';
 import {backupEqual} from '../backupCodec';
 import type {BackupRows} from '../backupValidation';
 import {conversationImagesSchema} from '../conversationImages';
 import {parseStoredMedia} from '../media';
 import {alignmentStatusAt} from '../../../experience/personalMeaningJourney/alignmentLifecycle';
+import type {MeaningJourneyRecord} from '../../../experience/personalMeaningJourney/store';
 import type {Table} from '../store';
 
 type RequireRow=(table:Table,id:string)=>any;
@@ -19,41 +20,25 @@ export function validatePersonalSemanticWorldReplica(input:{
  fail:()=>never;
 }){
  const {rows,maps,requireRow,fail}=input,uuid=z.string().uuid(),timestamp=z.string().datetime({offset:true});
- let semanticWorld:ReturnType<typeof journeyStateFromRows>|null=null;
- if(maps.semanticState.has('root'))try{
-  semanticWorld=journeyStateFromRows(Object.fromEntries(semanticJourneyTables.map(table=>[table,rows[table]])) as Parameters<typeof journeyStateFromRows>[0]);
- }catch{fail();}
+ try{assertPersonalSemanticWorldRecords({get:(table,key)=>maps[table].get(key),entries:table=>rows[table]});}catch{fail();}
  for(const {key,value} of rows.media){const media=parseStoredMedia(value);if(media.mediaId!==key)fail();uuid.parse(key);}
- if(semanticWorld){
-  for(const {key,value:meaning} of rows.semanticMeanings){
-   if(meaning.personalMeaning.personalMeaningId!==key)fail();
-  }
-  for(const {key,value:row} of rows.semanticRegistry){
-   const ids={senses:'senseId',senseVersions:'senseVersionId',expressions:'expressionId',expressionVersions:'expressionVersionId',bindings:'senseExpressionBindingId',bindingVersions:'bindingVersionId'} as const;
-   const idField=ids[row.kind as keyof typeof ids],id=key.slice(key.indexOf(':')+1);
-   if(!idField||!Number.isSafeInteger(row.ordinal)||row.ordinal<0||!key.startsWith(`${row.kind}:`)||row.value[idField]!==id)fail();
-  }
-  for(const {key,value:item} of rows.semanticInbox)if(item.intakeId!==key)fail();
-  for(const {key,value:draft} of rows.semanticDrafts)if(draft.intakeId!==key)fail();
-  for(const {key,value:receipt} of rows.semanticReceipts)if(receipt.operationId!==key)fail();
-  for(const meaning of semanticWorld.meanings)for(const revision of meaning.personalSemanticAnchorRevisions)if(revision.personalMediaObjectId&&!maps.media.has(revision.personalMediaObjectId))fail();
-  for(const item of semanticWorld.inboxItems)for(const mediaId of item.payload.context?.mediaReferenceIds??[])if(!maps.media.has(mediaId))fail();
- }
+ for(const {value:meaning} of rows.semanticMeanings)for(const revision of meaning.personalSemanticAnchorRevisions)if(revision.personalMediaObjectId&&!maps.media.has(revision.personalMediaObjectId))fail();
+ for(const {value:item} of rows.semanticInbox)for(const mediaId of item.payload.context?.mediaReferenceIds??[])if(!maps.media.has(mediaId))fail();
  const requirePersonalSource=(source:any)=>{
-  const semantic=semanticWorld??fail();if(semantic.version!=='sensa-personal-meaning-journey-store-v5')fail();
+  if(!maps.semanticState.has('root'))fail();
   for(const field of ['personalMeaningId','personalMeaningRevisionId','personalMeaningAlignmentId','alignmentBasisReferenceId','senseId','senseVersionId','bindingId','bindingVersionId'])uuid.parse(source[field]);
   z.number().int().positive().parse(source.alignmentRevision);if(source.meaningFocusId!==null)uuid.parse(source.meaningFocusId);
   // A durable learning source pins historical facts, not today's World view.
   // Tombstoning the personal origin must not invalidate already accepted learning.
-  const record=semantic.meanings?.find((candidate:any)=>candidate.personalMeaning?.personalMeaningId===source.personalMeaningId)??fail();
+  const record=(maps.semanticMeanings.get(source.personalMeaningId) as MeaningJourneyRecord|undefined)??fail();
   if(!record.personalMeaningRevisions.some((candidate:any)=>candidate.personalMeaningRevisionId===source.personalMeaningRevisionId))fail();
   const alignment=record.alignments.find((candidate:any)=>candidate.personalMeaningAlignmentId===source.personalMeaningAlignmentId)??fail();
   if(alignment.personalMeaningRevisionId!==source.personalMeaningRevisionId||alignment.revision!==source.alignmentRevision||alignment.senseId!==source.senseId||alignment.senseVersionId!==source.senseVersionId)fail();
   if(alignmentStatusAt(record.alignmentEvents,alignment.personalMeaningAlignmentId,source.alignmentRevision)!=='active')fail();
   const basisReferenceId=alignment.basis.kind==='contextual_resolution'?alignment.basis.semanticAcceptanceId:alignment.basis.senseProposalConfirmationId;
   if(basisReferenceId!==source.alignmentBasisReferenceId||(alignment.basis.kind==='sense_construction'?alignment.basis.meaningFocusId:null)!==source.meaningFocusId)fail();
-  const bindingVersion=semantic.registry?.bindingVersions?.find((candidate:any)=>candidate.bindingVersionId===source.bindingVersionId)??fail();
-  const binding=semantic.registry?.bindings?.find((candidate:any)=>candidate.senseExpressionBindingId===source.bindingId)??fail();
+  const bindingVersion=maps.semanticRegistry.get(`bindingVersions:${source.bindingVersionId}`)?.value??fail();
+  const binding=maps.semanticRegistry.get(`bindings:${source.bindingId}`)?.value??fail();
   if(binding.senseId!==source.senseId||bindingVersion.senseExpressionBindingId!==source.bindingId||bindingVersion.senseVersionId!==source.senseVersionId)fail();
   const basis=alignment.basis;
   const proposalVersionId=basis.kind==='sense_construction'
