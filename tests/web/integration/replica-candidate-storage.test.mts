@@ -13,6 +13,8 @@ import {createJourneyModules} from '../../../apps/web/src/experience/personalMea
 import {createSeededClock} from '../../../apps/web/src/experience/personalMeaningJourney/ports';
 import {semanticLookupPayload,syntheticSemanticWorld} from '../support/semanticLookupFixtures';
 import {semanticRecords} from '../support/semanticWorldRecordFixture.mts';
+import {candidateExpected,candidateBlocksFor} from '../support/replicaCandidateFixture.mts';
+import {verifyReplicaCandidateManifest} from '../../../apps/web/src/data/library/replicaCandidateProof';
 
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined,location:new URL('http://candidate-storage.fixture.invalid/')});
 const database=await useNodeLearningCapacityStorage();afterAll(()=>database.close());
@@ -28,10 +30,10 @@ const rows=(count=1):ReplicaCandidateRecord[]=>[
 const fence=()=>readLibrary(async tx=>({owner,identity,incarnation:await assertCurrentLibrary(tx),localRevision:await readLocalLibraryRevision(tx)} satisfies ReplicaCandidateFence));
 const original=()=>readLibrary(async tx=>({identity:await tx.get('meta','identity'),meanings:await tx.entries('semanticMeanings'),drafts:await tx.entries('drafts'),base:await tx.syncBaseEntries(),revision:await readLocalLibraryRevision(tx)}));
 const begin=async(records:ReplicaCandidateRecord[])=>{
- const result=await database.replicaCandidate({kind:'begin',fence:await fence(),expected:{libraryId:identity.id,learnerId:identity.learnerId,records:records.length,head:{revision:3,manifest:['b'.repeat(64)]}}});
+ const result=await database.replicaCandidate({kind:'begin',fence:await fence(),expected:candidateExpected(records,identity)});
  if(result.kind!=='begun')throw Error('Expected candidate');return result.id;
 };
-const append=(id:string,records:ReplicaCandidateRecord[])=>database.replicaCandidate({kind:'append',id,records});
+const append=(id:string,records:ReplicaCandidateRecord[])=>database.replicaCandidate({kind:'append',id,records,blocks:candidateBlocksFor(records)});
 const validate=(id:string)=>database.replicaCandidate({kind:'validate',id});
 const discard=(id:string)=>database.replicaCandidate({kind:'discard',id});
 
@@ -95,7 +97,7 @@ test('lost begin ACK reuses one generation; a different completed request replac
   expect(await begin(records)).toBe(id);await append(id,records);
   expect(await begin(records)).toBe(id);const result=await validate(id);expect(result.kind).toBe('validated');
   expect(await begin(records)).toBe(id);
-  const replacement=await database.replicaCandidate({kind:'begin',fence:await fence(),expected:{libraryId:identity.id,learnerId:identity.learnerId,records:records.length,head:{revision:4,manifest:['c'.repeat(64)]}}});
+  const replacement=await database.replicaCandidate({kind:'begin',fence:await fence(),expected:candidateExpected(records,identity,4)});
   if(replacement.kind!=='begun')throw Error('Expected candidate');expect(replacement.id).not.toBe(id);
   await expect(validate(id)).rejects.toThrow('library_sync_candidate_invalid');await discard(replacement.id);
  }finally{await discard(id);}
@@ -118,9 +120,9 @@ function isolatedDatabase(){
  database.commit({clears:[],deletes:[],puts:[{table:'meta',key:'identity',encodedValue:JSON.stringify(encodeBackupValue(identity))},{table:'meta',key:'service-owner',encodedValue:JSON.stringify(encodeBackupValue(owner))},{table:'meta',key:'sentinel',encodedValue:JSON.stringify(encodeBackupValue('Existing owner data'))}]});
  const request=database.replicaCandidate.bind(database);
  const stage=async(count=128)=>{
-  const records=rows(count),result=await request({kind:'begin',fence:{owner,identity,localRevision:0,incarnation:'initial'},expected:{libraryId:identity.id,learnerId:identity.learnerId,records:records.length,head:{revision:3,manifest:['b'.repeat(64)]}}});
+  const records=rows(count),result=await request({kind:'begin',fence:{owner,identity,localRevision:0,incarnation:'initial'},expected:candidateExpected(records,identity)});
   if(result.kind!=='begun')throw Error('Expected candidate');
-  for(let at=0;at<records.length;at+=128)await request({kind:'append',id:result.id,records:records.slice(at,at+128)});
+  for(let at=0;at<records.length;at+=128){const page=records.slice(at,at+128);await request({kind:'append',id:result.id,records:page,blocks:candidateBlocksFor(page)});}
   return result.id;
  };
  const storedCount=()=>Number((raw.exec({sql:'SELECT count(*) FROM sensa_replica_candidate_records_v1',rowMode:0,returnValue:'resultRows'}) as number[])[0]);
@@ -182,8 +184,8 @@ test('an invalid complete candidate removes its private bodies without touching 
  const fixture=isolatedDatabase();
  try{
   const records=rows().filter(row=>row.table!=='semanticState');
-  const result=await fixture.request({kind:'begin',fence:{owner,identity,localRevision:0,incarnation:'initial'},expected:{libraryId:identity.id,learnerId:identity.learnerId,records:records.length,head:{revision:3,manifest:['b'.repeat(64)]}}});
-  if(result.kind!=='begun')throw Error('Expected candidate');await fixture.request({kind:'append',id:result.id,records});
+  const result=await fixture.request({kind:'begin',fence:{owner,identity,localRevision:0,incarnation:'initial'},expected:candidateExpected(records,identity)});
+  if(result.kind!=='begun')throw Error('Expected candidate');await fixture.request({kind:'append',id:result.id,records,blocks:candidateBlocksFor(records)});
   expect(fixture.storedCount()).toBeGreaterThan(0);await expect(fixture.request({kind:'validate',id:result.id})).rejects.toThrow();
   expect(fixture.storedCount()).toBe(0);expect(fixture.database.get('meta','sentinel')).toBe(JSON.stringify(encodeBackupValue('Existing owner data')));
  }finally{fixture.database.close(false);}
@@ -192,9 +194,9 @@ test('an invalid complete candidate removes its private bodies without touching 
 test('a nonfatal cleanup failure is explicit and begin retries a new generation rather than a stuck seal',async()=>{
  const fixture=isolatedDatabase();
  try{
-  const records=rows().filter(row=>row.table!=='semanticState'),fence={owner,identity,localRevision:0,incarnation:'initial'},expected={libraryId:identity.id,learnerId:identity.learnerId,records:records.length,head:{revision:3,manifest:['b'.repeat(64)]}};
+  const records=rows().filter(row=>row.table!=='semanticState'),fence={owner,identity,localRevision:0,incarnation:'initial'},expected=candidateExpected(records,identity);
   const begun=await fixture.request({kind:'begin',fence,expected});if(begun.kind!=='begun')throw Error('Expected candidate');
-  await fixture.request({kind:'append',id:begun.id,records});
+  await fixture.request({kind:'append',id:begun.id,records,blocks:candidateBlocksFor(records)});
   const originalExec=fixture.raw.exec,exec=vi.spyOn(fixture.raw,'exec').mockImplementation(function(...args:Parameters<typeof originalExec>){
    const input:unknown=args[0],sql=typeof input==='string'?input:(input as {sql?:string})?.sql;
    if(sql?.includes("DELETE FROM sensa_replica_candidates_v1 WHERE id=? AND state='sealed'"))throw Object.assign(Error('fixture cleanup SQLITE_FULL'),{resultCode:13});
@@ -206,4 +208,76 @@ test('a nonfatal cleanup failure is explicit and begin retries a new generation 
   expect(replacement.id).not.toBe(begun.id);expect(fixture.storedCount()).toBe(0);
   expect(fixture.database.get('meta','sentinel')).toBe(JSON.stringify(encodeBackupValue('Existing owner data')));
  }finally{fixture.database.close(false);}
+});
+
+for(const fault of ['wrong-manifest-hash','missing-manifest-part','extra-manifest-part'] as const)test(`candidate begin binds the observed manifest: ${fault}`,async()=>{
+ const records=rows(),expected=candidateExpected(records,identity),before=await original();
+ if(fault==='wrong-manifest-hash')expected.manifestBlocks[0]!.data+=' ';
+ if(fault==='missing-manifest-part')expected.manifestBlocks=[];
+ if(fault==='extra-manifest-part')expected.manifestBlocks.push({hash:'f'.repeat(64),data:'unrequested data'});
+ await expect(database.replicaCandidate({kind:'begin',fence:await fence(),expected})).rejects.toThrow();expect(await original()).toEqual(before);
+});
+
+for(const fault of ['wrong-block-hash','wrong-row-ref','valid-different-row-body','extra-row','missing-proof'] as const)test(`candidate rows cannot bypass manifest and body binding: ${fault}`,async()=>{
+ const records=rows(),id=await begin(records),before=await original();
+ try{
+  const row={...records[0]!,blockRefs:[...records[0]!.blockRefs]},blocks=candidateBlocksFor([records[0]!]);
+  if(fault==='wrong-block-hash')blocks[0]!.data+=' ';
+  if(fault==='wrong-row-ref')row.blockRefs=['f'.repeat(64)];
+  if(fault==='valid-different-row-body')row.valueJson=JSON.stringify(encodeBackupValue({...identity,createdAt:'2026-10-01T00:00:00.000Z'}));
+  if(fault==='extra-row'){row.table='settings';row.key='not-in-the-observed-manifest';}
+  if(fault==='missing-proof')blocks.length=0;
+  await expect(database.replicaCandidate({kind:'append',id,records:[row],blocks})).rejects.toThrow();
+  // A refused row and its newly proved blocks roll back together. The exact
+  // original wire can still fill and validate the entire observed checkpoint.
+  await append(id,records);const validated=await validate(id);expect(validated.kind).toBe('validated');expect(await original()).toEqual(before);
+ }finally{await discard(id);}
+});
+
+test('exact row retries reuse proved fragments and the receipt identifies the observed head',async()=>{
+ const records=rows(),expected=candidateExpected(records,identity),result=await database.replicaCandidate({kind:'begin',fence:await fence(),expected});
+ if(result.kind!=='begun')throw Error('Expected candidate');
+ try{
+  await append(result.id,records);await database.replicaCandidate({kind:'append',id:result.id,records,blocks:[]});
+  const receipt=await validate(result.id);if(receipt.kind!=='validated')throw Error('Expected validation');
+  expect(receipt.candidate.records).toBe(records.length);expect(receipt.candidate.head).toEqual(expected.head);
+ }finally{await discard(result.id);}
+});
+
+test('changing storage telemetry under the same head does not replace a partially filled generation',async()=>{
+ const records=rows(),id=await begin(records);
+ try{
+  await append(id,records.slice(0,1));const expected=candidateExpected(records,identity);
+  expected.head.storage={usedBytes:1024,capacityBytes:256*1024*1024};
+  expect(await database.replicaCandidate({kind:'begin',fence:await fence(),expected})).toEqual({kind:'begun',id});
+  await append(id,records.slice(1));expect((await validate(id)).kind).toBe('validated');
+ }finally{await discard(id);}
+});
+
+test('proof input cannot inflate beyond its bounded row batch or pre-prove unrelated rows',async()=>{
+ const large:ReplicaCandidateRecord={table:'settings',key:'opaque-compressed-fixture',valueJson:JSON.stringify(encodeBackupValue('x'.repeat(250000))),blockRefs:[]};
+ const records=[...rows(),large],id=await begin(records);
+ try{
+  await expect(database.replicaCandidate({kind:'append',id,records:[records[0]!],blocks:candidateBlocksFor(records)})).rejects.toThrow('library_sync_candidate_invalid');
+  await expect(database.replicaCandidate({kind:'append',id,records:[{...large,valueJson:'["null"]'}],blocks:candidateBlocksFor([large])})).rejects.toThrow('library_sync_capacity');
+  await append(id,records);expect((await validate(id)).kind).toBe('validated');
+ }finally{await discard(id);}
+});
+
+test('an oversized raw manifest fragment is refused before a proportional encoding allocation',()=>{
+ const expected=candidateExpected(rows(),identity),oversized='x'.repeat(1000000);expected.manifestBlocks[0]!.data=oversized;
+ const encode=vi.spyOn(TextEncoder.prototype,'encode');
+ try{expect(()=>verifyReplicaCandidateManifest(expected)).toThrow('library_sync_candidate_invalid');expect(encode.mock.calls.some(call=>call[0]===oversized)).toBe(false);}finally{encode.mockRestore();}
+});
+
+test('ordered multi-fragment compressed Unicode rows bind every slice and retain valid opaque preferences',async()=>{
+ const unicode:ReplicaCandidateRecord={table:'settings',key:'opaque-unicode-fixture',valueJson:JSON.stringify(encodeBackupValue('🙂汉字'.repeat(100000))),blockRefs:[]};
+ const records=[...rows(),unicode],id=await begin(records);
+ try{
+  expect(unicode.blockRefs.length).toBeGreaterThan(1);
+  const blocks=candidateBlocksFor([unicode]);
+  await expect(database.replicaCandidate({kind:'append',id,records:[unicode],blocks:blocks.slice(0,-1)})).rejects.toThrow('library_sync_missing_block');
+  await expect(database.replicaCandidate({kind:'append',id,records:[{...unicode,blockRefs:[...unicode.blockRefs].reverse()}],blocks})).rejects.toThrow();
+  await append(id,records);expect((await validate(id)).kind).toBe('validated');
+ }finally{await discard(id);}
 });

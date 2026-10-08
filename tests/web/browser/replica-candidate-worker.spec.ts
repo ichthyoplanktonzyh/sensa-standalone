@@ -8,6 +8,7 @@ import {createServer as createViteServer,type ViteDevServer} from 'vite';
 import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec';
 import type {SqliteWorkerInput,SqliteWorkerResult} from '../../../apps/web/src/data/library/sqliteProtocol';
 import type {ReplicaCandidateRecord} from '../../../apps/web/src/data/library/replicaCandidateProtocol';
+import {candidateExpected,candidateBlocksFor} from '../support/replicaCandidateFixture.mts';
 
 for(const scenario of ['reads','close','native-failure','crash'] as const)test(`private OPFS candidate lifecycle: ${scenario}`,async({browser},testInfo)=>{
  test.setTimeout(180_000);
@@ -36,9 +37,9 @@ for(const scenario of ['reads','close','native-failure','crash'] as const)test(`
    {table:'meta',key:'service-owner',encodedValue:text(owner)},
    {table:'meta',key:'sentinel',encodedValue:text('Existing local data')},
   ]}}));
-  const begun=value(await invoke({kind:'replicaCandidate',request:{kind:'begin',fence:{identity,owner,incarnation:'initial',localRevision:0},expected:{libraryId:identity.id,learnerId:identity.learnerId,records:records.length,head:{revision:3,manifest:['b'.repeat(64)]}}}})) as {kind:string;id:string};
+  const begun=value(await invoke({kind:'replicaCandidate',request:{kind:'begin',fence:{identity,owner,incarnation:'initial',localRevision:0},expected:candidateExpected(records,identity)}})) as {kind:string;id:string};
   expect(begun.kind).toBe('begun');
-  for(let at=0;at<records.length;at+=128)value(await invoke({kind:'replicaCandidate',request:{kind:'append',id:begun.id,records:records.slice(at,at+128)}}));
+  for(let at=0;at<records.length;at+=128){const page=records.slice(at,at+128);value(await invoke({kind:'replicaCandidate',request:{kind:'append',id:begun.id,records:page,blocks:candidateBlocksFor(page)}}));}
   expect(value(await invoke({kind:'count',table:'drafts'}))).toBe(0);
   if(scenario!=='reads'){
    if(scenario!=='crash'){
@@ -93,7 +94,7 @@ for(const scenario of ['reads','close','native-failure','crash'] as const)test(`
   for(const read of measured.reads)expect(value(read.reply)).toBe(text('Existing local data'));
   expect(measured.reads.some(read=>read.during)).toBe(true);
   expect(value(await invoke({kind:'count',table:'drafts'}))).toBe(0);
-  expect((await invoke({kind:'replicaCandidate',request:{kind:'append',id:begun.id,records:[records[0]!]}})).ok).toBe(false);
+  expect((await invoke({kind:'replicaCandidate',request:{kind:'append',id:begun.id,records:[records[0]!],blocks:[]}})).ok).toBe(false);
   value(await invoke({kind:'replicaCandidate',request:{kind:'discard',id:begun.id}}));
   expect(value(await invoke({kind:'get',table:'meta',key:'sentinel'}))).toBe(text('Existing local data'));
   const errorReplies=measured.reads.filter(read=>!read.reply.ok);expect(errorReplies).toEqual([]);

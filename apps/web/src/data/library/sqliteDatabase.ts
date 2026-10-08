@@ -671,7 +671,7 @@ export class SqliteRecordDatabase {
     try{
       switch(request.kind){
         case 'begin':return {kind:'begun',id:candidates.begin(request.fence,request.expected)};
-        case 'append':candidates.append(request.id,request.records);return {kind:'appended'};
+        case 'append':candidates.append(request.id,request.records,request.blocks);return {kind:'appended'};
         case 'validate':return {kind:'validated',candidate:await candidates.validate(request.id)};
         case 'discard':candidates.discard(request.id);return {kind:'discarded'};
       }

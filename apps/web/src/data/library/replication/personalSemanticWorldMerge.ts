@@ -205,16 +205,19 @@ export function mergePersonalSemanticWorldReplica(
    const id=String(receipt.result.personalMeaningId),group=lifecycleReceipts.get(id)??[];
    group.push(receipt);lifecycleReceipts.set(id,group);
   }
-  const meanings=new Map(side.filter(entry=>entry.table==='semanticMeanings').map(entry=>[entry.key,decodeBackupValue(entry.value) as MeaningLifecycleRecord]));
-  for(const entry of side)if(entry.table==='semanticMeanings')try{
-   const meaning=meanings.get(entry.key)!;
-   assertMeaningLifecycle(meaning);assertMeaningLifecycleReceipts([meaning],lifecycleReceipts.get(entry.key)??[]);
-   assertMeaningCorrectionReceipts(meaning as MeaningJourneyRecord,correctionReceipts.get(entry.key)??[]);
-  }catch{conflicts.add(entryId(entry));admissionConflicts.add(entryId(entry));}
+  const meanings=new Map(side.filter(entry=>entry.table==='semanticMeanings').map(entry=>[entry.key,entry]));
+  const meaningFor=(id:string)=>{const entry=meanings.get(id);return entry?decodeBackupValue(entry.value) as MeaningLifecycleRecord:undefined;};
+  for(const entry of side)if(entry.table==='semanticMeanings'){
+   const meaning=meaningFor(entry.key)!;
+   try{
+    assertMeaningLifecycle(meaning);assertMeaningLifecycleReceipts([meaning],lifecycleReceipts.get(entry.key)??[]);
+    assertMeaningCorrectionReceipts(meaning as MeaningJourneyRecord,correctionReceipts.get(entry.key)??[]);
+   }catch{conflicts.add(entryId(entry));admissionConflicts.add(entryId(entry));}
+  }
   for(const entry of side)if(entry.table==='semanticReceipts')try{
    const receipt=decodeBackupValue(entry.value) as CommandReceipt;
-   assertMeaningLifecycleOperationReceipt(meanings.get(String(receipt.result.personalMeaningId)),receipt);
-   if(receipt.command==='CorrectPersonalMeaning'){const meaning=meanings.get(String(receipt.result.personalMeaningId));if(!meaning)throw Error('meaning_correction_invalid');assertMeaningCorrectionReceipts(meaning as MeaningJourneyRecord,correctionReceipts.get(String(receipt.result.personalMeaningId))??[]);}
+   assertMeaningLifecycleOperationReceipt(meaningFor(String(receipt.result.personalMeaningId)),receipt);
+   if(receipt.command==='CorrectPersonalMeaning'){const meaning=meaningFor(String(receipt.result.personalMeaningId));if(!meaning)throw Error('meaning_correction_invalid');assertMeaningCorrectionReceipts(meaning as MeaningJourneyRecord,correctionReceipts.get(String(receipt.result.personalMeaningId))??[]);}
   }catch{conflicts.add(entryId(entry));admissionConflicts.add(entryId(entry));}
  }
  for(const id of new Set([...base.keys(),...local.keys(),...remote.keys()])){

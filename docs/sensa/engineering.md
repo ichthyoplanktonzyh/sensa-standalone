@@ -332,7 +332,16 @@ Registry 引用只在当前记录内复用，不建长期缓存。当前 capture
 严格解码，验证合同版本相应推进。Provider 校验只依赖纯 metadata schema，不初始化模型、账号或 TTS。
 `replicaCandidate` Worker RPC 的 begin／append／validate／discard 管理私有、版本化暂存表，不修改 source
 schema version 或既有事实。只保留一个候选代，同 fence／预期 head 的 begin 重试返回同一 ID，失败代可重新
-开始；不同请求不能抢占正在校验的候选。普通完整性校验失败立即级联移除该副本；清理失败单独报错并保留
+开始；源身份只取 revision／manifest，storage 用量变动不替换同一候选。begin 接收真实 v6 Manifest 原始块，
+用共用 codec、传输 SHA 和严格 Manifest schema 验证后固定完整的 key／有序 refs 集合，不接受自报记录数。
+append 的 raw block 经相同校验后只保留解码文本 SHA／字符数，逐片验证 row JSON 与有序 refs 的完整覆盖，
+不长期保留另一份已解码媒体；缺片、错序、正文／摘要／key 不符均拒绝。proof 元数据与事实批次同事务回滚。
+Manifest 原始及解码 UTF-8 均受 64 MiB 上限保护；单块先检查字符长度，批级累计解压在保留文本前检查。
+append 只接收本批 rows 引用的 proof，原始 proof 批次受 4 MiB 保护，累计解压不能超过已预检的 row 字节量。
+已确认 proof 可复用而不重复解压；单个异常块最多触及 v6 codec 的固定输出界限。回执带所验证的 head，
+仅证明给定 head／manifest／候选正文自洽，不证明它来自认证服务、仍为最新版本或已被应用。
+begin／append 在写事务内重验 owner fence，避免预检与暂存写入之间的账号变化窗口。
+不同请求不能抢占正在校验的候选。普通完整性校验失败立即级联移除该副本；清理失败单独报错并保留
 原始校验与 SQL 原因，重试 begin 不复用已经停止校验的 sealed 代。fatal 时不再尝试 SQL 清理，
 留待健康重开清除。换代以事务移除旧私有副本，连接重开清除遗留候选，正式事实不变。
 批次精确重试不重复计数，不同正文的同 key 拒绝；部分候选不能封存，完整候选

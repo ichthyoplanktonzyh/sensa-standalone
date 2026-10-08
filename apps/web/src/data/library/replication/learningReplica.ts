@@ -12,8 +12,8 @@ const references=(table:ReplicaRecordReference['table'],keys:unknown):ReplicaRec
 /** A stale device cannot change a committed participant's Policy. Future,
  * unstarted candidates are not frozen by the Session's origin selection. */
 function activeRunPolicyConflicts(entries:ReplicaMergeResult['entries']):string[]{
- const facts=new Map(entries.map(entry=>[entryId(entry),entry.value]));
- const read=(table:string,key:string)=>{const value=facts.get(JSON.stringify([table,key]));return value===undefined?undefined:decodeBackupValue(value);};
+ const facts=new Map(entries.map(entry=>[entryId(entry),entry]));
+ const read=(table:string,key:string)=>{const entry=facts.get(JSON.stringify([table,key]));return entry===undefined?undefined:decodeBackupValue(entry.value);};
  const active=read('meta','learning-session-active');if(typeof active!=='string')return [];
  const session=record(read('learningSessions',active));if(!session||session.endedAt)return [];
  const activeRun=record(read('learningRuns',session.activeRunId)),conflicts:string[]=[];

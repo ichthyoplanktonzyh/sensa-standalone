@@ -40,7 +40,8 @@ const entryId=(table:string,key:string)=>JSON.stringify([table,key]);
 const decoded=<T>(entry:SyncEntry|undefined):T|undefined=>entry?decodeBackupValue(entry.value) as T:undefined;
 const mapFor=(entries:readonly SyncEntry[])=>new Map(entries.map(entry=>[entryId(entry.table,entry.key),entry]));
 const later=(left:LearningEventLike,right:LearningEventLike)=>left.at.localeCompare(right.at)||left.id.localeCompare(right.id);
-const laterRun=(left:LearningRunLike,right:LearningRunLike)=>(left.completedAt??'').localeCompare(right.completedAt??'')||left.id.localeCompare(right.id);
+type CompletedRunHeader=Pick<LearningRunLike,'id'|'completedAt'>;
+const laterRun=(left:CompletedRunHeader,right:CompletedRunHeader)=>(left.completedAt??'').localeCompare(right.completedAt??'')||left.id.localeCompare(right.id);
 const sortedUnique=(values:readonly string[])=>[...new Set(values)].sort();
 
 /** Learning state is a projection. Ignore only fields written by starting or
@@ -85,19 +86,20 @@ export function reconcileConcurrentLearningEntries(input:{
   const ours=decoded<LearningTargetLike>(localEntry),theirs=decoded<LearningTargetLike>(remoteEntry);
   if(!ours||!theirs||ours.id!==targetId||theirs.id!==targetId||ours.retentionId!==theirs.retentionId)continue;
   if(!backupEqual(structuralTarget(ours),structuralTarget(theirs)))continue;
-  const localEvents=localOnly.map(entry=>({entry,event:decoded<LearningEventLike>(entry)})).filter((item):item is {entry:SyncEntry;event:LearningEventLike}=>item.event?.targetId===targetId);
-  const remoteEvents=remoteOnly.map(entry=>({entry,event:decoded<LearningEventLike>(entry)})).filter((item):item is {entry:SyncEntry;event:LearningEventLike}=>item.event?.targetId===targetId);
+  const eventHeader=(entry:SyncEntry)=>{const event=decoded<LearningEventLike>(entry);return event?{id:event.id,runId:event.runId,targetId:event.targetId,at:event.at}:undefined;};
+  const localEvents=localOnly.map(entry=>({entry,event:eventHeader(entry)})).filter((item):item is {entry:SyncEntry;event:LearningEventLike}=>item.event?.targetId===targetId);
+  const remoteEvents=remoteOnly.map(entry=>({entry,event:eventHeader(entry)})).filter((item):item is {entry:SyncEntry;event:LearningEventLike}=>item.event?.targetId===targetId);
   if(!localEvents.length||!remoteEvents.length)continue;
   const localRunIds=new Set(localEvents.map(item=>item.event.runId)),remoteRunIds=new Set(remoteEvents.map(item=>item.event.runId));
   if([...localRunIds].some(id=>remoteRunIds.has(id)))continue;
-  const completed=(side:Map<string,SyncEntry>,ids:Set<string>)=>[...ids].map(id=>{
+  const completed=(side:Map<string,SyncEntry>,ids:Set<string>):Array<CompletedRunHeader|null>=>[...ids].map(id=>{
    const run=decoded<LearningRunLike>(side.get(entryId('learningRuns',id)));
-   return run?.id===id&&run.completedAt!==null&&run.targetIds.includes(targetId)?run:null;
+   return run?.id===id&&run.completedAt!==null&&run.targetIds.includes(targetId)?{id:run.id,completedAt:run.completedAt}:null;
   });
   const localRuns=completed(local,localRunIds),remoteRuns=completed(remote,remoteRunIds);
   if(localRuns.some(run=>run===null)||remoteRuns.some(run=>run===null))continue;
-  const validLocalRuns=localRuns.filter((run):run is LearningRunLike=>run!==null);
-  const validRemoteRuns=remoteRuns.filter((run):run is LearningRunLike=>run!==null);
+  const validLocalRuns=localRuns.filter((run):run is CompletedRunHeader=>run!==null);
+  const validRemoteRuns=remoteRuns.filter((run):run is CompletedRunHeader=>run!==null);
   const candidates=[...localEvents,...remoteEvents];
   if(candidates.some(({event})=>event.id.length===0||!Number.isFinite(Date.parse(event.at))))continue;
   const selectedRun=[...validLocalRuns,...validRemoteRuns].sort(laterRun).at(-1)!;
@@ -157,8 +159,8 @@ export function* validateLearningReconciliationRecordSteps(reader:LibraryRecordR
   if(!backupEqual(sortedUnique([...appliedRunIds]),decision.appliedRunIds))throw new Error('libraryBackup.errors.inconsistent');
   const expectedHistoryRuns=sortedUnique([...history].map(id=>events.get(id)!.runId));
   if(!backupEqual(expectedHistoryRuns,decision.historyOnlyRunIds))throw new Error('libraryBackup.errors.inconsistent');
-  const candidateRuns:LearningRunLike[]=[];
-  for(const runId of [...appliedRunIds,...historyRunIds]){const run=runs.get(runId);if(!run||run.completedAt===null||!run.targetIds.includes(decision.targetId))throw new Error('libraryBackup.errors.inconsistent');candidateRuns.push({id:run.id,targetIds:run.targetIds,completedAt:run.completedAt});const runEvents=sortedUnique(eventIdsByRunTarget.get(groupKey(runId,decision.targetId))??[]);const recorded=sortedUnique(recordedByRun.get(runId)??[]);if(!backupEqual(runEvents,recorded))throw new Error('libraryBackup.errors.inconsistent');yield;}
+  const candidateRuns:CompletedRunHeader[]=[];
+  for(const runId of [...appliedRunIds,...historyRunIds]){const run=runs.get(runId);if(!run||run.completedAt===null||!run.targetIds.includes(decision.targetId))throw new Error('libraryBackup.errors.inconsistent');candidateRuns.push({id:run.id,completedAt:run.completedAt});const runEvents=sortedUnique(eventIdsByRunTarget.get(groupKey(runId,decision.targetId))??[]);const recorded=sortedUnique(recordedByRun.get(runId)??[]);if(!backupEqual(runEvents,recorded))throw new Error('libraryBackup.errors.inconsistent');yield;}
   const selectedRun=candidateRuns.sort(laterRun).at(-1)!;
   const selectedAppliedEvent=(candidateEvents as LearningEventLike[]).filter(event=>applied.has(event.id)).sort(later).at(-1)!;
   if(selectedRun.id!==decision.selectedRunId||selectedRun.completedAt!==decision.decidedAt||!appliedRunIds.has(selectedRun.id)||selectedAppliedEvent.id!==decision.selectedEventId)throw new Error('libraryBackup.errors.inconsistent');

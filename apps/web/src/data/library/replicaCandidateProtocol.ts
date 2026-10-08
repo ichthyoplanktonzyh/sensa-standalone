@@ -3,12 +3,13 @@ import type {SqliteLibraryTable} from './sqliteProtocol';
 import type {LibrarySyncHead} from '@sensa/contracts/sensa';
 
 export type ReplicaCandidateFence={owner:{subject:string;accountId:string};incarnation:string;localRevision:number;identity:LibraryIdentity};
-export type ReplicaCandidateExpected={libraryId:string;learnerId:string;records:number;head:LibrarySyncHead};
+export type ReplicaCandidateBlock={hash:string;data:string};
+export type ReplicaCandidateExpected={head:LibrarySyncHead;manifestBlocks:ReplicaCandidateBlock[]};
 export type ReplicaCandidateRecord={table:SqliteLibraryTable;key:string;valueJson:string;blockRefs:string[]};
-export type ReplicaCandidateValidation={id:string;identity:LibraryIdentity;records:number;logicalBytes:number;storedBytes:number};
+export type ReplicaCandidateValidation={id:string;identity:LibraryIdentity;head:LibrarySyncHead;records:number;logicalBytes:number;storedBytes:number};
 export type ReplicaCandidateRequest=
  |{kind:'begin';fence:ReplicaCandidateFence;expected:ReplicaCandidateExpected}
- |{kind:'append';id:string;records:ReplicaCandidateRecord[]}
+ |{kind:'append';id:string;records:ReplicaCandidateRecord[];blocks:ReplicaCandidateBlock[]}
  |{kind:'validate';id:string}
  |{kind:'discard';id:string};
 export type ReplicaCandidateResponse={kind:'begun';id:string}|{kind:'appended'}|{kind:'validated';candidate:ReplicaCandidateValidation}|{kind:'discarded'};
@@ -33,6 +34,22 @@ CREATE TABLE IF NOT EXISTS sensa_replica_candidate_records_v1(
  value_json TEXT NOT NULL CHECK(json_valid(value_json)),
  refs_json TEXT NOT NULL CHECK(json_valid(refs_json)),
  PRIMARY KEY(candidate_id,table_name,record_key),
+ FOREIGN KEY(candidate_id) REFERENCES sensa_replica_candidates_v1(id) ON DELETE CASCADE
+) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS sensa_replica_candidate_manifest_v1(
+ candidate_id TEXT NOT NULL,
+ table_name TEXT NOT NULL,
+ record_key TEXT NOT NULL,
+ refs_json TEXT NOT NULL CHECK(json_valid(refs_json)),
+ PRIMARY KEY(candidate_id,table_name,record_key),
+ FOREIGN KEY(candidate_id) REFERENCES sensa_replica_candidates_v1(id) ON DELETE CASCADE
+) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS sensa_replica_candidate_proofs_v1(
+ candidate_id TEXT NOT NULL,
+ digest TEXT NOT NULL,
+ plain_digest TEXT,
+ plain_chars INTEGER,
+ PRIMARY KEY(candidate_id,digest),
  FOREIGN KEY(candidate_id) REFERENCES sensa_replica_candidates_v1(id) ON DELETE CASCADE
 ) WITHOUT ROWID;
 `;
