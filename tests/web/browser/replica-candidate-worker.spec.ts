@@ -168,8 +168,13 @@ for(const scenario of ['restore','write-during-validation','meaning-scale','mean
    const phaseMs:Record<string,number>={},phaseCalls:Record<string,number>={};
    const timedReplica=async(message:any)=>{const started=performance.now();try{return await original(message);}finally{phaseMs[message.kind]=(phaseMs[message.kind]??0)+performance.now()-started;phaseCalls[message.kind]=(phaseCalls[message.kind]??0)+1;}};
    adapter.commit=async(mutation:any)=>{const started=performance.now();try{return await originalCommit(mutation);}finally{if(mutation.replicaCandidateRestore)phaseMs.promotion=(phaseMs.promotion??0)+performance.now()-started;}};
-   let validationRequests=0,writingDuringValidation=false,validationInvalidatedByWrite=false,writeMs=0,localDraftId:string|undefined;
+   let validationRequests=0,writingDuringValidation=false,validationInvalidatedByWrite=false,writeMs=0,localDraftId:string|undefined,appendReadCount=0,maxAppendReadMs=0;
    adapter.replicaCandidate=async(message:any)=>{
+    if(scenario==='meaning-profile'&&message.kind==='append'){
+     const pending=timedReplica(message),started=performance.now();
+     const reading=store.readLibrary((tx:any)=>tx.count('semanticMeanings')).then((count:number)=>{if(count!==0)throw Error('candidate_exposed_before_promotion');appendReadCount++;maxAppendReadMs=Math.max(maxAppendReadMs,performance.now()-started);});
+     const [result]=await Promise.all([pending,reading]);return result;
+    }
     if(scenario!=='write-during-validation'||message.kind!=='validate')return timedReplica(message);
     validationRequests++;
     let settled=false;const validation=timedReplica(message).then((result:any)=>{settled=true;return {result};},(error:Error)=>{settled=true;return {error};});
@@ -181,9 +186,9 @@ for(const scenario of ['restore','write-during-validation','meaning-scale','mean
    let error:string|undefined;
    try{await sync.synchronizeLibrary(async(path:string,body?:unknown)=>{const response=await fetch('/candidate'+path,{method:body?'POST':'GET',headers:{'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});if(!response.ok)throw Error('controlled_transport_failed');return response.json();});}catch(cause){error=cause instanceof Error?cause.message:String(cause);}
    finally{clearInterval(timer);adapter.replicaCandidate=original;adapter.commit=originalCommit;}
-   return {originalIdentity,error,validationRequests,writingDuringValidation,validationInvalidatedByWrite,writeMs,localDraftId,phaseMs,phaseCalls,durationMs:performance.now()-started,maxMainThreadGapMs,state:await sync.readCloudSync(),count:await store.readLibrary((tx:any)=>tx.count(table)),identity:await store.readLibrary((tx:any)=>tx.get('meta','identity')),storage:await navigator.storage.estimate(),workerProfile:Reflect.get(globalThis,'sensaRestoreProfile')};
+   return {originalIdentity,error,validationRequests,writingDuringValidation,validationInvalidatedByWrite,writeMs,localDraftId,appendReadCount,maxAppendReadMs,phaseMs,phaseCalls,durationMs:performance.now()-started,maxMainThreadGapMs,state:await sync.readCloudSync(),count:await store.readLibrary((tx:any)=>tx.count(table)),identity:await store.readLibrary((tx:any)=>tx.get('meta','identity')),storage:await navigator.storage.estimate(),workerProfile:Reflect.get(globalThis,'sensaRestoreProfile')};
   },{storeUrl,syncUrl,adapterUrl,draftUrl,owner,scenario,table:fixture.table});
-  if(scenario==='meaning-profile')expect(measured.workerProfile?.phases.promotion.calls).toBe(1);
+  if(scenario==='meaning-profile'){expect(measured.workerProfile?.phases.promotion.calls).toBe(1);expect(measured.appendReadCount).toBe(measured.phaseCalls.append);expect(measured.maxAppendReadMs).toBeLessThanOrEqual(1500);}
   else expect(fixture.logicalBytes).toBeGreaterThan(64*1024*1024);
   await testInfo.attach('normal-staged-restore-evidence',{contentType:'application/json',body:JSON.stringify({scenario,browser:browser.version(),fixture:fixture.table==='semanticMeanings'?`${fixture.count} accepted synthetic Meanings, unique initial Registry, no media/Learning history; controlled HTTP, ${scenario==='meaning-profile'?'instrumented diagnostic':'unmodified'} Worker/OPFS; no PostgreSQL/account UI`:'5000 valid synthetic Drafts; controlled loopback HTTP; real normal synchronizer/Worker/OPFS, no PostgreSQL or account UI',recordCount:fixture.recordCount,logicalBytes:fixture.logicalBytes,...measured,paidCalls:0})});
   if(scenario!=='write-during-validation'){

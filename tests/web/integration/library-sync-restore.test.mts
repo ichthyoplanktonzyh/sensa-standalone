@@ -5,6 +5,7 @@ import {afterEach,beforeEach,expect,test} from 'vitest';
 import {useNodeLearningCapacityStorage} from '../../../scripts/support/nodeLearningCapacity.mts';
 import {openLibrary,readLibrary,writeLibraryState,restoreLibraryTransaction,readLocalLibraryRevision,type LibraryIdentity} from '../../../apps/web/src/data/library/store';
 import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec';
+import {replicaCandidateAppendRecordLimit,replicaCandidateAppendReferenceLimit} from '../../../apps/web/src/data/library/replicaCandidateProtocol';
 import {saveDraft} from '../../../apps/web/src/data/library/drafts';
 import {sqliteRecordAdapter} from '../../../apps/web/src/data/library/sqliteAdapter';
 import {librarySyncBlockFetch} from '@sensa/contracts/sensa';
@@ -158,7 +159,7 @@ test('fresh staged restore above 64 MiB never captures whole source or baseline 
   return candidate(message);
  };
  try{await synchronizeLibrary(request);}finally{adapter.entries=entries;adapter.syncBaseEntries=base;adapter.replicaCandidate=candidate;}
- expect(logicalBytes).toBeGreaterThan(64*1024*1024);expect(maxBatchBytes).toBeLessThanOrEqual(4*1024*1024);expect(maxRecords).toBeLessThanOrEqual(128);expect(appends).toBeGreaterThan(1);
+ expect(logicalBytes).toBeGreaterThan(64*1024*1024);expect(maxBatchBytes).toBeLessThanOrEqual(4*1024*1024);expect(maxRecords).toBeLessThanOrEqual(replicaCandidateAppendRecordLimit);expect(appends).toBeGreaterThan(1);
  expect(await readLibrary(tx=>tx.count('drafts'))).toBe(drafts.length);
  expect(await readLibrary(tx=>tx.get('drafts',drafts[0]!.id))).toEqual(drafts[0]);
  expect(await readLibrary(tx=>tx.get('drafts',drafts.at(-1)!.id))).toEqual(drafts.at(-1));
@@ -214,6 +215,22 @@ test('a legal row with over 512 unique fragments proves in batches before its bo
  adapter.replicaCandidate=async message=>{if(message.kind==='prove')proofs++;return original(message);};
  try{await synchronizeLibrary(request);}finally{adapter.replicaCandidate=original;}
  expect(proofs).toBeGreaterThanOrEqual(2);expect(await readLibrary(tx=>tx.get('settings','fragmented-opaque'))).toBe(setting);expect((await readCloudSync())?.status).toBe('synced');
+});
+
+test('dense repeated fragments split by total reference work without changing their order or values',async()=>{
+ const settings=Array.from({length:3},(_,index)=>({key:`dense-fragments-${index}`,value:`Exact private value ${index}.`}));
+ const refsByKey=new Map<string,string[]>();
+ const rows=[{table:'meta',key:'identity',blocks:[block(JSON.stringify(encodeBackupValue(remoteIdentity)))]},...settings.map(setting=>{
+  const wire=JSON.stringify(encodeBackupValue(setting.value)),refs=[block('['),...Array.from({length:2046},()=>block(' ')),block(wire.slice(1))];refsByKey.set(setting.key,refs);return {table:'settings',key:setting.key,blocks:refs};
+ })];
+ manifest=splitLibrarySyncText(JSON.stringify({version:6,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows})).map(block);revision++;
+ const adapter=await sqliteRecordAdapter(),original=adapter.replicaCandidate.bind(adapter);let appends=0,maximumReferences=0;
+ adapter.replicaCandidate=async message=>{if(message.kind==='append'){appends++;maximumReferences=Math.max(maximumReferences,message.records.reduce((sum,row)=>sum+row.blockRefs.length,0));}return original(message);};
+ try{await synchronizeLibrary(request);}finally{adapter.replicaCandidate=original;}
+ expect(appends).toBeGreaterThan(1);expect(maximumReferences).toBeLessThanOrEqual(replicaCandidateAppendReferenceLimit);
+ const references=await readLibrary(tx=>tx.syncBaseReferences());
+ for(const setting of settings){expect(await readLibrary(tx=>tx.get('settings',setting.key))).toBe(setting.value);expect(references.find(row=>row.table==='settings'&&row.key===setting.key)?.blockRefs).toEqual(refsByKey.get(setting.key));}
+ expect((await readCloudSync())?.status).toBe('synced');
 });
 
 for(const kind of ['compressed','high-entropy'] as const)test(`large ${kind} single-row proofs stay within raw and decoded batch budgets`,async()=>{

@@ -8,7 +8,7 @@ import {isReplicatedLibraryEntry,restoreLibraryReplicaValue,canCopyLibraryReplic
 import type {SqliteMutation,SqliteLibraryTable} from './sqliteProtocol';
 import type {LibraryRecordReader} from './libraryRecordReader';
 import {isFatalSqliteConnectionFailure,sqliteRollbackFailure} from './sqliteConnectionFailure';
-import {replicaCandidateSchema,type ReplicaCandidateFence,type ReplicaCandidateExpected,type ReplicaCandidateRecord,type ReplicaCandidateValidation,type ReplicaCandidateBlock} from './replicaCandidateProtocol';
+import {replicaCandidateSchema,replicaCandidateAppendRecordLimit,replicaCandidateAppendReferenceLimit,type ReplicaCandidateFence,type ReplicaCandidateExpected,type ReplicaCandidateRecord,type ReplicaCandidateValidation,type ReplicaCandidateBlock} from './replicaCandidateProtocol';
 import {replicaCandidateProofBatchBytes,verifyReplicaCandidateBlock,verifyReplicaCandidateManifest} from './replicaCandidateProof';
 
 const uuid=z.string().uuid(),integer=z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -80,13 +80,15 @@ export class SqliteReplicaCandidates{
  }
  append(id:string,records:readonly ReplicaCandidateRecord[],blocks:readonly ReplicaCandidateBlock[]):void{
   const header=this.header(id);this.check(header);if(header.state!=='filling')this.fail();
-  if(!records.length||records.length>128)this.fail();
-  let logical=0,stored=0;
+  if(!records.length||records.length>replicaCandidateAppendRecordLimit)this.fail();
+  let logical=0,stored=0,references=0;
   // Preflight the entire raw batch before JSON parsing or compression. Even
-  // a rejected batch must not materialize 128 individually large objects.
+  // a rejected batch must not materialize individually large decoded objects.
   const inputs=records.map(row=>{
    if(!isReplicatedLibraryEntry(row.table,row.key)||typeof row.key!=='string'||!row.key.length||row.key.length>2000||typeof row.valueJson!=='string')this.fail();
    if(row.valueJson.length>maximumRecordBytes)throw Error('library_sync_capacity');
+   if(!Array.isArray(row.blockRefs))this.fail();
+   references+=row.blockRefs.length;if(references>replicaCandidateAppendReferenceLimit)throw Error('library_sync_capacity');
    const refs=z.array(z.string().regex(/^[a-f0-9]{64}$/u)).min(1).max(2048).parse(row.blockRefs),size=utf8(row.valueJson);
    logical+=size;if(size>maximumRecordBytes||records.length>1&&logical>appendBytes)throw Error('library_sync_capacity');
    return {...row,size,refsJson:JSON.stringify(refs)};

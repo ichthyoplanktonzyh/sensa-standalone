@@ -2,6 +2,12 @@ import type {LibraryIdentity} from './store';
 import type {SqliteLibraryTable} from './sqliteProtocol';
 import type {LibrarySyncHead} from '@sensa/contracts/sensa';
 
+/** Count, body/proof bytes and reference work bound the same private batch.
+ * Count every reference occurrence, not only distinct hashes. Two maximum-
+ * reference rows still fit; denser manifests are split, never truncated. */
+export const replicaCandidateAppendRecordLimit=512;
+export const replicaCandidateAppendReferenceLimit=4096;
+
 export type ReplicaCandidateFence={owner:{subject:string;accountId:string};incarnation:string;localRevision:number;identity:LibraryIdentity};
 export type ReplicaCandidateBlock={hash:string;data:string};
 export type ReplicaCandidateExpected={head:LibrarySyncHead;manifestBlocks:ReplicaCandidateBlock[]};

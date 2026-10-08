@@ -7,7 +7,7 @@ import {useNodeLearningCapacityStorage} from '../../../scripts/support/nodeLearn
 import {openLibrary,readLibrary,writeLibraryState,assertCurrentLibrary,readLocalLibraryRevision} from '../../../apps/web/src/data/library/store';
 import {saveDraft} from '../../../apps/web/src/data/library/drafts';
 import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec';
-import type {ReplicaCandidateFence,ReplicaCandidateRecord} from '../../../apps/web/src/data/library/replicaCandidateProtocol';
+import {replicaCandidateAppendRecordLimit,replicaCandidateAppendReferenceLimit,type ReplicaCandidateFence,type ReplicaCandidateRecord} from '../../../apps/web/src/data/library/replicaCandidateProtocol';
 import {MemoryJourneyRepository} from '../../../apps/web/src/experience/personalMeaningJourney/repository';
 import {createJourneyModules} from '../../../apps/web/src/experience/personalMeaningJourney/gateway';
 import {createSeededClock} from '../../../apps/web/src/experience/personalMeaningJourney/ports';
@@ -113,6 +113,30 @@ test('oversized batches fail before parsing any body and do not leave a partial 
   const invalid='{'+ ' '.repeat(2200000);
   await expect(append(id,[{...records[0]!,valueJson:invalid},{...records[1]!,valueJson:invalid}])).rejects.toThrow('library_sync_capacity');
   await append(id,records);expect((await validate(id)).kind).toBe('validated');
+ }finally{await discard(id);}
+});
+
+test('a full bounded batch retries exactly and a late body mismatch rolls back every staged row and proof',async()=>{
+ const records=rows(Math.ceil(replicaCandidateAppendRecordLimit/7)+1),id=await begin(records),page=records.slice(0,replicaCandidateAppendRecordLimit),before=await original();
+ try{
+  const over=records.slice(0,replicaCandidateAppendRecordLimit+1).map(row=>({...row,valueJson:'{'}));
+  await expect(append(id,over)).rejects.toThrow('library_sync_candidate_invalid');
+  const wrong=page.map((row,index)=>index===page.length-1?{...row,valueJson:row.valueJson+'x'}:row);
+  await expect(database.replicaCandidate({kind:'append',id,records:wrong,blocks:candidateBlocksFor(page)})).rejects.toThrow('library_sync_hash');
+  const raw=Reflect.get(database,'database');
+  expect(raw.exec({sql:'SELECT count(*) FROM sensa_replica_candidate_records_v1 WHERE candidate_id=?',bind:[id],rowMode:0,returnValue:'resultRows'})).toEqual([0]);
+  await append(id,page);await append(id,page);await append(id,records.slice(page.length));
+  const result=await validate(id);if(result.kind!=='validated')throw Error('Expected validation');expect(result.candidate.records).toBe(records.length);expect(await original()).toEqual(before);
+ }finally{await discard(id);}
+});
+
+test('repeated reference work is bounded before parsing bodies or opening an append transaction',async()=>{
+ const records=rows(),id=await begin(records),before=await original();
+ try{
+  const dense=Array.from({length:3},(_,index)=>({table:'settings' as const,key:`dense-${index}`,valueJson:'{',blockRefs:Array.from({length:2048},()=> 'a'.repeat(64))}));
+  expect(dense.flatMap(row=>row.blockRefs).length).toBeGreaterThan(replicaCandidateAppendReferenceLimit);
+  await expect(append(id,dense)).rejects.toThrow('library_sync_capacity');
+  expect(await original()).toEqual(before);await append(id,records);expect((await validate(id)).kind).toBe('validated');
  }finally{await discard(id);}
 });
 

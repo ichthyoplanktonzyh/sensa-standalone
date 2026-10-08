@@ -362,8 +362,11 @@ Worker 的候选校验不占据普通请求队列，按记录让出，
 Worker 按 ES module 分块构建，完整 validator 延迟加载；离线 shell 预缓存所有构建的 JS／Wasm 代码块。
 正常 synchronizer 的新设备恢复已使用该内核：只在无 baseline、无 pending／冲突，且本机 replicated facts
 仅有 identity 时准入；同库 identity 分叉及不改变内容的 identity-only head 保留原 merge／确认路径。
-正文分批由正常 HTTP block fetch 进入私有候选，最多预取 64 个不同 hash，不先加载 128 条任意大小的行；
-当前大行前释放无关预取块，最后一次引用后释放，换 head 重试也清缓存。多行 append 仍限制 128 条／4 MiB；
+正文分批由正常 HTTP block fetch 进入私有候选，最多预取 64 个不同 hash，不先加载一批任意大小的行；
+当前大行前释放无关预取块，最后一次引用后释放，换 head 重试也清缓存。多行 append 限制 512 条／4 MiB，
+同时累计最多 4096 次 block 引用（包括重复引用）；引用密集的合法资料分批，不去重或截断原有有序 refs。
+生产者与 Worker 共用批次计数合同，在解析正文或写入前核对。较大有界事务摊薄提交开销，仍保留 FULL，
+参见 [SQLite 事务批量写入说明](https://sqlite.org/faq.html#q19)；它不是容量或恢复时长已达标的证明。
 单行保留既有 90 MiB 例外，因此不能称每条 RPC／单行峰值始终只有 4 MiB。
 长时 candidate 校验不持有 live Library Web Lock，本机保存可以使其 fence 失效而不是等待完整校验。
 新设备应用在 source SQLite commit 内重验 owner、identity、revision、空 facts 和空 baseline，惰性读取单行
@@ -381,7 +384,7 @@ incarnation fence，清除后的旧点击不能变成新授权。普通尝试失
 清除通知使已暂停的空库成为本机 authoritative，不请求云端或继续阻挡资料页；准入失败后的手动重连
 只重试准入，真正成功后才允许同步。
 暂存应用、完整回退应用或空账号确认在同一源事务内解除暂停；失败不消费，新的本机资料仍须走身份冲突。
-候选应用只额外允许删除这一确切的现存 marker，不开放其他 metadata 或删除操作；协调协议为 53。
+候选应用只额外允许删除这一确切的现存 marker，不开放其他 metadata 或删除操作；协调协议为 54。
 同事务 restoreOperationId 回执确认协调器丢失 ACK／候选重放后的实际提交，确认后才发送资料变化通知；
 无法读取该回执时不能冒充成功。候选、live、baseline 和 WAL 可同时占磁盘；256 MiB 暂存估计不是峰值磁盘证明。
 已有资料仍须接入领域防倒退、不可改写历史和显式冲突的有界三方 merge，不能因为“本机无未同步更改”就直接
@@ -398,7 +401,9 @@ incarnation fence，清除后的旧点击不能变成新授权。普通尝试失
 可剖析正常 synchronizer 在 Node SQLite/Wasm 内存库上的暂存、校验、应用、各派生索引及 SQL 耗时；
 它不证明 OPFS、真实账号 UI、峰值内存或容量。`SENSA_RESTORE_SQL_PROFILE=true` 启用
 `replica-candidate-worker` 中的可选 1k Meaning Chromium/OPFS 诊断；包装仅存在于测试 Worker，
-与未修改生产 Worker 的 10k 恢复验收分开。索引写入将每条文档的短查询 gram 与每条记录的 UUID
+与未修改生产 Worker 的 10k 恢复验收分开。1k 诊断还在每次 append 等待期间通过正式本机读取接口
+读取已提交的 Meaning 计数，要求候选不可见且每次读取不超过 1.5 秒；这不是完整 App 或已有大库的响应保证。
+索引写入将每条文档的短查询 gram 与每条记录的 UUID
 reservation 分别以 SQLite 集合写入；同一事务的 Meaning／Registry 更改只重建一次对应练习材料。
 v6 发布仍组装整份 key/block-ref manifest 元数据；它不再解码所有未变正文，但不能宣称整条路径严格 O(变化数)。
 完整恢复／收敛在同一 SQLite commit 应用已校验候选、对应基线和同步状态；基线或事实写入失败都回滚身份、

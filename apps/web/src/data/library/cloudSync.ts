@@ -15,7 +15,7 @@ import {
 } from './replication/libraryReplica';
 import {applyLibraryReplicaMutation} from './replication/libraryReplicaApplication';
 import {validateLibraryReplicaCooperatively,libraryReplicaValidationVersion,type ValidatedLibraryReplica} from './replication/libraryReplicaValidation';
-import type {ReplicaCandidateFence,ReplicaCandidateRequest,ReplicaCandidateResponse,ReplicaCandidateRecord,ReplicaCandidateValidation} from './replicaCandidateProtocol';
+import {replicaCandidateAppendRecordLimit,replicaCandidateAppendReferenceLimit,type ReplicaCandidateFence,type ReplicaCandidateRequest,type ReplicaCandidateResponse,type ReplicaCandidateRecord,type ReplicaCandidateValidation} from './replicaCandidateProtocol';
 export type SyncRequest=(path:string,body?:unknown)=>Promise<any>;
 export type LibrarySyncOptions={publishEmptyIdentity?:boolean;restoreAfterLocalClear?:boolean};
 export type CloudSyncEntry=LibraryReplicaEntry;
@@ -255,12 +255,12 @@ class Blocks{
   try{
    for(const hash of [...this.cache.keys()])this.forget(hash);
    const remaining=new Map<string,number>();for(const row of manifest.rows)for(const hash of new Set(row.blocks))remaining.set(hash,(remaining.get(hash)??0)+1);
-   let records:ReplicaCandidateRecord[]=[],proofs=new Map<string,string>(),bodyBytes=0,proofBytes=0;
+   let records:ReplicaCandidateRecord[]=[],proofs=new Map<string,string>(),bodyBytes=0,proofBytes=0,referenceCount=0;
    const flush=async()=>{
     if(!records.length)return;
     const result=await send({kind:'append',id,records,blocks:[...proofs].map(([hash,data])=>({hash,data}))});
     if(result.kind!=='appended')throw Error('library_sync_candidate_invalid');
-    records=[];proofs=new Map();bodyBytes=0;proofBytes=0;
+    records=[];proofs=new Map();bodyBytes=0;proofBytes=0;referenceCount=0;
    };
    for(let at=0;at<manifest.rows.length;at++){
     const row=manifest.rows[at],refs=new Set(row.blocks);
@@ -289,9 +289,9 @@ class Blocks{
      await prove();const result=await send({kind:'append',id,records:[record],blocks:[]});if(result.kind!=='appended')throw Error('library_sync_candidate_invalid');
     }else{
      const needed=[...refs].filter(hash=>!proofs.has(hash)),extra=needed.reduce((sum,hash)=>sum+new TextEncoder().encode(this.cache.get(hash)!).length,0);
-     if(records.length&&(records.length===128||bodyBytes+size>4*1024*1024||proofBytes+extra>4*1024*1024||proofs.size+needed.length>512))await flush();
+     if(records.length&&(records.length===replicaCandidateAppendRecordLimit||referenceCount+row.blocks.length>replicaCandidateAppendReferenceLimit||bodyBytes+size>4*1024*1024||proofBytes+extra>4*1024*1024||proofs.size+needed.length>512))await flush();
      for(const hash of refs)if(!proofs.has(hash)){const data=this.cache.get(hash)!;proofs.set(hash,data);proofBytes+=new TextEncoder().encode(data).length;}
-     records.push(record);bodyBytes+=size;
+     records.push(record);bodyBytes+=size;referenceCount+=row.blocks.length;
     }
     for(const hash of refs){const count=remaining.get(hash)!-1;if(count)remaining.set(hash,count);else{remaining.delete(hash);this.forget(hash);}}
    }
