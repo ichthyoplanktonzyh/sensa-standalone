@@ -495,6 +495,8 @@ YouGlish 使用官方 Widget 直接嵌入真实语境聆听页面；提供方脚
 不进入 App Shell 启动路径，也不需要独立播放器站点。Widget 按目标表达和目标语言检索公开片段，结果
 不构成 Sense 判定或学习事实；提供方不可用时只影响该练习页面，不阻止个人库保存或其他学习流程。
 
+每组表达／语言／口音拥有独立 Widget 生命周期，退役后忽略其全部事件并关闭媒体。结果非零与 `onPlayerReady` 同时成立才开放控制，速度使用 `onSpeedChange` 确认值；载入失败或超时退役该 Widget，不接受晚到成功。字幕适配器保留高亮标记，并分别处理实际观察到的旧式字节编码及 UTF-8。嵌入 DOM 按供应商高度参与正常布局，仅约束最大宽度，不以 `height:100% !important` 覆盖供应商像素高度。
+
 资源 schema、生成指导和基础展示字段集中在 `packages/contracts/src/sensa/learningResourceDefinitions.ts`；
 轻量 Demand 与两阶段用途组合由 `lightweightLearningContent.ts` 声明。生成循环消费请求中的资源合同，
 只生成允许的 model roles；权威表达、意义与来源事实由系统装配。词源和录音不能由模型生成 URL 或

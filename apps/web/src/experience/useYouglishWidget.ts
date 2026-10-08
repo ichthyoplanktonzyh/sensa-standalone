@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import {decodeYouglishCaption} from './youglishCaption';
 
 /** The provider-owned widget API loaded only while real-world listening is open. */
 type YouglishWidget = {
@@ -21,6 +22,7 @@ interface WidgetEvent {
   totalResult?: number;
   caption?: string;
   state?: number;
+  speed?: number;
 }
 
 declare global {
@@ -67,6 +69,8 @@ export interface YouglishWidgetHandle {
   totalResults: number;
   caption: string | null;
   isPlaying: boolean;
+  /** Confirmed by onSpeedChange, not inferred from a requested setting. */
+  speed: number;
   toggle(): void;
   move(seconds: number): void;
   replay(): void;
@@ -93,57 +97,80 @@ export const useYouglishWidget = ({mountRef,query,lang,accent,components=8,activ
   const [totalResults,setTotalResults]=useState(0);
   const [caption,setCaption]=useState<string|null>(null);
   const [isPlaying,setIsPlaying]=useState(false);
-  const [ready,setReady]=useState(false);
+  const [speed,setSpeedState]=useState(1);
   const widgetRef=useRef<YouglishWidget|null>(null);
   const isPlayingRef=useRef(false);
   const mountedRef=useRef(true);
+  const controlsReadyRef=useRef(false);
+  const failureRef=useRef<(()=>void)|null>(null);
 
   useEffect(()=>{mountedRef.current=true;return()=>{mountedRef.current=false;};},[]);
 
   useEffect(()=>{
-    if(!active||widgetRef.current)return;
+    setCaption(null);setTotalResults(0);setIsPlaying(false);setSpeedState(1);
+    isPlayingRef.current=false;controlsReadyRef.current=false;
+    if(!active||!query){setStatus('idle');return;}
     const host=mountRef.current;if(!host)return;
-    let disposed=false;setStatus('loading');
+    let disposed=false,playerReady=false,hasResults=false;
+    let widget:YouglishWidget|null=null,timer:number|undefined;
+    const retire=()=>{
+      controlsReadyRef.current=false;
+      if(widgetRef.current===widget)widgetRef.current=null;
+      try{widget?.pause();}catch{}
+      try{widget?.close();}catch{}
+      widget=null;host.replaceChildren();
+    };
+    const fail=()=>{
+      if(disposed||!mountedRef.current)return;
+      disposed=true;window.clearTimeout(timer);retire();
+      isPlayingRef.current=false;setIsPlaying(false);setStatus('error');
+    };
+    const markReady=()=>{
+      if(disposed||!mountedRef.current||!hasResults||!playerReady)return;
+      window.clearTimeout(timer);controlsReadyRef.current=true;setStatus('ready');
+    };
+    failureRef.current=fail;setStatus('loading');
     loadYouglishApi().then(YG=>{
-      if(disposed||!mountedRef.current||widgetRef.current)return;
+      if(disposed||!mountedRef.current)return;
       const inner=document.createElement('div');
       inner.id=`yg-widget-${crypto.randomUUID()}`;
       host.appendChild(inner);
-      widgetRef.current=new YG.Widget(inner.id,{
+      widget=new YG.Widget(inner.id,{
         width:Math.round(host.clientWidth)||360,
         components:components===0?'0':components,
         events:{
-          onFetchDone:(event:WidgetEvent)=>{if(!mountedRef.current)return;const total=event.totalResult??0;setTotalResults(total);setStatus(total>0?'ready':'empty');},
-          onCaptionChange:(event:WidgetEvent)=>{if(!mountedRef.current)return;let text=event.caption??null;if(text)try{text=decodeURIComponent(text);}catch{}setCaption(text);},
-          onPlayerStateChange:(event:WidgetEvent)=>{if(!mountedRef.current)return;const playing=event.state===PLAYER_STATE_PLAYING;isPlayingRef.current=playing;setIsPlaying(playing);},
-          onError:()=>{if(mountedRef.current)setStatus('error');},
+          onFetchDone:(event:WidgetEvent)=>{
+            if(disposed||!mountedRef.current)return;
+            const total=event.totalResult??0;setTotalResults(total);hasResults=total>0;
+            if(hasResults)markReady();else{
+              disposed=true;window.clearTimeout(timer);retire();
+              isPlayingRef.current=false;setIsPlaying(false);setCaption(null);setStatus('empty');
+            }
+          },
+          onPlayerReady:()=>{if(disposed)return;playerReady=true;markReady();},
+          onCaptionChange:(event:WidgetEvent)=>{if(disposed||!mountedRef.current)return;setCaption(event.caption?decodeYouglishCaption(event.caption):null);},
+          onPlayerStateChange:(event:WidgetEvent)=>{if(disposed||!mountedRef.current)return;const playing=event.state===PLAYER_STATE_PLAYING;isPlayingRef.current=playing;setIsPlaying(playing);},
+          onSpeedChange:(event:WidgetEvent)=>{if(!disposed&&mountedRef.current&&typeof event.speed==='number'&&Number.isFinite(event.speed)&&event.speed>=0)setSpeedState(event.speed);},
+          onError:fail,
         },
       });
-      if(mountedRef.current)setReady(true);
-    }).catch(()=>{if(!disposed&&mountedRef.current)setStatus('error');});
-    return()=>{disposed=true;};
-  },[active,components,mountRef]);
+      if(disposed||!mountedRef.current){retire();return;}
+      widgetRef.current=widget;
+      timer=window.setTimeout(fail,15000);
+      widget.fetch(query,lang,accent);
+    }).catch(fail);
+    return()=>{disposed=true;window.clearTimeout(timer);if(failureRef.current===fail)failureRef.current=null;retire();};
+  },[active,query,lang,accent,components,mountRef]);
 
-  useEffect(()=>{
-    if(!ready||!query||!widgetRef.current)return;
-    setStatus('loading');setCaption(null);setTotalResults(0);
-    try{widgetRef.current.fetch(query,lang,accent);}catch{setStatus('error');}
-  },[ready,query,lang,accent]);
-
-  useEffect(()=>{
-    if(status!=='loading')return;
-    const timer=window.setTimeout(()=>setStatus(current=>current==='loading'?'error':current),15000);
-    return()=>window.clearTimeout(timer);
-  },[status,query,accent]);
-
-  useEffect(()=>{if(!active)try{widgetRef.current?.pause();}catch{}},[active]);
-  useEffect(()=>()=>{try{widgetRef.current?.close();}catch{}widgetRef.current=null;},[]);
-
-  const next=useCallback(()=>{try{widgetRef.current?.next();}catch{}},[]);
-  const previous=useCallback(()=>{try{widgetRef.current?.previous();}catch{}},[]);
-  const replay=useCallback(()=>{try{widgetRef.current?.replay();}catch{}},[]);
-  const toggle=useCallback(()=>{try{if(isPlayingRef.current)widgetRef.current?.pause();else widgetRef.current?.play();}catch{}},[]);
-  const move=useCallback((seconds:number)=>{try{widgetRef.current?.move(seconds);}catch{}},[]);
-  const setSpeed=useCallback((rate:number)=>{try{widgetRef.current?.setSpeed(rate);}catch{}},[]);
-  return {status,totalResults,caption,isPlaying,toggle,move,replay,next,previous,setSpeed};
+  const perform=useCallback((action:(widget:YouglishWidget)=>void)=>{
+    if(!controlsReadyRef.current||!widgetRef.current)return;
+    try{action(widgetRef.current);}catch{failureRef.current?.();}
+  },[]);
+  const next=useCallback(()=>perform(widget=>widget.next()),[perform]);
+  const previous=useCallback(()=>perform(widget=>widget.previous()),[perform]);
+  const replay=useCallback(()=>perform(widget=>widget.replay()),[perform]);
+  const toggle=useCallback(()=>perform(widget=>isPlayingRef.current?widget.pause():widget.play()),[perform]);
+  const move=useCallback((seconds:number)=>perform(widget=>widget.move(seconds)),[perform]);
+  const setSpeed=useCallback((rate:number)=>perform(widget=>widget.setSpeed(rate)),[perform]);
+  return {status,totalResults,caption,isPlaying,speed,toggle,move,replay,next,previous,setSpeed};
 };

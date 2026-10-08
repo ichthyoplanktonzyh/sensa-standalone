@@ -44,6 +44,7 @@ export type WebTestCatalogEntry = Readonly<{
  * split into named behavior scenarios.
  */
 const foundationTests = [
+  {id:'youglish-caption',file:'tests/web/unit/youglish-caption.test.mts',kind:'unit',risks:['local-correctness'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'sqlite-runtime-failure',file:'tests/web/browser/sqlite-runtime-failure.spec.ts',kind:'integration',risks:['durability'],environment:'chromium',suite:'browser',runner:'playwright'},
   {id:'supplemental-membership',file:'tests/web/integration/supplemental-membership.test.mts',kind:'integration',risks:['local-correctness','durability','convergence'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
   {id:'learning-session-scope',file:'tests/web/integration/learning-session-scope.test.mts',kind:'integration',risks:['local-correctness','durability','convergence'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
@@ -251,6 +252,7 @@ const fastWithMemory = [
 ] as const;
 
 const browserTests = [
+  'browser/youglish-lifecycle',
   'browser/reference-query-lifecycle',
   'browser/reference-assessment-boundary',
   'browser/extension-subtitle-surface',
@@ -282,6 +284,7 @@ const manualTests = [
 ] as const;
 
 const playwrightPaths = new Set<string>([
+  'browser/youglish-lifecycle',
   'browser/reference-query-lifecycle',
   'browser/reference-assessment-boundary',
   'browser/extension-subtitle-surface',

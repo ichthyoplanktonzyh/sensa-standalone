@@ -332,6 +332,41 @@ async function referenceProviders(page:Page){
  return state;
 }
 
+test('delivered listening preserves learner facts and provider layout after another tab changes Route',async({page,context})=>{
+ setRegistry([referenceDelivery.descriptor]);await page.route('**/sensa/model/turn',route=>route.fulfill({status:503,json:{code:'fixture_model_unavailable'}}));
+ await page.route('https://youglish.com/public/emb/widget.js',route=>route.fulfill({contentType:'text/javascript',body:`
+ window.__listeningFixture={requests:[],closed:0};
+ window.YG={Widget:class{
+  constructor(id,options){this.events=options.events;const root=document.getElementById(id),wrapper=document.createElement('div'),frame=document.createElement('iframe');wrapper.style.cssText='display:flex;flex-direction:column;align-items:center';frame.title='Controlled provider layout';frame.style.cssText='position:static;height:640px;width:'+options.width+'px';frame.srcdoc='<html><body style="margin:0;background:#dddddd">Controlled layout, not real playback</body></html>';wrapper.append(frame);root.append(wrapper);this.root=root;}
+  fetch(query,lang,accent){window.__listeningFixture.requests.push({query,lang,accent});queueMicrotask(()=>{this.events.onFetchDone({totalResult:3});this.events.onPlayerReady();this.events.onCaptionChange({caption:'Controlled [[[clip]]]'});});}
+  play(){this.events.onPlayerStateChange({state:1});}pause(){this.events.onPlayerStateChange({state:2});}
+  next(){}previous(){}replay(){}move(){}setSpeed(speed){this.events.onSpeedChange({speed});}
+  close(){window.__listeningFixture.closed++;this.root.replaceChildren();}
+ }};window.onYouglishAPIReady();
+ `}));
+ const runtime=await startOrdinaryBook(page,/只读查词样本/);await runtime.getByRole('button',{name:'暂停',exact:true}).click();
+ await page.goto(origin+'/academy');const practice=page.locator('#s-academy');
+ const start=practice.locator('.sensa-practice-activities').getByRole('button').first();await expect(start).toBeEnabled();await start.click();
+ const listening=page.locator('#s-real-world-listening');await expect(listening.getByRole('button',{name:'播放',exact:true})).toBeEnabled();
+ const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest()),checkpoint=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ const stored=await page.evaluate(()=>window.__sensaBrowserSmoke!.curriculumSourceCheckpointForTest()),arrangement=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningArrangementCheckpointForTest());
+ const peer=await context.newPage();await peer.goto(origin+'/profile');await peer.locator('#settings-preferences').click();await peer.locator('#account-languages').click();
+ const routes=peer.getByRole('dialog',{name:'语言路线',exact:true});await routes.getByLabel('选择目标语言',{exact:true}).selectOption('es');await routes.getByLabel('选择辅助语言',{exact:true}).selectOption('zh-CN');await routes.getByRole('button',{name:'添加路线',exact:true}).click();await routes.getByRole('radio').filter({hasText:'Español'}).click();
+ await listening.getByRole('button',{name:'播放',exact:true}).click();await expect(listening.getByRole('button',{name:'暂停',exact:true})).toBeEnabled();await listening.getByRole('button',{name:'暂停',exact:true}).click();
+ await listening.getByRole('button',{name:'英式',exact:true}).click();await expect(listening.getByRole('button',{name:'播放',exact:true})).toBeEnabled();
+ const geometry=await listening.getByTitle('Controlled provider layout').evaluate(frame=>{const box=frame.getBoundingClientRect(),host=frame.closest('.bg-surface-media')!.getBoundingClientRect();return {height:box.height,contained:box.bottom<=host.bottom+1};});
+ expect(geometry.height).toBe(640);expect(geometry.contained).toBe(true);
+ const requests=await page.evaluate(()=>(window as unknown as {__listeningFixture:{requests:Array<{lang:string;accent?:string}>}}).__listeningFixture.requests);expect(requests.length).toBeGreaterThan(1);expect(requests.every(request=>request.lang==='english')).toBe(true);
+ await listening.locator('header').getByRole('button').click();await expect(practice).toBeVisible();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest())).toEqual(before);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.curriculumSourceCheckpointForTest())).toEqual(stored);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningArrangementCheckpointForTest())).toEqual(arrangement);
+ // The workspace lists are Route-filtered; the existing run and stored facts are not.
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).runtime).toEqual(checkpoint.runtime);
+ await routes.getByRole('radio').filter({hasText:'English'}).click();await expect(routes.getByRole('radio').filter({hasText:'English'})).toHaveAttribute('aria-checked','true');
+ await expect.poll(()=>page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(checkpoint);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.intakeInboxCount())).toBe(0);await peer.close();
+});
+
 test('reference lookup, manual search and example return preserve the same real learning Step and stored learner facts',async({page})=>{
  setRegistry([referenceDelivery.descriptor]);const sources=await referenceProviders(page),runtime=await startOrdinaryBook(page,/只读查词样本/);await runtime.getByRole('button',{name:/查看表达/}).click();
  const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint()),facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest());
