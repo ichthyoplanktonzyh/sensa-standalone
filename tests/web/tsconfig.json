@@ -86,6 +86,8 @@
     "integration/library-sync-incremental.test.mts",
     "integration/library-sync-restore.test.mts",
     "integration/semantic-record-validation.test.mts",
+    "integration/library-record-validation.test.mts",
+    "integration/learning-reconciliation.test.mts",
     "../../scripts/benchmarkSemanticReplicaValidation.mts",
     "quality/appearance.test.mts",
     "integration/content-agent.test.mts",

@@ -315,8 +315,17 @@ pending commit 恢复或冲突均保留完整 capture／merge／领域验证。�
 PSW 完整副本验证复用 `SemanticWorldRecordReader` 的逐行规则与精确键查询，不再为校验重建完整 JourneyState；
 Registry head/parent、Meaning 内部历史、全局 scene owner，以及 lifecycle/correction 的正反向凭据检查均保留。
 非空 PSW 缺失 root 必须拒绝，不能当成空世界；校验合同版本已相应推进，旧设备 stamp 要重新完整验证。
-当前云端调用方仍构造完整 BackupRows；SQLite/Wasm 候选 reader 的分页验证不等于生产恢复已流式化，
-也不证明 Learning history、下载、合并或整个进程的内存上界。Registry 引用只在当前记录内复用，不建长期缓存。
+完整 Library 校验共用 `LibraryRecordReader` 的 get／键存在性 has／可重复 entries；云端 reader 只索引原 encoded
+Entry 引用，按需解码，不再构造额外的完整 BackupRows 或在应用时再建一份全库 decoded Map。手动备份仍接收
+已经解码的完整行集合，同一协调器把语义、内容、学习与偏好交给各自 authority。重复物理 key 不能被 Map 覆盖。
+Learning 重放长期只保留六字段 retention 投影、Run 排序头和 Action key；每次只读当前 Run、participants 及其
+Actions 的正文，材料／事件检查同样在该 Run 内复用。相同排序时间／revision／purpose 用 key 确定顺序。
+reconciliation 只索引 Event 的 id／run／target／时间，按 run-target 分组校验事件闭包，不逐裁决扫描全部正文。
+应用只精确读取已校验的变化事实，候选缺行时拒绝，不写入 undefined 冒充该事实；记录内合法 undefined 仍保留。
+Registry 引用只在当前记录内复用，不建长期缓存。当前 capture、merge 和下载仍持有完整 encoded Entry 集合，
+完整校验仍在应用线程同步运行；这一步不证明整个进程内存、UI 响应或大容量恢复达标。SQLite/Wasm 候选 reader
+目前只是测试夹具，64 行分页不代表字节上界；生产暂存须封存 candidate generation、同时约束行数与字节，
+在 Worker 本地执行可协作的完整校验，再绑定同一 candidate 原子应用，不能把异步存储 RPC 当成同步 get。
 `node --import tsx scripts/benchmarkSemanticReplicaValidation.mts` 在 Node 的 SQLite/Wasm 候选库上度量完整 PSW
 规则校验；准备数据不计入耗时，采样的 V8 heap 不包括 SQLite/Wasm 内存。加 `--storage-profile` 可只重现逻辑
 正文的体积分解，分别输出普通 JSON、tagged 编码、表／Registry 类型，以及字符串字段的 UTF-8 字节计数。

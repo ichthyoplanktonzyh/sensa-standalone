@@ -4,9 +4,11 @@ import assert from 'node:assert/strict';
 import {decodeBackupValue,encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec.ts';
 import {
   reconcileConcurrentLearningEntries,
-  validateLearningReconciliationRows,
+  validateLearningReconciliationRecords,
 } from '../../../apps/web/src/data/library/learningReconciliation.ts';
 import {learningReplica} from '../../../apps/web/src/data/library/replication/learningReplica.ts';
+import {libraryRowsReader,type LibraryRecordRows} from '../../../apps/web/src/data/library/libraryRecordReader';
+import {sqliteLibraryTables} from '../../../apps/web/src/data/library/sqliteProtocol';
 import {
   isReplicatedLibraryEntry,
   mergeLibraryReplicas,
@@ -14,11 +16,12 @@ import {
   partitionLibraryReplicaConflicts,
   planLibraryReplicaApply,
   replicaEntryId,
+  type LibraryReplicaEntry,
 } from '../../../apps/web/src/data/library/replication/libraryReplica.ts';
 
 test("learning-reconciliation", async () => {
 
-type Entry={table:string;key:string;value:unknown};
+type Entry=LibraryReplicaEntry;
 const ids={
   target:'00000000-0000-4000-8000-000000000001',
   retention:'00000000-0000-4000-8000-000000000002',
@@ -27,7 +30,7 @@ const ids={
   localEvent:'00000000-0000-4000-8000-000000000005',
   remoteEvent:'00000000-0000-4000-8000-000000000006',
 };
-const entry=(table:string,key:string,value:unknown):Entry=>({table,key,value:encodeBackupValue(value)});
+const entry=(table:Entry['table'],key:string,value:unknown):Entry=>({table,key,value:encodeBackupValue(value)});
 const baseTarget={id:ids.target,retentionId:ids.retention,expression:'raincoat',memory:null,memoryRevision:0,startedAt:null,completedAt:null,relearnAt:null,relearningState:null};
 const localTarget={...baseTarget,memory:{dueAt:'2026-09-22T09:00:00.000Z'},memoryRevision:1,startedAt:'2026-09-21T08:55:00.000Z',completedAt:'2026-09-21T09:00:00.000Z'};
 const remoteTarget={...baseTarget,memory:{dueAt:'2026-09-24T09:05:00.000Z'},memoryRevision:1,startedAt:'2026-09-21T09:00:00.000Z',completedAt:'2026-09-21T09:05:00.000Z'};
@@ -82,7 +85,8 @@ const activeFacts=[
  entry('learningTargets',ids.target,{id:ids.target,committedPolicy:{profileId:'lightweight',profileVersion:'1'}}),
  entry('learningTargets',futureTargetId,{id:futureTargetId,committedPolicy:null,policyAssignment:{profileId:'four_stage'}}),
 ];
-const mergeActive=(facts:Entry[])=>learningReplica.merge({base:facts,local:facts,remote:facts} as any,()=>({entries:facts,conflicts:[]}));
+const merge=learningReplica.merge;assert(merge);
+const mergeActive=(facts:Entry[])=>merge({base:facts,local:facts,remote:facts},()=>({entries:facts,conflicts:[]}));
 assert.deepEqual(mergeActive(activeFacts).conflicts,[],'unstarted targets in a legacy Scope remain outside the active Run policy lock');
 const driftedActive=activeFacts.map(row=>row.table==='learningTargets'&&row.key===ids.target?entry('learningTargets',row.key,{id:row.key,committedPolicy:{profileId:'four_stage',profileVersion:'1'}}):row);
 assert.deepEqual(mergeActive(driftedActive).conflicts,[conflict],'the actual started participant remains protected');
@@ -100,7 +104,8 @@ const dependencies={
  registrySenseVersion:crypto.randomUUID(),unrelatedRegistrySenseVersion:crypto.randomUUID(),annotation:'learning-scene:fixture',draft:crypto.randomUUID(),reconciliation:crypto.randomUUID(),
 };
 const continuationParent=crypto.randomUUID(),selectionParent=crypto.randomUUID();
-assert.deepEqual(learningReplica.conflictDependencies({table:'learningRuns',key:ids.localRun} as any,{
+const dependenciesFor=learningReplica.conflictDependencies;assert(dependenciesFor);
+assert.deepEqual(dependenciesFor({table:'learningRuns',key:ids.localRun} as any,{
  id:ids.localRun,continuedFromRunId:continuationParent,
  lifecycleEvents:[{kind:'session_intent_selected',continuedFromRunId:selectionParent}],
  participants:{[ids.target]:{materializations:{digest:{snapshot:{provenance:{packageKey:dependencies.package,attemptId:dependencies.attempt}}}}}},
@@ -144,10 +149,11 @@ const rows={
   learningEvents:[{key:ids.localEvent,value:localEvent},{key:ids.remoteEvent,value:remoteEvent}],
   learningReconciliations:[{key:decisionRow.key,value:decision}],
 };
-const validated=validateLearningReconciliationRows(rows);
+const reader=(input:typeof rows)=>libraryRowsReader(Object.assign(Object.fromEntries(sqliteLibraryTables.map(table=>[table,[]])),input) as unknown as LibraryRecordRows);
+const validated=validateLearningReconciliationRecords(reader(rows));
 assert.deepEqual([...validated.historyOnlyRunIds],[ids.localRun]);
 assert.deepEqual([...validated.historyOnlyEventIds],[ids.localEvent]);
-assert.throws(()=>validateLearningReconciliationRows({...rows,learningReconciliations:[{key:decisionRow.key,value:{...decision,selectedEventId:ids.localEvent}}]}),/libraryBackup\.errors\.inconsistent/u);
+assert.throws(()=>validateLearningReconciliationRecords(reader({...rows,learningReconciliations:[{key:decisionRow.key,value:{...decision,selectedEventId:ids.localEvent}}]})),/libraryBackup\.errors\.inconsistent/u);
 
 console.log('PASS: domain Replica Modules own normalization, deletion and explicit conflict dependencies; learner prose stays opaque while concurrent Learning histories reconcile deterministically.');
 

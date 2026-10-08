@@ -6,7 +6,7 @@ import {createJourneyModules} from '../apps/web/src/experience/personalMeaningJo
 import {createSeededClock} from '../apps/web/src/experience/personalMeaningJourney/ports';
 import {assertPersonalSemanticWorldRecords,type SemanticWorldRecordReader} from '../apps/web/src/experience/personalMeaningJourney/authority';
 import {semanticLookupPayload,syntheticSemanticWorld} from '../tests/web/support/semanticLookupFixtures';
-import {semanticRecords,sqliteSemanticCandidate,type SemanticCandidateRecord} from '../tests/web/support/semanticWorldRecordFixture.mts';
+import {semanticRecords,sqliteLibraryCandidate,type SemanticCandidateRecord} from '../tests/web/support/semanticWorldRecordFixture.mts';
 import {encodeBackupValue} from '../apps/web/src/data/library/backupCodec';
 
 const bytes=(text:string)=>Buffer.byteLength(text,'utf8');
@@ -51,7 +51,7 @@ if(process.argv.includes('--storage-profile')){
  console.log(JSON.stringify({fixture:'10000 accepted synthetic Meanings; unique Registry, one initial version; no media, Learning history or corrections',units:'UTF-8 bytes of logical record values; string counters are overlapping subsets, excluding JSON escaping/punctuation',...profile},null,2));
 }else{
 for(const meanings of [1000,10000]){
- const candidate=await sqliteSemanticCandidate(semanticRecords(syntheticSemanticWorld(seed,meanings)));
+ const candidate=await sqliteLibraryCandidate(semanticRecords(syntheticSemanticWorld(seed,meanings)));
  try{
   // Let setup's complete synthetic World go before sampling the validator.
   (globalThis as typeof globalThis&{gc?:()=>void}).gc?.();

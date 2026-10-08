@@ -3,7 +3,7 @@ import {z} from 'zod';
 
 import {assertPersonalSemanticWorldRecords} from '../../../experience/personalMeaningJourney/authority';
 import {backupEqual} from '../backupCodec';
-import type {BackupRows} from '../backupValidation';
+import {findLibraryRow,type LibraryRecordRows,type LibraryRecordLookups} from '../libraryRecordReader';
 import {conversationImagesSchema} from '../conversationImages';
 import {parseStoredMedia} from '../media';
 import {alignmentStatusAt} from '../../../experience/personalMeaningJourney/alignmentLifecycle';
@@ -14,8 +14,8 @@ type RequireRow=(table:Table,id:string)=>any;
 
 /** Validate Personal Semantic World objects and return its cross-domain source resolver. */
 export function validatePersonalSemanticWorldReplica(input:{
- rows:BackupRows;
- maps:Record<Table,Map<string,any>>;
+ rows:LibraryRecordRows;
+ maps:LibraryRecordLookups;
  requireRow:RequireRow;
  fail:()=>never;
 }){
@@ -61,7 +61,7 @@ export function validatePersonalSemanticWorldReplica(input:{
   if(meaning.contextHistory)for(const [index,history] of meaning.contextHistory.entries()){if(history.revision!==index+1)fail();z.string().max(16000).parse(history.text);conversationImagesSchema.parse(history.images);}
   semanticProposalSchema.parse(meaning.proposal);for(const key of ['id','senseId','senseVersionId','bindingId','bindingVersionId','contextAnchorId','expressionAnchorId','alignmentId','acceptanceId'])uuid.parse(meaning[key]);
   const draft=requireRow('drafts',meaning.draftId),session=requireRow('sessions',meaning.sessionId);
-  if(meaning.draftRevision>draft.revision||session.meaningId!==meaning.id||session.status!=='accepted'||!backupEqual(meaning.proposal,session.candidate)||(meaning.contextHistory?.[0]?.text??meaning.context)!==(session.contextSummary??session.input)||!rows.identities.some(({value})=>['senseId','senseVersionId','bindingId','bindingVersionId'].every(key=>value[key]===meaning[key])))fail();
+  if(meaning.draftRevision>draft.revision||session.meaningId!==meaning.id||session.status!=='accepted'||!backupEqual(meaning.proposal,session.candidate)||(meaning.contextHistory?.[0]?.text??meaning.context)!==(session.contextSummary??session.input)||!findLibraryRow(rows.identities,({value})=>['senseId','senseVersionId','bindingId','bindingVersionId'].every(key=>value[key]===meaning[key])))fail();
  }
  return {requirePersonalSource};
 }

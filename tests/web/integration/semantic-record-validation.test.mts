@@ -9,7 +9,7 @@ import {meaningCorrectionPayload} from '../../../apps/web/src/experience/persona
 import {isAlignmentActive} from '../../../apps/web/src/experience/personalMeaningJourney/alignmentLifecycle';
 import type {JourneyState} from '../../../apps/web/src/experience/personalMeaningJourney/store';
 import {semanticLookupPayload,syntheticSemanticWorld,deleteFirstMeaning} from '../support/semanticLookupFixtures';
-import {semanticRecords,memorySemanticReader,sqliteSemanticCandidate,type SemanticCandidateRecord} from '../support/semanticWorldRecordFixture.mts';
+import {semanticRecords,memorySemanticReader,sqliteLibraryCandidate,type SemanticCandidateRecord} from '../support/semanticWorldRecordFixture.mts';
 import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec';
 
 const repository=new MemoryJourneyRepository(),modules=createJourneyModules({repository,clock:createSeededClock('2026-10-03T00:00:00Z')});
@@ -49,7 +49,7 @@ const cases:Array<{name:string;state:JourneyState;valid:boolean}>=[
  {name:'orphan correction receipt',state:corrupt(valid,s=>{s.commandReceipts.push({operationId:crypto.randomUUID(),command:'CorrectPersonalMeaning',requestDigest:'d'.repeat(64),result:{personalMeaningId:s.meanings[0]!.personalMeaning.personalMeaningId}});}),valid:false},
 ];
 for(const sample of cases)test(`complete and indexed candidate validation agree: ${sample.name}`,async()=>{
- const records=[...semanticRecords(sample.state)],candidate=await sqliteSemanticCandidate(records);
+ const records=[...semanticRecords(sample.state)],candidate=await sqliteLibraryCandidate(records);
  try{
   expect(accepted(()=>oldComplete(records))).toBe(sample.valid);
   expect(accepted(()=>assertPersonalSemanticWorldRecords(memorySemanticReader(records)))).toBe(sample.valid);
@@ -66,12 +66,12 @@ test('storage identities, orphan receipts and a missing root cannot be hidden by
   original.map(row=>row.table==='semanticRegistry'?{...row,key:'senses:'+crypto.randomUUID()}:row),
   [...original,{table:'semanticReceipts' as const,key:crypto.randomUUID(),value:{operationId:crypto.randomUUID(),command:'fixture',result:{}}}],
  ];
- for(const records of variants){const candidate=await sqliteSemanticCandidate(records);try{expect(()=>assertPersonalSemanticWorldRecords(candidate.reader)).toThrow();}finally{candidate.close();}}
+ for(const records of variants){const candidate=await sqliteLibraryCandidate(records);try{expect(()=>assertPersonalSemanticWorldRecords(candidate.reader)).toThrow();}finally{candidate.close();}}
  expect(()=>assertPersonalSemanticWorldRecords(memorySemanticReader([original[0]!,original[0]!]))).toThrow();
 });
 
 test('indexed validation reads 1000 complete Meanings in bounded pages without rebuilding JourneyState',async()=>{
- const candidate=await sqliteSemanticCandidate(semanticRecords(syntheticSemanticWorld(await repository.load(),1000)));
+ const candidate=await sqliteLibraryCandidate(semanticRecords(syntheticSemanticWorld(await repository.load(),1000)));
  try{
   assertPersonalSemanticWorldRecords(candidate.reader);expect(candidate.recordCount).toBe(7001);expect(candidate.metrics.largestPage).toBe(64);
   expect(candidate.metrics.pointReads).toBeGreaterThan(1000);expect(candidate.metrics.iteratedRecords).toBe(candidate.recordCount);
@@ -83,7 +83,7 @@ test('replica admission rejects a nonempty semantic world without its root but a
  const {validateLibraryReplica}=await import('../../../apps/web/src/data/library/replication/libraryReplicaValidation');
  const id=crypto.randomUUID(),identity={id,learnerId:crypto.randomUUID(),deviceId:id,createdAt:'2026-10-03T00:00:00.000Z',schemaVersion:2};
  const rows=[{table:'meta' as const,key:'identity',value:encodeBackupValue(identity)},...[...semanticRecords(valid)].map(row=>({...row,value:encodeBackupValue(row.value)}))];
- expect(validateLibraryReplica(rows).semanticMeanings).toHaveLength(2);
+ expect([...validateLibraryReplica(rows).records.entries('semanticMeanings')]).toHaveLength(2);
  expect(()=>validateLibraryReplica(rows.filter(row=>row.table!=='semanticState'))).toThrow('libraryBackup.errors.inconsistent');
- expect(validateLibraryReplica([rows[0]!]).semanticMeanings).toEqual([]);
+ expect([...validateLibraryReplica([rows[0]!]).records.entries('semanticMeanings')]).toEqual([]);
 });

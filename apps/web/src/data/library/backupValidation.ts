@@ -7,7 +7,8 @@ import {validateContentSupplyReplica} from './replication/contentSupplyValidatio
 import {validatePersonalContentReplica} from './replication/personalContentValidation';
 import {validateLearningReplica} from './replication/learningValidation';
 import {validatePersonalSemanticWorldReplica} from './replication/personalSemanticWorldValidation';
-import {libraryTables,type Table} from './store';
+import type {Table} from './store';
+import {libraryRowsReader,libraryRecordViews,findLibraryRow,type LibraryRecordReader} from './libraryRecordReader';
 
 export type BackupRows=Record<Table,{key:string;value:any}[]>;
 const uuid=z.string().uuid(),timestamp=z.string().datetime({offset:true});
@@ -20,7 +21,12 @@ const fail=():never=>{throw new Error('libraryBackup.errors.inconsistent');};
  * backup. Each product domain validates its own facts and replay semantics.
  */
 export function validateBackupRows(rows:BackupRows){
- const maps=Object.fromEntries(libraryTables.map(table=>[table,new Map(rows[table].map(row=>[row.key,row.value]))])) as Record<Table,Map<string,any>>;
+ return validateLibraryRecords(libraryRowsReader(rows));
+}
+
+/** Same complete integrity contract for decoded backups and indexed candidates. */
+export function validateLibraryRecords(reader:LibraryRecordReader){
+ const {rows,maps}=libraryRecordViews(reader);
  const requireRow=(table:Table,id:string)=>maps[table].get(id)??fail();
  const routeCollection=sensaLanguageRouteCollectionSchema.parse(maps.settings.get('language-learning-routes')??defaultSensaLanguageRouteCollection);
  const routes=new Map(routeCollection.routes.map(route=>[route.id,route]));
@@ -40,7 +46,7 @@ export function validateBackupRows(rows:BackupRows){
   if(operation.cloudReceipt!==undefined&&(operation.cloudReceipt!==true||operation.result!==null||['library.create','intake.receive'].includes(input.kind)))fail();
  }
  const operationInput=(id:string)=>{const operation=maps.operations.get(id);return operation?JSON.parse(operation.input):undefined;};
- if(rows.operations.length){
+ if(findLibraryRow(rows.operations,()=>true)){
   const creation=maps.operations.get('00000000-0000-4000-8000-000000000001');
   if(!creation||operationInput('00000000-0000-4000-8000-000000000001').kind!=='library.create'||!backupEqual(creation.result,identity))fail();
  }

@@ -2,6 +2,7 @@ import {stableUuid} from '@sensa/learning-kernel';
 import {z} from 'zod';
 
 import {backupEqual,decodeBackupValue,encodeBackupValue} from './backupCodec';
+import type {LibraryRecordReader} from './libraryRecordReader';
 
 export const learningReconciliationAlgorithm = 'latest-completed-learning-branch-v1' as const;
 
@@ -125,17 +126,19 @@ export function reconcileConcurrentLearningEntries(input:{
 
 /** Validate persisted decisions and expose the Runs excluded only from the
  * effective projection. Their Events remain normal immutable history rows. */
-export function validateLearningReconciliationRows(rows:{
- learningEvents:{key:string;value:any}[];
- learningRuns:{key:string;value:any}[];
- learningTargets:{key:string;value:any}[];
- learningReconciliations:{key:string;value:any}[];
-}){
- const events=new Map(rows.learningEvents.map(row=>[row.key,row.value as LearningEventLike]));
- const runs=new Map(rows.learningRuns.map(row=>[row.key,row.value as LearningRunLike]));
- const targets=new Map(rows.learningTargets.map(row=>[row.key,row.value as LearningTargetLike]));
+export function validateLearningReconciliationRecords(reader:LibraryRecordReader){
+ // Decisions need only event identity/order, not every Action's materials and
+ // evaluation bodies. Referenced Runs and Targets are read on demand.
+ const events=new Map<string,LearningEventLike>();
+ const eventIdsByRunTarget=new Map<string,string[]>(),groupKey=(runId:string,targetId:string)=>JSON.stringify([runId,targetId]);
+ for(const row of reader.entries('learningEvents')){
+  const {id,runId,targetId,at}=row.value;events.set(row.key,{id,runId,targetId,at});
+  const group=groupKey(runId,targetId),ids=eventIdsByRunTarget.get(group)??[];ids.push(id);eventIdsByRunTarget.set(group,ids);
+ }
+ const runs={get:(id:string)=>reader.get('learningRuns',id) as LearningRunLike|undefined};
+ const targets={get:(id:string)=>reader.get('learningTargets',id) as LearningTargetLike|undefined};
  const historyOnlyEventIds=new Set<string>(),historyOnlyRunIds=new Set<string>(),appliedRunIdsAcrossDecisions=new Set<string>();
- for(const row of rows.learningReconciliations){
+ for(const row of reader.entries('learningReconciliations')){
   const decision=decisionSchema.parse(row.value) as LearningReconciliationDecision;
   if(row.key!==decision.id||decision.id!==decisionId(decision.targetId,decision.candidateEventIds))throw new Error('libraryBackup.errors.inconsistent');
   const candidateSet=new Set(decision.candidateEventIds),applied=new Set(decision.appliedEventIds),history=new Set(decision.historyOnlyEventIds);
@@ -144,13 +147,15 @@ export function validateLearningReconciliationRows(rows:{
   const candidateEvents=[...candidateSet].map(id=>events.get(id));
   const target=targets.get(decision.targetId);
   if(candidateEvents.some(event=>!event||event.targetId!==decision.targetId)||!target||target.retentionId!==decision.retentionId)throw new Error('libraryBackup.errors.inconsistent');
+  const recordedByRun=new Map<string,string[]>();
+  for(const event of candidateEvents as LearningEventLike[]){const ids=recordedByRun.get(event.runId)??[];ids.push(event.id);recordedByRun.set(event.runId,ids);}
   const appliedRunIds=new Set([...applied].map(id=>events.get(id)!.runId)),historyRunIds=new Set([...history].map(id=>events.get(id)!.runId));
   if([...appliedRunIds].some(id=>historyRunIds.has(id)))throw new Error('libraryBackup.errors.inconsistent');
   if(!backupEqual(sortedUnique([...appliedRunIds]),decision.appliedRunIds))throw new Error('libraryBackup.errors.inconsistent');
   const expectedHistoryRuns=sortedUnique([...history].map(id=>events.get(id)!.runId));
   if(!backupEqual(expectedHistoryRuns,decision.historyOnlyRunIds))throw new Error('libraryBackup.errors.inconsistent');
   const candidateRuns:LearningRunLike[]=[];
-  for(const runId of [...appliedRunIds,...historyRunIds]){const run=runs.get(runId);if(!run||run.completedAt===null||!run.targetIds.includes(decision.targetId))throw new Error('libraryBackup.errors.inconsistent');candidateRuns.push(run);const runEvents=sortedUnique([...events.values()].filter(event=>event.runId===runId&&event.targetId===decision.targetId).map(event=>event.id));const recorded=sortedUnique(decision.candidateEventIds.filter(id=>events.get(id)!.runId===runId));if(!backupEqual(runEvents,recorded))throw new Error('libraryBackup.errors.inconsistent');}
+  for(const runId of [...appliedRunIds,...historyRunIds]){const run=runs.get(runId);if(!run||run.completedAt===null||!run.targetIds.includes(decision.targetId))throw new Error('libraryBackup.errors.inconsistent');candidateRuns.push({id:run.id,targetIds:run.targetIds,completedAt:run.completedAt});const runEvents=sortedUnique(eventIdsByRunTarget.get(groupKey(runId,decision.targetId))??[]);const recorded=sortedUnique(recordedByRun.get(runId)??[]);if(!backupEqual(runEvents,recorded))throw new Error('libraryBackup.errors.inconsistent');}
   const selectedRun=candidateRuns.sort(laterRun).at(-1)!;
   const selectedAppliedEvent=(candidateEvents as LearningEventLike[]).filter(event=>applied.has(event.id)).sort(later).at(-1)!;
   if(selectedRun.id!==decision.selectedRunId||selectedRun.completedAt!==decision.decidedAt||!appliedRunIds.has(selectedRun.id)||selectedAppliedEvent.id!==decision.selectedEventId)throw new Error('libraryBackup.errors.inconsistent');

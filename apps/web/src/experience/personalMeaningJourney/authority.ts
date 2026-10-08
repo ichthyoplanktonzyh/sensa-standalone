@@ -370,7 +370,9 @@ export const semanticWorldRecordTables=['semanticState','semanticMeanings','sema
 export type SemanticWorldRecordTable=typeof semanticWorldRecordTables[number];
 /** Complete, immutable validation snapshot. Iterate every stored row exactly
  * once (including its key); get resolves the exact key in the same snapshot.
- * Synchronous indexed access runs inside SQLite's Worker, not network I/O. */
+ * Access is synchronous: a future SQLite Worker candidate must run validation
+ * locally, not make one asynchronous RPC per reference. Current cloud callers
+ * adapt immutable in-memory wire references. */
 export interface SemanticWorldRecordReader{
  get(table:SemanticWorldRecordTable,key:string):unknown|undefined;
  entries(table:SemanticWorldRecordTable):Iterable<{key:string;value:unknown}>;

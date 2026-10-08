@@ -20,9 +20,9 @@ import {materialReadyAt} from '../../contentSupply/provisioning/materialReadines
 import {hasDeclaredMasteryOverride} from '../../learning/runtime/targetPlanningOverrides';
 import {personalLearningSceneRowId} from '../../personalContent/system/personalContentSystem';
 import {backupEqual} from './backupCodec';
-import type {BackupRows} from './backupValidation';
+import {findLibraryRow,everyLibraryRow,type LibraryRecordRows,type LibraryRecordLookups} from './libraryRecordReader';
 import type {LearningEvent,LearningStepPresentation} from './learning';
-import {validateLearningReconciliationRows} from './learningReconciliation';
+import {validateLearningReconciliationRecords} from './learningReconciliation';
 import {applyLocalProtocolTransition} from './learningSettlement';
 import {packageInstallationSchema} from './packageRecords';
 import {assertPublishedCurriculumSource,publishedMaterialMembership} from './publishedCurriculumSources';
@@ -105,8 +105,8 @@ function assertDirectGeneratedMembership(enrollment:LocalCurriculumEnrollment,ta
 }
 
 export type LearningSystemStateInput={
- rows:BackupRows;
- maps:Record<Table,Map<string,any>>;
+ rows:LibraryRecordRows;
+ maps:LibraryRecordLookups;
  identity:LibraryIdentity;
  routes:Map<string,any>;
  requireRow:RequireRow;
@@ -144,7 +144,7 @@ export function assertLearningSystemState(input:LearningSystemStateInput){
   }else{
    const archiveSha256=enrollment.source.publicationArchiveSha256;
    const source=enrollment.source;
-   const members=rows.packageInstallations.map(row=>packageInstallationSchema.parse(row.value)).flatMap(item=>{
+   const members=Array.from(rows.packageInstallations,row=>packageInstallationSchema.parse(row.value)).flatMap(item=>{
     const reference=item.artifact.bookMemberships?.find(member=>member.archiveSha256===archiveSha256);
     return reference||item.artifact.bookArchiveSha256===archiveSha256?[{installation:item,reference}]:[];
    });
@@ -157,7 +157,7 @@ export function assertLearningSystemState(input:LearningSystemStateInput){
    if(enrollment.bookPlan)assertResolvedBookRange(enrollment.bookPlan.range,members.map(member=>member.installation),[...maps.packageCache.values()]);
   }
  }
- assertOneActiveBook(rows.curriculumEnrollments.map(row=>curriculumEnrollmentSchema.parse(row.value)));
+ assertOneActiveBook(Array.from(rows.curriculumEnrollments,row=>curriculumEnrollmentSchema.parse(row.value)));
  for(const {value:target} of rows.learningTargets){
   learningPolicyProfileRegistry.get(localTargetPolicy(target));
   const assignment=target.policyAssignment;
@@ -192,7 +192,7 @@ export function assertLearningSystemState(input:LearningSystemStateInput){
     const enrollment=curriculumEnrollmentSchema.parse(requireRow('curriculumEnrollments',task.source.enrollmentId));
     assertDirectGeneratedMembership(enrollment,target,membership,task,attempt);
    }else if(membership.sourceKind==='personal_meaning_alignment'){
-    const source=membership.provenance as any,task=rows.personalLearning.find(({value:candidate})=>candidate.targetId===target.id&&candidate.curriculumMembershipId===membership.id)?.value;
+    const source=membership.provenance as any,task=findLibraryRow(rows.personalLearning,({value:candidate})=>candidate.targetId===target.id&&candidate.curriculumMembershipId===membership.id)?.value;
     if(membership.packageKey!==null||membership.assurancePackageKey!==undefined||!task||source?.personalMeaningId!==task.source.personalMeaningId||source?.alignmentId!==task.source.personalMeaningAlignmentId||source?.personalMeaningRevisionId!==task.source.personalMeaningRevisionId||source?.alignmentBasisReferenceId!==task.source.alignmentBasisReferenceId||membership.id!==stableUuid(`local-curriculum-membership:${target.id}:${context.languageRouteId}:personal_meaning_alignment:${source.alignmentId}`))fail();
     requirePersonalSource(task.source);const attempt=requireRow('contentAttempts',provenance.attemptId);
     assertReadyContentAttempt(attempt);
@@ -201,24 +201,58 @@ export function assertLearningSystemState(input:LearningSystemStateInput){
   }
   if(target.introducedLanguageRouteId!==null&&!target.curriculumMemberships.some((membership:any)=>membership.languageContext.languageRouteId===target.introducedLanguageRouteId))fail();
  }
- const packageCacheComplete=rows.learningTargets.every(({value:target})=>target.curriculumMemberships.every((membership:any)=>!membership.packageKey||maps.packageCache.has(membership.packageKey)));
+ const packageCacheComplete=everyLibraryRow(rows.learningTargets,({value:target})=>target.curriculumMemberships.every((membership:any)=>!membership.packageKey||maps.packageCache.has(membership.packageKey)));
  let historyOnlyRunIds=new Set<string>();
- try{({historyOnlyRunIds}=validateLearningReconciliationRows(rows));}catch{fail();}
- const targets=new Map<string,LocalLearningTarget>(rows.learningTargets.map(({value:target})=>[target.id,{...target,memory:null,memoryRevision:0,completedAt:null,relearnAt:null,relearningState:null,startedAt:null}]));
+ try{({historyOnlyRunIds}=validateLearningReconciliationRecords({get:(table,key)=>maps[table].get(key),has:(table,key)=>maps[table].has(key),entries:table=>rows[table]}));}catch{fail();}
+ const replayFields=['memory','memoryRevision','startedAt','completedAt','relearnAt','relearningState'] as const;
+ type TargetReplay=Pick<LocalLearningTarget,typeof replayFields[number]>;
+ const replayStates=new Map<string,TargetReplay>();
+ for(const {key} of rows.learningTargets)replayStates.set(key,{memory:null,memoryRevision:0,completedAt:null,relearnAt:null,relearningState:null,startedAt:null});
  const unfinished=new Set<string>(),knownProtocolRunIds=new Set<string>();
  const unreplayedTargets=new Set<string>();
- const eventsByRun=new Map<string,LearningEvent[]>();
- for(const {value:event} of rows.learningEvents){const events=eventsByRun.get(event.runId)??[];events.push(event);eventsByRun.set(event.runId,events);}
+ const eventKeysByRun=new Map<string,string[]>();
+ for(const {key,value:event} of rows.learningEvents){if(!maps.learningRuns.has(event.runId))fail();const keys=eventKeysByRun.get(event.runId)??[];keys.push(key);eventKeysByRun.set(event.runId,keys);}
  // Wall time alone is not a causal order: a Review may hand off Relearning
  // within the same millisecond. The pinned memory revision orders settlement;
  // a repair completion follows same-instant repair attempts without settling
  // that originating Review again.
  const replayRevision=(run:LocalLearningRun)=>Math.min(...Object.values(run.participants).map(participant=>participant.memoryRevision));
  const replayPurpose=(run:LocalLearningRun)=>run.purpose==='initial_learning'?0:run.purpose==='retention_review'?1:run.completionKind==='wait_relearning'?2:3;
- const runs:LocalLearningRun[]=rows.learningRuns.map(row=>row.value).sort((left,right)=>Date.parse(left.startedAt)-Date.parse(right.startedAt)||replayRevision(left)-replayRevision(right)||replayPurpose(left)-replayPurpose(right));
- for(const saved of runs){
+ const runs=Array.from(rows.learningRuns,({key,value:run})=>({key,startedAt:Date.parse(run.startedAt),revision:replayRevision(run),purpose:replayPurpose(run)})).sort((left,right)=>left.startedAt-right.startedAt||left.revision-right.revision||left.purpose-right.purpose||left.key.localeCompare(right.key));
+ const active=maps.meta.get('learning-active');
+ const assertStoredRunFacts=(saved:LocalLearningRun,actions:{key:string;value:LearningEvent}[])=>{
+  const context=validateLanguageContext(saved.languageContext);requireRow('learningTargets',saved.targetId);
+  for(const [id,participant] of Object.entries(saved.participants)){
+   const target=requireRow('learningTargets',id),baseline=runBaselineMaterial(participant);validateLightweightInitialMaterialization(baseline);
+   if(baseline.snapshot.learningTargetId!==id||baseline.snapshot.learnerUserId!==identity.learnerId||!backupEqual(participant.languageContext,context)||!target.curriculumMemberships.some((membership:any)=>membership.id===participant.curriculumMembershipId&&membership.languageContext.languageRouteId===context.languageRouteId&&membership.languageContext.targetLanguageTag===context.targetLanguageTag&&membership.languageContext.supportLanguageTag===context.supportLanguageTag))fail();
+  }
+  for(const {key,value:event} of actions){
+   const eventRun=saved,operation=operationInput(key),participant=eventRun.participants[event.targetId]??fail(),presented=runStepMaterial(participant,event.detail.stepId);if(event.detail.materializationId!==presented.snapshot.learningMaterializationId||operation&&(operation.kind!=='learning.act'||operation.input.runId!==event.runId||operation.input.revision!==event.detail.runRevision||operation.input.at!==event.at||!backupEqual(operation.input.action,event.detail.action)))fail();
+   assertRunMaterialPresentedBy(presented,eventRun,event.at);
+   if(!Object.hasOwn(event.detail,'nextPresentation'))fail();
+   if(event.detail.nextPresentation!==null){
+    const next=z.object({targetId:z.string().uuid(),stepId:z.string().min(1),material:z.string().regex(/^[a-f0-9]{64}$/u)}).strict().parse(event.detail.nextPresentation);
+    assertRunMaterialPresentedBy(runMaterial(eventRun.participants[next.targetId]??fail(),next.material),eventRun,event.at);
+   }
+   const facts=event.detail.formalEvaluation;if(facts){
+    for(const id of [facts.step.protocolStepInstanceId,facts.step.protocolRunId,facts.action.actionId,facts.attempt.attemptId,facts.observation.observationId,facts.evaluation.evaluationId,facts.transitionDecision.transitionDecisionId])uuid.parse(id);
+    if(!backupEqual(facts.step.learningMaterializationIds,[event.detail.materializationId])||facts.step.protocolRunId!==eventRun.participants[event.targetId]?.protocolRunId||facts.action.protocolStepInstanceId!==facts.step.protocolStepInstanceId||facts.attempt.actionId!==facts.action.actionId||facts.observation.attemptId!==facts.attempt.attemptId||facts.evaluation.observationId!==facts.observation.observationId||facts.evaluation.protocolRunId!==facts.step.protocolRunId||facts.evaluation.evaluationPolicyId!==eventRun.protocolBinding.evaluationPolicyId||facts.transitionDecision.observationId!==facts.observation.observationId||!backupEqual(facts.observation.evidenceIds,facts.evidence.map((evidence:any)=>evidence.learningEvidenceId)))fail();
+    for(const evidence of facts.evidence){uuid.parse(evidence.learningEvidenceId);if(evidence.observationId!==facts.observation.observationId||evidence.attemptId!==facts.attempt.attemptId||evidence.protocolRunId!==facts.step.protocolRunId||evidence.learningTargetId!==event.targetId)fail();}
+   }
+  }
+  if(!saved.completedAt&&saved.id!==active&&!localRunOpenPlanningInterruption(saved)&&!localRunOpenSessionPause(saved))fail();
+ };
+ for(const header of runs){
+  const saved=requireRow('learningRuns',header.key) as LocalLearningRun;
   try{for(const participant of Object.values(saved.participants))validateRunMaterialPins(participant);}catch{fail();}
+  const actions=(eventKeysByRun.get(saved.id)??[]).map(key=>({key,value:requireRow('learningEvents',key) as LearningEvent}));
+  assertStoredRunFacts(saved,actions);
   if(historyOnlyRunIds.has(saved.id))continue;
+  // Only this Run's participant bodies and Action facts remain decoded during
+  // replay. The cross-Run state consists of the small retention projection.
+  const targets=new Map<string,LocalLearningTarget>();
+  for(const id of localRunTargetIds(saved)){const state=replayStates.get(id);if(state)targets.set(id,{...requireRow('learningTargets',id),...state});}
+  const events=actions.map(row=>row.value);
   const runLanguageContext=validateLanguageContext(saved.languageContext),ids=localRunTargetIds(saved);
   try{for(const field of ['startedByOperationId','continuedFromRunId'] as const)if(Object.hasOwn(saved,field))uuid.parse(saved[field]);}catch{fail();}
   if(saved.continuedFromRunId!==undefined){
@@ -249,7 +283,7 @@ export function assertLearningSystemState(input:LearningSystemStateInput){
     openPause=event;
    }else if(event.kind==='paused_for_session_end'){
     const session=learningSessionSchema.parse(requireRow('learningSessions',event.learningSessionId));
-    if(openPause||openInterruption||event.eventId!==stableUuid(`local-run-session-end:${saved.id}:${event.operationId}`)||!session.runIds.includes(saved.id)||session.endReason!=='learner_ended'||session.endedByOperationId!==event.operationId||session.endedAt!==event.at||(eventsByRun.get(saved.id)??[]).some(action=>action.detail.runRevision<event.runRevision&&Date.parse(action.at)>Date.parse(event.at))||saved.lifecycleEvents.some(previous=>previous.runRevision<event.runRevision&&Date.parse(previous.at)>Date.parse(event.at))||operation&&(operation.kind!=='learning.endSession'||operation.input.runId!==saved.id||operation.input.expectedRevision!==event.runRevision||operation.input.at!==event.at))fail();
+    if(openPause||openInterruption||event.eventId!==stableUuid(`local-run-session-end:${saved.id}:${event.operationId}`)||!session.runIds.includes(saved.id)||session.endReason!=='learner_ended'||session.endedByOperationId!==event.operationId||session.endedAt!==event.at||events.some(action=>action.detail.runRevision<event.runRevision&&Date.parse(action.at)>Date.parse(event.at))||saved.lifecycleEvents.some(previous=>previous.runRevision<event.runRevision&&Date.parse(previous.at)>Date.parse(event.at))||operation&&(operation.kind!=='learning.endSession'||operation.input.runId!==saved.id||operation.input.expectedRevision!==event.runRevision||operation.input.at!==event.at))fail();
     openPause=event;
    }else if(event.kind==='resumed_after_session_switch'||event.kind==='resumed_after_session_end'){
     if(!openPause||event.kind!==(openPause.kind==='paused_for_session_end'?'resumed_after_session_end':'resumed_after_session_switch')||event.interruptionEventId!==openPause.eventId||!['mixed','review_only'].includes(event.sessionIntent)||event.sessionIntent==='review_only'&&saved.purpose==='initial_learning'||Date.parse(event.at)<Date.parse(openPause.at)||operation&&(!['learning.start','learning.continue'].includes(operation.kind)||!ids.includes(operation.input.targetId)||operation.input.at!==event.at||(operation.input.sessionIntent??event.sessionIntent)!==event.sessionIntent))fail();
@@ -354,7 +388,7 @@ export function assertLearningSystemState(input:LearningSystemStateInput){
   const primary=targets.get(saved.targetId)??fail(),primaryExecutable=localExecutableTargetForParticipant(primary,saved.participants[saved.targetId]??fail());
   let run=replayLocalProtocolRun({execution,target:primaryExecutable,resource:primaryExecutable.packageKey?maps.packageCache.get(primaryExecutable.packageKey):undefined,saved});
   if(!Object.hasOwn(saved,'completionKind'))delete run.completionKind;
-  const events=eventsByRun.get(saved.id)??[],byRevision=new Map<number,{action:LearningEvent}|{lifecycle:LocalLearningRun['lifecycleEvents'][number]}>();
+  const byRevision=new Map<number,{action:LearningEvent}|{lifecycle:LocalLearningRun['lifecycleEvents'][number]}>();
   for(const event of events){const revision=event.detail?.runRevision;if(!Number.isSafeInteger(revision)||revision<1||byRevision.has(revision))fail();byRevision.set(revision,{action:event});}
   for(const event of saved.lifecycleEvents){if(byRevision.has(event.runRevision))fail();byRevision.set(event.runRevision,{lifecycle:event});}
   if(!Number.isSafeInteger(saved.revision)||saved.revision!==1+byRevision.size)fail();
@@ -390,25 +424,11 @@ export function assertLearningSystemState(input:LearningSystemStateInput){
    try{replayNextPresentation(run,execution,detail.nextPresentation,saved,event.at);}catch{fail();}
   }
   if(!backupEqual(run,saved))fail();if(!run.completedAt)ids.forEach(id=>unfinished.add(id));
+  for(const [id,target] of targets)replayStates.set(id,Object.fromEntries(replayFields.map(field=>[field,target[field]])) as TargetReplay);
  }
  for(const {value:target} of rows.learningTargets)if(target.committedPolicy&&!knownProtocolRunIds.has(target.committedPolicy.committedByProtocolRunId))fail();
- for(const {value:target} of rows.learningTargets)if(!unreplayedTargets.has(target.id))for(const key of ['memory','memoryRevision','startedAt','completedAt','relearnAt','relearningState'] as const)if(!backupEqual(targets.get(target.id)![key],target[key]))fail();
- for(const {value:saved} of rows.learningRuns){const context=validateLanguageContext(saved.languageContext);requireRow('learningTargets',saved.targetId);for(const [id,participant] of Object.entries(saved.participants as LocalLearningRun['participants'])){const target=requireRow('learningTargets',id),baseline=runBaselineMaterial(participant);validateLightweightInitialMaterialization(baseline);if(baseline.snapshot.learningTargetId!==id||baseline.snapshot.learnerUserId!==identity.learnerId||!backupEqual(participant.languageContext,context)||!target.curriculumMemberships.some((membership:any)=>membership.id===participant.curriculumMembershipId&&membership.languageContext.languageRouteId===context.languageRouteId&&membership.languageContext.targetLanguageTag===context.targetLanguageTag&&membership.languageContext.supportLanguageTag===context.supportLanguageTag))fail();}}
- for(const {key,value:event} of rows.learningEvents){
-  const eventRun=requireRow('learningRuns',event.runId),operation=operationInput(key),participant=eventRun.participants[event.targetId]??fail(),presented=runStepMaterial(participant,event.detail.stepId);if(event.detail.materializationId!==presented.snapshot.learningMaterializationId||operation&&(operation.kind!=='learning.act'||operation.input.runId!==event.runId||operation.input.revision!==event.detail.runRevision||operation.input.at!==event.at||!backupEqual(operation.input.action,event.detail.action)))fail();
-  assertRunMaterialPresentedBy(presented,eventRun,event.at);
-  if(!Object.hasOwn(event.detail,'nextPresentation'))fail();
-  if(event.detail.nextPresentation!==null){
-   const next=z.object({targetId:z.string().uuid(),stepId:z.string().min(1),material:z.string().regex(/^[a-f0-9]{64}$/u)}).strict().parse(event.detail.nextPresentation);
-   assertRunMaterialPresentedBy(runMaterial(eventRun.participants[next.targetId]??fail(),next.material),eventRun,event.at);
-  }
-  const facts=event.detail.formalEvaluation;if(facts){
-   for(const id of [facts.step.protocolStepInstanceId,facts.step.protocolRunId,facts.action.actionId,facts.attempt.attemptId,facts.observation.observationId,facts.evaluation.evaluationId,facts.transitionDecision.transitionDecisionId])uuid.parse(id);
-   if(!backupEqual(facts.step.learningMaterializationIds,[event.detail.materializationId])||facts.step.protocolRunId!==eventRun.participants[event.targetId]?.protocolRunId||facts.action.protocolStepInstanceId!==facts.step.protocolStepInstanceId||facts.attempt.actionId!==facts.action.actionId||facts.observation.attemptId!==facts.attempt.attemptId||facts.evaluation.observationId!==facts.observation.observationId||facts.evaluation.protocolRunId!==facts.step.protocolRunId||facts.evaluation.evaluationPolicyId!==eventRun.protocolBinding.evaluationPolicyId||facts.transitionDecision.observationId!==facts.observation.observationId||!backupEqual(facts.observation.evidenceIds,facts.evidence.map((evidence:any)=>evidence.learningEvidenceId)))fail();
-   for(const evidence of facts.evidence){uuid.parse(evidence.learningEvidenceId);if(evidence.observationId!==facts.observation.observationId||evidence.attemptId!==facts.attempt.attemptId||evidence.protocolRunId!==facts.step.protocolRunId||evidence.learningTargetId!==event.targetId)fail();}
-  }
- }
- const active=maps.meta.get('learning-active');if(active)requireRow('learningRuns',active);if(active&&(localRunOpenPlanningInterruption(requireRow('learningRuns',active))||localRunOpenSessionPause(requireRow('learningRuns',active))||localRunTargetIds(requireRow('learningRuns',active)).some(id=>hasDeclaredMasteryOverride(requireRow('learningTargets',id)))))fail();for(const {key,value:run} of rows.learningRuns)if(!run.completedAt&&key!==active&&!localRunOpenPlanningInterruption(run)&&!localRunOpenSessionPause(run))fail();
+ for(const {value:target} of rows.learningTargets)if(!unreplayedTargets.has(target.id))for(const key of replayFields)if(!backupEqual(replayStates.get(target.id)![key],target[key]))fail();
+ if(active){const run=requireRow('learningRuns',active);if(localRunOpenPlanningInterruption(run)||localRunOpenSessionPause(run)||localRunTargetIds(run).some(id=>hasDeclaredMasteryOverride(requireRow('learningTargets',id))))fail();}
  for(const {key,value:operation} of rows.operations)if(operation.result?.format==='sensa-learning-run-receipt-v1'){
   const request=operationInput(key);try{verifyLearningRunReceiptFacts({id:key,kind:request.kind,input:request.input},operation.result,maps.learningRuns.get(operation.result.id),maps.learningEvents.get(key),request.kind==='learning.continue'?maps.learningRuns.get(request.input.runId):undefined);}catch{fail();}
  }
@@ -484,7 +504,7 @@ function assertStudyScopeState(input:LearningSystemStateInput):void{
    }else if(session.endReason==='learner_ended'){
     if(!session.runIds.some(id=>(requireRow('learningRuns',id) as LocalLearningRun).lifecycleEvents.some(event=>event.kind==='paused_for_session_end'&&event.learningSessionId===session.id&&event.operationId===session.endedByOperationId&&event.at===session.endedAt)))fail();
    }else if(session.endReason==='session_switch'){
-    if(!rows.learningSessions.some(({value:next})=>next.id!==session.id&&next.startedByOperationId===session.endedByOperationId&&next.startedAt===session.endedAt))fail();
+    if(!findLibraryRow(rows.learningSessions,({value:next})=>next.id!==session.id&&next.startedByOperationId===session.endedByOperationId&&next.startedAt===session.endedAt))fail();
    }else if(session.endReason==='planning_override'){
     if(!session.runIds.some(id=>(requireRow('learningRuns',id) as LocalLearningRun).lifecycleEvents.some(event=>event.kind==='interrupted_by_planning_override'&&event.operationId===session.endedByOperationId&&event.at===session.endedAt)))fail();
    }else fail();

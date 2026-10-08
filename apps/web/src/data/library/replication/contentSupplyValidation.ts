@@ -6,7 +6,7 @@ import {
 import {stableUuid} from '@sensa/learning-kernel';
 import {z} from 'zod';
 
-import type {BackupRows} from '../backupValidation';
+import type {LibraryRecordRows} from '../libraryRecordReader';
 import {packageInstallationSchema,portablePackageKey,publicationBookMembership} from '../packageRecords';
 import {validateInstalledLearningContent} from '../../../contentSupply/portable/installedLearningContent';
 import type {LibraryIdentity,Table} from '../store';
@@ -23,7 +23,7 @@ type RequireRow=(table:Table,id:string)=>any;
 
 /** Content Supply validates both recoverable public-artifact references and learner-owned preparation attempts. */
 export function validateContentSupplyReplica(input:{
- rows:BackupRows;
+ rows:LibraryRecordRows;
  identity:LibraryIdentity;
  requireRow:RequireRow;
  requirePersonalSource:(source:any)=>unknown;

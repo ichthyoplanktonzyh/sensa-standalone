@@ -173,7 +173,7 @@ async function applyEntries(expected:Awaited<ReturnType<typeof capture>>,entries
   const current=await captureHeader(tx);
   if(!sameOwner(current.owner,expected.owner)||current.incarnation!==expected.incarnation)throw new Error('account_changed');
   if(current.localRevision!==expected.localRevision||!equal(current.identity,expected.identity))throw new Error('library_sync_local_changed');
-  applyLibraryReplicaMutation({tx,current:expected.entries,desired:entries,rows,identity:current.identity});
+  applyLibraryReplicaMutation({tx,current:expected.entries,desired:entries,records:rows.records,identity:current.identity});
   tx.put('meta',STATE,state);tx.replaceSyncBase(base);
   return current.localRevision+(changesContent?1:0);
  });
@@ -262,7 +262,7 @@ class Blocks{
     for(const id of new Set(row.blocks)){const count=remaining.get(id)!-1;if(count)remaining.set(id,count);else{remaining.delete(id);this.forget(id);}}
    }
   }
-  entries.sort((a,b)=>entryId(a).localeCompare(entryId(b)));const rows=validateLibraryReplica(entries),identity=rows.meta.find(r=>r.key==='identity')!.value;if(identity.id!==manifest.libraryId||identity.learnerId!==manifest.learnerId)throw new Error('library_sync_identity');return entries;
+  entries.sort((a,b)=>entryId(a).localeCompare(entryId(b)));const {identity}=validateLibraryReplica(entries);if(identity.id!==manifest.libraryId||identity.learnerId!==manifest.learnerId)throw new Error('library_sync_identity');return entries;
  }
 }
 async function downloadStableHead(blocks:Blocks,request:SyncRequest,base:Entry[],confirmedRevision?:number,observedHead?:LibrarySyncHead){
