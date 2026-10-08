@@ -91,6 +91,7 @@ export class LibraryTransaction {
     onCommitStart?:()=>void;
   }> = [];
   private syncBaseReplacement: Array<{ table: Table; key: string; valueJson: string; blockRefs: string[] }> | undefined;
+  private syncBasePatch:SqliteMutation['syncBasePatch'];
 
   constructor(
     private readonly mode: "readonly" | "readwrite",
@@ -271,8 +272,23 @@ export class LibraryTransaction {
     }));
   }
 
+  async syncBaseReferences():Promise<import('./sqliteProtocol').SqliteSyncBaseReference[]>{
+    if(this.wrote)throw new Error('library_sync_base_requires_snapshot');
+    return storageCall(()=>this.adapter.syncBaseReferences());
+  }
+  patchSyncBase(input:{puts:readonly {table:Table;key:string;value:unknown;blocks:readonly string[]}[];deletes:readonly {table:Table;key:string}[]}):void{
+    this.assertWritable();
+    if(this.syncBaseReplacement!==undefined||this.syncBasePatch)throw new Error('library_sync_base_mutation_conflict');
+    const puts=input.puts.map(row=>{
+      const blockRefs=[...row.blocks];
+      if(!blockRefs.length||blockRefs.some(ref=>!/^[a-f0-9]{64}$/u.test(ref)))throw new Error('library_sync_format');
+      return {table:row.table,key:recordKey(row.key),valueJson:JSON.stringify(row.value),blockRefs};
+    });
+    this.syncBasePatch={puts,deletes:input.deletes.map(({table,key})=>({table,key:recordKey(key)}))};this.wrote=true;
+  }
   replaceSyncBase(entries: readonly { table: Table; key: string; value: unknown; blocks?: readonly string[] }[]): void {
     this.assertWritable();
+    if(this.syncBasePatch)throw new Error('library_sync_base_mutation_conflict');
     const unique = new Map<string, { table: Table; key: string; valueJson: string; blockRefs: string[] }>();
     for (const entry of entries) {
       const key = recordKey(entry.key);
@@ -541,6 +557,7 @@ export class LibraryTransaction {
       ...(this.syncBaseReplacement === undefined
         ? {}
         : { syncBaseReplacement: this.syncBaseReplacement }),
+      ...(this.syncBasePatch===undefined?{}:{syncBasePatch:this.syncBasePatch}),
     };
   }
 

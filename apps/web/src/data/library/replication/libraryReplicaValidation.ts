@@ -2,6 +2,8 @@ import {decodeBackupValue} from '../backupCodec';
 import {validateBackupRows,type BackupRows} from '../backupValidation';
 import {libraryTables} from '../store';
 import {isReplicatedLibraryEntry,type LibraryReplicaEntry} from './libraryReplica';
+/** Advance when the complete replica integrity contract changes. Device-only. */
+export const libraryReplicaValidationVersion=1 as const;
 
 /** Validate a complete candidate replica before transport publication or apply. */
 export function validateLibraryReplica(entries:LibraryReplicaEntry[],packageCache:BackupRows['packageCache']=[]):BackupRows{
@@ -15,4 +17,3 @@ export function validateLibraryReplica(entries:LibraryReplicaEntry[],packageCach
  validateBackupRows(rows);
  return rows;
 }
-

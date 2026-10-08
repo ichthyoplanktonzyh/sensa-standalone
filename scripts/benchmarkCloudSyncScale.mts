@@ -32,6 +32,13 @@ try{
     const context=await browser.newContext(),page=await context.newPage();await page.addInitScript('window.__name = fn => fn;');await page.goto(origin);
     const result=await page.evaluate(async input=>(await import(/* @vite-ignore */ '/core.js')).measureCloudSyncScale(input.records,input.mediaEvery),scenario);
     results.push(result);
+    assert.equal(result.noChangeBaselineBodies,0,'an unchanged head read baseline bodies');
+    assert.equal(result.noChangeBaselineWrites,0,'an unchanged head rewrote baselines');
+    assert.equal(result.fullBaselineReads,0,'a single local edit read all baseline bodies');
+    assert.equal(result.fullBaselineReplacements,0,'a single local edit replaced the baseline');
+    assert.equal(result.sourceTableReads,0,'a single local edit enumerated source tables');
+    assert.equal(result.changedBaselineBodies,1,'a single local edit read unrelated baseline bodies');
+    assert.equal(result.changedBaselineWrites,1,'a single local edit wrote unrelated baseline bodies');
     assert.equal(result.changedCheckpointRecords,1,`${scenario.records} records did not narrow a single-record edit`);
     assert(result.journalRowsRead<=2,`${scenario.records} records read ${result.journalRowsRead} journal rows for one edit`);
     assert(result.stateBytes<16*1024,`${scenario.records} records leaked the checkpoint baseline back into cloud-sync state`);
@@ -42,11 +49,12 @@ try{
   }
   console.table(results.map(row=>({
     records:row.records,mediaRecords:row.mediaRecords,logicalMiB:Number((Number(row.logicalBytes)/1048576).toFixed(2)),
-    initialSyncMs:Number(Number(row.initialSyncMs).toFixed(1)),singleChangeSyncMs:Number(Number(row.singleChangeSyncMs).toFixed(1)),
+    initialSyncMs:Number(Number(row.initialSyncMs).toFixed(1)),noChangeSyncMs:Number(Number(row.noChangeSyncMs).toFixed(1)),singleChangeSyncMs:Number(Number(row.singleChangeSyncMs).toFixed(1)),
+    baselineBodies:row.changedBaselineBodies,baselineWrites:row.changedBaselineWrites,metadataRows:row.metadataRows,
     journalRowsRead:row.journalRowsRead,uploadedBlocks:row.uploadedBlocks,uploadedKiB:Number((Number(row.uploadedChars)/1024).toFixed(1)),fetchedBlocks:row.fetchedBlocks,stateKiB:Number((Number(row.stateBytes)/1024).toFixed(1)),
     heapDeltaMiB:row.heapDeltaBytes===null?null:Number((Number(row.heapDeltaBytes)/1048576).toFixed(2)),
   })));
-  console.log('PASS: a real end-to-end single-record sync at 1k/10k scale reads one changed checkpoint record and uploads only its data block plus the changed manifest segment; timings are reported, not presented as real-device Core Web Vitals.');
+  console.log('PASS: real Chromium/OPFS sync at 1k/10k scale has zero unchanged baseline body reads/writes and one changed baseline body read/write. The v6 complete manifest still reads all key/block references. Controlled Draft/media/transport, not Sense or Learning-history capacity; timings and end-of-operation heap delta are not CWV or peak memory guarantees.');
 }finally{
   await browser.close();
   await new Promise<void>(resolve=>server.close(()=>resolve()));

@@ -40,6 +40,7 @@ export interface SqliteRecordAdapter {
   changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]>;
   hasChangesSince(contentRevision:number,tables:readonly SqliteLibraryTable[]):Promise<boolean>;
   syncBaseEntries(keys?: readonly { table: SqliteLibraryTable; key: string }[]): Promise<SqliteSyncBaseEntry[]>;
+  syncBaseReferences():Promise<import('./sqliteProtocol').SqliteSyncBaseReference[]>;
   count(table: SqliteLibraryTable): Promise<number>;
   estimateRecordBytes(tables: readonly SqliteLibraryTable[]): Promise<number>;
   homeLearningProjection(languageRouteId: string,clock?:number): Promise<HomeLearningStorageProjection>;
@@ -137,6 +138,9 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
     return this.send(input) as Promise<SqliteSyncBaseEntry[]>;
   }
 
+  syncBaseReferences():Promise<import('./sqliteProtocol').SqliteSyncBaseReference[]>{
+    return this.send({kind:'syncBaseReferences'}) as Promise<import('./sqliteProtocol').SqliteSyncBaseReference[]>;
+  }
   count(table: SqliteLibraryTable): Promise<number> {
     return this.send({ kind: "count", table }) as Promise<number>;
   }

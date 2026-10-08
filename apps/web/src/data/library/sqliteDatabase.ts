@@ -459,6 +459,10 @@ export class SqliteRecordDatabase {
     }));
   }
 
+  syncBaseReferences():import('./sqliteProtocol').SqliteSyncBaseReference[]{
+    return (this.database.exec({sql:'SELECT table_name,record_key,block_refs_json FROM sensa_sync_base ORDER BY table_name,record_key',rowMode:'object',returnValue:'resultRows'}) as Array<Record<string,unknown>>)
+      .map(row=>({table:String(row.table_name) as SqliteLibraryTable,key:String(row.record_key),blockRefs:JSON.parse(String(row.block_refs_json)) as string[]}));
+  }
   count(table: SqliteLibraryTable): number {
     const rows = this.database.exec({
       sql: "SELECT COUNT(*) FROM sensa_records WHERE table_name=?",
@@ -658,6 +662,7 @@ export class SqliteRecordDatabase {
       && !mutation.puts.length
       && !mutation.portablePackages?.length
       && mutation.syncBaseReplacement === undefined
+      && mutation.syncBasePatch === undefined
     ) return;
     if (Date.now() >= this.nextOptimizeAt) {
       this.database.exec("PRAGMA optimize");
@@ -684,6 +689,17 @@ export class SqliteRecordDatabase {
             sql: 'INSERT INTO sensa_sync_base(table_name,record_key,value_json,block_refs_json) VALUES(?,?,?,?)',
             bind: [entry.table, entry.key, this.storedEncoded('sync',entry.table,entry.key,entry.valueJson,removedContent), blockRefsJson],
           });
+        }
+      }
+      if(mutation.syncBasePatch){
+        if(mutation.syncBaseReplacement!==undefined)throw new Error('sqlite_sync_base_mutation_conflict');
+        for(const entry of mutation.syncBasePatch.deletes){
+          this.detachSharedContent('sync',entry.table,entry.key,removedContent);
+          this.database.exec({sql:'DELETE FROM sensa_sync_base WHERE table_name=? AND record_key=?',bind:[entry.table,entry.key]});
+        }
+        for(const entry of mutation.syncBasePatch.puts){
+          const refs=JSON.stringify(entry.blockRefs);encodedWriteSize+=entry.valueJson.length+refs.length;
+          this.database.exec({sql:'INSERT INTO sensa_sync_base(table_name,record_key,value_json,block_refs_json) VALUES(?,?,?,?) ON CONFLICT(table_name,record_key) DO UPDATE SET value_json=excluded.value_json,block_refs_json=excluded.block_refs_json',bind:[entry.table,entry.key,this.storedEncoded('sync',entry.table,entry.key,entry.valueJson,removedContent),refs]});
         }
       }
       for (const table of mutation.clears) {

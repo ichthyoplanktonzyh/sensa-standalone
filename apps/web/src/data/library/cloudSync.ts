@@ -10,17 +10,18 @@ import {
  finalizeLibraryReplicaConflictChoice,
  replicaEntriesEqual,
  replicaEntryId,
+ assertLibraryReplicaDelete,
  type LibraryReplicaEntry,
 } from './replication/libraryReplica';
 import {applyLibraryReplicaMutation} from './replication/libraryReplicaApplication';
-import {validateLibraryReplica} from './replication/libraryReplicaValidation';
+import {validateLibraryReplica,libraryReplicaValidationVersion} from './replication/libraryReplicaValidation';
 export type SyncRequest=(path:string,body?:unknown)=>Promise<any>;
 export type CloudSyncEntry=LibraryReplicaEntry;
 type Entry=CloudSyncEntry;
 type Owner={subject:string;accountId:string};
 export type CloudSyncConflictChoice='local'|'remote';
 export type CloudSyncConflict={detectedAt:string;remoteRevision:number;remoteManifest:string[]|null;records:{id:string;base:Entry|null;local:Entry|null;remote:Entry|null}[];affectedRecordIds:string[]};
-export type CloudSyncState={owner:Owner;incarnation:string;revision:number;checkpointVersion?:6;storage?:LibrarySyncHead['storage'];syncedLocalRevision?:number;pending?:{operationId:string;baseRevision:number;manifest:string[]};status:'pending'|'syncing'|'synced'|'offline'|'conflict'|'failed';conflicts?:string[];conflict?:CloudSyncConflict;resolution?:{choice:CloudSyncConflictChoice;expectedRemoteRevision:number};lastSyncedAt?:string;lastCheckedAt?:string;syncStartedAt?:string;error?:string;failureKind?:CloudSyncFailureKind;retryCount?:number;retryAt?:string};
+export type CloudSyncState={owner:Owner;incarnation:string;revision:number;checkpointVersion?:6;validationVersion?:typeof libraryReplicaValidationVersion;storage?:LibrarySyncHead['storage'];syncedLocalRevision?:number;pending?:{operationId:string;baseRevision:number;manifest:string[]};status:'pending'|'syncing'|'synced'|'offline'|'conflict'|'failed';conflicts?:string[];conflict?:CloudSyncConflict;resolution?:{choice:CloudSyncConflictChoice;expectedRemoteRevision:number};lastSyncedAt?:string;lastCheckedAt?:string;syncStartedAt?:string;error?:string;failureKind?:CloudSyncFailureKind;retryCount?:number;retryAt?:string};
 type State=CloudSyncState;
 export type PendingCloudSyncRecord={table:typeof librarySyncTables[number];key:string};
 export type PendingCloudSyncSnapshot={
@@ -40,10 +41,55 @@ const TRANSFER_CAP=96*1024*1024;
 // a bounded snapshot path. Compression is not permission to multiply its heap.
 const DECODED_CAP=64*1024*1024;
 const blockCodec=()=>import('@sensa/contracts/sensa/library-sync-blocks');
-async function capture(tx:LibraryTransaction){
+// These API rejections occur before commit, unlike a lost/malformed ACK.
+const rejectedPublication=(cause:unknown)=>cause instanceof Error&&['library_sync_history','library_sync_identity'].includes(cause.message);
+async function captureHeader(tx:LibraryTransaction){
  const incarnation=await assertCurrentLibrary(tx),owner=await tx.get<Owner>('meta','service-owner'),identity=await tx.get<LibraryIdentity>('meta','identity');
  if(!owner?.accountId||!identity||await tx.get('meta','signed-out'))throw new Error('authentication_required');
- const state=await tx.get<State>('meta',STATE),localRevision=await readLocalLibraryRevision(tx),entries:Entry[]=[];
+ return {owner,incarnation,identity,state:await tx.get<State>('meta',STATE),localRevision:await readLocalLibraryRevision(tx)};
+}
+/** Only a complete, confirmed checkpoint may stand in for an unchanged head.
+ * Conflict baselines may deliberately contain different branches. */
+function confirmedCheckpoint(state:State|undefined){
+ return state?.checkpointVersion===6&&Number.isSafeInteger(state.revision)&&state.revision>=0&&Number.isSafeInteger(state.syncedLocalRevision)&&(state.syncedLocalRevision??-1)>=0
+  &&!state.pending&&state.status!=='conflict'&&!state.conflicts?.length&&!state.conflict&&!state.resolution;
+}
+const validatedCheckpoint=(state:State|undefined)=>confirmedCheckpoint(state)&&state!.validationVersion===libraryReplicaValidationVersion;
+
+/** A validated remote baseline plus owner-admitted local transactions needs
+ * only the changed bodies. The v6 manifest still carries all row references. */
+async function captureDelta(tx:LibraryTransaction,expected:Awaited<ReturnType<typeof captureHeader>>,head:LibrarySyncHead){
+ const current=await captureHeader(tx);
+ if(!sameOwner(current.owner,expected.owner)||current.incarnation!==expected.incarnation)throw new Error('account_changed');
+ if(current.localRevision!==expected.localRevision||!validatedCheckpoint(current.state)||current.state!.revision!==head.revision)throw new Error('library_sync_local_changed');
+ if(current.localRevision===current.state!.syncedLocalRevision)return {...current,puts:[] as Entry[],deletes:[] as Array<Pick<Entry,'table'|'key'>>,references:[] as Array<{table:Entry['table'];key:string;blockRefs:string[]}>};
+ const changes=(await tx.changesSince(current.state!.syncedLocalRevision!,librarySyncTables)).filter(row=>isReplicatedLibraryEntry(row.table,row.key));
+ const base=new Map((await tx.syncBaseEntries<typeof librarySyncTables>(changes)).map(row=>[entryId(row),row]));
+ const puts:Entry[]=[],deletes:Array<Pick<Entry,'table'|'key'>>=[];
+ for(const change of changes){
+  const before=base.get(entryId(change));
+  if(change.value===null){
+   assertLibraryReplicaDelete(before?{...before,value:before.value}:{table:change.table,key:change.key,value:undefined});
+   if(before)deletes.push({table:change.table,key:change.key});
+  }else{
+   const normalized=normalizeLibraryReplicaEntry({table:change.table,key:change.key,value:change.value},current.identity),value=encodeBackupValue(normalized.value);
+   if(!equal(value,before?.value))puts.push({...normalized,value});
+  }
+ }
+ if(!puts.length&&!deletes.length)return {...current,puts,deletes,references:[]};
+ const references=(await tx.syncBaseReferences()).map(row=>{
+  if(!isReplicatedLibraryEntry(row.table,row.key)||!row.blockRefs.length||row.blockRefs.some(ref=>!/^[a-f0-9]{64}$/u.test(ref)))throw new Error('library_sync_format');
+  return {...row,table:row.table as Entry['table']};
+ });
+ if(!references.some(row=>row.table==='meta'&&row.key==='identity')&&!puts.some(row=>row.table==='meta'&&row.key==='identity')){
+  if(head.manifest!==null)throw new Error('library_sync_format');
+  const identity=normalizeLibraryReplicaEntry({table:'meta',key:'identity',value:current.identity},current.identity);
+  puts.push({...identity,value:encodeBackupValue(identity.value)});
+ }
+ return {...current,puts,deletes,references};
+}
+async function capture(tx:LibraryTransaction){
+ const {owner,incarnation,identity,state,localRevision}=await captureHeader(tx),entries:Entry[]=[];
  const base:Entry[]=(await tx.syncBaseEntries<typeof librarySyncTables>()).map(row=>({table:row.table,key:row.key,value:row.value,blocks:row.blocks}));
  base.sort((a,b)=>entryId(a).localeCompare(entryId(b)));
  if(state?.syncedLocalRevision!==undefined&&state.syncedLocalRevision<=localRevision){
@@ -175,11 +221,17 @@ class Blocks{
    librarySyncBlockStore.parse({blocks});await this.request('/blocks/store',{blocks});
   }
  }
+ async prepare(entries:Entry[]){
+  const {librarySyncRecordSegments}=await blockCodec(),prepared:Entry[]=[];let decodedSize=0;
+  for(const r of entries){let refs=r.blocks;if(!refs?.length){refs=[];for(const segment of librarySyncRecordSegments(r.value)){decodedSize+=new TextEncoder().encode(segment).length;if(decodedSize>DECODED_CAP)throw new Error('library_sync_capacity');refs.push(...await this.pack(segment));}}prepared.push({...r,blocks:[...refs]});}
+  return prepared;
+ }
+ async packManifest(identity:LibraryIdentity,rows:LibrarySyncManifest['rows']){
+  return this.pack(JSON.stringify(librarySyncManifest.parse({version:6,libraryId:identity.id,learnerId:identity.learnerId,rows})));
+ }
  async manifest(entries:Entry[]){
-  const {librarySyncRecordSegments}=await blockCodec(),identity=decodeBackupValue(entries.find(r=>r.table==='meta'&&r.key==='identity')!.value);
-  const rows:LibrarySyncManifest['rows']=[],prepared:Entry[]=[];let decodedSize=0;
-  for(const r of entries){let refs=r.blocks;if(!refs?.length){refs=[];for(const segment of librarySyncRecordSegments(r.value)){decodedSize+=new TextEncoder().encode(segment).length;if(decodedSize>DECODED_CAP)throw new Error('library_sync_capacity');refs.push(...await this.pack(segment));}}rows.push({table:r.table,key:r.key,blocks:refs});prepared.push({...r,blocks:[...refs]});}
-  const manifest=await this.pack(JSON.stringify(librarySyncManifest.parse({version:6,libraryId:identity.id,learnerId:identity.learnerId,rows})));return {manifest,entries:prepared};
+  const identity=decodeBackupValue(entries.find(r=>r.table==='meta'&&r.key==='identity')!.value),prepared=await this.prepare(entries);
+  return {manifest:await this.packManifest(identity,prepared.map(r=>({table:r.table,key:r.key,blocks:r.blocks!}))),entries:prepared};
  }
  async download(head:LibrarySyncHead,base:Entry[]=[]){
   if(!head.manifest)return [];
@@ -210,8 +262,8 @@ class Blocks{
   entries.sort((a,b)=>entryId(a).localeCompare(entryId(b)));const rows=validateLibraryReplica(entries),identity=rows.meta.find(r=>r.key==='identity')!.value;if(identity.id!==manifest.libraryId||identity.learnerId!==manifest.learnerId)throw new Error('library_sync_identity');return entries;
  }
 }
-async function downloadStableHead(blocks:Blocks,request:SyncRequest,base:Entry[],confirmedRevision?:number){
- let head=librarySyncHead.parse(await request('/head'));
+async function downloadStableHead(blocks:Blocks,request:SyncRequest,base:Entry[],confirmedRevision?:number,observedHead?:LibrarySyncHead){
+ let head=observedHead??librarySyncHead.parse(await request('/head'));
  // A confirmed baseline is already the complete body of this remote revision.
  // Reuse it without fetching even the manifest; conflicts deliberately keep a
  // mixed baseline and therefore never provide a confirmed revision here.
@@ -230,9 +282,10 @@ async function downloadStableHead(blocks:Blocks,request:SyncRequest,base:Entry[]
 }
 /** Injected transport permits offline/idempotency/restore tests without real accounts. */
 export async function synchronizeLibrary(request:SyncRequest,options:{publishEmptyIdentity?:boolean}={}){
- let initial=await readLibrary(capture);const expected={owner:initial.owner,incarnation:initial.incarnation};
- const prior=initial.state;
- if(prior&&(!sameOwner(prior.owner,initial.owner)||prior.incarnation!==initial.incarnation))throw new Error('account_changed');
+ const header=await readLibrary(captureHeader),expected={owner:header.owner,incarnation:header.incarnation};
+ const prior=header.state;
+ const initiallyConflicted=prior?.status==='conflict'||!!prior?.conflicts?.length||!!prior?.conflict||!!prior?.resolution;
+ if(prior&&(!sameOwner(prior.owner,header.owner)||prior.incarnation!==header.incarnation))throw new Error('account_changed');
  const defaults:State={...expected,revision:0,status:'pending'};
  const transport=request;
  request=async(path,body)=>{
@@ -242,22 +295,69 @@ export async function synchronizeLibrary(request:SyncRequest,options:{publishEmp
  const blocks=new Blocks(request);
  try{
   await saveState(expected,old=>({...old??defaults,status:'syncing',syncStartedAt:new Date().toISOString(),error:undefined}));
+  let observedHead:LibrarySyncHead|undefined;
+  if(validatedCheckpoint(prior)&&prior!.syncedLocalRevision!<=header.localRevision){
+   observedHead=librarySyncHead.parse(await request('/head'));
+   if(observedHead.revision===prior!.revision&&!(observedHead.manifest===null&&options.publishEmptyIdentity)){
+    const delta=await readLibrary(tx=>captureDelta(tx,header,observedHead!));
+    if(delta.puts.length||delta.deletes.length){
+     const prepared=await blocks.prepare(delta.puts),rows=new Map(delta.references.map(row=>[entryId(row),{table:row.table,key:row.key,blocks:row.blockRefs}]));
+     for(const row of delta.deletes)rows.delete(entryId(row));
+     for(const row of prepared)rows.set(entryId(row),{table:row.table,key:row.key,blocks:row.blocks!});
+     const manifest=await blocks.packManifest(delta.identity,[...rows.values()].sort((a,b)=>entryId(a).localeCompare(entryId(b))));
+     const pending={operationId:crypto.randomUUID(),baseRevision:observedHead.revision,manifest};
+     await blocks.upload();
+     await saveState(expected,old=>{
+      if(!validatedCheckpoint(old)||old!.revision!==pending.baseRevision)throw new Error('library_sync_local_changed');
+      return {...old!,status:'pending',pending};
+     });
+     let published:LibrarySyncHead;
+     try{published=librarySyncHead.parse(await request('/commit',pending));}
+     catch(cause){
+      if(cause instanceof Error&&cause.message==='library_sync_conflict'){await saveState(expected,old=>({...old!,pending:undefined}));throw new Error('library_sync_head_changed');}
+      if(rejectedPublication(cause))await saveState(expected,old=>({...old!,pending:undefined}));
+      throw cause;
+     }
+     if(published.revision<=pending.baseRevision||!equal(published.manifest,pending.manifest))throw new Error('library_sync_format');
+     await writeLibraryState(async tx=>{
+      const current=await captureHeader(tx),state=current.state;
+      if(!sameOwner(current.owner,expected.owner)||current.incarnation!==expected.incarnation)throw new Error('account_changed');
+      if(state?.pending?.operationId!==pending.operationId||state.revision!==pending.baseRevision)throw new Error('library_sync_local_changed');
+      const completedAt=new Date().toISOString();
+      tx.patchSyncBase({puts:prepared.map(row=>({...row,blocks:row.blocks!})),deletes:delta.deletes});
+      tx.put('meta',STATE,{...state,revision:published.revision,storage:published.storage??state.storage,status:current.localRevision===delta.localRevision?'synced':'pending',syncedLocalRevision:delta.localRevision,pending:undefined,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
+     });
+     return;
+    }
+    await writeLibraryState(async tx=>{
+     const current=await captureHeader(tx);
+     if(!sameOwner(current.owner,expected.owner)||current.incarnation!==expected.incarnation)throw new Error('account_changed');
+     if(current.localRevision!==header.localRevision||!validatedCheckpoint(current.state)||current.state!.revision!==prior!.revision||current.state!.syncedLocalRevision!==prior!.syncedLocalRevision)throw new Error('library_sync_local_changed');
+     const completedAt=new Date().toISOString();
+     tx.put('meta',STATE,{...current.state!,storage:observedHead!.storage??current.state!.storage,status:'synced',syncedLocalRevision:header.localRevision,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
+    });
+    return;
+   }
+  }
+  let initial=await readLibrary(capture);
+  if(observedHead&&initial.localRevision!==header.localRevision)throw new Error('library_sync_local_changed');
   // Pending publication survives a lost HTTP acknowledgement and is retried verbatim.
   let state=await readCloudSync()??defaults;
   if(state.pending){
    const p=state.pending;
    try{const head=librarySyncHead.parse(await request('/commit',{operationId:p.operationId,baseRevision:p.baseRevision,manifest:p.manifest}));const confirmed=await blocks.download(head,initial.base);await saveState(expected,old=>({...old!,revision:head.revision,storage:head.storage??old!.storage,pending:undefined}),confirmed);}
-   catch(e){if(!(e instanceof Error)||!['library_sync_conflict','library_sync_missing_block'].includes(e.message))throw e;await saveState(expected,old=>({...old!,pending:undefined}));}
+   catch(e){if(rejectedPublication(e)){await saveState(expected,old=>({...old!,pending:undefined}));throw e;}if(!(e instanceof Error)||!['library_sync_conflict','library_sync_missing_block'].includes(e.message))throw e;await saveState(expected,old=>({...old!,pending:undefined}));}
   }
   initial=await readLibrary(capture);state=initial.state??defaults;
-  const confirmedRevision=initial.state?.checkpointVersion===6&&initial.state.syncedLocalRevision!==undefined&&!initial.state.conflicts?.length?initial.state.revision:undefined;
-  const stable=await downloadStableHead(blocks,request,initial.base,confirmedRevision),head=stable.head,remote=stable.remote.filter(row=>isReplicatedLibraryEntry(row.table,row.key));
+  const confirmedRevision=!initiallyConflicted&&confirmedCheckpoint(initial.state)?initial.state!.revision:undefined;
+  const stable=await downloadStableHead(blocks,request,initial.base,confirmedRevision,observedHead),head=stable.head,remote=stable.remote.filter(row=>isReplicatedLibraryEntry(row.table,row.key));
   // An identity-only browser and a null remote head are the authoritative empty
   // account. Confirm that state without publishing device bootstrap metadata.
   // The first learner-content write will still become pending and publish v6.
   if(head.manifest===null&&empty(initial.entries)&&!options.publishEmptyIdentity){
+   validateLibraryReplica(initial.entries);
    const completedAt=new Date().toISOString();
-   await saveState(expected,old=>({...old!,checkpointVersion:6,revision:head.revision,storage:head.storage,status:'synced',syncedLocalRevision:initial.localRevision,pending:undefined,conflicts:undefined,conflict:undefined,resolution:undefined,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined}),[]);
+   await saveState(expected,old=>({...old!,checkpointVersion:6,validationVersion:libraryReplicaValidationVersion,revision:head.revision,storage:head.storage,status:'synced',syncedLocalRevision:initial.localRevision,pending:undefined,conflicts:undefined,conflict:undefined,resolution:undefined,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined}),[]);
    return;
   }
   let merged:ReturnType<typeof mergeLibraryReplicas>;
@@ -298,12 +398,13 @@ export async function synchronizeLibrary(request:SyncRequest,options:{publishEmp
    await blocks.upload();await saveState(expected,old=>({...old!,pending}));
    let published:LibrarySyncHead;
    try{published=librarySyncHead.parse(await request('/commit',{operationId:pending.operationId,baseRevision:pending.baseRevision,manifest}));}
-   catch(error){if(error instanceof Error&&error.message==='library_sync_conflict'){await saveState(expected,old=>({...old!,pending:undefined}));throw new Error('library_sync_head_changed');}throw error;}
+   catch(error){if(error instanceof Error&&error.message==='library_sync_conflict'){await saveState(expected,old=>({...old!,pending:undefined}));throw new Error('library_sync_head_changed');}if(rejectedPublication(error))await saveState(expected,old=>({...old!,pending:undefined}));throw error;}
+   if(published.revision<=pending.baseRevision||!equal(published.manifest,pending.manifest))throw new Error('library_sync_format');
    await saveState(expected,old=>({...old!,revision:published.revision,storage:published.storage??old!.storage,pending:undefined,lastSyncedAt:new Date().toISOString()}),nextBase(prepared.entries));
   }
   const current=await readLibrary(capture);
   const completedAt=new Date().toISOString(),converged=entriesEqual(current.entries,current.base);
-  await saveState(expected,old=>({...old!,checkpointVersion:6,status:activeConflicts.length?'conflict':converged?'synced':'pending',conflicts:activeConflicts.length?activeConflicts:undefined,conflict:activeConflicts.length?conflict:undefined,resolution:undefined,syncedLocalRevision:converged?current.localRevision:old!.syncedLocalRevision,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined}));
+  await saveState(expected,old=>({...old!,checkpointVersion:6,validationVersion:libraryReplicaValidationVersion,status:activeConflicts.length?'conflict':converged?'synced':'pending',conflicts:activeConflicts.length?activeConflicts:undefined,conflict:activeConflicts.length?conflict:undefined,resolution:undefined,syncedLocalRevision:converged?current.localRevision:old!.syncedLocalRevision,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined}));
  }catch(error){const message=error instanceof Error?error.message:'library_sync_failed';
   await saveState(expected,old=>{const state=old??defaults;
    if(message==='library_sync_local_changed')return {...state,status:'pending',syncStartedAt:undefined,error:message,failureKind:undefined,retryCount:undefined,retryAt:undefined};

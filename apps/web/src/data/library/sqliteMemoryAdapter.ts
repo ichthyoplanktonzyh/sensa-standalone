@@ -186,6 +186,10 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
       .sort((left, right) => left.table.localeCompare(right.table) || left.key.localeCompare(right.key));
   }
 
+  async syncBaseReferences():Promise<import('./sqliteProtocol').SqliteSyncBaseReference[]>{
+    return [...this.syncBase.values()].map(({table,key,blockRefs})=>({table,key,blockRefs:[...blockRefs]}))
+      .sort((a,b)=>a.table.localeCompare(b.table)||a.key.localeCompare(b.key));
+  }
   async count(table: SqliteLibraryTable): Promise<number> {
     const prefix = `${table}\u0000`;
     let count = 0;
@@ -351,6 +355,11 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
         `${entry.table}\u0000${entry.key}`,
         { ...entry, blockRefs: [...entry.blockRefs] },
       ]));
+    if(mutation.syncBasePatch){
+      if(mutation.syncBaseReplacement!==undefined)throw new Error('sqlite_sync_base_mutation_conflict');
+      for(const row of mutation.syncBasePatch.deletes)nextSyncBase.delete(`${row.table}\u0000${row.key}`);
+      for(const row of mutation.syncBasePatch.puts)nextSyncBase.set(`${row.table}\u0000${row.key}`,{...row,blockRefs:[...row.blockRefs]});
+    }
     const nextPortableMedia=new Map([...this.portableMediaBlobs].map(([digest,blob])=>[
       digest,{...blob,bytes:new Uint8Array(blob.bytes)},
     ]));

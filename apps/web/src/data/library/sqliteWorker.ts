@@ -201,6 +201,7 @@ const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
     case 'changesSince': return current.database.changesSince(request.contentRevision,request.tables);
     case 'hasChangesSince':return current.database.hasChangesSince(request.contentRevision,request.tables);
     case 'syncBaseEntries': return current.database.syncBaseEntries(request.keys);
+    case 'syncBaseReferences':return current.database.syncBaseReferences();
     case 'count': return current.database.count(request.table);
     case 'estimateRecordBytes': return current.database.estimateRecordBytes(request.tables);
     case 'homeLearningProjection': return current.database.homeLearningProjection(request.languageRouteId,request.clock);

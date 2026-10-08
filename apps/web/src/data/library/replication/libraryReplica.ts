@@ -111,7 +111,7 @@ export function finalizeLibraryReplicaConflictChoice(selected:ReplicaEntry[],mer
  }).sort((a,b)=>replicaEntryId(a).localeCompare(replicaEntryId(b)));
 }
 
-function assertLibraryReplicaDelete(entry:ReplicaEntry){
+export function assertLibraryReplicaDelete(entry:ReplicaEntry){
  const module=moduleFor(entry.table,entry.key);
  if(!module)throw new Error('library_sync_format');
  module.assertDelete?.(entry);

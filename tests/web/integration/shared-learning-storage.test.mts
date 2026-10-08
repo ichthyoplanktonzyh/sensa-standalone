@@ -148,7 +148,15 @@ test('sync baseline ownership survives source clearing and releases bodies only 
   expect(copy.syncBaseEntries()[0]!.valueJson).toBe(run.encodedValue);
   const storage=Reflect.get(copy,'database') as Database;
   expect((storage.exec({sql:'SELECT COUNT(*) FROM sensa_shared_record_content',rowMode:0,returnValue:'resultRows'}) as number[])[0]).toBeGreaterThan(0);
-  copy.commit({clears:[],deletes:[],puts:[],syncBaseReplacement:[]});
+  const before=()=>['sensa_sync_base','sensa_shared_record_content','sensa_shared_record_content_owners'].map(table=>storage.exec({sql:`SELECT * FROM ${table} ORDER BY 1,2`,rowMode:'object',returnValue:'resultRows'}));
+  const retained=before(),exec=storage.exec.bind(storage);let injected=false;
+  storage.exec=((input:any)=>{const sql=typeof input==='string'?input:input.sql;if(!injected&&sql.startsWith('INSERT INTO sensa_shared_record_content_owners')){injected=true;throw new Error('interrupted baseline body owner');}return exec(input);}) as typeof storage.exec;
+  try{expect(()=>copy.commit({clears:[],deletes:[],puts:[],syncBasePatch:{deletes:[],puts:[{table:'learningRuns',key:run.key,valueJson:run.encodedValue,blockRefs:['1'.repeat(64)]}]}})).toThrow('interrupted baseline body owner');}finally{storage.exec=exec;}
+  expect(injected).toBe(true);expect(before()).toEqual(retained);
+  copy.commit({clears:[],deletes:[],puts:[],syncBasePatch:{deletes:[],puts:[{table:'learningRuns',key:run.key,valueJson:run.encodedValue,blockRefs:['1'.repeat(64)]}]}});
+  expect(copy.syncBaseEntries()[0]!.valueJson).toBe(run.encodedValue);
+  expect(copy.syncBaseReferences()[0]!.blockRefs).toEqual(['1'.repeat(64)]);
+  copy.commit({clears:[],deletes:[],puts:[],syncBasePatch:{deletes:[{table:'learningRuns',key:run.key}],puts:[]}});
   expect(storage.exec({sql:'SELECT COUNT(*) FROM sensa_shared_record_content',rowMode:0,returnValue:'resultRows'})).toEqual([0]);
  }finally{copy.close();}
 });

@@ -26,7 +26,7 @@ export const sqlitePoolDirectory = "/sensa-local-library-v12";
 export const sqliteLibraryBaselineVersion = 10;
 export const sqliteLibrarySchemaVersion = 16;
 /** Cross-tab RPC changes must bump this before adding or changing messages. */
-export const sqliteCoordinatorProtocolVersion = 46;
+export const sqliteCoordinatorProtocolVersion = 47;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -72,6 +72,8 @@ export type SqliteMutation = {
   portablePackages?:PortablePackageMediaWrite[];
   /** Atomic replacement of the last server-confirmed checkpoint baseline. */
   syncBaseReplacement?: SqliteSyncBaseEntry[];
+  /** Confirmed local publication: replace only the affected baseline records. */
+  syncBasePatch?:{puts:SqliteSyncBaseEntry[];deletes:Array<{table:SqliteLibraryTable;key:string}>};
 };
 
 export type SqliteRecordChange = {
@@ -87,6 +89,7 @@ export type SqliteSyncBaseEntry = {
   valueJson: string;
   blockRefs: string[];
 };
+export type SqliteSyncBaseReference=Pick<SqliteSyncBaseEntry,'table'|'key'|'blockRefs'>;
 
 export type SqliteWorkerRequest =
   | { id: number; kind: "initialize"; namespace?:string|null }
@@ -108,6 +111,7 @@ export type SqliteWorkerRequest =
   | { id: number; kind: "changesSince"; contentRevision: number; tables: SqliteLibraryTable[] }
   | { id:number;kind:'hasChangesSince';contentRevision:number;tables:SqliteLibraryTable[] }
   | { id: number; kind: "syncBaseEntries"; keys?: Array<{ table: SqliteLibraryTable; key: string }> }
+  | {id:number;kind:'syncBaseReferences'}
   | { id: number; kind: "count"; table: SqliteLibraryTable }
   | { id: number; kind: "estimateRecordBytes"; tables: SqliteLibraryTable[] }
   | { id: number; kind: "homeLearningProjection"; languageRouteId: string;clock:number }

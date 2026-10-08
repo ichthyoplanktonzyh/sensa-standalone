@@ -640,7 +640,7 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  if(localWebOrigin){
   await test.step('formal account UI stays mounted across same-session auth events',async()=>{
   const webOrigin=localWebOrigin;if(new URL(webOrigin).hostname!=='127.0.0.1')throw Error('Use isolated loopback Web');
-  const ctx=await browser.newContext(),ui=await ctx.newPage();let accountInitializations=0;const errors:string[]=[];ui.on('pageerror',e=>errors.push(e.message));
+  const ctx=await browser.newContext({locale:'zh-CN'}),ui=await ctx.newPage();let accountInitializations=0;const errors:string[]=[];ui.on('pageerror',e=>errors.push(e.message));
   const token=[{}, {sub:primary.subject,exp:Math.floor(Date.now()/1000)+3600},'fixture'].map(x=>Buffer.from(JSON.stringify(x)).toString('base64url')).join('.');
   await ctx.route('**/*',async route=>{
    const req=route.request(),address=new URL(req.url());
@@ -654,7 +654,14 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
    if(address.origin===webOrigin){await route.continue();return;}
    await route.abort();
   });
-  await ui.goto(webOrigin+'/profile');await ui.getByLabel('邮箱',{exact:true}).fill('sync@sensa.invalid');await ui.getByRole('button',{name:'发送登录邮件',exact:true}).click();await ui.getByRole('button',{name:'邮件中有验证码？',exact:true}).click();await ui.getByLabel('验证码',{exact:true}).fill('123456');await ui.getByRole('button',{name:'验证并继续',exact:true}).click();
+  // Guest settings remain usable without authentication. Login is an explicit
+  // account intent, not an automatic email gate when visiting the profile.
+  ui.setDefaultTimeout(15_000);
+  await ui.goto(webOrigin+'/profile');
+  await expect(ui.getByRole('heading',{name:'账号与设置',exact:true})).toBeVisible();
+  await ui.getByRole('button',{name:/账号与安全/u}).click();
+  await ui.getByRole('button',{name:'登录 Sensa',exact:true}).click();
+  await ui.getByLabel('邮箱',{exact:true}).fill('sync@sensa.invalid');await ui.getByRole('button',{name:'发送登录邮件',exact:true}).click();await ui.getByRole('button',{name:'邮件中有验证码？',exact:true}).click();await ui.getByLabel('验证码',{exact:true}).fill('123456');await ui.getByRole('button',{name:'验证并继续',exact:true}).click();
   await expect(ui.getByRole('heading',{name:'账号与设置',exact:true})).toBeVisible({timeout:60000});
   await ui.getByRole('button',{name:/设备与数据/}).click();await expect(ui.getByRole('heading',{name:'账号云同步'})).toBeVisible();await expect(ui.getByText('已同步到账号',{exact:true})).toBeVisible();
   await expect(ui.getByRole('button',{name:'立即同步',exact:true})).toBeEnabled();await expect(ui.getByText('恢复码',{exact:true})).toHaveCount(0);

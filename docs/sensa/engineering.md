@@ -303,7 +303,18 @@ Personal Anchor media 与 Practice Artifact 仍按各自 learner-owned 表进入
 消费、在最后引用后释放；解码行上限 90 MiB、累计新增解码事实上限保持 64 MiB 是不同保护，不是 JS heap
 承诺或已通过的大规模云端性能结论。账号存储边界仍为 256 MiB。不兼容 checkpoint 停止同步并保留原副本，
 不会为编码升级自动覆盖旧 head。
-完整 capture／merge 仍读取完整事实与同步基线；分块压缩不证明大规模跨设备恢复的内存或容量达标。
+已由当前 replica validation version 完整校验并确认的 v6 基线，在相同远端 revision 下复用本机 owner 事务准入：
+无变化只读取轻量身份、同步游标并核对 head；本机增量只读取变化事实和对应基线正文，保留其余 block refs，
+确认 CAS commit 后在同一 SQLite 事务中 patch 受影响基线与同步状态。后续本机写入保留 pending，不能把游标
+推进到未上传版本；丢失或无法确认 ACK 仍用原 operation 重试。服务端明确在提交前拒绝的历史／身份错误
+才清除该 pending receipt，保留本机事实与原基线，避免反复重放必败请求。普通物理删除继续交由领域 Replica
+的许可规则裁决。
+`validationVersion` 是设备内完整性合同版本，不是 wire version；该版本缺失/过期、首次发布、远端 head 变化、
+pending commit 恢复或冲突均保留完整 capture／merge／领域验证。验证合同变更时须更新其版本；泛型 store 写口
+是内部接口，生产事实仍必须经各 owner 准入或已完整校验的恢复入口，不把同步当作语义/学习事实创建者。
+v6 发布仍组装整份 key/block-ref manifest 元数据；它不再解码所有未变正文，但不能宣称整条路径严格 O(变化数)。
+上述 fallback 仍读取完整事实与基线，64 MiB 解码保护与256 MiB账号容量尚有差距；增量优化或分块压缩不证明
+大规模跨设备恢复的内存或容量达标。
 Checkpoint 的 block/manifest 传输、CAS commit、重试和 baseline 由 Cloud Sync Coordinator 负责；记录的
 跨设备归一化、三方收敛、完整性验证、历史 replay 与删除许可由领域 Replica Module 负责。Personal
 Semantic World、Personal Content、Learning System、Content Supply 和 Preference 各声明唯一记录所有权，

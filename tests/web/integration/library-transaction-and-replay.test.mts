@@ -291,6 +291,18 @@ assert.deepEqual(database.syncBaseEntries(), [
 assert.deepEqual(database.syncBaseEntries([{ table: 'drafts', key: 'changed-b' }]), [
   { table: 'drafts', key: 'changed-b', valueJson: '{"revision":2}', blockRefs: ['a'.repeat(64)] },
 ]);
+assert.deepEqual(database.syncBaseReferences(),[
+ {table:'drafts',key:'changed-b',blockRefs:['a'.repeat(64)]},{table:'meta',key:'identity',blockRefs:['b'.repeat(64)]},
+]);
+const baseBefore=database.syncBaseEntries();
+rawDatabase.exec("CREATE TEMP TRIGGER fail_baseline_patch BEFORE INSERT ON sensa_sync_base WHEN NEW.record_key='changed-b' BEGIN SELECT RAISE(ABORT,'controlled baseline patch failure'); END");
+try{
+ assert.throws(()=>database.commit({clears:[],deletes:[],puts:[],syncBasePatch:{deletes:[{table:'meta',key:'identity'}],puts:[{table:'drafts',key:'changed-b',valueJson:'{"revision":3}',blockRefs:['c'.repeat(64)]}]}}),/controlled baseline patch failure/u);
+ assert.deepEqual(database.syncBaseEntries(),baseBefore,'an interrupted patch must roll its earlier deletes back');
+}finally{rawDatabase.exec('DROP TRIGGER fail_baseline_patch');}
+database.commit({clears:[],deletes:[],puts:[],syncBasePatch:{deletes:[],puts:[{table:'drafts',key:'changed-b',valueJson:'{"revision":3}',blockRefs:['c'.repeat(64)]}]}});
+assert.equal(database.syncBaseEntries([{table:'drafts',key:'changed-b'}])[0]!.valueJson,'{"revision":3}');
+assert.deepEqual(database.syncBaseEntries([{table:'meta',key:'identity'}])[0],baseBefore[1],'untouched baseline facts stay exact');
 database.commit({ clears: [], deletes: [], puts: [], syncBaseReplacement: [] });
 assert.deepEqual(database.syncBaseEntries(), []);
 assert.throws(() => database.commit({

@@ -28,7 +28,7 @@ const retryableOwnerReads=new Set<SqliteWorkerInput['kind']>([
   'initialize','get','entries','entriesPage','recordKeysPage','changesSince','diagnostics',
   'meaningLookup','registrySelection','worldBrowse','worldSceneMeaning','worldLearningChoices','practiceExpressions',
   'existingRecordKeys','existingJourneyIdentities','packageCacheProjection',
-  'learningSemanticMemory','hasChangesSince','syncBaseEntries','count','estimateRecordBytes',
+  'learningSemanticMemory','hasChangesSince','syncBaseEntries','syncBaseReferences','count','estimateRecordBytes',
   'homeLearningProjection','learningHistoryPage','learningManagementSummary','runtimeLearningCandidates',
   'studyScopeMember','latestLearningActionAt','countIntroducedLearningTargets','learningRunIdsForTarget',
   'openLearningRunTargets','countContentAttemptsSince','learningTargetIdsForBookUpgrade',
@@ -54,6 +54,7 @@ export interface CoordinatedSqliteBackend {
   changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]>;
   hasChangesSince(contentRevision:number,tables:readonly SqliteLibraryTable[]):Promise<boolean>;
   syncBaseEntries(keys?: readonly { table: SqliteLibraryTable; key: string }[]): Promise<SqliteSyncBaseEntry[]>;
+  syncBaseReferences():Promise<import('./sqliteProtocol').SqliteSyncBaseReference[]>;
   count(table: SqliteLibraryTable): Promise<number>;
   estimateRecordBytes(tables: readonly SqliteLibraryTable[]): Promise<number>;
   homeLearningProjection(languageRouteId: string,clock?:number): Promise<HomeLearningStorageProjection>;
@@ -175,6 +176,9 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
     return this.call(input) as Promise<SqliteSyncBaseEntry[]>;
   }
 
+  syncBaseReferences():Promise<import('./sqliteProtocol').SqliteSyncBaseReference[]>{
+    return this.call({kind:'syncBaseReferences'}) as Promise<import('./sqliteProtocol').SqliteSyncBaseReference[]>;
+  }
   count(table: SqliteLibraryTable): Promise<number> {
     return this.call({ kind: 'count', table }) as Promise<number>;
   }
@@ -602,6 +606,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       case 'changesSince': return backend.changesSince(input.contentRevision, input.tables);
       case 'hasChangesSince':return backend.hasChangesSince(input.contentRevision,input.tables);
       case 'syncBaseEntries': return backend.syncBaseEntries(input.keys);
+      case 'syncBaseReferences':return backend.syncBaseReferences();
       case 'count': return backend.count(input.table);
       case 'estimateRecordBytes': return backend.estimateRecordBytes(input.tables);
       case 'homeLearningProjection': return backend.homeLearningProjection(input.languageRouteId,input.clock);

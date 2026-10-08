@@ -7,7 +7,8 @@ import {
   restoreLibraryTransaction,
   writeLibraryState,
 } from '../../apps/web/src/data/library/store';
-import {librarySyncTables} from '../../packages/contracts/src/sensa/librarySync';
+import {sqliteRecordAdapter} from '../../apps/web/src/data/library/sqliteAdapter';
+import {saveDraft} from '../../apps/web/src/data/library/drafts';
 
 type ScaleResult={
   records:number;
@@ -15,6 +16,15 @@ type ScaleResult={
   logicalBytes:number;
   initialSyncMs:number;
   singleChangeSyncMs:number;
+  noChangeSyncMs:number;
+  noChangeBaselineBodies:number;
+  noChangeBaselineWrites:number;
+  changedBaselineBodies:number;
+  changedBaselineWrites:number;
+  fullBaselineReads:number;
+  fullBaselineReplacements:number;
+  sourceTableReads:number;
+  metadataRows:number;
   changedCheckpointRecords:number;
   journalRowsRead:number;
   uploadedBlocks:number;
@@ -74,12 +84,20 @@ export async function measureCloudSyncScale(records:number,mediaEvery:number):Pr
     drafts:await tx.entries('drafts'),
   }));
   const cloud=fakeCloud(),initialStarted=performance.now();await synchronizeLibrary(cloud.request);const initialSyncMs=performance.now()-initialStarted;
+  const adapter=await sqliteRecordAdapter(),original={base:adapter.syncBaseEntries.bind(adapter),refs:adapter.syncBaseReferences.bind(adapter),entries:adapter.entries.bind(adapter),changes:adapter.changesSince.bind(adapter),commit:adapter.commit.bind(adapter)};
+  const io={baselineBodies:0,baselineWrites:0,fullReads:0,fullReplacements:0,sourceReads:0,metadataRows:0,journalRows:0};
+  adapter.syncBaseEntries=async keys=>{if(keys===undefined)io.fullReads++;const rows=await original.base(keys);io.baselineBodies+=rows.length;return rows;};
+  adapter.syncBaseReferences=async()=>{const rows=await original.refs();io.metadataRows+=rows.length;return rows;};
+  adapter.entries=async table=>{io.sourceReads++;return original.entries(table);};
+  adapter.changesSince=async(...args)=>{const rows=await original.changes(...args);io.journalRows+=rows.length;return rows;};
+  adapter.commit=async mutation=>{if(mutation.syncBaseReplacement!==undefined){io.fullReplacements++;io.baselineWrites+=mutation.syncBaseReplacement.length;}if(mutation.syncBasePatch)io.baselineWrites+=mutation.syncBasePatch.puts.length+mutation.syncBasePatch.deletes.length;await original.commit(mutation);};
+  try{
+  const noChangeStarted=performance.now();await synchronizeLibrary(cloud.request);const noChangeSyncMs=performance.now()-noChangeStarted;
+  const noChangeBaselineBodies=io.baselineBodies,noChangeBaselineWrites=io.baselineWrites;
+  for(const key of Object.keys(io) as Array<keyof typeof io>)io[key]=0;
   const target=id(10);
-  await restoreLibraryTransaction(async tx=>{
-    const draft=await tx.get<any>('drafts',target);
-    tx.put('drafts',target,{...draft,revision:draft.revision+1,text:`${draft.text} changed`,updatedAt:'2026-09-21T00:01:00.000Z'});
-  });
-  const journal=await readLibrary(tx=>tx.changesSince(initial.revision,librarySyncTables));
+  const draft=await readLibrary(tx=>tx.get<any>('drafts',target));
+  await saveDraft(crypto.randomUUID(),{id:target,expectedRevision:draft.revision,text:`${draft.text} changed`,images:draft.images});
   cloud.resetMetrics();
   const memory=performance as Performance&{memory?:{usedJSHeapSize:number}};
   const before=memory.memory?.usedJSHeapSize??null,started=performance.now();await synchronizeLibrary(cloud.request);const singleChangeSyncMs=performance.now()-started,after=memory.memory?.usedJSHeapSize??null;
@@ -89,12 +107,15 @@ export async function measureCloudSyncScale(records:number,mediaEvery:number):Pr
     mediaRecords:initial.drafts.filter(row=>Array.isArray((row.value as {images?:unknown[]}).images)&&(row.value as {images:unknown[]}).images.length>0).length,
     logicalBytes:initial.drafts.reduce((total,row)=>total+JSON.stringify(row.value).length,0),
     initialSyncMs,singleChangeSyncMs,
-    changedCheckpointRecords:journal.filter(row=>row.value!==null&&(row.table!=='meta'||['identity','learning-active'].includes(row.key))).length,
-    journalRowsRead:journal.length,
+    noChangeSyncMs,noChangeBaselineBodies,noChangeBaselineWrites,
+    changedBaselineBodies:io.baselineBodies,changedBaselineWrites:io.baselineWrites,fullBaselineReads:io.fullReads,fullBaselineReplacements:io.fullReplacements,sourceTableReads:io.sourceReads,metadataRows:io.metadataRows,
+    changedCheckpointRecords:io.baselineWrites,
+    journalRowsRead:io.journalRows,
     uploadedBlocks:cloud.metrics.uploadedBlocks,
     uploadedChars:cloud.metrics.uploadedChars,
     fetchedBlocks:cloud.metrics.fetchedBlocks,
     stateBytes:JSON.stringify(state).length,
     heapDeltaBytes:before===null||after===null?null:Math.max(0,after-before),
   };
+  }finally{adapter.syncBaseEntries=original.base;adapter.syncBaseReferences=original.refs;adapter.entries=original.entries;adapter.changesSince=original.changes;adapter.commit=original.commit;}
 }
