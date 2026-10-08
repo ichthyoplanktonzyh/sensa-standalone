@@ -313,7 +313,12 @@ Personal Anchor media 与 Practice Artifact 仍按各自 learner-owned 表进入
 pending commit 恢复或冲突均保留完整 capture／merge／领域验证。验证合同变更时须更新其版本；泛型 store 写口
 是内部接口，生产事实仍必须经各 owner 准入或已完整校验的恢复入口，不把同步当作语义/学习事实创建者。
 v6 发布仍组装整份 key/block-ref manifest 元数据；它不再解码所有未变正文，但不能宣称整条路径严格 O(变化数)。
-上述 fallback 仍读取完整事实与基线，64 MiB 解码保护与256 MiB账号容量尚有差距；增量优化或分块压缩不证明
+完整恢复／收敛在同一 SQLite commit 应用已校验候选、对应基线和同步状态；基线或事实写入失败都回滚身份、
+资料及建库回执，不留下半恢复。应用前以捕获的本机 revision、identity、owner/incarnation 重查，提交后在写锁内
+核对应用 revision；下载中及提交后的新写入不被覆盖或标为已同步。无事实变化只写同步账本，不制造本机内容
+revision。完整路径只在首次捕获及 pending 重放改变基线后读取正文，不为应用／最终确认再次 capture 整库。
+生产同步统一经 `syncAccountLibrary` 的单飞与跨标签页 Web Lock；底层注入传输接口不承担并发同步任务调度。
+上述 fallback 仍读取完整事实与基线，64 MiB 解码保护与 256 MiB 账号容量尚有差距；增量优化或分块压缩不证明
 大规模跨设备恢复的内存或容量达标。
 Checkpoint 的 block/manifest 传输、CAS commit、重试和 baseline 由 Cloud Sync Coordinator 负责；记录的
 跨设备归一化、三方收敛、完整性验证、历史 replay 与删除许可由领域 Replica Module 负责。Personal

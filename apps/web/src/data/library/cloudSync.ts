@@ -166,14 +166,17 @@ async function saveState(expected:{owner:Owner;incarnation:string},work:(old:Sta
  await writeLibraryState(async tx=>{const owner=await tx.get<Owner>('meta','service-owner');if(!owner||!sameOwner(owner,expected.owner)||await tx.get('meta','signed-out')||(await assertCurrentLibrary(tx))!==expected.incarnation)throw new Error('account_changed');tx.put('meta',STATE,work(await tx.get<State>('meta',STATE)));if(base!==undefined)tx.replaceSyncBase(base);});
 }
 async function applyEntries(expected:Awaited<ReturnType<typeof capture>>,entries:Entry[],rows:ReturnType<typeof validateLibraryReplica>,state:State,base:Entry[]){
- await restoreLibraryTransaction(async tx=>{
-  const current=await capture(tx);if(!sameOwner(current.owner,expected.owner)||current.incarnation!==expected.incarnation)throw new Error('account_changed');
-  if(!entriesEqual(current.entries,expected.entries))throw new Error('library_sync_local_changed');
-  applyLibraryReplicaMutation({tx,current:current.entries,desired:entries,rows,identity:current.identity});
+ const changesContent=!entriesEqual(expected.entries,entries);
+ // One SQLite commit makes facts and their corresponding baseline visible
+ // together. An unchanged candidate remains bookkeeping, not a learner edit.
+ return (changesContent?restoreLibraryTransaction:writeLibraryState)(async tx=>{
+  const current=await captureHeader(tx);
+  if(!sameOwner(current.owner,expected.owner)||current.incarnation!==expected.incarnation)throw new Error('account_changed');
+  if(current.localRevision!==expected.localRevision||!equal(current.identity,expected.identity))throw new Error('library_sync_local_changed');
+  applyLibraryReplicaMutation({tx,current:expected.entries,desired:entries,rows,identity:current.identity});
+  tx.put('meta',STATE,state);tx.replaceSyncBase(base);
+  return current.localRevision+(changesContent?1:0);
  });
- // The baseline and progress are sync bookkeeping, not learner content. Writing them in
- // a content transaction would announce a local edit and schedule another sync pass.
- await writeLibraryState(async tx=>{const owner=await tx.get<Owner>('meta','service-owner');if(!owner||!sameOwner(owner,expected.owner)||await tx.get('meta','signed-out')||(await assertCurrentLibrary(tx))!==expected.incarnation)throw new Error('account_changed');tx.put('meta',STATE,state);tx.replaceSyncBase(base);});
 }
 class Blocks{
  cache=new Map<string,string>();
@@ -342,13 +345,13 @@ export async function synchronizeLibrary(request:SyncRequest,options:{publishEmp
   let initial=await readLibrary(capture);
   if(observedHead&&initial.localRevision!==header.localRevision)throw new Error('library_sync_local_changed');
   // Pending publication survives a lost HTTP acknowledgement and is retried verbatim.
-  let state=await readCloudSync()??defaults;
+  let state=initial.state??defaults;
   if(state.pending){
    const p=state.pending;
    try{const head=librarySyncHead.parse(await request('/commit',{operationId:p.operationId,baseRevision:p.baseRevision,manifest:p.manifest}));const confirmed=await blocks.download(head,initial.base);await saveState(expected,old=>({...old!,revision:head.revision,storage:head.storage??old!.storage,pending:undefined}),confirmed);}
    catch(e){if(rejectedPublication(e)){await saveState(expected,old=>({...old!,pending:undefined}));throw e;}if(!(e instanceof Error)||!['library_sync_conflict','library_sync_missing_block'].includes(e.message))throw e;await saveState(expected,old=>({...old!,pending:undefined}));}
+   initial=await readLibrary(capture);state=initial.state??defaults;
   }
-  initial=await readLibrary(capture);state=initial.state??defaults;
   const confirmedRevision=!initiallyConflicted&&confirmedCheckpoint(initial.state)?initial.state!.revision:undefined;
   const stable=await downloadStableHead(blocks,request,initial.base,confirmedRevision,observedHead),head=stable.head,remote=stable.remote.filter(row=>isReplicatedLibraryEntry(row.table,row.key));
   // An identity-only browser and a null remote head are the authoritative empty
@@ -387,7 +390,8 @@ export async function synchronizeLibrary(request:SyncRequest,options:{publishEmp
   // Different compression/chunking of the same remote facts is not a local edit
   // and must not manufacture another publication during a pure restore.
   const publicationRequired=!entriesEqual(uploadEntries,remote);
-  await applyEntries(initial,localEntries,localRows,{...state,revision:head.revision,storage:head.storage,status:'pending',conflicts:activeConflicts.length?activeConflicts:undefined,conflict,resolution:activeConflicts.length?undefined:state.resolution,pending:undefined},nextBase(remote));
+  let confirmedBase=nextBase(remote);
+  const appliedLocalRevision=await applyEntries(initial,localEntries,localRows,{...state,revision:head.revision,storage:head.storage,status:'pending',conflicts:activeConflicts.length?activeConflicts:undefined,conflict,resolution:activeConflicts.length?undefined:state.resolution,pending:undefined},confirmedBase);
   if(publicationRequired){
    // Only changed facts need a newly encoded manifest. Confirmed row references
    // remain reusable even when the server repacked its immutable transport.
@@ -400,11 +404,17 @@ export async function synchronizeLibrary(request:SyncRequest,options:{publishEmp
    try{published=librarySyncHead.parse(await request('/commit',{operationId:pending.operationId,baseRevision:pending.baseRevision,manifest}));}
    catch(error){if(error instanceof Error&&error.message==='library_sync_conflict'){await saveState(expected,old=>({...old!,pending:undefined}));throw new Error('library_sync_head_changed');}if(rejectedPublication(error))await saveState(expected,old=>({...old!,pending:undefined}));throw error;}
    if(published.revision<=pending.baseRevision||!equal(published.manifest,pending.manifest))throw new Error('library_sync_format');
-   await saveState(expected,old=>({...old!,revision:published.revision,storage:published.storage??old!.storage,pending:undefined,lastSyncedAt:new Date().toISOString()}),nextBase(prepared.entries));
+   confirmedBase=nextBase(prepared.entries);
+   await saveState(expected,old=>({...old!,revision:published.revision,storage:published.storage??old!.storage,pending:undefined,lastSyncedAt:new Date().toISOString()}),confirmedBase);
   }
-  const current=await readLibrary(capture);
-  const completedAt=new Date().toISOString(),converged=entriesEqual(current.entries,current.base);
-  await saveState(expected,old=>({...old!,checkpointVersion:6,validationVersion:libraryReplicaValidationVersion,status:activeConflicts.length?'conflict':converged?'synced':'pending',conflicts:activeConflicts.length?activeConflicts:undefined,conflict:activeConflicts.length?conflict:undefined,resolution:undefined,syncedLocalRevision:converged?current.localRevision:old!.syncedLocalRevision,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined}));
+  await writeLibraryState(async tx=>{
+   const current=await captureHeader(tx);
+   if(!sameOwner(current.owner,expected.owner)||current.incarnation!==expected.incarnation)throw new Error('account_changed');
+   // The applied candidate and baseline were validated before commit. Only
+   // metadata is needed to prove that no later local transaction changed it.
+   const converged=current.localRevision===appliedLocalRevision&&entriesEqual(localEntries,confirmedBase),completedAt=new Date().toISOString();
+   tx.put('meta',STATE,{...current.state!,checkpointVersion:6,validationVersion:libraryReplicaValidationVersion,status:activeConflicts.length?'conflict':converged?'synced':'pending',conflicts:activeConflicts.length?activeConflicts:undefined,conflict:activeConflicts.length?conflict:undefined,resolution:undefined,syncedLocalRevision:converged?current.localRevision:current.state!.syncedLocalRevision,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
+  });
  }catch(error){const message=error instanceof Error?error.message:'library_sync_failed';
   await saveState(expected,old=>{const state=old??defaults;
    if(message==='library_sync_local_changed')return {...state,status:'pending',syncStartedAt:undefined,error:message,failureKind:undefined,retryCount:undefined,retryAt:undefined};
