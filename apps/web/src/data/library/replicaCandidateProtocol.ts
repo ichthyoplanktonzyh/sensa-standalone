@@ -6,13 +6,14 @@ export type ReplicaCandidateFence={owner:{subject:string;accountId:string};incar
 export type ReplicaCandidateBlock={hash:string;data:string};
 export type ReplicaCandidateExpected={head:LibrarySyncHead;manifestBlocks:ReplicaCandidateBlock[]};
 export type ReplicaCandidateRecord={table:SqliteLibraryTable;key:string;valueJson:string;blockRefs:string[]};
-export type ReplicaCandidateValidation={id:string;identity:LibraryIdentity;head:LibrarySyncHead;records:number;logicalBytes:number;storedBytes:number};
+export type ReplicaCandidateValidation={id:string;identity:LibraryIdentity;head:LibrarySyncHead;tables:SqliteLibraryTable[];records:number;logicalBytes:number;storedBytes:number};
 export type ReplicaCandidateRequest=
  |{kind:'begin';fence:ReplicaCandidateFence;expected:ReplicaCandidateExpected}
  |{kind:'append';id:string;records:ReplicaCandidateRecord[];blocks:ReplicaCandidateBlock[]}
+ |{kind:'prove';id:string;record:Pick<ReplicaCandidateRecord,'table'|'key'>;blocks:ReplicaCandidateBlock[]}
  |{kind:'validate';id:string}
  |{kind:'discard';id:string};
-export type ReplicaCandidateResponse={kind:'begun';id:string}|{kind:'appended'}|{kind:'validated';candidate:ReplicaCandidateValidation}|{kind:'discarded'};
+export type ReplicaCandidateResponse={kind:'begun';id:string}|{kind:'appended'|'proved'}|{kind:'validated';candidate:ReplicaCandidateValidation}|{kind:'discarded'};
 
 /** Private versioned cache, never a logical Library table or checkpoint fact.
  * Creating it does not change or migrate the learner's record representation. */

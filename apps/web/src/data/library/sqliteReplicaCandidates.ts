@@ -1,10 +1,11 @@
 import type {Database} from '@sqlite.org/sqlite-wasm';
 import {z} from 'zod';
-import {librarySyncHead,librarySyncBlockChars} from '@sensa/contracts/sensa';
+import {librarySyncHead,librarySyncBlockChars,canonicalConsumerJson} from '@sensa/contracts/sensa';
 import {sha256} from '@sensa/learning-kernel';
-import {decodeBackupValue} from './backupCodec';
+import {decodeBackupValue,encodeBackupValue} from './backupCodec';
 import {packStoredRecord,unpackStoredRecord} from './sharedRecordContent';
-import {isReplicatedLibraryEntry} from './replication/libraryReplica';
+import {isReplicatedLibraryEntry,restoreLibraryReplicaValue,type LibraryReplicaEntry} from './replication/libraryReplica';
+import type {SqliteMutation,SqliteLibraryTable} from './sqliteProtocol';
 import type {LibraryRecordReader} from './libraryRecordReader';
 import {isFatalSqliteConnectionFailure,sqliteRollbackFailure} from './sqliteConnectionFailure';
 import {replicaCandidateSchema,type ReplicaCandidateFence,type ReplicaCandidateExpected,type ReplicaCandidateRecord,type ReplicaCandidateValidation,type ReplicaCandidateBlock} from './replicaCandidateProtocol';
@@ -122,6 +123,28 @@ export class SqliteReplicaCandidates{
    this.database.exec('COMMIT');
   }catch(cause){try{this.database.exec('ROLLBACK');}catch(rollbackCause){throw sqliteRollbackFailure(cause,rollbackCause);}throw cause;}
  }
+ /** A large row's proofs can arrive before its body, in bounded transactions.
+  * Only refs for that exact manifest row are admitted; no live row is written. */
+ prove(id:string,record:Pick<ReplicaCandidateRecord,'table'|'key'>,blocks:readonly ReplicaCandidateBlock[]):void{
+  const header=this.header(id);this.check(header);if(header.state!=='filling')this.fail();
+  const admitted=this.rows<{refs_json:string}>('SELECT refs_json FROM sensa_replica_candidate_manifest_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,record.table,record.key])[0];if(!admitted)this.fail();
+  const refs=new Set<string>(JSON.parse(admitted.refs_json));
+  if(!Array.isArray(blocks)||!blocks.length||blocks.length>512)this.fail();
+  let rawBytes=0;
+  for(const block of blocks){if(typeof block?.data!=='string'||block.data.length>librarySyncBlockChars||!refs.has(block.hash))this.fail();rawBytes+=utf8(block.data);if(rawBytes>replicaCandidateProofBatchBytes)throw Error('library_sync_capacity');}
+  this.database.exec('BEGIN IMMEDIATE');
+  try{
+   this.check(header);let decodedBytes=0,storedBytes=0;
+   for(const block of blocks){
+    const prior=this.rows<{plain_digest:string|null}>('SELECT plain_digest FROM sensa_replica_candidate_proofs_v1 WHERE candidate_id=? AND digest=?',[id,block.hash])[0];if(!prior)this.fail();
+    if(prior.plain_digest!==null){if(sha256(block.data)!==block.hash)throw Error('library_sync_hash');continue;}
+    const proof=verifyReplicaCandidateBlock(block);decodedBytes+=proof.plainBytes;if(decodedBytes>replicaCandidateProofBatchBytes)throw Error('library_sync_capacity');
+    storedBytes+=72;if(header.stored_bytes+storedBytes>maximumStoredBytes)throw Error('library_sync_capacity');
+    this.database.exec({sql:'UPDATE sensa_replica_candidate_proofs_v1 SET plain_digest=?,plain_chars=? WHERE candidate_id=? AND digest=?',bind:[proof.plainDigest,proof.plainChars,id,proof.hash]});
+   }
+   this.database.exec({sql:'UPDATE sensa_replica_candidates_v1 SET stored_bytes=stored_bytes+? WHERE id=?',bind:[storedBytes,id]});this.database.exec('COMMIT');
+  }catch(cause){try{this.database.exec('ROLLBACK');}catch(rollbackCause){throw sqliteRollbackFailure(cause,rollbackCause);}throw cause;}
+ }
  private reader(id:string,signal:AbortSignal):LibraryRecordReader{
   const alive=()=>{this.assertHealthy();if(signal.aborted)throw signal.reason;};
   return {
@@ -182,7 +205,38 @@ export class SqliteReplicaCandidates{
  }
  private receipt(header:Header):ReplicaCandidateValidation{
   if(header.state!=='validated'||header.identity_json===null)this.fail();
-  return {id:header.id,identity:identitySchema.parse(JSON.parse(header.identity_json!)),head:expectedSchema.parse(JSON.parse(header.expected_json)).head,records:header.records,logicalBytes:header.logical_bytes,storedBytes:header.stored_bytes};
+  const tables=this.rows<{table_name:SqliteLibraryTable}>('SELECT DISTINCT table_name FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? ORDER BY table_name',[header.id]).map(row=>row.table_name);
+  return {id:header.id,identity:identitySchema.parse(JSON.parse(header.identity_json!)),head:expectedSchema.parse(JSON.parse(header.expected_json)).head,tables,records:header.records,logicalBytes:header.logical_bytes,storedBytes:header.stored_bytes};
+ }
+
+ /** Called only inside the source transaction. Bodies remain in the private
+  * SQLite generation; existing commit/projection code reads one on demand.
+  * This is not a shortcut for merging an existing or previously synced world. */
+ prepareFreshRestore(id:string,mutation:SqliteMutation):Pick<SqliteMutation,'puts'|'syncBaseReplacement'>{
+  if(mutation.clears.length||mutation.deletes.length||mutation.portablePackages?.length||mutation.syncBaseReplacement!==undefined||mutation.syncBasePatch!==undefined||mutation.puts.some(row=>row.table!=='meta'||!['cloud-sync','local-content-revision'].includes(row.key)))this.fail();
+  const header=this.header(id);this.check(header);const receipt=this.receipt(header),fence=fenceSchema.parse(JSON.parse(header.fence_json));
+  if(mutation.contentRevision!==fence.localRevision+1)this.fail();
+  if(this.rows('SELECT 1 FROM sensa_sync_base LIMIT 1').length)throw Error('library_sync_local_changed');
+  for(const row of this.rows<{table_name:string;record_key:string}>('SELECT table_name,record_key FROM sensa_records')){
+   if(isReplicatedLibraryEntry(row.table_name,row.record_key)&&!(row.table_name==='meta'&&row.record_key==='identity'))throw Error('library_sync_local_changed');
+  }
+  const stateRow=mutation.puts.find(row=>row.table==='meta'&&row.key==='cloud-sync');if(!stateRow)this.fail();
+  const revisionRow=mutation.puts.find(row=>row.table==='meta'&&row.key==='local-content-revision');
+  if(mutation.puts.length!==2||!revisionRow||decodeBackupValue(JSON.parse(revisionRow.encodedValue))!==mutation.contentRevision)this.fail();
+  const state=decodeBackupValue(JSON.parse(stateRow.encodedValue)) as {restoreOperationId?:string;owner?:{subject:string;accountId:string};incarnation?:string;revision?:number;syncedLocalRevision?:number;status?:string};
+  if(state.restoreOperationId!==id||state.owner?.subject!==fence.owner.subject||state.owner.accountId!==fence.owner.accountId||state.incarnation!==fence.incarnation||state.revision!==receipt.head.revision||state.syncedLocalRevision!==mutation.contentRevision||state.status!=='synced')this.fail();
+  const rows=this.rows<{table_name:LibraryReplicaEntry['table'];record_key:string;refs_json:string}>('SELECT table_name,record_key,refs_json FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? ORDER BY table_name,record_key',[id]);
+  const read=(table:string,key:string)=>{
+   const row=this.rows<{value_json:string}>('SELECT value_json FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,table,key])[0];if(!row)this.fail();return unpackStoredRecord(row.value_json);
+  };
+  const puts:SqliteMutation['puts']=rows.map(row=>({table:row.table_name,key:row.record_key,get encodedValue(){
+   const value=decodeBackupValue(JSON.parse(read(row.table_name,row.record_key)));
+   return JSON.stringify(encodeBackupValue(restoreLibraryReplicaValue({table:row.table_name,key:row.record_key,value:undefined},value,fence.identity)));
+  }}));
+  const restoredIdentity=restoreLibraryReplicaValue({table:'meta',key:'identity',value:undefined},receipt.identity,fence.identity);
+  puts.push({table:'operations',key:'00000000-0000-4000-8000-000000000001',encodedValue:JSON.stringify(encodeBackupValue({input:canonicalConsumerJson({kind:'library.create',input:{}}),result:restoredIdentity,committedAt:receipt.identity.createdAt}))});
+  const syncBaseReplacement:NonNullable<SqliteMutation['syncBaseReplacement']>=rows.map(row=>({table:row.table_name,key:row.record_key,blockRefs:JSON.parse(row.refs_json),get valueJson(){return read(row.table_name,row.record_key);}}));
+  return {puts,syncBaseReplacement};
  }
  discard(id:string):void{uuid.parse(id);this.ensure();this.validations.get(id)?.controller.abort(Error('library_sync_candidate_discarded'));this.database.exec({sql:'DELETE FROM sensa_replica_candidates_v1 WHERE id=?',bind:[id]});}
  abortAll(reason:Error):void{for(const validation of this.validations.values())validation.controller.abort(reason);}

@@ -8,6 +8,7 @@ import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec'
 import {saveDraft} from '../../../apps/web/src/data/library/drafts';
 import {sqliteRecordAdapter} from '../../../apps/web/src/data/library/sqliteAdapter';
 import {librarySyncBlockFetch} from '@sensa/contracts/sensa';
+import {encodeLibrarySyncBlock,splitLibrarySyncText,decodeLibrarySyncBlock} from '@sensa/contracts/sensa/library-sync-blocks';
 import type {SyncRequest} from '../../../apps/web/src/data/library/cloudSync';
 
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined,location:new URL('http://restore-atomicity.fixture.invalid/')});
@@ -24,11 +25,11 @@ afterEach(()=>database.close());
 const first={id:crypto.randomUUID(),revision:1,text:'A complete cloud draft.',createdAt:'2026-10-08T00:00:00.000Z',updatedAt:'2026-10-08T00:00:00.000Z'};
 const second={...first,id:crypto.randomUUID(),text:'Another remote draft.'};
 const blocks=new Map<string,string>();let revision=0,manifest:string[]=[];
-function block(text:string){const id=createHash('sha256').update(text).digest('hex');blocks.set(id,text);return id;}
+function block(text:string){const data=encodeLibrarySyncBlock(text),id=createHash('sha256').update(data).digest('hex');blocks.set(id,data);return id;}
 function publish(drafts:typeof first[]){
  const entries=[{table:'meta',key:'identity',value:remoteIdentity},...drafts.map(value=>({table:'drafts',key:value.id,value}))];
  const rows=entries.map(row=>({table:row.table,key:row.key,blocks:[block(JSON.stringify(encodeBackupValue(row.value)))]}));
- manifest=[block(JSON.stringify({version:6,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows}))];revision++;
+ manifest=splitLibrarySyncText(JSON.stringify({version:6,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows})).map(block);revision++;
 }
 let onFetch:(()=>Promise<void>)|undefined;
 const request:SyncRequest=async(path,body)=>{
@@ -98,4 +99,99 @@ test('a learner write after the atomic restore stays local and pending when sync
  expect(later).toBeTruthy();const after=await facts();expect(after.drafts[0]?.value.text).toBe('New input after the restore committed.');
  const original=after.base.find(row=>row.table==='drafts');expect(original?.value).toEqual(encodeBackupValue(first));
  expect((await readCloudSync())?.status).toBe('pending');expect((await readCloudSync())?.syncedLocalRevision).not.toBe(after.localRevision);
+});
+
+test('fresh staged restore above 64 MiB never captures whole source or baseline bodies',async()=>{
+ const drafts=Array.from({length:5000},(_,index)=>({...first,id:crypto.randomUUID(),text:`Synthetic remote draft ${index}: `+'x'.repeat(15000)}));publish(drafts);
+ const adapter=await sqliteRecordAdapter(),entries=adapter.entries.bind(adapter),base=adapter.syncBaseEntries.bind(adapter),candidate=adapter.replicaCandidate.bind(adapter);
+ let appends=0,logicalBytes=0,maxBatchBytes=0,maxRecords=0;
+ adapter.entries=async()=>{throw Error('Unexpected complete source capture');};
+ adapter.syncBaseEntries=async keys=>{if(keys===undefined)throw Error('Unexpected complete baseline capture');return base(keys);};
+ adapter.replicaCandidate=async message=>{
+  if(message.kind==='append'){
+   const bytes=message.records.reduce((sum,row)=>sum+Buffer.byteLength(row.valueJson,'utf8'),0);
+   appends++;logicalBytes+=bytes;maxBatchBytes=Math.max(maxBatchBytes,bytes);maxRecords=Math.max(maxRecords,message.records.length);
+  }
+  return candidate(message);
+ };
+ try{await synchronizeLibrary(request);}finally{adapter.entries=entries;adapter.syncBaseEntries=base;adapter.replicaCandidate=candidate;}
+ expect(logicalBytes).toBeGreaterThan(64*1024*1024);expect(maxBatchBytes).toBeLessThanOrEqual(4*1024*1024);expect(maxRecords).toBeLessThanOrEqual(128);expect(appends).toBeGreaterThan(1);
+ expect(await readLibrary(tx=>tx.count('drafts'))).toBe(drafts.length);
+ expect(await readLibrary(tx=>tx.get('drafts',drafts[0]!.id))).toEqual(drafts[0]);
+ expect(await readLibrary(tx=>tx.get('drafts',drafts.at(-1)!.id))).toEqual(drafts.at(-1));
+ expect(await readLibrary(tx=>tx.get('meta','identity'))).toEqual({...remoteIdentity,deviceId:localIdentity.deviceId});
+ expect((await readCloudSync())?.status).toBe('synced');
+});
+
+test('a fresh staged source write failure rolls back identity, baseline and creation receipt',async()=>{
+ publish([first,second]);const before=await facts();
+ sql.exec(`CREATE TEMP TRIGGER deny_fresh_fact BEFORE INSERT ON sensa_records WHEN NEW.table_name='drafts' AND NEW.record_key='${second.id}' BEGIN SELECT RAISE(ABORT,'controlled fresh fact failure'); END`);
+ try{await expect(synchronizeLibrary(request)).rejects.toThrow();}finally{sql.exec('DROP TRIGGER deny_fresh_fact');}
+ expect(await facts()).toEqual(before);expect((await readCloudSync())?.status).not.toBe('synced');
+ await synchronizeLibrary(request);expect((await facts()).drafts).toHaveLength(2);expect((await readCloudSync())?.status).toBe('synced');
+});
+
+test('an unchanged identity-only checkpoint does not manufacture a content revision',async()=>{
+ remoteIdentity={...localIdentity,deviceId:localIdentity.id};publish([]);
+ const before=await readLibrary(readLocalLibraryRevision);await synchronizeLibrary(request);
+ expect(await readLibrary(readLocalLibraryRevision)).toBe(before);expect((await readCloudSync())?.status).toBe('synced');
+});
+
+test('a same-library identity fork still requires explicit conflict handling',async()=>{
+ remoteIdentity={...localIdentity,learnerId:crypto.randomUUID(),deviceId:localIdentity.id};publish([first]);
+ await synchronizeLibrary(request);
+ expect(await readLibrary(tx=>tx.get('meta','identity'))).toEqual(localIdentity);expect((await readCloudSync())?.status).toBe('conflict');
+});
+
+test('a missing body after head replacement discards the old generation and restores only the new head',async()=>{
+ publish([first]);let fetches=0;
+ onFetch=async()=>{if(++fetches===2){blocks.clear();publish([second]);}};
+ try{await synchronizeLibrary(request);}finally{onFetch=undefined;}
+ const after=await facts();expect(after.drafts.map(row=>row.value)).toEqual([second]);expect((await readCloudSync())?.revision).toBe(2);expect((await readCloudSync())?.status).toBe('synced');
+});
+
+test('a lost local promotion ACK uses the durable transaction receipt and still announces restored facts',async()=>{
+ publish([first]);const adapter=await sqliteRecordAdapter(),commit=adapter.commit.bind(adapter);let replayed=false,announced=false;
+ const changed=(event:Event)=>{if((event as CustomEvent).detail?.tables?.includes('drafts'))announced=true;};window.addEventListener('sensa-library-changed',changed);
+ adapter.commit=async mutation=>{
+  await commit(mutation);
+  if(mutation.replicaCandidateRestore&&!replayed){replayed=true;await expect(commit(mutation)).rejects.toThrow('library_sync_candidate_invalid');throw Error('sqlite_coordination_timeout');}
+ };
+ try{await synchronizeLibrary(request);}finally{adapter.commit=commit;window.removeEventListener('sensa-library-changed',changed);}
+ expect(replayed).toBe(true);expect(announced).toBe(true);expect((await facts()).drafts.map(row=>row.value)).toEqual([first]);expect((await readCloudSync())?.status).toBe('synced');
+});
+
+test('a legal row with over 512 unique fragments proves in batches before its body is appended',async()=>{
+ const setting=Array.from({length:1000},(_,index)=>`fragment:${String(index).padStart(4,'0')};`).join(''),wire=JSON.stringify(encodeBackupValue(setting)),refs:string[]=[];
+ for(let at=0;at<wire.length;at+=16)refs.push(block(wire.slice(at,at+16)));
+ expect(new Set(refs).size).toBeGreaterThan(512);expect(refs.length).toBeLessThanOrEqual(2048);
+ const rows=[{table:'meta',key:'identity',blocks:[block(JSON.stringify(encodeBackupValue(remoteIdentity)))]},{table:'settings',key:'fragmented-opaque',blocks:refs}];
+ manifest=splitLibrarySyncText(JSON.stringify({version:6,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows})).map(block);revision++;
+ const adapter=await sqliteRecordAdapter(),original=adapter.replicaCandidate.bind(adapter);let proofs=0;
+ adapter.replicaCandidate=async message=>{if(message.kind==='prove')proofs++;return original(message);};
+ try{await synchronizeLibrary(request);}finally{adapter.replicaCandidate=original;}
+ expect(proofs).toBeGreaterThanOrEqual(2);expect(await readLibrary(tx=>tx.get('settings','fragmented-opaque'))).toBe(setting);expect((await readCloudSync())?.status).toBe('synced');
+});
+
+for(const kind of ['compressed','high-entropy'] as const)test(`large ${kind} single-row proofs stay within raw and decoded batch budgets`,async()=>{
+ let setting:string;
+ if(kind==='compressed')setting=Array.from({length:21},(_,index)=>String.fromCharCode(65+index).repeat(262144)).join('');
+ else{
+  const bytes=Buffer.alloc(6*1024*1024),alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';let word=123456789;
+  for(let index=0;index<bytes.length;index++){word^=word<<13;word^=word>>>17;word^=word<<5;bytes[index]=alphabet.charCodeAt(word>>>26);}setting=bytes.toString('ascii');
+ }
+ const refs=splitLibrarySyncText(JSON.stringify(encodeBackupValue(setting))).map(block);
+ const rows=[{table:'meta',key:'identity',blocks:[block(JSON.stringify(encodeBackupValue(remoteIdentity)))]},{table:'settings',key:'large-opaque',blocks:refs}];
+ manifest=splitLibrarySyncText(JSON.stringify({version:6,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows})).map(block);revision++;
+ const adapter=await sqliteRecordAdapter(),original=adapter.replicaCandidate.bind(adapter);let proofs=0;
+ adapter.replicaCandidate=async message=>{
+  if(message.kind==='prove'){
+   proofs++;expect(message.blocks.length).toBeLessThanOrEqual(512);
+   expect(message.blocks.reduce((sum,row)=>sum+Buffer.byteLength(row.data,'utf8'),0)).toBeLessThanOrEqual(4*1024*1024);
+   expect(message.blocks.reduce((sum,row)=>sum+Buffer.byteLength(decodeLibrarySyncBlock(row.data),'utf8'),0)).toBeLessThanOrEqual(4*1024*1024);
+  }
+  return original(message);
+ };
+ try{await synchronizeLibrary(request);}finally{adapter.replicaCandidate=original;}
+ expect(proofs).toBeGreaterThanOrEqual(2);expect(await readLibrary(tx=>tx.get('settings','large-opaque'))).toBe(setting);expect((await readCloudSync())?.status).toBe('synced');
 });

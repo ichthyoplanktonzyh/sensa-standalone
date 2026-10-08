@@ -5,6 +5,7 @@ import {assertLocalLibrarySelected,localLibraryScopedName} from './localLibraryL
 
 import { decodeBackupValue, encodeBackupValue } from "./backupCodec";
 import { sqliteRecordAdapter } from "./sqliteAdapter";
+import type {ReplicaCandidateRequest,ReplicaCandidateResponse,ReplicaCandidateValidation} from './replicaCandidateProtocol';
 import type {PackageCacheProjectionQuery,PackageCacheProjectionResult} from './packageCacheProjection';
 import type {InstalledPackageSummary} from './packageRecords';
 import type {
@@ -92,11 +93,18 @@ export class LibraryTransaction {
   }> = [];
   private syncBaseReplacement: Array<{ table: Table; key: string; valueJson: string; blockRefs: string[] }> | undefined;
   private syncBasePatch:SqliteMutation['syncBasePatch'];
+  private replicaCandidateRestore:SqliteMutation['replicaCandidateRestore'];
 
   constructor(
     private readonly mode: "readonly" | "readwrite",
     private readonly adapter: Awaited<ReturnType<typeof sqliteRecordAdapter>>,
   ) {}
+
+  restoreReplicaCandidate(candidate:ReplicaCandidateValidation):void{
+    this.assertWritable();
+    if(this.replicaCandidateRestore||this.syncBaseReplacement!==undefined||this.syncBasePatch)throw Error('library_sync_base_mutation_conflict');
+    this.replicaCandidateRestore={id:candidate.id,tables:candidate.tables};this.wrote=true;
+  }
 
   async get<T>(table: Table, inputKey: string): Promise<T | undefined> {
     const key = recordKey(inputKey);
@@ -558,6 +566,7 @@ export class LibraryTransaction {
         ? {}
         : { syncBaseReplacement: this.syncBaseReplacement }),
       ...(this.syncBasePatch===undefined?{}:{syncBasePatch:this.syncBasePatch}),
+      ...(this.replicaCandidateRestore===undefined?{}:{replicaCandidateRestore:this.replicaCandidateRestore}),
     };
   }
 
@@ -649,7 +658,21 @@ async function transaction<T>(
       library.beginCommit();
       assertLocalLibrarySelected();
       const storageStarted=performance.now();
-      await storageCall(() => adapter.commit(mutation));
+      try{await storageCall(() => adapter.commit(mutation));}
+      catch(cause){
+        // A coordinator may lose the ACK after the entire source transaction
+        // committed, then replay a now-consumed candidate ID. Only its durable
+        // transaction receipt permits treating that uncertain outcome as success.
+        let confirmed=false;
+        if(mutation.replicaCandidateRestore){
+          try{
+            const encoded=await storageCall(()=>adapter.get('meta','cloud-sync'));
+            const state=encoded===null?undefined:decode(encoded) as {restoreOperationId?:string;syncedLocalRevision?:number};
+            confirmed=state?.restoreOperationId===mutation.replicaCandidateRestore.id&&state.syncedLocalRevision===mutation.contentRevision;
+          }catch{/* Keep the original failure when the outcome cannot be read. */}
+        }
+        if(!confirmed)throw cause;
+      }
       if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.library.sqlite-commit',{start:storageStarted,end:performance.now()});
       if (kind === "state") window.dispatchEvent(new Event("sensa-sync-state-changed"));
       else {
@@ -657,8 +680,10 @@ async function transaction<T>(
           ...mutation.clears,
           ...mutation.deletes.map((row) => row.table),
           ...mutation.puts.map((row) => row.table),
+          ...(mutation.replicaCandidateRestore?.tables??[]),
+          ...(mutation.replicaCandidateRestore?['operations' as const]:[]),
         ])];
-        const changes={sender:libraryNotificationSender,tables,clears:mutation.clears,
+        const changes={sender:libraryNotificationSender,tables,clears:[...new Set([...mutation.clears,...(mutation.replicaCandidateRestore?.tables??[])])],
           records:[...mutation.puts,...mutation.deletes].map(({table,key})=>({table,key}))};
         window.dispatchEvent(new CustomEvent("sensa-library-changed", { detail: changes }));
         if (typeof BroadcastChannel !== "undefined") {
@@ -683,6 +708,12 @@ async function transaction<T>(
 /** Reserved for validated full-library restore; it remains one SQLite transaction. */
 export const restoreLibraryTransaction = <T>(work: (tx: LibraryTransaction) => Promise<T>) =>
   transaction("readwrite", work);
+/** A sealed private candidate is coherent without holding the live Library's
+ * Web Lock. Its Worker fence aborts if concurrent user/owner writes occur. */
+export async function requestReplicaCandidate(request:ReplicaCandidateRequest):Promise<ReplicaCandidateResponse>{
+  assertLocalLibrarySelected();const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');
+  const result=await adapter.replicaCandidate(request);assertLocalLibrarySelected();return result;
+}
 /** Sync progress and baselines do not announce learner-content changes. */
 export const writeLibraryState = <T>(work: (tx: LibraryTransaction) => Promise<T>) =>
   transaction("readwrite", work, "state");

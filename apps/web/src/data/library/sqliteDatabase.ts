@@ -672,6 +672,7 @@ export class SqliteRecordDatabase {
       switch(request.kind){
         case 'begin':return {kind:'begun',id:candidates.begin(request.fence,request.expected)};
         case 'append':candidates.append(request.id,request.records,request.blocks);return {kind:'appended'};
+        case 'prove':candidates.prove(request.id,request.record,request.blocks);return {kind:'proved'};
         case 'validate':return {kind:'validated',candidate:await candidates.validate(request.id)};
         case 'discard':candidates.discard(request.id);return {kind:'discarded'};
       }
@@ -720,6 +721,7 @@ export class SqliteRecordDatabase {
       && !mutation.portablePackages?.length
       && mutation.syncBaseReplacement === undefined
       && mutation.syncBasePatch === undefined
+      && mutation.replicaCandidateRestore === undefined
     ) return;
     if (Date.now() >= this.nextOptimizeAt) {
       this.database.exec("PRAGMA optimize");
@@ -730,7 +732,7 @@ export class SqliteRecordDatabase {
     let bulkMaintenance=false;
     const removedContent=new Set<string>();
     const ownerKeys=new Set(['identity','service-owner','local-incarnation','signed-out']);
-    const discardCandidates=mutation.clears.includes('meta')
+    let discardCandidates=mutation.clears.includes('meta')
       ||mutation.deletes.some(item=>item.table==='meta'&&ownerKeys.has(item.key))
       ||mutation.puts.some(item=>item.table==='meta'&&ownerKeys.has(item.key)&&this.get('meta',item.key)!==item.encodedValue);
     this.database.exec("BEGIN IMMEDIATE");
@@ -739,16 +741,22 @@ export class SqliteRecordDatabase {
       if (contentRevision !== undefined && (!Number.isSafeInteger(contentRevision) || contentRevision <= 0)) {
         throw new Error('sqlite_content_revision_invalid');
       }
+      if(mutation.replicaCandidateRestore){
+        if(!this.replicaCandidateStore)throw Error('library_sync_candidate_invalid');
+        const staged=this.replicaCandidateStore.prepareFreshRestore(mutation.replicaCandidateRestore.id,mutation);
+        mutation={...mutation,puts:[...staged.puts,...mutation.puts],syncBaseReplacement:staged.syncBaseReplacement};
+        discardCandidates=true;
+      }
       if (mutation.syncBaseReplacement) {
         for(const row of this.database.exec({sql:"SELECT DISTINCT digest FROM sensa_shared_record_content_owners WHERE owner_kind='sync'",rowMode:0,returnValue:'resultRows'}) as string[])removedContent.add(row);
         this.database.exec("DELETE FROM sensa_shared_record_content_owners WHERE owner_kind='sync'");
         this.database.exec('DELETE FROM sensa_sync_base');
         for (const entry of mutation.syncBaseReplacement) {
-          const blockRefsJson=JSON.stringify(entry.blockRefs);
-          encodedWriteSize+=entry.valueJson.length+blockRefsJson.length;
+          const blockRefsJson=JSON.stringify(entry.blockRefs),valueJson=entry.valueJson;
+          encodedWriteSize+=valueJson.length+blockRefsJson.length;
           this.database.exec({
             sql: 'INSERT INTO sensa_sync_base(table_name,record_key,value_json,block_refs_json) VALUES(?,?,?,?)',
-            bind: [entry.table, entry.key, this.storedEncoded('sync',entry.table,entry.key,entry.valueJson,removedContent), blockRefsJson],
+            bind: [entry.table, entry.key, this.storedEncoded('sync',entry.table,entry.key,valueJson,removedContent), blockRefsJson],
           });
         }
       }
@@ -868,8 +876,9 @@ export class SqliteRecordDatabase {
         }
       }
       for (const item of mutation.puts) {
-        encodedWriteSize+=item.encodedValue.length;
-        const stored=this.storedEncoded('record',item.table,item.key,item.encodedValue,removedContent);
+        const encodedValue=item.encodedValue;
+        encodedWriteSize+=encodedValue.length;
+        const stored=this.storedEncoded('record',item.table,item.key,encodedValue,removedContent);
         if (contentRevision === undefined) {
           this.database.exec({
             sql: `INSERT INTO sensa_records(table_name,record_key,value_json,content_revision) VALUES(?,?,?,0)
@@ -889,21 +898,21 @@ export class SqliteRecordDatabase {
             bind: [item.table, item.key],
           });
         }
-        if(item.table==='packageCache')this.upsertPackageCacheProjection(item.key,item.encodedValue);
-        if(item.table==='curriculumEnrollments')this.runtimeCandidates.upsertEnrollment(item.key,this.decode<import('./curriculumEnrollments').LocalCurriculumEnrollment>(item.encodedValue));
-        if(item.table==='supplementalMembershipStates')this.runtimeCandidates.upsertSupplementalState(item.key,this.decode<import('./supplementalMemberships').SupplementalMembershipState>(item.encodedValue));
-        if(item.table==='studyScopes')this.runtimeCandidates.upsertScope(item.key,this.decode<import('./studyScopes').LocalStudyScope>(item.encodedValue));
+        if(item.table==='packageCache')this.upsertPackageCacheProjection(item.key,encodedValue);
+        if(item.table==='curriculumEnrollments')this.runtimeCandidates.upsertEnrollment(item.key,this.decode<import('./curriculumEnrollments').LocalCurriculumEnrollment>(encodedValue));
+        if(item.table==='supplementalMembershipStates')this.runtimeCandidates.upsertSupplementalState(item.key,this.decode<import('./supplementalMemberships').SupplementalMembershipState>(encodedValue));
+        if(item.table==='studyScopes')this.runtimeCandidates.upsertScope(item.key,this.decode<import('./studyScopes').LocalStudyScope>(encodedValue));
         if (item.table === 'learningTargets') {
-          this.upsertLearningTargetProjection(item.key, item.encodedValue);
+          this.upsertLearningTargetProjection(item.key, encodedValue);
         }
         if (item.table === 'learningRuns') {
-          this.upsertLearningRunProjection(item.key, item.encodedValue);
+          this.upsertLearningRunProjection(item.key, encodedValue);
         }
         if (item.table === 'contentAttempts') {
-          this.upsertContentAttemptProjection(item.key, item.encodedValue);
+          this.upsertContentAttemptProjection(item.key, encodedValue);
         }
         if (item.table === 'semanticMeanings' || item.table === 'semanticInbox') {
-          this.replaceMediaReferences(item.table, item.key, item.encodedValue);
+          this.replaceMediaReferences(item.table, item.key, encodedValue);
         }
       }
       // Replica mutations are ordered by record identity, not dependency:

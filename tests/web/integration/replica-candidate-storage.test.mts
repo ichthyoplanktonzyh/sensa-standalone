@@ -129,6 +129,43 @@ function isolatedDatabase(){
  return {raw,database,request,stage,storedCount};
 }
 
+for(const added of ['live-fact','baseline'] as const)test(`fresh promotion rechecks ${added} inside its source transaction`,async()=>{
+ const fixture=isolatedDatabase();
+ try{
+  const id=await fixture.stage(1);expect((await fixture.request({kind:'validate',id})).kind).toBe('validated');
+  const key=crypto.randomUUID(),valueJson=JSON.stringify(encodeBackupValue({id:key,revision:1,text:'A concurrent fact must survive.',createdAt:identity.createdAt,updatedAt:identity.createdAt}));
+  fixture.database.commit({clears:[],deletes:[],puts:added==='live-fact'?[{table:'drafts',key,encodedValue:valueJson}]:[],...(added==='baseline'?{syncBasePatch:{puts:[{table:'drafts' as const,key,valueJson,blockRefs:['a'.repeat(64)]}],deletes:[]}}:{})});
+  expect(()=>fixture.database.commit({clears:[],deletes:[],puts:[],contentRevision:1,replicaCandidateRestore:{id,tables:['semanticMeanings']}})).toThrow('library_sync_local_changed');
+  expect(fixture.database.count('semanticMeanings')).toBe(0);expect(fixture.database.get('meta','sentinel')).toBe(JSON.stringify(encodeBackupValue('Existing owner data')));
+  if(added==='live-fact')expect(fixture.database.get('drafts',key)).toBe(valueJson);else expect(fixture.database.syncBaseEntries()).toHaveLength(1);
+  expect((await fixture.request({kind:'validate',id})).kind).toBe('validated');
+ }finally{fixture.database.close(false);}
+});
+
+test('only a validated generation can promote and its commit cannot bundle independent fact changes',async()=>{
+ const fixture=isolatedDatabase();
+ try{
+  const id=await fixture.stage(1),mutation={clears:[],deletes:[],puts:[],contentRevision:1,replicaCandidateRestore:{id,tables:['semanticMeanings' as const]}};
+  expect(()=>fixture.database.commit(mutation)).toThrow('library_sync_candidate_invalid');
+  expect((await fixture.request({kind:'validate',id})).kind).toBe('validated');
+  expect(()=>fixture.database.commit({...mutation,puts:[{table:'settings',key:'unrelated',encodedValue:'["string","extra fact"]'}]})).toThrow('library_sync_candidate_invalid');
+  expect(()=>fixture.database.commit({...mutation,puts:[{table:'meta',key:'service-owner',encodedValue:JSON.stringify(encodeBackupValue({subject:crypto.randomUUID(),accountId:crypto.randomUUID()}))}]})).toThrow('library_sync_candidate_invalid');
+  expect(fixture.database.count('semanticMeanings')).toBe(0);expect(fixture.database.syncBaseEntries()).toEqual([]);
+ }finally{fixture.database.close(false);}
+});
+
+test('proof-only batches are tied to one manifest row and cannot seal or expose a partial body',async()=>{
+ const records=rows(),id=await begin(records),before=await original();
+ try{
+  const identityProofs=candidateBlocksFor([records[0]!]),otherProofs=candidateBlocksFor([records[1]!]);
+  await expect(database.replicaCandidate({kind:'prove',id,record:{table:records[0]!.table,key:records[0]!.key},blocks:otherProofs})).rejects.toThrow('library_sync_candidate_invalid');
+  for(let attempt=0;attempt<2;attempt++)expect((await database.replicaCandidate({kind:'prove',id,record:{table:records[0]!.table,key:records[0]!.key},blocks:identityProofs})).kind).toBe('proved');
+  expect(await original()).toEqual(before);await expect(validate(id)).rejects.toThrow('library_sync_candidate_invalid');
+  await database.replicaCandidate({kind:'append',id,records:[records[0]!],blocks:[]});await append(id,records.slice(1));
+  expect((await validate(id)).kind).toBe('validated');expect(await original()).toEqual(before);
+ }finally{await discard(id);}
+});
+
 test('close drains an in-flight validation and performs no later SQL through its closed connection',async()=>{
  const fixture=isolatedDatabase();
  try{

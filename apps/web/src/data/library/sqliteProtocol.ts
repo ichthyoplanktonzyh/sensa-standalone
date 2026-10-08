@@ -27,7 +27,7 @@ export const sqlitePoolDirectory = "/sensa-local-library-v12";
 export const sqliteLibraryBaselineVersion = 10;
 export const sqliteLibrarySchemaVersion = 16;
 /** Cross-tab RPC changes must bump this before adding or changing messages. */
-export const sqliteCoordinatorProtocolVersion = 49;
+export const sqliteCoordinatorProtocolVersion = 51;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -75,6 +75,9 @@ export type SqliteMutation = {
   syncBaseReplacement?: SqliteSyncBaseEntry[];
   /** Confirmed local publication: replace only the affected baseline records. */
   syncBasePatch?:{puts:SqliteSyncBaseEntry[];deletes:Array<{table:SqliteLibraryTable;key:string}>};
+  /** A fully validated private checkpoint may populate an identity-only Library.
+   * The Worker rechecks that condition and its owner/revision inside COMMIT. */
+  replicaCandidateRestore?:{id:string;tables:SqliteLibraryTable[]};
 };
 
 export type SqliteRecordChange = {

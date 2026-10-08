@@ -326,11 +326,11 @@ Book 校验逐 installation 让出并只保留匹配成员，默认 all range �
 active-book 唯一约束以迭代方式检查，普通命令与完整校验共用规则。每个 Book 仍扫描 installations，单个
 大型 reconciliation 的集合派生／排序仍有同步段；这些未消除的工作不能被表述为严格增量或任意分布的响应性保证。
 应用只精确读取已校验的变化事实，候选缺行时拒绝，不写入 undefined 冒充该事实；记录内合法 undefined 仍保留。
-Registry 引用只在当前记录内复用，不建长期缓存。当前 capture、merge 和下载仍持有完整 encoded Entry 集合，
-云同步的完整校验使用与同步入口同一组 generator 规则，在事实、Run 与 Action 之间按执行时间让出；它仍读取
+Registry 引用只在当前记录内复用，不建长期缓存。已有资料的三方收敛仍在 capture、merge 和下载中持有完整 encoded Entry 集合，
+已有资料的三方云同步完整校验使用与同步入口同一组 generator 规则，在事实、Run 与 Action 之间按执行时间让出；它仍读取
 完整 encoded Entry 集合，不证明整个进程内存或大容量恢复达标。每个 wire（包括未被领域读取的偏好）仍须
 严格解码，验证合同版本相应推进。Provider 校验只依赖纯 metadata schema，不初始化模型、账号或 TTS。
-`replicaCandidate` Worker RPC 的 begin／append／validate／discard 管理私有、版本化暂存表，不修改 source
+`replicaCandidate` Worker RPC 的 begin／prove／append／validate／discard 管理私有、版本化暂存表，不修改 source
 schema version 或既有事实。只保留一个候选代，同 fence／预期 head 的 begin 重试返回同一 ID，失败代可重新
 开始；源身份只取 revision／manifest，storage 用量变动不替换同一候选。begin 接收真实 v6 Manifest 原始块，
 用共用 codec、传输 SHA 和严格 Manifest schema 验证后固定完整的 key／有序 refs 集合，不接受自报记录数。
@@ -338,6 +338,8 @@ append 的 raw block 经相同校验后只保留解码文本 SHA／字符数，�
 不长期保留另一份已解码媒体；缺片、错序、正文／摘要／key 不符均拒绝。proof 元数据与事实批次同事务回滚。
 Manifest 原始及解码 UTF-8 均受 64 MiB 上限保护；单块先检查字符长度，批级累计解压在保留文本前检查。
 append 只接收本批 rows 引用的 proof，原始 proof 批次受 4 MiB 保护，累计解压不能超过已预检的 row 字节量。
+单行的正文、proof 数量或传输量超出 append 批次时，prove 只接受该 Manifest row 的 refs，分批限制原始与累计
+解压各 4 MiB；已证实片段随后由完整 row 的有序文本摘要检查复用，不将半行写入 live facts 或封存。
 已确认 proof 可复用而不重复解压；单个异常块最多触及 v6 codec 的固定输出界限。回执带所验证的 head，
 仅证明给定 head／manifest／候选正文自洽，不证明它来自认证服务、仍为最新版本或已被应用。
 begin／append 在写事务内重验 owner fence，避免预检与暂存写入之间的账号变化窗口。
@@ -356,9 +358,19 @@ Worker 的候选校验不占据普通请求队列，按记录让出，
 随后逐行编码写入，不同时保留整批压缩／解码对象。单代逻辑正文保护为 512 MiB、已存编码预算为 256 MiB；
 它们不是账号容量、实际 OPFS 占用或峰值内存证明，单个巨型事实仍需单独验证响应性。
 Worker 按 ES module 分块构建，完整 validator 延迟加载；离线 shell 预缓存所有构建的 JS／Wasm 代码块。
-该暂存内核尚未接入正常 HTTP 下载、领域 merge 和原子应用。接入时须复用领域防倒退、不可改写历史与显式
-冲突规则，不能以“本机无未同步更改”为由直接整库替换；候选、live facts、对应 baseline 与同步状态仍须一起
-原子应用。异步存储 RPC 不能冒充同步 get，64 行的测试夹具也不能代替生产的字节预算或 OPFS 容量验收。
+正常 synchronizer 的新设备恢复已使用该内核：只在无 baseline、无 pending／冲突，且本机 replicated facts
+仅有 identity 时准入；同库 identity 分叉及不改变内容的 identity-only head 保留原 merge／确认路径。
+正文分批由正常 HTTP block fetch 进入私有候选，最多预取 64 个不同 hash，不先加载 128 条任意大小的行；
+当前大行前释放无关预取块，最后一次引用后释放，换 head 重试也清缓存。多行 append 仍限制 128 条／4 MiB；
+单行保留既有 90 MiB 例外，因此不能称每条 RPC／单行峰值始终只有 4 MiB。
+长时 candidate 校验不持有 live Library Web Lock，本机保存可以使其 fence 失效而不是等待完整校验。
+新设备应用在 source SQLite commit 内重验 owner、identity、revision、空 facts 和空 baseline，惰性读取单行
+正文并复用既有 restore／索引／媒体引用管线，与 baseline、同步状态、deviceId、本机建库回执和候选清理同事务。
+同事务 restoreOperationId 回执确认协调器丢失 ACK／候选重放后的实际提交，确认后才发送资料变化通知；
+无法读取该回执时不能冒充成功。候选、live、baseline 和 WAL 可同时占磁盘；256 MiB 暂存估计不是峰值磁盘证明。
+已有资料仍须接入领域防倒退、不可改写历史和显式冲突的有界三方 merge，不能因为“本机无未同步更改”就直接
+替换。异步存储 RPC 不能冒充同步 get；受控 5k Draft HTTP／OPFS 恢复也不能代替 10k Meaning、账号 UI、
+全进程峰值内存或完整账号容量验收。
 `node --import tsx scripts/benchmarkSemanticReplicaValidation.mts` 在 Node 的 SQLite/Wasm 候选库上度量完整 PSW
 规则校验；准备数据不计入耗时，采样的 V8 heap 不包括 SQLite/Wasm 内存。加 `--storage-profile` 可只重现逻辑
 正文的体积分解，分别输出普通 JSON、tagged 编码、表／Registry 类型，以及字符串字段的 UTF-8 字节计数。
@@ -372,7 +384,7 @@ v6 发布仍组装整份 key/block-ref manifest 元数据；它不再解码所�
 核对应用 revision；下载中及提交后的新写入不被覆盖或标为已同步。无事实变化只写同步账本，不制造本机内容
 revision。完整路径只在首次捕获及 pending 重放改变基线后读取正文，不为应用／最终确认再次 capture 整库。
 生产同步统一经 `syncAccountLibrary` 的单飞与跨标签页 Web Lock；底层注入传输接口不承担并发同步任务调度。
-上述 fallback 仍读取完整事实与基线，64 MiB 解码保护与 256 MiB 账号容量尚有差距；增量优化或分块压缩不证明
+上述已有资料 fallback 仍读取完整事实与基线，64 MiB 解码保护与 256 MiB 账号容量尚有差距；增量优化或分块压缩不证明
 大规模跨设备恢复的内存或容量达标。
 Checkpoint 的 block/manifest 传输、CAS commit、重试和 baseline 由 Cloud Sync Coordinator 负责；记录的
 跨设备归一化、三方收敛、完整性验证、历史 replay 与删除许可由领域 Replica Module 负责。Personal

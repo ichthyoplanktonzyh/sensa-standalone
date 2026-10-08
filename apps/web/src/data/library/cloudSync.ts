@@ -1,5 +1,5 @@
 import {librarySyncManifest,librarySyncHead,librarySyncTables,librarySyncBlockFetchHashes,librarySyncBlockFetchResult,librarySyncBlockMissingResult,librarySyncBlockStore,librarySyncBlockStoreBatch,librarySyncBlockStoreChars,type LibrarySyncManifest,type LibrarySyncHead} from '@sensa/contracts/sensa';
-import {readLibrary,readLocalLibraryRevision,restoreLibraryTransaction,writeLibraryState,assertCurrentLibrary,type LibraryTransaction,type LibraryIdentity} from './store';
+import {readLibrary,readLocalLibraryRevision,restoreLibraryTransaction,writeLibraryState,assertCurrentLibrary,requestReplicaCandidate,type LibraryTransaction,type LibraryIdentity} from './store';
 import {backupEqual,encodeBackupValue,decodeBackupValue} from './backupCodec';
 import {cloudSyncFailurePolicy,type CloudSyncFailureKind} from './cloudSyncPolicy';
 import {
@@ -15,6 +15,7 @@ import {
 } from './replication/libraryReplica';
 import {applyLibraryReplicaMutation} from './replication/libraryReplicaApplication';
 import {validateLibraryReplicaCooperatively,libraryReplicaValidationVersion,type ValidatedLibraryReplica} from './replication/libraryReplicaValidation';
+import type {ReplicaCandidateFence,ReplicaCandidateRequest,ReplicaCandidateResponse,ReplicaCandidateRecord,ReplicaCandidateValidation} from './replicaCandidateProtocol';
 export type SyncRequest=(path:string,body?:unknown)=>Promise<any>;
 export type CloudSyncEntry=LibraryReplicaEntry;
 type Entry=CloudSyncEntry;
@@ -22,7 +23,7 @@ type Owner={subject:string;accountId:string};
 export type CloudSyncConflictChoice='local'|'remote';
 export type CloudSyncConflict={detectedAt:string;remoteRevision:number;remoteManifest:string[]|null;records:{id:string;base:Entry|null;local:Entry|null;remote:Entry|null}[];affectedRecordIds:string[]};
 export type CloudSyncState={owner:Owner;incarnation:string;revision:number;checkpointVersion?:6;validationVersion?:typeof libraryReplicaValidationVersion;storage?:LibrarySyncHead['storage'];syncedLocalRevision?:number;pending?:{operationId:string;baseRevision:number;manifest:string[]};status:'pending'|'syncing'|'synced'|'offline'|'conflict'|'failed';conflicts?:string[];conflict?:CloudSyncConflict;resolution?:{choice:CloudSyncConflictChoice;expectedRemoteRevision:number};lastSyncedAt?:string;lastCheckedAt?:string;syncStartedAt?:string;error?:string;failureKind?:CloudSyncFailureKind;retryCount?:number;retryAt?:string};
-type State=CloudSyncState;
+type State=CloudSyncState&{/** Durable proof for an uncertain staged-restore COMMIT ACK. */restoreOperationId?:string};
 export type PendingCloudSyncRecord={table:typeof librarySyncTables[number];key:string};
 export type PendingCloudSyncSnapshot={
  accountLinked:boolean;
@@ -236,6 +237,64 @@ class Blocks{
   const identity=decodeBackupValue(entries.find(r=>r.table==='meta'&&r.key==='identity')!.value),prepared=await this.prepare(entries);
   return {manifest:await this.packManifest(identity,prepared.map(r=>({table:r.table,key:r.key,blocks:r.blocks!}))),entries:prepared};
  }
+ /** Fresh-device restore keeps only bounded body batches on the main thread.
+  * Hash/manifest binding and full authority run against Worker storage. */
+ async stage(head:LibrarySyncHead,fence:ReplicaCandidateFence,send:(request:ReplicaCandidateRequest)=>Promise<ReplicaCandidateResponse>):Promise<ReplicaCandidateValidation>{
+  if(!head.manifest)throw Error('library_sync_candidate_invalid');
+  await this.fetch(head.manifest);
+  let raw:unknown;try{raw=JSON.parse(await this.text(head.manifest));}catch{throw Error('library_sync_format');}
+  if(!raw||typeof raw!=='object'||!('version' in raw)||raw.version!==6)throw Error('library_sync_incompatible_checkpoint');
+  const parsed=librarySyncManifest.safeParse(raw);if(!parsed.success)throw Error('library_sync_format');const manifest=parsed.data;
+  const begun=await send({kind:'begin',fence,expected:{head,manifestBlocks:[...new Set(head.manifest)].map(hash=>({hash,data:this.cache.get(hash)!}))}});
+  if(begun.kind!=='begun')throw Error('library_sync_candidate_invalid');
+  const id=begun.id;
+  try{
+   for(const hash of [...this.cache.keys()])this.forget(hash);
+   const remaining=new Map<string,number>();for(const row of manifest.rows)for(const hash of new Set(row.blocks))remaining.set(hash,(remaining.get(hash)??0)+1);
+   let records:ReplicaCandidateRecord[]=[],proofs=new Map<string,string>(),bodyBytes=0,proofBytes=0;
+   const flush=async()=>{
+    if(!records.length)return;
+    const result=await send({kind:'append',id,records,blocks:[...proofs].map(([hash,data])=>({hash,data}))});
+    if(result.kind!=='appended')throw Error('library_sync_candidate_invalid');
+    records=[];proofs=new Map();bodyBytes=0;proofBytes=0;
+   };
+   for(let at=0;at<manifest.rows.length;at++){
+    const row=manifest.rows[at],refs=new Set(row.blocks);
+    if(row.blocks.some(hash=>!this.cache.has(hash))){
+     // A fixed block window, not 128 arbitrarily large rows. Before fetching a
+     // large current row, release unrelated prefetched bytes from earlier rows.
+     for(const hash of [...this.cache.keys()])if(!refs.has(hash))this.forget(hash);
+     const wanted=new Set<string>();
+     for(let index=at;index<manifest.rows.length&&wanted.size<64;index++)for(const hash of manifest.rows[index].blocks){wanted.add(hash);if(wanted.size===64)break;}
+     await this.fetch([...wanted]);
+     if(row.blocks.some(hash=>!this.cache.has(hash))){for(const hash of [...this.cache.keys()])if(!refs.has(hash))this.forget(hash);await this.fetch(row.blocks);}
+    }
+    const valueJson=await this.text(row.blocks),size=new TextEncoder().encode(valueJson).length;
+    if(size>90*1024*1024)throw Error('library_sync_capacity');
+    const record:ReplicaCandidateRecord={table:row.table,key:row.key,valueJson,blockRefs:row.blocks};
+    const rowProofBytes=[...refs].reduce((sum,hash)=>sum+new TextEncoder().encode(this.cache.get(hash)!).length,0);
+    if(size>4*1024*1024||rowProofBytes>4*1024*1024||refs.size>512){
+     await flush();const {decodeLibrarySyncBlock}=await blockCodec();
+     let batch:Array<{hash:string;data:string}>=[],rawBytes=0,plainBytes=0;
+     const prove=async()=>{if(!batch.length)return;const result=await send({kind:'prove',id,record:{table:row.table,key:row.key},blocks:batch});if(result.kind!=='proved')throw Error('library_sync_candidate_invalid');batch=[];rawBytes=0;plainBytes=0;};
+     for(const hash of refs){
+      const data=this.cache.get(hash)!,raw=new TextEncoder().encode(data).length,plain=new TextEncoder().encode(decodeLibrarySyncBlock(data)).length;
+      if(batch.length&&(rawBytes+raw>4*1024*1024||plainBytes+plain>4*1024*1024||batch.length===512))await prove();
+      batch.push({hash,data});rawBytes+=raw;plainBytes+=plain;
+     }
+     await prove();const result=await send({kind:'append',id,records:[record],blocks:[]});if(result.kind!=='appended')throw Error('library_sync_candidate_invalid');
+    }else{
+     const needed=[...refs].filter(hash=>!proofs.has(hash)),extra=needed.reduce((sum,hash)=>sum+new TextEncoder().encode(this.cache.get(hash)!).length,0);
+     if(records.length&&(records.length===128||bodyBytes+size>4*1024*1024||proofBytes+extra>4*1024*1024||proofs.size+needed.length>512))await flush();
+     for(const hash of refs)if(!proofs.has(hash)){const data=this.cache.get(hash)!;proofs.set(hash,data);proofBytes+=new TextEncoder().encode(data).length;}
+     records.push(record);bodyBytes+=size;
+    }
+    for(const hash of refs){const count=remaining.get(hash)!-1;if(count)remaining.set(hash,count);else{remaining.delete(hash);this.forget(hash);}}
+   }
+   await flush();for(const hash of [...this.cache.keys()])this.forget(hash);
+   const result=await send({kind:'validate',id});if(result.kind!=='validated')throw Error('library_sync_candidate_invalid');return result.candidate;
+  }catch(cause){for(const hash of [...this.cache.keys()])this.forget(hash);await send({kind:'discard',id}).catch(()=>{});throw cause;}
+ }
  async download(head:LibrarySyncHead,base:Entry[]=[]){
   if(!head.manifest)return [];
   await this.fetch(head.manifest);
@@ -283,6 +342,17 @@ async function downloadStableHead(blocks:Blocks,request:SyncRequest,base:Entry[]
  }
  throw new Error('library_sync_head_changed');
 }
+
+async function canRestoreFreshLibrary(tx:LibraryTransaction){
+ // Read only keys, never materialize an existing user's bodies to determine
+ // eligibility. A previous baseline must still take the domain merge path.
+ if((await tx.syncBaseReferences()).length)return false;
+ for(const table of librarySyncTables)for await(const keys of tx.recordKeyBatches(table))for(const key of keys){
+  if(isReplicatedLibraryEntry(table,key)&&!(table==='meta'&&key==='identity'))return false;
+ }
+ return true;
+}
+
 /** Injected transport permits offline/idempotency/restore tests without real accounts. */
 export async function synchronizeLibrary(request:SyncRequest,options:{publishEmptyIdentity?:boolean}={}){
  const header=await readLibrary(captureHeader),expected={owner:header.owner,incarnation:header.incarnation};
@@ -340,6 +410,40 @@ export async function synchronizeLibrary(request:SyncRequest,options:{publishEmp
      tx.put('meta',STATE,{...current.state!,storage:observedHead!.storage??current.state!.storage,status:'synced',syncedLocalRevision:header.localRevision,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
     });
     return;
+   }
+  }
+  if(!prior?.pending&&!initiallyConflicted&&await readLibrary(canRestoreFreshLibrary)){
+   observedHead??=librarySyncHead.parse(await request('/head'));
+   if(observedHead.manifest){
+    const send=requestReplicaCandidate;
+    let candidate:ReplicaCandidateValidation|undefined;
+    try{
+     for(let attempt=0;attempt<3;attempt++){
+      try{candidate=await blocks.stage(observedHead,{owner:header.owner,incarnation:header.incarnation,identity:header.identity,localRevision:header.localRevision},send);break;}
+      catch(cause){
+       if(!(cause instanceof Error)||cause.message!=='library_sync_missing_block')throw cause;
+       const latest=librarySyncHead.parse(await request('/head'));
+       if(latest.revision===observedHead.revision&&equal(latest.manifest,observedHead.manifest))throw cause;
+       if(attempt===2)throw Error('library_sync_head_changed');observedHead=latest;
+       if(!latest.manifest)break;
+      }
+     }
+     // A same-library identity fork still follows ordinary explicit conflict
+     // handling; only a genuinely empty fresh Library may adopt another ID.
+     const normalizedIdentity=normalizeLibraryReplicaEntry({table:'meta',key:'identity',value:header.identity},header.identity).value;
+     if(candidate&&(candidate.identity.id!==header.identity.id||candidate.records>1&&equal(candidate.identity,normalizedIdentity))){
+      const selected=candidate;
+      await restoreLibraryTransaction(async tx=>{
+       const current=await captureHeader(tx);
+       if(!sameOwner(current.owner,header.owner)||current.incarnation!==header.incarnation)throw Error('account_changed');
+       if(current.localRevision!==header.localRevision||!equal(current.identity,header.identity))throw Error('library_sync_local_changed');
+       const completedAt=new Date().toISOString();tx.restoreReplicaCandidate(selected);
+       tx.put('meta',STATE,{...current.state!,restoreOperationId:selected.id,checkpointVersion:6,validationVersion:libraryReplicaValidationVersion,revision:selected.head.revision,storage:selected.head.storage,status:'synced',syncedLocalRevision:header.localRevision+1,pending:undefined,conflicts:undefined,conflict:undefined,resolution:undefined,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
+      });
+      return;
+     }
+    }catch(cause){if(!(cause instanceof Error)||cause.message!=='sqlite_replica_candidate_unavailable')throw cause;}
+    finally{if(candidate)await send({kind:'discard',id:candidate.id}).catch(()=>{});}
    }
   }
   let initial=await readLibrary(capture);
