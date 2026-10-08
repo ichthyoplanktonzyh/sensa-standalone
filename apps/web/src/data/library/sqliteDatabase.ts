@@ -26,6 +26,7 @@ import type {LocalLearningRun,LocalLearningTarget} from '../../learning/runtime/
 import type {PackageBookMembership} from './packageRecords';
 import {
   sqliteLibrarySchema,
+  sqliteSyncBaseSchema,
   sqlitePortableMediaSchema,
   sqliteSharedRecordContentSchema,
   sqliteLibraryBaselineVersion,
@@ -201,14 +202,15 @@ export class SqliteRecordDatabase {
       catch(error){try{this.database.exec('ROLLBACK');}catch{/* Preserve the original records and constraint. */}throw error;}
       this.database.exec(sqliteLibrarySchema);
     }
-    else if(before===16){
-      // Keep existing source bytes and indexes. Only future record writes or
-      // verified copies may use the already-supported compression envelope.
+    else if(before===16||before===17){
+      // Keep source facts, stored bytes and indexes. Only the sync baseline's
+      // physical B-tree layout changes, atomically with the version header.
       this.database.exec(sqliteRuntimePragmas);
       this.database.exec('BEGIN IMMEDIATE');
       try{
         const present=this.database.exec({sql:"SELECT name FROM sqlite_schema WHERE type='table' AND name IN (SELECT value FROM json_each(?))",bind:[JSON.stringify(sqliteRequiredTables)],rowMode:'object',returnValue:'resultRows'}) as unknown[];
         if(present.length!==sqliteRequiredTables.length)throw new Error('sqlite_source_schema_incomplete');
+        this.useRowidSyncBase();
         ensureSqliteSchemaIndexes(this.database,sqliteLibrarySchema);
         this.database.exec(`PRAGMA user_version=${sqliteLibrarySchemaVersion}`);this.database.exec('COMMIT');
       }
@@ -292,7 +294,7 @@ export class SqliteRecordDatabase {
     const tables=[
       {name:'sensa_records',columns:'rowid,table_name,record_key,value_json,content_revision',definition:`${keyColumns},value_json TEXT NOT NULL CHECK(json_valid(value_json)),content_revision INTEGER NOT NULL DEFAULT 0 CHECK(content_revision>=0),PRIMARY KEY(table_name,record_key)`,suffix:''},
       {name:'sensa_record_tombstones',columns:'table_name,record_key,content_revision',definition:`${keyColumns},content_revision INTEGER NOT NULL CHECK(content_revision>0),PRIMARY KEY(table_name,record_key)`,suffix:' WITHOUT ROWID'},
-      {name:'sensa_sync_base',columns:'table_name,record_key,value_json,block_refs_json',definition:`${keyColumns},value_json TEXT NOT NULL CHECK(json_valid(value_json)),block_refs_json TEXT NOT NULL CHECK(json_valid(block_refs_json)),PRIMARY KEY(table_name,record_key)`,suffix:' WITHOUT ROWID'},
+      {name:'sensa_sync_base',columns:'table_name,record_key,value_json,block_refs_json',definition:`${keyColumns},value_json TEXT NOT NULL CHECK(json_valid(value_json)),block_refs_json TEXT NOT NULL CHECK(json_valid(block_refs_json)),PRIMARY KEY(table_name,record_key)`,suffix:''},
     ];
     for(const table of tables){
       const present=this.database.exec({sql:"SELECT 1 FROM sqlite_schema WHERE type='table' AND name=?",bind:[table.name],rowMode:0,returnValue:'resultRows'}) as unknown[];
@@ -305,6 +307,20 @@ export class SqliteRecordDatabase {
       this.database.exec(`ALTER TABLE ${replacement} RENAME TO ${table.name}`);
       for(const sql of indexes)this.database.exec(sql);
     }
+  }
+
+  /** Called inside the header upgrade transaction. Copy opaque stored bytes,
+   * ordered refs and explicit indexes, never decode or rewrite owner facts. */
+  private useRowidSyncBase():void{
+    const definition=this.scalarText("SELECT sql FROM sqlite_schema WHERE type='table' AND name='sensa_sync_base'");
+    if(!/WITHOUT\s+ROWID\s*$/iu.test(definition))return;
+    const replacement='sensa_sync_base_v18_upgrade';
+    const indexes=this.database.exec({sql:"SELECT sql FROM sqlite_schema WHERE type='index' AND tbl_name='sensa_sync_base' AND sql IS NOT NULL ORDER BY name",rowMode:0,returnValue:'resultRows'}) as string[];
+    this.database.exec(sqliteSyncBaseSchema.replace('IF NOT EXISTS sensa_sync_base',replacement));
+    this.database.exec(`INSERT INTO ${replacement}(table_name,record_key,value_json,block_refs_json) SELECT table_name,record_key,value_json,block_refs_json FROM sensa_sync_base`);
+    this.database.exec('DROP TABLE sensa_sync_base');
+    this.database.exec(`ALTER TABLE ${replacement} RENAME TO sensa_sync_base`);
+    for(const index of indexes)this.database.exec(index);
   }
 
   entries(table: SqliteLibraryTable): StoredEntry[] {

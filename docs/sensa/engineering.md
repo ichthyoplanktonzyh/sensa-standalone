@@ -190,12 +190,17 @@ Package key；运行恢复、策略锁定和生成频控通过领域索引查询
 已完整恢复的内容缓存复用一次一致的安装／来源快照；下载或缓存修复后重新读取当前快照，避免把期间新增但未恢复的来源误报为就绪。
 学习状态变化只刷新学习投影，语言选择只读取当前语言方向；通知按记录 key 过滤，当前页面不重复处理自己发出的跨页通知。
 数据结构调整不要求保留历史格式兼容层；当前源事实和可重建索引分开处理，不通过清空用户库恢复初始化错误。
-物理 schema 17 沿用共享摘要存储材料内容、协议绑定和步骤定义，记录仍独立保存身份、版本、时间、provenance
+物理 schema 18 沿用共享摘要存储材料内容、协议绑定和步骤定义，记录仍独立保存身份、版本、时间、provenance
 及结算事实。`sharedRecordContent.ts` 只改变无损存储表示；普通 record 接口读取还原后的原值，页面和协议
 不解析存储引用。共享 body 与 record／sync baseline 的直接 owner 关系同事务写入；只回收本次事务解除引用
 后确实无 owner 的 body，不在日常评分时扫描全部 body。同一无损压缩 envelope 也用于普通记录与基线，
 所有逻辑读取先还原精确字节；Registry scalar UDF、identity 冷重建／诊断及 supplemental 冷重建同样解包。
-16→17 只在完整源结构上原子推进存储版本，保留已有编码行和索引，不批量重写 owner 数据；失败保留原版本与字节。
+16／17→18 只在完整源结构上原子调整 sync baseline 的 B-tree 布局并推进版本；基线以普通 rowid 表保存较大正文，
+保留两列 NOT NULL 与复合唯一主键。影子表原样复制 value/ref 字节、交换表名并保留显式索引，与版本号同事务；
+不解码、重编码或改变源 facts／共享正文所有权，失败保留原版本、字节和索引。
+大正文与紧凑关系表分别实测布局，不一律使用 `WITHOUT ROWID`，参见
+[SQLite 适用条件](https://sqlite.org/withoutrowid.html)。暂存候选的正文同样使用 rowid；冷连接只在私有候选事务内
+清理旧代及重建正文表，manifest／proof 随父记录级联清除，不触及本机事实。
 这些 body 是源事实表示的一部分，不是可猜测重建的缓存；缺失或损坏必须失败，不从当前包、模型或材料新版替代。
 13→14 的共享表示不改写已有逻辑事实；15 为 `studyScopes` 与 `learningSessions` 扩展
 record、tombstone 与 sync baseline 的表名允许项，在同一事务内逐字节复制原编码行，
@@ -384,7 +389,7 @@ incarnation fence，清除后的旧点击不能变成新授权。普通尝试失
 清除通知使已暂停的空库成为本机 authoritative，不请求云端或继续阻挡资料页；准入失败后的手动重连
 只重试准入，真正成功后才允许同步。
 暂存应用、完整回退应用或空账号确认在同一源事务内解除暂停；失败不消费，新的本机资料仍须走身份冲突。
-候选应用只额外允许删除这一确切的现存 marker，不开放其他 metadata 或删除操作；协调协议为 54。
+候选应用只额外允许删除这一确切的现存 marker，不开放其他 metadata 或删除操作；协调协议为 55。
 同事务 restoreOperationId 回执确认协调器丢失 ACK／候选重放后的实际提交，确认后才发送资料变化通知；
 无法读取该回执时不能冒充成功。候选、live、baseline 和 WAL 可同时占磁盘；256 MiB 暂存估计不是峰值磁盘证明。
 已有资料仍须接入领域防倒退、不可改写历史和显式冲突的有界三方 merge，不能因为“本机无未同步更改”就直接
@@ -400,9 +405,16 @@ incarnation fence，清除后的旧点击不能变成新授权。普通尝试失
 `SENSA_TEST_MEMORY_LIBRARY=true node --import tsx scripts/benchmarkMeaningRestore.mts --meanings=1000`
 可剖析正常 synchronizer 在 Node SQLite/Wasm 内存库上的暂存、校验、应用、各派生索引及 SQL 耗时；
 它不证明 OPFS、真实账号 UI、峰值内存或容量。`SENSA_RESTORE_SQL_PROFILE=true` 启用
-`replica-candidate-worker` 中的可选 1k Meaning Chromium/OPFS 诊断；包装仅存在于测试 Worker，
-与未修改生产 Worker 的 10k 恢复验收分开。1k 诊断还在每次 append 等待期间通过正式本机读取接口
-读取已提交的 Meaning 计数，要求候选不可见且每次读取不超过 1.5 秒；这不是完整 App 或已有大库的响应保证。
+`replica-candidate-worker` 中的可选 Meaning Chromium/OPFS 诊断；包装仅存在于测试 Worker，
+与未修改生产 Worker 的 10k 恢复验收分开。`SENSA_RESTORE_PROFILE_MEANINGS` 仅允许 1000（默认）或 5000；
+`SENSA_RESTORE_PROFILE_CACHE_KIB` 可选 16384／40960，仅影响隔离诊断连接，不改变生产默认缓存。
+诊断在每次 append 等待期间通过正式本机读取接口读取已提交的 Meaning 计数，要求候选不可见且每次读取
+不超过 1.5 秒；输出 cache hit/miss/write/spill、阶段边界采样 cache bytes 和按表／page type 的 dbstat。
+rowid 的主键自动索引也必须计入布局空间；采样 cache bytes 不是全进程峰值内存，诊断计时包含测量开销，
+也不是完整 App 或已有大库的响应保证。
+`node --import tsx scripts/benchmarkReplicaTableLayout.mts` 以相同真实 packed 值、有序 refs 和唯一键比较基线／
+候选正文的两种表布局；逐列核对值并报告含自动索引的 page type／payload／unused。
+该专用 Node SQLite/Wasm 内存诊断只证明页几何与原值保留，不证明 OPFS 时长、物理故障或峰值资源。
 索引写入将每条文档的短查询 gram 与每条记录的 UUID
 reservation 分别以 SQLite 集合写入；同一事务的 Meaning／Registry 更改只重建一次对应练习材料。
 v6 发布仍组装整份 key/block-ref manifest 元数据；它不再解码所有未变正文，但不能宣称整条路径严格 O(变化数)。

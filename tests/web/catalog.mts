@@ -48,7 +48,7 @@ const foundationTests = [
   {id:'web-entry-hmr',file:'tests/web/browser/web-entry-hmr.spec.ts',kind:'integration',risks:['local-correctness','durability'],environment:'chromium',suite:'browser',runner:'playwright'},
   {id:'library-bootstrap-recovery',file:'tests/web/integration/library-bootstrap-recovery.test.mts',kind:'integration',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
   {id:'youglish-caption',file:'tests/web/unit/youglish-caption.test.mts',kind:'unit',risks:['local-correctness'],environment:'node',suite:'fast',runner:'vitest'},
-  {id:'sqlite-runtime-failure',file:'tests/web/browser/sqlite-runtime-failure.spec.ts',kind:'integration',risks:['durability'],environment:'chromium',suite:'browser',runner:'playwright'},
+  {id:'sqlite-runtime-failure',file:'tests/web/browser/sqlite-runtime-failure.spec.ts',kind:'integration',risks:['local-correctness','durability'],environment:'chromium',suite:'browser',runner:'playwright'},
   {id:'supplemental-membership',file:'tests/web/integration/supplemental-membership.test.mts',kind:'integration',risks:['local-correctness','durability','convergence'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
   {id:'learning-session-scope',file:'tests/web/integration/learning-session-scope.test.mts',kind:'integration',risks:['local-correctness','durability','convergence'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
   {id:'personal-meaning-lifecycle',file:'tests/web/integration/personal-meaning-lifecycle.test.mts',kind:'integration',risks:['local-correctness','durability','convergence'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},

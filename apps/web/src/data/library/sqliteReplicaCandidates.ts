@@ -8,7 +8,7 @@ import {isReplicatedLibraryEntry,restoreLibraryReplicaValue,canCopyLibraryReplic
 import type {SqliteMutation,SqliteLibraryTable} from './sqliteProtocol';
 import type {LibraryRecordReader} from './libraryRecordReader';
 import {isFatalSqliteConnectionFailure,sqliteRollbackFailure} from './sqliteConnectionFailure';
-import {replicaCandidateSchema,replicaCandidateAppendRecordLimit,replicaCandidateAppendReferenceLimit,type ReplicaCandidateFence,type ReplicaCandidateExpected,type ReplicaCandidateRecord,type ReplicaCandidateValidation,type ReplicaCandidateBlock} from './replicaCandidateProtocol';
+import {replicaCandidateSchema,replicaCandidateRecordSchema,replicaCandidateAppendRecordLimit,replicaCandidateAppendReferenceLimit,type ReplicaCandidateFence,type ReplicaCandidateExpected,type ReplicaCandidateRecord,type ReplicaCandidateValidation,type ReplicaCandidateBlock} from './replicaCandidateProtocol';
 import {replicaCandidateProofBatchBytes,verifyReplicaCandidateBlock,verifyReplicaCandidateManifest} from './replicaCandidateProof';
 
 const uuid=z.string().uuid(),integer=z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -31,10 +31,16 @@ export class SqliteReplicaCandidates{
  private ensure(){
   this.assertHealthy();
   if(!this.ready){
-   this.database.exec(replicaCandidateSchema);
    // A generation is a disposable download scratch area, not a recoverable
    // source fact. No caller from a previous connection can still own its ID.
-   this.database.exec('DELETE FROM sensa_replica_candidates_v1');
+   this.database.exec('BEGIN IMMEDIATE');
+   try{
+    this.database.exec(replicaCandidateSchema);
+    this.database.exec('DELETE FROM sensa_replica_candidates_v1');
+    this.database.exec('DROP TABLE sensa_replica_candidate_records_v1');
+    this.database.exec(replicaCandidateRecordSchema);
+    this.database.exec('COMMIT');
+   }catch(cause){try{this.database.exec('ROLLBACK');}catch(rollbackCause){throw sqliteRollbackFailure(cause,rollbackCause);}throw cause;}
    this.ready=true;
   }
  }

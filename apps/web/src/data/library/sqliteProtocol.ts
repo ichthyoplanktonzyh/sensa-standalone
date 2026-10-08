@@ -25,9 +25,9 @@ export const sqliteLibraryFile = "/sensa-local-library-v12.sqlite3";
 export const sqlitePoolDirectory = "/sensa-local-library-v12";
 /** First supported production-user baseline; prototype formats stay unsupported. */
 export const sqliteLibraryBaselineVersion = 10;
-export const sqliteLibrarySchemaVersion = 17;
+export const sqliteLibrarySchemaVersion = 18;
 /** Cross-tab RPC changes must bump this before adding or changing messages. */
-export const sqliteCoordinatorProtocolVersion = 54;
+export const sqliteCoordinatorProtocolVersion = 55;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -167,6 +167,17 @@ export type SqliteStorageDiagnostics = {
 
 const quotedTables = sqliteLibraryTables.map((value) => `'${value}'`).join(",");
 
+/** Body-bearing rows use a table B-tree; a clustered index B-tree can force
+ * modest packed values onto sparsely used overflow pages. Keys stay unique. */
+export const sqliteSyncBaseSchema=`
+CREATE TABLE IF NOT EXISTS sensa_sync_base(
+  table_name TEXT NOT NULL CHECK(table_name IN (${quotedTables})),
+  record_key TEXT NOT NULL CHECK(length(record_key) BETWEEN 1 AND 2000),
+  value_json TEXT NOT NULL CHECK(json_valid(value_json)),
+  block_refs_json TEXT NOT NULL CHECK(json_valid(block_refs_json)),
+  PRIMARY KEY(table_name,record_key)
+);`;
+
 /** Private representation storage. Keep DDL free of compression/archive imports
  * so importing the Worker protocol does not pull them into the Home closure. */
 export const sqliteSharedRecordContentSchema=`
@@ -232,13 +243,7 @@ CREATE TABLE IF NOT EXISTS sensa_record_tombstones(
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS sensa_record_tombstones_revision
   ON sensa_record_tombstones(content_revision,table_name,record_key);
-CREATE TABLE IF NOT EXISTS sensa_sync_base(
-  table_name TEXT NOT NULL CHECK(table_name IN (${quotedTables})),
-  record_key TEXT NOT NULL CHECK(length(record_key) BETWEEN 1 AND 2000),
-  value_json TEXT NOT NULL CHECK(json_valid(value_json)),
-  block_refs_json TEXT NOT NULL CHECK(json_valid(block_refs_json)),
-  PRIMARY KEY(table_name,record_key)
-) WITHOUT ROWID;
+${sqliteSyncBaseSchema}
 CREATE TABLE IF NOT EXISTS sensa_learning_targets(
   record_key TEXT NOT NULL PRIMARY KEY,
   projection_value_json TEXT NOT NULL CHECK(json_valid(projection_value_json)),

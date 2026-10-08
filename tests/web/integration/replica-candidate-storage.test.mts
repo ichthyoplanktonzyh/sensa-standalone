@@ -7,7 +7,8 @@ import {useNodeLearningCapacityStorage} from '../../../scripts/support/nodeLearn
 import {openLibrary,readLibrary,writeLibraryState,assertCurrentLibrary,readLocalLibraryRevision} from '../../../apps/web/src/data/library/store';
 import {saveDraft} from '../../../apps/web/src/data/library/drafts';
 import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec';
-import {replicaCandidateAppendRecordLimit,replicaCandidateAppendReferenceLimit,type ReplicaCandidateFence,type ReplicaCandidateRecord} from '../../../apps/web/src/data/library/replicaCandidateProtocol';
+import {replicaCandidateSchema,replicaCandidateRecordSchema,replicaCandidateAppendRecordLimit,replicaCandidateAppendReferenceLimit,type ReplicaCandidateFence,type ReplicaCandidateRecord} from '../../../apps/web/src/data/library/replicaCandidateProtocol';
+import {SqliteReplicaCandidates} from '../../../apps/web/src/data/library/sqliteReplicaCandidates';
 import {MemoryJourneyRepository} from '../../../apps/web/src/experience/personalMeaningJourney/repository';
 import {createJourneyModules} from '../../../apps/web/src/experience/personalMeaningJourney/gateway';
 import {createSeededClock} from '../../../apps/web/src/experience/personalMeaningJourney/ports';
@@ -154,6 +155,30 @@ function isolatedDatabase(){
  const storedCount=()=>Number((raw.exec({sql:'SELECT count(*) FROM sensa_replica_candidate_records_v1',rowMode:0,returnValue:'resultRows'}) as number[])[0]);
  return {raw,database,request,stage,storedCount};
 }
+
+for(const interrupted of [false,true])test(`cold candidate handler replaces only abandoned clustered bodies atomically (${interrupted})`,async()=>{
+ const fixture=isolatedDatabase();let handler:SqliteReplicaCandidates|undefined;
+ try{
+  const raw=fixture.raw,oldRecord=replicaCandidateRecordSchema.replace(/\);$/u,') WITHOUT ROWID;'),oldId=crypto.randomUUID();
+  raw.exec(replicaCandidateSchema.replace(replicaCandidateRecordSchema,oldRecord));
+  raw.exec({sql:"INSERT INTO sensa_replica_candidates_v1(id,fence_json,expected_json,state) VALUES(?,'{}','{}','filling')",bind:[oldId]});
+  raw.exec({sql:'INSERT INTO sensa_replica_candidate_records_v1 VALUES(?,?,?,?,?)',bind:[oldId,'settings','abandoned','["string","abandoned private download"]','[]']});
+  raw.exec({sql:'INSERT INTO sensa_replica_candidate_manifest_v1 VALUES(?,?,?,?)',bind:[oldId,'settings','abandoned',JSON.stringify(['a'.repeat(64)])]});
+  raw.exec({sql:'INSERT INTO sensa_replica_candidate_proofs_v1(candidate_id,digest) VALUES(?,?)',bind:[oldId,'a'.repeat(64)]});
+  const snapshot=()=>['sensa_replica_candidates_v1','sensa_replica_candidate_records_v1','sensa_replica_candidate_manifest_v1','sensa_replica_candidate_proofs_v1'].map(table=>raw.exec({sql:`SELECT * FROM ${table} ORDER BY 1`,rowMode:'array',returnValue:'resultRows'})),before=snapshot();
+  handler=new SqliteReplicaCandidates(raw,()=>{},()=>{});
+  const records=rows(),expected=candidateExpected(records,identity),fence={owner,identity,localRevision:0,incarnation:'initial'};
+  if(interrupted){const exec=raw.exec.bind(raw);raw.exec=((input:any)=>{if(input==='DROP TABLE sensa_replica_candidate_records_v1')throw Error('fixture cache layout interrupted');return exec(input);}) as typeof raw.exec;
+   try{expect(()=>handler!.begin(fence,expected)).toThrow('fixture cache layout interrupted');}finally{raw.exec=exec;}
+   expect(snapshot()).toEqual(before);expect(String((raw.exec({sql:"SELECT sql FROM sqlite_schema WHERE name='sensa_replica_candidate_records_v1'",rowMode:0,returnValue:'resultRows'}) as string[])[0])).toMatch(/WITHOUT ROWID/);
+  }
+  const id=handler.begin(fence,expected);expect(id).not.toBe(oldId);expect(fixture.storedCount()).toBe(0);
+  for(const table of ['sensa_replica_candidate_records_v1','sensa_replica_candidate_manifest_v1','sensa_replica_candidate_proofs_v1'])expect(raw.exec({sql:`SELECT count(*) FROM ${table} WHERE candidate_id=?`,bind:[oldId],rowMode:0,returnValue:'resultRows'})).toEqual([0]);
+  expect(String((raw.exec({sql:"SELECT sql FROM sqlite_schema WHERE name='sensa_replica_candidate_records_v1'",rowMode:0,returnValue:'resultRows'}) as string[])[0])).not.toMatch(/WITHOUT ROWID/);
+  expect(fixture.database.get('meta','sentinel')).toBe(JSON.stringify(encodeBackupValue('Existing owner data')));
+  handler.append(id,records,candidateBlocksFor(records));expect((await handler.validate(id)).records).toBe(records.length);
+ }finally{handler?.close();fixture.database.close(false);}
+});
 
 for(const added of ['live-fact','baseline'] as const)test(`fresh promotion rechecks ${added} inside its source transaction`,async()=>{
  const fixture=isolatedDatabase();

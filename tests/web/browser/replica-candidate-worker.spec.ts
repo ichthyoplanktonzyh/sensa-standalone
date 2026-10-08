@@ -107,9 +107,11 @@ for(const scenario of ['reads','close','native-failure','crash'] as const)test(`
  }
 });
 
-for(const scenario of ['restore','write-during-validation','meaning-scale','meaning-profile'] as const)test(scenario==='meaning-profile'?'instrumented 1k Meaning OPFS restore diagnostic':`normal staged OPFS sync over 64 MiB: ${scenario}`,async({browser},testInfo)=>{
+for(const scenario of ['restore','write-during-validation','meaning-scale','meaning-profile'] as const)test(scenario==='meaning-profile'?'instrumented Meaning OPFS restore diagnostic':`normal staged OPFS sync over 64 MiB: ${scenario}`,async({browser},testInfo)=>{
  test.skip(scenario==='meaning-profile'&&process.env.SENSA_RESTORE_SQL_PROFILE!=='true','Optional CPU/SQL diagnostic, not an unmodified-Worker latency guarantee');
  test.setTimeout(scenario==='meaning-scale'?420_000:240_000);
+ const profileCount=Number(process.env.SENSA_RESTORE_PROFILE_MEANINGS??1000),profileCache=process.env.SENSA_RESTORE_PROFILE_CACHE_KIB;
+ if(scenario==='meaning-profile'&&(profileCount!==1000&&profileCount!==5000||profileCache!==undefined&&!['16384','40960'].includes(profileCache)))throw Error('unsupported_diagnostic_configuration');
  let vite:ViteDevServer|undefined,http:Server|undefined;
  const context=await browser.newContext(),page=await context.newPage();
  const id=crypto.randomUUID(),identity={id,learnerId:crypto.randomUUID(),deviceId:id,createdAt:'2026-10-03T00:00:00.000Z',schemaVersion:2 as const},owner={subject:crypto.randomUUID(),accountId:crypto.randomUUID()};
@@ -119,7 +121,7 @@ for(const scenario of ['restore','write-during-validation','meaning-scale','mean
   if(scenario==='meaning-scale'||scenario==='meaning-profile'){
    const [{MemoryJourneyRepository},{createJourneyModules},{createSeededClock},{semanticLookupPayload,syntheticSemanticWorld},{semanticRecords}]=await Promise.all([import('../../../apps/web/src/experience/personalMeaningJourney/repository'),import('../../../apps/web/src/experience/personalMeaningJourney/gateway'),import('../../../apps/web/src/experience/personalMeaningJourney/ports'),import('../support/semanticLookupFixtures'),import('../support/semanticWorldRecordFixture.mts')]);
    const repository=new MemoryJourneyRepository();await createJourneyModules({repository,clock:createSeededClock('2026-10-03T00:00:00Z')}).semanticIntake.submit(semanticLookupPayload());
-   count=scenario==='meaning-profile'?1000:10000;
+   count=scenario==='meaning-profile'?profileCount:10000;
    const world=syntheticSemanticWorld(await repository.load(),count);table='semanticMeanings';first=world.meanings[0]!;last=world.meanings.at(-1)!;
    for(const row of semanticRecords(world))records.push({...row,valueJson:JSON.stringify(encodeBackupValue(row.value)),blockRefs:[]});
   }else for(let index=0;index<5000;index++){
@@ -159,7 +161,7 @@ for(const scenario of ['restore','write-during-validation','meaning-scale','mean
      this.addEventListener('message',event=>{if(event.data.sensaRestoreProfile)Reflect.set(globalThis,'sensaRestoreProfile',event.data.sensaRestoreProfile);});
     }
    };
-  },`/@fs/${resolve('scripts/support/sqliteRestoreProfileWorker.ts')}`);
+  },`/@fs/${resolve('scripts/support/sqliteRestoreProfileWorker.ts')}?${new URLSearchParams(profileCache===undefined?{}:{cacheKiB:profileCache})}`);
   await page.goto(origin);
   const measured=await page.evaluate(async({storeUrl,syncUrl,adapterUrl,draftUrl,owner,scenario,table})=>{
    const store=await import(/* @vite-ignore */ storeUrl),sync=await import(/* @vite-ignore */ syncUrl),adapters=await import(/* @vite-ignore */ adapterUrl),drafts=await import(/* @vite-ignore */ draftUrl);
@@ -188,9 +190,9 @@ for(const scenario of ['restore','write-during-validation','meaning-scale','mean
    finally{clearInterval(timer);adapter.replicaCandidate=original;adapter.commit=originalCommit;}
    return {originalIdentity,error,validationRequests,writingDuringValidation,validationInvalidatedByWrite,writeMs,localDraftId,appendReadCount,maxAppendReadMs,phaseMs,phaseCalls,durationMs:performance.now()-started,maxMainThreadGapMs,state:await sync.readCloudSync(),count:await store.readLibrary((tx:any)=>tx.count(table)),identity:await store.readLibrary((tx:any)=>tx.get('meta','identity')),storage:await navigator.storage.estimate(),workerProfile:Reflect.get(globalThis,'sensaRestoreProfile')};
   },{storeUrl,syncUrl,adapterUrl,draftUrl,owner,scenario,table:fixture.table});
-  if(scenario==='meaning-profile'){expect(measured.workerProfile?.phases.promotion.calls).toBe(1);expect(measured.appendReadCount).toBe(measured.phaseCalls.append);expect(measured.maxAppendReadMs).toBeLessThanOrEqual(1500);}
-  else expect(fixture.logicalBytes).toBeGreaterThan(64*1024*1024);
   await testInfo.attach('normal-staged-restore-evidence',{contentType:'application/json',body:JSON.stringify({scenario,browser:browser.version(),fixture:fixture.table==='semanticMeanings'?`${fixture.count} accepted synthetic Meanings, unique initial Registry, no media/Learning history; controlled HTTP, ${scenario==='meaning-profile'?'instrumented diagnostic':'unmodified'} Worker/OPFS; no PostgreSQL/account UI`:'5000 valid synthetic Drafts; controlled loopback HTTP; real normal synchronizer/Worker/OPFS, no PostgreSQL or account UI',recordCount:fixture.recordCount,logicalBytes:fixture.logicalBytes,...measured,paidCalls:0})});
+  if(scenario==='meaning-profile'){expect(measured.workerProfile?.phases.promotion.calls).toBe(1);expect(measured.workerProfile?.diagnosticErrors).toEqual([]);expect(measured.workerProfile?.pages.length).toBeGreaterThan(0);expect(measured.appendReadCount).toBe(measured.phaseCalls.append);expect(measured.maxAppendReadMs).toBeLessThanOrEqual(1500);}
+  else expect(fixture.logicalBytes).toBeGreaterThan(64*1024*1024);
   if(scenario!=='write-during-validation'){
    expect(measured.error).toBeUndefined();expect(measured.count).toBe(fixture.count);expect(measured.state.status).toBe('synced');expect(measured.identity).toEqual({...identity,deviceId:measured.originalIdentity.deviceId});
    await page.reload();

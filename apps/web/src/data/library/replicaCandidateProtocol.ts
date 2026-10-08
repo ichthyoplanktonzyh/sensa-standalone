@@ -21,6 +21,19 @@ export type ReplicaCandidateRequest=
  |{kind:'discard';id:string};
 export type ReplicaCandidateResponse={kind:'begun';id:string}|{kind:'appended'|'proved'}|{kind:'validated';candidate:ReplicaCandidateValidation}|{kind:'discarded'};
 
+/** Large private bodies use ordinary rowid storage, with the same unique key
+ * and parent ownership. The cache is disposable across physical connections. */
+export const replicaCandidateRecordSchema=`
+CREATE TABLE IF NOT EXISTS sensa_replica_candidate_records_v1(
+ candidate_id TEXT NOT NULL,
+ table_name TEXT NOT NULL,
+ record_key TEXT NOT NULL CHECK(length(record_key) BETWEEN 1 AND 2000),
+ value_json TEXT NOT NULL CHECK(json_valid(value_json)),
+ refs_json TEXT NOT NULL CHECK(json_valid(refs_json)),
+ PRIMARY KEY(candidate_id,table_name,record_key),
+ FOREIGN KEY(candidate_id) REFERENCES sensa_replica_candidates_v1(id) ON DELETE CASCADE
+);`;
+
 /** Private versioned cache, never a logical Library table or checkpoint fact.
  * Creating it does not change or migrate the learner's record representation. */
 export const replicaCandidateSchema=`
@@ -34,15 +47,7 @@ CREATE TABLE IF NOT EXISTS sensa_replica_candidates_v1(
  stored_bytes INTEGER NOT NULL DEFAULT 0 CHECK(stored_bytes>=0),
  identity_json TEXT CHECK(identity_json IS NULL OR json_valid(identity_json))
 ) WITHOUT ROWID;
-CREATE TABLE IF NOT EXISTS sensa_replica_candidate_records_v1(
- candidate_id TEXT NOT NULL,
- table_name TEXT NOT NULL,
- record_key TEXT NOT NULL CHECK(length(record_key) BETWEEN 1 AND 2000),
- value_json TEXT NOT NULL CHECK(json_valid(value_json)),
- refs_json TEXT NOT NULL CHECK(json_valid(refs_json)),
- PRIMARY KEY(candidate_id,table_name,record_key),
- FOREIGN KEY(candidate_id) REFERENCES sensa_replica_candidates_v1(id) ON DELETE CASCADE
-) WITHOUT ROWID;
+${replicaCandidateRecordSchema}
 CREATE TABLE IF NOT EXISTS sensa_replica_candidate_manifest_v1(
  candidate_id TEXT NOT NULL,
  table_name TEXT NOT NULL,

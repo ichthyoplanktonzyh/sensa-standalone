@@ -25,7 +25,7 @@ export const open=async(options:{unmodified?:boolean}={})=>{
     if(options.unmodified)resolve();
   });
 };
-export const request=(input:SqliteWorkerInput|{kind:'close'}|{kind:'test_arm_short_write'|'test_arm_checkpoint_short_write'|'test_arm_rollback_io_failure'|'test_arm_diagnostic_rollback_io_failure'|'test_arm_constructor_failure'|'test_probe_pool_free'|'test_native_write_stats'}):Promise<SqliteWorkerResult>=>{
+export const request=(input:SqliteWorkerInput|{kind:'close'}|{kind:'test_arm_short_write'|'test_arm_checkpoint_short_write'|'test_arm_rollback_io_failure'|'test_arm_diagnostic_rollback_io_failure'|'test_arm_constructor_failure'|'test_probe_pool_free'|'test_native_write_stats'|'test_seed_baseline_layout17'|'test_probe_baseline_upgrade'|'test_baseline_upgrade_evidence'}):Promise<SqliteWorkerResult>=>{
   if(!worker)throw new Error('sqlite_runtime_test_worker_missing');
   const id=nextId++;
   return new Promise((resolve,reject)=>{
