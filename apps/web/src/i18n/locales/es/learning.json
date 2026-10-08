@@ -232,18 +232,18 @@
   "practice": {
     "title": "Práctica libre",
     "note": "Practica cuando quieras sin cambiar el progreso de aprendizaje.",
-    "scope": "Ámbito de práctica",
+    "scope": "Material de práctica",
     "change": "Cambiar ámbito",
     "back": "Volver",
     "empty": "Aún no hay contenido para practicar",
-    "count": "{{count}} significados",
-    "use": "Usar {{count}} significados",
+    "count": "{{count}} expresiones",
+    "use": "Usar {{count}} expresiones",
     "choose": "Elegir contenido",
     "all": "Seleccionar todo",
     "clear": "Deseleccionar todo",
     "currentStudySubtitle": "Todo lo añadido al aprendizaje en el idioma actual",
     "sources": {
-      "current_study": "Contenido de aprendizaje actual",
+      "current_study": "Contenido descargado",
       "personal_semantic_world": "Mi mundo semántico"
     },
     "areas": {

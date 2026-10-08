@@ -1,4 +1,4 @@
-import {lazy,useCallback,useMemo,useState,type ReactNode} from 'react';
+import {lazy,useCallback,useState,type ReactNode} from 'react';
 import {useTranslation} from 'react-i18next';
 import i18n from '../../i18n';
 import {interfaceLanguageDisplayName} from '../../i18n/languageDisplayName';
@@ -10,8 +10,6 @@ import {usePackageLearning} from './usePackageLearning';
 import {BookPlanPanel} from './BookPlanPanel';
 import {SupplementalPlanPanel} from './SupplementalPlanPanel';
 import {usePersonalLearning} from './usePersonalLearning';
-import {usePracticeScope} from '../usePracticeScope';
-import {createPracticeScopeSnapshot,type PracticeScopeSnapshot} from '../practiceScope';
 import {contentSenseForId,type ContentSectionId} from '../../learnerSemanticProjection/system';
 import type {PracticeSenseItem} from '../practiceData';
 import {JourneyAlignmentLearningControls,PersonalPreparationTarget,pendingPersonalTargetView} from './PersonalLearningControls';
@@ -21,10 +19,7 @@ import {ScreenHost} from '../ui/ScreenHost';
 import {screenInstanceKey} from '../router/shellLocation';
 import type {LearningShellScreenId} from '../router/screenRegistry';
 
-const AcademyScreen=lazy(()=>import('../components/AcademyScreen').then(module=>({default:module.AcademyScreen})));
 const PersonalMeaningDetailScreen=lazy(()=>import('../components/PersonalMeaningDetailScreen').then(module=>({default:module.PersonalMeaningDetailScreen})));
-const PracticeScopeScreen=lazy(()=>import('../components/PracticeScopeScreen').then(module=>({default:module.PracticeScopeScreen})));
-const YouGlishListeningScreen=lazy(()=>import('../components/YouGlishListeningScreen').then(module=>({default:module.YouGlishListeningScreen})));
 const ContentScreen=lazy(()=>import('../components/ContentScreen').then(module=>({default:module.ContentScreen})));
 const ConfirmedSenseDetailScreen=lazy(()=>import('../components/ConfirmedSenseDetailScreen').then(module=>({default:module.ConfirmedSenseDetailScreen})));
 const StudyScreen=lazy(()=>import('../components/StudyScreen').then(module=>({default:module.StudyScreen})));
@@ -73,22 +68,6 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
  const selectedPersonalTask=activePendingPersonal.find(task=>task.targetId===params.targetId);
  const localSelectedTarget=packageLearning.activeTargets.find(target=>target.targetId===params.targetId);
  const openLocalTarget=(id:string)=>goMain('s-learning-target',{targetId:id});
- const practiceStudyTargets=useMemo(()=>packageLearning.activeTargets.map(target=>({target})),[packageLearning.activeTargets]);
- const practiceOpen=active&&['s-academy','s-practice-scope','s-real-world-listening'].includes(currentScreen);
- const {catalog:practiceScopeCatalog,selectScope,availability:personalScopeAvailability,reload:reloadPracticeScope}=usePracticeScope({studyTargets:practiceStudyTargets,activeLanguageTag:activeRoute.targetLanguageTag,enabled:practiceOpen});
- const practiceScopeAvailability=personalScopeAvailability==='unavailable'||packageLearning.loadStatus==='unavailable'?'unavailable'
-  :personalScopeAvailability==='loading'||packageLearning.loadStatus==='loading'?'loading':'ready';
- const practiceScopeReady=practiceScopeAvailability==='ready';
- const retryPracticeScope=()=>{
-  reloadPracticeScope();
-  if(packageLearning.loadStatus==='unavailable')void packageLearning.retryInitialLoad();
- };
- const [activePracticeScope,setActivePracticeScope]=useState<PracticeScopeSnapshot|null>(null);
- const openRealWorldListening=useCallback(()=>{
-  if(!practiceScopeReady)return;
-  setActivePracticeScope(createPracticeScopeSnapshot(practiceScopeCatalog.currentScope,crypto.randomUUID(),new Date().toISOString()));
-  goMain('s-real-world-listening');
- },[goMain,practiceScopeCatalog.currentScope,practiceScopeReady]);
  const openContentSection=useCallback((section:ContentSectionId)=>goMain('s-content-library',{section}),[goMain]);
  const openContentSense=useCallback((item:PracticeSenseItem)=>goMain('s-content-sense',{senseId:item.senseId}),[goMain]);
  const openSemanticWorldSense=useCallback((senseId:string)=>{const item=contentSenseForId(senseId);if(item)openContentSense(item);},[openContentSense]);
@@ -147,15 +126,12 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
  const preferencesStatus=managementStatus??(packageLearning.notice?<p role="alert">{localFlowNotice(packageLearning.notice)}</p>:null);
  const preferencesBusy=packageLearning.busy||packageLearning.loadStatus!=='ready';
  const learningScreenRenderers:Record<LearningWorkspaceScreenId,(active:boolean)=>ReactNode>={
-  's-academy':screenActive=><AcademyScreen active={screenActive} onBack={backMain} onOpenPracticeScope={()=>goMain('s-practice-scope')} onOpenRealWorldListening={openRealWorldListening} onBrowseContent={()=>goMain('s-catalog')} onRecordContext={startSensaConversation} practiceScope={practiceScopeCatalog.currentScope} scopeAvailability={practiceScopeAvailability} onRetryScope={retryPracticeScope}/>,
-  's-practice-scope':screenActive=><PracticeScopeScreen active={screenActive} catalog={practiceScopeCatalog} onBack={backMain} onSelectScope={selectScope} scopeAvailability={practiceScopeAvailability} onRetryScope={retryPracticeScope}/>,
   's-content':screenActive=>renderContentScreen('s-content',screenActive),
   's-semantic-world':screenActive=>renderContentScreen('s-semantic-world',screenActive),
   's-personal-meaning':screenActive=><PersonalMeaningDetailScreen key={personalMeaningId} active={screenActive} personalMeaningId={personalMeaningId}
     onConversationCreated={openPersonalMeaning} onBack={backMain} onOpenConfirmedSense={openConfirmedSense} toast={toast}
     alignmentLearningControls={(detail,alignment)=><JourneyAlignmentLearningControls detail={detail} alignment={alignment} c={personalLearning} onStart={id=>void startLocalLearning(id)}/>}/>,
   's-confirmed-sense':screenActive=><ConfirmedSenseDetailScreen active={screenActive} personalMeaningId={personalMeaningId} meaningFocusId={meaningFocusId} onBack={backMain} onOpenBinding={()=>goMain('s-expression-binding')} learningControls={(detail,alignment)=><JourneyAlignmentLearningControls detail={detail} alignment={alignment} c={personalLearning} onStart={id=>void startLocalLearning(id)}/>}/>,
-  's-real-world-listening':screenActive=><YouGlishListeningScreen active={screenActive} targets={(activePracticeScope??practiceScopeCatalog.currentScope).targets} onBack={backMain} toast={toast}/>,
   's-study':screenActive=><StudyScreen
     bookPlans={<><BookPlanPanel active={screenActive}/><SupplementalPlanPanel active={screenActive}/></>}
     availability={packageLearning.loadStatus} status={managementStatus}

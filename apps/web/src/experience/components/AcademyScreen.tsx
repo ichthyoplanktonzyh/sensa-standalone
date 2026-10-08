@@ -1,6 +1,5 @@
-import type { ResolvedPracticeScope } from '../practiceScope';
+import type {PracticeExpression,PracticeMaterialSelection} from '../practiceMaterials';
 import { SensaFreePracticeScreen } from './SensaFreePracticeScreen';
-import type {PracticeScopeAvailability} from '../usePracticeScope';
 
 export interface AcademyScreenProps {
   active: boolean;
@@ -9,8 +8,10 @@ export interface AcademyScreenProps {
   onOpenRealWorldListening: () => void;
   onBrowseContent: () => void;
   onRecordContext: () => void;
-  practiceScope: ResolvedPracticeScope;
-  scopeAvailability?: PracticeScopeAvailability;
+  selection:PracticeMaterialSelection;
+  preview:readonly PracticeExpression[];
+  count:number|null;
+  scopeAvailability?: 'loading'|'ready'|'unavailable';
   onRetryScope?:()=>void;
 }
 

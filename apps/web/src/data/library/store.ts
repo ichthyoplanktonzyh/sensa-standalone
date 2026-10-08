@@ -1,6 +1,7 @@
 /** Production local-library storage: SQLite WASM in an OPFS Worker. */
 import {canonicalConsumerJson} from '@sensa/contracts/sensa/canonical-json';
-import {markLocalLibraryPresent} from './localLibraryHint';
+import {hasLocalLibraryHint,markLocalLibraryPresent} from './localLibraryHint';
+import {assertLocalLibrarySelected,localLibraryScopedName} from './localLibraryLocation';
 
 import { decodeBackupValue, encodeBackupValue } from "./backupCodec";
 import { sqliteRecordAdapter } from "./sqliteAdapter";
@@ -163,6 +164,10 @@ export class LibraryTransaction {
   async worldLearningChoices(query:import('./sqliteProtocol').WorldLearningChoiceQuery):Promise<import('./sqliteProtocol').WorldLearningChoicePage>{
     if(this.wrote)throw new Error('library_projection_requires_snapshot');
     return storageCall(()=>this.adapter.worldLearningChoices(query));
+  }
+  async practiceExpressions(query:import('./sqliteProtocol').PracticeExpressionQuery):Promise<import('./sqliteProtocol').PracticeExpressionPage>{
+    if(this.wrote)throw new Error('library_projection_requires_snapshot');
+    return storageCall(()=>this.adapter.practiceExpressions(query));
   }
   async existingJourneyIdentities(ids:readonly string[]):Promise<Set<string>>{
     if(this.wrote)throw new Error('library_projection_requires_snapshot');
@@ -578,7 +583,7 @@ async function runAcrossPages<T>(
   if (typeof navigator === "undefined" || !navigator.locks) return work();
   try {
     return await navigator.locks.request(
-      "sensa-library-transaction-v1",
+      localLibraryScopedName('sensa-library-transaction-v1'),
       {
         mode: mode === "readonly" ? "shared" : "exclusive",
         signal: AbortSignal.timeout(45_000),
@@ -600,6 +605,7 @@ async function transaction<T>(
   kind: "content" | "state" | "cache" = "content",
 ): Promise<T> {
   const execute = async () => {
+    assertLocalLibrarySelected();
     const adapter = await storageCall(sqliteRecordAdapter, 'localFlow.storageOpen');
     const library = new LibraryTransaction(mode, adapter);
     const value = await work(library);
@@ -613,6 +619,7 @@ async function transaction<T>(
       const mutation = await library.mutation();
       mutation.contentRevision = contentRevision;
       library.beginCommit();
+      assertLocalLibrarySelected();
       const storageStarted=performance.now();
       await storageCall(() => adapter.commit(mutation));
       if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.library.sqlite-commit',{start:storageStarted,end:performance.now()});
@@ -627,12 +634,13 @@ async function transaction<T>(
           records:[...mutation.puts,...mutation.deletes].map(({table,key})=>({table,key}))};
         window.dispatchEvent(new CustomEvent("sensa-library-changed", { detail: changes }));
         if (typeof BroadcastChannel !== "undefined") {
-          const channel = new BroadcastChannel("sensa-local-library");
+          const channel = new BroadcastChannel(localLibraryScopedName('sensa-local-library'));
           channel.postMessage(changes);
           channel.close();
         }
       }
     }
+    assertLocalLibrarySelected();
     return value;
   };
   // Web Locks already coordinate this entire logical transaction within and
@@ -707,6 +715,7 @@ export async function command<T>(
   const input = canonicalConsumerJson({ kind: op.kind, input: op.input });
   return transaction("readwrite", async (tx) => {
     await assertCurrentLibrary(tx);
+    if(hasLocalLibraryHint()&&!await tx.get('meta','identity'))throw new Error('localFlow.libraryMissing');
     const prior = await tx.get<{ input: string; result: T; cloudReceipt?: true }>("operations", op.id);
     if (prior) {
       if (prior.input !== input) throw new Error("localFlow.operationConflict");
@@ -730,13 +739,32 @@ export type LibraryIdentity = {
 };
 
 export async function openLibrary(): Promise<LibraryIdentity> {
-  const identity=await command({
-    id: "00000000-0000-4000-8000-000000000001",
-    kind: "library.create",
-    input: {},
-  }, async (tx) => {
+  // Opening verifies current identity, not a possibly orphaned creation receipt.
+  // Missing prior data is a recovery state, never an automatic empty replacement.
+  const identity=await transaction('readwrite',async tx=>{
+    await assertCurrentLibrary(tx);
+    const key='00000000-0000-4000-8000-000000000001';
+    const input=canonicalConsumerJson({kind:'library.create',input:{}});
+    const prior=await tx.get<{input:string;result:unknown}>('operations',key);
+    if(prior&&prior.input!==input)throw new Error('localFlow.operationConflict');
     const existing=await tx.get<LibraryIdentity>('meta','identity');
-    if(existing)return existing;
+    if(existing){
+      if(prior&&canonicalConsumerJson(prior.result)!==canonicalConsumerJson(existing))throw new Error('localFlow.libraryMissing');
+      // Export/replica validation requires this reserved receipt. Reconstruct a
+      // missing receipt from the actual identity, never the other way around.
+      if(!prior)tx.put('operations',key,{input,result:existing,committedAt:existing.createdAt});
+      return existing;
+    }
+    if(prior||hasLocalLibraryHint()||await tx.get('meta','service-owner'))throw new Error('localFlow.libraryMissing');
+    const meta=await tx.entries('meta');
+    const intentionalReset=meta.some(row=>row.key==='local-reset'&&row.value==='account-deletion')&&meta.some(row=>row.key==='signed-out'&&row.value===true);
+    const permittedMeta=intentionalReset?['package-catalog','local-reset','signed-out','local-incarnation','local-content-revision']:['package-catalog'];
+    if(meta.some(row=>!permittedMeta.includes(String(row.key))))throw new Error('localFlow.libraryMissing');
+    const operations=await tx.entries('operations');
+    if(operations.some(row=>JSON.parse(row.value.input).kind!=='package.catalog'))throw new Error('localFlow.libraryMissing');
+    // Public caches/catalog metadata do not claim a learner library. Any owned
+    // rows without identity, however, must remain intact for recovery.
+    for(const table of libraryTables)if(!['meta','operations','packageCache'].includes(table)&&await tx.count(table))throw new Error('localFlow.libraryMissing');
     const identity: LibraryIdentity = {
       id: crypto.randomUUID(),
       learnerId: crypto.randomUUID(),
@@ -745,6 +773,8 @@ export async function openLibrary(): Promise<LibraryIdentity> {
       schemaVersion: 2,
     };
     tx.put("meta", "identity", identity);
+    tx.delete('meta','local-reset');
+    tx.put('operations',key,{input,result:identity,committedAt:identity.createdAt});
     return identity;
   });
   markLocalLibraryPresent();
@@ -774,7 +804,7 @@ export function observeLibrary(listener: () => void, tables?: readonly Table[], 
   window.addEventListener("sensa-library-changed", local);
   const channel = typeof BroadcastChannel === "undefined"
     ? null
-    : new BroadcastChannel("sensa-local-library");
+    : new BroadcastChannel(localLibraryScopedName('sensa-local-library'));
   if (channel) channel.onmessage = (event) => {
     if(event.data?.sender===libraryNotificationSender)return;
     if (relevant(event.data)) listener();

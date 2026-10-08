@@ -49,6 +49,7 @@ export type SqliteSahPoolLease=Readonly<{release:()=>Promise<void>}>;
 /** Hold one physical-pool Web Lock for the Worker VFS lifetime. */
 export const acquireSqliteSahPoolLease=async(
   locks:Pick<LockManager,'request'>,
+  ownerLock=sqliteSahPoolOwnerLock,
 ):Promise<SqliteSahPoolLease>=>{
   let grant!:()=>void;
   let rejectGrant!:(cause:unknown)=>void;
@@ -56,7 +57,7 @@ export const acquireSqliteSahPoolLease=async(
   let acquired=false;
   const granted=new Promise<void>((resolve,reject)=>{grant=resolve;rejectGrant=reject;});
   const hold=new Promise<void>(resolve=>{releaseHold=resolve;});
-  const owner=locks.request(sqliteSahPoolOwnerLock,{
+  const owner=locks.request(ownerLock,{
     mode:'exclusive',
     signal:AbortSignal.timeout(sqliteSahPoolLockWaitMs),
   },async lock=>{

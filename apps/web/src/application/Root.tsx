@@ -2,6 +2,7 @@ import { lazy, Suspense, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cachedAuthSubject, hasAuthCallback } from '../data/account/authSessionHint';
 import {hasLocalLibraryHint} from '../data/library/localLibraryHint';
+import {hasLocalLibrarySelection} from '../data/library/localLibraryLocation';
 import { pendingAccountDeletion } from '../experience/account/accountDeletionState';
 import { LandingPage } from '../experience/landing/LandingPage';
 
@@ -24,7 +25,7 @@ export default function Root() {
   const publicLanding = !accountRequested
     && !pendingAccountDeletion()
     && !hasAuthCallback()
-    && (landingPreview || howItWorks || (location.pathname === '/' && sessionHint === null && !hasLocalLibraryHint()));
+    && (landingPreview || howItWorks || (location.pathname === '/' && sessionHint === null && !hasLocalLibraryHint()&&!hasLocalLibrarySelection()));
   if (publicLanding) {
     if (howItWorks) {
       return <Suspense fallback={<main role="status">{t('reliability.loading')}</main>}><HowItWorksPage signedIn={sessionHint !== null} onEnter={() => setAccountRequested(true)} /></Suspense>;

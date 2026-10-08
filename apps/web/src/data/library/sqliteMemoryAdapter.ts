@@ -16,12 +16,26 @@ import {worldRegistryClosure,worldItemFromRecord,summarizeWorldItem,worldSearchT
 import {validateWorldLearningChoiceQuery,worldLearningChoice,type WorldLearningChoiceQuery,type WorldLearningChoicePage} from '../../experience/personalMeaningJourney/worldRead';
 import {buildPersonalMeaningLearningSources} from '../../experience/personalMeaningJourney/learningSource';
 import {indexRegistry} from '../../experience/personalMeaningJourney/registryRead';
+import {practiceExpressionsFromPersonal,practiceExpressionsFromPackage,validatePracticeExpressionQuery,practiceExpressionForm,type PracticeExpressionQuery,type PracticeExpressionPage} from './practiceExpressionProjection';
 import {journeyIdentityTables,journeyReservedIdentities} from '../../experience/personalMeaningJourney/reservedIdentities';
 import {isUuid} from '../../experience/personalMeaningJourney/ids';
 import {memoryRegistrySelection,type RegistrySelectionQuery,type RegistrySelection} from './semanticRegistrySelection';
 
 /** Test/non-browser Adapter. Production never selects this path. */
 export class MemoryRecordAdapter implements SqliteRecordAdapter {
+  private practiceRevision=0;
+  async practiceExpressions(raw:PracticeExpressionQuery):Promise<PracticeExpressionPage>{
+    const query=validatePracticeExpressionQuery(raw),table=query.source==='personal'?'semanticMeanings':'packageCache',selected=query.selectedIds?new Set(query.selectedIds):null,excluded=new Set(query.excludedIds??[]);
+    const items=new Map<string,import('./practiceExpressionProjection').PracticeExpression>();
+    for(const [key,encoded] of this.records)if(key.startsWith(table+'\u0000')){
+      const owner=key.slice(table.length+1),value=decodeBackupValue(JSON.parse(encoded));
+      const expressionRead=(key:string)=>{const encoded=this.records.get('semanticRegistry\u0000'+key);return encoded===undefined?undefined:decodeBackupValue(JSON.parse(encoded));};
+      for(const item of query.source==='personal'?practiceExpressionsFromPersonal(value,owner,expressionRead):practiceExpressionsFromPackage(value,owner))
+        if(item.languageTag===query.languageTag&&practiceExpressionForm(item.text,item.languageTag).startsWith(query.query)&&(!selected||selected.has(item.id))&&!excluded.has(item.id)&&!items.has(item.id))items.set(item.id,item);
+    }
+    const sorted=[...items.values()].sort((a,b)=>{const af=practiceExpressionForm(a.text,a.languageTag),bf=practiceExpressionForm(b.text,b.languageTag);return af<bf?-1:af>bf?1:a.id<b.id?-1:a.id>b.id?1:0;}),page=sorted.slice(query.offset,query.offset+query.limit);
+    return {total:sorted.length,revision:this.practiceRevision,ids:page.map(item=>item.id),items:query.idsOnly?[]:page};
+  }
   async learningSemanticMemory(targetId?:string):Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>{
     const {learningSemanticMemoryTarget}=await import('./learningSemanticMemoryProjection');
     const rows=targetId===undefined?await this.entries('learningTargets'):[{key:targetId,encodedValue:await this.get('learningTargets',targetId)}];
@@ -388,6 +402,9 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
     }
     this.journeyIdentityRows=identityRows;this.journeyIdentityCounts=identityCounts;
     this.records = next;
+    // This non-browser oracle conservatively retires frames on relevant writes,
+    // including repairs/changes of exact Expression dependencies.
+    if(mutation.clears.some(table=>['semanticMeanings','semanticRegistry','packageCache'].includes(table))||[...mutation.puts,...mutation.deletes].some(row=>['semanticMeanings','semanticRegistry','packageCache'].includes(row.table)))this.practiceRevision++;
     this.changes = nextChanges;
     this.syncBase = nextSyncBase;
     const referenced=new Set(nextPortableReferences.values());

@@ -232,18 +232,18 @@
   "practice": {
     "title": "Serbest alıştırma",
     "note": "Öğrenme ilerlemesini değiştirmeden istediğiniz zaman alıştırma yapın.",
-    "scope": "Alıştırma kapsamı",
+    "scope": "Alıştırma materyalleri",
     "change": "Kapsamı değiştir",
     "back": "Geri",
     "empty": "Henüz alıştırma içeriği yok",
-    "count": "{{count}} anlam",
-    "use": "{{count}} anlamı kullan",
+    "count": "{{count}} ifade",
+    "use": "{{count}} ifadeyi kullan",
     "choose": "İçerik seç",
     "all": "Tümünü seç",
     "clear": "Tüm seçimi kaldır",
     "currentStudySubtitle": "Geçerli dilde öğrenmeye eklenen her şey",
     "sources": {
-      "current_study": "Geçerli öğrenme içeriği",
+      "current_study": "İndirilen içerik",
       "personal_semantic_world": "Anlamsal Dünyam"
     },
     "areas": {

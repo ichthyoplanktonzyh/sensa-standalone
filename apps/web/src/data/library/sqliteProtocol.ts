@@ -9,6 +9,8 @@ export type {StoredLearningRecord} from './learningHistoryProjection';
 import type {PackageCacheProjectionQuery} from './packageCacheProjection';
 import {sqlitePackageCacheProjectionSchema} from './packageCacheProjection';
 import {sqliteRegistrySelectionSchema} from './semanticRegistrySchema';
+export type {PracticeExpressionQuery,PracticeExpressionPage} from './practiceExpressionProjection';
+import type {PracticeExpressionQuery} from './practiceExpressionProjection';
 import type {RegistrySelectionQuery,RegistrySelection} from './semanticRegistrySelection';
 import type {MeaningLookupResult} from '../../experience/personalMeaningJourney/meaningLookup';
 import type {WorldBrowseQuery,WorldBrowsePage,WorldLearningChoiceQuery,WorldLearningChoicePage} from '../../experience/personalMeaningJourney/worldRead';
@@ -24,7 +26,7 @@ export const sqlitePoolDirectory = "/sensa-local-library-v12";
 export const sqliteLibraryBaselineVersion = 10;
 export const sqliteLibrarySchemaVersion = 16;
 /** Cross-tab RPC changes must bump this before adding or changing messages. */
-export const sqliteCoordinatorProtocolVersion = 43;
+export const sqliteCoordinatorProtocolVersion = 45;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -87,7 +89,7 @@ export type SqliteSyncBaseEntry = {
 };
 
 export type SqliteWorkerRequest =
-  | { id: number; kind: "initialize" }
+  | { id: number; kind: "initialize"; namespace?:string|null }
   | { id: number; kind: "close" }
   | { id: number; kind: "get"; table: SqliteLibraryTable; key: string }
   | { id: number; kind: "entries"; table: SqliteLibraryTable }
@@ -100,6 +102,7 @@ export type SqliteWorkerRequest =
   | {id:number;kind:'registrySelection';query:RegistrySelectionQuery}
   | {id:number;kind:'learningSemanticMemory';targetId?:string}
   | {id:number;kind:'worldLearningChoices';query:WorldLearningChoiceQuery}
+  | {id:number;kind:'practiceExpressions';query:PracticeExpressionQuery}
   | {id:number;kind:'existingJourneyIdentities';ids:string[]}
   | { id: number; kind: "changesSince"; contentRevision: number; tables: SqliteLibraryTable[] }
   | { id:number;kind:'hasChangesSince';contentRevision:number;tables:SqliteLibraryTable[] }

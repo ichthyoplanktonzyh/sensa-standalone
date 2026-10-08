@@ -97,20 +97,22 @@ export class WorldSnapshotReader<Value>{
  private listeners=new Set<()=>void>();
  private stop:(()=>void)|null=null;
  private generation=0;
- constructor(private port:{subscribe(listener:()=>void):()=>void;read():Promise<Value>},private onIdle:()=>void=()=>{}){}
+ private pending:AbortController|null=null;
+ constructor(private port:{subscribe(listener:()=>void):()=>void;read(signal:AbortSignal):Promise<Value>},private onIdle:()=>void=()=>{}){}
  read=()=>this.snapshot;
  subscribe=(listener:()=>void)=>{
   this.listeners.add(listener);
   if(this.listeners.size===1){this.stop=this.port.subscribe(this.reload);this.reload();}
-  return()=>{this.listeners.delete(listener);if(!this.listeners.size){this.stop?.();this.stop=null;this.generation++;this.onIdle();}};
+  return()=>{this.listeners.delete(listener);if(!this.listeners.size){this.stop?.();this.stop=null;this.generation++;this.pending?.abort();this.pending=null;this.onIdle();}};
  };
  reload=()=>{
   const generation=++this.generation;
+  this.pending?.abort();const controller=new AbortController();this.pending=controller;
   // Keep one coherent prior frame while rechecking it. Replacing the detail
   // with null on every notification would unmount an unsaved Context editor.
   this.snapshot={value:this.snapshot.value,status:loading()};for(const listener of this.listeners)listener();
   if(!this.listeners.size)return;
-  void this.port.read().then(value=>{
+  void this.port.read(controller.signal).then(value=>{
    if(generation!==this.generation||!this.listeners.size)return;
    this.snapshot={value,status:ready()};for(const listener of this.listeners)listener();
   },cause=>{

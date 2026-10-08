@@ -232,18 +232,18 @@
   "practice": {
     "title": "自由練習",
     "note": "学習の進捗を変えず、いつでも練習できます。",
-    "scope": "練習範囲",
+    "scope": "練習素材",
     "change": "範囲を変更",
     "back": "戻る",
     "empty": "練習コンテンツはまだありません",
-    "count": "{{count}}個の意味",
-    "use": "{{count}}個の意味を使う",
+    "count": "{{count}}個の表現",
+    "use": "{{count}}個の表現を使う",
     "choose": "コンテンツを選択",
     "all": "すべて選択",
     "clear": "すべて選択解除",
     "currentStudySubtitle": "現在の言語で学習に追加されたすべて",
     "sources": {
-      "current_study": "現在の学習コンテンツ",
+      "current_study": "ダウンロード済みコンテンツ",
       "personal_semantic_world": "私の意味世界"
     },
     "areas": {

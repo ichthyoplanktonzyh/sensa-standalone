@@ -232,18 +232,18 @@
   "practice": {
     "title": "Freies Üben",
     "note": "Üben Sie jederzeit, ohne den Lernfortschritt zu verändern.",
-    "scope": "Übungsumfang",
+    "scope": "Übungsmaterial",
     "change": "Umfang ändern",
     "back": "Zurück",
     "empty": "Noch keine Übungsinhalte",
-    "count": "{{count}} Bedeutungen",
-    "use": "{{count}} Bedeutungen verwenden",
+    "count": "{{count}} Ausdrücke",
+    "use": "{{count}} Ausdrücke verwenden",
     "choose": "Inhalte auswählen",
     "all": "Alle auswählen",
     "clear": "Auswahl aufheben",
     "currentStudySubtitle": "Alle Inhalte, die in der aktuellen Sprache zum Lernen hinzugefügt wurden",
     "sources": {
-      "current_study": "Aktuelle Lerninhalte",
+      "current_study": "Heruntergeladene Inhalte",
       "personal_semantic_world": "Meine Bedeutungswelt"
     },
     "areas": {

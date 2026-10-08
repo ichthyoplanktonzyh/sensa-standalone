@@ -22,7 +22,7 @@ export interface WorldBrowsePage{items:WorldBrowseItem[];total:number;pending:nu
 export interface WorldMeaningReference{
  personalMeaningAlignmentId:string;senseId:string;word:string;meaning:string;historical:boolean;
 }
-/** Selection transport contains immutable pins, never Context/media or material. */
+/** Formal learning selection contains immutable pins, never Context/media or material. */
 export interface WorldLearningChoice{key:string;reference:PersonalMeaningLearningReference;targetLanguageTag:string;label:string;incarnation?:string}
 export interface WorldLearningChoiceQuery extends WorldBrowseQuery{targetLanguageTag:string}
 export interface WorldLearningChoicePage{items:WorldLearningChoice[];total:number}

@@ -232,18 +232,18 @@
   "practice": {
     "title": "Prática livre",
     "note": "Pratique quando quiser sem alterar o progresso de aprendizagem.",
-    "scope": "Escopo da prática",
+    "scope": "Materiais de prática",
     "change": "Alterar escopo",
     "back": "Voltar",
     "empty": "Ainda não há conteúdo para praticar",
-    "count": "{{count}} sentidos",
-    "use": "Usar {{count}} sentidos",
+    "count": "{{count}} expressões",
+    "use": "Usar {{count}} expressões",
     "choose": "Escolher conteúdo",
     "all": "Selecionar tudo",
     "clear": "Desmarcar tudo",
     "currentStudySubtitle": "Tudo que foi adicionado à aprendizagem no idioma atual",
     "sources": {
-      "current_study": "Conteúdo de aprendizagem atual",
+      "current_study": "Conteúdo baixado",
       "personal_semantic_world": "Meu Mundo Semântico"
     },
     "areas": {

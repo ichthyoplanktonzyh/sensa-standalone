@@ -232,18 +232,18 @@
   "practice": {
     "title": "Free practice",
     "note": "Practice anytime without changing learning progress.",
-    "scope": "Practice scope",
+    "scope": "Practice materials",
     "change": "Change scope",
     "back": "Back",
     "empty": "No practice content yet",
-    "count": "{{count}} meanings",
-    "use": "Use {{count}} meanings",
+    "count": "{{count}} expressions",
+    "use": "Use {{count}} expressions",
     "choose": "Choose content",
     "all": "Select all",
     "clear": "Deselect all",
     "currentStudySubtitle": "Everything added to learning in the current language",
     "sources": {
-      "current_study": "Current learning content",
+      "current_study": "Downloaded content",
       "personal_semantic_world": "My semantic world"
     },
     "areas": {

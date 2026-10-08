@@ -232,18 +232,18 @@
   "practice": {
     "title": "Exercices libres",
     "note": "Entraînez-vous à tout moment sans modifier votre progression.",
-    "scope": "Portée des exercices",
+    "scope": "Matériel d’exercice",
     "change": "Modifier la portée",
     "back": "Retour",
     "empty": "Aucun contenu d’exercice pour le moment",
-    "count": "{{count}} sens",
-    "use": "Utiliser {{count}} sens",
+    "count": "{{count}} expressions",
+    "use": "Utiliser {{count}} expressions",
     "choose": "Choisir du contenu",
     "all": "Tout sélectionner",
     "clear": "Tout désélectionner",
     "currentStudySubtitle": "Tout ce qui a été ajouté à l’apprentissage dans la langue actuelle",
     "sources": {
-      "current_study": "Contenu d’apprentissage actuel",
+      "current_study": "Contenu téléchargé",
       "personal_semantic_world": "Mon monde sémantique"
     },
     "areas": {

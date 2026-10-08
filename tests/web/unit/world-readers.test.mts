@@ -4,7 +4,6 @@ import type {WorldBrowseItem,WorldBrowseQuery} from '../../../apps/web/src/exper
 import type {WorldPageSnapshot,WorldDetailSnapshot} from '../../../apps/web/src/experience/personalMeaningJourney/worldRepository';
 import type {WorldLearningChoice,WorldLearningChoiceQuery} from '../../../apps/web/src/experience/personalMeaningJourney/worldRead';
 import type {WorldLearningChoiceSnapshot} from '../../../apps/web/src/experience/personalMeaningJourney/worldRepository';
-
 const item=(index:number):WorldBrowseItem=>({personalMeaningId:`meaning-${index}`,status:'active',label:`label-${index}`,primaryLabel:'private preview',updatedAt:'2026-10-04',
  senseFormation:{phase:'sense_confirmed',focusCount:0,acceptedFocusCount:0,pendingFocusCount:0,clarifyingFocusCount:0,proposalPendingCount:0,confirmedSenseCount:1,nextFocusId:null},
  expressionBinding:{phase:'bound',confirmedSenseCount:1,boundSenseCount:1,confirmedBindingCount:1,pendingBindingCount:0,nextFocusId:null}});
@@ -12,14 +11,14 @@ const page=(offset=0,revision=1,incarnation='one'):WorldPageSnapshot=>({incarnat
 const detail=(revision=1):WorldDetailSnapshot=>({incarnation:'one',revision,detail:null,draft:null,sources:[],source:null});
 const tick=async()=>{await Promise.resolve();await Promise.resolve();await Promise.resolve();};
 test('Inbox snapshot invalidation fences old reads and preserves loading/error/retry without fabricated empty success',async()=>{
- const pending:Array<{resolve:(value:{revision:number;items:string[]})=>void;reject:(error:Error)=>void}>=[];let notify=()=>{};
- const reader=new WorldSnapshotReader({subscribe:(listener:()=>void)=>{notify=listener;return()=>{};},read:()=>new Promise<{revision:number;items:string[]}>((resolve,reject)=>pending.push({resolve,reject}))});
+ const pending:Array<{resolve:(value:{revision:number;items:string[]})=>void;reject:(error:Error)=>void;signal:AbortSignal}>=[];let notify=()=>{};
+ const reader=new WorldSnapshotReader({subscribe:(listener:()=>void)=>{notify=listener;return()=>{};},read:signal=>new Promise<{revision:number;items:string[]}>((resolve,reject)=>pending.push({resolve,reject,signal}))});
  const stop=reader.subscribe(()=>{});expect(reader.read()).toMatchObject({value:null,status:{loading:true}});
- notify();pending[0]!.resolve({revision:1,items:['stale']});await tick();expect(reader.read().value).toBeNull();
+ notify();expect(pending[0]!.signal.aborted).toBe(true);pending[0]!.resolve({revision:1,items:['stale']});await tick();expect(reader.read().value).toBeNull();
  pending[1]!.reject(new Error('Inbox unavailable'));await tick();expect(reader.read()).toMatchObject({value:null,status:{ok:false,loading:false}});
  reader.reload();pending[2]!.resolve({revision:3,items:['pending capture']});await tick();expect(reader.read().value?.items).toEqual(['pending capture']);
  notify();expect(reader.read().status.loading).toBe(true);pending[3]!.resolve({revision:4,items:[]});await tick();expect(reader.read()).toMatchObject({value:{revision:4,items:[]},status:{ok:true,loading:false}});
- reader.reload();stop();pending[4]!.resolve({revision:5,items:['detached']});await tick();expect(reader.read().value?.revision).toBe(4);
+ reader.reload();stop();expect(pending[4]!.signal.aborted).toBe(true);pending[4]!.resolve({revision:5,items:['detached']});await tick();expect(reader.read().value?.revision).toBe(4);
 });
 function fixture(){
  let notify:()=>void=()=>{},connects=0,disconnects=0;

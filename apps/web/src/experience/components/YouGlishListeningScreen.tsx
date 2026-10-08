@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Play, Pause, SkipBack, SkipForward, RotateCcw, ExternalLink } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowLeft, Play, Pause, SkipBack, SkipForward, RotateCcw, ExternalLink,ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { PracticeScopeTarget } from '../practiceScope';
+import type {PracticeExpression} from '../practiceMaterials';
 import { useYouglishWidget } from '../useYouglishWidget';
-import { clipAccentsFor, clipLanguageFor, speechLocaleFor } from '../services/speechLanguage';
+import { clipAccentsFor, clipLanguageFor } from '../services/speechLanguage';
 import { practiceButton, practiceSurface } from './SensaFreePracticeScreen';
 import { useScreenState } from '../ui/ScreenHost';
 export interface YouGlishListeningScreenProps {
- active:boolean;targets:readonly PracticeScopeTarget[];onBack:()=>void;toast:(message:string)=>void;
+ active:boolean;expression:PracticeExpression|null;onBack:()=>void;onChooseExpression:()=>void;
 }
 export const YouGlishListeningScreen=(props:YouGlishListeningScreenProps)=>{
  const [attempt,setAttempt]=useState(0);
@@ -15,12 +15,9 @@ export const YouGlishListeningScreen=(props:YouGlishListeningScreenProps)=>{
   {props.active&&<ListeningPlayer key={attempt} {...props} retry={()=>setAttempt(value=>value+1)}/>}
  </section>;
 };
-function ListeningPlayer({targets,onBack,retry}:YouGlishListeningScreenProps&{retry:()=>void}) {
+function ListeningPlayer({expression:current,onBack,onChooseExpression,retry}:YouGlishListeningScreenProps&{retry:()=>void}) {
  const {t}=useTranslation();
- const listenable=useMemo(()=>{const seen=new Set<string>();return targets.filter(target=>{const form=target.expression.surfaceForm.trim().toLocaleLowerCase(speechLocaleFor(target.expression.languageTag)),key=`${target.expression.languageTag}:${form}`;if(!form||seen.has(key))return false;seen.add(key);return true;});},[targets]);
- const [targetId,setTargetId]=useScreenState('real-world-listening:target',listenable[0]?.targetId??'');
- const current=listenable.find(target=>target.targetId===targetId)??listenable[0];
- const languageTag=current?.expression.languageTag;
+ const languageTag=current?.languageTag;
  const accents=languageTag?clipAccentsFor(languageTag):['all'];
  const [accent,setAccent]=useScreenState('real-world-listening:accent','all');
  const [rate,setRate]=useScreenState('real-world-listening:rate',1);
@@ -29,7 +26,7 @@ function ListeningPlayer({targets,onBack,retry}:YouGlishListeningScreenProps&{re
  const activeAccent=accents.includes(accent)?accent:'all';
  const mountRef=useRef<HTMLDivElement>(null);
  const controlsRef=useRef<HTMLDivElement>(null);
- const widget=useYouglishWidget({mountRef,components:0,query:current?.expression.surfaceForm,lang:languageTag?clipLanguageFor(languageTag):'',accent:activeAccent==='all'?undefined:activeAccent,active:!!current});
+ const widget=useYouglishWidget({mountRef,components:0,query:current?.text,lang:languageTag?clipLanguageFor(languageTag):'',accent:activeAccent==='all'?undefined:activeAccent,active:!!current});
  const ready=widget.status==='ready';
  const canControl=widget.controlsReady;
  useEffect(()=>{if(canControl)widget.setSpeed(preferredRate.current);},[canControl,widget.setSpeed]);
@@ -41,9 +38,9 @@ function ListeningPlayer({targets,onBack,retry}:YouGlishListeningScreenProps&{re
   {current&&<a href="#real-world-listening-controls" onClick={event=>{event.preventDefault();controlsRef.current?.focus();controlsRef.current?.scrollIntoView({block:'nearest'});}} className="sr-only focus:not-sr-only focus:mb-4 focus:inline-block focus:rounded-control focus:p-3 focus:text-action-primary focus:outline-2 focus:outline-focus">{t('practice.skipToControls')}</a>}
   {!current?<p className="py-24 text-center text-fg-tertiary">{t('practice.empty')}</p>:<>
    <div className="mb-6 flex flex-wrap items-end justify-between gap-4 px-1">
-    <label className="flex min-w-0 flex-col gap-1.5 text-xs text-fg-tertiary">{t('practice.expression')}
-     <select lang={languageTag} dir="auto" value={current.targetId} onChange={event=>setTargetId(event.target.value)} className="min-h-12 max-w-full cursor-pointer rounded-control border-0 bg-transparent pr-8 text-3xl font-medium tracking-tight text-fg-primary outline-offset-4 focus-visible:outline-2 focus-visible:outline-focus sm:text-4xl">{listenable.map(target=><option key={target.targetId} value={target.targetId}>{target.expression.surfaceForm}</option>)}</select>
-    </label>
+    <div className="flex min-w-0 flex-col gap-1.5 text-xs text-fg-tertiary"><span>{t('practice.expression')}</span>
+     <button lang={languageTag} dir="auto" onClick={onChooseExpression} aria-label={t('practice.expression')+' · '+current.text} className="flex min-h-12 max-w-full items-center gap-3 break-words rounded-control bg-transparent py-1 text-left text-3xl font-medium tracking-tight text-fg-primary outline-offset-4 focus-visible:outline-2 focus-visible:outline-focus sm:text-4xl"><span className="min-w-0 break-words">{current.text}</span><ChevronDown size={20} aria-hidden="true" className="shrink-0 text-fg-secondary"/></button>
+    </div>
     <span className="pb-2 text-xs tabular-nums text-fg-tertiary">{ready?t('practice.results',{count:widget.totalResults}):'YouGlish'}</span>
    </div>
    <div className="overflow-hidden rounded-overlay border border-border-subtle bg-surface-panel shadow-raised">

@@ -12,7 +12,7 @@ import {execFileSync} from 'node:child_process';
 import {createServer,type Server} from 'node:http';
 import {once} from 'node:events';
 import {mkdir,mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {cpus,tmpdir} from 'node:os';
 import {extname,join,resolve} from 'node:path';
 import {chromium,expect,test,type Page} from '@playwright/test';
 import {unzipSync,zipSync} from 'fflate';
@@ -337,14 +337,145 @@ test('an empty practice scope offers content selection and return without loadin
  await page.goto(origin+'/academy');const practice=page.locator('#s-academy').last(),activities=practice.locator('.sensa-practice-activities').getByRole('button');
  await expect(practice.getByText('当前没有可练内容',{exact:true})).toBeVisible();await expect(activities).toHaveCount(1);await expect(activities).toBeDisabled();
  const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint()),facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest());
- await practice.getByRole('button',{name:/练习范围.*当前学习内容/u}).click();const scope=page.locator('#s-practice-scope');
- await expect(scope.getByText('当前没有可练内容',{exact:true})).toBeVisible();await scope.getByRole('button',{name:'更换范围',exact:true}).click();
- await expect(scope.getByRole('button',{name:/当前学习内容/u})).toBeDisabled();await expect(scope.getByRole('button',{name:/我的语义世界/u})).toBeDisabled();
- await scope.getByRole('button',{name:'返回',exact:true}).click();await scope.getByRole('button',{name:'返回',exact:true}).click();await expect(practice).toBeVisible();
+ await practice.getByRole('button',{name:/练习材料/u}).click();const scope=page.locator('#s-practice-scope').last();
+ await expect(scope.getByText('当前没有可练内容',{exact:true})).toBeVisible();await expect(scope.getByRole('button',{name:'使用 0 个表达',exact:true})).toBeDisabled();
+ await scope.getByRole('button',{name:'我的语义世界',exact:true}).click();await expect(scope.getByText('当前没有可练内容',{exact:true})).toBeVisible();
+ await scope.getByRole('button',{name:'返回',exact:true}).click();await expect(practice).toBeVisible();
  await practice.getByRole('button',{name:'学习包目录',exact:true}).click();await expect(page.locator('#s-catalog').last()).toBeVisible();await page.goBack();await expect(practice).toBeVisible();
  await practice.getByRole('button',{name:'添加个人内容',exact:true}).click();await expect(page.locator('#s-personal-meaning')).toBeVisible();await page.goBack();await expect(practice).toBeVisible();
  expect(sdkRequests).toBe(0);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(before);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest())).toEqual(facts);
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.intakeInboxCount())).toBe(0);
+});
+
+test('a missing local identity opens recovery without an empty replacement, and explicit backup restore preserves personal facts',async({page})=>{
+ test.setTimeout(90_000);
+ await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ const repository=new MemoryJourneyRepository();await createJourneyModules({repository}).semanticIntake.submit(semanticLookupPayload());
+ // Synthetic accepted source setup, not a claim of manual/model authoring.
+ expect(await page.evaluate(state=>window.__sensaBrowserSmoke!.seedSemanticWorld(state),await repository.load())).toBe(1);
+ const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest());
+ const password='isolated-recovery-password';
+ await page.goto(origin+'/profile');await page.locator('#settings-data').click();await page.locator('#settings-backup').click();
+ const originalPanel=page.getByRole('region',{name:'本机库备份与恢复',exact:true});
+ await originalPanel.getByLabel('备份密码',{exact:true}).fill(password);
+ const pendingDownload=page.waitForEvent('download');await originalPanel.getByRole('button',{name:'导出加密备份',exact:true}).click();
+ const downloaded=await pendingDownload,path=await downloaded.path();if(!path)throw new Error('backup_download_missing');
+ const backup=await readFile(path);
+ // Only this isolated test origin is cleared, after a real recoverable export.
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.discardLibraryForRecoveryTest());await page.reload();
+ await expect(page.getByRole('heading',{name:'恢复本机资料',exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'导出加密备份',exact:true})).toHaveCount(0);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest())).toEqual({identity:null,creationReceipt:null,settings:0});
+ await page.getByRole('button',{name:'登录原账号',exact:true}).click();
+ await page.getByRole('button',{name:'取消',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'恢复本机资料',exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest())).toEqual({identity:null,creationReceipt:null,settings:0});
+ await page.getByRole('button',{name:/重新打开/u}).click();
+ await expect(page.getByRole('heading',{name:'恢复本机资料',exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest())).toEqual({identity:null,creationReceipt:null,settings:0});
+ const panel=page.getByRole('region',{name:'本机库备份与恢复',exact:true});
+ await panel.getByLabel('备份密码',{exact:true}).fill('incorrect-test-password');
+ await panel.getByLabel('选择备份文件',{exact:true}).setInputFiles({name:'synthetic-personal.sensa-backup',mimeType:'application/octet-stream',buffer:backup});
+ await panel.getByRole('button',{name:'检查备份',exact:true}).click();await expect(panel.getByRole('alert')).toBeVisible();
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest())).identity).toBeNull();
+ await panel.getByLabel('备份密码',{exact:true}).fill(password);await panel.getByRole('button',{name:'检查备份',exact:true}).click();
+ await expect(panel.getByRole('button',{name:'确认恢复到当前空本机库',exact:true})).toBeEnabled();
+ await expect(panel).toContainText('1 个意思');
+ await panel.getByRole('button',{name:'确认恢复到当前空本机库',exact:true}).click();
+ await expect(panel.getByRole('button',{name:/重新打开/u})).toBeVisible();
+ const after=await page.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest());
+ expect(after.identity).toMatchObject({id:(before.identity as {id:string}).id});
+ await panel.getByRole('button',{name:/重新打开/u}).click();await expect(page.locator('#s-profile')).toBeVisible();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(1);
+ await page.goto(origin+'/content');await expect(page.locator('.sensa-world-row').first()).toBeVisible();
+ await page.locator('.sensa-world-row').first().click();await expect(page.getByText('Private source: May asked to borrow an umbrella.',{exact:true}).first()).toBeVisible();
+});
+
+test('explicit fresh start uses a separate OPFS pool, fences old tabs, and preserves the old files and facts',async({page,context},testInfo)=>{
+ test.setTimeout(90_000);
+ await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ const repository=new MemoryJourneyRepository();await createJourneyModules({repository}).semanticIntake.submit(semanticLookupPayload());
+ expect(await page.evaluate(state=>window.__sensaBrowserSmoke!.seedSemanticWorld(state),await repository.load())).toBe(1);
+ const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest());
+ const oldTab=await context.newPage();await oldTab.goto(origin+'/content');await expect(oldTab.locator('.sensa-world-row').first()).toBeVisible();
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.removeLibraryIdentityForRecoveryTest());await page.reload();
+ await expect(page.getByRole('heading',{name:'恢复本机资料',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'重新开始',exact:true}).click();await expect(page.getByText(/旧文件会保留/u)).toBeVisible();
+ await testInfo.attach('explicit-fresh-start-confirmation',{body:await page.screenshot(),contentType:'image/png'});
+ await page.getByRole('button',{name:'取消',exact:true}).click();
+ expect(await page.evaluate(()=>localStorage.getItem('sensa:local-library-selection:v1'))).toBeNull();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(1);
+ await page.getByRole('button',{name:'重新开始',exact:true}).click();
+ await page.getByRole('button',{name:'确认创建新本机库',exact:true}).click();await expect(page.locator('#s-home')).toBeVisible();
+ const binding=await page.evaluate(()=>JSON.parse(localStorage.getItem('sensa:local-library-selection:v1')!)) as {namespace:string;preservedNamespaces:unknown[]};
+ expect(binding.namespace).toMatch(/^[0-9a-f-]{36}$/u);expect(binding.preservedNamespaces).toEqual([null]);
+ const after=await page.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest());
+ expect((after.identity as {id:string}).id).not.toBe((before.identity as {id:string}).id);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);
+ await expect(oldTab.locator('[data-sensa-version-guard="selection"]')).toBeVisible();
+ const staleRead=await oldTab.evaluate(async()=>{try{await window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest();return 'unexpected success';}catch(cause){return cause instanceof Error?cause.message:String(cause);}});
+ expect(staleRead).toBe('localFlow.libraryReplaced');await oldTab.close();
+ const digestOldFiles=()=>page.evaluate(async()=>{
+  const root=await navigator.storage.getDirectory(),directory=await root.getDirectoryHandle('sensa-local-library-v12'),opaque=await directory.getDirectoryHandle('.opaque');
+  const rows:Array<{name:string;bytes:number;sha256:string}>=[];
+  for await(const [name,entry] of (opaque as FileSystemDirectoryHandle&{entries:()=>AsyncIterableIterator<[string,FileSystemHandle]>}).entries()){
+   if(entry.kind!=='file')continue;const bytes=await (await (entry as FileSystemFileHandle).getFile()).arrayBuffer(),digest=new Uint8Array(await crypto.subtle.digest('SHA-256',bytes));
+   rows.push({name,bytes:bytes.byteLength,sha256:Array.from(digest,byte=>byte.toString(16).padStart(2,'0')).join('')});
+  }
+  return rows.sort((a,b)=>a.name.localeCompare(b.name));
+ });
+ const oldFiles=await digestOldFiles();expect(oldFiles.length).toBeGreaterThan(0);expect(oldFiles.some(row=>row.bytes>4096)).toBe(true);
+ const newPool=`sensa-local-library-v12-${binding.namespace}`;
+ expect(await page.evaluate(async name=>{await (await navigator.storage.getDirectory()).getDirectoryHandle(name);return true;},newPool)).toBe(true);
+ await page.reload();await expect(page.locator('#s-home')).toBeVisible();
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest())).identity).toEqual(after.identity);
+ expect(await digestOldFiles()).toEqual(oldFiles);
+ // Only the isolated synthetic profile is pointed back for a retained-fact check.
+ await page.evaluate(async()=>{await window.__sensaBrowserSmoke!.closeLibraryStorageForRecoveryTest();localStorage.removeItem('sensa:local-library-selection:v1');});
+ await page.reload();await expect(page.getByRole('heading',{name:'恢复本机资料',exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(1);
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest())).creationReceipt).toEqual(before.creationReceipt);
+});
+
+test('a damaged device selection opens recovery and explicit fresh start retains the damaged pointer',async({page})=>{
+ test.setTimeout(60_000);
+ await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
+ await page.goto(origin);
+ await page.evaluate(()=>localStorage.setItem('sensa:local-library-selection:v1','{isolated broken pointer'));await page.reload();
+ await expect(page.getByRole('heading',{name:'恢复本机资料',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'重新开始',exact:true}).click();
+ await Promise.all([page.waitForEvent('domcontentloaded'),page.getByRole('button',{name:'确认创建新本机库',exact:true}).click()]);
+ await expect(page.locator('#s-home')).toBeVisible();
+ const original=await page.evaluate(()=>{const binding=JSON.parse(localStorage.getItem('sensa:local-library-selection:v1')!);return localStorage.getItem(binding.unreadableSelectionKey);});
+ expect(original).toBe('{isolated broken pointer');
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest())).identity).toBeTruthy();
+});
+
+test.describe('new-pool failure exit',()=>{
+test.use({serviceWorkers:'block'});
+test('the first new-pool startup failure stays in recovery and reopening retries the same selected pool',async({page,context})=>{
+ test.setTimeout(90_000);
+ await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.fallback():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ await expect(page.locator('#s-home')).toBeVisible();
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.removeLibraryIdentityForRecoveryTest());await page.reload();
+ await expect(page.getByRole('heading',{name:'恢复本机资料',exact:true})).toBeVisible();
+ // Controlled Worker denial tests the UI failure exit, not native OPFS corruption.
+ let denyNewPool=true,denials=0;
+ await context.route('**/assets/sqliteWorker-*.js',route=>{if(!denyNewPool)return route.continue();denials++;return route.fulfill({contentType:'text/javascript',body:`self.onmessage=event=>{const request=event.data;self.postMessage(request.kind==='close'?{id:request.id,ok:true,value:null}:{id:request.id,ok:false,error:'sqlite_fixture_startup_denied'});};`});});
+ await page.getByRole('button',{name:'重新开始',exact:true}).click();
+ await Promise.all([page.waitForEvent('domcontentloaded'),page.getByRole('button',{name:'确认创建新本机库',exact:true}).click()]);
+ await expect(page.getByRole('heading',{name:'恢复本机资料',exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'重新开始',exact:true})).toBeVisible();
+ expect(denials).toBeGreaterThan(0);
+ const namespace=await page.evaluate(()=>JSON.parse(localStorage.getItem('sensa:local-library-selection:v1')!).namespace) as string;
+ expect(await page.evaluate(namespace=>localStorage.getItem('sensa:local-library-present:v1:'+namespace),namespace)).toBeNull();
+ denyNewPool=false;await page.getByRole('button',{name:/重新打开/u}).click();await expect(page.locator('#s-home')).toBeVisible();
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('sensa:local-library-selection:v1')!).namespace)).toBe(namespace);
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest())).identity).toBeTruthy();
+});
 });
 
 test('delivered listening preserves learner facts and provider layout after another tab changes Route',async({page,context})=>{
@@ -359,7 +490,10 @@ test('delivered listening preserves learner facts and provider layout after anot
   close(){window.__listeningFixture.closed++;this.root.replaceChildren();}
  }};window.onYouglishAPIReady();
  `}));
- const runtime=await startOrdinaryBook(page,/只读查词样本/);await runtime.getByRole('button',{name:'暂停',exact:true}).click();
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ await page.locator('#s-home').getByRole('button',{name:'学习包目录',exact:true}).click();await page.locator('#s-catalog').last().getByRole('button',{name:/只读查词样本/}).click();
+ const book=page.locator('#s-catalog-book').last();await book.getByRole('button',{name:'下载学习包',exact:true}).click();await expect(book.getByText('已下载',{exact:true})).toBeVisible();
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).targetIds).toEqual([]);
  await page.goto(origin+'/academy');const practice=page.locator('#s-academy');
  const start=practice.locator('.sensa-practice-activities').getByRole('button').first();await expect(start).toBeEnabled();await start.click();
  const listening=page.locator('#s-real-world-listening');await expect(listening.getByRole('button',{name:'播放',exact:true})).toBeEnabled();
@@ -375,7 +509,7 @@ test('delivered listening preserves learner facts and provider layout after anot
  await listening.locator('header').getByRole('button').click();await expect(practice).toBeVisible();
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest())).toEqual(before);
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.curriculumSourceCheckpointForTest())).toEqual(stored);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningArrangementCheckpointForTest())).toEqual(arrangement);
- // The workspace lists are Route-filtered; the existing run and stored facts are not.
+ // Downloaded expressions are usable without enrollment; exposure creates no Run.
  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).runtime).toEqual(checkpoint.runtime);
  await expect(routes.getByRole('radio').filter({hasText:'Español'})).toHaveAttribute('aria-checked','true');
  await routes.getByRole('radio').filter({hasText:'English'}).click();await expect(routes.getByRole('radio').filter({hasText:'English'})).toHaveAttribute('aria-checked','true');
@@ -1280,6 +1414,75 @@ test('personal learning scene updates remain explicit while stale editors preser
  expect(new URL(page.url()).searchParams.get('meaningId')).toBe(meaningId);const currentDetail=page.getByRole('article',{name:'表达详情',exact:true});await expect(currentDetail).toContainText(worldContext);await expect(currentDetail).toContainText(afterWorld);
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(1);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await other.close();
+});
+
+test('practice content selection and listening start stay bounded with 10000 personal Meanings',async({page,context,browser},testInfo)=>{
+ // Bulk fixture construction is outside the interaction budget below.
+ test.setTimeout(300_000);
+ const repository=new MemoryJourneyRepository();await createJourneyModules({repository}).semanticIntake.submit(semanticLookupPayload());
+ semanticScaleFixture=syntheticSemanticWorld(await repository.load(),10_000);setRegistry([referenceDelivery.descriptor]);
+ await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
+ await page.route('https://youglish.com/public/emb/widget.js',route=>route.fulfill({contentType:'text/javascript',body:`
+ window.YG={Widget:class{
+  constructor(id,options){this.events=options.events;}
+  fetch(){queueMicrotask(()=>{this.events.onFetchDone({totalResult:2});this.events.onPlayerReady();this.events.onPlayerStateChange({state:2});});}
+  pause(){}close(){}play(){this.events.onPlayerStateChange({state:1});}next(){}previous(){}replay(){}move(){}setSpeed(speed){this.events.onSpeedChange({speed});}
+ }};window.onYouglishAPIReady();
+ `}));
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ expect(await page.evaluate(async()=>window.__sensaBrowserSmoke!.seedSemanticWorld(await(await fetch('/semantic-scale-fixture')).json()))).toBe(10_000);
+ const runtime=await startOrdinaryBook(page,/只读查词样本/);await runtime.getByRole('button',{name:'暂停',exact:true}).click();
+ const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest());
+ const timings:Array<{action:string;elapsedMs:number;phases:Array<{name:string;durationMs:number}>}>=[];
+ const timed=async(action:string,work:()=>Promise<void>)=>{
+  const start=await page.evaluate(()=>performance.timeOrigin+performance.now());await work();
+  timings.push(await page.evaluate(({start,action})=>({action,elapsedMs:performance.timeOrigin+performance.now()-start,phases:performance.getEntriesByType('measure').filter(entry=>performance.timeOrigin+entry.startTime>=start&&entry.name.startsWith('sensa.journey.')).map(entry=>({name:entry.name,durationMs:entry.duration}))}),{start,action}));
+  console.log('LJ-15 local interaction:',JSON.stringify(timings.at(-1)));
+ };
+ const practice=page.locator('#s-academy').last(),scope=page.locator('#s-practice-scope').last(),listening=page.locator('#s-real-world-listening');
+ try{
+  await timed('openPracticeWithUnrelatedPersonalWorld',async()=>{
+   await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'练习',exact:true}).click();
+   await expect(practice.locator('.sensa-practice-activities').getByRole('button')).toBeEnabled({timeout:60_000});
+  });
+  await timed('openPersonalContentSelection',async()=>{
+   await practice.getByRole('button',{name:/练习材料/u}).click();await scope.getByRole('button',{name:'我的语义世界',exact:true}).click();
+   await expect(scope.getByRole('listitem').first()).toBeVisible({timeout:60_000});
+   expect(await scope.getByRole('listitem').count()).toBeLessThan(80);await expect(scope).not.toContainText('May asked');
+  });
+  await timed('selectAndUseAllPersonalContent',async()=>{
+   await scope.getByRole('button',{name:'全选',exact:true}).click();await scope.getByRole('button',{name:'使用 10000 个表达',exact:true}).click();
+   await expect(practice.getByText('10000 个表达',{exact:true})).toBeVisible();
+   expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('sensa:web-ui:v1:sensa.practice.materials.v4:en')!))).toEqual({source:'personal',expressionIds:null});
+  });
+  await timed('startListeningWithPersonalContent',async()=>{
+   await practice.locator('.sensa-practice-activities').getByRole('button').click();await expect(listening.getByRole('button',{name:'播放',exact:true})).toBeEnabled();await expect(listening.getByRole('status')).toHaveCount(0);
+   await expect(listening.locator('select')).toHaveCount(1); // playback speed only; no 10k-option expression selector.
+  });
+  await timed('searchAndChooseOneExpression',async()=>{
+   await listening.getByRole('button',{name:/^选择表达 · borrow-/u}).click();await scope.getByRole('searchbox').fill('borrow-9999');
+   await scope.getByRole('button',{name:'borrow-9999',exact:true}).click();await expect(listening.getByRole('button',{name:'选择表达 · borrow-9999',exact:true})).toBeVisible();
+   await expect(listening.getByRole('button',{name:'播放',exact:true})).toBeEnabled();
+  });
+  await timed('restoreTheSameExpressionAfterReload',async()=>{
+   await page.reload();await expect(listening.getByRole('button',{name:'选择表达 · borrow-9999',exact:true})).toBeVisible();
+   await expect(listening.getByRole('button',{name:'播放',exact:true})).toBeEnabled();
+  });
+  await timed('returnAndContinueTheSameExpression',async()=>{
+   await listening.getByRole('button',{name:'返回',exact:true}).click();
+   await practice.locator('.sensa-practice-activities').getByRole('button').click();
+   await expect(listening.getByRole('button',{name:'选择表达 · borrow-9999',exact:true})).toBeVisible();
+   await expect(listening.getByRole('button',{name:'播放',exact:true})).toBeEnabled();
+  });
+  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest())).toEqual(before);
+  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(10_000);
+  }finally{
+  const report={platform:process.platform,arch:process.arch,cpuModel:cpus()[0]?.model??'unknown',browser:browser.version(),cpuThrottle:1,network:'loopback',provider:'controlled SDK; no online media',personalMeanings:10_000,senses:semanticScaleFixture.registry.senses.length,fixtureBytes:Buffer.byteLength(JSON.stringify(semanticScaleFixture)),media:'text-only personal data; one small compiled Book',budgetMs:1500,timings};
+  console.log('LJ-15 practice / synthetic 10k personal Meanings / Chromium+OPFS / 1x CPU / loopback / no model:',JSON.stringify(report));
+  await testInfo.attach('practice-capacity-10000.json',{body:JSON.stringify(report,null,2),contentType:'application/json'});
+ }
+ expect(timings).toHaveLength(7);
+ for(const timing of timings){expect(timing.elapsedMs).toBeGreaterThanOrEqual(0);expect(timing.elapsedMs,`${timing.action}: local interaction budget, not provider latency`).toBeLessThan(1500);}
 });
 
 test('explicit personal scene acceptance and update stay bounded with 10000 unrelated Meanings',async({page,context},testInfo)=>{

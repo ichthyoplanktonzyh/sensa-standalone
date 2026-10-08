@@ -1,5 +1,11 @@
 {
   "localFlow": {
+    "libraryRecovery": "로컬 데이터 복구",
+    "libraryMissing": "이전 로컬 데이터를 읽을 수 없습니다. 다시 시도하거나 백업을 복원하세요. 브라우저 데이터를 삭제하지 마세요.",
+    "libraryRecoveryLogin": "원래 계정으로 로그인",
+    "libraryRestart": "새로 시작",
+    "libraryRestartConfirm": "별도의 새 로컬 라이브러리를 만들고 현재 계정에서 로그아웃합니다. 기존 파일은 보관되지만 새 라이브러리에 자동으로 복원되지 않습니다.",
+    "libraryCreateSeparate": "새 로컬 라이브러리 생성 확인",
     "outsideLearningPlan": "향후 학습 계획에서 제외됨",
     "supplementalEmpty":"아직 개별 추가한 콘텐츠가 없습니다","supplementalLearning": "보충 학습",
     "removeFromLearning": "학습에서 제외",

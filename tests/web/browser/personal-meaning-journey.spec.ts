@@ -12,7 +12,6 @@ import {createJourneyModules} from '../../../apps/web/src/experience/personalMea
 import {createSeededClock} from '../../../apps/web/src/experience/personalMeaningJourney/ports';
 import {semanticLookupPayload,syntheticSemanticWorld} from '../support/semanticLookupFixtures';
 import type {JourneyState} from '../../../apps/web/src/experience/personalMeaningJourney/store';
-import {PERSONAL_SEMANTIC_WORLD_SCOPE_ID} from '../../../apps/web/src/experience/practiceScope';
 
 declare global{interface Window{semanticDetailPaint?:{startedAt:number;elapsedMs:number|null}}}
 
@@ -988,9 +987,9 @@ test('explicit batch confirmation saves all intentions and failed preparation re
 test('10k personal meanings keep the shipped World bounded and searchable, with real detail and refresh recovery',async({page})=>{
  test.setTimeout(180_000);
  page.on('crash',()=>console.log('Semantic scale fixture renderer crashed during browser acceptance'));
- const preference={sourceId:PERSONAL_SEMANTIC_WORLD_SCOPE_ID,targetIds:['pending-source-selection']};
+ const preference={source:'personal',expressionIds:['pending-source-selection']};
  await page.addInitScript(preference=>{
-  const key='sensa:web-ui:v1:sensa.free-practice.scope-selection.v2';
+  const key='sensa:web-ui:v1:sensa.practice.materials.v4:en';
   if(localStorage.getItem(key)===null)localStorage.setItem(key,JSON.stringify(preference));
  },preference);
  await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
@@ -1117,10 +1116,10 @@ test('10k personal meanings keep the shipped World bounded and searchable, with 
  await expect(context).toHaveCount(0);
  const saveMs=await page.evaluate(start=>performance.now()-start,saveStart);
  console.log('Shipped World / 10k synthetic / UI actions / no model:',JSON.stringify({searchMs,detailMs,saveMs}));
- expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('sensa:web-ui:v1:sensa.free-practice.scope-selection.v2')!))).toEqual(preference);
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('sensa:web-ui:v1:sensa.practice.materials.v4:en')!))).toEqual(preference);
  await page.reload();await expect(page.getByRole('heading',{name:'borrow-9999',exact:true})).toBeVisible({timeout:30_000});
  await expect(page.getByRole('article',{name:'表达详情'}).getByText('验收修改：借用同伴的雨伞，用完后归还。',{exact:true})).toBeVisible();
- expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('sensa:web-ui:v1:sensa.free-practice.scope-selection.v2')!))).toEqual(preference);
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('sensa:web-ui:v1:sensa.practice.materials.v4:en')!))).toEqual(preference);
  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).targetIds).toEqual([]);
  expect(searchMs).toBeLessThan(500);expect(detailMs).toBeLessThan(500);expect(saveMs).toBeLessThan(500);
 

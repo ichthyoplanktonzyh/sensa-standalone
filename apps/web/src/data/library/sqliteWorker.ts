@@ -6,17 +6,18 @@ import type {SAHPoolUtil,Database} from '@sqlite.org/sqlite-wasm';
 
 import { SqliteRecordDatabase } from "./sqliteDatabase";
 import {isFatalSqliteConnectionFailure} from './sqliteConnectionFailure';
+import {localLibraryPoolDirectory,localLibraryScopedName,validateLocalLibraryNamespace,type LocalLibraryNamespace} from './localLibraryLocation';
 import {
   assertSahPoolAccessHandlesFree,
   acquireSqliteSahPoolLease,
   closeSqliteSahPoolSafely,
   releaseSqliteSahPoolLeaseWhenFree,
   SahPoolProbeCloseError,
+  sqliteSahPoolOwnerLock,
   type SqliteSahPoolLease,
 } from './sqlitePoolLifecycle';
 import {
   sqliteLibraryFile,
-  sqlitePoolDirectory,
   type SqliteWorkerRequest,
   type SqliteWorkerResult,
 } from "./sqliteProtocol";
@@ -40,8 +41,10 @@ let closed=false;
 let cleanupUnconfirmed=false;
 let failedConnection=false;
 let requestQueue:Promise<void>=Promise.resolve();
+let namespace:LocalLibraryNamespace=null;
+let namespaceBound=false;
 
-const verifyPoolHandles=()=>assertSahPoolAccessHandlesFree(navigator.storage,sqlitePoolDirectory);
+const verifyPoolHandles=()=>assertSahPoolAccessHandlesFree(navigator.storage,localLibraryPoolDirectory(namespace));
 const releaseLease=async()=>{
   const lease=activeLease;
   if(!lease)return;
@@ -54,7 +57,7 @@ async function database():Promise<WorkerStore>{
   if(!store){
     store=(async()=>{
       const started=performance.now();
-      activeLease=await acquireSqliteSahPoolLease(navigator.locks);
+      activeLease=await acquireSqliteSahPoolLease(navigator.locks,localLibraryScopedName(sqliteSahPoolOwnerLock,namespace));
       const leased=performance.now();
       installerStarted=false;
       try{
@@ -71,7 +74,7 @@ async function database():Promise<WorkerStore>{
         const wasmReady=performance.now();
         installerStarted=true;
         const pool=await sqlite3.installOpfsSAHPoolVfs({
-          directory:sqlitePoolDirectory,
+          directory:localLibraryPoolDirectory(namespace),
           initialCapacity:6,
         });
         const poolReady=performance.now();
@@ -158,6 +161,11 @@ async function closeStorage():Promise<void>{
 }
 
 const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
+  if(request.kind==='initialize'){
+    const next=validateLocalLibraryNamespace(request.namespace??null);
+    if((namespaceBound||store)&&next!==namespace)throw new Error('localFlow.libraryReplaced');
+    namespace=next;namespaceBound=true;
+  }
   if(request.kind==='close'){
     await closeStorage();
     return null;
@@ -187,6 +195,7 @@ const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
     case 'registrySelection':return current.database.registrySelection(request.query);
     case 'learningSemanticMemory':return current.database.learningSemanticMemory(request.targetId);
     case 'worldLearningChoices':return current.database.worldLearningChoices(request.query);
+    case 'practiceExpressions':return current.database.practiceExpressions(request.query);
     case 'existingJourneyIdentities':return current.database.existingJourneyIdentities(request.ids);
     case 'changesSince': return current.database.changesSince(request.contentRevision,request.tables);
     case 'hasChangesSince':return current.database.hasChangesSince(request.contentRevision,request.tables);

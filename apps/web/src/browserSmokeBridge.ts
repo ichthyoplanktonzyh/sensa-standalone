@@ -81,6 +81,10 @@ type BrowserSmokeBridge = {
     identities:import('./data/library/packageCacheProjection').PackagePublicationIdentity[];
   }>;
   discardPackageCacheForRecoveryTest():Promise<void>;
+  discardLibraryForRecoveryTest():Promise<void>;
+  removeLibraryIdentityForRecoveryTest():Promise<void>;
+  closeLibraryStorageForRecoveryTest():Promise<void>;
+  libraryBootstrapFactsForTest():Promise<{identity:unknown;creationReceipt:unknown;settings:number}>;
   curriculumSourceCheckpointForTest():Promise<{
     targets:import('./learning/runtime/localProtocol').LocalLearningTarget[];
     runs:import('./learning/runtime/localProtocol').LocalLearningRun[];
@@ -438,6 +442,15 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
       // Fault injection only: learner facts and installation identities remain.
       await writeLibraryCache(async tx=>{tx.clear('packageCache');});
     },
+    async discardLibraryForRecoveryTest(){
+      // Destructive fault injection for isolated browser-test origins only.
+      // The test first exports a recoverable synthetic backup; keep local hints.
+      const {libraryTables}=await import('./data/library/store');
+      await restoreLibraryTransaction(async tx=>{for(const table of libraryTables)tx.clear(table);});
+    },
+    async libraryBootstrapFactsForTest(){return readLibrary(async tx=>({identity:await tx.get('meta','identity')??null,creationReceipt:await tx.get('operations','00000000-0000-4000-8000-000000000001')??null,settings:await tx.count('settings')}));},
+    async removeLibraryIdentityForRecoveryTest(){await restoreLibraryTransaction(async tx=>tx.delete('meta','identity'));},
+    async closeLibraryStorageForRecoveryTest(){await import('./data/library/sqliteAdapter').then(module=>module.closeLocalLibraryStorage());},
     async supplyCheckpoint() {
       const {contentSupplySystem}=await import('./contentSupply/system');
       const snapshot=await contentSupplySystem.read({kind:'workspace'});

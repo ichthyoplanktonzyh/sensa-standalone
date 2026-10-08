@@ -232,18 +232,18 @@
   "practice": {
     "title": "Luyện tập tự do",
     "note": "Luyện tập bất cứ lúc nào mà không làm thay đổi tiến độ học.",
-    "scope": "Phạm vi luyện tập",
+    "scope": "Tài liệu luyện tập",
     "change": "Đổi phạm vi",
     "back": "Quay lại",
     "empty": "Chưa có nội dung luyện tập",
-    "count": "{{count}} nghĩa",
-    "use": "Dùng {{count}} nghĩa",
+    "count": "{{count}} biểu đạt",
+    "use": "Dùng {{count}} biểu đạt",
     "choose": "Chọn nội dung",
     "all": "Chọn tất cả",
     "clear": "Bỏ chọn tất cả",
     "currentStudySubtitle": "Mọi nội dung được thêm vào việc học bằng ngôn ngữ hiện tại",
     "sources": {
-      "current_study": "Nội dung đang học",
+      "current_study": "Nội dung đã tải",
       "personal_semantic_world": "Thế giới ngữ nghĩa của tôi"
     },
     "areas": {

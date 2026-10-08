@@ -180,7 +180,10 @@ test('encrypted backup preview and actual empty-destination restore retain the c
  const {exportLibraryBackup,inspectLibraryBackup,restoreLibraryBackup}=await import('../../../apps/web/src/data/library/backup');
  const before=await snapshot(),backup=await exportLibraryBackup('shared-storage-test-password');
  expect((await inspectLibraryBackup(backup.file,'shared-storage-test-password')).runs).toBe(2);
- await restoreLibraryTransaction(async tx=>{for(const table of libraryTables)tx.clear(table);});await openLibrary();
+ await restoreLibraryTransaction(async tx=>{for(const table of libraryTables)tx.clear(table);});
+ // A missing previously used identity must not create a placeholder learner.
+ // Explicit validated backup restore itself supplies the original identity.
+ await expect(openLibrary()).rejects.toThrow('localFlow.libraryMissing');
  const execute=contentSupplySystem.execute.bind(contentSupplySystem);
  const refresh=vi.spyOn(contentSupplySystem,'execute').mockImplementation((async(command:any)=>command.kind==='rehydrate'?{ready:[],blocked:['fixture'],failed:[]}:execute(command)) as typeof contentSupplySystem.execute);
  try{

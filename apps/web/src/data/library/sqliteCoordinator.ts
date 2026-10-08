@@ -11,6 +11,7 @@ import type {
 } from './sqliteProtocol';
 import { sqliteCoordinatorProtocolVersion, sqliteLibrarySchemaVersion } from './sqliteProtocol';
 import {observeSahPoolPageHide} from './sqlitePoolLifecycle';
+import {localLibraryScopedName,type LocalLibraryNamespace} from './localLibraryLocation';
 import type {PackageCacheProjectionQuery,PackageCacheProjectionResult} from './packageCacheProjection';
 import type {RuntimeLearningCandidateQuery,RuntimeLearningCandidates} from './runtimeLearningCandidates';
 import type {LearningManagementSummaryQuery,LearningManagementStorageSummary} from './runtimeLearningCandidates';
@@ -25,7 +26,7 @@ const remoteTimeoutMs = 15_000;
 const leaderWaitMs = 10_000;
 const retryableOwnerReads=new Set<SqliteWorkerInput['kind']>([
   'initialize','get','entries','entriesPage','changesSince','diagnostics',
-  'meaningLookup','registrySelection','worldBrowse','worldSceneMeaning','worldLearningChoices',
+  'meaningLookup','registrySelection','worldBrowse','worldSceneMeaning','worldLearningChoices','practiceExpressions',
   'existingRecordKeys','existingJourneyIdentities','packageCacheProjection',
   'learningSemanticMemory','hasChangesSince','syncBaseEntries','count','estimateRecordBytes',
   'homeLearningProjection','learningHistoryPage','learningManagementSummary','runtimeLearningCandidates',
@@ -47,6 +48,7 @@ export interface CoordinatedSqliteBackend {
   worldSceneMeaning(sceneId:string):Promise<string|null>;
   registrySelection(query:import('./sqliteProtocol').RegistrySelectionQuery):Promise<import('./sqliteProtocol').RegistrySelection>;
   worldLearningChoices(query:import('./sqliteProtocol').WorldLearningChoiceQuery):Promise<import('./sqliteProtocol').WorldLearningChoicePage>;
+  practiceExpressions(query:import('./sqliteProtocol').PracticeExpressionQuery):Promise<import('./sqliteProtocol').PracticeExpressionPage>;
   existingJourneyIdentities(ids:readonly string[]):Promise<string[]>;
   changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]>;
   hasChangesSince(contentRevision:number,tables:readonly SqliteLibraryTable[]):Promise<boolean>;
@@ -93,7 +95,8 @@ const errorMessage = (cause: unknown): string => cause instanceof Error
  */
 export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
   private readonly id = crypto.randomUUID();
-  private readonly channel = new BroadcastChannel(channelName);
+  private readonly channel:BroadcastChannel;
+  private readonly ownerLock:string;
   private readonly pending = new Map<string, {
     resolve: (value: unknown) => void;
     reject: (error: Error) => void;
@@ -117,7 +120,9 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
   private leaderId:string|null=null;
   private incompatible = false;
 
-  constructor(private readonly createBackend: () => CoordinatedSqliteBackend) {
+  constructor(private readonly createBackend: () => CoordinatedSqliteBackend,namespace:LocalLibraryNamespace=null,private readonly assertSelected:()=>void=()=>{}) {
+    this.channel=new BroadcastChannel(localLibraryScopedName(channelName,namespace));
+    this.ownerLock=localLibraryScopedName(ownerLock,namespace);
     this.channel.addEventListener('message', (event: MessageEvent<CoordinatorMessage>) => {
       this.receive(event.data);
     });
@@ -149,6 +154,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
   worldSceneMeaning(sceneId:string):Promise<string|null>{return this.call({kind:'worldSceneMeaning',sceneId}) as Promise<string|null>;}
   registrySelection(query:import('./sqliteProtocol').RegistrySelectionQuery):Promise<import('./sqliteProtocol').RegistrySelection>{return this.call({kind:'registrySelection',query}) as Promise<import('./sqliteProtocol').RegistrySelection>;}
   worldLearningChoices(query:import('./sqliteProtocol').WorldLearningChoiceQuery):Promise<import('./sqliteProtocol').WorldLearningChoicePage>{return this.call({kind:'worldLearningChoices',query}) as Promise<import('./sqliteProtocol').WorldLearningChoicePage>;}
+  practiceExpressions(query:import('./sqliteProtocol').PracticeExpressionQuery):Promise<import('./sqliteProtocol').PracticeExpressionPage>{return this.call({kind:'practiceExpressions',query}) as Promise<import('./sqliteProtocol').PracticeExpressionPage>;}
   existingJourneyIdentities(ids:readonly string[]):Promise<string[]>{return this.call({kind:'existingJourneyIdentities',ids:[...ids]}) as Promise<string[]>;}
   entriesPage(table:SqliteLibraryTable,afterKey:string|null,limit:number):Promise<Array<{key:string;encodedValue:string}>>{
     return this.call({kind:'entriesPage',table,afterKey,limit}) as Promise<Array<{key:string;encodedValue:string}>>;
@@ -278,6 +284,13 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
   }
 
   private async call(input: SqliteWorkerInput): Promise<unknown> {
+    this.assertSelected();
+    const value=await this.callSelected(input);
+    this.assertSelected();
+    return value;
+  }
+
+  private async callSelected(input: SqliteWorkerInput): Promise<unknown> {
     if (this.incompatible) throw new Error('sqlite_owner_incompatible');
     if(this.closing||this.closeInFlight)throw new Error('sqlite_owner_closing');
     if(this.cleanupUnconfirmed)await this.close();
@@ -346,7 +359,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       const fail = (cause: unknown) => {
         if (!settled) { settled = true; reject(cause); }
       };
-      void navigator.locks.request(ownerLock, { mode: 'exclusive', ifAvailable: true }, async (lock) => {
+      void navigator.locks.request(this.ownerLock, { mode: 'exclusive', ifAvailable: true }, async (lock) => {
         if (!lock) {
           succeed(false);
           return;
@@ -453,6 +466,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
   }
 
   private assertLifecycleGeneration(generation:number):void{
+    this.assertSelected();
     if(this.closing||generation!==this.lifecycleGeneration){
       throw new Error('sqlite_owner_lifecycle_closed');
     }
@@ -564,6 +578,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
   }
 
   private dispatch(backend: CoordinatedSqliteBackend, input: SqliteWorkerInput): Promise<unknown> {
+    try{this.assertSelected();}catch(cause){return Promise.reject(cause);}
     switch (input.kind) {
       case 'initialize': return backend.initialize();
       case 'get': return backend.get(input.table, input.key);
@@ -577,6 +592,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       case 'registrySelection':return backend.registrySelection(input.query);
       case 'learningSemanticMemory':return backend.learningSemanticMemory(input.targetId);
       case 'worldLearningChoices':return backend.worldLearningChoices(input.query);
+      case 'practiceExpressions':return backend.practiceExpressions(input.query);
       case 'existingJourneyIdentities':return backend.existingJourneyIdentities(input.ids);
       case 'changesSince': return backend.changesSince(input.contentRevision, input.tables);
       case 'hasChangesSince':return backend.hasChangesSince(input.contentRevision,input.tables);

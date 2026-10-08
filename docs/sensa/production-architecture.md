@@ -787,8 +787,9 @@ projection。Runtime union 已完成 Protocol surface、active Target、Step、�
   resource、interaction、feedback 与 session-policy requirements；
 - Package Practice Manifest 与获准的 external provider availability 声明当前可用 practice resources；
   Runtime 只从 Profile、资源可用性与 client support 的交集发布 Executable Practice Capability Inventory；
-- Free Practice Session 固定 Brief、Scope、primary Area、Activity Definition 与解析版本；Practice Turn
-  可以产生 Practice Observation、Feedback 与 optional learner-owned Artifact；
+- Free Practice 以所选材料与可用活动为入口；材料 requirements 由活动决定，不统一要求完整 Meaning 或
+  Learning Target。Expression-form Listening 只解析表达文本与语言，保留轻量选择引用及当前播放项，不复制
+  完整 Scope。Brief、版本化 Turn、Observation、Feedback 与 Artifact 仅随相应活动实际交付，不是播放前置条件；
 - Free Practice 不经过 Unified Planner，不结算 Encounter Outcome，也不生成 Learning Evidence、
   Memory Outcome 或改写 Gate、5D、phase、daily plan 与 FSRS；这个边界不因 feedback 含判断或分数而改变；
 - 从练习中另存新的 Context–Expression–Sense 必须提交独立 Semantic Intake；加入正式学习必须提交

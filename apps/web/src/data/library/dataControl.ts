@@ -58,5 +58,6 @@ export async function eraseDeletedAccount(subject:string){
   if(owner&&owner.subject!==subject)throw new Error('localFlow.wrongAccount');
   for(const table of libraryTables)tx.clear(table);
   tx.put('meta','local-incarnation',crypto.randomUUID());tx.put('meta','signed-out',true);
+  tx.put('meta','local-reset','account-deletion');
  });clearAllCredentials();clearLocalLibraryHint();
 }

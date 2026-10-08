@@ -232,18 +232,18 @@
   "practice": {
     "title": "Swobodne ćwiczenia",
     "note": "Ćwicz w dowolnej chwili bez zmiany postępów w nauce.",
-    "scope": "Zakres ćwiczeń",
+    "scope": "Materiały do ćwiczeń",
     "change": "Zmień zakres",
     "back": "Wstecz",
     "empty": "Brak treści do ćwiczeń",
-    "count": "Znaczenia: {{count}}",
-    "use": "Użyj znaczeń: {{count}}",
+    "count": "Wyrażenia: {{count}}",
+    "use": "Użyj wyrażeń: {{count}}",
     "choose": "Wybierz treści",
     "all": "Zaznacz wszystko",
     "clear": "Odznacz wszystko",
     "currentStudySubtitle": "Wszystko dodane do nauki w bieżącym języku",
     "sources": {
-      "current_study": "Bieżące treści do nauki",
+      "current_study": "Pobrane treści",
       "personal_semantic_world": "Mój świat znaczeń"
     },
     "areas": {

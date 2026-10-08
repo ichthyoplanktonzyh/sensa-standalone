@@ -11,6 +11,7 @@ import {summarizeWorldItem,worldLearningChoice} from '../../../apps/web/src/expe
 import type {JourneyState} from '../../../apps/web/src/experience/personalMeaningJourney/store';
 import type {SqliteMutation} from '../../../apps/web/src/data/library/sqliteProtocol';
 import {semanticLookupPayload,semanticLookupSpec,syntheticSemanticWorld,advanceSemanticHeads,deleteFirstMeaning} from '../support/semanticLookupFixtures';
+import {directPublishedFixture} from '../support/directPublishedFixture';
 
 const sqlite=await init(),encode=(value:unknown)=>JSON.stringify(encodeBackupValue(value));
 const ids={senses:'senseId',senseVersions:'senseVersionId',expressions:'expressionId',expressionVersions:'expressionVersionId',bindings:'senseExpressionBindingId',bindingVersions:'bindingVersionId'} as const;
@@ -76,6 +77,7 @@ test('World pages preserve exact labels/phases, search private Context, and neve
   database.commit({clears:[],deletes:[{table:'semanticRegistry',key}],puts:[],contentRevision:3});
   expect(()=>database.worldBrowse(query)).toThrow('world_source_invalid');
   expect(()=>database.worldLearningChoices({...query,targetLanguageTag:'en'})).toThrow('world_source_invalid');
+  expect(database.practiceExpressions({source:'personal',languageTag:'en',query:'',offset:0,limit:1}).items.map(item=>item.text),'Expression listening does not require the missing Sense dependency').toEqual(['borrow']);
   database.commit({clears:[],deletes:[],puts:[{table:'semanticRegistry',key,encodedValue:old}],contentRevision:4});
   expect(database.worldBrowse(query).total).toBe(1);
   database.commit({clears:[],deletes:[],puts:rows(deleteFirstMeaning(next)).filter(row=>row.table==='semanticMeanings'),contentRevision:5});
@@ -132,7 +134,7 @@ test('a SQLite read failure during World maintenance is not converted into commi
  const raw=new sqlite.oo1.DB(':memory:'),database=new SqliteRecordDatabase(sqlite,raw,'memory');database.initialize();
  try{
   const {state,modules,repository}=await seed();database.commit({clears:[],deletes:[],puts:rows(state),contentRevision:1});
-  const before=database.worldBrowse(query),source=database.entries('semanticMeanings');
+  const before=database.worldBrowse(query),source=database.entries('semanticMeanings'),materialFrame=database.practiceExpressions({source:'personal',languageTag:'en',query:'',offset:0,limit:1}).revision;
   const id=state.meanings[0]!.personalMeaning.personalMeaningId;
   await modules.personalMeaningJourney.reviseContext({operationId:crypto.randomUUID(),personalMeaningId:id,expectedRevision:state.meanings[0]!.personalMeaning.currentRevision,blocks:[{kind:'text',bodyText:'Changed private source'}]});
   expect(modules.personalMeaningJourney.getDetail(id)?.materialBlocks[0]?.bodyText).toBe('Changed private source');
@@ -150,6 +152,7 @@ test('a SQLite read failure during World maintenance is not converted into commi
   database.get=get;expect(database.entries('semanticMeanings')).toEqual(source);expect(database.worldBrowse(query)).toEqual(before);
   database.commit({clears:[],deletes:[],puts:replacement,contentRevision:2});
   expect(database.worldBrowse({...query,query:'May asked'}).total,'retired capture remains searchable after Context replacement').toBe(1);
+  expect(database.practiceExpressions({source:'personal',languageTag:'en',query:'',offset:0,limit:1}).revision,'Context-only changes do not revise Expression material').toBe(materialFrame);
  }finally{database.close();}
 });
 
@@ -164,6 +167,17 @@ test('10k World facts page/search without reading source rows or transporting pr
   const choices=database.worldLearningChoices({...query,targetLanguageTag:'en',limit:64});
   expect(choices.total).toBe(10_000);expect(choices.items).toHaveLength(64);
   expect(JSON.stringify(choices.items)).not.toContain('May asked');expect(choices.items.every(choice=>!('context'in choice)&&!('semanticSpec'in choice))).toBe(true);
+  expect(choices.items.every(choice=>!('practiceTarget'in choice))).toBe(true);
+  const materials=database.practiceExpressions({source:'personal',languageTag:'en',query:'',offset:0,limit:64});
+  expect(materials.total).toBe(10_000);expect(materials.items).toHaveLength(64);
+  expect(materials.items.every(item=>JSON.stringify(Object.keys(item).sort())===JSON.stringify(['id','languageTag','source','text']))).toBe(true);
+  expect(JSON.stringify(materials)).not.toContain('May asked');expect(JSON.stringify(materials)).not.toContain('senseVersion');
+  const identityPage=database.practiceExpressions({source:'personal',languageTag:'en',query:'',offset:0,limit:256,idsOnly:true});
+  expect(identityPage.items).toEqual([]);expect(identityPage.ids).toHaveLength(256);
+  expect(identityPage.ids.every(id=>id.length===36&&!id.includes('borrow'))).toBe(true);
+  expect(database.practiceExpressions({source:'personal',languageTag:'en',query:'ＢＯＲＲＯＷ-９９９９',offset:0,limit:1}).items.map(item=>item.text)).toEqual(['borrow-9999']);
+  expect(database.practiceExpressions({source:'personal',languageTag:'en',query:'',selectedIds:materials.ids.slice(0,2),offset:0,limit:1}).total).toBe(2);
+  expect(database.practiceExpressions({source:'personal',languageTag:'fr',query:'',offset:0,limit:1}).total).toBe(0);
   expect(database.worldLearningChoices({...query,targetLanguageTag:'en',query:'ＢＯＲＲＯＷ-９９９９'}).items.map(choice=>choice.label)).toEqual(['borrow-9999']);
   expect(database.worldLearningChoices({...query,targetLanguageTag:'en',offset:9960,limit:40}).items).toHaveLength(40);
   expect(page.total).toBe(10_000);expect(page.items).toHaveLength(40);expect(last.items).toHaveLength(40);
@@ -195,3 +209,34 @@ test('10k World facts page/search without reading source rows or transporting pr
   expect(()=>database.worldBrowse({...query,limit:257})).toThrow('world_query_invalid');
  }finally{database.close();}
 },60_000);
+
+test('Expression cache rebuild and failed updates preserve all source facts, with independent downloaded material',async()=>{
+ const raw=new sqlite.oo1.DB(':memory:'),database=new SqliteRecordDatabase(sqlite,raw,'memory');database.initialize();
+ try{
+  const {state}=await seed(),book=directPublishedFixture().pack;
+  // Controlled cache representation: exercise every entry, deduplication and
+  // language filtering, not another assertion of public package admission.
+  const pack=structuredClone(book);pack.content.entries=[book.content.entries[0]!,{...book.content.entries[0]!,expression:'water'},book.content.entries[0]!];
+  database.commit({clears:[],deletes:[],puts:[...rows(state),{table:'packageCache',key:pack.key,encodedValue:encode(pack)},{table:'settings',key:'fixture-language-routes',encodedValue:encode(['en','es'])}],contentRevision:1});
+  const personal={source:'personal' as const,languageTag:'en',query:'',offset:0,limit:20},downloaded={...personal,source:'books' as const};
+  expect(database.practiceExpressions(downloaded).items.map(item=>item.text)).toEqual(['borrow','water']);
+  expect(database.practiceExpressions({...downloaded,languageTag:'fr'}).total).toBe(0);
+  expect(database.count('learningTargets')).toBe(0);expect(database.count('curriculumEnrollments')).toBe(0);
+  const sourceTables=['semanticMeanings','semanticRegistry','packageCache','settings'] as const;
+  const before=sourceTables.map(table=>database.entries(table)),material=database.practiceExpressions(personal);
+  raw.exec("CREATE TEMP TRIGGER reject_expression_delete BEFORE DELETE ON sensa_practice_expressions BEGIN SELECT RAISE(ABORT,'fixture-expression-index-failure'); END;");
+  expect(()=>database.commit({clears:[],deletes:[],puts:rows(deleteFirstMeaning(state)).filter(row=>row.table==='semanticMeanings'),contentRevision:2})).toThrow('fixture-expression-index-failure');
+  expect(sourceTables.map(table=>database.entries(table))).toEqual(before);expect(database.practiceExpressions(personal)).toEqual(material);
+  raw.exec('DROP TRIGGER reject_expression_delete;DROP TABLE sensa_practice_expression_dependencies;');
+  new SqliteRecordDatabase(sqlite,raw,'memory').initialize();
+  expect(sourceTables.map(table=>database.entries(table))).toEqual(before);
+  expect(database.practiceExpressions(personal).items).toEqual(material.items);
+  expect(database.practiceExpressions(downloaded).items.map(item=>item.text)).toEqual(['borrow','water']);
+  const versionKey=`expressionVersions:${state.registry.expressionVersions[0]!.expressionVersionId}`,version=database.get('semanticRegistry',versionKey)!;
+  database.commit({clears:[],deletes:[{table:'semanticRegistry',key:versionKey}],puts:[],contentRevision:2});
+  expect(()=>database.practiceExpressions(personal)).toThrow('practice_material_source_invalid');
+  expect(database.practiceExpressions(downloaded).total).toBe(2);
+  database.commit({clears:[],deletes:[],puts:[{table:'semanticRegistry',key:versionKey,encodedValue:version}],contentRevision:3});
+  expect(database.practiceExpressions(personal).items).toEqual(material.items);
+ }finally{database.close();}
+});

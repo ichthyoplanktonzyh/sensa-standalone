@@ -19,7 +19,7 @@ export type ShellParams = Readonly<Partial<Record<ShellParamKey, string>>>;
 
 type ShellScreenDefinition = Readonly<{
   id: `s-${string}`;
-  host: 'app' | 'learning';
+  host: 'app' | 'learning' | 'practice';
   params?: readonly ShellParamKey[];
   instance?: Readonly<{
     params: readonly ShellParamKey[];
@@ -33,7 +33,7 @@ type ShellScreenDefinition = Readonly<{
  * a screen cannot leave parser, serializer and dispatcher allowlists apart.
  */
 export const SHELL_SCREEN_DEFINITIONS = [
-  { id: 's-academy', host: 'learning' },
+  { id: 's-academy', host: 'practice' },
   { id: 's-catalog', host: 'learning' },
   { id: 's-catalog-book', host: 'learning', params: ['bookKey'], instance: { params: ['bookKey'] } },
   { id: 's-confirmed-sense', host: 'learning', params: ['meaningId', 'focusId'], instance: { params: ['meaningId', 'focusId'] } },
@@ -50,10 +50,10 @@ export const SHELL_SCREEN_DEFINITIONS = [
   { id: 's-library', host: 'learning' },
   { id: 's-library-package', host: 'learning', params: ['packageKey','publicationArchiveSha256'], instance: { params: ['packageKey','publicationArchiveSha256'] } },
   { id: 's-personal-meaning', host: 'learning', params: ['meaningId', 'focusId'], instance: { params: ['meaningId'], defaults: { meaningId: 'new' } } },
-  { id: 's-practice-scope', host: 'learning' },
+  { id: 's-practice-scope', host: 'practice' },
   { id: 's-profile', host: 'learning' },
   { id: 's-publisher', host: 'learning' },
-  { id: 's-real-world-listening', host: 'learning' },
+  { id: 's-real-world-listening', host: 'practice' },
   { id: 's-semantic-world', host: 'learning', params: ['worldAction'] },
   { id: 's-stats', host: 'learning' },
   { id: 's-study', host: 'learning' },
@@ -71,7 +71,7 @@ const definitionsById = new Map<string, ShellScreenDefinition>(
   SHELL_SCREEN_DEFINITIONS.map((definition) => [definition.id, definition]),
 );
 
-export const shellScreenHost = (screenId: string): 'app' | 'learning' | undefined =>
+export const shellScreenHost = (screenId: string): 'app' | 'learning' | 'practice' | undefined =>
   definitionsById.get(screenId)?.host;
 
 export const shellScreenParams = (screenId: string): readonly ShellParamKey[] =>

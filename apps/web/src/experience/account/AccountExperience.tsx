@@ -8,6 +8,8 @@ import {lazy,Suspense,useCallback,useEffect,useMemo,useRef,useState,type ReactNo
 import {auth,cachedAuthSubject,authStorageKey} from '../../data/account/auth';
 import {completeEmailLink,emailLinkRedirect} from '../../data/consumer/emailLink';
 import {command,readLibrary,openLibrary,observeLibrary,type LibraryTransaction} from '../../data/library/store';
+import {hasLocalLibraryHint} from '../../data/library/localLibraryHint';
+import {hasLocalLibrarySelection} from '../../data/library/localLibraryLocation';
 import {setupButton,setupPrimary} from '../components/learning/LearningSetupFrame';
 import {SensaLogo} from '../brand/SensaLogo';
 import type {LibraryAvailability} from './AccountLibrarySync';
@@ -17,17 +19,20 @@ const AccountLibrarySync=lazy(()=>import('./AccountLibrarySync').then(module=>({
 const ExtensionIntake=lazy(()=>import('./ExtensionIntake').then(module=>({default:module.ExtensionIntake})));
 const RemoteIntakeDelivery=lazy(()=>import('./RemoteIntakeDelivery').then(module=>({default:module.RemoteIntakeDelivery})));
 const AccountDeletion=lazy(()=>import('./AccountDeletion').then(module=>({default:module.AccountDeletion})));
+const LocalLibraryRecovery=lazy(()=>import('./LocalLibraryRecovery'));
 const preloadMedia=()=>import('../personalMeaningJourney/mediaStore').then(module=>module.preloadMedia());
 const warmMedia=()=>{void preloadMedia().catch(()=>undefined);};
 const clearAllCredentials=()=>import('../../data/library/providers').then(module=>module.clearAllCredentials());
 
 type Owner={subject:string;email:string;accountId?:string};
+const storageRecoveryCodes=new Set(['localFlow.storageOpen','localFlow.storageWrite','localFlow.storageFull','localFlow.storageBusy','localFlow.storageUnsupported','localFlow.storageUnavailable']);
 /** Authentication is an online-service boundary, not a consumer sync bootstrap. */
 export default function AccountExperience({children,onReturnToLanding}:{children:ReactNode;onReturnToLanding?:()=>void}){
  const {t}=useTranslation();
  const [deletionOpen,setDeletionOpen]=useState(()=>!!pendingAccountDeletion());const deletionRef=useRef(deletionOpen);deletionRef.current=deletionOpen;
  const [ready,setReady]=useState(false),[local,setLocal]=useState(false),[loginOpen,setLoginOpen]=useState(false),[onlineService,setOnlineService]=useState(false),[connectionConflict,setConnectionConflict]=useState(false);
  const [publisherAccess,setPublisherAccess]=useState(false);
+ const [libraryMissing,setLibraryMissing]=useState(false);
  const [libraryAvailability,setLibraryAvailability]=useState<LibraryAvailability>('restoring');
  const [webSession,setWebSession]=useState<'checking'|'present'|'absent'>('checking');
  const [email,setEmail]=useState(''),[code,setCode]=useState(''),[sent,setSent]=useState(false),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[owner,setOwner]=useState<Owner|null>(null);
@@ -50,7 +55,8 @@ export default function AccountExperience({children,onReturnToLanding}:{children
    const cachedSubject=cachedAuthSubject();
    const inspect=()=>readLibrary(async tx=>{const checkpoint=await tx.get<{status?:string}>('meta','cloud-sync');return {owner:await tx.get<Owner>('meta','service-owner'),identity:await tx.get('meta','identity'),signedOut:await tx.get<boolean>('meta','signed-out'),usable:checkpoint?.status==='synced'||!!(await tx.get('semanticState','root'))||await tx.count('drafts')>0||await tx.count('packageInstallations')>0||await tx.count('learningTargets')>0};});
    let stored=await inspect();
-   if(!stored.identity&&!stored.owner){await openLibrary();stored=await inspect();}
+   if(!stored.identity){await openLibrary();stored=await inspect();}
+   setLibraryMissing(false);
    if(gen!==generation.current)return;
    if(stored.identity)warmMedia();
    if(gen!==generation.current)return;
@@ -123,7 +129,7 @@ export default function AccountExperience({children,onReturnToLanding}:{children
    // summary projections unknown until its first account restore settles. The App
    // Shell stays open throughout; AccountLibrarySync advances that availability.
    setOwner(next);setLocal(true);setOnlineService(true);setPublisherAccess(access.capabilities?.publishLearningContent??false);setConnectionConflict(false);setLoginOpen(false);setNotice('');
-  }catch(cause){if(gen===generation.current){if(needsInitialRestore)setLibraryAvailability(guestAttempt?'authoritative':'failed');if(cause instanceof Error&&cause.message==='localFlow.accountLibraryConflict'){setConnectionConflict(true);setLoginOpen(false);}setNotice(localFlowErrorKey(cause,'localFlow.networkRetry'));}}
+  }catch(cause){if(gen===generation.current){if(cause instanceof Error&&(cause.message==='localFlow.libraryMissing'||(hasLocalLibraryHint()||hasLocalLibrarySelection())&&storageRecoveryCodes.has(cause.message))){setLibraryMissing(true);setLocal(false);setOnlineService(false);setPublisherAccess(false);setLoginOpen(false);}if(needsInitialRestore)setLibraryAvailability(guestAttempt?'authoritative':'failed');if(cause instanceof Error&&cause.message==='localFlow.accountLibraryConflict'){setConnectionConflict(true);setLoginOpen(false);}setNotice(localFlowErrorKey(cause,'localFlow.networkRetry'));}}
   finally{if(gen===generation.current)setReady(true);}
  };
  useEffect(()=>{void recover();const sub=auth?.onAuthStateChange((event,session)=>{
@@ -137,7 +143,7 @@ export default function AccountExperience({children,onReturnToLanding}:{children
   setTimeout(()=>void recover(),0);
  });const online=()=>void recover();const storage=(event:StorageEvent)=>{if(event.key===null||event.key===authStorageKey)void recover();};window.addEventListener('online',online);window.addEventListener('storage',storage);return()=>{generation.current++;sub?.data.subscription.unsubscribe();window.removeEventListener('online',online);window.removeEventListener('storage',storage);};},[]);
  useEffect(()=>{if(!sent||now>=retryAt)return;const timer=window.setTimeout(()=>setNow(Date.now()),Math.max(0,retryAt-Date.now())+20);return()=>window.clearTimeout(timer);},[now,retryAt,sent]);
- useEffect(()=>observeLibrary(()=>{void readLibrary(async tx=>({signedOut:await tx.get('meta','signed-out')})).then(state=>{if(state.signedOut&&localRef.current){void clearAllCredentials();setOnlineService(false);}}).catch(()=>setNotice(localFlowText('localStatusFailed')));},['meta']),[]);
+ useEffect(()=>{if(!local)return;return observeLibrary(()=>{void readLibrary(async tx=>({signedOut:await tx.get('meta','signed-out')})).then(state=>{if(state.signedOut&&localRef.current){void clearAllCredentials();setOnlineService(false);}}).catch(()=>setNotice(localFlowText('localStatusFailed')));},['meta']);},[local]);
  const perform=useCallback(async(work:()=>Promise<void>)=>{callbackDismissed.current=true;setBusy(true);setNotice('');try{await work();}catch{setNotice(localFlowText('tryLater'));}finally{setBusy(false);}},[]);
  const send=async()=>{if(!auth)return;const {error}=await auth.signInWithOtp({email:email.trim(),options:{shouldCreateUser:true,emailRedirectTo:emailLinkRedirect()}});if(error){setNotice(error.status===429?localFlowText('otpRateLimit'):localFlowText('emailLinkSendFailed'));return;}setSent(true);setRetryAt(Date.now()+60000);};
  const logout=useCallback(async()=>{const extensionModule=await import('./extensionConnection');extensionModule.notifyExtensionSignout(owner?.accountId);await clearAllCredentials();await command({id:crypto.randomUUID(),kind:'service.signout',input:{}},async tx=>{tx.put('meta','signed-out',true);return null;});generation.current++;setLocal(false);setOnlineService(false);setPublisherAccess(false);setLoginOpen(false);setSent(false);setCode('');setUseCode(false);const result=await auth?.signOut({scope:'local'});if(result?.error)setNotice(localFlowText('signoutIncomplete'));},[owner?.accountId]);
@@ -155,6 +161,7 @@ export default function AccountExperience({children,onReturnToLanding}:{children
  }),[notice,onlineService,publisherAccess,connectionConflict,libraryAvailability,owner?.email,perform,logout]);
  if(deletionOpen)return <Suspense fallback={<main role="status">{localFlowText('loadingSensa')}</main>}><AccountDeletion onClose={()=>{location.assign('/profile');}}/></Suspense>;
  if(!ready)return <main role="status" className="grid min-h-screen place-content-center">{localFlowText(extensionRequest?'extensionConnecting':'loadingSensa')}</main>;
+ if(libraryMissing&&!loginOpen)return <Suspense fallback={<main role="status">{localFlowText('loadingSensa')}</main>}><LocalLibraryRecovery notice={notice||'localFlow.libraryMissing'} onLogin={()=>{setNotice('');setLoginOpen(true);}}/></Suspense>;
  if(extensionRequest&&webSession==='present')return <main className="grid min-h-screen place-content-center gap-4 p-8 text-center"><p role="status">{notice?localFlowNotice(notice):localFlowText('extensionConnecting')}</p>{notice&&<div className="flex justify-center gap-2"><button className={setupPrimary} disabled={busy} onClick={()=>void perform(recover)}>{localFlowText('extensionRetry')}</button><button className={setupButton} onClick={()=>location.assign('/profile')}>{localFlowText('cancel')}</button></div>}</main>;
  if(local&&!loginOpen&&extension.get('extension')!=='connect')return <AccountContext.Provider value={accountAccess}><Suspense fallback={null}>{onlineService&&<AccountLibrarySync online onAvailabilityChange={updateLibraryAvailability}/>}{onlineService&&<RemoteIntakeDelivery online/>}<ExtensionIntake accountId={owner?.accountId??null} onlineService={onlineService}/></Suspense>{children}</AccountContext.Provider>;
  // Default Supabase templates send links; custom OTP templates remain supported.
@@ -167,6 +174,7 @@ export default function AccountExperience({children,onReturnToLanding}:{children
   <button type="button" className={setupButton} disabled={busy} onClick={()=>void perform(recover)}>{localFlowText('checkLogin')}</button>
   {owner&&<button type="button" className={setupButton} disabled={busy} onClick={()=>void perform(logout)}>{localFlowText('switchAccount')}</button>}
   {local&&extension.get('extension')!=='connect'&&<button type="button" className={setupButton} onClick={()=>setLoginOpen(false)}>{localFlowText('continueLocal')}</button>}
+  {libraryMissing&&loginOpen&&<button type="button" className={setupButton} disabled={busy} onClick={()=>{setNotice('');setLoginOpen(false);}}>{localFlowText('cancel')}</button>}
   {!local&&!sent&&(location.pathname==='/'||location.pathname==='/welcome')&&onReturnToLanding&&<button type="button" className={setupButton} onClick={onReturnToLanding}>{t('landing.back')}</button>}
  </form></main>;
 }

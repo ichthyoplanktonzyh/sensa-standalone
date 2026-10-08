@@ -1,4 +1,5 @@
 import { previewStorage } from '../services/previewStorage';
+import {assertLocalLibrarySelected,localLibraryScopedName} from '../../data/library/localLibraryLocation';
 /**
  * Local persistence for the active clarification thread.
  *
@@ -142,7 +143,8 @@ const normalizeFallback = (
 const readTabFallbackKey = (key: string): TabFallbackMap => {
   if (typeof window === 'undefined') return {};
   try {
-    const raw = window.sessionStorage.getItem(key);
+    const raw = window.sessionStorage.getItem(localLibraryScopedName(key));
+    assertLocalLibrarySelected();
     if (!raw) return {};
     const value = JSON.parse(raw) as unknown;
     if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
@@ -165,7 +167,8 @@ const readTabFallbacks = (): TabFallbackMap => ({
 const saveTabFallback = (entry: TabFallbackEntry): void => {
   if (typeof window === 'undefined') return;
   try {
-    window.sessionStorage.setItem(TAB_FALLBACK_KEY, JSON.stringify({
+    assertLocalLibrarySelected();
+    window.sessionStorage.setItem(localLibraryScopedName(TAB_FALLBACK_KEY), JSON.stringify({
       ...readTabFallbacks(),
       [entry.session.personalMeaningId]: entry,
     }));
@@ -183,9 +186,9 @@ const removeTabFallback = (personalMeaningId: string): void => {
       if (!sessions[personalMeaningId]) continue;
       delete sessions[personalMeaningId];
       if (Object.keys(sessions).length === 0) {
-        window.sessionStorage.removeItem(key);
+        window.sessionStorage.removeItem(localLibraryScopedName(key));
       } else {
-        window.sessionStorage.setItem(key, JSON.stringify(sessions));
+        window.sessionStorage.setItem(localLibraryScopedName(key), JSON.stringify(sessions));
       }
     } catch {
       // A stale fallback is reconciled against the durable value on the next load.
@@ -203,7 +206,7 @@ const withSessionWriteLock = async <T>(
 ): Promise<T> => {
   if (typeof navigator === 'undefined' || !navigator.locks) return task();
   return navigator.locks.request(
-    `${SESSION_LOCK_PREFIX}${personalMeaningId}`,
+    localLibraryScopedName(`${SESSION_LOCK_PREFIX}${personalMeaningId}`),
     {mode: 'exclusive'},
     () => task(),
   );

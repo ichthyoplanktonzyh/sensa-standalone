@@ -6,6 +6,7 @@ import {externalizeSharedRecordContent,expandSharedRecordContent,packStoredRecor
 import {learningExpressionForm,learningPackageChoicesSql,validateLearningPackageQuery} from './packageCacheProjection';
 import {SqliteMeaningLookupProjection} from './meaningLookupProjection';
 import {SqliteWorldBrowseProjection} from './worldBrowseProjection';
+import {SqlitePracticeExpressionProjection,type PracticeExpressionQuery,type PracticeExpressionPage} from './practiceExpressionProjection';
 import {SqliteJourneyIdentityProjection} from './journeyIdentityProjection';
 import {SqliteLearningHistoryProjection,type StoredLearningRecord,type StoredLearningHistoryPage} from './learningHistoryProjection';
 import type {LearningHistoryRequest} from '../../learning/system/learningHistoryModel';
@@ -91,6 +92,7 @@ export class SqliteRecordDatabase {
   private fatalStorageFailure:Error|undefined;
   private meaningLookup:SqliteMeaningLookupProjection;
   private worldBrowseProjection:SqliteWorldBrowseProjection;
+  private practiceExpressionProjection:SqlitePracticeExpressionProjection;
   private walMaintenance:SqliteStorageDiagnostics['walMaintenance'];
   private journeyIdentities:SqliteJourneyIdentityProjection;
   private learningHistory:SqliteLearningHistoryProjection;
@@ -117,6 +119,7 @@ export class SqliteRecordDatabase {
     }});
     this.meaningLookup=new SqliteMeaningLookupProjection(database,(table,key)=>this.get(table,key));
     this.worldBrowseProjection=new SqliteWorldBrowseProjection(database,(table,key)=>this.get(table,key));
+    this.practiceExpressionProjection=new SqlitePracticeExpressionProjection(database,(table,key)=>this.decoded(table,key));
     this.journeyIdentities=new SqliteJourneyIdentityProjection(database);
     this.semanticMemoryProjection=new SqliteLearningSemanticMemoryProjection(database,encoded=>this.decode<LocalLearningTarget>(this.logicalEncoded('learningTargets',encoded)),id=>{const encoded=this.get('learningTargets',id);return encoded===null?null:this.decode<LocalLearningTarget>(encoded);});
     this.learningHistory=new SqliteLearningHistoryProjection(database,id=>this.decoded<LocalLearningTarget>('learningTargets',id),encoded=>this.decode<LocalLearningRun>(this.logicalEncoded('learningRuns',encoded)));
@@ -212,6 +215,7 @@ export class SqliteRecordDatabase {
       this.meaningLookup.initialize();
       lookupReady=performance.now();
       this.worldBrowseProjection.initialize();
+      this.practiceExpressionProjection.initialize();
       worldReady=performance.now();
       this.journeyIdentities.initialize();
       this.learningHistory.initialize();
@@ -305,6 +309,7 @@ export class SqliteRecordDatabase {
     return registrySelectionResult(query,rows);
   }
   worldLearningChoices(query:WorldLearningChoiceQuery):WorldLearningChoicePage{return this.worldBrowseProjection.learningChoices(query);}
+  practiceExpressions(query:PracticeExpressionQuery):PracticeExpressionPage{return this.practiceExpressionProjection.query(query);}
   existingJourneyIdentities(ids:readonly string[]):string[]{return this.journeyIdentities.existing(ids);}
 
   entriesPage(table:SqliteLibraryTable,afterKey:string|null,limit:number):StoredEntry[]{
@@ -830,6 +835,7 @@ export class SqliteRecordDatabase {
                             )`);
       this.meaningLookup.update(mutation);
       this.worldBrowseProjection.update(mutation);
+      this.practiceExpressionProjection.update(mutation);
       this.journeyIdentities.update(mutation);
       // Only dependencies detached by this mutation can become orphaned. An
       // ordinary rating must not sweep all immutable bodies in the library.

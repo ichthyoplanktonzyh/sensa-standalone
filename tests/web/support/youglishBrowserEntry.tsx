@@ -6,7 +6,7 @@ import i18n from '../../../apps/web/src/i18n';
 import {useYouglishWidget} from '../../../apps/web/src/experience/useYouglishWidget';
 import {YouGlishListeningScreen} from '../../../apps/web/src/experience/components/YouGlishListeningScreen';
 import {ScreenMemoryProvider} from '../../../apps/web/src/experience/ui/ScreenHost';
-import type {PracticeScopeTarget} from '../../../apps/web/src/experience/practiceScope';
+import type {PracticeExpression} from '../../../apps/web/src/experience/practiceMaterials';
 
 type Event=Record<string,string|number>;
 const widgets:Array<{events:Record<string,(event:Event)=>void>;calls:Array<{kind:string;args:unknown[]}>}>=[];
@@ -37,16 +37,16 @@ export function emit(index:number,event:string,payload:Event={}){widgets[index]?
 export function dispose(){root?.unmount();root=undefined;}
 export async function mountSpanish(){
  await i18n.changeLanguage('zh-CN');
- const target:PracticeScopeTarget={targetId:'fixture-spanish',identity:{kind:'personal_meaning_binding',personalMeaningId:'fixture',personalMeaningRevisionId:'fixture-r1',personalMeaningAlignmentId:'fixture-a1',alignmentRevision:1,alignmentBasisReferenceId:'fixture-basis',senseId:'fixture-sense',senseVersionId:'fixture-sv',bindingId:'fixture-binding',bindingVersionId:'fixture-bv'},expression:{surfaceForm:'banco',languageTag:'es',expressionType:'word',pronunciationVariant:null},sense:{senseId:'fixture-sense',senseVersionId:'fixture-sv',label:'Fixture only'},context:null,capabilities:{expressionForm:true,semanticBinding:true,context:false,pronunciation:false,validatedLearningMaterial:false},provenance:{sourceId:'personal_semantic_world',sourceLabel:'Fixture only'}};
- root=createRoot(document.getElementById('root')!);root.render(<ScreenMemoryProvider><YouGlishListeningScreen active targets={[target]} onBack={()=>{}} toast={()=>{}}/></ScreenMemoryProvider>);
+ const expression:PracticeExpression={id:'fixture-spanish',text:'banco',languageTag:'es',source:{kind:'personal',id:'fixture'}};
+ root=createRoot(document.getElementById('root')!);root.render(<ScreenMemoryProvider><YouGlishListeningScreen active expression={expression} onBack={()=>{}} onChooseExpression={()=>{}}/></ScreenMemoryProvider>);
 }
 
 function PlayerJourney(){
  const [active,setActive]=useState(true);
- const target={targetId:'fixture-expression',expression:{surfaceForm:'borrow',languageTag:'en'}} as PracticeScopeTarget;
+ const expression:PracticeExpression={id:'fixture-expression',text:'borrow',languageTag:'en',source:{kind:'personal',id:'fixture'}};
  return <ScreenMemoryProvider>
   {!active&&<button onClick={()=>setActive(true)}>Open listening</button>}
-  <YouGlishListeningScreen active={active} targets={[target]} onBack={()=>setActive(false)} toast={()=>{}}/>
+  <YouGlishListeningScreen active={active} expression={expression} onBack={()=>setActive(false)} onChooseExpression={()=>{}}/>
  </ScreenMemoryProvider>;
 }
 /** Navigation controlled, actual listening screen/cleanup; no persisted source. */

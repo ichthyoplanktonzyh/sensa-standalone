@@ -1,141 +1,74 @@
-/** Actual scope hook/screens and OPFS, with an isolated read barrier and synthetic Study projection. */
+/** Shipped Practice workspace and real OPFS. Only read faults are controlled. */
 import {createRoot,type Root} from 'react-dom/client';
-import {useLayoutEffect,useState} from 'react';
+import {RouterProvider,createRootRoute,createRoute,createRouter} from '@tanstack/react-router';
 import '../../../apps/web/src/i18n/workspaceResources';
-import {usePracticeScope} from '../../../apps/web/src/experience/usePracticeScope';
-import {AcademyScreen} from '../../../apps/web/src/experience/components/AcademyScreen';
-import {PracticeScopeScreen} from '../../../apps/web/src/experience/components/PracticeScopeScreen';
+import i18n from '../../../apps/web/src/i18n';
+import {PracticeWorkspace} from '../../../apps/web/src/experience/PracticeWorkspace';
 import {ScreenMemoryProvider} from '../../../apps/web/src/experience/ui/ScreenHost';
+import {practiceMaterialsRepository} from '../../../apps/web/src/experience/practiceMaterials';
+import {practiceExpressionId} from '../../../apps/web/src/data/library/practiceExpressionProjection';
 import {previewStorage} from '../../../apps/web/src/experience/services/previewStorage';
-import {createPracticeScopeSnapshot,PERSONAL_SEMANTIC_WORLD_SCOPE_ID,type PracticeStudyTarget,type PracticeScopeSnapshot} from '../../../apps/web/src/experience/practiceScope';
 import {LibraryJourneyRepository,MemoryJourneyRepository} from '../../../apps/web/src/experience/personalMeaningJourney/repository';
-import {createJourneyModules,journeyGateway} from '../../../apps/web/src/experience/personalMeaningJourney/gateway';
+import {createJourneyModules} from '../../../apps/web/src/experience/personalMeaningJourney/gateway';
 import {createSeededClock} from '../../../apps/web/src/experience/personalMeaningJourney/ports';
 import {restoreLibraryTransaction} from '../../../apps/web/src/data/library/store';
 import {semanticLookupPayload} from './semanticLookupFixtures';
-import {usePackageLearning} from '../../../apps/web/src/experience/library/usePackageLearning';
 import {learningSystem} from '../../../apps/web/src/learning/system';
-import {contentSupplySystem} from '../../../apps/web/src/contentSupply/system';
-import {languageRoutesSnapshot,updateLanguageRouteSupport} from '../../../apps/web/src/data/library/language';
-
-const preferenceKey='sensa.free-practice.scope-selection.v2';
-// Deliberately distinct from the saved Personal target. This is a resolver
-// input, not a fabricated persisted Learning Target/outcome.
-const studyTargets:PracticeStudyTarget[]=[{target:{
- targetId:'study-only',curriculumMembershipId:'study-membership',
- identity:{senseId:'study-sense',senseVersionId:'study-sense-version',bindingId:'study-binding',bindingVersionId:'study-binding-version'},
- presentation:{expression:'study-only',targetLanguageTag:'en'},
- material:{snapshot:{learningMaterializationId:'study-material',validationStatus:'validated'},content:{resources:[
-  {materialRoleKey:'target_expression',contentPayload:{surface:'study-only'}},
-  {materialRoleKey:'sense_confirmation',contentPayload:{meaning:'Synthetic Current Study fallback'}},
-  {materialRoleKey:'language_structure',contentPayload:{expressionKind:'word'}},
- ]}},
-}} as never];
-let root:Root|undefined,session:PracticeScopeSnapshot|null=null;
-let release:(()=>void)|undefined,barrier:Promise<unknown>|undefined;
-let version:{key:string;value:unknown}|undefined;
-let failWorkspaceRead=false;
-let repairWorkspaceOnRetry=false;
-let holdWorkspaceRead=false;
-let pendingWorkspaceReads:Array<()=>Promise<void>>=[];
-const routeFrames:Array<{revision:number;status:string}>=[];
-const learningFailures:Array<{kind:string;message:string}>=[];
-const readLearning=learningSystem.read.bind(learningSystem);
-const executeLearning=learningSystem.execute.bind(learningSystem);
-const readSupply=contentSupplySystem.read.bind(contentSupplySystem),executeSupply=contentSupplySystem.execute.bind(contentSupplySystem);
-Object.defineProperty(contentSupplySystem,'read',{value:async(query:Parameters<typeof contentSupplySystem.read>[0])=>{
- try{return await readSupply(query);}catch(error){learningFailures.push({kind:'supply read '+query.kind,message:error instanceof Error?error.message:String(error)});throw error;}
+import {addLanguageRoute,setActiveLanguageRoute} from '../../../apps/web/src/data/library/language';
+const preferenceKey='sensa.practice.materials.v4:en';
+let root:Root|undefined,release:(()=>void)|undefined,barrier:Promise<unknown>|undefined;
+let originalRecord:{key:string;value:unknown}|undefined;
+let failBooks=false,failLearning=false,learningReads=0,heldLanguage:string|null=null;
+let holdStart=false;
+let startQuery:Parameters<typeof readMaterials>[0]|null=null;
+const pendingReads:Array<()=>Promise<void>>=[];
+const readMaterials=practiceMaterialsRepository.page.bind(practiceMaterialsRepository),readLearning=learningSystem.read.bind(learningSystem);
+Object.defineProperty(practiceMaterialsRepository,'page',{value:(query:Parameters<typeof readMaterials>[0])=>{
+ if(holdStart&&query.limit===1){startQuery=query;return new Promise((resolve,reject)=>pendingReads.push(async()=>{try{resolve(await readMaterials(query));}catch(error){reject(error);}}));}
+ if(query.source==='books'&&failBooks)return Promise.reject(new Error('fixture book material read failure'));
+ if(query.languageTag===heldLanguage)return new Promise((resolve,reject)=>pendingReads.push(async()=>{try{resolve(await readMaterials(query));}catch(error){reject(error);}}));
+ return readMaterials(query);
 }});
-Object.defineProperty(contentSupplySystem,'execute',{value:async(command:Parameters<typeof contentSupplySystem.execute>[0])=>{
- try{return await executeSupply(command);}catch(error){learningFailures.push({kind:'supply execute '+command.kind,message:error instanceof Error?error.message:String(error)});throw error;}
-}});
-Object.defineProperty(learningSystem,'execute',{value:async(command:Parameters<typeof learningSystem.execute>[0])=>{
- try{return await executeLearning(command);}catch(error){learningFailures.push({kind:command.kind,message:error instanceof Error?error.message:String(error)});throw error;}
-}});
-// Controlled adapter failure at the public read interface. Source records and
-// domain admission stay real; do not bypass SQLite protection to insert junk.
-Object.defineProperty(learningSystem,'read',{value:(query:Parameters<typeof learningSystem.read>[0])=>{
- if(query.kind==='workspace'&&failWorkspaceRead)return Promise.reject(new Error('fixture learning workspace read failure'));
- if(query.kind==='workspace'&&holdWorkspaceRead)return new Promise((resolve,reject)=>pendingWorkspaceReads.push(async()=>{try{resolve(await readLearning(query));}catch(error){reject(error);}}));
- return readLearning(query);
-}});
-
-function Probe(){
- const scope=usePracticeScope({studyTargets,activeLanguageTag:'en'});
- const [view,setView]=useState<'academy'|'scope'>('academy');
- return <ScreenMemoryProvider>
-  <output data-testid="scope-availability">{scope.availability}</output>
-  {view==='academy'?<AcademyScreen active onBack={()=>{}} onBrowseContent={()=>{}} onRecordContext={()=>{}} practiceScope={scope.catalog.currentScope}
-   scopeAvailability={scope.availability} onRetryScope={scope.reload} onOpenPracticeScope={()=>setView('scope')}
-   onOpenRealWorldListening={()=>{if(scope.availability!=='ready')return;session=createPracticeScopeSnapshot(scope.catalog.currentScope,crypto.randomUUID(),new Date().toISOString());}}/>
-   :<PracticeScopeScreen active catalog={scope.catalog} scopeAvailability={scope.availability}
-    onRetryScope={scope.reload} onBack={()=>setView('academy')} onSelectScope={scope.selectScope}/>}
- </ScreenMemoryProvider>;
-}
-
-function PackageProbe(){
- const learning=usePackageLearning(false);
- const scope=usePracticeScope({studyTargets:learning.activeTargets.map(target=>({target})),activeLanguageTag:learning.languageContext.targetLanguageTag});
- const availability=scope.availability==='unavailable'||learning.loadStatus==='unavailable'?'unavailable'
-  :scope.availability==='loading'||learning.loadStatus==='loading'?'loading':'ready';
- useLayoutEffect(()=>{routeFrames.push({revision:learning.languageContext.languageRouteRevision,status:learning.loadStatus});},[learning.languageContext.languageRouteRevision,learning.loadStatus]);
- return <>
-  <output data-testid="scope-availability">{availability}</output>
-  <AcademyScreen active onBack={()=>{}} onBrowseContent={()=>{}} onRecordContext={()=>{}} practiceScope={scope.catalog.currentScope}
-   scopeAvailability={availability} onRetryScope={()=>{
-    // Release the controlled fault at the actual retry gesture. An unrelated
-    // OPFS notification must not win the race and remove the button beforehand.
-    if(repairWorkspaceOnRetry){failWorkspaceRead=false;repairWorkspaceOnRetry=false;}
-    scope.reload();void learning.retryInitialLoad();
-   }} onOpenPracticeScope={()=>{}}
-   onOpenRealWorldListening={()=>{if(availability!=='ready')return;session=createPracticeScopeSnapshot(scope.catalog.currentScope,crypto.randomUUID(),new Date().toISOString());}}/>
- </>;
-}
-
+Object.defineProperty(learningSystem,'read',{value:(query:Parameters<typeof readLearning>[0])=>{learningReads++;return failLearning?Promise.reject(new Error('fixture learning failure')):readLearning(query);}});
 export async function prepare(){
+ await i18n.changeLanguage('zh-CN');
  const memory=new MemoryJourneyRepository(),modules=createJourneyModules({repository:memory,clock:createSeededClock(),languages:{read:async()=>({targetLanguageTag:'en',supportLanguageTag:'zh-CN'})}});
- const saved=await modules.semanticIntake.submit(semanticLookupPayload());
- if(saved.route!=='fast_track')throw new Error('expected accepted fixture');
- const after=await memory.load(),repository=new LibraryJourneyRepository(),before=await repository.load();
- if(before.meanings.length)throw new Error('practice acceptance requires an empty isolated origin');
- await repository.commit({before,after});
- const reference=modules.personalMeaningJourney.getLearningSources(saved.personalMeaningId)[0]!.reference;
- const preference={sourceId:PERSONAL_SEMANTIC_WORLD_SCOPE_ID,targetIds:[`personal:${reference.personalMeaningAlignmentId}:${reference.bindingVersionId}`]};
- previewStorage.setItem(preferenceKey,JSON.stringify(preference));return preference;
+ const saved=await modules.semanticIntake.submit(semanticLookupPayload());if(saved.route!=='fast_track')throw new Error('expected accepted fixture');
+ const after=await memory.load(),repository=new LibraryJourneyRepository(),before=await repository.load();if(before.meanings.length)throw new Error('requires empty isolated origin');await repository.commit({before,after});
+ const preference={source:'personal',expressionIds:[practiceExpressionId('borrow','en')]};previewStorage.setItem(preferenceKey,JSON.stringify(preference));return preference;
+}
+export function mount(){
+ const parent=createRootRoute({component:()=> <ScreenMemoryProvider><PracticeWorkspace/></ScreenMemoryProvider>});
+ const router=createRouter({routeTree:parent.addChildren([createRoute({getParentRoute:()=>parent,path:'/'}),createRoute({getParentRoute:()=>parent,path:'$'})])});
+ root=createRoot(document.getElementById('root')!);root.render(<RouterProvider router={router}/>);
 }
 export async function holdAndMount(){
  let entered!:()=>void;const waiting=new Promise<void>(resolve=>{entered=resolve;});
- barrier=restoreLibraryTransaction(async()=>{entered();await new Promise<void>(resolve=>{release=resolve;});});
- await waiting;root=createRoot(document.getElementById('root')!);root.render(<Probe/>);
+ barrier=restoreLibraryTransaction(async()=>{entered();await new Promise<void>(resolve=>{release=resolve;});});await waiting;mount();
 }
 export async function releaseRead(){release?.();release=undefined;await barrier;}
 export function preference(){return JSON.parse(previewStorage.getItem(preferenceKey)??'null');}
-export function snapshot(){return session;}
-export async function breakVersion(){
+export function currentExpression(){return JSON.parse(previewStorage.getItem('sensa.practice.current-expression.v4')??'null');}
+export function expressionId(){return practiceExpressionId('borrow','en');}
+export function holdStartRead(){holdStart=true;}
+export function capturedStartQuery(){return startQuery;}
+export async function changeLanguage(){const route=await addLanguageRoute(crypto.randomUUID(),'fr','zh-CN');await setActiveLanguageRoute(crypto.randomUUID(),route.id);}
+export function breakLearning(){failLearning=true;}
+export function learningReadCount(){return learningReads;}
+export function breakBooks(){failBooks=true;}
+export function repairBooks(){failBooks=false;}
+export async function breakExpression(){
+ const state=await new LibraryJourneyRepository().load(),record=state.meanings[0]!;originalRecord={key:record.personalMeaning.personalMeaningId,value:structuredClone(record)};
+ record.personalExpressionAnchorRevisions=[];await restoreLibraryTransaction(async tx=>{tx.put('semanticMeanings',originalRecord!.key,record);});
+}
+export async function repairExpression(){if(!originalRecord)throw new Error('no source');await restoreLibraryTransaction(async tx=>{tx.put('semanticMeanings',originalRecord!.key,originalRecord!.value);});}
+export async function breakSense(){
  const state=await new LibraryJourneyRepository().load(),value=state.registry.senseVersions[0]!;
- version={key:`senseVersions:${value.senseVersionId}`,value:{kind:'senseVersions',ordinal:0,value}};
- // Explicit corruption injection to verify that unavailable sources cannot
- // silently replace the saved Personal choice with Current Study.
- await restoreLibraryTransaction(async tx=>{tx.delete('semanticRegistry',version!.key);});
- journeyGateway.reload();
+ await restoreLibraryTransaction(async tx=>{tx.delete('semanticRegistry',`senseVersions:${value.senseVersionId}`);});
 }
-export async function repairVersion(){
- if(!version)throw new Error('no version to repair');
- await restoreLibraryTransaction(async tx=>{tx.put('semanticRegistry',version!.key,version!.value);});
+export async function changeLanguageWhileHoldingRead(){
+ heldLanguage='fr';const route=await addLanguageRoute(crypto.randomUUID(),'fr','zh-CN');await setActiveLanguageRoute(crypto.randomUUID(),route.id);return route;
 }
-export async function breakLearningAndMount(){
- failWorkspaceRead=true;
- root=createRoot(document.getElementById('root')!);root.render(<PackageProbe/>);
-}
-export function repairLearning(){repairWorkspaceOnRetry=true;}
-export function mountLearning(){root=createRoot(document.getElementById('root')!);root.render(<PackageProbe/>);}
-export async function changeRouteWhileHoldingRead(){
- holdWorkspaceRead=true;
- const {activeRoute}=await languageRoutesSnapshot();
- return updateLanguageRouteSupport(crypto.randomUUID(),activeRoute.id,'ja');
-}
-export function observedRouteFrames(){return routeFrames;}
-export function observedLearningFailures(){return learningFailures;}
-export function readIsHeld(){return pendingWorkspaceReads.length>0;}
-export async function releaseWorkspaceRead(){holdWorkspaceRead=false;const pending=pendingWorkspaceReads;pendingWorkspaceReads=[];await Promise.all(pending.map(run=>run()));}
+export function readIsHeld(){return pendingReads.length>0;}
+export async function releaseMaterialRead(){heldLanguage=null;holdStart=false;const pending=pendingReads.splice(0);await Promise.all(pending.map(run=>run()));}
 export function dispose(){release?.();root?.unmount();}

@@ -1,4 +1,10 @@
 {"localFlow":{
+    "libraryRecovery": "Odzyskaj dane lokalne",
+    "libraryMissing": "Nie można odczytać poprzednich danych lokalnych. Spróbuj ponownie lub przywróć kopię zapasową; nie usuwaj danych przeglądarki.",
+    "libraryRecoveryLogin": "Zaloguj się na pierwotne konto",
+    "libraryRestart": "Zacznij od nowa",
+    "libraryRestartConfirm": "Powstanie nowa, oddzielna biblioteka lokalna, a bieżące konto zostanie wylogowane. Stare pliki pozostaną zachowane, ale nie zostaną automatycznie przywrócone w nowej bibliotece.",
+    "libraryCreateSeparate": "Potwierdź nową bibliotekę lokalną",
     "outsideLearningPlan": "Poza przyszłym planem nauki",
     "supplementalEmpty":"Nie dodano jeszcze osobnych treści","supplementalLearning": "Nauka uzupełniająca",
     "removeFromLearning": "Usuń z nauki",

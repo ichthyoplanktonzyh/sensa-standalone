@@ -232,18 +232,18 @@
   "practice": {
     "title": "Latihan bebas",
     "note": "Berlatih kapan saja tanpa mengubah progres belajar.",
-    "scope": "Cakupan latihan",
+    "scope": "Materi latihan",
     "change": "Ubah cakupan",
     "back": "Kembali",
     "empty": "Belum ada konten latihan",
-    "count": "{{count}} makna",
-    "use": "Gunakan {{count}} makna",
+    "count": "{{count}} ungkapan",
+    "use": "Gunakan {{count}} ungkapan",
     "choose": "Pilih konten",
     "all": "Pilih semua",
     "clear": "Batalkan semua pilihan",
     "currentStudySubtitle": "Semua yang ditambahkan ke pembelajaran dalam bahasa saat ini",
     "sources": {
-      "current_study": "Konten belajar saat ini",
+      "current_study": "Konten yang diunduh",
       "personal_semantic_world": "Dunia Semantik Saya"
     },
     "areas": {

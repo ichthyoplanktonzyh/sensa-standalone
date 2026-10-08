@@ -773,14 +773,16 @@ Initial Profile 每个 Practice Area 只承诺一个边界明确的 Activity Def
 | Contextual Meaning Inference（语境推义） | Reading | controlled Context 中的目标 Sense | reveal 当前 Sense 与 context cues，不把 reveal 后行为当评价 | Sense-controlled short Context、精确 Expression occurrence、Sense reveal/cue binding |
 | Written Scenario Response（情境书面表达） | Writing | Sense-grounded contextual expression | AI 提供自然度、意义贴合、修订与 alternative；无唯一标准答案 | communicative brief、written response、AI feedback capability |
 
-Initial Profile 的 Practice Scope 首先支持 learner 明确选择的完整 Personal Meanings、Senses/
-Expressions 与当前 Book slice 中可执行的 targets。Saved item、Semantic Field、Personal Collection
+当前 Expression-form Listening 从现有个人表达和已下载内容提供轻量表达材料，不以完整 Personal Meaning、
+Sense 或可执行 Learning Target 为前提。Initial Profile 的其他活动按实际交付需求声明材料与资源。
+Saved item、Semantic Field、Personal Collection
 或 history-based Scope 只有在对应 content/persistence/API/Sync contract 已交付时才可加入 inventory；
 Profile 不根据“薄弱维度”自动创建强制任务或学习债务。
 
 YouGlish 片段属于 form-level provider resource，不成为 Learning Example，也不因为 Scope 中存在 Sense
-就获得 contextual Sense assignment。相同拼写存在多种发音时，resolver 必须约束正确 Pronunciation
-Variant；无法可靠约束就省略该 occurrence。Sense-controlled Reading Context 与 Speaking/Writing brief
+就获得 contextual Sense assignment。当前按形式检索的片段可能含其他意义与发音，不宣称对应某个目标 Sense
+或 Pronunciation Variant；未来若活动明确要求指定 Variant，才核验其约束与 occurrence 适用性。
+Sense-controlled Reading Context 与 Speaking/Writing brief
 可以来自已获准的不可变资源或受版本化 policy 约束的 runtime generation；来源与生成版本必须保留，
 但 AI 输出仍不是 reviewed content 或正式 grading basis。
 

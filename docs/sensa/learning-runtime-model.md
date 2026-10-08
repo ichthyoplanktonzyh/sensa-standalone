@@ -664,10 +664,12 @@ Expression/Alignment facts，也不得用 Active Route Selection 强制重标捕
 
 ## 8. Free Practice
 
-Free Practice 是独立的语言使用与泛化运行时，不是宽松版 Learning Protocol，也不是第三种 Learning
-Session intent。语言相关的 Free Practice Session 同样固定 Pinned Language Context。它可以读取
-Learning Target、Personal Semantic World 中完整的 Context–Expression–Sense、Practice Scope 与获准
-资源，但不能写入正式学习的证据、进度或调度状态。
+Free Practice 是使用系统中语言材料的独立练习空间，不是宽松版 Learning Protocol，也不是第三种 Learning
+Session intent。用户主线是提供或选择材料、选择可用练习方式、开始练习；这些是逻辑环节，不要求三个页面或
+重复确认。材料无需先加入正式学习。每种活动只解析自己所需事实：Expression-form Listening 只需要表达文本和
+表达语言，来源引用用于必要的回看，不要求完整 Meaning、Sense、Context、Learning Target 或正式调度状态。
+已开始的外部查询保持当前表达与语言，不因其他页面改动而静默换词；正式 Pinned Language Context 不是它的前置
+学习身份。需要语义语境的未来活动另行声明必要材料，不让当前播放承担尚未交付能力的要求。
 
 听、说、读、写是稳定的 learner-facing **Practice Area**。它们来自 receptive/productive ×
 sound/written 的组织矩阵，但不是四个运行引擎、mastery dimensions、分数或 Gate：
@@ -683,7 +685,11 @@ sound/written 的组织矩阵，但不是四个运行引擎、mastery dimensions
 Practice Brief 给一次练习提供局部方向，至少可以表达 learner intent 或 communicative goal、scenario、
 optional Scope 与 support level。它不是 Learning Objective、Protocol、graduation standard 或评分合同。
 
-Free Practice Session 由 learner 主动开启并至少固定：
+Free Practice Session 由 learner 主动开启，保留所选活动和材料引用。当前 Expression-form Listening 只需保留
+当前表达、表达语言及播放控制状态；不创建完整来源快照、学习队列或正式学习 Session。Practice Brief、反馈、
+Artifact 与历史仅在实际交付的活动需要时提供，不作为所有活动的统一启动前置条件。
+
+未来需要反馈和可追溯历史的活动可记录：
 
 ```text
 practiceBriefSnapshot
@@ -695,7 +701,7 @@ executableInventoryVersion
 status: active | completed | abandoned
 ```
 
-Session 创建前，Practice Runtime 必须解析：
+提供活动前，产品必须按实际交付能力核验：
 
 ```text
 Free Practice Profile
@@ -709,13 +715,16 @@ Profile 固定允许的 Practice Activity Definitions 及其 target、channel、
 与 session-policy requirements；Package Practice Manifest 声明 Package 内获准复用的 practice
 roles/resources，外部 provider 则必须保留自己的来源、授权与可用性事实。Inventory 是上述能力与
 当前 client support 的交集。它既不读取 learner mastery 来伪造 capability，也不借用 Acquisition
-Required Asset Manifest 推断四个 Area 全部可用。Session 固定 profile 与 resolved inventory version，
-运行中能力变化只能在下个 Session 生效。
+Required Asset Manifest 推断四个 Area 全部可用。Profile 与 Inventory 是能力交付约定，不要求当前只读播放
+创建版本化的持久 Session 或复制整个库存。
 
 Practice Scope 可以来自 learner 明确选择的 Personal Meanings/Senses/Expressions、Book slice、最近
-学习、已完成首次习得、Saved items 或其他已交付的 typed source。Scope 在 Session 开始时解析成稳定
-snapshot，并保留 Context、Expression、Sense、binding 或 Learning Target 的实际身份与 provenance；
-后续收藏、Book 或 progress 变化不能静默改变正在进行的活动。Declared Mastery 只排除正式 Planning，
+学习、已完成首次习得、Saved items 或其他已交付的 typed source。当前表达练习按表达语言与形式组织材料，
+不按 Meaning 或 Learning Target 数量重复播放同一形式。显式选择保留轻量材料引用，浏览按需读取。
+选择整个来源时包含该来源当前可用的表达，不生成全量成员快照；自选部分材料时保留表达身份。重复形式使用一个
+可追溯的代表来源，不复制全部出现记录；原始来源事实仍完整保留。
+开始播放只解析当前表达，不复制选中集合的全部语义详情。来源变化不静默替换正在播放的表达；下一次选词重新核验
+其可用性，缺失或读取失败须如实显示并提供重新选择或重试。Declared Mastery 只排除正式 Planning，
 不阻止 learner 自由练习。
 
 Practice Activity Definition 是扩展的主要单元，至少固定：
@@ -756,9 +765,9 @@ brief、feedback 与 retry 机制，再分别使用 voice/text channel adapter�
 不是为了凑数量而建立的新 Activity family。
 
 Real-world Speech Variation 的检索是 form-level：YouGlish occurrence 必须保留 provider provenance，
-UI 也必须明确这些片段按 Expression 检索、可能覆盖其他 Sense。若某个相同拼写具有不同发音，只有
-能够可靠约束 Pronunciation Variant 的 occurrence 才能用于对应声音泛化；首期省略语义 WSD 不等于
-允许错误发音污染活动。
+UI 也必须明确这些片段按 Expression 检索、可能覆盖其他 Sense。当前形式检索也可能包含多种发音，不宣称
+它们属于指定 Sense 或 Pronunciation Variant。未来明确要求指定 Variant 的活动必须另行核验 occurrence；
+不能把当前自由语流暴露当作特定发音目标已达成。
 
 Initial Profile 只发布 Inventory 中确实具备资源、provider、renderer 与 feedback capability 的 Activity。
 缺少任一活动不阻止正式 Learning Package 发布，也不能用占位内容伪装可进入。Practice Runtime 只能

@@ -1,5 +1,11 @@
 {
   "localFlow": {
+    "libraryRecovery": "Yerel verileri kurtar",
+    "libraryMissing": "Önceki yerel verilerin okunamadı. Yeniden dene veya yedeği geri yükle; tarayıcı verilerini silme.",
+    "libraryRecoveryLogin": "Asıl hesaba giriş yap",
+    "libraryRestart": "Yeniden başla",
+    "libraryRestartConfirm": "Ayrı bir yeni yerel kitaplık oluşturulacak ve mevcut hesaptan çıkış yapılacak. Eski dosyalar korunacak ancak yeni kitaplığa otomatik olarak geri yüklenmeyecek.",
+    "libraryCreateSeparate": "Yeni yerel kitaplığı onayla",
     "outsideLearningPlan": "Gelecekteki öğrenme planının dışında",
     "supplementalEmpty":"Henüz ayrı içerik eklenmedi","supplementalLearning": "Ek öğrenme",
     "removeFromLearning": "Öğrenmeden çıkar",

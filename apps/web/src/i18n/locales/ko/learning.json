@@ -232,18 +232,18 @@
   "practice": {
     "title": "자유 연습",
     "note": "학습 진도를 바꾸지 않고 언제든 연습할 수 있습니다.",
-    "scope": "연습 범위",
+    "scope": "연습 자료",
     "change": "범위 변경",
     "back": "뒤로",
     "empty": "연습 콘텐츠가 아직 없습니다",
-    "count": "의미 {{count}}개",
-    "use": "의미 {{count}}개 사용",
+    "count": "표현 {{count}}개",
+    "use": "표현 {{count}}개 사용",
     "choose": "콘텐츠 선택",
     "all": "모두 선택",
     "clear": "모두 선택 해제",
     "currentStudySubtitle": "현재 언어의 학습에 추가된 모든 항목",
     "sources": {
-      "current_study": "현재 학습 콘텐츠",
+      "current_study": "다운로드한 콘텐츠",
       "personal_semantic_world": "내 시맨틱 월드"
     },
     "areas": {

@@ -13,6 +13,7 @@ import {shellScreenHost,type AppShellScreenId} from './router/screenRegistry';
 import {useOverlayStore} from './stores/overlayStore';
 
 const HomeLearningController=lazy(()=>import('./library/HomeLearningController').then(module=>({default:module.HomeLearningController})));
+const PracticeWorkspace=lazy(()=>import('./PracticeWorkspace').then(module=>({default:module.PracticeWorkspace})));
 const LearningWorkspace=lazy(async()=>{
  const [module]=await Promise.all([
   import('./library/LearningWorkspace'),
@@ -61,7 +62,8 @@ export default function App(){
 
  const currentScreen=mainStack.at(-1)??'s-home';
  const learningWorkspaceActive=viewMode==='lightweight'||shellScreenHost(currentScreen)==='learning';
- const hostedScreenKey=learningWorkspaceActive?'learning-workspace':screenInstanceKey(currentScreen,params);
+ const practiceWorkspaceActive=viewMode==='main'&&shellScreenHost(currentScreen)==='practice';
+ const hostedScreenKey=learningWorkspaceActive?'learning-workspace':practiceWorkspaceActive?'practice-workspace':screenInstanceKey(currentScreen,params);
  const overlayOpen=!!dictModalWord||!!referenceExampleDeck||!!noteModalWord||!!sceneEditorTarget;
  const baseActive=!overlayOpen;
  const appScreenRenderers:Record<AppScreenId,(active:boolean)=>ReactNode>={
@@ -89,6 +91,7 @@ export default function App(){
  };
  const renderScreen=(active:boolean)=>{
   if(learningWorkspaceActive)return <LearningWorkspace active={active}/>;
+  if(practiceWorkspaceActive)return <PracticeWorkspace active={active}/>;
   return appScreenRenderers[currentScreen as AppScreenId]?.(active)??null;
  };
  const fallback=<section id={currentScreen} className="screen active absolute inset-0 grid place-content-center bg-surface-canvas text-fg-primary" role="status">{t('reliability.loading')}</section>;

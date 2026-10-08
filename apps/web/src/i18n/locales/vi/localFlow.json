@@ -1,5 +1,11 @@
 {
   "localFlow": {
+    "libraryRecovery": "Khôi phục dữ liệu cục bộ",
+    "libraryMissing": "Không thể đọc dữ liệu cục bộ trước đây. Hãy thử lại hoặc khôi phục bản sao lưu; đừng xóa dữ liệu trình duyệt.",
+    "libraryRecoveryLogin": "Đăng nhập tài khoản gốc",
+    "libraryRestart": "Bắt đầu lại",
+    "libraryRestartConfirm": "Tạo thư viện cục bộ mới riêng biệt và đăng xuất tài khoản hiện tại. Các tệp cũ được giữ lại nhưng không tự động khôi phục vào thư viện mới.",
+    "libraryCreateSeparate": "Xác nhận thư viện cục bộ mới",
     "outsideLearningPlan": "Ngoài kế hoạch học sau này",
     "supplementalEmpty":"Chưa có nội dung được thêm riêng","supplementalLearning": "Học bổ sung",
     "removeFromLearning": "Loại khỏi nội dung học",

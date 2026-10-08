@@ -232,18 +232,18 @@
   "practice": {
     "title": "自由練習",
     "note": "隨時練習，不改變學習進度。",
-    "scope": "練習範圍",
+    "scope": "練習材料",
     "change": "更換範圍",
     "back": "返回",
     "empty": "目前沒有可練內容",
-    "count": "{{count}} 個意思",
-    "use": "使用 {{count}} 個意思",
+    "count": "{{count}} 個表達",
+    "use": "使用 {{count}} 個表達",
     "choose": "選擇內容",
     "all": "全選",
     "clear": "取消全選",
     "currentStudySubtitle": "目前語言中已加入學習的全部內容",
     "sources": {
-      "current_study": "目前學習內容",
+      "current_study": "已下載內容",
       "personal_semantic_world": "我的語意世界"
     },
     "areas": {

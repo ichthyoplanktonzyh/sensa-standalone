@@ -19,8 +19,8 @@ CREATE INDEX IF NOT EXISTS sensa_world_browse_order ON sensa_world_browse(visibl
 CREATE INDEX IF NOT EXISTS sensa_world_browse_status ON sensa_world_browse(status,updated_at DESC,meaning_id);
 CREATE INDEX IF NOT EXISTS sensa_world_browse_valid ON sensa_world_browse(valid);
 CREATE INDEX IF NOT EXISTS sensa_world_browse_pending ON sensa_world_browse(updated_at DESC,meaning_id) WHERE visible=1 AND (formation<>'sense_confirmed' OR binding<>'bound');
-CREATE TABLE IF NOT EXISTS sensa_world_learning_choices(choice_key TEXT PRIMARY KEY,meaning_id TEXT NOT NULL,language_tag TEXT NOT NULL,choice_json TEXT NOT NULL CHECK(json_valid(choice_json))) WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS sensa_world_learning_choice_language ON sensa_world_learning_choices(language_tag,meaning_id,choice_key);
+CREATE TABLE IF NOT EXISTS sensa_world_learning_choices(choice_key TEXT PRIMARY KEY,meaning_id TEXT NOT NULL,language_tag TEXT NOT NULL,updated_at TEXT NOT NULL,choice_json TEXT NOT NULL CHECK(json_valid(choice_json))) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS sensa_world_learning_choice_language ON sensa_world_learning_choices(language_tag,updated_at DESC,meaning_id,choice_key);
 CREATE INDEX IF NOT EXISTS sensa_world_learning_choice_meaning ON sensa_world_learning_choices(meaning_id);
 CREATE TABLE IF NOT EXISTS sensa_world_scene_meanings(scene_id TEXT NOT NULL,meaning_id TEXT NOT NULL,PRIMARY KEY(scene_id,meaning_id)) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS sensa_world_scene_meaning_owner ON sensa_world_scene_meanings(meaning_id);
@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS sensa_world_browse_grams(gram TEXT NOT NULL,document_
 CREATE INDEX IF NOT EXISTS sensa_world_browse_gram_document ON sensa_world_browse_grams(document_id,gram);
 CREATE TABLE IF NOT EXISTS sensa_world_browse_meta(id INTEGER PRIMARY KEY CHECK(id=1),version INTEGER NOT NULL);
 `;
-const version=10,tables=[...['search','grams','dependencies','meta',''].map(name=>`sensa_world_browse${name?'_'+name:''}`),'sensa_world_learning_choices','sensa_world_scene_meanings'];
+const version=14,tables=[...['search','grams','dependencies','meta',''].map(name=>`sensa_world_browse${name?'_'+name:''}`),'sensa_world_learning_choices','sensa_world_scene_meanings'];
 type Row=Record<string,any>;
 export class SqliteWorldBrowseProjection{
  private statements=new Map<string,PreparedStatement>();
@@ -81,7 +81,7 @@ export class SqliteWorldBrowseProjection{
     this.write('INSERT INTO sensa_world_browse_search(rowid,text) VALUES(?,?)',[row.id,text]);
     const characters=Array.from(text),grams=new Set(characters);for(let index=1;index<characters.length;index++)grams.add(characters[index-1]!+characters[index]!);
     for(const gram of grams)this.write('INSERT INTO sensa_world_browse_grams VALUES(?,?)',[gram,row.id]);
-    if(visible)for(const choice of choices)this.write('INSERT INTO sensa_world_learning_choices VALUES(?,?,?,?)',[choice.key,id,choice.targetLanguageTag,JSON.stringify(choice)]);
+    if(visible)for(const choice of choices)this.write('INSERT INTO sensa_world_learning_choices VALUES(?,?,?,?,?)',[choice.key,id,choice.targetLanguageTag,summary.updatedAt,JSON.stringify(choice)]);
    }else{
     // Record corruption is a visible read failure, never a fabricated empty
     // World. Missing references are tracked so an actual repair can recover.
@@ -131,10 +131,22 @@ export class SqliteWorldBrowseProjection{
  }
  learningChoices(raw:WorldLearningChoiceQuery):WorldLearningChoicePage{
   const query=validateWorldLearningChoiceQuery(raw),{join,clauses,bind}=this.selection(query);
+  const decode=(row:Row):WorldLearningChoice=>JSON.parse(row.choice_json);
+  if(query.query===''&&query.filter==='all'&&query.senseIds===undefined){
+   // Choices are maintained only for visible, verified Meaning sources. The
+   // covering index counts/orders compact keys without loading skipped JSON.
+   const total=Number(this.rows('SELECT COUNT(*) AS count FROM sensa_world_learning_choices WHERE language_tag=?',[query.targetLanguageTag])[0]!.count);
+   const items=this.rows(`WITH page AS MATERIALIZED (
+    SELECT choice_key,updated_at,meaning_id FROM sensa_world_learning_choices INDEXED BY sensa_world_learning_choice_language
+    WHERE language_tag=? ORDER BY updated_at DESC,meaning_id,choice_key LIMIT ? OFFSET ?
+   ) SELECT choice.choice_json FROM page JOIN sensa_world_learning_choices AS choice ON choice.choice_key=page.choice_key
+   ORDER BY page.updated_at DESC,page.meaning_id,page.choice_key`,[query.targetLanguageTag,query.limit,query.offset]).map(decode);
+   return {items,total};
+  }
   clauses.push('choice.language_tag=?');bind.push(query.targetLanguageTag);
   const from=`FROM sensa_world_browse AS world ${join} JOIN sensa_world_learning_choices AS choice ON choice.meaning_id=world.meaning_id WHERE ${clauses.join(' AND ')}`;
   const total=Number(this.rows(`SELECT COUNT(*) AS count ${from}`,bind)[0]!.count);
-  const items=this.rows(`SELECT choice.choice_json ${from} ORDER BY world.updated_at DESC,world.meaning_id,choice.choice_key LIMIT ? OFFSET ?`,[...bind,query.limit,query.offset]).map(row=>JSON.parse(row.choice_json));
+  const items=this.rows(`SELECT choice.choice_json ${from} ORDER BY world.updated_at DESC,world.meaning_id,choice.choice_key LIMIT ? OFFSET ?`,[...bind,query.limit,query.offset]).map(decode);
   return {items,total};
  }
  query(raw:WorldBrowseQuery):WorldBrowsePage{

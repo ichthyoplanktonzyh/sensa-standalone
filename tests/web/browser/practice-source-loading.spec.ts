@@ -24,77 +24,81 @@ test.beforeAll(async()=>{
 });
 test.afterAll(async()=>{if(server?.listening)await new Promise<void>(done=>server.close(()=>done()));});
 
-test('a saved Personal scope cannot start from a loading or unavailable Current Study fallback',async({page})=>{
+test('saved Expression material selection survives loading, read failure and retry without fallback',async({page})=>{
  await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
  await page.goto(origin);await page.waitForFunction(()=>!!window.practiceScopeFixture);
  const preference=await page.evaluate(()=>window.practiceScopeFixture.prepare());
  await page.evaluate(()=>window.practiceScopeFixture.holdAndMount());
- const availability=page.getByTestId('scope-availability');
- await expect(availability).toHaveText('loading');
- const listening=page.locator('.sensa-practice-activities').getByRole('button').first();
- await expect(page.locator('.sensa-practice-activities').getByRole('button')).toHaveCount(1);
- for(const title of ['情境口语排演','语境推义','情境书面表达'])await expect(page.getByRole('heading',{name:title,exact:true})).toHaveCount(0);
- await expect(listening).toBeDisabled();await expect(page.getByText('study-only',{exact:true})).toHaveCount(0);
+ const listening=page.locator('.sensa-practice-activities').getByRole('button');
+ await expect(listening).toBeDisabled();
  expect(await page.evaluate(()=>window.practiceScopeFixture.preference())).toEqual(preference);
- expect(await page.evaluate(()=>window.practiceScopeFixture.snapshot())).toBeNull();
- await page.evaluate(()=>window.practiceScopeFixture.releaseRead());
- await expect(availability).toHaveText('ready');await expect(listening).toBeEnabled();
- await listening.click();const session=await page.evaluate(()=>window.practiceScopeFixture.snapshot());
- expect(session?.sourceId).toBe(preference.sourceId);expect(session?.targets.map(target=>target.expression.surfaceForm)).toEqual(['borrow']);
- await page.evaluate(()=>window.practiceScopeFixture.breakVersion());
- await expect(availability).toHaveText('unavailable');await expect(listening).toBeDisabled();
- await expect(page.getByRole('alert')).toBeVisible();
+ expect(await page.evaluate(()=>window.practiceScopeFixture.currentExpression())).toBeNull();
+ await page.evaluate(()=>window.practiceScopeFixture.releaseRead());await expect(listening).toBeEnabled();
+ await page.evaluate(()=>window.practiceScopeFixture.breakExpression());
+ await expect(page.getByRole('alert')).toBeVisible();await expect(listening).toBeDisabled();
  expect(await page.evaluate(()=>window.practiceScopeFixture.preference())).toEqual(preference);
- expect(await page.evaluate(()=>window.practiceScopeFixture.snapshot())).toEqual(session);
- // Retry while still broken must stay unavailable, not launch the fallback.
- await page.getByRole('button',{name:'重试',exact:true}).click();
- await expect(availability).toHaveText('unavailable');await expect(listening).toBeDisabled();
- await page.evaluate(()=>window.practiceScopeFixture.repairVersion());
- // A real storage notification may recover before a manual retry is needed.
- await expect(availability).toHaveText('ready');await expect(listening).toBeEnabled();
+ await page.getByRole('button',{name:'重试',exact:true}).click();await expect(listening).toBeDisabled();
+ await page.evaluate(()=>window.practiceScopeFixture.repairExpression());await expect(listening).toBeEnabled();
+ expect(await page.evaluate(()=>window.practiceScopeFixture.preference())).toEqual(preference);
+ expect(await page.evaluate(()=>window.practiceScopeFixture.learningReadCount())).toBe(0);
+ await page.evaluate(()=>window.practiceScopeFixture.dispose());
+});
+
+test('Expression listening is independent of formal Learning reads and Sense details',async({page})=>{
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.waitForFunction(()=>!!window.practiceScopeFixture);
+ await page.evaluate(async()=>{await window.practiceScopeFixture.prepare();window.practiceScopeFixture.breakLearning();await window.practiceScopeFixture.breakSense();window.practiceScopeFixture.mount();});
+ const listening=page.locator('.sensa-practice-activities').getByRole('button');
+ await expect(listening).toBeEnabled();await expect(page.getByText('1 个表达',{exact:true})).toBeVisible();
+ await listening.click();await expect(page.getByRole('button',{name:'选择表达 · borrow',exact:true})).toBeVisible();
+ const current=await page.evaluate(()=>window.practiceScopeFixture.currentExpression());
+ expect(current).toEqual({id:await page.evaluate(()=>window.practiceScopeFixture.expressionId()),source:'personal',languageTag:'en'});
+ expect(await page.evaluate(()=>window.practiceScopeFixture.learningReadCount())).toBe(0);
+ await page.evaluate(()=>window.practiceScopeFixture.dispose());
+});
+
+test('a target-language change cannot start the previous English material while the new read is pending',async({page})=>{
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.waitForFunction(()=>!!window.practiceScopeFixture);
+ const preference=await page.evaluate(()=>window.practiceScopeFixture.prepare());await page.evaluate(()=>window.practiceScopeFixture.mount());
+ const listening=page.locator('.sensa-practice-activities').getByRole('button');await expect(listening).toBeEnabled();
+ await page.evaluate(()=>window.practiceScopeFixture.changeLanguageWhileHoldingRead());
+ await expect.poll(()=>page.evaluate(()=>window.practiceScopeFixture.readIsHeld())).toBe(true);await expect(listening).toBeDisabled();
+ expect(await page.evaluate(()=>window.practiceScopeFixture.preference())).toEqual(preference);
+ expect(await page.evaluate(()=>window.practiceScopeFixture.currentExpression())).toBeNull();
+ await page.evaluate(()=>window.practiceScopeFixture.releaseMaterialRead());await expect(page.getByText('当前没有可练内容',{exact:true})).toBeVisible();await expect(listening).toBeDisabled();
  expect(await page.evaluate(()=>window.practiceScopeFixture.preference())).toEqual(preference);
  await page.evaluate(()=>window.practiceScopeFixture.dispose());
 });
 
-test('initial Learning workspace failure exposes retry and cannot leave Personal practice permanently loading',async({page})=>{
+test('a failed downloaded-content read does not block selected Personal material or switching back to it',async({page})=>{
  await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
  await page.goto(origin);await page.waitForFunction(()=>!!window.practiceScopeFixture);
  const preference=await page.evaluate(()=>window.practiceScopeFixture.prepare());
- await page.evaluate(()=>window.practiceScopeFixture.breakLearningAndMount());
- const availability=page.getByTestId('scope-availability'),listening=page.locator('.sensa-practice-activities').getByRole('button').first();
- await expect(availability).toHaveText('unavailable');await expect(listening).toBeDisabled();
- await expect(page.getByRole('alert')).toBeVisible();
- expect(await page.evaluate(()=>window.practiceScopeFixture.preference())).toEqual(preference);
- expect(await page.evaluate(()=>window.practiceScopeFixture.snapshot())).toBeNull();
- await page.evaluate(()=>window.practiceScopeFixture.repairLearning());
- await page.getByRole('button',{name:'重试',exact:true}).click();
- await expect(availability).toHaveText('ready');await expect(listening).toBeEnabled();
- await listening.click();expect((await page.evaluate(()=>window.practiceScopeFixture.snapshot()))?.sourceId).toBe(preference.sourceId);
- expect(await page.evaluate(()=>window.practiceScopeFixture.preference())).toEqual(preference);
+ await page.evaluate(()=>{window.practiceScopeFixture.breakBooks();window.practiceScopeFixture.mount();});
+ const listening=page.locator('.sensa-practice-activities').getByRole('button');await expect(listening).toBeEnabled();
+ await page.getByRole('button',{name:/练习材料/u}).click();const chooser=page.locator('#s-practice-scope');
+ await chooser.getByRole('button',{name:'已下载内容',exact:true}).click();await expect(chooser.getByRole('alert')).toBeVisible();
+ await expect(chooser.locator('footer').getByRole('button')).toBeDisabled();
+ await chooser.getByRole('button',{name:'我的语义世界',exact:true}).click();await expect(chooser.getByRole('alert')).toHaveCount(0);
+ await expect(chooser.getByRole('button',{name:'使用 1 个表达',exact:true})).toBeEnabled();await chooser.getByRole('button',{name:'使用 1 个表达',exact:true}).click();
+ await expect(listening).toBeEnabled();expect(await page.evaluate(()=>window.practiceScopeFixture.preference())).toEqual(preference);
+ expect(await page.evaluate(()=>window.practiceScopeFixture.learningReadCount())).toBe(0);
  await page.evaluate(()=>window.practiceScopeFixture.dispose());
 });
 
-test('a Route revision is not ready with the preceding workspace even before reload effects finish',async({page})=>{
+test('changing language during the one-expression start read retires its old-language result',async({page})=>{
  await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
  await page.goto(origin);await page.waitForFunction(()=>!!window.practiceScopeFixture);
- const preference=await page.evaluate(()=>window.practiceScopeFixture.prepare());
- await page.evaluate(()=>window.practiceScopeFixture.mountLearning());
- const availability=page.getByTestId('scope-availability'),listening=page.locator('.sensa-practice-activities').getByRole('button').first();
- await expect(availability).toHaveText('ready');await expect(listening).toBeEnabled();
- const route=await page.evaluate(()=>window.practiceScopeFixture.changeRouteWhileHoldingRead());
+ await page.evaluate(async()=>{await window.practiceScopeFixture.prepare();window.practiceScopeFixture.mount();});
+ const listening=page.locator('.sensa-practice-activities').getByRole('button');await expect(listening).toBeEnabled();
+ await page.evaluate(()=>window.practiceScopeFixture.holdStartRead());await listening.click();
  await expect.poll(()=>page.evaluate(()=>window.practiceScopeFixture.readIsHeld())).toBe(true);
- console.log('Route transition read failure diagnostics:',JSON.stringify(await page.evaluate(()=>window.practiceScopeFixture.observedLearningFailures())));
- await expect(availability).toHaveText('loading').catch(async error=>{
-  console.log('Failed route load diagnostics:',JSON.stringify(await page.evaluate(()=>window.practiceScopeFixture.observedLearningFailures())));throw error;
- });await expect(listening).toBeDisabled();
- const frames=await page.evaluate(()=>window.practiceScopeFixture.observedRouteFrames());
- console.log('Route-bound scope readiness frames:',JSON.stringify(frames));
- console.log('Route-bound learning diagnostics:',JSON.stringify(await page.evaluate(()=>window.practiceScopeFixture.observedLearningFailures())));
- expect(frames.filter(frame=>frame.revision===route.revision)).not.toHaveLength(0);
- expect(frames.filter(frame=>frame.revision===route.revision).every(frame=>frame.status==='loading')).toBe(true);
- expect(await page.evaluate(()=>window.practiceScopeFixture.snapshot())).toBeNull();
- expect(await page.evaluate(()=>window.practiceScopeFixture.preference())).toEqual(preference);
- await page.evaluate(()=>window.practiceScopeFixture.releaseWorkspaceRead());
- await expect(availability).toHaveText('ready');await expect(listening).toBeEnabled();
+ expect(await page.evaluate(()=>window.practiceScopeFixture.capturedStartQuery())).toMatchObject({limit:1,selectedIds:[await page.evaluate(()=>window.practiceScopeFixture.expressionId())]});
+ await page.evaluate(()=>window.practiceScopeFixture.changeLanguage());await expect(listening).toBeDisabled();
+ await page.evaluate(()=>window.practiceScopeFixture.releaseMaterialRead());
+ await expect(page.locator('#s-real-world-listening')).toHaveCount(0);
+ await expect(page.getByText('当前没有可练内容',{exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>window.practiceScopeFixture.currentExpression())).toBeNull();
  await page.evaluate(()=>window.practiceScopeFixture.dispose());
 });

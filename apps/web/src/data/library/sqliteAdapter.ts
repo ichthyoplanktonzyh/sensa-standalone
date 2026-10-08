@@ -14,11 +14,13 @@ import type {
   SqliteWorkerResult,
 } from "./sqliteProtocol";
 import type {PackageCacheProjectionQuery,PackageCacheProjectionResult} from './packageCacheProjection';
+import type {PracticeExpressionQuery,PracticeExpressionPage} from './practiceExpressionProjection';
 import type {RuntimeLearningCandidateQuery,RuntimeLearningCandidates} from './runtimeLearningCandidates';
 import type {LearningManagementSummaryQuery,LearningManagementStorageSummary} from './runtimeLearningCandidates';
 import type {LearningHistoryRequest} from '../../learning/system/learningHistoryModel';
 import type {StoredLearningHistoryPage} from './learningHistoryProjection';
 import {CoordinatedSqliteAdapter,type CoordinatedSqliteBackend} from './sqliteCoordinator';
+import {localLibraryNamespace,assertLocalLibrarySelected,observeLocalLibrarySelection,type LocalLibraryNamespace} from './localLibraryLocation';
 
 export interface SqliteRecordAdapter {
   learningSemanticMemory(targetId?:string):Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>;
@@ -32,6 +34,7 @@ export interface SqliteRecordAdapter {
   worldSceneMeaning(sceneId:string):Promise<string|null>;
   registrySelection(query:import('./sqliteProtocol').RegistrySelectionQuery):Promise<import('./sqliteProtocol').RegistrySelection>;
   worldLearningChoices(query:WorldLearningChoiceQuery):Promise<WorldLearningChoicePage>;
+  practiceExpressions(query:PracticeExpressionQuery):Promise<PracticeExpressionPage>;
   existingJourneyIdentities(ids:readonly string[]):Promise<string[]>;
   changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]>;
   hasChangesSince(contentRevision:number,tables:readonly SqliteLibraryTable[]):Promise<boolean>;
@@ -69,7 +72,7 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
   private terminated=false;
   private workerError:Error|undefined;
 
-  constructor() {
+  constructor(private readonly namespace:LocalLibraryNamespace) {
     this.worker.addEventListener("message", (event: MessageEvent<SqliteWorkerResult>) => {
       const waiting = this.pending.get(event.data.id);
       if (!waiting) return;
@@ -86,7 +89,7 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
   }
 
   initialize(): Promise<SqliteStorageDiagnostics> {
-    return this.send({ kind: "initialize" }) as Promise<SqliteStorageDiagnostics>;
+    return this.send({ kind: "initialize",namespace:this.namespace }) as Promise<SqliteStorageDiagnostics>;
   }
 
   get(table: SqliteLibraryTable, key: string): Promise<string | null> {
@@ -116,6 +119,7 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
   worldSceneMeaning(sceneId:string):Promise<string|null>{return this.send({kind:'worldSceneMeaning',sceneId}) as Promise<string|null>;}
   registrySelection(query:import('./sqliteProtocol').RegistrySelectionQuery):Promise<import('./sqliteProtocol').RegistrySelection>{return this.send({kind:'registrySelection',query}) as Promise<import('./sqliteProtocol').RegistrySelection>;}
   worldLearningChoices(query:WorldLearningChoiceQuery):Promise<WorldLearningChoicePage>{return this.send({kind:'worldLearningChoices',query}) as Promise<WorldLearningChoicePage>;}
+  practiceExpressions(query:PracticeExpressionQuery):Promise<PracticeExpressionPage>{return this.send({kind:'practiceExpressions',query}) as Promise<PracticeExpressionPage>;}
   existingJourneyIdentities(ids:readonly string[]):Promise<string[]>{return this.send({kind:'existingJourneyIdentities',ids:[...ids]}) as Promise<string[]>;}
 
   hasChangesSince(contentRevision:number,tables:readonly SqliteLibraryTable[]):Promise<boolean>{
@@ -238,10 +242,14 @@ function assertBrowserSqliteAvailable(): void {
 }
 
 let adapter: Promise<SqliteRecordAdapter> | undefined;
+let activeBrowserAdapter:CoordinatedSqliteAdapter|undefined;
+export async function closeLocalLibraryStorage():Promise<void>{await activeBrowserAdapter?.close();}
 
 async function browserAdapter(): Promise<SqliteRecordAdapter> {
   assertBrowserSqliteAvailable();
-  const coordinated = new CoordinatedSqliteAdapter(() => new WorkerSqliteAdapter());
+  const namespace=localLibraryNamespace();
+  const coordinated = activeBrowserAdapter = new CoordinatedSqliteAdapter(()=>new WorkerSqliteAdapter(namespace),namespace,()=>assertLocalLibrarySelected(namespace));
+  observeLocalLibrarySelection(namespace,()=>{void coordinated.close().catch(()=>{});});
   try {
     await coordinated.initialize();
     // Capability checks alone cannot prove that this origin can durably write.

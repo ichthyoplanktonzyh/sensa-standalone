@@ -31,7 +31,7 @@ _Avoid_: Content Distribution when referring to the whole system
 
 **Local-first Platform（本地优先平台）**:
 The supporting capability on which learner-owned systems commit and operate locally
-before optional account synchronization. It supplies persistence, recovery, sync,
+before optional account synchronization. It supplies persistence, explicit recovery, sync,
 identity, media and online adapters without owning semantic or learning decisions.
 
 **Intake Layer（摄取入口层）**:
@@ -937,16 +937,23 @@ every activity has one primary Area even when it crosses multiple channels.
 **Practice Brief**:
 The learner's local direction for Free Practice: an intent or communicative goal,
 a scenario, optional scope and support level. It guides a Session without becoming
-a curriculum objective, graduation criterion or assessment contract.
+a curriculum objective, graduation criterion or assessment contract; an activity
+that only needs an Expression does not require a Brief.
+
+**Practice Material**:
+Learner-selected language content used by a particular practice activity, independent
+of formal learning enrollment. Its required facts are defined by that activity;
+Expression-form listening needs the expression text and its language, not a complete Meaning or Learning Target.
 
 **Free Practice Session**:
-A learner-initiated activity that pins one Practice Brief, primary Practice Area,
-Activity Definition and Practice Scope. It is separate from Learning Session and
-does not settle formal Acquisition or Review.
+A learner-initiated use of selected Practice Material through one available Activity
+Definition. It is separate from Learning Session and does not settle formal Acquisition or Review.
 
 **Practice Scope**:
-The resolved set of typed Context, Expression, Sense, binding or Learning Target
-references selected for one Free Practice Session, with source provenance.
+The learner's selected material references for Free Practice, with source provenance
+where needed; it is not a copy of the complete source aggregates or formal learning inventory.
+Selecting a whole source includes its currently available expressions; an explicit
+subset retains material identities. Neither choice changes the expression already playing.
 
 **Practice Activity Definition**:
 A versioned Free Practice interaction contract with one primary Area, explicit

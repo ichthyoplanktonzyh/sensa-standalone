@@ -6,9 +6,7 @@ import {test} from 'vitest';
  */
 import assert from 'node:assert/strict';
 import {advanceInterleavedLearningRetries,resolveLearningQueue,selectInterleavedLearningTarget} from '../../../apps/web/src/learning/system/learningPlanning.ts';
-import {resolvePracticeScopeCatalog, CURRENT_STUDY_SCOPE_ID, PERSONAL_SEMANTIC_WORLD_SCOPE_ID,type PracticeStudyTarget} from '../../../apps/web/src/experience/practiceScope.ts';
 import type { LocalLearningTarget } from '../../../apps/web/src/data/library/learning.ts';
-import type {PersonalMeaningLearningSource} from '../../../apps/web/src/contentSupply/provisioning/contracts.ts';
 
 test("action-language", async () => {
 
@@ -77,29 +75,5 @@ assert.equal(selectInterleavedLearningTarget({due:[retryA,retryB],initialReady:[
 retries=advanceInterleavedLearningRetries(retries,'retry-a',false);
 assert.equal(selectInterleavedLearningTarget({due:[retryB],initialReady:[newD],currentRunTargetIds:['retry-a'],retries})?.id,'retry-b','multiple misses interleave instead of collecting at the tail');
 
-// Free Practice offers the expressions of the language being learned now.
-const meaning=(id:string,languageTag:string):PersonalMeaningLearningSource=>({
-  sourceKind:'personal_meaning_alignment',
-  reference:{personalMeaningId:id,personalMeaningRevisionId:'meaning-revision-'+id,personalMeaningAlignmentId:'alignment-'+id,alignmentRevision:1,alignmentBasisReferenceId:'basis-'+id,meaningFocusId:null,senseId:'sense-'+id,senseVersionId:'sense-version-'+id,bindingId:'binding-id-'+id,bindingVersionId:'binding-'+id},
-  targetLanguageTag:languageTag,
-  context:{text:'',images:[],personalSemanticAnchorRevisionIds:[]},
-  expression:{expressionType:'word',surfaceForm:'expression-'+id,languageTag},
-  semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1',coreMeaningFocus:'sense '+id,prototypeScenes:[{summary:'scene '+id,participantRoles:[],states:[],directionOrCausality:null}],includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[]},
-});
-const personalMeaningSources=[meaning('es-1','es'),meaning('en-1','en')];
-const personalOnly={sourceId:PERSONAL_SEMANTIC_WORLD_SCOPE_ID,targetIds:['personal:alignment-es-1:binding-es-1','personal:alignment-en-1:binding-en-1']} as never;
-const spanishScope=resolvePracticeScopeCatalog({selection:personalOnly,personalMeaningSources,studyTargets:[],studyTitle:'Current learning',activeLanguageTag:'es'});
-assert.deepEqual(spanishScope.currentScope.targets.map(t=>t.expression.languageTag),['es'],'practice offers the language being learned now');
-assert.deepEqual(spanishScope.selection,{sourceId:PERSONAL_SEMANTIC_WORLD_SCOPE_ID,targetIds:['personal:alignment-es-1:binding-es-1']},'a selection that survives the language only keeps its own language');
-const englishScope=resolvePracticeScopeCatalog({selection:personalOnly,personalMeaningSources,studyTargets:[],studyTitle:'Current learning',activeLanguageTag:'en'});
-assert.deepEqual(englishScope.currentScope.targets.map(t=>t.expression.languageTag),['en']);
-// The formal Learning Target projection follows the same active Route filter;
-// it never falls back to a shipped catalogue.
-const practiceStudyTarget:PracticeStudyTarget={target:{targetId:'learning-en',curriculumMembershipId:'membership-en',identity:{senseId:'sense-en',senseVersionId:'sense-version-en',bindingId:'binding-en',bindingVersionId:'binding-version-en'},presentation:{expression:'borrow',targetLanguageTag:'en'},material:{snapshot:{learningMaterializationId:'material-en',validationStatus:'validated'},content:{resources:[]}}}} as never;
-const studyFor=(tag:string)=>resolvePracticeScopeCatalog({selection:{sourceId:CURRENT_STUDY_SCOPE_ID},personalMeaningSources:[],activeLanguageTag:tag,studyTargets:[practiceStudyTarget],studyTitle:'Current learning'});
-assert.equal(studyFor('en').currentScope.targets.length,1,'an English learner keeps the real English Learning Target');
-assert.equal(studyFor('es').currentScope.targets.length,0,'another language is not offered that English Learning Target');
-
-console.log('PASS: the queue and Study Plan allowance follow the active Language Route, while Free Practice follows its Target Language and shared Target progress is preserved.');
-
+console.log('PASS: the queue and Study Plan allowance follow the active Language Route, while shared Target progress is preserved.');
 });
