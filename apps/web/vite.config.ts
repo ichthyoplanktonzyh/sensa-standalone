@@ -85,7 +85,7 @@ export default defineConfig(({ mode,command,isPreview }) => {
     publicDir: "public",
     plugins: [sqliteSahPoolInitPreserver(),react(), tailwindcss(),localAgentAssets(),offlineShell()],
     optimizeDeps:{exclude:['@sqlite.org/sqlite-wasm']},
-    worker:{plugins:()=>[sqliteSahPoolInitPreserver(true)]},
+    worker:{format:'es',plugins:()=>[sqliteSahPoolInitPreserver(true)]},
     server: {
       host: "127.0.0.1",
       port: Number(env.VITE_WEB_PORT ?? 3000),

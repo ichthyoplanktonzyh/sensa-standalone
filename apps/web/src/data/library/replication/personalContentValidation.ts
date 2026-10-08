@@ -5,7 +5,7 @@ import type {PersonalContentRecord} from '../../../personalContent/system/person
 import type {Table} from '../store';
 
 /** Validate Personal Content and its references into Semantic/Learning facts. */
-export function validatePersonalContentReplica(input:{rows:LibraryRecordRows;requireRow:(table:Table,id:string)=>any;fail:()=>never}){
+export function* validatePersonalContentReplicaSteps(input:{rows:LibraryRecordRows;requireRow:(table:Table,id:string)=>any;fail:()=>never}){
  const {rows,requireRow,fail}=input,uuid=z.string().uuid();
  for(const {key,value:annotation} of rows.annotations as Iterable<{key:string;value:PersonalContentRecord}>){
   if(!annotation||annotation.id!==key||!['sense_note','saved_sense','saved_example','sense_context','learning_scene'].includes(annotation.kind))fail();
@@ -29,5 +29,6 @@ export function validatePersonalContentReplica(input:{rows:LibraryRecordRows;req
    if((annotation.acceptedRevisionId===null)!==(annotation.acceptedPersonalMeaningId===null)||annotation.acceptedRevisionId!==null&&!annotation.revisions.some(revision=>revision.revisionId===annotation.acceptedRevisionId))fail();
    if(annotation.acceptedPersonalMeaningId!==null)uuid.parse(annotation.acceptedPersonalMeaningId);
   }
+  yield;
  }
 }

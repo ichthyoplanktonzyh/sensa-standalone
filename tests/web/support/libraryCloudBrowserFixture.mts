@@ -97,6 +97,7 @@ export async function createLibraryCloudBrowserFixture(providedBrowser?: Browser
 
   const built = await viteBuild({
     configFile: false,
+    worker: {format:'es'},
     root: process.cwd(),
     logLevel: 'silent',
     base: '/',

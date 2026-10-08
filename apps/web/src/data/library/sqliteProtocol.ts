@@ -5,6 +5,7 @@ import type {StoredLearningRecord} from './learningHistoryProjection';
 import type {RuntimeLearningCandidateQuery} from './runtimeLearningCandidates';
 import type {LearningManagementSummaryQuery} from './runtimeLearningCandidates';
 import type {LearningHistoryRequest} from '../../learning/system/learningHistoryModel';
+import type {ReplicaCandidateRequest} from './replicaCandidateProtocol';
 export type {StoredLearningRecord} from './learningHistoryProjection';
 import type {PackageCacheProjectionQuery} from './packageCacheProjection';
 import {sqlitePackageCacheProjectionSchema} from './packageCacheProjection';
@@ -26,7 +27,7 @@ export const sqlitePoolDirectory = "/sensa-local-library-v12";
 export const sqliteLibraryBaselineVersion = 10;
 export const sqliteLibrarySchemaVersion = 16;
 /** Cross-tab RPC changes must bump this before adding or changing messages. */
-export const sqliteCoordinatorProtocolVersion = 47;
+export const sqliteCoordinatorProtocolVersion = 48;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -129,6 +130,7 @@ export type SqliteWorkerRequest =
   | { id: number; kind: "portableMedia"; sha256: string }
   | { id: number; kind: "portableMediaDiagnostics" }
   | { id: number; kind: "commit"; mutation: SqliteMutation }
+  | {id:number;kind:'replicaCandidate';request:ReplicaCandidateRequest}
   | { id: number; kind: "diagnostics";verifyIntegrity?:boolean };
 
 export type SqliteWorkerInput = Exclude<SqliteWorkerRequest,{id:number;kind:'close'}> extends infer Request

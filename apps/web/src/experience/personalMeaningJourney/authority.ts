@@ -390,17 +390,17 @@ function* checkedWorldRecords(reader:SemanticWorldRecordReader,table:SemanticWor
  * JourneyState or retaining Meaning/Registry/Inbox/receipt bodies. Only compact
  * uniqueness and scene-owner metadata survives each row. Restore also checks
  * lifecycle and correction witnesses in both directions. */
-export function assertPersonalSemanticWorldRecords(reader:SemanticWorldRecordReader):void{
+export function* assertPersonalSemanticWorldRecordSteps(reader:SemanticWorldRecordReader):Generator<void,void>{
  const root=record(reader.get('semanticState','root'));
  if(!root){
   for(const table of semanticWorldRecordTables){
    const iterator=reader.entries(table)[Symbol.iterator]();
-   try{requireInvariant(iterator.next().done,'Personal Semantic World 缺少版本记录。');}finally{iterator.return?.();}
+   try{requireInvariant(iterator.next().done,'Personal Semantic World 缺少版本记录。');}finally{iterator.return?.();}yield;
   }
   return;
  }
  requireInvariant(root.version===JOURNEY_STORE_VERSION,'Personal Semantic World store version 不匹配。');
- for(const _row of checkedWorldRecords(reader,'semanticState')){ /* validate all stored keys, not just root */ }
+ for(const _row of checkedWorldRecords(reader,'semanticState'))yield;
  // One aggregate may reference the same immutable version several times.
  // Reuse those point reads only within this row, never across a World refresh.
  const references=new Map<string,Fact|undefined>();
@@ -422,6 +422,7 @@ export function assertPersonalSemanticWorldRecords(reader:SemanticWorldRecordRea
   const parent=kind==='senseVersions'?'senseId':kind==='expressionVersions'?'expressionId':kind==='bindingVersions'?'senseExpressionBindingId':null;
   if(parent){const slot=JSON.stringify([kind,fact![parent],fact!.versionNumber]);requireInvariant(!slots.has(slot),'Semantic Registry version 槽重复。');slots.add(slot);}
   validateRegistryReference(kind,fact!,registry);
+  yield;
  }
  const owners=new Map<string,string>(),readReceipt=(id:string)=>reader.get('semanticReceipts',id) as CommandReceipt|undefined;
  for(const {key,value} of checkedWorldRecords(reader,'semanticMeanings')){
@@ -430,16 +431,19 @@ export function assertPersonalSemanticWorldRecords(reader:SemanticWorldRecordRea
   requireInvariant(key===meaning.personalMeaning.personalMeaningId,'Personal Meaning identity 与 storage key 不一致。');assertSceneOwner(meaning,owners);
   for(const stamp of meaning.personalMeaningRevisions)assertMeaningLifecycleReceipt(key,stamp,{get:readReceipt});
   assertMeaningCorrectionReceiptFacts(meaning,readReceipt);
+  yield;
  }
  references.clear();
  for(const {key,value} of checkedWorldRecords(reader,'semanticInbox')){
   const item=value as JourneyState['inboxItems'][number];parse(sensaIntakeItemSchema,item,'Intake Item');
   requireInvariant(key===item.intakeId,'Inbox identity 与 storage key 不一致。');
+  yield;
  }
  for(const {key,value} of checkedWorldRecords(reader,'semanticDrafts')){
   const draft=value as JourneyState['clarificationDrafts'][number];
   requireInvariant(key===draft?.intakeId,'Clarification Draft identity 与 storage key 不一致。');
   validateClarificationDraft(draft,id=>reader.get('semanticInbox',id)!==undefined);
+  yield;
  }
  for(const {key,value} of checkedWorldRecords(reader,'semanticReceipts')){
   const receipt=value as CommandReceipt;validateReceipt(receipt);
@@ -448,7 +452,12 @@ export function assertPersonalSemanticWorldRecords(reader:SemanticWorldRecordRea
    const id=receipt.result.personalMeaningId,meaning=typeof id==='string'?reader.get('semanticMeanings',id) as MeaningJourneyRecord|undefined:undefined;
    assertMeaningLifecycleOperationReceipt(meaning,receipt);assertMeaningCorrectionOperationReceipt(meaning,receipt);
   }
+  yield;
  }
+}
+
+export function assertPersonalSemanticWorldRecords(reader:SemanticWorldRecordReader):void{
+ runSynchronously(assertPersonalSemanticWorldRecordSteps(reader));
 }
 
 /** Validate every Personal Semantic World fact and internal reference. */

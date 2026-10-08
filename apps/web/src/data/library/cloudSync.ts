@@ -14,7 +14,7 @@ import {
  type LibraryReplicaEntry,
 } from './replication/libraryReplica';
 import {applyLibraryReplicaMutation} from './replication/libraryReplicaApplication';
-import {validateLibraryReplica,libraryReplicaValidationVersion} from './replication/libraryReplicaValidation';
+import {validateLibraryReplicaCooperatively,libraryReplicaValidationVersion,type ValidatedLibraryReplica} from './replication/libraryReplicaValidation';
 export type SyncRequest=(path:string,body?:unknown)=>Promise<any>;
 export type CloudSyncEntry=LibraryReplicaEntry;
 type Entry=CloudSyncEntry;
@@ -165,7 +165,7 @@ export async function resolveCloudSyncConflicts(choice:CloudSyncConflictChoice){
 async function saveState(expected:{owner:Owner;incarnation:string},work:(old:State|undefined)=>State,base?:Entry[]){
  await writeLibraryState(async tx=>{const owner=await tx.get<Owner>('meta','service-owner');if(!owner||!sameOwner(owner,expected.owner)||await tx.get('meta','signed-out')||(await assertCurrentLibrary(tx))!==expected.incarnation)throw new Error('account_changed');tx.put('meta',STATE,work(await tx.get<State>('meta',STATE)));if(base!==undefined)tx.replaceSyncBase(base);});
 }
-async function applyEntries(expected:Awaited<ReturnType<typeof capture>>,entries:Entry[],rows:ReturnType<typeof validateLibraryReplica>,state:State,base:Entry[]){
+async function applyEntries(expected:Awaited<ReturnType<typeof capture>>,entries:Entry[],rows:ValidatedLibraryReplica,state:State,base:Entry[]){
  const changesContent=!entriesEqual(expected.entries,entries);
  // One SQLite commit makes facts and their corresponding baseline visible
  // together. An unchanged candidate remains bookkeeping, not a learner edit.
@@ -262,7 +262,7 @@ class Blocks{
     for(const id of new Set(row.blocks)){const count=remaining.get(id)!-1;if(count)remaining.set(id,count);else{remaining.delete(id);this.forget(id);}}
    }
   }
-  entries.sort((a,b)=>entryId(a).localeCompare(entryId(b)));const {identity}=validateLibraryReplica(entries);if(identity.id!==manifest.libraryId||identity.learnerId!==manifest.learnerId)throw new Error('library_sync_identity');return entries;
+  entries.sort((a,b)=>entryId(a).localeCompare(entryId(b)));const {identity}=await validateLibraryReplicaCooperatively(entries);if(identity.id!==manifest.libraryId||identity.learnerId!==manifest.learnerId)throw new Error('library_sync_identity');return entries;
  }
 }
 async function downloadStableHead(blocks:Blocks,request:SyncRequest,base:Entry[],confirmedRevision?:number,observedHead?:LibrarySyncHead){
@@ -358,7 +358,7 @@ export async function synchronizeLibrary(request:SyncRequest,options:{publishEmp
   // account. Confirm that state without publishing device bootstrap metadata.
   // The first learner-content write will still become pending and publish v6.
   if(head.manifest===null&&empty(initial.entries)&&!options.publishEmptyIdentity){
-   validateLibraryReplica(initial.entries);
+   await validateLibraryReplicaCooperatively(initial.entries);
    const completedAt=new Date().toISOString();
    await saveState(expected,old=>({...old!,checkpointVersion:6,validationVersion:libraryReplicaValidationVersion,revision:head.revision,storage:head.storage,status:'synced',syncedLocalRevision:initial.localRevision,pending:undefined,conflicts:undefined,conflict:undefined,resolution:undefined,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined}),[]);
    return;
@@ -380,10 +380,10 @@ export async function synchronizeLibrary(request:SyncRequest,options:{publishEmp
   // the local Package/media cache. Validation must therefore use the same
   // cache-independent authority path on both the publishing and restoring
   // device; admitted Runtime bytes were already checked at local write time.
-  let localRows:ReturnType<typeof validateLibraryReplica>;
+  let localRows:ValidatedLibraryReplica;
   try{
-   localRows=validateLibraryReplica(localEntries);
-   if(!entriesEqual(localEntries,uploadEntries))validateLibraryReplica(uploadEntries);
+   localRows=await validateLibraryReplicaCooperatively(localEntries);
+   if(!entriesEqual(localEntries,uploadEntries))await validateLibraryReplicaCooperatively(uploadEntries);
   }catch(error){
    if(activeConflicts.length){await saveState(expected,old=>({...old!,status:'conflict',conflicts:activeConflicts,conflict,resolution:undefined,error:'library_sync_conflict'}));return;}throw error;
   }

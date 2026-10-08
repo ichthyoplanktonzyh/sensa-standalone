@@ -36,6 +36,7 @@ const retryableOwnerReads=new Set<SqliteWorkerInput['kind']>([
 ]);
 
 export interface CoordinatedSqliteBackend {
+  replicaCandidate?(request:import('./replicaCandidateProtocol').ReplicaCandidateRequest):Promise<import('./replicaCandidateProtocol').ReplicaCandidateResponse>;
   learningSemanticMemory(targetId?:string):Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>;
   existingRecordKeys(table:SqliteLibraryTable,keys:readonly string[]):Promise<string[]>;
   packageCacheProjection<Query extends PackageCacheProjectionQuery>(query:Query):Promise<PackageCacheProjectionResult<Query>>;
@@ -138,6 +139,8 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
   get(table: SqliteLibraryTable, key: string): Promise<string | null> {
     return this.call({ kind: 'get', table, key }) as Promise<string | null>;
   }
+
+  replicaCandidate(request:import('./replicaCandidateProtocol').ReplicaCandidateRequest):Promise<import('./replicaCandidateProtocol').ReplicaCandidateResponse>{return this.call({kind:'replicaCandidate',request}) as Promise<import('./replicaCandidateProtocol').ReplicaCandidateResponse>;}
 
   entries(table: SqliteLibraryTable): Promise<Array<{ key: string; encodedValue: string }>> {
     return this.call({ kind: 'entries', table }) as Promise<Array<{ key: string; encodedValue: string }>>;
@@ -634,6 +637,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       case 'portableMedia': return backend.portableMedia(input.sha256);
       case 'portableMediaDiagnostics': return backend.portableMediaDiagnostics();
       case 'commit': return backend.commit(input.mutation);
+      case 'replicaCandidate':return backend.replicaCandidate?.(input.request)??Promise.reject(Error('sqlite_replica_candidate_unavailable'));
       case 'diagnostics': return backend.diagnostics({verifyIntegrity:input.verifyIntegrity});
     }
   }

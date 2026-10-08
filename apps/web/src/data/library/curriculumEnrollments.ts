@@ -69,13 +69,17 @@ export const enrollmentMatchesContext=(
  &&enrollment.languageContext.supportLanguageTag===context.supportLanguageTag;
 
 /** One active Book per Route; maintenance/paused sources retain their facts. */
-export function assertOneActiveBook(enrollments:readonly LocalCurriculumEnrollment[]):void{
+export function* assertOneActiveBookSteps(enrollments:Iterable<LocalCurriculumEnrollment>):Generator<void,void>{
  const routes=new Set<string>();
- for(const enrollment of enrollments)if(enrollment.status==='active'&&enrollment.source.kind==='published_book'&&(enrollment.bookPlan?.mode??'active')==='active'){
-  if(routes.has(enrollment.languageContext.languageRouteId))throw new Error('localFlow.resourceInvalid');
-  routes.add(enrollment.languageContext.languageRouteId);
+ for(const enrollment of enrollments){
+  if(enrollment.status==='active'&&enrollment.source.kind==='published_book'&&(enrollment.bookPlan?.mode??'active')==='active'){
+   if(routes.has(enrollment.languageContext.languageRouteId))throw new Error('localFlow.resourceInvalid');
+   routes.add(enrollment.languageContext.languageRouteId);
+  }
+  yield;
  }
 }
+export function assertOneActiveBook(enrollments:Iterable<LocalCurriculumEnrollment>):void{for(const _step of assertOneActiveBookSteps(enrollments)){/* synchronous live admission */}}
 
 /** Public bytes are recoverable cache; the accepted source remains a learner fact. */
 export function assertDirectEnrollmentSource(selection:DirectLearningSource,read:Parameters<typeof resolveDirectLearningSourceSnapshot>[0]):void{

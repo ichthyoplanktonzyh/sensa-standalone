@@ -1,7 +1,8 @@
 import type { Database, Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 import {isFatalSqliteConnectionFailure,sqliteRollbackFailure} from './sqliteConnectionFailure';
 
-import {decodeBackupValue,encodeBackupValue} from './backupCodec';
+import {decodeBackupValue,encodeBackupValue,backupEqual} from './backupCodec';
+import type {ReplicaCandidateRequest,ReplicaCandidateResponse,ReplicaCandidateFence} from './replicaCandidateProtocol';
 import {externalizeSharedRecordContent,expandSharedRecordContent,packStoredRecord,unpackStoredRecord,sharedRecordTables} from './sharedRecordContent';
 import {learningExpressionForm,learningPackageChoicesSql,validateLearningPackageQuery} from './packageCacheProjection';
 import {SqliteMeaningLookupProjection} from './meaningLookupProjection';
@@ -99,6 +100,9 @@ export class SqliteRecordDatabase {
   private runtimeCandidates:SqliteRuntimeLearningCandidates;
   private semanticMemoryProjection:SqliteLearningSemanticMemoryProjection;
   private recordGet:ReturnType<Database['prepare']>|undefined;
+  private replicaCandidates:Promise<import('./sqliteReplicaCandidates').SqliteReplicaCandidates>|undefined;
+  private replicaCandidateStore:import('./sqliteReplicaCandidates').SqliteReplicaCandidates|undefined;
+  private replicaCandidatesClosing=false;
 
   /** The Worker must stop queued requests even if the durable COMMIT succeeded. */
   get connectionFailed():boolean{return this.integrityFailed||this.fatalStorageFailure!==undefined;}
@@ -225,6 +229,9 @@ export class SqliteRecordDatabase {
       // Source facts, shared bodies and their ownership are untouched.
       const retired=this.database.exec({sql:"SELECT 1 FROM sqlite_schema WHERE type='table' AND name='sensa_study_scope_target_snapshots'",rowMode:0,returnValue:'resultRows'}) as unknown[];
       if(retired.length)this.database.exec('DROP TABLE sensa_study_scope_target_snapshots');
+      // No private download generation survives its owning connection. This
+      // also covers an abrupt Worker loss without loading its validator code.
+      this.purgeReplicaCandidates();
       this.database.exec('COMMIT');
     }catch(error){try{this.database.exec('ROLLBACK');}catch{/* Preserve initialization failure. */}throw error;}
     const schemaReady=performance.now();
@@ -653,7 +660,57 @@ export class SqliteRecordDatabase {
     };
   }
 
+  async replicaCandidate(request:ReplicaCandidateRequest):Promise<ReplicaCandidateResponse>{
+    this.assertReplicaCandidateHealthy();
+    this.replicaCandidates??=import('./sqliteReplicaCandidates').then(({SqliteReplicaCandidates})=>{
+      this.assertReplicaCandidateHealthy();
+      return this.replicaCandidateStore=new SqliteReplicaCandidates(this.database,fence=>this.assertReplicaCandidateFence(fence),()=>this.assertReplicaCandidateHealthy());
+    });
+    const candidates=await this.replicaCandidates;
+    this.assertReplicaCandidateHealthy();
+    try{
+      switch(request.kind){
+        case 'begin':return {kind:'begun',id:candidates.begin(request.fence,request.expected)};
+        case 'append':candidates.append(request.id,request.records);return {kind:'appended'};
+        case 'validate':return {kind:'validated',candidate:await candidates.validate(request.id)};
+        case 'discard':candidates.discard(request.id);return {kind:'discarded'};
+      }
+    }catch(cause){if(isFatalSqliteConnectionFailure(cause))this.quarantineConnection(cause as Error);throw cause;}
+  }
+
+  private assertReplicaCandidateHealthy():void{
+    if(this.closed||this.replicaCandidatesClosing)throw Error('sqlite_database_closed');
+    if(this.fatalStorageFailure)throw this.fatalStorageFailure;
+    if(this.integrityFailed)throw Error('sqlite_integrity_failed');
+  }
+
+  /** The owner Worker drains cooperative reads before releasing native handles. */
+  async settleReplicaCandidates():Promise<void>{
+    this.replicaCandidatesClosing=true;
+    const candidates=await this.replicaCandidates?.catch(()=>undefined);
+    await candidates?.settle();
+  }
+
+  quarantineConnection(cause:Error):void{
+    this.fatalStorageFailure??=cause;
+    this.replicaCandidateStore?.abortAll(this.fatalStorageFailure);
+  }
+
+  private purgeReplicaCandidates():void{
+    // Privacy reset also clears abandoned copies from an earlier Worker, even
+    // if this connection has never loaded the candidate implementation.
+    if(this.scalarNumber("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='sensa_replica_candidates_v1'"))this.database.exec('DELETE FROM sensa_replica_candidates_v1');
+  }
+
+  private assertReplicaCandidateFence(fence:ReplicaCandidateFence):void{
+    this.assertReplicaCandidateHealthy();
+    const owner=this.decoded<{subject:string;accountId:string}>('meta','service-owner');
+    if(!owner||owner.subject!==fence.owner.subject||owner.accountId!==fence.owner.accountId||this.decoded('meta','signed-out')||(this.decoded('meta','local-incarnation')??'initial')!==fence.incarnation)throw Error('account_changed');
+    if((this.decoded('meta','local-content-revision')??0)!==fence.localRevision||!backupEqual(this.decoded('meta','identity'),fence.identity))throw Error('library_sync_local_changed');
+  }
+
   commit(mutation: SqliteMutation): void {
+    if(this.closed)throw Error('sqlite_database_closed');
     if(this.fatalStorageFailure)throw this.fatalStorageFailure;
     if(this.integrityFailed)throw new Error('sqlite_integrity_failed');
     if (
@@ -672,6 +729,10 @@ export class SqliteRecordDatabase {
     let encodedWriteSize=0;
     let bulkMaintenance=false;
     const removedContent=new Set<string>();
+    const ownerKeys=new Set(['identity','service-owner','local-incarnation','signed-out']);
+    const discardCandidates=mutation.clears.includes('meta')
+      ||mutation.deletes.some(item=>item.table==='meta'&&ownerKeys.has(item.key))
+      ||mutation.puts.some(item=>item.table==='meta'&&ownerKeys.has(item.key)&&this.get('meta',item.key)!==item.encodedValue);
     this.database.exec("BEGIN IMMEDIATE");
     try {
       const contentRevision = mutation.contentRevision;
@@ -872,7 +933,9 @@ export class SqliteRecordDatabase {
       // maintenance even when they occupy only a handful of logical rows.
       bulkMaintenance=this.database.changes(true)-changesBefore>256||encodedWriteSize>1024*1024||mutation.clears.length>0;
       if(bulkMaintenance)this.database.exec('PRAGMA optimize');
+      if(discardCandidates)this.purgeReplicaCandidates();
       this.database.exec("COMMIT");
+      if(discardCandidates)this.replicaCandidateStore?.abortAll(Error('account_changed'));
       this.integrityCheck=undefined;
     } catch (error) {
       try { this.database.exec("ROLLBACK"); } catch (rollbackCause) {
@@ -880,6 +943,7 @@ export class SqliteRecordDatabase {
         if(isFatalSqliteConnectionFailure(failure))this.fatalStorageFailure??=failure;
         throw failure;
       }
+      if(isFatalSqliteConnectionFailure(error))this.quarantineConnection(error as Error);
       throw error;
     }
     // A completed large transaction can leave a large reusable WAL. Bound its
@@ -937,11 +1001,17 @@ export class SqliteRecordDatabase {
 
   close(optimize=true): void {
     if(this.closed)return;
+    this.replicaCandidatesClosing=true;
+    this.replicaCandidateStore?.abortAll(Error('sqlite_database_closed'));
     let optimizeFailed=false;
     let optimizeFailure:unknown;
     if(optimize&&!this.connectionFailed){
       try{this.database.exec("PRAGMA optimize");}
-      catch(cause){optimizeFailed=true;optimizeFailure=cause;}
+      catch(cause){if(isFatalSqliteConnectionFailure(cause))this.quarantineConnection(cause as Error);optimizeFailed=true;optimizeFailure=cause;}
+    }
+    if(!this.connectionFailed){
+      try{this.purgeReplicaCandidates();}
+      catch(cause){if(isFatalSqliteConnectionFailure(cause))this.quarantineConnection(cause as Error);optimizeFailed=true;optimizeFailure??=cause;}
     }
     this.meaningLookup.close();this.worldBrowseProjection.close();this.journeyIdentities.close();this.recordGet?.finalize();this.recordGet=undefined;
     this.database.close();

@@ -8,6 +8,7 @@ import {build as viteBuild} from 'vite';
 
 const built=await viteBuild({
   configFile:false,root:process.cwd(),logLevel:'silent',base:'/',
+  worker:{format:'es'},
   build:{write:false,target:'es2022',rollupOptions:{
     preserveEntrySignatures:'strict',
     input:resolve('scripts/support/cloudSyncScaleBrowserEntry.ts'),

@@ -11,7 +11,7 @@ let server:Server,origin:string;
 test.setTimeout(45_000);
 test.use({locale:'zh-CN'});
 test.beforeAll(async()=>{
- const built=await viteBuild({configFile:false,root:process.cwd(),logLevel:'silent',base:'/',esbuild:{jsx:'automatic'},build:{write:false,minify:false,target:'es2022',rollupOptions:{preserveEntrySignatures:'strict',
+ const built=await viteBuild({configFile:false,worker:{format:'es'},root:process.cwd(),logLevel:'silent',base:'/',esbuild:{jsx:'automatic'},build:{write:false,minify:false,target:'es2022',rollupOptions:{preserveEntrySignatures:'strict',
   input:resolve('tests/web/support/practiceScopeBrowserEntry.tsx'),output:{entryFileNames:'core.js',chunkFileNames:'assets/[name]-[hash].js',assetFileNames:'assets/[name]-[hash][extname]'}}}});
  if(Array.isArray(built)||!('output'in built))throw new Error('expected one scope fixture bundle');
  const files=new Map(built.output.map(file=>[file.fileName,file.type==='chunk'?file.code:file.source]));

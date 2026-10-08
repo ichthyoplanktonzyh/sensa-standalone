@@ -10,6 +10,7 @@ import {readFile,readdir} from 'node:fs/promises';
 import {join,relative,resolve} from 'node:path';
 import {modelPurposeSchema} from '../../../packages/contracts/src/sensa/modelExecution.ts';
 import {modelAssignmentFeatures} from '../../../packages/contracts/src/sensa/consumer/reading.ts';
+import {purposes} from '../../../apps/web/src/data/library/providerContracts';
 
 test("model-management", async () => {
 
@@ -59,8 +60,7 @@ check(/VITE_GEMINI_API_KEY/u.test(reference)===false,'reference lookup must not 
 // 4. Every assignable purpose is a contract purpose, and the reads are not purposes.
 const contractPurposes=modelPurposeSchema.options as string[];
 for(const purpose of modelAssignmentFeatures)check(contractPurposes.includes(purpose),`assignable purpose ${purpose} is not a contract purpose`);
-const providers=text.get('apps/web/src/data/library/providers.ts')!;
-const assignable=/const purposes=\[([^\]]*)\]/u.exec(providers)?.[1].replace(/['\s]/gu,'').split(',')??[];
+const assignable:string[]=[...purposes];
 assert.deepEqual(assignable,[...modelAssignmentFeatures],'the assignable purpose list and the contract agree');
 check(assignable.includes('reference'),'the reference purpose must be assignable');
 check(!assignable.includes('probe'),'probe is an internal purpose and is never assignable');

@@ -19,10 +19,12 @@ import type {RuntimeLearningCandidateQuery,RuntimeLearningCandidates} from './ru
 import type {LearningManagementSummaryQuery,LearningManagementStorageSummary} from './runtimeLearningCandidates';
 import type {LearningHistoryRequest} from '../../learning/system/learningHistoryModel';
 import type {StoredLearningHistoryPage} from './learningHistoryProjection';
+import type {ReplicaCandidateRequest,ReplicaCandidateResponse} from './replicaCandidateProtocol';
 import {CoordinatedSqliteAdapter,type CoordinatedSqliteBackend} from './sqliteCoordinator';
 import {localLibraryNamespace,assertLocalLibrarySelected,observeLocalLibrarySelection,type LocalLibraryNamespace} from './localLibraryLocation';
 
 export interface SqliteRecordAdapter {
+  replicaCandidate(request:ReplicaCandidateRequest):Promise<ReplicaCandidateResponse>;
   learningSemanticMemory(targetId?:string):Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>;
   get(table: SqliteLibraryTable, key: string): Promise<string | null>;
   entries(table: SqliteLibraryTable): Promise<Array<{ key: string; encodedValue: string }>>;
@@ -93,6 +95,8 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
   initialize(): Promise<SqliteStorageDiagnostics> {
     return this.send({ kind: "initialize",namespace:this.namespace }) as Promise<SqliteStorageDiagnostics>;
   }
+
+  replicaCandidate(request:ReplicaCandidateRequest):Promise<ReplicaCandidateResponse>{return this.send({kind:'replicaCandidate',request}) as Promise<ReplicaCandidateResponse>;}
 
   get(table: SqliteLibraryTable, key: string): Promise<string | null> {
     return this.send({ kind: "get", table, key }) as Promise<string | null>;

@@ -318,14 +318,38 @@ Registry head/parent、Meaning 内部历史、全局 scene owner，以及 lifecy
 完整 Library 校验共用 `LibraryRecordReader` 的 get／键存在性 has／可重复 entries；云端 reader 只索引原 encoded
 Entry 引用，按需解码，不再构造额外的完整 BackupRows 或在应用时再建一份全库 decoded Map。手动备份仍接收
 已经解码的完整行集合，同一协调器把语义、内容、学习与偏好交给各自 authority。重复物理 key 不能被 Map 覆盖。
-Learning 重放长期只保留六字段 retention 投影、Run 排序头和 Action key；每次只读当前 Run、participants 及其
-Actions 的正文，材料／事件检查同样在该 Run 内复用。相同排序时间／revision／purpose 用 key 确定顺序。
+Learning 重放长期只保留六字段 retention 投影、Run 排序头和 Action key；每次只读当前 Run／participants，
+该 Run 的 Action 校验与重放逐条读取正文，仅保存 key／revision／时间头，不保留全部 Action 正文；校验在
+participant、Action 和 lifecycle 之间让出。相同排序时间／revision／purpose 用 key 确定顺序。
 reconciliation 只索引 Event 的 id／run／target／时间，按 run-target 分组校验事件闭包，不逐裁决扫描全部正文。
+Book 校验逐 installation 让出并只保留匹配成员，默认 all range 不加载缓存，精细范围只读取本书成员缓存。
+active-book 唯一约束以迭代方式检查，普通命令与完整校验共用规则。每个 Book 仍扫描 installations，单个
+大型 reconciliation 的集合派生／排序仍有同步段；这些未消除的工作不能被表述为严格增量或任意分布的响应性保证。
 应用只精确读取已校验的变化事实，候选缺行时拒绝，不写入 undefined 冒充该事实；记录内合法 undefined 仍保留。
 Registry 引用只在当前记录内复用，不建长期缓存。当前 capture、merge 和下载仍持有完整 encoded Entry 集合，
-完整校验仍在应用线程同步运行；这一步不证明整个进程内存、UI 响应或大容量恢复达标。SQLite/Wasm 候选 reader
-目前只是测试夹具，64 行分页不代表字节上界；生产暂存须封存 candidate generation、同时约束行数与字节，
-在 Worker 本地执行可协作的完整校验，再绑定同一 candidate 原子应用，不能把异步存储 RPC 当成同步 get。
+云同步的完整校验使用与同步入口同一组 generator 规则，在事实、Run 与 Action 之间按执行时间让出；它仍读取
+完整 encoded Entry 集合，不证明整个进程内存或大容量恢复达标。每个 wire（包括未被领域读取的偏好）仍须
+严格解码，验证合同版本相应推进。Provider 校验只依赖纯 metadata schema，不初始化模型、账号或 TTS。
+`replicaCandidate` Worker RPC 的 begin／append／validate／discard 管理私有、版本化暂存表，不修改 source
+schema version 或既有事实。只保留一个候选代，同 fence／预期 head 的 begin 重试返回同一 ID，失败代可重新
+开始；不同请求不能抢占正在校验的候选。普通完整性校验失败立即级联移除该副本；清理失败单独报错并保留
+原始校验与 SQL 原因，重试 begin 不复用已经停止校验的 sealed 代。fatal 时不再尝试 SQL 清理，
+留待健康重开清除。换代以事务移除旧私有副本，连接重开清除遗留候选，正式事实不变。
+批次精确重试不重复计数，不同正文的同 key 拒绝；部分候选不能封存，完整候选
+先封存再通过同一完整 authority 校验。校验期间本机 revision／身份／owner 或 incarnation 改变即拒绝；
+候选正文和基线一直不可见，取消只移除对应私有副本。owner／identity／incarnation／signed-out 变化及清库
+在同一源事务清除私有副本，成功后停止在途校验；事务失败不清正式资料或已存副本。Worker 关闭先取消并等待
+校验结束再关闭 native handles，fatal quarantine 同时停止在途读；失效连接不能继续写失败或已校验状态。
+完整协调器保留 reader 的原始失败，不把取消、并发 fence 变化或存储故障误报成领域资料损坏。
+Worker 的候选校验不占据普通请求队列，按记录让出，
+允许本机读取继续；校验仍绑定同一不可变候选。SQL keyset 页同时限制 64 行与 1 MiB 已存编码，允许单个
+超页记录单独处理；单记录原始正文保护仍为 90 MiB。多行批次在任何解析／压缩前预检原始 4 MiB 字节预算，
+随后逐行编码写入，不同时保留整批压缩／解码对象。单代逻辑正文保护为 512 MiB、已存编码预算为 256 MiB；
+它们不是账号容量、实际 OPFS 占用或峰值内存证明，单个巨型事实仍需单独验证响应性。
+Worker 按 ES module 分块构建，完整 validator 延迟加载；离线 shell 预缓存所有构建的 JS／Wasm 代码块。
+该暂存内核尚未接入正常 HTTP 下载、领域 merge 和原子应用。接入时须复用领域防倒退、不可改写历史与显式
+冲突规则，不能以“本机无未同步更改”为由直接整库替换；候选、live facts、对应 baseline 与同步状态仍须一起
+原子应用。异步存储 RPC 不能冒充同步 get，64 行的测试夹具也不能代替生产的字节预算或 OPFS 容量验收。
 `node --import tsx scripts/benchmarkSemanticReplicaValidation.mts` 在 Node 的 SQLite/Wasm 候选库上度量完整 PSW
 规则校验；准备数据不计入耗时，采样的 V8 heap 不包括 SQLite/Wasm 内存。加 `--storage-profile` 可只重现逻辑
 正文的体积分解，分别输出普通 JSON、tagged 编码、表／Registry 类型，以及字符串字段的 UTF-8 字节计数。

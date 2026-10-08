@@ -87,6 +87,8 @@
     "integration/library-sync-restore.test.mts",
     "integration/semantic-record-validation.test.mts",
     "integration/library-record-validation.test.mts",
+    "integration/replica-candidate-storage.test.mts",
+    "browser/replica-candidate-worker.spec.ts",
     "integration/learning-reconciliation.test.mts",
     "../../scripts/benchmarkSemanticReplicaValidation.mts",
     "quality/appearance.test.mts",

@@ -1,16 +1,16 @@
 import {decodeBackupValue} from '../backupCodec';
-import {validateLibraryRecords,type BackupRows} from '../backupValidation';
+import {validateLibraryRecords,validateLibraryRecordsCooperatively,type BackupRows} from '../backupValidation';
 import {sqliteLibraryTables} from '../sqliteProtocol';
 import type {LibraryRecordReader} from '../libraryRecordReader';
 import type {LibraryIdentity,Table} from '../store';
 import {isReplicatedLibraryEntry,type LibraryReplicaEntry} from './libraryReplica';
 /** Advance when the complete replica integrity contract changes. Device-only. */
-export const libraryReplicaValidationVersion=3 as const;
+export const libraryReplicaValidationVersion=4 as const;
 
 export type ValidatedLibraryReplica={identity:LibraryIdentity;records:LibraryRecordReader};
 
 /** Validate a complete candidate replica before transport publication or apply. */
-export function validateLibraryReplica(entries:LibraryReplicaEntry[],packageCache:BackupRows['packageCache']=[]):ValidatedLibraryReplica{
+function replicaRecords(entries:LibraryReplicaEntry[],packageCache:BackupRows['packageCache']):LibraryRecordReader{
  const index=new Map<Table,Map<string,LibraryReplicaEntry>>(sqliteLibraryTables.map(table=>[table,new Map()]));
  for(const row of entries){
   if(!isReplicatedLibraryEntry(row.table,row.key))throw new Error('library_sync_format');
@@ -27,5 +27,12 @@ export function validateLibraryReplica(entries:LibraryReplicaEntry[],packageCach
   has:(table,key)=>table==='packageCache'?cache.has(key):index.get(table)!.has(key),
   *entries(table){if(table==='packageCache'){yield*cache.values();return;}for(const row of index.get(table)!.values())yield {key:row.key,value:decodeBackupValue(row.value)};},
  };
- return {identity:validateLibraryRecords(records),records};
+ return records;
+}
+
+export function validateLibraryReplica(entries:LibraryReplicaEntry[],packageCache:BackupRows['packageCache']=[]):ValidatedLibraryReplica{
+ const records=replicaRecords(entries,packageCache);return {identity:validateLibraryRecords(records),records};
+}
+export async function validateLibraryReplicaCooperatively(entries:LibraryReplicaEntry[],packageCache:BackupRows['packageCache']=[]):Promise<ValidatedLibraryReplica>{
+ const records=replicaRecords(entries,packageCache);return {identity:await validateLibraryRecordsCooperatively(records),records};
 }

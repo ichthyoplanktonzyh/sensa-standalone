@@ -22,7 +22,7 @@ import {assertReadyContentAttempt} from '../contentAttemptEvidence';
 type RequireRow=(table:Table,id:string)=>any;
 
 /** Content Supply validates both recoverable public-artifact references and learner-owned preparation attempts. */
-export function validateContentSupplyReplica(input:{
+export function* validateContentSupplyReplicaSteps(input:{
  rows:LibraryRecordRows;
  identity:LibraryIdentity;
  requireRow:RequireRow;
@@ -31,7 +31,7 @@ export function validateContentSupplyReplica(input:{
  fail:()=>never;
 }){
  const {rows,identity,requireRow,requirePersonalSource,validateLanguageContext,fail}=input;
- for(const {key,value:i} of rows.packageInstallations){const installation=packageInstallationSchema.parse(i);if(key!==installation.key)fail();}
+ for(const {key,value:i} of rows.packageInstallations){const installation=packageInstallationSchema.parse(i);if(key!==installation.key)fail();yield;}
  for(const {key,value:p} of rows.packageCache){
   validateInstalledLearningContent(p.content);
   const manifest=sensaPortableLightweightPackageSchema.parse(p.portableOrigin.manifest);
@@ -48,6 +48,7 @@ export function validateContentSupplyReplica(input:{
    const member=publicationBookMembership(publication);
    if(member&&!installation.artifact.bookMemberships?.some(value=>backupEqual(value,member)))fail();
   }
+  yield;
  }
  for(const {value:task} of rows.personalLearning){
   const direct=isDirectProvisioningReference(task.source);
@@ -67,6 +68,7 @@ export function validateContentSupplyReplica(input:{
    if(!member||member.languageContext.languageRouteId!==task.languageContext.languageRouteId||member.languageContext.targetLanguageTag!==task.languageContext.targetLanguageTag||member.languageContext.supportLanguageTag!==task.languageContext.supportLanguageTag)fail();
   }else if(task.coveredByMembershipId!==undefined)fail();
   if(!['waiting','generating','reviewing','failed','rejected','stopped','ready','covered'].includes(task.status))fail();
+  yield;
  }
  for(const {value:attempt} of rows.contentAttempts){
   if(attempt.status==='ready')assertReadyContentAttempt(attempt);
@@ -95,5 +97,6 @@ export function validateContentSupplyReplica(input:{
   if(attempt.request)sensaContentGenerationRequestSchema.parse(attempt.request);
   if(attempt.bundle){sensaMaterialCandidateBundleSchema.parse(attempt.bundle);if(!attempt.request||attempt.bundle.contentGenerationRequestId!==attempt.request.contentGenerationRequestId)fail();}
   if(attempt.resumedFrom)requireRow('contentAttempts',attempt.resumedFrom);
+  yield;
  }
 }

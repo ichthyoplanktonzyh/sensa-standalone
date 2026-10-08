@@ -23,6 +23,7 @@ import {memoryRegistrySelection,type RegistrySelectionQuery,type RegistrySelecti
 
 /** Test/non-browser Adapter. Production never selects this path. */
 export class MemoryRecordAdapter implements SqliteRecordAdapter {
+  async replicaCandidate(_request:import('./replicaCandidateProtocol').ReplicaCandidateRequest):Promise<import('./replicaCandidateProtocol').ReplicaCandidateResponse>{throw Error('sqlite_replica_candidate_unavailable');}
   private practiceRevision=0;
   async practiceExpressions(raw:PracticeExpressionQuery):Promise<PracticeExpressionPage>{
     const query=validatePracticeExpressionQuery(raw),table=query.source==='personal'?'semanticMeanings':'packageCache',selected=query.selectedIds?new Set(query.selectedIds):null,excluded=new Set(query.excludedIds??[]);

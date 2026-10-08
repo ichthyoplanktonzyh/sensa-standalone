@@ -118,6 +118,7 @@ async function closeStorage():Promise<void>{
     const databaseValue=initializedStore?.database??activeDatabase;
     const rawDatabase=activeRawDatabase;
     const pool=initializedStore?.pool??activePool;
+    await databaseValue?.settleReplicaCandidates();
     if((databaseValue||rawDatabase)&&pool){
       await closeSqliteSahPoolSafely({
         closeDatabase:()=>databaseValue?databaseValue.close(!failedConnection&&(initializedStore?.initialized??false)):rawDatabase!.close(),
@@ -229,6 +230,7 @@ const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
     case 'portableMedia': return current.database.portableMedia(request.sha256);
     case 'portableMediaDiagnostics': return current.database.portableMediaDiagnostics();
     case 'commit': current.database.commit(request.mutation); return null;
+    case 'replicaCandidate':return current.database.replicaCandidate(request.request);
     case 'diagnostics': return {...current.database.diagnostics({verifyIntegrity:request.verifyIntegrity}),workerStartupTimingsMs:current.startupTimingsMs};
   }
 };
@@ -237,15 +239,17 @@ worker.addEventListener('message',(event:MessageEvent<SqliteWorkerRequest>)=>{
   const response=requestQueue.then(()=>message(event.data)).finally(()=>{
     // Post-COMMIT maintenance retains a successful receipt. Quarantine before
     // the queue advances, even though that request did not reject.
-    if(activeDatabase?.connectionFailed)failedConnection=true;
+    if(activeDatabase?.connectionFailed){failedConnection=true;activeDatabase.quarantineConnection(Error('sqlite_storage_connection_failed'));}
   }).catch(cause=>{
     // An I/O/corruption failure is not an ordinary rejected user operation.
     // Stop every queued/future SQL request on this connection, retaining the
     // original failure and files. Only explicit close may settle its handles.
-    if(isFatalSqliteConnectionFailure(cause))failedConnection=true;
+    if(isFatalSqliteConnectionFailure(cause)){failedConnection=true;activeDatabase?.quarantineConnection(cause as Error);}
     throw cause;
   });
-  requestQueue=response.then(()=>undefined,()=>undefined);
+  // Sealed candidate validation reads a private immutable generation. It may
+  // yield while normal Library requests run; never hold the owner queue for it.
+  if(event.data.kind!=='replicaCandidate'||event.data.request.kind!=='validate')requestQueue=response.then(()=>undefined,()=>undefined);
   void response.then(
     value=>worker.postMessage({id:event.data.id,ok:true,value} satisfies SqliteWorkerResult),
     cause=>worker.postMessage({
