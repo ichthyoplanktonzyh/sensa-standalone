@@ -657,6 +657,12 @@ Expression and its stable Sense relationship; an optional Meaning Focus may expl
 how an ambiguous Context was resolved. It can explicitly bridge a confirmed target
 into Curriculum, but is neither a learning prerequisite nor a progress owner.
 
+**Personal Meaning Conflict Decision**:
+An explicit learner choice between precisely identified concurrent versions of one
+Personal Meaning. It selects the current branch for the account while retaining
+both branches and prior decisions as immutable history; it never covers later edits
+or changes learning evidence.
+
 **Personal Semantic Tombstone**:
 A durable lifecycle fact marking a Personal Semantic World identity as deleted while
 retaining its revisions and provenance. It prevents an offline older replica from

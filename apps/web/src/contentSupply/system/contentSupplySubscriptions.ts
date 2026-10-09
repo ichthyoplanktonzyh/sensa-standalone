@@ -11,6 +11,7 @@ const queryTables = {
   provisioning_control: ['personalLearning', 'learningTargets','supplementalMembershipStates','curriculumEnrollments', 'providers', 'settings'],
   provisioning_tasks: ['personalLearning','learningTargets','supplementalMembershipStates','curriculumEnrollments'],
   provisioning_task: ['personalLearning','learningTargets','supplementalMembershipStates','curriculumEnrollments'],
+  personal_provisioning_source:['personalLearning','semanticMeanings','semanticRegistry','media'],
 } as const satisfies Record<ContentSupplyQuery['kind'], readonly Table[]>;
 
 export const subscribeContentSupply=(query:ContentSupplyQuery,listener:()=>void):(()=>void)=>

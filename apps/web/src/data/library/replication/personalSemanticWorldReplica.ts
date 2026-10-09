@@ -1,6 +1,9 @@
 import type {DomainReplicaModule,ReplicaRecordReference,ReplicaEntry} from './domainReplica';
 import {mergePersonalSemanticWorldReplica,requiresPersonalSemanticWorldTombstone} from './personalSemanticWorldMerge';
-import {decodeBackupValue} from '../backupCodec';
+import {decodeBackupValue,encodeBackupValue,backupEqual} from '../backupCodec';
+import {decideMeaningConflict} from '../../../experience/personalMeaningJourney/meaningConflictHistory';
+import {meaningHistoryRecords} from '../../../experience/personalMeaningJourney/meaningHistoryRead';
+import type {MeaningJourneyRecord} from '../../../experience/personalMeaningJourney/store';
 
 const tables=new Set([
  'drafts','sessions','meanings','identities',
@@ -13,7 +16,7 @@ const reference=(table:ReplicaRecordReference['table'],key:unknown):ReplicaRecor
 const registryReference=(kind:string,key:unknown)=>reference('semanticRegistry',typeof key==='string'?`${kind}:${key}`:undefined);
 const values=(value:unknown):Record<string,any>[]=>Array.isArray(value)?value.flatMap(item=>record(item)??[]):[];
 
-function meaningDependencies(value:unknown){
+function branchDependencies(value:unknown){
  const meaning=record(value);if(!meaning)return [];
  const references:ReplicaRecordReference[]=[];
  for(const revision of values(meaning.personalSemanticAnchorRevisions))references.push(...reference('media',revision.personalMediaObjectId));
@@ -29,6 +32,7 @@ function meaningDependencies(value:unknown){
  );
  return references;
 }
+function meaningDependencies(value:unknown){return meaningHistoryRecords(value as MeaningJourneyRecord).flatMap(branchDependencies);}
 
 function registryDependencies(value:unknown){
  const row=record(value),fact=record(row?.value);if(!row||!fact)return [];
@@ -47,6 +51,13 @@ function registryDependencies(value:unknown){
   ...registryReference('expressionVersions',fact.expressionVersionId),
  ];
  return [];
+}
+
+function dependencyBody(entry:ReplicaEntry){
+ const value=decodeBackupValue(entry.value);if(entry.table!=='semanticRegistry')return value;
+ const fact={...value.value};
+ for(const key of ['currentSenseVersionId','currentExpressionVersionId','currentBindingVersionId','currentVersionNumber'])delete fact[key];
+ return {kind:value.kind,value:fact};
 }
 
 export const personalSemanticWorldReplica:DomainReplicaModule={
@@ -77,6 +88,24 @@ export const personalSemanticWorldReplica:DomainReplicaModule={
    const entry=queue[at]!,key=id(entry);if(chosen.has(key)||base.has(key)||conflicts.has(key))continue;
    chosen.set(key,entry);
    for(const dependency of this.conflictDependencies?.(entry,decodeBackupValue(entry.value))??[]){const row=rows.get(id(dependency));if(row)queue.push(row);}
+  }
+  {
+   const local=new Map(context.local.map(entry=>[id(entry),entry])),remote=new Map(context.remote.map(entry=>[id(entry),entry])),decided=new Set<string>();
+   const variants=new Map<string,ReplicaEntry[]>();for(const branch of [context.base,context.local,context.remote])for(const entry of branch){const key=id(entry),group=variants.get(key)??[];group.push(entry);variants.set(key,group);}
+   for(const key of conflicts){const ours=local.get(key),theirs=remote.get(key),selected=chosen.get(key);if(selected?.table!=='semanticMeanings'||!ours||!theirs)continue;
+    const dependencies=[...meaningDependencies(decodeBackupValue(ours.value)),...meaningDependencies(decodeBackupValue(theirs.value))],visited=new Set<string>();
+    for(let at=0;at<dependencies.length;at++){const key=id(dependencies[at]!);if(visited.has(key))continue;visited.add(key);const candidates=variants.get(key);if(!candidates?.length||!candidates.every(row=>backupEqual(dependencyBody(row),dependencyBody(candidates[0]!))))throw Error('library_sync_conflict_unsupported');for(const entry of candidates)dependencies.push(...this.conflictDependencies!(entry,decodeBackupValue(entry.value)));}
+    const prior=context.base.find(entry=>id(entry)===key);
+    const value=decideMeaningConflict(decodeBackupValue(ours.value),decodeBackupValue(theirs.value),decodeBackupValue(selected.value),context.decision.id,context.decision.createdAt,prior?decodeBackupValue(prior.value):undefined);
+    chosen.set(key,{...selected,value:encodeBackupValue(value),blocks:undefined});decided.add(selected.key);
+   }
+   if(decided.size){
+    for(const entry of merged)if(['semanticRegistry','semanticReceipts','media'].includes(entry.table)&&!conflicts.has(id(entry)))chosen.set(id(entry),entry);
+    const retain=(key:string)=>{const present=chosen.get(key);if(present)return present;const candidates=variants.get(key);if(!candidates?.length||!candidates.every(row=>backupEqual(row.value,candidates[0]!.value)))throw Error('library_sync_conflict_unsupported');chosen.set(key,candidates[0]!);return candidates[0]!;};
+    const dependencies:ReplicaRecordReference[]=[];for(const meaningId of decided)dependencies.push(...meaningDependencies(decodeBackupValue(chosen.get(id({table:'semanticMeanings',key:meaningId}))!.value)));
+    const visited=new Set<string>();for(let at=0;at<dependencies.length;at++){const key=id(dependencies[at]!);if(visited.has(key))continue;visited.add(key);const row=retain(key);dependencies.push(...this.conflictDependencies!(row,decodeBackupValue(row.value)));}
+    for(const [key,rows] of variants)if(rows[0]!.table==='semanticReceipts'&&decided.has(String(record(decodeBackupValue(rows[0]!.value))?.result?.personalMeaningId)))retain(key);
+   }
   }
   return [...chosen.values(),...merged.filter(entry=>entry.table==='semanticReceipts'&&record(decodeBackupValue(entry.value))?.command==='AcceptPublishedLearningScene'&&!chosen.has(id(entry)))];
  },

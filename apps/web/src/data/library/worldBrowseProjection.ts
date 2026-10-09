@@ -8,6 +8,7 @@ import type {MeaningJourneyRecord} from '../../experience/personalMeaningJourney
 import {buildPersonalMeaningLearningSources} from '../../experience/personalMeaningJourney/learningSource';
 import {indexRegistry} from '../../experience/personalMeaningJourney/registryRead';
 import {isUuid} from '../../experience/personalMeaningJourney/ids';
+import {meaningHistoryRecords} from '../../experience/personalMeaningJourney/meaningHistoryRead';
 
 const schema=`
 CREATE TABLE IF NOT EXISTS sensa_world_browse(
@@ -29,7 +30,7 @@ CREATE INDEX IF NOT EXISTS sensa_world_browse_dependency_key ON sensa_world_brow
 CREATE VIRTUAL TABLE IF NOT EXISTS sensa_world_browse_search USING fts5(text,tokenize='trigram');
 CREATE TABLE IF NOT EXISTS sensa_world_browse_meta(id INTEGER PRIMARY KEY CHECK(id=1),version INTEGER NOT NULL);
 `;
-const version=15,tables=[...['search','dependencies','meta',''].map(name=>`sensa_world_browse${name?'_'+name:''}`),'sensa_world_learning_choices','sensa_world_scene_meanings'];
+const version=16,tables=[...['search','dependencies','meta',''].map(name=>`sensa_world_browse${name?'_'+name:''}`),'sensa_world_learning_choices','sensa_world_scene_meanings'];
 type Row=Record<string,any>;
 export class SqliteWorldBrowseProjection{
  private statements=new Map<string,PreparedStatement>();
@@ -71,7 +72,7 @@ export class SqliteWorldBrowseProjection{
     if(!(cause instanceof WorldSourceInvalidError))throw cause;
    }
    if(derived){
-    const sceneIds=new Set(record.personalSemanticAnchorRevisions.map(revision=>(revision.structuredPayload.learningScene as {sceneId?:unknown}|undefined)?.sceneId).filter(isUuid));
+    const sceneIds=new Set(meaningHistoryRecords(record).flatMap(branch=>branch.personalSemanticAnchorRevisions).map(revision=>(revision.structuredPayload.learningScene as {sceneId?:unknown}|undefined)?.sceneId).filter(isUuid));
     for(const sceneId of sceneIds)this.write('INSERT INTO sensa_world_scene_meanings VALUES(?,?)',[sceneId,id]);
     const {summary,text,visible,choices}=derived;
     const row=this.rows('INSERT INTO sensa_world_browse(meaning_id,updated_at,formation,binding,valid,visible,status,summary_json,search_text) VALUES(?,?,?,?,1,?,?,?,?) RETURNING id',

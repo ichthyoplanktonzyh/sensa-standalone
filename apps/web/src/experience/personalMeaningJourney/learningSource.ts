@@ -180,8 +180,12 @@ const meaningLearningSources = (
 export const buildPersonalMeaningLearningSources=(record:MeaningJourneyRecord,registry:RegistryRead,alignmentId?:string,contextRevisionIds?:readonly string[])=>
  record.personalMeaning.status==='active'?meaningLearningSources(record,registry,alignmentId,contextRevisionIds):[];
 
-export function resolvePinnedPersonalMeaningLearningSource(record:MeaningJourneyRecord,registry:RegistryRead,reference:PersonalMeaningLearningSource['reference'],contextRevisionIds?:readonly string[]):PersonalMeaningLearningSource|null{
+export function resolvePinnedPersonalMeaningLearningSource(current:MeaningJourneyRecord,registry:RegistryRead,reference:PersonalMeaningLearningSource['reference'],contextRevisionIds?:readonly string[]):PersonalMeaningLearningSource|null{
+ const record=personalMeaningPinnedRecord(current,reference,contextRevisionIds);
+ if(!record)return null;
  const alignment=record.alignments.find(row=>row.personalMeaningAlignmentId===reference.personalMeaningAlignmentId);
  if(!alignment||alignment.revision!==reference.alignmentRevision||alignmentStatusAt(record.alignmentEvents,alignment.personalMeaningAlignmentId,reference.alignmentRevision)!=='active')return null;
  return meaningLearningSources(record,registry,alignment.personalMeaningAlignmentId,contextRevisionIds,true).find(source=>canonicalConsumerJson(source.reference)===canonicalConsumerJson(reference))??null;
 }
+export const personalMeaningPinnedRecord=(current:MeaningJourneyRecord,reference:PersonalMeaningLearningSource['reference'],contextRevisionIds?:readonly string[])=>
+ [current,...(current.conflictHistory?.branches.map(branch=>branch.record)??[])].find(branch=>branch.personalMeaningRevisions.some(row=>row.personalMeaningRevisionId===reference.personalMeaningRevisionId)&&branch.alignments.some(row=>row.personalMeaningAlignmentId===reference.personalMeaningAlignmentId)&&(contextRevisionIds??[]).every(id=>branch.personalSemanticAnchorRevisions.some(row=>row.personalSemanticAnchorRevisionId===id)));

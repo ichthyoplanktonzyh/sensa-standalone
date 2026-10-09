@@ -1,4 +1,5 @@
 import {isUuid} from './ids';
+import {meaningHistoryRecords} from './meaningHistoryRead';
 import type {MeaningJourneyRecord,CommandReceipt,JourneyState} from './store';
 
 export const journeyIdentityTables=['semanticMeanings','semanticRegistry','semanticInbox','semanticDrafts','semanticReceipts'] as const;
@@ -9,9 +10,13 @@ export function journeyReservedIdentities(table:JourneyIdentityTable,value:unkno
  const ids=new Set<string>();
  const fact=(item:unknown)=>{if(item&&typeof item==='object'&&!Array.isArray(item))for(const [field,id] of Object.entries(item))if(field.endsWith('Id')&&isUuid(id))ids.add(id);};
  if(table==='semanticMeanings'){
-  const record=value as MeaningJourneyRecord;fact(record.personalMeaning);
-  for(const rows of Object.values(record))if(Array.isArray(rows))for(const row of rows)fact(row);
-  for(const version of record.proposalVersions??[])for(const candidate of version.expressionCandidates??[])fact(candidate);
+  const record=value as MeaningJourneyRecord;
+  for(const branch of meaningHistoryRecords(record)){
+   fact(branch.personalMeaning);
+   for(const rows of Object.values(branch))if(Array.isArray(rows))for(const row of rows)fact(row);
+   for(const version of branch.proposalVersions??[])for(const candidate of version.expressionCandidates??[])fact(candidate);
+  }
+  for(const decision of record.conflictHistory?.decisions??[])if(isUuid(decision.id))ids.add(decision.id);
  }else if(table==='semanticRegistry')fact((value as {value:unknown}).value);
  else if(table==='semanticInbox'){
   const item=value as JourneyState['inboxItems'][number];fact(item);fact(item.payload);

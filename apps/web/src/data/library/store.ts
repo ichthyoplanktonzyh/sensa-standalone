@@ -1,5 +1,6 @@
 /** Production local-library storage: SQLite WASM in an OPFS Worker. */
 import {canonicalConsumerJson} from '@sensa/contracts/sensa/canonical-json';
+import {meaningMediaReferences} from '../../experience/personalMeaningJourney/meaningHistoryRead';
 import {hasLocalLibraryHint,markLocalLibraryPresent} from './localLibraryHint';
 import {assertLocalLibrarySelected,localLibraryScopedName} from './localLibraryLocation';
 
@@ -455,8 +456,7 @@ export class LibraryTransaction {
     const meanings = await this.all<{
       personalSemanticAnchorRevisions?: Array<{ personalMediaObjectId?: string | null }>;
     }>('semanticMeanings');
-    if (meanings.some((meaning) => meaning.personalSemanticAnchorRevisions
-      ?.some((revision) => revision.personalMediaObjectId === mediaId))) return true;
+    if (meanings.some(meaning=>meaningMediaReferences(meaning).includes(mediaId))) return true;
     const inbox = await this.all<{
       payload?: { context?: { mediaReferenceIds?: string[] } | null };
     }>('semanticInbox');

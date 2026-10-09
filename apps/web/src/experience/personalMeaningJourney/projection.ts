@@ -586,6 +586,12 @@ export const buildDetailView = (
     .map((alignment) => buildAlignmentView(record, registry, alignment))
     .filter((view): view is JourneyAlignmentView => view !== null);
   const meaningRevision = currentMeaningRevision(record);
+  const currentAlignmentIds=new Set(record.alignments.filter(alignment=>isAlignmentActive(record,alignment)).map(alignment=>alignment.personalMeaningAlignmentId));
+  const alignmentHistory=new Map<string,JourneyAlignmentView>();
+  for(const branch of [record,...(record.conflictHistory?.branches.map(row=>row.record)??[])])for(const alignment of branch.alignments){
+    if(currentAlignmentIds.has(alignment.personalMeaningAlignmentId)||alignmentHistory.has(alignment.personalMeaningAlignmentId))continue;
+    const view=buildAlignmentView(branch,registry,alignment,true);if(view)alignmentHistory.set(alignment.personalMeaningAlignmentId,view);
+  }
   return {
     personalMeaningId: record.personalMeaning.personalMeaningId,
     shortId: shortId(record.personalMeaning.personalMeaningId),
@@ -603,7 +609,7 @@ export const buildDetailView = (
     startingPoint: record.mockState.startingPoint ?? null,
     focuses,
     directAlignments,
-    alignmentHistory:record.alignments.filter(row=>!isAlignmentActive(record,row)).flatMap(row=>{const view=buildAlignmentView(record,registry,row,true);return view?[view]:[];}),
+    alignmentHistory:[...alignmentHistory.values()],
     createdAt: record.personalMeaning.createdAt,
     updatedAt: record.personalMeaning.updatedAt,
   };

@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS sensa_journey_identities(record_id INTEGER NOT NULL,i
 CREATE INDEX IF NOT EXISTS sensa_journey_identity_lookup ON sensa_journey_identities(identity_id);
 CREATE TABLE IF NOT EXISTS sensa_journey_identity_meta(id INTEGER PRIMARY KEY CHECK(id=1),version INTEGER NOT NULL);
 `;
-const version=2;
+const version=3;
 const uuidBytes=(id:string)=>{const hex=id.replaceAll('-','');return Uint8Array.from({length:16},(_,index)=>Number.parseInt(hex.slice(index*2,index*2+2),16));};
 const uuidString=(bytes:Uint8Array)=>{const hex=Array.from(bytes,byte=>byte.toString(16).padStart(2,'0')).join('');return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;};
 export class SqliteJourneyIdentityProjection{

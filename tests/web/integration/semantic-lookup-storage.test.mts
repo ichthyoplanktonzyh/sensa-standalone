@@ -58,11 +58,11 @@ test('identity reservation lookup is bounded, excludes opaque prose, retains sha
   expect(()=>database.existingJourneyIdentities([senseVersion])).toThrow('journey_identity_cache_invalid');expect(database.entries('semanticMeanings')).toEqual(source);
   raw.exec('DROP TRIGGER refuse_identity_repair;');
   database=new SqliteRecordDatabase(sqlite,raw,'memory');database.initialize();
-  expect(raw.selectValue('SELECT version FROM sensa_journey_identity_meta WHERE id=1')).toBe(2);expect(database.existingJourneyIdentities([senseVersion])).toEqual([senseVersion]);expect(database.entries('semanticMeanings')).toEqual(source);
+  expect(raw.selectValue('SELECT version FROM sensa_journey_identity_meta WHERE id=1')).toBe(3);expect(database.existingJourneyIdentities([senseVersion])).toEqual([senseVersion]);expect(database.entries('semanticMeanings')).toEqual(source);
   raw.exec({sql:'DELETE FROM sensa_journey_identities WHERE identity_id=?',bind:[versionBytes]});
   raw.exec("CREATE TEMP TRIGGER refuse_identity_marker BEFORE INSERT ON sensa_journey_identity_meta BEGIN SELECT RAISE(ABORT,'fixture-identity-marker-failure'); END;");
   expect(()=>database.diagnostics({verifyIntegrity:true})).toThrow('fixture-identity-marker-failure');
-  expect(()=>database.existingJourneyIdentities([senseVersion])).toThrow('journey_identity_cache_invalid');expect(raw.selectValue('SELECT version FROM sensa_journey_identity_meta WHERE id=1')).toBe(2);expect(database.entries('semanticMeanings')).toEqual(source);
+  expect(()=>database.existingJourneyIdentities([senseVersion])).toThrow('journey_identity_cache_invalid');expect(raw.selectValue('SELECT version FROM sensa_journey_identity_meta WHERE id=1')).toBe(3);expect(database.entries('semanticMeanings')).toEqual(source);
   raw.exec('DROP TRIGGER refuse_identity_marker;');
   expect(database.diagnostics({verifyIntegrity:true}).journeyIdentityCheck?.status).toBe('rebuilt');expect(database.existingJourneyIdentities([senseVersion])).toEqual([senseVersion]);
   database.commit({clears:[],deletes:[{table:'semanticMeanings',key:id}],puts:[],contentRevision:2});

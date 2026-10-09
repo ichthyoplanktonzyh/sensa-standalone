@@ -1,4 +1,5 @@
 import type {SqliteRecordAdapter} from './sqliteAdapter';
+import {meaningMediaReferences,meaningHistoryRecords} from '../../experience/personalMeaningJourney/meaningHistoryRead';
 import type {HomeLearningStorageProjection,PortableMediaBlob,PortableMediaStorageDiagnostics,SqliteLibraryTable,SqliteMutation,SqliteRecordChange,SqliteSyncBaseEntry,SqliteStorageDiagnostics} from './sqliteProtocol';
 import {sqliteLibrarySchemaVersion} from './sqliteProtocol';
 import {decodeBackupValue} from './backupCodec';
@@ -82,7 +83,7 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
     if(!isUuid(sceneId))throw new Error('scene_identity_invalid');
     const owners=[...this.records].filter(([key])=>key.startsWith('semanticMeanings\u0000')).flatMap(([,encoded])=>{
       const record=decodeBackupValue(JSON.parse(encoded)) as MeaningJourneyRecord;
-      return record.personalSemanticAnchorRevisions.some(revision=>(revision.structuredPayload.learningScene as {sceneId?:string}|undefined)?.sceneId===sceneId)?[record.personalMeaning.personalMeaningId]:[];
+      return meaningHistoryRecords(record).some(branch=>branch.personalSemanticAnchorRevisions.some(revision=>(revision.structuredPayload.learningScene as {sceneId?:string}|undefined)?.sceneId===sceneId))?[record.personalMeaning.personalMeaningId]:[];
     });
     if(owners.length>1)throw new Error('scene_owner_ambiguous');return owners[0]??null;
   }
@@ -321,11 +322,7 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
 
   async isMediaReferenced(mediaId: string): Promise<boolean> {
     const meanings = await this.entries('semanticMeanings');
-    if (meanings.some((row) => (
-      decodeBackupValue(JSON.parse(row.encodedValue)) as {
-        personalSemanticAnchorRevisions?: Array<{ personalMediaObjectId?: string | null }>;
-      }
-    ).personalSemanticAnchorRevisions?.some((revision) => revision.personalMediaObjectId === mediaId))) return true;
+    if (meanings.some(row=>meaningMediaReferences(decodeBackupValue(JSON.parse(row.encodedValue))).includes(mediaId))) return true;
     const inbox = await this.entries('semanticInbox');
     return inbox.some((row) => (
       decodeBackupValue(JSON.parse(row.encodedValue)) as {

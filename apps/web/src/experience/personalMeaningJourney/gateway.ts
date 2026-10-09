@@ -15,6 +15,7 @@
  * through the Personal Semantic World authority before any fact is committed.
  */
 
+import {assertCurrentMeaningReceipt,meaningHistoryRecords} from './meaningHistoryRead';
 import type {
   IngestResult,
   SensaIntakeAcceptance,
@@ -515,9 +516,12 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
     await runCooperatively((function*(){
       for(const rows of Object.values(state.registry))for(const row of rows)yield*fact(row);
       for(const meaning of state.meanings){
-        yield*fact(meaning.personalMeaning);
-        for(const rows of Object.values(meaning))if(Array.isArray(rows))for(const row of rows)yield*fact(row);
-        for(const version of meaning.proposalVersions)for(const candidate of version.expressionCandidates)yield*fact(candidate);
+        for(const branch of meaningHistoryRecords(meaning)){
+          yield*fact(branch.personalMeaning);
+          for(const rows of Object.values(branch))if(Array.isArray(rows))for(const row of rows)yield*fact(row);
+          for(const version of branch.proposalVersions)for(const candidate of version.expressionCandidates)yield*fact(candidate);
+        }
+        for(const decision of meaning.conflictHistory?.decisions??[])ids.add(decision.id);
       }
       for(const item of state.inboxItems){
         yield*fact(item);yield*fact(item.payload);
@@ -535,6 +539,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
 
   private matchReceipt(found:CommandReceipt|undefined,command:string,requestDigest?:string):CommandReceipt|null{
     if(found&&(found.command!==command||requestDigest!==undefined&&found.requestDigest!==requestDigest))throw new Error('这个 operationId 已用于另一个个人意义操作。');
+    if(found&&this.state)assertCurrentMeaningReceipt(this.state.meanings.find(row=>row.personalMeaning.personalMeaningId===found.result.personalMeaningId),found);
     return found??null;
   }
   private async receipt(

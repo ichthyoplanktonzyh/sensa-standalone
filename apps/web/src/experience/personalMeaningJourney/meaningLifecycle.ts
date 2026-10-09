@@ -1,7 +1,8 @@
 /** Lifecycle facts reuse immutable Meaning revisions, not a second history. */
 import type {SensaPersonalMeaningSnapshot,SensaPersonalMeaningRevisionSnapshot} from '@sensa/contracts/sensa';
 import {canonicalConsumerJson} from '@sensa/contracts/sensa';
-import type {CommandReceipt} from './store';
+import type {CommandReceipt,MeaningJourneyRecord} from './store';
+import {meaningHistoryRecords} from './meaningHistoryRead';
 
 export type MeaningLifecycleRecord={personalMeaning:SensaPersonalMeaningSnapshot;personalMeaningRevisions:readonly SensaPersonalMeaningRevisionSnapshot[]};
 const invalid=():never=>{throw new Error('personal_meaning_lifecycle_invalid');};
@@ -19,7 +20,7 @@ export function assertMeaningLifecycleReceipt(meaningId:string,stamp:SensaPerson
 export function assertMeaningLifecycleReceipts(records:readonly MeaningLifecycleRecord[],receipts:readonly CommandReceipt[]):void{
  const byId=new Map(receipts.map(receipt=>[receipt.operationId,receipt]));
  const witnessed=new Set<string>();
- for(const record of records)for(const stamp of record.personalMeaningRevisions){
+ for(const record of records.flatMap(record=>meaningHistoryRecords(record as MeaningJourneyRecord)))for(const stamp of record.personalMeaningRevisions){
   assertMeaningLifecycleReceipt(record.personalMeaning.personalMeaningId,stamp,byId);
   if(stamp.lifecycle)witnessed.add(stamp.provenance.createdByOperationId);
  }
@@ -27,7 +28,7 @@ export function assertMeaningLifecycleReceipts(records:readonly MeaningLifecycle
 }
 export function assertMeaningLifecycleOperationReceipt(record:MeaningLifecycleRecord|undefined,receipt:CommandReceipt):void{
  if(receipt.command!=='ChangeMeaningLifecycle')return;
- const stamp=record?.personalMeaningRevisions.find(stamp=>stamp.lifecycle&&stamp.provenance.createdByOperationId===receipt.operationId);
+ const stamp=record&&meaningHistoryRecords(record as MeaningJourneyRecord).flatMap(branch=>branch.personalMeaningRevisions).find(stamp=>stamp.lifecycle&&stamp.provenance.createdByOperationId===receipt.operationId);
  if(!record||!stamp)return invalid();
  assertMeaningLifecycleReceipt(record.personalMeaning.personalMeaningId,stamp,new Map([[receipt.operationId,receipt]]));
 }

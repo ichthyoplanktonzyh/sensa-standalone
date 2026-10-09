@@ -105,6 +105,7 @@ export type ContentSupplyQuery =
   | Readonly<{kind:'package_summaries';packageKeys:readonly string[]}>
   | Readonly<{ kind: 'provisioning_control' }>
   | Readonly<{ kind:'provisioning_task';taskId:string }>
+  | Readonly<{kind:'personal_provisioning_source';taskId:string}>
   | Readonly<{ kind: 'provisioning_tasks' }>;
 export type ContentSupplyQueryResult<Query extends ContentSupplyQuery> =
   Query['kind'] extends 'direct_provisioning_task'?ContentProvisioningTask|null
@@ -115,6 +116,7 @@ export type ContentSupplyQueryResult<Query extends ContentSupplyQuery> =
     :Query['kind'] extends 'package_summaries'?readonly ContentSupplyPackage[]
     : Query['kind'] extends 'provisioning_control' ? ContentProvisioningControl
       :Query['kind'] extends 'provisioning_task'?ContentProvisioningTask|null
+      :Query['kind'] extends 'personal_provisioning_source'?PersonalMeaningLearningSource|null
       : readonly ContentProvisioningTask[];
 
 /**

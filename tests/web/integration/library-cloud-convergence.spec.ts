@@ -6,6 +6,7 @@ import {
   type LibraryCloudBrowserFixture,
 } from '../support/libraryCloudBrowserFixture.mts';
 import { createRealLibraryConvergenceWorld } from '../support/realLibraryConvergenceWorld.mts';
+import {manualMeaningPayload,newManualMeaningDraft} from '../../../apps/web/src/experience/intake/manualMeaning';
 
 let fixture: LibraryCloudBrowserFixture;
 const worlds = new Set<Awaited<ReturnType<typeof createRealLibraryConvergenceWorld>>>();
@@ -27,6 +28,63 @@ test.afterAll(async () => {
 const draftTexts = (drafts: readonly Readonly<{ text: string }>[]): string[] => (
   drafts.map(({ text }) => text).sort((left, right) => left.localeCompare(right))
 );
+
+test('[integration][durability][convergence] a Meaning correction decision reaches the other device without discarding either history',async()=>{
+ const account=await fixture.createAccount(),a=await fixture.createClient(account),b=await fixture.createClient(account);
+ try{
+  const payload=manualMeaningPayload({...newManualMeaningDraft(),context:'She asked to borrow my umbrella.',occurrence:'borrow',languageTag:'en',meaning:'暂时借用，随后归还。',usage:'借朋友的伞。'});
+  const saved=await a.evaluate(async payload=>{const c=(window as any).core,result=await c.createJourneyModules().semanticIntake.submit(payload);await (window as any).sync();return result;},payload);
+  await b.evaluate(()=>(window as any).sync());
+  const archivedMedia=await a.evaluate(async id=>{
+   const c=(window as any).core,mediaId=crypto.randomUUID(),png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII=';
+   await c.command({id:crypto.randomUUID(),kind:'fixture.media-upload',input:{mediaId}},(tx:any)=>tx.put('media',mediaId,{mediaId,mediaKind:'image',mimeType:'image/png',dataUrl:'data:image/png;base64,'+png,sizeBytes:atob(png).length,createdAt:new Date().toISOString()}));
+   const record=await c.readLibrary((tx:any)=>tx.get('semanticMeanings',id));
+   await c.createJourneyModules().personalMeaningJourney.reviseContext({operationId:crypto.randomUUID(),personalMeaningId:id,expectedRevision:record.personalMeaning.currentRevision,blocks:[{kind:'text',bodyText:'She asked to borrow my umbrella.'},{kind:'image',personalMediaObjectId:mediaId}]});return mediaId;
+  },saved.personalMeaningId);
+  const edit=(page:import('@playwright/test').Page,text:string)=>page.evaluate(async({id,text})=>{
+   const c=(window as any).core,detail=await c.worldReadRepository.detail(id),alignment=detail.detail.directAlignments[0],seed=await c.worldReadRepository.correction(id,alignment.personalMeaningAlignmentId),operationId=crypto.randomUUID();
+   const request={operationId,personalMeaningId:id,personalMeaningAlignmentId:alignment.personalMeaningAlignmentId,source:seed.source,payload:{...seed.payload,operationId,sense:{...seed.payload.sense,senseKey:crypto.randomUUID(),semanticSpec:{...seed.payload.sense.semanticSpec,coreMeaningFocus:text}},acceptance:{mode:'learner_direct'}}};
+   const result=await c.createJourneyModules().personalMeaningJourney.correctPersonalMeaning(request);return {request,result};
+  },{id:saved.personalMeaningId,text});
+  const branchA=await edit(a,'A: 明天归还雨伞。'),branchB=await edit(b,'B: 周末归还雨伞。');
+  const pendingTask=await a.evaluate(async id=>{const c=(window as any).core,source=(await c.worldReadRepository.detail(id)).sources[0],languageContext=(await c.languageRoutesSnapshot()).context,task=await c.enrollPersonal(crypto.randomUUID(),source,languageContext,true);return c.personalLearningTaskSnapshot(task.id);},saved.personalMeaningId);
+  await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());
+  expect((await b.evaluate(()=>(window as any).core.readCloudSync())).status).toBe('conflict');
+  await b.evaluate(async()=>{const c=(window as any).core;await c.resolveCloudSyncConflicts('local',(await c.readCloudSync()).conflict);await (window as any).sync();});
+  await a.evaluate(()=>(window as any).sync());
+  for(const page of [a,b]){
+   const result=await page.evaluate(async id=>{const c=(window as any).core;return {sync:await c.readCloudSync(),detail:await c.worldReadRepository.detail(id),record:await c.readLibrary((tx:any)=>tx.get('semanticMeanings',id)),receipts:await c.readLibrary((tx:any)=>tx.entries('semanticReceipts'))};},saved.personalMeaningId);
+   expect(result.sync.status).toBe('synced');expect(result.detail.detail.directAlignments[0].coreMeaningFocus).toBe('B: 周末归还雨伞。');
+   expect(result.record.conflictHistory.branches).toHaveLength(3);
+   expect(await page.evaluate(id=>(window as any).core.readLibrary((tx:any)=>tx.isMediaReferenced(id)),archivedMedia)).toBe(true);
+   expect(await page.evaluate(id=>(window as any).core.personalLearningTaskSnapshot(id),pendingTask.id)).toEqual(pendingTask);
+   const pinned=await page.evaluate(taskId=>(window as any).core.contentSupplySystem.read({kind:'personal_provisioning_source',taskId}),pendingTask.id);
+   expect(pinned.reference).toEqual(pendingTask.source);expect(pinned.context.images.some((row:any)=>row.id===archivedMedia)).toBe(true);
+   expect(result.detail.detail.alignmentHistory.some((row:any)=>row.personalMeaningAlignmentId===branchA.result.personalMeaningAlignmentId)).toBe(true);
+   await expect(page.evaluate(async source=>{const c=(window as any).core;await c.enrollPersonal(crypto.randomUUID(),source,(await c.languageRoutesSnapshot()).context,true);},pinned)).rejects.toThrow('meaningChanged');
+   for(const branch of [branchA,branchB]){expect(result.receipts.some((row:any)=>row.key===branch.request.operationId)).toBe(true);expect(result.record.conflictHistory.branches.some((row:any)=>row.record.personalMeaningRevisions.some((revision:any)=>revision.personalMeaningRevisionId===branch.result.personalMeaningRevisionId))).toBe(true);}
+  }
+  const resumed=await a.evaluate(async taskId=>{
+   const c=(window as any).core,source=await c.contentSupplySystem.read({kind:'personal_provisioning_source',taskId});
+   await c.stopPersonalPreparation(crypto.randomUUID(),taskId);
+   const stopped=(await c.personalLearningTaskSnapshot(taskId)).status;
+   const provider=await c.saveProvider(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,name:'No-cost interrupted fixture',kind:'compatible',endpoint:'https://fixture.invalid/v1',model:'fixture'},'fixture-secret');
+   const {settings}=await c.providerSnapshot();await c.assignProvider(crypto.randomUUID(),'content',provider.id,settings.revision);
+   const controller=new AbortController();let saved=0,error='';
+   try{await c.preparePersonal(taskId,source,provider,await c.selectedReviewProvider(),controller.signal,()=>{saved++;controller.abort();});}catch(reason){error=String(reason);}
+   return {stopped,saved,error,task:await c.personalLearningTaskSnapshot(taskId)};
+  },pendingTask.id);
+  expect(resumed.stopped).toBe('stopped');expect(resumed.saved).toBeGreaterThanOrEqual(2);expect(resumed.error).toContain('requestStopped');
+  expect(resumed.task.status).toBe('failed');expect(resumed.task.attemptId).toBeTruthy();expect(resumed.task.source).toEqual(pendingTask.source);
+  await expect(a.evaluate(request=>(window as any).core.createJourneyModules().personalMeaningJourney.correctPersonalMeaning(request),branchA.request)).rejects.toThrow('meaningChanged');
+  await edit(a,'A: 在已选结果之上继续明确修改。');await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());
+  expect((await b.evaluate(()=>(window as any).core.readCloudSync())).status).toBe('synced');
+  await b.evaluate(()=>(window as any).core.exportLibraryBackup('conflict-branch-backup-fixture'));
+  await b.reload();
+  const reopened=await b.evaluate(async id=>{const path='/core.js',c=await import(/* @vite-ignore */ path);await c.openLibrary();return {detail:await c.worldReadRepository.detail(id),state:await c.readCloudSync()};},saved.personalMeaningId);
+  expect(reopened.detail.detail.directAlignments[0].coreMeaningFocus).toBe('A: 在已选结果之上继续明确修改。');expect(reopened.state.status).toBe('synced');
+ }finally{await a.context().close();await b.context().close();}
+});
 
 test('[integration][local-correctness][convergence] conflict UI compares versions and refuses a stale local choice',async()=>{
  const account=await fixture.createAccount(),a=await fixture.createClient(account),b=await fixture.createClient(account);

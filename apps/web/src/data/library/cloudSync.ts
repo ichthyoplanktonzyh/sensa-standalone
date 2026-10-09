@@ -25,7 +25,7 @@ type Entry=CloudSyncEntry;
 type Owner={subject:string;accountId:string};
 export type CloudSyncConflictChoice='local'|'remote';
 export type CloudSyncConflict={detectedAt:string;localRevision:number;remoteRevision:number;remoteManifest:string[]|null;records:{id:string;base:Entry|null;local:Entry|null;remote:Entry|null}[];affectedRecordIds:string[];comparison?:CloudSyncComparison};
-export type CloudSyncState={owner:Owner;incarnation:string;revision:number;checkpointVersion?:6;validationVersion?:typeof libraryReplicaValidationVersion;storage?:LibrarySyncHead['storage'];syncedLocalRevision?:number;pending?:{operationId:string;baseRevision:number;manifest:string[]};status:'pending'|'syncing'|'synced'|'offline'|'conflict'|'failed';conflicts?:string[];conflict?:CloudSyncConflict;resolution?:{choice:CloudSyncConflictChoice;expectedRemoteRevision:number;expectedLocalRevision:number};lastSyncedAt?:string;lastCheckedAt?:string;syncStartedAt?:string;error?:string;failureKind?:CloudSyncFailureKind;retryCount?:number;retryAt?:string};
+export type CloudSyncState={owner:Owner;incarnation:string;revision:number;checkpointVersion?:6;validationVersion?:typeof libraryReplicaValidationVersion;storage?:LibrarySyncHead['storage'];syncedLocalRevision?:number;pending?:{operationId:string;baseRevision:number;manifest:string[]};status:'pending'|'syncing'|'synced'|'offline'|'conflict'|'failed';conflicts?:string[];conflict?:CloudSyncConflict;resolution?:{choice:CloudSyncConflictChoice;expectedRemoteRevision:number;expectedLocalRevision:number;decision:{id:string;createdAt:string}};lastSyncedAt?:string;lastCheckedAt?:string;syncStartedAt?:string;error?:string;failureKind?:CloudSyncFailureKind;retryCount?:number;retryAt?:string};
 type State=CloudSyncState&{/** Durable proof for an uncertain staged-restore COMMIT ACK. */restoreOperationId?:string};
 export type PendingCloudSyncRecord={table:typeof librarySyncTables[number];key:string};
 export type PendingCloudSyncSnapshot={
@@ -168,7 +168,7 @@ export async function resolveCloudSyncConflicts(choice:CloudSyncConflictChoice,e
   await assertCurrentLibrary(tx);if(await tx.get('meta','signed-out'))throw new Error('authentication_required');
   const state=await tx.get<State>('meta',STATE);if(state?.status!=='conflict'||!state.conflict)throw new Error('library_sync_no_conflict');
   if(!expected||!Number.isSafeInteger(expected.localRevision)||expected.localRevision!==state.conflict.localRevision||expected.remoteRevision!==state.conflict.remoteRevision||await readLocalLibraryRevision(tx)!==expected.localRevision)throw Error('library_sync_conflict_changed');
-  tx.put('meta',STATE,{...state,status:'pending',resolution:{choice,expectedRemoteRevision:expected.remoteRevision,expectedLocalRevision:expected.localRevision},error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
+  tx.put('meta',STATE,{...state,status:'pending',resolution:{choice,expectedRemoteRevision:expected.remoteRevision,expectedLocalRevision:expected.localRevision,decision:{id:crypto.randomUUID(),createdAt:new Date().toISOString()}},error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
  });
 }
 async function saveState(expected:{owner:Owner;incarnation:string;localRevision?:number},work:(old:State|undefined)=>State,base?:Entry[],consumeReconnect=false){
@@ -538,7 +538,7 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
   if(merged.conflicts.length){
    const partition=partitionLibraryReplicaConflicts({base:initial.base,local:initial.entries,remote,merged:merged.entries,conflicts:merged.conflicts});
    conflict=await conflictSnapshot(initial.base,initial.entries,remote,merged.conflicts,partition.affectedRecordIds,head,initial.localRevision);
-   if(state.resolution?.expectedRemoteRevision===head.revision&&state.resolution.expectedLocalRevision===initial.localRevision){localEntries=uploadEntries=finalizeLibraryReplicaConflictChoice(state.resolution.choice==='local'?partition.local:partition.upload,merged.entries,{base:initial.base,conflicts:merged.conflicts});activeConflicts=[];conflict=undefined;}
+   if(state.resolution?.expectedRemoteRevision===head.revision&&state.resolution.expectedLocalRevision===initial.localRevision){localEntries=uploadEntries=finalizeLibraryReplicaConflictChoice(state.resolution.choice==='local'?partition.local:partition.upload,merged.entries,{base:initial.base,conflicts:merged.conflicts,local:initial.entries,remote,decision:state.resolution.decision});activeConflicts=[];conflict=undefined;}
    else{localEntries=partition.local;uploadEntries=partition.upload;nextBase=partition.base;}
   }
   // Cloud Checkpoints replicate the recoverable Package installation fact, not
@@ -587,6 +587,7 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
   });
  }catch(error){const message=error instanceof Error?error.message:'library_sync_failed';
   await saveState(expected,old=>{const state=old??defaults;
+   if(['meaning_conflict_history_invalid','library_sync_conflict_unsupported'].includes(message))return {...state,status:'conflict',resolution:undefined,syncStartedAt:undefined,error:'library_sync_conflict_unsupported',failureKind:undefined,retryCount:undefined,retryAt:undefined};
    if(message==='library_sync_local_changed')return {...state,status:'pending',syncStartedAt:undefined,error:message,failureKind:undefined,retryCount:undefined,retryAt:undefined};
    if(['library_sync_conflict','library_sync_identity','library_sync_history','library_sync_tombstone_required','libraryBackup.errors.inconsistent'].includes(message))return {...state,status:'conflict',syncStartedAt:undefined,error:message,failureKind:undefined,retryCount:undefined,retryAt:undefined};
    return {...state,...cloudSyncFailurePolicy(message,navigator.onLine,state.retryCount),syncStartedAt:undefined,error:message};

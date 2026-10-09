@@ -837,6 +837,7 @@ Reference Release 和离线索引尚未交付，在线结果及其测试不能�
 
 - 普通内容冲突必须保留 base/local/remote 的可理解差异，并在写入前重新验证 head revision；
 - Personal Semantic World 的 delete-vs-edit 不按时间猜测；
+- 个人意义明确裁决须跨设备传播：未再修改的另一端采用同一结果，未选分支、操作收据、媒体及历史学习 pin 仍可验证；后续离线新改动或相反并发裁决不能被旧选择覆盖；
 - 两设备并发完成的学习 Run 不能使用通用“保留本机/使用云端”。两边 Run/Event 均保留，由版本化
   reconciliation decision 决定当前 Memory/Schedule 分支，另一支成为 history-only，不重复结算；
 - 多标签页共享一个 OPFS 资料库，由单一 owner 和 Web Locks 协调；旧页面或旧 schema 不得越权写入。

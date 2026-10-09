@@ -26,6 +26,6 @@ export type DomainReplicaModule={
  conflictDependencies?(entry:ReplicaEntry,decodedValue:unknown):readonly ReplicaRecordReference[];
  /** Preserve domain-owned audit records and uncontested additions after the
   * learner has explicitly selected a complete conflicting branch. */
- afterConflictChoice?(selected:ReplicaEntry[],merged:ReplicaEntry[],context:{base:ReplicaEntry[];conflicts:readonly string[]}):ReplicaEntry[];
+ afterConflictChoice?(selected:ReplicaEntry[],merged:ReplicaEntry[],context:{base:ReplicaEntry[];conflicts:readonly string[];local:ReplicaEntry[];remote:ReplicaEntry[];decision:{id:string;createdAt:string}}):ReplicaEntry[];
  assertDelete?(entry:ReplicaEntry):void;
 };

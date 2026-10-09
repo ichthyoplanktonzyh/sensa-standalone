@@ -13,6 +13,7 @@ import {clarificationSourceWitness,meaningSourceValue,intakeSourceValue,type Cla
 import type {JourneyState,SenseRegistryState} from './store';
 import {canonicalConsumerJson} from '@sensa/contracts/sensa';
 import {meaningCorrectionPayload} from './meaningCorrection';
+import {meaningHistoryRecords} from './meaningHistoryRead';
 export interface PersonalMeaningCorrectionSeed extends WorldReadStamp{
  personalMeaningId:string;personalMeaningAlignmentId:string;source:ClarificationSourceWitness;
  payload:import('@sensa/contracts/sensa').SensaIntakePayload;reuseSense:{senseId:string;senseVersionId:string};
@@ -34,7 +35,7 @@ export async function readWorldFrame(tx:LibraryTransaction):Promise<WorldReadSta
 }
 export async function readMeaningRegistry(tx:Pick<LibraryTransaction,'get'>,record:MeaningJourneyRecord):Promise<{registry:SenseRegistryState;records:ReadonlyMap<string,unknown>}>{
  const keys=new Set<string>();
- for(const rows of Object.values(record))if(Array.isArray(rows))for(const fact of rows)for(const key of worldFactRegistryReferences(fact))keys.add(key);
+ for(const branch of meaningHistoryRecords(record))for(const rows of Object.values(branch))if(Array.isArray(rows))for(const fact of rows)for(const key of worldFactRegistryReferences(fact))keys.add(key);
  return readRegistryRecords(tx,[...keys],record);
 }
 /** Command frames reuse the same exact-reference/current-head traversal. */

@@ -47,6 +47,12 @@ const materialDependencies=(material:unknown)=>{
 export const learningReplica:DomainReplicaModule={
  namespace:'learning-system',
  owns:(table,key)=>tables.has(table)||(table==='meta'&&['learning-active','learning-session-active'].includes(key)),
+ afterConflictChoice(selected,merged,{conflicts}){
+  const blocked=new Set(conflicts);
+  // The learner chose conflicting content, not to undo independent learning
+  // facts or the domain's already-reconciled history.
+  return [...selected.filter(row=>blocked.has(entryId(row))),...merged.filter(row=>!blocked.has(entryId(row)))];
+ },
  *mergeSteps(input,ordinary){
   const historical=input.base.filter(entry=>immutableHistory.has(entry.table));
   for(const side of [input.local,input.remote]){

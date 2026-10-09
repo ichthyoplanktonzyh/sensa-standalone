@@ -1,4 +1,5 @@
-import {decodeBackupValue} from './backupCodec';
+import {decodeBackupValue,backupEqual} from './backupCodec';
+import {partitionLibraryReplicaConflicts} from './replication/libraryReplica';
 import type {LibraryReplicaEntry} from './replication/libraryReplica';
 import {buildDetailView} from '../../experience/personalMeaningJourney/projection';
 import type {MeaningJourneyRecord} from '../../experience/personalMeaningJourney/store';
@@ -8,7 +9,7 @@ import {parseStoredMedia} from './media';
 export type ConflictPreviewField={label:'expression'|'meaning'|'context'|'note'|'examples'|'included'|'excluded'|'contrasts'|'questions'|'content';text:string};
 export type ConflictPreview={title:string|null;removed:boolean;available:boolean;fields:ConflictPreviewField[];images:string[]};
 export type ConflictComparison={id:string;base:ConflictPreview;local:ConflictPreview;remote:ConflictPreview};
-export type CloudSyncComparison={records:ConflictComparison[];images:Record<string,string>};
+export type CloudSyncComparison={records:ConflictComparison[];images:Record<string,string>;coveredRecordIds:string[]};
 type Branch=ReadonlyMap<string,LibraryReplicaEntry>;
 const key=(table:string,id:string)=>JSON.stringify([table,id]);
 const text=(value:unknown)=>typeof value==='string'?value:null;
@@ -69,5 +70,12 @@ export function buildCloudSyncComparison(ids:readonly string[],branches:{base:Br
   }catch{view.available=false;}
   return view;
  };
- return {records:ids.map(id=>({id,base:preview(id,branches.base),local:preview(id,branches.local),remote:preview(id,branches.remote)})),images};
+ const sources={base:[...branches.base.values()],local:[...branches.local.values()],remote:[...branches.remote.values()]};
+ const resolvedMeaningIds=ids.filter(id=>[branches.base,branches.local,branches.remote].some(branch=>{const row=branch.get(id);return row?.table==='semanticMeanings'&&!!decodeBackupValue(row.value)?.conflictHistory;}));
+ const related=new Set(resolvedMeaningIds.length?partitionLibraryReplicaConflicts({...sources,merged:[],conflicts:resolvedMeaningIds}).affectedRecordIds:[]);
+ const visible=ids.filter(id=>{
+  const rows=[branches.base.get(id),branches.local.get(id),branches.remote.get(id)].filter((row):row is LibraryReplicaEntry=>!!row),sample=rows[0];
+  return !sample||!related.has(id)||!['semanticRegistry','semanticReceipts'].includes(sample.table)||(branches.local.has(id)&&branches.remote.has(id))||!rows.every(row=>backupEqual(row.value,sample.value));
+ });
+ return {records:visible.map(id=>({id,base:preview(id,branches.base),local:preview(id,branches.local),remote:preview(id,branches.remote)})),images,coveredRecordIds:[...ids]};
 }

@@ -13,7 +13,7 @@ import {curriculumEnrollmentSchema} from './curriculumEnrollments';
 import {assertDirectTaskEnrollment,assertDirectAttemptSource} from './directProvisioningAssertions';
 import {assertPersonalAttemptSource} from './personalProvisioningAssertions';
 import {readPersonalProvisioningSource} from './personalProvisioningSource';
-import {assertPersonalContextPin} from '../../experience/personalMeaningJourney/learningSource';
+import {assertPersonalContextPin,personalMeaningPinnedRecord} from '../../experience/personalMeaningJourney/learningSource';
 import {
   packageInstallationSchema,
   mergePackageInstallationRecovery,
@@ -122,7 +122,12 @@ export async function assertContentSupplyTransition(input: {
       }).strict().parse(task.source);
       const direct=isDirectProvisioningReference(source);
       if(direct&&task.contextPin!==undefined)reject('Direct preparation cannot pin personal Context.');
-      if(!direct&&task.contextPin!==undefined)assertPersonalContextPin(await read('semanticMeanings',source.personalMeaningId) as any,task.contextPin);
+      if(!direct&&task.contextPin!==undefined){
+        const current=await read('semanticMeanings',source.personalMeaningId) as any;
+        const pinned=change.before===null?current:personalMeaningPinnedRecord(current,source,task.contextPin);
+        if(!pinned)reject('Provisioning Context pin is missing its retained source.');
+        assertPersonalContextPin(pinned,task.contextPin);
+      }
       if(direct){
         const enrollment=curriculumEnrollmentSchema.parse(await read('curriculumEnrollments',source.enrollmentId));
         assertDirectTaskEnrollment(task,enrollment);
@@ -192,7 +197,7 @@ export async function assertContentSupplyTransition(input: {
       const enrollment=curriculumEnrollmentSchema.parse(await read('curriculumEnrollments',task.source.enrollmentId));
       assertDirectAttemptSource(attempt,task,assertDirectTaskEnrollment(task,enrollment),identity.learnerId);
     }else{
-      const source=await readPersonalProvisioningSource({get:async(table,key)=>await read(table,key) as any},attempt.fixedInput.source,attempt.contextPin);
+      const source=await readPersonalProvisioningSource({get:async(table,key)=>await read(table,key) as any},attempt.fixedInput.source,attempt.contextPin,true);
       assertPersonalAttemptSource(attempt,task,source,identity.learnerId);
     }
     if (attempt.request) sensaContentGenerationRequestSchema.parse(attempt.request);

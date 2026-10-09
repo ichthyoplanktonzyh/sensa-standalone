@@ -19,6 +19,9 @@ const meaningFactCollections=[
 ] as const satisfies readonly (keyof MeaningJourneyRecord)[];
 export function meaningSourceValue(record:MeaningJourneyRecord|undefined){
  if(!record||record.personalMeaning.status!=='active')throw new ClarificationSourceChangedError();
+ return canonicalMeaningFacts(record);
+}
+export function canonicalMeaningFacts(record:MeaningJourneyRecord):MeaningJourneyRecord{
  // Only top-level fact collections are unordered. Bind every complete fact,
  // including duplicates and nested user/provenance sequences, without writing
  // a normalized record back or invalidating review on replica array ordering.
@@ -27,7 +30,7 @@ export function meaningSourceValue(record:MeaningJourneyRecord|undefined){
   .map(fact=>({fact,encoded:canonicalConsumerJson(fact)}))
   .sort((left,right)=>left.encoded<right.encoded?-1:left.encoded>right.encoded?1:0)
   .map(row=>row.fact);
- return source;
+ return source as unknown as MeaningJourneyRecord;
 }
 export function intakeSourceValue(item:JourneyState['inboxItems'][number]|undefined,metadata:JourneyState['clarificationDrafts'][number]|undefined){
  if(!item)throw new ClarificationSourceChangedError();

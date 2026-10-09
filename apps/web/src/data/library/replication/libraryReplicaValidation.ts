@@ -5,7 +5,7 @@ import type {LibraryRecordReader} from '../libraryRecordReader';
 import type {LibraryIdentity,Table} from '../store';
 import {isReplicatedLibraryEntry,type LibraryReplicaEntry} from './libraryReplica';
 /** Advance when the complete replica integrity contract changes. Device-only. */
-export const libraryReplicaValidationVersion=4 as const;
+export const libraryReplicaValidationVersion=5 as const;
 
 export type ValidatedLibraryReplica={identity:LibraryIdentity;records:LibraryRecordReader};
 

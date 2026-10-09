@@ -201,6 +201,7 @@ test('personal scenes and original action pins restore while offline first accep
   const conflict=await b.evaluate(()=>(window as any).core.readCloudSync());assert.equal(conflict.status,'conflict');
   assert.deepEqual((await inspect(b)).scene,beforeB.scene);assert.equal((await inspect(b)).meanings.length,1,'a conflicting annotation must not auto-merge its two independently accepted Meanings');
   await b.evaluate(async()=>{const c=(window as any).core;await c.resolveCloudSyncConflicts('remote',(await c.readCloudSync()).conflict);await (window as any).sync();});
+  await a.evaluate(()=>(window as any).sync());
   const settled=await inspect(b);assert.equal(settled.scene.acceptedPersonalMeaningId,acceptedA.personalMeaningId);assert.equal(settled.meanings.length,1);assert.equal(settled.meanings[0].key,acceptedA.personalMeaningId);
   assert.deepEqual(retainedMeaningFacts(settled.meanings[0].value),retainedMeaningFacts((await inspect(a)).meanings[0].value));
   assert.deepEqual(settled.learning,beforeB.learning,'scene fork decisions cannot invent rating, completion or scheduling');

@@ -47,12 +47,12 @@ export function usePersonalLearning(sourceView:{kind:'library'}|{kind:'target';t
    ?learningSystem.read({kind:'target',targetId:sourceView.targetId,languageContext,clock:Date.now()}).then(detail=>({targets:detail.target?[detail.target]:[]}))
    :learningSystem.read({kind:'workspace',languageContext,clock:Date.now()})]);
   const personalTasks=supply.tasks.filter(isPersonalProvisioningTask);
-  const ids=[...new Set(personalTasks.filter(task=>sourceView&&task.languageContext.languageRouteId===languageContext.languageRouteId
+  const pendingTasks=personalTasks.filter(task=>sourceView&&task.languageContext.languageRouteId===languageContext.languageRouteId
     &&(sourceView.kind==='library'||task.targetId===sourceView.targetId)
-    &&!learning.targets.some(target=>target.targetId===task.targetId)).map(task=>task.source.personalMeaningId))];
-  const sources=await Promise.all(ids.map(id=>worldReadRepository.detail(id)));
+    &&!learning.targets.some(target=>target.targetId===task.targetId));
+  const sources=await Promise.all(pendingTasks.map(task=>contentSupplySystem.read({kind:'personal_provisioning_source',taskId:task.id})));
   if(batchRunner.read().busy||currentRoute.current!==routeKey||generation!==readGeneration.current)return;
-  setTaskSources(new Map(sources.flatMap(row=>row.sources.map(source=>[personalLearningSourceKey(source.reference),source] as const))));
+  setTaskSources(new Map(sources.flatMap(source=>source?[[personalLearningSourceKey(source.reference),source] as const]:[])));
   setSourceReadKey(routeKey);
   setSourceFailureKey(null);
   setTargets(learning.targets);setTasks(personalTasks);setPreparationAvailable(supply.preparationAvailable);setClock(Date.now());
@@ -69,7 +69,7 @@ export function usePersonalLearning(sourceView:{kind:'library'}|{kind:'target';t
  },[nextLeaseExpiry]);
  const perform=async<T,>(work:()=>Promise<T>)=>{if(batchRunner.read().busy)return null;setBusy(true);setNotice('');try{const outcome=await settleOperation(work,refresh);if(outcome.kind==='rejected'){const error=outcome.error;setNotice(error instanceof Error&&error.message.startsWith('localFlow.')?error.message:localFlowText('preparationPreserved'));return null;}if(outcome.projection==='stale')setNotice(localFlowText('preparationReadFailed'));return outcome.value;}finally{setBusy(false);}};
  const sourceForTask=(task:ContentProvisioningTask)=>taskSources.get(personalLearningSourceKey(task.source))??null;
- const prepare=async(id:string,source?:PersonalMeaningLearningSource)=>{if(!preparationAvailable)throw new Error('localFlow.checkModels');const task=source?null:tasks.find(candidate=>candidate.id===id)??await contentSupplySystem.read({kind:'provisioning_task',taskId:id}),current=source??(task&&isPersonalProvisioningTask(task)?(await worldReadRepository.detail(task.source.personalMeaningId)).sources.find(candidate=>personalLearningSourceKey(candidate.reference)===personalLearningSourceKey(task.source)):null);if(!current)throw new Error('localFlow.meaningChanged');await backgroundPreparation.run(id,signal=>contentSupplySystem.execute({kind:'prepare_materialization',taskId:id,source:current,signal}));};
+ const prepare=async(id:string,source?:PersonalMeaningLearningSource)=>{if(!preparationAvailable)throw new Error('localFlow.checkModels');const current=source??await contentSupplySystem.read({kind:'personal_provisioning_source',taskId:id});if(!current)throw new Error('localFlow.meaningChanged');await backgroundPreparation.run(id,signal=>contentSupplySystem.execute({kind:'prepare_materialization',taskId:id,source:current,signal}));};
  const enrollBatch=async(choices:readonly WorldLearningChoice[],useContext:boolean)=>{
   if(busy||batchRunner.read().busy)return;setNotice('');
   try{await batchRunner.run(choices,languageContext,useContext);}

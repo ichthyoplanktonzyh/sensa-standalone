@@ -3,6 +3,7 @@ import {emptyJourneyState,type MeaningJourneyRecord,type SenseRegistryState} fro
 import {assertPersonalSemanticWorldRecord} from './authority';
 import {buildWorldItemView} from './projection';
 import {indexRegistry} from './registryRead';
+import {meaningHistoryRecords} from './meaningHistoryRead';
 import {confirmedLookupConnections,normalizeMeaningQuery} from './meaningLookupFacts';
 import type {JourneyWorldItemView,JourneySenseFormationView,JourneyExpressionBindingView} from './types';
 import type {PersonalMeaningLearningSource,PersonalMeaningLearningReference} from '../../contentSupply/provisioning/contracts';
@@ -56,7 +57,7 @@ export function worldRegistryClosure(record:MeaningJourneyRecord,read:WorldRecor
    if(!requested.has(key)){requested.add(key);pending.push(key);onReference?.(key);}
   }
  };
- for(const rows of Object.values(record))if(Array.isArray(rows))for(const fact of rows)references(fact);
+ for(const branch of meaningHistoryRecords(record))for(const rows of Object.values(branch))if(Array.isArray(rows))for(const fact of rows)references(fact);
  for(let at=0;at<pending.length;at++){
   const key=pending[at]!,kind=key.slice(0,key.indexOf(':')) as keyof SenseRegistryState,id=key.slice(key.indexOf(':')+1);
   const raw=read('semanticRegistry',key) as {kind?:string;value?:Record<string,unknown>}|undefined;

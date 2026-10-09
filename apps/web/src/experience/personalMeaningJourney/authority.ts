@@ -28,6 +28,8 @@ import {
 } from '@sensa/contracts/sensa';
 import {assertMeaningLifecycle,assertMeaningLifecycleReceipt,assertMeaningLifecycleOperationReceipt,validMeaningLifecycleDescendant} from './meaningLifecycle';
 import {assertAlignmentHistory} from './alignmentLifecycle';
+import {assertMeaningConflictHistory,assertUnchangedMeaningConflictHistory} from './meaningConflictHistory';
+import {meaningHistoryRecords,assertArchivedSceneReceipts,hasSceneReceiptWitness} from './meaningHistoryRead';
 import {assertMeaningCorrectionReceipts,assertMeaningCorrectionReceiptFacts,assertMeaningCorrectionOperationReceipt,meaningCorrectionFacts} from './meaningCorrection';
 import type {z} from 'zod';
 import {runCooperatively,runSynchronously} from './cooperative';
@@ -184,6 +186,8 @@ const meaningIds={
 } as const;
 
 function validateMeaning(meaning:MeaningJourneyRecord,registry:RegistryIndex){
+ assertMeaningConflictHistory(meaning);
+ for(const branch of meaning.conflictHistory?.branches??[])validateMeaning(branch.record,registry);
  parse(sensaPersonalMeaningSnapshotSchema,meaning.personalMeaning,'Personal Meaning');
  const meaningId=meaning.personalMeaning.personalMeaningId;
  for(const field of Object.keys(meaningSchemas) as Array<keyof typeof meaningSchemas>){
@@ -342,6 +346,12 @@ function validateAuxiliaryState(state:JourneyState){
  for(const draft of state.clarificationDrafts)validateClarificationDraft(draft,id=>inboxIds.has(id));
  unique(state.commandReceipts,receipt=>receipt.operationId,'Command receipt');
  for(const receipt of state.commandReceipts)validateReceipt(receipt);
+ const byOperation=new Map(state.commandReceipts.map(receipt=>[receipt.operationId,receipt]));
+ for(const meaning of state.meanings)assertArchivedSceneReceipts(meaning,id=>byOperation.get(id));
+ for(const receipt of state.commandReceipts)if(receipt.command==='AcceptPublishedLearningScene'){
+  const meaning=state.meanings.find(row=>row.personalMeaning.personalMeaningId===receipt.result.personalMeaningId);
+  if(meaning?.conflictHistory)requireInvariant(meaningHistoryRecords(meaning).some(branch=>hasSceneReceiptWitness(branch,receipt)),'Archived Scene receipt 缺少分支见证。');
+ }
  const corrections=new Map<string,JourneyState['commandReceipts']>();
  for(const receipt of state.commandReceipts)if(receipt.command==='CorrectPersonalMeaning'){
   const id=String(receipt.result.personalMeaningId),group=corrections.get(id)??[];group.push(receipt);corrections.set(id,group);
@@ -357,7 +367,7 @@ function requireStateShape(state:JourneyState){
 
 function assertSceneOwner(meaning:MeaningJourneyRecord,owners:Map<string,string>){
  const meaningId=meaning.personalMeaning.personalMeaningId;
- for(const revision of meaning.personalSemanticAnchorRevisions){
+ for(const revision of meaningHistoryRecords(meaning).flatMap(branch=>branch.personalSemanticAnchorRevisions)){
   const scene=record(revision.structuredPayload.learningScene);if(!scene)continue;
   const sceneId=scene.sceneId;
   requireInvariant(typeof sceneId==='string'&&sceneId.length>0,'Personal Learning Scene identity 缺失。');
@@ -429,8 +439,9 @@ export function* assertPersonalSemanticWorldRecordSteps(reader:SemanticWorldReco
   references.clear();
   const meaning=value as MeaningJourneyRecord;validateMeaning(meaning,registry);
   requireInvariant(key===meaning.personalMeaning.personalMeaningId,'Personal Meaning identity 与 storage key 不一致。');assertSceneOwner(meaning,owners);
-  for(const stamp of meaning.personalMeaningRevisions)assertMeaningLifecycleReceipt(key,stamp,{get:readReceipt});
+  for(const branch of meaningHistoryRecords(meaning))for(const stamp of branch.personalMeaningRevisions)assertMeaningLifecycleReceipt(key,stamp,{get:readReceipt});
   assertMeaningCorrectionReceiptFacts(meaning,readReceipt);
+  assertArchivedSceneReceipts(meaning,readReceipt);
   yield;
  }
  references.clear();
@@ -451,6 +462,10 @@ export function* assertPersonalSemanticWorldRecordSteps(reader:SemanticWorldReco
   if(['ChangeMeaningLifecycle','CorrectPersonalMeaning'].includes(receipt.command)){
    const id=receipt.result.personalMeaningId,meaning=typeof id==='string'?reader.get('semanticMeanings',id) as MeaningJourneyRecord|undefined:undefined;
    assertMeaningLifecycleOperationReceipt(meaning,receipt);assertMeaningCorrectionOperationReceipt(meaning,receipt);
+  }
+  if(receipt.command==='AcceptPublishedLearningScene'){
+   const meaning=reader.get('semanticMeanings',String(receipt.result.personalMeaningId)) as MeaningJourneyRecord|undefined;
+   if(meaning?.conflictHistory)requireInvariant(meaningHistoryRecords(meaning).some(branch=>hasSceneReceiptWitness(branch,receipt)),'Archived Scene receipt 缺少分支见证。');
   }
   yield;
  }
@@ -524,6 +539,7 @@ function assertRegistryHeadTransition(before:Fact,after:Fact,pointer:string,revi
 }
 
 function assertMeaningTransition(before:MeaningJourneyRecord,after:MeaningJourneyRecord){
+ assertUnchangedMeaningConflictHistory(before,after);
  const prior=before.personalMeaning,next=after.personalMeaning;
  if(next.lifecycleRevision!==prior.lifecycleRevision){
   requireInvariant(validMeaningLifecycleDescendant(before,after)&&next.lifecycleRevision===prior.lifecycleRevision+1&&next.currentRevision===prior.currentRevision+1,'Personal Meaning lifecycle 必须以一个明确操作前进一位。');

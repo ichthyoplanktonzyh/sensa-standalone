@@ -15,6 +15,7 @@ import {parseStoredMedia,type StoredMedia} from '../../data/library/media';
 import {assertPersonalSemanticWorldState,assertPersonalSemanticWorldStateCooperatively,assertPersonalSemanticWorldTransition,semanticWorldRecordTables} from './authority';
 import {assertMeaningLifecycleReceipts,assertMeaningLifecycleOperationReceipt} from './meaningLifecycle';
 import {assertMeaningCorrectionReceipts} from './meaningCorrection';
+import {assertCurrentMeaningReceipt,meaningHistoryRecords} from './meaningHistoryRead';
 import {StorageUnavailableError} from './ports';
 import type {MeaningLookupResult} from './meaningLookup';
 import {sourceWitnessFromState,type ClarificationSourceKind,type ClarificationSourceWitness} from './clarificationSource';
@@ -244,7 +245,7 @@ export class MemoryJourneyRepository implements JourneyRepository{
   subscribe(listener:()=>void):()=>void{this.listeners.add(listener);return ()=>{this.listeners.delete(listener);};}
   async readReceipt(operationId:string):Promise<CommandReceipt|null>{
     const receipt=clone(this.records.semanticReceipts.get(operationId) as CommandReceipt|undefined);
-    if(receipt)assertSceneReceiptWitness(receipt,this.records.semanticMeanings.get(String(receipt.result.personalMeaningId)) as MeaningJourneyRecord|undefined);
+    if(receipt){const meaning=this.records.semanticMeanings.get(String(receipt.result.personalMeaningId)) as MeaningJourneyRecord|undefined;assertSceneReceiptWitness(receipt,meaning);assertCurrentMeaningReceipt(meaning,receipt);}
     return receipt??null;
   }
   async captureSource(kind:ClarificationSourceKind,id:string):Promise<ClarificationSourceWitness>{return sourceWitnessFromState(await this.load(),this.incarnation,kind,id);}
@@ -437,14 +438,15 @@ export class LibraryJourneyRepository implements JourneyRepository{
             records.semanticMeanings.set(personalMeaningId,meaning);
             // The aggregate's own lifecycle witnesses are exact dependencies,
             // not a reason to enumerate the World or all operation receipts.
-            for(const stamp of meaning.personalMeaningRevisions)if(stamp.lifecycle){
+            for(const stamp of meaningHistoryRecords(meaning).flatMap(branch=>branch.personalMeaningRevisions))if(stamp.lifecycle){
               const key=stamp.provenance.createdByOperationId,receipt=await tx.get('semanticReceipts',key);
               if(!receipt)throw new StoreCorruptedError('个人意义的生命周期操作凭据缺失。');
               records.semanticReceipts.set(key,receipt);
             }
             assertMeaningLifecycleReceipts([meaning],[...records.semanticReceipts.values()] as CommandReceipt[]);
-            for(const event of meaning.alignmentEvents)if(event.ordinal>1){const receipt=await tx.get('semanticReceipts',event.operationId);if(!receipt)throw Error('meaning_correction_invalid');records.semanticReceipts.set(event.operationId,receipt);}
+            for(const event of meaningHistoryRecords(meaning).flatMap(branch=>branch.alignmentEvents))if(event.ordinal>1){const receipt=await tx.get('semanticReceipts',event.operationId);if(!receipt)throw Error('meaning_correction_invalid');records.semanticReceipts.set(event.operationId,receipt);}
             assertMeaningCorrectionReceipts(meaning,[...records.semanticReceipts.values()] as CommandReceipt[]);
+            if(meaning.conflictHistory)for(const revision of meaningHistoryRecords(meaning).flatMap(branch=>branch.personalSemanticAnchorRevisions))if(revision.structuredPayload.learningScene){const key=revision.provenance.createdByOperationId,receipt=await tx.get('semanticReceipts',key);if(!receipt)throw Error('meaning_scene_receipt_invalid');records.semanticReceipts.set(key,receipt);}
             const closure=await readMeaningRegistry(tx,meaning);dependencies=[];
             for(const [key,value] of closure.records){records.semanticRegistry.set(key,value);dependencies.push({table:'semanticRegistry',key,expected:value});}
           }
@@ -501,11 +503,13 @@ export class LibraryJourneyRepository implements JourneyRepository{
       if(receipt?.command==='AcceptPublishedLearningScene')assertSceneReceiptWitness(receipt,await tx.get<MeaningJourneyRecord>('semanticMeanings',String(receipt.result.personalMeaningId)));
       if(receipt?.command==='ChangeMeaningLifecycle'){
         const key=receipt.result.personalMeaningId;
-        assertMeaningLifecycleOperationReceipt(typeof key==='string'?await tx.get<MeaningJourneyRecord>('semanticMeanings',key):undefined,receipt);
+        const meaning=typeof key==='string'?await tx.get<MeaningJourneyRecord>('semanticMeanings',key):undefined;
+        assertCurrentMeaningReceipt(meaning,receipt);assertMeaningLifecycleOperationReceipt(meaning,receipt);
       }
       if(receipt?.command==='CorrectPersonalMeaning'){
         const meaning=await tx.get<MeaningJourneyRecord>('semanticMeanings',String(receipt.result.personalMeaningId));if(!meaning)throw Error('meaning_correction_invalid');
-        const receipts=await Promise.all(meaning.alignmentEvents.filter(event=>event.ordinal>1).map(event=>tx.get<CommandReceipt>('semanticReceipts',event.operationId)));
+        assertCurrentMeaningReceipt(meaning,receipt);
+        const receipts=await Promise.all([...new Set(meaningHistoryRecords(meaning).flatMap(branch=>branch.alignmentEvents.filter(event=>event.ordinal>1).map(event=>event.operationId)))].map(id=>tx.get<CommandReceipt>('semanticReceipts',id)));
         if(receipts.some(row=>!row))throw Error('meaning_correction_invalid');assertMeaningCorrectionReceipts(meaning,receipts as CommandReceipt[]);
       }
       return receipt??null;

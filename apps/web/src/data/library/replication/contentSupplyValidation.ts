@@ -14,7 +14,7 @@ import {isDirectProvisioningReference,provisioningTaskId,provisioningMembershipI
 import {curriculumEnrollmentSchema} from '../curriculumEnrollments';
 import {assertDirectTaskEnrollment,assertDirectAttemptSource} from '../directProvisioningAssertions';
 import {assertPersonalAttemptSource} from '../personalProvisioningAssertions';
-import {assertPersonalContextPin,resolvePinnedPersonalMeaningLearningSource,orderPersonalContextImages} from '../../../experience/personalMeaningJourney/learningSource';
+import {assertPersonalContextPin,resolvePinnedPersonalMeaningLearningSource,orderPersonalContextImages,personalMeaningPinnedRecord} from '../../../experience/personalMeaningJourney/learningSource';
 import {parseStoredMedia} from '../media';
 import {backupEqual} from '../backupCodec';
 import {assertReadyContentAttempt} from '../contentAttemptEvidence';
@@ -55,7 +55,7 @@ export function* validateContentSupplyReplicaSteps(input:{
   if(direct)assertDirectTaskEnrollment(task,curriculumEnrollmentSchema.parse(requireRow('curriculumEnrollments',task.source.enrollmentId)));
   else requirePersonalSource(task.source);
   if(direct&&task.contextPin!==undefined)fail();
-  if(!direct&&task.contextPin!==undefined)assertPersonalContextPin(requireRow('semanticMeanings',task.source.personalMeaningId),task.contextPin);
+  if(!direct&&task.contextPin!==undefined)assertPersonalContextPin(personalMeaningPinnedRecord(requireRow('semanticMeanings',task.source.personalMeaningId),task.source,task.contextPin)??fail(),task.contextPin);
   const context=validateLanguageContext(task.languageContext);
   if(task.id!==provisioningTaskId(task.source,context.languageRouteId)||task.targetId!==stableUuid(`sensa-learning-target:${identity.learnerId}:${task.source.senseVersionId}:${task.source.bindingVersionId}`)
     ||task.curriculumMembershipId!==provisioningMembershipId(task.source,task.targetId,context.languageRouteId))fail();
@@ -78,14 +78,14 @@ export function* validateContentSupplyReplicaSteps(input:{
   if(task.attemptId===attempt.id&&!backupEqual(attempt.fixedInput,{source:task.source,languageContext:task.languageContext,planRevision:task.planRevision,useContext:task.useContext}))fail();
   if(attempt.contextPin!==undefined){
    if(isDirectProvisioningReference(task.source))fail();
-   assertPersonalContextPin(requireRow('semanticMeanings',task.source.personalMeaningId),attempt.contextPin);
   }
   if(isDirectProvisioningReference(task.source))assertDirectAttemptSource(attempt,task,assertDirectTaskEnrollment(task,curriculumEnrollmentSchema.parse(requireRow('curriculumEnrollments',task.source.enrollmentId))),identity.learnerId);
   else{
    if(!attempt.fixedInput)throw new Error('Personal preparation is missing its frozen input.');
    validateLanguageContext(attempt.fixedInput.languageContext);
    requirePersonalSource(attempt.fixedInput.source);
-   const record=requireRow('semanticMeanings',attempt.fixedInput.source.personalMeaningId);
+   const record=personalMeaningPinnedRecord(requireRow('semanticMeanings',attempt.fixedInput.source.personalMeaningId),attempt.fixedInput.source,attempt.contextPin)??fail();
+   if(attempt.contextPin)assertPersonalContextPin(record,attempt.contextPin);
    const source=resolvePinnedPersonalMeaningLearningSource(record,(kind,id)=>requireRow('semanticRegistry',`${kind}:${id}`).value,attempt.fixedInput.source,attempt.contextPin);
    if(!source)throw new Error('Personal preparation has a different accepted source.');
    const ids=new Set(source.context.personalSemanticAnchorRevisionIds);

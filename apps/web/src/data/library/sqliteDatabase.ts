@@ -1,4 +1,5 @@
 import type { Database, Sqlite3Static } from "@sqlite.org/sqlite-wasm";
+import {meaningMediaReferences} from '../../experience/personalMeaningJourney/meaningHistoryRead';
 import {isFatalSqliteConnectionFailure,sqliteRollbackFailure} from './sqliteConnectionFailure';
 
 import {decodeBackupValue,encodeBackupValue,backupEqual} from './backupCodec';
@@ -48,6 +49,7 @@ type ContentAttemptProjectionSource = {
 };
 type SemanticMeaningMediaSource = {
   personalSemanticAnchorRevisions?: Array<{ personalMediaObjectId?: string | null }>;
+  conflictHistory?:{branches:Array<{record:SemanticMeaningMediaSource}>};
 };
 type SemanticInboxMediaSource = {
   payload?: { context?: { mediaReferenceIds?: string[] } | null };
@@ -1273,8 +1275,7 @@ export class SqliteRecordDatabase {
     encodedValue: string,
   ): void {
     const mediaIds = table === 'semanticMeanings'
-      ? (this.decode<SemanticMeaningMediaSource>(encodedValue).personalSemanticAnchorRevisions ?? [])
-        .map((revision) => revision.personalMediaObjectId)
+      ? meaningMediaReferences(this.decode<SemanticMeaningMediaSource>(encodedValue))
       : (this.decode<SemanticInboxMediaSource>(encodedValue).payload?.context?.mediaReferenceIds ?? []);
     this.database.exec({
       sql: 'DELETE FROM sensa_media_references WHERE owner_table=? AND owner_key=?',

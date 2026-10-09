@@ -80,7 +80,7 @@ async function active(tx:LibraryTransaction,id:string,attemptId:string,source:Co
   if(source.sourceKind!=='stable_sense')throw new Error('localFlow.meaningChanged');
  }else{
   if(source.sourceKind!=='personal_meaning_alignment')throw new Error('localFlow.meaningChanged');
-  await assertPersonalProvisioningSource(tx,source,task.useContext?task.contextPin:source.context.personalSemanticAnchorRevisionIds);
+  await assertPersonalProvisioningSource(tx,source,task.useContext?task.contextPin:source.context.personalSemanticAnchorRevisionIds,true);
  }
  const covered=await provisioningCoverage(tx,task,source);
  if(covered&&(!task.replacing||covered.id!==task.curriculumMembershipId))throw new PreparationCovered(covered.id);
@@ -94,7 +94,7 @@ export async function preparePersonal(id:string,source:ContentProvisioningSource
   const owner=await learningOwner(tx),task=await tx.get<PersonalLearning>('personalLearning',id);if(!task)throw new Error('localFlow.enrollFirst');currentSource(task,source);
   await assertSupplementalMembershipActive(tx,task.curriculumMembershipId);
   if(source.sourceKind==='personal_meaning_alignment'){
-   await assertPersonalProvisioningSource(tx,source,task.useContext?task.contextPin:source.context.personalSemanticAnchorRevisionIds);
+   await assertPersonalProvisioningSource(tx,source,task.useContext?task.contextPin:source.context.personalSemanticAnchorRevisionIds,true);
    task.contextPin??=[...source.context.personalSemanticAnchorRevisionIds];
   }
   if(isDirectProvisioningReference(task.source)){await assertDirectProvisioningReference(tx,task.source);await requireLanguageRouteContext(tx,task.languageContext);if(task.useContext)throw new Error('localFlow.meaningChanged');}

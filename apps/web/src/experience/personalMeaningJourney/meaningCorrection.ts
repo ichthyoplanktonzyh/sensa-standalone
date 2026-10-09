@@ -6,6 +6,7 @@ import {readRegistry,type RegistryRead} from './registryRead';
 import {digestOf} from './digest';
 import type {CorrectPersonalMeaningResult} from './types';
 import {currentMeaningContextRevisions} from './meaningRecords';
+import {meaningHistoryRecords} from './meaningHistoryRead';
 export {currentMeaningContextRevisions} from './meaningRecords';
 
 export const correctionReason='personal_meaning_correction';
@@ -59,14 +60,14 @@ export function meaningCorrectionFacts(record:MeaningJourneyRecord){
 }
 /** Tie every structural replacement to its exact durable operation receipt. */
 export function assertMeaningCorrectionReceiptFacts(record:MeaningJourneyRecord,read:(operationId:string)=>CommandReceipt|undefined){
- for(const fact of meaningCorrectionFacts(record)){
+ for(const fact of meaningHistoryRecords(record).flatMap(meaningCorrectionFacts)){
   const receipt=read(fact.operationId);if(receipt?.command!=='CorrectPersonalMeaning'||digestOf(receipt.result)!==digestOf(fact.result))throw Error('meaning_correction_invalid');
  }
 }
 /** Reverse witness check also rejects an orphan receipt in a streamed replica. */
 export function assertMeaningCorrectionOperationReceipt(record:MeaningJourneyRecord|undefined,receipt:CommandReceipt){
  if(receipt.command!=='CorrectPersonalMeaning')return;
- const fact=record&&meaningCorrectionFacts(record).find(fact=>fact.operationId===receipt.operationId);
+ const fact=record&&meaningHistoryRecords(record).flatMap(meaningCorrectionFacts).find(fact=>fact.operationId===receipt.operationId);
  if(!fact||receipt.result.personalMeaningId!==record!.personalMeaning.personalMeaningId||digestOf(receipt.result)!==digestOf(fact.result))throw Error('meaning_correction_invalid');
 }
 export function assertMeaningCorrectionReceipts(record:MeaningJourneyRecord,receipts:readonly CommandReceipt[]){
