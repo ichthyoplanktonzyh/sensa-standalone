@@ -530,9 +530,13 @@ export async function prepareLearningQueue(languageContext:SensaFormalPinnedLang
  if(reviewOnly)return [];
  const fingerprint=await readLibrary(async tx=>{
   const plans=await readStudyPlans(tx),enrollments=(await tx.all<LocalCurriculumEnrollment>('curriculumEnrollments')).filter(item=>enrollmentMatchesContext(item,context));
+  // Reading an empty Home must not leave a materialization receipt or pending
+  // content revision when there is no Curriculum to prepare.
+  if(!enrollments.some(item=>item.source.kind!=='published_book'||!item.bookPlan||item.bookPlan.mode==='active'))return null;
   const packages=await tx.packageCacheProjection({kind:'identities'});
   return JSON.stringify({trigger,day:new Date(at).toDateString(),languageContext:context,dailyLimit:plans[context.languageRouteId]?.dailyNewSenseLimit??20,enrollments:enrollments.map(item=>[item.id,item.revision]),packages:packages.map(item=>[item.key,item.digest]).sort()});
  });
+ if(fingerprint===null)return [];
  const operationId=stableUuid(`local-learning-queue-window:${fingerprint}`);
  return learningCommand({id:operationId,kind:'learning.materialize',input:{languageContext:context,day:new Date(at).toDateString(),trigger}},async tx=>{
   await learningOwner(tx);await requireLanguageRouteContext(tx,context);

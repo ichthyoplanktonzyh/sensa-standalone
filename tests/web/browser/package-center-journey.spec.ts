@@ -393,6 +393,72 @@ test('a missing local identity opens recovery without an empty replacement, and 
  await page.locator('.sensa-world-row').first().click();await expect(page.getByText('Private source: May asked to borrow an umbrella.',{exact:true}).first()).toBeVisible();
 });
 
+test('an encrypted backup restores exact personal facts and genuine learning history in a fresh browser without overwriting an occupied library',async({page,browser},testInfo)=>{
+ test.setTimeout(120_000);
+ await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ const runtime=await startOrdinaryBook(page);await runtime.getByRole('button',{name:/查看表达/}).click();await runtime.getByRole('button',{name:/已经连上/}).click();
+ await expect.poll(async()=>(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records.length).toBe(1);
+ if(await runtime.getByRole('button',{name:'暂停',exact:true}).isVisible())await runtime.getByRole('button',{name:'暂停',exact:true}).click();
+ const repository=new MemoryJourneyRepository();await createJourneyModules({repository}).semanticIntake.submit(semanticLookupPayload());
+ await page.evaluate(state=>window.__sensaBrowserSmoke!.seedSemanticWorld(state),await repository.load());
+ // Real owner Draft commands carry a synthetic private image; provider quality
+ // and manual authorship are covered separately from the backup transport.
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.seedDrafts(1,1));
+ const facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest());
+ const learning=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest());
+ const password='isolated-roundtrip-password';
+ const backupPanel=async(target:Page)=>{await target.goto(origin+'/profile');await target.locator('#settings-data').click();await target.locator('#settings-backup').click();return target.getByRole('region',{name:'本机库备份与恢复',exact:true});};
+ const sourcePanel=await backupPanel(page);await sourcePanel.getByLabel('备份密码',{exact:true}).fill(password);
+ const pendingDownload=page.waitForEvent('download');await sourcePanel.getByRole('button',{name:'导出加密备份',exact:true}).click();
+ const downloaded=await pendingDownload,downloadPath=await downloaded.path();if(!downloadPath)throw Error('backup_download_missing');
+ const backup=await readFile(downloadPath),file={name:'roundtrip.sensa-backup',mimeType:'application/octet-stream',buffer:backup};
+ await sourcePanel.getByLabel('选择备份文件',{exact:true}).setInputFiles(file);await sourcePanel.getByRole('button',{name:'检查备份',exact:true}).click();
+ await expect(sourcePanel.getByRole('alert')).toContainText('当前本机库已有资料');await expect(sourcePanel.getByRole('button',{name:'确认恢复到当前空本机库',exact:true})).toHaveCount(0);
+ await expect(sourcePanel).toContainText('1 个意思');
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(facts);
+ const receiver=await browser.newContext({viewport:{width:390,height:844},locale:'zh-CN'});
+ try{
+  await receiver.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
+  const restoredPage=await receiver.newPage();await restoredPage.goto(origin);await restoredPage.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();await expect(restoredPage.locator('#s-home')).toBeVisible();
+  const destination=await restoredPage.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest());
+  const destinationFacts=await restoredPage.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest(true));
+  const destinationPath=testInfo.outputPath('fresh-destination-facts.json');await writeFile(destinationPath,JSON.stringify(destinationFacts));await testInfo.attach('fresh-destination-facts',{path:destinationPath,contentType:'application/json'});
+  const panel=await backupPanel(restoredPage);await panel.getByLabel('选择备份文件',{exact:true}).setInputFiles(file);await panel.getByLabel('备份密码',{exact:true}).fill('incorrect-roundtrip-password');
+  await panel.getByRole('button',{name:'检查备份',exact:true}).click();await expect(panel.getByRole('alert')).toBeVisible();
+  expect(await restoredPage.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest())).toEqual(destination);
+  const corrupted=JSON.parse(backup.toString('utf8'));corrupted.data=(corrupted.data[0]==='A'?'B':'A')+corrupted.data.slice(1);
+  await panel.getByLabel('备份密码',{exact:true}).fill(password);await panel.getByLabel('选择备份文件',{exact:true}).setInputFiles({...file,buffer:Buffer.from(JSON.stringify(corrupted))});await panel.getByRole('button',{name:'检查备份',exact:true}).click();await expect(panel.getByRole('alert')).toBeVisible();
+  expect(await restoredPage.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest())).toEqual(destination);
+  await panel.getByLabel('选择备份文件',{exact:true}).setInputFiles(file);
+  await panel.getByLabel('备份密码',{exact:true}).fill(password);await panel.getByRole('button',{name:'检查备份',exact:true}).click();
+  await expect(panel).toContainText('1 个意思');await expect(panel).toContainText('1 次运行');
+  const started=Date.now();await panel.getByRole('button',{name:'确认恢复到当前空本机库',exact:true}).click();await expect(panel.getByRole('button',{name:/重新打开/u})).toBeVisible();
+  await testInfo.attach('backup-roundtrip-conditions',{body:JSON.stringify({privateDraftImages:1,personalMeanings:1,learningRecords:1,fileBytes:backup.byteLength,restoreMs:Date.now()-started,viewport:'390x844',cpu:'1x',provider:'synthetic low-media publication; no paid calls'}),contentType:'application/json'});
+  await panel.getByRole('button',{name:/重新打开/u}).click();await expect(restoredPage.locator('#s-profile')).toBeVisible();
+  const after=await restoredPage.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest());
+  expect(after.identity).toMatchObject({id:(before.identity as {id:string}).id,learnerId:(before.identity as {learnerId:string}).learnerId});
+  expect((after.identity as {deviceId:string}).deviceId).not.toBe((before.identity as {deviceId:string}).deviceId);
+  expect(await restoredPage.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(facts);
+  expect(await restoredPage.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(learning);
+  await restoredPage.reload();await expect(restoredPage.locator('#s-profile')).toBeVisible();
+  expect(await restoredPage.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(facts);
+  await restoredPage.goto(origin+'/content');await restoredPage.locator('.sensa-world-row').first().click();await expect(restoredPage.getByText('Private source: May asked to borrow an umbrella.',{exact:true}).first()).toBeVisible();
+ }finally{await receiver.close();}
+ const racing=await browser.newContext({locale:'zh-CN'});
+ try{
+  await racing.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
+  const restoring=await racing.newPage();await restoring.goto(origin);await restoring.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();await expect(restoring.locator('#s-home')).toBeVisible();
+  const panel=await backupPanel(restoring);await panel.getByLabel('备份密码',{exact:true}).fill(password);await panel.getByLabel('选择备份文件',{exact:true}).setInputFiles(file);await panel.getByRole('button',{name:'检查备份',exact:true}).click();await expect(panel.getByRole('button',{name:'确认恢复到当前空本机库',exact:true})).toBeEnabled();
+  const writer=await racing.newPage();await writer.goto(origin);await expect(writer.locator('#s-home')).toBeVisible();await writer.evaluate(()=>window.__sensaBrowserSmoke!.seedDrafts(1,0));
+  const concurrent=await writer.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest());
+  await panel.getByRole('button',{name:'确认恢复到当前空本机库',exact:true}).click();await expect(panel.getByRole('alert')).toContainText('当前本机库已有资料');
+  expect(await writer.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(concurrent);
+  await writer.reload();await expect(writer.locator('#s-home')).toBeVisible();expect(await writer.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(concurrent);
+ }finally{await racing.close();}
+});
+
 const emptySignedInPreflightRetry=(failure:'http-error'|'network-error')=>async({page,context}:{page:Page;context:BrowserContext},testInfo:TestInfo)=>{
  test.setTimeout(90_000);
  await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.fallback():route.abort());

@@ -85,6 +85,7 @@ type BrowserSmokeBridge = {
   removeLibraryIdentityForRecoveryTest():Promise<void>;
   closeLibraryStorageForRecoveryTest():Promise<void>;
   libraryBootstrapFactsForTest():Promise<{identity:unknown;creationReceipt:unknown;settings:number}>;
+  durableBackupFactsForTest(includeLocalMetadata?:boolean):Promise<Record<string,{key:string;value:unknown}[]>>;
   localReplicaContentPresentForTest():Promise<boolean>;
   curriculumSourceCheckpointForTest():Promise<{
     targets:import('./learning/runtime/localProtocol').LocalLearningTarget[];
@@ -451,6 +452,10 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
       await restoreLibraryTransaction(async tx=>{for(const table of libraryTables)tx.clear(table);});
     },
     async libraryBootstrapFactsForTest(){return readLibrary(async tx=>({identity:await tx.get('meta','identity')??null,creationReceipt:await tx.get('operations','00000000-0000-4000-8000-000000000001')??null,settings:await tx.count('settings')}));},
+    async durableBackupFactsForTest(includeLocalMetadata=false){
+      const [{libraryBackupTables},{encodeBackupValue}]=await Promise.all([import('./data/library/backupPolicy'),import('./data/library/backupCodec')]);
+      return readLibrary(async tx=>Object.fromEntries(await Promise.all(libraryBackupTables.filter(table=>includeLocalMetadata||(table!=='meta'&&table!=='operations')).map(async table=>[table,(await tx.entries(table)).map(row=>({key:String(row.key),value:encodeBackupValue(row.value)})).sort((left,right)=>left.key.localeCompare(right.key))]))));
+    },
     async localReplicaContentPresentForTest(){const {hasGuestLibraryContent}=await import('./experience/account/guestLibraryConnection');return readLibrary(hasGuestLibraryContent);},
     async removeLibraryIdentityForRecoveryTest(){await restoreLibraryTransaction(async tx=>tx.delete('meta','identity'));},
     async closeLibraryStorageForRecoveryTest(){await import('./data/library/sqliteAdapter').then(module=>module.closeLocalLibraryStorage());},

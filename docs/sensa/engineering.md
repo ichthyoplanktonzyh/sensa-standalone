@@ -657,6 +657,9 @@ Point manifest、摘要、大小、library/learner/schema identity 与 `account_
 账号、空目标库与 incarnation 恢复检查。压缩明文上限仍为 64 MiB，文件上限仍为 90 MiB，record 上限仍为
 200k；解压总量和单帧另有 512 MiB／96 MiB 的防护边界，不能把这些字节上限当作实际 JS heap 承诺。
 本机压缩表示与手动恢复格式不自动改变 Cloud Checkpoint 的分块协议或证明其容量通过。
+备份目的地占用检查与事务内恢复共用同一规则：结果严格为空数组的无事实 `learning.materialize` 回执不算资料，其他非启动操作与领域记录仍受保护。
+没有可准备课程时首页不提交空准备回执。备份页检查文件时先读取目的地状态，非空库可看摘要但不提供确认；实际恢复再次原子核对。
+恢复后的新 incarnation 保持旧页面写入保护；零学习包不加载资源重取模块，需要公共资源的恢复可在重新打开后继续取得，已提交事实不随重取失败回滚。
 
 Web 页面与扩展之间的桥也只声明一次：`packages/contracts/src/sensa/consumer/extension.ts` 同时声明握手（授权、交换、凭据）、页面请求/应答和不含内容的 Intake-ready 通知。Web 应用按它构造请求并校验应答，`apps/browser-extension/src/background.ts` 在分发前解析每条桥消息——未声明的 kind 或字段一律拒绝，不再静默丢弃；页面侧的 `webBridge.ts` 是每个 Sensa 页面都会加载的内容脚本，因此不带 schema，它的频道名、id 上限与 kind 白名单由 `apps/browser-extension/build.mjs` 在构建时从同一份声明注入。扩展完成持久化后主动通知已打开的 Web 页面，页面再通过完整 pull/ack 合同取数据；空闲页不轮询扩展，恢复焦点和可见性作为丢失通知的兜底。游客采集由 `localIntake.ts` 独立保存并绑定本机 Web library，账号采集继续由 `webDestination.ts` 保管；两者不自动迁移。授权这一轮同样共用：API 路由与 Web 前置校验读同一组 schema。Web 页面在后台自动续接普通连接；插件中的显式登录则使用 Chrome Identity Web Auth Flow 打开带 PKCE challenge 的短时入口。已有 Web Session 自动签发一次性 code；没有 Session 才显示登录，登录完成后继续原请求。verifier 和最终扩展 credential 始终只在扩展后台，另一账号或资料库的队列不会随连接迁移。`tests/web/contracts/bridge-contract.test.mts` 在快速测试里把真实 forwarder 与真实 background 装进同一台假浏览器，逐 kind 走一遍。
 

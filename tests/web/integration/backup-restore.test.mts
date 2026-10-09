@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {test,vi} from 'vitest';
 import {canonicalConsumerJson,defaultSensaLanguageRoute,sensaPinnedLanguageContext} from '@sensa/contracts/sensa';
+import {portablePackageFixture} from '../../../scripts/support/portablePackageFixture.mts';
 
 const resourceModule=vi.hoisted(()=>({failImport:false}));
 vi.mock('../../../apps/web/src/contentSupply/system/contentSupplySystem.ts',()=>{
@@ -17,6 +18,9 @@ const {libraryTables,openLibrary,readLibrary,restoreLibraryTransaction}=await im
 
 test('a committed backup restore remains successful when resource refresh is deferred',async()=>{
  const source=await openLibrary();
+ const fixture=portablePackageFixture({packageId:crypto.randomUUID()});
+ const {installPortablePackage}=await import('../../../apps/web/src/contentSupply/portable/portablePackage');
+ await installPortablePackage(fixture.bytes,fixture.archiveDigest);
  await confirmLearningQuantity(crypto.randomUUID(),sensaPinnedLanguageContext(defaultSensaLanguageRoute),20);
  const exported=await exportLibraryBackup('restore-test-password');
 
@@ -39,4 +43,15 @@ test('a committed backup restore remains successful when resource refresh is def
  const context=sensaPinnedLanguageContext(defaultSensaLanguageRoute);
  assert.equal((await readLibrary(readStudyPlans))[context.languageRouteId]?.dailyNewSenseLimit,20);
  assert(await readLibrary(tx=>tx.get('meta','backup-restored')),'the committed restore marker must survive the follow-up failure');
+});
+
+test('a backup without public packages needs no resource module and reports its facts completely restored',async()=>{
+ vi.resetModules();
+ const library=await import('../../../apps/web/src/data/library/store'),backup=await import('../../../apps/web/src/data/library/backup');
+ const source=await library.openLibrary(),exported=await backup.exportLibraryBackup('text-only-test-password');
+ await library.restoreLibraryTransaction(async tx=>{for(const table of library.libraryTables)tx.clear(table);});
+ resourceModule.failImport=true;
+ const restored=await backup.restoreLibraryBackup(exported.file,'text-only-test-password');
+ assert.equal(restored.summary.packages,0);assert.equal(restored.resourceRefresh,'complete');
+ assert.equal((await library.readLibrary(tx=>tx.get<{id:string}>('meta','identity')))?.id,source.id);
 });

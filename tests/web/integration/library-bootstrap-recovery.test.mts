@@ -100,6 +100,35 @@ test('an explicit valid guest backup restores its original facts into a missing-
  expect(identity).toMatchObject({id:source.id,learnerId:source.learnerId});expect(identity!.deviceId).not.toBe(source.deviceId);
  expect(await library.readLibrary(tx=>tx.get('settings','language-route-study-plans'))).toBeDefined();
 });
+test('an empty Home creates no preparation receipt and a confirmed empty preparation never blocks backup recovery',async()=>{
+ const library=await store(),source=await library.openLibrary();
+ const {confirmLearningQuantity,prepareLearningQueue}=await import('../../../apps/web/src/data/library/learning');
+ const context=sensaPinnedLanguageContext(defaultSensaLanguageRoute);
+ await confirmLearningQuantity(crypto.randomUUID(),context,20);
+ const backup=await import('../../../apps/web/src/data/library/backup'),exported=await backup.exportLibraryBackup('empty-home-test-password');
+ await clear();values.delete(hintKey);await library.restoreLibraryTransaction(async tx=>{tx.put('meta','local-reset','account-deletion');tx.put('meta','signed-out',true);});
+ const destination=await library.openLibrary(),before=await library.readLibrary(tx=>tx.entries('operations'));
+ expect(await prepareLearningQueue(context)).toEqual([]);
+ expect(await library.readLibrary(tx=>tx.entries('operations'))).toEqual(before);
+ // The exact no-fact receipt observed in a previously opened empty Home.
+ await library.command({id:crypto.randomUUID(),kind:'learning.materialize',input:{languageContext:context,day:new Date().toDateString(),trigger:'daily'}},async()=>[]);
+ expect(await backup.isLibraryBackupDestinationEmpty()).toBe(true);
+ await backup.restoreLibraryBackup(exported.file,'empty-home-test-password');
+ expect(await library.readLibrary(tx=>tx.get('meta','identity'))).toMatchObject({id:source.id,deviceId:destination.deviceId});
+});
+test('a nonempty preparation result or an unrelated receipt remains protected from backup overwrite',async()=>{
+ const library=await store();await library.openLibrary();
+ const backup=await import('../../../apps/web/src/data/library/backup');
+ const exported=await backup.exportLibraryBackup('receipt-protection-password');
+ for(const entry of [{kind:'learning.materialize',result:['retained-target-id']},{kind:'fixture.explicit-history',result:[]}]){
+  await clear();values.delete(hintKey);await library.restoreLibraryTransaction(async tx=>{tx.put('meta','local-reset','account-deletion');tx.put('meta','signed-out',true);});await library.openLibrary();
+  await library.command({id:crypto.randomUUID(),kind:entry.kind,input:{}},async()=>entry.result);
+  const before=await library.readLibrary(tx=>tx.entries('operations'));
+  expect(await backup.isLibraryBackupDestinationEmpty()).toBe(false);
+  await expect(backup.restoreLibraryBackup(exported.file,'receipt-protection-password')).rejects.toThrow('libraryBackup.errors.occupied');
+  expect(await library.readLibrary(tx=>tx.entries('operations'))).toEqual(before);
+ }
+});
 test('prior-use metadata or non-bootstrap receipts cannot become a new library without a hint',async()=>{
  const library=await store();
  await library.restoreLibraryTransaction(async tx=>tx.put('meta','service-installation',crypto.randomUUID()));

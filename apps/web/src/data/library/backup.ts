@@ -43,9 +43,10 @@ export async function exportLibraryBackup(password:string){
  return {file,summary:summary(payload,rows)};
 }
 export async function inspectLibraryBackup(file:Uint8Array,password:string){return (await decode(file,password)).summary;}
-async function refreshRestoredLibrary():Promise<BackupRestoreResult['resourceRefresh']>{
+async function refreshRestoredLibrary(publicPackages:number):Promise<BackupRestoreResult['resourceRefresh']>{
  let deferred=false;
  try{clearAllCredentials();}catch{deferred=true;}
+ if(publicPackages===0)return deferred?'deferred':'complete';
  try{
   const {contentSupplySystem}=await import('../../contentSupply/system/contentSupplySystem');
   const result=await contentSupplySystem.execute({kind:'rehydrate'});
@@ -54,9 +55,15 @@ async function refreshRestoredLibrary():Promise<BackupRestoreResult['resourceRef
  return deferred?'deferred':'complete';
 }
 async function emptyDestination(tx:LibraryTransaction){
- for(const table of libraryTables){const entries=await tx.entries(table);if(table==='packageCache')continue;if(table==='meta'){if(entries.some(r=>!localMeta.has(String(r.key))&&!['identity','package-catalog'].includes(String(r.key))))return false;}else if(table==='operations'){if(entries.some(r=>!serviceOperation(r.value)&&!['library.create','package.catalog'].includes(JSON.parse(r.value.input).kind)))return false;}else if(entries.length)return false;}
+ for(const table of libraryTables){const entries=await tx.entries(table);if(table==='packageCache')continue;if(table==='meta'){if(entries.some(r=>!localMeta.has(String(r.key))&&!['identity','package-catalog'].includes(String(r.key))))return false;}else if(table==='operations'){if(entries.some(r=>{
+   const kind=JSON.parse(r.value.input).kind;
+   return !serviceOperation(r.value)&&!['library.create','package.catalog'].includes(kind)
+    &&!(kind==='learning.materialize'&&Array.isArray(r.value.result)&&r.value.result.length===0);
+  }))return false;}else if(entries.length)return false;}
  return true;
 }
+/** A preview does not authorize a later write; restore rechecks atomically. */
+export const isLibraryBackupDestinationEmpty=()=>readLibrary(emptyDestination);
 function restoredDomainValue(table:string,key:string,value:unknown,identity:LibraryIdentity){
  if(!isReplicatedLibraryEntry(table,key))return value;
  const entry={table:table as LibraryReplicaEntry['table'],key,value};
@@ -107,5 +114,5 @@ export async function restoreLibraryBackup(file:Uint8Array,password:string){
   return checked.summary;
  });
  markLocalLibraryPresent();
- return {summary:result,resourceRefresh:await refreshRestoredLibrary()} satisfies BackupRestoreResult;
+ return {summary:result,resourceRefresh:await refreshRestoredLibrary(result.packages)} satisfies BackupRestoreResult;
 }
