@@ -480,7 +480,7 @@
     "dailyNewQuantity": "Quantidade diária de novos itens de aprendizagem",
     "libraryReplaced": "Esta biblioteca local foi substituída. Abra a página novamente para continuar.",
     "clearChanged": "A biblioteca mudou. Confira-a novamente antes de confirmar a exclusão.",
-    "clearSyncRequired": "Sincronize as alterações pendentes da conta antes de apagar ou descarte-as explicitamente após uma tentativa de sincronização sem sucesso.",
+    "clearSyncRequired": "Sincronize primeiro as alterações pendentes da conta. Se a sincronização falhar ou você estiver desconectado, confirme explicitamente que deseja descartá-las antes de apagar.",
     "deleteCheck": "Verificar status da exclusão",
     "deleteTitle": "Excluir conta",
     "deleteScope": "Exclua sua conta e os dados dos serviços online e apague este navegador. Esta ação não pode ser desfeita. Sessões anteriores e o acesso pela extensão deixarão de funcionar. Apague também outros dispositivos offline e backups exportados; não será possível restaurar backups com a conta excluída.",

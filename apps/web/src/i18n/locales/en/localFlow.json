@@ -479,7 +479,7 @@
     "dailyNewQuantity": "Daily new-learning quantity",
     "libraryReplaced": "This local library was replaced. Reopen the page to continue.",
     "clearChanged": "The library changed. Check it again before confirming erasure.",
-    "clearSyncRequired": "Sync pending account changes before clearing, or explicitly discard them after a failed sync attempt.",
+    "clearSyncRequired": "Sync pending account changes first; if sync fails or you are signed out, explicitly confirm discarding them before clearing.",
     "deleteCheck": "Check deletion status",
     "deleteTitle": "Delete account",
     "deleteScope": "Delete your account and online service data, and clear this browser. This cannot be undone. Previous sessions and extension access will stop working. Clear other offline devices and exported backups separately; backups cannot be restored with the deleted account.",

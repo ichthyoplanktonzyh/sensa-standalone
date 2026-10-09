@@ -6,7 +6,7 @@ import {clearLocalLibraryHint} from './localLibraryHint';
 import {inspectPendingCloudSync,type PendingCloudSyncRecord} from './cloudSync';
 import {syncAccountLibrary} from './cloudSyncService';
 import {accountSignoutEpochKey,readAccountSignoutEpoch} from '../account/accountSessionBoundary';
-export type LocalClearSyncAttempt='not-needed'|'required'|'succeeded'|'failed';
+export type LocalClearSyncAttempt='not-needed'|'required'|'succeeded'|'failed'|'unavailable';
 export type LocalClearPreview={libraryId:string;incarnation:string;localRevision:number;operations:number;drafts:number;meanings:number;packages:number;targets:number;events:number;pending:number;pendingSync:number;pendingSyncRecords:PendingCloudSyncRecord[];canSync:boolean;syncAttempt:LocalClearSyncAttempt};
 async function inspectLocalClearTransaction(tx:LibraryTransaction):Promise<LocalClearPreview>{
  const owner=await learningOwner(tx),incarnation=await assertCurrentLibrary(tx);
@@ -16,7 +16,7 @@ async function inspectLocalClearTransaction(tx:LibraryTransaction):Promise<Local
   tx.count('learningTargets'),tx.count('learningEvents'),
   tx.all<any>('sessions'),tx.all<any>('personalLearning'),inspectPendingCloudSync(tx),
  ]);
- return {libraryId:owner.id,incarnation,localRevision:cloud.localRevision,operations,drafts,meanings,packages,targets,events,pending:sessions.filter(s=>s.status==='inflight').length+tasks.filter(t=>['waiting','generating','reviewing','failed','rejected','stopped'].includes(t.status)).length,pendingSync:cloud.records.length,pendingSyncRecords:cloud.records,canSync:cloud.canSync,syncAttempt:cloud.records.length?'required':'not-needed'};
+ return {libraryId:owner.id,incarnation,localRevision:cloud.localRevision,operations,drafts,meanings,packages,targets,events,pending:sessions.filter(s=>s.status==='inflight').length+tasks.filter(t=>['waiting','generating','reviewing','failed','rejected','stopped'].includes(t.status)).length,pendingSync:cloud.records.length,pendingSyncRecords:cloud.records,canSync:cloud.canSync,syncAttempt:cloud.records.length?cloud.canSync?'required':'unavailable':'not-needed'};
 }
 export const inspectLocalClear=()=>readLibrary(inspectLocalClearTransaction);
 function samePreview(expected:LocalClearPreview,current:LocalClearPreview){
@@ -27,6 +27,7 @@ export async function attemptLocalClearSync(preview:LocalClearPreview,synchroniz
  const before=await inspectLocalClear();
  if(!samePreview(preview,before))throw new Error('localFlow.clearChanged');
  if(!before.pendingSync)return {...before,syncAttempt:'not-needed'};
+ if(!before.canSync)return {...before,syncAttempt:'unavailable'};
  try{await synchronize();}catch{
   const current=await inspectLocalClear();
   if(current.libraryId!==before.libraryId||current.incarnation!==before.incarnation)throw new Error('localFlow.clearChanged');
@@ -41,7 +42,8 @@ export async function clearLocalLibrary(preview:LocalClearPreview,options:{disca
  await restoreLibraryTransaction(async tx=>{
   const current=await inspectLocalClearTransaction(tx);
   if(!samePreview(preview,current))throw new Error('localFlow.clearChanged');
-  if(current.pendingSync&&!(preview.syncAttempt==='failed'&&options.discardPendingSync))throw new Error('localFlow.clearSyncRequired');
+  const canDiscard=preview.syncAttempt==='failed'||preview.syncAttempt==='unavailable'&&!current.canSync;
+  if(current.pendingSync&&!(canDiscard&&options.discardPendingSync))throw new Error('localFlow.clearSyncRequired');
   const owner=await tx.get('meta','service-owner'),installation=await tx.get('meta','service-installation');
   const signedOut=await tx.get('meta','signed-out'),signoutEpoch=await readAccountSignoutEpoch(tx);
   for(const table of libraryTables)tx.clear(table);

@@ -480,7 +480,7 @@
     "dailyNewQuantity": "Cantidad diaria de aprendizajes nuevos",
     "libraryReplaced": "Esta biblioteca local se reemplazó. Vuelve a abrir la página para continuar.",
     "clearChanged": "La biblioteca cambió. Compruébala de nuevo antes de confirmar el borrado.",
-    "clearSyncRequired": "Sincroniza los cambios pendientes de la cuenta antes de borrar, o descártalos explícitamente después de un intento de sincronización fallido.",
+    "clearSyncRequired": "Sincroniza primero los cambios pendientes de la cuenta. Si falla la sincronización o has cerrado sesión, confirma explícitamente que los descartas antes de borrar.",
     "deleteCheck": "Comprobar el estado de eliminación",
     "deleteTitle": "Eliminar cuenta",
     "deleteScope": "Elimina tu cuenta y los datos del servicio en línea, y borra este navegador. Esta acción no se puede deshacer. Las sesiones anteriores y el acceso de la extensión dejarán de funcionar. Borra por separado otros dispositivos sin conexión y las copias exportadas; no podrás restaurarlas con la cuenta eliminada.",

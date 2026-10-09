@@ -28,6 +28,7 @@
     "unit/cloud-sync-comparison.test.mts",
     "integration/personal-meaning-conflict-decision.test.mts",
     "integration/account-session-boundary.test.mts",
+    "integration/local-clear-signed-out.test.mts",
     "unit/email-link-boundary.test.mts",
     "integration/shared-learning-storage.test.mts",
     "unit/learning-target-view.test.mts",

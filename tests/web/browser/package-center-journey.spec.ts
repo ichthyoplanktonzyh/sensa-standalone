@@ -523,6 +523,93 @@ test('a delayed account admission in another tab cannot reopen online services a
  }finally{resume();await page.evaluate(()=>window.__sensaBrowserSmoke!.releaseAccountSignoutForTest());await other.close();}
 });
 
+test('a 10000-Meaning local clear uses a bounded preview and leaves an empty reopened library',async({},testInfo)=>{
+ const profile=await mkdtemp(join(tmpdir(),'sensa-lj19-clear-'));
+ const context=await chromium.launchPersistentContext(profile,{headless:true,viewport:{width:1280,height:900},locale:'zh-CN'}),page=await context.newPage();
+ let completed=false;
+ await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.fallback():route.abort());
+ const repository=new MemoryJourneyRepository();await createJourneyModules({repository}).semanticIntake.submit(semanticLookupPayload());semanticScaleFixture=syntheticSemanticWorld(await repository.load(),10_000);
+ const fixtureBytes=Buffer.byteLength(JSON.stringify(semanticScaleFixture));
+ try{
+  await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();await expect(page.locator('#s-home')).toBeVisible();
+  expect(await page.evaluate(async()=>window.__sensaBrowserSmoke!.seedSemanticWorld(await(await fetch('/semantic-scale-fixture')).json()))).toBe(10_000);
+  await page.goto(origin+'/profile');await page.locator('#settings-data').click();await page.locator('#settings-storage').click();
+  const start=await page.evaluate(()=>performance.now());await page.getByRole('button',{name:'检查要清除的资料',exact:true}).click();await expect(page.getByText(/10000 个意思/)).toBeVisible();
+  const previewMs=await page.evaluate(start=>performance.now()-start,start);expect(previewMs).toBeLessThan(1500);
+  await page.getByLabel('我已保存需要的备份，确认清除以上本机资料。').check();const clearStart=await page.evaluate(()=>performance.now());
+  await page.getByRole('button',{name:'确认清除本机资料',exact:true}).click();await expect(page.getByText('本机资料已清除。重新打开应用可开始使用空资料库。',{exact:true})).toBeVisible({timeout:15_000});
+  const clearMs=await page.evaluate(start=>performance.now()-start,clearStart);expect(clearMs).toBeLessThan(15_000);
+  await page.getByRole('button',{name:'重新打开应用',exact:true}).click();await expect(page.locator('#s-profile')).toBeVisible();
+  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);expect(Object.values(await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).every(rows=>rows.length===0)).toBe(true);
+  const measurement={meanings:10_000,fixtureJsonBytes:fixtureBytes,media:0,learningHistory:0,previewMs,clearMs,browser:'Chromium OPFS persistent profile',cpu:cpus()[0]?.model,network:'loopback fixture setup; preview/clear are local',scope:'synthetic confirmed text Meaning/Registry facts; one destructive clear, not p95, physical file reclamation or heavy Learning/Media capacity'};
+  console.info('LJ19 local clear capacity:',JSON.stringify(measurement));const evidence=testInfo.outputPath('local-clear-capacity.json');await writeFile(evidence,JSON.stringify(measurement));await testInfo.attach('local-clear-capacity',{contentType:'application/json',path:evidence});completed=true;
+ }finally{semanticScaleFixture=undefined;await context.close();if(completed)await rm(profile,{recursive:true,force:true});else await testInfo.attach('retained-clear-profile',{contentType:'text/plain',body:profile});}
+});
+
+test('the shipped account pages clear only this browser and offline reload stays empty until explicit sync',async({page,context},testInfo)=>{
+ cloudManifest=null;cloudRevision=0;cloudBlocks.clear();
+ await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.fallback():route.abort());
+ await page.goto(origin);await page.evaluate(({key,value})=>localStorage.setItem(key,JSON.stringify(value)),{key:storageKey,value:session()});
+ await page.goto(origin+'/profile');await expect(page.locator('#s-profile')).toBeVisible();
+ const repository=new MemoryJourneyRepository();await createJourneyModules({repository}).semanticIntake.submit(semanticLookupPayload());await page.evaluate(state=>window.__sensaBrowserSmoke!.seedSemanticWorld(state),await repository.load());
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.seedDrafts(1,1));
+ const runtime=await startOrdinaryBook(page);await runtime.getByRole('button',{name:/查看表达/}).click();await runtime.getByRole('button',{name:/已经连上/}).click();
+ await expect.poll(async()=>(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records.length).toBe(1);
+ await page.goto(origin+'/profile');await page.locator('#settings-data').click();await page.getByRole('button',{name:'立即同步',exact:true}).click();await expect(page.getByRole('status').filter({hasText:'已同步到账号'})).toBeVisible();
+ const facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest()),original=(await page.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest())).identity;
+ expect(original).toBeTruthy();const cloudBefore={revision:cloudRevision,manifest:cloudManifest,blocks:[...cloudBlocks]};
+ await expect.poll(()=>page.evaluate(()=>!!navigator.serviceWorker.controller)).toBe(true);
+ await page.locator('#settings-storage').click();await page.getByRole('button',{name:'检查要清除的资料',exact:true}).click();
+ await expect(page.locator('[data-local-clear-sync]')).toHaveCount(0);await page.getByLabel('我已保存需要的备份，确认清除以上本机资料。').check();
+ await page.getByRole('button',{name:'确认清除本机资料',exact:true}).click();await expect(page.getByText('本机资料已清除。重新打开应用可开始使用空资料库。',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'重新打开应用',exact:true}).click();await expect(page.locator('#s-profile')).toBeVisible();
+ const cleared=(await page.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest())).identity as {id:string;deviceId:string};expect(cleared.id).not.toBe((original as {id:string}).id);
+ const empty=await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest());expect(Object.values(empty).every(rows=>rows.length===0)).toBe(true);
+ let requests=0;context.on('request',request=>{if(new URL(request.url()).pathname.startsWith('/sensa/library-sync/'))requests++;});
+ await context.setOffline(true);
+ try{await page.reload();await expect(page.locator('#s-profile')).toBeVisible();expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(empty);}finally{await context.setOffline(false);}
+ await page.reload();await expect(page.locator('#s-profile')).toBeVisible();await page.locator('#settings-data').click();await expect(page.getByRole('button',{name:'立即同步',exact:true})).toBeEnabled();
+ expect(requests).toBe(0);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(empty);expect({revision:cloudRevision,manifest:cloudManifest,blocks:[...cloudBlocks]}).toEqual(cloudBefore);
+ await page.getByRole('button',{name:'立即同步',exact:true}).click();await expect.poll(()=>page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(1);
+ await page.reload();await expect(page.locator('#s-profile')).toBeVisible();expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(facts);
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest())).identity).toEqual({...original as object,deviceId:cleared.deviceId});expect(requests).toBeGreaterThan(0);
+ await testInfo.attach('local-clear-journey',{contentType:'application/json',body:JSON.stringify({scope:'shipped AccountExperience/ProfileScreen, genuine learning rating, private Draft image, accepted synthetic Meaning, OPFS and native offline reload; controlled Auth/HTTP',original,cleared,paidCalls:0})});
+});
+
+test('a signed-out owner can explicitly discard pending local content without reconnecting its account',async({page,context})=>{
+ cloudManifest=null;cloudRevision=0;cloudBlocks.clear();
+ await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.fallback():route.abort());
+ await page.goto(origin);await page.evaluate(({key,value})=>localStorage.setItem(key,JSON.stringify(value)),{key:storageKey,value:session()});
+ await page.goto(origin+'/profile');await expect(page.locator('#s-profile')).toBeVisible();
+ const repository=new MemoryJourneyRepository();await createJourneyModules({repository}).semanticIntake.submit(semanticLookupPayload());await page.evaluate(state=>window.__sensaBrowserSmoke!.seedSemanticWorld(state),await repository.load());
+ const runtime=await startOrdinaryBook(page);await runtime.getByRole('button',{name:/查看表达/}).click();await runtime.getByRole('button',{name:/已经连上/}).click();
+ await expect.poll(async()=>(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records.length).toBe(1);
+ await page.goto(origin+'/profile');const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest());
+ await page.route('**/auth/v1/logout*',route=>route.fulfill({status:204}));
+ await page.locator('#settings-security').click();await page.getByRole('button',{name:'退出账号',exact:true}).click();
+ await expect.poll(()=>page.evaluate(key=>localStorage.getItem(key),storageKey)).toBeNull();await page.goto(origin+'/profile');
+ // Completion may checkpoint earlier facts. This genuine local save occurs
+ // after logout, so the pending branch cannot depend on scheduler timing.
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.seedDrafts(1,1));
+ const facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest());
+ await page.locator('#settings-data').click();await page.locator('#settings-storage').click();
+ await page.getByRole('button',{name:'检查要清除的资料',exact:true}).click();await expect(page.locator('[data-local-clear-sync]')).toHaveAttribute('data-local-clear-sync','unavailable');
+ await expect(page.getByRole('button',{name:'立即同步',exact:true})).toBeDisabled();
+ const erase=page.getByRole('button',{name:'确认清除本机资料',exact:true});await expect(erase).toBeDisabled();
+ await page.getByLabel('我已保存需要的备份，确认清除以上本机资料。').check();await expect(erase).toBeDisabled();
+ await page.getByLabel(/丢弃这个浏览器中的 .* 项未同步账号修改/).check();await expect(erase).toBeEnabled();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(facts);
+ const cloudBefore={revision:cloudRevision,manifest:cloudManifest,blocks:[...cloudBlocks]};
+ const metadata=await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest(true)),epoch=metadata.meta!.find(row=>row.key==='service-signout-epoch');
+ await erase.click();await expect(page.getByText('本机资料已清除。重新打开应用可开始使用空资料库。',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'重新打开应用',exact:true}).click();await expect(page.locator('#s-profile')).toBeVisible();
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest())).identity).not.toEqual(before.identity);
+ const cleared=await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest());expect(Object.values(cleared).every(rows=>rows.length===0)).toBe(true);
+ const after=await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest(true));expect(after.meta!.find(row=>row.key==='signed-out')?.value).toEqual(['boolean',true]);expect(after.meta!.find(row=>row.key==='service-signout-epoch')).toEqual(epoch);
+ await page.reload();await expect(page.locator('#s-profile')).toBeVisible();expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(cleared);
+ expect({revision:cloudRevision,manifest:cloudManifest,blocks:[...cloudBlocks]}).toEqual(cloudBefore);expect(await page.evaluate(key=>localStorage.getItem(key),storageKey)).toBeNull();
+});
+
 test('a signed-out library opens locally while an expired cached token is stuck refreshing',async({page,context})=>{
  cloudManifest=null;cloudRevision=0;cloudBlocks.clear();
  await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.fallback():route.abort());

@@ -478,7 +478,7 @@
     "dailyNewQuantity": "Số nội dung mới học mỗi ngày",
     "libraryReplaced": "Thư viện cục bộ đã được thay thế. Mở lại trang để tiếp tục.",
     "clearChanged": "Thư viện đã đổi. Kiểm tra lại trước khi xác nhận xóa.",
-    "clearSyncRequired": "Hãy đồng bộ các thay đổi tài khoản đang chờ trước khi xóa, hoặc xác nhận rõ việc hủy chúng sau khi đồng bộ thất bại.",
+    "clearSyncRequired": "Hãy đồng bộ các thay đổi tài khoản đang chờ trước. Nếu đồng bộ thất bại hoặc bạn đã đăng xuất, hãy xác nhận rõ việc bỏ các thay đổi đó trước khi xóa.",
     "deleteCheck": "Kiểm tra trạng thái xóa",
     "deleteTitle": "Xóa tài khoản",
     "deleteScope": "Xóa tài khoản và dữ liệu dịch vụ trực tuyến, đồng thời xóa trình duyệt này. Không thể hoàn tác. Phiên trước và quyền truy cập tiện ích sẽ ngừng hoạt động. Hãy tự xóa các thiết bị ngoại tuyến khác và bản sao lưu đã xuất; không thể khôi phục bản sao lưu bằng tài khoản đã xóa.",

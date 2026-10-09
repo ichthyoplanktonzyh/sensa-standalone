@@ -478,7 +478,7 @@
     "dailyNewQuantity": "Jumlah belajar baru harian",
     "libraryReplaced": "Pustaka lokal ini diganti. Buka ulang halaman untuk melanjutkan.",
     "clearChanged": "Pustaka berubah. Periksa lagi sebelum mengonfirmasi penghapusan.",
-    "clearSyncRequired": "Sinkronkan perubahan akun yang tertunda sebelum menghapus, atau buang secara tegas setelah upaya sinkronisasi gagal.",
+    "clearSyncRequired": "Sinkronkan perubahan akun yang tertunda terlebih dahulu. Jika sinkronisasi gagal atau Anda sudah keluar, konfirmasikan pembuangannya sebelum menghapus.",
     "deleteCheck": "Periksa status penghapusan",
     "deleteTitle": "Hapus akun",
     "deleteScope": "Hapus akun dan data layanan online Anda, serta kosongkan browser ini. Tindakan ini tidak dapat dibatalkan. Sesi sebelumnya dan akses ekstensi akan berhenti berfungsi. Hapus perangkat offline lain dan cadangan ekspor secara terpisah; cadangan tidak dapat dipulihkan dengan akun yang telah dihapus.",

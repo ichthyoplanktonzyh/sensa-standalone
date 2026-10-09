@@ -480,7 +480,7 @@
     "dailyNewQuantity": "Quantità giornaliera di nuovi contenuti",
     "libraryReplaced": "Questa libreria locale è stata sostituita. Riapri la pagina per continuare.",
     "clearChanged": "La libreria è cambiata. Controllala di nuovo prima di confermare la cancellazione.",
-    "clearSyncRequired": "Sincronizza le modifiche dell’account in sospeso prima di cancellare oppure conferma esplicitamente di eliminarle dopo un tentativo di sincronizzazione non riuscito.",
+    "clearSyncRequired": "Sincronizza prima le modifiche dell’account in sospeso. Se la sincronizzazione fallisce o hai effettuato la disconnessione, conferma esplicitamente di scartarle prima di cancellare.",
     "deleteCheck": "Controlla lo stato dell'eliminazione",
     "deleteTitle": "Elimina account",
     "deleteScope": "Elimina il tuo account e i dati dei servizi online e cancella questo browser. L'operazione è irreversibile. Le sessioni precedenti e l'accesso dell'estensione smetteranno di funzionare. Cancella separatamente gli altri dispositivi offline e i backup esportati; dopo l'eliminazione, non potrai ripristinare i backup con questo account.",

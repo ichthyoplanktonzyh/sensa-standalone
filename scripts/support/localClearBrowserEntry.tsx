@@ -19,7 +19,7 @@ export function mountLocalDataControl(){
  * admission only. This is not the full login/AccountExperience application. */
 function CloudSyncControl({automatic,initialAvailability}:{automatic:boolean;initialAvailability:LibraryAvailability}){
  const [availability,setAvailability]=useState(initialAvailability);
- const account:AccountAccess={deleteAccount:()=>{},notice:'',email:'sync@sensa.invalid',onlineService:true,publisherAccess:false,connectionConflict:false,libraryAvailability:availability,login:()=>{},retryConnection:async()=>{},logout:async()=>{}};
+ const account:AccountAccess={deleteAccount:()=>{},notice:'',email:'sync@sensa.invalid',onlineService:true,webSessionPresent:true,publisherAccess:false,connectionConflict:false,libraryAvailability:availability,login:()=>{},retryConnection:async()=>{},logout:async()=>{}};
  return <AccountContext.Provider value={account}>{automatic&&<AccountLibrarySync online onAvailabilityChange={setAvailability}/>}<div data-testid="library-availability">{availability}</div>{availability!=='authoritative'&&<LibraryRestorationScreen id="restore-fixture" active failed={availability==='failed'} onRetry={account.retryConnection} onSettings={()=>{}}/>}<CloudSyncPanel/></AccountContext.Provider>;
 }
 export function mountCloudSyncControl({automatic=true,initialAvailability='authoritative'}:{automatic?:boolean;initialAvailability?:LibraryAvailability}={}){

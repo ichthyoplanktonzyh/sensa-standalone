@@ -662,6 +662,7 @@ Point manifest、摘要、大小、library/learner/schema identity 与 `account_
 恢复后的新 incarnation 保持旧页面写入保护；零学习包不加载资源重取模块，需要公共资源的恢复可在重新打开后继续取得，已提交事实不随重取失败回滚。
 Web 退出通过 `service.signout` 原子保存 `signed-out` 与本机 `service-signout-epoch`，不更换数据库 incarnation。
 本机清除保留这两项权限事实；删除内容不能撤销退出或复活首次退出前捕获的在线回复。
+清除预览区分待同步、实际失败与已退出不可同步；后者不执行网络请求，仍要求明确丢弃。刷新同步后预览的UI同时退休旧确认，提交仍原子核对原库/incarnation/内容revision和操作数。
 `accountSessionBoundary.ts` 以现有owner及退出epoch核对服务请求前后；此本机权限边界不进入同步或备份，不表示服务端所有JWT立即撤销。
 新的PKCE callback在首次交换时绑定模块级epoch，OTP在验证开始前绑定；后续组件重挂/回复不能重标旧证明。
 重新连接与准入写入在事务内核对同一epoch，跨标签退出退休未完成的恢复；已结束会话的本机数据入口保持可用。

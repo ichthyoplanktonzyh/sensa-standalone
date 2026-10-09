@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {libraryCloudPackageFixture} from '../../../scripts/support/libraryCloudPackageFixture.mts';
-import {expect,test} from '@playwright/test';
+import {expect,test,type Browser} from '@playwright/test';
 import {purgeExpiredLibraryCloudBlocks} from '../../../apps/api/src/sensa/library/retention.ts';
 import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec.ts';
 import {librarySyncBlockChars,librarySyncBlockStoreBatch} from '../../../packages/contracts/src/sensa/librarySync.ts';
@@ -55,6 +55,31 @@ test('clearing a device through the UI survives reload until explicit Cloud rest
   await testInfo.attach('clear-reconnect-evidence',{contentType:'application/json',body:JSON.stringify({originalIdentity:original.identity,clearedIdentity:cleared.identity,restoredIdentity:restored.identity,meanings:restored.meanings.length,paidCalls:0,scope:'actual LocalDataControlPanel/CloudSyncPanel/automatic scheduler, OPFS reload and Hono/PostgreSQL; controlled auth, not full AccountExperience login'})});
  }finally{await fixture.close();}
 });
+
+const localClearDuringSync=(failure:boolean)=>async({browser}:{browser:Browser})=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount(),page=await fixture.createClient(account);
+  await page.evaluate(async()=>{await (window as any).sync();const c=(window as any).core;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Shown before synchronization'});const original=(window as any).sync;(window as any).__syncEntered=false;(window as any).sync=async()=>{(window as any).__syncEntered=true;await new Promise<void>(resolve=>{(window as any).__resumeSync=resolve;});if((window as any).__failClearSync)throw Error('controlled interrupted sync');await original();};});
+  await page.evaluate(failure=>{(window as any).__failClearSync=failure;},failure);
+  await page.evaluate(async()=>{const path='/local-clear.js';(await import(/* @vite-ignore */ path)).mountLocalDataControl();});
+  await page.getByRole('button',{name:'Review local content',exact:true}).click();
+  const confirmation=page.getByLabel('I have saved any backup I need and confirm erasing this local content.');await confirmation.check();
+  await page.getByRole('button',{name:'Sync now',exact:true}).click();await expect.poll(()=>page.evaluate(()=>(window as any).__syncEntered)).toBe(true);
+  const peer=await page.context().newPage();await peer.goto(fixture.origin);
+  const added=await peer.evaluate(async()=>{const path='/core.js',c=await import(/* @vite-ignore */ path);await c.openLibrary();const id=crypto.randomUUID();await c.saveDraft(crypto.randomUUID(),{id,expectedRevision:0,text:'Written in another tab during synchronization'});return id;});
+  await page.evaluate(()=>(window as any).__resumeSync());
+  if(failure)await expect(page.getByRole('alert')).toContainText('Sync did not finish');
+  else await expect(page.locator('[data-local-clear-sync]')).toHaveCount(0);
+  await expect(page.getByText(/2 sources/)).toBeVisible();await expect(confirmation).not.toBeChecked();
+  await expect(page.getByRole('button',{name:'Erase local content',exact:true})).toBeDisabled();
+  expect((await page.evaluate(()=>(window as any).core.listDrafts())).map((row:any)=>row.id)).toContain(added);
+  if(failure)await page.getByLabel(/Discard these .* unsynced account changes/).check();
+  await confirmation.check();await expect(page.getByRole('button',{name:'Erase local content',exact:true})).toBeEnabled();await peer.close();
+ }finally{await fixture.close();}
+};
+test('local-clear confirmation is retired when sync succeeds after another tab writes',localClearDuringSync(false));
+test('local-clear confirmation is retired when sync fails after another tab writes',localClearDuringSync(true));
 
 test('a manual sync queued behind another tab cannot authorize restoration after a later local clear',async({browser})=>{
  const fixture=await createLibraryCloudBrowserFixture(browser);
@@ -679,6 +704,7 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
 	  await expect(page.getByText('Sync did not finish. Your local data is still saved. Check the connection and retry.',{exact:true})).toBeVisible();
 	  assert((await page.evaluate(()=>(window as any).core.listDrafts())).some((draft:any)=>draft.id===pendingId),'failed pre-clear sync must preserve local OPFS data');
 	  await page.getByLabel(/Discard these 1 unsynced account change/).check();
+	  await page.getByLabel('I have saved any backup I need and confirm erasing this local content.').check();
 	  await page.evaluate(async()=>{const c=(window as any).core;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'newer than discard confirmation'});});
 	  await page.getByRole('button',{name:'Erase local content',exact:true}).click();
 	  await expect(page.getByText('The library changed. Check it again before confirming erasure.',{exact:true})).toBeVisible();
