@@ -47,14 +47,16 @@ const materialDependencies=(material:unknown)=>{
 export const learningReplica:DomainReplicaModule={
  namespace:'learning-system',
  owns:(table,key)=>tables.has(table)||(table==='meta'&&['learning-active','learning-session-active'].includes(key)),
- merge(input,ordinary){
+ *mergeSteps(input,ordinary){
   const historical=input.base.filter(entry=>immutableHistory.has(entry.table));
   for(const side of [input.local,input.remote]){
    const retained=new Set(side.map(entryId));
    if(historical.some(entry=>!retained.has(entryId(entry))))throw new Error('library_sync_history');
   }
-  const merged=ordinary(input);
+  const merged=yield* ordinary(input);
+  yield;
   const reconciled=reconcileConcurrentLearningEntries({...input,merged:merged.entries,conflicts:merged.conflicts}) as ReplicaMergeResult;
+  yield;
   return {...reconciled,conflicts:[...new Set([...reconciled.conflicts,...activeRunPolicyConflicts(reconciled.entries),...activeBookConflicts(reconciled.entries)])].sort()};
  },
  conflictDependencies(entry,value){

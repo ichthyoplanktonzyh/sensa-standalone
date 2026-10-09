@@ -85,8 +85,7 @@ const activeFacts=[
  entry('learningTargets',ids.target,{id:ids.target,committedPolicy:{profileId:'lightweight',profileVersion:'1'}}),
  entry('learningTargets',futureTargetId,{id:futureTargetId,committedPolicy:null,policyAssignment:{profileId:'four_stage'}}),
 ];
-const merge=learningReplica.merge;assert(merge);
-const mergeActive=(facts:Entry[])=>merge({base:facts,local:facts,remote:facts},()=>({entries:facts,conflicts:[]}));
+const mergeActive=(facts:Entry[])=>mergeLibraryReplicas({base:facts,local:facts,remote:facts});
 assert.deepEqual(mergeActive(activeFacts).conflicts,[],'unstarted targets in a legacy Scope remain outside the active Run policy lock');
 const driftedActive=activeFacts.map(row=>row.table==='learningTargets'&&row.key===ids.target?entry('learningTargets',row.key,{id:row.key,committedPolicy:{profileId:'four_stage',profileVersion:'1'}}):row);
 assert.deepEqual(mergeActive(driftedActive).conflicts,[conflict],'the actual started participant remains protected');

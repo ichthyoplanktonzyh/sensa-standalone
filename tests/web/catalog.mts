@@ -135,6 +135,15 @@ const foundationTests = [
     runner: 'vitest',
   },
   {
+    id: 'library-replica-execution',
+    file: 'tests/web/unit/library-replica-execution.test.mts',
+    kind: 'unit',
+    risks: ['local-correctness', 'convergence', 'scale'],
+    environment: 'node',
+    suite: 'fast',
+    runner: 'vitest',
+  },
+  {
     id: 'learning-authority',
     file: 'tests/web/integration/learning-authority.test.mts',
     kind: 'integration',

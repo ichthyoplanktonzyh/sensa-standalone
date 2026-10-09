@@ -4,7 +4,7 @@ import {backupEqual,encodeBackupValue,decodeBackupValue} from './backupCodec';
 import {cloudSyncFailurePolicy,type CloudSyncFailureKind} from './cloudSyncPolicy';
 import {
  isReplicatedLibraryEntry,
- mergeLibraryReplicas,
+ mergeLibraryReplicasCooperatively,
  normalizeLibraryReplicaEntry,
  partitionLibraryReplicaConflicts,
  finalizeLibraryReplicaConflictChoice,
@@ -168,8 +168,13 @@ export const readCloudSync=()=>readLibrary(async tx=>{const state=await tx.get<S
 export async function resolveCloudSyncConflicts(choice:CloudSyncConflictChoice){
  await writeLibraryState(async tx=>{await assertCurrentLibrary(tx);if(await tx.get('meta','signed-out'))throw new Error('authentication_required');const state=await tx.get<State>('meta',STATE);if(state?.status!=='conflict'||!state.conflict)throw new Error('library_sync_no_conflict');tx.put('meta',STATE,{...state,status:'pending',resolution:{choice,expectedRemoteRevision:state.conflict.remoteRevision},error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});});
 }
-async function saveState(expected:{owner:Owner;incarnation:string},work:(old:State|undefined)=>State,base?:Entry[],consumeReconnect=false){
- await writeLibraryState(async tx=>{const owner=await tx.get<Owner>('meta','service-owner');if(!owner||!sameOwner(owner,expected.owner)||await tx.get('meta','signed-out')||(await assertCurrentLibrary(tx))!==expected.incarnation)throw new Error('account_changed');tx.put('meta',STATE,work(await tx.get<State>('meta',STATE)));if(base!==undefined)tx.replaceSyncBase(base);if(consumeReconnect)tx.delete('meta','local-reset');});
+async function saveState(expected:{owner:Owner;incarnation:string;localRevision?:number},work:(old:State|undefined)=>State,base?:Entry[],consumeReconnect=false){
+ await writeLibraryState(async tx=>{
+  const owner=await tx.get<Owner>('meta','service-owner');
+  if(!owner||!sameOwner(owner,expected.owner)||await tx.get('meta','signed-out')||(await assertCurrentLibrary(tx))!==expected.incarnation)throw new Error('account_changed');
+  if(expected.localRevision!==undefined&&await readLocalLibraryRevision(tx)!==expected.localRevision)throw new Error('library_sync_local_changed');
+  tx.put('meta',STATE,work(await tx.get<State>('meta',STATE)));if(base!==undefined)tx.replaceSyncBase(base);if(consumeReconnect)tx.delete('meta','local-reset');
+ });
 }
 async function applyEntries(expected:Awaited<ReturnType<typeof capture>>,entries:Entry[],rows:ValidatedLibraryReplica,state:State,base:Entry[],consumeReconnect=false){
  const changesContent=!entriesEqual(expected.entries,entries);
@@ -483,10 +488,10 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
    await saveState(expected,old=>({...old!,checkpointVersion:6,validationVersion:libraryReplicaValidationVersion,revision:head.revision,storage:head.storage,status:'synced',syncedLocalRevision:initial.localRevision,pending:undefined,conflicts:undefined,conflict:undefined,resolution:undefined,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined}),[],consumeReconnect);
    return;
   }
-  let merged:ReturnType<typeof mergeLibraryReplicas>;
+  let merged:Awaited<ReturnType<typeof mergeLibraryReplicasCooperatively>>;
   const remoteIdentity=remote.find(r=>r.table==='meta'&&r.key==='identity');
   if(remoteIdentity&&decodeBackupValue(remoteIdentity.value).id!==initial.identity.id){if(!empty(initial.entries))throw new Error('library_sync_identity');merged={entries:remote,conflicts:[]};}
-  else merged=mergeLibraryReplicas({base:initial.base,local:initial.entries,remote});
+  else merged=await mergeLibraryReplicasCooperatively({base:initial.base,local:initial.entries,remote});
   let localEntries=merged.entries,uploadEntries=merged.entries,activeConflicts=merged.conflicts;
   let nextBase=(published:Entry[])=>published;
   let conflict:CloudSyncConflict|undefined;
@@ -505,7 +510,7 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
    localRows=await validateLibraryReplicaCooperatively(localEntries);
    if(!entriesEqual(localEntries,uploadEntries))await validateLibraryReplicaCooperatively(uploadEntries);
   }catch(error){
-   if(activeConflicts.length){await saveState(expected,old=>({...old!,status:'conflict',conflicts:activeConflicts,conflict,resolution:undefined,error:'library_sync_conflict'}));return;}throw error;
+   if(activeConflicts.length){await saveState({...expected,localRevision:initial.localRevision},old=>({...old!,status:'conflict',conflicts:activeConflicts,conflict,resolution:undefined,error:'library_sync_conflict'}));return;}throw error;
   }
   // Different compression/chunking of the same remote facts is not a local edit
   // and must not manufacture another publication during a pure restore.

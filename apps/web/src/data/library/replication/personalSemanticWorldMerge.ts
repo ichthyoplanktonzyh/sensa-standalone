@@ -1,5 +1,5 @@
 import {backupEqual,decodeBackupValue,encodeBackupValue} from '../backupCodec';
-import type {ReplicaEntry,ReplicaMergeInput,ReplicaMergeResult} from './domainReplica';
+import type {ReplicaEntry,ReplicaMergeInput,ReplicaMergeSteps} from './domainReplica';
 import {assertMeaningLifecycle,assertMeaningLifecycleReceipts,assertMeaningLifecycleOperationReceipt,validMeaningLifecycleDescendant,type MeaningLifecycleRecord} from '../../../experience/personalMeaningJourney/meaningLifecycle';
 import type {CommandReceipt} from '../../../experience/personalMeaningJourney/store';
 import type {MeaningJourneyRecord} from '../../../experience/personalMeaningJourney/store';
@@ -174,7 +174,7 @@ function mergeRegistry(base:unknown,local:unknown,remote:unknown):ValueResult{
 function mergedEntry(value:unknown,...candidates:Array<ReplicaEntry|undefined>):ReplicaEntry{
  for(const candidate of candidates)if(candidate&&equal(decodeBackupValue(candidate.value),value))return candidate;
  const source=candidates.find(Boolean)!;
- return {...source,value:encodeBackupValue(value),blocks:undefined};
+ return {table:source.table,key:source.key,value:encodeBackupValue(value)};
 }
 
 const durableTables=new Set<ReplicaEntry['table']>(['semanticState','semanticMeanings','semanticRegistry','semanticReceipts','meanings','identities']);
@@ -187,40 +187,45 @@ const registrySlot=(entry:ReplicaEntry)=>{
 };
 
 /** Domain merge for revisioned Personal Semantic World facts and durable tombstones. */
-export function mergePersonalSemanticWorldReplica(
+export function* mergePersonalSemanticWorldReplica(
  input:ReplicaMergeInput,
- ordinary:(input:ReplicaMergeInput)=>ReplicaMergeResult,
-):ReplicaMergeResult{
- const result=ordinary(input),entries=new Map(result.entries.map(entry=>[entryId(entry),entry])),conflicts=new Set(result.conflicts);
+ ordinary:(input:ReplicaMergeInput)=>ReplicaMergeSteps,
+):ReplicaMergeSteps{
+ const result=yield* ordinary(input),entries=new Map(result.entries.map(entry=>[entryId(entry),entry])),conflicts=new Set(result.conflicts);
  const base=byId(input.base),local=byId(input.local),remote=byId(input.remote);
  const admissionConflicts=new Set<string>();
  // Validate each branch against its own durable operation facts, before any
  // ordinary three-way choice can import a well-shaped but unwitnessed restore.
  for(const side of [input.base,input.local,input.remote]){
-  const receipts=side.filter(entry=>entry.table==='semanticReceipts').map(entry=>decodeBackupValue(entry.value) as CommandReceipt);
-  const lifecycleReceipts=new Map<string,CommandReceipt[]>();
-  const correctionReceipts=new Map<string,CommandReceipt[]>();
-  for(const receipt of receipts)if(receipt.command==='CorrectPersonalMeaning'){const id=String(receipt.result.personalMeaningId),group=correctionReceipts.get(id)??[];group.push(receipt);correctionReceipts.set(id,group);}
-  for(const receipt of receipts)if(receipt.command==='ChangeMeaningLifecycle'){
-   const id=String(receipt.result.personalMeaningId),group=lifecycleReceipts.get(id)??[];
-   group.push(receipt);lifecycleReceipts.set(id,group);
+  // Retain record references, not all decoded receipt bodies. Admission reads
+  // only the receipts belonging to the Meaning currently under examination.
+  const lifecycleReceipts=new Map<string,ReplicaEntry[]>(),correctionReceipts=new Map<string,ReplicaEntry[]>();
+  for(const entry of side)if(entry.table==='semanticReceipts'){
+   yield;
+   const receipt=decodeBackupValue(entry.value) as CommandReceipt;
+   const groups=receipt.command==='CorrectPersonalMeaning'?correctionReceipts:receipt.command==='ChangeMeaningLifecycle'?lifecycleReceipts:undefined;
+   if(groups){const id=String(receipt.result.personalMeaningId),group=groups.get(id)??[];group.push(entry);groups.set(id,group);}
   }
+  const receiptsFor=(groups:Map<string,ReplicaEntry[]>,id:string)=>(groups.get(id)??[]).map(entry=>decodeBackupValue(entry.value) as CommandReceipt);
   const meanings=new Map(side.filter(entry=>entry.table==='semanticMeanings').map(entry=>[entry.key,entry]));
   const meaningFor=(id:string)=>{const entry=meanings.get(id);return entry?decodeBackupValue(entry.value) as MeaningLifecycleRecord:undefined;};
   for(const entry of side)if(entry.table==='semanticMeanings'){
+   yield;
    const meaning=meaningFor(entry.key)!;
    try{
-    assertMeaningLifecycle(meaning);assertMeaningLifecycleReceipts([meaning],lifecycleReceipts.get(entry.key)??[]);
-    assertMeaningCorrectionReceipts(meaning as MeaningJourneyRecord,correctionReceipts.get(entry.key)??[]);
+    assertMeaningLifecycle(meaning);assertMeaningLifecycleReceipts([meaning],receiptsFor(lifecycleReceipts,entry.key));
+    assertMeaningCorrectionReceipts(meaning as MeaningJourneyRecord,receiptsFor(correctionReceipts,entry.key));
    }catch{conflicts.add(entryId(entry));admissionConflicts.add(entryId(entry));}
   }
   for(const entry of side)if(entry.table==='semanticReceipts')try{
+   yield;
    const receipt=decodeBackupValue(entry.value) as CommandReceipt;
    assertMeaningLifecycleOperationReceipt(meaningFor(String(receipt.result.personalMeaningId)),receipt);
-   if(receipt.command==='CorrectPersonalMeaning'){const meaning=meaningFor(String(receipt.result.personalMeaningId));if(!meaning)throw Error('meaning_correction_invalid');assertMeaningCorrectionReceipts(meaning as MeaningJourneyRecord,correctionReceipts.get(String(receipt.result.personalMeaningId))??[]);}
+   if(receipt.command==='CorrectPersonalMeaning'){const meaning=meaningFor(String(receipt.result.personalMeaningId));if(!meaning)throw Error('meaning_correction_invalid');assertMeaningCorrectionReceipts(meaning as MeaningJourneyRecord,receiptsFor(correctionReceipts,String(receipt.result.personalMeaningId)));}
   }catch{conflicts.add(entryId(entry));admissionConflicts.add(entryId(entry));}
  }
  for(const id of new Set([...base.keys(),...local.keys(),...remote.keys()])){
+  yield;
   const prior=base.get(id),ours=local.get(id),theirs=remote.get(id),sample=ours??theirs??prior!;
   if(prior&&durableTables.has(sample.table)&&(!ours||!theirs)){conflicts.add(id);continue;}
   if(!prior||!ours||!theirs)continue;
@@ -234,6 +239,7 @@ export function mergePersonalSemanticWorldReplica(
  }
  const slots=new Map<string,string>();
  for(const entry of entries.values())if(entry.table==='semanticRegistry'){
+  yield;
   const slot=registrySlot(entry);if(!slot)continue;const existing=slots.get(slot);
   if(existing&&existing!==entryId(entry)){conflicts.add(existing);conflicts.add(entryId(entry));}else slots.set(slot,entryId(entry));
  }

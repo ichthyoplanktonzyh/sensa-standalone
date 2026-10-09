@@ -1,7 +1,7 @@
 /** Shipped sync over SQLite/Wasm, with SQL faults and controlled transport.
  * This proves restore atomicity, not OPFS durability or large-account capacity. */
 import {createHash,randomBytes} from 'node:crypto';
-import {afterEach,beforeEach,expect,test} from 'vitest';
+import {afterEach,beforeEach,expect,test,vi} from 'vitest';
 import {useNodeLearningCapacityStorage} from '../../../scripts/support/nodeLearningCapacity.mts';
 import {openLibrary,readLibrary,writeLibraryState,restoreLibraryTransaction,readLocalLibraryRevision,type LibraryIdentity} from '../../../apps/web/src/data/library/store';
 import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec';
@@ -11,6 +11,7 @@ import {sqliteRecordAdapter} from '../../../apps/web/src/data/library/sqliteAdap
 import {librarySyncBlockFetch,librarySyncBlockFetchHashes,librarySyncBlockFetchBytes} from '@sensa/contracts/sensa';
 import {encodeLibrarySyncBlock,splitLibrarySyncText,decodeLibrarySyncBlock} from '@sensa/contracts/sensa/library-sync-blocks';
 import type {SyncRequest} from '../../../apps/web/src/data/library/cloudSync';
+import * as replicaValidation from '../../../apps/web/src/data/library/replication/libraryReplicaValidation';
 
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined,location:new URL('http://restore-atomicity.fixture.invalid/')});
 Object.defineProperty(globalThis,'navigator',{value:{onLine:true},configurable:true});
@@ -48,6 +49,33 @@ const request:SyncRequest=async(path,body)=>{
  throw new Error(`unexpected_restore_request:${path}`);
 };
 const facts=()=>readLibrary(async tx=>({identity:await tx.get('meta','identity'),creation:await tx.get<{result:LibraryIdentity}>('operations','00000000-0000-4000-8000-000000000001'),drafts:await tx.entries('drafts'),base:await tx.syncBaseEntries(),localRevision:await readLocalLibraryRevision(tx)}));
+
+for(const concurrentWrite of [false,true])test(`failed conflict validation fences its captured local revision (concurrent write: ${concurrentWrite})`,async()=>{
+ remoteIdentity={...localIdentity,deviceId:localIdentity.id};publish([first]);await synchronizeLibrary(request);
+ const ours=await saveDraft(crypto.randomUUID(),{id:first.id,expectedRevision:1,text:'Local conflicting edit.'});
+ publish([{...first,revision:2,text:'Remote conflicting edit.'}]);
+ const before=await facts();let later:Awaited<ReturnType<typeof saveDraft>>|undefined;
+ const validate=replicaValidation.validateLibraryReplicaCooperatively;
+ const validation=vi.spyOn(replicaValidation,'validateLibraryReplicaCooperatively').mockImplementationOnce(validate).mockImplementationOnce(async()=>{
+  if(concurrentWrite)later=await saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Saved while conflict validation yielded.'});
+  throw Error('controlled_conflicting_graph_failure');
+ });
+ try{
+  if(concurrentWrite)await expect(synchronizeLibrary(request)).rejects.toThrow('library_sync_local_changed');
+  else await synchronizeLibrary(request);
+ }
+ finally{validation.mockRestore();}
+ const after=await facts();expect(after.base).toEqual(before.base);
+ const state=await readCloudSync();
+ if(concurrentWrite){
+  expect(later).toBeDefined();expect(after.drafts.map(row=>row.value)).toEqual(expect.arrayContaining([ours,later]));
+  expect(after.localRevision).toBe(before.localRevision+1);
+  expect(state?.status).toBe('pending');expect(state?.conflict).toBeUndefined();
+ }else{
+  expect(after.drafts.map(row=>row.value)).toEqual([ours]);expect(after.localRevision).toBe(before.localRevision);
+  expect(state?.status).toBe('conflict');expect(state?.conflict).toBeDefined();
+ }
+});
 
 for(const pageLimit of [librarySyncBlockFetchBytes,2048])test(`fresh restoration consumes API byte pages without a fixed 64-block roundtrip limit (${pageLimit})`,async()=>{
  const drafts=Array.from({length:1024},(_,index)=>({...first,id:crypto.randomUUID(),text:`Small remote draft ${index}`}));publish(drafts);

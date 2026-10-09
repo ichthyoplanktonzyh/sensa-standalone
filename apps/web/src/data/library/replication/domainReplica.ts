@@ -8,6 +8,7 @@ export type ReplicaMergeInput={
  remote:ReplicaEntry[];
 };
 export type ReplicaMergeResult={entries:ReplicaEntry[];conflicts:string[]};
+export type ReplicaMergeSteps=Generator<unknown,ReplicaMergeResult>;
 export type ReplicaRecordReference=Pick<ReplicaEntry,'table'|'key'>;
 
 /**
@@ -20,7 +21,7 @@ export type DomainReplicaModule={
  owns(table:ReplicaEntry['table'],key:string):boolean;
  normalize?(entry:ReplicaEntry,identity:LibraryIdentity):ReplicaEntry;
  restore?(entry:ReplicaEntry,value:unknown,identity:LibraryIdentity):unknown;
- merge?(input:ReplicaMergeInput,ordinary:(input:ReplicaMergeInput)=>ReplicaMergeResult):ReplicaMergeResult;
+ mergeSteps?(input:ReplicaMergeInput,ordinary:(input:ReplicaMergeInput)=>ReplicaMergeSteps):ReplicaMergeSteps;
  /** Records that must remain on the same side when this record conflicts. */
  conflictDependencies?(entry:ReplicaEntry,decodedValue:unknown):readonly ReplicaRecordReference[];
  /** Preserve domain-owned audit records and uncontested additions after the

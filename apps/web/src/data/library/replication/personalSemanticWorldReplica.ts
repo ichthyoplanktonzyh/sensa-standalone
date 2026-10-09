@@ -61,7 +61,7 @@ export const personalSemanticWorldReplica:DomainReplicaModule={
   }
   return {...entry,value};
  },
- merge(input,ordinary){return mergePersonalSemanticWorldReplica(input,ordinary);},
+ mergeSteps:mergePersonalSemanticWorldReplica,
  afterConflictChoice(selected,merged,context){
   const id=(entry:ReplicaRecordReference)=>JSON.stringify([entry.table,entry.key]);
   const chosen=new Map(selected.map(entry=>[id(entry),entry])),base=new Set(context.base.map(id)),conflicts=new Set(context.conflicts),rows=new Map(merged.map(entry=>[id(entry),entry]));
