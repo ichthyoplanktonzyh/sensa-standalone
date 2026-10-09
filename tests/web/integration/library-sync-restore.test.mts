@@ -50,6 +50,17 @@ const request:SyncRequest=async(path,body)=>{
 };
 const facts=()=>readLibrary(async tx=>({identity:await tx.get('meta','identity'),creation:await tx.get<{result:LibraryIdentity}>('operations','00000000-0000-4000-8000-000000000001'),drafts:await tx.entries('drafts'),base:await tx.syncBaseEntries(),localRevision:await readLocalLibraryRevision(tx)}));
 
+for(const existing of [false,true])test(`account display metadata is not part of the replica ownership fence (existing checkpoint: ${existing})`,async()=>{
+ if(existing){publish([first]);await synchronizeLibrary(request);}
+ const account=await readLibrary(tx=>tx.get<{subject:string;accountId:string}>('meta','service-owner'));
+ const displayedOwner={...account!,email:'learner@fixture.invalid'};
+ await writeLibraryState(async tx=>tx.put('meta','service-owner',displayedOwner));
+ publish(existing?[first,second]:[first]);await synchronizeLibrary(request);
+ expect((await facts()).drafts.map(row=>row.value)).toEqual(expect.arrayContaining(existing?[first,second]:[first]));
+ expect(await readLibrary(tx=>tx.get('meta','service-owner'))).toEqual(displayedOwner);
+ expect((await readCloudSync())?.status).toBe('synced');
+});
+
 test('remote-only updates reuse unchanged blocks and apply only changed rows without whole body capture',async()=>{
  const drafts=Array.from({length:256},(_,index)=>({...first,id:crypto.randomUUID(),text:`Confirmed draft ${index}: `+'x'.repeat(4000)}));
  publish(drafts);await synchronizeLibrary(request);const before=await facts();

@@ -234,7 +234,7 @@ export async function createLibraryCloudBrowserFixture(providedBrowser?: Browser
         await core.openLibrary();
         await core.command(
           { id: crypto.randomUUID(), kind: 'service.connect', input: {} },
-          async (transaction: any) => transaction.put('meta', 'service-owner', { subject, accountId }),
+          async (transaction: any) => transaction.put('meta', 'service-owner', { subject, accountId, email:'learner@fixture.invalid' }),
         );
         browserWindow.request = async (path: string, body?: unknown) => {
           if (browserWindow.offline) throw new Error('offline');

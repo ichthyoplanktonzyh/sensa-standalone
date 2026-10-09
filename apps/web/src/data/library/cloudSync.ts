@@ -47,8 +47,11 @@ const blockCodec=()=>import('@sensa/contracts/sensa/library-sync-blocks');
 // These API rejections occur before commit, unlike a lost/malformed ACK.
 const rejectedPublication=(cause:unknown)=>cause instanceof Error&&['library_sync_history','library_sync_identity'].includes(cause.message);
 async function captureHeader(tx:LibraryTransaction){
- const incarnation=await assertCurrentLibrary(tx),owner=await tx.get<Owner>('meta','service-owner'),identity=await tx.get<LibraryIdentity>('meta','identity');
- if(!owner?.accountId||!identity||await tx.get('meta','signed-out'))throw new Error('authentication_required');
+ const incarnation=await assertCurrentLibrary(tx),storedOwner=await tx.get<Owner>('meta','service-owner'),identity=await tx.get<LibraryIdentity>('meta','identity');
+ if(!storedOwner?.accountId||!identity||await tx.get('meta','signed-out'))throw new Error('authentication_required');
+ // Account display metadata (such as email) is not replica authority and must
+ // not leak into the strict Worker fence. Leave the stored account untouched.
+ const owner:Owner={subject:storedOwner.subject,accountId:storedOwner.accountId};
  return {owner,incarnation,identity,state:await tx.get<State>('meta',STATE),localRevision:await readLocalLibraryRevision(tx),reconnectRequired:await cloudReconnectRequired(tx)};
 }
 /** A validated remote baseline plus owner-admitted local transactions needs

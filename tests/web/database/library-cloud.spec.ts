@@ -691,7 +691,7 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
 	  await page.getByRole('button',{name:'Erase local content',exact:true}).click();
 	  await expect(page.getByText('Local content cleared. Reopen the app to use the empty library.',{exact:true})).toBeVisible();
   const after=await page.evaluate(async()=>{const c=(window as any).core;return {identity:await c.readLibrary((tx:any)=>tx.get('meta','identity')),owner:await c.readLibrary((tx:any)=>tx.get('meta','service-owner')),drafts:await c.listDrafts()};});
-  assert.notEqual(after.identity.id,initialIdentity.id);assert.deepEqual(after.owner,{subject:clearance.subject,accountId:clearance.accountId});assert.deepEqual(after.drafts,[]);
+  assert.notEqual(after.identity.id,initialIdentity.id);assert.deepEqual(after.owner,{subject:clearance.subject,accountId:clearance.accountId,email:'learner@fixture.invalid'});assert.deepEqual(after.drafts,[]);
   const cloudAfter=(await pool.query('SELECT revision,manifest FROM sensa_consumer.library_cloud WHERE account_id=$1',[clearance.accountId])).rows[0];
   assert.deepEqual(cloudAfter,cloudBefore,'discarding pending local records must not create a cloud tombstone or rewrite the checkpoint');
   await page.context().close();
