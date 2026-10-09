@@ -5,7 +5,7 @@ import {assertLocalLibrarySelected,localLibraryScopedName} from './localLibraryL
 
 import { decodeBackupValue, encodeBackupValue } from "./backupCodec";
 import { sqliteRecordAdapter } from "./sqliteAdapter";
-import type {ReplicaCandidateRequest,ReplicaCandidateResponse,ReplicaCandidateValidation} from './replicaCandidateProtocol';
+import type {ReplicaCandidateRequest,ReplicaCandidateResponse,ReplicaCandidateValidation,ReplicaCandidateUpdate} from './replicaCandidateProtocol';
 import type {PackageCacheProjectionQuery,PackageCacheProjectionResult} from './packageCacheProjection';
 import type {InstalledPackageSummary} from './packageRecords';
 import type {
@@ -105,6 +105,12 @@ export class LibraryTransaction {
     this.assertWritable();
     if(this.replicaCandidateRestore||this.syncBaseReplacement!==undefined||this.syncBasePatch)throw Error('library_sync_base_mutation_conflict');
     this.replicaCandidateRestore={id:candidate.id,tables:candidate.tables};this.wrote=true;
+  }
+
+  updateReplicaCandidate(update:ReplicaCandidateUpdate):void{
+    this.assertWritable();
+    if(this.replicaCandidateRestore||this.syncBaseReplacement!==undefined||this.syncBasePatch)throw Error('library_sync_base_mutation_conflict');
+    this.replicaCandidateRestore={id:update.id,tables:update.tables,update};this.wrote=true;
   }
 
   async get<T>(table: Table, inputKey: string): Promise<T | undefined> {
@@ -669,7 +675,7 @@ async function transaction<T>(
           try{
             const encoded=await storageCall(()=>adapter.get('meta','cloud-sync'));
             const state=encoded===null?undefined:decode(encoded) as {restoreOperationId?:string;syncedLocalRevision?:number};
-            confirmed=state?.restoreOperationId===mutation.replicaCandidateRestore.id&&state.syncedLocalRevision===mutation.contentRevision;
+            confirmed=state?.restoreOperationId===mutation.replicaCandidateRestore.id&&state.syncedLocalRevision===(mutation.contentRevision??mutation.replicaCandidateRestore.update?.localRevision);
           }catch{/* Keep the original failure when the outcome cannot be read. */}
         }
         if(!confirmed)throw cause;
@@ -682,10 +688,10 @@ async function transaction<T>(
           ...mutation.deletes.map((row) => row.table),
           ...mutation.puts.map((row) => row.table),
           ...(mutation.replicaCandidateRestore?.tables??[]),
-          ...(mutation.replicaCandidateRestore?['operations' as const]:[]),
+          ...(mutation.replicaCandidateRestore&&!mutation.replicaCandidateRestore.update?['operations' as const]:[]),
         ])];
-        const changes={sender:libraryNotificationSender,tables,clears:[...new Set([...mutation.clears,...(mutation.replicaCandidateRestore?.tables??[])])],
-          records:[...mutation.puts,...mutation.deletes].map(({table,key})=>({table,key}))};
+        const changes={sender:libraryNotificationSender,tables,clears:[...new Set([...mutation.clears,...(mutation.replicaCandidateRestore?.update?[]:mutation.replicaCandidateRestore?.tables??[])])],
+          records:[...mutation.puts,...mutation.deletes,...(mutation.replicaCandidateRestore?.update?.records??[])].map(({table,key})=>({table,key}))};
         window.dispatchEvent(new CustomEvent("sensa-library-changed", { detail: changes }));
         if (typeof BroadcastChannel !== "undefined") {
           const channel = new BroadcastChannel(localLibraryScopedName('sensa-local-library'));
@@ -706,7 +712,7 @@ async function transaction<T>(
     : runSerially(execute);
 }
 
-/** Reserved for validated full-library restore; it remains one SQLite transaction. */
+/** Reserved for validated replica/backup application; one SQLite transaction. */
 export const restoreLibraryTransaction = <T>(work: (tx: LibraryTransaction) => Promise<T>) =>
   transaction("readwrite", work);
 /** A sealed private candidate is coherent without holding the live Library's

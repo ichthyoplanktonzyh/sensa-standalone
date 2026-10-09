@@ -247,9 +247,9 @@ worker.addEventListener('message',(event:MessageEvent<SqliteWorkerRequest>)=>{
     if(isFatalSqliteConnectionFailure(cause)){failedConnection=true;activeDatabase?.quarantineConnection(cause as Error);}
     throw cause;
   });
-  // Sealed candidate validation reads a private immutable generation. It may
-  // yield while normal Library requests run; never hold the owner queue for it.
-  if(event.data.kind!=='replicaCandidate'||event.data.request.kind!=='validate')requestQueue=response.then(()=>undefined,()=>undefined);
+  // Private candidate validation/merge may yield while normal requests run.
+  // Merge also rechecks its live baseline fence; never hold the owner queue.
+  if(event.data.kind!=='replicaCandidate'||!['validate','prepareUpdate'].includes(event.data.request.kind))requestQueue=response.then(()=>undefined,()=>undefined);
   void response.then(
     value=>worker.postMessage({id:event.data.id,ok:true,value} satisfies SqliteWorkerResult),
     cause=>worker.postMessage({

@@ -4,7 +4,7 @@ import {createHash,randomBytes} from 'node:crypto';
 import {afterEach,beforeEach,expect,test,vi} from 'vitest';
 import {useNodeLearningCapacityStorage} from '../../../scripts/support/nodeLearningCapacity.mts';
 import {openLibrary,readLibrary,writeLibraryState,restoreLibraryTransaction,readLocalLibraryRevision,type LibraryIdentity} from '../../../apps/web/src/data/library/store';
-import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec';
+import {encodeBackupValue,decodeBackupValue} from '../../../apps/web/src/data/library/backupCodec';
 import {replicaCandidateAppendRecordLimit,replicaCandidateAppendReferenceLimit} from '../../../apps/web/src/data/library/replicaCandidateProtocol';
 import {saveDraft} from '../../../apps/web/src/data/library/drafts';
 import {sqliteRecordAdapter} from '../../../apps/web/src/data/library/sqliteAdapter';
@@ -49,6 +49,90 @@ const request:SyncRequest=async(path,body)=>{
  throw new Error(`unexpected_restore_request:${path}`);
 };
 const facts=()=>readLibrary(async tx=>({identity:await tx.get('meta','identity'),creation:await tx.get<{result:LibraryIdentity}>('operations','00000000-0000-4000-8000-000000000001'),drafts:await tx.entries('drafts'),base:await tx.syncBaseEntries(),localRevision:await readLocalLibraryRevision(tx)}));
+
+test('remote-only updates reuse unchanged blocks and apply only changed rows without whole body capture',async()=>{
+ const drafts=Array.from({length:256},(_,index)=>({...first,id:crypto.randomUUID(),text:`Confirmed draft ${index}: `+'x'.repeat(4000)}));
+ publish(drafts);await synchronizeLibrary(request);const before=await facts();
+ const unchanged=before.base.filter(row=>row.table==='drafts'&&row.key!==drafts[0]!.id&&row.key!==drafts[1]!.id).flatMap(row=>row.blocks);
+ const changed={...drafts[0]!,revision:2,text:'Changed on another device.'},added={...second,id:crypto.randomUUID()};
+ publish([changed,...drafts.slice(2),added]);
+ sql.exec(`CREATE TEMP TRIGGER unchanged_source BEFORE UPDATE ON sensa_records WHEN OLD.table_name='drafts' AND OLD.record_key<>'${changed.id}' BEGIN SELECT RAISE(ABORT,'unchanged source rewritten'); END`);
+ sql.exec(`CREATE TEMP TRIGGER unchanged_base BEFORE UPDATE ON sensa_sync_base WHEN OLD.table_name='drafts' AND OLD.record_key<>'${changed.id}' BEGIN SELECT RAISE(ABORT,'unchanged baseline rewritten'); END`);
+ const adapter=await sqliteRecordAdapter(),baseline=database.syncBaseEntries.bind(database),commit=adapter.commit.bind(adapter);
+ const sourceRead=vi.spyOn(adapter,'entries').mockImplementation(async()=>{throw Error('whole source capture');});
+ const baseRead=vi.spyOn(database,'syncBaseEntries').mockImplementation(keys=>{if(!keys)throw Error('whole baseline capture');return baseline(keys);});
+ let update=false;const write=vi.spyOn(adapter,'commit').mockImplementation(async mutation=>{
+  if(mutation.replicaCandidateRestore?.update){update=true;expect(mutation.puts.every(row=>row.table==='meta')).toBe(true);expect(mutation.syncBaseReplacement).toBeUndefined();}
+  await commit(mutation);
+ });
+ const fetched:string[]=[];
+ try{await synchronizeLibrary(async(path,body)=>{if(path==='/blocks/fetch')fetched.push(...librarySyncBlockFetch.parse(body).hashes);return request(path,body);});}
+ finally{sourceRead.mockRestore();baseRead.mockRestore();write.mockRestore();}
+ expect(update).toBe(true);expect(fetched.some(hash=>unchanged.includes(hash))).toBe(false);
+ const after=await facts();expect(after.localRevision).toBe(before.localRevision+1);expect(after.identity).toEqual(before.identity);
+ expect(after.drafts).toHaveLength(256);expect(after.drafts.map(row=>row.value)).toEqual(expect.arrayContaining([changed,added,...drafts.slice(2)]));
+ expect(after.base.some(row=>row.key===drafts[1]!.id)).toBe(false);expect((await readCloudSync())?.status).toBe('synced');
+});
+
+test('repacked remote facts patch references without a content revision and recover a lost update ACK',async()=>{
+ publish([first]);await synchronizeLibrary(request);const before=await facts();
+ const entries=[{table:'meta',key:'identity',value:remoteIdentity},{table:'drafts',key:first.id,value:first}];
+ const rows=entries.map(row=>({table:row.table,key:row.key,blocks:[block(' '+JSON.stringify(encodeBackupValue(row.value))+' ')]}));
+ manifest=splitLibrarySyncText(JSON.stringify({version:6,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows})).map(block);revision++;
+ sql.exec(`CREATE TEMP TRIGGER repack_no_source_write BEFORE INSERT ON sensa_records WHEN NEW.table_name='drafts' BEGIN SELECT RAISE(ABORT,'repack rewrote source'); END`);
+ const adapter=await sqliteRecordAdapter(),commit=adapter.commit.bind(adapter);let lost=false;
+ adapter.commit=async mutation=>{await commit(mutation);if(mutation.replicaCandidateRestore?.update){expect(mutation.contentRevision).toBeUndefined();lost=true;throw Error('sqlite_coordination_timeout');}};
+ try{await synchronizeLibrary(request);}finally{adapter.commit=commit;}
+ expect(lost).toBe(true);const after=await facts();expect(after.drafts).toEqual(before.drafts);expect(after.localRevision).toBe(before.localRevision);
+ expect(after.base.find(row=>row.table==='drafts')?.blocks).toEqual(rows[1]!.blocks);expect((await readCloudSync())?.status).toBe('synced');
+});
+
+for(const target of ['source','baseline'] as const)test(`a failed remote-only ${target} write rolls back the whole update and retries`,async()=>{
+ publish([first]);await synchronizeLibrary(request);const before=await facts(),changed={...first,revision:2,text:'A remote replacement.'};publish([changed,second]);
+ const table=target==='source'?'sensa_records':'sensa_sync_base';
+ sql.exec(`CREATE TEMP TRIGGER reject_update BEFORE INSERT ON ${table} WHEN NEW.table_name='drafts' AND NEW.record_key='${second.id}' BEGIN SELECT RAISE(ABORT,'controlled update failure'); END`);
+ await expect(synchronizeLibrary(request)).rejects.toThrow();expect(await facts()).toEqual(before);expect((await readCloudSync())?.status).not.toBe('synced');
+ sql.exec('DROP TRIGGER reject_update');await synchronizeLibrary(request);
+ expect((await facts()).drafts.map(row=>row.value)).toEqual(expect.arrayContaining([changed,second]));expect((await readCloudSync())?.status).toBe('synced');
+});
+
+test('a genuine local write after Worker preparation retires the remote-only update',async()=>{
+ publish([first]);await synchronizeLibrary(request);const before=await facts();publish([{...first,revision:2,text:'Remote edit.'}]);
+ const adapter=await sqliteRecordAdapter(),candidate=adapter.replicaCandidate.bind(adapter);let wrote=false;
+ adapter.replicaCandidate=async message=>{
+  const result=await candidate(message);
+  if(result.kind==='updatePrepared'&&result.update&&!wrote){wrote=true;await saveDraft(crypto.randomUUID(),{id:first.id,expectedRevision:1,text:'New local edit during synchronization.'});}
+  return result;
+ };
+ try{await expect(synchronizeLibrary(request)).rejects.toThrow('library_sync_local_changed');}finally{adapter.replicaCandidate=candidate;}
+ expect(wrote).toBe(true);const after=await facts();expect(after.base).toEqual(before.base);expect(after.drafts[0]!.value.text).toBe('New local edit during synchronization.');expect((await readCloudSync())?.status).toBe('pending');
+});
+
+test('remote-only Meaning updates preserve pinned versions and never import rewritten immutable history',async()=>{
+ const [{MemoryJourneyRepository},{createJourneyModules},{createSeededClock},{semanticLookupPayload,syntheticSemanticWorld,advanceSemanticHeads},{semanticRecords}]=await Promise.all([
+  import('../../../apps/web/src/experience/personalMeaningJourney/repository'),import('../../../apps/web/src/experience/personalMeaningJourney/gateway'),import('../../../apps/web/src/experience/personalMeaningJourney/ports'),import('../support/semanticLookupFixtures'),import('../support/semanticWorldRecordFixture.mts'),
+ ]);
+ const repository=new MemoryJourneyRepository();await createJourneyModules({repository,clock:createSeededClock('2026-10-03T00:00:00Z')}).semanticIntake.submit(semanticLookupPayload());
+ const original=syntheticSemanticWorld(await repository.load(),4),advanced=advanceSemanticHeads(original);
+ const publishWorld=(world:typeof original)=>publishEntries([{table:'meta',key:'identity',value:remoteIdentity},...[...semanticRecords(world)]]);
+ publishWorld(original);await synchronizeLibrary(request);const before=await facts();
+ const adapter=await sqliteRecordAdapter(),candidate=adapter.replicaCandidate.bind(adapter);const prepared:boolean[]=[];
+ adapter.replicaCandidate=async message=>{const result=await candidate(message);if(result.kind==='updatePrepared')prepared.push(result.update!==null);return result;};
+ try{
+  publishWorld(advanced);await synchronizeLibrary(request);expect(prepared).toEqual([true]);
+  const oldVersion=original.registry.senseVersions[0]!,oldKey=`senseVersions:${oldVersion.senseVersionId}`;
+  expect(decodeBackupValue(JSON.parse(database.get('semanticRegistry',oldKey)!)).value).toEqual(oldVersion);
+  expect(database.lookupMeanings('借用编号0').meanings).toHaveLength(1);
+  expect((await facts()).localRevision).toBe(before.localRevision+1);
+  const broken=structuredClone(advanced);broken.registry.senseVersions[0]!.semanticSpec.coreMeaningFocus='Rewritten immutable version.';
+  // The remote graph is structurally valid; it is the transition against the
+  // confirmed baseline that must reject this rewrite, not snapshot validation.
+  await replicaValidation.validateLibraryReplicaCooperatively([{table:'meta',key:'identity',value:encodeBackupValue(remoteIdentity)},...[...semanticRecords(broken)].map(row=>({...row,value:encodeBackupValue(row.value)}))]);
+  publishWorld(broken);await synchronizeLibrary(request);
+  expect(prepared).toEqual([true,false]);expect((await readCloudSync())?.status).toBe('conflict');
+  expect(decodeBackupValue(JSON.parse(database.get('semanticRegistry',oldKey)!)).value).toEqual(oldVersion);
+ }finally{adapter.replicaCandidate=candidate;}
+});
 
 for(const concurrentWrite of [false,true])test(`failed conflict validation fences its captured local revision (concurrent write: ${concurrentWrite})`,async()=>{
  remoteIdentity={...localIdentity,deviceId:localIdentity.id};publish([first]);await synchronizeLibrary(request);
@@ -249,11 +333,12 @@ test('a same-library identity fork still requires explicit conflict handling',as
  expect(await readLibrary(tx=>tx.get('meta','identity'))).toEqual(localIdentity);expect((await readCloudSync())?.status).toBe('conflict');
 });
 
-test('a missing body after head replacement discards the old generation and restores only the new head',async()=>{
- publish([first]);let fetches=0;
- onFetch=async()=>{if(++fetches===2){blocks.clear();publish([second]);}};
+for(const existing of [false,true])test(`a missing body after head replacement discards the old generation (existing checkpoint: ${existing})`,async()=>{
+ if(existing){publish([first]);await synchronizeLibrary(request);}
+ publish(existing?[first,second]:[first]);let fetches=0;const latest={...second,text:'New head after retiring the old body.'};
+ onFetch=async()=>{if(++fetches===2){blocks.clear();publish([latest]);}};
  try{await synchronizeLibrary(request);}finally{onFetch=undefined;}
- const after=await facts();expect(after.drafts.map(row=>row.value)).toEqual([second]);expect((await readCloudSync())?.revision).toBe(2);expect((await readCloudSync())?.status).toBe('synced');
+ const after=await facts();expect(after.drafts.map(row=>row.value)).toEqual([latest]);expect((await readCloudSync())?.revision).toBe(existing?3:2);expect((await readCloudSync())?.status).toBe('synced');
 });
 
 test('a lost local promotion ACK uses the durable transaction receipt and still announces restored facts',async()=>{

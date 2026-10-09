@@ -697,12 +697,15 @@ export class SqliteRecordDatabase {
     });
     const candidates=await this.replicaCandidates;
     this.assertReplicaCandidateHealthy();
+    const readBase=(table:SqliteLibraryTable,key:string)=>{const row=this.syncBaseEntries([{table,key}])[0];if(!row)throw Error('library_sync_local_changed');return row.valueJson;};
     try{
       switch(request.kind){
         case 'begin':return {kind:'begun',id:candidates.begin(request.fence,request.expected)};
         case 'append':candidates.append(request.id,request.records,request.blocks);return {kind:'appended'};
         case 'prove':candidates.prove(request.id,request.record,request.blocks);return {kind:'proved'};
         case 'validate':return {kind:'validated',candidate:await candidates.validate(request.id)};
+        case 'reuse':return {kind:'reused',keys:candidates.reuse(request.id,request.baseRevision,request.keys,readBase)};
+        case 'prepareUpdate':return {kind:'updatePrepared',update:await candidates.prepareUpdate(request.id,request.baseRevision,readBase)};
         case 'discard':candidates.discard(request.id);return {kind:'discarded'};
       }
     }catch(cause){if(isFatalSqliteConnectionFailure(cause))this.quarantineConnection(cause as Error);throw cause;}
@@ -785,8 +788,13 @@ export class SqliteRecordDatabase {
       }
       if(mutation.replicaCandidateRestore){
         if(!this.replicaCandidateStore)throw Error('library_sync_candidate_invalid');
-        staged=this.replicaCandidateStore.prepareFreshRestore(mutation.replicaCandidateRestore.id,mutation);
-        mutation={...mutation,puts:[...staged.puts,...mutation.puts],syncBaseReplacement:staged.syncBaseReplacement};
+        if(mutation.replicaCandidateRestore.update){
+          const update=this.replicaCandidateStore.prepareCheckpointUpdate(mutation.replicaCandidateRestore.id,mutation);
+          mutation={...mutation,puts:[...update.puts,...mutation.puts],deletes:[...update.deletes,...mutation.deletes],syncBasePatch:update.syncBasePatch};
+        }else{
+          staged=this.replicaCandidateStore.prepareFreshRestore(mutation.replicaCandidateRestore.id,mutation);
+          mutation={...mutation,puts:[...staged.puts,...mutation.puts],syncBaseReplacement:staged.syncBaseReplacement};
+        }
         discardCandidates=true;
       }
       if (mutation.syncBaseReplacement) {

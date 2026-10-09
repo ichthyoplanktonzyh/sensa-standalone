@@ -2,6 +2,7 @@ import {librarySyncManifest,librarySyncHead,librarySyncTables,librarySyncBlockFe
 import {readLibrary,readLocalLibraryRevision,restoreLibraryTransaction,writeLibraryState,assertCurrentLibrary,requestReplicaCandidate,type LibraryTransaction,type LibraryIdentity} from './store';
 import {backupEqual,encodeBackupValue,decodeBackupValue} from './backupCodec';
 import {cloudSyncFailurePolicy,type CloudSyncFailureKind} from './cloudSyncPolicy';
+import {confirmedCheckpoint,validatedCheckpoint} from './cloudSyncCheckpoint';
 import {
  isReplicatedLibraryEntry,
  mergeLibraryReplicasCooperatively,
@@ -50,14 +51,6 @@ async function captureHeader(tx:LibraryTransaction){
  if(!owner?.accountId||!identity||await tx.get('meta','signed-out'))throw new Error('authentication_required');
  return {owner,incarnation,identity,state:await tx.get<State>('meta',STATE),localRevision:await readLocalLibraryRevision(tx),reconnectRequired:await cloudReconnectRequired(tx)};
 }
-/** Only a complete, confirmed checkpoint may stand in for an unchanged head.
- * Conflict baselines may deliberately contain different branches. */
-function confirmedCheckpoint(state:State|undefined){
- return state?.checkpointVersion===6&&Number.isSafeInteger(state.revision)&&state.revision>=0&&Number.isSafeInteger(state.syncedLocalRevision)&&(state.syncedLocalRevision??-1)>=0
-  &&!state.pending&&state.status!=='conflict'&&!state.conflicts?.length&&!state.conflict&&!state.resolution;
-}
-const validatedCheckpoint=(state:State|undefined)=>confirmedCheckpoint(state)&&state!.validationVersion===libraryReplicaValidationVersion;
-
 /** A validated remote baseline plus owner-admitted local transactions needs
  * only the changed bodies. The v6 manifest still carries all row references. */
 async function captureDelta(tx:LibraryTransaction,expected:Awaited<ReturnType<typeof captureHeader>>,head:LibrarySyncHead){
@@ -254,7 +247,7 @@ class Blocks{
  }
  /** Fresh-device restore keeps only bounded body batches on the main thread.
   * Hash/manifest binding and full authority run against Worker storage. */
- async stage(head:LibrarySyncHead,fence:ReplicaCandidateFence,send:(request:ReplicaCandidateRequest)=>Promise<ReplicaCandidateResponse>):Promise<ReplicaCandidateValidation>{
+ async stage(head:LibrarySyncHead,fence:ReplicaCandidateFence,send:(request:ReplicaCandidateRequest)=>Promise<ReplicaCandidateResponse>,baseRevision?:number):Promise<ReplicaCandidateValidation>{
   if(!head.manifest)throw Error('library_sync_candidate_invalid');
   await this.fetch(head.manifest);
   let raw:unknown;try{raw=JSON.parse(await this.text(head.manifest));}catch{throw Error('library_sync_format');}
@@ -265,7 +258,14 @@ class Blocks{
   const id=begun.id;
   try{
    for(const hash of [...this.cache.keys()])this.forget(hash);
-   const remaining=new Map<string,number>();for(const row of manifest.rows)for(const hash of new Set(row.blocks))remaining.set(hash,(remaining.get(hash)??0)+1);
+   const reused=new Set<string>();
+   if(baseRevision!==undefined)for(let at=0;at<manifest.rows.length;at+=replicaCandidateAppendRecordLimit){
+    const keys=manifest.rows.slice(at,at+replicaCandidateAppendRecordLimit).map(({table,key})=>({table:table as Entry['table'],key}));
+    const result=await send({kind:'reuse',id,baseRevision,keys});if(result.kind!=='reused')throw Error('library_sync_candidate_invalid');
+    const requested=new Set(keys.map(entryId));for(const key of result.keys){if(!requested.has(entryId(key as Entry)))throw Error('library_sync_candidate_invalid');reused.add(entryId(key as Entry));}
+   }
+   const pendingRows=manifest.rows.filter(row=>!reused.has(entryId(row as Entry)));
+   const remaining=new Map<string,number>();for(const row of pendingRows)for(const hash of new Set(row.blocks))remaining.set(hash,(remaining.get(hash)??0)+1);
    let records:ReplicaCandidateRecord[]=[],proofs=new Map<string,string>(),bodyBytes=0,proofBytes=0,referenceCount=0;
    const flush=async()=>{
     if(!records.length)return;
@@ -273,15 +273,15 @@ class Blocks{
     if(result.kind!=='appended')throw Error('library_sync_candidate_invalid');
     records=[];proofs=new Map();bodyBytes=0;proofBytes=0;referenceCount=0;
    };
-   for(let at=0;at<manifest.rows.length;at++){
-    const row=manifest.rows[at],refs=new Set(row.blocks);
+   for(let at=0;at<pendingRows.length;at++){
+    const row=pendingRows[at],refs=new Set(row.blocks);
     if(row.blocks.some(hash=>!this.cache.has(hash))){
      // Ask for the existing API's hash window but retain only one byte page.
      // Small records share a roundtrip; large records cannot inflate prefetch.
      // Before fetching a large current row, release unrelated prefetched bytes.
      for(const hash of [...this.cache.keys()])if(!refs.has(hash))this.forget(hash);
      const wanted=new Set<string>();
-     for(let index=at;index<manifest.rows.length&&wanted.size<librarySyncBlockFetchHashes;index++)for(const hash of manifest.rows[index].blocks){wanted.add(hash);if(wanted.size===librarySyncBlockFetchHashes)break;}
+     for(let index=at;index<pendingRows.length&&wanted.size<librarySyncBlockFetchHashes;index++)for(const hash of pendingRows[index].blocks){wanted.add(hash);if(wanted.size===librarySyncBlockFetchHashes)break;}
      await this.fetch([...wanted],true);
      if(row.blocks.some(hash=>!this.cache.has(hash))){for(const hash of [...this.cache.keys()])if(!refs.has(hash))this.forget(hash);await this.fetch(row.blocks);}
     }
@@ -369,6 +369,20 @@ async function canRestoreFreshLibrary(tx:LibraryTransaction){
  return true;
 }
 
+async function stageStableCandidate(blocks:Blocks,request:SyncRequest,head:LibrarySyncHead,fence:ReplicaCandidateFence,baseRevision?:number):Promise<{head:LibrarySyncHead;candidate?:ReplicaCandidateValidation}>{
+ for(let attempt=0;attempt<3;attempt++){
+  if(!head.manifest)return {head};
+  try{return {head,candidate:await blocks.stage(head,fence,requestReplicaCandidate,baseRevision)};}
+  catch(cause){
+   if(!(cause instanceof Error)||cause.message!=='library_sync_missing_block')throw cause;
+   const latest=librarySyncHead.parse(await request('/head'));
+   if(latest.revision===head.revision&&equal(latest.manifest,head.manifest))throw cause;
+   if(attempt===2)throw Error('library_sync_head_changed');head=latest;
+  }
+ }
+ throw Error('library_sync_head_changed');
+}
+
 /** Injected transport permits offline/idempotency/restore tests without real accounts. */
 export async function synchronizeLibrary(request:SyncRequest,options:LibrarySyncOptions={}){
  const header=await readLibrary(captureHeader),expected={owner:header.owner,incarnation:header.incarnation};
@@ -432,22 +446,38 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
     return;
    }
   }
+  // A remote-only update can keep its bodies in the same SQLite candidate
+  // used for fresh restoration. The Worker still runs domain three-way merge
+  // against the confirmed baseline, then prepares only actual record changes.
+  if(validatedCheckpoint(prior)&&prior!.syncedLocalRevision===header.localRevision&&observedHead?.manifest&&observedHead.revision!==prior!.revision){
+   let candidate:ReplicaCandidateValidation|undefined;
+   try{
+    const staged=await stageStableCandidate(blocks,request,observedHead,{owner:header.owner,incarnation:header.incarnation,identity:header.identity,localRevision:header.localRevision},prior!.revision);
+    observedHead=staged.head;candidate=staged.candidate;
+    const prepared=candidate?await requestReplicaCandidate({kind:'prepareUpdate',id:candidate.id,baseRevision:prior!.revision}):{kind:'updatePrepared' as const,update:null};
+    if(prepared.kind!=='updatePrepared')throw Error('library_sync_candidate_invalid');
+    if(prepared.update&&candidate){
+     const selected=candidate,update=prepared.update;
+     await (update.contentChanged?restoreLibraryTransaction:writeLibraryState)(async tx=>{
+      const current=await captureHeader(tx);
+      if(!sameOwner(current.owner,header.owner)||current.incarnation!==header.incarnation)throw Error('account_changed');
+      if(current.localRevision!==header.localRevision||!equal(current.identity,header.identity)||!validatedCheckpoint(current.state)||current.state!.revision!==prior!.revision)throw Error('library_sync_local_changed');
+      const completedAt=new Date().toISOString();tx.updateReplicaCandidate(update);
+      tx.put('meta',STATE,{...current.state!,restoreOperationId:selected.id,checkpointVersion:6,validationVersion:libraryReplicaValidationVersion,revision:selected.head.revision,storage:selected.head.storage,status:'synced',syncedLocalRevision:header.localRevision+(update.contentChanged?1:0),pending:undefined,conflicts:undefined,conflict:undefined,resolution:undefined,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
+     });
+     return;
+    }
+   }catch(cause){if(!(cause instanceof Error)||cause.message!=='sqlite_replica_candidate_unavailable')throw cause;}
+   finally{if(candidate)await requestReplicaCandidate({kind:'discard',id:candidate.id}).catch(()=>{});}
+  }
   if(!prior?.pending&&!initiallyConflicted&&await readLibrary(canRestoreFreshLibrary)){
    observedHead??=librarySyncHead.parse(await request('/head'));
    if(observedHead.manifest){
     const send=requestReplicaCandidate;
     let candidate:ReplicaCandidateValidation|undefined;
     try{
-     for(let attempt=0;attempt<3;attempt++){
-      try{candidate=await blocks.stage(observedHead,{owner:header.owner,incarnation:header.incarnation,identity:header.identity,localRevision:header.localRevision},send);break;}
-      catch(cause){
-       if(!(cause instanceof Error)||cause.message!=='library_sync_missing_block')throw cause;
-       const latest=librarySyncHead.parse(await request('/head'));
-       if(latest.revision===observedHead.revision&&equal(latest.manifest,observedHead.manifest))throw cause;
-       if(attempt===2)throw Error('library_sync_head_changed');observedHead=latest;
-       if(!latest.manifest)break;
-      }
-     }
+     const staged=await stageStableCandidate(blocks,request,observedHead,{owner:header.owner,incarnation:header.incarnation,identity:header.identity,localRevision:header.localRevision});
+     observedHead=staged.head;candidate=staged.candidate;
      // A same-library identity fork still follows ordinary explicit conflict
      // handling; only a genuinely empty fresh Library may adopt another ID.
      const normalizedIdentity=normalizeLibraryReplicaEntry({table:'meta',key:'identity',value:header.identity},header.identity).value;

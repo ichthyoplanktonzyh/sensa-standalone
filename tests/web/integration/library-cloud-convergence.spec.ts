@@ -73,6 +73,32 @@ test('[integration][durability][convergence] real offline independent writes eve
   assert.equal(deviceB.sync.status, 'synced');
 });
 
+test('[integration][durability][convergence] a confirmed device receives a Worker-prepared update and reopens exact facts',async()=>{
+ const account=await fixture.createAccount(),left=await fixture.createClient(account),right=await fixture.createClient(account);
+ try{
+  const saved=await left.evaluate(async()=>{
+   const core=(window as any).core,rows=[];
+   for(let index=0;index<32;index++)rows.push(await core.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:`Shared context ${index}`}));
+   await (window as any).sync();return rows;
+  });
+  await right.evaluate(()=>(window as any).sync());
+  const before=await right.evaluate(async()=>{const core=(window as any).core;return {state:await core.readCloudSync(),revision:await core.readLibrary(core.readLocalLibraryRevision)};});
+  const edited=await left.evaluate(async(id)=>{const core=(window as any).core,value=await core.saveDraft(crypto.randomUUID(),{id,expectedRevision:1,text:'Changed on the first device.'});await (window as any).sync();return value;},saved[0].id);
+  await right.evaluate(()=>{(window as any).changes=[];window.addEventListener('sensa-library-changed',event=>(window as any).changes.push((event as CustomEvent).detail));});
+  await right.evaluate(()=>(window as any).sync());
+  const applied=await right.evaluate(async()=>{const core=(window as any).core;return {state:await core.readCloudSync(),revision:await core.readLibrary(core.readLocalLibraryRevision),changes:(window as any).changes};});
+  assert.equal(applied.state.status,'synced');assert.notEqual(applied.state.restoreOperationId,before.state.restoreOperationId,'the new head uses a new Worker-prepared application receipt');
+  assert.equal(applied.revision,before.revision+1);
+  assert(applied.changes.some((change:any)=>change.records.some((row:any)=>row.table==='drafts'&&row.key===edited.id)),'the exact changed record is announced');
+  assert(applied.changes.every((change:any)=>!change.clears.includes('drafts')),'an incremental update does not announce a whole-table clear');
+  await right.reload();
+  const reopened=await right.evaluate(async()=>{const path='/core.js',core=await import(/* @vite-ignore */ path);await core.openLibrary();return {drafts:await core.listDrafts(),state:await core.readCloudSync()};});
+  assert.deepEqual(reopened.drafts.find((row:any)=>row.id===edited.id),edited);
+  for(const original of saved.slice(1))assert.deepEqual(reopened.drafts.find((row:any)=>row.id===original.id),original);
+  assert.equal(reopened.state.status,'synced');assert.equal(reopened.state.restoreOperationId,applied.state.restoreOperationId);
+ }finally{await left.context().close();await right.context().close();}
+});
+
 test('[integration][local-correctness][convergence] real conflicts preserve both branches until an explicit decision', async () => {
   const world = await createRealLibraryConvergenceWorld(fixture, ['device-a', 'device-b', 'observer']);
   worlds.add(world);

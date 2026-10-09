@@ -192,7 +192,7 @@ Package key；运行恢复、策略锁定和生成频控通过领域索引查询
 原错误必须穿透领域冲突处理，不能误报为用户可裁决的冲突。合并校验失败后的冲突状态写入也在
 写事务内核对捕获的本机内容版本；期间新增内容时保留原事实与基线，回到待同步，不发布旧冲突快照。
 协作调度不等于整体资源有界：
-现有远端变化回退仍持有整库 wire 正文，排序、单个 Meaning 与 Learning reconciliation 也仍有同步工作段。
+双方变化或冲突等完整回退仍持有整库 wire 正文，排序、单个 Meaning 与 Learning reconciliation 也仍有同步工作段。
 已完整恢复的内容缓存复用一次一致的安装／来源快照；下载或缓存修复后重新读取当前快照，避免把期间新增但未恢复的来源误报为就绪。
 学习状态变化只刷新学习投影，语言选择只读取当前语言方向；通知按记录 key 过滤，当前页面不重复处理自己发出的跨页通知。
 数据结构调整不要求保留历史格式兼容层；当前源事实和可重建索引分开处理，不通过清空用户库恢复初始化错误。
@@ -325,7 +325,7 @@ Personal Anchor media 与 Practice Artifact 仍按各自 learner-owned 表进入
 推进到未上传版本；丢失或无法确认 ACK 仍用原 operation 重试。服务端明确在提交前拒绝的历史／身份错误
 才清除该 pending receipt，保留本机事实与原基线，避免反复重放必败请求。普通物理删除继续交由领域 Replica
 的许可规则裁决。
-`validationVersion` 是设备内完整性合同版本，不是 wire version；该版本缺失/过期、首次发布、远端 head 变化、
+`validationVersion` 是设备内完整性合同版本，不是 wire version；该版本缺失/过期、首次发布、双方变化、
 pending commit 恢复或冲突均保留完整 capture／merge／领域验证。验证合同变更时须更新其版本；泛型 store 写口
 是内部接口，生产事实仍必须经各 owner 准入或已完整校验的恢复入口，不把同步当作语义/学习事实创建者。
 PSW 完整副本验证复用 `SemanticWorldRecordReader` 的逐行规则与精确键查询，不再为校验重建完整 JourneyState；
@@ -399,11 +399,19 @@ incarnation fence，清除后的旧点击不能变成新授权。普通尝试失
 清除通知使已暂停的空库成为本机 authoritative，不请求云端或继续阻挡资料页；准入失败后的手动重连
 只重试准入，真正成功后才允许同步。
 暂存应用、完整回退应用或空账号确认在同一源事务内解除暂停；失败不消费，新的本机资料仍须走身份冲突。
-候选应用只额外允许删除这一确切的现存 marker，不开放其他 metadata 或删除操作；协调协议为 55。
+新设备候选应用只额外允许删除这一确切的现存 marker，不开放其他 metadata 或删除操作；协调协议为 57。
 同事务 restoreOperationId 回执确认协调器丢失 ACK／候选重放后的实际提交，确认后才发送资料变化通知；
 无法读取该回执时不能冒充成功。候选、live、baseline 和 WAL 可同时占磁盘；256 MiB 暂存估计不是峰值磁盘证明。
-已有资料仍须接入领域防倒退、不可改写历史和显式冲突的有界三方 merge，不能因为“本机无未同步更改”就直接
-替换。异步存储 RPC 不能冒充同步 get；受控 5k Draft HTTP／OPFS 恢复也不能代替 10k Meaning、账号 UI、
+已有当前版本验证的 checkpoint 且本机 revision 未变化时，远端新 head 也进入同一私有候选。每批最多 512 key
+在 Worker 内比对当前 baseline 与 manifest 的完整 refs，逐条复用已确认正文，避免未变内容重新下载或跨 RPC。
+共享正文引用在本地还原；候选完整校验后，Worker 仍以 baseline／baseline／remote 执行领域三方合并，不能
+只凭本机未修改而略过不可变历史、删除和冲突规则。仅无冲突且合并结果等于 remote 时生成私有增量应用计划；
+否则保留原完整合并／裁决路径。准备合并让出时普通请求仍可执行，每次惰性读取与最终提交都受原 source fence 保护。
+应用在同一源事务内复核当前验证 stamp、基线版本、内容 revision 与私有计划，按需读取变化正文，原子更新
+facts、baseline patch、派生索引与状态。仅 transport refs 改变时不制造内容 revision；丢 ACK 仍检查同事务回执。
+HTTP head 期间更换并退休旧块时，新设备与增量接收共用最多三次重读／重试。该路径避免整库正文跨页面消息，
+但仍复制未变基线到私有候选并执行全域检查，工作量并非完全只随变化量增长，亦不证明全进程峰值内存或性能达标。
+异步存储 RPC 不能冒充同步 get；受控 5k Draft HTTP／OPFS 恢复也不能代替 10k Meaning、账号 UI、
 全进程峰值内存或完整账号容量验收。
 `node --import tsx scripts/benchmarkSemanticReplicaValidation.mts` 在 Node 的 SQLite/Wasm 候选库上度量完整 PSW
 规则校验；准备数据不计入耗时，采样的 V8 heap 不包括 SQLite/Wasm 内存。加 `--storage-profile` 可只重现逻辑
