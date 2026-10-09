@@ -12,6 +12,9 @@ import {loadJourneyStateFromLibrary} from './experience/personalMeaningJourney/r
 import type {JourneyState} from './experience/personalMeaningJourney/store';
 
 type BrowserSmokeBridge = {
+  holdNextAccountSignoutForTest():Promise<void>;
+  releaseAccountSignoutForTest():void;
+  accountSignoutWaitingForTest():boolean;
   copyVerifiedLearningCapacityForTest(manifestPath:string):Promise<{targets:number;runs:number;events:number}>;
   learningCapacityCheckpointForTest(targetId:string):Promise<{targets:number;memoryRevision:number;runs:number;events:number;activeRunId:string|null;activeTargetId:string|null}>;
   setSpeechFixtureForTest(unavailable:boolean):Promise<void>;
@@ -130,8 +133,16 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
   let hiddenInboxMedia:import('./data/library/media').StoredMedia|undefined;
   let releaseDirectResult:(()=>void)|undefined,restoreLearningReads:(()=>void)|undefined,restoreAnnotationReads:(()=>void)|undefined,restoreSceneReads:(()=>void)|undefined;
   let releaseLearningResult:(()=>void)|undefined,learningReadCounts:Record<string,number>|undefined;
+  let releaseAccountSignout:(()=>void)|undefined,accountSignoutWaiting=false;
   let restoreLearningTrace:(()=>void)|undefined;
   window.__sensaBrowserSmoke = {
+    async holdNextAccountSignoutForTest(){
+      const {auth}=await import('./data/account/auth');if(!auth||releaseAccountSignout)throw Error('Account signout cannot be held');
+      const original=auth.signOut.bind(auth),held=new Promise<void>(resolve=>{releaseAccountSignout=resolve;});
+      auth.signOut=async options=>{auth.signOut=original;accountSignoutWaiting=true;await held;accountSignoutWaiting=false;return original(options);};
+    },
+    releaseAccountSignoutForTest(){if(!releaseAccountSignout)throw Error('No held account signout');releaseAccountSignout();releaseAccountSignout=undefined;},
+    accountSignoutWaitingForTest(){return accountSignoutWaiting;},
     async copyVerifiedLearningCapacityForTest(manifestPath){
       if(!manifestPath.startsWith('/__capacity_fixture/'))throw new Error('Invalid capacity fixture path');
       const [{libraryTables},{decodeBackupValue,encodeBackupValue},{sqliteRecordAdapter}]=await Promise.all([import('./data/library/store'),import('./data/library/backupCodec'),import('./data/library/sqliteAdapter')]);

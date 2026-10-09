@@ -386,7 +386,7 @@
     "tryLater": "Operasi belum selesai. Coba lagi nanti.",
     "otpRateLimit": "Terlalu banyak permintaan. Coba lagi nanti.",
     "otpSendFailed": "Kode tidak dapat dikirim. Periksa alamat email lalu coba lagi.",
-    "signoutIncomplete": "Akses lokal terkunci, tetapi proses keluar online belum selesai. Silakan coba lagi.",
+    "signoutIncomplete": "Data lokal tetap tersedia, tetapi proses keluar online belum selesai. Coba keluar lagi.",
     "loadingSensa": "Memuat Sensa…",
     "cancel": "Batal",
     "otpInvalid": "Kode salah atau kedaluwarsa. Masukkan lagi.",

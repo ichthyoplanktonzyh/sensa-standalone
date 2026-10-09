@@ -1,5 +1,6 @@
 import {z} from 'zod';
 import {auth} from '../account/auth';
+import {captureAccountSessionBoundary,assertAccountSessionBoundary,type AccountSessionBoundary} from '../account/accountSessionBoundary';
 import type {Purpose} from './providers';
 import {readingAssignmentsSchema} from '@sensa/contracts/sensa';
 
@@ -43,12 +44,14 @@ async function endpoint(){
  if(!session)throw new Error('localFlow.accountLogin');
  const base=import.meta.env.VITE_SENSA_API_URL;
  if(!base)throw new Error('localFlow.serviceUnconfigured');
- return {token:session.access_token,userId:session.user.id,base:base.replace(/\/+$/u,'')+'/sensa/reading'};
+ return {token:session.access_token,userId:session.user.id,base:base.replace(/\/+$/u,'')+'/sensa/reading',boundary:await captureAccountSessionBoundary(session.user.id)};
 }
 
-async function send(target:{token:string;userId:string},path:string,init:RequestInit|undefined,signal?:AbortSignal){
+async function send(target:{token:string;userId:string;boundary:AccountSessionBoundary},path:string,init:RequestInit|undefined,signal?:AbortSignal){
+ await assertAccountSessionBoundary(target.boundary);
  const response=await fetch(path,{...init,redirect:'error',credentials:'omit',headers:{...(init?.headers??{}),authorization:'Bearer '+target.token},signal:AbortSignal.any([signal??AbortSignal.timeout(15000),AbortSignal.timeout(15000)])});
  if((await auth?.getSession())?.data.session?.user.id!==target.userId)throw new Error('localFlow.accountChanged');
+ await assertAccountSessionBoundary(target.boundary);
  if(response.status===401||response.status===403)throw new Error('localFlow.accountLogin');
  if(!response.ok){const body=await response.json().catch(()=>({}));throw new Error(errors[body?.code as string]??'localFlow.accountUnavailable');}
  return response;

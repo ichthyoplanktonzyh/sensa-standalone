@@ -3,6 +3,7 @@ import {complete} from '../../../apps/web/src/data/library/transport';
 
 const state=vi.hoisted(()=>({subject:'account-a',assignment:'teacher-a',gate:Promise.resolve(),queued:false,preflight:false}));
 vi.mock('../../../apps/web/src/data/account/auth',()=>({auth:{getSession:async()=>({error:null,data:{session:{access_token:'synthetic-test-token',user:{id:state.subject}}}})}}));
+vi.mock('../../../apps/web/src/data/library/store',()=>({readLibrary:async(work:(tx:{get:(table:string,key:string)=>Promise<unknown>})=>unknown)=>work({get:async(_table,key)=>key==='service-owner'?{subject:'account-a',accountId:'fixture-account'}:undefined})}));
 vi.mock('../../../apps/web/src/data/library/providers',()=>({clearCredential:()=>{},providerSnapshot:async()=>({providers:[]})}));
 vi.mock('../../../apps/web/src/data/library/modelExecution',()=>({localModelQueue:{run:async(_input:unknown,signal:AbortSignal,work:(signal:AbortSignal,record:Record<string,unknown>)=>Promise<unknown>)=>{state.queued=true;await state.gate;return work(signal,{});}}}));
 afterEach(()=>{vi.unstubAllGlobals();vi.unstubAllEnvs();});

@@ -388,7 +388,7 @@
     "tryLater": "La operación no terminó. Inténtalo más tarde.",
     "otpRateLimit": "Demasiadas solicitudes. Inténtalo más tarde.",
     "otpSendFailed": "No se pudo enviar un código. Comprueba tu correo electrónico e inténtalo de nuevo.",
-    "signoutIncomplete": "El acceso local está bloqueado, pero no terminó el cierre de sesión en línea. Inténtalo de nuevo.",
+    "signoutIncomplete": "Tus datos locales siguen disponibles, pero no terminó el cierre de sesión en línea. Intenta cerrar sesión de nuevo.",
     "loadingSensa": "Cargando Sensa…",
     "cancel": "Cancelar",
     "otpInvalid": "El código es incorrecto o ha caducado. Introdúcelo de nuevo.",

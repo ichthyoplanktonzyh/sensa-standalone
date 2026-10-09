@@ -388,7 +388,7 @@
     "tryLater": "L'operazione non è terminata. Riprova più tardi.",
     "otpRateLimit": "Troppe richieste. Riprova più tardi.",
     "otpSendFailed": "Impossibile inviare un codice. Controlla l'indirizzo e-mail e riprova.",
-    "signoutIncomplete": "L'accesso locale è bloccato, ma non è stato possibile completare l'uscita dai servizi online. Riprova.",
+    "signoutIncomplete": "I dati locali restano disponibili, ma l'uscita dai servizi online non è stata completata. Riprova a uscire.",
     "loadingSensa": "Caricamento di Sensa…",
     "cancel": "Annulla",
     "otpInvalid": "Il codice è errato o scaduto. Inseriscilo di nuovo.",

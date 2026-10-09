@@ -70,12 +70,12 @@ function setRegistry(items:typeof delivery.descriptor[]){
  registry={...snapshot,revision:createHash('sha256').update(canonicalConsumerJson(snapshot)).digest('hex')};
 }
 
-const jwt=(expiresInSeconds:number)=>{
+const jwt=(expiresInSeconds:number,userId=subject)=>{
   const encode=(value:unknown)=>Buffer.from(JSON.stringify(value)).toString('base64url');
   return [
     encode({alg:'HS256',typ:'JWT'}),
     encode({
-      sub:subject,aud:'authenticated',email:'package-center@sensa.invalid',
+      sub:userId,aud:'authenticated',email:'package-center@sensa.invalid',
       session_id:randomUUID(),exp:Math.floor(Date.now()/1000)+expiresInSeconds,
       amr:[{method:'otp',timestamp:Math.floor(Date.now()/1000)}],
     }),
@@ -83,11 +83,11 @@ const jwt=(expiresInSeconds:number)=>{
   ].join('.');
 };
 
-const session=()=>({
-  access_token:jwt(3600),token_type:'bearer',expires_in:3600,
+const session=(userId=subject)=>({
+  access_token:jwt(3600,userId),token_type:'bearer',expires_in:3600,
   expires_at:Math.floor(Date.now()/1000)+3600,refresh_token:'fixture-refresh-token',
   user:{
-    id:subject,aud:'authenticated',role:'authenticated',
+    id:userId,aud:'authenticated',role:'authenticated',
     email:'package-center@sensa.invalid',app_metadata:{},user_metadata:{},
     identities:[],created_at:new Date().toISOString(),
   },
@@ -457,6 +457,89 @@ test('an encrypted backup restores exact personal facts and genuine learning his
   expect(await writer.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(concurrent);
   await writer.reload();await expect(writer.locator('#s-home')).toBeVisible();expect(await writer.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(concurrent);
  }finally{await racing.close();}
+});
+
+test('signout keeps local facts available while the auth service is stalled and reconnecting cannot cancel that intent',async({page,context})=>{
+ cloudManifest=null;cloudRevision=0;cloudBlocks.clear();
+ await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.fallback():route.abort());
+ await page.addInitScript(({key,value})=>localStorage.setItem(key,JSON.stringify(value)),{key:storageKey,value:session()});
+ await page.goto(origin+'/profile');await expect(page.locator('#s-profile')).toBeVisible();
+ const repository=new MemoryJourneyRepository();await createJourneyModules({repository}).semanticIntake.submit(semanticLookupPayload());await page.evaluate(state=>window.__sensaBrowserSmoke!.seedSemanticWorld(state),await repository.load());
+ const runtime=await startOrdinaryBook(page);await runtime.getByRole('button',{name:/查看表达/}).click();await runtime.getByRole('button',{name:'暂停',exact:true}).click();
+ const beforeLearning=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());await page.goto(origin+'/profile');
+ const facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest());
+ let release!:()=>void,logoutRequests=0;const held=new Promise<void>(resolve=>{release=resolve;});
+ await page.route('**/auth/v1/logout*',async route=>{logoutRequests++;await held;await route.fulfill({status:503,json:{message:'synthetic unavailable logout'}});});
+ try{
+  await page.locator('#settings-security').click();await page.getByRole('button',{name:'退出账号',exact:true}).click();await expect.poll(()=>logoutRequests).toBe(1);
+  await expect(page.locator('#s-profile')).toBeVisible();
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的语义世界',exact:true}).click();await page.locator('.sensa-world-row').first().click();await expect(page.getByText('Private source: May asked to borrow an umbrella.',{exact:true}).first()).toBeVisible();
+  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(facts);
+  const metadata=await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest(true));expect(metadata.meta!.find(row=>row.key==='signed-out')?.value).toEqual(['boolean',true]);
+  await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'今日',exact:true}).click();await page.locator('#s-home').getByRole('button',{name:/继续学习/}).click();
+  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).runtime).toEqual(beforeLearning.runtime);
+  await page.locator('#s-lightweight-runtime').getByRole('button',{name:/已经连上/}).click();await expect.poll(async()=>(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records.length).toBe(1);
+ }finally{release();}
+ await expect.poll(()=>page.evaluate(key=>localStorage.getItem(key)===null,storageKey),{timeout:20_000}).toBe(true);
+});
+
+test('a different account cannot open an owned library and can sign out without replacing its facts',async({page,context})=>{
+ cloudManifest=null;cloudRevision=0;cloudBlocks.clear();
+ await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.fallback():route.abort());
+ await page.addInitScript(({key,value})=>{if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(value));},{key:storageKey,value:session()});
+ await page.goto(origin+'/profile');await expect(page.locator('#s-profile')).toBeVisible();
+ const repository=new MemoryJourneyRepository();await createJourneyModules({repository}).semanticIntake.submit(semanticLookupPayload());await page.evaluate(state=>window.__sensaBrowserSmoke!.seedSemanticWorld(state),await repository.load());
+ const facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest()),identity=await page.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest());
+ // Controlled auth change: real account/runtime/OPFS handling, not provider login.
+ await page.evaluate(({key,value})=>localStorage.setItem(key,JSON.stringify(value)),{key:storageKey,value:session(randomUUID())});await page.reload();
+ await page.evaluate(()=>{(window as any).__fixtureExtensionSignouts=[];window.addEventListener('message',event=>{if(event.data?.kind==='web-session-ended')(window as any).__fixtureExtensionSignouts.push(event.data);});});
+ await expect(page.locator('.sensa-account-entry')).toBeVisible();await expect(page.locator('#s-profile')).toHaveCount(0);await expect(page.getByText('Private source: May asked to borrow an umbrella.',{exact:true})).toHaveCount(0);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(facts);
+ await page.getByRole('button',{name:'退出当前登录，使用原账号重新登录',exact:true}).click();await expect(page.locator('#s-profile')).toBeVisible();
+ expect(await page.evaluate(()=>(window as any).__fixtureExtensionSignouts)).toEqual([]);
+ await page.locator('#settings-security').click();await expect(page.getByRole('button',{name:'退出账号',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'登录 Sensa',exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(facts);expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest())).identity).toEqual(identity.identity);
+});
+
+test('a delayed account admission in another tab cannot reopen online services after a committed logout',async({page,context})=>{
+ cloudManifest=null;cloudRevision=0;cloudBlocks.clear();
+ await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.fallback():route.abort());
+ await page.addInitScript(({key,value})=>{if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(value));},{key:storageKey,value:session()});
+ await page.goto(origin+'/profile');await expect(page.locator('#s-profile')).toBeVisible();
+ const repository=new MemoryJourneyRepository();await createJourneyModules({repository}).semanticIntake.submit(semanticLookupPayload());await page.evaluate(state=>window.__sensaBrowserSmoke!.seedSemanticWorld(state),await repository.load());
+ const facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest());
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.holdNextAccountSignoutForTest());
+ const other=await context.newPage();let resume!:()=>void,requests=0;const paused=new Promise<void>(resolve=>{resume=resolve;});
+ await other.route('**/sensa/web/access/session',async route=>{requests++;await paused;await route.fulfill({status:200,json:{authorized:true,accountId:account,capabilities:{publishLearningContent:false}}});});
+ await other.goto(origin+'/profile');await expect.poll(()=>requests).toBe(1);await expect(other.locator('#s-profile')).toBeVisible();
+ await page.locator('#settings-security').click();await page.getByRole('button',{name:'退出账号',exact:true}).click();await expect.poll(()=>page.evaluate(()=>window.__sensaBrowserSmoke!.accountSignoutWaitingForTest())).toBe(true);
+ const unwanted=other.waitForRequest(request=>new URL(request.url()).pathname.startsWith('/sensa/intake/'),{timeout:1500}).then(()=>true,()=>false);
+ try{
+  const response=other.waitForResponse(response=>new URL(response.url()).pathname==='/sensa/web/access/session');resume();await response;
+  expect(await unwanted).toBe(false);await expect(other.locator('#s-profile').getByText('本机使用',{exact:true})).toBeVisible();
+  const metadata=await other.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest(true));expect(metadata.meta!.find(row=>row.key==='signed-out')?.value).toEqual(['boolean',true]);
+  expect(await other.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(facts);
+ }finally{resume();await page.evaluate(()=>window.__sensaBrowserSmoke!.releaseAccountSignoutForTest());await other.close();}
+});
+
+test('a signed-out library opens locally while an expired cached token is stuck refreshing',async({page,context})=>{
+ cloudManifest=null;cloudRevision=0;cloudBlocks.clear();
+ await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.fallback():route.abort());
+ await page.addInitScript(({key,value})=>{if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(value));},{key:storageKey,value:session()});
+ await page.goto(origin+'/profile');await expect(page.locator('#s-profile')).toBeVisible();
+ const repository=new MemoryJourneyRepository();await createJourneyModules({repository}).semanticIntake.submit(semanticLookupPayload());await page.evaluate(state=>window.__sensaBrowserSmoke!.seedSemanticWorld(state),await repository.load());
+ const facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest());
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.holdNextAccountSignoutForTest());await page.locator('#settings-security').click();await page.getByRole('button',{name:'退出账号',exact:true}).click();await expect.poll(()=>page.evaluate(()=>window.__sensaBrowserSmoke!.accountSignoutWaitingForTest())).toBe(true);
+ let resume!:()=>void,refreshRequests=0;const paused=new Promise<void>(resolve=>{resume=resolve;});
+ await context.route('**/auth/v1/token*',async route=>{refreshRequests++;await paused;await route.fulfill({status:400,json:{error:'invalid_grant',error_description:'synthetic expired refresh'}});});
+ const expired={...session(),access_token:jwt(-3600),expires_at:Math.floor(Date.now()/1000)-3600};await page.evaluate(({key,value})=>localStorage.setItem(key,JSON.stringify(value)),{key:storageKey,value:expired});
+ const reopened=await context.newPage();
+ try{
+  await reopened.goto(origin+'/content');await expect.poll(()=>refreshRequests).toBeGreaterThan(0);
+  await expect(reopened.locator('.sensa-world-row').first()).toBeVisible();await reopened.locator('.sensa-world-row').first().click();await expect(reopened.getByText('Private source: May asked to borrow an umbrella.',{exact:true}).first()).toBeVisible();
+  expect(await reopened.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(facts);
+ }finally{resume();await page.evaluate(()=>window.__sensaBrowserSmoke!.releaseAccountSignoutForTest());await reopened.close();}
 });
 
 const emptySignedInPreflightRetry=(failure:'http-error'|'network-error')=>async({page,context}:{page:Page;context:BrowserContext},testInfo:TestInfo)=>{

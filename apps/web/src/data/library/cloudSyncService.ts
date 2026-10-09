@@ -1,4 +1,5 @@
 import {auth} from '../account/auth';
+import {captureAccountSessionBoundary,assertAccountSessionBoundary} from '../account/accountSessionBoundary';
 import {readLibrary,assertCurrentLibrary} from './store';
 import {synchronizeLibrary,readCloudReconnectRequired,type LibrarySyncOptions} from './cloudSync';
 let running:Promise<void>|undefined;
@@ -18,14 +19,17 @@ export function syncAccountLibrary(options:LibrarySyncOptions={}):Promise<void>{
   if(!options.restoreAfterLocalClear&&await readCloudReconnectRequired())return;
   const owner=await readLibrary(tx=>tx.get<{subject:string;accountId:string}>('meta','service-owner'));
   if(!owner)throw new Error('authentication_required');
+  const boundary=await captureAccountSessionBoundary(owner.subject);
   const passSignal=AbortSignal.timeout(90000);
   await synchronizeLibrary(async(path,body)=>{
    const current=await readLibrary(async tx=>({owner:await tx.get<{subject:string;accountId:string}>('meta','service-owner'),signedOut:await tx.get('meta','signed-out')}));
    const session=(await auth?.getSession())?.data.session;
    if(!session||session.user.id!==owner.subject||current.signedOut||current.owner?.accountId!==owner.accountId||current.owner.subject!==owner.subject)throw new Error('authentication_required');
+   await assertAccountSessionBoundary(boundary);
    const endpoint=import.meta.env.VITE_SENSA_API_URL;
    if(!endpoint)throw new Error('library_sync_unavailable');
    let response:Response;try{response=await fetch(endpoint.replace(/\/+$/,'')+'/sensa/library-sync'+path,{method:body===undefined?'GET':'POST',headers:{authorization:'Bearer '+session.access_token,'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.any([passSignal,AbortSignal.timeout(15000)]),redirect:'error',cache:'no-store'});}catch{throw new Error('library_sync_network');}
+   await assertAccountSessionBoundary(boundary);
    if(response.status===429)throw new Error('library_sync_rate_limited');if(response.status>=500)throw new Error('library_sync_server_error');
    let value:any;try{value=await response.json();}catch{throw new Error('library_sync_format');}
    if(!response.ok)throw new Error(value.code??'library_sync_unavailable');return value;

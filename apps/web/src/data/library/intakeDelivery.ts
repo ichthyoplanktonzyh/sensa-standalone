@@ -9,16 +9,19 @@ import {
 } from "@sensa/contracts/sensa";
 
 import { auth } from "../account/auth";
+import {captureAccountSessionBoundary,assertAccountSessionBoundary,type AccountSessionBoundary} from '../account/accountSessionBoundary';
 
-async function endpoint(): Promise<{ base: string; token: string; subject: string }> {
+async function endpoint(): Promise<{ base: string; token: string; subject: string;boundary:AccountSessionBoundary }> {
   const session = (await auth?.getSession())?.data.session;
   if (!session) throw new Error("authentication_required");
+  const boundary=await captureAccountSessionBoundary(session.user.id);
   const configured = import.meta.env.VITE_SENSA_API_URL as string | undefined;
   if (!configured) throw new Error("intake_delivery_unavailable");
   return {
     base: configured.replace(/\/+$/u, "") + "/sensa/intake",
     token: session.access_token,
     subject: session.user.id,
+    boundary,
   };
 }
 
@@ -39,6 +42,7 @@ async function send(path: string, body: unknown, expectedSubject?:string): Promi
   });
   const current = (await auth?.getSession())?.data.session;
   if (!current || current.user.id !== target.subject) throw new Error("account_changed");
+  await assertAccountSessionBoundary(target.boundary);
   const value = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(value?.code ?? "intake_delivery_unavailable");
   return value;

@@ -47,6 +47,8 @@ const foundationTests = [
   {id:'guest-content-presence',file:'tests/web/integration/guest-content-presence.test.mts',kind:'integration',risks:['local-correctness'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
   {id:'web-entry-hmr',file:'tests/web/browser/web-entry-hmr.spec.ts',kind:'integration',risks:['local-correctness','durability'],environment:'chromium',suite:'browser',runner:'playwright'},
   {id:'library-bootstrap-recovery',file:'tests/web/integration/library-bootstrap-recovery.test.mts',kind:'integration',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
+  {id:'account-session-boundary',file:'tests/web/integration/account-session-boundary.test.mts',kind:'integration',risks:['local-correctness','durability','convergence'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
+  {id:'email-link-boundary',file:'tests/web/unit/email-link-boundary.test.mts',kind:'unit',risks:['local-correctness','convergence'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'youglish-caption',file:'tests/web/unit/youglish-caption.test.mts',kind:'unit',risks:['local-correctness'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'sqlite-runtime-failure',file:'tests/web/browser/sqlite-runtime-failure.spec.ts',kind:'integration',risks:['local-correctness','durability'],environment:'chromium',suite:'browser',runner:'playwright'},
   {id:'supplemental-membership',file:'tests/web/integration/supplemental-membership.test.mts',kind:'integration',risks:['local-correctness','durability','convergence'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},

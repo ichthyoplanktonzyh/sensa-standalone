@@ -387,7 +387,7 @@
     "tryLater": "The operation did not finish. Try again later.",
     "otpRateLimit": "Too many requests. Try again later.",
     "otpSendFailed": "Could not send a code. Check your email address and try again.",
-    "signoutIncomplete": "Local access is locked, but online sign-out did not finish. Please retry.",
+    "signoutIncomplete": "Your local data is still available, but online sign-out did not finish. Retry signing out.",
     "loadingSensa": "Loading Sensa…",
     "cancel": "Cancel",
     "otpInvalid": "The code is incorrect or expired. Enter it again.",

@@ -386,7 +386,7 @@
     "tryLater": "Thao tác chưa hoàn tất. Thử lại sau.",
     "otpRateLimit": "Có quá nhiều yêu cầu. Thử lại sau.",
     "otpSendFailed": "Không gửi được mã. Kiểm tra địa chỉ email rồi thử lại.",
-    "signoutIncomplete": "Quyền truy cập cục bộ đã khóa nhưng đăng xuất trực tuyến chưa hoàn tất. Vui lòng thử lại.",
+    "signoutIncomplete": "Dữ liệu cục bộ vẫn dùng được nhưng đăng xuất trực tuyến chưa hoàn tất. Hãy thử đăng xuất lại.",
     "loadingSensa": "Đang tải Sensa…",
     "cancel": "Hủy",
     "otpInvalid": "Mã không đúng hoặc đã hết hạn. Nhập lại.",

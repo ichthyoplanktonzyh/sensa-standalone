@@ -1,6 +1,7 @@
 import {clientSpeechInputSchema,type ClientSpeechInput,type ClientSpeechMaterial,type ClientSpeechProvider} from './provider';
 import {edgeVoiceByLanguage} from './edgeVoiceCatalog';
 import {auth} from '../../account/auth';
+import {captureAccountSessionBoundary,assertAccountSessionBoundary} from '../../account/accountSessionBoundary';
 
 const TRUSTED_CLIENT_TOKEN='6A5AA1D4EAFF4E9FB37E23D68491D6F4';
 const EDGE_VERSION='143.0.3650.75';
@@ -105,6 +106,7 @@ async function synthesizeThroughService(input:ClientSpeechInput,signal:AbortSign
  const base=import.meta.env.VITE_SENSA_API_URL;
  const session=(await auth?.getSession())?.data.session;
  if(!base||!session)throw Error('localFlow.authUnavailable');
+ const boundary=await captureAccountSessionBoundary(session.user.id);
  let response:Response;
  try{
   response=await fetch(base.replace(/\/+$/u,'')+'/sensa/speech/edge-tts',{
@@ -119,6 +121,7 @@ async function synthesizeThroughService(input:ClientSpeechInput,signal:AbortSign
  const audioBase64=(result as {audioBase64?:unknown})?.audioBase64;
  if(typeof audioBase64!=='string'||audioBase64.length<100||audioBase64.length>2_800_000||!/^[A-Za-z0-9+/]+={0,2}$/u.test(audioBase64))throw Error('edge_tts_invalid_message');
  if((await auth?.getSession())?.data.session?.user.id!==session.user.id)throw Error('localFlow.authUnavailable');
+ await assertAccountSessionBoundary(boundary);
  return {surface:input.surface,languageTag:input.languageTag,audioUrl:`data:audio/mpeg;base64,${audioBase64}`,method:'tts',phoneticNotation:null,accentLabel:selection.locale,
   source:JSON.stringify({provider:'microsoft-edge-read-aloud',providerRevision:1,voice:selection.voice,locale:selection.locale,rate:'+0%',format:'audio-24khz-48kbitrate-mono-mp3'})};
 }

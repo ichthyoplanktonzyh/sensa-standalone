@@ -12,11 +12,14 @@ export function emailLinkRedirect():string {
 
 type CallbackResult='none'|'signed-in'|'failed';
 let completion:Promise<CallbackResult>|undefined;
+let callbackSignoutEpoch:string|null|undefined;
+export const emailLinkSignoutEpoch=()=>callbackSignoutEpoch;
 /** One exchange per page, including StrictMode and concurrent recovery events.
  * The SDK validates the browser's PKCE verifier; URL tokens are never trusted.
  */
-export function completeEmailLink():Promise<CallbackResult> {
- return completion??=consumeCallback();
+export function completeEmailLink(signoutEpoch?:string|null):Promise<CallbackResult> {
+ if(!completion){callbackSignoutEpoch=signoutEpoch;completion=consumeCallback();}
+ return completion;
 }
 
 async function consumeCallback():Promise<CallbackResult> {

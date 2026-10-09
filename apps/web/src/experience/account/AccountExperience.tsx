@@ -6,7 +6,8 @@ import {localFlowErrorKey,localFlowText,localFlowNotice} from '../../i18n/localF
 import {z} from 'zod';
 import {lazy,Suspense,useCallback,useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
 import {auth,cachedAuthSubject,authStorageKey} from '../../data/account/auth';
-import {completeEmailLink,emailLinkRedirect} from '../../data/consumer/emailLink';
+import {accountSignoutEpoch,accountSignoutEpochKey,readAccountSignoutEpoch} from '../../data/account/accountSessionBoundary';
+import {completeEmailLink,emailLinkRedirect,emailLinkSignoutEpoch} from '../../data/consumer/emailLink';
 import {command,readLibrary,openLibrary,observeLibrary,type LibraryTransaction} from '../../data/library/store';
 import {hasLocalLibraryHint} from '../../data/library/localLibraryHint';
 import {hasLocalLibrarySelection} from '../../data/library/localLibraryLocation';
@@ -41,21 +42,26 @@ export default function AccountExperience({children,onReturnToLanding}:{children
  const [useCode,setUseCode]=useState(false);const callbackDismissed=useRef(false);
  const observedAuth=useRef<{subject:string|null;token:string|null}|null>(null);
  const generation=useRef(0),localRef=useRef(false);localRef.current=local;
+ const explicitSignIn=useRef<string|null|undefined>(undefined),callbackAccepted=useRef(false);
+ const observedSignoutEpoch=useRef<string|null|undefined>(undefined);
  const extension=new URLSearchParams(location.search),extensionRequest=extension.get('extension')==='connect';
- const recover=async()=>{
+ const recover=async(freshSignIn?:{epoch:string|null})=>{
   if(deletionRef.current)return;
   const gen=++generation.current;
   let needsInitialRestore=false,guestAttempt=false;
   let usableLocalFacts=false;
   let recheckGuestContent:((tx:LibraryTransaction)=>Promise<boolean>)|undefined;
   try{
-   const callback=await completeEmailLink();
+   const entryEpoch=await accountSignoutEpoch();
    if(gen!==generation.current)return;
+   if(observedSignoutEpoch.current===undefined)observedSignoutEpoch.current=entryEpoch;
+   const callback=await completeEmailLink(entryEpoch);
+   if(gen!==generation.current)return;
+   if(callback==='signed-in'&&!callbackAccepted.current){callbackAccepted.current=true;explicitSignIn.current=emailLinkSignoutEpoch();}
+   if(freshSignIn)explicitSignIn.current=freshSignIn.epoch;
    if(callback==='failed'&&!callbackDismissed.current)setNotice(localFlowText('emailLinkInvalid'));
-   const session=(await auth?.getSession())?.data.session;
-   if(gen!==generation.current)return;
    const cachedSubject=cachedAuthSubject();
-   const inspect=()=>readLibrary(async tx=>{const checkpoint=await tx.get<{status?:string}>('meta','cloud-sync');return {owner:await tx.get<Owner>('meta','service-owner'),identity:await tx.get('meta','identity'),signedOut:await tx.get<boolean>('meta','signed-out'),usable:checkpoint?.status==='synced'||await tx.get('meta','local-reset')==='local-clear'||await hasGuestLibraryContent(tx)};});
+   const inspect=()=>readLibrary(async tx=>{const checkpoint=await tx.get<{status?:string}>('meta','cloud-sync');return {owner:await tx.get<Owner>('meta','service-owner'),identity:await tx.get('meta','identity'),signedOut:await tx.get<boolean>('meta','signed-out'),epoch:await readAccountSignoutEpoch(tx),usable:checkpoint?.status==='synced'||await tx.get('meta','local-reset')==='local-clear'||await hasGuestLibraryContent(tx)};});
    let stored=await inspect();
    if(!stored.identity){await openLibrary();stored=await inspect();}
    setLibraryMissing(false);
@@ -67,12 +73,22 @@ export default function AccountExperience({children,onReturnToLanding}:{children
    // Local access uses the already admitted owner. Refreshing an expired online
    // token may wait indefinitely offline; it must not hold the local library gate.
    if(stored.owner&&(cachedSubject===undefined||cachedSubject!==null&&cachedSubject!==stored.owner.subject)){
-    setLocal(false);setNotice(localFlowText('accountUnreadable'));return;
+    const session=(await auth?.getSession())?.data.session;if(gen!==generation.current)return;setWebSession(session?'present':'absent');setLocal(false);setNotice(localFlowText('accountUnreadable'));return;
    }
+   const staysSignedOut=stored.signedOut&&(explicitSignIn.current===undefined||explicitSignIn.current!==stored.epoch);
+   if(stored.identity&&!extensionRequest&&(stored.usable||staysSignedOut)){
+    await openLibrary();if(gen!==generation.current)return;
+    setLibraryAvailability('authoritative');setLocal(true);setReady(true);
+   }
+   if(staysSignedOut){setOnlineService(false);setPublisherAccess(false);setConnectionConflict(false);setLoginOpen(extensionRequest);if(extensionRequest)setNotice(localFlowText('onlineLogin'));return;}
+   const session=(await auth?.getSession())?.data.session;
+   if(gen!==generation.current)return;
+   setWebSession(session?'present':'absent');
    if(stored.identity&&!extensionRequest){setLibraryAvailability(session&&!stored.usable?'restoring':!stored.owner||stored.usable?'authoritative':'restoring');setLocal(true);setReady(true);}
    if(!session){setWebSession('absent');setOnlineService(false);setPublisherAccess(false);setConnectionConflict(false);setLoginOpen(false);return;}
-   setWebSession('present');
    if(stored.owner&&stored.owner.subject!==session.user.id){setLocal(false);setNotice(localFlowText('wrongAccount'));return;}
+   // A pending/failed remote signout cannot undo the locally committed choice.
+   // Only a validated new email callback or OTP explicitly reconnects it.
    // A valid account session may open the local product before the online admission
    // request completes. The account id is added later and only gates online services.
    const provisional:Owner={...stored.owner,subject:session.user.id,email:session.user.email??stored.owner?.email??''};
@@ -94,7 +110,8 @@ export default function AccountExperience({children,onReturnToLanding}:{children
     setLibraryAvailability(admission.cloudHasContent&&!admission.localHasContent?'restoring':'authoritative');
     guestAdmission={accountId:admission.accountId,installationId,publisherAccess:admission.publisherAccess};
    }
-   if(!stored.owner||stored.signedOut||stored.owner.email!==provisional.email)await command({id:crypto.randomUUID(),kind:'service.local-access',input:{subject:provisional.subject}},async tx=>{const current=await tx.get<Owner>('meta','service-owner');if(current&&current.subject!==provisional.subject)throw new Error('account mismatch');if(recheckGuestContent&&await recheckGuestContent(tx))throw new Error('localFlow.accountLibraryConflict');tx.put('meta','service-owner',provisional);tx.put('meta','signed-out',false);return null;});
+   if(!stored.owner||stored.signedOut||stored.owner.email!==provisional.email)await command({id:crypto.randomUUID(),kind:'service.local-access',input:{subject:provisional.subject}},async tx=>{const current=await tx.get<Owner>('meta','service-owner');if(gen!==generation.current||await readAccountSignoutEpoch(tx)!==stored.epoch)throw Error('stale login');if(current&&current.subject!==provisional.subject)throw new Error('account mismatch');if(recheckGuestContent&&await recheckGuestContent(tx))throw new Error('localFlow.accountLibraryConflict');tx.put('meta','service-owner',provisional);tx.put('meta','signed-out',false);return null;});
+   explicitSignIn.current=undefined;
    if(gen!==generation.current)return;
    await openLibrary();
    if(gen!==generation.current)return;
@@ -121,7 +138,9 @@ export default function AccountExperience({children,onReturnToLanding}:{children
    if(gen!==generation.current)return;
    const next={subject:session.user.id,email:session.user.email??'',accountId:access.accountId};
    const currentOwner=await readLibrary(tx=>tx.get<Owner>('meta','service-owner'));
-   if(currentOwner?.subject!==next.subject||currentOwner.accountId!==next.accountId||currentOwner.email!==next.email)await command({id:crypto.randomUUID(),kind:'service.connect',input:next},async tx=>{const current=await tx.get<Owner>('meta','service-owner');if(gen!==generation.current)throw new Error('stale login');if(current&&current.subject!==next.subject)throw new Error('account mismatch');tx.put('meta','service-owner',next);tx.put('meta','signed-out',false);return null;});
+   if(currentOwner?.subject!==next.subject||currentOwner.accountId!==next.accountId||currentOwner.email!==next.email)await command({id:crypto.randomUUID(),kind:'service.connect',input:next},async tx=>{const current=await tx.get<Owner>('meta','service-owner');if(gen!==generation.current||await readAccountSignoutEpoch(tx)!==stored.epoch||await tx.get('meta','signed-out'))throw new Error('stale login');if(current&&current.subject!==next.subject)throw new Error('account mismatch');tx.put('meta','service-owner',next);tx.put('meta','signed-out',false);return null;});
+   const signedOut=await readLibrary(async tx=>await tx.get('meta','signed-out')||await readAccountSignoutEpoch(tx)!==stored.epoch);
+   if(signedOut)return;
    if(gen!==generation.current)return;
    if(extensionRequest){
     const result=await import('./extensionConnection').then(module=>module.authorizeExtensionConnection({installationId:extension.get('installationId'),state:extension.get('state'),challenge:extension.get('challenge'),redirectUri:extension.get('redirectUri')},AbortSignal.timeout(15000),next.subject));
@@ -143,20 +162,23 @@ export default function AccountExperience({children,onReturnToLanding}:{children
   // or a new account; tearing down the app here interrupts extension PKCE.
   if(previous?.subject===next.subject&&previous.token===next.token&&event!=='USER_UPDATED')return;
   observedAuth.current=next;
-  if(event==='SIGNED_OUT'||previous&&previous.subject!==next.subject){generation.current++;void clearAllCredentials();setWebSession(event==='SIGNED_OUT'?'absent':'checking');setOnlineService(false);setPublisherAccess(false);setLocal(false);}
+  setWebSession(session?'present':'absent');
+  if(event==='SIGNED_OUT'||previous&&previous.subject!==next.subject){generation.current++;void clearAllCredentials();setWebSession(event==='SIGNED_OUT'?'absent':'checking');setOnlineService(false);setPublisherAccess(false);if(event!=='SIGNED_OUT')setLocal(false);}
   setTimeout(()=>void recover(),0);
  });const online=()=>void recover();const storage=(event:StorageEvent)=>{if(event.key===null||event.key===authStorageKey)void recover();};window.addEventListener('online',online);window.addEventListener('storage',storage);return()=>{generation.current++;sub?.data.subscription.unsubscribe();window.removeEventListener('online',online);window.removeEventListener('storage',storage);};},[]);
  useEffect(()=>{if(!sent||now>=retryAt)return;const timer=window.setTimeout(()=>setNow(Date.now()),Math.max(0,retryAt-Date.now())+20);return()=>window.clearTimeout(timer);},[now,retryAt,sent]);
- useEffect(()=>{if(!local)return;return observeLibrary(()=>{void readLibrary(async tx=>({signedOut:await tx.get('meta','signed-out')})).then(state=>{if(state.signedOut&&localRef.current){void clearAllCredentials();setOnlineService(false);}}).catch(()=>setNotice(localFlowText('localStatusFailed')));},['meta']);},[local]);
+ useEffect(()=>{if(!local)return;return observeLibrary(()=>{void readLibrary(async tx=>({signedOut:await tx.get('meta','signed-out'),epoch:await readAccountSignoutEpoch(tx)})).then(state=>{if(state.signedOut&&localRef.current){if(state.epoch!==observedSignoutEpoch.current){generation.current++;explicitSignIn.current=undefined;callbackAccepted.current=true;}observedSignoutEpoch.current=state.epoch;void clearAllCredentials();setOnlineService(false);setPublisherAccess(false);}}).catch(()=>setNotice(localFlowText('localStatusFailed')));},['meta']);},[local]);
  const perform=useCallback(async(work:()=>Promise<unknown>)=>{callbackDismissed.current=true;setBusy(true);setNotice('');try{await work();}catch{setNotice(localFlowText('tryLater'));}finally{setBusy(false);}},[]);
  const send=async()=>{if(!auth)return;const {error}=await auth.signInWithOtp({email:email.trim(),options:{shouldCreateUser:true,emailRedirectTo:emailLinkRedirect()}});if(error){setNotice(error.status===429?localFlowText('otpRateLimit'):localFlowText('emailLinkSendFailed'));return;}setSent(true);setRetryAt(Date.now()+60000);};
- const logout=useCallback(async()=>{const extensionModule=await import('./extensionConnection');extensionModule.notifyExtensionSignout(owner?.accountId);await clearAllCredentials();await command({id:crypto.randomUUID(),kind:'service.signout',input:{}},async tx=>{tx.put('meta','signed-out',true);return null;});generation.current++;setLocal(false);setOnlineService(false);setPublisherAccess(false);setLoginOpen(false);setSent(false);setCode('');setUseCode(false);const result=await auth?.signOut({scope:'local'});if(result?.error)setNotice(localFlowText('signoutIncomplete'));},[owner?.accountId]);
+ const verify=async()=>{const epoch=await accountSignoutEpoch();const result=await auth!.verifyOtp({email:email.trim(),token:code.trim(),type:'email'});if(result.error){setNotice(localFlowText('otpInvalid'));return;}await recover({epoch});};
+ const logout=useCallback(async()=>{generation.current++;explicitSignIn.current=undefined;callbackAccepted.current=true;const extensionModule=await import('./extensionConnection');if(cachedAuthSubject()===owner?.subject)extensionModule.notifyExtensionSignout(owner?.accountId);await clearAllCredentials();const operationId=crypto.randomUUID();await command({id:operationId,kind:'service.signout',input:{}},async tx=>{tx.put('meta','signed-out',true);tx.put('meta',accountSignoutEpochKey,operationId);return null;});setOnlineService(false);setPublisherAccess(false);setLoginOpen(false);setSent(false);setCode('');setUseCode(false);const result=await auth?.signOut({scope:'local'});if(result?.error)setNotice(localFlowText('signoutIncomplete'));},[owner?.accountId,owner?.subject]);
  const updateLibraryAvailability=useCallback((value:LibraryAvailability)=>setLibraryAvailability(current=>current==='authoritative'?current:value),[]);
  const accountAccess=useMemo<AccountAccess>(()=>({
   deleteAccount:()=>{generation.current++;setDeletionOpen(true);},
   notice:localFlowNotice(notice),
   email:owner?.email??null,
   onlineService,
+  webSessionPresent:webSession==='present',
   publisherAccess,
   connectionConflict,
   libraryAvailability,
@@ -172,21 +194,21 @@ export default function AccountExperience({children,onReturnToLanding}:{children
    }catch(cause){updateLibraryAvailability('failed');throw cause;}
   }),
   logout:()=>perform(logout),
- }),[notice,onlineService,publisherAccess,connectionConflict,libraryAvailability,owner?.email,perform,logout]);
+ }),[notice,onlineService,webSession,publisherAccess,connectionConflict,libraryAvailability,owner?.email,perform,logout]);
  if(deletionOpen)return <Suspense fallback={<main role="status">{localFlowText('loadingSensa')}</main>}><AccountDeletion onClose={()=>{location.assign('/profile');}}/></Suspense>;
  if(!ready)return <main role="status" className="grid min-h-screen place-content-center">{localFlowText(extensionRequest?'extensionConnecting':'loadingSensa')}</main>;
  if(libraryMissing&&!loginOpen)return <Suspense fallback={<main role="status">{localFlowText('loadingSensa')}</main>}><LocalLibraryRecovery notice={notice||'localFlow.libraryMissing'} onLogin={()=>{setNotice('');setLoginOpen(true);}}/></Suspense>;
- if(extensionRequest&&webSession==='present')return <main className="grid min-h-screen place-content-center gap-4 p-8 text-center"><p role="status">{notice?localFlowNotice(notice):localFlowText('extensionConnecting')}</p>{notice&&<div className="flex justify-center gap-2"><button className={setupPrimary} disabled={busy} onClick={()=>void perform(recover)}>{localFlowText('extensionRetry')}</button><button className={setupButton} onClick={()=>location.assign('/profile')}>{localFlowText('cancel')}</button></div>}</main>;
+ if(extensionRequest&&webSession==='present'&&!loginOpen)return <main className="grid min-h-screen place-content-center gap-4 p-8 text-center"><p role="status">{notice?localFlowNotice(notice):localFlowText('extensionConnecting')}</p>{notice&&<div className="flex justify-center gap-2"><button className={setupPrimary} disabled={busy} onClick={()=>void perform(recover)}>{localFlowText('extensionRetry')}</button><button className={setupButton} onClick={()=>location.assign('/profile')}>{localFlowText('cancel')}</button></div>}</main>;
  if(local&&!loginOpen&&extension.get('extension')!=='connect')return <AccountContext.Provider value={accountAccess}><Suspense fallback={null}>{onlineService&&<AccountLibrarySync online onAvailabilityChange={updateLibraryAvailability}/>}{onlineService&&<RemoteIntakeDelivery online/>}<ExtensionIntake accountId={owner?.accountId??null} onlineService={onlineService}/></Suspense>{children}</AccountContext.Provider>;
  // Default Supabase templates send links; custom OTP templates remain supported.
- return <main className="sensa-account-entry flex min-h-screen items-center justify-center bg-surface-canvas px-6 font-product text-fg-primary"><form className="w-full max-w-sm space-y-5" onSubmit={e=>{e.preventDefault();void perform(sent?useCode?async()=>{const result=await auth!.verifyOtp({email:email.trim(),token:code.trim(),type:'email'});if(result.error){setNotice(localFlowText('otpInvalid'));return;}await recover();}:recover:send);}}>
+ return <main className="sensa-account-entry flex min-h-screen items-center justify-center bg-surface-canvas px-6 font-product text-fg-primary"><form className="w-full max-w-sm space-y-5" onSubmit={e=>{e.preventDefault();void perform(sent?useCode?verify:recover:send);}}>
   <div className="flex items-center justify-between"><SensaLogo/><LanguageSwitch/></div><h1 className="text-3xl font-semibold">{sent?localFlowText(useCode?'enterOtp':'checkEmailLink'):localFlowText('welcome')}</h1>
   <p className="text-sm leading-6">{sent?localFlowText(useCode?'otpSent':'emailLinkSent',{email}):localFlowText('loginIntro')}</p>
   {!auth?<p role="status">{localFlowText('loginUnavailable')}</p>:<>{sent?useCode&&<label className="block text-sm">{localFlowText('otp')}<input className="mt-2 w-full rounded-control border border-border-strong bg-surface-panel p-3 text-fg-primary focus-visible:outline-2 focus-visible:outline-focus" autoComplete="one-time-code" inputMode="numeric" value={code} onChange={e=>setCode(e.target.value)} required/></label>:<label className="block text-sm">{localFlowText('email')}<input className="mt-2 w-full rounded-control border border-border-strong bg-surface-panel p-3 text-fg-primary focus-visible:outline-2 focus-visible:outline-focus" type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} required/></label>}{(!sent||useCode)&&<button className={setupPrimary+' w-full'} disabled={busy}>{busy?localFlowText('processing'):sent?localFlowText('verify'):localFlowText('sendEmailLink')}</button>}</>}
   {notice&&<p role="status">{localFlowNotice(notice)}</p>}
   {sent&&<div className="flex flex-wrap gap-2"><button type="button" className={setupButton} disabled={busy||now<retryAt} onClick={()=>void perform(send)}>{now<retryAt?localFlowText('resendLater'):localFlowText('resend')}</button><button type="button" className={setupButton} disabled={busy} onClick={()=>{setSent(false);setCode('');setUseCode(false);}}>{localFlowText('changeEmail')}</button>{!useCode&&<button type="button" className={setupButton} disabled={busy} onClick={()=>setUseCode(true)}>{localFlowText('useEmailCode')}</button>}</div>}
   <button type="button" className={setupButton} disabled={busy} onClick={()=>void perform(recover)}>{localFlowText('checkLogin')}</button>
-  {owner&&<button type="button" className={setupButton} disabled={busy} onClick={()=>void perform(logout)}>{localFlowText('switchAccount')}</button>}
+  {owner&&webSession==='present'&&<button type="button" className={setupButton} disabled={busy} onClick={()=>void perform(logout)}>{localFlowText('switchAccount')}</button>}
   {local&&extension.get('extension')!=='connect'&&<button type="button" className={setupButton} onClick={()=>setLoginOpen(false)}>{localFlowText('continueLocal')}</button>}
   {libraryMissing&&loginOpen&&<button type="button" className={setupButton} disabled={busy} onClick={()=>{setNotice('');setLoginOpen(false);}}>{localFlowText('cancel')}</button>}
   {!local&&!sent&&(location.pathname==='/'||location.pathname==='/welcome')&&onReturnToLanding&&<button type="button" className={setupButton} onClick={onReturnToLanding}>{t('landing.back')}</button>}

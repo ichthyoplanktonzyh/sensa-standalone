@@ -5,6 +5,7 @@ import {clearAllCredentials} from './providers';
 import {clearLocalLibraryHint} from './localLibraryHint';
 import {inspectPendingCloudSync,type PendingCloudSyncRecord} from './cloudSync';
 import {syncAccountLibrary} from './cloudSyncService';
+import {accountSignoutEpochKey,readAccountSignoutEpoch} from '../account/accountSessionBoundary';
 export type LocalClearSyncAttempt='not-needed'|'required'|'succeeded'|'failed';
 export type LocalClearPreview={libraryId:string;incarnation:string;localRevision:number;operations:number;drafts:number;meanings:number;packages:number;targets:number;events:number;pending:number;pendingSync:number;pendingSyncRecords:PendingCloudSyncRecord[];canSync:boolean;syncAttempt:LocalClearSyncAttempt};
 async function inspectLocalClearTransaction(tx:LibraryTransaction):Promise<LocalClearPreview>{
@@ -42,10 +43,15 @@ export async function clearLocalLibrary(preview:LocalClearPreview,options:{disca
   if(!samePreview(preview,current))throw new Error('localFlow.clearChanged');
   if(current.pendingSync&&!(preview.syncAttempt==='failed'&&options.discardPendingSync))throw new Error('localFlow.clearSyncRequired');
   const owner=await tx.get('meta','service-owner'),installation=await tx.get('meta','service-installation');
+  const signedOut=await tx.get('meta','signed-out'),signoutEpoch=await readAccountSignoutEpoch(tx);
   for(const table of libraryTables)tx.clear(table);
   const identity:LibraryIdentity={id:crypto.randomUUID(),learnerId:crypto.randomUUID(),deviceId:crypto.randomUUID(),createdAt:new Date().toISOString(),schemaVersion:2};
   tx.put('meta','identity',identity);if(owner)tx.put('meta','service-owner',owner);
   if(installation)tx.put('meta','service-installation',installation);
+  // Clearing content must not reconnect an explicitly signed-out account or
+  // revive responses captured before its logout, even if SDK signout stalled.
+  if(signedOut!==undefined)tx.put('meta','signed-out',signedOut);
+  if(signoutEpoch!==null)tx.put('meta',accountSignoutEpochKey,signoutEpoch);
   tx.put('meta','local-incarnation',crypto.randomUUID());
   // Clearing a device is not permission to restore the old Cloud world on
   // its next boot. The existing manual sync action reconnects explicitly.

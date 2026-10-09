@@ -386,7 +386,7 @@
     "tryLater": "操作未完成，請稍後重試。",
     "otpRateLimit": "傳送過於頻繁，請稍後重試。",
     "otpSendFailed": "驗證碼未能傳送，請檢查電子郵件地址後重試。",
-    "signoutIncomplete": "已鎖定本機入口，線上會話退出未完成，請重試。",
+    "signoutIncomplete": "本機資料仍可使用，線上會話退出未完成，請重試退出。",
     "loadingSensa": "正在讀取 Sensa…",
     "cancel": "取消",
     "otpInvalid": "驗證碼不正確或已過期，請重新輸入。",

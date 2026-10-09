@@ -660,6 +660,12 @@ Point manifest、摘要、大小、library/learner/schema identity 与 `account_
 备份目的地占用检查与事务内恢复共用同一规则：结果严格为空数组的无事实 `learning.materialize` 回执不算资料，其他非启动操作与领域记录仍受保护。
 没有可准备课程时首页不提交空准备回执。备份页检查文件时先读取目的地状态，非空库可看摘要但不提供确认；实际恢复再次原子核对。
 恢复后的新 incarnation 保持旧页面写入保护；零学习包不加载资源重取模块，需要公共资源的恢复可在重新打开后继续取得，已提交事实不随重取失败回滚。
+Web 退出通过 `service.signout` 原子保存 `signed-out` 与本机 `service-signout-epoch`，不更换数据库 incarnation。
+本机清除保留这两项权限事实；删除内容不能撤销退出或复活首次退出前捕获的在线回复。
+`accountSessionBoundary.ts` 以现有owner及退出epoch核对服务请求前后；此本机权限边界不进入同步或备份，不表示服务端所有JWT立即撤销。
+新的PKCE callback在首次交换时绑定模块级epoch，OTP在验证开始前绑定；后续组件重挂/回复不能重标旧证明。
+重新连接与准入写入在事务内核对同一epoch，跨标签退出退休未完成的恢复；已结束会话的本机数据入口保持可用。
+已有可用事实或明确退出的库先开放本机入口；过期SDK凭据刷新不能阻塞它。不同账号的缓存身份仍停止展示原owner内容，实际在线准入继续等待SDK和API确认。
 
 Web 页面与扩展之间的桥也只声明一次：`packages/contracts/src/sensa/consumer/extension.ts` 同时声明握手（授权、交换、凭据）、页面请求/应答和不含内容的 Intake-ready 通知。Web 应用按它构造请求并校验应答，`apps/browser-extension/src/background.ts` 在分发前解析每条桥消息——未声明的 kind 或字段一律拒绝，不再静默丢弃；页面侧的 `webBridge.ts` 是每个 Sensa 页面都会加载的内容脚本，因此不带 schema，它的频道名、id 上限与 kind 白名单由 `apps/browser-extension/build.mjs` 在构建时从同一份声明注入。扩展完成持久化后主动通知已打开的 Web 页面，页面再通过完整 pull/ack 合同取数据；空闲页不轮询扩展，恢复焦点和可见性作为丢失通知的兜底。游客采集由 `localIntake.ts` 独立保存并绑定本机 Web library，账号采集继续由 `webDestination.ts` 保管；两者不自动迁移。授权这一轮同样共用：API 路由与 Web 前置校验读同一组 schema。Web 页面在后台自动续接普通连接；插件中的显式登录则使用 Chrome Identity Web Auth Flow 打开带 PKCE challenge 的短时入口。已有 Web Session 自动签发一次性 code；没有 Session 才显示登录，登录完成后继续原请求。verifier 和最终扩展 credential 始终只在扩展后台，另一账号或资料库的队列不会随连接迁移。`tests/web/contracts/bridge-contract.test.mts` 在快速测试里把真实 forwarder 与真实 background 装进同一台假浏览器，逐 kind 走一遍。
 

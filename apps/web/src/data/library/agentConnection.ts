@@ -10,8 +10,9 @@ import {
 } from '@sensa/contracts/sensa';
 
 import { auth } from '../account/auth';
+import {captureAccountSessionBoundary,assertAccountSessionBoundary,type AccountSessionBoundary} from '../account/accountSessionBoundary';
 
-async function target(): Promise<{ base: string; token: string; subject: string }> {
+async function target(): Promise<{ base: string; token: string; subject: string;boundary:AccountSessionBoundary }> {
   const session = (await auth?.getSession())?.data.session;
   if (!session) throw new Error('authentication_required');
   const configured = import.meta.env.VITE_SENSA_API_URL as string | undefined;
@@ -20,6 +21,7 @@ async function target(): Promise<{ base: string; token: string; subject: string 
     base: configured.replace(/\/+$/u, '') + '/sensa/agent',
     token: session.access_token,
     subject: session.user.id,
+    boundary:await captureAccountSessionBoundary(session.user.id),
   };
 }
 
@@ -40,6 +42,7 @@ async function send(method: 'GET' | 'POST', path: string, body?: unknown, expect
   });
   const current = (await auth?.getSession())?.data.session;
   if (!current || current.user.id !== destination.subject) throw new Error('account_changed');
+  await assertAccountSessionBoundary(destination.boundary);
   const value = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(value?.code ?? 'agent_connection_unavailable');
   return value;

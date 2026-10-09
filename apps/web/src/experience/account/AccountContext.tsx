@@ -6,6 +6,7 @@ export type AccountAccess={
  notice:string;
  email:string|null;
  onlineService:boolean;
+ webSessionPresent:boolean;
  publisherAccess:boolean;
  connectionConflict:boolean;
  libraryAvailability:LibraryAvailability;
@@ -19,6 +20,7 @@ export const AccountContext=createContext<AccountAccess>({
  notice:'',
  email:null,
  onlineService:false,
+ webSessionPresent:false,
  publisherAccess:false,
  connectionConflict:false,
  libraryAvailability:'restoring',

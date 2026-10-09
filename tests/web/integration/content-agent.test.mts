@@ -18,6 +18,8 @@ const compiled=await build({stdin:{resolveDir:process.cwd(),contents:['store','p
 const temp=await mkdtemp(join(tmpdir(),'sensa-agent-'));await writeFile(join(temp,'core.mjs'),compiled.outputFiles[0].text);
 const api=await import(pathToFileURL(join(temp,'core.mjs')).href),id=()=>crypto.randomUUID();
 await api.openLibrary();
+// Online reference lookup requires an admitted local owner, not only an SDK token.
+await api.command({id:id(),kind:'service.local-access',input:{subject:session.user.id}},async(tx:any)=>{tx.put('meta','service-owner',{subject:session.user.id});tx.put('meta','signed-out',false);});
 const provider=live?api.defaultSensaProvider:await api.saveProvider(id(),{id:id(),expectedRevision:0,name:'Fixture',kind:'compatible',endpoint:base,model:'fixture'},'test-key');
 let cachedSound:any=syntheticSound('borrow','en');
 if(live){
