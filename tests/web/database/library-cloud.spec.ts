@@ -200,7 +200,7 @@ test('personal scenes and original action pins restore while offline first accep
   const beforeB=await inspect(b);await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());
   const conflict=await b.evaluate(()=>(window as any).core.readCloudSync());assert.equal(conflict.status,'conflict');
   assert.deepEqual((await inspect(b)).scene,beforeB.scene);assert.equal((await inspect(b)).meanings.length,1,'a conflicting annotation must not auto-merge its two independently accepted Meanings');
-  await b.evaluate(async()=>{const c=(window as any).core;await c.resolveCloudSyncConflicts('remote');await (window as any).sync();});
+  await b.evaluate(async()=>{const c=(window as any).core;await c.resolveCloudSyncConflicts('remote',(await c.readCloudSync()).conflict);await (window as any).sync();});
   const settled=await inspect(b);assert.equal(settled.scene.acceptedPersonalMeaningId,acceptedA.personalMeaningId);assert.equal(settled.meanings.length,1);assert.equal(settled.meanings[0].key,acceptedA.personalMeaningId);
   assert.deepEqual(retainedMeaningFacts(settled.meanings[0].value),retainedMeaningFacts((await inspect(a)).meanings[0].value));
   assert.deepEqual(settled.learning,beforeB.learning,'scene fork decisions cannot invent rating, completion or scheduling');
@@ -233,7 +233,7 @@ test('personal scenes and original action pins restore while offline first accep
   },gSeed);
   await gA.evaluate(()=>(window as any).sync());await gB.evaluate(()=>(window as any).sync());
   assert.equal((await gB.evaluate(()=>(window as any).core.readCloudSync())).status,'conflict');
-  await gB.evaluate(async()=>{const c=(window as any).core;await c.resolveCloudSyncConflicts('local');await (window as any).sync();});
+  await gB.evaluate(async()=>{const c=(window as any).core;await c.resolveCloudSyncConflicts('local',(await c.readCloudSync()).conflict);await (window as any).sync();});
   const resumed=await gB.evaluate(async({request,seed})=>{
    const c=(window as any).core,result=await c.createJourneyModules().personalMeaningJourney.acceptPublishedLearningScene(request),revision=seed.scene.revisions[0],ids=c.learningSceneSemanticOperationIds(revision.revisionId);
    await c.personalContentSystem.execute({kind:'mark_learning_scene_accepted',operationId:ids.link,sceneId:seed.scene.sceneId,revisionId:revision.revisionId,personalMeaningId:result.personalMeaningId});return {result,note:await c.personalContentSystem.readSenseNote(seed.input.senseId),meanings:await c.readLibrary((tx:any)=>tx.entries('semanticMeanings'))};
@@ -251,7 +251,7 @@ test('personal scenes and original action pins restore while offline first accep
    const accepted=await c.createJourneyModules().personalMeaningJourney.acceptPublishedLearningScene(request);await c.personalContentSystem.execute({kind:'mark_learning_scene_accepted',operationId:ids.link,sceneId:scene.sceneId,revisionId:revision.revisionId,personalMeaningId:accepted.personalMeaningId});return request;
   },{seed:gSeed,scene:laterScene});
   await gA.evaluate(()=>(window as any).sync());await gB.evaluate(()=>(window as any).sync());assert.equal((await gB.evaluate(()=>(window as any).core.readCloudSync())).status,'conflict');
-  await gB.evaluate(async()=>{const c=(window as any).core;await c.resolveCloudSyncConflicts('local');await (window as any).sync();});
+  await gB.evaluate(async()=>{const c=(window as any).core;await c.resolveCloudSyncConflicts('local',(await c.readCloudSync()).conflict);await (window as any).sync();});
   const laterReplay=await gB.evaluate(async request=>{const c=(window as any).core,result=await c.createJourneyModules().personalMeaningJourney.acceptPublishedLearningScene(request),ids=c.learningSceneSemanticOperationIds(request.scene.revisionId);await c.personalContentSystem.execute({kind:'mark_learning_scene_accepted',operationId:ids.link,sceneId:request.scene.sceneId,revisionId:request.scene.revisionId,personalMeaningId:result.personalMeaningId});return result;},laterRequest);assert.equal(laterReplay.replayed,true);assert.equal(laterReplay.personalMeaningId,resumed.result.personalMeaningId);
   const latest=await gB.evaluate(async id=>(window as any).core.worldReadRepository.detail(id),resumed.result.personalMeaningId);assert(latest.detail.materialBlocks.some((block:any)=>block.bodyText===laterRequest.scene.body));
   await gB.evaluate(()=>(window as any).core.exportLibraryBackup('scene-note-fixture-backup-password'));
@@ -487,7 +487,7 @@ test('note edits reject a same-revision Cloud fork replacement and an unchanged 
   await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());
   assert.equal((await b.evaluate(()=>(window as any).core.readCloudSync())).status,'conflict');
   assert.deepEqual(await read(b),staleBase,'unresolved conflict must not silently replace the local note');
-  await b.evaluate(async()=>{await (window as any).core.resolveCloudSyncConflicts('remote');await (window as any).sync();});
+  await b.evaluate(async()=>{const c=(window as any).core;await c.resolveCloudSyncConflicts('remote',(await c.readCloudSync()).conflict);await (window as any).sync();});
   assert.deepEqual(await read(b),{body:'device A branch',revision:2},'explicit resolution selects the other legitimate branch without renumbering it');
   const staleOperationId=crypto.randomUUID();
   const rejection=await b.evaluate(async({senseId,expected,operationId})=>{

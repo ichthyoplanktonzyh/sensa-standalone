@@ -25,6 +25,7 @@
     "integration/relearning-loop.test.mts",
     "integration/library-sync-transport.test.mts",
     "unit/library-sync-blocks.test.mts",
+    "unit/cloud-sync-comparison.test.mts",
     "integration/shared-learning-storage.test.mts",
     "unit/learning-target-view.test.mts",
     "browser/portable-package-journey.spec.ts",

@@ -97,7 +97,7 @@ export async function createRealLibraryConvergenceWorld(
 
     resolve(deviceId, decision) {
       return device(deviceId).evaluate(
-        (selectedDecision) => (window as any).core.resolveCloudSyncConflicts(selectedDecision),
+        async (selectedDecision) => {const core=(window as any).core;const state=await core.readCloudSync();return core.resolveCloudSyncConflicts(selectedDecision,state.conflict);},
         decision,
       );
     },

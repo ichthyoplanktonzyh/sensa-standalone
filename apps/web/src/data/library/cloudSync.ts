@@ -3,6 +3,7 @@ import {readLibrary,readLocalLibraryRevision,restoreLibraryTransaction,writeLibr
 import {backupEqual,encodeBackupValue,decodeBackupValue} from './backupCodec';
 import {cloudSyncFailurePolicy,type CloudSyncFailureKind} from './cloudSyncPolicy';
 import {confirmedCheckpoint,validatedCheckpoint} from './cloudSyncCheckpoint';
+import type {CloudSyncComparison} from './cloudSyncComparison';
 import {
  isReplicatedLibraryEntry,
  mergeLibraryReplicasCooperatively,
@@ -23,8 +24,8 @@ export type CloudSyncEntry=LibraryReplicaEntry;
 type Entry=CloudSyncEntry;
 type Owner={subject:string;accountId:string};
 export type CloudSyncConflictChoice='local'|'remote';
-export type CloudSyncConflict={detectedAt:string;remoteRevision:number;remoteManifest:string[]|null;records:{id:string;base:Entry|null;local:Entry|null;remote:Entry|null}[];affectedRecordIds:string[]};
-export type CloudSyncState={owner:Owner;incarnation:string;revision:number;checkpointVersion?:6;validationVersion?:typeof libraryReplicaValidationVersion;storage?:LibrarySyncHead['storage'];syncedLocalRevision?:number;pending?:{operationId:string;baseRevision:number;manifest:string[]};status:'pending'|'syncing'|'synced'|'offline'|'conflict'|'failed';conflicts?:string[];conflict?:CloudSyncConflict;resolution?:{choice:CloudSyncConflictChoice;expectedRemoteRevision:number};lastSyncedAt?:string;lastCheckedAt?:string;syncStartedAt?:string;error?:string;failureKind?:CloudSyncFailureKind;retryCount?:number;retryAt?:string};
+export type CloudSyncConflict={detectedAt:string;localRevision:number;remoteRevision:number;remoteManifest:string[]|null;records:{id:string;base:Entry|null;local:Entry|null;remote:Entry|null}[];affectedRecordIds:string[];comparison?:CloudSyncComparison};
+export type CloudSyncState={owner:Owner;incarnation:string;revision:number;checkpointVersion?:6;validationVersion?:typeof libraryReplicaValidationVersion;storage?:LibrarySyncHead['storage'];syncedLocalRevision?:number;pending?:{operationId:string;baseRevision:number;manifest:string[]};status:'pending'|'syncing'|'synced'|'offline'|'conflict'|'failed';conflicts?:string[];conflict?:CloudSyncConflict;resolution?:{choice:CloudSyncConflictChoice;expectedRemoteRevision:number;expectedLocalRevision:number};lastSyncedAt?:string;lastCheckedAt?:string;syncStartedAt?:string;error?:string;failureKind?:CloudSyncFailureKind;retryCount?:number;retryAt?:string};
 type State=CloudSyncState&{/** Durable proof for an uncertain staged-restore COMMIT ACK. */restoreOperationId?:string};
 export type PendingCloudSyncRecord={table:typeof librarySyncTables[number];key:string};
 export type PendingCloudSyncSnapshot={
@@ -120,9 +121,10 @@ async function capture(tx:LibraryTransaction){
 }
 function sameOwner(a:Owner,b:Owner){return a.subject===b.subject&&a.accountId===b.accountId;}
 function empty(entries:Entry[]){return entries.every(r=>r.table==='meta'&&r.key==='identity');}
-function conflictSnapshot(base:Entry[],local:Entry[],remote:Entry[],conflicts:string[],affectedRecordIds:string[],head:LibrarySyncHead):CloudSyncConflict{
+async function conflictSnapshot(base:Entry[],local:Entry[],remote:Entry[],conflicts:string[],affectedRecordIds:string[],head:LibrarySyncHead,localRevision:number):Promise<CloudSyncConflict>{
  const byId=(entries:Entry[])=>new Map(entries.map(entry=>[entryId(entry),entry]));const b=byId(base),l=byId(local),r=byId(remote);
- return {detectedAt:new Date().toISOString(),remoteRevision:head.revision,remoteManifest:head.manifest,records:conflicts.map(id=>({id,base:b.get(id)??null,local:l.get(id)??null,remote:r.get(id)??null})),affectedRecordIds};
+ const {buildCloudSyncComparison}=await import('./cloudSyncComparison');
+ return {detectedAt:new Date().toISOString(),localRevision,remoteRevision:head.revision,remoteManifest:head.manifest,records:conflicts.map(id=>({id,base:b.get(id)??null,local:l.get(id)??null,remote:r.get(id)??null})),affectedRecordIds,comparison:buildCloudSyncComparison(conflicts,{base:b,local:l,remote:r})};
 }
 async function pendingCloudSyncRecords(tx:LibraryTransaction,state:State|undefined,identity:LibraryIdentity){
  if(state?.syncedLocalRevision===undefined){
@@ -161,8 +163,13 @@ async function localDiffersFromBase(tx:LibraryTransaction,state:State,identity:L
 const cloudReconnectRequired=async(tx:LibraryTransaction)=>(await tx.get('meta','local-reset'))==='local-clear';
 export const readCloudReconnectRequired=()=>readLibrary(cloudReconnectRequired);
 export const readCloudSync=()=>readLibrary(async tx=>{const state=await tx.get<State>('meta',STATE);if(state?.status==='syncing'&&(!state.syncStartedAt||Date.now()-Date.parse(state.syncStartedAt)>120000))return {...state,status:'pending' as const,syncStartedAt:undefined};if(state?.status==='synced'&&!await tx.get('meta','signed-out')){const localRevision=await readLocalLibraryRevision(tx);if(localRevision!==state.syncedLocalRevision){const identity=await tx.get<LibraryIdentity>('meta','identity');if(!identity||await localDiffersFromBase(tx,state,identity))return {...state,status:'pending' as const};}}return state;});
-export async function resolveCloudSyncConflicts(choice:CloudSyncConflictChoice){
- await writeLibraryState(async tx=>{await assertCurrentLibrary(tx);if(await tx.get('meta','signed-out'))throw new Error('authentication_required');const state=await tx.get<State>('meta',STATE);if(state?.status!=='conflict'||!state.conflict)throw new Error('library_sync_no_conflict');tx.put('meta',STATE,{...state,status:'pending',resolution:{choice,expectedRemoteRevision:state.conflict.remoteRevision},error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});});
+export async function resolveCloudSyncConflicts(choice:CloudSyncConflictChoice,expected:Pick<CloudSyncConflict,'localRevision'|'remoteRevision'>){
+ await writeLibraryState(async tx=>{
+  await assertCurrentLibrary(tx);if(await tx.get('meta','signed-out'))throw new Error('authentication_required');
+  const state=await tx.get<State>('meta',STATE);if(state?.status!=='conflict'||!state.conflict)throw new Error('library_sync_no_conflict');
+  if(!expected||!Number.isSafeInteger(expected.localRevision)||expected.localRevision!==state.conflict.localRevision||expected.remoteRevision!==state.conflict.remoteRevision||await readLocalLibraryRevision(tx)!==expected.localRevision)throw Error('library_sync_conflict_changed');
+  tx.put('meta',STATE,{...state,status:'pending',resolution:{choice,expectedRemoteRevision:expected.remoteRevision,expectedLocalRevision:expected.localRevision},error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
+ });
 }
 async function saveState(expected:{owner:Owner;incarnation:string;localRevision?:number},work:(old:State|undefined)=>State,base?:Entry[],consumeReconnect=false){
  await writeLibraryState(async tx=>{
@@ -181,7 +188,7 @@ async function applyEntries(expected:Awaited<ReturnType<typeof capture>>,entries
   if(!sameOwner(current.owner,expected.owner)||current.incarnation!==expected.incarnation)throw new Error('account_changed');
   if(current.localRevision!==expected.localRevision||!equal(current.identity,expected.identity))throw new Error('library_sync_local_changed');
   applyLibraryReplicaMutation({tx,current:expected.entries,desired:entries,records:rows.records,identity:current.identity});
-  tx.put('meta',STATE,state);tx.replaceSyncBase(base);
+  tx.put('meta',STATE,{...state,...(state.conflict?{conflict:{...state.conflict,localRevision:current.localRevision+(changesContent?1:0)}}:{})});tx.replaceSyncBase(base);
   if(consumeReconnect)tx.delete('meta','local-reset');
   return current.localRevision+(changesContent?1:0);
  });
@@ -530,8 +537,8 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
   let conflict:CloudSyncConflict|undefined;
   if(merged.conflicts.length){
    const partition=partitionLibraryReplicaConflicts({base:initial.base,local:initial.entries,remote,merged:merged.entries,conflicts:merged.conflicts});
-   conflict=conflictSnapshot(initial.base,initial.entries,remote,merged.conflicts,partition.affectedRecordIds,head);
-   if(state.resolution?.expectedRemoteRevision===head.revision){localEntries=uploadEntries=finalizeLibraryReplicaConflictChoice(state.resolution.choice==='local'?partition.local:partition.upload,merged.entries,{base:initial.base,conflicts:merged.conflicts});activeConflicts=[];conflict=undefined;}
+   conflict=await conflictSnapshot(initial.base,initial.entries,remote,merged.conflicts,partition.affectedRecordIds,head,initial.localRevision);
+   if(state.resolution?.expectedRemoteRevision===head.revision&&state.resolution.expectedLocalRevision===initial.localRevision){localEntries=uploadEntries=finalizeLibraryReplicaConflictChoice(state.resolution.choice==='local'?partition.local:partition.upload,merged.entries,{base:initial.base,conflicts:merged.conflicts});activeConflicts=[];conflict=undefined;}
    else{localEntries=partition.local;uploadEntries=partition.upload;nextBase=partition.base;}
   }
   // Cloud Checkpoints replicate the recoverable Package installation fact, not
@@ -550,6 +557,7 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
   const publicationRequired=!entriesEqual(uploadEntries,remote);
   let confirmedBase=nextBase(remote);
   const appliedLocalRevision=await applyEntries(initial,localEntries,localRows,{...state,revision:head.revision,storage:head.storage,status:'pending',conflicts:activeConflicts.length?activeConflicts:undefined,conflict,resolution:activeConflicts.length?undefined:state.resolution,pending:undefined},confirmedBase,consumeReconnect);
+  if(conflict)conflict={...conflict,localRevision:appliedLocalRevision};
   if(publicationRequired){
    // Only changed facts need a newly encoded manifest. Confirmed row references
    // remain reusable even when the server repacked its immutable transport.
@@ -563,7 +571,11 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
    catch(error){if(error instanceof Error&&error.message==='library_sync_conflict'){await saveState(expected,old=>({...old!,pending:undefined}));throw new Error('library_sync_head_changed');}if(rejectedPublication(error))await saveState(expected,old=>({...old!,pending:undefined}));throw error;}
    if(published.revision<=pending.baseRevision||!equal(published.manifest,pending.manifest))throw new Error('library_sync_format');
    confirmedBase=nextBase(prepared.entries);
-   await saveState(expected,old=>({...old!,revision:published.revision,storage:published.storage??old!.storage,pending:undefined,lastSyncedAt:new Date().toISOString()}),confirmedBase);
+   // Publishing unrelated merged facts advances the head without changing the
+   // remote conflict branch. Bind the displayed comparison to that confirmed
+   // head so the next explicit choice is not spuriously rejected once.
+   if(conflict)conflict={...conflict,remoteRevision:published.revision,remoteManifest:published.manifest};
+   await saveState(expected,old=>({...old!,revision:published.revision,storage:published.storage??old!.storage,...(conflict?{conflict}:{}),pending:undefined,lastSyncedAt:new Date().toISOString()}),confirmedBase);
   }
   await writeLibraryState(async tx=>{
    const current=await captureHeader(tx);

@@ -8,7 +8,7 @@ import {encodeBackupValue,decodeBackupValue} from '../../../apps/web/src/data/li
 import {replicaCandidateAppendRecordLimit,replicaCandidateAppendReferenceLimit} from '../../../apps/web/src/data/library/replicaCandidateProtocol';
 import {saveDraft} from '../../../apps/web/src/data/library/drafts';
 import {sqliteRecordAdapter} from '../../../apps/web/src/data/library/sqliteAdapter';
-import {librarySyncBlockFetch,librarySyncBlockFetchHashes,librarySyncBlockFetchBytes} from '@sensa/contracts/sensa';
+import {librarySyncBlockFetch,librarySyncBlockFetchHashes,librarySyncBlockFetchBytes,librarySyncBlockMissing,librarySyncBlockStore,librarySyncCommit} from '@sensa/contracts/sensa';
 import {encodeLibrarySyncBlock,splitLibrarySyncText,decodeLibrarySyncBlock} from '@sensa/contracts/sensa/library-sync-blocks';
 import type {SyncRequest} from '../../../apps/web/src/data/library/cloudSync';
 import * as replicaValidation from '../../../apps/web/src/data/library/replication/libraryReplicaValidation';
@@ -170,6 +170,31 @@ for(const concurrentWrite of [false,true])test(`failed conflict validation fence
   expect(after.drafts.map(row=>row.value)).toEqual([ours]);expect(after.localRevision).toBe(before.localRevision);
   expect(state?.status).toBe('conflict');expect(state?.conflict).toBeDefined();
  }
+});
+
+test('publishing unrelated facts persists the comparison head before final status confirmation',async()=>{
+ remoteIdentity={...localIdentity,deviceId:localIdentity.id};publish([first]);await synchronizeLibrary(request);
+ await saveDraft(crypto.randomUUID(),{id:first.id,expectedRevision:1,text:'Local conflicting edit.'});
+ await saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Independent new context.'});
+ publish([{...first,revision:2,text:'Remote conflicting edit.'}]);
+ const transport:SyncRequest=async(path,body)=>{
+  if(path==='/blocks/missing')return {missing:librarySyncBlockMissing.parse(body).hashes.filter(hash=>!blocks.has(hash))};
+  if(path==='/blocks/store'){for(const row of librarySyncBlockStore.parse(body).blocks)blocks.set(row.hash,row.data);return {stored:true};}
+  if(path==='/commit'){const input=librarySyncCommit.parse(body);expect(input.baseRevision).toBe(revision);manifest=input.manifest;return {revision:++revision,manifest};}
+  return request(path,body);
+ };
+ const adapter=await sqliteRecordAdapter(),commit=adapter.commit.bind(adapter);let failed=false;
+ const spy=vi.spyOn(adapter,'commit').mockImplementation(async mutation=>{
+  const row=mutation.puts.find(row=>row.table==='meta'&&row.key==='cloud-sync');
+  const state=row?decodeBackupValue(JSON.parse(row.encodedValue)):null;
+  if(!failed&&state?.status==='conflict'&&!state.syncStartedAt&&!mutation.syncBaseReplacement){failed=true;throw Error('final_status_write_failed');}
+  return commit(mutation);
+ });
+ try{await expect(synchronizeLibrary(transport)).rejects.toThrow('localFlow.storageWrite');}finally{spy.mockRestore();}
+ expect(failed).toBe(true);const state=(await readCloudSync())!;
+ expect(state.revision).toBe(revision);expect(state.conflict?.remoteRevision).toBe(revision);expect(state.conflict?.remoteManifest).toEqual(manifest);
+ expect((await facts()).drafts.map(row=>(row.value as any).text)).toEqual(expect.arrayContaining(['Local conflicting edit.','Independent new context.']));
+ await synchronizeLibrary(transport);expect((await readCloudSync())?.status).toBe('conflict');
 });
 
 for(const pageLimit of [librarySyncBlockFetchBytes,2048])test(`fresh restoration consumes API byte pages without a fixed 64-block roundtrip limit (${pageLimit})`,async()=>{

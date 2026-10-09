@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from '@playwright/test';
+import { test,expect } from '@playwright/test';
 
 import {
   createLibraryCloudBrowserFixture,
@@ -27,6 +27,41 @@ test.afterAll(async () => {
 const draftTexts = (drafts: readonly Readonly<{ text: string }>[]): string[] => (
   drafts.map(({ text }) => text).sort((left, right) => left.localeCompare(right))
 );
+
+test('[integration][local-correctness][convergence] conflict UI compares versions and refuses a stale local choice',async()=>{
+ const account=await fixture.createAccount(),a=await fixture.createClient(account),b=await fixture.createClient(account);
+ try{
+  const shared=await a.evaluate(async()=>{const c=(window as any).core;const row=await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'The original context'});await (window as any).sync();return row;});
+  await b.evaluate(()=>(window as any).sync());
+  for(const [page,text] of [[a,'The cloud context'],[b,'The device context']] as const)await page.evaluate(async({id,text})=>{const c=(window as any).core;await c.saveDraft(crypto.randomUUID(),{id,expectedRevision:1,text});},{id:shared.id,text});
+  await b.evaluate(()=>(window as any).core.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Unrelated new context'}));
+  await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());
+  const shown=await b.evaluate(()=>(window as any).core.readCloudSync());
+  expect(shown.status).toBe('conflict');expect(shown.conflict.comparison.records[0].local.fields).toContainEqual({label:'content',text:'The device context'});
+  expect(shown.conflict.remoteRevision).toBe(shown.revision);
+  expect(shown.conflict.remoteRevision).toBe((await b.evaluate(()=>(window as any).request('/head'))).revision);
+  await b.route('https://service.fixture.invalid/**',async route=>{const url=new URL(route.request().url());const response=await route.fetch({url:fixture.origin+url.pathname+url.search});await route.fulfill({response});});
+  await b.evaluate(async account=>{(window as any).__fixtureAuthSession={access_token:account.token,user:{id:account.subject}};const path='/local-clear.js',ui=await import(/* @vite-ignore */ path);ui.mountCloudSyncControl({automatic:false});},account);
+  await expect(b.getByText('The device context',{exact:true})).toBeVisible();await expect(b.getByText('The cloud context',{exact:true})).toBeVisible();
+  await b.locator('summary').click();await expect(b.getByText('The original context',{exact:true})).toBeVisible();
+  await expect(b.getByText(shared.id,{exact:false})).toHaveCount(0);
+  await b.evaluate(async id=>{const c=(window as any).core;await c.saveDraft(crypto.randomUUID(),{id,expectedRevision:2,text:'A newer device context'});},shared.id);
+  const rejection=await b.evaluate(async conflict=>{try{await (window as any).core.resolveCloudSyncConflicts('remote',conflict);return null;}catch(e){return (e as Error).message;}},shown.conflict);
+  expect(rejection).toBe('library_sync_conflict_changed');
+  await b.evaluate(()=>(window as any).sync());
+  await expect(b.getByText('A newer device context',{exact:true})).toBeVisible();
+  // A valid decision also cannot cover a new edit made after the click but
+  // before the synchronizer captures facts.
+  await b.evaluate(async id=>{const c=(window as any).core;await c.resolveCloudSyncConflicts('remote',(await c.readCloudSync()).conflict);await c.saveDraft(crypto.randomUUID(),{id,expectedRevision:3,text:'Written after choosing'});await (window as any).sync();},shared.id);
+  expect((await b.evaluate(()=>(window as any).core.readCloudSync())).status).toBe('conflict');
+  await expect(b.getByText('Written after choosing',{exact:true})).toBeVisible();
+  await b.getByRole('button',{name:/Use cloud version|使用云端版本/}).click();
+  await expect.poll(()=>b.evaluate(async()=> (await (window as any).core.readCloudSync()).status)).toBe('synced');
+  expect(await b.evaluate(async id=>(await (window as any).core.listDrafts()).find((row:any)=>row.id===id).text,shared.id)).toBe('The cloud context');
+  await b.reload();
+  expect(await b.evaluate(async id=>{const path='/core.js',c=await import(/* @vite-ignore */ path);await c.openLibrary();return (await c.listDrafts()).find((row:any)=>row.id===id).text;},shared.id)).toBe('The cloud context');
+ }finally{await a.context().close();await b.context().close();}
+});
 
 test('[integration][durability][convergence] real cloud retry after a lost acknowledgement is idempotent', async () => {
   const world = await createRealLibraryConvergenceWorld(fixture, ['device-a', 'device-b']);
