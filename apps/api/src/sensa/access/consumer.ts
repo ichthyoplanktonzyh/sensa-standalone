@@ -28,7 +28,7 @@ import {assertDeletionConfigured,finishAccountDeletion,requestAccountDeletion,ty
 import {authorizeExtension,exchangeExtension,extensionVerifier} from './extension.js';
 import {agentVerifier,createAgentConnectionSetup,exchangeAgentConnectionSetup,listAgentConnectionEvents,listAgentConnections,revokeAgentConnection} from './agent.js';
 import {sensaExtensionAuthorizationSchema,sensaExtensionExchangeSchema} from '@sensa/contracts/sensa';
-import {serviceTelemetry,setTelemetryError,type ServiceRequestRecord} from './telemetry.js';
+import {serviceTelemetry,setTelemetryError,setTelemetryFailure,type ServiceRequestRecord} from './telemetry.js';
 import {registerBrowserTelemetry,type BrowserTelemetrySink,type BrowserTelemetryRateLimiter} from './browserTelemetry.js';
 import {readLearningContentRegistry} from './learningContentRegistry.js';
 import {synthesizeEdgeSpeech} from '../speech/edgeTts.js';
@@ -116,6 +116,7 @@ export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
     if(error instanceof ConsumerError){setTelemetryError(context,error.code);return context.json({code:error.code},error.status);}
     if(error instanceof z.ZodError||error instanceof SyntaxError){setTelemetryError(context,'invalid_request');return context.json({code:'invalid_request'},400);}
     setTelemetryError(context,'temporarily_unavailable');
+    setTelemetryFailure(context,error);
     return context.json({code:'temporarily_unavailable'},503);
   });
 

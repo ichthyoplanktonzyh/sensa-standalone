@@ -1011,6 +1011,13 @@ Ctrl-C 关闭该次运行的服务并删除其临时数据库，诊断产物保�
 
 ## CI 与生产发布
 
+服务端请求日志关联 request ID、release 和公开错误类别。未预期错误仍只向客户端返回
+`temporarily_unavailable`；服务日志可增加 `failureKind` 与固定允许列表内的 `failureCode`，不输出异常消息、
+SQL、正文、邮箱、token、堆栈或嵌套 cause。连接池连接／idle／rollback 日志共用同一脱敏分类，回滚失败
+仍销毁连接并保留原异常给 caller；日志 sink 失败不得替换原异常或泄漏已借出的连接。
+分类器不执行异常属性 getter；未知值归为 `unexpected`，不能把未知原因
+视为已定位故障。实际故障须用固定 release 与 request ID 关联线上事件，测试中的受控异常不是线上根因证据。
+
 `.github/workflows/sensa-consumer-check.yml` 在 pull request 和 `main` push 时运行 `Sensa CI`。它执行静态检查、构建、Web 快速测试、浏览器检查以及 PostgreSQL/API 集成。Pull request 只生成验证构建；`main` 的静态／快速 job 使用 `web-candidate` 公共配置构建一次生产候选，在同一 job 内固定完整 SHA、GitHub Actions provenance、公开目标、migration 集合和每个交付文件摘要，完成 artifact 检查与 Cloudflare dry-run 后才上传 `sensa-production-<SHA>`。其余 CI job 共同决定该候选是否具备发布资格；失败 run 中即使存在 artifact 也不能被发布器接受。
 
 整个生产系统只有一个发布编排器：`.github/workflows/sensa-release.yml`。正常路径由成功的同仓库
