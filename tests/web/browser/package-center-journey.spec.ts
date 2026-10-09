@@ -332,6 +332,77 @@ async function referenceProviders(page:Page){
  return state;
 }
 
+test('ordinary email login uses a persisted PKCE challenge, preserves local facts and starts real learning after admission',async({page,context})=>{
+ cloudManifest=null;cloudRevision=0;cloudBlocks.clear();
+ await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.fallback():route.abort());
+ let sent=0,exchanged=0,challenge='';
+ await page.route('**/auth/v1/otp*',async route=>{
+  const body=route.request().postDataJSON();sent++;
+  expect(body.email).toBe('package-center@sensa.invalid');expect(body.code_challenge_method).toBe('s256');
+  expect(body.code_challenge).toMatch(/^[A-Za-z0-9_-]{43}$/u);challenge=body.code_challenge;
+  const redirect=new URL(route.request().url()).searchParams.get('redirect_to');expect(redirect).toBe(origin+'/profile');
+  await route.fulfill({json:{user:null,session:null}});
+ });
+ await page.route('**/auth/v1/token*',async route=>{
+  exchanged++;expect(new URL(route.request().url()).searchParams.get('grant_type')).toBe('pkce');
+  const body=route.request().postDataJSON();expect(body.auth_code).toBe('ordinary-login-code');
+  expect(createHash('sha256').update(body.code_verifier).digest('base64url')).toBe(challenge);
+  await route.fulfill({json:session()});
+ });
+ await page.goto(origin+'/profile');await expect(page.locator('#s-profile')).toBeVisible();
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.seedDrafts(1,0));
+ const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest());
+ await page.locator('#settings-security').click();await page.getByRole('button',{name:'登录 Sensa',exact:true}).click();
+ await page.getByLabel('邮箱',{exact:true}).fill('package-center@sensa.invalid');await page.getByRole('button',{name:'发送登录邮件',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'查看登录邮件',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'稍后可重新发送',exact:true})).toBeDisabled();
+ expect(sent).toBe(1);expect(exchanged).toBe(0);
+ // Full navigation discards component memory: the SDK must recover its own
+ // browser-stored verifier. The synthetic provider still does not send mail.
+ await page.goto(origin+'/profile?code=ordinary-login-code');await expect(page.locator('#s-profile')).toBeVisible();
+ await expect(page.getByRole('heading',{name:'当前账号',exact:true})).toBeVisible();await expect(page.getByText('已连接账号',{exact:true})).toBeVisible();expect(exchanged).toBe(1);
+ expect(new URL(page.url()).search).toBe('');
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(before);
+ await page.reload();await expect(page.getByRole('heading',{name:'当前账号',exact:true})).toBeVisible();expect(exchanged).toBe(1);
+ const runtime=await startOrdinaryBook(page);await runtime.getByRole('button',{name:/查看表达/}).click();await runtime.getByRole('button',{name:/已经连上/}).click();
+ await expect.poll(async()=>(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records.length).toBe(1);
+});
+
+test('ordinary email rate limits, invalid codes and missing invitations preserve usable guest content',async({page,context})=>{
+ await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.fallback():route.abort());
+ let sends=0,verifications=0;
+ await page.route('**/auth/v1/otp*',async route=>{sends++;await route.fulfill(sends===1?{status:429,json:{msg:'fixture_rate_limit'}}:{json:{user:null,session:null}});});
+ await page.route('**/auth/v1/verify*',async route=>{verifications++;const body=route.request().postDataJSON();expect(body.email).toBe('package-center@sensa.invalid');expect(body.type).toBe('email');await route.fulfill(verifications===1?{status:403,json:{msg:'fixture_expired'}}:{json:session()});});
+ await page.route('**/sensa/web/access/session',route=>route.fulfill({status:403,json:{code:'invite_required'}}));
+ await page.goto(origin+'/profile');await expect(page.locator('#s-profile')).toBeVisible();await page.evaluate(()=>window.__sensaBrowserSmoke!.seedDrafts(1,0));
+ const facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest());
+ await page.locator('#settings-security').click();await page.getByRole('button',{name:'登录 Sensa',exact:true}).click();await page.getByLabel('邮箱',{exact:true}).fill('package-center@sensa.invalid');await page.getByRole('button',{name:'发送登录邮件',exact:true}).click();
+ await expect(page.getByRole('status')).toContainText('发送过于频繁');expect(sends).toBe(1);
+ await page.getByRole('button',{name:'发送登录邮件',exact:true}).click();await page.getByRole('button',{name:'邮件中有验证码？',exact:true}).click();
+ await page.getByLabel('验证码',{exact:true}).fill('000000');await page.getByRole('button',{name:'验证并继续',exact:true}).click();
+ await expect(page.getByRole('status')).toContainText('验证码不正确或已过期');
+ await page.getByLabel('验证码',{exact:true}).fill('123456');await page.getByRole('button',{name:'验证并继续',exact:true}).click();
+ await expect(page.locator('#s-profile')).toBeVisible();await expect(page.getByRole('status').filter({hasText:'当前账号尚未获得服务访问权限，请联系 Sensa 支持。'})).toBeVisible();
+ await expect(page.getByText('已连接账号',{exact:true})).toHaveCount(0);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(facts);expect(verifications).toBe(2);
+ await page.locator('#settings-security').click();await page.getByRole('button',{name:'退出账号',exact:true}).click();
+ await expect.poll(()=>page.evaluate(key=>localStorage.getItem(key),storageKey)).toBeNull();
+ await page.reload();await expect(page.locator('#s-profile')).toBeVisible();expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(facts);
+});
+
+test('an ordinary mail callback without this browser PKCE verifier fails visibly and keeps local content',async({page,context})=>{
+ await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.fallback():route.abort());
+ let admissions=0;
+ await page.route('**/sensa/web/access/session',async route=>{admissions++;await route.fulfill({status:403,json:{code:'invite_required'}});});
+ await page.goto(origin+'/profile');await expect(page.locator('#s-profile')).toBeVisible();await page.evaluate(()=>window.__sensaBrowserSmoke!.seedDrafts(1,0));
+ const facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest());
+ await page.goto(origin+'/profile?code=another-browser-code');await expect(page.locator('#s-profile')).toBeVisible();
+ await expect(page.getByRole('status')).toContainText('登录链接已失效，或未在发起登录的浏览器中打开');expect(new URL(page.url()).search).toBe('');
+ expect(admissions).toBe(0);expect(await page.evaluate(key=>localStorage.getItem(key),storageKey)).toBeNull();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(facts);
+ await page.locator('#settings-security').click();await page.getByRole('button',{name:'登录 Sensa',exact:true}).click();
+ await expect(page.getByRole('button',{name:'发送登录邮件',exact:true})).toBeEnabled();
+});
+
 test('an empty practice scope offers content selection and return without loading a player or inventing learner facts',async({page})=>{
  let sdkRequests=0;await page.route('https://youglish.com/public/emb/widget.js',route=>{sdkRequests++;return route.abort();});
  await page.goto(origin+'/academy');const practice=page.locator('#s-academy').last(),activities=practice.locator('.sensa-practice-activities').getByRole('button');

@@ -44,6 +44,7 @@ export type WebTestCatalogEntry = Readonly<{
  * split into named behavior scenarios.
  */
 const foundationTests = [
+  {id:'account-admission',file:'tests/web/database/account-admission.test.mts',kind:'integration',risks:['local-correctness','convergence'],environment:'postgres',suite:'database',runner:'vitest'},
   {id:'guest-content-presence',file:'tests/web/integration/guest-content-presence.test.mts',kind:'integration',risks:['local-correctness'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
   {id:'web-entry-hmr',file:'tests/web/browser/web-entry-hmr.spec.ts',kind:'integration',risks:['local-correctness','durability'],environment:'chromium',suite:'browser',runner:'playwright'},
   {id:'library-bootstrap-recovery',file:'tests/web/integration/library-bootstrap-recovery.test.mts',kind:'integration',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
