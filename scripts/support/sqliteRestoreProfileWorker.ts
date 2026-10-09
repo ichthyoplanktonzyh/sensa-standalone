@@ -8,7 +8,22 @@ type Counters={hit:number;miss:number;write:number;spill:number;cacheBytes:numbe
 // Cache use is sampled at phase boundaries, not a whole-process peak.
 const nativeCache:Record<string,{calls:number;hit:number;miss:number;write:number;spill:number;maxObservedCacheBytes:number}>={};
 const diagnosticErrors:string[]=[];
+// Measure the native boundary before choosing a different file layout or
+// durability policy. This wrapper runs only in isolated synthetic tests;
+// production remains WAL/FULL and no filesystem method is replaced there.
+const nativeIo:Record<string,{calls:number;ms:number;bytes:number;failures:number}>={};
+for(const method of ['read','write','flush'] as const){
+ const original=FileSystemSyncAccessHandle.prototype[method];
+ Reflect.set(FileSystemSyncAccessHandle.prototype,method,function(this:FileSystemSyncAccessHandle,...args:unknown[]){
+  const metric=nativeIo[`${phase}:${method}`]??={calls:0,ms:0,bytes:0,failures:0},started=performance.now();metric.calls++;
+  try{const result=Reflect.apply(original,this,args);if(typeof result==='number')metric.bytes+=result;return result;}
+  catch(cause){metric.failures++;throw cause;}
+  finally{metric.ms+=performance.now()-started;}
+ });
+}
 const requestedCache=new URL(self.location.href).searchParams.get('cacheKiB');
+const journalMode=new URL(self.location.href).searchParams.get('journalMode')??'wal';
+if(journalMode!=='wal'&&journalMode!=='delete')throw Error('unsupported_diagnostic_journal_mode');
 const cacheKiB=requestedCache===null?undefined:Number(requestedCache);
 if(cacheKiB!==undefined&&cacheKiB!==16384&&cacheKiB!==40960)throw Error('unsupported_diagnostic_cache_size');
 let phase='initialize';
@@ -36,11 +51,11 @@ const emit=(database:SqliteRecordDatabase,includePages=false)=>{
  const scalar=(sql:string)=>Number((raw.exec({sql,rowMode:0,returnValue:'resultRows'}) as number[])[0]);
  let settings:unknown,pages:unknown;
  try{
-  settings={cacheSize:scalar('PRAGMA cache_size'),pageSize:scalar('PRAGMA page_size'),pageCount:scalar('PRAGMA page_count'),freePages:scalar('PRAGMA freelist_count'),synchronous:scalar('PRAGMA synchronous')};
+  settings={journalMode:raw.exec({sql:'PRAGMA journal_mode',rowMode:0,returnValue:'resultRows'})[0],cacheSize:scalar('PRAGMA cache_size'),pageSize:scalar('PRAGMA page_size'),pageCount:scalar('PRAGMA page_count'),freePages:scalar('PRAGMA freelist_count'),synchronous:scalar('PRAGMA synchronous')};
   if(includePages)pages=raw.exec({sql:'SELECT name,pagetype,count(*) AS pages,sum(pgsize) AS bytes,sum(payload) AS payloadBytes,sum(unused) AS unusedBytes FROM dbstat GROUP BY name,pagetype ORDER BY name,pagetype',rowMode:'object',returnValue:'resultRows'});
  }catch(cause){diagnosticErrors.push(String(cause));}
  const base64={encode:typeof Reflect.get(Uint8Array.prototype,'toBase64')==='function',decode:typeof Reflect.get(Uint8Array,'fromBase64')==='function'};
- self.postMessage({sensaRestoreProfile:{phases,projections,reads,nativeCache,settings,pages,base64,diagnosticErrors,execTimings:[...sql].sort((a,b)=>b[1].ms-a[1].ms).slice(0,25).map(([sql,metric])=>({sql,...metric}))}});
+ self.postMessage({sensaRestoreProfile:{phases,projections,reads,nativeCache,nativeIo,settings,pages,base64,diagnosticErrors,execTimings:[...sql].sort((a,b)=>b[1].ms-a[1].ms).slice(0,25).map(([sql,metric])=>({sql,...metric}))}});
 };
 const instrumented=new WeakSet<object>(),initialize=SqliteRecordDatabase.prototype.initialize;
 SqliteRecordDatabase.prototype.initialize=function(){
@@ -58,7 +73,14 @@ SqliteRecordDatabase.prototype.initialize=function(){
   const get=this.get;
   this.get=function(table,key){const started=performance.now();try{return get.call(this,table,key);}finally{record(reads,`${phase}:${table}`,performance.now()-started);}};
  }
- try{const result=initialize.call(this);if(first&&cacheKiB!==undefined)raw.exec(`PRAGMA cache_size=-${cacheKiB}`);return result;}finally{phase='outside';}
+ try{
+  const result=initialize.call(this);
+  if(first&&cacheKiB!==undefined)raw.exec(`PRAGMA cache_size=-${cacheKiB}`);
+  // SQLite recommends EXTRA for rollback-journal power-loss durability. FULL
+  // alone is not a durability-equivalent comparison with WAL/FULL.
+  if(first&&journalMode==='delete')raw.exec('PRAGMA journal_mode=DELETE;PRAGMA synchronous=EXTRA');
+  return result;
+ }finally{phase='outside';}
 };
 const candidate=SqliteRecordDatabase.prototype.replicaCandidate;
 SqliteRecordDatabase.prototype.replicaCandidate=async function(request){

@@ -3,14 +3,16 @@
  * or mature-product capacity/latency-equivalence claim. */
 import {once} from 'node:events';
 import {createServer,type Server} from 'node:http';
-import {resolve} from 'node:path';
-import {test,expect} from '@playwright/test';
+import {resolve,join} from 'node:path';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {test,expect,chromium,type BrowserContext} from '@playwright/test';
 import {createServer as createViteServer,type ViteDevServer} from 'vite';
 import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec';
 import type {SqliteWorkerInput,SqliteWorkerResult} from '../../../apps/web/src/data/library/sqliteProtocol';
 import type {ReplicaCandidateRecord} from '../../../apps/web/src/data/library/replicaCandidateProtocol';
 import {candidateExpected,candidateBlocksFor,candidateFixture} from '../support/replicaCandidateFixture.mts';
-import {librarySyncBlockFetch} from '@sensa/contracts/sensa';
+import {librarySyncBlockFetch,librarySyncBlockFetchBytes} from '@sensa/contracts/sensa';
 
 for(const scenario of ['reads','close','native-failure','crash'] as const)test(`private OPFS candidate lifecycle: ${scenario}`,async({browser},testInfo)=>{
  test.setTimeout(180_000);
@@ -110,10 +112,17 @@ for(const scenario of ['reads','close','native-failure','crash'] as const)test(`
 for(const scenario of ['restore','write-during-validation','meaning-scale','meaning-profile'] as const)test(scenario==='meaning-profile'?'instrumented Meaning OPFS restore diagnostic':`normal staged OPFS sync over 64 MiB: ${scenario}`,async({browser},testInfo)=>{
  test.skip(scenario==='meaning-profile'&&process.env.SENSA_RESTORE_SQL_PROFILE!=='true','Optional CPU/SQL diagnostic, not an unmodified-Worker latency guarantee');
  test.setTimeout(scenario==='meaning-scale'?420_000:240_000);
- const profileCount=Number(process.env.SENSA_RESTORE_PROFILE_MEANINGS??1000),profileCache=process.env.SENSA_RESTORE_PROFILE_CACHE_KIB;
+ const profileCount=Number(process.env.SENSA_RESTORE_PROFILE_MEANINGS??1000),profileCache=process.env.SENSA_RESTORE_PROFILE_CACHE_KIB,profileJournal=process.env.SENSA_RESTORE_PROFILE_JOURNAL??'wal';
  if(scenario==='meaning-profile'&&(profileCount!==1000&&profileCount!==5000||profileCache!==undefined&&!['16384','40960'].includes(profileCache)))throw Error('unsupported_diagnostic_configuration');
+ if(scenario==='meaning-profile'&&!['wal','delete'].includes(profileJournal))throw Error('unsupported_diagnostic_configuration');
  let vite:ViteDevServer|undefined,http:Server|undefined;
- const context=await browser.newContext(),page=await context.newPage();
+ const persistent=process.env.SENSA_RESTORE_PERSISTENT??'true';
+ if(!['true','false'].includes(persistent))throw Error('unsupported_restore_profile');
+ const persistentProfile=persistent==='true'?await mkdtemp(join(tmpdir(),'sensa-restore-profile-')):undefined;
+ let context:BrowserContext|undefined;
+ try{
+ context=persistentProfile?await chromium.launchPersistentContext(persistentProfile,{headless:true,...process.env.SENSA_CHROMIUM_PATH?{executablePath:process.env.SENSA_CHROMIUM_PATH}:{}}):await browser.newContext();
+ const page=await context.newPage();
  const id=crypto.randomUUID(),identity={id,learnerId:crypto.randomUUID(),deviceId:id,createdAt:'2026-10-03T00:00:00.000Z',schemaVersion:2 as const},owner={subject:crypto.randomUUID(),accountId:crypto.randomUUID()};
  const fixture=await(async()=>{
   const records:ReplicaCandidateRecord[]=[{table:'meta',key:'identity',valueJson:JSON.stringify(encodeBackupValue(identity)),blockRefs:[]}];
@@ -134,7 +143,7 @@ for(const scenario of ['restore','write-during-validation','meaning-scale','mean
  // Use Vite's canonical /src URLs so the synchronizer and the instrumented
  // adapter share one module instance rather than /@fs aliases of that file.
  const storeUrl='/src/data/library/store.ts',syncUrl='/src/data/library/cloudSync.ts',adapterUrl='/src/data/library/sqliteAdapter.ts',draftUrl='/src/data/library/drafts.ts';
- try{
+ const transportStats={fetchRequests:0,maxRequestedHashes:0,maxResponseDataBytes:0,deferredResponses:0};
   vite=await createViteServer({configFile:resolve('apps/web/vite.config.ts'),root:resolve('apps/web'),logLevel:'error',server:{middlewareMode:true,hmr:false,fs:{allow:[process.cwd()]}}});
   http=createServer(async(request,response)=>{
    if(request.url==='/candidate/head'){response.setHeader('content-type','application/json');response.end(JSON.stringify(fixture.expected.head));return;}
@@ -142,7 +151,10 @@ for(const scenario of ['restore','write-during-validation','meaning-scale','mean
     try{
      const chunks:Buffer[]=[];for await(const chunk of request)chunks.push(Buffer.from(chunk));
      const {hashes}=librarySyncBlockFetch.parse(JSON.parse(Buffer.concat(chunks).toString('utf8')));
-     response.setHeader('content-type','application/json');response.end(JSON.stringify({blocks:hashes.filter(hash=>fixture.wire.has(hash)).map(hash=>({hash,data:fixture.wire.get(hash)!})),missing:hashes.filter(hash=>!fixture.wire.has(hash)),deferred:[]}));
+     const selected:Array<{hash:string;data:string}>=[],missing:string[]=[],deferred:string[]=[];let bytes=0;
+     for(const hash of hashes){const data=fixture.wire.get(hash);if(data===undefined){missing.push(hash);continue;}const size=Buffer.byteLength(data);if(selected.length&&bytes+size>librarySyncBlockFetchBytes){deferred.push(hash);continue;}selected.push({hash,data});bytes+=size;}
+     transportStats.fetchRequests++;transportStats.maxRequestedHashes=Math.max(transportStats.maxRequestedHashes,hashes.length);transportStats.maxResponseDataBytes=Math.max(transportStats.maxResponseDataBytes,bytes);if(deferred.length)transportStats.deferredResponses++;
+     response.setHeader('content-type','application/json');response.end(JSON.stringify({blocks:selected,missing,deferred}));
     }catch{response.statusCode=400;response.end('{}');}return;
    }
    vite!.middlewares(request,response);
@@ -161,7 +173,7 @@ for(const scenario of ['restore','write-during-validation','meaning-scale','mean
      this.addEventListener('message',event=>{if(event.data.sensaRestoreProfile)Reflect.set(globalThis,'sensaRestoreProfile',event.data.sensaRestoreProfile);});
     }
    };
-  },`/@fs/${resolve('scripts/support/sqliteRestoreProfileWorker.ts')}?${new URLSearchParams(profileCache===undefined?{}:{cacheKiB:profileCache})}`);
+  },`/@fs/${resolve('scripts/support/sqliteRestoreProfileWorker.ts')}?${new URLSearchParams({...profileCache===undefined?{}:{cacheKiB:profileCache},journalMode:profileJournal})}`);
   await page.goto(origin);
   const measured=await page.evaluate(async({storeUrl,syncUrl,adapterUrl,draftUrl,owner,scenario,table})=>{
    const store=await import(/* @vite-ignore */ storeUrl),sync=await import(/* @vite-ignore */ syncUrl),adapters=await import(/* @vite-ignore */ adapterUrl),drafts=await import(/* @vite-ignore */ draftUrl);
@@ -190,8 +202,17 @@ for(const scenario of ['restore','write-during-validation','meaning-scale','mean
    finally{clearInterval(timer);adapter.replicaCandidate=original;adapter.commit=originalCommit;}
    return {originalIdentity,error,validationRequests,writingDuringValidation,validationInvalidatedByWrite,writeMs,localDraftId,appendReadCount,maxAppendReadMs,phaseMs,phaseCalls,durationMs:performance.now()-started,maxMainThreadGapMs,state:await sync.readCloudSync(),count:await store.readLibrary((tx:any)=>tx.count(table)),identity:await store.readLibrary((tx:any)=>tx.get('meta','identity')),storage:await navigator.storage.estimate(),workerProfile:Reflect.get(globalThis,'sensaRestoreProfile')};
   },{storeUrl,syncUrl,adapterUrl,draftUrl,owner,scenario,table:fixture.table});
-  await testInfo.attach('normal-staged-restore-evidence',{contentType:'application/json',body:JSON.stringify({scenario,browser:browser.version(),fixture:fixture.table==='semanticMeanings'?`${fixture.count} accepted synthetic Meanings, unique initial Registry, no media/Learning history; controlled HTTP, ${scenario==='meaning-profile'?'instrumented diagnostic':'unmodified'} Worker/OPFS; no PostgreSQL/account UI`:'5000 valid synthetic Drafts; controlled loopback HTTP; real normal synchronizer/Worker/OPFS, no PostgreSQL or account UI',recordCount:fixture.recordCount,logicalBytes:fixture.logicalBytes,...measured,paidCalls:0})});
-  if(scenario==='meaning-profile'){expect(measured.workerProfile?.phases.promotion.calls).toBe(1);expect(measured.workerProfile?.diagnosticErrors).toEqual([]);expect(measured.workerProfile?.pages.length).toBeGreaterThan(0);expect(measured.appendReadCount).toBe(measured.phaseCalls.append);expect(measured.maxAppendReadMs).toBeLessThanOrEqual(1500);}
+  await testInfo.attach('normal-staged-restore-evidence',{contentType:'application/json',body:JSON.stringify({scenario,browser:browser.version(),profile:persistentProfile?'isolated persistent profile':'isolated ephemeral context',fixture:fixture.table==='semanticMeanings'?`${fixture.count} accepted synthetic Meanings, unique initial Registry, no media/Learning history; controlled HTTP, ${scenario==='meaning-profile'?'instrumented diagnostic':'unmodified'} Worker/OPFS; no PostgreSQL/account UI`:'5000 valid synthetic Drafts; controlled loopback HTTP; real normal synchronizer/Worker/OPFS, no PostgreSQL or account UI',recordCount:fixture.recordCount,logicalBytes:fixture.logicalBytes,transportStats,...measured,paidCalls:0})});
+  expect(transportStats.maxRequestedHashes).toBeLessThanOrEqual(512);expect(transportStats.maxResponseDataBytes).toBeLessThanOrEqual(librarySyncBlockFetchBytes);
+  if(scenario==='meaning-profile'){
+   expect(measured.workerProfile?.phases.promotion.calls).toBe(1);expect(measured.workerProfile?.diagnosticErrors).toEqual([]);expect(measured.workerProfile?.pages.length).toBeGreaterThan(0);expect(measured.appendReadCount).toBe(measured.phaseCalls.append);expect(measured.maxAppendReadMs).toBeLessThanOrEqual(1500);
+   for(const phase of ['append','promotion'])for(const method of ['read','write','flush']){
+    const metric=measured.workerProfile?.nativeIo?.[`${phase}:${method}`];expect(metric?.calls).toBeGreaterThan(0);expect(metric?.failures).toBe(0);expect(metric?.ms).toBeGreaterThanOrEqual(0);
+    if(method!=='flush')expect(metric?.bytes).toBeGreaterThan(0);
+   }
+   expect(measured.workerProfile?.settings.synchronous).toBe(profileJournal==='wal'?2:3);
+   expect(measured.workerProfile?.settings.journalMode).toBe(profileJournal);
+  }
   else expect(fixture.logicalBytes).toBeGreaterThan(64*1024*1024);
   if(scenario!=='write-during-validation'){
    expect(measured.error).toBeUndefined();expect(measured.count).toBe(fixture.count);expect(measured.state.status).toBe('synced');expect(measured.identity).toEqual({...identity,deviceId:measured.originalIdentity.deviceId});
@@ -209,5 +230,11 @@ for(const scenario of ['restore','write-during-validation','meaning-scale','mean
    expect(measured.validationRequests).toBe(1);expect(measured.validationInvalidatedByWrite).toBe(true);expect(measured.error).toBe('library_sync_local_changed');expect(measured.count).toBe(1);expect(measured.identity).toEqual(measured.originalIdentity);expect(measured.state.status).toBe('pending');
    expect(await page.evaluate(async storeUrl=>{const store=await import(/* @vite-ignore */ storeUrl);return store.readLibrary(async(tx:any)=>(await tx.syncBaseReferences()).length);},storeUrl)).toBe(0);
   }
- }finally{await context.close();if(http)await new Promise<void>((resolve,reject)=>http!.close(error=>error?reject(error):resolve()));await vite?.close();}
+ }finally{
+  let browserClosed=context===undefined;
+  try{await context?.close();browserClosed=true;}finally{
+   try{if(http)await new Promise<void>((resolve,reject)=>http!.close(error=>error?reject(error):resolve()));await vite?.close();}
+   finally{if(persistentProfile&&browserClosed)await rm(persistentProfile,{recursive:true,force:true});}
+  }
+ }
 });

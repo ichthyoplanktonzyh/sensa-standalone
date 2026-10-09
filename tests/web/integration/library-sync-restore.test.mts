@@ -1,6 +1,6 @@
 /** Shipped sync over SQLite/Wasm, with SQL faults and controlled transport.
  * This proves restore atomicity, not OPFS durability or large-account capacity. */
-import {createHash} from 'node:crypto';
+import {createHash,randomBytes} from 'node:crypto';
 import {afterEach,beforeEach,expect,test} from 'vitest';
 import {useNodeLearningCapacityStorage} from '../../../scripts/support/nodeLearningCapacity.mts';
 import {openLibrary,readLibrary,writeLibraryState,restoreLibraryTransaction,readLocalLibraryRevision,type LibraryIdentity} from '../../../apps/web/src/data/library/store';
@@ -8,7 +8,7 @@ import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec'
 import {replicaCandidateAppendRecordLimit,replicaCandidateAppendReferenceLimit} from '../../../apps/web/src/data/library/replicaCandidateProtocol';
 import {saveDraft} from '../../../apps/web/src/data/library/drafts';
 import {sqliteRecordAdapter} from '../../../apps/web/src/data/library/sqliteAdapter';
-import {librarySyncBlockFetch} from '@sensa/contracts/sensa';
+import {librarySyncBlockFetch,librarySyncBlockFetchHashes,librarySyncBlockFetchBytes} from '@sensa/contracts/sensa';
 import {encodeLibrarySyncBlock,splitLibrarySyncText,decodeLibrarySyncBlock} from '@sensa/contracts/sensa/library-sync-blocks';
 import type {SyncRequest} from '../../../apps/web/src/data/library/cloudSync';
 
@@ -41,11 +41,45 @@ const request:SyncRequest=async(path,body)=>{
  if(path==='/blocks/fetch'){
   await onFetch?.();
   const input=librarySyncBlockFetch.parse(body);
-  return {blocks:input.hashes.filter(id=>blocks.has(id)).map(hash=>({hash,data:blocks.get(hash)!})),missing:input.hashes.filter(id=>!blocks.has(id)),deferred:[]};
+  const selected:Array<{hash:string;data:string}>=[],missing:string[]=[],deferred:string[]=[];let bytes=0;
+  for(const hash of input.hashes){const data=blocks.get(hash);if(data===undefined){missing.push(hash);continue;}const size=Buffer.byteLength(data);if(selected.length&&bytes+size>librarySyncBlockFetchBytes){deferred.push(hash);continue;}selected.push({hash,data});bytes+=size;}
+  return {blocks:selected,missing,deferred};
  }
  throw new Error(`unexpected_restore_request:${path}`);
 };
 const facts=()=>readLibrary(async tx=>({identity:await tx.get('meta','identity'),creation:await tx.get<{result:LibraryIdentity}>('operations','00000000-0000-4000-8000-000000000001'),drafts:await tx.entries('drafts'),base:await tx.syncBaseEntries(),localRevision:await readLocalLibraryRevision(tx)}));
+
+for(const pageLimit of [librarySyncBlockFetchBytes,2048])test(`fresh restoration consumes API byte pages without a fixed 64-block roundtrip limit (${pageLimit})`,async()=>{
+ const drafts=Array.from({length:1024},(_,index)=>({...first,id:crypto.randomUUID(),text:`Small remote draft ${index}`}));publish(drafts);
+ const requested:number[]=[];let deferredReplies=0;const delivered=new Map<string,number>();
+ const transport:SyncRequest=async(path,body)=>{
+  if(path!=='/blocks/fetch')return request(path,body);
+  const {hashes}=librarySyncBlockFetch.parse(body);requested.push(hashes.length);
+  let bytes=0;const selected:string[]=[],deferred:string[]=[];
+  for(const hash of hashes){const size=Buffer.byteLength(blocks.get(hash)!);if(selected.length&&bytes+size>pageLimit){deferred.push(hash);continue;}selected.push(hash);bytes+=size;}
+  if(deferred.length)deferredReplies++;
+  for(const hash of selected)delivered.set(hash,(delivered.get(hash)??0)+1);
+  return {blocks:selected.map(hash=>({hash,data:blocks.get(hash)!})),missing:[],deferred};
+ };
+ await synchronizeLibrary(transport);
+ expect(Math.max(...requested)).toBe(librarySyncBlockFetchHashes);
+ if(pageLimit===librarySyncBlockFetchBytes){expect(requested).toHaveLength(4);expect(deferredReplies).toBe(0);}
+ else expect(deferredReplies).toBeGreaterThan(0);
+ expect([...delivered.values()].every(count=>count===1)).toBe(true);
+ expect(await readLibrary(tx=>tx.count('drafts'))).toBe(drafts.length);expect(await readLibrary(tx=>tx.get('drafts',drafts.at(-1)!.id))).toEqual(drafts.at(-1));
+ expect((await readCloudSync())?.status).toBe('synced');
+});
+
+test('an oversized prefetch response is rejected without adopting any remote identity or facts',async()=>{
+ const drafts=Array.from({length:400},()=>({...first,id:crypto.randomUUID(),text:randomBytes(13500).toString('base64')}));publish(drafts);
+ const before=await facts();
+ const oversized:SyncRequest=async(path,body)=>{
+  if(path!=='/blocks/fetch')return request(path,body);
+  const {hashes}=librarySyncBlockFetch.parse(body);return {blocks:hashes.map(hash=>({hash,data:blocks.get(hash)!})),missing:[],deferred:[]};
+ };
+ await expect(synchronizeLibrary(oversized)).rejects.toThrow('library_sync_format');
+ expect(await facts()).toEqual(before);expect((await readCloudSync())?.status).not.toBe('synced');
+});
 
 for(const path of ['staged','fallback'] as const)test(`a cleared device waits for explicit reconnect through ${path} restoration`,async()=>{
  // Persisted post-clear state; the actual clear + page reload is exercised by

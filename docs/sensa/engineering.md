@@ -370,7 +370,8 @@ Worker 的候选校验不占据普通请求队列，按记录让出，
 Worker 按 ES module 分块构建，完整 validator 延迟加载；离线 shell 预缓存所有构建的 JS／Wasm 代码块。
 正常 synchronizer 的新设备恢复已使用该内核：只在无 baseline、无 pending／冲突，且本机 replicated facts
 仅有 identity 时准入；同库 identity 分叉及不改变内容的 identity-only head 保留原 merge／确认路径。
-正文分批由正常 HTTP block fetch 进入私有候选，最多预取 64 个不同 hash，不先加载一批任意大小的行；
+正文分批由正常 HTTP block fetch 进入私有候选，每次预取最多请求 512 个不同 hash，但只接收一页、最多
+4 MiB 的块正文；超额响应拒绝，deferred 留待后续消费，不先追完全部 hash 或加载任意大小的一批行。
 当前大行前释放无关预取块，最后一次引用后释放，换 head 重试也清缓存。多行 append 限制 512 条／4 MiB，
 同时累计最多 4096 次 block 引用（包括重复引用）；引用密集的合法资料分批，不去重或截断原有有序 refs。
 生产者与 Worker 共用批次计数合同，在解析正文或写入前核对。较大有界事务摊薄提交开销，仍保留 FULL，
@@ -415,6 +416,15 @@ incarnation fence，清除后的旧点击不能变成新授权。普通尝试失
 `SENSA_RESTORE_PROFILE_CACHE_KIB` 可选 16384／40960，仅影响隔离诊断连接，不改变生产默认缓存。
 诊断在每次 append 等待期间通过正式本机读取接口读取已提交的 Meaning 计数，要求候选不可见且每次读取
 不超过 1.5 秒；输出 cache hit/miss/write/spill、阶段边界采样 cache bytes 和按表／page type 的 dbstat。
+测试 Worker 另按阶段统计实际 SAH read/write/flush 调用数、返回字节、同步调用耗时及失败数，以区分
+SQL／解码工作、重复页 I/O 与持久化 flush 的成本。包装默认使用生产 WAL/FULL；显式
+`SENSA_RESTORE_PROFILE_JOURNAL=delete` 仅在该隔离样本中对照 SQLite rollback journal，要求 EXTRA（3）以
+对齐 WAL/FULL 的 SQLite 持久化配置要求，不使用降低同步保证的比较。
+正常恢复用例（含未修改 Worker 的 10k 用例）和诊断用例默认使用独立临时持久化 Chrome profile，完成后关闭
+并删除这个测试 profile；不访问用户浏览器资料。`SENSA_RESTORE_PERSISTENT=false` 仅用于显式 ephemeral 对照。
+报告必须区分两种 profile，不能把 ephemeral 的 I/O 行为等同正常会话。这些诊断不是生产配置、持久化保证
+或模式迁移验收，不因基准结果自动更改正式库。
+调用耗时含浏览器实现但不等同底层物理磁盘时间，诊断开销不进入未修改 Worker 的性能结论。
 rowid 的主键自动索引也必须计入布局空间；采样 cache bytes 不是全进程峰值内存，诊断计时包含测量开销，
 也不是完整 App 或已有大库的响应保证。
 `node --import tsx scripts/benchmarkReplicaTableLayout.mts` 以相同真实 packed 值、有序 refs 和唯一键比较基线／
@@ -429,11 +439,15 @@ rowid 的主键自动索引也必须计入布局空间；采样 cache bytes 不�
 256 Ki 个 UTF-16 code units（含 key）；过大的单行不缓存。逐出／阴性缓存不改变已接受版本、依赖重建或来源事实，
 不保留整批 Registry 对象。该来源字符预算不是 decoded heap 或单个大事实的内存保证。
 v6 发布仍组装整份 key/block-ref manifest 元数据；它不再解码所有未变正文，但不能宣称整条路径严格 O(变化数)。
+首次 checkpoint 之前，待同步预览只分页读取符合复制所有权的记录键，排除 bootstrap identity，不为计数或
+清除前提醒解码整库正文。已确认 checkpoint 的预览仍对比变更行与其基线，签出状态不隐去未同步资料。
 完整恢复／收敛在同一 SQLite commit 应用已校验候选、对应基线和同步状态；基线或事实写入失败都回滚身份、
 资料及建库回执，不留下半恢复。应用前以捕获的本机 revision、identity、owner/incarnation 重查，提交后在写锁内
 核对应用 revision；下载中及提交后的新写入不被覆盖或标为已同步。无事实变化只写同步账本，不制造本机内容
 revision。完整路径只在首次捕获及 pending 重放改变基线后读取正文，不为应用／最终确认再次 capture 整库。
 生产同步统一经 `syncAccountLibrary` 的单飞与跨标签页 Web Lock；底层注入传输接口不承担并发同步任务调度。
+同步完成后的公共内容恢复使用独立超时信号，不继承已经被下载／本机校验耗尽的同步 deadline；公共内容
+不可用仍独立呈现，不把已完成的个人资料同步改成失败。
 上述已有资料 fallback 仍读取完整事实与基线，64 MiB 解码保护与 256 MiB 账号容量尚有差距；增量优化或分块压缩不证明
 大规模跨设备恢复的内存或容量达标。
 Checkpoint 的 block/manifest 传输、CAS commit、重试和 baseline 由 Cloud Sync Coordinator 负责；记录的

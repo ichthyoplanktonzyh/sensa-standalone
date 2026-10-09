@@ -34,7 +34,9 @@ export function syncAccountLibrary(options:LibrarySyncOptions={}):Promise<void>{
   // the device catalog after sync, but leave unavailable artifacts honestly
   // blocked instead of turning a healthy learner-data sync into a failure.
   const {contentSupplySystem}=await import('../../contentSupply/system/contentSupplySystem');
-  await contentSupplySystem.execute({kind:'rehydrate',signal:passSignal}).catch(()=>undefined);
+  // Restoring a large Library may finish after the transfer deadline. Public
+  // artifacts are a separate phase, not a request on that expired signal.
+  await contentSupplySystem.execute({kind:'rehydrate',signal:AbortSignal.timeout(90000)}).catch(()=>undefined);
  };
  const start=async()=>{
   if(scope)expected=await scope;

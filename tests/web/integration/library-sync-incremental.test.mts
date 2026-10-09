@@ -13,7 +13,7 @@ import {decodeBackupValue} from '../../../apps/web/src/data/library/backupCodec'
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined,location:new URL('http://incremental-sync.fixture.invalid/')});
 Object.defineProperty(globalThis,'navigator',{value:{onLine:true},configurable:true});
 const database=await useNodeLearningCapacityStorage();afterAll(()=>database.close());
-const {synchronizeLibrary,readCloudSync}=await import('../../../apps/web/src/data/library/cloudSync');
+const {synchronizeLibrary,readCloudSync,inspectPendingCloudSync}=await import('../../../apps/web/src/data/library/cloudSync');
 const {libraryReplicaValidationVersion}=await import('../../../apps/web/src/data/library/replication/libraryReplicaValidation');
 const blocks=new Map<string,string>(),receipts=new Map<string,{revision:number;manifest:string[]}>(),calls:string[]=[];
 let revision=0,manifest:string[]|null=null,hook:((path:string,body:any)=>Promise<void>)|undefined;
@@ -39,6 +39,21 @@ test('a validated checkpoint checks only metadata when unchanged and publishes o
  await openLibrary();const owner={subject:crypto.randomUUID(),accountId:crypto.randomUUID()};
  await writeLibraryState(async tx=>tx.put('meta','service-owner',owner));
  const drafts:Awaited<ReturnType<typeof saveDraft>>[]=[];for(let index=0;index<256;index++)drafts.push(await saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:`Private draft ${index}: `+'a'.repeat(8000)}));
+ const firstAdapter=await sqliteRecordAdapter(),pointRead=firstAdapter.get.bind(firstAdapter);
+ const allBodies=vi.spyOn(firstAdapter,'entries').mockImplementation(async()=>{throw Error('first checkpoint preview hydrated source bodies');});
+ const pointBodies=vi.spyOn(firstAdapter,'get').mockImplementation(async(table,key)=>{if(table!=='meta')throw Error('first checkpoint preview read a fact body');return pointRead(table,key);});
+ const pages=vi.spyOn(firstAdapter,'recordKeysPage');
+ try{
+  const pending=await readLibrary(inspectPendingCloudSync);
+  expect(pending).toMatchObject({accountLinked:true,canSync:true});
+  expect(pending.records.filter(row=>row.table==='drafts').map(row=>row.key).sort()).toEqual(drafts.map(row=>row.id).sort());
+  expect(pending.records.some(row=>row.table==='meta'&&row.key==='identity')).toBe(false);
+  expect(pages.mock.calls.filter(([table])=>table==='drafts')).toHaveLength(3);
+  expect(pages.mock.calls.every(([, ,limit])=>limit===128)).toBe(true);
+  await writeLibraryState(async tx=>tx.put('meta','signed-out',true));
+  try{const offline=await readLibrary(inspectPendingCloudSync);expect(offline.canSync).toBe(false);expect(offline.records).toEqual(pending.records);}
+  finally{await writeLibraryState(async tx=>tx.delete('meta','signed-out'));}
+ }finally{allBodies.mockRestore();pointBodies.mockRestore();pages.mockRestore();}
  await synchronizeLibrary(request);expect((await readCloudSync())?.validationVersion).toBe(libraryReplicaValidationVersion);
  const adapter=await sqliteRecordAdapter(),base=adapter.syncBaseEntries.bind(adapter),commit=adapter.commit.bind(adapter);
  const read=vi.spyOn(adapter,'entries').mockImplementation(async()=>{throw new Error('incremental sync read a whole source table');});

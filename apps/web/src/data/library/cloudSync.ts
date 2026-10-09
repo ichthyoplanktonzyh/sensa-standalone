@@ -1,4 +1,4 @@
-import {librarySyncManifest,librarySyncHead,librarySyncTables,librarySyncBlockFetchHashes,librarySyncBlockFetchResult,librarySyncBlockMissingResult,librarySyncBlockStore,librarySyncBlockStoreBatch,librarySyncBlockStoreChars,type LibrarySyncManifest,type LibrarySyncHead} from '@sensa/contracts/sensa';
+import {librarySyncManifest,librarySyncHead,librarySyncTables,librarySyncBlockFetchHashes,librarySyncBlockFetchBytes,librarySyncBlockFetchResult,librarySyncBlockMissingResult,librarySyncBlockStore,librarySyncBlockStoreBatch,librarySyncBlockStoreChars,type LibrarySyncManifest,type LibrarySyncHead} from '@sensa/contracts/sensa';
 import {readLibrary,readLocalLibraryRevision,restoreLibraryTransaction,writeLibraryState,assertCurrentLibrary,requestReplicaCandidate,type LibraryTransaction,type LibraryIdentity} from './store';
 import {backupEqual,encodeBackupValue,decodeBackupValue} from './backupCodec';
 import {cloudSyncFailurePolicy,type CloudSyncFailureKind} from './cloudSyncPolicy';
@@ -131,8 +131,10 @@ function conflictSnapshot(base:Entry[],local:Entry[],remote:Entry[],conflicts:st
 async function pendingCloudSyncRecords(tx:LibraryTransaction,state:State|undefined,identity:LibraryIdentity){
  if(state?.syncedLocalRevision===undefined){
   const records:PendingCloudSyncRecord[]=[];
-  for(const table of librarySyncTables)for(const row of await tx.entries(table)){
-   if(isReplicatedLibraryEntry(table,row.key)&&!(table==='meta'&&row.key==='identity'))records.push({table,key:row.key});
+  // Before the first checkpoint every replicated key is pending. The clear
+  // preview needs identities/counts, not every Meaning, history or media body.
+  for(const table of librarySyncTables)for await(const keys of tx.recordKeyBatches(table))for(const key of keys){
+   if(isReplicatedLibraryEntry(table,key)&&!(table==='meta'&&key==='identity'))records.push({table,key});
   }
   return records.sort((a,b)=>entryId(a).localeCompare(entryId(b)));
  }
@@ -193,7 +195,7 @@ class Blocks{
  async pack(text:string){const refs:string[]=[];let at=0;const media=/data:(?:image|audio)\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+/giu;for(const match of text.matchAll(media)){const start=match.index??0;await this.packSegment(text.slice(at,start),refs);await this.packSegment(match[0],refs);at=start+match[0].length;}await this.packSegment(text.slice(at),refs);return refs;}
  /** One request per byte-budgeted page: the cost of a restore follows library size,
   *  not how many blocks an older client happened to split it into. */
- async fetch(ids:string[]){
+ async fetch(ids:string[],onePage=false){
   const pending=[...new Set(ids)].filter(id=>!this.cache.has(id));
   let rounds=0,pageSize=librarySyncBlockFetchHashes;
   for(let at=0;at<pending.length;){
@@ -211,8 +213,12 @@ class Blocks{
    const requested=new Set(page);
    if(reply.blocks.some(block=>!requested.has(block.hash))||reply.missing.some(id=>!requested.has(id))||reply.deferred.some(id=>!requested.has(id)))throw new Error('library_sync_format');
    if(reply.missing.length)throw new Error('library_sync_missing_block');
+   if(onePage&&reply.blocks.reduce((bytes,block)=>bytes+new TextEncoder().encode(block.data).length,0)>librarySyncBlockFetchBytes)throw new Error('library_sync_format');
    for(const block of reply.blocks){if(await hash(block.data)!==block.hash)throw new Error('library_sync_hash');this.remember(block.hash,block.data);}
    if(!reply.blocks.length&&reply.deferred.length)throw new Error('library_sync_format');
+   // Prefetch only one byte-bounded response, not every deferred hash. The
+   // current row falls back to complete fetch below if it spans several pages.
+   if(onePage)return;
    at+=page.length;
    // The response is bounded by bytes, so anything it could not carry is re-queued.
    for(const id of reply.deferred)if(!this.cache.has(id))pending.push(id);
@@ -265,12 +271,13 @@ class Blocks{
    for(let at=0;at<manifest.rows.length;at++){
     const row=manifest.rows[at],refs=new Set(row.blocks);
     if(row.blocks.some(hash=>!this.cache.has(hash))){
-     // A fixed block window, not 128 arbitrarily large rows. Before fetching a
-     // large current row, release unrelated prefetched bytes from earlier rows.
+     // Ask for the existing API's hash window but retain only one byte page.
+     // Small records share a roundtrip; large records cannot inflate prefetch.
+     // Before fetching a large current row, release unrelated prefetched bytes.
      for(const hash of [...this.cache.keys()])if(!refs.has(hash))this.forget(hash);
      const wanted=new Set<string>();
-     for(let index=at;index<manifest.rows.length&&wanted.size<64;index++)for(const hash of manifest.rows[index].blocks){wanted.add(hash);if(wanted.size===64)break;}
-     await this.fetch([...wanted]);
+     for(let index=at;index<manifest.rows.length&&wanted.size<librarySyncBlockFetchHashes;index++)for(const hash of manifest.rows[index].blocks){wanted.add(hash);if(wanted.size===librarySyncBlockFetchHashes)break;}
+     await this.fetch([...wanted],true);
      if(row.blocks.some(hash=>!this.cache.has(hash))){for(const hash of [...this.cache.keys()])if(!refs.has(hash))this.forget(hash);await this.fetch(row.blocks);}
     }
     const valueJson=await this.text(row.blocks),size=new TextEncoder().encode(valueJson).length;
