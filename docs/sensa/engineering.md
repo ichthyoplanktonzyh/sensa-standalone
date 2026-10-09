@@ -433,6 +433,11 @@ node --import tsx tests/web/run.mts --suite=manual --id=extension-popup
 
 ## CI 与生产发布
 
+服务端未预期错误对客户端仍只返回通用 `temporarily_unavailable`。服务日志通过 request ID 和 release 关联，
+可附带固定的 `failureKind` 与允许列表内的 `failureCode`，不记录原异常消息、SQL、正文、邮箱、token、
+堆栈或嵌套 cause。数据库连接／idle／rollback 日志共用这一脱敏边界；日志 sink 失败不得替换原异常、
+泄漏已借出的连接或改变回滚后的销毁决定。受控测试只证明日志及响应边界，不证明线上503已经定位或修复。
+
 `.github/workflows/sensa-consumer-check.yml` 在 pull request 和 `main` push 时运行 `Sensa CI`。它执行静态检查、构建、Web 快速测试、浏览器检查以及 PostgreSQL/API 集成。
 
 整个生产系统只有一个人工发布入口：`.github/workflows/sensa-release.yml`。它先生成

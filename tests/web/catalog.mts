@@ -38,6 +38,7 @@ export type WebTestCatalogEntry = Readonly<{
  * split into named behavior scenarios.
  */
 const foundationTests = [
+  {id:'database-log-privacy',file:'tests/web/integration/database-log-privacy.test.mts',kind:'integration',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
   {
     id: 'learning-language-matrix',
     file: 'tests/web/integration/learning-language-matrix.test.mts',

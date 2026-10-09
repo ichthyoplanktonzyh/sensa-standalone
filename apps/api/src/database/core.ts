@@ -1,5 +1,6 @@
 import pg from "pg";
 import { readSensaApiEnvironment } from "../server/environment.js";
+import { failureDiagnostics } from "../server/failureDiagnostics.js";
 
 export type SqlValue =
   | string
@@ -26,6 +27,11 @@ export type WorkspaceDatabaseScope = Readonly<{
 
 let pool: pg.Pool | undefined;
 
+/** A logging sink cannot replace a database failure or leak a borrowed client. */
+function writeDatabaseLog(level:'info'|'error',record:Record<string,unknown>):void{
+  try{console[level](JSON.stringify(record));}catch{/* Operational diagnostics are best effort. */}
+}
+
 function databaseUrl(): string {
   const value = readSensaApiEnvironment().DATABASE_URL;
   if (value === undefined || value === "") {
@@ -48,11 +54,11 @@ function getPool(): pg.Pool {
       application_name: 'sensa-api',
     });
     pool.on("error", (error: Error) => {
-      console.error(JSON.stringify({
+      writeDatabaseLog('error',{
         domain: "sensa-api",
         action: "database_pool_error",
-        message: error.message,
-      }));
+        ...failureDiagnostics(error),
+      });
     });
   }
   return pool;
@@ -62,10 +68,10 @@ async function acquirePoolClient():Promise<pg.PoolClient>{
   const current=getPool(),started=performance.now(),queued=current.waitingCount;
   try{
     const client=await current.connect();
-    console.info(JSON.stringify({event:'sensa.database_pool_acquire',waitMs:Math.round(performance.now()-started),queuedBefore:queued,total:current.totalCount,idle:current.idleCount,waiting:current.waitingCount}));
+    writeDatabaseLog('info',{event:'sensa.database_pool_acquire',waitMs:Math.round(performance.now()-started),queuedBefore:queued,total:current.totalCount,idle:current.idleCount,waiting:current.waitingCount});
     return client;
   }catch(error){
-    console.error(JSON.stringify({event:'sensa.database_pool_acquire_failed',waitMs:Math.round(performance.now()-started),queuedBefore:queued,total:current.totalCount,idle:current.idleCount,waiting:current.waitingCount,message:error instanceof Error?error.message:String(error)}));
+    writeDatabaseLog('error',{event:'sensa.database_pool_acquire_failed',waitMs:Math.round(performance.now()-started),queuedBefore:queued,total:current.totalCount,idle:current.idleCount,waiting:current.waitingCount,...failureDiagnostics(error)});
     throw error;
   }
 }
@@ -105,11 +111,11 @@ async function withTransaction<Result>(
       await client.query("ROLLBACK");
     } catch (rollbackError) {
       destroy=true;
-      console.error(JSON.stringify({
+      writeDatabaseLog('error',{
         domain: "sensa-api",
         action: "database_rollback_failed",
-        message: rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
-      }));
+        ...failureDiagnostics(rollbackError),
+      });
     }
     throw error;
   } finally {
