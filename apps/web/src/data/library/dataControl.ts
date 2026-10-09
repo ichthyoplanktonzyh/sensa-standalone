@@ -62,12 +62,28 @@ export async function clearLocalLibrary(preview:LocalClearPreview,options:{disca
  });clearAllCredentials();
 }
 /** Apply a confirmed account barrier locally; never clear a different account's library. */
-export async function eraseDeletedAccount(subject:string){
+export type AccountDeletionLocalScope={libraryId:string;incarnation:string};
+export async function accountDeletionLocalScope(subject:string):Promise<AccountDeletionLocalScope>{
+ return readLibrary(async tx=>{
+  const owner=await tx.get<{subject:string}>('meta','service-owner'),identity=await tx.get<LibraryIdentity>('meta','identity');
+  if(!owner||owner.subject!==subject||!identity)throw new Error('localFlow.wrongAccount');
+  return {libraryId:identity.id,incarnation:await assertCurrentLibrary(tx)};
+ });
+}
+export async function eraseDeletedAccount(subject:string,expected?:AccountDeletionLocalScope){
  await restoreLibraryTransaction(async tx=>{
   const owner=await tx.get<{subject:string}>('meta','service-owner');
-  if(!owner&&await tx.get('meta','signed-out'))return;
-  await assertCurrentLibrary(tx);
-  if(owner&&owner.subject!==subject)throw new Error('localFlow.wrongAccount');
+  if(!owner){
+   // Only an actually empty prior erasure may replay. A signed-out guest or a
+   // newly selected library is not evidence of ownership by this account.
+   if(await tx.get('meta','signed-out')&&await tx.get('meta','local-reset')==='account-deletion'&&!await tx.get('meta','identity')){
+    if((await Promise.all(libraryTables.filter(table=>table!=='meta').map(table=>tx.count(table)))).every(count=>count===0))return;
+   }
+   throw new Error('localFlow.wrongAccount');
+  }
+  const incarnation=await assertCurrentLibrary(tx);
+  if(owner.subject!==subject)throw new Error('localFlow.wrongAccount');
+  if(expected&&((await tx.get<LibraryIdentity>('meta','identity'))?.id!==expected.libraryId||incarnation!==expected.incarnation))throw new Error('localFlow.libraryReplaced');
   for(const table of libraryTables)tx.clear(table);
   tx.put('meta','local-incarnation',crypto.randomUUID());tx.put('meta','signed-out',true);
   tx.put('meta','local-reset','account-deletion');

@@ -162,6 +162,9 @@ pool 关联头的摘要或读取长度异常、无路径却仍含数据时，初
 导航。存在性从同一读取事务按有界 key 页查询覆盖索引，不读取或解码完整事实、共享材料和媒体正文。
 预检重试复用账号连接流程，不重复发送邮件；已准入的同步失败重试则实际重跑手动同步，不依赖
 online 布尔值变化才能重启，也不伪装成功恢复。
+账号删除复用 Supabase SDK 的 PKCE／OTP 验证，而不从 URL 或缓存会话制造新鲜验证。服务端在签名验证后读取 AMR 中的 `otp` 或 PKCE `magiclink` 时间，仍检查五分钟窗口与未来时间；JWT 签发／刷新、OAuth、注册或邀请不能代替邮件重新验证，参见[Supabase AMR 说明](https://supabase.com/docs/guides/auth/auth-mfa)。删除收据在发送邮件前保存原账号、本机身份／incarnation 与退出 epoch；验证回调与明确删除提交分离，提交阶段在跨标签 Web Lock 内单向推进，取消不能撤回或复活已提交请求。
+服务器删除身份使用仅后端的 `SUPABASE_SECRET_KEY`（现代 Secret Key 走 `apikey`，不能当 JWT 使用）；仍可配置旧 `SUPABASE_SERVICE_ROLE_KEY`。不得将两者传入 `VITE_*`、浏览器产物、日志或 Git。
+发布前须核对邮件投递及容量：Supabase 内置邮件供应商默认每项目每小时 2 封；正式登录和敏感操作重新验证应配置并验收自定义 SMTP 或 Send Email Hook，不能降低删除验证标准或以管理员生成链接替代实际邮件旅程。参见[官方限流说明](https://supabase.com/docs/guides/auth/rate-limits)。
 浏览器内不再叠加全局 Promise 队列：只读事务持有 shared Web Lock 并可并发，写事务持有 exclusive Web Lock；
 无 Web Locks 的测试 Adapter 才使用串行 fallback。
 UI 只通过本机事务修改数据，不直接执行 SQL，也不写派生学习结果。Node 测试使用相同事务接口的内存

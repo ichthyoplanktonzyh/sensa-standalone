@@ -546,6 +546,39 @@ test('a 10000-Meaning local clear uses a bounded preview and leaves an empty reo
  }finally{semanticScaleFixture=undefined;await context.close();if(completed)await rm(profile,{recursive:true,force:true});else await testInfo.attach('retained-clear-profile',{contentType:'text/plain',body:profile});}
 });
 
+test('the shipped account deletion verifies a magic link without deleting and clears only after explicit confirmation',async({page,context})=>{
+ cloudManifest=null;cloudRevision=0;cloudBlocks.clear();
+ await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.fallback():route.abort());
+ await page.goto(origin);await page.evaluate(({key,value})=>localStorage.setItem(key,JSON.stringify(value)),{key:storageKey,value:session()});await page.goto(origin+'/profile');await expect(page.locator('#s-profile')).toBeVisible();
+ const repository=new MemoryJourneyRepository();await createJourneyModules({repository}).semanticIntake.submit(semanticLookupPayload());await page.evaluate(state=>window.__sensaBrowserSmoke!.seedSemanticWorld(state),await repository.load());
+ const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest());let deletionCalls=0,otpInput:any;
+ await context.route('**/auth/v1/otp*',async route=>{otpInput=route.request().postDataJSON();await route.fulfill({json:{}});});
+ await context.route('**/auth/v1/token*',route=>route.fulfill({json:session()}));await context.route('**/auth/v1/logout*',route=>route.fulfill({status:204}));
+ await context.route('**/sensa/account/deletion',async route=>{deletionCalls++;await route.fulfill({json:{state:'deleted',operationId:route.request().postDataJSON().operationId}});});
+ await page.locator('#settings-security').click();await page.getByRole('button',{name:'删除账号',exact:true}).click();await expect(page.getByText(/删除后不能再用原账号恢复备份/)).toBeVisible();
+ await page.getByRole('checkbox').check();await page.getByRole('button',{name:'发送删除验证邮件',exact:true}).click();await expect(page.getByText(/登录邮件已发送/)).toBeVisible();expect(otpInput.create_user).toBe(false);
+ const receipt=await page.evaluate(()=>JSON.parse(localStorage.getItem('sensa:account-deletion')!));expect(receipt.phase).toBe('verifying');expect(otpInput.code_challenge).toBeTruthy();
+ await page.goto(origin+'/profile?error=access_denied&error_code=otp_expired&error_description=synthetic');await expect(page.getByRole('alert')).toHaveText(/登录链接已失效/);await expect(page).toHaveURL(origin+'/profile');expect(deletionCalls).toBe(0);
+ await page.goto(origin+'/profile?code=synthetic-fresh-deletion-code');await expect(page.getByRole('status')).toHaveText('已验证邮箱。请再次确认后删除账号。');expect(deletionCalls).toBe(0);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(before);
+ const erase=page.getByRole('button',{name:'验证并删除账号',exact:true});await expect(erase).toBeDisabled();await page.getByRole('checkbox').check();await erase.click();await expect(page.getByRole('status')).toHaveText('账号已删除，当前浏览器资料已清除。');expect(deletionCalls).toBe(1);
+ await page.getByRole('button',{name:'返回登录',exact:true}).click();await expect(page.locator('#s-profile')).toBeVisible();expect(await page.evaluate(()=>localStorage.getItem('sensa:account-deletion'))).toBeNull();
+ await page.reload();await expect(page.locator('#s-profile')).toBeVisible();expect(Object.values(await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).every(rows=>rows.length===0)).toBe(true);
+});
+
+test('the shipped deletion recovers a lost response through the same receipt after reload',async({page,context})=>{
+ cloudManifest=null;cloudRevision=0;cloudBlocks.clear();await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.fallback():route.abort());
+ await page.goto(origin);await page.evaluate(({key,value})=>localStorage.setItem(key,JSON.stringify(value)),{key:storageKey,value:session()});await page.goto(origin+'/profile');await expect(page.locator('#s-profile')).toBeVisible();await page.evaluate(()=>window.__sensaBrowserSmoke!.seedDrafts(1,1));
+ await context.route('**/auth/v1/otp*',route=>route.fulfill({json:{}}));await context.route('**/auth/v1/verify',route=>route.fulfill({json:session()}));await context.route('**/auth/v1/logout*',route=>route.fulfill({status:204}));
+ let operationId='',calls=0;await context.route('**/sensa/account/deletion',async route=>{calls++;operationId=route.request().postDataJSON().operationId;await route.abort('failed');});
+ await context.route('**/sensa/account/deletion/status',async route=>{expect(route.request().postDataJSON().operationId).toBe(operationId);await route.fulfill({json:{state:'deletion_pending',operationId}});});
+ await page.locator('#settings-security').click();await page.getByRole('button',{name:'删除账号',exact:true}).click();await page.getByRole('checkbox').check();await page.getByRole('button',{name:'发送删除验证邮件',exact:true}).click();await page.getByRole('button',{name:'邮件中有验证码？',exact:true}).click();await page.getByLabel('邮箱验证码', {exact:true}).fill('123456');await page.getByRole('button',{name:'验证并继续',exact:true}).click();await expect(page.getByRole('status')).toHaveText('已验证邮箱。请再次确认后删除账号。');
+ await page.getByRole('button',{name:'验证并删除账号',exact:true}).click();await expect(page.getByRole('alert')).toBeVisible();await page.reload();await expect(page.getByRole('button',{name:'检查删除进度',exact:true})).toBeVisible();await page.getByRole('button',{name:'检查删除进度',exact:true}).click();await expect(page.getByRole('status')).toHaveText(/账号访问已停止/);expect(calls).toBe(1);
+ await page.getByRole('button',{name:'暂时离开',exact:true}).click();await expect(page.locator('#s-profile')).toBeVisible();expect(Object.values(await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).every(rows=>rows.length===0)).toBe(true);
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('sensa:account-deletion')!).operationId)).toBe(operationId);
+ await page.locator('#settings-security').click();await page.getByRole('button',{name:'检查删除进度',exact:true}).click();await expect(page.getByRole('button',{name:'检查删除进度',exact:true})).toBeVisible();
+ await context.route('**/sensa/account/deletion/status',route=>route.fulfill({json:{state:'deleted',operationId}}));await page.getByRole('button',{name:'检查删除进度',exact:true}).click();await expect(page.getByRole('status')).toContainText('账号已删除');expect(calls).toBe(1);await page.getByRole('button',{name:'返回登录',exact:true}).click();await expect(page.locator('#s-profile')).toBeVisible();expect(await page.evaluate(()=>localStorage.getItem('sensa:account-deletion'))).toBeNull();
+});
+
 test('the shipped account pages clear only this browser and offline reload stays empty until explicit sync',async({page,context},testInfo)=>{
  cloudManifest=null;cloudRevision=0;cloudBlocks.clear();
  await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.fallback():route.abort());

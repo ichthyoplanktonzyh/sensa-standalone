@@ -1,13 +1,14 @@
 import type {DatabaseExecutor} from '../../database/index.js';
 import {ConsumerError,type ConsumerPrincipal} from './auth.js';
 export type DeleteIdentity=(subject:string,issuer:string)=>Promise<void>;
+const deletionKey=()=>process.env.SUPABASE_SECRET_KEY||process.env.SUPABASE_SERVICE_ROLE_KEY;
 export function assertDeletionConfigured(){
- if(!process.env.SUPABASE_SERVICE_ROLE_KEY||!/^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/.test(process.env.SUPABASE_URL??''))throw new ConsumerError(503,'account_deletion_not_configured');
+ if(!deletionKey()||!/^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/.test(process.env.SUPABASE_URL??''))throw new ConsumerError(503,'account_deletion_not_configured');
 }
 export const deleteHostedIdentity:DeleteIdentity=async(subject,issuer)=>{
- const url=process.env.SUPABASE_URL?.replace(/\/$/,''),key=process.env.SUPABASE_SERVICE_ROLE_KEY;
+ const url=process.env.SUPABASE_URL?.replace(/\/$/,''),key=deletionKey();
  if(!url||!key||issuer!==url+'/auth/v1'||!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(url)||!/^[a-f0-9-]{36}$/i.test(subject))throw new ConsumerError(503,'account_deletion_not_configured');
- const response=await fetch(url+'/auth/v1/admin/users/'+encodeURIComponent(subject),{method:'DELETE',headers:{apikey:key,authorization:'Bearer '+key,'content-type':'application/json'},body:JSON.stringify({should_soft_delete:false}),redirect:'error',signal:AbortSignal.timeout(15000)});
+ const response=await fetch(url+'/auth/v1/admin/users/'+encodeURIComponent(subject),{method:'DELETE',headers:{apikey:key,...(key.startsWith('sb_secret_')?{}:{authorization:'Bearer '+key}),'content-type':'application/json'},body:JSON.stringify({should_soft_delete:false}),redirect:'error',signal:AbortSignal.timeout(15000)});
  if(!response.ok&&response.status!==404)throw new ConsumerError(503,'account_deletion_pending');
 };
 type Transaction=<T>(work:(db:DatabaseExecutor)=>Promise<T>)=>Promise<T>;

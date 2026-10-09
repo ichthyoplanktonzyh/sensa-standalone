@@ -31,7 +31,7 @@ const storageRecoveryCodes=new Set(['localFlow.storageOpen','localFlow.storageWr
 /** Authentication is an online-service boundary, not a consumer sync bootstrap. */
 export default function AccountExperience({children,onReturnToLanding}:{children:ReactNode;onReturnToLanding?:()=>void}){
  const {t}=useTranslation();
- const [deletionOpen,setDeletionOpen]=useState(()=>!!pendingAccountDeletion());const deletionRef=useRef(deletionOpen);deletionRef.current=deletionOpen;
+ const [deletionOpen,setDeletionOpen]=useState(()=>{const pending=pendingAccountDeletion();return !!pending&&!pending.dismissed;});const deletionRef=useRef(deletionOpen);deletionRef.current=deletionOpen;
  const [ready,setReady]=useState(false),[local,setLocal]=useState(false),[loginOpen,setLoginOpen]=useState(false),[onlineService,setOnlineService]=useState(false),[connectionConflict,setConnectionConflict]=useState(false);
  const [publisherAccess,setPublisherAccess]=useState(false);
  const [libraryMissing,setLibraryMissing]=useState(false);
@@ -125,9 +125,10 @@ export default function AccountExperience({children,onReturnToLanding}:{children
    let access:{authorized:true;accountId:string;capabilities?:{publishLearningContent:boolean}};
    if(guestAdmission)access={authorized:true,accountId:guestAdmission.accountId,capabilities:{publishLearningContent:guestAdmission.publisherAccess}};
    else{
+    const deletionScope=await import('../../data/library/dataControl').then(module=>module.accountDeletionLocalScope(session.user.id));
     const response=await fetch(endpoint.replace(/\/+$/,'')+'/sensa/web/access/session',{method:'POST',headers:{authorization:'Bearer '+session.access_token,'content-type':'application/json'},body:JSON.stringify({installationId}),signal:AbortSignal.timeout(15000),redirect:'error'});
     if(gen!==generation.current)return;
-    if(!response.ok){setOnlineService(false);if(needsInitialRestore)setLibraryAvailability('failed');const failure=await response.json().catch(()=>({}));if(failure.code==='account_deleted'){await import('../../data/library/dataControl').then(module=>module.eraseDeletedAccount(session.user.id));setLocal(false);setNotice(localFlowText('deleteDone'));await auth?.signOut({scope:'local'});return;}setNotice(response.status===403?localFlowText('contactSupport'):localFlowText('serviceRetry'));return;}
+    if(!response.ok){setOnlineService(false);if(needsInitialRestore)setLibraryAvailability('failed');const failure=await response.json().catch(()=>({}));if(failure.code==='account_deleted'){await import('../../data/library/dataControl').then(module=>module.eraseDeletedAccount(session.user.id,deletionScope));if(gen!==generation.current)return;setLocal(false);setNotice(localFlowText('deleteDone'));return;}setNotice(response.status===403?localFlowText('contactSupport'):localFlowText('serviceRetry'));return;}
     access=z.object({
      authorized:z.literal(true),
      accountId:z.string().uuid(),

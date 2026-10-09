@@ -18,3 +18,7 @@ test('provider rejection cannot become a fresh successful callback proof',async(
  expect(await callback.completeEmailLink('before')).toBe('failed');expect(await callback.completeEmailLink('after')).toBe('failed');
  expect(callback.emailLinkSignoutEpoch()).toBe('before');expect(exchange.calls).toBe(1);
 });
+test('error-only mail callbacks are detected and scrubbed before retry',async()=>{
+ window.location.href='https://sensa.fixture.invalid/profile?error=access_denied&error_code=otp_expired&error_description=fixture';
+ const callback=await import('../../../apps/web/src/data/consumer/emailLink');expect(callback.emailLinkCallbackPresent()).toBe(true);expect(await callback.completeEmailLink(null)).toBe('failed');expect(exchange.calls).toBe(0);expect(window.history.replaceState).toHaveBeenCalledWith(window.history.state,'','/profile');
+});

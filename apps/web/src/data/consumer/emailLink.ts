@@ -14,6 +14,10 @@ type CallbackResult='none'|'signed-in'|'failed';
 let completion:Promise<CallbackResult>|undefined;
 let callbackSignoutEpoch:string|null|undefined;
 export const emailLinkSignoutEpoch=()=>callbackSignoutEpoch;
+export function emailLinkCallbackPresent():boolean{
+ const url=new URL(window.location.href),fragment=new URLSearchParams(url.hash.slice(1));
+ return url.searchParams.has('code')||['error','error_code','access_token','refresh_token'].some(key=>url.searchParams.has(key)||fragment.has(key));
+}
 /** One exchange per page, including StrictMode and concurrent recovery events.
  * The SDK validates the browser's PKCE verifier; URL tokens are never trusted.
  */
