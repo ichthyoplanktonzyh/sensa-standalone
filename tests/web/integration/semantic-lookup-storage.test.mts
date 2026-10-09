@@ -231,12 +231,59 @@ test('missing derived table with a current metadata version rebuilds without rew
  try{
   const state=await fixture();database.commit({clears:[],deletes:[],puts:rows(state),contentRevision:1});
   const facts=database.entries('semanticMeanings'),registry=database.entries('semanticRegistry');
-  for(const table of ['search','grams']){
+  for(const table of ['search','documents']){
    raw.exec(`DROP TABLE sensa_meaning_lookup_${table}`);
    database=new SqliteRecordDatabase(sqlite,raw,'memory');database.initialize();
    expect(database.lookupMeanings('borrow').meanings).toHaveLength(1);expect(database.lookupMeanings('临').meanings).toHaveLength(1);
   }
   expect(database.entries('semanticMeanings')).toEqual(facts);expect(database.entries('semanticRegistry')).toEqual(registry);
+ }finally{database.close();}
+});
+
+test('retiring short-character posting caches is atomic and preserves facts and literal search',async()=>{
+ const raw=new sqlite.oo1.DB(':memory:');let database=new SqliteRecordDatabase(sqlite,raw,'memory');database.initialize();
+ try{
+  const state=await fixture();database.commit({clears:[],deletes:[],puts:rows(state),contentRevision:1});
+  const facts=database.entries('semanticMeanings'),registry=database.entries('semanticRegistry');
+  const terms=['borrow','临','临时','%','_','龘','😀'];
+  const before=terms.map(query=>({lookup:database.lookupMeanings(query),world:database.worldBrowse({query,filter:'all',offset:0,limit:20})}));
+  // Disposable prior-version cache marker/table, not a fabricated source fact.
+  raw.exec(`CREATE TABLE sensa_meaning_lookup_grams(gram TEXT NOT NULL,document_id INTEGER NOT NULL,PRIMARY KEY(gram,document_id)) WITHOUT ROWID;
+   CREATE TABLE sensa_world_browse_grams(gram TEXT NOT NULL,document_id INTEGER NOT NULL,PRIMARY KEY(gram,document_id)) WITHOUT ROWID;
+   INSERT INTO sensa_meaning_lookup_grams VALUES('临',1);INSERT INTO sensa_world_browse_grams VALUES('临',1);
+   UPDATE sensa_meaning_lookup_meta SET version=5;UPDATE sensa_world_browse_meta SET version=14;
+   CREATE TEMP TRIGGER fail_cache_rebuild BEFORE INSERT ON sensa_records BEGIN SELECT RAISE(ABORT,'unexpected_source_rewrite'); END;`);
+  const exec=raw.exec;
+  raw.exec=function(this:typeof raw,...args:Parameters<typeof exec>){
+   const input=args[0],sql=typeof input==='string'?input:input.sql;
+   if(typeof sql==='string'&&sql.includes('CREATE TABLE IF NOT EXISTS sensa_world_browse('))throw Error('injected_second_projection_failure');
+   return Reflect.apply(exec,this,args);
+  } as typeof raw.exec;
+  try{expect(()=>new SqliteRecordDatabase(sqlite,raw,'memory').initialize()).toThrow('injected_second_projection_failure');}finally{raw.exec=exec;}
+  expect(raw.selectValue('SELECT version FROM sensa_meaning_lookup_meta')).toBe(5);expect(raw.selectValue('SELECT version FROM sensa_world_browse_meta')).toBe(14);
+  expect(raw.selectValue('SELECT gram FROM sensa_meaning_lookup_grams')).toBe('临');expect(raw.selectValue('SELECT gram FROM sensa_world_browse_grams')).toBe('临');
+  expect(database.entries('semanticMeanings')).toEqual(facts);expect(database.entries('semanticRegistry')).toEqual(registry);
+  database=new SqliteRecordDatabase(sqlite,raw,'memory');database.initialize();
+  expect(raw.selectValue("SELECT count(*) FROM sqlite_schema WHERE name IN ('sensa_meaning_lookup_grams','sensa_world_browse_grams')")).toBe(0);
+  expect(database.entries('semanticMeanings')).toEqual(facts);expect(database.entries('semanticRegistry')).toEqual(registry);
+  expect(terms.map(query=>({lookup:database.lookupMeanings(query),world:database.worldBrowse({query,filter:'all',offset:0,limit:20})}))).toEqual(before);
+  raw.exec('DROP TRIGGER fail_cache_rebuild');
+ }finally{database.close();}
+});
+
+test('short literal SQL queries retain non-BMP, normalized and punctuation matches without reading source bodies',async()=>{
+ const raw=new sqlite.oo1.DB(':memory:'),database=new SqliteRecordDatabase(sqlite,raw,'memory');database.initialize();
+ try{
+  const state=await fixture();state.registry.senseVersions[0]!.semanticSpec.coreMeaningFocus='😀 ％ ＿ Ａ é " 临时';
+  database.commit({clears:[],deletes:[],puts:rows(state),contentRevision:1});
+  const get=database.get;database.get=()=>{throw Error('query hydrated source body');};
+  try{
+   for(const term of ['😀','％','%','＿','_','Ａ','a','é','e\u0301','"','临','临时']){
+    const result=database.lookupMeanings(term);expect(result.meanings.map(row=>row.senseVersionId),term).toEqual([state.registry.senseVersions[0]!.senseVersionId]);expect(result.truncated).toBe(false);
+    expect(database.worldBrowse({query:term,filter:'all',offset:0,limit:20}).total,term).toBe(1);
+   }
+   for(const term of ['龘','😁']){expect(database.lookupMeanings(term).meanings).toEqual([]);expect(database.worldBrowse({query:term,filter:'all',offset:0,limit:20}).total).toBe(0);}
+  }finally{database.get=get;}
  }finally{database.close();}
 });
 
@@ -294,7 +341,7 @@ test('all derived rows exclude learner labels, notes, raw Context and resolution
   const state=await fixture(),revision=state.meanings[0]!.personalMeaningRevisions[0]!;
   revision.displayLabel='secret-owner-label';revision.learnerIntentNote='secret-owner-intent';
   database.commit({clears:[],deletes:[],puts:rows(state)});
-  const stored=['versions','connections','dependencies','expressions','documents','grams','search','meta'].map(table=>raw.exec({sql:`SELECT * FROM sensa_meaning_lookup_${table}`,rowMode:'object',returnValue:'resultRows'}));
+  const stored=['versions','connections','dependencies','expressions','documents','search','meta'].map(table=>raw.exec({sql:`SELECT * FROM sensa_meaning_lookup_${table}`,rowMode:'object',returnValue:'resultRows'}));
   const encoded=JSON.stringify(stored);
   for(const privateText of ['secret-owner-label','secret-owner-intent','Private source','umbrella','private-provenance'])expect(encoded).not.toContain(privateText);
  }finally{database.close();}

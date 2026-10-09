@@ -195,6 +195,9 @@ Package key；运行恢复、策略锁定和生成频控通过领域索引查询
 不解析存储引用。共享 body 与 record／sync baseline 的直接 owner 关系同事务写入；只回收本次事务解除引用
 后确实无 owner 的 body，不在日常评分时扫描全部 body。同一无损压缩 envelope 也用于普通记录与基线，
 所有逻辑读取先还原精确字节；Registry scalar UDF、identity 冷重建／诊断及 supplemental 冷重建同样解包。
+可用时用标准 Uint8Array Base64 字节方法代替逐字节字符串转换；缺少方法的平台仍使用既有 btoa／atob 路径，
+不改变 envelope、压缩、长度预算或摘要校验，参见
+[原生字节转换规范](https://tc39.es/ecma262/multipage/indexed-collections.html#sec-uint8array.frombase64)。
 16／17→18 只在完整源结构上原子调整 sync baseline 的 B-tree 布局并推进版本；基线以普通 rowid 表保存较大正文，
 保留两列 NOT NULL 与复合唯一主键。影子表原样复制 value/ref 字节、交换表名并保留显式索引，与版本号同事务；
 不解码、重编码或改变源 facts／共享正文所有权，失败保留原版本、字节和索引。
@@ -404,6 +407,8 @@ incarnation fence，清除后的旧点击不能变成新授权。普通尝试失
 不能用增加容量、删除来源或丢弃旧学习引用替代这一审查。
 `SENSA_TEST_MEMORY_LIBRARY=true node --import tsx scripts/benchmarkMeaningRestore.mts --meanings=1000`
 可剖析正常 synchronizer 在 Node SQLite/Wasm 内存库上的暂存、校验、应用、各派生索引及 SQL 耗时；
+`--base64=legacy` 只在这个隔离 Node 进程内禁用原生方法以作同代码对照，默认 platform 仅报告实际可用能力。
+模式不进入产品设置或协议；CPU 采样、Node 时长不能代替未修改 Worker 的浏览器延迟。
 它不证明 OPFS、真实账号 UI、峰值内存或容量。`SENSA_RESTORE_SQL_PROFILE=true` 启用
 `replica-candidate-worker` 中的可选 Meaning Chromium/OPFS 诊断；包装仅存在于测试 Worker，
 与未修改生产 Worker 的 10k 恢复验收分开。`SENSA_RESTORE_PROFILE_MEANINGS` 仅允许 1000（默认）或 5000；
@@ -415,8 +420,14 @@ rowid 的主键自动索引也必须计入布局空间；采样 cache bytes 不�
 `node --import tsx scripts/benchmarkReplicaTableLayout.mts` 以相同真实 packed 值、有序 refs 和唯一键比较基线／
 候选正文的两种表布局；逐列核对值并报告含自动索引的 page type／payload／unused。
 该专用 Node SQLite/Wasm 内存诊断只证明页几何与原值保留，不证明 OPFS 时长、物理故障或峰值资源。
-索引写入将每条文档的短查询 gram 与每条记录的 UUID
-reservation 分别以 SQLite 集合写入；同一事务的 Meaning／Registry 更改只重建一次对应练习材料。
+搜索使用 SQLite FTS5 trigram；不足三个 Unicode 字符的查询通过 `instr` 匹配精简派生文本，不维护另一套
+逐字／双字 posting 表，也不解码 Meaning／Registry 聚合。短查询是随派生文本规模增长的 SQL 扫描，不能
+宣称常数复杂度；浏览器规模验收同时覆盖常见词与无匹配词，避免 LIMIT 提前退出掩盖最坏路径。
+旧 posting 表只作为可重建缓存随投影版本更新移除；源事实不变。UUID reservation 使用 SQLite 集合写入；
+同一事务的 Meaning／Registry 更改只重建一次对应练习材料。
+检索投影的 decoded Registry 引用只在一次同步 replace 内复用，LRU 同时限制 128 条与来源字符串的
+256 Ki 个 UTF-16 code units（含 key）；过大的单行不缓存。逐出／阴性缓存不改变已接受版本、依赖重建或来源事实，
+不保留整批 Registry 对象。该来源字符预算不是 decoded heap 或单个大事实的内存保证。
 v6 发布仍组装整份 key/block-ref manifest 元数据；它不再解码所有未变正文，但不能宣称整条路径严格 O(变化数)。
 完整恢复／收敛在同一 SQLite commit 应用已校验候选、对应基线和同步状态；基线或事实写入失败都回滚身份、
 资料及建库回执，不留下半恢复。应用前以捕获的本机 revision、identity、owner/incarnation 重查，提交后在写锁内

@@ -166,7 +166,7 @@ export async function seed(count:number){
   if(before.meanings.length)throw new Error('capacity fixture requires its own empty browser context');
   await repository.commit({before,after:state});console.log('semantic-lookup phase: fixture committed',performance.now()-started);return state.meanings.length;
 }
-export async function measureQueries(query='borrow-9999'){
+export async function measureQueries(query='borrow-9999',expectedEmpty=false){
   measuring=true;
   let previous=performance.now(),maxTimerGapMs=0;
   const timer=setInterval(()=>{const now=performance.now();maxTimerGapMs=Math.max(maxTimerGapMs,now-previous);previous=now;},10);
@@ -180,7 +180,7 @@ export async function measureQueries(query='borrow-9999'){
   const times:number[]=[];
   for(let index=0;index<50;index++){
     const start=performance.now(),result=await gateway.lookupMeanings(query);times.push(performance.now()-start);
-    if(!result.meanings.length||result.meanings.some(match=>!match.semanticSpec.coreMeaningFocus.includes(query)
+    if((expectedEmpty?result.meanings.length!==0:!result.meanings.length)||result.meanings.some(match=>!match.semanticSpec.coreMeaningFocus.includes(query)
       &&!match.expressions.some(expression=>expression.expression.includes(query))))throw new Error('capacity query returned the wrong fact');
     if(query.startsWith('borrow-')&&result.meanings[0]?.senseKey!==query)throw new Error('capacity query returned the wrong identity');
     if(index<3)console.log('semantic-lookup phase: warm query',index,times.at(-1));

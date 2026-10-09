@@ -39,7 +39,8 @@ const emit=(database:SqliteRecordDatabase,includePages=false)=>{
   settings={cacheSize:scalar('PRAGMA cache_size'),pageSize:scalar('PRAGMA page_size'),pageCount:scalar('PRAGMA page_count'),freePages:scalar('PRAGMA freelist_count'),synchronous:scalar('PRAGMA synchronous')};
   if(includePages)pages=raw.exec({sql:'SELECT name,pagetype,count(*) AS pages,sum(pgsize) AS bytes,sum(payload) AS payloadBytes,sum(unused) AS unusedBytes FROM dbstat GROUP BY name,pagetype ORDER BY name,pagetype',rowMode:'object',returnValue:'resultRows'});
  }catch(cause){diagnosticErrors.push(String(cause));}
- self.postMessage({sensaRestoreProfile:{phases,projections,reads,nativeCache,settings,pages,diagnosticErrors,execTimings:[...sql].sort((a,b)=>b[1].ms-a[1].ms).slice(0,25).map(([sql,metric])=>({sql,...metric}))}});
+ const base64={encode:typeof Reflect.get(Uint8Array.prototype,'toBase64')==='function',decode:typeof Reflect.get(Uint8Array,'fromBase64')==='function'};
+ self.postMessage({sensaRestoreProfile:{phases,projections,reads,nativeCache,settings,pages,base64,diagnosticErrors,execTimings:[...sql].sort((a,b)=>b[1].ms-a[1].ms).slice(0,25).map(([sql,metric])=>({sql,...metric}))}});
 };
 const instrumented=new WeakSet<object>(),initialize=SqliteRecordDatabase.prototype.initialize;
 SqliteRecordDatabase.prototype.initialize=function(){

@@ -26,14 +26,10 @@ CREATE TABLE IF NOT EXISTS sensa_meaning_lookup_expressions(
  sense_version_id TEXT NOT NULL,expression TEXT NOT NULL,language_tag TEXT NOT NULL,normalized_expression TEXT NOT NULL,
  reference_count INTEGER NOT NULL CHECK(reference_count>0),PRIMARY KEY(sense_version_id,language_tag,expression)
 ) WITHOUT ROWID;
-CREATE TABLE IF NOT EXISTS sensa_meaning_lookup_grams(
- gram TEXT NOT NULL,document_id INTEGER NOT NULL,PRIMARY KEY(gram,document_id)
-) WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS sensa_meaning_lookup_gram_document ON sensa_meaning_lookup_grams(document_id,gram);
 CREATE VIRTUAL TABLE IF NOT EXISTS sensa_meaning_lookup_search USING fts5(sense_version_id UNINDEXED,text,tokenize='trigram');
 CREATE TABLE IF NOT EXISTS sensa_meaning_lookup_meta(id INTEGER PRIMARY KEY CHECK(id=1),version INTEGER NOT NULL);
 `;
-export const meaningLookupProjectionVersion=5;
+export const meaningLookupProjectionVersion=6;
 const registryIds={senses:'senseId',senseVersions:'senseVersionId',expressions:'expressionId',expressionVersions:'expressionVersionId',bindings:'senseExpressionBindingId',bindingVersions:'bindingVersionId'} as const;
 function lookupFacts(encoded:string):MeaningLookupFacts{
   const wire=JSON.parse(encoded);
@@ -67,7 +63,7 @@ export class SqliteMeaningLookupProjection{
  close():void{for(const statement of this.statements.values())statement.finalize();this.statements.clear();}
  /** Replace only disposable derived tables, never learner records. Caller owns the transaction. */
  initialize():void{
-  const tables=['search','grams','documents','connections','dependencies','expressions','versions','meta'].map(name=>`sensa_meaning_lookup_${name}`);
+  const tables=['search','documents','connections','dependencies','expressions','versions','meta'].map(name=>`sensa_meaning_lookup_${name}`);
   const existing=this.rows("SELECT name FROM sqlite_schema WHERE type='table' AND name IN (SELECT value FROM json_each(?))",[JSON.stringify(tables)]);
   const complete=existing.length===tables.length;
   const current=complete&&this.rows('SELECT version FROM sensa_meaning_lookup_meta WHERE id=1')[0]?.version===meaningLookupProjectionVersion;
@@ -75,6 +71,7 @@ export class SqliteMeaningLookupProjection{
   if(!current){
    // No compatibility layer for an old cache. Rebuild from unchanged authoritative facts.
    for(const table of tables)this.write(`DROP TABLE IF EXISTS ${table}`);
+   this.write('DROP TABLE IF EXISTS sensa_meaning_lookup_grams');
   }
   this.database.exec(sqliteMeaningLookupSchema);
   if(!current)this.rebuild();
@@ -84,22 +81,20 @@ export class SqliteMeaningLookupProjection{
   if(existing){this.write('UPDATE sensa_meaning_lookup_documents SET reference_count=reference_count+1 WHERE id=?',[existing.id]);return;}
   const row=this.rows('INSERT INTO sensa_meaning_lookup_documents(sense_version_id,text,reference_count) VALUES(?,?,1) RETURNING id',[versionId,text])[0]!;
   this.write('INSERT INTO sensa_meaning_lookup_search(rowid,sense_version_id,text) VALUES(?,?,?)',[row.id,versionId,text]);
-  // FTS5 trigram cannot index one/two-codepoint queries. Compact postings keep
-  // Chinese short queries (and literal punctuation) off the full-text scan path.
-  const characters=Array.from(text),grams=new Set(characters);
-  for(let index=1;index<characters.length;index++)grams.add(characters[index-1]!+characters[index]!);
-  this.write('INSERT INTO sensa_meaning_lookup_grams SELECT value,? FROM json_each(?)',[row.id,JSON.stringify([...grams])]);
  }
  private releaseDocument(versionId:string,text:string):void{
   const row=this.rows('SELECT id,reference_count FROM sensa_meaning_lookup_documents WHERE sense_version_id=? AND text=?',[versionId,text])[0];
   if(!row)throw new Error('meaning_lookup_document_missing');
   if(row.reference_count>1){this.write('UPDATE sensa_meaning_lookup_documents SET reference_count=reference_count-1 WHERE id=?',[row.id]);return;}
   this.write('DELETE FROM sensa_meaning_lookup_search WHERE rowid=?',[row.id]);
-  this.write('DELETE FROM sensa_meaning_lookup_grams WHERE document_id=?',[row.id]);
   this.write('DELETE FROM sensa_meaning_lookup_documents WHERE id=?',[row.id]);
  }
  private replace(meanings:readonly string[]):void{
-  const registry=new Map<string,unknown>(),affected=new Set<string>();
+  // Reuse nearby immutable references within this source transaction, not a
+  // decoded copy of the entire imported Registry. Chars bound retained source
+  // representation, not the heap size of decoded objects or a large one-off row.
+  const registry=new Map<string,{value:unknown;chars:number}>(),affected=new Set<string>();
+  let registryChars=0;
   for(const meaningId of meanings){
    for(const row of this.rows('SELECT sense_version_id,expression,language_tag,normalized_expression,normalized_focus FROM sensa_meaning_lookup_connections WHERE meaning_id=?',[meaningId])){
     affected.add(row.sense_version_id);
@@ -116,11 +111,15 @@ export class SqliteMeaningLookupProjection{
    const dependencies=new Set<string>();
    const read:LookupRegistryRead=(kind,id)=>{
     const key=`${kind}:${id}`;dependencies.add(key);
-    if(!registry.has(key)){
-      const encoded=this.get('semanticRegistry',key),row=encoded?decodeBackupValue(JSON.parse(encoded)):undefined;
-      registry.set(key,row?.kind===kind&&row.value?.[registryIds[kind]]===id?row.value:undefined);
+    const cached=registry.get(key);
+    if(cached){registry.delete(key);registry.set(key,cached);return cached.value as never;}
+    const encoded=this.get('semanticRegistry',key),row=encoded?decodeBackupValue(JSON.parse(encoded)):undefined;
+    const value=row?.kind===kind&&row.value?.[registryIds[kind]]===id?row.value:undefined,chars=key.length+(encoded?.length??0);
+    if(chars<=256*1024){
+     while(registry.size>=128||registryChars+chars>256*1024){const oldest=registry.keys().next().value!;registryChars-=registry.get(oldest)!.chars;registry.delete(oldest);}
+     registry.set(key,{value,chars});registryChars+=chars;
     }
-    return registry.get(key) as never;
+    return value as never;
    };
    // Keep witnesses to missing versions too, so repair/reinsertion rebuilds the edge.
    for(const alignment of facts.alignments){read('senses',alignment.senseId);read('senseVersions',alignment.senseVersionId);}
@@ -157,7 +156,7 @@ export class SqliteMeaningLookupProjection{
   if(affected.size)this.replace([...affected]);
  }
  rebuild():void{
-  for(const table of ['connections','dependencies','versions','search','documents','expressions','grams'])this.write(`DELETE FROM sensa_meaning_lookup_${table}`);
+  for(const table of ['connections','dependencies','versions','search','documents','expressions'])this.write(`DELETE FROM sensa_meaning_lookup_${table}`);
   const ids=this.rows("SELECT record_key FROM sensa_records WHERE table_name='semanticMeanings' ORDER BY record_key").map(row=>row.record_key);
   this.replace(ids);
   this.write('INSERT INTO sensa_meaning_lookup_meta VALUES(1,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version',[meaningLookupProjectionVersion]);
@@ -167,8 +166,10 @@ export class SqliteMeaningLookupProjection{
   const quoted=`"${query.replaceAll('"','""')}"`;
   const candidates=long
     ?this.rows(`SELECT DISTINCT sense_version_id FROM sensa_meaning_lookup_search WHERE sensa_meaning_lookup_search MATCH ? AND instr(text,?)>0 LIMIT 33`,[quoted,query])
-    :this.rows(`SELECT DISTINCT document.sense_version_id FROM sensa_meaning_lookup_grams AS gram
-      JOIN sensa_meaning_lookup_documents AS document ON document.id=gram.document_id WHERE gram.gram=? LIMIT 33`,[query]);
+    // FTS5 MATCH needs three codepoints. Short literal queries inspect only
+    // compact derived text, not decoded Meaning/Registry aggregates. Keeping
+    // another posting row for every one/two-character slice amplifies writes.
+    :this.rows('SELECT DISTINCT sense_version_id FROM sensa_meaning_lookup_documents WHERE instr(text,?)>0 LIMIT 33',[query]);
   const result:MeaningLookupResult={meanings:[],truncated:candidates.length>32};
   for(const candidate of candidates.slice(0,32)){
    if(result.meanings.length===5){result.truncated=true;break;}

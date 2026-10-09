@@ -2,6 +2,7 @@
 import {test,expect} from 'vitest';
 import init from '@sqlite.org/sqlite-wasm';
 import {SqliteRecordDatabase} from '../../../apps/web/src/data/library/sqliteDatabase';
+import {SqliteMeaningLookupProjection} from '../../../apps/web/src/data/library/meaningLookupProjection';
 import {MemoryRecordAdapter} from '../../../apps/web/src/data/library/sqliteMemoryAdapter';
 import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec';
 import {MemoryJourneyRepository} from '../../../apps/web/src/experience/personalMeaningJourney/repository';
@@ -26,6 +27,47 @@ async function seed(){
  await modules.semanticIntake.submit(semanticLookupPayload());return {repository,modules,state:await repository.load()};
 }
 const query={query:'',filter:'all' as const,offset:0,limit:20};
+
+for(const budget of ['entry-count','source-chars','aggregate-source-chars'] as const)test(`public lookup reuses exact Registry facts after bounded-cache eviction (${budget})`,async()=>{
+ const raw=new sqlite.oo1.DB(':memory:'),database=new SqliteRecordDatabase(sqlite,raw,'memory');database.initialize();
+ let projection:SqliteMeaningLookupProjection|undefined;
+ try{
+  const world=syntheticSemanticWorld((await seed()).state,budget==='entry-count'?50:budget==='source-chars'?2:4),last=world.meanings.length-1,references=new Map<string,string>();
+  // The last independent Meaning confirms the first one's immutable Registry
+  // versions. This is a read/storage fixture, not a public intake command.
+  for(const kind of Object.keys(ids) as Array<keyof typeof ids>){const list=world.registry[kind] as unknown as Record<string,string>[];references.set(list.at(-1)![ids[kind]]!,list[0]![ids[kind]]!);list.pop();}
+  world.meanings[last]=JSON.parse(JSON.stringify(world.meanings[last],(_key,value)=>typeof value==='string'?references.get(value)??value:value));
+  const mutation={clears:[],deletes:[],puts:rows(world)} as SqliteMutation;
+  const firstKey=`senses:${world.registry.senses[0]!.senseId}`;
+  for(const row of mutation.puts){
+   // Valid JSON whitespace changes representation cost, not the source fact.
+   const padding=row.table==='semanticRegistry'?(budget==='source-chars'&&row.key===firstKey?256*1024:budget==='aggregate-source-chars'&&row.key.startsWith('senses:')?96*1024:0):0;
+   const encoded=' '.repeat(padding)+row.encodedValue;
+   raw.exec({sql:'INSERT INTO sensa_records(table_name,record_key,value_json,content_revision) VALUES(?,?,?,1)',bind:[row.table,row.key,encoded]});
+  }
+  const before=database.entries('semanticMeanings');let firstReads=0;
+  projection=new SqliteMeaningLookupProjection(raw,(table,key)=>{if(table==='semanticRegistry'&&key===firstKey)firstReads++;return database.get(table,key);});
+  projection.initialize();projection.update(mutation);
+  expect(firstReads).toBe(budget==='source-chars'?4:2);
+  const result=projection.query('借用编号0');expect(result.meanings).toHaveLength(1);expect(result.meanings[0]!.senseId).toBe(world.registry.senses[0]!.senseId);
+  expect(result.meanings[0]!.expressions).toMatchObject([{expression:'borrow-0',languageTag:'en'}]);
+  expect(database.entries('semanticMeanings')).toEqual(before);
+ }finally{projection?.close();database.close(false);}
+});
+
+test('lookup negative references are reused only within one transaction and explicit source repair rebuilds the same owner',async()=>{
+ const raw=new sqlite.oo1.DB(':memory:'),database=new SqliteRecordDatabase(sqlite,raw,'memory');database.initialize();let projection:SqliteMeaningLookupProjection|undefined;
+ try{
+  const state=(await seed()).state,mutation={clears:[],deletes:[],puts:rows(state)} as SqliteMutation,key=`senses:${state.registry.senses[0]!.senseId}`;
+  const missing=mutation.puts.find(row=>row.table==='semanticRegistry'&&row.key===key)!;
+  for(const row of mutation.puts)if(row!==missing)raw.exec({sql:'INSERT INTO sensa_records(table_name,record_key,value_json,content_revision) VALUES(?,?,?,1)',bind:[row.table,row.key,row.encodedValue]});
+  const before=database.entries('semanticMeanings');let reads=0;
+  projection=new SqliteMeaningLookupProjection(raw,(table,id)=>{if(table==='semanticRegistry'&&id===key)reads++;return database.get(table,id);});
+  projection.initialize();projection.update(mutation);expect(reads).toBe(1);expect(projection.query('临时').meanings).toEqual([]);
+  raw.exec({sql:'INSERT INTO sensa_records(table_name,record_key,value_json,content_revision) VALUES(?,?,?,2)',bind:[missing.table,key,missing.encodedValue]});
+  projection.update({clears:[],deletes:[],puts:[missing]});expect(reads).toBe(2);expect(projection.query('临时').meanings).toHaveLength(1);expect(database.entries('semanticMeanings')).toEqual(before);
+ }finally{projection?.close();database.close(false);}
+});
 
 test('a transaction changing Meaning and Registry derives practice material once per affected owner',async()=>{
  const raw=new sqlite.oo1.DB(':memory:'),database=new SqliteRecordDatabase(sqlite,raw,'memory');database.initialize();
@@ -115,7 +157,7 @@ test('a failed World-index write rolls back source facts and existing pages; mis
   raw.exec("CREATE TEMP TRIGGER reject_choice_delete BEFORE DELETE ON sensa_world_learning_choices BEGIN SELECT RAISE(ABORT,'fixture-choice-index-failure'); END;");
   expect(()=>database.commit({clears:[],deletes:[],puts:rows(deleteFirstMeaning(state)).filter(row=>row.table==='semanticMeanings'),contentRevision:2})).toThrow('fixture-choice-index-failure');
   expect(database.entries('semanticMeanings')).toEqual(source);expect(database.worldLearningChoices({...query,targetLanguageTag:'en'})).toEqual(choices);
-  raw.exec('DROP TRIGGER reject_choice_delete;DROP TABLE sensa_world_browse_grams;');
+  raw.exec('DROP TRIGGER reject_choice_delete;DROP TABLE sensa_world_browse_search;');
   // Initialization only replaces derived tables and their own metadata.
   new SqliteRecordDatabase(sqlite,raw,'memory').initialize();
   expect(database.worldBrowse(query)).toEqual(before);expect(database.entries('semanticMeanings')).toEqual(source);

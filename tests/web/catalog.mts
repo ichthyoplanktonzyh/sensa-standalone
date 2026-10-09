@@ -66,6 +66,7 @@ const foundationTests = [
   {id:'replica-candidate-worker',file:'tests/web/browser/replica-candidate-worker.spec.ts',kind:'integration',risks:['local-correctness','durability','scale'],environment:'chromium',suite:'browser',runner:'playwright'},
   {id:'library-sync-blocks',file:'tests/web/unit/library-sync-blocks.test.mts',kind:'unit',risks:['local-correctness','durability','scale'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'shared-learning-storage',file:'tests/web/integration/shared-learning-storage.test.mts',kind:'integration',risks:['local-correctness','durability','scale'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
+  {id:'stored-record-codec',file:'tests/web/unit/stored-record-codec.test.mts',kind:'unit',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'study-scope-storage',file:'tests/web/integration/study-scope-storage.test.mts',kind:'integration',risks:['local-correctness','durability','scale'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
   {id:'learning-target-view',file:'tests/web/unit/learning-target-view.test.mts',kind:'unit',risks:['local-correctness'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'scene-editor-read',file:'tests/web/unit/scene-editor-read.test.mts',kind:'unit',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},

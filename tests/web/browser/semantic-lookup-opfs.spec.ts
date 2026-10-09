@@ -322,16 +322,30 @@ test('10k OPFS connections keep first-after-write and warm lookup bounded withou
   expect(measured.count).toBe(1);expect(measured.warmP95Ms).toBeLessThan(100);
   expect(measured.firstQueryMs).toBeLessThan(500);
   expect(measured.maxTimerGapMs).toBeLessThan(100);
-  for(const query of ['临','临时']){
-    const short=await page.evaluate(query=>window.semanticLookupFixture.measureQueries(query),query);
+  for(const query of ['临','临时','龘','😀']){
+    const short=await page.evaluate(query=>window.semanticLookupFixture.measureQueries(query,query==='龘'||query==='😀'),query);
     console.log('Chromium / real OPFS / synthetic 10k / short query:',JSON.stringify({query,...short}));
-    expect(short.count).toBe(5);expect(short.truncated).toBe(true);
+    const matching=query==='临'||query==='临时';expect(short.count).toBe(matching?5:0);expect(short.truncated).toBe(matching);
     expect(short.firstQueryMs).toBeLessThan(500);expect(short.warmP95Ms).toBeLessThan(100);expect(short.maxTimerGapMs).toBeLessThan(100);
   }
   const worldRead=await page.evaluate(()=>window.semanticLookupFixture.measureWorldRead());
   console.log('Chromium / already-open real OPFS / synthetic 10k / first private World read (not UI paint):',JSON.stringify(worldRead));
   expect(worldRead.total).toBe(10_000);expect(worldRead.rows).toBe(40);
   expect(worldRead.firstPageMs).toBeLessThan(500);expect(worldRead.searchMs).toBeLessThan(100);expect(worldRead.detailMs).toBeLessThan(100);
+  // Common and absent short terms both exercise the compact SQL text scan;
+  // a LIMIT-only common-term test would hide the worst case for lookup.
+  for(const query of ['临','临时','龘','😀']){
+    const short=await page.evaluate(async query=>{
+      const samples:number[]=[];let total=0;
+      for(let sample=0;sample<12;sample++){
+        const started=performance.now();const result=await window.semanticLookupFixture.worldPage({query,filter:'all',offset:0,limit:40});
+        samples.push(performance.now()-started);total=result.total;
+      }
+      const firstMs=samples.shift()!;samples.sort((a,b)=>a-b);return {firstMs,warmP95Ms:samples[Math.ceil(samples.length*.95)-1]!,total};
+    },query);
+    console.log('Chromium / real OPFS / synthetic 10k / private World short query:',JSON.stringify({query,...short}));
+    expect(short.total).toBe(query==='临'||query==='临时'?10_000:0);expect(short.firstMs).toBeLessThan(500);expect(short.warmP95Ms).toBeLessThan(100);
+  }
   expect((await page.evaluate(()=>window.semanticLookupFixture.worldPage({query:'ＭＡＹ',filter:'all',offset:0,limit:40}))).total).toBe(10_000);
   const confirmation=await page.evaluate(()=>window.semanticLookupFixture.measureColdConfirmation());
   console.log('Chromium / real OPFS / synthetic 10k / first semantic acceptance / no model:',JSON.stringify(confirmation));

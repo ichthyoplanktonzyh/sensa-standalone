@@ -15,6 +15,13 @@ import {librarySyncBlockFetch} from '@sensa/contracts/sensa';
 const count=Number(process.argv.find(argument=>argument.startsWith('--meanings='))?.split('=')[1]??1000);
 assert(Number.isSafeInteger(count)&&count>0&&count<=10000,'Use --meanings=1..10000');
 assert.equal(process.env.SENSA_TEST_MEMORY_LIBRARY,'true','Explicitly enable isolated Node fixture storage');
+const base64Mode=process.argv.find(argument=>argument.startsWith('--base64='))?.split('=')[1]??'platform';
+assert(base64Mode==='platform'||base64Mode==='legacy','Use --base64=platform|legacy');
+if(base64Mode==='legacy'){
+ Object.defineProperty(Uint8Array.prototype,'toBase64',{configurable:true,value:undefined});
+ Object.defineProperty(Uint8Array,'fromBase64',{configurable:true,value:undefined});
+}
+const base64={mode:base64Mode,encode:typeof Reflect.get(Uint8Array.prototype,'toBase64')==='function',decode:typeof Reflect.get(Uint8Array,'fromBase64')==='function'};
 const repository=new MemoryJourneyRepository();
 await createJourneyModules({repository,clock:createSeededClock('2026-10-03T00:00:00Z')}).semanticIntake.submit(semanticLookupPayload());
 const world=syntheticSemanticWorld(await repository.load(),count),id=crypto.randomUUID();
@@ -63,5 +70,5 @@ try{
  const durationMs=performance.now()-started;
  assert.equal(database.count('semanticMeanings'),count);
  assert.equal(database.lookupMeanings('借用编号0').meanings.length,1);
- console.log(JSON.stringify({fixture:`${count} accepted synthetic Meanings, unique initial Registry; no media/history/corrections`,storage:'Node SQLite/Wasm memory, controlled in-process transport; NOT browser/OPFS/account UI',logicalBytes,durationMs,phases,projections,reads,execTimings:[...sql].sort((a,b)=>b[1].ms-a[1].ms).slice(0,25).map(([sql,metric])=>({sql,...metric})),paidCalls:0},null,2));
+ console.log(JSON.stringify({fixture:`${count} accepted synthetic Meanings, unique initial Registry; no media/history/corrections`,storage:'Node SQLite/Wasm memory, controlled in-process transport; NOT browser/OPFS/account UI',base64,logicalBytes,durationMs,phases,projections,reads,execTimings:[...sql].sort((a,b)=>b[1].ms-a[1].ms).slice(0,25).map(([sql,metric])=>({sql,...metric})),paidCalls:0},null,2));
 }finally{database.close();}

@@ -27,11 +27,9 @@ CREATE INDEX IF NOT EXISTS sensa_world_scene_meaning_owner ON sensa_world_scene_
 CREATE TABLE IF NOT EXISTS sensa_world_browse_dependencies(meaning_id TEXT NOT NULL,registry_key TEXT NOT NULL,PRIMARY KEY(meaning_id,registry_key)) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS sensa_world_browse_dependency_key ON sensa_world_browse_dependencies(registry_key,meaning_id);
 CREATE VIRTUAL TABLE IF NOT EXISTS sensa_world_browse_search USING fts5(text,tokenize='trigram');
-CREATE TABLE IF NOT EXISTS sensa_world_browse_grams(gram TEXT NOT NULL,document_id INTEGER NOT NULL,PRIMARY KEY(gram,document_id)) WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS sensa_world_browse_gram_document ON sensa_world_browse_grams(document_id,gram);
 CREATE TABLE IF NOT EXISTS sensa_world_browse_meta(id INTEGER PRIMARY KEY CHECK(id=1),version INTEGER NOT NULL);
 `;
-const version=14,tables=[...['search','grams','dependencies','meta',''].map(name=>`sensa_world_browse${name?'_'+name:''}`),'sensa_world_learning_choices','sensa_world_scene_meanings'];
+const version=15,tables=[...['search','dependencies','meta',''].map(name=>`sensa_world_browse${name?'_'+name:''}`),'sensa_world_learning_choices','sensa_world_scene_meanings'];
 type Row=Record<string,any>;
 export class SqliteWorldBrowseProjection{
  private statements=new Map<string,PreparedStatement>();
@@ -50,13 +48,13 @@ export class SqliteWorldBrowseProjection{
   const complete=this.rows("SELECT name FROM sqlite_schema WHERE type='table' AND name IN (SELECT value FROM json_each(?))",[JSON.stringify(tables)]).length===tables.length;
   const current=complete&&this.rows('SELECT version FROM sensa_world_browse_meta WHERE id=1')[0]?.version===version;
   if(current){ensureSqliteSchemaIndexes(this.database,schema);return;}
-  if(!current)for(const table of tables)this.write(`DROP TABLE IF EXISTS ${table}`);
+  if(!current){for(const table of tables)this.write(`DROP TABLE IF EXISTS ${table}`);this.write('DROP TABLE IF EXISTS sensa_world_browse_grams');}
   this.database.exec(schema);if(!current)this.rebuild();
  }
  private replace(ids:readonly string[]){
   for(const id of ids){
    const old=this.rows('SELECT id FROM sensa_world_browse WHERE meaning_id=?',[id])[0];
-   if(old){this.write('DELETE FROM sensa_world_browse_search WHERE rowid=?',[old.id]);this.write('DELETE FROM sensa_world_browse_grams WHERE document_id=?',[old.id]);}
+   if(old)this.write('DELETE FROM sensa_world_browse_search WHERE rowid=?',[old.id]);
    this.write('DELETE FROM sensa_world_browse WHERE meaning_id=?',[id]);this.write('DELETE FROM sensa_world_browse_dependencies WHERE meaning_id=?',[id]);
    this.write('DELETE FROM sensa_world_learning_choices WHERE meaning_id=?',[id]);
    this.write('DELETE FROM sensa_world_scene_meanings WHERE meaning_id=?',[id]);
@@ -79,8 +77,6 @@ export class SqliteWorldBrowseProjection{
     const row=this.rows('INSERT INTO sensa_world_browse(meaning_id,updated_at,formation,binding,valid,visible,status,summary_json,search_text) VALUES(?,?,?,?,1,?,?,?,?) RETURNING id',
      [id,summary.updatedAt,summary.senseFormation.phase,summary.expressionBinding.phase,visible?1:0,summary.status,JSON.stringify(summary),text])[0]!;
     this.write('INSERT INTO sensa_world_browse_search(rowid,text) VALUES(?,?)',[row.id,text]);
-    const characters=Array.from(text),grams=new Set(characters);for(let index=1;index<characters.length;index++)grams.add(characters[index-1]!+characters[index]!);
-    this.write('INSERT INTO sensa_world_browse_grams SELECT value,? FROM json_each(?)',[row.id,JSON.stringify([...grams])]);
     if(visible)for(const choice of choices)this.write('INSERT INTO sensa_world_learning_choices VALUES(?,?,?,?,?)',[choice.key,id,choice.targetLanguageTag,summary.updatedAt,JSON.stringify(choice)]);
    }else{
     // Record corruption is a visible read failure, never a fabricated empty
@@ -116,7 +112,7 @@ export class SqliteWorldBrowseProjection{
   }
   if(query.query){
    if(characters.length>=3){join='JOIN sensa_world_browse_search AS search ON search.rowid=world.id';clauses.push('sensa_world_browse_search MATCH ?','instr(world.search_text,?)>0');bind.push(`"${query.query.replaceAll('"','""')}"`,query.query);}
-   else{join='JOIN sensa_world_browse_grams AS gram ON gram.document_id=world.id';clauses.push('gram.gram=?');bind.push(query.query);}
+   else{clauses.push('instr(world.search_text,?)>0');bind.push(query.query);}
   }
   return {join,clauses,bind};
  }

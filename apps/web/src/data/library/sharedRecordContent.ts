@@ -53,10 +53,15 @@ export function expandSharedRecordContent(value:WireValue,read:(digest:string)=>
 
 
 const base64=(bytes:Uint8Array)=>{
+ const native=Reflect.get(Uint8Array.prototype,'toBase64');
+ if(typeof native==='function')return Reflect.apply(native,bytes,[]) as string;
  let text='';for(let offset=0;offset<bytes.length;offset+=16384)text+=String.fromCharCode(...bytes.subarray(offset,offset+16384));
  return btoa(text);
 };
-const unbase64=(text:string)=>Uint8Array.from(atob(text),character=>character.charCodeAt(0));
+const unbase64=(text:string):Uint8Array=>{
+ const native=Reflect.get(Uint8Array,'fromBase64');
+ return typeof native==='function'?Reflect.apply(native,Uint8Array,[text]):Uint8Array.from(atob(text),character=>character.charCodeAt(0));
+};
 
 /** Compress the remaining record framing, not instead of sharing its bodies.
  * Compression is private to the storage seam; its digest covers exact bytes. */
