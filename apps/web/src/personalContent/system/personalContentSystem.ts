@@ -1,6 +1,7 @@
 import { canonicalJsonDigest } from '@sensa/learning-kernel';
 
 import {
+  assertCurrentLibrary,
   command,
   observeLibrary,
   readLibrary,
@@ -43,6 +44,23 @@ export interface SenseNote {
   updatedAt: number;
 }
 
+export interface SenseNoteSnapshot {
+  readonly body: string;
+  /** Zero means no note has ever been saved; clearing retains the revision. */
+  readonly revision: number;
+}
+
+export class SenseNoteConflictError extends Error {
+  constructor(readonly current: SenseNoteSnapshot) {
+    super('personalContent.noteChanged');
+  }
+}
+
+export interface SenseNoteSaveResult {
+  readonly note: SenseNoteSnapshot;
+  readonly projectionUpdated: boolean;
+}
+
 export interface PersonalLearningSceneRevision {
   revisionId: string;
   revision: number;
@@ -71,6 +89,29 @@ export interface PersonalLearningScene {
   updatedAt: number;
 }
 
+/** The editor's exact read base, without copying media into command metadata. */
+export type PersonalLearningSceneEditBase = Readonly<{revisionId:string;contentDigest:string}> | null;
+
+export const personalLearningSceneEditBase = (scene:PersonalLearningScene|null):PersonalLearningSceneEditBase => {
+  const revision=scene?.revisions.find(row=>row.revision===scene.currentRevision);
+  return revision?{revisionId:revision.revisionId,contentDigest:canonicalJsonDigest({body:revision.body,media:revision.media})}:null;
+};
+
+export interface PersonalLearningSceneEditSnapshot {
+  readonly expected:PersonalLearningSceneEditBase;
+  readonly body:string;
+  readonly media:PersonalContentImage[];
+}
+
+export class PersonalLearningSceneConflictError extends Error {
+  constructor(readonly current:PersonalLearningSceneEditSnapshot|null) {super('personalContent.sceneChanged');}
+}
+
+export interface PersonalLearningSceneSaveResult {
+  readonly scene:PersonalLearningScene;
+  readonly projectionUpdated:boolean;
+}
+
 export type PersonalContentRecord =
   | SenseNote
   | Readonly<{
@@ -89,12 +130,14 @@ export type PersonalContentRecord =
   | PersonalLearningScene;
 
 export interface PersonalContentSnapshot {
+  readonly status: 'loading' | 'ready' | 'error';
   readonly savedSenseIds: ReadonlySet<string>;
   readonly savedExampleIds: ReadonlySet<string>;
   readonly senseNotes: Readonly<Record<string, string>>;
 }
 
 export interface PersonalSenseContent {
+  readonly status: 'loading' | 'ready' | 'error';
   readonly saved: boolean;
   readonly note: string;
   readonly contexts: readonly SenseContextNote[];
@@ -114,6 +157,8 @@ export type PersonalContentQueryResult<Query extends PersonalContentQuery> =
         : Query['kind'] extends 'sense_context' ? SenseContextNote | null
           : PersonalLearningScene | null;
 
+export type PersonalSceneQuery = Extract<PersonalContentQuery,{kind:'sense_context'|'learning_scene'}>;
+
 type SetSavedCommand = Readonly<{
   operationId: string;
   saved: boolean;
@@ -122,7 +167,7 @@ type SetSavedCommand = Readonly<{
 export type PersonalContentCommand =
   | (SetSavedCommand & Readonly<{ kind: 'set_saved_sense'; senseId: string }>)
   | (SetSavedCommand & Readonly<{ kind: 'set_saved_example'; exampleId: string }>)
-  | Readonly<{ kind: 'set_sense_note'; operationId: string; senseId: string; body: string }>
+  | Readonly<{ kind: 'set_sense_note'; operationId: string; senseId: string; body: string; expected: SenseNoteSnapshot }>
   | Readonly<{
       kind: 'save_sense_context';
       operationId: string;
@@ -142,6 +187,7 @@ export type PersonalContentCommand =
       bindingVersionId: string;
       body: string;
       media: readonly PersonalContentImage[];
+      expected: PersonalLearningSceneEditBase;
     }>
   | Readonly<{
       kind: 'mark_learning_scene_accepted';
@@ -153,15 +199,21 @@ export type PersonalContentCommand =
 
 export type PersonalContentCommandResult<Command extends PersonalContentCommand> =
   Command['kind'] extends 'set_saved_sense' | 'set_saved_example' ? boolean
-    : Command['kind'] extends 'set_sense_note' ? void
+    : Command['kind'] extends 'set_sense_note' ? SenseNoteSaveResult
       : Command['kind'] extends 'save_sense_context' ? string
-        : PersonalLearningScene;
+        : Command['kind'] extends 'save_learning_scene' ? PersonalLearningSceneSaveResult
+          : PersonalLearningScene;
 
 export interface PersonalContentSystem {
   execute<Command extends PersonalContentCommand>(
     command: Command,
   ): Promise<PersonalContentCommandResult<Command>>;
   read<Query extends PersonalContentQuery>(query: Query): PersonalContentQueryResult<Query>;
+  /** Load the exact edit base, not an initially empty or stale presentation cache. */
+  readSenseNote(senseId: string): Promise<SenseNoteSnapshot>;
+  /** An exact durable scene/context read; null means confirmed absence, never an unread cache. */
+  readScene<Query extends PersonalSceneQuery>(query:Query):Promise<PersonalContentQueryResult<Query>>;
+  refresh(): Promise<void>;
   subscribe(query: PersonalContentQuery, listener: () => void): () => void;
 }
 
@@ -172,7 +224,10 @@ export const personalLearningSceneRowId = (learningTargetId: string, languageRou
   rowId('learning_scene', `${learningTargetId}:${languageRouteId}`);
 
 let rows: readonly PersonalContentRecord[] = [];
+let rowsById = new Map<string,PersonalContentRecord>();
+let contextsBySense = new Map<string,SenseContextNote[]>();
 let loadRevision = 0;
+let readStatus: PersonalContentSnapshot['status'] = 'loading';
 let stopObserving: (() => void) | null = null;
 const listeners = new Set<() => void>();
 
@@ -184,9 +239,20 @@ const reloadQuietly = () => { void reload().catch(() => undefined); };
 
 async function reload() {
   const revision = ++loadRevision;
-  const next = await readLibrary((tx) => tx.all<PersonalContentRecord>('annotations'));
+  if(readStatus!=='loading'){readStatus='loading';notify();}
+  let next:PersonalContentRecord[];
+  try{next=await readLibrary((tx) => tx.all<PersonalContentRecord>('annotations'));}
+  catch(error){if(revision===loadRevision){readStatus='error';notify();}throw error;}
   if (revision !== loadRevision) return;
   rows = next;
+  rowsById=new Map(next.map(row=>[row.id,row]));
+  const grouped=new Map<string,SenseContextNote[]>();
+  for(const row of next)if(row.kind==='sense_context'){
+    const group=grouped.get(row.senseId)??[];group.push(row);grouped.set(row.senseId,group);
+  }
+  for(const group of grouped.values())group.sort((a,b)=>b.updatedAt-a.updatedAt);
+  contextsBySense=grouped;
+  readStatus='ready';
   notify();
 }
 
@@ -206,9 +272,7 @@ const subscribe = (listener: () => void) => {
 };
 
 const find = <K extends PersonalContentRecord['kind']>(kind: K, id: string) =>
-  rows.find((row): row is Extract<PersonalContentRecord, { kind: K }> => (
-    row.kind === kind && row.id === id
-  ));
+  {const row=rowsById.get(id);return row?.kind===kind?row as Extract<PersonalContentRecord,{kind:K}>:undefined;};
 
 const cloneImages = (media: readonly PersonalContentImage[]): PersonalContentImage[] =>
   structuredClone(media) as PersonalContentImage[];
@@ -220,32 +284,68 @@ const assertChangedPersonalContent = async (tx: LibraryTransaction) => {
 
 async function setSenseNote(input: Extract<PersonalContentCommand, { kind: 'set_sense_note' }>) {
   const senseId = input.senseId.trim();
-  if (!senseId) throw new Error('localFlow.annotationInvalid');
+  const expected = input.expected && {body: input.expected.body, revision: input.expected.revision};
+  if (!senseId || !expected || !Number.isSafeInteger(expected.revision) || expected.revision < 0
+    || typeof expected.body !== 'string' || expected.body.length > 1000) {
+    throw new Error('localFlow.annotationInvalid');
+  }
   const id = rowId('sense_note', senseId);
   const body = input.body.trim();
-  await command({
+  const note = await command({
     id: input.operationId,
     kind: 'personal_content.sense_note.set',
-    input: { senseId, clear: !body, contentDigest: canonicalJsonDigest(body) },
+    input: { senseId, expectedRevision: expected.revision, expectedContentDigest: canonicalJsonDigest(expected.body), clear: !body, contentDigest: canonicalJsonDigest(body) },
   }, async (tx) => {
     const current = await tx.get<SenseNote>('annotations', id);
-    if (!body) tx.delete('annotations', id);
-    else if (current?.body !== body) {
+    const revision = current?.revision ?? 0;
+    // An explicitly chosen Cloud fork can have the same revision number with
+    // different content. Compare the actual edit base, not just the counter.
+    if (revision !== expected.revision || (current?.body ?? '') !== expected.body) {
+      throw new SenseNoteConflictError({body: current?.body ?? '', revision});
+    }
+    if ((current?.body ?? '') !== body) {
       const now = Date.now();
       tx.put('annotations', id, {
         id,
         kind: 'sense_note',
         senseId,
         body,
-        revision: (current?.revision ?? 0) + 1,
+        revision: revision + 1,
         createdAt: current?.createdAt ?? now,
         updatedAt: now,
       } satisfies SenseNote);
+      await assertChangedPersonalContent(tx);
+      return {body, revision: revision + 1};
     }
-    await assertChangedPersonalContent(tx);
+    return {body, revision};
   });
-  await reload();
+  // A failed presentation read cannot turn a confirmed durable save into a
+  // failed write. The caller can offer a read retry without re-saving.
+  try {
+    await reload();
+    return {note, projectionUpdated: readStatus==='ready'};
+  } catch {
+    return {note, projectionUpdated: false};
+  }
 }
+
+const readSenseNote = (senseId: string): Promise<SenseNoteSnapshot> => readLibrary(async (tx) => {
+  const normalized = senseId.trim();
+  if (!normalized) throw new Error('localFlow.annotationInvalid');
+  await assertCurrentLibrary(tx);
+  const current = await tx.get<SenseNote>('annotations', rowId('sense_note', normalized));
+  return {body: current?.body ?? '', revision: current?.revision ?? 0};
+});
+
+const readScene = <Query extends PersonalSceneQuery>(query:Query):Promise<PersonalContentQueryResult<Query>> => {
+  const key=query.kind==='sense_context'?rowId('sense_context',query.contextId):personalLearningSceneRowId(query.learningTargetId,query.languageRouteId);
+  return readLibrary(async tx=>{
+    await assertCurrentLibrary(tx);
+    const current=await tx.get<SenseContextNote|PersonalLearningScene>('annotations',key);
+    if(current&&current.kind!==query.kind)throw Error('localFlow.annotationInvalid');
+    return (current??null) as PersonalContentQueryResult<Query>;
+  });
+};
 
 async function setSaved(
   kind: 'saved_sense' | 'saved_example',
@@ -314,6 +414,12 @@ async function saveSenseContext(
 async function saveLearningScene(
   input: Extract<PersonalContentCommand, { kind: 'save_learning_scene' }>,
 ) {
+  if(input.expected===undefined)throw new Error('localFlow.annotationInvalid');
+  // Capture one request before waiting on the transaction. Caller aliases
+  // cannot change either the receipt digest or the material that is committed.
+  input={...input,media:cloneImages(input.media),expected:input.expected&&{...input.expected}};
+  if(input.expected&&(typeof input.expected.revisionId!=='string'||!input.expected.revisionId
+    ||typeof input.expected.contentDigest!=='string'||!input.expected.contentDigest))throw new Error('localFlow.annotationInvalid');
   const body = input.body.trim();
   if (!body && input.media.length === 0) throw new Error('localFlow.annotationInvalid');
   const id = personalLearningSceneRowId(input.learningTargetId, input.languageRouteId);
@@ -327,6 +433,7 @@ async function saveLearningScene(
       senseId: input.senseId,
       senseVersionId: input.senseVersionId,
       bindingVersionId: input.bindingVersionId,
+      expected: input.expected,
       contentDigest: canonicalJsonDigest({ body, media: input.media }),
     },
   }, async (tx) => {
@@ -339,6 +446,9 @@ async function saveLearningScene(
       || current.bindingVersionId !== input.bindingVersionId
     )) throw new Error('localFlow.annotationInvalid');
     const currentValue = current?.revisions.find((revision) => revision.revision === current.currentRevision);
+    if(canonicalJsonDigest(personalLearningSceneEditBase(current??null))!==canonicalJsonDigest(input.expected)) {
+      throw new PersonalLearningSceneConflictError(currentValue?{expected:personalLearningSceneEditBase(current!),body:currentValue.body,media:cloneImages(currentValue.media)}:null);
+    }
     if (currentValue && canonicalJsonDigest({ body: currentValue.body, media: currentValue.media })
       === canonicalJsonDigest({ body, media: input.media })) return current;
     const now = Date.now();
@@ -370,8 +480,9 @@ async function saveLearningScene(
     await assertChangedPersonalContent(tx);
     return next;
   });
-  await reload();
-  return scene;
+  // A list refresh cannot undo the durable scene+receipt commit.
+  try {await reload();return {scene,projectionUpdated:readStatus==='ready'};}
+  catch {return {scene,projectionUpdated:false};}
 }
 
 async function markLearningSceneAccepted(
@@ -409,18 +520,18 @@ const read = <Query extends PersonalContentQuery>(
   switch (query.kind) {
     case 'snapshot':
       result = {
+        status: readStatus,
         savedSenseIds: new Set(rows.flatMap((row) => row.kind === 'saved_sense' ? [row.senseId] : [])),
         savedExampleIds: new Set(rows.flatMap((row) => row.kind === 'saved_example' ? [row.exampleId] : [])),
-        senseNotes: Object.fromEntries(rows.flatMap((row) => row.kind === 'sense_note' ? [[row.senseId, row.body]] : [])),
+        senseNotes: Object.fromEntries(rows.flatMap((row) => row.kind === 'sense_note' && row.body ? [[row.senseId, row.body]] : [])),
       } satisfies PersonalContentSnapshot;
       break;
     case 'sense':
       result = {
+        status: readStatus,
         saved: !!find('saved_sense', rowId('saved_sense', query.senseId.trim())),
         note: find('sense_note', rowId('sense_note', query.senseId.trim()))?.body ?? '',
-        contexts: rows
-          .flatMap((row) => row.kind === 'sense_context' && row.senseId === query.senseId ? [row] : [])
-          .sort((left, right) => right.updatedAt - left.updatedAt),
+        contexts: [...(contextsBySense.get(query.senseId)??[])],
       } satisfies PersonalSenseContent;
       break;
     case 'example':
@@ -462,6 +573,9 @@ export const personalContentSystem: PersonalContentSystem = {
     }
   }) as PersonalContentSystem['execute'],
   read,
+  readSenseNote,
+  readScene,
+  refresh: reload,
   subscribe: (_query, listener) => subscribe(listener),
 };
 

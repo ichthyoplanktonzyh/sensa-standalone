@@ -5,11 +5,12 @@ import {learningResourceLabel} from '../../../i18n/resourceLabel';
 import {RichExperience} from './RichExperience';
 
 /** Shared renderer for resource details and supplementary reveal material. */
-export function LearningResource({resource}:{resource:SensaMaterializedResource}) {
+export function LearningResource({resource,meaningPresentation}:{resource:SensaMaterializedResource;meaningPresentation?:string}) {
  useTranslation();
  const definition=learningResourceDefinition(resource.materialRoleKey);
  if(!definition)throw new Error(`Unsupported learning resource: ${resource.materialRoleKey}`);
- const payload=definition.schema.parse(resource.contentPayload) as Record<string,unknown>;
+ const savedPayload=definition.schema.parse(resource.contentPayload) as Record<string,unknown>;
+ const payload=resource.materialRoleKey==='sense_confirmation'&&meaningPresentation?{...savedPayload,meaning:meaningPresentation}:savedPayload;
  const kindLabels={word:'resourceWord',phrase:'resourcePhrase',construction:'resourceConstruction',utterance:'resourceUtterance',sentence:'resourceSentence'} as const;
  const label=learningResourceLabel(resource.materialRoleKey);
  return <section aria-label={label} className="space-y-2"><h4 className="text-sm font-medium text-fg-secondary">{label}</h4>

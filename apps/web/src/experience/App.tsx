@@ -10,9 +10,12 @@ import type {ContentNoteItem,SavedExampleItem} from '../learnerSemanticProjectio
 import {useShellNavigation} from './router/useShellNavigation';
 import {screenInstanceKey} from './router/shellLocation';
 import {shellScreenHost,type AppShellScreenId} from './router/screenRegistry';
+import {useAccountExperience} from './account/AccountContext';
+import {LibraryRestorationScreen} from './account/LibraryRestorationScreen';
 import {useOverlayStore} from './stores/overlayStore';
 
 const HomeLearningController=lazy(()=>import('./library/HomeLearningController').then(module=>({default:module.HomeLearningController})));
+const PracticeWorkspace=lazy(()=>import('./PracticeWorkspace').then(module=>({default:module.PracticeWorkspace})));
 const LearningWorkspace=lazy(async()=>{
  const [module]=await Promise.all([
   import('./library/LearningWorkspace'),
@@ -20,10 +23,11 @@ const LearningWorkspace=lazy(async()=>{
  ]);
  return {default:module.LearningWorkspace};
 });
-const PersonalMeaningDetailScreen=lazy(()=>import('./components/PersonalMeaningDetailScreen').then(module=>({default:module.PersonalMeaningDetailScreen})));
 const ExpressionBindingScreen=lazy(()=>import('./components/ExpressionBindingScreen').then(module=>({default:module.ExpressionBindingScreen})));
 const ContentLibraryScreen=lazy(()=>import('./components/ContentLibraryScreen').then(module=>({default:module.ContentLibraryScreen})));
 const ContentSenseDetailScreen=lazy(()=>import('./components/ContentSenseDetailScreen').then(module=>({default:module.ContentSenseDetailScreen})));
+const ContentLearningDetailScreen=lazy(()=>import('./components/ContentLearningDetailScreen').then(module=>({default:module.ContentLearningDetailScreen})));
+const ContentPersonalReferenceDetailScreen=lazy(()=>import('./components/ContentPersonalReferenceDetailScreen').then(module=>({default:module.ContentPersonalReferenceDetailScreen})));
 const ContentExampleDetailScreen=lazy(()=>import('./components/ContentExampleDetailScreen').then(module=>({default:module.ContentExampleDetailScreen})));
 const ContentComingSoonScreen=lazy(()=>import('./components/ContentComingSoonScreen').then(module=>({default:module.ContentComingSoonScreen})));
 const ReferenceDictionaryScreen=lazy(()=>import('./components/ReferenceDictionaryScreen').then(module=>({default:module.ReferenceDictionaryScreen})));
@@ -35,17 +39,17 @@ type AppScreenId=AppShellScreenId|'s-home';
 
 export default function App(){
  const {t}=useTranslation();
- const {viewMode,mainStack,params,goMain,backMain,setMainStack}=useShellNavigation();
+ const account=useAccountExperience();
+ const {viewMode,mainStack,params,goMain,backMain,setMainStack,leaveRuntime}=useShellNavigation();
  const contentSection:ContentSectionId=isContentSectionId(params.section)?params.section:'recent';
  const contentComingKind:'scenes'|'collections'=params.coming==='collections'?'collections':'scenes';
  const personalMeaningId=params.meaningId??null;
  const meaningFocusId=params.focusId??null;
- const openContentSense=useCallback((item:PracticeSenseItem)=>goMain('s-content-sense',{senseId:item.senseId}),[goMain]);
- const openPersonalMeaning=useCallback((meaningId:string,focusId?:string)=>goMain('s-personal-meaning',{meaningId,focusId}),[goMain]);
- const openConfirmedSense=useCallback((meaningId:string,focusId:string)=>goMain('s-confirmed-sense',{meaningId,focusId}),[goMain]);
+ const openContentSense=useCallback((item:PracticeSenseItem)=>goMain('s-content-sense',{senseId:item.senseId,targetId:undefined,meaningId:undefined,alignmentId:undefined}),[goMain]);
  const openContentExample=useCallback((item:PracticeSenseItem)=>goMain('s-content-example',{exampleId:item.senseId}),[goMain]);
 
  const dictModalWord=useOverlayStore(state=>state.dictModalWord);
+ const dictModalLanguages=useOverlayStore(state=>state.dictModalLanguages);
  const referenceExampleDeck=useOverlayStore(state=>state.referenceExampleDeck);
  const openDictModal=useOverlayStore(state=>state.openDictModal);
  const closeDictModal=useOverlayStore(state=>state.closeDictModal);
@@ -61,37 +65,37 @@ export default function App(){
 
  const currentScreen=mainStack.at(-1)??'s-home';
  const learningWorkspaceActive=viewMode==='lightweight'||shellScreenHost(currentScreen)==='learning';
- const hostedScreenKey=learningWorkspaceActive?'learning-workspace':screenInstanceKey(currentScreen,params);
+ const practiceWorkspaceActive=viewMode==='main'&&shellScreenHost(currentScreen)==='practice';
+ const hostedScreenKey=learningWorkspaceActive?'learning-workspace':practiceWorkspaceActive?'practice-workspace':screenInstanceKey(currentScreen,params);
  const overlayOpen=!!dictModalWord||!!referenceExampleDeck||!!noteModalWord||!!sceneEditorTarget;
  const baseActive=!overlayOpen;
  const appScreenRenderers:Record<AppScreenId,(active:boolean)=>ReactNode>={
   's-home':active=><HomeLearningController active={active}/>,
-  's-personal-meaning':active=><PersonalMeaningDetailScreen
-    key={personalMeaningId} active={active} personalMeaningId={personalMeaningId}
-    onConversationCreated={openPersonalMeaning} onBack={backMain}
-    onOpenConfirmedSense={openConfirmedSense} toast={toast}/>,
   's-expression-binding':active=><ExpressionBindingScreen
     active={active} personalMeaningId={personalMeaningId} meaningFocusId={meaningFocusId}
     onBack={backMain} toast={toast}/>,
   's-content-library':active=><ContentLibraryScreen
-    active={active} section={contentSection} onBack={backMain} onOpenSense={openContentSense}
+    active={active} section={contentSection} onBack={backMain}
+    onOpenReference={item=>{if(item.kind==='practice')openContentSense(item.practice);else if(item.kind==='personal_meaning'){if((item.historical||item.primary===false)&&item.personalMeaningAlignmentId)goMain('s-content-sense',{meaningId:item.personalMeaningId,alignmentId:item.personalMeaningAlignmentId,targetId:undefined,senseId:undefined});else goMain('s-personal-meaning',{meaningId:item.personalMeaningId,alignmentId:undefined});}else goMain('s-content-sense',{targetId:item.targetId,senseId:undefined,meaningId:undefined,alignmentId:undefined});}}
     onOpenExample={(entry:SavedExampleItem)=>openContentExample(entry.sense)}
-    onEditNote={(entry:ContentNoteItem)=>openNoteEditor(entry.sense.sourceWord,entry.sense.senseId,entry.sense.meaning)}/>,
-  's-content-sense':active=><ContentSenseDetailScreen
+    onEditNote={(entry:ContentNoteItem)=>openNoteEditor(entry.reference.kind==='practice'?entry.reference.practice.sourceWord:entry.word,entry.reference.senseId,entry.reference.meaning)}/>,
+  's-content-sense':active=>params.meaningId&&params.alignmentId?<ContentPersonalReferenceDetailScreen active={active} meaningId={params.meaningId} alignmentId={params.alignmentId} onBack={backMain} onEditNote={openNoteEditor} toast={toast}/>:params.targetId?<ContentLearningDetailScreen active={active} targetId={params.targetId} onBack={backMain} onEditNote={openNoteEditor} toast={toast}/>:<ContentSenseDetailScreen
     active={active} senseId={params.senseId??null} onBack={backMain} onOpenExample={openContentExample}
-    onOpenSense={item=>goMain('s-content-sense',{senseId:item.senseId})}
-    onOpenDictionary={item=>openDictModal(item.sourceWord)}
+    onOpenSense={openContentSense}
+    onOpenDictionary={item=>openDictModal(item.sourceWord,item.referenceLanguages)}
     onEditNote={item=>openNoteEditor(item.sourceWord,item.senseId,item.meaning)} toast={toast}/>,
   's-content-example':active=><ContentExampleDetailScreen
     active={active} exampleId={params.exampleId??null} onBack={backMain}
     onOpenSense={item=>{
      const nextStack=mainStack.includes('s-content-sense')?mainStack.slice(0,-1):[...mainStack.slice(0,-1),'s-content-sense'];
-     setMainStack(nextStack,{senseId:item.senseId});
+     setMainStack(nextStack,{senseId:item.senseId,targetId:undefined,meaningId:undefined,alignmentId:undefined});
     }} toast={toast}/>,
   's-content-coming':active=><ContentComingSoonScreen active={active} kind={contentComingKind} onBack={backMain}/>,
  };
  const renderScreen=(active:boolean)=>{
+  if(account.libraryAvailability!=='authoritative'&&!['s-profile','s-publisher'].includes(currentScreen))return <LibraryRestorationScreen id={currentScreen} active={active} failed={account.libraryAvailability==='failed'} onRetry={account.retryConnection} onSettings={()=>leaveRuntime('s-profile')}/>;
   if(learningWorkspaceActive)return <LearningWorkspace active={active}/>;
+  if(practiceWorkspaceActive)return <PracticeWorkspace active={active}/>;
   return appScreenRenderers[currentScreen as AppScreenId]?.(active)??null;
  };
  const fallback=<section id={currentScreen} className="screen active absolute inset-0 grid place-content-center bg-surface-canvas text-fg-primary" role="status">{t('reliability.loading')}</section>;
@@ -103,10 +107,11 @@ export default function App(){
     </ScreenHost>
     <EdgeSwipeBack enabled={viewMode==='main'&&mainStack.length>0&&!overlayOpen} onBack={backMain}/>
     <Suspense fallback={null}>
-    {dictModalWord&&<ReferenceDictionaryScreen active={!referenceExampleDeck} wordData={dictModalWord} onClose={closeDictModal} onOpenExamples={setReferenceExampleDeck}/>}
+    {dictModalWord&&<ReferenceDictionaryScreen active={!referenceExampleDeck} wordData={dictModalWord} languages={dictModalLanguages??undefined} onClose={closeDictModal} onOpenExamples={setReferenceExampleDeck}/>}
     {referenceExampleDeck&&<ReferenceExampleViewer active deck={referenceExampleDeck} onClose={()=>setReferenceExampleDeck(null)}/>}
     {noteModalWord&&noteModalSense&&<NoteEditorModal active wordData={noteModalWord} senseId={noteModalSense.senseId} senseMeaning={noteModalSense.meaning} onClose={closeNoteEditor} toast={toast}/>}
     {sceneEditorTarget&&<SceneEditorModal
+      key={JSON.stringify([sceneEditorTarget.content.senseKey,sceneEditorTarget.contextId??null,sceneEditorTarget.learningTarget?.learningTargetId??null,sceneEditorTarget.learningTarget?.languageRouteId??null])}
       active
       senseId={sceneEditorTarget.content.senseKey}
       word={sceneEditorTarget.content.lemma}

@@ -76,6 +76,10 @@ Personal Meaning 是稳定的 learner-owned identity，表示 learner 直接或�
 它的原始个人来源。删除稳定 identity 必须保留 Personal Semantic Tombstone、已有 revisions 与
 provenance，不能通过物理移除记录表达。离线旧副本不得让 tombstone 对象复活；删除与同一对象的并发
 编辑必须成为显式冲突，而不是依赖设备时间戳选择一端。
+删除采用可恢复移除：用户可明确恢复同一 identity；删除和恢复各自追加不可变 revision 中的生命周期
+事实，并推进内容 head 与 lifecycle revision。恢复不重做 Semantic Acceptance，也不抹除原删除事实。
+同一后继 revision 槽的并发删除、恢复或内容修订必须显式处理冲突；旧 active 副本没有新的恢复事实，
+不能成为恢复依据。被删除的成员只能查看与恢复，不能继续修订、解析或新增材料。
 
 ### Meaning Focus
 
@@ -90,6 +94,8 @@ Personal Semantic Anchor 用文本、图片、音频、场景、动作、感受�
 Meaning 可以被 learner 重新进入。它说明“这个意义对我如何有根”，不是标准例句、语言学事实、
 评分答案或成功 Evidence。它必须保留来源与捕获 provenance；同一素材可以直接支撑一个已解析
 Context–Expression–Sense 关系，也可以在需要时被多个 Meaning Focus 复用。
+多块材料组成 Personal Context Composition 时保留 learner 保存的文字／媒体次序。替换情境形成新的有序
+组合，新增材料追加到组合末尾；纠正解释、修改 Binding、删除／恢复 Meaning 或同步事实集合不重排材料。
 
 学习运行时中的 Personal Learning Scene 先属于 learner-owned learning scaffold，而不是尚未接受的
 Personal Meaning。它按 Learning Target + Language Learning Route 保持一份 current scene，并以不可变
@@ -102,6 +108,11 @@ Personal Learning Scene 与其已经接受的 Personal Meaning 各自演进。�
 revision，不自动改写已接受的 Personal Semantic Anchor；用户可以再次明确提交当前 revision，以更新
 同一个 Personal Meaning 的 Anchor revision。移除 Book、结束学习或删除学习来源不能删除 Personal
 Meaning；删除 Personal Meaning 也不改变 Learning Target、Retention、Protocol history 或 scene history。
+如果 learner 已独立替换 Personal Context Composition，使原 scene Anchor 退役，再次明确接受 scene
+不得复活该 tombstone 或覆盖新整理的 Context；它在同一 Personal Meaning 的当前组合末尾引入新的
+scene Anchor，后续 scene 更新沿该活动 Anchor 追加 revision。删除的 Personal Meaning 仍须先明确恢复。
+同一 scene identity 只能沿一个 Personal Meaning 演进，包括其退役素材与删除历史；离线分叉不自动
+合并成两条长期意义，涉及同一 scene 的分叉必须保留两侧事实并显式处理。
 
 ### Personal Expression Anchor
 
@@ -122,9 +133,30 @@ Sense Expression Binding。它首先由 Context 与被定位 Expression 的解�
 - 当时固定的 Context、Expression occurrence、Sense Version 与 Binding；
 - 后续撤销、重新解析或版本迁移事实。
 
+用户可以明确纠正同一 Personal Meaning 当前的解释或表达。纠正使用用户这次实际审阅的当前真实 Context
+组合，并固定参与的所有 Context revisions；不会无提示地挑选其中第一个素材。此前 Context 修订仍保留在历史中。
+用户在此 Context 旁明确填写的 Expression 可以定位到这个个人意义的 Context revision，不要求把表达
+硬写进原始叙述。它不是脱离 Context 的独立 Sense 创建，也不把用户编辑误记为模型建议。
+纠正追加新的 Semantic Acceptance 和 Alignment，并以不可变事件撤回被替换的连接；原接受、Context、
+Expression、Sense Version、Binding 和旧学习引用不改写。Alignment 的接受快照保持不可变，当前有效性
+由它的确认／撤回／恢复事件推导；已固定的学习来源引用接受快照，而不是当前有效性。
+新的连接只有经独立 Add-to-Learning 才进入学习，不转移或重置旧 Target 的记忆与历史。
+
+并发修改发生分叉时，Personal Meaning Conflict Decision 记录用户实际核对的两条分支及所选当前版本。
+它是可同步的账号事实，不是仅留在点击设备上的偏好。另一设备若仍持有该决议精确覆盖的版本，采用已选结果；
+决议后继续编辑的内容或相互矛盾的并发决议仍须处理冲突。未选分支保留原有修订、操作事实和依赖，不拼接进
+另一条分支的线性 revision 槽，也不改写既有 fact identity。旧学习 pin 仍能定位其接受时的分支；默认浏览和
+新增学习仅使用当前分支。重放旧操作不得把历史分支重新提升为当前内容。
+
 模型置信度可以帮助排序或决定 UI，但不能自己构成 acceptance。反过来，只要 Agent 持有 learner
 明确授予的正式提交权限，它对一个完整解析的调用本身就是 delegated acceptance，不需要 learner
 回到第一方 UI 再确认一次。
+
+检索个人世界时只把当前有效连接作为候选来源；复用已经选定的 Sense Version 时，接受的对象则是
+该固定语义合同，而不是原 Personal Meaning 的当前 membership 或表达 Binding。原个人材料后来被
+删除、撤销对齐或修改，不会使共享 Sense Version 消失，也不能阻止 learner 在新 Context 下明确接受
+一个新的完整 Personal Meaning。新接受不得复活旧 identity、自动采用 Sense 的新 head version，或
+宣称复用了未被选定的 Binding；提交时仍须验证固定版本在当前资料库中存在且合同未被改写。
 
 ## 3. 公共 Sense 的含义
 
@@ -424,8 +456,8 @@ Intake/Construction draft 可以长期保持未确认 Sense 或没有自然的�
 - Personal Semantic World 的稳定 identity 以 revisioned tombstone 表达删除；同一 revision 槽分叉、
   删除与同一对象的并发编辑必须停止为冲突，独立子对象的不可变事实追加才可自动合并；
 - 本地 command、Repository commit、跨设备同步和备份恢复必须经过同一个领域 authority；合法 JSON
-  结构本身不足以获得写入资格，immutable fact 改写、断裂引用、revision 跳号、物理删除与 tombstone
-  复活都必须在事务提交前被拒绝；
+  结构本身不足以获得写入资格，immutable fact 改写、断裂引用、revision 跳号、物理删除与没有明确
+  恢复事实的 tombstone 复活都必须在事务提交前被拒绝；
 - Meaning Focus 是可选解析桥梁，不是 Personal Meaning、Alignment 或快轨的必要字段；不得从 Sense
   definition 合成伪 Focus，也不得为快轨伪造零轮 Sense Construction/Proposal 链；
 - LLM 提议本身不是 learner 意图；受授权 Agent 的 commit operation 可以表达 delegated learner

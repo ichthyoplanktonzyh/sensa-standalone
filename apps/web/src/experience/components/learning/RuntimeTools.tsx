@@ -20,16 +20,17 @@ export interface RuntimeToolsProps {
 export function RuntimeTools({content, personalContent, showSave, onUndo, canUndo, onMarkKnown, onOpenMenuMore, toast, busy}: RuntimeToolsProps) {
   const {t} = useTranslation();
   const [starred, setStarred] = useState(false);
+  const [annotationReady,setAnnotationReady]=useState(false);
   useEffect(() => {
-    const update = () => setStarred(!!content && personalContentSystem.read({ kind: 'sense', senseId: content.senseKey }).saved);
+    const update = () => {const value=content?personalContentSystem.read({kind:'sense',senseId:content.senseKey}):null;setStarred(value?.status==='ready'&&value.saved);setAnnotationReady(value?.status==='ready');};
     update();
     return personalContentSystem.subscribe({ kind: 'snapshot' }, update);
   }, [content?.senseKey]);
-  const button = 'inline-flex min-h-11 min-w-11 items-center justify-center rounded-control border border-border-strong bg-surface-panel px-2 text-sm text-action-primary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-30';
+  const button = 'inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center whitespace-nowrap rounded-control border border-border-strong bg-surface-panel px-2 text-sm text-action-primary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-30';
   return <>
     {showSave && <>
       {onUndo && <button className={button} disabled={busy || !canUndo} onClick={onUndo} aria-label={t('assurance.undo')}><Undo2 size={18}/></button>}
-      <button className={button} disabled={busy || !content} aria-label={t('assurance.save')} aria-pressed={starred} onClick={() => {
+      <button className={button} disabled={busy || !content || !annotationReady} aria-label={t('assurance.save')} aria-pressed={annotationReady?starred:undefined} onClick={() => {
         if (content) void personalContentSystem.execute({kind:'set_saved_sense',operationId:crypto.randomUUID(),senseId:content.senseKey,saved:!starred}).then((saved) => {
           toast(t(saved ? 'assurance.saved' : 'assurance.unsaved'));
         }).catch(() => {

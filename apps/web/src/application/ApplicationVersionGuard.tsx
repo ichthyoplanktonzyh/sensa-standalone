@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import '../i18n/versionResources';
+import {localFlowText} from '../i18n/localFlowText';
 
-type VersionNotice = 'library' | 'update' | null;
+type VersionNotice = 'library' | 'selection' | 'update' | null;
 
 /** Keeps a page from writing through a stale cross-tab or Service Worker protocol. */
 export function ApplicationVersionGuard() {
   const { t } = useTranslation('version');
   const [notice, setNotice] = useState<VersionNotice>(() =>
-    document.documentElement.dataset.libraryVersion === 'incompatible'
+    document.documentElement.dataset.librarySelection === 'changed'?'selection':document.documentElement.dataset.libraryVersion === 'incompatible'
       ? 'library'
       : document.documentElement.dataset.appUpdate === 'ready'
         ? 'update'
@@ -18,24 +19,27 @@ export function ApplicationVersionGuard() {
   useEffect(() => {
     const library = () => setNotice('library');
     const update = () => setNotice((current) => current ?? 'update');
+    const selection=()=>setNotice('selection');
+    window.addEventListener('sensa-local-library-selected',selection);
     window.addEventListener('sensa-library-version-incompatible', library);
     window.addEventListener('sensa-app-update-ready', update);
     return () => {
       window.removeEventListener('sensa-library-version-incompatible', library);
       window.removeEventListener('sensa-app-update-ready', update);
+      window.removeEventListener('sensa-local-library-selected',selection);
     };
   }, []);
 
   if (!notice) return null;
-  const library = notice === 'library';
+  const library = notice !== 'update';
   return (
     <div className="fixed inset-x-0 bottom-0 z-[100] p-4 sm:p-6" role="alert" data-sensa-version-guard={notice}>
       <section className="mx-auto max-w-2xl rounded-card border border-border-subtle bg-surface-panel p-5 shadow-raised">
         <h2 className="text-lg font-medium text-fg-primary">
-          {t(library ? 'conflictTitle' : 'updateTitle')}
+          {notice==='selection'?localFlowText('libraryRecovery'):t(library ? 'conflictTitle' : 'updateTitle')}
         </h2>
         <p className="mt-2 text-sm leading-6 text-fg-secondary">
-          {t(library ? 'conflictDescription' : 'updateDescription')}
+          {notice==='selection'?localFlowText('libraryReplaced'):t(library ? 'conflictDescription' : 'updateDescription')}
         </p>
         <button
           type="button"

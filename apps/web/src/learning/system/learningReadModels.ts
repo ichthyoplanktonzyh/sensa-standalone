@@ -2,9 +2,11 @@ import type {
   SensaFormalPinnedLanguageContext,
   SensaProtocolStepDefinition,
   SensaProtocolStepMaterialBinding,
+  SensaMaterializedResource,
 } from '@sensa/contracts/sensa';
 
 import type { LightweightInitialLearningMaterialization } from '../../contentSupply/provisioning/lightweightInitialContent';
+import type {LearningHistorySummary} from './learningHistoryModel';
 import type { AssessmentResource } from '../content/assessmentResources';
 import type { RuntimeLearningContent } from '../content/learningCatalog';
 import type {
@@ -85,6 +87,8 @@ export interface LearningTargetProjection {
   readonly declaredMastery: boolean;
   readonly nextReviewAt: string | null;
   readonly curriculumMembershipId: string;
+  /** Future-source governance, distinct from material readiness and open work. */
+  readonly planningActive?:boolean;
   readonly languageContext: SensaFormalPinnedLanguageContext;
   readonly packageKey: string | null;
   readonly publicationArchiveSha256: string | null;
@@ -135,6 +139,18 @@ export interface LearningHomeProjection {
   readonly policyOptions: readonly LearningPolicyOption[];
 }
 
+export interface LearningManagementProjection{
+ readonly targetIds:readonly string[];readonly pendingDirectCount:number;readonly policies:readonly LearningPolicy[];readonly dailyLimit:number|null;
+ readonly readyInitialCount:number;readonly reviewDueCount:number;
+ readonly policyOptions:readonly LearningPolicyOption[];
+}
+export type LearningBookRangeSelection=import('../../data/library/bookPlans').BookRangeSelection;
+export type LearningBookMode='active'|'maintenance'|'paused';
+export type LearningBookPlanProjection=Readonly<{
+ enrollmentId:string;revision:number;title:string|null;bookVersionNumber:number;memberCount:number;
+ mode:LearningBookMode;selection:LearningBookRangeSelection;
+}>;
+export interface LearningHistoryProjection extends LearningHistorySummary{readonly records:readonly LearningRecordProjection[];readonly version:string;}
 export interface LearningPersonalEnrollmentIndex {
   readonly targets: readonly Readonly<{
     targetId: string;
@@ -146,6 +162,14 @@ export interface LearningSemanticMemoryProjection {
   readonly targets: readonly Readonly<{
     targetId: string;
     senseId: string;
+    presentation: Readonly<{
+      expression: string;
+      meaning: string;
+      scene: string;
+      targetLanguageTag: string;
+      supportLanguageTag: string;
+      personalMeaningId: string | null;
+    }>;
     declaredMastery: boolean;
     memory: Readonly<{
       dueAt: Date;
@@ -194,9 +218,14 @@ interface LearningRuntimeProjectionBase {
 
 export interface LearningLightweightRuntimeProjection extends LearningRuntimeProjectionBase {
   readonly kind: 'lightweight';
+  /** The Run ended, but its recorded repair progress is not a Completion. */
+  readonly needsRelearning: boolean;
   readonly target: LearningTargetProjection;
   readonly phase: 'experience' | 'reveal';
   readonly step: LearningLightweightStepProjection | null;
+  /** Current Step bindings plus the experience actually acted on before Reveal. */
+  readonly questionResources: readonly SensaMaterializedResource[];
+  readonly questionUsesPersonalContext: boolean;
 }
 
 export interface LearningStructuredRuntimeProjection extends LearningRuntimeProjectionBase {
@@ -291,6 +320,8 @@ export type LearningCurriculumEnrollmentProjection=Readonly<{
   packageId:string;
   packageVersion:number;
   packageKey:string;
+ }>|Readonly<{
+  kind:'stable_sense';senseId:string;senseVersionId:string;bindingId:string;bindingVersionId:string;expression:string;meaning:string;
  }>;
 }>;
 
@@ -302,5 +333,28 @@ export interface LearningWorkspaceProjection {
   readonly activeRunId: string | null;
   readonly dailyLimit: number | null;
   readonly records: readonly LearningRecordProjection[];
+  readonly policyOptions: readonly LearningPolicyOption[];
+}
+
+/** Active execution plus compact continuation planning, without collection
+ * material, completed Run history or study records. */
+export interface LearningRuntimeWorkspaceProjection {
+  readonly runtime: LearningRuntimeProjection | null;
+  readonly dailyLimit: number | null;
+  /** Editable future preference, distinct from this activity's fixed quota. */
+  readonly preferencesDailyLimit: number | null;
+  /** Continuation is planned only at a Run boundary, never during a Step. */
+  readonly nextTargetId: string | null;
+  readonly nextChangeAt: number | null;
+  readonly policyOptions: readonly LearningPolicyOption[];
+}
+
+/** One current Route's Target detail, without collection planning or history.
+ * The active participant identities preserve the existing continue action. */
+export interface LearningTargetDetailProjection {
+  readonly target: LearningTargetProjection | null;
+  readonly activeRunTargetIds: readonly string[];
+  readonly exportPackageKey: string | null;
+  readonly dailyLimit: number | null;
   readonly policyOptions: readonly LearningPolicyOption[];
 }

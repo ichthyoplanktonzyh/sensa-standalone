@@ -97,6 +97,7 @@ export async function createLibraryCloudBrowserFixture(providedBrowser?: Browser
 
   const built = await viteBuild({
     configFile: false,
+    worker: {format:'es'},
     root: process.cwd(),
     logLevel: 'silent',
     base: '/',
@@ -108,7 +109,7 @@ export async function createLibraryCloudBrowserFixture(providedBrowser?: Browser
       enforce: 'pre',
       load(id) {
         if (id.endsWith('/apps/web/src/data/account/auth.ts')) {
-          return "export const auth={getSession:async()=>({data:{session:{access_token:'fixture',user:{id:'fixture'}}}})}; export {authStorageKey,cachedAuthSubject} from './authSessionHint';";
+          return "export const auth={getSession:async()=>({data:{session:window.__fixtureAuthSession??{access_token:'fixture',user:{id:'fixture'}}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),signOut:async()=>({error:null})}; export const cachedAuthSubject=()=>window.__fixtureAuthSession?.user.id??null; export {authStorageKey} from './authSessionHint';";
         }
       },
     }],
@@ -233,7 +234,7 @@ export async function createLibraryCloudBrowserFixture(providedBrowser?: Browser
         await core.openLibrary();
         await core.command(
           { id: crypto.randomUUID(), kind: 'service.connect', input: {} },
-          async (transaction: any) => transaction.put('meta', 'service-owner', { subject, accountId }),
+          async (transaction: any) => transaction.put('meta', 'service-owner', { subject, accountId, email:'learner@fixture.invalid' }),
         );
         browserWindow.request = async (path: string, body?: unknown) => {
           if (browserWindow.offline) throw new Error('offline');

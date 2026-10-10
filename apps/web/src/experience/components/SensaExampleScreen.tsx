@@ -1,4 +1,6 @@
 import {cardText} from '../../i18n/originalCards';
+import {localFlowText} from '../../i18n/localFlowText';
+import {uiText} from '../../i18n/uiText';
 import { personalContentSystem } from '../../personalContent/system';
 import {
   useCallback,
@@ -29,6 +31,7 @@ export function SensaExampleScreen({
   screenId = 's-example',
   onClose,
   onOpenDict,
+  lookupDictionary,
   toast,
 }: ExampleScreenProps) {
   const senseDetails = useMemo(() => (
@@ -49,6 +52,7 @@ export function SensaExampleScreen({
   const [isPlaying, setIsPlaying] = useState(false);
   const { activeLookup, openLookup, clearLookup } = useImmediateDictionaryLookup();
   const [, setPersonalContentRevision] = useState(0);
+  const [saving,setSaving]=useState(false);
   const playbackToken = useRef(0);
   const wordIdentity = curWord.id ?? curWord.w;
   const sequenceIdentity = sentenceSequence?.join(',') ?? '';
@@ -68,7 +72,8 @@ export function SensaExampleScreen({
   const sentence = sentences[sentenceIndex] ?? sentences[0] ?? null;
   const exampleId = sentence?.exampleId
     ?? `${curWord.id ?? curWord.w}:example:${senseIndex}:${sentence ? availableSentences.indexOf(sentence) : initialSentenceIdx}`;
-  const isSaved = personalContentSystem.read({ kind: 'example', exampleId });
+  const annotationStatus=personalContentSystem.read({kind:'snapshot'}).status;
+  const isSaved = annotationStatus==='ready'&&personalContentSystem.read({ kind: 'example', exampleId });
   const hasPrevious = sentenceIndex > 0;
   const hasNext = sentenceIndex < sentences.length - 1;
 
@@ -181,9 +186,10 @@ export function SensaExampleScreen({
         <button
           type="button"
           className={isSaved ? 'is-saved' : ''}
-          disabled={!sentence}
-          aria-pressed={isSaved}
+          disabled={!sentence||annotationStatus!=='ready'||saving}
+          aria-pressed={annotationStatus==='ready'?isSaved:undefined}
           onClick={() => { void (async () => {
+            if(annotationStatus!=='ready'||saving)return;setSaving(true);
             try {
               const saved = await personalContentSystem.execute({
                 kind: 'set_saved_example',
@@ -194,6 +200,8 @@ export function SensaExampleScreen({
               toast(saved ? cardText('exampleSaved') : cardText('exampleRemovedFromSavedItems'));
             } catch {
               toast(cardText('couldNotSaveThisExampleTryAgain'));
+            } finally {
+              setSaving(false);
             }
           })(); }}
           aria-label={isSaved ? cardText('unsaveThisExample') : cardText('saveThisExample')}
@@ -203,6 +211,7 @@ export function SensaExampleScreen({
       </header>
 
       <div className="sensa-example-scroll">
+        {annotationStatus!=='ready'&&<p role={annotationStatus==='error'?'alert':'status'}>{localFlowText(annotationStatus==='error'?'localStatusFailed':'loadingSensa')}{annotationStatus==='error'&&<button type="button" className="ml-3 min-h-11 underline" onClick={()=>void personalContentSystem.refresh().catch(()=>undefined)}>{uiText('retry')}</button>}</p>}
         <ExampleCardCarousel
           itemCount={sentences.length}
           currentIndex={sentenceIndex}
@@ -243,7 +252,7 @@ export function SensaExampleScreen({
                       displayWord: token.cleanWord,
                       load: async (signal) => {
                         const { lookupDictionaryEntry } = await import('../services/quickDict');
-                        const entry = await lookupDictionaryEntry(request, { signal });
+                        const entry = await (lookupDictionary??lookupDictionaryEntry)(request, { signal });
                         if (!entry) toast(cardText('thisWordIsNotInTheDictionary'));
                         return entry;
                       },

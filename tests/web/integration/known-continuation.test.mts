@@ -13,6 +13,7 @@ test("known-continuation", async () => {
 const compiled=await build({stdin:{contents:[
  ...['store','learning','backupValidation'].map(name=>`export * from './apps/web/src/data/library/${name}';`),
  "export {learningSystem} from './apps/web/src/learning/system';",
+ "export {startLearning,actLearning} from './tests/web/support/learningRunFixture';",
  "export {contentSupplySystem} from './apps/web/src/contentSupply/system';",
  "export * from './apps/web/src/contentSupply/provisioning/hybridMaterialization';",
 ].join('\n'),resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env':'{}'}});
@@ -33,6 +34,26 @@ try{
  const [targetId]=ids;
  let run=await api.startLearning(id(),targetId,context,20);
  const before=await api.readLearning(),target=before.targets.find((t:any)=>t.id===targetId),membership=target.curriculumMemberships[0],pinned=structuredClone(run);
+ // An admitted published base plus an approved source-backed supplement is a
+ // new immutable material, never an in-place edit of its base or running Step.
+ const base=structuredClone(membership.material),response={request:api.supplementRequest(base,'etymology','zh-CN'),provider:'fixture-source',sourceVersion:'fixture-v1',result:{status:'available',payload:{explanation:'Synthetic sourced historical explanation.',source:'Explicit fixture source',sourceUrl:'https://fixture.invalid/etymology'}}};
+ const hybrid=api.appendResourceSupplement(base,response,id(),new Date().toISOString(),'zh-CN');
+ assert.throws(()=>api.appendResourceSupplement(base,response,id(),new Date(Date.parse(base.snapshot.provenance.sourceReadyAt)-1).toISOString(),'zh-CN'),/clockChanged/,'a supplement cannot be admitted before its base source is Ready');
+ assert.notEqual(hybrid.snapshot.learningMaterializationId,base.snapshot.learningMaterializationId);
+ assert.notEqual(hybrid.snapshot.contentDigest,base.snapshot.contentDigest);
+ assert.deepEqual(api.baseContentBeforeSupplement(hybrid,'zh-CN'),base.content);
+ assert.deepEqual(base,membership.material,'supplement construction must not mutate the admitted published base');
+ for(const unavailable of ['unavailable','not_applicable']){
+  const failed={...response,result:unavailable==='unavailable'?{status:'unavailable',reason:'source_missing'}:{status:'not_applicable',reason:'single_word_only'}};
+  assert.throws(()=>api.appendResourceSupplement(base,failed,id(),new Date().toISOString(),'zh-CN'),/resourceInvalid/);
+  assert.deepEqual(base,membership.material);
+ }
+ const wrongSource=structuredClone(response);wrongSource.request.surface='other-expression';
+ assert.throws(()=>api.appendResourceSupplement(base,wrongSource,id(),new Date().toISOString(),'zh-CN'),/resourceInvalid/);
+ const corrupted=structuredClone(hybrid);corrupted.snapshot.provenance.resourceSupplement.baseContentDigest='0'.repeat(64);
+ assert.throws(()=>api.baseContentBeforeSupplement(corrupted,'zh-CN'),/resourceInvalid/);
+ assert.throws(()=>api.appendResourceSupplement(hybrid,response,id(),new Date().toISOString(),'zh-CN'),/stepChanged/);
+ assert.deepEqual((await api.readLearning()).runs.find((candidate:any)=>candidate.id===pinned.id),pinned);
  run=await api.actLearning(id(),run.id,run.revision,{kind:'reveal'});
  run=await api.actLearning(id(),run.id,run.revision,{kind:'rate',rating:'good'});await api.finishLearning(id(),run.id);
  // Declaration continues directly to the next eligible target and does not forge learning outcomes.

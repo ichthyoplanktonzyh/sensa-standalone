@@ -22,7 +22,7 @@ assert.match(staticHeaders,/\/sw\.js\n  Cache-Control: no-cache/);
 assert.match(staticHeaders,/\/integrations\/\*\n  Cache-Control: no-cache/);
 assert.match(staticHeaders,/script-src 'self' 'wasm-unsafe-eval' https:\/\/youglish\.com;/u);
 assert.match(staticHeaders,/frame-src 'self' https:\/\/youglish\.com/u);
-const env={SENSA_WEB_ORIGIN:'https://learn.example.com',VITE_SENSA_SUPPORT_URL:'mailto:support@example.com',VITE_SUPABASE_URL:'https://fixture.supabase.co',VITE_SENSA_API_URL:'https://fixture.supabase.co/functions/v1/sensa-api',VITE_SUPABASE_PUBLISHABLE_KEY:'sb_publishable_'+'x'.repeat(30),VITE_SENSA_MODE:'production',SENSA_EXTENSION_WEB_URL:'https://learn.example.com',SENSA_EXTENSION_API_URL:'https://fixture.supabase.co/functions/v1/sensa-api',SENSA_RELEASE_SHA:'a'.repeat(40)};
+const env={SENSA_WEB_ORIGIN:'https://learn.example.com',VITE_SENSA_SUPPORT_URL:'mailto:support@example.com',VITE_SUPABASE_URL:'https://fixture.supabase.co',VITE_SENSA_API_URL:'https://fixture.supabase.co/functions/v1/sensa-api',VITE_SUPABASE_PUBLISHABLE_KEY:'sb_publishable_'+'x'.repeat(30),VITE_SENSA_MODE:'production',SENSA_EXTENSION_WEB_URL:'https://learn.example.com',SENSA_EXTENSION_API_URL:'https://fixture.supabase.co/functions/v1/sensa-api',SENSA_RELEASE_SHA:'a'.repeat(40),GITHUB_REPOSITORY:'sensa/example',GITHUB_RUN_ID:'123',GITHUB_RUN_ATTEMPT:'1'};
 assert.equal(validateReleaseEnvironment(env).webOrigin,env.SENSA_WEB_ORIGIN);
 assert.equal('playerOrigin' in validateReleaseEnvironment(env),false);
 assert.equal(validateReleaseEnvironment(env).supportUrl,env.VITE_SENSA_SUPPORT_URL);
@@ -49,8 +49,11 @@ try{
  assert.match(await readFile(join(web,'_headers'),'utf8'),/\/integrations\/\*\n  Cache-Control: no-cache/);
  assert.match(await readFile(join(web,'_headers'),'utf8'),/frame-src 'self' https:\/\/youglish\.com;/u);
  const verify=()=>execFileSync(process.execPath,[resolve('scripts/release/verifyCandidate.mjs')],{cwd:root,env:{...process.env,...releaseEnv},stdio:'pipe'});verify();
+ const verifyAsWrongRun=()=>execFileSync(process.execPath,[resolve('scripts/release/verifyCandidate.mjs')],{cwd:root,env:{...process.env,...releaseEnv,SENSA_CANDIDATE_RUN_ID:'124'},stdio:'pipe'});assert.throws(verifyAsWrongRun);
+ const verifyAsWrongAttempt=()=>execFileSync(process.execPath,[resolve('scripts/release/verifyCandidate.mjs')],{cwd:root,env:{...process.env,...releaseEnv,SENSA_CANDIDATE_RUN_ATTEMPT:'2'},stdio:'pipe'});assert.throws(verifyAsWrongAttempt);
  await writeFile(join(web,'unlisted.js'),'unexpected');assert.throws(verify);await rm(join(web,'unlisted.js'));
  assert.equal(candidate.commit,sha);assert.match(candidate.scope,/Web, browser extension and compiled API/);assert.match(candidate.scope,/ordinary account cloud sync/);assert(candidate.files.every(f=>/^[a-f0-9]{64}$/.test(f.sha256)));
+ assert.deepEqual(candidate.provenance,{repository:'sensa/example',workflowRunId:'123',workflowRunAttempt:'1'});
  assert.equal('playerOrigin' in candidate,false);
  assert(candidate.files.some(f=>f.path==='apps/api/dist/index.js'));
  assert.equal(candidate.database.count,1);assert.equal(candidate.database.latest,'db/migrations/0001_fixture.sql');assert.match(candidate.database.sha256,/^[a-f0-9]{64}$/u);
@@ -61,7 +64,7 @@ try{
  assert.equal('catalogSha256' in candidate,false,'application releases must not capture a learning-content Registry');
  assert(!(await readFile(join(root,'release-candidate/manifest.json'),'utf8')).includes(env.VITE_SUPABASE_PUBLISHABLE_KEY));
  await writeFile(join(root,'db/migrations/0001_fixture.sql'),'SELECT 2;\n');assert.throws(verify);await writeFile(join(root,'db/migrations/0001_fixture.sql'),'SELECT 1;\n');verify();
- await assert.rejects(prepareCandidate(env,root),/HEAD/);
+ await assert.rejects(prepareCandidate({...releaseEnv,SENSA_RELEASE_SHA:env.SENSA_RELEASE_SHA},root),/HEAD/);
  await writeFile(join(web,'assets/app.js'),'// stale local build');await assert.rejects(prepareCandidate(releaseEnv,root),/rebuild/);
  console.log('PASS: isolated candidate manifest, hashes, secret-free report and stale SHA/build rejection; no deployment.');
 }finally{await rm(root,{recursive:true,force:true});}

@@ -16,14 +16,15 @@ import {t,extensionLanguage} from './i18n';
  * learner asks, with the same shortcut that translates a paragraph, and the page
  * is not modified until they say so.
  */
-const writable=['text','search'].map(type=>`input[type="${type}"]`).join(',')+',textarea,[contenteditable]:not([contenteditable="false"])';
+const writable='input,textarea,[contenteditable]:not([contenteditable="false"])';
 const maxWritableCharacters=12000;
 
 /** The field under an event, when it is one this surface may touch. */
 export function writableField(target:EventTarget|null):HTMLElement|null{
  const element=target instanceof Element?target.closest<HTMLElement>(writable):null;
  if(!element)return null;
- if(element instanceof HTMLInputElement||element instanceof HTMLTextAreaElement)return element.readOnly||element.disabled?null:element;
+ if(element instanceof HTMLInputElement&&!['text','search'].includes(element.type))return null;
+ if(element instanceof HTMLInputElement||element instanceof HTMLTextAreaElement)return element.readOnly||element.matches(':disabled')?null:element;
  return element.isContentEditable?element:null;
 }
 export const writableFieldText=(field:HTMLElement)=>field instanceof HTMLInputElement||field instanceof HTMLTextAreaElement?field.value:field.innerText;
@@ -65,9 +66,9 @@ export function createInputTranslation(accountId:string,isAuthorized:()=>boolean
  root.innerHTML=`<style>:host{all:initial}section{position:fixed;max-width:340px;padding:10px;background:#fbfbfa;border:1px solid #bbc5da;border-radius:12px;box-shadow:0 4px 20px #0002;font:13px/1.5 system-ui;color:#242a38}div{max-height:180px;overflow-y:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:white;border:1px solid #e0e5ee;border-radius:8px;padding:8px;margin-bottom:6px}button{font:inherit;min-height:34px;background:white;color:#303f76;border:1px solid #bcc7df;border-radius:7px;padding:5px 9px;margin:2px;cursor:pointer}button:focus-visible{outline:3px solid #5268a9}p{margin:6px 2px;overflow-wrap:anywhere}</style><section><div role="status" aria-live="polite"></div><button data-action="replace" hidden></button><button data-action="close"></button><p hidden></p></section>`;
  const panel=root.querySelector<HTMLElement>('section')!,answer=root.querySelector<HTMLDivElement>('div')!,replace=root.querySelector<HTMLButtonElement>('[data-action="replace"]')!,close=root.querySelector<HTMLButtonElement>('[data-action="close"]')!,note=root.querySelector<HTMLParagraphElement>('p')!;
  panel.setAttribute('aria-label',t('writingLabel'));replace.textContent=t('writingReplace');close.textContent=t('panelClose');
- let field:HTMLElement|null=null,generation=0,controller:AbortController|null=null,translated='';
+ let field:HTMLElement|null=null,generation=0,controller:AbortController|null=null,translated='',originalText='';
  function hide(){
-  generation++;controller?.abort();controller=null;field=null;translated='';
+  generation++;controller?.abort();controller=null;field=null;translated='';originalText='';
   answer.textContent='';answer.removeAttribute('aria-busy');replace.hidden=true;note.hidden=true;host.remove();
  }
  /** Placed under the field, or above it when the field is near the bottom of the
@@ -80,10 +81,10 @@ export function createInputTranslation(accountId:string,isAuthorized:()=>boolean
  }
  function say(message:string){note.textContent=message;note.hidden=false;}
  async function translate(target:HTMLElement){
-  const text=writableFieldText(target).trim();
+  const original=writableFieldText(target),text=original.trim();
   hide();
   if(!isAuthorized())return;
-  field=target;document.documentElement.append(host);place();
+  field=target;originalText=original;document.documentElement.append(host);place();
   if(!text)return say(t('writingEmpty'));
   if(text.length>maxWritableCharacters)return say(t('writingTooLong',{count:text.length}));
   const run=++generation;controller=new AbortController();
@@ -94,14 +95,15 @@ export function createInputTranslation(accountId:string,isAuthorized:()=>boolean
    // learner asking for one piece of their own writing, and a request is never
    // skipped.
    translated=await runReading(accountId,'writing',text,surroundingText(target),'',crypto.randomUUID(),partial=>{if(run===generation&&field===target)answer.textContent=partial;},controller.signal);
-   if(run!==generation||field!==target||!target.isConnected)return;
+   if(run!==generation||field!==target)return;
+   if(!target.isConnected||!isAuthorized()||writableField(target)!==target||writableFieldText(target)!==original)return hide();
    answer.textContent=translated;answer.removeAttribute('aria-busy');replace.hidden=false;place();
   }catch(error){
    if(run!==generation||field!==target)return;
    answer.removeAttribute('aria-busy');answer.textContent=readingError(error);
   }
  }
- replace.addEventListener('click',()=>{if(field&&translated){replaceFieldText(field,translated);hide();}});
+ replace.addEventListener('click',()=>{if(field&&translated){if(field.isConnected&&isAuthorized()&&writableField(field)===field&&writableFieldText(field)===originalText)replaceFieldText(field,translated);hide();}});
  close.addEventListener('click',hide);
  const key=(event:KeyboardEvent)=>{
   if(event.key==='Escape'&&field){event.preventDefault();event.stopPropagation();hide();return;}
@@ -114,9 +116,11 @@ export function createInputTranslation(accountId:string,isAuthorized:()=>boolean
  // A field that leaves the document takes its answer with it; a panel that merely
  // lost focus does not, because the replace button is what focus moved to.
  const focusedOut=()=>{if(field&&!field.isConnected)hide();};
+ const edited=(event:Event)=>{if(field&&event.target instanceof Node&&field.contains(event.target))hide();};
  const scrolled=()=>{if(field)place();};
  document.addEventListener('keydown',key,true);
  document.addEventListener('focusout',focusedOut,true);
+ document.addEventListener('input',edited,true);
  addEventListener('scroll',scrolled,true);
- return {host,destroy(){document.removeEventListener('keydown',key,true);document.removeEventListener('focusout',focusedOut,true);removeEventListener('scroll',scrolled,true);hide();}};
+ return {host,destroy(){document.removeEventListener('keydown',key,true);document.removeEventListener('focusout',focusedOut,true);document.removeEventListener('input',edited,true);removeEventListener('scroll',scrolled,true);hide();}};
 }

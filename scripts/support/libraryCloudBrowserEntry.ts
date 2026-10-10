@@ -1,12 +1,15 @@
 /** Production-shaped browser entry for the PostgreSQL library integration smoke. */
 export * from '../../apps/web/src/data/library/store';
 export * from '../../apps/web/src/data/library/cloudSync';
+export {syncAccountLibrary} from '../../apps/web/src/data/library/cloudSyncService';
 export * from '../../apps/web/src/data/library/providers';
 export * from '../../apps/web/src/data/library/personalLearning';
 export * from '../../apps/web/src/data/library/drafts';
 export * from '../../apps/web/src/data/library/packageRecords';
 export {contentSupplySystem} from '../../apps/web/src/contentSupply/system';
+export {learningSystem,learningSceneSemanticOperationIds} from '../../apps/web/src/learning/system';
 export * from '../../apps/web/src/data/library/learning';
+export {startLearning,actLearning} from '../../tests/web/support/learningRunFixture';
 export * from '../../apps/web/src/data/library/language';
 export * from '../../apps/web/src/data/library/speech/defaultProvider';
 export * from '../../apps/web/src/data/library/backup';
@@ -14,5 +17,7 @@ export * from '../../apps/web/src/data/library/backupValidation';
 export * from '../../apps/web/src/data/library/backupCodec';
 export * from '../../apps/web/src/data/library/dataControl';
 export * from '../../apps/web/src/experience/personalMeaningJourney/gateway';
+export {worldReadRepository} from '../../apps/web/src/experience/personalMeaningJourney/worldRepository';
+export {personalContentSystem,personalLearningSceneEditBase} from '../../apps/web/src/personalContent/system';
 export * from '../../apps/web/src/learning/protocols/fourStage';
 export * from '../../apps/web/src/learning/runtime/localCurriculum';

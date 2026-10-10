@@ -4,10 +4,14 @@ export const SHELL_PARAM_KEYS = [
   'section',
   'coming',
   'meaningId',
+  'alignmentId',
   'focusId',
   'targetId',
   'bookKey',
+  'packageKey',
+  'publicationArchiveSha256',
   'worldAction',
+  'enrollmentId',
 ] as const;
 
 export type ShellParamKey = (typeof SHELL_PARAM_KEYS)[number];
@@ -15,7 +19,7 @@ export type ShellParams = Readonly<Partial<Record<ShellParamKey, string>>>;
 
 type ShellScreenDefinition = Readonly<{
   id: `s-${string}`;
-  host: 'app' | 'learning';
+  host: 'app' | 'learning' | 'practice';
   params?: readonly ShellParamKey[];
   instance?: Readonly<{
     params: readonly ShellParamKey[];
@@ -29,7 +33,7 @@ type ShellScreenDefinition = Readonly<{
  * a screen cannot leave parser, serializer and dispatcher allowlists apart.
  */
 export const SHELL_SCREEN_DEFINITIONS = [
-  { id: 's-academy', host: 'learning' },
+  { id: 's-academy', host: 'practice' },
   { id: 's-catalog', host: 'learning' },
   { id: 's-catalog-book', host: 'learning', params: ['bookKey'], instance: { params: ['bookKey'] } },
   { id: 's-confirmed-sense', host: 'learning', params: ['meaningId', 'focusId'], instance: { params: ['meaningId', 'focusId'] } },
@@ -37,17 +41,19 @@ export const SHELL_SCREEN_DEFINITIONS = [
   { id: 's-content-coming', host: 'app', params: ['coming'], instance: { params: ['coming'], defaults: { coming: 'scenes' } } },
   { id: 's-content-example', host: 'app', params: ['exampleId'], instance: { params: ['exampleId'] } },
   { id: 's-content-library', host: 'app', params: ['section'], instance: { params: ['section'], defaults: { section: 'recent' } } },
-  { id: 's-content-sense', host: 'app', params: ['senseId'], instance: { params: ['senseId'] } },
+  { id: 's-content-sense', host: 'app', params: ['senseId','targetId','meaningId','alignmentId'], instance: { params: ['senseId','targetId','meaningId','alignmentId'] } },
   { id: 's-expression-binding', host: 'app', params: ['meaningId', 'focusId'], instance: { params: ['meaningId', 'focusId'] } },
   { id: 's-learning-entry', host: 'learning' },
+  { id: 's-direct-learning', host: 'learning', params: ['enrollmentId'], instance: { params: ['enrollmentId'], defaults: { enrollmentId: 'search' } } },
   { id: 's-learning-library', host: 'learning' },
   { id: 's-learning-target', host: 'learning', params: ['targetId'], instance: { params: ['targetId'] } },
   { id: 's-library', host: 'learning' },
-  { id: 's-personal-meaning', host: 'app', params: ['meaningId', 'focusId'], instance: { params: ['meaningId'], defaults: { meaningId: 'new' } } },
-  { id: 's-practice-scope', host: 'learning' },
+  { id: 's-library-package', host: 'learning', params: ['packageKey','publicationArchiveSha256'], instance: { params: ['packageKey','publicationArchiveSha256'] } },
+  { id: 's-personal-meaning', host: 'learning', params: ['meaningId', 'focusId'], instance: { params: ['meaningId'], defaults: { meaningId: 'new' } } },
+  { id: 's-practice-scope', host: 'practice' },
   { id: 's-profile', host: 'learning' },
   { id: 's-publisher', host: 'learning' },
-  { id: 's-real-world-listening', host: 'learning' },
+  { id: 's-real-world-listening', host: 'practice' },
   { id: 's-semantic-world', host: 'learning', params: ['worldAction'] },
   { id: 's-stats', host: 'learning' },
   { id: 's-study', host: 'learning' },
@@ -65,7 +71,7 @@ const definitionsById = new Map<string, ShellScreenDefinition>(
   SHELL_SCREEN_DEFINITIONS.map((definition) => [definition.id, definition]),
 );
 
-export const shellScreenHost = (screenId: string): 'app' | 'learning' | undefined =>
+export const shellScreenHost = (screenId: string): 'app' | 'learning' | 'practice' | undefined =>
   definitionsById.get(screenId)?.host;
 
 export const shellScreenParams = (screenId: string): readonly ShellParamKey[] =>

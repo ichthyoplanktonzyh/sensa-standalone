@@ -6,7 +6,7 @@ import {
 import { canonicalJsonDigest, stableUuid } from '@sensa/learning-kernel';
 
 import type { InstalledPackage } from '../../data/library/packageRecords';
-import type { PersonalMeaningLearningSource } from './contracts';
+import type { ContentProvisioningSource } from './contracts';
 import type { LocalLearningMaterialization } from '../../learning/runtime/localProtocol';
 import {
   validateLightweightInitialMaterialization,
@@ -19,6 +19,9 @@ type PublishedEntry = InstalledPackage['content']['entries'][number];
 export function materializePublishedEntry(input: {
   learnerUserId: string;
   learningTargetId: string;
+  curriculumMembershipId:string;
+  materializationOperationId:string;
+  curriculumSource:Readonly<{curriculumEnrollmentId:string;bookId:string;bookVersionId:string|null;contentReleaseId:string|null;publicationArchiveSha256?:string}>;
   packageKey: string;
   installedPackage: InstalledPackage;
   entry: PublishedEntry;
@@ -30,7 +33,7 @@ export function materializePublishedEntry(input: {
   const snapshot = sensaLearningMaterializationSnapshotSchema.parse({
     contractVersion: sensaLearningConnectionContractVersion,
     learningMaterializationId: stableUuid(
-      `sensa-material:${input.learnerUserId}:${input.packageKey}:${input.learningTargetId}`,
+      `sensa-material:${input.learnerUserId}:${input.packageKey}:${input.learningTargetId}:${input.curriculumMembershipId}:${input.materializationOperationId}`,
     ),
     learnerUserId: input.learnerUserId,
     learningTargetId: input.learningTargetId,
@@ -42,10 +45,11 @@ export function materializePublishedEntry(input: {
     validationStatus: 'validated',
     validatorVersion: 'sensa-web-package-v1',
     provenance: {
+      ...input.curriculumSource,
+      curriculumMembershipId:input.curriculumMembershipId,
+      materializationOperationId:input.materializationOperationId,
+      sourceReadyAt: input.createdAt,
       packageKey: input.packageKey,
-      bookId: packageManifest.metadata.packageId,
-      bookVersionId: null,
-      contentReleaseId: null,
       packageVersion: String(packageManifest.metadata.version),
       packageDigest: pack.digest,
       senseId: entry.senseId,
@@ -64,13 +68,17 @@ export function materializePublishedEntry(input: {
 export function materializeOnDemandContent(input: {
   learnerUserId: string;
   learningTargetId: string;
-  source: PersonalMeaningLearningSource;
+  source: ContentProvisioningSource;
   content: LightweightInitialLearningMaterialization['content'];
   attemptId: string;
   personalAnchorUseGrantId: string | null;
   createdAt: string;
 }): LocalLearningMaterialization {
   const { reference } = input.source;
+  const provenance=input.source.sourceKind==='stable_sense'
+    ?{kind:'stable_sense',curriculumEnrollmentId:input.source.reference.enrollmentId,sourceDigest:input.source.reference.sourceDigest}
+    :{personalMeaningId:input.source.reference.personalMeaningId,personalMeaningRevisionId:input.source.reference.personalMeaningRevisionId,alignmentBasisReferenceId:input.source.reference.alignmentBasisReferenceId};
+  if(input.source.sourceKind==='stable_sense'&&input.personalAnchorUseGrantId!==null)throw new Error('localFlow.meaningChanged');
   const content = structuredClone(input.content);
   const snapshot = sensaLearningMaterializationSnapshotSchema.parse({
     contractVersion: sensaLearningConnectionContractVersion,
@@ -85,9 +93,8 @@ export function materializeOnDemandContent(input: {
     validationStatus: 'validated',
     validatorVersion: 'sensa-web-content-v1',
     provenance: {
-      personalMeaningId: reference.personalMeaningId,
-      personalMeaningRevisionId: reference.personalMeaningRevisionId,
-      alignmentBasisReferenceId: reference.alignmentBasisReferenceId,
+      ...provenance,
+      sourceReadyAt: input.createdAt,
       senseId: reference.senseId,
       senseVersionId: reference.senseVersionId,
       bindingId: reference.bindingId,

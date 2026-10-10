@@ -54,6 +54,8 @@ content/data/consumer-generations/
 /apps/web/public/learning-packages/
 .tmp/
 .sensa-local/
+output/playwright/
+.playwright-cli/
 apps/browser-extension/dist-local/
 
 # Local UI review captures are generated during design verification.

@@ -19,7 +19,7 @@ export const ContentComingSoonScreen = ({ active, kind, onBack }: ContentComingS
   return (
     <section className={slideScreenClass(active)} id="s-content-coming" data-anim="slide" aria-hidden={!active}>
       <header className={contentNavigationClass}>
-        <button className={contentNavigationBackClass} onClick={onBack} aria-label={t('content.backToMyContent')}>
+        <button className={contentNavigationBackClass} onClick={onBack} aria-label={t('contentUi.backToMyContent')}>
           <svg className={iconClass} aria-hidden="true"><use href="#i-chev-l" /></svg>
         </button>
         <h1>{t(`${key}.title`)}</h1>

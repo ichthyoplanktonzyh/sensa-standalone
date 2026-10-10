@@ -2,7 +2,8 @@ import {test} from 'vitest';
 /** Real generation/admission seams, synthetic sources only; no model or network calls. */
 import assert from 'node:assert/strict';
 import {canonicalJsonDigest} from '@sensa/learning-kernel';
-import {SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND,LEARNING_RESOURCE_DEFINITIONS,LIGHTWEIGHT_RESOURCE_PROFILE,makeRequest,makeBundle,validateBundle,generationResourceContracts,sensaLightweightInitialMaterializationContentSchema,lightweightStepRequirements} from '@sensa/contracts/sensa';
+import {learningSupportMeaning} from '@sensa/contracts/sensa';
+import {SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND,LEARNING_RESOURCE_DEFINITIONS,LIGHTWEIGHT_RESOURCE_PROFILE,makeRequest,makeBundle,validateBundle,validateBundleSnapshot,generationResourceContracts,sensaLightweightInitialMaterializationContentSchema,lightweightStepRequirements} from '@sensa/contracts/sensa';
 import {syntheticSound,withBindingFixture} from '../../../scripts/support/lightweightMaterialFixture.mts';
 import {provisionLightweightInitialContent} from '../../../apps/web/src/contentSupply/provisioning/lightweightInitialContent.ts';
 
@@ -12,7 +13,7 @@ const fixed={targetLanguageTag:'en',supportLanguageTag:'zh-CN',senseId:id(),sens
 const request=await makeRequest({id:id(),learner_user_id:id(),learning_target_id:id(),fixed_input:fixed},id(),now);
 const generated={resources:[
  {role:'experience_recall_cue',payload:{scene:'向朋友借一把伞，稍后归还。',senseFocus:'临时使用并归还'}},
- {role:'scene_bridge',payload:{text:'从取得者视角表达临时使用并准备归还。'}},
+ {role:'scene_bridge',payload:{text:'从取得者视角表达临时使用并准备归还。',meaningRendering:{meaning:'暂时取得物品并准备归还。',languageTag:'zh-CN'}}},
  {role:'scene_realization',payload:{example:'May asked to borrow an umbrella.',targetStart:13,targetEnd:19,experienceResourceKey:'experience_recall_cue:0'}},
  {role:'usage_guidance',payload:{example:'Can I borrow your pen?',translation:'我能借用你的笔吗？'}},
 ]};
@@ -57,9 +58,36 @@ for(const fields of [{targetStart:0,targetEnd:999},{experienceResourceKey:'anoth
  const tampered=structuredClone(bundle),candidate=tampered.candidates.find(c=>c.materialRoleKey==='scene_realization')!;
  Object.assign(candidate.contentPayload,fields);candidate.contentDigest=canonicalJsonDigest(candidate.contentPayload);
  assert.equal((await validateBundle(request,tampered,null,now)).content,null);
+ assert.equal(validateBundleSnapshot(request,tampered,null,now).content,null);
 }
 const accepted=await validateBundle(request,bundle,null,now);
+const restored=validateBundleSnapshot(request,bundle,null,now);
+assert.deepEqual(restored.content,accepted.content);
+assert.deepEqual(restored.validations.map(({materialCandidateValidationId,...fact})=>fact),accepted.validations.map(({materialCandidateValidationId,...fact})=>fact));
 assert(accepted.content,'core binding resources admit through the real shared seam');
+const japaneseRequest=await makeRequest({id:id(),learner_user_id:id(),learning_target_id:id(),fixed_input:{...fixed,supportLanguageTag:'ja'}},id(),now);
+const japaneseOutput=structuredClone(generated);
+japaneseOutput.resources[0]!.payload.scene='友人の傘を一時的に使い、後で返す。';
+japaneseOutput.resources[1]!.payload={text:'受け取る側から一時的な使用と返却の予定を表す。',meaningRendering:{meaning:'他人の物を一時的に借り、後で返すこと。',languageTag:'ja'}};
+const japaneseBundle=await produce(japaneseOutput,japaneseRequest),japanese=await validateBundle(japaneseRequest,japaneseBundle,null,now);
+assert(japanese.content);
+assert.equal(learningSupportMeaning(japanese.content.resources,'ja'),'他人の物を一時的に借り、後で返すこと。');
+assert.equal(japanese.content.resources.find(resource=>resource.materialRoleKey==='sense_confirmation')!.contentPayload.meaning,fixed.meaning,'rendering must not rewrite the confirmed semantic source');
+assert.equal(japaneseRequest.contextArtifacts.find(artifact=>artifact.contextKind==='sense_snapshot')!.payload.meaning,fixed.meaning);
+assert.throws(()=>learningSupportMeaning(japanese.content!.resources,'zh-CN'),/language_mismatch/);
+const downgradedRequest={...japaneseRequest,generatorPolicyVersion:'v3'},mismatchedPolicy=structuredClone(japaneseBundle);
+mismatchedPolicy.inputSnapshotDigest=canonicalJsonDigest(downgradedRequest);
+await assert.rejects(()=>validateBundle(downgradedRequest,mismatchedPolicy,null,now),/generator_policy_mismatch/);
+assert.throws(()=>validateBundleSnapshot(downgradedRequest,mismatchedPolicy,null,now),/generator_policy_mismatch/);
+for(const corruption of ['missing','wrong-language','rewrite-source'] as const){
+ const invalid=structuredClone(japaneseBundle),candidate=invalid.candidates.find(value=>value.materialRoleKey===(corruption==='rewrite-source'?'sense_confirmation':'scene_bridge'))!;
+ if(corruption==='missing')delete candidate.contentPayload.meaningRendering;
+ else if(corruption==='wrong-language')(candidate.contentPayload.meaningRendering as any).languageTag='zh-CN';
+ else candidate.contentPayload.meaning='source must not be replaced by a translation';
+ candidate.contentDigest=canonicalJsonDigest(candidate.contentPayload);
+ assert.equal((await validateBundle(japaneseRequest,invalid,null,now)).content,null,corruption);
+ assert.equal(validateBundleSnapshot(japaneseRequest,invalid,null,now).content,null,`restore: ${corruption}`);
+}
 assert.equal(accepted.content.resources.find(r=>r.materialRoleKey==='target_expression')?.contentPayload.expressionKind,'word');
 assert.equal(generationResourceContracts(request).some(r=>r.role==='usage_guidance'),true);
 assert.equal(generationResourceContracts(request).some(r=>r.role==='etymology'),false,'source facts never become model generation tasks');

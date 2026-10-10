@@ -293,7 +293,7 @@ Book Enrollment 固定一个不可变 Book Version、一个已解析 Book Range 
 
 Book 的新版本不会静默替换 Enrollment 已固定的 Book Version。升级必须是显式 Curriculum 操作：
 stable Sense 复用原进度，新加入成员获得新资格，被移除成员不删除历史，active Session 继续使用
-其已固定的旧 Scope/Content revisions。
+当前 Run 的旧 Scope/Content revisions；后续未开始 Run 按已明确应用的当前版本选择。
 
 ### Book Range
 
@@ -373,7 +373,7 @@ Example 只能通过其绑定 Sense 发起“学习这个意思”，Example
 本身不能成为 Curriculum member。unsave 不移除 Supplemental Membership；移除 Membership 也不
 unsave、不删除 Note/Anchor/Collection Membership、Retention Target 或 Learner Sense Progress。若同一 target 仍由
 其他 active/maintenance source 覆盖，它继续在有效 Study Scope 中；若已无任何有效 source，它从
-后续 Session 的正式候选中退出，但保留 phase、Protocol Run、Evidence 与 FSRS，重新加入时从原状态恢复。
+后续未开始 Run 的正式候选中退出，但保留 phase、Protocol Run、Evidence 与 FSRS，重新加入时从原状态恢复。
 
 ### On-demand Content Provisioning lifecycle
 
@@ -417,21 +417,21 @@ Provisioning Batch 是多个 Task 的非原子调度/观测容器。一个 Task 
 
 ### Study Scope Revision 与每日额度
 
-Study Scope 是固定一条 Language Learning Route revision、mode-aware、source-aware、policy-resolved
-的去重 scope snapshot：active Enrollment 提供
+正式学习队列是按当前 Language Learning Route、mode、来源、策略、readiness 与调度状态查询的可重建候选视图：active Enrollment 提供
 当前 Range 的新 Sense 与既有工作，maintenance Enrollment 只提供已经开始或进入长期保持的 Sense，
 paused Enrollment 不提供候选，active Supplemental Membership 提供对应 Learning Target。每个成员同时保留
 Curriculum source 与 Learning Entry Provenance、Effective Learning Policy、Resolved Learning Plan 与已解析 target/provisioning/protocol reference，
 只有当前 purpose 为 `ready` 时才提供运行候选，并按 Retention Target 去重。同一
 Retention Target 无论来自多少 Book、Range 或 Supplemental Membership，都只有一个 active
 Protocol Run 和一个 FSRS State；同一 Sense 的不同 target expressions 不得因此合并。
-换词书、调整 Range、切换 Enrollment mode、接纳或移除 Supplemental Membership 都产生新的不可变
-Study Scope Revision。
+Study Scope Revision 只固定实际选入一条 Protocol Run 的 Target、来源与已解析策略／计划，
+不复制整个候选库存，也不为未选中的目标预先建立执行快照。
 
-Learning Session 固定开始时的 Study Scope Revision 与 Pinned Language Context。Curriculum、Route 或
-Active Route Selection 变更从后续 Session 生效，不能
-静默改变正在进行的 Encounter 或队列；如果产品允许在 active Session 中修改 Plan，必须先明确
-结束/中断该 Session，而不是把它重绑定到新 Scope。
+Learning Session 固定开始时的 Pinned Language Context、intent 与每日新学上限，并保存起点选择及有序 Run。
+每条新 Run 固定自己的 Study Scope。换词书、调整 Range、切换 Enrollment mode、接纳或移除
+Supplemental Membership，以及未开始目标的合法 Policy Assignment 变更，都影响下一条尚未开始 Run 的候选，
+不要求先结束 Session。它们不增删当前 Run 的 participant，不改写已选来源、Committed Policy、已发生记录或调度结果。
+Route 与 Active Route Selection 不重绑定当前活动的固定语言上下文；数量偏好变更从后续 Session 生效。
 
 同一 Curriculum Membership 在固定 Target 与语言方向内发布新的不可变 Learning Materialization，
 不属于 Scope 重绑定。当前 Step 尚未接受 Action 时，Runtime 可以用新版替换其绑定并使旧界面 revision
@@ -464,8 +464,8 @@ Curriculum 只提供这些事实摘要，不据此生成维度处方、欠账或
 
 ## 5. Learning Session 与 Session intent
 
-Learning Session 是一次有开始和结束边界的用户活动容器。它固定 intent、Study Scope Revision 与
-Pinned Language Context：
+Learning Session 是一次有开始和结束边界的用户活动容器。它固定 intent、每日新学上限与 Pinned Language Context，
+保存起点 Study Scope，并允许后继 Run 从当前队列选择、各自固定实际来源：
 
 Pinned Language Context 固定 Route revision、Target Language 与 Support Language；具体 Step/Action
 再声明 Input Language 与 Output Language。阅读中的 target-language input 与 support-language explanation、
@@ -498,6 +498,11 @@ daily-new quota。尚未到期的 retaining Sense 也不因进入该模式被提
 
 Session 不是 FSRS 复习单位，也不聚合出一个总掌握结果。完成 Review-only 后，learner 仍可
 回到首页开始或继续 Mixed Session。
+
+普通暂停保留同一 Session 供继续；learner 明确结束当前活动则关闭该 Session，但保留未完成
+Protocol work、已保存 Step/材料和已经发生的 Introduction，不产生 Completion、Evidence 或 Memory
+Outcome。结束时间不得早于该活动中已接受的 Action。之后明确开始时重新解析当前 Study Plan/Scope，
+未完成 Run 只有在当前范围允许时才能明确恢复；恢复不改写 Run 的原 Scope、材料或历史。
 
 ## 6. Lexical Reference 与 Contextual Lookup
 
@@ -659,10 +664,12 @@ Expression/Alignment facts，也不得用 Active Route Selection 强制重标捕
 
 ## 8. Free Practice
 
-Free Practice 是独立的语言使用与泛化运行时，不是宽松版 Learning Protocol，也不是第三种 Learning
-Session intent。语言相关的 Free Practice Session 同样固定 Pinned Language Context。它可以读取
-Learning Target、Personal Semantic World 中完整的 Context–Expression–Sense、Practice Scope 与获准
-资源，但不能写入正式学习的证据、进度或调度状态。
+Free Practice 是使用系统中语言材料的独立练习空间，不是宽松版 Learning Protocol，也不是第三种 Learning
+Session intent。用户主线是提供或选择材料、选择可用练习方式、开始练习；这些是逻辑环节，不要求三个页面或
+重复确认。材料无需先加入正式学习。每种活动只解析自己所需事实：Expression-form Listening 只需要表达文本和
+表达语言，来源引用用于必要的回看，不要求完整 Meaning、Sense、Context、Learning Target 或正式调度状态。
+已开始的外部查询保持当前表达与语言，不因其他页面改动而静默换词；正式 Pinned Language Context 不是它的前置
+学习身份。需要语义语境的未来活动另行声明必要材料，不让当前播放承担尚未交付能力的要求。
 
 听、说、读、写是稳定的 learner-facing **Practice Area**。它们来自 receptive/productive ×
 sound/written 的组织矩阵，但不是四个运行引擎、mastery dimensions、分数或 Gate：
@@ -678,7 +685,11 @@ sound/written 的组织矩阵，但不是四个运行引擎、mastery dimensions
 Practice Brief 给一次练习提供局部方向，至少可以表达 learner intent 或 communicative goal、scenario、
 optional Scope 与 support level。它不是 Learning Objective、Protocol、graduation standard 或评分合同。
 
-Free Practice Session 由 learner 主动开启并至少固定：
+Free Practice Session 由 learner 主动开启，保留所选活动和材料引用。当前 Expression-form Listening 只需保留
+当前表达、表达语言及播放控制状态；不创建完整来源快照、学习队列或正式学习 Session。Practice Brief、反馈、
+Artifact 与历史仅在实际交付的活动需要时提供，不作为所有活动的统一启动前置条件。
+
+未来需要反馈和可追溯历史的活动可记录：
 
 ```text
 practiceBriefSnapshot
@@ -690,7 +701,7 @@ executableInventoryVersion
 status: active | completed | abandoned
 ```
 
-Session 创建前，Practice Runtime 必须解析：
+提供活动前，产品必须按实际交付能力核验：
 
 ```text
 Free Practice Profile
@@ -704,13 +715,16 @@ Profile 固定允许的 Practice Activity Definitions 及其 target、channel、
 与 session-policy requirements；Package Practice Manifest 声明 Package 内获准复用的 practice
 roles/resources，外部 provider 则必须保留自己的来源、授权与可用性事实。Inventory 是上述能力与
 当前 client support 的交集。它既不读取 learner mastery 来伪造 capability，也不借用 Acquisition
-Required Asset Manifest 推断四个 Area 全部可用。Session 固定 profile 与 resolved inventory version，
-运行中能力变化只能在下个 Session 生效。
+Required Asset Manifest 推断四个 Area 全部可用。Profile 与 Inventory 是能力交付约定，不要求当前只读播放
+创建版本化的持久 Session 或复制整个库存。
 
 Practice Scope 可以来自 learner 明确选择的 Personal Meanings/Senses/Expressions、Book slice、最近
-学习、已完成首次习得、Saved items 或其他已交付的 typed source。Scope 在 Session 开始时解析成稳定
-snapshot，并保留 Context、Expression、Sense、binding 或 Learning Target 的实际身份与 provenance；
-后续收藏、Book 或 progress 变化不能静默改变正在进行的活动。Declared Mastery 只排除正式 Planning，
+学习、已完成首次习得、Saved items 或其他已交付的 typed source。当前表达练习按表达语言与形式组织材料，
+不按 Meaning 或 Learning Target 数量重复播放同一形式。显式选择保留轻量材料引用，浏览按需读取。
+选择整个来源时包含该来源当前可用的表达，不生成全量成员快照；自选部分材料时保留表达身份。重复形式使用一个
+可追溯的代表来源，不复制全部出现记录；原始来源事实仍完整保留。
+开始播放只解析当前表达，不复制选中集合的全部语义详情。来源变化不静默替换正在播放的表达；下一次选词重新核验
+其可用性，缺失或读取失败须如实显示并提供重新选择或重试。Declared Mastery 只排除正式 Planning，
 不阻止 learner 自由练习。
 
 Practice Activity Definition 是扩展的主要单元，至少固定：
@@ -751,9 +765,9 @@ brief、feedback 与 retry 机制，再分别使用 voice/text channel adapter�
 不是为了凑数量而建立的新 Activity family。
 
 Real-world Speech Variation 的检索是 form-level：YouGlish occurrence 必须保留 provider provenance，
-UI 也必须明确这些片段按 Expression 检索、可能覆盖其他 Sense。若某个相同拼写具有不同发音，只有
-能够可靠约束 Pronunciation Variant 的 occurrence 才能用于对应声音泛化；首期省略语义 WSD 不等于
-允许错误发音污染活动。
+UI 也必须明确这些片段按 Expression 检索、可能覆盖其他 Sense。当前形式检索也可能包含多种发音，不宣称
+它们属于指定 Sense 或 Pronunciation Variant。未来明确要求指定 Variant 的活动必须另行核验 occurrence；
+不能把当前自由语流暴露当作特定发音目标已达成。
 
 Initial Profile 只发布 Inventory 中确实具备资源、provider、renderer 与 feedback capability 的 Activity。
 缺少任一活动不阻止正式 Learning Package 发布，也不能用占位内容伪装可进入。Practice Runtime 只能
@@ -792,7 +806,8 @@ NewEligible
 
 具体优先级、fairness、cooldown 和每天是否保留新学容量属于 Planning Policy，但必须满足：
 
-- 所有 candidate 必须来自 Session-pinned Study Scope Revision；`active` Enrollment 可以提供新与
+- 所有 candidate 必须按 Session 的语言方向与 intent 从当前来源安排中选择，而不是受其起点 Scope
+  库存限制；入选 Run 单独固定实际 participants 与来源。`active` Enrollment 可以提供新与
   既有工作，`maintenance` 只提供已经开始或 retaining/relearning 的工作，`paused` 不提供候选；
 - candidate 对应的 Resolved Learning Plan 必须为当前 purpose 提供 `ready` protocol/provisioning
   reference；`preparing/blocked` 只进入状态读取和恢复操作，不得被 Planner 当作可执行 Encounter；
@@ -818,6 +833,14 @@ Instance，不能把几个不同结果资格的 Step 偷偷合成一次评价。
 Step Instance 成为 current 时解析最新兼容的不可变 Learning Materialization。若 learner 尚未提交任何
 Action，同一 Membership 的新材料版本可以刷新当前绑定，同时写入可重放的 Run lifecycle fact 并使旧
 UI revision 失效；Action 被接受后，Step 的 materialization 和 role bindings 即成为不可变历史。
+
+历史保留每个 Step 的首次材料绑定，以及尚未操作时各次合法刷新的因果先后；最终材料映射本身不足以
+替代这些事实。即使多个操作发生于同一时刻，重放仍须复现其实际接受顺序，才能判断 Action 当时使用的
+材料与后继 Step 的绑定。历史摘要采用实际最后呈现的材料，不由容器遍历或序列化的排列推断。
+
+材料被来源正式接纳为 Ready 的时点独立于 Run 或 Step 的开始时点。Run 的材料快照必须保留这一事实，
+不能借改写快照创建时间，把后来就绪的材料当作先前已可用；个人生成材料以实际接纳的 Content Agent
+Attempt 为据，发布材料以本地 Curriculum 准入为据。补充资源也只能在它已接纳之后用于呈现。
 
 Sense Encounter 是对一个 learner、一个 Retention Target 及其 Sense、一个 Step purpose 和一组不可变版本的一次计划接触。
 它保存 Study Scope Revision、Curriculum source/Learning Entry Provenance、Learning Materialization、Learning

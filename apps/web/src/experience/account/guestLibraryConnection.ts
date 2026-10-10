@@ -4,7 +4,9 @@ import {readLibrary,type LibraryTransaction} from '../../data/library/store';
 import {isReplicatedLibraryEntry} from '../../data/library/replication/libraryReplica';
 
 export async function hasGuestLibraryContent(tx:LibraryTransaction){
- for(const table of librarySyncTables)for(const row of await tx.entries(table))if(isReplicatedLibraryEntry(table,row.key)&&!(table==='meta'&&row.key==='identity'))return true;
+ // Presence follows the same replication ownership rules as account admission.
+ // Stop at the first learner key; never decode record/media bodies for a bool.
+ for(const table of librarySyncTables)for await(const keys of tx.recordKeyBatches(table))for(const key of keys)if(isReplicatedLibraryEntry(table,key)&&!(table==='meta'&&key==='identity'))return true;
  return false;
 }
 

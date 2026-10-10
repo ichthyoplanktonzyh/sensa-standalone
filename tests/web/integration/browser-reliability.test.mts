@@ -130,13 +130,21 @@ for (const stack of [
   assert.deepEqual(parseMainStack(path), [...stack], `sheet stack did not round-trip: ${path}`);
 }
 assert.deepEqual(
-  retainParamsForStack({senseId:'sense',meaningId:'meaning',targetId:'target'},['s-content','s-content-sense']),
-  {senseId:'sense'},
+  retainParamsForStack({senseId:'sense',meaningId:'meaning',targetId:'target',alignmentId:'old-alignment'},['s-content','s-content-sense']),
+  {senseId:'sense',targetId:'target',meaningId:'meaning',alignmentId:'old-alignment'},
   'navigation params must leave history with their owning sheet',
 );
 assert.equal(screenInstanceKey('s-personal-meaning',{}),'s-personal-meaning:new');
-assert.equal(screenInstanceKey('s-content-sense',{senseId:'sense'}),'s-content-sense:sense');
+assert.deepEqual(retainParamsForStack({senseId:'sense',targetId:'target',meaningId:'meaning',alignmentId:'old-alignment',section:'notes'},['s-content','s-content-library']),{section:'notes'},'leaving all reference kinds removes their IDs');
+assert.equal(screenInstanceKey('s-content-sense',{senseId:'sense'}),'s-content-sense:sense:missing:missing:missing');
+assert.equal(screenInstanceKey('s-content-sense',{targetId:'target'}),'s-content-sense:missing:target:missing:missing');
+assert.equal(screenInstanceKey('s-content-sense',{meaningId:'meaning',alignmentId:'old-alignment'}),'s-content-sense:missing:missing:meaning:old-alignment');
+assert.notEqual(screenInstanceKey('s-content-sense',{meaningId:'meaning',alignmentId:'a'}),screenInstanceKey('s-content-sense',{meaningId:'meaning',alignmentId:'b'}),'two historical interpretations must not share screen memory');
+assert.notEqual(screenInstanceKey('s-content-sense',{senseId:'same'}),screenInstanceKey('s-content-sense',{targetId:'same'}),'a practice reference and Target reference must not share screen memory');
 assert.equal(screenInstanceKey('s-catalog-book',{bookKey:'english-foundation'}),'s-catalog-book:english-foundation');
+assert.deepEqual(retainParamsForStack({targetId:'target',packageKey:'member',publicationArchiveSha256:'source'},['s-learning-target','s-library-package']),{targetId:'target',packageKey:'member',publicationArchiveSha256:'source'});
+assert.deepEqual(retainParamsForStack({targetId:'target',packageKey:'member',publicationArchiveSha256:'source'},['s-learning-target']),{targetId:'target'},'returning to the target drops the source release parameters');
+assert.notEqual(screenInstanceKey('s-library-package',{packageKey:'member',publicationArchiveSha256:'first'}),screenInstanceKey('s-library-package',{packageKey:'member',publicationArchiveSha256:'second'}),'shared members in different source releases have distinct screen memory');
 console.log("PASS: browser errors are deduplicated and redacted, the API contract is strict/non-fatal, and shell routes round-trip while unknown paths are rejected.");
 
 });

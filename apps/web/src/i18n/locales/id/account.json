@@ -94,7 +94,7 @@
     "feedbackText": "Gunakan kontak di Tentang & dukungan untuk memberikan masukan dan koreksi konten.",
     "done": "Selesai"
   },
-  "cloudSync": {
+  "cloudSync": {"restoreTitle": "Data akun",
     "title": "Sinkronisasi akun",
     "pending": "Perubahan lokal menunggu untuk disinkronkan",
     "syncing": "Menyinkronkan…",
@@ -111,8 +111,9 @@
     "openFailed": "Data akun tidak dapat dipulihkan. Periksa koneksi dan coba lagi.",
     "retryOpen": "Coba pulihkan lagi",
     "details": "Lihat catatan yang bertentangan",
-    "conflictPrompt": "{{count}} catatan bertentangan dan memengaruhi {{affected}} catatan terkait. Pilih versi perangkat atau cloud untuk kelompok konflik ini.",
-    "conflictDecision": "Versi cloud terbaru akan diperiksa lagi sebelum pilihan Anda diterapkan. Jika berubah, konflik baru tetap disimpan untuk dikonfirmasi lagi. Data yang tidak terkait tetap disinkronkan.",
+    "conflictPrompt": "Bandingkan perubahan, lalu pilih satu versi untuk semuanya.",
+    "conflictDecision": "Jika salah satu versi berubah, bandingkan kembali.",
+    "comparison": {"local":"Perangkat ini","remote":"Akun Anda","base":"Sebelum perubahan","removed":"Dihapus atau belum ada dalam versi ini","unavailable":"Versi ini belum dapat ditampilkan sepenuhnya.","unsupported":"Perubahan ini belum dapat dibandingkan sepenuhnya. Kedua versi disimpan; hubungi dukungan.","refresh":"Sinkronkan sekarang untuk memuat versi.","changed":"Konten telah berubah. Sinkronkan dan bandingkan kembali.","item":"Konten {{number}}","fields":{"expression":"Ungkapan","meaning":"Makna","context":"Konteks","note":"Catatan","examples":"Situasi umum","included":"Kasus yang termasuk","excluded":"Kasus yang tidak termasuk","contrasts":"Perbedaan makna serupa","questions":"Pertanyaan terbuka","content":"Konten"}},
     "keepLocal": "Pertahankan versi perangkat",
     "useCloud": "Gunakan versi cloud",
     "resolving": "Memeriksa dan menyelesaikan…",

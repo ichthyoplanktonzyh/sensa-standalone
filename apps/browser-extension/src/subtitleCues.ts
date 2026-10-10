@@ -12,7 +12,8 @@ const finite=(value:unknown):value is number=>typeof value==='number'&&Number.is
  * drop boundaries no other language's punctuation justifies.
  */
 export function groupSubtitlePieces(input:Piece[],language?:string):Cue[]{
-  const pieces=input.filter(c=>c.text.trim()&&c.text.length<=12000&&finite(c.start)&&finite(c.end)&&c.start>=0&&c.end>c.start&&c.end<=86400).sort((a,b)=>a.start-b.start).slice(0,60000);
+  if(input.length>60000)throw new Error('captions_too_large');
+  const pieces=input.filter(c=>c.text.trim()&&c.text.length<=12000&&finite(c.start)&&finite(c.end)&&c.start>=0&&c.end>c.start&&c.end<=86400).sort((a,b)=>a.start-b.start);
   let text='';
   const spans=pieces.map(piece=>{const join=text?(piece.join??' '):'';text+=join;const offset=text.length;text+=piece.text;return {piece,offset};});
   const boundaries=Array.from(new Intl.Segmenter(language,{granularity:'sentence'}).segment(text),part=>part.index+part.segment.trimEnd().length)
@@ -36,8 +37,9 @@ export function groupSubtitlePieces(input:Piece[],language?:string):Cue[]{
 export function parseYoutubeCaptions(text:string,language?:string):Cue[]{
   const data=JSON.parse(text);
   if(!Array.isArray(data.events))throw new Error('invalid_subtitles');
+  if(data.events.length>10000)throw new Error('captions_too_large');
   type Event={tStartMs:number;dDurationMs?:number;wWinId?:number;segs?:{utf8?:string;tOffsetMs?:number}[]};
-  const events=(data.events as Event[]).filter(e=>e&&finite(e.tStartMs)&&e.tStartMs>=0&&e.tStartMs<86400000).sort((a,b)=>a.tStartMs-b.tStartMs).slice(0,10000);
+  const events=(data.events as Event[]).filter(e=>e&&finite(e.tStartMs)&&e.tStartMs>=0&&e.tStartMs<86400000).sort((a,b)=>a.tStartMs-b.tStartMs);
   // Same window/start is a repaint, not another spoken occurrence. Later repeats remain.
   const rows=new Map<string,Event>();
   for(const event of events)if(Array.isArray(event.segs)&&event.segs.some(s=>s&&typeof s.utf8==='string'&&s.utf8.trim()))rows.set(`${event.tStartMs}:${event.wWinId??''}`,event);

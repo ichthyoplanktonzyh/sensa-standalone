@@ -17,9 +17,9 @@ function normalizedAllowList(value){
 }
 
 export function authRedirectConfigMatches(config,desired){
- let configuredOrigin;
- try{configuredOrigin=new URL(config?.site_url).origin;}catch{return false;}
- return configuredOrigin===desired.siteUrl&&
+ let configured;
+ try{configured=new URL(config?.site_url);}catch{return false;}
+ return configured.href.replace(/\/$/,'')===desired.siteUrl&&
   JSON.stringify(normalizedAllowList(config?.uri_allow_list))===JSON.stringify([desired.uriAllowList]);
 }
 

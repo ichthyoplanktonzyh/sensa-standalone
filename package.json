@@ -54,7 +54,7 @@
     "sensa:package": "npm run build -w @sensa/contracts && npm run build -w @sensa/content-validator && node --import tsx content/tools/sensa_package.mts",
     "sensa:package-schema": "npm run build -w @sensa/contracts && node --import tsx content/tools/export_portable_lightweight_schema.mts",
     "content:route-foundation": "node --import tsx content/tools/route_foundation.mts",
-    "content:prepare-local": "node --import tsx scripts/local/prepareLearningBook.mts content/preview/lightweight-resources-v7.json .sensa-local/lightweight-resources-v7.json"
+    "content:prepare-local": "node --import tsx scripts/local/prepareLearningBook.mts content/preview/lightweight-resources-v8.json .sensa-local/lightweight-resources-v8.json"
   },
   "engines": {
     "node": ">=24"

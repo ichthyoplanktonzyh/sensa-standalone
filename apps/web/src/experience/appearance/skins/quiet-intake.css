@@ -1,5 +1,5 @@
 /* Context remains readable alongside the conversation and explicit acceptance. */
-html[data-sensa-skin="quiet"] .pmw-screen { --sensa-layout-detail-panel-width: 56rem; }
+html[data-sensa-skin="quiet"] .pmw-screen { --sensa-layout-detail-panel-width: 100%; }
 html[data-sensa-skin="quiet"] .pmw-screen .content-nav { background: var(--sensa-surface-canvas); }
 html[data-sensa-skin="quiet"] .pmw-screen .content-nav h1 { font-weight: 500; }
 html[data-sensa-skin="quiet"] .pmw-transcript { gap: 1.5rem; padding: 2rem; scroll-padding-block: 1.5rem; }

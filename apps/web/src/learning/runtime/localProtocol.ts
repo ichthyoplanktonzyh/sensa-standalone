@@ -14,6 +14,7 @@ import type {
 import {initialCompletionContractOf,orchestrationRegistry,type InitialCompletionContract,type LearningEvidenceLevel} from './orchestrations';
 import {protocolPolicyRegistry} from './protocolPolicies';
 import type {TargetPlanningOverride} from './targetPlanningOverrides';
+import {runBaselineMaterial,pinRunStepMaterial} from './runMaterialPins';
 
 export interface LocalLearningMaterialization {
   readonly snapshot: SensaLearningMaterializationSnapshot;
@@ -39,7 +40,7 @@ export interface LocalCurriculumMembership {
    * libraries written before Book release updates existed. */
   readonly status?:'active'|'superseded';
   readonly languageContext:SensaFormalPinnedLanguageContext;
-  readonly sourceKind:'sense_learning_package'|'personal_meaning_alignment';
+  readonly sourceKind:'sense_learning_package'|'personal_meaning_alignment'|'stable_sense';
   readonly provenance:Readonly<Record<string,unknown>>;
   readonly packageKey:string|null;
   readonly assurancePackageKey?:string;
@@ -144,8 +145,12 @@ export interface LocalLearningRunParticipant {
   /** Audit baseline selected when the Run plan was resolved. It does not freeze
    * every later Step: each presented Step records the material actually used,
    * and a not-yet-acted current Step may be explicitly refreshed. */
-  material: LocalLearningMaterialization;
-  presentedMaterials:Record<string,LocalLearningMaterialization>;
+  material: string;
+  materializations:Record<string,LocalLearningMaterialization>;
+  presentedMaterials:Record<string,string>;
+  /** First-binding order, independent of object-key serialization. Refreshes
+   * replace only the current binding and never reorder earlier Steps. */
+  presentationOrder:string[];
   policyCommitment:LocalCommittedLearningPolicy;
   resolvedPlan:LocalResolvedLearningPlanSnapshot;
   progress:ProtocolProgressState;
@@ -161,18 +166,28 @@ export interface LocalProtocolState {
 }
 
 /**
- * Persisted Session envelope. Each participant owns one formal Protocol Run;
+ * Persisted execution envelope within a separately stored Learning Session.
+ * Each participant owns one formal Protocol Run;
  * the envelope may interleave several of them without merging their identity,
  * progress, evidence, materialization, or settlement.
  */
 export interface LocalLearningRun {
   id: string;
+  /** Immutable creation witness; receipts reference facts, not copied Runs. */
+  startedByOperationId?:string;
+  continuedFromRunId?:string;
+  /** Creation activity; a paused Protocol Run can later be visited by another
+   * Session without rewriting this origin or any participant material. */
+  learningSessionId?:string;
+  studyScopeRevisionId?:string;
   /** Primary target used to enter the Run. Every actual member is in targetIds. */
   targetId: string;
   targetIds: string[];
   participants: Record<string, LocalLearningRunParticipant>;
   targetCompletions: Record<string, { at: string; kind: string }>;
   languageContext:SensaFormalPinnedLanguageContext;
+  /** Entry intent belongs to the persisted Session, not to the page queue. */
+  sessionIntent?:LocalLearningSessionIntent;
   purpose: LearningProtocolPurpose;
   policyProfileId: LearningPolicyId;
   policyProfileVersion: string;
@@ -191,7 +206,40 @@ export interface LocalLearningRun {
   completionKind?: string;
 }
 
-export type LocalLearningRunLifecycleEvent =
+export type LocalLearningRunLifecycleEvent = Readonly<{runRevision:number}> & (
+  | Readonly<{
+      eventId:string;
+      kind:'paused_for_session_switch';
+      operationId:string;
+      selectedTargetId:string;
+      at:string;
+    }>
+  | Readonly<{
+      eventId:string;
+      kind:'paused_for_session_end';
+      operationId:string;
+      learningSessionId:string;
+      at:string;
+    }>
+  | Readonly<{
+      eventId:string;
+      kind:'resumed_after_session_switch'|'resumed_after_session_end';
+      operationId:string;
+      interruptionEventId:string;
+      sessionIntent:LocalLearningSessionIntent;
+      requestedLanguageContext?:SensaFormalPinnedLanguageContext;
+      continuedFromRunId?:string;
+      at:string;
+    }>
+  | Readonly<{
+      eventId:string;
+      kind:'session_intent_selected';
+      operationId:string;
+      sessionIntent:LocalLearningSessionIntent;
+      requestedLanguageContext?:SensaFormalPinnedLanguageContext;
+      continuedFromRunId?:string;
+      at:string;
+    }>
   | Readonly<{
       eventId:string;
       kind:'interrupted_by_planning_override';
@@ -205,6 +253,9 @@ export type LocalLearningRunLifecycleEvent =
       kind:'resumed_after_planning_override';
       operationId:string;
       interruptionEventId:string;
+      sessionIntent?:LocalLearningSessionIntent;
+      requestedLanguageContext?:SensaFormalPinnedLanguageContext;
+      continuedFromRunId?:string;
       at:string;
     }>
   | Readonly<{
@@ -215,7 +266,19 @@ export type LocalLearningRunLifecycleEvent =
       stepId:string;
       materializationId:string;
       at:string;
-    }>;
+    }>);
+
+export type LocalLearningSessionIntent='mixed'|'review_only';
+
+export const localRunSessionIntent=(run:Pick<LocalLearningRun,'sessionIntent'|'lifecycleEvents'>):LocalLearningSessionIntent=>{
+  const selection=[...run.lifecycleEvents].reverse().find(event=>'sessionIntent' in event&&event.sessionIntent!==undefined);
+  return selection&&'sessionIntent' in selection?selection.sessionIntent??run.sessionIntent??'mixed':run.sessionIntent??'mixed';
+};
+
+export const localRunOpenSessionPause=(run:Pick<LocalLearningRun,'lifecycleEvents'>):Extract<LocalLearningRunLifecycleEvent,{kind:'paused_for_session_switch'|'paused_for_session_end'}>|null=>{
+  const resumed=new Set(run.lifecycleEvents.flatMap(event=>event.kind==='resumed_after_session_switch'||event.kind==='resumed_after_session_end'?[event.interruptionEventId]:[]));
+  return [...run.lifecycleEvents].reverse().find((event):event is Extract<LocalLearningRunLifecycleEvent,{kind:'paused_for_session_switch'|'paused_for_session_end'}> => (event.kind==='paused_for_session_switch'||event.kind==='paused_for_session_end')&&!resumed.has(event.eventId))??null;
+};
 
 /** The latest interruption remains open until a matching resume fact exists. */
 export const localRunOpenPlanningInterruption = (
@@ -443,7 +506,11 @@ export function readLocalProtocolState<T>(
 
 const runContractProjection=(run:LocalLearningRun)=>({
  id:run.id,targetId:run.targetId,targetIds:run.targetIds,participants:run.participants,
+ startedByOperationId:run.startedByOperationId,
+ continuedFromRunId:run.continuedFromRunId,
+ learningSessionId:run.learningSessionId,studyScopeRevisionId:run.studyScopeRevisionId,
  targetCompletions:run.targetCompletions,
+ languageContext:run.languageContext,sessionIntent:run.sessionIntent,
  purpose:run.purpose,policyProfileId:run.policyProfileId,policyProfileVersion:run.policyProfileVersion,
  protocolBinding:run.protocolBinding,protocolVersion:run.protocolVersion,
  schedulingPolicyId:run.schedulingPolicyId,schedulingPolicy:run.schedulingPolicy,
@@ -499,7 +566,7 @@ export const createLocalProtocolProgress=(protocolRunId:string,binding:LearningP
  createProtocolProgressState(protocolRunId,localProgressDefinition(binding));
 
 export const resetLocalRunParticipantsForReplay=(saved:LocalLearningRun):LocalLearningRun['participants']=>
- Object.fromEntries(Object.entries(saved.participants).map(([id,participant])=>[id,{...participant,evidenceIds:[],progress:createLocalProtocolProgress(participant.protocolRunId,saved.protocolBinding)}]));
+ Object.fromEntries(Object.entries(saved.participants).map(([id,participant])=>[id,{...participant,materializations:{[participant.material]:structuredClone(runBaselineMaterial(participant))},presentedMaterials:{},presentationOrder:[],evidenceIds:[],progress:createLocalProtocolProgress(participant.protocolRunId,saved.protocolBinding)}]));
 
 const assertLocalProtocolState=(state:LocalProtocolState,adapterId:RuntimeAdapterId):void=>{
  if(state.adapterId!==adapterId||!isJsonValue(state.value))throw new Error('localFlow.resourceInvalid');
@@ -514,7 +581,7 @@ export function validateLocalProtocolResources(
  execution.validate?.(structuredClone(target),resource?structuredClone(resource):undefined);
 }
 
-/** Initialize only the opaque plugin slot; the Session envelope stays kernel-owned. */
+/** Initialize only the opaque plugin slot; the execution envelope stays kernel-owned. */
 export function initializeLocalProtocolState(input:Readonly<{
  execution:LocalProtocolExecution;
  target:LocalExecutableLearningTarget;
@@ -555,10 +622,10 @@ export function replayLocalProtocolRun(input:Readonly<{
 }>):LocalLearningRun{
  const run:LocalLearningRun={
   ...structuredClone(input.saved),
-  // Every lifecycle event and Protocol action increments the same optimistic
-  // concurrency revision. Protocol actions are replayed below by the caller;
-  // lifecycle facts are already immutable and therefore establish this base.
-  revision:1+input.saved.lifecycleEvents.length,
+  // Actions and lifecycle facts are replayed together in causal revision order.
+  // The final material map and lifecycle history are not initial state.
+  revision:1,
+  lifecycleEvents:[],
   ordinal:1,
   completedAt:null,
   completionKind:undefined,
@@ -574,6 +641,9 @@ export function replayLocalProtocolRun(input:Readonly<{
  );
  assertLocalProtocolState(state,input.saved.protocolBinding.runtimeAdapterId);
  run.protocolState=structuredClone(state);
+ const firstTargetId=localProtocolActiveTargetId(input.execution,run),firstStepId=localProtocolStepId(input.execution,run),participant=run.participants[firstTargetId];
+ if(!participant)throw new Error('localFlow.resourceInvalid');
+ pinRunStepMaterial(participant,firstStepId,runBaselineMaterial(participant));
  return run;
 }
 

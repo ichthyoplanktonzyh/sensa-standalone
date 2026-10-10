@@ -1,7 +1,7 @@
 import {stableUuid} from './canonical.js';
 
 export const lightweightProtocolVersions=Object.freeze({
-  initial:'sensa-lightweight-initial-v1',
+  initial:'sensa-lightweight-initial-v2',
   review:'sensa-lightweight-review-v1',
   relearning:'sensa-lightweight-relearning-v1',
 } as const);
@@ -22,6 +22,9 @@ export function lightweightProtocolStepId(runId:string,ordinal:number,phase:'rec
 export function transitionLightweightProtocol(protocolVersion:string,phase:'recall'|'reveal',action:{kind:'reveal'}|{kind:'rate';rating:'again'|'hard'|'good'}){
   if(!Object.values(lightweightProtocolVersions).includes(protocolVersion as typeof lightweightProtocolVersions[keyof typeof lightweightProtocolVersions]))throw new Error('Unsupported protocol');
   if(phase==='recall'&&action.kind==='reveal')return 'reveal' as const;
-  if(phase==='reveal'&&action.kind==='rate')return protocolVersion===lightweightProtocolVersions.relearning&&action.rating==='again'?'waiting' as const:'completed' as const;
+  if(phase==='reveal'&&action.kind==='rate'){
+    if(protocolVersion===lightweightProtocolVersions.initial&&action.rating==='again')return 'recall' as const;
+    return protocolVersion===lightweightProtocolVersions.relearning&&action.rating==='again'?'waiting' as const:'completed' as const;
+  }
   throw new Error('Action is not allowed at this step');
 }

@@ -62,7 +62,7 @@ export interface ProtocolRuntimeAdapter {
 }
 
 export const LIGHTWEIGHT_LOCAL_PROTOCOL_BINDINGS=Object.freeze([
- {purpose:'initial_learning',protocolId:'lightweight-study',protocolVersion:'v3',localProtocolVersion:'sensa-lightweight-initial-v1'},
+ {purpose:'initial_learning',protocolId:'lightweight-study',protocolVersion:'v4',localProtocolVersion:'sensa-lightweight-initial-v2'},
  {purpose:'retention_review',protocolId:'learner-rated-retention-review',protocolVersion:'v1',localProtocolVersion:'sensa-lightweight-review-v1'},
  {purpose:'relearning',protocolId:'lightweight-rebinding',protocolVersion:'v1',localProtocolVersion:'sensa-lightweight-relearning-v1'},
 ] as const satisfies readonly LocalProtocolExecutionBinding[]);
@@ -344,13 +344,15 @@ export type LocalTargetExecutionReadiness=
  * It checks immutable identity, validated bytes, exact Policy/Profile versions,
  * purpose-specific content requirements and the selected execution adapter.
  */
-export function inspectLocalTargetReadiness(
+function inspectTargetPurposes(
   target:LocalLearningTarget,
   membership:LocalCurriculumMembership|undefined,
   resource:LocalLearningResource|undefined,
-  purpose:LearningProtocolPurpose=localLearningPurpose(target),
-):LocalTargetExecutionReadiness{
+  purposes:readonly LearningProtocolPurpose[],
+  pinnedProfileVersion?:string,
+):Partial<Record<LearningProtocolPurpose,LocalTargetExecutionReadiness>>{
  const profileId=localTargetPolicy(target);
+ const blocked=(purpose:LearningProtocolPurpose,error:unknown):LocalTargetExecutionReadiness=>Object.freeze({status:'blocked',purpose,profileId,profileVersion:target.committedPolicy?.profileVersion??pinnedProfileVersion??'',binding:null,materializationIds:Object.freeze([]),reason:error instanceof Error?error.message:'content_unavailable'});
  try{
   if(!membership)throw new Error('route_membership_missing');
   const executable=localExecutableTarget(target,membership);
@@ -360,21 +362,49 @@ export function inspectLocalTargetReadiness(
    membership.material.snapshot.validationStatus!=='validated'
    || membership.material.snapshot.contentDigest!==canonicalJsonDigest(membership.material.content)
   )throw new Error('material_validation_failed');
-  const profile=learningPolicyProfileRegistry.get(profileId,target.committedPolicy?.profileVersion);
-  const binding=profile.protocols[purpose];
-  if(!binding.localProtocolVersion||!profile.lifecycle.schedulingPolicy)throw new Error('incomplete_binding');
+  if(target.committedPolicy&&pinnedProfileVersion&&target.committedPolicy.profileVersion!==pinnedProfileVersion)throw new Error('scope_policy_version_changed');
+  const profile=learningPolicyProfileRegistry.get(profileId,target.committedPolicy?.profileVersion??pinnedProfileVersion);
   const structuredProvisioned=!!resource&&!!membership.assurancePackageKey;
-  const resolved=learningPolicyProfileRegistry.resolve(profileId,capabilityId=>{
-   const provisioned=capabilityId==='compact_learning_material'
-    || capabilityId==='structured_learning_package'&&structuredProvisioned;
-   return {view:{status:provisioned?'ready':'blocked',label:provisioned?'ready':'blocked',detail:provisioned?'content_validated':'content_unavailable'},provisioned,materializationId:provisioned?membership.material.snapshot.learningMaterializationId:null};
-  },profile.profileVersion).purposes[purpose];
-  if(!resolved.provisioned||resolved.readiness.status!=='ready')throw new Error('content_unavailable');
-  validateLocalProtocolResources(learningRuntimeCoordinator.localExecutionForBinding(binding,purpose),executable,resource);
-  return Object.freeze({status:'ready',purpose,profileId,profileVersion:profile.profileVersion,binding,materializationIds:Object.freeze([...resolved.materializationIds]),reason:null});
+  type Purposes=ReturnType<typeof learningPolicyProfileRegistry.resolve>['purposes'];
+  let resolution:{ok:true;value:Purposes}|{ok:false;error:unknown}|undefined;
+  return Object.fromEntries(purposes.map(purpose=>{
+   try{
+    const binding=profile.protocols[purpose];
+    if(!binding.localProtocolVersion||!profile.lifecycle.schedulingPolicy)throw new Error('incomplete_binding');
+    if(!resolution){
+     try{resolution={ok:true,value:learningPolicyProfileRegistry.resolve(profileId,capabilityId=>{
+      const provisioned=capabilityId==='compact_learning_material'||capabilityId==='structured_learning_package'&&structuredProvisioned;
+      return {view:{status:provisioned?'ready':'blocked',label:provisioned?'ready':'blocked',detail:provisioned?'content_validated':'content_unavailable'},provisioned,materializationId:provisioned?membership.material.snapshot.learningMaterializationId:null};
+     },profile.profileVersion).purposes};}
+     catch(error){resolution={ok:false,error};}
+    }
+    if(!resolution.ok)throw resolution.error;
+    const resolved=resolution.value[purpose];
+    if(!resolved.provisioned||resolved.readiness.status!=='ready')throw new Error('content_unavailable');
+    // The protocol probe still receives its own detached executable/resource.
+    // One purpose cannot mutate or suppress another purpose's validation.
+    validateLocalProtocolResources(learningRuntimeCoordinator.localExecutionForBinding(binding,purpose),executable,resource);
+    return [purpose,Object.freeze({status:'ready',purpose,profileId,profileVersion:profile.profileVersion,binding:Object.freeze(structuredClone(binding)),materializationIds:Object.freeze([...resolved.materializationIds]),reason:null})];
+   }catch(error){return [purpose,blocked(purpose,error)];}
+  }));
  }catch(error){
-  return Object.freeze({status:'blocked',purpose,profileId,profileVersion:target.committedPolicy?.profileVersion??'',binding:null,materializationIds:Object.freeze([]),reason:error instanceof Error?error.message:'content_unavailable'});
+  return Object.fromEntries(purposes.map(purpose=>[purpose,blocked(purpose,error)]));
  }
+}
+
+export function inspectLocalTargetReadiness(
+ target:LocalLearningTarget,membership:LocalCurriculumMembership|undefined,resource:LocalLearningResource|undefined,
+ purpose:LearningProtocolPurpose=localLearningPurpose(target),pinnedProfileVersion?:string,
+):LocalTargetExecutionReadiness{
+ return inspectTargetPurposes(target,membership,resource,[purpose],pinnedProfileVersion)[purpose]!;
+}
+
+/** A full Scope needs every purpose, but immutable identity/material bytes and
+ * profile capability resolution need checking only once per owned source. */
+export function inspectLocalTargetPurposeReadiness(
+ target:LocalLearningTarget,membership:LocalCurriculumMembership|undefined,resource:LocalLearningResource|undefined,pinnedProfileVersion?:string,
+):Readonly<Record<LearningProtocolPurpose,LocalTargetExecutionReadiness>>{
+ return Object.freeze(inspectTargetPurposes(target,membership,resource,LEARNING_PROTOCOL_PURPOSES,pinnedProfileVersion)) as Readonly<Record<LearningProtocolPurpose,LocalTargetExecutionReadiness>>;
 }
 
 export function requireLocalTargetReadiness(
@@ -382,8 +412,9 @@ export function requireLocalTargetReadiness(
  membership:LocalCurriculumMembership|undefined,
  resource:LocalLearningResource|undefined,
  purpose:LearningProtocolPurpose=localLearningPurpose(target),
+ pinnedProfileVersion?:string,
 ):Extract<LocalTargetExecutionReadiness,{status:'ready'}>{
- const readiness=inspectLocalTargetReadiness(target,membership,resource,purpose);
+ const readiness=inspectLocalTargetReadiness(target,membership,resource,purpose,pinnedProfileVersion);
  if(readiness.status!=='ready'||!readiness.binding)throw new Error('localFlow.resourceInvalid');
  return readiness;
 }

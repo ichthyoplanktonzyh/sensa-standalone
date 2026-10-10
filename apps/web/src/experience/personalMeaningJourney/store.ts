@@ -51,6 +51,9 @@ export interface JourneyMockState {
 
 /** All authoritative facts for one Personal Meaning. */
 export interface MeaningJourneyRecord {
+  /** Explicit conflict decisions retain both immutable branches, separate from
+   * the current Meaning. Ordinary records incur no branch archive. */
+  conflictHistory?: import('./meaningConflictHistory').MeaningConflictHistory;
   personalMeaning: SensaPersonalMeaningSnapshot;
   personalMeaningRevisions: SensaPersonalMeaningRevisionSnapshot[];
   personalSemanticAnchors: SensaPersonalSemanticAnchorSnapshot[];

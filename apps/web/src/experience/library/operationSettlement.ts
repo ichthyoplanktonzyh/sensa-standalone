@@ -25,3 +25,16 @@ export async function settleOperation<T>(
     return { kind: 'committed', value, projection: 'stale', refreshError };
   }
 }
+
+export type ReconciledOperation<T> = Exclude<OperationSettlement<T>,{kind:'rejected'}>
+  | Readonly<{kind:'unconfirmed';error:unknown;projection:'current'}>
+  | Readonly<{kind:'unconfirmed';error:unknown;projection:'stale';refreshError:unknown}>;
+
+/** A missing response is not proof of rollback. Re-read durable truth without
+ * re-executing the intent, and preserve uncertainty about its own receipt. */
+export async function settleReconciledOperation<T>(execute:()=>Promise<T>,refresh:()=>Promise<void>):Promise<ReconciledOperation<T>>{
+ const outcome=await settleOperation(execute,refresh);
+ if(outcome.kind!=='rejected')return outcome;
+ try{await refresh();return {kind:'unconfirmed',error:outcome.error,projection:'current'};}
+ catch(refreshError){return {kind:'unconfirmed',error:outcome.error,projection:'stale',refreshError};}
+}

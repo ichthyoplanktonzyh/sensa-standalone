@@ -1,31 +1,39 @@
 /** Loopback-only Auth and consumer API for local owner acceptance. */
 import { serve } from '@hono/node-server';
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { jwtVerify, SignJWT } from 'jose';
 import pg from 'pg';
 
 import { createConsumerRoutes } from '../../apps/api/src/sensa/access/consumer.ts';
+import { readLearningContentRegistry } from '../../apps/api/src/sensa/access/learningContentRegistry.ts';
 import { ConsumerError, type ConsumerPrincipal } from '../../apps/api/src/sensa/access/auth.ts';
 import type { DatabaseExecutor } from '../../apps/api/src/database/index.ts';
+import {localSensaCorsOptions,localExtensionOrigins} from './localCors.mts';
 
 const host = '127.0.0.1';
 const port = Number(process.env.SENSA_LOCAL_SERVICE_PORT ?? 4319);
 if (!Number.isInteger(port) || port < 1024 || port > 65_535) throw new Error('Invalid local service port');
 const serviceOrigin = `http://${host}:${port}`;
-const allowedOrigins = (process.env.SENSA_LOCAL_WEB_ORIGINS ?? '')
+const allowedWebOrigins = (process.env.SENSA_LOCAL_WEB_ORIGINS ?? '')
   .split(',').map(value => value.trim()).filter(Boolean);
-if (!allowedOrigins.length || allowedOrigins.some(value => {
+if (!allowedWebOrigins.length || allowedWebOrigins.some(value => {
   try {
     const url = new URL(value);
     return url.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(url.hostname);
   } catch { return true; }
 })) throw new Error('Local Web origins must be explicit loopback HTTP origins');
+const allowedOrigins=[...allowedWebOrigins,...localExtensionOrigins(process.env.SENSA_LOCAL_EXTENSION_ORIGINS)];
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl || new URL(databaseUrl).hostname !== host || !new URL(databaseUrl).pathname.startsWith('/sensa_m1a_')) {
   throw new Error('A disposable loopback Sensa database is required');
 }
+const catalogPath = process.env.SENSA_LOCAL_PACKAGE_CATALOG_PATH;
+const localCatalog = catalogPath ? await readLearningContentRegistry({
+  SENSA_PACKAGE_CATALOG_JSON: readFileSync(catalogPath,'utf8'),
+}) : undefined;
 
 const issuer = `${serviceOrigin}/auth/v1`;
 const localSubject = '10000000-0000-4000-8000-000000000001';
@@ -159,12 +167,7 @@ const transaction = async <T>(work: (database: DatabaseExecutor) => Promise<T>):
 };
 
 const app = new Hono();
-app.use('*', cors({
-  origin: allowedOrigins,
-  allowMethods: ['GET', 'POST', 'OPTIONS'],
-  allowHeaders: ['authorization', 'content-type', 'apikey', 'x-client-info', 'x-supabase-api-version'],
-  exposeHeaders: ['x-request-id'],
-}));
+app.use('*', cors(localSensaCorsOptions(allowedOrigins)));
 app.use('*', async (context, next) => {
   const origin = context.req.header('origin');
   if (origin && !allowedOrigins.includes(origin)) return context.json({ code: 'local_origin_refused' }, 403);
@@ -214,6 +217,7 @@ app.route('/', createConsumerRoutes({
   transaction,
   telemetry: () => {},
   deleteIdentity: async () => {},
+  learningContentRegistry: localCatalog ? async () => localCatalog : undefined,
 }));
 
 const server = serve({ fetch: app.fetch, hostname: host, port });

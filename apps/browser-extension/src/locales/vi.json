@@ -1,4 +1,5 @@
 {
+  "videoCaptionLimit": "Dữ liệu phụ đề quá lớn để tải đầy đủ.",
   "openInbox": "Mở hộp thư đến Sensa",
   "deliveryHint": "Sau khi lưu, mở Sensa trong trình duyệt này. Nội dung đã ghi sẽ tự xuất hiện trong hộp thư đến.",
   "savedInbox": "Đã chuyển vào hộp thư đến Sensa.",
@@ -167,7 +168,7 @@
   "videoTranslation": "Chỉ bản dịch (tự động)",
   "videoHint": "Tải phụ đề, rồi chọn cách diễn đạt để giải thích hoặc lưu. Chọn văn bản sẽ tạm dừng video.",
   "videoOwnFile": "Dùng tệp phụ đề của bạn",
-  "videoFileHint": "Nếu không có phụ đề đọc được, hãy tải tệp VTT / SRT của video hiện tại. Chưa hỗ trợ phiên âm AI trên đám mây.",
+  "videoFileHint": "Nếu không có phụ đề đọc được, hãy tải tệp VTT / SRT của video hiện tại.",
   "videoLoadFile": "Tải tệp phụ đề",
   "videoRetry": "Thử dịch lại",
   "videoAd": "Quảng cáo đang phát; đã tạm dừng thu thập phụ đề.",

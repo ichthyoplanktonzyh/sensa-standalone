@@ -1,9 +1,12 @@
 import {test,expect,type Page} from '@playwright/test';
 import {resolve} from 'node:path';
 import {readFile} from 'node:fs/promises';
+import {extensionArtifact as compileExtensionArtifact} from '../support/extensionArtifact.mts';
 import {readYoutubePlayer} from '../../../apps/browser-extension/src/youtubePlayer.ts';
 import {captureSnapshotSchema} from '@sensa/contracts/sensa';
-const extensionArtifact=process.env.SENSA_EXTENSION_TEST_DIR??'apps/browser-extension/dist';
+let extensionArtifact:string,artifact:Awaited<ReturnType<typeof compileExtensionArtifact>>;
+test.beforeAll(async()=>{artifact=await compileExtensionArtifact();extensionArtifact=artifact.path;});
+test.afterAll(async()=>{await artifact?.close();});
 const cues={events:[{tStartMs:12500,dDurationMs:1000,segs:[{utf8:'She took'}]},{tStartMs:13500,dDurationMs:2000,segs:[{utf8:'her time.'}]},{tStartMs:18000,dDurationMs:4000,segs:[{utf8:'They looked up at the sky.'}]}]};
 let captionRequest:URL|null=null,emptyCaptions=false;
 test.setTimeout(180_000);
@@ -222,7 +225,7 @@ try{
  await page.getByRole('button',{name:'翻译本句',exact:true}).click();await expect(page.getByLabel('当前字幕译文',{exact:true})).toHaveText('她不慌不忙地做事。');
  expect(await readings()).toBe(readCaptions+1);await page.getByLabel('字幕显示',{exact:true}).selectOption('original');
  await page.screenshot({path:'/tmp/sensa-browser-video.png'});
- emptyCaptions=true;await page.getByRole('button',{name:'加载字幕',exact:true}).click();await expect(caption).toHaveText('');await expect(page.getByText('未找到可读取的字幕。可检查视频字幕设置，或加载自己的字幕文件。',{exact:true})).toBeVisible();
+ emptyCaptions=true;await page.getByRole('button',{name:'加载字幕',exact:true}).click();await expect(caption).toHaveText('');await expect(page.getByText('字幕读取失败，请重试或加载自己的字幕文件。',{exact:true})).toBeVisible();
  await page.evaluate(()=>{history.pushState({},'', '/watch?v=lmnopqrstuv');document.dispatchEvent(new Event('yt-navigate-start'));});
  await expect(page.getByLabel('当前原字幕',{exact:true})).toHaveCount(0);
  await page.evaluate(()=>(window as any).fixture.receive({kind:'reading',enabled:false}));await expect(page.locator('[data-sensa-ui]')).toHaveCount(0);

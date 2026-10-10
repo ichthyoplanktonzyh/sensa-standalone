@@ -18,9 +18,8 @@ export interface CaptureLanguage {
 export const unknownCaptureLanguage: CaptureLanguage = {language: null, languageSource: null,languageConfidence:null};
 
 /**
- * Below this many characters a detector is reading trigrams that Spanish and
- * Portuguese share, so a short selection on a page that declares nothing is
- * reported as undetermined rather than filed under a coin flip.
+ * Very short selections offer little language evidence. Without a source
+ * declaration they remain undetermined instead of forcing a detector guess.
  */
 export const minDetectableCharacters = 10;
 
@@ -30,10 +29,9 @@ export const maxDetectableCharacters = 512;
 
 /**
  * Below this many characters, "does this already match the Support Language?" is not a
- * question a detector can answer safely: trigram statistics are what tells
- * Spanish from Portuguese, and a short sample of two related languages reads the
- * same to them. Text this short inherits the language of the surface it sits on
- * instead of being sent for a coin flip.
+ * question a detector can answer safely. Text this short can inherit the
+ * source's declaration; an uncertain longer sample must not inherit a global
+ * page language and thereby skip a foreign paragraph.
  */
 export const minSkimmableCharacters = 50;
 
@@ -41,6 +39,7 @@ export const minSkimmableCharacters = 50;
  * text in hand is already in that exact language. */
 export interface ReaderLanguage {
   supportLanguageTag: string;
+  sourceLanguageTag: string | null;
   alreadyReadable: boolean;
 }
 
@@ -67,7 +66,7 @@ export async function readerLanguage(text: string, surfaceLanguage: string | nul
     const response = await chrome.runtime.sendMessage({kind: 'reading-language', text: text.slice(0, maxDetectableCharacters), surfaceLanguage});
     const answer = response?.value;
     if (typeof answer?.supportLanguageTag !== 'string') return null;
-    return {supportLanguageTag: answer.supportLanguageTag, alreadyReadable: answer.alreadyReadable === true};
+    return {supportLanguageTag: answer.supportLanguageTag, sourceLanguageTag: typeof answer.sourceLanguageTag==='string'?sensaCanonicalLanguageTag(answer.sourceLanguageTag):null, alreadyReadable: answer.alreadyReadable === true};
   } catch {
     // A service worker that is asleep, or an extension reloaded under a live
     // page, is not a reason to withhold a translation the learner asked for:
@@ -79,16 +78,17 @@ export async function readerLanguage(text: string, surfaceLanguage: string | nul
 
 /** The material's own declaration, placed against the catalog. Cheapest
  * evidence, and the last resort for text too short to detect. */
-export function declaredCaptureLanguage(root: Pick<Document, 'documentElement'> = document): CaptureLanguage {
+type DeclaredLanguageSurface={documentElement:Pick<HTMLElement,'lang'>|null};
+export function declaredCaptureLanguage(root: DeclaredLanguageSurface = document): CaptureLanguage {
   const declared = root.documentElement?.lang?.trim();
   if (!declared) return unknownCaptureLanguage;
   const language=sensaCanonicalLanguageTag(declared);
-  return language?{language,languageSource:'declared',languageConfidence:1}:unknownCaptureLanguage;
+  return language&&language!=='und'?{language,languageSource:'declared',languageConfidence:1}:unknownCaptureLanguage;
 }
 
 /**
- * The language of `text`, detected locally and falling back to what the page
- * declares.
+ * The language of `text`, detected locally. Only short text falls back to the
+ * page declaration; uncertainty about a longer paragraph remains uncertainty.
  *
  * The text comes first because it is the thing being labelled: a site that
  * serves many languages under one `lang` attribute is common, and the captured
@@ -96,7 +96,7 @@ export function declaredCaptureLanguage(root: Pick<Document, 'documentElement'> 
  * declaration is the fallback for text too short for the detector to answer,
  * which is exactly the short-selection case.
  */
-export async function detectCaptureLanguage(text: string): Promise<CaptureLanguage> {
+export async function detectCaptureLanguage(text: string,root:DeclaredLanguageSurface=document): Promise<CaptureLanguage> {
   const sample = text.trim().slice(0, maxDetectableCharacters);
   if (sample.length >= minDetectableCharacters) {
     try {
@@ -111,10 +111,17 @@ export async function detectCaptureLanguage(text: string): Promise<CaptureLangua
         if(language)return {language,languageSource:'detector',languageConfidence:observation.confidence};
       }
     } catch {
-      // A sleeping service worker or a reloading extension is not a reason to
-      // lose the capture: the page declaration below is still evidence, and
-      // failing that, an undetermined language is a supported answer.
+      // An undetermined language is a supported capture, not a reason to label
+      // a longer foreign paragraph with the website's global UI language.
     }
   }
-  return declaredCaptureLanguage();
+  return sample.length<minSkimmableCharacters?declaredCaptureLanguage(root):unknownCaptureLanguage;
+}
+
+/** Page headings and short blocks do not contain enough evidence for a
+ * reliable statistical language choice. Their own declaration is evidence,
+ * not the learner's Route and not a silent default to English. */
+export async function detectBlockLanguage(text:string,root:DeclaredLanguageSurface=document):Promise<CaptureLanguage>{
+ const declared=declaredCaptureLanguage(root);
+ return text.trim().length<minSkimmableCharacters&&declared.language?declared:detectCaptureLanguage(text,root);
 }

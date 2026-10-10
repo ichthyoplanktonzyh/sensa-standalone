@@ -1,10 +1,11 @@
 import {expect, test} from '@playwright/test';
-import {chromium, type BrowserContext, type Page, type Request, type Response} from '@playwright/test';
+import {chromium, type BrowserContext, type Page, type Request} from '@playwright/test';
 import {mkdtemp, mkdir, rm, appendFile, writeFile, stat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import {sensaLanguages} from '@sensa/contracts/sensa';
 import {languageMatrixCases, type LanguageMatrixCase} from './languageMatrixFixtures';
+import {extensionPanelButton,extensionPanelUi} from '../support/extensionReadingPanel.mts';
 
 type Stage = {status:'passed'|'failed';durationMs:number;detail?:unknown};
 type RunReport = {
@@ -37,47 +38,26 @@ function duration(start:number){return Math.round(performance.now()-start);}
 function errorMessage(error:unknown){return error instanceof Error?error.name:'Unknown error';}
 async function stage<T>(report:RunReport,name:string,run:()=>Promise<T>):Promise<T>{
   const start=performance.now();
-  try{const detail=await run();report.stages[name]={status:'passed',durationMs:duration(start),...(detail===undefined?{}:{detail})};return detail;}
-  catch(error){report.stages[name]={status:'failed',durationMs:duration(start),detail:errorMessage(error)};throw error;}
+  try{const detail=await run();report.stages[name]={status:'passed',durationMs:duration(start),...(detail===undefined?{}:{detail})};console.info(`Live ${report.caseKey}: ${name} passed (${duration(start)}ms)`);return detail;}
+  catch(error){report.stages[name]={status:'failed',durationMs:duration(start),detail:errorMessage(error)};console.info(`Live ${report.caseKey}: ${name} failed (${duration(start)}ms)`);throw error;}
 }
 async function optionForPair(popup:Page,item:LanguageMatrixCase){
   const target=language(item.targetLanguageTag),support=language(item.supportLanguageTag);
-  const expected=`${target.names['zh-CN']} · ${support.names['zh-CN']}辅助`;
+  const expected=await popup.evaluate(({target,support})=>{
+    const names=new Intl.DisplayNames(['zh-CN'],{type:'language'});
+    return `${names.of(target)} · ${names.of(support)}辅助`;
+  },{target:target.tag,support:support.tag});
   const options=await popup.locator('#language-route option').evaluateAll(nodes=>nodes.map(node=>({value:(node as HTMLOptionElement).value,label:(node as HTMLOptionElement).textContent??''})));
   const match=options.find(option=>option.label===expected);
   if(!match)throw new Error(`Extension did not receive Web route ${expected}; available routes: ${options.map(option=>option.label).join(' | ')}`);
   return match.value;
 }
-async function responseFrames(request:Request,responses:Map<Request,Response>){
-  const response=responses.get(request);
-  if(!response)throw new Error(`No HTTP response was observed for ${request.url()}`);
-  await response.finished();
-  const raw=await response.text();
-  const frames=raw.split(/\r?\n/u).filter(Boolean).map(line=>{try{return JSON.parse(line) as Record<string,any>;}catch{return null;}}).filter((line):line is Record<string,any>=>line!==null);
-  const error=frames.find(frame=>frame.type==='error');
-  if(error)throw new Error('Service stream returned an error frame');
-  const result=frames.find(frame=>frame.type==='result')?.value;
-  if(!result)throw new Error('Service stream ended without a completion result');
-  return {frames,result};
+async function expectServiceSuccess(request:Request,status:Map<Request,number>){
+  await expect.poll(()=>status.get(request),{timeout:90_000}).toBeDefined();
+  expect(status.get(request),'The actual service response must succeed; a terminal error is not retried by waiting').toBe(200);
 }
 async function closedPanelText(page:Page,className:'explanation'|'assistance'){
-  const session=await page.context().newCDPSession(page);
-  try{
-    const {root}=await session.send('DOM.getDocument',{depth:-1,pierce:true});
-    const found:string[]=[];
-    const visit=(node:any)=>{
-      const attrs=Array.isArray(node.attributes)?Object.fromEntries(Array.from({length:Math.floor(node.attributes.length/2)},(_,index)=>[node.attributes[index*2],node.attributes[index*2+1]])):{};
-      if(typeof attrs.class==='string'&&attrs.class.split(/\s+/u).includes(className)){
-        const text=(current:any):string=>(current.nodeName==='#text'?current.nodeValue??'':'')+[
-          ...(current.children??[]),...(current.shadowRoots??[]),...(current.contentDocument?[current.contentDocument]:[]),
-        ].map(text).join('');
-        found.push(text(node).trim());
-      }
-      for(const child of [...(node.children??[]),...(node.shadowRoots??[]),...(node.contentDocument?[node.contentDocument]:[])])visit(child);
-    };
-    visit(root);
-    return found.at(-1)??'';
-  }finally{await session.detach().catch(()=>undefined);}
+  return (await extensionPanelUi(page))?.[className]?.trim()??'';
 }
 
 async function openReadingPanel(page:Page,item:LanguageMatrixCase){
@@ -97,24 +77,11 @@ async function openReadingPanel(page:Page,item:LanguageMatrixCase){
     document.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,button:0,pointerType:'mouse'}));
   },{sentence,expression,targetLanguageTag:item.targetLanguageTag});
   await page.waitForFunction(()=>Array.from(document.querySelectorAll<HTMLElement>('[popover]')).some(host=>host.matches(':popover-open')),undefined,{timeout:20_000});
-  await page.evaluate(()=>{
-    const host=Array.from(document.querySelectorAll<HTMLElement>('[popover]')).find(element=>element.matches(':popover-open'));
-    if(!host)throw new Error('Extension reading panel did not open');
-    let sentinel=document.querySelector<HTMLButtonElement>('#sensa-extension-matrix-focus');
-    sentinel?.remove();sentinel=document.createElement('button');sentinel.id='sensa-extension-matrix-focus';sentinel.dataset.sensaUi='test-focus';sentinel.textContent='Continue';sentinel.style.cssText='position:fixed;left:0;top:0;width:1px;height:1px;opacity:.01';
-    host.after(sentinel);sentinel.focus();
-  });
 }
 
-/** The in-page reading panel intentionally uses a closed shadow root. Focus it
- * through ordinary keyboard navigation after an accessible page-owned sentinel,
- * then verify its real service request at the network boundary. */
-async function activateClosedPanelButton(page:Page,buttonIndex:number){
-  const count=6; // Explain, local speech, preview, translation, custom action, close.
-  const sentinel=page.locator('#sensa-extension-matrix-focus');
-  await sentinel.focus();
-  for(let index=buttonIndex;index<count;index++)await page.keyboard.press('Shift+Tab');
-  await page.keyboard.press('Enter');
+async function activateClosedPanelButton(page:Page,label:string){
+  await expect.poll(()=>extensionPanelButton(page,label)).toBe(true);
+  if(!await extensionPanelButton(page,label,true))throw new Error('The visible reading action changed before clicking');
 }
 
 async function selectAgain(page:Page,item:LanguageMatrixCase){
@@ -174,7 +141,7 @@ async function installSession(context:BrowserContext,session:unknown){
 async function runCase(item:LanguageMatrixCase){
   const key=caseKey(item),report:RunReport={caseKey:`extension-${key}`,targetLanguageTag:item.targetLanguageTag,supportLanguageTag:item.supportLanguageTag,startedAt:new Date().toISOString(),durationMs:0,status:'failed',stages:{},requests:[],webAgentTrace:{status:'not-triggered',events:[]}};
   const started=performance.now();let profile='';let context:BrowserContext|undefined;
-  const requests:Request[]=[];const responseStatus=new Map<Request,number>();const responses=new Map<Request,Response>();
+  const requests:Request[]=[];const responseStatus=new Map<Request,number>();
   try{
     let session:Record<string,unknown>={};
     await stage(report,'synthetic-account',async()=>{
@@ -202,10 +169,11 @@ async function runCase(item:LanguageMatrixCase){
       const url=new URL(request.url());
       if(url.origin===serviceUrl&&/^\/sensa\/(?:reading|semantic\/lookups)/u.test(url.pathname))requests.push(request);
     });
-    context.on('response',response=>{if(requests.includes(response.request())){responseStatus.set(response.request(),response.status());responses.set(response.request(),response);}});
+    context.on('response',response=>{if(requests.includes(response.request()))responseStatus.set(response.request(),response.status());});
     await installSession(context,session);
     const serviceWorker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker',{timeout:30_000});
     const extensionId=new URL(serviceWorker.url()).host;
+    if(process.env.SENSA_LIVE_EXTENSION_ORIGIN&&`chrome-extension://${extensionId}`!==process.env.SENSA_LIVE_EXTENSION_ORIGIN)throw new Error('Loaded extension does not match the exact local API origin grant');
     const page=context.pages()[0]??await context.newPage();
     await stage(report,'web-login-and-route',async()=>{
       await page.goto(webUrl,{waitUntil:'domcontentloaded',timeout:60_000});
@@ -224,12 +192,8 @@ async function runCase(item:LanguageMatrixCase){
     await stage(report,'extension-current-route',async()=>{
       await expect(popup.locator('#status')).toContainText(/已登录 Sensa|Signed in to Sensa/u,{timeout:30_000});
       const routeId=await optionForPair(popup,item);
-      await popup.evaluate(id=>{
-        const select=document.querySelector<HTMLSelectElement>('#language-route');
-        if(!select)throw new Error('Extension route selector is missing');
-        select.value=id;select.dispatchEvent(new Event('change',{bubbles:true}));
-      },routeId);
-      await expect(popup.locator('#status')).toContainText(/阅读路线已切换|Reading route changed/u);
+      await popup.locator('#language-route').selectOption(routeId);
+      await expect(popup.locator('#status')).toHaveAttribute('aria-busy','false');
       await expect(popup.locator('#language-route')).toHaveValue(routeId);
       const status=await popup.evaluate(()=>document.querySelector('#status')?.textContent??'');
       if(!/已登录|Signed in/u.test(status))throw new Error(`Extension lost its Web connection: ${status}`);
@@ -265,32 +229,34 @@ async function runCase(item:LanguageMatrixCase){
     await openReadingPanel(page,item);
     await stage(report,'reading-explanation-target-to-support',async()=>{
       const before=requests.length;
-      await activateClosedPanelButton(page,0);
+      await activateClosedPanelButton(page,'句中解释');
       await expect.poll(()=>requests.slice(before).some(request=>new URL(request.url()).pathname==='/sensa/semantic/lookups/stream'),{timeout:90_000,intervals:[250,500,1000,2000]}).toBe(true);
       const request=requests.slice(before).find(value=>new URL(value.url()).pathname==='/sensa/semantic/lookups/stream')!;
-      await expect.poll(()=>responseStatus.get(request),{timeout:90_000}).toBe(200);
+      await expectServiceSuccess(request,responseStatus);
       const body=request.postDataJSON() as any;
       if(body.languages?.targetLanguageTag!==item.targetLanguageTag||body.languages?.supportLanguageTag!==item.supportLanguageTag)throw new Error('Explanation used the wrong language route');
-      if(body.input?.snapshot?.expression?.text!==item.fixture.expression)throw new Error('Explanation did not receive the selected target-language expression');
-      const {result}=await responseFrames(request,responses);
-      if(result.status!=='ready'||!result.proposal?.explanation)throw new Error('Semantic explanation did not complete with a visible proposal');
-      await expect.poll(()=>closedPanelText(page,'explanation'),{timeout:15_000}).not.toBe('');
-      return {endpoint:new URL(request.url()).pathname,route:body.languages,expressionReceived:true,visibleProposal:true,httpStatus:responseStatus.get(request)};
+      if(body.snapshot?.expression?.text!==item.fixture.expression)throw new Error('Explanation did not receive the selected target-language expression');
+      // The background consumes a terminal NDJSON frame and cancels its reader.
+      // CDP Response.finished() is not a completion oracle for that SW request.
+      // A ready proposal must reach the real content UI, not only a partial.
+      await expect.poll(async()=>(await extensionPanelUi(page))?.explanationBusy,{timeout:60_000}).toBe(false);
+      expect(await extensionPanelButton(page,'保存到我的语义世界'),'A completed valid proposal must expose explicit acceptance; an error is not a successful explanation').toBe(true);
+      const answer=await closedPanelText(page,'explanation');expect(answer).toContain(waterByLanguage[item.supportLanguageTag]);
+      return {endpoint:new URL(request.url()).pathname,route:body.languages,expressionReceived:true,visibleProposal:true,answer,httpStatus:responseStatus.get(request)};
     });
     await stage(report,'reading-translation-target-to-support',async()=>{
       const before=requests.length;
-      await activateClosedPanelButton(page,3);
+      await activateClosedPanelButton(page,'翻译');
       await expect.poll(()=>requests.slice(before).some(request=>new URL(request.url()).pathname==='/sensa/reading/stream'),{timeout:90_000,intervals:[250,500,1000,2000]}).toBe(true);
       const request=requests.slice(before).find(value=>new URL(value.url()).pathname==='/sensa/reading/stream')!;
-      await expect.poll(()=>responseStatus.get(request),{timeout:90_000}).toBe(200);
+      await expectServiceSuccess(request,responseStatus);
       const body=request.postDataJSON() as any;
-      if(body.input?.feature!=='selection'||body.input?.sourceLanguageTag!==item.targetLanguageTag)throw new Error('Selected expression was not sent as target-language reading');
+      if(body.feature!=='selection'||body.sourceLanguageTag!==item.targetLanguageTag)throw new Error('Selected expression was not sent as target-language reading');
       if(body.languages?.targetLanguageTag!==item.targetLanguageTag||body.languages?.supportLanguageTag!==item.supportLanguageTag)throw new Error('Reading used the wrong language route');
-      const {result}=await responseFrames(request,responses);
-      if(result.status!=='ready'||typeof result.text!=='string'||!result.text.trim())throw new Error('Target-to-support translation did not complete');
-      if(!result.text.normalize('NFC').toLocaleLowerCase().includes(waterByLanguage[item.supportLanguageTag].normalize('NFC').toLocaleLowerCase()))throw new Error('Reading result did not contain the expected support-language water term');
-      await expect.poll(()=>closedPanelText(page,'assistance'),{timeout:15_000}).toContain(waterByLanguage[item.supportLanguageTag]);
-      return {endpoint:new URL(request.url()).pathname,feature:body.input.feature,sourceLanguageTag:body.input.sourceLanguageTag,route:body.languages,nonEmptyVisibleAnswer:true,httpStatus:responseStatus.get(request)};
+      await expect.poll(async()=>(await extensionPanelUi(page))?.assistanceBusy,{timeout:90_000}).toBe(false);
+      const answer=await closedPanelText(page,'assistance');
+      if(!answer.normalize('NFC').toLocaleLowerCase().includes(waterByLanguage[item.supportLanguageTag].normalize('NFC').toLocaleLowerCase()))throw new Error('Completed visible reading result did not contain the expected support-language water term');
+      return {endpoint:new URL(request.url()).pathname,feature:body.feature,sourceLanguageTag:body.sourceLanguageTag,route:body.languages,nonEmptyVisibleAnswer:true,answer,httpStatus:responseStatus.get(request)};
     });
     await stage(report,'writing-translation-support-to-target',async()=>{
       const supportSurface=waterByLanguage[item.supportLanguageTag];
@@ -305,24 +271,23 @@ async function runCase(item:LanguageMatrixCase){
       await expect.poll(()=>answer.getAttribute('aria-busy'),{timeout:90_000}).toBeNull();
       await expect.poll(()=>requests.slice(before).some(request=>new URL(request.url()).pathname==='/sensa/reading/stream'),{timeout:15_000}).toBe(true);
       const request=requests.slice(before).find(value=>new URL(value.url()).pathname==='/sensa/reading/stream')!;
-      await expect.poll(()=>responseStatus.get(request),{timeout:90_000}).toBe(200);
+      await expectServiceSuccess(request,responseStatus);
       const body=request.postDataJSON() as any;
-      if(body.input?.feature!=='writing'||body.languages?.targetLanguageTag!==item.targetLanguageTag||body.languages?.supportLanguageTag!==item.supportLanguageTag)throw new Error('Writing used the wrong feature or language route');
-      const {result}=await responseFrames(request,responses);
-      if(result.status!=='ready'||typeof result.text!=='string'||!result.text.trim())throw new Error('Support-to-target writing translation did not complete');
+      if(body.feature!=='writing'||body.languages?.targetLanguageTag!==item.targetLanguageTag||body.languages?.supportLanguageTag!==item.supportLanguageTag)throw new Error('Writing used the wrong feature or language route');
       const translated=(await answer.textContent())?.trim()??'';
       if(!translated||translated.includes('provider')||translated.includes('失败'))throw new Error('Writing translation did not produce a usable visible result');
       const targetSurface=item.fixture.expression.normalize('NFC').toLocaleLowerCase();
       if(!translated.normalize('NFC').toLocaleLowerCase().includes(targetSurface))throw new Error('Writing result did not contain the expected target-language water term');
-      return {endpoint:new URL(request.url()).pathname,feature:body.input.feature,inputLanguageTag:item.supportLanguageTag,outputLanguageTag:item.targetLanguageTag,route:body.languages,visibleTargetTerm:true,httpStatus:responseStatus.get(request)};
+      await expect(writing).toHaveValue(supportSurface);
+      await host.getByRole('button',{name:'替换输入框内容',exact:true}).click();await expect(writing).toHaveValue(translated);
+      return {endpoint:new URL(request.url()).pathname,feature:body.feature,inputLanguageTag:item.supportLanguageTag,outputLanguageTag:item.targetLanguageTag,route:body.languages,visibleTargetTerm:true,answer:translated,originalPreservedUntilExplicitReplace:true,httpStatus:responseStatus.get(request)};
     });
     await stage(report,'save-capture-through-web-intake',async()=>{
       // The capture remains an explicitly saved, incomplete inbox item. No model
       // result is fabricated and the Web bridge must acknowledge its persistence.
       await selectAgain(page,item);
-      await activateClosedPanelButton(page,2); // “Save…” expands the capture.
-      for(let index=0;index<4;index++)await page.keyboard.press('Tab');
-      await page.keyboard.press('Enter'); // Save pending capture to the bridge queue.
+      await activateClosedPanelButton(page,'保存…');
+      await activateClosedPanelButton(page,'保存待处理');
       await page.bringToFront();
       await expect.poll(async()=>{
         await popup.evaluate(()=>document.querySelector<HTMLButtonElement>('#sync')?.click());
@@ -332,7 +297,8 @@ async function runCase(item:LanguageMatrixCase){
       await expect(recent).toContainText(item.fixture.expression);
       await expect(popup.locator('#recent-count')).toContainText(/1/u);
       const acknowledgement=await recent.getAttribute('href');
-      if(!acknowledgement?.includes('intake='))throw new Error(`Web receipt did not route this incomplete capture to the inbox: ${acknowledgement}`);
+      const receiptUrl=acknowledgement?new URL(acknowledgement):null;
+      if(!receiptUrl?.searchParams.has('intake')&&!(receiptUrl?.searchParams.get('worldAction')==='inbox'&&receiptUrl.searchParams.has('meaningId')))throw new Error('Web receipt did not route this incomplete capture to the inbox');
       await page.goto(`${webUrl}/content?worldAction=inbox`,{waitUntil:'domcontentloaded'});
       await expect(page.getByText(item.fixture.expression,{exact:false}).last()).toBeVisible({timeout:30_000});
       const traces=await page.evaluate(()=>((window as any).__sensaAgentTraceEvents??[]) as Array<Record<string,unknown>>);
@@ -349,8 +315,8 @@ async function runCase(item:LanguageMatrixCase){
       let metadata:Record<string,unknown>={};
       try{
         const body=request.postDataJSON() as any;
-        const input=body?.input;
-        metadata={feature:input?.feature??null,sourceLanguageTag:input?.sourceLanguageTag??null,targetLanguageTag:body?.languages?.targetLanguageTag??null,supportLanguageTag:body?.languages?.supportLanguageTag??null,hasExpression:Boolean(input?.snapshot?.expression),inputLength:typeof input?.text==='string'?input.text.length:typeof input?.snapshot?.sentence==='string'?input.snapshot.sentence.length:0,contextLength:typeof input?.context==='string'?input.context.length:0};
+        const snapshot=body?.snapshot;
+        metadata={feature:body?.feature??null,sourceLanguageTag:body?.sourceLanguageTag??snapshot?.language??null,targetLanguageTag:body?.languages?.targetLanguageTag??null,supportLanguageTag:body?.languages?.supportLanguageTag??null,hasExpression:Boolean(snapshot?.expression),inputLength:typeof body?.text==='string'?body.text.length:typeof snapshot?.sentence==='string'?snapshot.sentence.length:0,contextLength:typeof body?.context==='string'?body.context.length:0};
       }catch{/* Preserve only the endpoint and response status for malformed bodies. */}
       report.requests.push({path,metadata,status:responseStatus.get(request)});
     }
@@ -387,9 +353,9 @@ test.describe('live browser-extension language-route matrix',()=>{
     await writeFile(reportPath,'',{encoding:'utf8',flag:'wx'});
   });
   for(const item of selectedCases){
-    test(caseKey(item),async()=>{
+    test.describe(caseKey(item),()=>{test('installed extension completes temporary reading, explicit writing replacement and optional Inbox save',async()=>{
       test.setTimeout(240_000);
       await runCase(item);
-    });
+    });});
   }
 });

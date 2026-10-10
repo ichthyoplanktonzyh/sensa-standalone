@@ -6,6 +6,7 @@ import {LocalDataControlPanel} from './LocalDataControlPanel';
 import {LibraryBackupPanel} from './LibraryBackupPanel';
 import {LocalAgentPanel} from './LocalAgentPanel';
 import {useAccountExperience} from '../account/AccountContext';
+import {pendingAccountDeletion} from '../account/accountDeletionState';
 import { useEffect, useState, type ReactNode } from 'react';
 import { ArrowRight, ArrowLeft, BookOpen, SlidersHorizontal, UserRound, RefreshCw, Database, Cpu, Info, Languages, NotebookPen, Bot, FileDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -26,6 +27,8 @@ interface ProfileScreenProps {
   active: boolean;
   account?: {email: string; pending: number; busy: boolean; onSync: () => void; onLogout: () => void};
   status?: ReactNode;
+  preferencesBusy?: boolean;
+  preferencesStatus?: ReactNode;
   modelSettings?: ReactNode;
   localLibrary?: boolean;
   onOpenPreferences?: () => void;
@@ -144,11 +147,11 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
       {props.status}
       {props.localLibrary&&offlineShell==='failed'&&<p role="status" className="mt-3 text-sm text-fg-secondary">{t('account.localWeb.offlineFailed')}</p>}
       <div hidden={page!=='security'}>
-      {!props.account&&<div className="mt-5 flex flex-wrap gap-3">{!serviceAccount.connectionConflict&&<button className="min-h-11 rounded-control bg-surface-subtle px-5 text-sm" onClick={serviceAccount.login}>{serviceAccount.onlineService?t('account.localWeb.check'):t('account.localWeb.login')}</button>}{(serviceAccount.email||serviceAccount.connectionConflict)&&<button className="min-h-11 rounded-control border border-border-subtle px-5 text-sm" onClick={()=>void serviceAccount.logout().catch(()=>{})}>{t('account.localWeb.logout')}</button>}</div>}
+      {!props.account&&<div className="mt-5 flex flex-wrap gap-3">{!serviceAccount.connectionConflict&&<button className="min-h-11 rounded-control bg-surface-subtle px-5 text-sm" onClick={serviceAccount.login}>{serviceAccount.onlineService?t('account.localWeb.check'):t('account.localWeb.login')}</button>}{serviceAccount.webSessionPresent&&<button className="min-h-11 rounded-control border border-border-subtle px-5 text-sm" onClick={()=>void serviceAccount.logout().catch(()=>{})}>{t('account.localWeb.logout')}</button>}</div>}
       {!props.account&&serviceAccount.notice&&<p role="status" className="mt-3 text-sm">{serviceAccount.notice}</p>}
 
       {props.account && <div className="mt-8 flex flex-wrap gap-3"><button className="min-h-11 rounded-control border border-border-subtle px-5 text-sm" disabled={props.account.busy || props.account.pending > 0} onClick={props.account.onLogout}>{t('account.localWeb.signout')}</button>{props.account.pending > 0 && <p className="w-full text-sm text-fg-secondary">{t('account.localWeb.pendingLogout')}</p>}</div>}
-      {props.localLibrary&&serviceAccount.email&&<div className="mt-12 border-t border-border-subtle pt-6"><button className={button+' border-feedback-danger text-feedback-danger'} onClick={serviceAccount.deleteAccount}>{t('localFlow.deleteTitle')}</button></div>}
+      {props.localLibrary&&(serviceAccount.email||pendingAccountDeletion()?.phase==='submitted')&&<div className="mt-12 border-t border-border-subtle pt-6"><button className={button+' border-feedback-danger text-feedback-danger'} onClick={serviceAccount.deleteAccount}>{t(pendingAccountDeletion()?.phase==='submitted'?'localFlow.deleteCheck':'localFlow.deleteTitle')}</button></div>}
       </div>
       <div hidden={page!=='preferences'}>
         <section aria-labelledby="account-preferences">
@@ -222,7 +225,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
         </>,
       }}
     />
-    {props.active && preferencesOpen && <LearningPreferencesPanel policyOptions={props.policyOptions} fixedPolicy={props.fixedLearningPolicy} defaultPolicy={props.defaultPolicy} dailyNewCount={props.dailyNewCount} onPolicyChange={props.onPolicyChange} onDailyNewCountChange={props.onDailyNewCountChange} onClose={closePreferences} closeLabel={t('account.done')}/>}
+    {props.active && preferencesOpen && <LearningPreferencesPanel busy={props.preferencesBusy} status={props.preferencesStatus} policyOptions={props.policyOptions} fixedPolicy={props.fixedLearningPolicy} defaultPolicy={props.defaultPolicy} dailyNewCount={props.dailyNewCount} onPolicyChange={props.onPolicyChange} onDailyNewCountChange={props.onDailyNewCountChange} onClose={closePreferences} closeLabel={t('account.done')}/>}
     {props.active && languagesOpen && <LanguagePanelHost onClose={() => setLanguagesOpen(false)}/>}
     {props.active && glossaryOpen && <GlossaryPanelHost onClose={() => setGlossaryOpen(false)}/>}
   </>;

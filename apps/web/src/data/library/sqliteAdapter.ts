@@ -1,5 +1,7 @@
 import type {
   HomeLearningStorageProjection,
+  MeaningLookupResult,
+  WorldBrowseQuery,WorldBrowsePage,WorldLearningChoiceQuery,WorldLearningChoicePage,
   PortableMediaBlob,
   PortableMediaStorageDiagnostics,
   SqliteLibraryTable,
@@ -11,20 +13,44 @@ import type {
   SqliteWorkerRequest,
   SqliteWorkerResult,
 } from "./sqliteProtocol";
-import {sqliteLibrarySchemaVersion} from './sqliteProtocol';
-import {decodeBackupValue} from './backupCodec';
-import {createHomeLearningStorageProjection} from './homeLearningRecords';
-import type {LocalLearningRun,LocalLearningTarget} from '../../learning/runtime/localProtocol';
+import type {PackageCacheProjectionQuery,PackageCacheProjectionResult} from './packageCacheProjection';
+import type {PracticeExpressionQuery,PracticeExpressionPage} from './practiceExpressionProjection';
+import type {RuntimeLearningCandidateQuery,RuntimeLearningCandidates} from './runtimeLearningCandidates';
+import type {LearningManagementSummaryQuery,LearningManagementStorageSummary} from './runtimeLearningCandidates';
+import type {LearningHistoryRequest} from '../../learning/system/learningHistoryModel';
+import type {StoredLearningHistoryPage} from './learningHistoryProjection';
+import type {ReplicaCandidateRequest,ReplicaCandidateResponse} from './replicaCandidateProtocol';
 import {CoordinatedSqliteAdapter,type CoordinatedSqliteBackend} from './sqliteCoordinator';
+import {localLibraryNamespace,assertLocalLibrarySelected,observeLocalLibrarySelection,type LocalLibraryNamespace} from './localLibraryLocation';
 
 export interface SqliteRecordAdapter {
+  replicaCandidate(request:ReplicaCandidateRequest):Promise<ReplicaCandidateResponse>;
+  learningSemanticMemory(targetId?:string):Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>;
   get(table: SqliteLibraryTable, key: string): Promise<string | null>;
   entries(table: SqliteLibraryTable): Promise<Array<{ key: string; encodedValue: string }>>;
+  entriesPage(table:SqliteLibraryTable,afterKey:string|null,limit:number):Promise<Array<{key:string;encodedValue:string}>>;
+  recordKeysPage(table:SqliteLibraryTable,afterKey:string|null,limit:number):Promise<string[]>;
+  existingRecordKeys(table:SqliteLibraryTable,keys:readonly string[]):Promise<string[]>;
+  packageCacheProjection<Query extends PackageCacheProjectionQuery>(query:Query):Promise<PackageCacheProjectionResult<Query>>;
+  lookupMeanings(query:string):Promise<MeaningLookupResult>;
+  worldBrowse(query:WorldBrowseQuery):Promise<WorldBrowsePage>;
+  worldSceneMeaning(sceneId:string):Promise<string|null>;
+  registrySelection(query:import('./sqliteProtocol').RegistrySelectionQuery):Promise<import('./sqliteProtocol').RegistrySelection>;
+  worldLearningChoices(query:WorldLearningChoiceQuery):Promise<WorldLearningChoicePage>;
+  practiceExpressions(query:PracticeExpressionQuery):Promise<PracticeExpressionPage>;
+  existingJourneyIdentities(ids:readonly string[]):Promise<string[]>;
   changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]>;
+  hasChangesSince(contentRevision:number,tables:readonly SqliteLibraryTable[]):Promise<boolean>;
   syncBaseEntries(keys?: readonly { table: SqliteLibraryTable; key: string }[]): Promise<SqliteSyncBaseEntry[]>;
+  syncBaseReferences():Promise<import('./sqliteProtocol').SqliteSyncBaseReference[]>;
   count(table: SqliteLibraryTable): Promise<number>;
   estimateRecordBytes(tables: readonly SqliteLibraryTable[]): Promise<number>;
-  homeLearningProjection(languageRouteId: string): Promise<HomeLearningStorageProjection>;
+  homeLearningProjection(languageRouteId: string,clock?:number): Promise<HomeLearningStorageProjection>;
+  learningHistoryPage(query:LearningHistoryRequest):Promise<StoredLearningHistoryPage>;
+  learningManagementSummary(query:LearningManagementSummaryQuery):Promise<LearningManagementStorageSummary>;
+  runtimeLearningCandidates(query:RuntimeLearningCandidateQuery):Promise<RuntimeLearningCandidates>;
+  studyScopeMember(scopeRevisionId:string,targetId:string):Promise<import('./studyScopes').LocalStudyScopeMember|null>;
+  latestLearningActionAt(runId:string):Promise<string|null>;
   countIntroducedLearningTargets(languageRouteId: string, startedAfter: string, startedBefore: string): Promise<number>;
   learningRunIdsForTarget(targetId: string, openOnly: boolean): Promise<string[]>;
   openLearningRunTargets(): Promise<Array<{ runId: string; targetId: string }>>;
@@ -34,7 +60,7 @@ export interface SqliteRecordAdapter {
   portableMedia(sha256:string):Promise<PortableMediaBlob|null>;
   portableMediaDiagnostics():Promise<PortableMediaStorageDiagnostics>;
   commit(mutation: SqliteMutation): Promise<void>;
-  diagnostics(): Promise<SqliteStorageDiagnostics>;
+  diagnostics(options?:Readonly<{verifyIntegrity?:boolean}>): Promise<SqliteStorageDiagnostics>;
 }
 
 class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBackend {
@@ -47,8 +73,10 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
     reject: (error: Error) => void;
   }>();
   private nextId = 1;
+  private terminated=false;
+  private workerError:Error|undefined;
 
-  constructor() {
+  constructor(private readonly namespace:LocalLibraryNamespace) {
     this.worker.addEventListener("message", (event: MessageEvent<SqliteWorkerResult>) => {
       const waiting = this.pending.get(event.data.id);
       if (!waiting) return;
@@ -58,14 +86,17 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
     });
     this.worker.addEventListener("error", (event) => {
       const error = new Error(event.message || "sqlite_worker_failed");
+      this.workerError=error;
       for (const waiting of this.pending.values()) waiting.reject(error);
       this.pending.clear();
     });
   }
 
   initialize(): Promise<SqliteStorageDiagnostics> {
-    return this.send({ kind: "initialize" }) as Promise<SqliteStorageDiagnostics>;
+    return this.send({ kind: "initialize",namespace:this.namespace }) as Promise<SqliteStorageDiagnostics>;
   }
+
+  replicaCandidate(request:ReplicaCandidateRequest):Promise<ReplicaCandidateResponse>{return this.send({kind:'replicaCandidate',request}) as Promise<ReplicaCandidateResponse>;}
 
   get(table: SqliteLibraryTable, key: string): Promise<string | null> {
     return this.send({ kind: "get", table, key }) as Promise<string | null>;
@@ -74,9 +105,34 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
   entries(table: SqliteLibraryTable): Promise<Array<{ key: string; encodedValue: string }>> {
     return this.send({ kind: "entries", table }) as Promise<Array<{ key: string; encodedValue: string }>>;
   }
+  entriesPage(table:SqliteLibraryTable,afterKey:string|null,limit:number):Promise<Array<{key:string;encodedValue:string}>>{
+    return this.send({kind:'entriesPage',table,afterKey,limit}) as Promise<Array<{key:string;encodedValue:string}>>;
+  }
+  recordKeysPage(table:SqliteLibraryTable,afterKey:string|null,limit:number):Promise<string[]>{
+    return this.send({kind:'recordKeysPage',table,afterKey,limit}) as Promise<string[]>;
+  }
+
+  existingRecordKeys(table:SqliteLibraryTable,keys:readonly string[]):Promise<string[]>{
+    return this.send({kind:'existingRecordKeys',table,keys:[...keys]}) as Promise<string[]>;
+  }
+
+  packageCacheProjection<Query extends PackageCacheProjectionQuery>(query:Query):Promise<PackageCacheProjectionResult<Query>>{
+    return this.send({kind:'packageCacheProjection',query}) as Promise<PackageCacheProjectionResult<Query>>;
+  }
 
   changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]> {
     return this.send({ kind: "changesSince", contentRevision, tables: [...tables] }) as Promise<SqliteRecordChange[]>;
+  }
+  lookupMeanings(query:string):Promise<MeaningLookupResult>{return this.send({kind:'meaningLookup',query}) as Promise<MeaningLookupResult>;}
+  worldBrowse(query:WorldBrowseQuery):Promise<WorldBrowsePage>{return this.send({kind:'worldBrowse',query}) as Promise<WorldBrowsePage>;}
+  worldSceneMeaning(sceneId:string):Promise<string|null>{return this.send({kind:'worldSceneMeaning',sceneId}) as Promise<string|null>;}
+  registrySelection(query:import('./sqliteProtocol').RegistrySelectionQuery):Promise<import('./sqliteProtocol').RegistrySelection>{return this.send({kind:'registrySelection',query}) as Promise<import('./sqliteProtocol').RegistrySelection>;}
+  worldLearningChoices(query:WorldLearningChoiceQuery):Promise<WorldLearningChoicePage>{return this.send({kind:'worldLearningChoices',query}) as Promise<WorldLearningChoicePage>;}
+  practiceExpressions(query:PracticeExpressionQuery):Promise<PracticeExpressionPage>{return this.send({kind:'practiceExpressions',query}) as Promise<PracticeExpressionPage>;}
+  existingJourneyIdentities(ids:readonly string[]):Promise<string[]>{return this.send({kind:'existingJourneyIdentities',ids:[...ids]}) as Promise<string[]>;}
+
+  hasChangesSince(contentRevision:number,tables:readonly SqliteLibraryTable[]):Promise<boolean>{
+    return this.send({kind:'hasChangesSince',contentRevision,tables:[...tables]}) as Promise<boolean>;
   }
 
   syncBaseEntries(keys?: readonly { table: SqliteLibraryTable; key: string }[]): Promise<SqliteSyncBaseEntry[]> {
@@ -86,17 +142,27 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
     return this.send(input) as Promise<SqliteSyncBaseEntry[]>;
   }
 
+  syncBaseReferences():Promise<import('./sqliteProtocol').SqliteSyncBaseReference[]>{
+    return this.send({kind:'syncBaseReferences'}) as Promise<import('./sqliteProtocol').SqliteSyncBaseReference[]>;
+  }
   count(table: SqliteLibraryTable): Promise<number> {
     return this.send({ kind: "count", table }) as Promise<number>;
   }
+
+  learningSemanticMemory(targetId?:string):Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>{return this.send({kind:'learningSemanticMemory',targetId}) as Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>;}
 
   estimateRecordBytes(tables: readonly SqliteLibraryTable[]): Promise<number> {
     return this.send({kind:'estimateRecordBytes',tables:[...tables]}) as Promise<number>;
   }
 
-  homeLearningProjection(languageRouteId: string): Promise<HomeLearningStorageProjection> {
-    return this.send({ kind: "homeLearningProjection", languageRouteId }) as Promise<HomeLearningStorageProjection>;
+  homeLearningProjection(languageRouteId: string,clock=Date.now()): Promise<HomeLearningStorageProjection> {
+    return this.send({ kind: "homeLearningProjection", languageRouteId,clock }) as Promise<HomeLearningStorageProjection>;
   }
+  runtimeLearningCandidates(query:RuntimeLearningCandidateQuery):Promise<RuntimeLearningCandidates>{return this.send({kind:'runtimeLearningCandidates',query}) as Promise<RuntimeLearningCandidates>;}
+  studyScopeMember(scopeRevisionId:string,targetId:string):Promise<import('./studyScopes').LocalStudyScopeMember|null>{return this.send({kind:'studyScopeMember',scopeRevisionId,targetId}) as Promise<import('./studyScopes').LocalStudyScopeMember|null>;}
+  latestLearningActionAt(runId:string):Promise<string|null>{return this.send({kind:'latestLearningActionAt',runId}) as Promise<string|null>;}
+  learningHistoryPage(query:LearningHistoryRequest):Promise<StoredLearningHistoryPage>{return this.send({kind:'learningHistoryPage',query}) as Promise<StoredLearningHistoryPage>;}
+  learningManagementSummary(query:LearningManagementSummaryQuery):Promise<LearningManagementStorageSummary>{return this.send({kind:'learningManagementSummary',query}) as Promise<LearningManagementStorageSummary>;}
 
   countIntroducedLearningTargets(languageRouteId: string, startedAfter: string, startedBefore: string): Promise<number> {
     return this.send({
@@ -149,257 +215,25 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
     await this.send({ kind: "commit", mutation });
   }
 
-  diagnostics(): Promise<SqliteStorageDiagnostics> {
-    return this.send({ kind: "diagnostics" }) as Promise<SqliteStorageDiagnostics>;
+  diagnostics(options?:Readonly<{verifyIntegrity?:boolean}>): Promise<SqliteStorageDiagnostics> {
+    return this.send({ kind: "diagnostics",...options }) as Promise<SqliteStorageDiagnostics>;
   }
 
-  private send(input: SqliteWorkerInput): Promise<unknown> {
+  async close():Promise<void>{
+    if(this.terminated)return;
+    if(this.workerError)throw new Error('sqlite_worker_close_unconfirmed',{cause:this.workerError});
+    await this.send({kind:'close'});
+    this.worker.terminate();
+    this.terminated=true;
+  }
+
+  private send(input: SqliteWorkerInput|{kind:'close'}): Promise<unknown> {
+    if(this.terminated)return Promise.reject(new Error('sqlite_worker_terminated'));
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
       this.worker.postMessage({ id, ...input } as SqliteWorkerRequest);
     });
-  }
-}
-
-/** Test/non-browser Adapter. Production never selects this path. */
-class MemoryRecordAdapter implements SqliteRecordAdapter {
-  private records = new Map<string, string>();
-  private changes = new Map<string, SqliteRecordChange>();
-  private syncBase = new Map<string, SqliteSyncBaseEntry>();
-  private portableMediaBlobs=new Map<string,PortableMediaBlob>();
-  private portableMediaReferences=new Map<string,string>();
-
-  async get(table: SqliteLibraryTable, key: string): Promise<string | null> {
-    return this.records.get(`${table}\u0000${key}`) ?? null;
-  }
-
-  async entries(table: SqliteLibraryTable) {
-    const prefix = `${table}\u0000`;
-    return [...this.records]
-      .filter(([key]) => key.startsWith(prefix))
-      .map(([key, encodedValue]) => ({ key: key.slice(prefix.length), encodedValue }))
-      .sort((left, right) => left.key.localeCompare(right.key));
-  }
-
-  async changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]> {
-    const selected = new Set(tables);
-    return [...this.changes.values()]
-      .filter((change) => change.contentRevision > contentRevision && selected.has(change.table))
-      .sort((left, right) => left.contentRevision - right.contentRevision
-        || left.table.localeCompare(right.table)
-        || left.key.localeCompare(right.key))
-      .map((change) => ({ ...change }));
-  }
-
-  async syncBaseEntries(keys?: readonly { table: SqliteLibraryTable; key: string }[]): Promise<SqliteSyncBaseEntry[]> {
-    const selected = keys ? new Set(keys.map(({ table, key }) => `${table}\u0000${key}`)) : undefined;
-    return [...this.syncBase]
-      .filter(([id]) => !selected || selected.has(id))
-      .map(([, entry]) => ({ ...entry, blockRefs: [...entry.blockRefs] }))
-      .sort((left, right) => left.table.localeCompare(right.table) || left.key.localeCompare(right.key));
-  }
-
-  async count(table: SqliteLibraryTable): Promise<number> {
-    const prefix = `${table}\u0000`;
-    let count = 0;
-    for (const key of this.records.keys()) if (key.startsWith(prefix)) count++;
-    return count;
-  }
-
-  async estimateRecordBytes(tables: readonly SqliteLibraryTable[]): Promise<number> {
-    const selected=new Set(tables);
-    const encoder=new TextEncoder();
-    let bytes=0;
-    for(const [id,encodedValue] of this.records){
-      const separator=id.indexOf('\u0000');
-      if(separator<0||!selected.has(id.slice(0,separator) as SqliteLibraryTable))continue;
-      bytes+=encoder.encode(id.slice(separator+1)).byteLength+encoder.encode(encodedValue).byteLength+16;
-    }
-    return bytes;
-  }
-
-  async homeLearningProjection(languageRouteId: string): Promise<HomeLearningStorageProjection> {
-    const decode = <T>(encoded: string | undefined): T | undefined => encoded === undefined
-      ? undefined
-      : decodeBackupValue(JSON.parse(encoded)) as T;
-    const targets = (await this.entries('learningTargets'))
-      .map((row) => decode<LocalLearningTarget>(row.encodedValue)!);
-    const availablePackageKeys = (await this.entries('packageCache')).map((row) => row.key);
-    const activeId = decode<string>(this.records.get('meta\u0000learning-active'));
-    return createHomeLearningStorageProjection({
-      targets,
-      availablePackageKeys,
-      activeRun: activeId
-        ? decode<LocalLearningRun>(this.records.get(`learningRuns\u0000${activeId}`)) ?? null
-        : null,
-      studyPlans: decode(this.records.get('settings\u0000language-route-study-plans')) ?? {},
-      languageRouteId,
-    });
-  }
-
-  async learningRunIdsForTarget(targetId: string, openOnly: boolean): Promise<string[]> {
-    return (await this.entries('learningRuns'))
-      .map((row) => ({ key: row.key, run: decodeBackupValue(JSON.parse(row.encodedValue)) as LocalLearningRun }))
-      .filter(({ run }) => run.targetIds.includes(targetId) && (!openOnly || !run.completedAt))
-      .map(({ key }) => key)
-      .sort();
-  }
-
-  async countIntroducedLearningTargets(
-    languageRouteId: string,
-    startedAfter: string,
-    startedBefore: string,
-  ): Promise<number> {
-    return (await this.entries('learningTargets'))
-      .map((row) => decodeBackupValue(JSON.parse(row.encodedValue)) as LocalLearningTarget)
-      .filter((target) => target.introducedLanguageRouteId === languageRouteId
-        && target.startedAt !== null
-        && target.startedAt >= startedAfter
-        && target.startedAt < startedBefore)
-      .length;
-  }
-
-  async openLearningRunTargets(): Promise<Array<{ runId: string; targetId: string }>> {
-    return (await this.entries('learningRuns'))
-      .map((row) => ({ key: row.key, run: decodeBackupValue(JSON.parse(row.encodedValue)) as LocalLearningRun }))
-      .filter(({ run }) => !run.completedAt)
-      .flatMap(({ key, run }) => run.targetIds.map((targetId) => ({ runId: key, targetId })))
-      .sort((left, right) => left.targetId.localeCompare(right.targetId) || left.runId.localeCompare(right.runId));
-  }
-
-  async countContentAttemptsSince(taskId: string, createdAfter: string): Promise<number> {
-    return (await this.entries('contentAttempts'))
-      .map((row) => decodeBackupValue(JSON.parse(row.encodedValue)) as { taskId: string; createdAt: string })
-      .filter((attempt) => attempt.taskId === taskId && attempt.createdAt > createdAfter)
-      .length;
-  }
-
-  async learningTargetIdsForBookUpgrade(
-    languageRouteId: string,
-    targetLanguageTag: string,
-    supportLanguageTag: string,
-    bookId: string,
-    nextBookVersionId: string,
-  ): Promise<string[]> {
-    return (await this.entries('learningTargets'))
-      .map((row) => ({ key: row.key, target: decodeBackupValue(JSON.parse(row.encodedValue)) as LocalLearningTarget }))
-      .filter(({ target }) => target.curriculumMemberships.some((membership) => (
-        membership.status !== 'superseded'
-        && membership.sourceKind === 'sense_learning_package'
-        && membership.languageContext.languageRouteId === languageRouteId
-        && membership.languageContext.targetLanguageTag === targetLanguageTag
-        && membership.languageContext.supportLanguageTag === supportLanguageTag
-        && membership.provenance.bookId === bookId
-        && membership.provenance.bookVersionId !== nextBookVersionId
-      )))
-      .map(({ key }) => key)
-      .sort();
-  }
-
-  async isMediaReferenced(mediaId: string): Promise<boolean> {
-    const meanings = await this.entries('semanticMeanings');
-    if (meanings.some((row) => (
-      decodeBackupValue(JSON.parse(row.encodedValue)) as {
-        personalSemanticAnchorRevisions?: Array<{ personalMediaObjectId?: string | null }>;
-      }
-    ).personalSemanticAnchorRevisions?.some((revision) => revision.personalMediaObjectId === mediaId))) return true;
-    const inbox = await this.entries('semanticInbox');
-    return inbox.some((row) => (
-      decodeBackupValue(JSON.parse(row.encodedValue)) as {
-        payload?: { context?: { mediaReferenceIds?: string[] } | null };
-      }
-    ).payload?.context?.mediaReferenceIds?.includes(mediaId));
-  }
-
-  async portableMedia(sha256:string):Promise<PortableMediaBlob|null>{
-    const blob=this.portableMediaBlobs.get(sha256);
-    return blob?{...blob,bytes:new Uint8Array(blob.bytes)}:null;
-  }
-
-  async portableMediaDiagnostics():Promise<PortableMediaStorageDiagnostics>{
-    return {
-      blobCount:this.portableMediaBlobs.size,
-      totalBytes:[...this.portableMediaBlobs.values()].reduce((total,blob)=>total+blob.sizeBytes,0),
-      referenceCount:this.portableMediaReferences.size,
-    };
-  }
-
-  async commit(mutation: SqliteMutation): Promise<void> {
-    const next = new Map(this.records);
-    const nextChanges = new Map(this.changes);
-    const nextSyncBase = mutation.syncBaseReplacement === undefined
-      ? new Map(this.syncBase)
-      : new Map(mutation.syncBaseReplacement.map((entry) => [
-        `${entry.table}\u0000${entry.key}`,
-        { ...entry, blockRefs: [...entry.blockRefs] },
-      ]));
-    const nextPortableMedia=new Map([...this.portableMediaBlobs].map(([digest,blob])=>[
-      digest,{...blob,bytes:new Uint8Array(blob.bytes)},
-    ]));
-    const nextPortableReferences=new Map(this.portableMediaReferences);
-    const remember = (table: SqliteLibraryTable, key: string, encodedValue: string | null) => {
-      if (mutation.contentRevision === undefined) return;
-      nextChanges.set(`${table}\u0000${key}`, {
-        table,
-        key,
-        encodedValue,
-        contentRevision: mutation.contentRevision,
-      });
-    };
-    for (const table of mutation.clears) {
-      const prefix = `${table}\u0000`;
-      for (const key of [...next.keys()]) if (key.startsWith(prefix)) {
-        next.delete(key);
-        remember(table, key.slice(prefix.length), null);
-      }
-      if(table==='packageCache')nextPortableReferences.clear();
-    }
-    for (const item of mutation.deletes) {
-      next.delete(`${item.table}\u0000${item.key}`);
-      remember(item.table, item.key, null);
-      if(item.table==='packageCache'){
-        const prefix=`${item.key}\u0000`;
-        for(const key of nextPortableReferences.keys())if(key.startsWith(prefix))nextPortableReferences.delete(key);
-      }
-    }
-    for(const portable of mutation.portablePackages??[]){
-      const prefix=`${portable.packageKey}\u0000`;
-      for(const key of nextPortableReferences.keys())if(key.startsWith(prefix))nextPortableReferences.delete(key);
-      for(const media of portable.media){
-        const existing=nextPortableMedia.get(media.sha256);
-        if(existing&&existing.sizeBytes!==media.sizeBytes)throw new Error('portable_media_digest_collision');
-        nextPortableMedia.set(media.sha256,{
-          sha256:media.sha256,
-          sizeBytes:media.sizeBytes,
-          bytes:new Uint8Array(media.bytes),
-        });
-        nextPortableReferences.set(`${portable.packageKey}\u0000${media.mediaId}`,media.sha256);
-      }
-    }
-    for (const item of mutation.puts) {
-      next.set(`${item.table}\u0000${item.key}`, item.encodedValue);
-      remember(item.table, item.key, item.encodedValue);
-    }
-    this.records = next;
-    this.changes = nextChanges;
-    this.syncBase = nextSyncBase;
-    const referenced=new Set(nextPortableReferences.values());
-    for(const digest of nextPortableMedia.keys())if(!referenced.has(digest))nextPortableMedia.delete(digest);
-    this.portableMediaBlobs=nextPortableMedia;
-    this.portableMediaReferences=nextPortableReferences;
-  }
-
-  async diagnostics(): Promise<SqliteStorageDiagnostics> {
-    return {
-      engine: "memory-adapter",
-      persistence: "memory",
-      sqliteVersion: "not-applicable",
-      schemaVersion: sqliteLibrarySchemaVersion,
-      journalMode: "not-applicable",
-      synchronous: null,
-      lockingMode: "not-applicable",
-    };
   }
 }
 
@@ -420,37 +254,49 @@ function assertBrowserSqliteAvailable(): void {
 }
 
 let adapter: Promise<SqliteRecordAdapter> | undefined;
+let activeBrowserAdapter:CoordinatedSqliteAdapter|undefined;
+export async function closeLocalLibraryStorage():Promise<void>{await activeBrowserAdapter?.close();}
 
 async function browserAdapter(): Promise<SqliteRecordAdapter> {
   assertBrowserSqliteAvailable();
-  const coordinated = new CoordinatedSqliteAdapter(() => new WorkerSqliteAdapter());
-  await coordinated.initialize();
-  // Capability checks alone cannot prove that this origin can durably write.
-  // Exercise the initialized database before any product operation may report
-  // success, then remove the private probe row immediately.
-  const probeKey = `storage-probe:${crypto.randomUUID()}`;
-  const probeValue = JSON.stringify({ value: probeKey });
-  let wroteProbe = false;
+  const namespace=localLibraryNamespace();
+  const coordinated = activeBrowserAdapter = new CoordinatedSqliteAdapter(()=>new WorkerSqliteAdapter(namespace),namespace,()=>assertLocalLibrarySelected(namespace));
+  observeLocalLibrarySelection(namespace,()=>{void coordinated.close().catch(()=>{});});
   try {
-    await coordinated.commit({
-      clears: [],
-      deletes: [],
-      puts: [{ table: 'meta', key: probeKey, encodedValue: probeValue }],
-    });
-    wroteProbe = true;
-    if (await coordinated.get('meta', probeKey) !== probeValue) {
-      throw new Error('sqlite_storage_probe_failed');
-    }
-  } finally {
-    if (wroteProbe) {
+    await coordinated.initialize();
+    // Capability checks alone cannot prove that this origin can durably write.
+    // Exercise the initialized database before any product operation may report
+    // success, then remove the private probe row immediately.
+    const probeKey = `storage-probe:${crypto.randomUUID()}`;
+    const probeValue = JSON.stringify({ value: probeKey });
+    let wroteProbe = false;
+    try {
       await coordinated.commit({
         clears: [],
-        deletes: [{ table: 'meta', key: probeKey }],
-        puts: [],
+        deletes: [],
+        puts: [{ table: 'meta', key: probeKey, encodedValue: probeValue }],
       });
+      wroteProbe = true;
+      if (await coordinated.get('meta', probeKey) !== probeValue) {
+        throw new Error('sqlite_storage_probe_failed');
+      }
+    } finally {
+      if (wroteProbe) {
+        await coordinated.commit({
+          clears: [],
+          deletes: [{ table: 'meta', key: probeKey }],
+          puts: [],
+        });
+      }
     }
+    return coordinated;
+  } catch(cause) {
+    // If initialization or the durability probe fails, release the Worker and
+    // document owner locks only after the backend confirms safe VFS teardown.
+    try{await coordinated.close();}
+    catch(cleanupCause){throw new AggregateError([cause,cleanupCause],'sqlite_storage_cleanup_unconfirmed');}
+    throw cause;
   }
-  return coordinated;
 }
 
 export function sqliteRecordAdapter(): Promise<SqliteRecordAdapter> {
@@ -458,7 +304,7 @@ export function sqliteRecordAdapter(): Promise<SqliteRecordAdapter> {
     // Node smoke tests must opt in explicitly. A production browser never
     // accepts volatile storage as a successful local-library implementation.
     adapter = testMemoryAdapterRequested()
-      ? Promise.resolve(new MemoryRecordAdapter())
+      ? import('./sqliteMemoryAdapter').then(({MemoryRecordAdapter})=>new MemoryRecordAdapter())
       : browserAdapter();
     adapter.catch(() => { adapter = undefined; });
   }

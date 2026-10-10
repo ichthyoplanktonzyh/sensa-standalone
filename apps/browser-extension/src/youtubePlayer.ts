@@ -10,12 +10,14 @@ export async function readYoutubePlayer(expectedVideoId:string){
   const tracks=data.captions?.playerCaptionsTracklistRenderer?.captionTracks;
   if(!Array.isArray(tracks))return {error:'no_captions'};
   const selected=player?.getOption?.('captions','track');
-  const track=tracks.find(t=>/^en(?:-|$)/u.test(t.languageCode)&&t.vssId===(selected?.vssId??selected?.vss_id))
-    ??tracks.find(t=>/^en(?:-|$)/u.test(t.languageCode)&&t.kind!=='asr')??tracks.find(t=>/^en(?:-|$)/u.test(t.languageCode));
-  if(!track)return {error:'no_english_captions'};
+  const selectedId=selected?.vssId??selected?.vss_id;
+  const track=(selectedId?tracks.find(t=>t.vssId===selectedId):undefined)
+    ??(selected?.languageCode?tracks.find(t=>t.languageCode===selected.languageCode&&t.kind===selected.kind):undefined)
+    ??(selected?.languageCode?tracks.find(t=>t.languageCode===selected.languageCode):undefined)
+    ??tracks.find(t=>t.kind!=='asr')??tracks[0];
+  if(!track)return {error:'no_captions'};
   const captionButton=document.querySelector('.ytp-subtitles-button');
   if(captionButton?.getAttribute('aria-pressed')==='false')player?.toggleSubtitles?.();
-  if(selected?.languageCode&&!/^en(?:-|$)/u.test(selected.languageCode))player?.setOption?.('captions','track',{languageCode:track.languageCode});
   try{
     const url=new URL(track.baseUrl,location.origin);
     const isCaptionUrl=(candidate:URL)=>candidate.protocol==='https:'&&['www.youtube.com','youtube.com'].includes(candidate.hostname)&&candidate.pathname==='/api/timedtext'&&candidate.searchParams.get('v')===expectedVideoId;

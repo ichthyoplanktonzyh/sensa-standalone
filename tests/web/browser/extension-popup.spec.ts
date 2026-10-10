@@ -1,7 +1,10 @@
 import {test,expect} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
-const extensionArtifact=process.env.SENSA_EXTENSION_TEST_DIR??'apps/browser-extension/dist';
+import {extensionArtifact as compileExtensionArtifact} from '../support/extensionArtifact.mts';
+let extensionArtifact:string,artifact:Awaited<ReturnType<typeof compileExtensionArtifact>>;
+test.beforeAll(async()=>{artifact=await compileExtensionArtifact();extensionArtifact=artifact.path;});
+test.afterAll(async()=>{await artifact?.close();});
 
 test.setTimeout(60_000);
 test.use({locale:'zh-CN'});

@@ -10,7 +10,14 @@ export type SemanticResolver=(snapshot:CaptureSnapshot,languages:SensaFormalPinn
 export function semanticResolverFor(connection:Parameters<ReadingCompletion>[0],complete:ReadingCompletion=completeReading):SemanticResolver { return async(snapshot,languages,focus,onExplanation)=>{
  const body=await complete(connection,[{role:'system',content:semanticResolutionPrompt(snapshot,languages)},{role:'user',content:JSON.stringify({sentence:snapshot.sentence,expression:snapshot.expression,language:snapshot.language,languages,learnerFocus:focus?.text??null})}],true,onExplanation?async partial=>{const text=explanationPreview(partial);if(text)await onExplanation(text);}:undefined);
  const raw=JSON.parse(body);
- return {proposal:raw?.proposal===null?null:semanticProposalSchema.parse(raw?.proposal),provider:connection.name,policyVersion:'sensa-semantic-v4',model:connection.model};
+ const parsed=raw?.proposal===null?null:semanticProposalSchema.safeParse(raw?.proposal);
+ if(parsed&&!parsed.success){
+  // Schema paths/codes identify an adapter failure without logging source text,
+  // provider output, credentials or the rejected values in Zod's full error.
+  console.info(JSON.stringify({event:'sensa.semantic_proposal_invalid',issues:parsed.error.issues.map(issue=>({code:issue.code,path:issue.path}))}));
+  throw parsed.error;
+ }
+ return {proposal:parsed?.success?parsed.data:null,provider:connection.name,policyVersion:'sensa-semantic-v4',model:connection.model};
 };}
 export const resolveSemantic:SemanticResolver=async(snapshot,languages,focus,onExplanation)=>{
  if(process.env.SENSA_SEMANTIC_PROVIDER!=='deepseek'||!process.env.DEEPSEEK_API_KEY)throw new Error('provider_unavailable');

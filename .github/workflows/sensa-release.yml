@@ -1,6 +1,12 @@
 name: Release Sensa production
-run-name: Release Sensa ${{ inputs.release_sha || github.sha }} (${{ inputs.scope }})
+run-name: >-
+  Release Sensa ${{ github.event.workflow_run.head_sha || inputs.release_sha || github.sha }}
+  (${{ github.event_name == 'workflow_run' && 'automatic-policy' || inputs.scope }})
 on:
+  workflow_run:
+    workflows: [Sensa CI]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       release_sha:
@@ -38,6 +44,13 @@ concurrency:
   cancel-in-progress: false
 jobs:
   plan:
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.head_branch == 'main')
+      }}
     runs-on: ubuntu-latest
     timeout-minutes: 18
     outputs:
@@ -45,11 +58,14 @@ jobs:
       release_id: ${{ steps.planner.outputs.release_id }}
       deploy_application: ${{ steps.planner.outputs.deploy_application }}
       publish_learning_content: ${{ steps.planner.outputs.publish_learning_content }}
+      candidate_run_id: ${{ steps.ci.outputs.run_id }}
+      candidate_run_attempt: ${{ steps.ci.outputs.run_attempt }}
     env:
-      SENSA_RELEASE_SHA: ${{ inputs.release_sha || github.sha }}
+      SENSA_RELEASE_MODE: ${{ github.event_name == 'workflow_run' && 'automatic' || 'manual' }}
+      SENSA_RELEASE_SHA: ${{ github.event.workflow_run.head_sha || inputs.release_sha || github.sha }}
     steps:
       - name: Require owner authorization
-        if: ${{ !inputs.owner_accepted }}
+        if: ${{ github.event_name == 'workflow_dispatch' && !inputs.owner_accepted }}
         run: |
           echo 'Production release requires owner_accepted=true.' >&2
           exit 1
@@ -62,17 +78,28 @@ jobs:
           if(!/^[a-f0-9]{40}$/.test(sha))throw Error('Full release SHA required');
           appendFileSync(process.env.GITHUB_OUTPUT,`sha=${sha}\nshort_sha=${sha.slice(0,12)}\n`);
           JS
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ steps.release.outputs.sha }}
-          fetch-depth: 0
       - name: Require green main CI for this revision
+        id: ci
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           node --input-type=module <<'JS'
+          import {appendFileSync,readFileSync} from 'node:fs';
           const env=process.env,sha=env.SENSA_RELEASE_SHA??'';
           if(!env.GH_TOKEN||!env.GITHUB_REPOSITORY)throw Error('GitHub Actions identity required');
+          if(env.GITHUB_EVENT_NAME==='workflow_run'){
+            const event=JSON.parse(readFileSync(env.GITHUB_EVENT_PATH,'utf8')),run=event.workflow_run;
+            if(event.repository?.full_name!==env.GITHUB_REPOSITORY
+              ||run?.head_repository?.full_name!==env.GITHUB_REPOSITORY
+              ||run?.name!=='Sensa CI'||run?.event!=='push'||run?.head_branch!=='main'
+              ||run?.head_sha!==sha||run?.status!=='completed'||run?.conclusion!=='success'
+              ||!Number.isSafeInteger(run?.id)||!Number.isSafeInteger(run?.run_attempt)){
+              throw Error('Automatic release requires the successful same-repository Sensa CI main run');
+            }
+            console.log(`Accepted automatic release provenance from Sensa CI run ${run.id} for ${sha}.`);
+            appendFileSync(env.GITHUB_OUTPUT,`run_id=${run.id}\nrun_attempt=${run.run_attempt}\n`);
+            process.exit(0);
+          }
           const endpoint=new URL(`https://api.github.com/repos/${env.GITHUB_REPOSITORY}/actions/workflows/sensa-consumer-check.yml/runs`);
           for(const [key,value] of Object.entries({branch:'main',event:'push',head_sha:sha,per_page:'10'}))endpoint.searchParams.set(key,value);
           for(let attempt=0;attempt<56;attempt++){
@@ -81,6 +108,7 @@ jobs:
             const payload=await response.json(),run=payload.workflow_runs?.find(candidate=>candidate.head_sha===sha&&candidate.head_branch==='main'&&candidate.event==='push');
             if(run?.conclusion==='success'){
               console.log(`Verified green Sensa CI run ${run.id} for ${sha}.`);
+              appendFileSync(env.GITHUB_OUTPUT,`run_id=${run.id}\nrun_attempt=${run.run_attempt}\n`);
               process.exit(0);
             }
             if(run?.status==='completed')throw Error(`Sensa CI run ${run.id} concluded ${run.conclusion}`);
@@ -89,30 +117,33 @@ jobs:
             await new Promise(resolve=>setTimeout(resolve,15000));
           }
           JS
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.release.outputs.sha }}
+          fetch-depth: 0
       - name: Restore the previous successful system manifest
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          previous_run="$(gh run list --workflow sensa-release.yml --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
-          if [ -z "$previous_run" ]; then
-            echo 'No previous unified release exists; the planner will require a full bootstrap release.'
-            exit 0
-          fi
-          mkdir -p .tmp/previous-system-release
-          if ! gh run download "$previous_run" --pattern 'sensa-system-release-*' --dir .tmp/previous-system-release; then
-            echo 'Previous system manifest is unavailable; the planner will require a full bootstrap release.'
-            exit 0
-          fi
-          previous_manifest="$(find .tmp/previous-system-release -name system-release-manifest.json -type f -print -quit)"
-          if [ -z "$previous_manifest" ]; then
-            echo 'Previous system manifest is unavailable; the planner will require a full bootstrap release.'
-            exit 0
-          fi
-          echo "SENSA_PREVIOUS_RELEASE_MANIFEST=$previous_manifest" >> "$GITHUB_ENV"
+          while read -r previous_run; do
+            [ -n "$previous_run" ] || continue
+            evidence_dir=".tmp/previous-system-release/$previous_run"
+            mkdir -p "$evidence_dir"
+            if ! gh run download "$previous_run" --pattern 'sensa-system-release-*' --dir "$evidence_dir"; then
+              continue
+            fi
+            previous_manifest="$(find "$evidence_dir" -name system-release-manifest.json -type f -print -quit)"
+            if [ -n "$previous_manifest" ]; then
+              echo "SENSA_PREVIOUS_RELEASE_MANIFEST=$previous_manifest" >> "$GITHUB_ENV"
+              echo "Restored previous system release from run $previous_run."
+              exit 0
+            fi
+          done < <(gh run list --workflow sensa-release.yml --status success --limit 20 --json databaseId --jq '.[].databaseId')
+          echo 'No previous unified release manifest is available; the planner will require a full bootstrap release.'
       - name: Plan the smallest safe system release
         id: planner
         env:
-          SENSA_RELEASE_SCOPE: ${{ inputs.scope }}
+          SENSA_RELEASE_SCOPE: ${{ github.event_name == 'workflow_run' && 'auto' || inputs.scope }}
           SENSA_MEDIA_RELEASE_TAG: ${{ inputs.media_release_tag }}
           SENSA_MEDIA_PACK_SHA256: ${{ inputs.media_pack_sha256 }}
           SENSA_SYSTEM_RELEASE_ID: sensa-system-${{ steps.release.outputs.short_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -146,6 +177,8 @@ jobs:
     uses: ./.github/workflows/sensa-web-deploy.yml
     with:
       release_sha: ${{ needs.plan.outputs.release_sha }}
+      candidate_run_id: ${{ needs.plan.outputs.candidate_run_id }}
+      candidate_run_attempt: ${{ needs.plan.outputs.candidate_run_attempt }}
     secrets: inherit
 
   record:

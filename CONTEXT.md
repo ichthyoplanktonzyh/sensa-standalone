@@ -1,7 +1,7 @@
 # Sensa product context
 
 > Status: canonical ubiquitous language  
-> Updated: 2026-09-21
+> Updated: 2026-10-08
 > Domain document index: [`docs/sensa/README.md`](docs/sensa/README.md)
 
 Sensa is a sense-first language-learning product. Its durable learning identity
@@ -31,7 +31,7 @@ _Avoid_: Content Distribution when referring to the whole system
 
 **Local-first Platform（本地优先平台）**:
 The supporting capability on which learner-owned systems commit and operate locally
-before optional account synchronization. It supplies persistence, recovery, sync,
+before optional account synchronization. It supplies persistence, explicit recovery, sync,
 identity, media and online adapters without owning semantic or learning decisions.
 
 **Intake Layer（摄取入口层）**:
@@ -342,8 +342,8 @@ grounding or during repair. It is neither the authoring Sketch itself nor proof
 that the learner reconstructed the experience.
 
 **Support-Language Bridge**:
-A reviewed access path with a declared Language Tag that activates existing concepts
-and marks important support/target-language coverage differences. It is used only
+A reviewed access path with a declared Language Tag that renders the fixed meaning for the learner,
+activates existing concepts and marks important support/target-language coverage differences. It is used only
 when compatible with the Pinned Language Context and is not the Sense itself, a
 translation identity or an assessment answer.
 
@@ -462,6 +462,8 @@ Content Release. It is neither a Book nor a claim to be a universal ontology.
 A broad, versioned lookup corpus of source-backed words, multiword expressions,
 Reference Senses and licensed enrichment. It may contain meanings that Sensa
 does not teach and is neither a Book nor the Learning Catalog.
+Its lexical-form language, source-definition language and learner rendering
+language are distinct facts; one never relabels another.
 
 **Reference Context**:  
 The version anchor used for one lookup, including at least a Reference Release
@@ -541,13 +543,11 @@ Resolved Learning Plan is preparing or blocked; it is neither a Book, a Personal
 Collection nor a Saved list and is not runtime-eligible until ready.
 
 **Study Scope / Study Scope Revision**:  
-The resolved, mode-aware set of Learning Targets currently in one Language Learning
-Route, de-duplicated by Retention Target and carrying source, Effective Learning Policy
-and plan-readiness provenance in an immutable revision. Only purpose-ready members are
-executable; a Session pins one revision so later changes cannot silently alter work
-already acted on. A newer material revision for the same Curriculum Membership,
-Learning Target and pinned language pair may still be resolved for a current
-not-yet-acted or future Step without rebinding the Session scope.
+The immutable selection of Learning Targets and Curriculum sources actually admitted
+to a Protocol Run, carrying its effective Policy and purpose-readiness provenance.
+It preserves that Run's selected work, not the entire Route inventory; future Runs
+are selected from the current Study Plan. Compatible material revisions may still
+refresh an unacted Step without changing target, source or language identity.
 
 **Learner Sense Progress**:  
 The learner-by-Sense roll-up over all Retention Targets and explicitly Sense-
@@ -657,10 +657,19 @@ Expression and its stable Sense relationship; an optional Meaning Focus may expl
 how an ambiguous Context was resolved. It can explicitly bridge a confirmed target
 into Curriculum, but is neither a learning prerequisite nor a progress owner.
 
+**Personal Meaning Conflict Decision**:
+An explicit learner choice between precisely identified concurrent versions of one
+Personal Meaning. It selects the current branch for the account while retaining
+both branches and prior decisions as immutable history; it never covers later edits
+or changes learning evidence.
+
 **Personal Semantic Tombstone**:
 A durable lifecycle fact marking a Personal Semantic World identity as deleted while
 retaining its revisions and provenance. It prevents an offline older replica from
 resurrecting the identity and does not cascade into Learning or published content.
+An explicit learner restoration advances the same identity to a new lifecycle
+revision while retaining the earlier deletion fact; an old active replica is not
+a restoration intent.
 _Avoid_: Physical deletion, last-write-wins deletion
 
 **Personal Content**:  
@@ -692,6 +701,11 @@ A provenance-bearing text, image, audio, scene or other real Context intentional
 committed for a Personal Meaning by the learner or an authorized delegate. It may
 remain useful after Sense confirmation but is a private optional learning scaffold,
 not reviewed content, learner progress or Evidence.
+
+**Personal Context Composition**:
+The learner-ordered combination of currently active Personal Semantic Anchors for one
+Personal Meaning. Its material sequence is independent of storage or synchronization
+order and does not prescribe Sense, Curriculum or learning order.
 
 **Personal Semantic Region**:
 
@@ -730,6 +744,12 @@ in its Context and located Expression and optionally qualified by a Meaning Focu
 It preserves resolution and direct/delegated acceptance provenance. Acceptance
 preserves the Personal Meaning and does not by itself add the Sense to formal learning.
 
+**Personal Meaning Correction**:
+
+The learner's explicit replacement of an accepted interpretation or expression,
+grounded in an existing real Context of the same Personal Meaning. It retains the
+original acceptance and learning history; it is not public Sense revision or new learning.
+
 **Personal Collection / Collection Membership**:  
 A learner-named ordered organization of Sense and Example targets, plus one typed
 reference placing a target in it. It is independent of saving, Books and Semantic Fields.
@@ -748,9 +768,10 @@ The service that selects among due Review, ready protocol work and eligible new
 Retention-Target work while respecting Study Plan and the pinned Learning Protocol.
 
 **Learning Session**:  
-A bounded period of learner activity containing ordered Encounters. It pins one
-Study Scope Revision and one Pinned Language Context; its intent is `mixed` or
-`review_only`, and it is not itself a learning or FSRS result.
+A bounded period of learner activity containing ordered Encounters, with a fixed
+Pinned Language Context, intent and daily-new limit. Its starting Study Scope records
+the origin selection; each later Run pins its own selection from the current queue.
+A Session is not itself a learning or FSRS result.
 
 **Pinned Language Context**:
 The immutable Language Tags and contextual roles resolved when a language-dependent
@@ -922,16 +943,23 @@ every activity has one primary Area even when it crosses multiple channels.
 **Practice Brief**:
 The learner's local direction for Free Practice: an intent or communicative goal,
 a scenario, optional scope and support level. It guides a Session without becoming
-a curriculum objective, graduation criterion or assessment contract.
+a curriculum objective, graduation criterion or assessment contract; an activity
+that only needs an Expression does not require a Brief.
+
+**Practice Material**:
+Learner-selected language content used by a particular practice activity, independent
+of formal learning enrollment. Its required facts are defined by that activity;
+Expression-form listening needs the expression text and its language, not a complete Meaning or Learning Target.
 
 **Free Practice Session**:
-A learner-initiated activity that pins one Practice Brief, primary Practice Area,
-Activity Definition and Practice Scope. It is separate from Learning Session and
-does not settle formal Acquisition or Review.
+A learner-initiated use of selected Practice Material through one available Activity
+Definition. It is separate from Learning Session and does not settle formal Acquisition or Review.
 
 **Practice Scope**:
-The resolved set of typed Context, Expression, Sense, binding or Learning Target
-references selected for one Free Practice Session, with source provenance.
+The learner's selected material references for Free Practice, with source provenance
+where needed; it is not a copy of the complete source aggregates or formal learning inventory.
+Selecting a whole source includes its currently available expressions; an explicit
+subset retains material identities. Neither choice changes the expression already playing.
 
 **Practice Activity Definition**:
 A versioned Free Practice interaction contract with one primary Area, explicit

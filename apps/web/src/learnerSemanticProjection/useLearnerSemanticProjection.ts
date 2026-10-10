@@ -9,7 +9,8 @@ import { learnerSemanticProjectionSystem } from './system/learnerSemanticProject
  * One store shared by every caller: the projection is rebuilt once per change
  * rather than once per mounted component.
  */
-export const useLearnerSemanticProjection = () => useSyncExternalStore(
-  learnerSemanticProjectionSystem.subscribe,
+const inactiveSubscribe=()=>()=>{};
+export const useLearnerSemanticProjection = (enabled=true) => useSyncExternalStore(
+  enabled?learnerSemanticProjectionSystem.subscribe:inactiveSubscribe,
   learnerSemanticProjectionSystem.read,
 );

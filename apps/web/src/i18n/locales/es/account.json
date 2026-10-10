@@ -94,7 +94,7 @@
     "feedbackText": "Usa la opción de contacto de Acerca de y ayuda para enviar comentarios y correcciones de contenido.",
     "done": "Listo"
   },
-  "cloudSync": {
+  "cloudSync": {"restoreTitle": "Datos de la cuenta",
     "title": "Sincronización de la cuenta",
     "pending": "Hay cambios locales pendientes de sincronización",
     "syncing": "Sincronizando…",
@@ -111,8 +111,9 @@
     "openFailed": "No se pudieron restaurar los datos de la cuenta. Comprueba la conexión y vuelve a intentarlo.",
     "retryOpen": "Reintentar restauración",
     "details": "Ver registros en conflicto",
-    "conflictPrompt": "{{count}} registros en conflicto que afectan a {{affected}} registros relacionados. Elige la versión del dispositivo o de la nube para este grupo.",
-    "conflictDecision": "La última versión de la nube se comprueba de nuevo antes de aplicar tu elección. Si cambió, se conserva el nuevo conflicto para que lo confirmes. El resto de los datos sigue sincronizándose.",
+    "conflictPrompt": "Compara los cambios y elige una versión para todos.",
+    "conflictDecision": "Si cambia alguna versión, tendrás que compararlas de nuevo.",
+    "comparison": {"local":"Este dispositivo","remote":"Tu cuenta","base":"Antes de los cambios","removed":"Eliminado o ausente en esta versión","unavailable":"No se puede mostrar esta versión por completo.","unsupported":"Aún no se pueden comparar todos los cambios. Ambas versiones se conservan; contacta con soporte.","refresh":"Sincroniza ahora para cargar las versiones.","changed":"El contenido ha cambiado. Sincroniza y compara de nuevo.","item":"Contenido {{number}}","fields":{"expression":"Expresión","meaning":"Significado","context":"Contexto","note":"Nota","examples":"Situaciones típicas","included":"Casos incluidos","excluded":"Casos excluidos","contrasts":"Distinciones cercanas","questions":"Preguntas abiertas","content":"Contenido"}},
     "keepLocal": "Conservar la versión del dispositivo",
     "useCloud": "Usar la versión de la nube",
     "resolving": "Comprobando y resolviendo…",

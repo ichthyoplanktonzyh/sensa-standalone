@@ -10,16 +10,19 @@ import type { QuickDictEntry, Word } from '../types';
 import { audioService } from '../services/audioService';
 import {
   referenceSensesForDisplay,
+  referenceSenseText,
   type ReferenceLookupResult,
   type ReferencePronunciation,
   type ReferenceSense,
 } from '../reference/referenceDictionary';
 import { lookupReference } from '../reference/referenceLookup';
 import type { ReferenceExampleDeck } from './ReferenceExampleViewer';
+import type { SensaPinnedLanguageContext } from '@sensa/contracts/sensa';
 
 interface ReferenceDictionaryScreenProps {
   active: boolean;
   wordData: Word | QuickDictEntry | string | null;
+  languages?:SensaPinnedLanguageContext;
   onClose: () => void;
   onOpenExamples: (deck: ReferenceExampleDeck) => void;
 }
@@ -79,25 +82,24 @@ function partOfSpeechGroups(senses: readonly ReferenceSense[]): Array<{
 function SenseRow({
   sense,
   isContextual,
-  targetLanguage,
   learnerLanguage,
   onOpenExamples,
 }: {
   sense: ReferenceSense;
   isContextual: boolean;
-  targetLanguage: string;
   learnerLanguage: string;
   onOpenExamples: (sense: ReferenceSense) => void;
 }) {
   const examples = sense.examples ?? [];
+  const display=referenceSenseText(sense,learnerLanguage);
   return (
     <article className={`grid gap-4 rounded-card border p-5 sm:grid-cols-[1fr_auto] ${isContextual ? 'border-border-strong bg-surface-selected' : 'border-border-subtle bg-surface-panel'}`}>
       <div className="min-w-0">
         {isContextual && <span className="mb-3 inline-flex rounded-pill bg-accent-soft px-3 py-1 text-metadata font-semibold text-action-primary">{cardText('dictCurrent')}</span>}
-        <p className="text-body leading-7" lang={sense.glossL1 ? learnerLanguage : targetLanguage} dir="auto">
-          {sense.glossL1 ?? sense.definitionL2 ?? cardText('dictDefinitionMissing')}
+        <p className="text-body leading-7" lang={display?.languageTag??i18n.language} dir="auto">
+          {display?.text ?? cardText('dictDefinitionMissing')}
         </p>
-        {sense.glossL1 && sense.definitionL2 && <small className="mt-2 block text-body-support leading-6 text-fg-secondary" lang={targetLanguage} dir="auto">{sense.definitionL2}</small>}
+        {sense.glossL1 && sense.definition && <small className="mt-2 block text-body-support leading-6 text-fg-secondary" lang={sense.definition.languageTag} dir="auto">{sense.definition.text}</small>}
         {sense.labels && sense.labels.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
             {sense.labels.map((label) => <span className="rounded-pill bg-surface-subtle px-2 py-1 text-metadata text-fg-secondary" key={label}>{label}</span>)}
@@ -121,6 +123,7 @@ function SenseRow({
 export function ReferenceDictionaryScreen({
   active,
   wordData,
+  languages,
   onClose,
   onOpenExamples,
 }: ReferenceDictionaryScreenProps) {
@@ -133,11 +136,20 @@ export function ReferenceDictionaryScreen({
   const [isLoading, setIsLoading] = useState(false);
   const [lookupError, setLookupError] = useState<'dictInput'|'dictMissing'|'dictUnavailable'|null>(null);
   const [playingPronunciationId, setPlayingPronunciationId] = useState<string | null>(null);
+  const [playbackError,setPlaybackError]=useState(false);
+  const playback=useRef(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const lookupSequenceRef = useRef(0);
   const lookupAbortRef = useRef<AbortController | null>(null);
+  const lookupLanguages=useMemo(()=>{
+    if(languages)return languages;
+    const release=contextualResultFromWordData(wordData)?.release;
+    return release?{targetLanguageTag:release.targetLanguage,supportLanguageTag:release.learnerLocale}:undefined;
+  },[languages,wordData]);
+  const initializedSubject=useRef<{wordData:ReferenceDictionaryScreenProps['wordData'];languages:SensaPinnedLanguageContext|undefined}|null>(null);
 
   const performLookup = useCallback(async (rawQuery: string) => {
+    playback.current+=1;audioService.stop();setPlayingPronunciationId(null);setPlaybackError(false);
     const normalizedQuery = rawQuery.trim();
     lookupAbortRef.current?.abort();
     const sequence = lookupSequenceRef.current + 1;
@@ -156,7 +168,7 @@ export function ReferenceDictionaryScreen({
     setLookupError(null);
     try {
       // Manual searches have no sentence occurrence, so they do not run WSD.
-      const nextResult = await lookupReference(normalizedQuery, { signal: controller.signal });
+      const nextResult = await lookupReference(normalizedQuery, { signal: controller.signal,languages:lookupLanguages });
       if (lookupSequenceRef.current !== sequence || controller.signal.aborted) return;
       setResult(nextResult);
       setLookupError(nextResult ? null : 'dictMissing');
@@ -169,18 +181,25 @@ export function ReferenceDictionaryScreen({
         setIsLoading(false);
       }
     }
-  }, []);
+  }, [lookupLanguages]);
 
   useEffect(() => {
     if (!active) {
       lookupAbortRef.current?.abort();
+      playback.current+=1;
       audioService.stop();
+      setPlayingPronunciationId(null);
       return;
     }
+    // Opening this result's examples only suspends the dictionary. Returning
+    // must preserve a manual query and its result, not re-open the source word.
+    if(initializedSubject.current?.wordData===wordData&&initializedSubject.current.languages===lookupLanguages)return;
+    initializedSubject.current={wordData,languages:lookupLanguages};
     const nextQuery = queryFromWordData(wordData);
     const contextualResult = contextualResultFromWordData(wordData);
     setQuery(nextQuery);
     setPlayingPronunciationId(null);
+    playback.current+=1;audioService.stop();setPlaybackError(false);
     if (contextualResult) {
       lookupAbortRef.current?.abort();
       lookupSequenceRef.current += 1;
@@ -190,10 +209,11 @@ export function ReferenceDictionaryScreen({
       return;
     }
     void performLookup(nextQuery);
-  }, [active, performLookup, wordData]);
+  }, [active, performLookup, wordData,lookupLanguages]);
 
   useEffect(() => () => {
     lookupAbortRef.current?.abort();
+    playback.current+=1;
     audioService.stop();
   }, []);
 
@@ -227,14 +247,12 @@ export function ReferenceDictionaryScreen({
 
   const handleSpeak = (pronunciation: ReferencePronunciation) => {
     if (!pronunciation.audioUrl) return;
+    if(playingPronunciationId===pronunciation.pronunciationId){playback.current+=1;audioService.stop();setPlayingPronunciationId(null);return;}
+    const token=++playback.current;setPlaybackError(false);
     setPlayingPronunciationId(pronunciation.pronunciationId);
-    const accent = pronunciation.accent === 'en-GB' ? 'uk' : 'us';
-    const playback = audioService.playAudioUrl(
-      pronunciation.audioUrl,
-      entry?.headword ?? query,
-      accent,
-    );
-    void playback.finally(() => setPlayingPronunciationId(null));
+    void audioService.playReferencePronunciation({audioUrl:pronunciation.audioUrl,text:entry?.headword??query,languageTag:pronunciation.accent??targetLanguage})
+      .catch(()=>{if(token===playback.current)setPlaybackError(true);})
+      .finally(()=>{if(token===playback.current)setPlayingPronunciationId(null);});
   };
 
   const openExamples = (sense: ReferenceSense) => {
@@ -289,7 +307,7 @@ export function ReferenceDictionaryScreen({
         ) : !entry ? (
           <div className="flex min-h-64 flex-col items-center justify-center text-center" role="status">
             <strong className="text-body text-feedback-danger">{cardText(lookupError ?? 'dictMissing')}</strong>
-            <p className="mt-2 text-body-support text-fg-secondary">{cardText('dictRetry')}</p>
+            {lookupError!=='dictUnavailable'&&<p className="mt-2 text-body-support text-fg-secondary">{cardText('dictRetry')}</p>}
           </div>
         ) : (
           <>
@@ -311,8 +329,9 @@ export function ReferenceDictionaryScreen({
                         key={pronunciation.pronunciationId}
                         className={`inline-flex min-h-11 items-center gap-2 rounded-control border-0 px-4 text-control-label font-semibold focus-visible:outline-2 focus-visible:outline-focus ${playingPronunciationId === pronunciation.pronunciationId ? 'bg-action-primary text-action-on-primary' : 'bg-accent-soft text-action-primary hover:bg-surface-selected'}`}
                         onClick={() => handleSpeak(pronunciation)}
+                        aria-label={playingPronunciationId===pronunciation.pronunciationId?cardText('stopPronunciation'):cardText('play',{accent:accentLabel(pronunciation.accent),ipa:pronunciation.ipa??''})}
                       >
-                        <span>{accentLabel(pronunciation.accent)}</span>
+                        <span>{playingPronunciationId===pronunciation.pronunciationId?cardText('stopPronunciation'):accentLabel(pronunciation.accent)}</span>
                         <svg className={iconClass} aria-hidden="true"><use href="#i-vol-fill" /></svg>
                         {pronunciation.ipa && <i className="font-language not-italic" lang={targetLanguage} dir="auto">{pronunciation.ipa}</i>}
                       </button>
@@ -325,6 +344,7 @@ export function ReferenceDictionaryScreen({
                   ))}
                 </div>
               )}
+              {playbackError&&<p role="status" className="mt-3 text-body-support text-feedback-danger">{cardText('pronunciationIsUnavailableTryAgain')}</p>}
             </section>
 
             {contextualSense && (
@@ -333,7 +353,7 @@ export function ReferenceDictionaryScreen({
                 <div className="mb-3 mt-5 flex items-center justify-between text-metadata font-bold uppercase tracking-wide text-fg-tertiary">
                   <span>{contextualSense.partOfSpeech}</span>
                 </div>
-                <SenseRow sense={contextualSense} isContextual targetLanguage={targetLanguage} learnerLanguage={learnerLanguage} onOpenExamples={openExamples} />
+                <SenseRow sense={contextualSense} isContextual learnerLanguage={learnerLanguage} onOpenExamples={openExamples} />
               </section>
             )}
 
@@ -351,7 +371,6 @@ export function ReferenceDictionaryScreen({
                         key={sense.referenceSenseId}
                         sense={sense}
                         isContextual={false}
-                        targetLanguage={targetLanguage}
                         learnerLanguage={learnerLanguage}
                         onOpenExamples={openExamples}
                       />

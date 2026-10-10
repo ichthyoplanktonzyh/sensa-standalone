@@ -1,4 +1,5 @@
 import {createHash, randomUUID} from 'node:crypto';
+import {Buffer} from 'node:buffer';
 import WebSocket from 'ws';
 
 const token = '6A5AA1D4EAFF4E9FB37E23D68491D6F4';

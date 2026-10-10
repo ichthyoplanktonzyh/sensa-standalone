@@ -3,8 +3,9 @@ import {useTranslation} from 'react-i18next';
 import {Camera,ImagePlus,Send,Square,X} from 'lucide-react';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import {prepareConversationImage,type ConversationImage} from '../../data/library/conversationImages';
+import {MAX_SCENE_IMAGES,MAX_SCENE_IMAGE_SOURCE_BYTES} from './useSceneImageInput';
 
-export function ExpressionChatInput({busy,onSend,onStop,initialText='',initialImages=[],submitLabel,inputLabel,inputHint,maxImages=4}:{inputLabel?:string;inputHint?:string;initialText?:string;initialImages?:ConversationImage[];submitLabel?:string;maxImages?:number;busy:boolean;onSend:(text:string,images:ConversationImage[])=>Promise<void>;onStop?:()=>void}){
+export function ExpressionChatInput({busy,onSend,onStop,initialText='',initialImages=[],submitLabel,inputLabel,inputHint,imageUse='conversation',maxImages=imageUse==='scene'?MAX_SCENE_IMAGES:4}:{inputLabel?:string;inputHint?:string;initialText?:string;initialImages?:ConversationImage[];submitLabel?:string;imageUse?:'conversation'|'scene';maxImages?:number;busy:boolean;onSend:(text:string,images:ConversationImage[])=>Promise<void>;onStop?:()=>void}){
  useTranslation();
  const [text,setText]=useState(initialText),[images,setImages]=useState<ConversationImage[]>(initialImages),[notice,setNotice]=useState(''),[reading,setReading]=useState(false),[dragging,setDragging]=useState(false);
  const readingLock=useRef(false);
@@ -13,6 +14,7 @@ export function ExpressionChatInput({busy,onSend,onStop,initialText='',initialIm
  const add=async(files:File[])=>{
   if(readingLock.current||busy)return;
   setNotice('');if(images.length+files.length>maxImages){setNotice(maxImages===4?'localFlow.imageLimit':'localFlow.sceneImageRequirements');return;}
+  if(imageUse==='scene'&&files.some(file=>file.size>MAX_SCENE_IMAGE_SOURCE_BYTES)){setNotice('localFlow.sceneImageRequirements');return;}
   readingLock.current=true;setReading(true);try{const next=await Promise.all(files.map(prepareConversationImage));setImages(current=>[...current,...next]);}catch(e){setNotice(e instanceof Error?e.message:'localFlow.imageRead');}finally{readingLock.current=false;setReading(false);setDragging(false);}
  };
  const send=async()=>{if(busy||reading||(!text.trim()&&!images.length))return;setNotice('');try{await onSend(text.trim(),images);setText('');setImages([]);}catch{/* The conversation retains the source and displays the service error. */}};

@@ -245,6 +245,8 @@ test("official Registry delivers one atomic Book while preserving independent Se
       0,
       "a conflict in the final member must roll back the complete Book installation",
     );
+    assert.equal(await readLibrary(tx=>tx.count("packageInstallations")),1,
+      "a final-member failure must retain only the pre-existing installation fact");
     await command({id:crypto.randomUUID(),kind:"fixture.cleanup",input:{}},async tx=>{
       tx.delete("packageInstallations",conflictingInstallation.key);
     });

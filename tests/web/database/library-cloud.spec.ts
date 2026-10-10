@@ -2,12 +2,626 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {libraryCloudPackageFixture} from '../../../scripts/support/libraryCloudPackageFixture.mts';
-import {expect,test} from '@playwright/test';
+import {expect,test,type Browser} from '@playwright/test';
 import {purgeExpiredLibraryCloudBlocks} from '../../../apps/api/src/sensa/library/retention.ts';
 import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec.ts';
 import {librarySyncBlockChars,librarySyncBlockStoreBatch} from '../../../packages/contracts/src/sensa/librarySync.ts';
+import {decodeLibrarySyncBlock,encodeLibrarySyncBlock} from '../../../packages/contracts/src/sensa/librarySyncBlocks.ts';
 import {createLibraryCloudBrowserFixture} from '../../../tests/web/support/libraryCloudBrowserFixture.mts';
+import type {LearningHistoryProjection,LearningRuntimeProjection} from '../../../apps/web/src/learning/system';
+import {manualMeaningPayload,newManualMeaningDraft} from '../../../apps/web/src/experience/intake/manualMeaning';
 test.setTimeout(300_000);
+/** Fact collections are identity/ordinal sets, not an ordered text document.
+ * Compare every full fact by identity. Nested user materials, pins and ordered
+ * provenance references remain untouched; their order has separate oracles. */
+const meaningFactIds:Record<string,string>={personalMeaningRevisions:'personalMeaningRevisionId',personalSemanticAnchors:'personalSemanticAnchorId',personalSemanticAnchorRevisions:'personalSemanticAnchorRevisionId',personalExpressionAnchors:'personalExpressionAnchorId',personalExpressionAnchorRevisions:'personalExpressionAnchorRevisionId',focuses:'meaningFocusId',focusRevisions:'meaningFocusRevisionId',focusAcceptances:'meaningFocusAcceptanceId',constructions:'senseConstructionId',constructionTurns:'constructionTurnId',proposals:'senseProposalId',proposalVersions:'senseProposalVersionId',senseConfirmations:'senseProposalConfirmationId',semanticAcceptances:'semanticAcceptanceId',alignments:'personalMeaningAlignmentId',alignmentEvents:'personalMeaningAlignmentEventId',bindingConfirmations:'expressionBindingConfirmationId'};
+const retainedMeaningFacts=(record:any)=>Object.fromEntries(Object.entries(record).map(([key,value])=>[key,Array.isArray(value)&&meaningFactIds[key]?[...value].sort((a,b)=>a[meaningFactIds[key]!].localeCompare(b[meaningFactIds[key]!])):value]));
+
+test('clearing a device through the UI survives reload until explicit Cloud restoration',async({browser},testInfo)=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount('clear-reconnect'),page=await fixture.createClient(account);
+  const payload=manualMeaningPayload({...newManualMeaningDraft(),context:'Could I borrow your umbrella?',occurrence:'borrow',languageTag:'en',meaning:'暂时借用对方的物品，之后归还。',usage:'下雨时借朋友的雨伞。'});
+  const original=await page.evaluate(async payload=>{const c=(window as any).core;await c.createJourneyModules().semanticIntake.submit(payload);await (window as any).sync();return {identity:await c.openLibrary(),meanings:await c.readLibrary((tx:any)=>tx.entries('semanticMeanings')),state:await c.readCloudSync()};},payload);
+  expect(original.meanings).toHaveLength(1);expect(original.state.status).toBe('synced');
+  await page.evaluate(async()=>{const path='/local-clear.js';const ui=await import(/* @vite-ignore */ path);ui.mountLocalDataControl();});
+  await page.getByRole('button',{name:'Review local content',exact:true}).click();
+  await expect(page.getByText(/1 meanings/)).toBeVisible();
+  await page.getByRole('checkbox',{name:'I have saved any backup I need and confirm erasing this local content.'}).check();
+  await page.getByRole('button',{name:'Erase local content',exact:true}).click();
+  await expect(page.getByText('Local content cleared. Reopen the app to use the empty library.',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Reopen app',exact:true}).click();
+  // Real reload retires the old module incarnation instead of changing JS
+  // globals to pretend a newly cleared device is still the old world.
+  await page.evaluate(async token=>{const path='/core.js',c=await import(/* @vite-ignore */ path);(window as any).core=c;(window as any).token=token;await c.openLibrary();(window as any).request=async(path:string,body?:unknown)=>{const response=await fetch('/sensa/library-sync'+path,{method:body===undefined?'GET':'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const value=await response.json();if(!response.ok)throw Error(value.code);return value;};},account.token);
+  const inspect=()=>page.evaluate(async()=>{const c=(window as any).core;return {identity:await c.openLibrary(),paused:await c.readCloudReconnectRequired(),state:await c.readCloudSync(),meanings:await c.readLibrary((tx:any)=>tx.entries('semanticMeanings')),base:await c.readLibrary((tx:any)=>tx.syncBaseReferences())};});
+  const cleared=await inspect();expect(cleared.identity.id).not.toBe(original.identity.id);expect(cleared.paused).toBe(true);expect(cleared.meanings).toEqual([]);expect(cleared.base).toEqual([]);
+  fixture.clearRequests();let serviceRequests=0;
+  await page.route('https://service.fixture.invalid/**',async route=>{serviceRequests++;const url=new URL(route.request().url());const response=await route.fetch({url:fixture.origin+url.pathname+url.search});await route.fulfill({response});});
+  await page.clock.install();
+  await page.evaluate(async account=>{(window as any).__fixtureAuthSession={access_token:account.token,user:{id:account.subject}};const path='/local-clear.js',ui=await import(/* @vite-ignore */ path);ui.mountCloudSyncControl();},account);
+  await expect(page.getByRole('status')).toHaveText('Saved locally; cloud sync is not enabled');
+  await page.clock.fastForward(300000);
+  expect(serviceRequests).toBe(0);expect(fixture.requests()).toEqual([]);expect(await inspect()).toEqual(cleared);
+  // Failure preserves the user's cleared world and cannot enable auto retry.
+  await page.route('**/sensa/library-sync/head',route=>route.fulfill({status:503,json:{code:'fixture_server_unavailable'}}));
+  await page.getByRole('button',{name:'Sync now',exact:true}).click();
+  await expect(page.getByRole('status')).toHaveText('Sync did not finish. Your local data is still saved. Check the connection and retry.');
+  await page.unroute('**/sensa/library-sync/head');const failed=await inspect();expect(failed.paused).toBe(true);expect(failed.identity).toEqual(cleared.identity);expect(failed.meanings).toEqual([]);expect(failed.base).toEqual([]);
+  fixture.clearRequests();const failedRequests=serviceRequests;await page.clock.fastForward(300000);expect(serviceRequests).toBe(failedRequests);expect(fixture.requests()).toEqual([]);
+  await page.getByRole('button',{name:'Sync now',exact:true}).click();
+  await expect.poll(()=>page.evaluate(()=>(window as any).core.readCloudSync())).toMatchObject({status:'synced'});
+  const restored=await inspect();expect(restored.paused).toBe(false);expect(restored.identity).toEqual({...original.identity,deviceId:cleared.identity.deviceId});expect(restored.state.status).toBe('synced');expect(restored.meanings).toEqual(original.meanings);
+  await testInfo.attach('clear-reconnect-evidence',{contentType:'application/json',body:JSON.stringify({originalIdentity:original.identity,clearedIdentity:cleared.identity,restoredIdentity:restored.identity,meanings:restored.meanings.length,paidCalls:0,scope:'actual LocalDataControlPanel/CloudSyncPanel/automatic scheduler, OPFS reload and Hono/PostgreSQL; controlled auth, not full AccountExperience login'})});
+ }finally{await fixture.close();}
+});
+
+const localClearDuringSync=(failure:boolean)=>async({browser}:{browser:Browser})=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount(),page=await fixture.createClient(account);
+  await page.evaluate(async()=>{await (window as any).sync();const c=(window as any).core;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Shown before synchronization'});const original=(window as any).sync;(window as any).__syncEntered=false;(window as any).sync=async()=>{(window as any).__syncEntered=true;await new Promise<void>(resolve=>{(window as any).__resumeSync=resolve;});if((window as any).__failClearSync)throw Error('controlled interrupted sync');await original();};});
+  await page.evaluate(failure=>{(window as any).__failClearSync=failure;},failure);
+  await page.evaluate(async()=>{const path='/local-clear.js';(await import(/* @vite-ignore */ path)).mountLocalDataControl();});
+  await page.getByRole('button',{name:'Review local content',exact:true}).click();
+  const confirmation=page.getByLabel('I have saved any backup I need and confirm erasing this local content.');await confirmation.check();
+  await page.getByRole('button',{name:'Sync now',exact:true}).click();await expect.poll(()=>page.evaluate(()=>(window as any).__syncEntered)).toBe(true);
+  const peer=await page.context().newPage();await peer.goto(fixture.origin);
+  const added=await peer.evaluate(async()=>{const path='/core.js',c=await import(/* @vite-ignore */ path);await c.openLibrary();const id=crypto.randomUUID();await c.saveDraft(crypto.randomUUID(),{id,expectedRevision:0,text:'Written in another tab during synchronization'});return id;});
+  await page.evaluate(()=>(window as any).__resumeSync());
+  if(failure)await expect(page.getByRole('alert')).toContainText('Sync did not finish');
+  else await expect(page.locator('[data-local-clear-sync]')).toHaveCount(0);
+  await expect(page.getByText(/2 sources/)).toBeVisible();await expect(confirmation).not.toBeChecked();
+  await expect(page.getByRole('button',{name:'Erase local content',exact:true})).toBeDisabled();
+  expect((await page.evaluate(()=>(window as any).core.listDrafts())).map((row:any)=>row.id)).toContain(added);
+  if(failure)await page.getByLabel(/Discard these .* unsynced account changes/).check();
+  await confirmation.check();await expect(page.getByRole('button',{name:'Erase local content',exact:true})).toBeEnabled();await peer.close();
+ }finally{await fixture.close();}
+};
+test('local-clear confirmation is retired when sync succeeds after another tab writes',localClearDuringSync(false));
+test('local-clear confirmation is retired when sync fails after another tab writes',localClearDuringSync(true));
+
+test('a manual sync queued behind another tab cannot authorize restoration after a later local clear',async({browser})=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount('queued-clear'),source=await fixture.createClient(account);
+  await source.evaluate(async()=>{const c=(window as any).core;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'This old Cloud material must not return from a queued click.'});await (window as any).sync();});
+  const holder=await source.context().newPage();await holder.goto(fixture.origin);
+  await holder.evaluate(()=>{(window as any).__held=false;void navigator.locks.request('sensa-account-library-sync',()=>new Promise<void>(resolve=>{(window as any).__release=resolve;(window as any).__held=true;}));});
+  await expect.poll(()=>holder.evaluate(()=>(window as any).__held)).toBe(true);
+  const waiter=await source.context().newPage();await waiter.goto(fixture.origin);
+  let serviceRequests=0;
+  await waiter.route('https://service.fixture.invalid/**',async route=>{serviceRequests++;const url=new URL(route.request().url());const response=await route.fetch({url:fixture.origin+url.pathname+url.search});await route.fulfill({response});});
+  // Do not open the library through core on this fresh tab. The user's click
+  // itself must bind its world before waiting for the cross-tab sync lock.
+  await waiter.evaluate(async account=>{(window as any).__fixtureAuthSession={access_token:account.token,user:{id:account.subject}};(window as any).__finished=0;window.addEventListener('sensa-account-library-sync-finished',()=>{(window as any).__finished++;});const path='/local-clear.js',ui=await import(/* @vite-ignore */ path);ui.mountCloudSyncControl({automatic:false});},account);
+  await waiter.getByRole('button',{name:'Sync now',exact:true}).click();
+  await expect.poll(()=>waiter.evaluate(async()=>{const state=await navigator.locks.query();return (state.pending??[]).filter(lock=>lock.name==='sensa-account-library-sync').length;})).toBe(1);
+  await source.evaluate(async()=>{const c=(window as any).core;await c.clearLocalLibrary(await c.inspectLocalClear());});
+  const cleared=await source.evaluate(()=>(window as any).core.readLibrary(async(tx:any)=>({identity:await tx.get('meta','identity'),marker:await tx.get('meta','local-reset'),drafts:await tx.entries('drafts'),base:await tx.syncBaseReferences()})));
+  expect(cleared.marker).toBe('local-clear');expect(cleared.drafts).toEqual([]);expect(cleared.base).toEqual([]);fixture.clearRequests();
+  await holder.evaluate(()=>(window as any).__release());
+  await expect.poll(()=>waiter.evaluate(()=>(window as any).__finished)).toBe(1);
+  await expect(waiter.getByRole('button',{name:'Sync now',exact:true})).toBeEnabled();
+  expect(serviceRequests).toBe(0);expect(fixture.requests()).toEqual([]);
+  expect(await source.evaluate(()=>(window as any).core.readLibrary(async(tx:any)=>({identity:await tx.get('meta','identity'),marker:await tx.get('meta','local-reset'),drafts:await tx.entries('drafts'),base:await tx.syncBaseReferences()})))).toEqual(cleared);
+ }finally{await fixture.close();}
+});
+
+test('local clear releases a live failed restoration gate without an automatic Cloud request',async({browser})=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount('live-clear'),page=await fixture.createClient(account);
+  await page.evaluate(async()=>{const c=(window as any).core;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Explicitly disposable local material.'});await (window as any).sync();});
+  let attempts=0;
+  await page.route('https://service.fixture.invalid/**',route=>{attempts++;return route.fulfill({status:503,json:{code:'fixture_server_unavailable'}});});
+  await page.clock.install();
+  await page.evaluate(async account=>{(window as any).__fixtureAuthSession={access_token:account.token,user:{id:account.subject}};const path='/local-clear.js',ui=await import(/* @vite-ignore */ path);ui.mountCloudSyncControl({initialAvailability:'restoring'});},account);
+  await expect(page.getByTestId('library-availability')).toHaveText('failed');await expect(page.locator('#restore-fixture')).toBeVisible();
+  const beforeClear=attempts;
+  await page.evaluate(async()=>{const c=(window as any).core;await c.clearLocalLibrary(await c.inspectLocalClear());});
+  await expect(page.getByTestId('library-availability')).toHaveText('authoritative');await expect(page.locator('#restore-fixture')).toHaveCount(0);
+  await page.clock.fastForward(300000);expect(attempts).toBe(beforeClear);
+  expect(await page.evaluate(()=>(window as any).core.readLibrary(async(tx:any)=>({marker:await tx.get('meta','local-reset'),drafts:await tx.entries('drafts')})))).toEqual({marker:'local-clear',drafts:[]});
+ }finally{await fixture.close();}
+});
+
+test('a clear after the account lock check still retires the old click before sync header capture',async({browser})=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount('capture-clear'),source=await fixture.createClient(account);
+  await source.evaluate(async()=>{const c=(window as any).core;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Do not resurrect this from a pre-clear click.'});await (window as any).sync();});
+  const waiter=await source.context().newPage();await waiter.goto(fixture.origin);let serviceRequests=0;
+  await waiter.route('https://service.fixture.invalid/**',route=>{serviceRequests++;return route.fulfill({status:503,json:{code:'unexpected_sync'}});});
+  await waiter.evaluate(async account=>{
+   (window as any).__fixtureAuthSession={access_token:account.token,user:{id:account.subject}};
+   const path='/core.js',c=await import(/* @vite-ignore */ path);
+   const request=navigator.locks.request.bind(navigator.locks) as any;let insideSync=false,reads=0;
+   // Hold only the shared Library read immediately before header capture.
+   // Every actual acquire still uses native Web Locks; no storage is replaced.
+   (navigator.locks as any).request=(name:string,...args:any[])=>{
+    const callback=args.pop();
+    if(name==='sensa-account-library-sync')return request(name,...args,(lock:Lock)=>{insideSync=true;return callback(lock);});
+    if(insideSync&&name.includes('sensa-library-transaction-v1')&&args[0]?.mode==='shared'&&++reads===3){
+     (window as any).__beforeHeader=true;
+     return new Promise<void>(resolve=>{(window as any).__releaseHeader=resolve;}).then(()=>request(name,...args,callback));
+    }
+    return request(name,...args,callback);
+   };
+   (window as any).__outcome=c.syncAccountLibrary({restoreAfterLocalClear:true}).then(()=>true,(cause:Error)=>cause.message);
+  },account);
+  await expect.poll(()=>waiter.evaluate(()=>(window as any).__beforeHeader)).toBe(true);
+  await source.evaluate(async()=>{const c=(window as any).core;await c.clearLocalLibrary(await c.inspectLocalClear());});
+  fixture.clearRequests();await waiter.evaluate(()=>(window as any).__releaseHeader());
+  expect(await waiter.evaluate(()=>(window as any).__outcome)).toBe('localFlow.libraryReplaced');
+  expect(serviceRequests).toBe(0);expect(fixture.requests()).toEqual([]);
+  expect(await source.evaluate(()=>(window as any).core.readLibrary(async(tx:any)=>({marker:await tx.get('meta','local-reset'),drafts:await tx.entries('drafts'),state:await tx.get('meta','cloud-sync')})))).toEqual({marker:'local-clear',drafts:[],state:undefined});
+ }finally{await fixture.close();}
+});
+
+test('a manual restoration retry never bypasses a rejected account admission',async({browser})=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount('retry-admission'),page=await fixture.createClient(account);let admissions=0,syncRequests=0;
+  await page.route('https://service.fixture.invalid/**',route=>{if(new URL(route.request().url()).pathname==='/sensa/web/access/session'){admissions++;return route.fulfill({status:403,json:{code:'access_rejected'}});}syncRequests++;return route.fulfill({status:503,json:{code:'unexpected_online_request'}});});
+  await page.evaluate(async account=>{(window as any).__fixtureAuthSession={access_token:account.token,user:{id:account.subject}};const path='/local-clear.js',ui=await import(/* @vite-ignore */ path);ui.mountAccountConnectionControl();},account);
+  await expect(page.getByTestId('connection-online')).toHaveText('false');await expect.poll(()=>admissions).toBe(1);await expect(page.getByTestId('connection-notice')).not.toBeEmpty();
+  await page.locator('#account-restore-fixture button').first().click();
+  await expect.poll(()=>admissions).toBe(2);await expect(page.locator('#account-restore-fixture button').first()).toBeEnabled();
+  expect(syncRequests).toBe(0);await expect(page.getByTestId('connection-online')).toHaveText('false');expect(await page.evaluate(()=>(window as any).core.readCloudSync())).toBeUndefined();
+ }finally{await fixture.close();}
+});
+
+test('an explicit sync queued behind a failed ordinary attempt retains its own retry intent',async({browser})=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount('queued-retry'),page=await fixture.createClient(account);let attempts=0,release:()=>void=()=>{};
+  await page.evaluate(async()=>{const c=(window as any).core;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Keep this fact across failed ordinary sync and queued explicit retry.'});await (window as any).sync();});
+  await page.route('https://service.fixture.invalid/**',async route=>{const url=new URL(route.request().url());if(url.pathname.endsWith('/head')&&++attempts===1){await new Promise<void>(resolve=>{release=resolve;});await route.fulfill({status:503,json:{code:'fixture_server_unavailable'}});return;}const response=await route.fetch({url:fixture.origin+url.pathname+url.search});await route.fulfill({response});});
+  await page.evaluate(async account=>{(window as any).__fixtureAuthSession={access_token:account.token,user:{id:account.subject}};const path='/local-clear.js',ui=await import(/* @vite-ignore */ path);ui.mountCloudSyncControl();},account);
+  await expect.poll(()=>attempts).toBe(1);
+  await page.evaluate(()=>{(window as any).__queuedOutcome=(window as any).core.syncAccountLibrary({restoreAfterLocalClear:true}).then(()=>true,(cause:Error)=>cause.message);});release();
+  expect(await page.evaluate(()=>(window as any).__queuedOutcome)).toBe(true);
+  await expect.poll(()=>page.evaluate(()=>(window as any).core.readCloudSync())).toMatchObject({status:'synced'});expect(attempts).toBe(2);
+  expect(await page.evaluate(()=>(window as any).core.readLibrary((tx:any)=>tx.entries('drafts')))).toHaveLength(1);
+ }finally{await fixture.close();}
+});
+
+test('personal scenes and original action pins restore while offline first acceptance forks remain explicit',async({browser})=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount('personal-scene'),a=await fixture.createClient(account),publication=await libraryCloudPackageFixture();
+  const createScene=(page:import('@playwright/test').Page)=>page.evaluate(async({bookBytes,descriptor})=>{
+   const c=(window as any).core,id=()=>crypto.randomUUID(),fetch=window.fetch;
+   window.fetch=async input=>String(input)===descriptor.url?new Response(new Uint8Array(bookBytes)):new Response(null,{status:404});
+   try{await c.contentSupplySystem.execute({kind:'install_catalog_item',descriptor,signal:new AbortController().signal});}finally{window.fetch=fetch;}
+   const languageContext=(await c.languageRoutesSnapshot()).context;
+   await c.learningSystem.execute({kind:'enroll_book',operationId:id(),languageContext,publicationArchiveSha256:descriptor.sha256});
+   const target=(await c.readLearning()).targets[0];await c.learningSystem.execute({kind:'start',operationId:id(),targetId:target.id,languageContext,dailyLimit:20});
+   const runtime=(await c.learningSystem.read({kind:'runtime',languageContext})).runtime,t=runtime.target;
+   const input={kind:'save_learning_scene',learningTargetId:t.targetId,languageRouteId:languageContext.languageRouteId,curriculumMembershipId:t.curriculumMembershipId,senseId:t.identity.senseId,senseVersionId:t.identity.senseVersionId,bindingVersionId:t.identity.bindingVersionId};
+   const media=[{mediaId:id(),kind:'image',dataUrl:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII=',mimeType:'image/png',fileName:'private.png',altText:'私有借伞场景'}];
+   const {scene}=await c.personalContentSystem.execute({...input,operationId:id(),body:'两台设备共同拥有、尚未接受的借伞场景。',media,expected:null});
+   await c.learningSystem.execute({kind:'act',operationId:id(),runId:runtime.runId,expectedRevision:runtime.revision,action:{kind:'reveal'}});
+   const pack=(await c.contentSupplySystem.read({kind:'workspace'})).packages[0],p=pack.portableOrigin.publications[0],entry=pack.content.entries[0];
+   const acceptance={existingPersonalMeaningId:null,source:{packageKey:pack.key,bookId:p.book.bookId,bookVersionId:p.book.bookVersionId,contentReleaseId:p.contentRelease.contentReleaseId,publishedAt:p.publishedAt,title:p.book.title},target:{learningTargetId:t.targetId,curriculumMembershipId:t.curriculumMembershipId,senseId:t.identity.senseId,senseVersionId:t.identity.senseVersionId,bindingId:t.identity.bindingId,bindingVersionId:t.identity.bindingVersionId,expression:t.presentation.expression,targetLanguageTag:t.presentation.targetLanguageTag},semantic:entry.semantic};
+   return {input,acceptance,scene,languageContext};
+  },{bookBytes:Array.from(publication.bookBytes),descriptor:publication.descriptor});
+  const seed=await createScene(a);
+  await a.evaluate(()=>(window as any).sync());const b=await fixture.createClient(account);await b.evaluate(()=>(window as any).sync());
+  const query={kind:'learning_scene',learningTargetId:seed.input.learningTargetId,languageRouteId:seed.input.languageRouteId};
+  const inspect=(page:import('@playwright/test').Page)=>page.evaluate(async query=>{const c=(window as any).core;return {scene:await c.personalContentSystem.readScene(query),meanings:await c.readLibrary((tx:any)=>tx.entries('semanticMeanings')),learning:await c.readLibrary(async(tx:any)=>Object.fromEntries(await Promise.all(['learningTargets','learningRuns','learningEvents','learningSessions','studyScopes'].map(async table=>[table,await tx.entries(table)]))))};},query);
+  assert.deepEqual((await inspect(b)).scene,seed.scene);assert.equal((await inspect(b)).meanings.length,0);
+  const editAndAccept=(page:import('@playwright/test').Page,body:string)=>page.evaluate(async({seed,body,query})=>{
+   const c=(window as any).core,prior=await c.personalContentSystem.readScene(query),old=prior.revisions.find((r:any)=>r.revision===prior.currentRevision);
+   const expected=c.personalLearningSceneEditBase(prior);
+   const {scene}=await c.personalContentSystem.execute({...seed.input,operationId:crypto.randomUUID(),body,media:old.media,expected});
+   const revision=scene.revisions.find((r:any)=>r.revision===scene.currentRevision),operationId=crypto.randomUUID();
+   const accepted=await c.createJourneyModules().personalMeaningJourney.acceptPublishedLearningScene({...seed.acceptance,operationId,existingPersonalMeaningId:scene.acceptedPersonalMeaningId,scene:{...revision,sceneId:scene.sceneId}});
+   await c.personalContentSystem.execute({kind:'mark_learning_scene_accepted',operationId:crypto.randomUUID(),sceneId:scene.sceneId,revisionId:revision.revisionId,personalMeaningId:accepted.personalMeaningId});
+   return {accepted,request:{...seed.acceptance,operationId,existingPersonalMeaningId:scene.acceptedPersonalMeaningId,scene:{...revision,sceneId:scene.sceneId}}};
+  },{seed,body,query});
+  const branchA=await editAndAccept(a,'设备 A 明确接受的借伞经历。'),branchB=await editAndAccept(b,'设备 B 离线独立接受的借伞经历。'),acceptedA=branchA.accepted,acceptedB=branchB.accepted;assert.equal(acceptedA.personalMeaningId,acceptedB.personalMeaningId,'the same Scene has one owner identity even before devices meet');
+  const beforeB=await inspect(b);await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());
+  const conflict=await b.evaluate(()=>(window as any).core.readCloudSync());assert.equal(conflict.status,'conflict');
+  assert.deepEqual((await inspect(b)).scene,beforeB.scene);assert.equal((await inspect(b)).meanings.length,1,'a conflicting annotation must not auto-merge its two independently accepted Meanings');
+  await b.evaluate(async()=>{const c=(window as any).core;await c.resolveCloudSyncConflicts('remote',(await c.readCloudSync()).conflict);await (window as any).sync();});
+  await a.evaluate(()=>(window as any).sync());
+  const settled=await inspect(b);assert.equal(settled.scene.acceptedPersonalMeaningId,acceptedA.personalMeaningId);assert.equal(settled.meanings.length,1);assert.equal(settled.meanings[0].key,acceptedA.personalMeaningId);
+  assert.deepEqual(retainedMeaningFacts(settled.meanings[0].value),retainedMeaningFacts((await inspect(a)).meanings[0].value));
+  assert.deepEqual(settled.learning,beforeB.learning,'scene fork decisions cannot invent rating, completion or scheduling');
+  assert(settled.learning.learningEvents.some((row:any)=>row.value.detail.personalLearningScene?.revisionId===seed.scene.revisions[0].revisionId),'the original actual reveal still pins the pre-fork Scene');
+  const retained=await b.evaluate(()=>(window as any).core.readLibrary((tx:any)=>tx.entries('semanticReceipts')));assert(retained.some((row:any)=>row.key===branchA.request.operationId));assert(retained.some((row:any)=>row.key===branchB.request.operationId));
+  await assert.rejects(b.evaluate(request=>(window as any).core.createJourneyModules().personalMeaningJourney.acceptPublishedLearningScene(request),branchB.request),/meaningChanged/,'a retained but superseded branch receipt cannot replay a nonexistent Anchor as current success');
+  assert.deepEqual((await inspect(b)).scene,settled.scene);assert.deepEqual((await inspect(b)).learning,settled.learning);
+  await b.reload();await b.evaluate(async()=>{const path='/core.js';(window as any).core=await import(/* @vite-ignore */ path);await (window as any).core.openLibrary();});
+  assert.deepEqual((await inspect(b)).scene,settled.scene);
+  // A new user intent after choosing a branch is not the discarded operation.
+  // Confirming the selected Scene must neither duplicate nor rewrite its facts.
+  const confirmed=await b.evaluate(async({request,scene})=>{
+   const revision=scene.revisions.find((r:any)=>r.revision===scene.currentRevision);
+   return (window as any).core.createJourneyModules().personalMeaningJourney.acceptPublishedLearningScene({...request,operationId:crypto.randomUUID(),existingPersonalMeaningId:scene.acceptedPersonalMeaningId,scene:{...revision,sceneId:scene.sceneId}});
+  },{request:branchA.request,scene:settled.scene});
+  assert.equal(confirmed.personalMeaningId,acceptedA.personalMeaningId);assert.equal(confirmed.personalSemanticAnchorRevisionId,acceptedA.personalSemanticAnchorRevisionId);assert.equal(confirmed.acceptedByOperationId,branchA.request.operationId);
+  assert.deepEqual((await inspect(b)).meanings,settled.meanings);assert.deepEqual((await inspect(b)).learning,settled.learning);
+  await b.evaluate(()=>(window as any).core.exportLibraryBackup('scene-fixture-backup-password'));
+  // A different conflict sharing immutable registry dependencies must not
+  // make an untouched Scene's fixed-ID command replay unusable. The UI now
+  // creates a fresh ID per intent; these callers deliberately retain their IDs.
+  const ghostAccount=await fixture.createAccount('scene-note-closure'),gA=await fixture.createClient(ghostAccount),gSeed=await createScene(gA);
+  const note=async(page:import('@playwright/test').Page,body:string)=>page.evaluate(async({senseId,body})=>{const c=(window as any).core;await c.personalContentSystem.execute({kind:'set_sense_note',operationId:crypto.randomUUID(),senseId,body,expected:await c.personalContentSystem.readSenseNote(senseId)});},{senseId:gSeed.input.senseId,body});
+  await note(gA,'共同笔记基线');await gA.evaluate(()=>(window as any).sync());const gB=await fixture.createClient(ghostAccount);await gB.evaluate(()=>(window as any).sync());
+  await note(gA,'远端笔记分叉');await note(gB,'明确选择保留的本机笔记分叉');
+  const fixedRequest=await gA.evaluate(async seed=>{
+   const c=(window as any).core,revision=seed.scene.revisions[0],ids=c.learningSceneSemanticOperationIds(revision.revisionId),request={...seed.acceptance,operationId:ids.accept,existingPersonalMeaningId:null,scene:{...revision,sceneId:seed.scene.sceneId}};
+   const accepted=await c.createJourneyModules().personalMeaningJourney.acceptPublishedLearningScene(request);
+   await c.personalContentSystem.execute({kind:'mark_learning_scene_accepted',operationId:ids.link,sceneId:seed.scene.sceneId,revisionId:revision.revisionId,personalMeaningId:accepted.personalMeaningId});return request;
+  },gSeed);
+  await gA.evaluate(()=>(window as any).sync());await gB.evaluate(()=>(window as any).sync());
+  assert.equal((await gB.evaluate(()=>(window as any).core.readCloudSync())).status,'conflict');
+  await gB.evaluate(async()=>{const c=(window as any).core;await c.resolveCloudSyncConflicts('local',(await c.readCloudSync()).conflict);await (window as any).sync();});
+  const resumed=await gB.evaluate(async({request,seed})=>{
+   const c=(window as any).core,result=await c.createJourneyModules().personalMeaningJourney.acceptPublishedLearningScene(request),revision=seed.scene.revisions[0],ids=c.learningSceneSemanticOperationIds(revision.revisionId);
+   await c.personalContentSystem.execute({kind:'mark_learning_scene_accepted',operationId:ids.link,sceneId:seed.scene.sceneId,revisionId:revision.revisionId,personalMeaningId:result.personalMeaningId});return {result,note:await c.personalContentSystem.readSenseNote(seed.input.senseId),meanings:await c.readLibrary((tx:any)=>tx.entries('semanticMeanings'))};
+  },{request:fixedRequest,seed:gSeed});
+  assert.equal(resumed.result.replayed,true);assert.equal(resumed.meanings.length,1);assert.equal(resumed.note.body,'明确选择保留的本机笔记分叉');
+  await gB.evaluate(()=>(window as any).sync());await gA.evaluate(()=>(window as any).sync());
+  const laterScene=await gB.evaluate(async seed=>{
+   const c=(window as any).core,query={kind:'learning_scene',learningTargetId:seed.input.learningTargetId,languageRouteId:seed.input.languageRouteId},prior=await c.personalContentSystem.readScene(query),revision=prior.revisions.find((r:any)=>r.revision===prior.currentRevision);
+   return (await c.personalContentSystem.execute({...seed.input,operationId:crypto.randomUUID(),body:'已有意义之后，在两台设备共同保存的新还伞场景。',media:revision.media,expected:c.personalLearningSceneEditBase(prior)})).scene;
+  },gSeed);
+  await gB.evaluate(()=>(window as any).sync());await gA.evaluate(()=>(window as any).sync());
+  await note(gA,'后续更新时的远端笔记分叉');await note(gB,'后续更新时保留的本机笔记分叉');
+  const laterRequest=await gA.evaluate(async({seed,scene})=>{
+   const c=(window as any).core,revision=scene.revisions.find((r:any)=>r.revision===scene.currentRevision),ids=c.learningSceneSemanticOperationIds(revision.revisionId),request={...seed.acceptance,operationId:ids.accept,existingPersonalMeaningId:scene.acceptedPersonalMeaningId,scene:{...revision,sceneId:scene.sceneId}};
+   const accepted=await c.createJourneyModules().personalMeaningJourney.acceptPublishedLearningScene(request);await c.personalContentSystem.execute({kind:'mark_learning_scene_accepted',operationId:ids.link,sceneId:scene.sceneId,revisionId:revision.revisionId,personalMeaningId:accepted.personalMeaningId});return request;
+  },{seed:gSeed,scene:laterScene});
+  await gA.evaluate(()=>(window as any).sync());await gB.evaluate(()=>(window as any).sync());assert.equal((await gB.evaluate(()=>(window as any).core.readCloudSync())).status,'conflict');
+  await gB.evaluate(async()=>{const c=(window as any).core;await c.resolveCloudSyncConflicts('local',(await c.readCloudSync()).conflict);await (window as any).sync();});
+  const laterReplay=await gB.evaluate(async request=>{const c=(window as any).core,result=await c.createJourneyModules().personalMeaningJourney.acceptPublishedLearningScene(request),ids=c.learningSceneSemanticOperationIds(request.scene.revisionId);await c.personalContentSystem.execute({kind:'mark_learning_scene_accepted',operationId:ids.link,sceneId:request.scene.sceneId,revisionId:request.scene.revisionId,personalMeaningId:result.personalMeaningId});return result;},laterRequest);assert.equal(laterReplay.replayed,true);assert.equal(laterReplay.personalMeaningId,resumed.result.personalMeaningId);
+  const latest=await gB.evaluate(async id=>(window as any).core.worldReadRepository.detail(id),resumed.result.personalMeaningId);assert(latest.detail.materialBlocks.some((block:any)=>block.bodyText===laterRequest.scene.body));
+  await gB.evaluate(()=>(window as any).core.exportLibraryBackup('scene-note-fixture-backup-password'));
+ }finally{await fixture.close();}
+});
+test('ordered Context paragraphs survive Cloud fact reordering, correction and later material append',async({browser})=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount('ordered-context'),sender=await fixture.createClient(account);
+  const payload=manualMeaningPayload({...newManualMeaningDraft(),context:'I asked to borrow an umbrella.',occurrence:'borrow',languageTag:'en',meaning:'暂时借用别人的物品，之后归还。',usage:'向同事暂借雨伞。'});
+  const identity=await sender.evaluate(async payload=>{const c=(window as any).core,accepted=await c.createJourneyModules().semanticIntake.submit(payload);return {meaningId:accepted.personalMeaningId,alignmentId:(await c.worldReadRepository.detail(accepted.personalMeaningId)).sources[0].reference.personalMeaningAlignmentId};},payload);
+  await sender.evaluate(()=>(window as any).sync());const receiver=await fixture.createClient(account);await receiver.evaluate(()=>(window as any).sync());
+  const paragraphs=['第一段：出门时下雨，先向同事暂借一把雨伞。','第二段：回家之后，约好次日把伞归还。'];
+  await sender.evaluate(async({meaningId,paragraphs})=>{
+   const c=(window as any).core,detail=(await c.worldReadRepository.detail(meaningId)).detail,at=new Date().toISOString(),prefix=crypto.randomUUID().slice(0,8);let ordinal=0xffff;
+   // Actual commands, controlled identity/clock ports: simultaneous paragraphs
+   // have descending UUIDs so the historical Cloud ID sort must reorder them.
+   const gateway=c.createJourneyModules({clock:{nowIso:()=>at},ids:{next:()=>`${prefix}-${(ordinal--).toString(16).padStart(4,'0')}-4000-8000-000000000000`}}).personalMeaningJourney;
+   await gateway.reviseContext({operationId:crypto.randomUUID(),personalMeaningId:meaningId,expectedRevision:detail.revision,blocks:paragraphs.map(bodyText=>({kind:'text',bodyText}))});
+  },{meaningId:identity.meaningId,paragraphs});
+  const inspect=(page:import('@playwright/test').Page)=>page.evaluate(async({meaningId,alignmentId})=>{
+   const c=(window as any).core,record=await c.readLibrary((tx:any)=>tx.get('semanticMeanings',meaningId)),detail=await c.worldReadRepository.detail(meaningId),seed=await c.worldReadRepository.correction(meaningId,alignmentId);
+   return {rawActiveIds:record.personalSemanticAnchors.filter((row:any)=>row.status==='active').map((row:any)=>row.personalSemanticAnchorId),label:record.personalMeaningRevisions.find((row:any)=>row.revision===record.personalMeaning.currentRevision).displayLabel,detailText:detail.detail.materialBlocks.filter((row:any)=>row.kind==='text').map((row:any)=>row.bodyText),learningText:detail.sources[0].context.text,correctionText:seed.payload.context.textSegment};
+  },identity);
+  const before=await inspect(sender);assert.deepEqual(before.detailText,paragraphs);assert.equal(before.learningText,paragraphs.join('\n\n'));assert.equal(before.correctionText,paragraphs.join('\n\n'));
+  const reviewed=await sender.evaluate(async({meaningId,alignmentId})=>(window as any).core.worldReadRepository.correction(meaningId,alignmentId),identity);
+  await sender.evaluate(()=>(window as any).sync());await receiver.evaluate(()=>(window as any).sync());
+  const restored=await inspect(receiver);assert.notDeepEqual(restored.rawActiveIds,before.rawActiveIds,'fixture must exercise actual aggregate-array reordering, not a no-op transport');
+  assert.deepEqual(restored.detailText,paragraphs);assert.equal(restored.learningText,paragraphs.join('\n\n'));assert.equal(restored.correctionText,paragraphs.join('\n\n'));
+  // Another device adds only a note. Its canonical fact arrays return to the
+  // original device without changing the reviewed Meaning or user Context.
+  await receiver.evaluate(async({meaningId})=>{const c=(window as any).core,senseId=(await c.worldReadRepository.detail(meaningId)).sources[0].reference.senseId;await c.personalContentSystem.execute({kind:'set_sense_note',operationId:crypto.randomUUID(),senseId,body:'补充笔记，但没有修改已审阅的情境。',expected:{body:'',revision:0}});},{meaningId:identity.meaningId});
+  await receiver.evaluate(()=>(window as any).sync());await sender.evaluate(()=>(window as any).sync());
+  assert.notDeepEqual((await inspect(sender)).rawActiveIds,before.rawActiveIds,'the reviewed device must actually receive reordered facts');
+  const newAlignment=await sender.evaluate(async({identity,reviewed})=>{
+   const c=(window as any).core,operationId=crypto.randomUUID();
+   return c.createJourneyModules().personalMeaningJourney.correctPersonalMeaning({operationId,personalMeaningId:identity.meaningId,personalMeaningAlignmentId:identity.alignmentId,source:reviewed.source,reuseSense:reviewed.reuseSense,payload:{...reviewed.payload,operationId,capturedAt:new Date().toISOString(),acceptance:{mode:'learner_direct'}}});
+  },{identity,reviewed});
+  await sender.evaluate(()=>(window as any).sync());await receiver.evaluate(()=>(window as any).sync());
+  identity.alignmentId=newAlignment.personalMeaningAlignmentId;
+  const third='第三段：第二天按约定还伞，并感谢同事。';
+  await receiver.evaluate(async({meaningId,bodyText})=>{const c=(window as any).core;await c.createJourneyModules().personalMeaningJourney.addMaterialBlock({operationId:crypto.randomUUID(),personalMeaningId:meaningId,block:{kind:'text',bodyText}});},{meaningId:identity.meaningId,bodyText:third});
+  await receiver.evaluate(()=>(window as any).sync());await sender.evaluate(()=>(window as any).sync());
+  const fresh=await fixture.createClient(account);await fresh.evaluate(()=>(window as any).sync());
+  for(const page of [sender,receiver,fresh]){const value=await inspect(page);assert.deepEqual(value.detailText,[...paragraphs,third]);assert.equal(value.learningText,[...paragraphs,third].join('\n\n'));assert.equal(value.correctionText,[...paragraphs,third].join('\n\n'));assert.equal(value.label,paragraphs[0]!.length>24?paragraphs[0]!.slice(0,24)+'…':paragraphs[0]);}
+  await fresh.reload();await fresh.evaluate(async()=>{const path='/core.js';(window as any).core=await import(/* @vite-ignore */ path);await (window as any).core.openLibrary();});assert.deepEqual((await inspect(fresh)).detailText,[...paragraphs,third]);
+ }finally{await fixture.close();}
+});
+test('correcting a learned personal meaning preserves prepared attempts, audio and real learning history across Cloud restore and OPFS reload',async({browser})=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount('learned-personal-correction'),sender=await fixture.createClient(account);
+  const payload=manualMeaningPayload({...newManualMeaningDraft(),context:'I wore my raincoat in the rain.',occurrence:'raincoat',languageTag:'en',meaning:'防雨时穿在身上的衣服。',usage:'一个人在雨中穿着防水的外衣。'});
+  const identity=await sender.evaluate(async payload=>{
+   const c=(window as any).core,id=()=>crypto.randomUUID(),at=new Date().toISOString(),prefix=id().slice(0,8);let ordinal=0xffff;
+   const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII=',mediaIds=[id(),id()];
+   // Synthetic uploaded assets, not learning outcomes. Controlled ports make
+   // the Context heads/revisions tie so canonical replica order is adversarial.
+   await c.writeLibraryState((tx:any)=>{for(const mediaId of mediaIds)tx.put('media',mediaId,{mediaId,mediaKind:'image',mimeType:'image/png',dataUrl:'data:image/png;base64,'+png,sizeBytes:atob(png).length,createdAt:at});});
+   const accepted=await c.createJourneyModules({clock:{nowIso:()=>at},ids:{next:()=>`${prefix}-${(ordinal--).toString(16).padStart(4,'0')}-4000-8000-000000000000`}}).semanticIntake.submit({...payload,context:{...payload.context,modality:'mixed',mediaReferenceIds:mediaIds}});
+   if(accepted.route!=='fast_track')throw Error('Expected actual accepted Meaning');
+   const source=(await c.worldReadRepository.detail(accepted.personalMeaningId)).sources[0];if(!source)throw Error('Missing accepted source');
+   const provider=await c.saveProvider(id(),{id:id(),expectedRevision:0,name:'Controlled history fixture',kind:'compatible',endpoint:'https://correction-history-model.invalid/v1',model:'synthetic'},'synthetic-fixture-device-secret');
+   await c.assignProvider(id(),'content',provider.id,(await c.providerSnapshot()).settings.revision);
+   // Controlled provider/speech validate durability, not paid model quality or
+   // real audio playback. Learning facts still come from actual owner commands.
+   const restoreSpeech=c.replaceClientSpeechProvider({id:'fixture',revision:1,displayName:'Fixture',synthesize:async(input:any)=>({...input,audioUrl:'data:audio/mpeg;base64,UklGRg==',phoneticNotation:null,accentLabel:'en-US',source:'synthetic history fixture',method:'tts'})});
+   const original=window.fetch;window.fetch=async(url:any,init:any)=>{
+    const address=String(url);
+    if(address.endsWith('/sensa/resource-facts'))return new Response(JSON.stringify({input:JSON.parse(String(init?.body)),references:[]}),{headers:{'content-type':'application/json'}});
+    if(address.startsWith(provider.endpoint))return new Response(JSON.stringify({model:'synthetic',choices:[{finish_reason:'stop',message:{content:JSON.stringify({resources:[
+     {role:'experience_recall_cue',payload:{scene:'下雨时，一个人穿了防水外衣来挡住雨水。',senseFocus:'防雨时穿在身上的衣服。'}},
+     {role:'scene_bridge',payload:{text:'回想雨中穿着防水外衣的体验。',meaningRendering:{meaning:'在下雨时穿在身上、用来挡雨的外衣。',languageTag:'zh-CN'}}},
+     {role:'scene_realization',payload:{example:'I wore my raincoat in the rain.',targetStart:10,targetEnd:18,experienceResourceKey:'experience_recall_cue:0'}},
+    ]})}}]}),{headers:{'content-type':'application/json'}});
+    return original(url,init);
+   };
+   let task:any;const languageContext=(await c.languageRoutesSnapshot()).context;
+   try{task=await c.enrollPersonal(id(),source,languageContext,true);await c.preparePersonal(task.id,source,provider,null,new AbortController().signal,()=>{});}
+   finally{restoreSpeech();window.fetch=original;}
+   if((await c.personalLearningTaskSnapshot(task.id)).status!=='ready')throw Error('Preparation did not actually become ready');
+   await c.learningSystem.execute({kind:'start',operationId:id(),targetId:task.targetId,languageContext,dailyLimit:20});
+   let runtime=(await c.learningSystem.read({kind:'runtime',languageContext})).runtime as LearningRuntimeProjection;
+   await c.learningSystem.execute({kind:'act',operationId:id(),runId:runtime.runId,expectedRevision:runtime.revision,action:{kind:'reveal'}});
+   runtime=(await c.learningSystem.read({kind:'runtime',languageContext})).runtime;
+   await c.learningSystem.execute({kind:'act',operationId:id(),runId:runtime.runId,expectedRevision:runtime.revision,action:{kind:'rate',rating:'good'}});
+   await c.learningSystem.execute({kind:'finish',operationId:id(),runId:runtime.runId});
+   return {meaningId:accepted.personalMeaningId,alignmentId:source.reference.personalMeaningAlignmentId,targetId:task.targetId,taskId:task.id};
+  },payload);
+  const inspect=(page:import('@playwright/test').Page)=>page.evaluate(async identity=>{
+   const c=(window as any).core,rows=await c.readLibrary(async(tx:any)=>Object.fromEntries(await Promise.all(c.libraryTables.map(async(table:string)=>[table,await tx.entries(table)]))));
+   // Raw local rows include service-local receipts that are intentionally not
+   // portable. Exercise the real export admission instead of inventing a raw
+   // snapshot format that the product does not offer to users.
+   const backupSummary=(await c.exportLibraryBackup('learned-personal-correction-fixture-password')).summary;
+   const learningTables=['curriculumEnrollments','supplementalMembershipStates','studyScopes','learningSessions','learningTargets','learningRuns','learningEvents','learningReconciliations','personalLearning','contentAttempts','media'];
+   const encode=(table:string)=>rows[table].map((row:any)=>({key:row.key,value:c.encodeBackupValue(row.value)})).sort((a:any,b:any)=>a.key.localeCompare(b.key));
+   return {learning:Object.fromEntries(learningTables.map(table=>[table,encode(table)])),nonsemantic:Object.fromEntries(c.libraryTables.filter((table:string)=>!table.startsWith('semantic')&&table!=='meta').map((table:string)=>[table,encode(table)])),record:rows.semanticMeanings.find((row:any)=>row.key===identity.meaningId).value,memory:await c.learningSystem.read({kind:'semantic_memory',targetId:identity.targetId}),sources:(await c.worldReadRepository.detail(identity.meaningId)).sources,backupSummary,hasReadyAttempt:rows.contentAttempts.some((row:any)=>row.value.status==='ready'),hasRating:rows.learningEvents.some((row:any)=>row.value.kind==='rate'),hasCompletedRun:rows.learningRuns.some((row:any)=>row.value.completedAt)};
+  },identity);
+  const learned=await inspect(sender);
+  assert(learned.hasReadyAttempt,'not an empty attempts fixture');
+  assert.equal(learned.learning.media.length,2,'actual uploaded Context images must remain available for frozen historical grants');
+  assert(JSON.stringify(learned.learning.learningTargets).includes('data:audio/mpeg;base64,UklGRg=='),'the actual admitted material must contain the persisted synthetic audio; media-table emptiness alone is not an audio oracle');
+  assert.equal(learned.memory.targets[0].targetId,identity.targetId);assert(learned.memory.targets[0].memory,'actual rating must have created Memory');
+  assert(learned.hasRating);assert(learned.hasCompletedRun);assert.equal(learned.backupSummary.targets,1);assert.equal(learned.backupSummary.runs,1);
+  await sender.evaluate(()=>(window as any).sync());const existing=await fixture.createClient(account);await existing.evaluate(()=>(window as any).sync());assert.deepEqual((await inspect(existing)).learning,learned.learning);
+  // Historical attempts must retain their own Context pins, not the Context
+  // later reviewed for a new acceptance of the corrected meaning/expression.
+  await sender.evaluate(async meaningId=>{const c=(window as any).core,detail=(await c.worldReadRepository.detail(meaningId)).detail;await c.createJourneyModules().personalMeaningJourney.reviseContext({operationId:crypto.randomUUID(),personalMeaningId:meaningId,expectedRevision:detail.revision,blocks:[{kind:'text',bodyText:'现在重新核对：雨天穿的是一件普通外套，并不能保证防水。'}]});},identity.meaningId);
+  const before=await inspect(sender);
+  assert.deepEqual(before.learning,learned.learning);
+  await sender.evaluate(async({meaningId,alignmentId})=>{
+   const c=(window as any).core,seed=await c.worldReadRepository.correction(meaningId,alignmentId),operationId=crypto.randomUUID();
+   const payload={...seed.payload,operationId,capturedAt:new Date().toISOString(),acceptance:{mode:'learner_direct'},expression:{surfaceForm:'jacket',languageTag:'en',expressionTypeHint:'word',occurrence:{surfaceForm:'jacket',locator:seed.payload.expression.occurrence.locator}},sense:{...seed.payload.sense,senseKey:null,wordingSource:'learner_authored',semanticSpec:{...seed.payload.sense.semanticSpec,coreMeaningFocus:'穿在身上的普通外套，不要求能够防雨。',prototypeScenes:[{summary:'天气转凉时穿上一件普通外套。',participantRoles:[],states:[],directionOrCausality:null}]}}};
+   await c.createJourneyModules().personalMeaningJourney.correctPersonalMeaning({operationId,personalMeaningId:meaningId,personalMeaningAlignmentId:alignmentId,source:seed.source,payload});
+  },identity);
+  const corrected=await inspect(sender);
+  assert.deepEqual(corrected.nonsemantic,before.nonsemantic,'correction must not rewrite any independent owner table');
+  assert(!corrected.sources.some((source:any)=>source.reference.personalMeaningAlignmentId===identity.alignmentId));
+  assert.equal(corrected.sources[0].expression.surfaceForm,'jacket');assert.equal(corrected.memory.targets[0].presentation.expression,'raincoat');assert.deepEqual(corrected.memory,learned.memory);
+  assert.deepEqual(corrected.record.semanticAcceptances[0],learned.record.semanticAcceptances[0]);assert.deepEqual(corrected.record.alignments[0],learned.record.alignments[0]);
+  await sender.evaluate(()=>(window as any).sync());await existing.evaluate(()=>(window as any).sync());
+  const fresh=await fixture.createClient(account);await fresh.evaluate(()=>(window as any).sync());
+  for(const page of [existing,fresh]){const restored=await inspect(page);assert.deepEqual(restored.learning,learned.learning);assert.deepEqual(restored.memory,learned.memory);assert.deepEqual(retainedMeaningFacts(restored.record),retainedMeaningFacts(corrected.record));assert.deepEqual(restored.sources,corrected.sources);}
+  const backup=await fresh.evaluate(()=>(window as any).core.exportLibraryBackup('learned-personal-correction-fixture-password'));assert(backup.summary);
+  await fresh.reload();await fresh.evaluate(async()=>{const path='/core.js';(window as any).core=await import(/* @vite-ignore */ path);await (window as any).core.openLibrary();});
+  const reopened=await inspect(fresh);assert.deepEqual(reopened.learning,learned.learning);assert.deepEqual(reopened.memory,learned.memory);assert.deepEqual(retainedMeaningFacts(reopened.record),retainedMeaningFacts(corrected.record));
+  // Returning later must use the retained admitted Target, not the corrected
+  // current Meaning or an invented new target. Advance only this isolated
+  // browser's trusted clock to its actual due instant before normal commands.
+  await fresh.clock.setFixedTime(new Date(new Date(learned.memory.targets[0].memory.dueAt).getTime()+60_000));
+  await fresh.evaluate(async targetId=>{
+   const c=(window as any).core,id=()=>crypto.randomUUID(),languageContext=(await c.languageRoutesSnapshot()).context;
+   await c.learningSystem.execute({kind:'start',operationId:id(),targetId,languageContext,dailyLimit:20});
+   let runtime=(await c.learningSystem.read({kind:'runtime',languageContext})).runtime as LearningRuntimeProjection;
+   if(runtime.currentTargetId!==targetId)throw Error('Review selected another Target');
+   await c.learningSystem.execute({kind:'act',operationId:id(),runId:runtime.runId,expectedRevision:runtime.revision,action:{kind:'reveal'}});
+   runtime=(await c.learningSystem.read({kind:'runtime',languageContext})).runtime;
+   await c.learningSystem.execute({kind:'act',operationId:id(),runId:runtime.runId,expectedRevision:runtime.revision,action:{kind:'rate',rating:'good'}});
+   await c.learningSystem.execute({kind:'finish',operationId:id(),runId:runtime.runId});
+  },identity.targetId);
+  const reviewed=await inspect(fresh);assert.equal(reviewed.memory.targets[0].presentation.expression,'raincoat');assert.equal(reviewed.memory.targets[0].memory.reps,learned.memory.targets[0].memory.reps+1);
+  assert.equal(reviewed.learning.learningTargets.length,1);assert.equal(reviewed.learning.learningRuns.length,2);
+  for(const table of ['contentAttempts','personalLearning','media'])assert.deepEqual(reviewed.learning[table],learned.learning[table],'review must not silently prepare another meaning');
+  for(const table of ['learningRuns','learningEvents'])for(const original of learned.learning[table])assert.deepEqual(reviewed.learning[table].find((row:any)=>row.key===original.key),original,'original completed learning remains immutable history');
+  assert.deepEqual(retainedMeaningFacts(reviewed.record),retainedMeaningFacts(corrected.record));
+ }finally{await fixture.close();}
+});
+test('personal correction and old Sense annotations survive Cloud restore while an unchanged offline Meaning cannot reactivate the replaced interpretation',async({browser})=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount('personal-correction-history'),sender=await fixture.createClient(account);
+  const payload=manualMeaningPayload({...newManualMeaningDraft(),context:'Jo asked to borrow my umbrella. I gave it to her.',occurrence:'borrow',languageTag:'en',meaning:'暂时取得他人的物品，之后归还。',usage:'向朋友暂借雨伞。'});
+  const identity=await sender.evaluate(async payload=>{
+   const c=(window as any).core,accepted=await c.createJourneyModules().semanticIntake.submit(payload),record=await c.readLibrary((tx:any)=>tx.get('semanticMeanings',accepted.personalMeaningId)),alignment=record.alignments[0];
+   await c.personalContentSystem.execute({kind:'set_saved_sense',operationId:crypto.randomUUID(),senseId:alignment.senseId,saved:true});
+   await c.personalContentSystem.execute({kind:'set_sense_note',operationId:crypto.randomUUID(),senseId:alignment.senseId,body:'旧笔记对应借入。',expected:{body:'',revision:0}});
+   return {meaningId:accepted.personalMeaningId,senseId:alignment.senseId,alignmentId:alignment.personalMeaningAlignmentId};
+  },payload);
+  const inspect=(page:import('@playwright/test').Page)=>page.evaluate(async({meaningId,senseId})=>{
+   const c=(window as any).core;await c.personalContentSystem.refresh();
+   const personal=c.personalContentSystem.read({kind:'snapshot'});
+   return {record:await c.readLibrary((tx:any)=>tx.get('semanticMeanings',meaningId)),references:await c.worldReadRepository.references([senseId]),saved:[...personal.savedSenseIds],note:await c.personalContentSystem.readSenseNote(senseId),receipts:await c.readLibrary((tx:any)=>tx.entries('semanticReceipts')),targets:(await c.readLearning()).targets,runs:await c.readLibrary((tx:any)=>tx.entries('learningRuns'))};
+  },identity);
+  await sender.evaluate(()=>(window as any).sync());const offline=await fixture.createClient(account);await offline.evaluate(()=>(window as any).sync());const original=await inspect(offline);
+  await offline.evaluate(()=>{(window as any).offline=true;});
+  const correction=await sender.evaluate(async({meaningId,alignmentId})=>{
+   const c=(window as any).core,seed=await c.worldReadRepository.correction(meaningId,alignmentId),operationId=crypto.randomUUID();
+   const payload={...seed.payload,operationId,capturedAt:new Date().toISOString(),acceptance:{mode:'learner_direct'},expression:{...seed.payload.expression,surfaceForm:'lend',occurrence:{...seed.payload.expression.occurrence,surfaceForm:'lend'}},sense:{...seed.payload.sense,senseKey:null,wordingSource:'learner_authored',semanticSpec:{...seed.payload.sense.semanticSpec,coreMeaningFocus:'把自己的物品暂时交给别人使用，之后收回。',prototypeScenes:[{summary:'把雨伞暂借给同事，用完后收回。',participantRoles:[],states:[],directionOrCausality:null}]}}};
+   return c.createJourneyModules().personalMeaningJourney.correctPersonalMeaning({operationId,personalMeaningId:meaningId,personalMeaningAlignmentId:alignmentId,source:seed.source,payload});
+  },identity);
+  await sender.evaluate(()=>(window as any).sync());assert.deepEqual((await inspect(offline)).record,original.record,'the old device has not received the correction');
+  await offline.evaluate(async senseId=>{const c=(window as any).core;await c.personalContentSystem.execute({kind:'set_sense_note',operationId:crypto.randomUUID(),senseId,body:'离线修改的旧笔记仍对应借入。',expected:await c.personalContentSystem.readSenseNote(senseId)});(window as any).offline=false;await (window as any).sync();},identity.senseId);
+  await sender.evaluate(()=>(window as any).sync());const corrected=await inspect(sender);
+  const compare=(value:Awaited<ReturnType<typeof inspect>>)=>({...value,record:retainedMeaningFacts(value.record)});
+  assert.deepEqual(compare(await inspect(offline)),compare(corrected));
+  assert.equal(corrected.record.personalMeaning.personalMeaningId,identity.meaningId);assert.equal(corrected.record.personalMeaning.currentRevision,correction.revision);
+  assert.deepEqual(corrected.record.alignments[0],original.record.alignments[0]);assert.deepEqual(corrected.record.semanticAcceptances[0],original.record.semanticAcceptances[0]);assert.deepEqual(corrected.record.personalSemanticAnchorRevisions,original.record.personalSemanticAnchorRevisions);
+  assert.equal(corrected.record.alignmentEvents.find((row:any)=>row.personalMeaningAlignmentId===identity.alignmentId&&row.ordinal===2)?.eventType,'withdrawn');
+  assert(corrected.references[0].references.some((row:any)=>row.personalMeaningAlignmentId===identity.alignmentId&&row.senseId===identity.senseId&&row.word==='borrow'&&row.historical));
+  assert.deepEqual(corrected.saved,[identity.senseId]);assert.deepEqual(corrected.note,{body:'离线修改的旧笔记仍对应借入。',revision:2});assert.deepEqual(corrected.targets,[]);assert.deepEqual(corrected.runs,[]);
+  const fresh=await fixture.createClient(account);await fresh.evaluate(()=>(window as any).sync());assert.deepEqual(compare(await inspect(fresh)),compare(corrected));
+  const backup=await fresh.evaluate(()=>(window as any).core.exportLibraryBackup('correction-history-fixture-password'));assert(backup.summary);
+  await fresh.reload();await fresh.evaluate(async()=>{const path='/core.js';(window as any).core=await import(/* @vite-ignore */ path);await (window as any).core.openLibrary();});assert.deepEqual(compare(await inspect(fresh)),compare(corrected));
+ }finally{await fixture.close();}
+});
+test('personal meaning recycle-bin deletion beats an unchanged offline replica and explicit same-identity restoration survives Cloud reload',async({browser})=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount('personal-meaning-recycle-bin'),sender=await fixture.createClient(account);
+  const payload=manualMeaningPayload({...newManualMeaningDraft(),context:'I asked to borrow an umbrella and promised to return it.',occurrence:'borrow',canonicalForm:'borrow',languageTag:'en',meaning:'临时借用物品，之后归还。',usage:'下雨时向同伴暂借雨伞。'});
+  const accepted=await sender.evaluate(payload=>(window as any).core.createJourneyModules().semanticIntake.submit(payload),payload);
+  assert.equal(accepted.route,'fast_track');const meaningId=accepted.personalMeaningId;
+  const inspect=(page:import('@playwright/test').Page)=>page.evaluate(async meaningId=>{
+   const c=(window as any).core;
+   return {record:await c.readLibrary((tx:any)=>tx.get('semanticMeanings',meaningId)),receipts:await c.readLibrary((tx:any)=>tx.entries('semanticReceipts')),active:(await c.worldReadRepository.page({query:'',filter:'all',offset:0,limit:64})).items,trash:(await c.worldReadRepository.page({query:'',filter:'deleted',offset:0,limit:64})).items,targets:(await c.readLearning()).targets,runs:await c.readLibrary((tx:any)=>tx.entries('learningRuns'))};
+  },meaningId);
+  await sender.evaluate(()=>(window as any).sync());
+  const offline=await fixture.createClient(account);await offline.evaluate(()=>(window as any).sync());
+  const original=await inspect(offline);assert.equal(original.record.personalMeaning.status,'active');
+  await offline.evaluate(async()=>{const c=(window as any).core;(window as any).offline=true;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'unrelated offline material must survive'});});
+  const remove=await sender.evaluate(async meaningId=>(window as any).core.createJourneyModules().personalMeaningJourney.changeMeaningLifecycle({operationId:crypto.randomUUID(),personalMeaningId:meaningId,expectedRevision:1,action:'delete'}),meaningId);
+  await sender.evaluate(()=>(window as any).sync());
+  assert.equal((await inspect(offline)).record.personalMeaning.status,'active','the old device is genuinely still offline');
+  await offline.evaluate(async()=>{(window as any).offline=false;return (window as any).sync();});
+  const deleted=await inspect(offline);assert.equal(deleted.record.personalMeaning.status,'deleted');assert.equal(deleted.active.length,0);assert.equal(deleted.trash.length,1);assert.deepEqual(deleted.targets,[]);assert.deepEqual(deleted.runs,[]);
+  await sender.evaluate(()=>(window as any).sync());
+  assert.equal((await sender.evaluate(()=>(window as any).core.listDrafts())).length,1,'merging the tombstone does not discard unrelated offline content');
+  const fresh=await fixture.createClient(account);await fresh.evaluate(()=>(window as any).sync());assert.deepEqual((await inspect(fresh)).record,deleted.record);
+  const restore=await sender.evaluate(async({meaningId,revision})=>(window as any).core.createJourneyModules().personalMeaningJourney.changeMeaningLifecycle({operationId:crypto.randomUUID(),personalMeaningId:meaningId,expectedRevision:revision,action:'restore'}),{meaningId,revision:remove.revision});
+  assert.equal(restore.personalMeaningId,meaningId);await sender.evaluate(()=>(window as any).sync());await offline.evaluate(()=>(window as any).sync());await fresh.evaluate(()=>(window as any).sync());
+  const restored=await inspect(fresh);assert.equal(restored.record.personalMeaning.status,'active');assert.equal(restored.record.personalMeaning.lifecycleRevision,3);assert.equal(restored.active.length,1);assert.equal(restored.trash.length,0);
+  assert.deepEqual(restored.record.personalMeaningRevisions.slice(0,2),deleted.record.personalMeaningRevisions);assert.deepEqual(restored.record.semanticAcceptances,original.record.semanticAcceptances);
+  await fresh.reload();await fresh.evaluate(async()=>{const path='/core.js';(window as any).core=await import(/* @vite-ignore */ path);await (window as any).core.openLibrary();});
+  assert.deepEqual((await inspect(fresh)).record,restored.record);assert.deepEqual((await inspect(fresh)).receipts,restored.receipts);
+ }finally{await fixture.close();}
+});
+test('note edits reject a same-revision Cloud fork replacement and an unchanged offline copy cannot resurrect a cleared note',async({browser})=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount('personal-note-fork'),a=await fixture.createClient(account);
+  const payload=manualMeaningPayload({...newManualMeaningDraft(),context:'I asked to borrow an umbrella and promised to return it.',occurrence:'borrow',canonicalForm:'borrow',languageTag:'en',meaning:'临时借用物品，之后归还。',usage:'下雨时向同伴暂借雨伞。'});
+  const senseId=await a.evaluate(async payload=>{
+   const c=(window as any).core,accepted=await c.createJourneyModules().semanticIntake.submit(payload);
+   const record=await c.readLibrary((tx:any)=>tx.get('semanticMeanings',accepted.personalMeaningId));return record.alignments[0].senseId as string;
+  },payload);
+  const read=(page:import('@playwright/test').Page)=>page.evaluate(senseId=>(window as any).core.personalContentSystem.readSenseNote(senseId),senseId);
+  const save=(page:import('@playwright/test').Page,body:string,expected:{body:string;revision:number})=>page.evaluate(({senseId,body,expected})=>(window as any).core.personalContentSystem.execute({kind:'set_sense_note',operationId:crypto.randomUUID(),senseId,body,expected}),{senseId,body,expected});
+  await save(a,'original note',await read(a));await a.evaluate(()=>(window as any).sync());
+  const b=await fixture.createClient(account);await b.evaluate(()=>(window as any).sync());assert.deepEqual(await read(b),{body:'original note',revision:1});
+  await save(a,'device A branch',await read(a));await save(b,'device B branch',await read(b));
+  const staleBase=await read(b);assert.equal(staleBase.revision,2);
+  await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());
+  assert.equal((await b.evaluate(()=>(window as any).core.readCloudSync())).status,'conflict');
+  assert.deepEqual(await read(b),staleBase,'unresolved conflict must not silently replace the local note');
+  await b.evaluate(async()=>{const c=(window as any).core;await c.resolveCloudSyncConflicts('remote',(await c.readCloudSync()).conflict);await (window as any).sync();});
+  assert.deepEqual(await read(b),{body:'device A branch',revision:2},'explicit resolution selects the other legitimate branch without renumbering it');
+  const staleOperationId=crypto.randomUUID();
+  const rejection=await b.evaluate(async({senseId,expected,operationId})=>{
+   const c=(window as any).core;
+   try{await c.personalContentSystem.execute({kind:'set_sense_note',operationId,senseId,body:'stale editing draft',expected});return {error:null};}
+   catch(error){return {error:(error as Error).message,current:(error as any).current,receipt:await c.readLibrary((tx:any)=>tx.get('operations',operationId))??null};}
+  },{senseId,expected:staleBase,operationId:staleOperationId});
+  assert.deepEqual(rejection,{error:'personalContent.noteChanged',current:{body:'device A branch',revision:2},receipt:null});
+  await save(b,'explicitly reviewed replacement',await read(b));await b.evaluate(()=>(window as any).sync());await a.evaluate(()=>(window as any).sync());assert.deepEqual(await read(a),{body:'explicitly reviewed replacement',revision:3});
+  const old=await fixture.createClient(account);await old.evaluate(()=>(window as any).sync());await old.evaluate(()=>{(window as any).offline=true;});
+  await save(a,'',await read(a));await a.evaluate(()=>(window as any).sync());
+  assert.deepEqual(await read(old),{body:'explicitly reviewed replacement',revision:3},'the old replica is actually still offline');
+  await old.evaluate(async()=>{(window as any).offline=false;await (window as any).sync();});assert.deepEqual(await read(old),{body:'',revision:4});
+  await a.evaluate(()=>(window as any).sync());assert.deepEqual(await read(a),{body:'',revision:4},'unchanged offline text cannot resurrect the cleared note');
+  const fresh=await fixture.createClient(account);await fresh.evaluate(()=>(window as any).sync());assert.deepEqual(await read(fresh),{body:'',revision:4});
+  const backup=await fresh.evaluate(()=>(window as any).core.exportLibraryBackup('personal-note-fixture-password'));assert(backup.summary);
+  await fresh.reload();await fresh.evaluate(async()=>{const path='/core.js';(window as any).core=await import(/* @vite-ignore */ path);await (window as any).core.openLibrary();});
+  assert.deepEqual(await read(fresh),{body:'',revision:4});
+ }finally{await fixture.close();}
+});
+
+test('direct learning intent and ready membership survive cloud restore without a Personal Meaning or package cache',async({browser})=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount('direct-learning'),sender=await fixture.createClient(account);
+  const publication=await libraryCloudPackageFixture();
+  const intent=await sender.evaluate(async({bookBytes,descriptor})=>{
+   const c=(window as any).core,original=window.fetch;
+   window.fetch=async input=>String(input)===descriptor.url?new Response(new Uint8Array(bookBytes)):new Response(null,{status:404});
+   try{
+    await c.contentSupplySystem.execute({kind:'install_catalog_item',descriptor,signal:new AbortController().signal});
+    const languageContext=(await c.languageRoutesSnapshot()).context;
+    const choices=await c.learningSystem.read({kind:'direct_choices',query:'borrow',targetLanguageTag:languageContext.targetLanguageTag,page:0});
+    const reference=choices.items[0].reference,source=await c.learningSystem.read({kind:'direct_source',reference});
+    return c.learningSystem.execute({kind:'enroll_direct',operationId:crypto.randomUUID(),reference,expectedDigest:source.sourceDigest,languageContext});
+   }finally{window.fetch=original;}
+  },{bookBytes:Array.from(publication.bookBytes),descriptor:publication.descriptor});
+  await sender.evaluate(()=>(window as any).sync());
+  const pendingReceiver=await fixture.createClient(account);await pendingReceiver.evaluate(()=>(window as any).sync());
+  const inspect=(page:import('@playwright/test').Page)=>page.evaluate(async(enrollmentId)=>{
+   const c=(window as any).core;
+   await c.personalContentSystem.refresh();const annotations=c.personalContentSystem.read({kind:'snapshot'});
+   return {intent:await c.learningSystem.read({kind:'direct_enrollment',enrollmentId}),targets:(await c.readLearning()).targets,
+    semanticMemory:await c.learningSystem.read({kind:'semantic_memory'}),annotations:{savedSenseIds:[...annotations.savedSenseIds],senseNotes:annotations.senseNotes},
+    meanings:await c.readLibrary((tx:any)=>tx.entries('semanticMeanings')),packages:await c.installedPackages()};
+  },intent.enrollmentId);
+  const pending=await inspect(pendingReceiver);assert.deepEqual(pending.intent,intent);assert.deepEqual(pending.targets,[]);assert.deepEqual(pending.meanings,[]);assert.deepEqual(pending.packages,[]);
+  const change=async(expectedRevision:number,active:boolean)=>sender.evaluate(async({enrollmentId,expectedRevision,active})=>{const c=(window as any).core;return c.learningSystem.execute({kind:'change_supplemental_membership',operationId:crypto.randomUUID(),source:{kind:'stable_sense',id:enrollmentId},expectedRevision,active,languageContext:(await c.languageRoutesSnapshot()).context});},{enrollmentId:intent.enrollmentId,expectedRevision,active});
+  await change(0,false);await sender.evaluate(()=>(window as any).sync());
+  await pendingReceiver.evaluate(()=>(window as any).sync());
+  assert.equal((await inspect(pendingReceiver)).intent.status,'removed');
+  const blocked=await pendingReceiver.evaluate(async enrollmentId=>{try{await (window as any).core.learningSystem.execute({kind:'prepare_direct',operationId:crypto.randomUUID(),enrollmentId});return null;}catch(error){return (error as Error).message;}},intent.enrollmentId);
+  assert.equal(blocked,'localFlow.membershipRemoved');assert.deepEqual((await inspect(pendingReceiver)).targets,[]);
+  await change(1,true);await sender.evaluate(()=>(window as any).sync());
+  await pendingReceiver.evaluate(()=>(window as any).sync());
+  assert.equal((await inspect(pendingReceiver)).intent.status,'awaiting_content');
+  assert.equal((await inspect(pendingReceiver)).intent.membershipRevision,2);
+  assert.equal((await sender.evaluate(enrollmentId=>(window as any).core.learningSystem.execute({kind:'prepare_direct',operationId:crypto.randomUUID(),enrollmentId}),intent.enrollmentId)).status,'ready');
+  await sender.evaluate(async()=>{const c=(window as any).core,target=(await c.learningSystem.read({kind:'semantic_memory'})).targets[0];await c.personalContentSystem.execute({kind:'set_saved_sense',operationId:crypto.randomUUID(),senseId:target.senseId,saved:true});await c.personalContentSystem.execute({kind:'set_sense_note',operationId:crypto.randomUUID(),senseId:target.senseId,body:'Saved nonbundled source survives cacheless Cloud restore.',expected:await c.personalContentSystem.readSenseNote(target.senseId)});});
+  await sender.evaluate(()=>(window as any).sync());
+  const receiver=await fixture.createClient(account);await receiver.evaluate(()=>(window as any).sync());
+  const ready=await inspect(receiver),original=await inspect(sender);
+  assert.deepEqual(ready.targets,original.targets);assert.equal(ready.targets.length,1);assert.equal(ready.targets[0].curriculumMemberships[0].sourceKind,'stable_sense');
+  assert.deepEqual(ready.meanings,[]);assert.deepEqual(ready.packages,[]);
+  assert.deepEqual(ready.semanticMemory,original.semanticMemory,'restored Target facts rebuild the compact read projection without package bytes');
+  assert.deepEqual(ready.annotations,original.annotations);
+  assert.equal(ready.semanticMemory.targets[0].targetId,ready.targets[0].id);assert.equal(ready.semanticMemory.targets[0].memory,null,'bookmarking and notes never fabricate memory');
+  assert.deepEqual(ready.annotations.savedSenseIds,[ready.targets[0].identity.senseId]);assert.equal(ready.annotations.senseNotes[ready.targets[0].identity.senseId],'Saved nonbundled source survives cacheless Cloud restore.');
+  assert.deepEqual(await receiver.evaluate(targetId=>(window as any).core.learningSystem.read({kind:'semantic_memory',targetId}),ready.targets[0].id),ready.semanticMemory,'an exact restored reference remains readable without public cache');
+  const backup=await receiver.evaluate(async()=>{const c=(window as any).core;return (await c.exportLibraryBackup('direct-fixture-backup-password')).summary;});
+  assert.equal(backup.targets,1);assert.equal(backup.runs,0,'restoration never fabricates a Run');
+  await receiver.reload();await receiver.evaluate(async()=>{const path='/core.js';(window as any).core=await import(/* @vite-ignore */ path);await (window as any).core.openLibrary();});
+  const reopened=await inspect(receiver);assert.deepEqual(reopened.targets,ready.targets);assert.deepEqual(reopened.semanticMemory,ready.semanticMemory);assert.deepEqual(reopened.annotations,ready.annotations);
+ }finally{await fixture.close();}
+});
+test('an explicitly ended unfinished Session restores through Cloud without an active pointer, completion or public package bytes',async({browser})=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount('unfinished-session-end'),sender=await fixture.createClient(account),publication=await libraryCloudPackageFixture();
+  const ids=await sender.evaluate(async({bookBytes,descriptor})=>{
+   const c=(window as any).core,fetch=window.fetch;window.fetch=async input=>String(input)===descriptor.url?new Response(new Uint8Array(bookBytes)):new Response(null,{status:404});
+   try{
+    await c.contentSupplySystem.execute({kind:'install_catalog_item',descriptor,signal:new AbortController().signal});
+    const languageContext=(await c.languageRoutesSnapshot()).context;
+    const targetIds=await c.learningSystem.execute({kind:'enroll_book',operationId:crypto.randomUUID(),languageContext,publicationArchiveSha256:descriptor.sha256});
+    await c.learningSystem.execute({kind:'confirm_quantity',operationId:crypto.randomUUID(),languageContext,dailyLimit:20});
+    await c.learningSystem.execute({kind:'start',operationId:crypto.randomUUID(),targetId:targetIds[0],languageContext,dailyLimit:20});
+    let {runtime}=await c.learningSystem.read({kind:'runtime',languageContext});
+    await c.learningSystem.execute({kind:'act',operationId:crypto.randomUUID(),runId:runtime.runId,expectedRevision:runtime.revision,action:{kind:'reveal'}});
+    ({runtime}=await c.learningSystem.read({kind:'runtime',languageContext}));
+    const run=await c.readLibrary((tx:any)=>tx.get('learningRuns',runtime.runId));
+    await c.learningSystem.execute({kind:'end_session',operationId:crypto.randomUUID(),runId:run.id,expectedRevision:run.revision});
+    return {runId:run.id,sessionId:run.learningSessionId,scopeId:run.studyScopeRevisionId};
+   }finally{window.fetch=fetch;}
+  },{bookBytes:Array.from(publication.bookBytes),descriptor:publication.descriptor});
+  const inspect=(page:import('@playwright/test').Page)=>page.evaluate(async ids=>{
+   const c=(window as any).core;return c.readLibrary(async(tx:any)=>({run:await tx.get('learningRuns',ids.runId),session:await tx.get('learningSessions',ids.sessionId),scope:await tx.get('studyScopes',ids.scopeId),activeRun:await tx.get('meta','learning-active')??null,activeSession:await tx.get('meta','learning-session-active')??null,targets:await tx.all('learningTargets'),events:await tx.all('learningEvents')}));
+  },ids);
+  const original=await inspect(sender);assert.equal(original.session.endReason,'learner_ended');assert.equal(original.run.completedAt,null);assert.equal(original.events.length,1);
+  assert(original.targets.every((target:any)=>target.memoryRevision===0&&!target.memory));assert.equal(original.activeRun,null);assert.equal(original.activeSession,null);
+  await sender.evaluate(()=>(window as any).sync());
+  const receiver=await fixture.createClient(account);await receiver.evaluate(()=>(window as any).sync());
+  assert.deepEqual(await inspect(receiver),original);assert.equal((await receiver.evaluate(()=>(window as any).core.installedPackages())).length,0);
+  await receiver.reload();await receiver.evaluate(async()=>{const path='/core.js';(window as any).core=await import(/* @vite-ignore */ path);await (window as any).core.openLibrary();});
+  assert.deepEqual(await inspect(receiver),original);
+ }finally{await fixture.close();}
+});
+
 test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres', async({browser})=>{
  const fixture=await createLibraryCloudBrowserFixture(browser);
  const {origin,pool}=fixture;
@@ -15,6 +629,23 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  const primary=await fixture.createAccount('first'),secondary=await fixture.createAccount('second'),clearance=await fixture.createAccount('clearance');
  const accountId=primary.accountId,otherId=secondary.accountId;
  const a=await fixture.createClient(primary);const b=await fixture.createClient(primary);const other=await fixture.createClient(secondary);
+ await test.step('explicit Agent destination initialization publishes only an empty account identity',async()=>{
+  const agentAccount=await fixture.createAccount('agent-empty-identity');
+  const sender=await fixture.createClient(agentAccount);
+  const originalIdentity=await sender.evaluate(()=>(window as any).core.openLibrary());
+  await sender.evaluate(()=>(window as any).sync());
+  assert.equal((await pool.query('SELECT revision FROM sensa_consumer.library_cloud WHERE account_id=$1',[agentAccount.accountId])).rows[0].revision,0,'ordinary empty boot stays read-only');
+  await sender.evaluate(()=>(window as any).core.synchronizeLibrary((window as any).request,{publishEmptyIdentity:true}));
+  const initialized=(await pool.query('SELECT revision,manifest FROM sensa_consumer.library_cloud WHERE account_id=$1',[agentAccount.accountId])).rows[0];
+  assert.equal(initialized.revision,1);assert(initialized.manifest);
+  assert.deepEqual(await sender.evaluate(()=>(window as any).core.listDrafts()),[],'identity initialization cannot invent learner material');
+  const receiver=await fixture.createClient(agentAccount);await receiver.evaluate(()=>(window as any).sync());
+  const restoredIdentity=await receiver.evaluate(()=>(window as any).core.openLibrary());
+  assert.equal(restoredIdentity.id,originalIdentity.id,'another empty device restores the same Agent destination identity');
+  await receiver.evaluate(()=>(window as any).core.synchronizeLibrary((window as any).request,{publishEmptyIdentity:true}));
+  assert.equal((await pool.query('SELECT revision FROM sensa_consumer.library_cloud WHERE account_id=$1',[agentAccount.accountId])).rows[0].revision,1,'initialization is idempotent, not another destination');
+  await sender.context().close();await receiver.context().close();
+ });
  await test.step('account isolation, local caches, legacy heads and mid-sync writes',async()=>{
  const draft=await a.evaluate(async()=>{const c=(window as any).core;return c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'My raincoat',images:[{id:crypto.randomUUID(),name:'raincoat.jpg',dataUrl:document.createElement('canvas').toDataURL('image/jpeg')}]});});
  await a.evaluate(()=>(window as any).sync());
@@ -37,7 +668,7 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  // A legacy Checkpoint is terminal: fetch only its small manifest, preserve the
  // local library, and leave retry scheduling to explicit recovery.
  const legacyRow=JSON.stringify({kind:'legacy-operation',payload:'x'.repeat(32_768)}),legacyRowHash=createHash('sha256').update(legacyRow).digest('hex');
- const legacyManifest=JSON.stringify({version:1,libraryId:crypto.randomUUID(),learnerId:crypto.randomUUID(),rows:[{table:'operations',key:crypto.randomUUID(),blocks:[legacyRowHash]}]}),legacyManifestHash=createHash('sha256').update(legacyManifest).digest('hex');
+ const legacyManifest=JSON.stringify({version:5,libraryId:crypto.randomUUID(),learnerId:crypto.randomUUID(),rows:[{table:'drafts',key:crypto.randomUUID(),blocks:[legacyRowHash]}]}),legacyManifestHash=createHash('sha256').update(legacyManifest).digest('hex');
  await pool.query('INSERT INTO sensa_consumer.library_cloud_blocks(account_id,hash,data) VALUES($1,$2,$3),($1,$4,$5) ON CONFLICT(account_id,hash) DO UPDATE SET data=EXCLUDED.data',[otherId,legacyRowHash,legacyRow,legacyManifestHash,legacyManifest]);
  await pool.query('UPDATE sensa_consumer.library_cloud SET revision=revision+1,manifest=$2::jsonb,updated_at=now() WHERE account_id=$1',[otherId,JSON.stringify([legacyManifestHash])]);
  const legacy=await fixture.createClient(secondary),localIdentity=await legacy.evaluate(()=>(window as any).core.openLibrary());fixture.clearRequests();
@@ -73,6 +704,7 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
 	  await expect(page.getByText('Sync did not finish. Your local data is still saved. Check the connection and retry.',{exact:true})).toBeVisible();
 	  assert((await page.evaluate(()=>(window as any).core.listDrafts())).some((draft:any)=>draft.id===pendingId),'failed pre-clear sync must preserve local OPFS data');
 	  await page.getByLabel(/Discard these 1 unsynced account change/).check();
+	  await page.getByLabel('I have saved any backup I need and confirm erasing this local content.').check();
 	  await page.evaluate(async()=>{const c=(window as any).core;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'newer than discard confirmation'});});
 	  await page.getByRole('button',{name:'Erase local content',exact:true}).click();
 	  await expect(page.getByText('The library changed. Check it again before confirming erasure.',{exact:true})).toBeVisible();
@@ -86,7 +718,7 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
 	  await page.getByRole('button',{name:'Erase local content',exact:true}).click();
 	  await expect(page.getByText('Local content cleared. Reopen the app to use the empty library.',{exact:true})).toBeVisible();
   const after=await page.evaluate(async()=>{const c=(window as any).core;return {identity:await c.readLibrary((tx:any)=>tx.get('meta','identity')),owner:await c.readLibrary((tx:any)=>tx.get('meta','service-owner')),drafts:await c.listDrafts()};});
-  assert.notEqual(after.identity.id,initialIdentity.id);assert.deepEqual(after.owner,{subject:clearance.subject,accountId:clearance.accountId});assert.deepEqual(after.drafts,[]);
+  assert.notEqual(after.identity.id,initialIdentity.id);assert.deepEqual(after.owner,{subject:clearance.subject,accountId:clearance.accountId,email:'learner@fixture.invalid'});assert.deepEqual(after.drafts,[]);
   const cloudAfter=(await pool.query('SELECT revision,manifest FROM sensa_consumer.library_cloud WHERE account_id=$1',[clearance.accountId])).rows[0];
   assert.deepEqual(cloudAfter,cloudBefore,'discarding pending local records must not create a cloud tombstone or rewrite the checkpoint');
   await page.context().close();
@@ -97,20 +729,36 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  // Canonical v3 Intake -> Personal Semantic World -> generated resources.
  await a.evaluate(async()=>{
   const c=(window as any).core,id=()=>crypto.randomUUID(),library=await c.openLibrary();
-  const operationId=id(),modules=c.createJourneyModules(),gateway=modules.personalMeaningJourney,intake=modules.semanticIntake;
+  const operationId=id(),modules=c.createJourneyModules(),intake=modules.semanticIntake;
   const text='I wore my raincoat in the rain.';
   const accepted=await intake.submit({contractVersion:'sensa-intake-v3',operationId,capturedAt:new Date().toISOString(),context:{modality:'text',textSegment:text,mediaReferenceIds:[],languageTag:'en',source:{client:'sensa-web',url:'https://example.org',title:'A rainy day',sourceReferenceId:null,domSelector:null,paragraphContext:null}},expression:{surfaceForm:'raincoat',languageTag:'en',occurrence:{surfaceForm:'raincoat',locator:{kind:'text_span',start:10,end:18}},expressionTypeHint:'word'},sense:{senseKey:null,semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1',coreMeaningFocus:'防雨时穿在身上的衣服',prototypeScenes:[{summary:'一个人在雨中穿着防水的外衣。',participantRoles:['穿衣者'],states:['下雨'],directionOrCausality:null}],includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[]},wordingSource:'llm_suggested',resolutionProvenance:{resolverKind:'language_model',provider:'fixture',model:'fixture',policyVersion:'fixture-v1',sourceReferenceIds:['cloud-smoke']}},acceptance:{mode:'learner_direct'}});
   if(accepted.route!=='fast_track'||!accepted.personalMeaningId)throw Error('canonical intake not accepted');
-  const source=gateway.getLearningSources(accepted.personalMeaningId)[0];if(!source)throw Error('canonical learning source missing');
+  const source=(await c.worldReadRepository.detail(accepted.personalMeaningId)).sources[0];if(!source)throw Error('canonical learning source missing');
   const provider=await c.saveProvider(id(),{id:id(),expectedRevision:0,name:'Test model',kind:'compatible',endpoint:'https://sync-model.invalid/v1',model:'synthetic'},'fixture-device-secret');
   const settings=(await c.providerSnapshot()).settings;await c.assignProvider(id(),'content',provider.id,settings.revision);
   const restoreSpeech=c.replaceClientSpeechProvider({id:'fixture',revision:1,displayName:'Fixture',synthesize:async(input:any)=>({...input,audioUrl:'data:audio/mpeg;base64,UklGRg==',phoneticNotation:null,accentLabel:'en-US',source:'synthetic test fixture',method:'tts'})});
-  const original=window.fetch;window.fetch=async(url:any,init:any)=>{const address=String(url);if(address.endsWith('/sensa/resource-facts'))return new Response(JSON.stringify({input:JSON.parse(String(init?.body)),references:[]}),{headers:{'content-type':'application/json'}});if(address.startsWith(provider.endpoint))return new Response(JSON.stringify({model:'synthetic',choices:[{finish_reason:'stop',message:{content:JSON.stringify({resources:[{role:'experience_recall_cue',payload:{scene:'下雨时一个人穿了自己的防水外衣，挡住雨水。',senseFocus:'防雨时穿在身上的衣服'}},{role:'scene_bridge',payload:{text:'回想雨中穿着防水外衣的体验。'}},{role:'scene_realization',payload:{example:'I wore my raincoat in the rain.',targetStart:10,targetEnd:18,experienceResourceKey:'experience_recall_cue:0'}}]})}}]}),{headers:{'content-type':'application/json'}});return original(url,init);};
+  const original=window.fetch;window.fetch=async(url:any,init:any)=>{const address=String(url);if(address.endsWith('/sensa/resource-facts'))return new Response(JSON.stringify({input:JSON.parse(String(init?.body)),references:[]}),{headers:{'content-type':'application/json'}});if(address.startsWith(provider.endpoint))return new Response(JSON.stringify({model:'synthetic',choices:[{finish_reason:'stop',message:{content:JSON.stringify({resources:[{role:'experience_recall_cue',payload:{scene:'下雨时一个人穿了自己的防水外衣，挡住雨水。',senseFocus:'防雨时穿在身上的衣服'}},{role:'scene_bridge',payload:{text:'回想雨中穿着防水外衣的体验。',meaningRendering:{meaning:'在下雨时穿在身上、用来挡雨的外衣。',languageTag:'zh-CN'}}},{role:'scene_realization',payload:{example:'I wore my raincoat in the rain.',targetStart:10,targetEnd:18,experienceResourceKey:'experience_recall_cue:0'}}]})}}]}),{headers:{'content-type':'application/json'}});return original(url,init);};
   try{const languageContext=(await c.languageRoutesSnapshot()).context,task=await c.enrollPersonal(id(),source,languageContext,true);await c.preparePersonal(task.id,source,provider,null,new AbortController().signal,()=>{});}finally{restoreSpeech();window.fetch=original;}
   if((await c.personalLearningSnapshot())[0].status!=='ready')throw Error('personal resources not ready');
  });
  // Actual learning resources (including audio), runtime records and schedule restore/replay.
- progress=await a.evaluate(async({bookBytes,descriptor})=>{const c=(window as any).core,languageContext=(await c.languageRoutesSnapshot()).context,original=window.fetch;window.fetch=async input=>{const url=String(input);const body=url===descriptor.url?new Uint8Array(bookBytes):null;return body?new Response(body,{headers:{'content-length':String(body.byteLength)}}):new Response(null,{status:404});};try{const [pack]=await c.contentSupplySystem.execute({kind:'install_catalog_item',descriptor,signal:new AbortController().signal});await c.writeLibraryState((tx:any)=>tx.put('meta','package-catalog',{format:'sensa-local-registry-cache-v3',revision:'fixture',checkedAt:new Date().toISOString(),items:[descriptor]}));const ids=await c.enrollPackage(crypto.randomUUID(),pack.key,languageContext,descriptor.sha256);await c.confirmLearningQuantity(crypto.randomUUID(),languageContext,20);let run=await c.startLearning(crypto.randomUUID(),ids[0],languageContext,20,'2026-09-11T04:00:00.000Z');run=await c.actLearning(crypto.randomUUID(),run.id,run.revision,{kind:'reveal'},'2026-09-11T04:00:00.000Z');run=await c.actLearning(crypto.randomUUID(),run.id,run.revision,{kind:'rate',rating:'good'},'2026-09-11T04:00:00.000Z');if(!run.completedAt)throw Error('runtime incomplete');await c.finishLearning(crypto.randomUUID(),run.id);const learning=await c.readLearning();return JSON.stringify({...learning,packages:[]});}finally{window.fetch=original;}},{bookBytes,descriptor});
+ progress=await a.evaluate(async({bookBytes,descriptor})=>{
+  const c=(window as any).core,languageContext=(await c.languageRoutesSnapshot()).context,original=window.fetch;
+  window.fetch=async input=>{const body=String(input)===descriptor.url?new Uint8Array(bookBytes):null;return body?new Response(body,{headers:{'content-length':String(body.byteLength)}}):new Response(null,{status:404});};
+  try{
+   const [pack]=await c.contentSupplySystem.execute({kind:'install_catalog_item',descriptor,signal:new AbortController().signal});
+   await c.writeLibraryState((tx:any)=>tx.put('meta','package-catalog',{format:'sensa-local-registry-cache-v3',revision:'fixture',checkedAt:new Date().toISOString(),items:[descriptor]}));
+   const ids=await c.enrollPackage(crypto.randomUUID(),pack.key,languageContext,descriptor.sha256);
+   await c.confirmLearningQuantity(crypto.randomUUID(),languageContext,20);
+   const at=new Date().toISOString();
+   let run=await c.startLearning(crypto.randomUUID(),ids[0],languageContext,20,at);
+   run=await c.actLearning(crypto.randomUUID(),run.id,run.revision,{kind:'reveal'},at);
+   run=await c.actLearning(crypto.randomUUID(),run.id,run.revision,{kind:'rate',rating:'good'},at);
+   if(!run.completedAt)throw Error('runtime incomplete');
+   await c.finishLearning(crypto.randomUUID(),run.id);
+   return JSON.stringify({...await c.readLearning(),packages:[]});
+  }finally{window.fetch=original;}
+ },{bookBytes,descriptor});
  await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());
  assert.equal((await b.evaluate(()=>(window as any).core.installedPackages())).length,0,'published package bytes must not arrive in a Cloud Checkpoint');
  assert.equal((await b.evaluate(()=>(window as any).core.packageInstallations())).length,1,'the exact package installation fact must synchronize');
@@ -124,6 +772,9 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  // both Runs and all Events remain durable history.
  const concurrentTargetId=(JSON.parse(progress) as any).targets.find((target:any)=>target.curriculumMemberships.some((membership:any)=>membership.sourceKind==='sense_learning_package')).id;
  const branchRuns=[] as string[];
+ // Future fixture dates must advance the trusted browser clock, rather than
+ // bypassing due eligibility through a future command timestamp.
+ for(const page of [a,b])await page.clock.setFixedTime(new Date('2030-09-21T09:05:00.000Z'));
  for(const [page,at] of [[a,'2030-09-21T09:00:00.000Z'],[b,'2030-09-21T09:05:00.000Z']] as const)branchRuns.push(await page.evaluate(async({targetId,at})=>{const c=(window as any).core,languageContext=(await c.languageRoutesSnapshot()).context,pack=(await c.installedPackages())[0];let run=await c.startLearning(crypto.randomUUID(),targetId,languageContext,20,at),steps=0;while(!run.completedAt&&steps++<60){let action:any;if(run.protocolState.adapterId==='lightweight')action=run.protocolState.value.phase==='recall'?{kind:'reveal'}:{kind:'rate',rating:'good'};else{const session=c.fourStageQueue(run).getCurrentSession();let response:any;if(session.phase==='feedback')response={kind:'continue'};else if(session.mode==='review'||session.mode==='relearning')response={kind:'review',answer:'known'};else if(['meaning_choice','sound_choice'].includes(session.presentation)){const target=(await c.readLearning()).targets.find((candidate:any)=>candidate.id===session.targetId),executable=c.localExecutableTargetForParticipant(target,run.participants[target.id]),content=c.fourStageContent(executable,pack);response={kind:'choice',optionId:content.recognitionAssessment.options.find((option:any)=>option.isCorrect).id};}else response={kind:'self_report',known:true};action={kind:'protocol',response};}run=await c.actLearning(crypto.randomUUID(),run.id,run.revision,action,at);}if(!run.completedAt)throw Error('concurrent runtime incomplete');await c.finishLearning(crypto.randomUUID(),run.id);return run.id;},{targetId:concurrentTargetId,at}));
  await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());await a.evaluate(()=>(window as any).sync());
  for(const page of [a,b]){const reconciled=await page.evaluate(async()=>{const c=(window as any).core;return {state:await c.readCloudSync(),learning:JSON.stringify(await c.readLearning()),decisions:await c.readLibrary((tx:any)=>tx.entries('learningReconciliations')),runs:await c.readLibrary((tx:any)=>tx.entries('learningRuns'))};});assert.equal(reconciled.state.status,'synced');assert(reconciled.decisions.length>0,'concurrent learning must persist a reconciliation decision');assert(branchRuns.every(runId=>reconciled.runs.some((row:any)=>row.key===runId)),'both concurrent Runs must remain in history');}
@@ -137,12 +788,20 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  // That API accepts eight hashes and omits the deferred field.
  await fresh.evaluate(()=>{const w=window as any,original=w.request;w.request=async(path:string,body?:any)=>{if(path==='/blocks/fetch'){if(body.hashes.length>8)throw new Error('invalid_request');const value=await original(path,body);delete value.deferred;return value;}return original(path,body);};});
  await fresh.evaluate(()=>(window as any).sync());assert.deepEqual(JSON.parse(await fresh.evaluate(async()=>{const learning=await (window as any).core.readLearning();return JSON.stringify({...learning,packages:[]});})),{...JSON.parse(reconciledProgress),packages:[]});
+ const restoredHistory=async(page:typeof fresh)=>page.evaluate(async()=>{
+  const c=(window as any).core,languageContext=(await c.languageRoutesSnapshot()).context,filter={surface:'study',range:'all',start:'',end:'',kind:'all',languageChoice:null};
+  const records:LearningHistoryProjection['records'][number][]=[];let cursor:LearningHistoryProjection['nextCursor']=null,total=0;
+  do{const historyPage:LearningHistoryProjection=await c.learningSystem.read({kind:'history',languageContext,filter,cursor,limit:1});total=historyPage.total;records.push(...historyPage.records);cursor=historyPage.nextCursor;}while(cursor);
+  return {records,total};
+ });
+ assert.deepEqual(await restoredHistory(fresh),await restoredHistory(a),'fresh Cloud restore must rebuild complete paged Study history despite Runs-before-Targets replica ordering');
+ const history=await restoredHistory(fresh);assert(history.total>0,'a fresh restored learner must not see a false empty Study history');assert.equal(history.records.length,history.total,'all cursor pages must match the complete-range count');
  assert.deepEqual(await fresh.evaluate(()=>(window as any).core.listDrafts()),await a.evaluate(()=>(window as any).core.listDrafts()));
  assert.equal((await fresh.evaluate(()=>(window as any).core.installedPackages())).length,0,'a new device starts with an empty public artifact cache');
  await fresh.evaluate(async({bookBytes,descriptor})=>{const c=(window as any).core,original=window.fetch;window.fetch=async input=>{const url=String(input);const body=url===descriptor.url?new Uint8Array(bookBytes):null;return body?new Response(body,{headers:{'content-length':String(body.byteLength)}}):new Response(null,{status:404});};try{await c.writeLibraryState((tx:any)=>tx.put('meta','package-catalog',{format:'sensa-local-registry-cache-v3',revision:'fixture',checkedAt:new Date().toISOString(),items:[descriptor]}));const result=await c.contentSupplySystem.execute({kind:'rehydrate'});if(result.ready.length!==1)throw Error(JSON.stringify(result));}finally{window.fetch=original;}},{bookBytes,descriptor});
  assert.equal((await fresh.evaluate(()=>(window as any).core.installedPackages())).length,1,'the Content Supply resolver rehydrates exact package bytes after learner facts converge');
  const backup=await fresh.evaluate(async()=>{const c=(window as any).core;return (await c.exportLibraryBackup('sync-test-backup-password')).summary;});assert.equal(backup.targets,2);assert.equal(backup.packages,1);assert(backup.events>0);
- assert.equal(await fresh.evaluate(async()=>{const gateway=(window as any).core.createJourneyGateway();for(let attempt=0;attempt<50;attempt++){const count=gateway.getWorldItems().length;if(count)return count;await new Promise(resolve=>setTimeout(resolve,10));}return 0;}),1);assert.equal((await fresh.evaluate(()=>(window as any).core.personalLearningSnapshot()))[0].status,'ready');
+ assert.equal(await fresh.evaluate(async()=>((await (window as any).core.worldReadRepository.page({query:'',filter:'all',offset:0,limit:40})).total)),1);assert.equal((await fresh.evaluate(()=>(window as any).core.personalLearningSnapshot()))[0].status,'ready');
  const checkpointBlocks=(await pool.query('SELECT data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1',[accountId])).rows;
  assert(!checkpointBlocks.some(r=>r.data.includes('fixture-device-secret')),'BYOK credentials stay device-local');
  assert(!checkpointBlocks.some(r=>r.data.includes(Buffer.from('synthetic-sync-audio:').toString('base64'))),'public package audio bytes stay outside learner Cloud Checkpoints');
@@ -154,7 +813,7 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  if(localWebOrigin){
   await test.step('formal account UI stays mounted across same-session auth events',async()=>{
   const webOrigin=localWebOrigin;if(new URL(webOrigin).hostname!=='127.0.0.1')throw Error('Use isolated loopback Web');
-  const ctx=await browser.newContext(),ui=await ctx.newPage();let accountInitializations=0;const errors:string[]=[];ui.on('pageerror',e=>errors.push(e.message));
+  const ctx=await browser.newContext({locale:'zh-CN'}),ui=await ctx.newPage();let accountInitializations=0;const errors:string[]=[];ui.on('pageerror',e=>errors.push(e.message));
   const token=[{}, {sub:primary.subject,exp:Math.floor(Date.now()/1000)+3600},'fixture'].map(x=>Buffer.from(JSON.stringify(x)).toString('base64url')).join('.');
   await ctx.route('**/*',async route=>{
    const req=route.request(),address=new URL(req.url());
@@ -168,7 +827,14 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
    if(address.origin===webOrigin){await route.continue();return;}
    await route.abort();
   });
-  await ui.goto(webOrigin+'/profile');await ui.getByLabel('邮箱',{exact:true}).fill('sync@sensa.invalid');await ui.getByRole('button',{name:'发送登录邮件',exact:true}).click();await ui.getByRole('button',{name:'邮件中有验证码？',exact:true}).click();await ui.getByLabel('验证码',{exact:true}).fill('123456');await ui.getByRole('button',{name:'验证并继续',exact:true}).click();
+  // Guest settings remain usable without authentication. Login is an explicit
+  // account intent, not an automatic email gate when visiting the profile.
+  ui.setDefaultTimeout(15_000);
+  await ui.goto(webOrigin+'/profile');
+  await expect(ui.getByRole('heading',{name:'账号与设置',exact:true})).toBeVisible();
+  await ui.getByRole('button',{name:/账号与安全/u}).click();
+  await ui.getByRole('button',{name:'登录 Sensa',exact:true}).click();
+  await ui.getByLabel('邮箱',{exact:true}).fill('sync@sensa.invalid');await ui.getByRole('button',{name:'发送登录邮件',exact:true}).click();await ui.getByRole('button',{name:'邮件中有验证码？',exact:true}).click();await ui.getByLabel('验证码',{exact:true}).fill('123456');await ui.getByRole('button',{name:'验证并继续',exact:true}).click();
   await expect(ui.getByRole('heading',{name:'账号与设置',exact:true})).toBeVisible({timeout:60000});
   await ui.getByRole('button',{name:/设备与数据/}).click();await expect(ui.getByRole('heading',{name:'账号云同步'})).toBeVisible();await expect(ui.getByText('已同步到账号',{exact:true})).toBeVisible();
   await expect(ui.getByRole('button',{name:'立即同步',exact:true})).toBeEnabled();await expect(ui.getByText('恢复码',{exact:true})).toHaveCount(0);
@@ -188,10 +854,15 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  const refresh=async()=>{const rows=(await pool.query('SELECT hash,data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1',[accountId])).rows;stored.clear();for(const row of rows)stored.set(row.hash,row.data);};
  await refresh();
  const post=async(path:string,body:unknown)=>fetch(origin+'/sensa/'+path,{method:'POST',headers:{authorization:'Bearer first','content-type':'application/json'},body:JSON.stringify(body)});
- const readHead=async()=>{const row=(await pool.query('SELECT revision,manifest FROM sensa_consumer.library_cloud WHERE account_id=$1',[accountId])).rows[0];const refs=row.manifest as string[];const blocks=new Map((await pool.query('SELECT hash,data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[accountId,refs])).rows.map(r=>[r.hash,r.data]));if(refs.some(h=>!blocks.has(h)))throw Error('head manifest references a missing block');return {revision:Number(row.revision),manifest:JSON.parse(refs.map(h=>blocks.get(h)).join(''))};};
+ const corruptPacked=JSON.parse(encodeLibrarySyncBlock('immutable content'.repeat(400)));corruptPacked[1]='0'.repeat(64);
+ const corruptData=JSON.stringify(corruptPacked),corruptHash=createHash('sha256').update(corruptData).digest('hex');
+ const corruptReply=await post('library-sync/blocks/store',{blocks:[{hash:corruptHash,data:corruptData}]});
+ assert.equal(corruptReply.status,400);assert.equal((await corruptReply.json() as any).code,'library_sync_format');
+ assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=$2',[accountId,corruptHash])).rows[0].n,0,'a correctly addressed but corrupt compressed block is not stored');
+ const readHead=async()=>{const row=(await pool.query('SELECT revision,manifest FROM sensa_consumer.library_cloud WHERE account_id=$1',[accountId])).rows[0];const refs=row.manifest as string[];const blocks=new Map((await pool.query('SELECT hash,data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[accountId,refs])).rows.map(r=>[r.hash,r.data]));if(refs.some(h=>!blocks.has(h)))throw Error('head manifest references a missing block');return {revision:Number(row.revision),manifest:JSON.parse(refs.map(h=>decodeLibrarySyncBlock(blocks.get(h)!)).join(''))};};
  const publish=async(manifest:any,baseRevision:number,chunk:number)=>{
   const rewritten=new Map<string,string>();
-  for(const row of manifest.rows){const text=row.blocks.map((h:string)=>stored.get(h)).join(''),refs:string[]=[];
+  for(const row of manifest.rows){const text=row.blocks.map((h:string)=>decodeLibrarySyncBlock(stored.get(h)!)).join(''),refs:string[]=[];
    for(let at=0;at<text.length;at+=chunk){const data=text.slice(at,at+chunk),hash=createHash('sha256').update(data).digest('hex');rewritten.set(hash,data);refs.push(hash);}
    if(!refs.length){const hash=createHash('sha256').update('').digest('hex');rewritten.set(hash,'');refs.push(hash);}
    row.blocks=refs;}
@@ -227,7 +898,13 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  const priorRevision=head.revision;
  const repacked=await publish(JSON.parse(JSON.stringify(head.manifest)),priorRevision,8192);assert.equal(repacked.status,200,'repacking published history must be accepted');
  head=await readHead();assert.equal(head.revision,priorRevision+1);await refresh();
- assert.equal(head.manifest.version,5);assert.equal(head.manifest.rows.some((row:any)=>row.table==='operations'),false,'new Checkpoints must not contain the device ledger');
+ const repackedReceiver=await fixture.createClient(primary);fixture.clearRequests();
+ await repackedReceiver.evaluate(()=>(window as any).sync());
+ assert.equal((await readHead()).revision,head.revision,'restoring identical facts with a different block layout must not republish');
+ assert.equal(fixture.requests().filter(call=>call.path.endsWith('/commit')).length,0);
+ assert.equal((await repackedReceiver.evaluate(()=>(window as any).core.readCloudSync())).checkpointVersion,6);
+ await repackedReceiver.context().close();
+ assert.equal(head.manifest.version,6);assert.equal(head.manifest.rows.some((row:any)=>row.table==='operations'),false,'new Checkpoints must not contain the device ledger');
  assert.equal(head.manifest.rows.some((row:any)=>row.table==='packageCache'),false,'new Checkpoints must not contain public artifact cache bytes');
  assert.equal(head.manifest.rows.some((row:any)=>row.table==='packageInstallations'),true,'new Checkpoints must contain exact package installation facts');
  assert.equal(head.manifest.rows.some((row:any)=>row.table==='meta'&&row.key==='package-catalog'),false,'package catalog cache must not enter account checkpoints');
@@ -238,6 +915,11 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  const rejected=await publish(manifest,head.revision,librarySyncBlockChars);assert.equal(rejected.status,409);assert.equal((await rejected.json() as any).code,'library_sync_history');
  const decisionManifest=JSON.parse(JSON.stringify(head.manifest)),decision=decisionManifest.rows.find((r:any)=>r.table==='learningReconciliations');assert(decision,'concurrent learning did not publish its reconciliation decision');decision.blocks=decisionManifest.rows.find((r:any)=>r.table==='drafts').blocks;
  const rejectedDecision=await publish(decisionManifest,head.revision,librarySyncBlockChars);assert.equal(rejectedDecision.status,409);assert.equal((await rejectedDecision.json() as any).code,'library_sync_history');
+ for(const table of ['studyScopes','learningSessions','learningRuns']){
+  assert(head.manifest.rows.some((row:any)=>row.table===table),'actual learning must publish '+table);
+  const omitted=JSON.parse(JSON.stringify(head.manifest));omitted.rows=omitted.rows.filter((row:any)=>row.table!==table);
+  const denied=await publish(omitted,head.revision,librarySyncBlockChars);assert.equal(denied.status,409);assert.equal((await denied.json() as any).code,'library_sync_history');
+ }
  assert.equal((await pool.query('SELECT revision FROM sensa_consumer.library_cloud WHERE account_id=$1',[accountId])).rows[0].revision,head.revision);
  const deletion=await post('account/deletion',{operationId:crypto.randomUUID(),confirmation:'delete-account'});assert.equal(deletion.status,200);
  for(const table of ['library_cloud','library_cloud_blocks','library_cloud_commits','library_cloud_snapshot_leases','library_cloud_block_refs'])assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.'+table+' WHERE account_id=$1',[accountId])).rows[0].n,0);

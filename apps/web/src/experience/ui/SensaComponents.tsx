@@ -1,4 +1,5 @@
 import { createElement, useCallback, useId, useRef, type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type ReactNode, type Ref } from "react";
+import {createPortal} from 'react-dom';
 import {
   componentAttributes,
   componentSlot,
@@ -199,13 +200,13 @@ export function SensaOverlayLayout({
   }, [panelRef]);
   useDialogFocus(internalPanelRef, modal);
 
-  return (
+  const overlay = (
     <div
       {...props}
       {...componentAttributes("overlay", variant)}
       {...overlayLayoutAttributes(variant, mode)}
       data-sensa-overlay-measure={measure}
-      className={classNames(className)}
+      className={classNames(mode === 'viewport' ? 'font-product' : undefined, className)}
     >
       <div
         {...componentSlot<"overlay">("backdrop")}
@@ -249,6 +250,9 @@ export function SensaOverlayLayout({
       </div>
     </div>
   );
+  // A viewport overlay must not inherit a screen's transform, clipping or
+  // stacking context. Embedded specimens/containers keep their local layout.
+  return mode==='viewport'&&typeof document!=='undefined'?createPortal(overlay,document.body):overlay;
 }
 
 export interface SensaOverlayFrameProps extends Omit<HTMLAttributes<HTMLDivElement>, "title"> {

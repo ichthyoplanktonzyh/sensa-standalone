@@ -94,7 +94,7 @@
     "feedbackText": "Use the contact entry in About & support for feedback and content corrections.",
     "done": "Done"
   },
-  "cloudSync": {
+  "cloudSync": {"restoreTitle": "Account data",
     "title": "Account sync",
     "pending": "Local changes are waiting to sync",
     "syncing": "Syncing…",
@@ -111,8 +111,9 @@
     "openFailed": "Could not restore account data. Check the connection and retry.",
     "retryOpen": "Retry restore",
     "details": "View conflicting records",
-    "conflictPrompt": "{{count}} record conflicts, affecting {{affected}} related records. Choose the device or cloud version for this conflict group.",
-    "conflictDecision": "The latest cloud version is checked again before applying your choice. If it changed, the new conflict is preserved for another confirmation. Unrelated data continues to sync.",
+    "conflictPrompt": "Compare the changes below, then choose which version to keep for all of them.",
+    "conflictDecision": "If either version changes, you will be asked to compare again.",
+    "comparison": {"local":"This device","remote":"Your account","base":"Before these changes","removed":"Deleted or absent in this version","unavailable":"This version cannot be displayed completely.","unsupported":"These changes cannot yet be compared completely. Both versions are preserved; contact support before choosing.","refresh":"Sync now to load the versions for comparison.","changed":"The content has changed. Sync now and compare again before choosing.","item":"Content {{number}}","fields":{"expression":"Expression","meaning":"Meaning","context":"Context","note":"Note","examples":"Typical situations","included":"Included cases","excluded":"Excluded cases","contrasts":"Related distinctions","questions":"Open questions","content":"Content"}},
     "keepLocal": "Keep device version",
     "useCloud": "Use cloud version",
     "resolving": "Checking and resolving…",

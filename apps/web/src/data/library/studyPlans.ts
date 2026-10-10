@@ -9,6 +9,7 @@ export type LocalStudyPlan={
 };
 
 const STUDY_PLANS_KEY='language-route-study-plans';
+export const DEFAULT_DAILY_NEW_SENSE_LIMIT=20;
 
 export const readStudyPlans=async(tx:LibraryTransaction):Promise<Record<string,LocalStudyPlan>>=>
  await tx.get('settings',STUDY_PLANS_KEY)??{};

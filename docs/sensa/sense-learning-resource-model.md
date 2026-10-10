@@ -386,6 +386,10 @@ Reference Lexicon 是独立于 Learning Catalog 的宽覆盖查询语料。一�
 - 可公开的 Lexical Enrichment、资源可见性、review status 与内容 digest；
 - 可重建 search index 与 contextual resolver 所需的 release/version metadata。
 
+词条／表达的语言、来源定义的语言和 learner-facing rendering 的 Support Language 是三个独立事实。
+来源定义保留原文及其实际 Language Tag，不因词条语言或当前 Route 改标；例如英语版词典可用英语解释
+西语词条。模型生成的辅助语言 gloss 是独立呈现，不改写来源定义及其语言。
+
 Reference Lexical Unit 可以是单词，也可以是 phrasal verb、idiom 或其他 multiword expression。它不应
 被强行压入“一个 lemma 一条记录”；同形异源、不同词性或词典供应商的意义划分必须按 Reference
 Release 的真实结构保存。Reference Sense 的 provider order 用于完整词典展示，但不是课程顺序。
@@ -769,14 +773,16 @@ Initial Profile 每个 Practice Area 只承诺一个边界明确的 Activity Def
 | Contextual Meaning Inference（语境推义） | Reading | controlled Context 中的目标 Sense | reveal 当前 Sense 与 context cues，不把 reveal 后行为当评价 | Sense-controlled short Context、精确 Expression occurrence、Sense reveal/cue binding |
 | Written Scenario Response（情境书面表达） | Writing | Sense-grounded contextual expression | AI 提供自然度、意义贴合、修订与 alternative；无唯一标准答案 | communicative brief、written response、AI feedback capability |
 
-Initial Profile 的 Practice Scope 首先支持 learner 明确选择的完整 Personal Meanings、Senses/
-Expressions 与当前 Book slice 中可执行的 targets。Saved item、Semantic Field、Personal Collection
+当前 Expression-form Listening 从现有个人表达和已下载内容提供轻量表达材料，不以完整 Personal Meaning、
+Sense 或可执行 Learning Target 为前提。Initial Profile 的其他活动按实际交付需求声明材料与资源。
+Saved item、Semantic Field、Personal Collection
 或 history-based Scope 只有在对应 content/persistence/API/Sync contract 已交付时才可加入 inventory；
 Profile 不根据“薄弱维度”自动创建强制任务或学习债务。
 
 YouGlish 片段属于 form-level provider resource，不成为 Learning Example，也不因为 Scope 中存在 Sense
-就获得 contextual Sense assignment。相同拼写存在多种发音时，resolver 必须约束正确 Pronunciation
-Variant；无法可靠约束就省略该 occurrence。Sense-controlled Reading Context 与 Speaking/Writing brief
+就获得 contextual Sense assignment。当前按形式检索的片段可能含其他意义与发音，不宣称对应某个目标 Sense
+或 Pronunciation Variant；未来若活动明确要求指定 Variant，才核验其约束与 occurrence 适用性。
+Sense-controlled Reading Context 与 Speaking/Writing brief
 可以来自已获准的不可变资源或受版本化 policy 约束的 runtime generation；来源与生成版本必须保留，
 但 AI 输出仍不是 reviewed content 或正式 grading basis。
 
@@ -883,6 +889,8 @@ scene domain、construction、disambiguating cue、collocations 和 variation no
   呈现；Text Experience Render 必须是可独立建立经验的场景而非说明，renderer fallback 不得改变
   目标 Sense 或教学约束；
 - Support-Language Bridge 使用其声明的 Support Language，明确必要的跨语言范围差异；
+  面向 learner 的含义呈现与固定 Sense 语义原文分离，必须保持同一 Sense Version 的范围与视角，
+  不得把源文字直接重标成另一种语言，也不得以翻译或重述创建新的 Sense 或 Personal Meaning；
 - Example 必须自然表达目标 Sense，target form/span 可确定性核验；存在 support-language render 时，
   两侧语义必须一致；
 - Attested Usage 必须固定真实 source/rights、exact clip/context、target occurrence 与 approved

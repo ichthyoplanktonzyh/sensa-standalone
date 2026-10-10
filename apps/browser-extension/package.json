@@ -12,7 +12,6 @@
     "esbuild": "^0.28.2"
   },
   "dependencies": {
-    "@sensa/contracts": "0.1.0",
-    "franc": "^6.2.0"
+    "@sensa/contracts": "0.1.0"
   }
 }

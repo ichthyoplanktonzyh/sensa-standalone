@@ -8,6 +8,8 @@ import {
   readSensaPortableBook,
 } from '@sensa/content-validator/portable-book';
 import {
+  maxPortableBookArchiveBytes,
+  maxPortableBookMembers,
   sensaPortableBookDescriptorSchema,
   sensaPortableBookManifestSchema,
   type SensaPortableLightweightPackage,
@@ -21,6 +23,7 @@ export type PortablePackageFixtureOptions=Readonly<{
   targetLanguage?:string;
   supportLanguage?:string;
   expression?:string;
+  example?:string;
   expressionKind?:SensaPortableLightweightPackage['targetExpression']['expressionKind'];
   meaning?:string;
   scene?:string;
@@ -28,10 +31,12 @@ export type PortablePackageFixtureOptions=Readonly<{
   title?:string;
   createdAt?:string;
   semanticDeclaration?:SensaPortableLightweightPackage['semanticDeclaration'];
+  audioByteLength?:number;
 }>;
 
 export type PortableBookDeliveryFixtureOptions=PortablePackageFixtureOptions&Readonly<{
   memberExpressions?:readonly string[];
+  retainBookArchive?:boolean;
 }>;
 
 /** Deterministic, provider-free `.sensa` fixture for Web and Cloud tests. */
@@ -47,7 +52,16 @@ export const portablePackageFixture=(options:PortablePackageFixtureOptions={})=>
     :expressionKind==='unspecified'
       ?'word' as const
       :expressionKind;
-  const audioBytes=new TextEncoder().encode(`ID3:sensa-fixture:${expression}:${targetLanguage}`);
+  const prefix=new TextEncoder().encode(`ID3:sensa-fixture:${expression}:${targetLanguage}`);
+  const requested=options.audioByteLength??prefix.byteLength;
+  if(!Number.isInteger(requested)||requested<prefix.byteLength||requested>1024*1024)throw new Error('Invalid synthetic fixture audio size');
+  const audioBytes=new Uint8Array(requested);
+  // Distinct, incompressible synthetic payloads model media size without TTS.
+  let seed=prefix.reduce((value,byte)=>Math.imul(value^byte,16777619)>>>0,2166136261);
+  for(let at=prefix.byteLength;at<audioBytes.length;at++){
+    seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;audioBytes[at]=seed&255;
+  }
+  audioBytes.set(prefix);
   const mediaId='pronunciation';
   const semanticDeclaration=options.semanticDeclaration??{
     contractVersion:'sensa-portable-semantic-declaration-v1' as const,
@@ -117,10 +131,10 @@ export const portablePackageFixture=(options:PortablePackageFixtureOptions={})=>
       },
       sceneBridge:{text:'把刚才的经验放进下面这句话。'},
       sceneRealization:{
-        example:expression,
+        example:options.example??expression,
         translation:meaning,
-        targetStart:0,
-        targetEnd:expression.length,
+        targetStart:(options.example??expression).indexOf(expression),
+        targetEnd:(options.example??expression).indexOf(expression)+expression.length,
       },
       optional:{},
     },
@@ -141,17 +155,36 @@ export const portablePackageFixture=(options:PortablePackageFixtureOptions={})=>
 };
 
 export const portableBookDeliveryFixture=(options:PortableBookDeliveryFixtureOptions={})=>{
-  const {memberExpressions,...packageOptions}=options;
+  const {memberExpressions,retainBookArchive=true,...packageOptions}=options;
   const expressions=memberExpressions?.length?memberExpressions:[packageOptions.expression??'borrow'];
+  if(expressions.length>maxPortableBookMembers)throw new Error(`Synthetic Book exceeds ${maxPortableBookMembers} members`);
+  const projectedMediaBytes=expressions.reduce((total,expression)=>total+(
+    packageOptions.audioByteLength
+      ??new TextEncoder().encode(`ID3:sensa-fixture:${expression}:${packageOptions.targetLanguage??'en'}`).byteLength
+  ),0);
+  if(projectedMediaBytes>maxPortableBookArchiveBytes)throw new Error('Synthetic Book media exceeds the Book archive limit');
   const rootPackageId=packageOptions.packageId??stableUuid('sensa:test-portable-package');
-  const archives=expressions.map((expression,index)=>portablePackageFixture(memberExpressions?{
+  const memberOptions=(expression:string,index:number):PortablePackageFixtureOptions=>memberExpressions?{
     ...packageOptions,
     packageId:stableUuid(`${rootPackageId}:book-member:${index}:${expression}`),
     senseId:`${packageOptions.senseId??'fixture'}:${index}:${expression}`,
     expression,
     title:`${expression} fixture`,
-  }:packageOptions));
-  const archive=archives[0]!;
+    meaning:`Synthetic fixture sense ${index+1} for ${expression}.`,
+    scene:`Synthetic fixture scene ${index+1}: use ${expression} in context.`,
+  }:packageOptions;
+  const archive=portablePackageFixture(memberOptions(expressions[0]!,0));
+  const members=[{packageId:archive.package.metadata.packageId,version:archive.package.metadata.version,bytes:archive.bytes}];
+  let memberArchiveBytes=archive.bytes.byteLength;
+  let mediaBytes=archive.package.media.reduce((total,media)=>total+media.sizeBytes,0);
+  const semanticSenseIds=new Set([archive.package.semanticDeclaration!.sense.senseId]);
+  for(let index=1;index<expressions.length;index++){
+    const member=portablePackageFixture(memberOptions(expressions[index]!,index));
+    members.push({packageId:member.package.metadata.packageId,version:member.package.metadata.version,bytes:member.bytes});
+    memberArchiveBytes+=member.bytes.byteLength;
+    mediaBytes+=member.package.media.reduce((total,item)=>total+item.sizeBytes,0);
+    semanticSenseIds.add(member.package.semanticDeclaration!.sense.senseId);
+  }
   const base=packageOptions.baseUrl??'https://content.fixture.invalid/';
   const publishedAt='2026-09-25T00:00:00Z';
   const publisher={namespace:'sensa.test',name:'Sensa test publisher'};
@@ -182,20 +215,18 @@ export const portableBookDeliveryFixture=(options:PortableBookDeliveryFixtureOpt
       publisherNamespace:publisher.namespace,
       subject:'member-semantic-declarations',
     },
-    members:archives.map(member=>({
-      packageId:member.package.metadata.packageId,
-      version:member.package.metadata.version,
-    })),
+    members:members.map(({packageId,version})=>({packageId,version})),
   });
   const bookBytes=createSensaPortableBook(
     manifest,
     new Map(manifest.members.map((member,index)=>[
       portableBookMemberKey(member),
-      archives[index]!.bytes,
+      members[index]!.bytes,
     ])),
   );
-  const bookArchive=readSensaPortableBook(bookBytes);
-  const bookUrl=new URL(`${bookArchive.archiveDigest}.sensa-book`,base).href;
+  const bookArchive=retainBookArchive?readSensaPortableBook(bookBytes):undefined;
+  const archiveDigest=bookArchive?.archiveDigest??sha256(bookBytes);
+  const bookUrl=new URL(`${archiveDigest}.sensa-book`,base).href;
   const descriptor=sensaPortableBookDescriptorSchema.parse({
     format:'sensa-portable-book-descriptor-v1',
     publisher,
@@ -206,7 +237,7 @@ export const portableBookDeliveryFixture=(options:PortableBookDeliveryFixtureOpt
     changeSummary:manifest.changeSummary,
     memberCount:manifest.members.length,
     byteLength:bookBytes.byteLength,
-    sha256:bookArchive.archiveDigest,
+    sha256:archiveDigest,
     url:bookUrl,
   });
   return {
@@ -214,7 +245,8 @@ export const portableBookDeliveryFixture=(options:PortableBookDeliveryFixtureOpt
     descriptor,
     manifest,
     bookBytes,
-    bookArchive,
+    fixtureMetrics:{memberArchiveBytes,mediaBytes,uniqueSemanticSenseIds:semanticSenseIds.size},
+    ...(bookArchive?{bookArchive}:{}),
     responses:new Map<string,Uint8Array>([
       [bookUrl,bookBytes],
     ]),

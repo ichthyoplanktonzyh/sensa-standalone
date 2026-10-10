@@ -1,3 +1,4 @@
+import {runBaselineMaterial} from '../../learning/runtime/runMaterialPins';
 import {
   fsrsHandoffInitializerVersion,
   fsrsSchedulerAdapterVersion,
@@ -91,7 +92,7 @@ export function applyLocalProtocolTransition(input: Readonly<{
   if (
     !run.targetIds.includes(target.id)
     || !participant
-    || participant.material.snapshot.learningTargetId !== target.id
+    || runBaselineMaterial(participant).snapshot.learningTargetId !== target.id
   ) throw new Error('localFlow.stepChanged');
   const completionMarker=run.targetCompletions[target.id];
   const invalidPlan=[
@@ -104,10 +105,10 @@ export function applyLocalProtocolTransition(input: Readonly<{
     participant.resolvedPlan.protocolBinding.protocolId!==run.protocolBinding.protocolId&&'protocol',
     participant.resolvedPlan.protocolBinding.protocolVersion!==run.protocolBinding.protocolVersion&&'protocol_version',
     participant.resolvedPlan.protocolBinding.localProtocolVersion!==run.protocolBinding.localProtocolVersion&&'local_protocol_version',
-    !participant.resolvedPlan.learningMaterializationIds.includes(participant.material.snapshot.learningMaterializationId)&&'materialization',
+    !participant.resolvedPlan.learningMaterializationIds.includes(runBaselineMaterial(participant).snapshot.learningMaterializationId)&&'materialization',
   ].filter(Boolean);
   if(invalidPlan.length)throw new Error(`Invalid resolved Learning Plan: ${invalidPlan.join(',')}`);
-  const learnerUserId = participant.material.snapshot.learnerUserId;
+  const learnerUserId = runBaselineMaterial(participant).snapshot.learnerUserId;
   const intent = transition.settlement;
   if (!intent) {
     return {

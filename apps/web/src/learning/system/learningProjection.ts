@@ -1,9 +1,22 @@
 import type { SensaFormalPinnedLanguageContext } from '@sensa/contracts/sensa';
+import {learningSupportMeaning,lightweightStepRequirements} from '@sensa/contracts/sensa';
 
 import { contentSupplySystem, type ContentSupplyRuntimePackage } from '../../contentSupply/system';
-import { readHomeLearningRecords } from '../../data/library/store';
-import { readLearningOverview } from '../../data/library/learning';
+import { readHomeLearningRecords,readLibrary,readLearningHistoryPage,readRuntimeLearningCandidates,readLearningManagementSummary,readLocalLibraryRevision,readLearningSemanticMemoryRecords } from '../../data/library/store';
+import {stableUuid} from '@sensa/learning-kernel';
+import type {LocalCurriculumEnrollment} from '../../data/library/curriculumEnrollments';
+import { readLearningOverview } from '../../data/library/learningOverview';
+import {readStudyPlans} from '../../data/library/studyPlans';
+import {readActiveLearningSessionHeader,currentStudyMembership} from '../../data/library/studyScopes';
+import type {LibraryTransaction} from '../../data/library/store';
+import type {RuntimeLearningCandidateQuery} from '../../data/library/runtimeLearningCandidates';
+import {sameLearningSessionDirection} from '../../data/library/learningCommandReceipt';
+import {planningMembershipForContext,curriculumSourceEligibility} from '../runtime/curriculumEligibility';
+import {currentPlanningMembership} from '../../data/library/supplementalMemberships';
+import {runBaselineMaterial} from '../runtime/runMaterialPins';
 import { localFlowText } from '../../i18n/localFlowText';
+import '../../i18n/learningResources';
+import i18n from '../../i18n';
 import { assuranceContent, assuranceView, localAssuranceState } from '../protocols/assurance';
 import { fourStageContent, fourStageQueue } from '../protocols/fourStage';
 import { toReviewSpec } from '../content/reviewCards';
@@ -11,18 +24,20 @@ import { resolveReviewMemoryOutcome } from '../review/types';
 import {
   localCurriculumMeaning,
   localCurriculumMembershipForContext,
-  localCurriculumMembershipForRoute,
   localExecutableTargetForParticipant,
   localLastPresentedMaterial,
   localPresentedMaterial,
 } from '../runtime/localCurriculum';
 import {
   localLightweightPhase,
+  localLightweightAdoptedExperience,
   localLightweightStep,
 } from '../runtime/lightweightInitialProtocol';
 import {
   localProtocolActiveTargetId,
   localProtocolStepId,
+  localRunSessionIntent,
+  localLearningPurpose,
   type LocalCurriculumMembership,
   type LocalLearningMaterialization,
   type LocalLearningRun,
@@ -53,10 +68,12 @@ import type {
   LearningReadiness,
   LearningRecordProjection,
   LearningRuntimeProjection,
+  LearningRuntimeWorkspaceProjection,
   LearningSemanticMemoryProjection,
   LearningStructuredRuntimeProjection,
   LearningTargetPresentation,
   LearningTargetProjection,
+  LearningTargetDetailProjection,
   LearningWorkspaceProjection,
 } from './learningReadModels';
 
@@ -80,7 +97,7 @@ const packageFor = (
 
 const targetExample = (material: LocalLearningMaterialization): string => {
   const value = material.content.resources.find((resource) => (
-    resource.materialRoleKey === 'usage_guidance'
+    resource.materialRoleKey === 'scene_realization'
   ))?.contentPayload.example;
   return typeof value === 'string' ? value : '';
 };
@@ -99,8 +116,8 @@ const targetPresentation = (
   example: targetExample(material),
   partOfSpeech: '',
   expressionTypeLabel: localFlowText('expression'),
-  sourceKind: membership.packageKey ? 'book' : 'personal_semantic_world',
-  sourceLabel: membership.packageKey
+  sourceKind: membership.provenance.kind==='stable_sense'?'direct':membership.packageKey ? 'book' : 'personal_semantic_world',
+  sourceLabel: membership.provenance.kind==='stable_sense'?i18n.t('study.sources.direct',{ns:'learning'}):membership.packageKey
     ? localFlowText('downloadedPackages')
     : localFlowText('semanticWorld'),
   runtimeSenseId: null,
@@ -176,15 +193,15 @@ export const projectLearningTarget = (
 const recordProjection = (
   runs: readonly LocalLearningRun[],
   targets: readonly LocalLearningTarget[],
-): LearningRecordProjection[] => runs
+): LearningRecordProjection[] => {
+  const byTargetId=new Map(targets.map(target=>[target.id,target]));
+  return runs
   .filter((run) => run.completedAt && run.completionKind !== 'wait_relearning')
   .flatMap((run) => run.targetIds.map((targetId) => {
-    const target = targets.find((candidate) => candidate.id === targetId);
+    const target = byTargetId.get(targetId);
     const participant = run.participants[targetId];
     const material = participant ? localLastPresentedMaterial(participant) : undefined;
-    const meaning = material?.content.resources.find((resource) => (
-      resource.materialRoleKey === 'sense_confirmation'
-    ))?.contentPayload.meaning;
+    const meaning = material?learningSupportMeaning(material.content.resources,participant?.languageContext.supportLanguageTag):undefined;
     return {
       recordId: `${run.id}:${targetId}`,
       targetId,
@@ -199,7 +216,8 @@ const recordProjection = (
       detail: localFlowText('localRecord'),
     };
   }))
-  .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt));
+  .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt)||left.recordId.localeCompare(right.recordId));
+};
 
 const runtimeTarget = (
   run: LocalLearningRun,
@@ -215,7 +233,7 @@ const runtimeTarget = (
   const stepId = run.completedAt ? null : localProtocolStepId(execution, run);
   const material = run.completedAt
     ? localLastPresentedMaterial(participant)
-    : stepId ? localPresentedMaterial(participant, stepId) : participant.material;
+    : stepId ? localPresentedMaterial(participant, stepId) : runBaselineMaterial(participant);
   const executable = localExecutableTargetForParticipant(target, participant, material);
   return { target, participant, material, executable };
 };
@@ -245,13 +263,22 @@ const projectRuntime = (
 
   if (surface === 'lightweight_initial' || surface === 'lightweight_retention') {
     const step = localLightweightStep(run, target, material);
+    const currentKeys=new Set(step?.materialBindings.map(binding=>binding.resourceKey)??[]);
+    const experience=localLightweightAdoptedExperience(run,participant);
+    const experienceRoles=new Set<string>(lightweightStepRequirements('pre_reveal').map(requirement=>requirement.materialRoleKey));
     return {
       ...base,
       kind: 'lightweight',
+      needsRelearning: run.completionKind === 'wait_relearning',
       capabilities: ['toast', 'dictionary', 'personal_scenes', 'personal_content_menu', 'declared_mastery'],
       target: targetView,
       phase: localLightweightPhase(run) === 'reveal' ? 'reveal' : 'experience',
       step: step ? { ...structuredClone(step), materialization: structuredClone(material) } : null,
+      questionResources:structuredClone([
+        ...material.content.resources.filter(resource=>currentKeys.has(resource.resourceKey)),
+        ...(experience?.content.resources.filter(resource=>experienceRoles.has(resource.materialRoleKey))??[]),
+      ]),
+      questionUsesPersonalContext:material.snapshot.personalAnchorUseGrantIds.length>0||(experience?.snapshot.personalAnchorUseGrantIds.length??0)>0,
     } satisfies LearningLightweightRuntimeProjection;
   }
 
@@ -347,18 +374,25 @@ const projectRuntime = (
   throw new Error(`Unknown Learning Runtime presentation: ${surface}`);
 };
 
-const workspaceReadiness = (
+const workspaceReadiness = async (
   targets: readonly LocalLearningTarget[],
   packages: readonly ContentSupplyRuntimePackage[],
   context: SensaFormalPinnedLanguageContext,
-) => Object.fromEntries(targets.map((target) => {
-  const membership = localCurriculumMembershipForContext(target, context);
-  return [target.id, inspectLocalTargetReadiness(
-    target,
-    membership,
-    packageFor(packages, membership),
-  ).status];
-})) as Readonly<Record<string, 'ready' | 'blocked'>>;
+  enrollments:ReadonlyMap<string,LocalCurriculumEnrollment>,
+  sourceEligibility:Readonly<Record<string,{introduce:boolean;ongoing:boolean}>>,
+) => {
+  const readiness:Record<string,'ready'|'blocked'>={},eligibility:Record<string,{introduce:boolean;ongoing:boolean}>={};let until=performance.now()+8;
+  for(const target of targets){
+    const membership=planningMembershipForContext(target,context,enrollments,member=>inspectLocalTargetReadiness(target,member,packageFor(packages,member)).status==='ready',sourceEligibility);
+    readiness[target.id]=membership?'ready':'blocked';
+    const id=membership?.provenance?.curriculumEnrollmentId;
+    eligibility[target.id]=membership?curriculumSourceEligibility(membership,typeof id==='string'?enrollments.get(id):undefined,!!target.startedAt):{introduce:false,ongoing:false};
+    // All content checks remain mandatory. Yield between Targets so validating
+    // a collection cannot monopolize one main-thread task on a slower device.
+    if(performance.now()>=until){await new Promise<void>(resolve=>setTimeout(resolve,0));until=performance.now()+8;}
+  }
+  return {readiness,eligibility};
+};
 
 export async function readLearningWorkspaceProjection(input: Readonly<{
   languageContext: SensaFormalPinnedLanguageContext;
@@ -366,38 +400,39 @@ export async function readLearningWorkspaceProjection(input: Readonly<{
   retries: readonly InterleavedLearningRetry[];
 }>): Promise<LearningWorkspaceProjection> {
   const snapshot=await readLearningOverview();
-  const packageKeys=snapshot.targets.flatMap(target=>{
-    const membership=localCurriculumMembershipForContext(target,input.languageContext);
-    return membership?.assurancePackageKey&&membership.packageKey?[membership.packageKey]:[];
-  });
+  const enrollments=new Map(snapshot.enrollments.map(enrollment=>[enrollment.id,enrollment]));
+  const sourceEligibility=Object.fromEntries(snapshot.supplementalStates.filter(state=>state.status==='removed').map(state=>[state.id,{introduce:false,ongoing:false}]));
+  const packageKeys=snapshot.targets.flatMap(target=>target.curriculumMemberships.flatMap(member=>member.languageContext.languageRouteId===input.languageContext.languageRouteId&&member.assurancePackageKey&&member.packageKey?[member.packageKey]:[]));
   const packages=await contentSupplySystem.read({kind:'runtime_packages',packageKeys});
-  const readiness = workspaceReadiness(snapshot.targets, packages, input.languageContext);
+  const {readiness,eligibility} = await workspaceReadiness(snapshot.targets, packages, input.languageContext,enrollments,sourceEligibility);
   const dailyLimit = snapshot.studyPlans[input.languageContext.languageRouteId]?.dailyNewSenseLimit;
   const queue = resolveLearningQueue({
     targets: snapshot.targets,
     languageRouteId: input.languageContext.languageRouteId,
     readiness,
+    eligibility,
     clock: input.clock,
     dailyLimit,
   });
   const activeRun = snapshot.runs.find((run) => run.id === snapshot.active) ?? null;
   const nextTarget = selectInterleavedLearningTarget({
     due: queue.due,
-    initialReady: queue.initialReady,
-    currentRunTargetIds: activeRun?.targetIds ?? [],
+    initialReady: activeRun&&localRunSessionIntent(activeRun)==='review_only'?[]:queue.initialReady,
+    currentRunTargetIds: (activeRun?.targetIds??[]).filter(id=>!(activeRun?.purpose==='retention_review'&&queue.due.some(target=>target.id===id&&target.relearnAt))),
     retries: input.retries,
   });
-  const targets = queue.activeTargets.flatMap((target) => {
-    const membership = localCurriculumMembershipForContext(target, input.languageContext);
+  const targets = snapshot.targets.flatMap((target) => {
+    const planningActive=!!planningMembershipForContext(target,input.languageContext,enrollments,()=>true,sourceEligibility);
+    const membership = planningMembershipForContext(target,input.languageContext,enrollments,member=>inspectLocalTargetReadiness(target,member,packageFor(packages,member)).status==='ready',sourceEligibility)??localCurriculumMembershipForContext(target, input.languageContext);
     return membership
-      ? [projectLearningTarget(
+      ? [{...projectLearningTarget(
         target,
         membership,
-        readiness[target.id] ?? 'blocked',
+        inspectLocalTargetReadiness(target,membership,packageFor(packages,membership)).status,
         input.clock,
         membership.material,
         packageFor(packages, membership),
-      )]
+      ),planningActive}]
       : [];
   });
   return {
@@ -406,7 +441,11 @@ export async function readLearningWorkspaceProjection(input: Readonly<{
       &&enrollment.languageContext.languageRouteId===input.languageContext.languageRouteId
       &&enrollment.languageContext.targetLanguageTag===input.languageContext.targetLanguageTag
       &&enrollment.languageContext.supportLanguageTag===input.languageContext.supportLanguageTag)
-      .map(enrollment=>({enrollmentId:enrollment.id,languageRouteId:enrollment.languageContext.languageRouteId,source:structuredClone(enrollment.source)})),
+      .map(enrollment=>({enrollmentId:enrollment.id,languageRouteId:enrollment.languageContext.languageRouteId,source:enrollment.source.kind==='stable_sense'
+        ?{kind:'stable_sense' as const,senseId:enrollment.source.selection.reference.senseId,senseVersionId:enrollment.source.selection.reference.senseVersionId,
+          bindingId:enrollment.source.selection.reference.bindingId,bindingVersionId:enrollment.source.selection.reference.bindingVersionId,
+          expression:enrollment.source.selection.expression.surfaceForm,meaning:enrollment.source.selection.semanticSpec.coreMeaningFocus}
+        :structuredClone(enrollment.source)})),
     targets,
     queue: {
       activeTargetIds: queue.activeTargets.map((target) => target.id),
@@ -419,12 +458,100 @@ export async function readLearningWorkspaceProjection(input: Readonly<{
         readiness,
         clock: input.clock,
         dailyLimit,
-      }),
+      },queue),
     },
     runtime: activeRun ? projectRuntime(activeRun, snapshot.targets, packages, input.clock) : null,
     activeRunId: activeRun?.id ?? null,
     dailyLimit: dailyLimit ?? null,
     records: recordProjection(snapshot.runs, snapshot.targets),
+    policyOptions,
+  };
+}
+
+/** Exact Target and active Run reads share the Library lock. Merely opening a
+ * record must not prepare a queue, rehydrate artifacts or decode other Runs. */
+export async function readLearningTargetDetailProjection(input:Readonly<{
+  targetId:string;languageContext:SensaFormalPinnedLanguageContext;clock:number;
+}>):Promise<LearningTargetDetailProjection>{
+  if(!Number.isFinite(input.clock))throw new Error('localFlow.clockChanged');
+  const snapshot=await readLibrary(async tx=>{
+    const target=await tx.get<LocalLearningTarget>('learningTargets',input.targetId);
+    const current=target?await currentPlanningMembership(tx,target,input.languageContext):undefined;
+    const membership=current??(target?localCurriculumMembershipForContext(target,input.languageContext):undefined);
+    const activeId=await tx.get<string>('meta','learning-active');
+    const run=activeId?await tx.get<LocalLearningRun>('learningRuns',activeId):undefined;
+    if(activeId&&(!run||run.id!==activeId))throw new Error('localFlow.resourceInvalid');
+    const packageKey=membership?.packageKey;
+    const exportPackageKey=packageKey&&(await tx.existingRecordKeys('packageCache',[packageKey])).has(packageKey)?packageKey:null;
+    const dailyLimit=(await readStudyPlans(tx))[input.languageContext.languageRouteId]?.dailyNewSenseLimit??null;
+    return {target,membership,planningActive:!!current,activeRunTargetIds:run?.targetIds??[],exportPackageKey,dailyLimit};
+  });
+  const packages=await contentSupplySystem.read({kind:'runtime_packages',packageKeys:snapshot.membership?.assurancePackageKey&&snapshot.membership.packageKey?[snapshot.membership.packageKey]:[]});
+  const pack=packageFor(packages,snapshot.membership);
+  return {
+    target:snapshot.target&&snapshot.membership?{...projectLearningTarget(snapshot.target,snapshot.membership,inspectLocalTargetReadiness(snapshot.target,snapshot.membership,pack).status,input.clock,snapshot.membership.material,pack),planningActive:snapshot.planningActive}:null,
+    activeRunTargetIds:snapshot.activeRunTargetIds,exportPackageKey:snapshot.exportPackageKey,
+    dailyLimit:snapshot.dailyLimit,policyOptions,
+  };
+}
+
+/** The page's current execution does not need every stored material and Run.
+ * Exact participants and compact Worker planning share the Library read lock;
+ * immutable public artifacts are obtained through Content Supply afterwards. */
+async function readNextReadyRuntimeCandidate(tx:LibraryTransaction,query:RuntimeLearningCandidateQuery,selection:{run:LocalLearningRun|null;intent:'mixed'|'review_only';retries:readonly InterleavedLearningRetry[]}):Promise<{nextTargetId:string|null;nextChangeAt:number|null}>{
+  const excluded=new Set<string>();
+  for(;;){
+    const queue=await readRuntimeLearningCandidates({...query,excludedTargetIds:[...excluded]});
+    // A failed Review may continue as Relearning for the same Target. All
+    // other current participants and categories outside intent stay unprobed.
+    const currentIds=(selection.run?.targetIds??[]).filter(id=>!(selection.run?.purpose==='retention_review'&&queue.due.some(target=>target.id===id&&target.relearnAt)));
+    const next=selectInterleavedLearningTarget({due:queue.due,initialReady:selection.intent==='review_only'?[]:queue.initialReady,currentRunTargetIds:currentIds,retries:selection.retries});
+    if(!next)return {nextTargetId:null,nextChangeAt:queue.nextChangeAt};
+    const target=await tx.get<LocalLearningTarget>('learningTargets',next.id);
+    if(!target||target.id!==next.id)throw new Error('localFlow.resourceInvalid');
+    if(await currentStudyMembership(tx,target,query.languageContext,localLearningPurpose(target)))return {nextTargetId:next.id,nextChangeAt:queue.nextChangeAt};
+    // A protocol rejection refills the indexed prefix. Nothing is decoded
+    // merely because it shares the library or precedes an excluded participant.
+    excluded.add(next.id);
+  }
+}
+
+export async function readLearningRuntimeProjection(input:Readonly<{
+  languageContext:SensaFormalPinnedLanguageContext;clock:number;retries:readonly InterleavedLearningRetry[];
+  sessionIntent?:'mixed'|'review_only';
+}>):Promise<LearningRuntimeWorkspaceProjection>{
+  const snapshot=await readLibrary(async tx=>{
+    const activeId=await tx.get<string>('meta','learning-active');
+    const run=activeId?(await tx.get<LocalLearningRun>('learningRuns',activeId))??null:null;
+    if(activeId&&(!run||run.id!==activeId))throw new Error('localFlow.resourceInvalid');
+    const targets=run?await Promise.all(run.targetIds.map(async id=>{
+      const target=await tx.get<LocalLearningTarget>('learningTargets',id);
+      if(!target||target.id!==id)throw new Error('localFlow.resourceInvalid');
+      return target;
+    })):[];
+    // Ordinary Steps need no collection planning. Choose a continuation only
+    // at a Run boundary. The compact Worker query bypasses the page transaction
+    // chain, so it is safe under this lock without nesting a Library transaction.
+    const activity=await readActiveLearningSessionHeader(tx);
+    if(activity&&activity.activeRunId!==activeId)throw new Error('localFlow.progressReadFailed');
+    const preferencesDailyLimit=(await readStudyPlans(tx))[input.languageContext.languageRouteId]?.dailyNewSenseLimit??null;
+    const dailyLimit=activity?.dailyNewSenseLimit??preferencesDailyLimit??undefined;
+    return {run,targets,dailyLimit,preferencesDailyLimit,
+      // A pinned Run can finish after the surface Route changes. It cannot
+      // continue its Session into a different direction or Route.
+      planning:(!run||run.completedAt&&sameLearningSessionDirection(run.languageContext,input.languageContext))?await readNextReadyRuntimeCandidate(tx,{languageContext:activity?.languageContext??input.languageContext,clock:input.clock,dailyLimit,supportedPolicies:policyOptions.map(option=>option.id),currentTargetIds:run?.targetIds??[],retryTargetIds:input.retries.map(retry=>retry.id)},{run,intent:run?localRunSessionIntent(run):input.sessionIntent??'mixed',retries:input.retries}):null};
+  });
+  const packageKeys=snapshot.targets.flatMap(target=>{
+    const participant=snapshot.run!.participants[target.id];
+    const member=target.curriculumMemberships.find(member=>member.id===participant?.curriculumMembershipId);
+    return member?.assurancePackageKey&&member.packageKey?[member.packageKey]:[];
+  });
+  const packages=await contentSupplySystem.read({kind:'runtime_packages',packageKeys});
+  const runtime=snapshot.run?projectRuntime(snapshot.run,snapshot.targets,packages,input.clock):null;
+  if(!snapshot.planning)return {runtime,dailyLimit:snapshot.dailyLimit??null,preferencesDailyLimit:snapshot.preferencesDailyLimit,nextTargetId:null,nextChangeAt:null,policyOptions};
+  return {
+    runtime,
+    dailyLimit:snapshot.dailyLimit??null,preferencesDailyLimit:snapshot.preferencesDailyLimit,...snapshot.planning,
     policyOptions,
   };
 }
@@ -450,44 +577,67 @@ export const homeLearningReadiness = (
   return 'ready';
 };
 
+export async function readLearningPreferencesProjection(languageContext:SensaFormalPinnedLanguageContext){
+ return readLibrary(async tx=>({dailyLimit:(await readStudyPlans(tx))[languageContext.languageRouteId]?.dailyNewSenseLimit??null,policyOptions}));
+}
+export async function readLearningManagementProjection(input:{languageContext:SensaFormalPinnedLanguageContext;clock:number}):Promise<import('./learningReadModels').LearningManagementProjection>{
+ // Native projections bypass the page transaction chain. Hold the same shared
+ // Library lock as the enrollment read so a writer cannot split this snapshot.
+ const {summary,dailyLimit,pending}=await readLibrary(async tx=>{
+  const dailyLimit=(await readStudyPlans(tx))[input.languageContext.languageRouteId]?.dailyNewSenseLimit;
+  const [summary,identity,enrollments]=await Promise.all([readLearningManagementSummary({languageContext:input.languageContext,clock:input.clock,dailyLimit,supportedPolicies:policyOptions.map(option=>option.id)}),tx.get<import('../../data/library/store').LibraryIdentity>('meta','identity'),tx.all<LocalCurriculumEnrollment>('curriculumEnrollments')]);
+  if(!identity)throw new Error('localFlow.resourceInvalid');
+  return {summary,dailyLimit,pending:{identity,enrollments}};
+ });
+ const ids=new Set(summary.targetIds);
+ return {...summary,policies:summary.policies as LearningPolicy[],pendingDirectCount:pending.enrollments.filter(enrollment=>enrollment.status==='active'&&enrollment.source.kind==='stable_sense'&&enrollment.languageContext.languageRouteId===input.languageContext.languageRouteId&&enrollment.languageContext.targetLanguageTag===input.languageContext.targetLanguageTag&&enrollment.languageContext.supportLanguageTag===input.languageContext.supportLanguageTag&&!ids.has(stableUuid(`sensa-learning-target:${pending.identity.learnerId}:${enrollment.source.selection.reference.senseVersionId}:${enrollment.source.selection.reference.bindingVersionId}`))).length,dailyLimit:dailyLimit??null,policyOptions};
+}
+export async function readLearningBookPlans(context:SensaFormalPinnedLanguageContext):Promise<import('./learningReadModels').LearningBookPlanProjection[]>{
+ const enrollments=await readLibrary(async tx=>(await tx.all<LocalCurriculumEnrollment>('curriculumEnrollments')).filter(enrollment=>enrollment.status==='active'&&enrollment.source.kind==='published_book'&&sameLearningSessionDirection(enrollment.languageContext,context)));
+ const catalog=enrollments.some(enrollment=>enrollment.source.kind==='published_book'&&!enrollment.source.title)?await contentSupplySystem.read({kind:'catalog'}):[];
+ return enrollments.flatMap(enrollment=>{
+  const source=enrollment.source;if(source.kind!=='published_book')return [];
+  return [{enrollmentId:enrollment.id,revision:enrollment.revision,title:source.title??catalog.find(item=>item.sha256===source.publicationArchiveSha256)?.book.title??null,bookVersionNumber:source.bookVersionNumber,memberCount:source.memberCount,mode:enrollment.bookPlan?.mode??'active',selection:structuredClone(enrollment.bookPlan?.range.selection??{kind:'all' as const})}];
+ }).sort((left,right)=>(left.mode==='active'?0:1)-(right.mode==='active'?0:1)||(left.title??left.enrollmentId).localeCompare(right.title??right.enrollmentId));
+}
+export async function readLearningHistoryProjection(input:{request:import('./learningHistoryModel').LearningHistoryRequest}):Promise<import('./learningReadModels').LearningHistoryProjection>{
+ return readLibrary(async tx=>{
+  const [page,identity,incarnation,revision]=await Promise.all([readLearningHistoryPage(input.request),tx.get<import('../../data/library/store').LibraryIdentity>('meta','identity'),tx.get<string>('meta','local-incarnation'),readLocalLibraryRevision(tx)]);
+  if(!identity)throw new Error('localFlow.resourceInvalid');
+  return {...page,version:JSON.stringify([identity.id,incarnation??'initial',revision,Intl.DateTimeFormat().resolvedOptions().timeZone]),records:page.records.map(record=>({...record,label:localFlowText(record.kind==='initial_learning'?'initialRecord':record.kind==='retention_review'?'reviewRecord':'relearningRecord'),detail:localFlowText('localRecord')}))};
+ });
+}
 export async function readLearningHomeProjection(input: Readonly<{
-  languageRouteId: string;
+  languageContext: SensaFormalPinnedLanguageContext;
   clock: number;
 }>): Promise<LearningHomeProjection> {
-  const stored = await readHomeLearningRecords(input.languageRouteId);
-  const availablePackageKeys = new Set(stored.availablePackageKeys);
-  const readiness = Object.fromEntries(stored.targets.map((target) => {
-    const membership = localCurriculumMembershipForRoute(target, input.languageRouteId);
-    return [target.id, homeLearningReadiness(target, membership, availablePackageKeys)];
-  })) as Readonly<Record<string, 'ready' | 'blocked'>>;
-  const queue = resolveLearningQueue({
-    targets: stored.targets,
-    languageRouteId: input.languageRouteId,
-    readiness,
-    clock: input.clock,
-    dailyLimit: stored.dailyLimit,
+  // Home needs counts and the next choice, not a decoded object for every
+  // stored Target. Reuse the transactional scheduling indexes used by Study.
+  return readLibrary(async tx=>{
+    const activeId=await tx.get<string>('meta','learning-active');
+    const activeRun=activeId?await tx.get<LocalLearningRun>('learningRuns',activeId):undefined;
+    if(activeId&&(!activeRun||activeRun.id!==activeId))throw new Error('localFlow.resourceInvalid');
+    const activity=await readActiveLearningSessionHeader(tx);
+    if(activity&&activity.activeRunId!==activeId)throw new Error('localFlow.progressReadFailed');
+    const dailyLimit=activity&&sameLearningSessionDirection(activity.languageContext,input.languageContext)
+      ?activity.dailyNewSenseLimit:(await readStudyPlans(tx))[input.languageContext.languageRouteId]?.dailyNewSenseLimit;
+    const query={languageContext:input.languageContext,clock:input.clock,dailyLimit,supportedPolicies:policyOptions.map(option=>option.id),currentTargetIds:[],retryTargetIds:[]};
+    const [summary,mixed,review]=await Promise.all([
+      readLearningManagementSummary(query),
+      readNextReadyRuntimeCandidate(tx,query,{run:null,intent:'mixed',retries:[]}),
+      readNextReadyRuntimeCandidate(tx,query,{run:null,intent:'review_only',retries:[]}),
+    ]);
+    const nextTarget=mixed.nextTargetId?await tx.get<LocalLearningTarget>('learningTargets',mixed.nextTargetId):undefined;
+    return {
+      activeRunId:activeRun?.id??null,dailyLimit:dailyLimit??null,
+      readyInitialCount:summary.readyInitialCount,reviewDueCount:summary.reviewDueCount,
+      mixedReadyCount:summary.readyInitialCount+summary.reviewDueCount,
+      nextTargetId:activeRun?.targetId??mixed.nextTargetId,nextReviewTargetId:review.nextTargetId,
+      nextChangeAt:mixed.nextChangeAt,
+      nextTargetPolicy:nextTarget?(nextTarget.committedPolicy?.profileId??nextTarget.policyAssignment.profileId):null,
+      policyOptions,
+    };
   });
-  const nextTarget = queue.due[0] ?? queue.initialReady[0] ?? null;
-  return {
-    activeRunId: stored.activeRun?.id ?? null,
-    dailyLimit: stored.dailyLimit ?? null,
-    readyInitialCount: queue.initialReady.length,
-    reviewDueCount: queue.due.length,
-    mixedReadyCount: queue.initialReady.length + queue.due.length,
-    nextTargetId: stored.activeRun?.targetId ?? nextTarget?.id ?? null,
-    nextReviewTargetId: stored.activeRun?.targetId ?? queue.due[0]?.id ?? null,
-    nextChangeAt: nextLearningQueueChangeAt({
-      targets: stored.targets,
-      languageRouteId: input.languageRouteId,
-      readiness,
-      clock: input.clock,
-      dailyLimit: stored.dailyLimit,
-    }),
-    nextTargetPolicy: nextTarget
-      ? (nextTarget.committedPolicy?.profileId ?? nextTarget.policyAssignment.profileId)
-      : null,
-    policyOptions,
-  };
 }
 
 export async function readLearningPersonalEnrollmentIndex(): Promise<LearningPersonalEnrollmentIndex> {
@@ -500,22 +650,8 @@ export async function readLearningPersonalEnrollmentIndex(): Promise<LearningPer
   };
 }
 
-export async function readLearningSemanticMemoryProjection(): Promise<LearningSemanticMemoryProjection> {
-  const snapshot = await readLearningOverview();
-  return {
-    targets: snapshot.targets.map((target) => ({
-      targetId: target.id,
-      senseId: target.identity.senseId,
-      declaredMastery: hasDeclaredMasteryOverride(target),
-      memory: target.memory ? {
-        dueAt: target.memory.dueAt,
-        fsrsCardState: target.memory.fsrsCardState,
-        fsrsLastReviewedAt: target.memory.fsrsLastReviewedAt,
-        fsrsStability: target.memory.fsrsStability,
-        reps: target.memory.reps,
-      } : null,
-    })),
-  };
+export async function readLearningSemanticMemoryProjection(targetId?:string): Promise<LearningSemanticMemoryProjection> {
+  return readLearningSemanticMemoryRecords(targetId);
 }
 
 export const currentLearningPolicyOptions = () => policyOptions;

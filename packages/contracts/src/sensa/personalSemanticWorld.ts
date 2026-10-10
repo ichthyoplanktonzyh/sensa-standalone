@@ -124,6 +124,13 @@ export const sensaExpressionOccurrenceLocatorSchema = z.discriminatedUnion(
         curriculumMembershipId: uuid,
       })
       .strict(),
+    /** A learner-authored replacement expression beside a real Context in an
+     * existing Personal Meaning. This cannot locate a new standalone capture. */
+    z.object({
+      kind: z.literal("personal_meaning"),
+      personalMeaningId: uuid,
+      personalSemanticAnchorRevisionIds: z.array(uuid).min(1),
+    }).strict(),
   ],
 );
 
@@ -197,6 +204,8 @@ export const sensaPersonalMeaningRevisionSnapshotSchema = z
     learnerIntentNote: nonEmpty.nullable(),
     provenance: sensaPersonalProvenanceSchema,
     createdAt: timestamp,
+    /** Present only for an explicit move to/from the learner's recycle bin. */
+    lifecycle: z.object({kind:z.enum(['delete','restore']),revision:positiveInteger.min(2)}).strict().optional(),
   })
   .strict();
 

@@ -17,17 +17,23 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { ContentSectionId, LearnerSemanticProjectionSnapshot } from "../../learnerSemanticProjection/system";
+import {learnerSemanticProjectionSystem} from '../../learnerSemanticProjection/system';
 import { useLearnerSemanticProjection } from "../../learnerSemanticProjection/useLearnerSemanticProjection";
 import {
   useJourneyGateway,
   useJourneyWorld,
   type JourneyWorldItemView,
 } from "../personalMeaningJourney";
-import { useIntakeInbox } from "../intake";
 import { PersonalMeaningComposer } from "./PersonalMeaningComposer";
+import {ManualMeaningComposer} from './ManualMeaningComposer';
 import { IntakeInboxDrawer } from "./IntakeInboxDrawer";
 import { SensaCollectionBrowserLayout } from "../ui/SensaPageLayouts";
 import { useScreenState } from "../ui/ScreenHost";
+import {SensaVirtualList,SensaPagedVirtualList} from '../ui/SensaVirtualList';
+import {localFlowText} from '../../i18n/localFlowText';
+import {normalizeMeaningQuery} from '../personalMeaningJourney/meaningLookupFacts';
+import {useWorldWindow,useWorldInbox} from '../personalMeaningJourney/useWorldRead';
+import type {WorldBrowseItem,WorldBrowseQuery} from '../personalMeaningJourney/worldRead';
 
 export interface ContentScreenSource {
   items: JourneyWorldItemView[];
@@ -38,22 +44,24 @@ export interface ContentScreenSource {
   composer: import("./PersonalMeaningComposer").MaterialComposerPort;
 }
 interface ContentScreenProps {
-  bulkLearning?:(items:JourneyWorldItemView[],list:import('react').ReactNode)=>import('react').ReactNode;
+  bulkLearning?:(items:JourneyWorldItemView[],list:import('react').ReactNode,query?:Pick<WorldBrowseQuery,'query'|'filter'>)=>import('react').ReactNode;
   source?:ContentScreenSource;
   notice?:import("react").ReactNode;
   active: boolean;
   screenId?: string;
-  initialAction?: "create" | "inbox";
+  initialAction?: "create" | "inbox" | "add";
+  onInitialActionConsumed?:()=>void;
   onStartConversation?:()=>void;
   onBrowseExisting: () => void;
   onOpenPersonalMeaning: (id: string, focusId?: string) => void;
   onOpenConfirmedSense: (id: string, focusId: string) => void;
   onOpenSense: (id: string) => void;
+  onOpenLearningContent: (targetId: string) => void;
   onOpenSection: (section: ContentSectionId) => void;
   toast: (message: string) => void;
 }
 type Category = "personal" | "learning" | "markers";
-type Filter = "all" | "continue" | "binding" | "complete";
+type Filter = "all" | "continue" | "binding" | "complete" | "deleted";
 const button =
   "inline-flex min-h-11 items-center justify-center gap-2 rounded-control px-4 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:opacity-50";
 const alignmentBranches = (item: JourneyWorldItemView) => [
@@ -83,47 +91,58 @@ const searchText = (item: JourneyWorldItemView) =>
   [
     labelFor(item),
     ...item.familiarAnchors.map((a) => a.surfaceForm),
+    ...item.experienceAnchors.map((a)=>a.surfaceForm),
+    ...item.detail.materialBlocks.flatMap(block=>[block.bodyText??'',block.capturedSource?.text??'']),
+    ...(item.detail.capturedSources??[]).map(source=>source.text??''),
     ...alignmentBranches(item).flatMap((b) => [
       b.label,
       ...(b.alignment?.confirmedBindings.map((e) => e.surfaceForm) ?? []),
     ]),
   ]
-    .join(" ")
-    .toLocaleLowerCase();
+    .join(" ");
 
 export function ContentScreen(props:ContentScreenProps){
- return props.source?<ContentScreenView {...props} source={props.source}/>:<ConnectedContentScreen {...props}/>;
-}
-function ConnectedContentScreen(props:ContentScreenProps){
- const {items,status}=useJourneyWorld();const gateway=useJourneyGateway();const inbox=useIntakeInbox();const projection=useLearnerSemanticProjection();
- return <ContentScreenView {...props} source={{items,status,inbox,projection,reload:()=>gateway.reload()}}/>;
+ return <ContentScreenView {...props}/>;
 }
 function ContentScreenView({
   active,
   screenId = "s-content",
   initialAction,
+  onInitialActionConsumed,
   onBrowseExisting,onStartConversation,
   onOpenPersonalMeaning,
   onOpenConfirmedSense,
   onOpenSense,
+  onOpenLearningContent,
   onOpenSection,
-  toast,source,notice,bulkLearning,
-}: Omit<ContentScreenProps,"source"> & {source:Omit<ContentScreenSource,"composer"> & {composer?:ContentScreenSource["composer"]}}) {
+  toast,source:providedSource,notice,bulkLearning,
+}: ContentScreenProps) {
   const { t, i18n } = useTranslation();
-  const {items,status,inbox,projection}=source;
   const [category, setCategory] = useScreenState<Category>(`${screenId}:category`, "personal");
   const [view, setView] = useScreenState<"list" | "world">(`${screenId}:view`, "list");
   const [filter, setFilter] = useScreenState<Filter>(`${screenId}:filter`, "all");
   const [query, setQuery] = useScreenState(`${screenId}:query`, "");
   const [adding, setAdding] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
+  const [manualOpen,setManualOpen]=useState(false);
+  const [manualIntake,setManualIntake]=useState<import('@sensa/contracts/sensa').SensaIntakeItem|null>(null);
   const [inboxOpen, setInboxOpen] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
+  const page=useWorldWindow({query,filter},!providedSource&&active);
+  const fullRead=!providedSource&&active&&category==='personal'&&view==='world'&&filter!=='deleted';
+  const world=useJourneyWorld(fullRead),gateway=useJourneyGateway();
+  const inboxRead=useWorldInbox(!providedSource&&active&&inboxOpen);
+  const projectionRead=useLearnerSemanticProjection(!providedSource&&active&&category!=='personal');
+  const source=providedSource??{items:world.items,status:fullRead?world.status:page.status,inbox:inboxRead.value?.items??[],projection:projectionRead,reload:()=>{page.reload();if(fullRead)void gateway.reload();}};
+  const {items,status,inbox,projection}=source;
+  const showExamples=projection.annotationStatus!=='ready'||projection.savedExampleCount>0;
+  const paged=!providedSource&&category==='personal'&&(view==='list'||filter==='deleted');
   const fmt = (n: number) =>
     new Intl.NumberFormat(i18n.resolvedLanguage).format(n);
   useEffect(() => {
     if (active && initialAction === "inbox") setInboxOpen(true);
     if (active && initialAction === "create") {if(onStartConversation)onStartConversation();else setComposerOpen(true);}
+    if (active && initialAction === "add") {setAdding(true);onInitialActionConsumed?.();}
   }, [active, initialAction]);
   useEffect(() => {
     if (!adding) return;
@@ -134,20 +153,22 @@ function ContentScreenView({
     return () => window.removeEventListener("keydown", close);
   }, [adding]);
   const matchesFilter = (item: JourneyWorldItemView) =>
-    filter === "all" ||
+    filter==='deleted'?item.detail.status==='deleted':item.detail.status==='active'&&(filter === "all" ||
     (filter === "continue" &&
       item.senseFormation.phase !== "sense_confirmed") ||
     (filter === "binding" &&
       ["pending", "partial"].includes(item.expressionBinding.phase)) ||
-    (filter === "complete" && item.expressionBinding.phase === "bound");
+    (filter === "complete" && item.expressionBinding.phase === "bound"));
+  const searchable=useMemo(()=>new Map(items.map(item=>[item.personalMeaningId,normalizeMeaningQuery(searchText(item))])),[items]);
+  const normalizedQuery=normalizeMeaningQuery(query);
   const visible = useMemo(
     () =>
       items
         .filter((item) =>
-          searchText(item).includes(query.trim().toLocaleLowerCase()),
+          searchable.get(item.personalMeaningId)!.includes(normalizedQuery),
         )
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
-    [items, query],
+    [items, searchable,normalizedQuery],
   ).filter(matchesFilter);
   const learning = projection.semanticSenses.filter((item) =>
     `${item.expression.formL2} ${item.ground.labelL1} ${item.ground.experienceL1}`
@@ -161,7 +182,7 @@ function ContentScreenView({
         item.expressionBinding.phase !== "bound",
     )
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  const next = drafts[0];
+  const next = paged?page.next:drafts[0];
   const open = (id: string, focusId?: string) => {
     setSelected(id);
     const item = items.find((item) => item.personalMeaningId === id);
@@ -186,9 +207,9 @@ function ContentScreenView({
         strokeWidth={1.3}
       />
       <p className="text-sm text-fg-secondary">
-        {t(query ? "content.noResults" : "content.empty")}
+        {t(filter==='deleted'&&!query?'meaningGovernance.emptyTrash':query ? "content.noResults" : "content.empty")}
       </p>
-      {!query && category === "personal" && (
+      {!query && category === "personal" && filter!=='deleted'&& (
         <button
           className={`${button} mt-5 text-action-primary`}
           onClick={() => onStartConversation?onStartConversation():setComposerOpen(true)}
@@ -199,9 +220,9 @@ function ContentScreenView({
       )}
     </div>
   );
-  const personalList=(
-            <div className="divide-y divide-border-subtle border-y border-border-subtle">
-              {visible.map((item) => (
+  const row=(item:JourneyWorldItemView|WorldBrowseItem)=>{
+   const label='label'in item?item.label:labelFor(item);
+   return (
                 <button
                   key={item.personalMeaningId}
                   onClick={() => open(item.personalMeaningId)}
@@ -212,19 +233,21 @@ function ContentScreenView({
                   </span>
                   <span className="min-w-0 flex-1">
                     <strong className="block truncate text-sm font-medium">
-                      {labelFor(item)}
+                      {label}
                     </strong>
-                    {item.primaryLabel !== labelFor(item) && <span className="sensa-world-context mt-2 block line-clamp-2 text-sm leading-6 text-fg-secondary">{item.primaryLabel}</span>}
+                    {item.primaryLabel !== label && <span className="sensa-world-context mt-2 block line-clamp-2 text-sm leading-6 text-fg-secondary">{item.primaryLabel}</span>}
                     <span className="mt-2 block text-xs text-fg-tertiary">
-                      {t(`content.phase.${item.senseFormation.phase}`)} ·{" "}
+                      {('status'in item?item.status:item.detail.status)==='deleted'?t('meaningGovernance.deleted'):t(`content.phase.${item.senseFormation.phase}`)} ·{" "}
                       {t(`content.expression.${item.expressionBinding.phase}`)}
                     </span>
                   </span>
                   <ArrowUpRight size={16} className="shrink-0 text-fg-tertiary" />
                 </button>
-              ))}
-            </div>
-  );
+              );
+  };
+  const personalList=paged?<SensaPagedVirtualList count={page.total} itemAt={index=>page.items.get(index)} indexForKey={key=>{for(const [index,item] of page.items)if(item.personalMeaningId===key)return index;return -1;}} itemKey={item=>item.personalMeaningId} label={t('content.personal')} renderItem={row} request={page.request}/>
+   :<SensaVirtualList items={visible} itemKey={item=>item.personalMeaningId} label={t('content.personal')} renderItem={row}/>;
+  const personalCollection=status.loading&&(paged?!page.total:!items.length)?<div role="status" aria-busy="true" className="py-20 text-center text-sm text-fg-secondary">{localFlowText('loadingSensa')}</div>:!status.ok?<div role="alert" className="rounded-card border border-feedback-danger p-6 text-feedback-danger"><p>{t('content.loadError')}</p><button className={button} onClick={source.reload}>{t('content.retry')}</button></div>:!(paged?page.total:visible.length)?empty:view==='list'?personalList:<MeaningGraphView items={visible} selectedMeaningId={selected} onSelectMeaning={setSelected} onOpenMeaning={open} onOpenConfirmedSense={onOpenConfirmedSense}/>;
   return (
     <>
       <SensaCollectionBrowserLayout
@@ -232,24 +255,24 @@ function ContentScreenView({
         measure="wide"
         className={`screen sensa-world z-10 ${active ? "active" : "invisible pointer-events-none"}`}
         regions={{
-          header: <>{notice}<ContentHeader inboxCount={inbox.length+drafts.length} onInbox={()=>setInboxOpen(true)} onAdd={()=>setAdding(true)}/></>,
+          header: <>{notice}<ContentHeader inboxCount={providedSource?inbox.length+drafts.length:page.inboxCount+page.pending} onInbox={()=>setInboxOpen(true)} onAdd={()=>setAdding(true)}/>{category==='personal'&&<button className={button+' mt-3 text-fg-secondary'} aria-pressed={filter==='deleted'} onClick={()=>{setFilter(filter==='deleted'?'all':'deleted');setView('list');}}>{t(filter==='deleted'?'meaningGovernance.all':'meaningGovernance.trash')}</button>}</>,
           navigation: <div
           aria-label={t("content.categories")}
-          className="flex gap-6 overflow-x-auto border-b border-border-subtle"
+          className="grid grid-cols-3 gap-2 border-b border-border-subtle sm:flex sm:gap-6"
         >
           {(["personal", "learning", "markers"] as const).map((id) => (
             <button
               key={id}
               aria-current={category === id ? "page" : undefined}
               onClick={() => setCategory(id)}
-              className={`min-h-12 shrink-0 border-b-2 px-1 text-sm focus-visible:outline-2 focus-visible:outline-focus ${category === id ? "border-action-primary font-medium text-action-primary" : "border-transparent text-fg-secondary"}`}
+              className={`min-h-12 min-w-0 border-b-2 px-1 py-2 text-balance text-sm break-words focus-visible:outline-2 focus-visible:outline-focus ${category === id ? "border-action-primary font-medium text-action-primary" : "border-transparent text-fg-secondary"}`}
             >
               {t(`content.${id}`)}
             </button>
           ))}
         </div>,
           controls: <>
-        {category === "personal" && next && (
+        {category === "personal" && filter!=='deleted'&&next && (
           <button
             onClick={() => open(next.personalMeaningId)}
             className="mb-6 flex w-full items-center gap-4 rounded-card bg-surface-subtle px-5 py-4 text-left text-sm focus-visible:outline-2 focus-visible:outline-focus"
@@ -257,7 +280,7 @@ function ContentScreenView({
             <span className="shrink-0 text-fg-secondary">
               {t("content.continue")}
             </span>
-            <span className="min-w-0 flex-1 truncate">{labelFor(next)}</span>
+            <span className="min-w-0 flex-1 truncate">{'label'in next?next.label:labelFor(next)}</span>
             <ArrowRight size={16} />
           </button>
         )}
@@ -269,6 +292,7 @@ function ContentScreenView({
                 aria-label={t("content.search")}
                 placeholder={t("content.search")}
                 value={query}
+                maxLength={200}
                 onChange={(e) => setQuery(e.target.value)}
                 className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none"
               />
@@ -282,7 +306,7 @@ function ContentScreenView({
                 </button>
               )}
             </label>
-            {category === "personal" && (
+            {category === "personal" && filter!=='deleted'&& (
               <div
                 className="flex rounded-control border border-border-subtle bg-surface-panel p-1"
                 role="group"
@@ -303,7 +327,7 @@ function ContentScreenView({
             )}
           </div>
         )}
-        {category === "personal" && (
+        {category === "personal" && filter!=='deleted'&& (
           <div
             className="mt-6 flex flex-wrap gap-2"
             role="group"
@@ -323,34 +347,13 @@ function ContentScreenView({
         )}
           </>,
           collection: <>
-        {category === "personal" &&
-          (!status.ok ? (
-            <div role="alert" className="rounded-card border border-feedback-danger p-6 text-feedback-danger">
-              <p>{t("content.loadError")}</p>
-              <button className={button} onClick={source.reload}>
-                {t("content.retry")}
-              </button>
-            </div>
-          ) : !visible.length ? (
-            empty
-          ) : view === "list" ? (
-            bulkLearning?bulkLearning(visible,personalList):personalList
-          ) : (
-            <MeaningGraphView
-              items={visible}
-              selectedMeaningId={selected}
-              onSelectMeaning={setSelected}
-              onOpenMeaning={open}
-              onOpenConfirmedSense={onOpenConfirmedSense}
-            />
-          ))}
+        {category === 'personal' && (view==='list'&&bulkLearning&&filter!=='deleted'?bulkLearning(visible,personalCollection,paged?{query,filter}:undefined):personalCollection)}
         {category === "learning" &&
-          (learning.length ? (
-            <div className="divide-y divide-border-subtle border-y border-border-subtle">
-              {learning.map((item) => (
+          (projection.learningStatus!=='ready'?<div role={projection.learningStatus==='error'?'alert':'status'} className="p-5">{localFlowText(projection.learningStatus==='error'?'progressReadFailed':'loadingSensa')}{projection.learningStatus==='error'&&<button className={button} onClick={()=>learnerSemanticProjectionSystem.retryReferences()}>{t('contentUi.retry')}</button>}</div>:learning.length ? (
+            <SensaVirtualList items={learning} label={t('content.learning')} itemKey={item=>item.targetId??item.senseId} estimateSize={112} renderItem={item=>(
                 <button
-                  key={item.senseId}
-                  onClick={() => onOpenSense(item.senseId)}
+                  key={item.targetId??item.senseId}
+                  onClick={() => item.targetId?onOpenLearningContent(item.targetId):onOpenSense(item.senseId)}
                   className="flex w-full items-center gap-5 rounded-control py-6 text-left hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus"
                 >
                   <BookOpen size={20} className="text-fg-secondary" />
@@ -367,13 +370,12 @@ function ContentScreenView({
                   </span>
                   <ArrowUpRight size={16} />
                 </button>
-              ))}
-            </div>
+              )}/>
           ) : (
             empty
           ))}
         {category === "markers" && (
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className={`grid gap-4 ${showExamples?'sm:grid-cols-3':'sm:grid-cols-2'}`}>
             {(
               [
                 {
@@ -385,7 +387,7 @@ function ContentScreenView({
                 {
                   id: "saved-examples",
                   label: "savedExamples",
-                  count: projection.savedExamples.length,
+                  count: projection.savedExampleCount,
                   icon: MessageSquareText,
                 },
                 {
@@ -395,7 +397,7 @@ function ContentScreenView({
                   icon: StickyNote,
                 },
               ] as const
-            ).map(({ id, label, count, icon: Icon }) => (
+            ).filter(({id})=>id!=='saved-examples'||showExamples).map(({ id, label, count, icon: Icon }) => (
               <button
                 key={id}
                 onClick={() => onOpenSection(id)}
@@ -408,7 +410,7 @@ function ContentScreenView({
                 />
                 <span className="block text-sm">{t(`content.${label}`)}</span>
                 <strong className="mt-3 block text-3xl font-normal text-action-primary">
-                  {fmt(count)}
+                  {(id==='saved-examples'?projection.annotationStatus:projection.personalReferenceStatus)!=='ready'?'—':fmt(count)}
                 </strong>
               </button>
             ))}
@@ -420,6 +422,7 @@ function ContentScreenView({
       {adding && (
         <ContentDrawer title={t("content.add")} onClose={() => setAdding(false)}>
             {[
+              ...(!providedSource?[{title:'manual',hint:null,icon:StickyNote,action:()=>setManualOpen(true)}]:[]),
               {
                 title: onStartConversation?"findExpression":"record",
                 hint: onStartConversation?"findExpressionHint":"recordHint",
@@ -451,9 +454,9 @@ function ContentScreenView({
                   <strong className="text-sm font-medium">
                     {t(`content.${title}`)}
                   </strong>
-                  <span className="mt-2 block text-xs leading-5 text-fg-tertiary">
+                  {hint&&<span className="mt-2 block text-xs leading-5 text-fg-tertiary">
                     {t(`content.${hint}`)}
-                  </span>
+                  </span>}
                 </span>
                 <ArrowRight size={16} />
               </button>
@@ -461,7 +464,7 @@ function ContentScreenView({
         </ContentDrawer>
       )}
       <PersonalMeaningComposer
-        persistence={source.composer}
+        persistence={providedSource?.composer}
         open={composerOpen}
         onClose={() => setComposerOpen(false)}
         onSaved={toast}
@@ -470,13 +473,19 @@ function ContentScreenView({
           open(id);
         }}
       />
+      {manualOpen&&<ManualMeaningComposer onClose={()=>setManualOpen(false)} onCreated={id=>{setManualOpen(false);source.reload();onOpenPersonalMeaning(id);}}/>}
+      {manualIntake&&<ManualMeaningComposer key={manualIntake.intakeId} original={manualIntake} onClose={()=>{setManualIntake(null);setInboxOpen(true);}} onCreated={id=>{setManualIntake(null);source.reload();onOpenPersonalMeaning(id);}}/>}
       <IntakeInboxDrawer
-        drafts={drafts}
+        onManual={item=>{setInboxOpen(false);setManualIntake(item);}}
+        onResolved={id=>{setInboxOpen(false);open(id);}}
+        drafts={providedSource?drafts.map(item=>({personalMeaningId:item.personalMeaningId,label:item.experienceAnchors[0]?.surfaceForm||item.familiarAnchors[0]?.surfaceForm||item.primaryLabel})):inboxRead.value?.drafts??[]}
         onOpenDraft={(id) => {
           setInboxOpen(false);
           open(id);
         }}
         open={inboxOpen}
+        status={providedSource?status:inboxRead.status}
+        onRetry={providedSource?source.reload:inboxRead.reload}
         items={inbox}
         onClose={() => setInboxOpen(false)}
         onSummoned={(id) => {

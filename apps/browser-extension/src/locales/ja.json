@@ -1,4 +1,5 @@
 {
+  "videoCaptionLimit": "字幕データが大きすぎるため、すべて読み込めません。",
   "openInbox": "Sensaの受信箱を開く",
   "deliveryHint": "保存後、このブラウザーでSensaを開くと、保存した内容が自動的に受信箱に表示されます。",
   "savedInbox": "Sensaの受信箱に送信しました。",
@@ -167,7 +168,7 @@
   "videoTranslation": "翻訳のみ（自動）",
   "videoHint": "字幕を読み込んだら、表現を選択して説明または保存できます。選択すると動画は一時停止します。",
   "videoOwnFile": "自分の字幕ファイルを使用",
-  "videoFileHint": "字幕を読み込めない場合は、この動画のVTT / SRTファイルを読み込めます。クラウドAIによる文字起こしにはまだ対応していません。",
+  "videoFileHint": "字幕を読み込めない場合は、この動画のVTT / SRTファイルを読み込めます。",
   "videoLoadFile": "字幕ファイルを読み込む",
   "videoRetry": "翻訳を再試行",
   "videoAd": "広告の再生中は字幕の取得を一時停止します。",

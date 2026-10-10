@@ -28,7 +28,11 @@ import type {
   SensaSemanticAcceptanceFact,
 } from '@sensa/contracts/sensa';
 import { digestOf } from './digest';
+import {resolvedIntakePayload} from '../intake/resolvedIntake';
+import type {ResolveSemanticIntakeCommand} from '../intake/semanticIntakeModule';
+import {appendMaterialAnchor} from './materialFacts';
 import type { JourneyState, MeaningJourneyRecord } from './store';
+import type {JourneyFactPorts} from './ports';
 
 export const LOCAL_SEMANTIC_POLICY_VERSION = 'sensa-semantic-policy-local-v1';
 
@@ -39,10 +43,7 @@ const LEARNER_USER_ID = 'sensa-local-learner';
 type PersonalProvenanceKind =
   SensaPersonalMeaningRevisionSnapshot['provenance']['kind'];
 
-export interface IntakeEnginePorts {
-  newId(): string;
-  nowIso(): string;
-}
+export type IntakeEnginePorts = JourneyFactPorts;
 
 export type IntakeRouteDecision =
   | { route: 'fast_track' }
@@ -59,6 +60,7 @@ export interface FastTrackOutcome {
     languageTag: string;
     surfaceForm: string;
     provenanceKind: PersonalProvenanceKind;
+    personalExpressionAnchorRevisionId:string;
   };
   bindingInput: {
     senseVersionId: string;
@@ -141,26 +143,19 @@ export const dismissInboxItem = (
  */
 export const resolveInboxItemWithSense = (
   state: JourneyState,
-  input: {
-    intakeId: string;
-    sense: SensaIntakeSense;
-    operationId: string;
-    authority: SensaSemanticAcceptanceAuthority;
-  },
+  input: ResolveSemanticIntakeCommand & {authority:SensaSemanticAcceptanceAuthority},
   ports: IntakeEnginePorts,
 ): FastTrackOutcome => {
   const item = state.inboxItems.find(
     (candidate) => candidate.intakeId === input.intakeId,
   );
   if (!item) throw new Error('找不到这条待处理材料。');
-  const payload: SensaIntakePayload = {
-    ...item.payload,
-    sense: input.sense,
-    acceptance: { mode: 'learner_direct' },
-  };
+  const payload=resolvedIntakePayload(item,input);
+  const expressionWordingSource=input.expression&&digestOf(input.expression)!==digestOf(item.payload.expression)?'learner_authored'
+    :item.payload.sense?.wordingSource??(item.payload.context?.source&&item.payload.context.source.client!=='sensa-web'?'imported':'learner_authored');
   const outcome = executeFastTrack(
     state,
-    { payload, operationId: input.operationId, authority: input.authority },
+    {payload,operationId:input.operationId,authority:input.authority,sourcePayload:item.payload,expressionWordingSource,pinnedSense:input.reuseSense},
     ports,
   );
   return {
@@ -186,9 +181,18 @@ export const executeFastTrack = (
     payload: SensaIntakePayload;
     operationId: string;
     authority: SensaSemanticAcceptanceAuthority;
-    /** First-party learning adoption pins an already published version rather
-     * than following the registry aggregate's current-version pointer. */
+    /** Published adoption and explicit local reuse pin the reviewed version,
+     * rather than following the registry aggregate's current-version pointer. */
     pinnedSense?: { senseId: string; senseVersionId: string };
+    sourcePayload?:SensaIntakePayload;
+    expressionWordingSource?:PersonalProvenanceKind;
+    /** Published scene adoption supplies its own inline-media Anchor. */
+    materializeContextMedia?:boolean;
+    /** Scene adoption has one cross-device owner identity. Other Intake
+     * creation keeps the ordinary allocated identity. */
+    personalMeaningId?:string;
+    /** Correction reuses a real owned Context, never an invented capture. */
+    existingMeaning?:{record:MeaningJourneyRecord;contextAnchorRevisionId:string};
   },
   ports: IntakeEnginePorts,
 ): FastTrackOutcome => {
@@ -207,17 +211,21 @@ export const executeFastTrack = (
     || '媒体材料';
   const now = ports.nowIso();
 
-  // Provenance mapping is mechanical: the wording source travels unchanged
-  // into every fact's provenance kind, so LLM/词典 wording is never
-  // disguised as learner-authored text.
+  // Preserve the Sense wording source; a separately edited Expression has its
+  // own provenance. Confirmation does not relabel imported or model wording.
   const provenanceKind: PersonalProvenanceKind = sense.wordingSource;
+  const expressionProvenanceKind=input.expressionWordingSource??provenanceKind;
 
-  const personalMeaningId = ports.newId();
+  const previous=input.existingMeaning?.record;
+  const existingContext=previous?.personalSemanticAnchorRevisions.find(row=>row.personalSemanticAnchorRevisionId===input.existingMeaning!.contextAnchorRevisionId);
+  if(previous&&!existingContext)throw Error('localFlow.meaningChanged');
+  if(occurrence.locator.kind==='personal_meaning'&&(!previous||occurrence.locator.personalMeaningId!==previous.personalMeaning.personalMeaningId||occurrence.locator.personalSemanticAnchorRevisionIds[0]!==existingContext?.personalSemanticAnchorRevisionId))throw Error('localFlow.annotationInvalid');
+  const personalMeaningId = previous?.personalMeaning.personalMeaningId??input.personalMeaningId??ports.newId();
   const personalMeaningRevisionId = ports.newId();
 
   // 1) Semantic Anchor: the captured context itself.
-  const semanticAnchorId = ports.newId();
-  const semanticAnchorRevisionId = ports.newId();
+  const semanticAnchorId = existingContext?.personalSemanticAnchorId??ports.newId();
+  const semanticAnchorRevisionId = existingContext?.personalSemanticAnchorRevisionId??ports.newId();
   const contextAnchorProvenanceKind: PersonalProvenanceKind =
     context.source?.client === 'sensa-web' || !context.source
       ? 'learner_authored'
@@ -226,7 +234,14 @@ export const executeFastTrack = (
     mediaReferenceIds: [...context.mediaReferenceIds],
     source: context.source,
     languageTag: context.languageTag,
+    languageObservation:context.languageObservation??null,
     occurrenceSurfaceForm: occurrence.surfaceForm,
+    ...(input.sourcePayload?{intake:{
+      contractVersion:input.sourcePayload.contractVersion,operationId:input.sourcePayload.operationId,capturedAt:input.sourcePayload.capturedAt,
+      contextSource:input.sourcePayload.context?.source??null,contextText:input.sourcePayload.context?.textSegment??null,
+      contextLanguageTag:input.sourcePayload.context?.languageTag??null,contextLanguageObservation:input.sourcePayload.context?.languageObservation??null,
+      mediaReferenceIds:input.sourcePayload.context?.mediaReferenceIds??[],expression:input.sourcePayload.expression,senseCandidate:input.sourcePayload.sense,submittedAcceptance:input.sourcePayload.acceptance,
+    }}:{}),
   };
 
   // 2) Expression Anchor. The absolute language comes from the producer; the
@@ -260,13 +275,19 @@ export const executeFastTrack = (
       (candidate) => candidate.senseVersionId === input.pinnedSense!.senseVersionId,
     );
     if (!pinnedSense || pinnedSense.senseKey !== senseKey
-      || !pinnedVersion || pinnedVersion.senseId !== pinnedSense.senseId) {
+      || !pinnedVersion || pinnedVersion.senseId !== pinnedSense.senseId||digestOf(pinnedVersion.semanticSpec)!==digestOf(sense.semanticSpec)) {
       throw new Error('固定的已发布 Sense Version 不存在。');
     }
     senseId = pinnedSense.senseId;
     senseVersionId = pinnedVersion.senseVersionId;
     resolution = 'reuse_existing';
   } else if (existingSense) {
+    const existingVersion = state.registry.senseVersions.find(
+      candidate => candidate.senseVersionId === existingSense.currentSenseVersionId,
+    );
+    if (!existingVersion || digestOf(existingVersion.semanticSpec) !== digestOf(sense.semanticSpec)) {
+      throw new Error('语义 key 与已保存的 Sense 不一致，不能静默替换提交的意思。');
+    }
     senseId = existingSense.senseId;
     senseVersionId = existingSense.currentSenseVersionId;
     resolution = 'reuse_existing';
@@ -325,18 +346,18 @@ export const executeFastTrack = (
     normalizedForm: normalizedForm(expression.surfaceForm, languageTag),
     contextAnchorRevisionId: semanticAnchorRevisionId,
     occurrence: occurrence.locator,
-    provenanceKind,
+    provenanceKind:expressionProvenanceKind,
     // The accepted tuple is tracked by the Semantic Acceptance fact.
     verificationStatus: 'learner_confirmed',
     provenance: {
-      kind: provenanceKind,
+      kind: expressionProvenanceKind,
       sourceReferenceIds: [semanticAcceptanceId],
       createdByOperationId: operationId,
     },
     createdAt: now,
   };
 
-  const record: MeaningJourneyRecord = {
+  let record: MeaningJourneyRecord = {
     personalMeaning: {
       contractVersion: PSW,
       personalMeaningId,
@@ -390,7 +411,7 @@ export const executeFastTrack = (
         anchorKind: textSegment ? 'text' : context.modality === 'audio' ? 'audio' : 'image',
         languageTag: context.languageTag,
         bodyText: textSegment || null,
-        personalMediaObjectId: null,
+        personalMediaObjectId:input.materializeContextMedia!==false&&!textSegment&&context.modality!=='audio'?context.mediaReferenceIds[0]??null:null,
         structuredPayload,
         provenance: {
           kind: contextAnchorProvenanceKind,
@@ -478,23 +499,43 @@ export const executeFastTrack = (
     },
   };
 
+  if(previous){
+    const revision=previous.personalMeaning.currentRevision+1;
+    record={...previous,
+      personalMeaning:{...previous.personalMeaning,currentRevision:revision,updatedAt:now},
+      personalMeaningRevisions:[...previous.personalMeaningRevisions,{...record.personalMeaningRevisions[0]!,revision,learnerIntentNote:previous.personalMeaningRevisions.at(-1)?.learnerIntentNote??null}],
+      personalExpressionAnchors:[...previous.personalExpressionAnchors,...record.personalExpressionAnchors],
+      personalExpressionAnchorRevisions:[...previous.personalExpressionAnchorRevisions,...record.personalExpressionAnchorRevisions],
+      semanticAcceptances:[...previous.semanticAcceptances,...record.semanticAcceptances],
+      alignments:[...previous.alignments,...record.alignments],
+      alignmentEvents:[...previous.alignmentEvents,...record.alignmentEvents],
+    };
+  }
+
+  const primaryMediaId=record.personalSemanticAnchorRevisions[0]!.personalMediaObjectId;
+  for(const mediaId of previous||input.materializeContextMedia===false?[]:context.mediaReferenceIds){
+    if(mediaId===primaryMediaId)continue;
+    const {anchorId}=appendMaterialAnchor(ports,record,operationId,{kind:'image',personalMediaObjectId:mediaId},null,context);
+    record.personalMeaningRevisions[0]!.provenance.sourceReferenceIds.push(anchorId);
+  }
   const nextState: JourneyState = {
     ...state,
     registry,
-    meanings: [...state.meanings, record],
+    meanings: previous?state.meanings.map(value=>value.personalMeaning.personalMeaningId===personalMeaningId?record:value):[...state.meanings, record],
   };
 
   return {
     nextState,
     record,
     personalMeaningId,
-    alignment: record.alignments[0]!,
+    alignment: record.alignments.at(-1)!,
     bindingCandidate: {
       candidateId: semanticAcceptanceId,
       expressionType,
       languageTag,
       surfaceForm: expression.surfaceForm.trim(),
-      provenanceKind,
+      provenanceKind:expressionProvenanceKind,
+      personalExpressionAnchorRevisionId:expressionAnchorRevisionId,
     },
     bindingInput: {
       senseVersionId,

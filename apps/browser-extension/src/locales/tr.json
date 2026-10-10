@@ -1,4 +1,5 @@
 {
+  "videoCaptionLimit": "Altyazı verileri tamamen yüklenemeyecek kadar büyük.",
   "openInbox": "Sensa gelen kutusunu aç",
   "deliveryHint": "Kaydettikten sonra bu tarayıcıda Sensa’yı açın. Kaydınız otomatik olarak gelen kutusuna gelir.",
   "savedInbox": "Sensa gelen kutusuna iletildi.",
@@ -167,7 +168,7 @@
   "videoTranslation": "Yalnızca çeviri (otomatik)",
   "videoHint": "Altyazıları yükleyin, sonra açıklamak veya kaydetmek için bir ifade seçin. Seçim videoyu duraklatır.",
   "videoOwnFile": "Kendi altyazı dosyanı kullan",
-  "videoFileHint": "Altyazı yoksa bu video için VTT veya SRT dosyası yükleyin. Bulut AI transkripsiyonu henüz kullanılamıyor.",
+  "videoFileHint": "Altyazı yoksa bu video için VTT veya SRT dosyası yükleyin.",
   "videoLoadFile": "Altyazı dosyası yükle",
   "videoRetry": "Çeviriyi yeniden dene",
   "videoAd": "Reklam oynuyor. Altyazı toplama duraklatıldı.",

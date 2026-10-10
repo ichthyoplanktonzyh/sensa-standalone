@@ -18,6 +18,8 @@ const compiled=await build({stdin:{resolveDir:process.cwd(),contents:['store','p
 const temp=await mkdtemp(join(tmpdir(),'sensa-agent-'));await writeFile(join(temp,'core.mjs'),compiled.outputFiles[0].text);
 const api=await import(pathToFileURL(join(temp,'core.mjs')).href),id=()=>crypto.randomUUID();
 await api.openLibrary();
+// Online reference lookup requires an admitted local owner, not only an SDK token.
+await api.command({id:id(),kind:'service.local-access',input:{subject:session.user.id}},async(tx:any)=>{tx.put('meta','service-owner',{subject:session.user.id});tx.put('meta','signed-out',false);});
 const provider=live?api.defaultSensaProvider:await api.saveProvider(id(),{id:id(),expectedRevision:0,name:'Fixture',kind:'compatible',endpoint:base,model:'fixture'},'test-key');
 let cachedSound:any=syntheticSound('borrow','en');
 if(live){
@@ -37,7 +39,7 @@ const createRequest=async()=>{
  request.approvedTools=api.contentAgentTools.map((t:any)=>({toolKey:t.function.name,toolVersion:'v1',description:t.function.description,inputSchemaId:'fixture.'+t.function.name,inputSchemaVersion:'v1',inputJsonSchema:t.function.parameters,outputContextKinds:['reference_fact'],outputMaterialRoleKeys:[],maxCalls:24}));return request;
 };
 const cue={role:'experience_recall_cue',payload:{scene:'我向同伴借了一把伞，约好用完归还。',senseFocus:'临时使用并归还',imageIds:[]}};
-const bridge={role:'scene_bridge',payload:{text:'从取得者视角描述暂时使用他人的物品，并准备归还。'}};
+const bridge={role:'scene_bridge',payload:{text:'从取得者视角描述暂时使用他人的物品，并准备归还。',meaningRendering:{meaning:'暂时取得他人物品并预期归还',languageTag:'zh-CN'}}};
 const scene={role:'scene_realization',payload:{example:'I borrow an umbrella.',targetStart:2,targetEnd:8,experienceResourceKey:'experience_recall_cue:0'}};
 const tool=(name:string,args:unknown={})=>({id:id(),type:'function',function:{name,arguments:JSON.stringify(args)}});
 afterAll(async()=>{globalThis.fetch=originalFetch;await rm(temp,{recursive:true,force:true});});

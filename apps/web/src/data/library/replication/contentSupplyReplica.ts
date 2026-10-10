@@ -6,6 +6,11 @@ const reference=(table:ReplicaRecordReference['table'],key:unknown):ReplicaRecor
 export const contentSupplyReplica:DomainReplicaModule={
  namespace:'content-supply',
  owns:(table)=>tables.has(table),
+ afterConflictChoice(selected,merged,{conflicts}){
+  const blocked=new Set(conflicts),id=(row:ReplicaRecordReference)=>JSON.stringify([row.table,row.key]);
+  // Meaning wording choices cannot discard separately admitted preparation.
+  return [...selected.filter(row=>blocked.has(id(row))),...merged.filter(row=>!blocked.has(id(row)))];
+ },
  normalize(entry){
   const value=structuredClone(entry.value) as {status?:string;leaseUntil?:number;notice?:string};
   if(entry.table==='personalLearning'&&['generating','reviewing'].includes(value.status??'')){
@@ -17,6 +22,7 @@ export const contentSupplyReplica:DomainReplicaModule={
  conflictDependencies(entry,value){
   const fact=value&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,any>:{};
   if(entry.table==='personalLearning')return [
+   ...reference('curriculumEnrollments',fact.source?.enrollmentId),
    ...reference('semanticMeanings',fact.source?.personalMeaningId),
    ...reference('learningTargets',fact.targetId),
    ...reference('contentAttempts',fact.attemptId),

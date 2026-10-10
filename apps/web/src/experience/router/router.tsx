@@ -33,7 +33,9 @@ function SensaRootRoute() {
 
 const rootRoute = createRootRoute({
   component: SensaRootRoute,
-  errorComponent: ({ reset }: ErrorComponentProps) => <ProductRecovery kind="error" onRetry={reset} />,
+  // A rejected lazy import is retained by React/the module loader. Resetting
+  // the route alone renders that same rejection again, even after reconnect.
+  errorComponent: ({ error, reset }: ErrorComponentProps) => <ProductRecovery kind="error" onRetry={reset} reload={/Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module|Failed to load module script/iu.test(error.message)} />,
   notFoundComponent: () => <ProductRecovery kind="not_found" />,
   validateSearch: (search: Record<string, unknown> & SearchSchemaInput): ShellSearch => {
     const candidate=typeof search.candidate==='string'&&/^[0-9a-f-]{36}$/i.test(search.candidate)?search.candidate:undefined;

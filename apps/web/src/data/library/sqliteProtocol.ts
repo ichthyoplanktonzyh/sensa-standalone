@@ -1,6 +1,20 @@
 /** Internal protocol between the local-library module and its SQLite Worker. */
 
 import type {HomeLearningStorageProjection} from './homeLearningRecords';
+import type {StoredLearningRecord} from './learningHistoryProjection';
+import type {RuntimeLearningCandidateQuery} from './runtimeLearningCandidates';
+import type {LearningManagementSummaryQuery} from './runtimeLearningCandidates';
+import type {LearningHistoryRequest} from '../../learning/system/learningHistoryModel';
+import type {ReplicaCandidateRequest} from './replicaCandidateProtocol';
+export type {StoredLearningRecord} from './learningHistoryProjection';
+import type {PackageCacheProjectionQuery} from './packageCacheProjection';
+import {sqlitePackageCacheProjectionSchema} from './packageCacheProjection';
+import {sqliteRegistrySelectionSchema} from './semanticRegistrySchema';
+export type {PracticeExpressionQuery,PracticeExpressionPage} from './practiceExpressionProjection';
+import type {PracticeExpressionQuery} from './practiceExpressionProjection';
+import type {RegistrySelectionQuery,RegistrySelection} from './semanticRegistrySelection';
+import type {MeaningLookupResult} from '../../experience/personalMeaningJourney/meaningLookup';
+import type {WorldBrowseQuery,WorldBrowsePage,WorldLearningChoiceQuery,WorldLearningChoicePage} from '../../experience/personalMeaningJourney/worldRead';
 import type {
   PortableMediaBlob,
   PortableMediaStorageDiagnostics,
@@ -11,9 +25,9 @@ export const sqliteLibraryFile = "/sensa-local-library-v12.sqlite3";
 export const sqlitePoolDirectory = "/sensa-local-library-v12";
 /** First supported production-user baseline; prototype formats stay unsupported. */
 export const sqliteLibraryBaselineVersion = 10;
-export const sqliteLibrarySchemaVersion = 12;
+export const sqliteLibrarySchemaVersion = 18;
 /** Cross-tab RPC changes must bump this before adding or changing messages. */
-export const sqliteCoordinatorProtocolVersion = 7;
+export const sqliteCoordinatorProtocolVersion = 58;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -27,6 +41,9 @@ export const sqliteLibraryTables = [
   "packageCache",
   "packageInstallations",
   "curriculumEnrollments",
+  "supplementalMembershipStates",
+  "studyScopes",
+  "learningSessions",
   "learningTargets",
   "learningRuns",
   "learningEvents",
@@ -56,6 +73,11 @@ export type SqliteMutation = {
   portablePackages?:PortablePackageMediaWrite[];
   /** Atomic replacement of the last server-confirmed checkpoint baseline. */
   syncBaseReplacement?: SqliteSyncBaseEntry[];
+  /** Confirmed local publication: replace only the affected baseline records. */
+  syncBasePatch?:{puts:SqliteSyncBaseEntry[];deletes:Array<{table:SqliteLibraryTable;key:string}>};
+  /** Fresh population or a Worker-prepared update of a confirmed checkpoint.
+   * Bodies stay in SQLite; COMMIT rechecks the owner, revision and private plan. */
+  replicaCandidateRestore?:{id:string;tables:SqliteLibraryTable[];update?:import('./replicaCandidateProtocol').ReplicaCandidateUpdate};
 };
 
 export type SqliteRecordChange = {
@@ -71,16 +93,37 @@ export type SqliteSyncBaseEntry = {
   valueJson: string;
   blockRefs: string[];
 };
+export type SqliteSyncBaseReference=Pick<SqliteSyncBaseEntry,'table'|'key'|'blockRefs'>;
 
 export type SqliteWorkerRequest =
-  | { id: number; kind: "initialize" }
+  | { id: number; kind: "initialize"; namespace?:string|null }
+  | { id: number; kind: "close" }
   | { id: number; kind: "get"; table: SqliteLibraryTable; key: string }
   | { id: number; kind: "entries"; table: SqliteLibraryTable }
+  | {id:number;kind:'entriesPage';table:SqliteLibraryTable;afterKey:string|null;limit:number}
+  | {id:number;kind:'recordKeysPage';table:SqliteLibraryTable;afterKey:string|null;limit:number}
+  | {id:number;kind:'existingRecordKeys';table:SqliteLibraryTable;keys:string[]}
+  | { id:number;kind:'packageCacheProjection';query:PackageCacheProjectionQuery }
+  | {id:number;kind:'meaningLookup';query:string}
+  | {id:number;kind:'worldBrowse';query:WorldBrowseQuery}
+  | {id:number;kind:'worldSceneMeaning';sceneId:string}
+  | {id:number;kind:'registrySelection';query:RegistrySelectionQuery}
+  | {id:number;kind:'learningSemanticMemory';targetId?:string}
+  | {id:number;kind:'worldLearningChoices';query:WorldLearningChoiceQuery}
+  | {id:number;kind:'practiceExpressions';query:PracticeExpressionQuery}
+  | {id:number;kind:'existingJourneyIdentities';ids:string[]}
   | { id: number; kind: "changesSince"; contentRevision: number; tables: SqliteLibraryTable[] }
+  | { id:number;kind:'hasChangesSince';contentRevision:number;tables:SqliteLibraryTable[] }
   | { id: number; kind: "syncBaseEntries"; keys?: Array<{ table: SqliteLibraryTable; key: string }> }
+  | {id:number;kind:'syncBaseReferences'}
   | { id: number; kind: "count"; table: SqliteLibraryTable }
   | { id: number; kind: "estimateRecordBytes"; tables: SqliteLibraryTable[] }
-  | { id: number; kind: "homeLearningProjection"; languageRouteId: string }
+  | { id: number; kind: "homeLearningProjection"; languageRouteId: string;clock:number }
+  | { id:number;kind:'learningHistoryPage';query:LearningHistoryRequest }
+  | {id:number;kind:'learningManagementSummary';query:LearningManagementSummaryQuery}
+  | {id:number;kind:'runtimeLearningCandidates';query:RuntimeLearningCandidateQuery}
+  | {id:number;kind:'studyScopeMember';scopeRevisionId:string;targetId:string}
+  | {id:number;kind:'latestLearningActionAt';runId:string}
   | { id: number; kind: "countIntroducedLearningTargets"; languageRouteId: string; startedAfter: string; startedBefore: string }
   | { id: number; kind: "learningRunIdsForTarget"; targetId: string; openOnly: boolean }
   | { id: number; kind: "openLearningRunTargets" }
@@ -90,9 +133,10 @@ export type SqliteWorkerRequest =
   | { id: number; kind: "portableMedia"; sha256: string }
   | { id: number; kind: "portableMediaDiagnostics" }
   | { id: number; kind: "commit"; mutation: SqliteMutation }
-  | { id: number; kind: "diagnostics" };
+  | {id:number;kind:'replicaCandidate';request:ReplicaCandidateRequest}
+  | { id: number; kind: "diagnostics";verifyIntegrity?:boolean };
 
-export type SqliteWorkerInput = SqliteWorkerRequest extends infer Request
+export type SqliteWorkerInput = Exclude<SqliteWorkerRequest,{id:number;kind:'close'}> extends infer Request
   ? Request extends { id: number }
     ? Omit<Request, "id">
     : never
@@ -103,8 +147,15 @@ export type SqliteWorkerResult =
   | { id: number; ok: false; error: string };
 
 export type {HomeLearningStorageProjection};
+export type {MeaningLookupResult};
+export type {WorldBrowseQuery,WorldBrowsePage,WorldLearningChoiceQuery,WorldLearningChoicePage};
 
 export type SqliteStorageDiagnostics = {
+  integrityCheck?:Readonly<{status:'ok';checkedAt:string;durationMs:number}>;
+  journeyIdentityCheck?:Readonly<{status:'ok'|'rebuilt';checkedAt:string;durationMs:number;recordsChecked:number}>;
+  initializationTimingsMs?:Readonly<Record<string,number>>;
+  workerStartupTimingsMs?:Readonly<Record<string,number>>;
+  walMaintenance?:Readonly<{status:'ok'|'deferred'|'failed';checkedAt:string;durationMs:number;reason?:string}>;
   engine: "sqlite-wasm" | "memory-adapter";
   persistence: "opfs" | "memory";
   sqliteVersion: string;
@@ -116,6 +167,30 @@ export type SqliteStorageDiagnostics = {
 
 const quotedTables = sqliteLibraryTables.map((value) => `'${value}'`).join(",");
 
+/** Body-bearing rows use a table B-tree; a clustered index B-tree can force
+ * modest packed values onto sparsely used overflow pages. Keys stay unique. */
+export const sqliteSyncBaseSchema=`
+CREATE TABLE IF NOT EXISTS sensa_sync_base(
+  table_name TEXT NOT NULL CHECK(table_name IN (${quotedTables})),
+  record_key TEXT NOT NULL CHECK(length(record_key) BETWEEN 1 AND 2000),
+  value_json TEXT NOT NULL CHECK(json_valid(value_json)),
+  block_refs_json TEXT NOT NULL CHECK(json_valid(block_refs_json)),
+  PRIMARY KEY(table_name,record_key)
+);`;
+
+/** Private representation storage. Keep DDL free of compression/archive imports
+ * so importing the Worker protocol does not pull them into the Home closure. */
+export const sqliteSharedRecordContentSchema=`
+CREATE TABLE IF NOT EXISTS sensa_shared_record_content(
+ digest TEXT PRIMARY KEY NOT NULL CHECK(length(digest)=64),value_json TEXT NOT NULL
+) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS sensa_shared_record_content_owners(
+ owner_kind TEXT NOT NULL CHECK(owner_kind IN ('record','sync')),table_name TEXT NOT NULL,record_key TEXT NOT NULL,digest TEXT NOT NULL,
+ PRIMARY KEY(owner_kind,table_name,record_key,digest),
+ FOREIGN KEY(digest) REFERENCES sensa_shared_record_content(digest) ON DELETE RESTRICT
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS sensa_shared_record_content_digest ON sensa_shared_record_content_owners(digest);
+`;
 export const sqlitePortableMediaSchema=`
 CREATE TABLE IF NOT EXISTS sensa_portable_media(
   sha256 TEXT NOT NULL PRIMARY KEY CHECK(length(sha256)=64),
@@ -155,6 +230,11 @@ CREATE TABLE IF NOT EXISTS sensa_records(
 );
 CREATE INDEX IF NOT EXISTS sensa_records_content_revision
   ON sensa_records(content_revision,table_name,record_key);
+CREATE INDEX IF NOT EXISTS sensa_learning_events_clock_v1
+  ON sensa_records(sensa_learning_event_field(value_json,'runId'),julianday(sensa_learning_event_field(value_json,'at')) DESC)
+  WHERE table_name='learningEvents';
+${sqlitePackageCacheProjectionSchema}
+${sqliteRegistrySelectionSchema}
 CREATE TABLE IF NOT EXISTS sensa_record_tombstones(
   table_name TEXT NOT NULL CHECK(table_name IN (${quotedTables})),
   record_key TEXT NOT NULL CHECK(length(record_key) BETWEEN 1 AND 2000),
@@ -163,13 +243,7 @@ CREATE TABLE IF NOT EXISTS sensa_record_tombstones(
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS sensa_record_tombstones_revision
   ON sensa_record_tombstones(content_revision,table_name,record_key);
-CREATE TABLE IF NOT EXISTS sensa_sync_base(
-  table_name TEXT NOT NULL CHECK(table_name IN (${quotedTables})),
-  record_key TEXT NOT NULL CHECK(length(record_key) BETWEEN 1 AND 2000),
-  value_json TEXT NOT NULL CHECK(json_valid(value_json)),
-  block_refs_json TEXT NOT NULL CHECK(json_valid(block_refs_json)),
-  PRIMARY KEY(table_name,record_key)
-) WITHOUT ROWID;
+${sqliteSyncBaseSchema}
 CREATE TABLE IF NOT EXISTS sensa_learning_targets(
   record_key TEXT NOT NULL PRIMARY KEY,
   projection_value_json TEXT NOT NULL CHECK(json_valid(projection_value_json)),
@@ -231,7 +305,9 @@ CREATE TABLE IF NOT EXISTS sensa_media_references(
 CREATE INDEX IF NOT EXISTS sensa_media_references_owner
   ON sensa_media_references(owner_table,owner_key);
 ${sqlitePortableMediaSchema}
+${sqliteSharedRecordContentSchema}
 PRAGMA user_version=${sqliteLibrarySchemaVersion};
 `;
 
 export type {PortableMediaBlob,PortableMediaStorageDiagnostics};
+export type {RegistrySelectionQuery,RegistrySelection};

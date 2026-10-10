@@ -2,6 +2,7 @@ import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import {completeReading} from '../../../apps/api/src/sensa/reading/service.ts';
 import {explanationPreview} from '../../../apps/api/src/sensa/personal/explanationPreview.ts';
+import {semanticResolverFor} from '../../../apps/api/src/sensa/personal/semanticResolver.ts';
 import {ModelExecutionQueue,ModelExecutionError} from '../../../packages/contracts/src/sensa/modelExecution.ts';
 import {executeModel,modelQueue} from '../../../packages/model-runtime/src/index.ts';
 
@@ -32,6 +33,12 @@ try{
  const previousOrigins=process.env.SENSA_READING_ALLOWED_ORIGINS;process.env.SENSA_READING_ALLOWED_ORIGINS='https://fixture.invalid';
  try{const previews:string[]=[];const body=await completeReading({...conn,id:crypto.randomUUID(),name:'fixture',enabled:true},[{role:'user',content:'JSON fixture'}],true,async text=>{const preview=explanationPreview(text);if(preview)previews.push(preview);});assert.equal(JSON.parse(body).proposal.explanation,'分片解释');assert.deepEqual(previews,['分片','分片解释']);}finally{if(previousOrigins===undefined)delete process.env.SENSA_READING_ALLOWED_ORIGINS;else process.env.SENSA_READING_ALLOWED_ORIGINS=previousOrigins;}
  const logs=JSON.stringify(modelQueue.snapshot());assert(!logs.includes('private-'));assert(!logs.includes('secret-test-only'));assert(!logs.includes('data:image'));
+ const info=console.info,invalid:string[]=[];console.info=(line:unknown)=>invalid.push(String(line));
+ try{
+  const malformed=semanticResolverFor({...conn,id:crypto.randomUUID(),name:'fixture',enabled:true},async()=>JSON.stringify({proposal:{explanation:'private-semantic-explanation'}}));
+  await assert.rejects(malformed({sentence:'A fixture.',language:'en',languageSource:'declared',languageConfidence:1,expression:{text:'fixture',start:2,end:9},source:{url:'https://fixture.invalid',title:'private-source-title',capturedAt:new Date().toISOString()}},{targetLanguageTag:'en',supportLanguageTag:'zh-CN',languageRouteId:crypto.randomUUID(),languageRouteRevision:1}));
+  const diagnostic=JSON.parse(invalid[0]!);assert.equal(diagnostic.event,'sensa.semantic_proposal_invalid');assert(diagnostic.issues.some((issue:any)=>issue.path[0]==='semanticSpec'));assert(!JSON.stringify(invalid).includes('private-'));
+ }finally{console.info=info;}
  // The deployment executor declares `service`; the device queue declares `device`.
  assert(modelQueue.snapshot().length>0);assert(modelQueue.snapshot().every(r=>r.execution==='service'));
  console.log('PASS: shared scheduler per-provider/global bounds, queued cancellation; real Genkit flow and compatible adapter with image/tool conversion, token/trace metadata, bounded provider retry, declared execution place, no private payload in activity. Synthetic fetch only.');

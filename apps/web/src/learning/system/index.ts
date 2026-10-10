@@ -5,6 +5,14 @@ export {
   learningSystem,
 } from './learningSystem';
 export type {
+  SupplementalMembershipProjection,
+  SupplementalMembershipPage,
+  LearningBookPlanProjection,LearningBookRangeSelection,LearningBookMode,
+  DirectLearningChoice,
+  DirectLearningChoicePage,
+  DirectLearningReference,
+  DirectLearningSource,
+  DirectLearningEnrollment,
   FourStageInitialSessionProjection,
   FourStageReviewAnswer,
   FourStageReviewSessionProjection,
@@ -15,6 +23,8 @@ export type {
   LearningFourStageInitialRuntimeProjection,
   LearningFourStageReviewRuntimeProjection,
   LearningHomeProjection,
+  LearningManagementProjection,
+  LearningHistoryProjection,
   LearningLightweightRuntimeProjection,
   LearningLightweightRating,
   LearningLightweightStepProjection,
@@ -37,6 +47,7 @@ export type {
   LearningSystem,
   LearningTargetPresentation,
   LearningTargetProjection,
+  LearningTargetDetailProjection,
   LearningTargetState,
   LearningWorkspaceProjection,
 } from './learningSystem';

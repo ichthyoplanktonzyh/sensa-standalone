@@ -254,8 +254,9 @@ function validateManifest(
  * Lightweight runtime. Editorial rules used by Sensa Official production,
  * including pre-reveal non-disclosure, deliberately do not belong here.
  */
-export function validateSensaPortableLightweightPackage(
+function validatePortableArchive(
   archive: Uint8Array,
+  onValidatedFiles?: (files: Readonly<Record<string, Uint8Array>>) => void,
 ): SensaPortableLightweightPackageValidationResult {
   const issues = new Issues();
   const archiveDigest = digest(archive);
@@ -354,6 +355,7 @@ export function validateSensaPortableLightweightPackage(
   const value = parsed.data;
   const mediaBytes = validateManifest(value, files, issues);
   const finalIssues = issues.result();
+  if (finalIssues.length === 0) onValidatedFiles?.(files);
   return {
     status: finalIssues.length === 0 ? "satisfied" : "invalid",
     validatorVersion: sensaPortableLightweightPackageValidatorVersion,
@@ -363,6 +365,12 @@ export function validateSensaPortableLightweightPackage(
     package: value,
     issues: finalIssues,
   };
+}
+
+export function validateSensaPortableLightweightPackage(
+  archive: Uint8Array,
+): SensaPortableLightweightPackageValidationResult {
+  return validatePortableArchive(archive);
 }
 
 export type SensaPortableLightweightPackageArchive = Readonly<{
@@ -376,7 +384,8 @@ export type SensaPortableLightweightPackageArchive = Readonly<{
 export function readSensaPortableLightweightPackage(
   archive: Uint8Array,
 ): SensaPortableLightweightPackageArchive {
-  const validation = validateSensaPortableLightweightPackage(archive);
+  let files: Readonly<Record<string, Uint8Array>> = {};
+  const validation = validatePortableArchive(archive, validated => { files = validated; });
   if (
     validation.status !== "satisfied"
     || validation.package === null
@@ -385,7 +394,6 @@ export function readSensaPortableLightweightPackage(
     const details = validation.issues.map((issue) => `${issue.code}:${issue.path}`).join(", ");
     throw new Error(`Portable package is invalid: ${details}`);
   }
-  const files = unzipSync(archive);
   const mediaById = new Map(validation.package.media.map((media) => [
     media.mediaId,
     files[`media/${media.sha256}`]!,
@@ -403,6 +411,16 @@ export function createSensaPortableLightweightPackage(
   manifest: unknown,
   mediaById: ReadonlyMap<string, Uint8Array>,
 ): Uint8Array {
+  return createSensaPortableLightweightPackageArchive(manifest, mediaById).bytes;
+}
+
+/** Returns the deterministic bytes and the same validated, decoded contents.
+ * Compilation need not reopen a freshly created archive. Media remain detached
+ * from the caller's mutable input buffers, exactly as in the ordinary reader. */
+export function createSensaPortableLightweightPackageArchive(
+  manifest: unknown,
+  mediaById: ReadonlyMap<string, Uint8Array>,
+): Readonly<{bytes: Uint8Array; archive: SensaPortableLightweightPackageArchive}> {
   const value = sensaPortableLightweightPackageSchema.parse(manifest);
   const expectedIds = new Set(value.media.map((media) => media.mediaId));
   for (const mediaId of mediaById.keys()) {
@@ -428,10 +446,5 @@ export function createSensaPortableLightweightPackage(
   }
 
   const archive = zipSync(entries, {mtime: fixedZipTimestamp});
-  const validation = validateSensaPortableLightweightPackage(archive);
-  if (validation.status !== "satisfied") {
-    const details = validation.issues.map((issue) => `${issue.code}:${issue.path}`).join(", ");
-    throw new Error(`Portable package is invalid: ${details}`);
-  }
-  return archive;
+  return {bytes: archive, archive: readSensaPortableLightweightPackage(archive)};
 }

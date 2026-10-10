@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 
 import {
+  automaticReleasePolicyFormat,
   classifyReleaseChanges,
   finalizeSystemRelease,
   planSystemRelease,
@@ -78,9 +79,15 @@ test("system release planner separates independent components and couples shared
     changedPaths: ["packages/contracts/src/sensa/catalog.ts"], releaseId: releaseId(), ...media,
   });
   assert.equal(coupled.decision.kind, "coupled");
+
+  const fromLegacyManifest = planSystemRelease({
+    targetCommit: sha("b"), previousManifest: {...previous, format: "sensa-system-release-manifest-v1"},
+    requestedScope: "auto", changedPaths: ["apps/web/src/App.tsx"], releaseId: releaseId(),
+  });
+  assert.equal(fromLegacyManifest.previousRelease.releaseId, previous.releaseId);
 });
 
-test("system release planner bootstraps safely and refuses meaningless automatic releases", () => {
+test("system release planner bootstraps safely and refuses meaningless manual releases", () => {
   assert.throws(() => planSystemRelease({
     targetCommit: sha("b"), requestedScope: "application",
     changedPaths: ["apps/web/src/App.tsx"], releaseId: releaseId(),
@@ -96,6 +103,55 @@ test("system release planner bootstraps safely and refuses meaningless automatic
   }), /No production component changed/u);
 });
 
+test("standing policy automatically releases ordinary application changes and blocks new authority", () => {
+  const application = planSystemRelease({
+    targetCommit: sha("b"), previousManifest: previous, requestedScope: "auto",
+    releaseMode: "automatic", changedPaths: ["apps/web/src/App.tsx"], releaseId: releaseId(),
+  });
+  assert.equal(application.authorization.format, automaticReleasePolicyFormat);
+  assert.equal(application.authorization.mode, "automatic-policy");
+  assert.equal(application.authorization.outcome, "approved");
+  assert.equal(application.decision.kind, "application-only");
+
+  const operational = planSystemRelease({
+    targetCommit: sha("b"), previousManifest: previous, requestedScope: "auto",
+    releaseMode: "automatic", changedPaths: ["docs/sensa/engineering.md"], releaseId: releaseId(),
+  });
+  assert.equal(operational.authorization.outcome, "no-op");
+  assert.equal(operational.decision.kind, "no-op");
+  assert.equal(operational.decision.deployApplication, false);
+  assert.equal(operational.decision.publishLearningContent, false);
+
+  for (const changedPaths of [
+    ["content/authored/book.json"],
+    ["packages/contracts/src/sensa/catalog.ts"],
+    ["db/migrations/0042_breaking.sql"],
+    ["supabase/config.toml"],
+    ["supabase/functions/sensa-api/index.ts"],
+    ["wrangler.jsonc"],
+    ["infra/certs/production.pem"],
+    ["apps/api/src/auth/principal.ts"],
+    ["apps/api/src/sensa/access/auth.ts"],
+    ["apps/api/src/server/environment.ts"],
+  ]) {
+    assert.throws(() => planSystemRelease({
+      targetCommit: sha("b"), previousManifest: previous, requestedScope: "auto",
+      releaseMode: "automatic", changedPaths, releaseId: releaseId(), ...media,
+    }), /explicit owner authorization/u);
+  }
+  assert.throws(() => planSystemRelease({
+    targetCommit: sha("b"), requestedScope: "auto", releaseMode: "automatic",
+    changedPaths: ["apps/web/src/App.tsx"], releaseId: releaseId(), ...media,
+  }), /full bootstrap/u);
+
+  const explicit = planSystemRelease({
+    targetCommit: sha("b"), previousManifest: previous, requestedScope: "auto",
+    releaseMode: "manual", changedPaths: ["db/migrations/0042_forward.sql"], releaseId: releaseId(),
+  });
+  assert.equal(explicit.authorization.mode, "explicit-owner");
+  assert.equal(explicit.decision.kind, "application-only");
+});
+
 test("system release manifest records new evidence and carries an unchanged component", () => {
   const plan = planSystemRelease({
     targetCommit: sha("b"), previousManifest: previous, requestedScope: "auto",
@@ -104,6 +160,11 @@ test("system release manifest records new evidence and carries an unchanged comp
   const candidate = {
     format: "sensa-release-candidate-v2",
     commit: sha("b"),
+    provenance: {
+      repository: "sensa/example",
+      workflowRunId: "100",
+      workflowRunAttempt: "1",
+    },
     webOrigin: "https://learn.example.com",
     apiUrl: "https://fixture.supabase.co/functions/v1/sensa-api",
     supabaseOrigin: "https://fixture.supabase.co",
@@ -130,7 +191,9 @@ test("system release manifest records new evidence and carries an unchanged comp
     completedAt: "2026-09-29T00:00:00.000Z",
   });
   assert.equal(manifest.format, systemReleaseManifestFormat);
+  assert.equal(manifest.authorization.mode, "explicit-owner");
   assert.equal(manifest.components.application.sourceCommit, sha("b"));
+  assert.equal(manifest.components.application.candidate.workflowRunId, "100");
   assert.equal(manifest.components.application.web.versionId, "cloudflare-version-2");
   assert.equal(manifest.components.application.database.migrationSetSha256, digest("4"));
   assert.equal(manifest.components.application.targets.webOrigin, "https://learn.example.com");
@@ -185,17 +248,41 @@ test("system release manifest records a content-only promotion", () => {
   assert.equal(manifest.components.learningContent.packageCount, 3);
 });
 
-test("production has one manual release entry and internal component executors", async () => {
-  const [system, application, content] = await Promise.all([
+test("production promotes the exact application candidate tested by main CI", async () => {
+  const [system, application, content, ci] = await Promise.all([
     readFile(new URL("../../../.github/workflows/sensa-release.yml", import.meta.url), "utf8"),
     readFile(new URL("../../../.github/workflows/sensa-web-deploy.yml", import.meta.url), "utf8"),
     readFile(new URL("../../../.github/workflows/sensa-learning-content-publish.yml", import.meta.url), "utf8"),
+    readFile(new URL("../../../.github/workflows/sensa-consumer-check.yml", import.meta.url), "utf8"),
   ]);
   assert.match(system, /workflow_dispatch:/u);
+  assert.match(system, /workflow_run:/u);
+  assert.match(system, /workflows: \[Sensa CI\]/u);
+  assert.match(system, /github\.event\.workflow_run\.conclusion == 'success'/u);
+  assert.match(system, /run\?\.head_repository\?\.full_name!==env\.GITHUB_REPOSITORY/u);
+  assert.match(system, /SENSA_RELEASE_MODE: \$\{\{ github\.event_name == 'workflow_run' && 'automatic' \|\| 'manual' \}\}/u);
+  assert.match(system, /github\.event_name == 'workflow_dispatch' && !inputs\.owner_accepted/u);
+  assert.match(system, /--status success --limit 20/u);
+  assert.ok(system.indexOf("Require green main CI for this revision") < system.indexOf("- uses: actions/checkout"),
+    "the privileged workflow_run path must validate its same-repository main provenance before checkout");
   assert.match(system, /uses: \.\/\.github\/workflows\/sensa-web-deploy\.yml/u);
   assert.match(system, /uses: \.\/\.github\/workflows\/sensa-learning-content-publish\.yml/u);
   assert.match(system, /application:\n\s+needs: \[plan, learning_content\]/u,
     "content promotion precedes a coupled application promotion");
+  assert.match(system, /candidate_run_id: \$\{\{ steps\.ci\.outputs\.run_id \}\}/u);
+  assert.match(system, /candidate_run_attempt: \$\{\{ steps\.ci\.outputs\.run_attempt \}\}/u);
+  assert.match(system, /candidate_run_id: \$\{\{ needs\.plan\.outputs\.candidate_run_id \}\}/u);
+  assert.match(system, /candidate_run_attempt: \$\{\{ needs\.plan\.outputs\.candidate_run_attempt \}\}/u);
+  assert.match(ci, /name: Build, seal and verify the main release candidate/u);
+  assert.match(ci, /name: sensa-production-\$\{\{ github\.sha \}\}/u);
+  assert.match(ci, /node scripts\/release\/verifyCandidate\.mjs/u);
+  assert.match(ci, /npx wrangler versions upload --dry-run --strict/u);
+  assert.match(application, /run-id: \$\{\{ inputs\.candidate_run_id \}\}/u);
+  assert.match(application, /github-token: \$\{\{ github\.token \}\}/u);
+  assert.match(application, /SENSA_CANDIDATE_RUN_ID: \$\{\{ inputs\.candidate_run_id \}\}/u);
+  assert.match(application, /SENSA_CANDIDATE_RUN_ATTEMPT: \$\{\{ inputs\.candidate_run_attempt \}\}/u);
+  assert.doesNotMatch(application, /npm run build/u,
+    "production must promote the tested CI artifact instead of rebuilding it");
   assert.match(application, /VITE_SUPABASE_URL: \$\{\{ format\('https:\/\/\{0\}\.supabase\.co', vars\.SUPABASE_PROJECT_REF\) \}\}/u,
     "the production verifier must derive the Supabase origin from its approved project ref instead of requiring duplicate configuration");
   for (const executor of [application, content]) {

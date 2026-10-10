@@ -12,7 +12,6 @@ interface Props {
   allowedPolicies?:readonly LearningPolicy[];
   policyOptions?:readonly LearningPolicyOption[];
   showDailyQuantity?:boolean;
-  onConfirm?:()=>void;
   closeLabel?: string;
   fixedPolicy?: boolean;
   busy?: boolean;
@@ -23,7 +22,7 @@ interface Props {
   onDailyNewCountChange: (count:number)=>void;
   onClose: ()=>void;
 }
-export function LearningPreferencesPanel({allowedPolicies,policyOptions=[{id:'lightweight',localSelectable:true},{id:'high_assurance',localSelectable:true},{id:'interleaved_four_stage',localSelectable:true}],showDailyQuantity=true,onConfirm,closeLabel,fixedPolicy,busy,status,defaultPolicy,dailyNewCount,onPolicyChange,onDailyNewCountChange,onClose}:Props) {
+export function LearningPreferencesPanel({allowedPolicies,policyOptions=[{id:'lightweight',localSelectable:true},{id:'high_assurance',localSelectable:true},{id:'interleaved_four_stage',localSelectable:true}],showDailyQuantity=true,closeLabel,fixedPolicy,busy,status,defaultPolicy,dailyNewCount,onPolicyChange,onDailyNewCountChange,onClose}:Props) {
   const {t}=useTranslation();
   const [error,setError]=useState(false);
   useEffect(()=>{
@@ -37,6 +36,8 @@ export function LearningPreferencesPanel({allowedPolicies,policyOptions=[{id:'li
     try {action();setError(false);} catch {setError(true);}
   };
   const counts=[...new Set([5,10,15,20,30,dailyNewCount])].sort((a,b)=>a-b);
+  const policies=policyOptions.filter(option=>(!allowedPolicies||allowedPolicies.includes(option.id))&&(!fixedPolicy||option.id===defaultPolicy));
+  const canChoosePolicy=!fixedPolicy&&policies.length>1;
   return <SensaOverlayLayout variant="sheet" measure="compact" className="sensa-learning-preferences z-[150]" labelledBy="learning-preferences-title" onDismiss={onClose} dismissOnBackdrop regions={{
     header: <div className="flex items-center justify-between">
         <h2 id="learning-preferences-title" className="text-lg font-medium">{t(showDailyQuantity?'learningPreferences.title':'learningSetup.method')}</h2>
@@ -47,16 +48,16 @@ export function LearningPreferencesPanel({allowedPolicies,policyOptions=[{id:'li
           <span className="text-sm font-medium">{t('language.label')}</span><LanguageSwitch/>
         </div>}
         {showDailyQuantity&&<p className="text-xs leading-6 text-fg-tertiary">{t('learningPreferences.immediate')}</p>}
-        <div className="border-t border-border-subtle pt-6">
+        {canChoosePolicy&&<div className="border-t border-border-subtle pt-6">
           <h3 className="text-sm font-medium">{t(showDailyQuantity?'learningPreferences.defaultPolicy':'learningSetup.method')}</h3>
           <div className="mt-4 grid gap-2" role="radiogroup" aria-label={t(showDailyQuantity?'learningPreferences.defaultPolicy':'learningSetup.method')}>
-            {policyOptions.filter(option=>(!allowedPolicies||allowedPolicies.includes(option.id))&&(!fixedPolicy||option.id===defaultPolicy)).map(option=><button key={option.id} disabled={fixedPolicy||busy} type="button" role="radio" aria-checked={option.id===defaultPolicy}
+            {policies.map(option=><button key={option.id} disabled={busy} type="button" role="radio" aria-checked={option.id===defaultPolicy}
               onClick={()=>change(()=>onPolicyChange(option.id))}
               className={`min-h-12 rounded-control border px-4 text-left text-sm focus-visible:outline-2 focus-visible:outline-focus ${option.id===defaultPolicy?'border-border-strong bg-surface-selected text-action-primary':'border-border-subtle bg-surface-panel text-fg-secondary hover:bg-surface-subtle'}`}>
               {t('learningPreferences.policies.'+option.id)}
             </button>)}
           </div>
-        </div>
+        </div>}
         {showDailyQuantity&&<label className="flex items-center justify-between gap-4 text-sm font-medium">
           {t('learningPreferences.daily')}
           <select disabled={busy} aria-label={localFlowText('dailyNewQuantity')} className="min-h-12 rounded-control border border-border-subtle bg-surface-panel px-4 text-sm text-fg-secondary focus-visible:outline-2 focus-visible:outline-focus" value={dailyNewCount} onChange={event=>change(()=>onDailyNewCountChange(Number(event.target.value)))}>
@@ -68,6 +69,6 @@ export function LearningPreferencesPanel({allowedPolicies,policyOptions=[{id:'li
         {error&&<p role="alert" className="rounded-control bg-accent-soft p-4 text-sm text-feedback-danger">{t('runtime.saveError')}</p>}
       </div>,
     controls:
-        <button type="button" disabled={busy} className={`${runtimePrimary} w-full`} onClick={onConfirm??onClose}>{closeLabel ?? t('learningPreferences.resume')}</button>
+        <button type="button" disabled={busy} className={`${runtimePrimary} w-full`} onClick={onClose}>{closeLabel ?? t('learningPreferences.resume')}</button>
   }} />;
 }

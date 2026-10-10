@@ -3,10 +3,16 @@ import {useTranslation} from 'react-i18next';
 import {Camera} from 'lucide-react';
 import {cardText} from '../../i18n/originalCards';
 import {localFlowText} from '../../i18n/localFlowText';
+import {uiText} from '../../i18n/uiText';
 import {
   currentPersonalLearningSceneRevision,
   personalContentSystem,
+  personalLearningSceneEditBase,
+  PersonalLearningSceneConflictError,
   type PersonalContentImage,
+  type PersonalContentCommand,
+  type PersonalLearningSceneEditSnapshot,
+  type PersonalLearningSceneEditBase,
 } from '../../personalContent/system';
 import { iconClass } from '../ui/primitives';
 import { SensaOverlayLayout } from '../ui/SensaComponents';
@@ -84,36 +90,41 @@ export function SceneEditorModal({
   onClose,
   toast,
 }: SceneEditorModalProps) {
-  useTranslation();
+  const {t}=useTranslation();
   const [body, setBody] = useState('');
   const [media, setMedia] = useState<EditorImage[]>([]);
   const [saving, setSaving] = useState(false);
   const [imageError, setImageError] = useState('');
+  const [readStatus,setReadStatus]=useState<'loading'|'ready'|'error'>('loading');
+  const [readAttempt,setReadAttempt]=useState(0);
+  const [sceneBase,setSceneBase]=useState<PersonalLearningSceneEditBase>(null);
+  const [conflict,setConflict]=useState<PersonalLearningSceneEditSnapshot|null>(null);
+  const pendingSceneSave=useRef<Extract<PersonalContentCommand,{kind:'save_learning_scene'}>|null>(null);
+  const savingRef=useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  useEffect(()=>{if(!savingRef.current)pendingSceneSave.current=null;},[body,media]);
+
   useEffect(() => {
     if (!active || !senseId) return;
-    const learningScene = learningTarget
-      ? personalContentSystem.read({
-          kind: 'learning_scene',
-          learningTargetId: learningTarget.learningTargetId,
-          languageRouteId: learningTarget.languageRouteId,
-        })
-      : null;
-    const learningRevision = learningScene
-      ? currentPersonalLearningSceneRevision(learningScene)
-      : null;
-    const existing = !learningTarget && contextId
-      ? personalContentSystem.read({ kind: 'sense_context', contextId })
-      : null;
-    setBody(learningRevision?.body ?? existing?.body ?? '');
-    setMedia(learningRevision?.media ?? existing?.media ?? []);
-    setImageError('');
-    const focusTimer = window.setTimeout(() => textareaRef.current?.focus(), 180);
-    return () => window.clearTimeout(focusTimer);
-  }, [active, contextId, learningTarget, senseId]);
+    let cancelled=false,focusTimer:number|undefined;
+    setReadStatus('loading');setBody('');setMedia([]);setImageError('');
+    setConflict(null);pendingSceneSave.current=null;
+    const load=async()=>{
+      const existing=learningTarget
+        ?await personalContentSystem.readScene({kind:'learning_scene',learningTargetId:learningTarget.learningTargetId,languageRouteId:learningTarget.languageRouteId})
+        :contextId?await personalContentSystem.readScene({kind:'sense_context',contextId}):null;
+      const value=existing?.kind==='learning_scene'?currentPersonalLearningSceneRevision(existing):existing;
+      if(cancelled)return;
+      if(existing?.kind==='learning_scene'||learningTarget)setSceneBase(personalLearningSceneEditBase(existing?.kind==='learning_scene'?existing:null));
+      setBody(value?.body??'');setMedia(value?.media??[]);setReadStatus('ready');
+      focusTimer=window.setTimeout(()=>textareaRef.current?.focus(),180);
+    };
+    void load().catch(()=>{if(!cancelled)setReadStatus('error');});
+    return()=>{cancelled=true;if(focusTimer!==undefined)window.clearTimeout(focusTimer);};
+  }, [active, contextId, learningTarget, senseId,readAttempt]);
 
   const addImageFile = useCallback(async (file: File, sourceFileKey: string) => {
     const image = await compressSceneImage(file);
@@ -121,7 +132,7 @@ export function SceneEditorModal({
   }, []);
 
   const sceneImages = useSceneImageInput({
-    disabled: saving,
+    disabled: saving || readStatus!=='ready',
     imageCount: media.length,
     onAddFile: addImageFile,
     onStart: () => setImageError(''),
@@ -133,27 +144,31 @@ export function SceneEditorModal({
     sceneImages.clearStatuses();
   }, [active, contextId, learningTarget?.learningTargetId, sceneImages.clearStatuses, senseId]);
 
-  const unavailable = saving || sceneImages.processing;
+  const unavailable = saving || sceneImages.processing || readStatus!=='ready';
+  const closeUnavailable=saving||sceneImages.processing;
 
   if (!active || !senseId) return null;
 
-  const handleSave = async () => {
-    if (unavailable) return;
+  const handleSave = async (replace?:PersonalLearningSceneEditSnapshot) => {
+    if (unavailable || savingRef.current || (conflict&&!replace)) return;
     if (!body.trim() && media.length === 0) {
       toast(cardText('sceneRequired'));
       return;
     }
-    setSaving(true);
+    savingRef.current=true;setSaving(true);
     try {
       const persistedMedia = media.map(({sourceFileKey: _sourceFileKey, ...item}) => item);
       if (learningTarget) {
-        await personalContentSystem.execute({
+        const request=pendingSceneSave.current??{
           kind: 'save_learning_scene',
           operationId: crypto.randomUUID(),
           ...learningTarget,
           body,
           media: persistedMedia,
-        });
+          expected:replace?replace.expected:sceneBase,
+        };
+        pendingSceneSave.current=request;
+        await personalContentSystem.execute(request);
       } else {
         await personalContentSystem.execute({
           kind: 'save_sense_context',
@@ -166,24 +181,26 @@ export function SceneEditorModal({
       }
       toast(cardText('sceneSaved'));
       onClose();
-    } catch {
-      toast(cardText('sceneImageFailed'));
+    } catch(error) {
+      if(error instanceof PersonalLearningSceneConflictError&&error.current){
+        pendingSceneSave.current=null;setConflict(error.current);
+      }else toast(t('sceneEditor.saveUnconfirmed'));
     } finally {
-      setSaving(false);
+      savingRef.current=false;setSaving(false);
     }
   };
 
   return (
-    <SensaOverlayLayout variant="dialog" measure="wide" className={`sensa-scene-editor z-[120] ${active ? '' : 'hidden'}`} aria-hidden={!active} label={cardText('sceneFor',{word})} onDismiss={() => { if (!unavailable) onClose(); }} regions={{
+    <SensaOverlayLayout variant="dialog" measure="wide" className={`sensa-scene-editor z-[120] ${active ? '' : 'hidden'}`} aria-hidden={!active} label={cardText('sceneFor',{word})} onDismiss={() => { if (!closeUnavailable) onClose(); }} regions={{
       header: <div className="grid min-h-12 grid-cols-[2.75rem_1fr_2.75rem] items-center gap-3">
-          <button className="grid size-11 place-items-center rounded-control border-0 bg-transparent text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" type="button" disabled={unavailable} onClick={onClose} aria-label={cardText('sceneClose')}>
+          <button className="grid size-11 place-items-center rounded-control border-0 bg-transparent text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" type="button" disabled={closeUnavailable} onClick={onClose} aria-label={cardText('sceneClose')}>
             <svg className={iconClass} aria-hidden="true"><use href="#i-close" /></svg>
           </button>
           <div>
 
             <h2 className="text-center text-section-title font-semibold">{cardText('sceneTitle')}</h2>
           </div>
-          <button className="grid size-11 place-items-center rounded-control border-0 bg-action-primary text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-45" type="button" disabled={unavailable} onClick={() => void handleSave()} aria-label={cardText('sceneSave')}>
+          <button className="grid size-11 place-items-center rounded-control border-0 bg-action-primary text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-45" type="button" disabled={unavailable||!!conflict} onClick={() => void handleSave()} aria-label={cardText('sceneSave')}>
             <svg className={iconClass} aria-hidden="true"><use href="#i-chk-simple" /></svg>
           </button>
         </div>,
@@ -212,6 +229,18 @@ export function SceneEditorModal({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          {readStatus!=='ready'&&<p role={readStatus==='error'?'alert':'status'}>{localFlowText(readStatus==='error'?'localStatusFailed':'loadingSensa')}{readStatus==='error'&&<button className="ml-3 min-h-11 underline" type="button" onClick={()=>setReadAttempt(value=>value+1)}>{uiText('retry')}</button>}</p>}
+          {conflict&&<section role="alert" className="mb-4 space-y-3 rounded-card border border-border-strong p-4">
+            <p>{t('sceneEditor.changed')}</p>
+            <p className="whitespace-pre-wrap text-body-support">{conflict.body}</p>
+            {conflict.media.map(image=><figure key={image.mediaId}><img className="max-h-48 max-w-full object-contain" src={image.dataUrl} alt={image.altText}/>{image.altText&&<figcaption className="text-body-support">{image.altText}</figcaption>}</figure>)}
+            <div className="flex flex-wrap gap-3">
+              <button type="button" disabled={unavailable} className="min-h-11 underline" onClick={()=>{
+                setBody(conflict.body);setMedia(conflict.media);setSceneBase(conflict.expected);setConflict(null);pendingSceneSave.current=null;
+              }}>{t('sceneEditor.useLatest')}</button>
+              <button type="button" disabled={unavailable} className="min-h-11 underline" onClick={()=>void handleSave(conflict)}>{t('noteEditor.saveMine')}</button>
+            </div>
+          </section>}
           <textarea
             className="min-h-40 w-full resize-y rounded-card border border-border-strong bg-surface-panel p-4 text-body leading-7 text-fg-primary placeholder:text-fg-tertiary focus-visible:outline-2 focus-visible:outline-focus"
             ref={textareaRef}

@@ -24,6 +24,7 @@ import {
 
 const WIKT_API_ORIGIN = 'https://api.wiktapi.dev';
 const FREE_DICTIONARY_API_ORIGIN = 'https://api.dictionaryapi.dev';
+const WIKTIONARY_SOURCE_NAME = `${sensaLanguageForDeclaredTag(sensaLexiconEdition)?.names.en ?? sensaLexiconEdition} Wiktionary`;
 /** The official Wikimedia REST endpoint. One edition carries every language, so
  * this provider is the one that stays reachable for a non-English target
  * language when the aggregators do not.
@@ -53,7 +54,8 @@ function resolverSystem(language: SensaLanguage, supportLanguageTag: string): st
     `You are a strict ${target} (${language.tag}) word-sense disambiguator.`,
     'Select only from the supplied referenceSenseId values. Never write or revise a definition.',
     'Use the exact clicked occurrence and the whole sentence. If one candidate is not clearly better, return ambiguous.',
-    `When you select one sense, also render that sense in ${support} (${supportLanguageTag}) as a short gloss the learner reads instead of the ${target} wording. Translate; do not add, narrow or contradict anything the definition did not say.`,
+    'Each candidate declares its definitionLanguage. Source definitions need not be in the headword or sentence language.',
+    `When you select one sense, also render that sense in ${support} (${supportLanguageTag}) as a short gloss the learner reads instead of the source wording. Translate; do not add, narrow or contradict anything the definition did not say.`,
     'Return JSON only, in exactly one of these shapes:',
     '{"status":"selected","referenceSenseId":"one supplied id","confidence":0.0,"glossL1":"one short sentence in the learner language"}',
     '{"status":"ambiguous","candidateReferenceSenseIds":["supplied id"],"confidence":0.0}',
@@ -242,10 +244,10 @@ function makeWiktRelease(language: SensaLanguage, supportLanguageTag: string): R
   return Object.freeze({
     releaseId: `wiktapi.${sensaLexiconEdition}-wiktionary.${language.wiktionaryCode}-${supportLanguageTag}.current.prototype`,
     provider: `WiktAPI · ${sensaLexiconEdition} Wiktionary · ${language.names.en}`,
-    edition: '公开实时快照',
+    edition: '实时查询',
     targetLanguage: language.tag,
     learnerLocale: supportLanguageTag,
-    rightsLabel: 'Wiktionary 内容遵循 CC BY-SA；当前实时源仅用于 MVP，生产版需固定快照',
+    rightsLabel: 'Wiktionary 内容遵循 CC BY-SA',
     status: 'prototype',
   });
 }
@@ -255,16 +257,20 @@ function wiktAudioUrl(filename: string | null): string | undefined {
   return `https://commons.wikimedia.org/wiki/Special:Redirect/file/${encodeURIComponent(filename)}`;
 }
 
-/** An accent id for evidence the source did not place by region. English keeps
- * the two variants the product already labels; every other language reports its
- * own tag, because calling a Spanish recording `en-US` would be a claim the
- * provider never made. */
+/** Keep a region only when the source tags or recording filename declare it.
+ * Unplaced English evidence is English, not an invented American accent. */
 function pronunciationAccent(
   rawAccent: string,
   language: SensaLanguage,
 ): string {
   if (language.wiktionaryCode !== 'en') return language.tag;
-  return rawAccent.includes('uk') || rawAccent.includes('british') ? 'en-GB' : 'en-US';
+  const declaration=rawAccent.toLowerCase().replace(/[^a-z]+/gu,' ');
+  if(/\b(?:us|united states|american)\b/u.test(declaration))return 'en-US';
+  if(/\b(?:uk|british|received pronunciation|england|scotland|scottish)\b/u.test(declaration))return 'en-GB';
+  if(/\b(?:au|australia|australian)\b/u.test(declaration))return 'en-AU';
+  if(/\b(?:ca|canada|canadian)\b/u.test(declaration))return 'en-CA';
+  if(/\b(?:nz|new zealand)\b/u.test(declaration))return 'en-NZ';
+  return language.tag;
 }
 
 function normalizeWiktPronunciations(
@@ -308,7 +314,7 @@ function normalizeWiktExamples(
     normalized.push({
       exampleId: `ref.wikt.example.${language.wiktionaryCode}.${headword}.${stableHash(`${senseIdentity}:${textL2}`)}`,
       textL2,
-      sourceLabel: cleanText(example.ref) ?? `${language.names.en} Wiktionary`,
+      sourceLabel: cleanText(example.ref) ?? WIKTIONARY_SOURCE_NAME,
     });
   }
   return normalized;
@@ -330,14 +336,14 @@ function normalizeWiktEntry(
     const partOfSpeech = cleanText(group.pos) ?? 'word';
     for (const sourceSense of group.senses ?? []) {
       const glosses = (sourceSense.glosses ?? []).map(cleanText).filter((value): value is string => Boolean(value));
-      const definitionL2 = glosses[glosses.length - 1];
-      if (!definitionL2) continue;
-      const identity = `${language.wiktionaryCode}:${headword}:${partOfSpeech}:${definitionL2}`;
+      const definitionText = glosses[glosses.length - 1];
+      if (!definitionText) continue;
+      const identity = `${language.wiktionaryCode}:${headword}:${partOfSpeech}:${definitionText}`;
       senses.push({
         referenceSenseId: `ref.wikt.sense.${headword}.${stableHash(identity)}`,
         order: senses.length + 1,
         partOfSpeech,
-        definitionL2,
+        definition:{text:definitionText,languageTag:sensaLexiconEdition},
         labels: (sourceSense.tags ?? []).map(cleanText).filter((value): value is string => Boolean(value)),
         examples: normalizeWiktExamples(headword, identity, sourceSense.examples, language),
       });
@@ -358,7 +364,7 @@ function normalizeWiktEntry(
         ? [headword, rawWord.trim()]
         : [headword],
       senses,
-      attribution: `${language.names.en} Wiktionary via WiktAPI (CC BY-SA)`,
+      attribution: `${WIKTIONARY_SOURCE_NAME} via WiktAPI (CC BY-SA)`,
     },
   };
 }
@@ -413,15 +419,15 @@ function normalizeFreeDictionaryEntry(
   for (const meaning of sourceEntry.meanings ?? []) {
     const partOfSpeech = cleanText(meaning.partOfSpeech) ?? 'word';
     for (const sourceDefinition of meaning.definitions ?? []) {
-      const definitionL2 = cleanText(sourceDefinition.definition);
-      if (!definitionL2) continue;
-      const identity = `${headword}:${partOfSpeech}:${definitionL2}`;
+      const definitionText = cleanText(sourceDefinition.definition);
+      if (!definitionText) continue;
+      const identity = `${headword}:${partOfSpeech}:${definitionText}`;
       const example = cleanText(sourceDefinition.example);
       senses.push({
         referenceSenseId: `ref.free-dictionary.sense.${headword}.${stableHash(identity)}`,
         order: senses.length + 1,
         partOfSpeech,
-        definitionL2,
+        definition:{text:definitionText,languageTag:'en'},
         examples: example ? [{
           exampleId: `ref.free-dictionary.example.${headword}.${stableHash(`${identity}:${example}`)}`,
           textL2: example,
@@ -443,7 +449,7 @@ function normalizeFreeDictionaryEntry(
     seenPronunciations.add(identity);
     pronunciations.push({
       pronunciationId: `ref.free-dictionary.pronunciation.${stableHash(identity)}`,
-      accent: audioUrl?.toLocaleLowerCase().includes('-uk') ? 'en-GB' : 'en-US',
+      accent: pronunciationAccent(audioUrl??'',language),
       ipa,
       audioUrl,
     });
@@ -451,7 +457,7 @@ function normalizeFreeDictionaryEntry(
   if (pronunciations.length === 0 && sourceEntry.phonetic) {
     pronunciations.push({
       pronunciationId: `ref.free-dictionary.pronunciation.${stableHash(sourceEntry.phonetic)}`,
-      accent: 'en-US',
+      accent: language.tag,
       ipa: sourceEntry.phonetic,
     });
   }
@@ -514,7 +520,7 @@ function makeWiktRestRelease(language: SensaLanguage, supportLanguageTag: string
     edition: '公开实时结果',
     targetLanguage: language.tag,
     learnerLocale: supportLanguageTag,
-    rightsLabel: 'Wiktionary 内容遵循 CC BY-SA 4.0；当前实时源仅用于 MVP，生产版需固定快照',
+    rightsLabel: 'Wiktionary 内容遵循 CC BY-SA 4.0',
     status: 'prototype',
   });
 }
@@ -532,9 +538,9 @@ function normalizeWiktRestEntry(
   for (const group of payload[language.wiktionaryCode] ?? []) {
     const partOfSpeech = cleanText(group.partOfSpeech) ?? 'word';
     for (const sourceDefinition of group.definitions ?? []) {
-      const definitionL2 = wiktRestText(sourceDefinition.definition);
-      if (!definitionL2) continue;
-      const identity = `${language.wiktionaryCode}:${headword}:${partOfSpeech}:${definitionL2}`;
+      const definitionText = wiktRestText(sourceDefinition.definition);
+      if (!definitionText) continue;
+      const identity = `${language.wiktionaryCode}:${headword}:${partOfSpeech}:${definitionText}`;
       const examples: ReferenceExample[] = [];
       for (const parsed of sourceDefinition.parsedExamples ?? []) {
         const textL2 = wiktRestText(parsed.example);
@@ -542,14 +548,14 @@ function normalizeWiktRestEntry(
         examples.push({
           exampleId: `ref.wiktionary-rest.example.${language.wiktionaryCode}.${headword}.${stableHash(`${identity}:${textL2}`)}`,
           textL2,
-          sourceLabel: `${language.names.en} Wiktionary`,
+          sourceLabel: WIKTIONARY_SOURCE_NAME,
         });
       }
       senses.push({
         referenceSenseId: `ref.wiktionary-rest.sense.${headword}.${stableHash(identity)}`,
         order: senses.length + 1,
         partOfSpeech,
-        definitionL2,
+        definition:{text:definitionText,languageTag:sensaLexiconEdition},
         examples,
       });
     }
@@ -569,7 +575,7 @@ function normalizeWiktRestEntry(
       pronunciations: [],
       forms: [headword],
       senses,
-      attribution: `${language.names.en} Wiktionary (CC BY-SA 4.0)`,
+      attribution: `${WIKTIONARY_SOURCE_NAME} (CC BY-SA 4.0)`,
     },
   };
 }
@@ -769,7 +775,8 @@ async function resolveWithModel(
   const candidates = entry.senses.map((sense) => ({
     referenceSenseId: sense.referenceSenseId,
     partOfSpeech: sense.partOfSpeech,
-    definition: sense.definitionL2 ?? sense.glossL1 ?? '',
+    definition: sense.definition?.text ?? sense.glossL1 ?? '',
+    definitionLanguage: sense.definition?.languageTag ?? (sense.glossL1?context.supportLanguageTag:'und'),
     labels: sense.labels ?? [],
     examples: (sense.examples ?? []).slice(0, 2).map((example) => example.textL2),
   }));
@@ -821,7 +828,7 @@ async function resolveContextualReference(
 /** Projects the recorded Support-Language rendering onto the selected sense for
  * display. The provider's entry is not rewritten: the selected sense is returned
  * as a copy carrying `glossL1` — the field the screens already prefer — while
- * `definitionL2` keeps the provider's own wording underneath it. A rendering the
+ * `definition` keeps the provider's own wording and language underneath it. A rendering the
  * provider itself supplied is never overwritten. */
 function projectLearnerGloss(
   result: ReferenceLookupResult,

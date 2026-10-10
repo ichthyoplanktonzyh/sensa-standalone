@@ -1,148 +1,35 @@
-import {test} from 'vitest';
-/** Free Practice source resolution: real Learning Targets, complete Personal
- * Meanings, capability-aware Activities, and detached Session snapshots. */
-import assert from 'node:assert/strict';
-import type { PersonalMeaningLearningSource } from '../../../apps/web/src/contentSupply/provisioning/contracts.ts';
-import {
-  createPracticeScopeSnapshot,
-  CURRENT_STUDY_SCOPE_ID,
-  PERSONAL_SEMANTIC_WORLD_SCOPE_ID,
-  resolvePracticeScopeCatalog,
-  type PracticeStudyTarget,
-} from '../../../apps/web/src/experience/practiceScope.ts';
-import { resolvePracticeActivities } from '../../../apps/web/src/experience/practiceInventory.ts';
-
-test("practice-scope", async () => {
-
-const studyTarget: PracticeStudyTarget = {
-  target: {
-    targetId: 'learning-target-1',
-    curriculumMembershipId: 'membership-1',
-    identity: {
-      senseId: 'sense-1',
-      senseVersionId: 'sense-version-1',
-      bindingId: 'binding-1',
-      bindingVersionId: 'binding-version-1',
-    },
-    presentation: {
-      expression: 'borrow',
-      targetLanguageTag: 'en',
-    },
-    material: {
-      snapshot: {
-        learningMaterializationId: 'materialization-1',
-        validationStatus: 'validated',
-      },
-      content: {
-        resources: [
-          { materialRoleKey: 'target_expression', contentPayload: { surface: 'borrow' } },
-          { materialRoleKey: 'sense_confirmation', contentPayload: { meaning: '暂时取得并预期归还' } },
-          { materialRoleKey: 'language_structure', contentPayload: { expressionKind: 'word' } },
-          { materialRoleKey: 'experience_recall_cue', contentPayload: { scene: '向同事借伞，第二天归还。' } },
-          { materialRoleKey: 'pronunciation', contentPayload: { phoneticNotation: '/ˈbɒrəʊ/', accentLabel: 'UK', audioUrl: null } },
-        ],
-      },
-    },
-  },
-} as never;
-
-const personalSource: PersonalMeaningLearningSource = {
-  sourceKind: 'personal_meaning_alignment',
-  reference: {
-    personalMeaningId: 'personal-meaning-1',
-    personalMeaningRevisionId: 'personal-meaning-revision-1',
-    personalMeaningAlignmentId: 'alignment-1',
-    alignmentRevision: 2,
-    alignmentBasisReferenceId: 'basis-1',
-    meaningFocusId: null,
-    senseId: 'sense-2',
-    senseVersionId: 'sense-version-2',
-    bindingId: 'binding-2',
-    bindingVersionId: 'binding-version-2',
-  },
-  targetLanguageTag: 'en',
-  context: {
-    text: '会议快结束时，我想提出最后一个问题。',
-    images: [],
-    personalSemanticAnchorRevisionIds: ['anchor-revision-1'],
-  },
-  expression: {
-    surfaceForm: 'one last thing',
-    expressionType: 'phrase',
-    languageTag: 'en',
-  },
-  semanticSpec: {
-    schemaVersion: 'sensa-sense-semantic-spec-v1',
-    coreMeaningFocus: '在结束前补充最后一件事',
-    prototypeScenes: [{
-      summary: '对话结束前补充事项',
-      participantRoles: [],
-      states: [],
-      directionOrCausality: null,
-    }],
-    includedCases: [],
-    excludedCases: [],
-    neighborContrasts: [],
-    openQuestions: [],
-  },
-};
-
-const resolve = (
-  selection: Parameters<typeof resolvePracticeScopeCatalog>[0]['selection'],
-  studyTargets: readonly PracticeStudyTarget[] = [studyTarget],
-) => resolvePracticeScopeCatalog({
-  selection,
-  studyTargets,
-  personalMeaningSources: [personalSource],
-  studyTitle: '当前语言中已加入学习的全部内容',
-  activeLanguageTag: 'en',
+/** Expression material interface; controlled reads, no formal Learning or provider calls. */
+import {test,expect,vi,afterEach} from 'vitest';
+import {practiceMaterialsRepository,collectPracticeExpressionIds,resolvePracticeExpression} from '../../../apps/web/src/experience/practiceMaterials';
+import {practiceExpressionId,type PracticeExpression} from '../../../apps/web/src/data/library/practiceExpressionProjection';
+afterEach(()=>vi.restoreAllMocks());
+const expression=(index:number):PracticeExpression=>({id:`expression-${index}`,text:`word-${index}`,languageTag:'en',source:{kind:'personal',id:`owner-${index}`}});
+test('practice-scope',async()=>{
+ expect(practiceExpressionId('  BANK ','en')).toBe(practiceExpressionId('bank','en'));
+ expect(practiceExpressionId('bank','en')).not.toBe(practiceExpressionId('bank','de'));
+ expect(practiceExpressionId('A long personal expression with private wording','en')).toMatch(/^[a-f0-9-]{36}$/u);
+ const read=vi.spyOn(practiceMaterialsRepository,'page').mockResolvedValue({incarnation:'one',revision:1,total:10_000,items:[expression(0)],ids:[expression(0).id]});
+ expect(await resolvePracticeExpression({source:'personal',expressionIds:null},'en')).toEqual(expression(0));
+ expect(read.mock.calls[0]![0]).toEqual({source:'personal',languageTag:'en',query:'',offset:0,limit:1,selectedIds:undefined});
+ await resolvePracticeExpression({source:'personal',expressionIds:Array.from({length:10_000},(_,index)=>expression(index).id)},'en',expression(0).id);
+ expect(read.mock.calls[1]![0].selectedIds).toEqual([expression(0).id]);
+ await expect(resolvePracticeExpression({source:'personal',expressionIds:['chosen']},'en','other')).rejects.toThrow('practice_expression_not_selected');expect(read).toHaveBeenCalledTimes(2);
+ read.mockResolvedValueOnce({incarnation:'one',revision:1,total:0,items:[],ids:[]});
+ expect(await resolvePracticeExpression({source:'books',expressionIds:[]},'en')).toBeNull();
 });
-
-const current = resolve({ sourceId: CURRENT_STUDY_SCOPE_ID });
-assert.equal(current.currentScope.targets.length, 1, 'current learning comes only from supplied Learning Targets');
-const learned = current.currentScope.targets[0]!;
-assert.equal(learned.identity.kind, 'learning_target');
-assert.equal(learned.expression.surfaceForm, 'borrow');
-assert.equal(learned.sense.label, '暂时取得并预期归还');
-assert.equal(learned.context?.preview, '向同事借伞，第二天归还。');
-assert.equal(learned.capabilities.validatedLearningMaterial, true);
-assert.equal(learned.capabilities.pronunciation, true);
-
-const empty = resolve({ sourceId: CURRENT_STUDY_SCOPE_ID }, []);
-assert.equal(empty.currentScope.targets.length, 0, 'an empty library never falls back to bundled prototype data');
-
-const personalTargetId = 'personal:alignment-1:binding-version-2';
-const personal = resolve({
-  sourceId: PERSONAL_SEMANTIC_WORLD_SCOPE_ID,
-  targetIds: [personalTargetId],
+test('explicit select-all reads only bounded identity pages, never complete material bodies',async()=>{
+ const ids=Array.from({length:10_000},(_,index)=>`id-${index}`);
+ const read=vi.spyOn(practiceMaterialsRepository,'page').mockImplementation(async query=>({incarnation:'one',revision:1,total:ids.length,items:[],ids:ids.slice(query.offset,query.offset+query.limit)}));
+ expect(await collectPracticeExpressionIds({source:'personal',languageTag:'en',query:''},new AbortController().signal)).toEqual(ids);
+ expect(read.mock.calls.every(([query])=>query.idsOnly===true&&query.limit<=256)).toBe(true);
+ expect(read).toHaveBeenCalledTimes(40);
 });
-assert.equal(personal.currentScope.sourceId, PERSONAL_SEMANTIC_WORLD_SCOPE_ID);
-assert.equal(personal.currentScope.targets[0]?.identity.kind, 'personal_meaning_binding');
-assert.deepEqual(
-  personal.currentScope.targets[0]?.context?.personalSemanticAnchorRevisionIds,
-  ['anchor-revision-1'],
-  'Personal Meaning context pins canonical anchor revisions',
-);
-
-const invalidPersonal = resolve({
-  sourceId: PERSONAL_SEMANTIC_WORLD_SCOPE_ID,
-  targetIds: ['stale-target'],
-});
-assert.equal(invalidPersonal.currentScope.sourceId, CURRENT_STUDY_SCOPE_ID);
-
-const activities = resolvePracticeActivities(personal.currentScope);
-assert.equal(activities.find((activity) => activity.id === 'real_world_speech_variation')?.status, 'available');
-assert.equal(activities.find((activity) => activity.id === 'oral_scenario_rehearsal')?.targetCount, 1);
-
-const snapshot = createPracticeScopeSnapshot(
-  current.currentScope,
-  'practice-snapshot-1',
-  '2026-09-16T04:00:00.000Z',
-);
-(current.currentScope.targets[0]!.sense as { label: string }).label = 'changed later';
-assert.equal(snapshot.targets[0]?.sense.label, '暂时取得并预期归还', 'a Session snapshot is detached from later source changes');
-assert.equal(snapshot.snapshotId, 'practice-snapshot-1');
-
-console.log('PASS: Free Practice resolves real learning and semantic-world targets, checks capabilities, and pins detached Session scope snapshots.');
-
+test('select-all rejects a changed material frame, replacement library and cancellation without partial selection',async()=>{
+ const read=vi.spyOn(practiceMaterialsRepository,'page');
+ for(const next of [{incarnation:'one',revision:2},{incarnation:'replacement',revision:1}]){
+  read.mockResolvedValueOnce({incarnation:'one',revision:1,total:300,items:[],ids:Array.from({length:256},(_,index)=>`id-${index}`)}).mockResolvedValueOnce({...next,total:300,items:[],ids:Array.from({length:44},(_,index)=>`id-${256+index}`)});
+  await expect(collectPracticeExpressionIds({source:'books',languageTag:'en',query:''},new AbortController().signal)).rejects.toThrow('localFlow.meaningChanged');
+ }
+ const controller=new AbortController();controller.abort();const calls=read.mock.calls.length;
+ await expect(collectPracticeExpressionIds({source:'personal',languageTag:'en',query:''},controller.signal)).rejects.toThrow();expect(read.mock.calls).toHaveLength(calls);
 });

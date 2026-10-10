@@ -1,8 +1,8 @@
 import {canonicalConsumerJson} from '@sensa/contracts/sensa';
 
-import type {BackupRows} from '../backupValidation';
+import type {LibraryRecordReader} from '../libraryRecordReader';
 import type {LibraryIdentity,LibraryTransaction} from '../store';
-import {planLibraryReplicaApply,replicaEntryId,restoreLibraryReplicaValue,type LibraryReplicaEntry} from './libraryReplica';
+import {planLibraryReplicaApply,restoreLibraryReplicaValue,type LibraryReplicaEntry} from './libraryReplica';
 
 const LIBRARY_CREATE_OPERATION='00000000-0000-4000-8000-000000000001';
 
@@ -11,22 +11,18 @@ export function applyLibraryReplicaMutation(input:{
  tx:LibraryTransaction;
  current:LibraryReplicaEntry[];
  desired:LibraryReplicaEntry[];
- rows:BackupRows;
+ records:LibraryRecordReader;
  identity:LibraryIdentity;
 }){
- const {tx,current,desired,rows,identity}=input;
- const decoded=new Map<string,unknown>();
- for(const table of Object.keys(rows) as (keyof BackupRows)[]){
-  for(const row of rows[table])decoded.set(replicaEntryId({table:table as LibraryReplicaEntry['table'],key:row.key}),row.value);
- }
+ const {tx,current,desired,records,identity}=input;
  const mutation=planLibraryReplicaApply(current,desired);
  for(const row of mutation.deletes)tx.delete(row.table,row.key);
  let restoredIdentity:LibraryIdentity|undefined;
  for(const row of mutation.puts){
-  const value=restoreLibraryReplicaValue(row,decoded.get(replicaEntryId(row)),identity);
+  if(!records.has(row.table,row.key))throw Error('libraryBackup.errors.inconsistent');
+  const value=restoreLibraryReplicaValue(row,records.get(row.table,row.key),identity);
   if(row.table==='meta'&&row.key==='identity')restoredIdentity=value as LibraryIdentity;
   tx.put(row.table,row.key,value);
  }
  if(restoredIdentity)tx.put('operations',LIBRARY_CREATE_OPERATION,{input:canonicalConsumerJson({kind:'library.create',input:{}}),result:restoredIdentity,committedAt:restoredIdentity.createdAt});
 }
-

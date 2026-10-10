@@ -3,6 +3,7 @@ import {ModelExecutionError,type ModelExecutionRecord} from '@sensa/contracts/se
 import {z} from 'zod';
 import {canonicalConsumerJson} from '@sensa/contracts/sensa';
 import {auth} from '../account/auth';
+import {captureAccountSessionBoundary,assertAccountSessionBoundary,type AccountSessionBoundary} from '../account/accountSessionBoundary';
 import {clearCredential,providerCredential,providerSnapshot,type Provider,type Purpose} from './providers';
 import type {ConversationImage} from './conversationImages';
 import {ModelStreamError,readManagedModelStream,readOpenAiModelStream} from './modelStreaming';
@@ -18,6 +19,10 @@ async function abortable<T>(promise:Promise<T>,signal:AbortSignal):Promise<T>{
 
 export type CompleteOptions={
  responseFormat?:'json_object';
+ /** A feature's disclosure consent can pin the managed-service account. */
+ expectedSubject?:string;
+ /** Read-only disclosure preflight at actual dispatch, after queue waiting. */
+ beforeSend?:()=>Promise<void>;
  /** Raw provider text deltas. The owning feature decides what is safe to show. */
  onText?:(delta:string)=>void|Promise<void>;
 };
@@ -33,7 +38,8 @@ function modelFailure(code:unknown):never{
  if(code==='model_queue_full')throw new Error('localFlow.modelQueueFull');
  if(code==='model_rate_limited')throw new Error('localFlow.modelRateLimited');
  if(code==='model_request_rejected')throw new Error('localFlow.modelRequestRejected');
- if(code==='model_invalid_response'||code==='model_stream_invalid')throw new Error('localFlow.modelResponseInvalid');
+ if(code==='model_invalid_response')throw new Error('localFlow.modelResponseInvalid',{cause:{code}});
+ if(code==='model_stream_invalid')throw new Error('localFlow.modelResponseInvalid');
  if(code==='model_response_too_large')throw new Error('localFlow.responseLimit');
  if(code==='model_stream_incomplete')throw new Error('localFlow.modelIncomplete');
  if(code==='model_daily_budget'||code==='reading_daily_budget')throw new Error('localFlow.serviceLimit');
@@ -55,17 +61,22 @@ async function completeRequest(provider:Provider,purpose:Purpose,id:string,messa
  const base=new URL(provider.endpoint),body={model:provider.model,messages:wireMessages,...(tools.length?{tools}:{}),max_tokens:3000,stream:false as const,...(options.responseFormat==='json_object'||(purpose!=='teacher'&&!tools.length)?{response_format:{type:'json_object' as const}}:{})};
  if(messages.length>100||new TextEncoder().encode(JSON.stringify(messages.map(({images,...m})=>m))).length>256*1024)throw new Error('localFlow.conversationSave');
  let endpoint=provider.endpoint+'/chat/completions',payload:unknown=body,key:string,subject:string|undefined;
+ let accountBoundary:AccountSessionBoundary|undefined;
  if(provider.kind==='sensa'){
   const configured=import.meta.env.VITE_SENSA_API_URL as string|undefined;
   if(!configured||provider.endpoint!==configured.replace(/\/+$/u,''))throw new Error('localFlow.sensaEndpoint');
   if(!auth)throw new Error('localFlow.authUnavailable');
   const {data,error}=await abortable(auth.getSession(),signal);if(error||!data.session)throw new Error('localFlow.onlineLogin');
+  if(options.expectedSubject&&data.session.user.id!==options.expectedSubject)throw new Error('localFlow.staleAccountResult');
+  accountBoundary=await captureAccountSessionBoundary(data.session.user.id);
   key=data.session.access_token;subject=data.session.user.id;endpoint=provider.endpoint+(options.onText?'/sensa/model/turn/stream':'/sensa/model/turn');
   const input={id,purpose,body};payload={...input,inputDigest:await digest(input)};
  }else{
   key=await providerCredential(provider);
   payload={...body,...(options.onText?{stream:true}:{}),...(base.hostname==='api.deepseek.com'?{thinking:{type:'disabled'}}:{})};
  }
+ await options.beforeSend?.();signal.throwIfAborted();
+ if(accountBoundary)await assertAccountSessionBoundary(accountBoundary);
  const response=await fetch(endpoint,{method:'POST',redirect:'error',credentials:'omit',headers:{authorization:'Bearer '+key,'content-type':'application/json',...(options.onText?{accept:provider.kind==='sensa'?'application/x-ndjson':'text/event-stream'}:{})},body:JSON.stringify(payload),signal:AbortSignal.any([signal,AbortSignal.timeout(45000)])});
  if(response.status===401||response.status===403){clearCredential(provider.id);throw new Error('localFlow.providerAccessDenied');}
  if(!response.ok){const error=await response.json().catch(()=>({}));modelFailure(error.code);}
@@ -82,6 +93,7 @@ async function completeRequest(provider:Provider,purpose:Purpose,id:string,messa
  if(current?.revision!==provider.revision)throw new Error('localFlow.staleConfigResult');
  if(provider.kind==='sensa'){
   if((await abortable(auth!.getSession(),signal)).data.session?.user.id!==subject)throw new Error('localFlow.staleAccountResult');
+  await assertAccountSessionBoundary(accountBoundary!);
   const envelope=z.object({id:z.literal(id),inputDigest:z.literal((payload as {inputDigest:string}).inputDigest),response:z.unknown()}).strict().parse(value);value=envelope.response;
  }
  if(signal.aborted)throw new Error('localFlow.stoppedResult');

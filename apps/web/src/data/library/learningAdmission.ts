@@ -9,6 +9,8 @@ import {
   type LibraryTransaction,
   type Operation,
 } from './store';
+import {hasStudyScopeCaptureWitness} from './studyScopes';
+import {assertOneActiveBook,type LocalCurriculumEnrollment} from './curriculumEnrollments';
 
 /** Storage adapter for the Learning System authority's local transition seam. */
 export async function admitLearningSystemTransaction(
@@ -17,11 +19,12 @@ export async function admitLearningSystemTransaction(
 ):Promise<void>{
   const changes=await tx.proposedChanges(learningTransitionTables);
   const relevant=changes.filter(change=>(
-    ['curriculumEnrollments','learningTargets','learningRuns','learningEvents','learningReconciliations'].includes(change.table)
-    ||change.table==='meta'&&change.key==='learning-active'
+    ['curriculumEnrollments','supplementalMembershipStates','studyScopes','learningSessions','learningTargets','learningRuns','learningEvents','learningReconciliations'].includes(change.table)
+    ||change.table==='meta'&&['learning-active','learning-session-active'].includes(change.key)
     ||change.table==='settings'&&change.key==='language-route-study-plans'
   ));
   if(!relevant.length)return;
+  if(relevant.some(change=>change.table==='curriculumEnrollments'&&((change.after as LocalCurriculumEnrollment|null)?.source?.kind==='published_book'||(change.before as LocalCurriculumEnrollment|null)?.source?.kind==='published_book')))assertOneActiveBook(await tx.all<LocalCurriculumEnrollment>('curriculumEnrollments'));
   const identity=await tx.get<LibraryIdentity>('meta','identity');
   if(!identity)throw new LearningSystemInvariantError('The local Learning System has no Library identity.');
   await assertLearningSystemTransition({
@@ -29,6 +32,9 @@ export async function admitLearningSystemTransaction(
     operation,
     changes:relevant,
     read:(table,key)=>tx.get(table,key),
+    scopeMember:(scopeId,targetId)=>tx.studyScopeMember(scopeId,targetId),
+    latestActionAt:runId=>tx.latestLearningActionAt(runId),
+    capturedScopeIds:relevant.filter(change=>change.table==='studyScopes'&&hasStudyScopeCaptureWitness(tx,change.key)).map(change=>change.key),
   });
 }
 

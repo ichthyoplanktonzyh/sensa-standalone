@@ -1,8 +1,12 @@
-import type { SensaContextImage } from '@sensa/contracts/sensa';
+import {canonicalConsumerJson,type SensaContextImage} from '@sensa/contracts/sensa';
+import {z} from 'zod';
 import type {
   PersonalMeaningLearningSource,
 } from '../../contentSupply/system';
-import type { MeaningJourneyRecord, SenseRegistryState } from './store';
+import type { MeaningJourneyRecord } from './store';
+import {readRegistry,type RegistryRead} from './registryRead';
+import {isAlignmentActive,alignmentStatusAt} from './alignmentLifecycle';
+import {currentMeaningContextRevisions} from './meaningRecords';
 
 const bindingBelongsToConstructionAlignment = (
   record: MeaningJourneyRecord,
@@ -19,9 +23,9 @@ const bindingBelongsToConstructionAlignment = (
 
 const sceneImages = (
   record: MeaningJourneyRecord,
-  revisionIds: Set<string>,
-): SensaContextImage[] => record.personalSemanticAnchorRevisions
-  .filter((revision) => revisionIds.has(revision.personalSemanticAnchorRevisionId))
+  revisionIds: readonly string[],
+): SensaContextImage[] => revisionIds
+  .map(id=>record.personalSemanticAnchorRevisions.find(revision=>revision.personalSemanticAnchorRevisionId===id)!)
   .flatMap((revision) => Array.isArray(revision.structuredPayload.media)
     ? revision.structuredPayload.media
     : [])
@@ -31,7 +35,7 @@ const sceneImages = (
     if (
       typeof media.mediaId !== 'string'
       || typeof media.dataUrl !== 'string'
-      || !/^data:image\/jpeg;base64,/u.test(media.dataUrl)
+      || !/^data:image\/[A-Za-z0-9.+-]+;base64,/u.test(media.dataUrl)
     ) return [];
     return [{
       id: media.mediaId,
@@ -41,54 +45,53 @@ const sceneImages = (
   })
   .slice(0, 4);
 
-const alignedAnchorRevisions = (
-  record: MeaningJourneyRecord,
-  alignment: MeaningJourneyRecord['alignments'][number],
-) => {
-  if (alignment.basis.kind === 'contextual_resolution') {
-    const semanticAcceptanceId = alignment.basis.semanticAcceptanceId;
-    const acceptance = record.semanticAcceptances.find(
-      (candidate) => candidate.semanticAcceptanceId === semanticAcceptanceId,
-    );
-    return acceptance
-      ? record.personalSemanticAnchorRevisions.filter(
-          (candidate) => candidate.personalSemanticAnchorRevisionId
-            === acceptance.personalSemanticAnchorRevisionId,
-        )
-      : [];
-  }
-  return record.personalSemanticAnchors
-    .filter((anchor) => anchor.createdAt <= alignment.createdAt)
-    .flatMap((anchor) => record.personalSemanticAnchorRevisions
-      .filter((revision) => (
-        revision.personalSemanticAnchorId === anchor.personalSemanticAnchorId
-        && revision.createdAt <= alignment.createdAt
-      ))
-      .sort((left, right) => right.revision - left.revision)
-      .slice(0, 1));
-};
+export function assertPersonalContextPin(record:MeaningJourneyRecord,pin:unknown):asserts pin is string[]{
+ const ids=z.array(z.string().uuid()).min(1).parse(pin);
+ if(new Set(ids).size!==ids.length||ids.some(id=>!record.personalSemanticAnchorRevisions.some(revision=>revision.personalSemanticAnchorRevisionId===id)))throw new Error('localFlow.meaningChanged');
+}
+
+/** Preserve the supplied (current or historical) Context order across media
+ * loading and replica admission; never use fact-array order for a grant. */
+export function orderPersonalContextImages(record:MeaningJourneyRecord,revisionIds:readonly string[],images:readonly SensaContextImage[]):SensaContextImage[]{
+ const revisions=revisionIds.map(id=>{const revision=record.personalSemanticAnchorRevisions.find(row=>row.personalSemanticAnchorRevisionId===id);if(!revision)throw Error('localFlow.meaningChanged');return revision;});
+ const byId=new Map(images.map(image=>[image.id,image]));
+ const order=[...new Set(revisions.flatMap(revision=>[...(revision.personalMediaObjectId?[revision.personalMediaObjectId]:[]),...(Array.isArray(revision.structuredPayload.media)?revision.structuredPayload.media.flatMap(media=>media&&typeof media==='object'&&typeof (media as Record<string,unknown>).mediaId==='string'?[(media as {mediaId:string}).mediaId]:[]):[])]))];
+ return order.flatMap(id=>byId.has(id)?[byId.get(id)!]:[]);
+}
+
+/** Media stays in its owned store; only exact selected Context references are loaded. */
+export async function hydratePersonalLearningImages(record:MeaningJourneyRecord,sources:PersonalMeaningLearningSource[],read:(id:string)=>Promise<SensaContextImage>):Promise<PersonalMeaningLearningSource[]>{
+ const images=new Map<string,Promise<SensaContextImage>>();
+ return Promise.all(sources.map(async source=>{
+  const revisions=source.context.personalSemanticAnchorRevisionIds.map(id=>record.personalSemanticAnchorRevisions.find(revision=>revision.personalSemanticAnchorRevisionId===id)!);
+  const mediaIds=[...new Set(revisions.flatMap(revision=>revision.personalMediaObjectId?[revision.personalMediaObjectId]:[]))];
+  const loaded=await Promise.all(mediaIds.map(id=>{if(!images.has(id))images.set(id,read(id));return images.get(id)!;}));
+  return {...source,context:{...source.context,images:orderPersonalContextImages(record,source.context.personalSemanticAnchorRevisionIds,[...source.context.images,...loaded])}};
+ }));
+}
 
 /**
  * Resolve every learnable Binding on one active Alignment directly from the
  * authoritative Personal Semantic World aggregate. Incomplete records and
- * stale Binding versions deliberately yield no source.
+ * incompatible Binding versions deliberately yield no source. Registry heads
+ * may advance without replacing an Alignment's explicitly accepted versions.
  */
-export const buildPersonalMeaningLearningSources = (
+const meaningLearningSources = (
   record: MeaningJourneyRecord,
-  registry: SenseRegistryState,
+  registry: RegistryRead,
   alignmentId?: string,
+  contextRevisionIds?: readonly string[],
+  historical=false,
 ): PersonalMeaningLearningSource[] => record.alignments
   .filter((alignment) => (
-    alignment.status === 'active'
+    (historical||isAlignmentActive(record,alignment))
     && (!alignmentId || alignment.personalMeaningAlignmentId === alignmentId)
   ))
   .flatMap((alignment) => {
     const meaningRevision = record.personalMeaningRevisions.find(
       (candidate) => candidate.personalMeaningRevisionId === alignment.personalMeaningRevisionId,
     );
-    const senseVersion = registry.senseVersions.find(
-      (candidate) => candidate.senseVersionId === alignment.senseVersionId,
-    );
+    const senseVersion = readRegistry(registry,'senseVersions',alignment.senseVersionId);
     if (!meaningRevision || !senseVersion || senseVersion.senseId !== alignment.senseId) return [];
 
     const contextualAcceptanceId = alignment.basis.kind === 'contextual_resolution'
@@ -99,7 +102,10 @@ export const buildPersonalMeaningLearningSources = (
           (candidate) => candidate.semanticAcceptanceId === contextualAcceptanceId,
         )
       : null;
-    const revisions = alignedAnchorRevisions(record, alignment);
+    if(contextRevisionIds)assertPersonalContextPin(record,contextRevisionIds);
+    const revisions = contextRevisionIds
+      ? contextRevisionIds.map(id=>{const revision=record.personalSemanticAnchorRevisions.find(candidate=>candidate.personalSemanticAnchorRevisionId===id);if(!revision)throw new Error('localFlow.meaningChanged');return revision;})
+      : currentMeaningContextRevisions(record);
     const revisionIds = new Set(
       revisions.map((revision) => revision.personalSemanticAnchorRevisionId),
     );
@@ -120,26 +126,16 @@ export const buildPersonalMeaningLearningSources = (
             === contextualAcceptance?.personalExpressionAnchorRevisionId;
       if (!belongs) return [];
 
-      const bindingVersion = registry.bindingVersions.find(
-        (candidate) => candidate.bindingVersionId === confirmation.bindingVersionId,
-      );
-      const binding = bindingVersion && registry.bindings.find(
-        (candidate) => candidate.senseExpressionBindingId
-          === bindingVersion.senseExpressionBindingId,
-      );
-      const expressionVersion = registry.expressionVersions.find(
-        (candidate) => candidate.expressionVersionId === confirmation.expressionVersionId,
-      );
-      const expression = expressionVersion && registry.expressions.find(
-        (candidate) => candidate.expressionId === expressionVersion.expressionId,
-      );
+      const bindingVersion = readRegistry(registry,'bindingVersions',confirmation.bindingVersionId);
+      const binding = bindingVersion && readRegistry(registry,'bindings',bindingVersion.senseExpressionBindingId);
+      const expressionVersion = readRegistry(registry,'expressionVersions',confirmation.expressionVersionId);
+      const expression = expressionVersion && readRegistry(registry,'expressions',expressionVersion.expressionId);
       if (
         !bindingVersion
         || !binding
         || !expressionVersion
         || !expression
         || binding.senseId !== alignment.senseId
-        || binding.currentBindingVersionId !== bindingVersion.bindingVersionId
         || bindingVersion.senseVersionId !== alignment.senseVersionId
         || bindingVersion.expressionVersionId !== expressionVersion.expressionVersionId
       ) return [];
@@ -165,13 +161,13 @@ export const buildPersonalMeaningLearningSources = (
         targetLanguageTag: expression.languageTag,
         context: {
           text: contextText,
-          images: sceneImages(record, revisionIds),
+          images: sceneImages(record, [...revisionIds]),
           personalSemanticAnchorRevisionIds: [...revisionIds],
         },
         expression: {
           surfaceForm: expressionVersion.surfaceForm,
           ...(typeof expressionVersion.structure.spokenForm==='string'?{spokenForm:expressionVersion.structure.spokenForm}:{}),
-          ...(Array.isArray(expressionVersion.structure.formParts)?{formParts:expressionVersion.structure.formParts as {kind:'fixed'|'slot';text:string;constraint?:string}[]}:{}),
+          ...(Array.isArray(expressionVersion.structure.formParts)?{formParts:structuredClone(expressionVersion.structure.formParts) as {kind:'fixed'|'slot';text:string;constraint?:string}[]}:{}),
           expressionType: expression.expressionType,
           languageTag: expression.languageTag,
         },
@@ -179,3 +175,17 @@ export const buildPersonalMeaningLearningSources = (
       }];
     });
   });
+
+/** Current user selection is different from validating a frozen historical source. */
+export const buildPersonalMeaningLearningSources=(record:MeaningJourneyRecord,registry:RegistryRead,alignmentId?:string,contextRevisionIds?:readonly string[])=>
+ record.personalMeaning.status==='active'?meaningLearningSources(record,registry,alignmentId,contextRevisionIds):[];
+
+export function resolvePinnedPersonalMeaningLearningSource(current:MeaningJourneyRecord,registry:RegistryRead,reference:PersonalMeaningLearningSource['reference'],contextRevisionIds?:readonly string[]):PersonalMeaningLearningSource|null{
+ const record=personalMeaningPinnedRecord(current,reference,contextRevisionIds);
+ if(!record)return null;
+ const alignment=record.alignments.find(row=>row.personalMeaningAlignmentId===reference.personalMeaningAlignmentId);
+ if(!alignment||alignment.revision!==reference.alignmentRevision||alignmentStatusAt(record.alignmentEvents,alignment.personalMeaningAlignmentId,reference.alignmentRevision)!=='active')return null;
+ return meaningLearningSources(record,registry,alignment.personalMeaningAlignmentId,contextRevisionIds,true).find(source=>canonicalConsumerJson(source.reference)===canonicalConsumerJson(reference))??null;
+}
+export const personalMeaningPinnedRecord=(current:MeaningJourneyRecord,reference:PersonalMeaningLearningSource['reference'],contextRevisionIds?:readonly string[])=>
+ [current,...(current.conflictHistory?.branches.map(branch=>branch.record)??[])].find(branch=>branch.personalMeaningRevisions.some(row=>row.personalMeaningRevisionId===reference.personalMeaningRevisionId)&&branch.alignments.some(row=>row.personalMeaningAlignmentId===reference.personalMeaningAlignmentId)&&(contextRevisionIds??[]).every(id=>branch.personalSemanticAnchorRevisions.some(row=>row.personalSemanticAnchorRevisionId===id)));

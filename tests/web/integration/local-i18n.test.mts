@@ -104,6 +104,10 @@ for(const locale of interfaceLocales){
   for(const namespace of translationNamespaces)assert(i18n.hasResourceBundle(locale,namespace),`${locale}:${namespace}: registered`);
   assert.equal(i18n.t('nav.home'),((resources.get(locale)!.get('common')!.nav as Messages).home));
   assert.equal(localFlowNotice('localFlow.preparationStopped'),(resources.get(locale)!.get('localFlow')!.localFlow as Record<string,string>).preparationStopped);
+  assert.equal(i18n.t('learningPreferences.quantitySaveUnconfirmed'),(resources.get(locale)!.get('learning')!.learningPreferences as Record<string,string>).quantitySaveUnconfirmed);
+  assert.equal(i18n.t('study.manageContent'),(resources.get(locale)!.get('learning')!.study as Messages).manageContent);
+  assert.equal(i18n.t('bookPlanHeading.empty'),(resources.get(locale)!.get('learning')!.bookPlanHeading as Messages).empty);
+  assert.equal(localFlowNotice('localFlow.supplementalEmpty'),(resources.get(locale)!.get('localFlow')!.localFlow as Record<string,string>).supplementalEmpty);
 }
 
 const zhLocalFlow=(resources.get('zh-CN')!.get('localFlow')!.localFlow as Record<string,string>);
@@ -129,6 +133,9 @@ for(const file of files){
   const ast=parse(await readFile(file,'utf8'),{sourceType:'module',plugins:['typescript','jsx']});
   function visit(node:any,parent?:any):void{
     if(!node||typeof node!=='object')return;
+    const translator=node.type==='CallExpression'&&(node.callee?.type==='Identifier'&&node.callee.name==='t'
+      ||node.callee?.type==='MemberExpression'&&!node.callee.computed&&node.callee.property?.name==='t');
+    if(translator&&node.arguments[0]?.type==='StringLiteral')assert(i18n.exists(node.arguments[0].value,{ns:[...translationNamespaces]}),`${file}:${node.loc?.start.line}: unknown static translation key ${node.arguments[0].value}`);
     const value=node.type==='StringLiteral'||node.type==='JSXText'?node.value:node.type==='TemplateElement'?node.value.raw:'';
     const frozenProvider=file.endsWith('/providers.ts')&&parent?.type==='ObjectProperty'&&parent.key?.name==='name'&&value==='Sensa 服务';
     if(typeof value==='string'&&(/^(localFlow|libraryBackup)\.[a-zA-Z]/u.test(value)))assert(i18n.exists(value),`${file}: unknown message key ${value}`);

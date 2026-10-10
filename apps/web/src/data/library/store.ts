@@ -1,9 +1,14 @@
 /** Production local-library storage: SQLite WASM in an OPFS Worker. */
 import {canonicalConsumerJson} from '@sensa/contracts/sensa/canonical-json';
-import {markLocalLibraryPresent} from './localLibraryHint';
+import {meaningMediaReferences} from '../../experience/personalMeaningJourney/meaningHistoryRead';
+import {hasLocalLibraryHint,markLocalLibraryPresent} from './localLibraryHint';
+import {assertLocalLibrarySelected,localLibraryScopedName} from './localLibraryLocation';
 
 import { decodeBackupValue, encodeBackupValue } from "./backupCodec";
 import { sqliteRecordAdapter } from "./sqliteAdapter";
+import type {ReplicaCandidateRequest,ReplicaCandidateResponse,ReplicaCandidateValidation,ReplicaCandidateUpdate} from './replicaCandidateProtocol';
+import type {PackageCacheProjectionQuery,PackageCacheProjectionResult} from './packageCacheProjection';
+import type {InstalledPackageSummary} from './packageRecords';
 import type {
   PortableMediaStorageDiagnostics,
   PortablePackageMediaWrite,
@@ -32,6 +37,7 @@ export const cloudCheckpointRequestEvent = "sensa-cloud-checkpoint-requested";
 
 let sessionIncarnation: string | undefined;
 let serial: Promise<unknown> = Promise.resolve();
+const libraryNotificationSender=crypto.randomUUID();
 
 const recordKey = (key: string): string => {
   if (key.length === 0 || key.length > 2000) {
@@ -66,6 +72,7 @@ const storageCall = async <T>(
       throw new Error("localFlow.storageBusy", { cause });
     }
     if (message.startsWith("localFlow.")) throw cause;
+    if(['library_sync_history','library_sync_local_changed','account_changed'].includes(message))throw cause;
     throw new Error(fallback, { cause });
   }
 };
@@ -80,21 +87,47 @@ export class LibraryTransaction {
   private readonly clears = new Set<Table>();
   private readonly deletes = new Map<Table, Set<string>>();
   private readonly puts = new Map<Table, Map<string, unknown>>();
+  private readonly knownMissing=new Map<Table,Set<string>>();
+  private readonly commitSignals:Array<{
+    signal:AbortSignal;
+    code:string;
+    onCommitStart?:()=>void;
+  }> = [];
   private syncBaseReplacement: Array<{ table: Table; key: string; valueJson: string; blockRefs: string[] }> | undefined;
+  private syncBasePatch:SqliteMutation['syncBasePatch'];
+  private replicaCandidateRestore:SqliteMutation['replicaCandidateRestore'];
 
   constructor(
     private readonly mode: "readonly" | "readwrite",
     private readonly adapter: Awaited<ReturnType<typeof sqliteRecordAdapter>>,
   ) {}
 
+  restoreReplicaCandidate(candidate:ReplicaCandidateValidation):void{
+    this.assertWritable();
+    if(this.replicaCandidateRestore||this.syncBaseReplacement!==undefined||this.syncBasePatch)throw Error('library_sync_base_mutation_conflict');
+    this.replicaCandidateRestore={id:candidate.id,tables:candidate.tables};this.wrote=true;
+  }
+
+  updateReplicaCandidate(update:ReplicaCandidateUpdate):void{
+    this.assertWritable();
+    if(this.replicaCandidateRestore||this.syncBaseReplacement!==undefined||this.syncBasePatch)throw Error('library_sync_base_mutation_conflict');
+    this.replicaCandidateRestore={id:update.id,tables:update.tables,update};this.wrote=true;
+  }
+
   async get<T>(table: Table, inputKey: string): Promise<T | undefined> {
     const key = recordKey(inputKey);
     const pending = this.puts.get(table);
     if (pending?.has(key)) return clone(pending.get(key) as T);
     if (this.clears.has(table) || this.deletes.get(table)?.has(key)) return undefined;
-    const encoded = await storageCall(() => this.adapter.get(table, key));
+    const encoded = await this.storedValue(table,key);
     if(encoded===null)return undefined;
-    return clone(await this.decodeStored<T>(table,encoded));
+    // Decoding creates a new owned value on every read.
+    return this.decodeStored<T>(table,encoded);
+  }
+
+  private async storedValue(table:Table,key:string):Promise<string|null>{
+    if(this.knownMissing.get(table)?.has(key))return null;
+    return storageCall(()=>this.adapter.get(table,key));
   }
 
   async entries(table: Table): Promise<Array<{ key: string; value: any }>> {
@@ -113,19 +146,111 @@ export class LibraryTransaction {
       .map(([key, value]) => ({ key, value: clone(value) }));
   }
 
-  /** Read admitted Package facts without reconstructing their Runtime media.
-   * Only inventory/index code may use this projection; execution and export
-   * continue through `get`/`entries`, which return complete Runtime values. */
-  async packageCacheEntriesStored<T>():Promise<Array<{key:string;value:T}>>{
-    const table='packageCache' as const;
-    const values=new Map<string,unknown>();
+  /** Bounded transport/decode batches for a coherent large semantic snapshot. */
+  async *entryBatches(table:Table,afterKey:string|null=null):AsyncGenerator<Array<{key:string;value:unknown}>>{
+    if(this.wrote)throw new Error('library_entries_require_snapshot');
+    for(;;){
+      const rows=await storageCall(()=>this.adapter.entriesPage(table,afterKey,128));
+      if(!rows.length)return;
+      const decoded:Array<{key:string;value:unknown}>=[];
+      let until=performance.now()+8;
+      for(const row of rows){
+        decoded.push({key:row.key,value:await this.decodeStored(table,row.encodedValue)});
+        if(performance.now()>=until){await new Promise<void>(resolve=>setTimeout(resolve,0));until=performance.now()+8;}
+      }
+      yield decoded;afterKey=rows.at(-1)!.key;
+      if(rows.length<128)return;
+    }
+  }
+  /** Coherent, bounded key-only projection; no record/media decoding. */
+  async *recordKeyBatches(table:Table):AsyncGenerator<string[]>{
+    if(this.wrote)throw new Error('library_entries_require_snapshot');
+    let afterKey:string|null=null;
+    for(;;){
+      const keys=await storageCall(()=>this.adapter.recordKeysPage(table,afterKey,128));
+      if(!keys.length)return;
+      yield keys;afterKey=keys.at(-1)!;
+      if(keys.length<128)return;
+    }
+  }
+  async lookupMeanings(query:string):Promise<import('./sqliteProtocol').MeaningLookupResult>{
+    if(this.wrote)throw new Error('library_projection_requires_snapshot');
+    return storageCall(()=>this.adapter.lookupMeanings(query));
+  }
+  async worldBrowse(query:import('./sqliteProtocol').WorldBrowseQuery):Promise<import('./sqliteProtocol').WorldBrowsePage>{
+    if(this.wrote)throw new Error('library_projection_requires_snapshot');
+    return storageCall(()=>this.adapter.worldBrowse(query));
+  }
+  async worldSceneMeaning(sceneId:string):Promise<string|null>{
+    if(this.wrote)throw new Error('library_projection_requires_snapshot');
+    return storageCall(()=>this.adapter.worldSceneMeaning(sceneId));
+  }
+  async registrySelection(query:import('./sqliteProtocol').RegistrySelectionQuery):Promise<import('./sqliteProtocol').RegistrySelection>{
+    if(this.wrote)throw new Error('library_projection_requires_snapshot');
+    return storageCall(()=>this.adapter.registrySelection(query));
+  }
+  async worldLearningChoices(query:import('./sqliteProtocol').WorldLearningChoiceQuery):Promise<import('./sqliteProtocol').WorldLearningChoicePage>{
+    if(this.wrote)throw new Error('library_projection_requires_snapshot');
+    return storageCall(()=>this.adapter.worldLearningChoices(query));
+  }
+  async practiceExpressions(query:import('./sqliteProtocol').PracticeExpressionQuery):Promise<import('./sqliteProtocol').PracticeExpressionPage>{
+    if(this.wrote)throw new Error('library_projection_requires_snapshot');
+    return storageCall(()=>this.adapter.practiceExpressions(query));
+  }
+  async existingJourneyIdentities(ids:readonly string[]):Promise<Set<string>>{
+    if(this.wrote)throw new Error('library_projection_requires_snapshot');
+    return new Set(await storageCall(()=>this.adapter.existingJourneyIdentities(ids)));
+  }
+
+  /** Batch existence checks use only record keys, not resource payloads. */
+  async existingRecordKeys(table:Table,keys:readonly string[]):Promise<Set<string>>{
+    const requested=[...new Set(keys.map(recordKey))];
+    const present=new Set(this.clears.has(table)?[]:
+      await storageCall(()=>this.adapter.existingRecordKeys(table,requested)));
     if(!this.clears.has(table)){
-      for(const row of await storageCall(()=>this.adapter.entries(table))){
-        if(!this.deletes.get(table)?.has(row.key))values.set(row.key,decode(row.encodedValue));
+      const missing=this.knownMissing.get(table)??new Set<string>();
+      for(const key of requested)if(!present.has(key))missing.add(key);
+      this.knownMissing.set(table,missing);
+    }
+    for(const key of requested){
+      if(this.deletes.get(table)?.has(key))present.delete(key);
+      if(this.puts.get(table)?.has(key))present.add(key);
+    }
+    return present;
+  }
+
+  /** Read the derived index, including this transaction's pending cache writes. */
+  async packageCacheProjection<Query extends PackageCacheProjectionQuery>(query:Query):Promise<PackageCacheProjectionResult<Query>>{
+    if(query.kind==='route_counts'||query.kind==='learning_choices'||query.kind==='publication_identities'||query.kind==='summaries_by_keys'){
+      if(this.wrote)throw new Error('library_projection_requires_snapshot');
+      return storageCall(()=>this.adapter.packageCacheProjection(query));
+    }
+    const table='packageCache' as const;
+    const values=new Map<string,{key:string;digest:string}|InstalledPackageSummary>();
+    if(!this.clears.has(table)){
+      const stored=query.kind==='identities'
+        ?await storageCall(()=>this.adapter.packageCacheProjection({kind:'identities'}))
+        :await storageCall(()=>this.adapter.packageCacheProjection({kind:'summaries',packageId:query.packageId}));
+      for(const item of stored){
+        if(!this.deletes.get(table)?.has(item.key))values.set(item.key,item);
       }
     }
-    for(const [key,value] of this.puts.get(table)??[])values.set(key,value);
-    return [...values.entries()].sort(([left],[right])=>left.localeCompare(right)).map(([key,value])=>({key,value:clone(value as T)}));
+    const pending=this.puts.get(table);
+    if(pending?.size){
+      const {createPackageCacheSummary,isPackageCacheProjectionSource}=await import('./packageCacheProjection');
+      for(const [key,value] of pending){
+        if(!isPackageCacheProjectionSource(value)){values.delete(key);continue;}
+        if(query.kind==='summaries'&&query.packageId!==undefined&&value.portableOrigin.manifest.metadata.packageId!==query.packageId){values.delete(key);continue;}
+        values.set(key,query.kind==='identities'?{key,digest:value.digest}:createPackageCacheSummary(value));
+      }
+    }
+    return clone([...values.values()].sort((left,right)=>left.key.localeCompare(right.key))) as PackageCacheProjectionResult<Query>;
+  }
+
+  /** Coherent metadata-only invalidation probe, including deletion tombstones. */
+  async hasChangesSince(contentRevision:number,tables:readonly Table[]):Promise<boolean>{
+    if(this.wrote)throw new Error('library_changes_require_snapshot');
+    return storageCall(()=>this.adapter.hasChangesSince(contentRevision,tables));
   }
 
   async changesSince<Tables extends readonly Table[]>(contentRevision: number, tables: Tables): Promise<Array<{
@@ -163,8 +288,23 @@ export class LibraryTransaction {
     }));
   }
 
+  async syncBaseReferences():Promise<import('./sqliteProtocol').SqliteSyncBaseReference[]>{
+    if(this.wrote)throw new Error('library_sync_base_requires_snapshot');
+    return storageCall(()=>this.adapter.syncBaseReferences());
+  }
+  patchSyncBase(input:{puts:readonly {table:Table;key:string;value:unknown;blocks:readonly string[]}[];deletes:readonly {table:Table;key:string}[]}):void{
+    this.assertWritable();
+    if(this.syncBaseReplacement!==undefined||this.syncBasePatch)throw new Error('library_sync_base_mutation_conflict');
+    const puts=input.puts.map(row=>{
+      const blockRefs=[...row.blocks];
+      if(!blockRefs.length||blockRefs.some(ref=>!/^[a-f0-9]{64}$/u.test(ref)))throw new Error('library_sync_format');
+      return {table:row.table,key:recordKey(row.key),valueJson:JSON.stringify(row.value),blockRefs};
+    });
+    this.syncBasePatch={puts,deletes:input.deletes.map(({table,key})=>({table,key:recordKey(key)}))};this.wrote=true;
+  }
   replaceSyncBase(entries: readonly { table: Table; key: string; value: unknown; blocks?: readonly string[] }[]): void {
     this.assertWritable();
+    if(this.syncBasePatch)throw new Error('library_sync_base_mutation_conflict');
     const unique = new Map<string, { table: Table; key: string; valueJson: string; blockRefs: string[] }>();
     for (const entry of entries) {
       const key = recordKey(entry.key);
@@ -191,6 +331,12 @@ export class LibraryTransaction {
       return (await this.entries(table)).length;
     }
     return storageCall(() => this.adapter.count(table));
+  }
+
+  async latestLearningActionAt(inputRunId:string):Promise<string|null>{
+    const runId=recordKey(inputRunId);
+    if(this.hasPendingChanges('learningEvents'))return (await this.entries('learningEvents')).map(row=>row.value as {runId:string;at:string}).filter(event=>event.runId===runId).sort((left,right)=>Date.parse(right.at)-Date.parse(left.at))[0]?.at??null;
+    return storageCall(()=>this.adapter.latestLearningActionAt(runId));
   }
 
   async learningRunIdsForTarget(
@@ -242,6 +388,14 @@ export class LibraryTransaction {
     }
     const links = await storageCall(() => this.adapter.openLearningRunTargets());
     return [...new Set(links.map((link) => link.targetId))].sort();
+  }
+
+  async studyScopeMember(scopeRevisionId:string,targetId:string):Promise<import('./studyScopes').LocalStudyScopeMember|null>{
+    if(this.hasPendingChanges('studyScopes')){
+      const scope=await this.get<import('./studyScopes').LocalStudyScope>('studyScopes',scopeRevisionId);
+      return scope?.members.find(member=>member.targetId===targetId)??null;
+    }
+    return storageCall(()=>this.adapter.studyScopeMember(scopeRevisionId,targetId));
   }
 
   async countContentAttemptsSince(inputTaskId: string, createdAfter: string): Promise<number> {
@@ -302,8 +456,7 @@ export class LibraryTransaction {
     const meanings = await this.all<{
       personalSemanticAnchorRevisions?: Array<{ personalMediaObjectId?: string | null }>;
     }>('semanticMeanings');
-    if (meanings.some((meaning) => meaning.personalSemanticAnchorRevisions
-      ?.some((revision) => revision.personalMediaObjectId === mediaId))) return true;
+    if (meanings.some(meaning=>meaningMediaReferences(meaning).includes(mediaId))) return true;
     const inbox = await this.all<{
       payload?: { context?: { mediaReferenceIds?: string[] } | null };
     }>('semanticInbox');
@@ -366,7 +519,7 @@ export class LibraryTransaction {
     const changes: Array<LibraryRecordTransition<Tables>> = [];
     for (const [table, tableKeys] of keys) {
       for (const key of tableKeys) {
-        const beforeEncoded = await storageCall(() => this.adapter.get(table, key));
+        const beforeEncoded = await this.storedValue(table,key);
         const after = await this.get(table, key);
         const afterEncoded = after === undefined ? null : encode(after);
         const before=beforeEncoded===null?null:await this.decodeStored(table,beforeEncoded);
@@ -392,12 +545,22 @@ export class LibraryTransaction {
     const externalize=portablePuts?.size
       ?(await import('./portableMediaCache')).externalizePortablePackageCache
       :null;
+    let prepared=0;
     for(const [table,values] of this.puts)for(const [key,value] of values){
+      this.assertCommitSignals();
       if(table!=='packageCache')puts.push({table,key,encodedValue:encode(value)});
       else{
-        const externalized=externalize!(key,value);
+        const externalized=await externalize!(key,value);
         portablePackages.push(externalized.write);
         puts.push({table,key,encodedValue:encode(externalized.storedValue)});
+      }
+      // Preparation is not a SQLite commit. Let input/paint run between bounded
+      // chunks while the same write lock and single eventual commit stay intact.
+      if(++prepared%8===0&&typeof document!=='undefined'){
+        const scheduler=(globalThis as typeof globalThis&{scheduler?:{yield?:()=>Promise<void>}}).scheduler;
+        if(scheduler?.yield)await scheduler.yield();
+        else await new Promise<void>(resolve=>setTimeout(resolve,0));
+        this.assertCommitSignals();
       }
     }
     return {
@@ -409,7 +572,29 @@ export class LibraryTransaction {
       ...(this.syncBaseReplacement === undefined
         ? {}
         : { syncBaseReplacement: this.syncBaseReplacement }),
+      ...(this.syncBasePatch===undefined?{}:{syncBasePatch:this.syncBasePatch}),
+      ...(this.replicaCandidateRestore===undefined?{}:{replicaCandidateRestore:this.replicaCandidateRestore}),
     };
+  }
+
+  requireCommitSignal(
+    signal:AbortSignal,
+    code='library_transaction_cancelled',
+    onCommitStart?:()=>void,
+  ):void{
+    this.assertWritable();this.commitSignals.push({signal,code,onCommitStart});
+  }
+
+  beginCommit():void{
+    this.assertCommitSignals();
+    // Keep these callbacks synchronous with the final abort check and the
+    // adapter.commit call. Once they run, the atomic storage commit has begun
+    // and an AbortSignal can no longer promise to undo it.
+    for(const {onCommitStart} of this.commitSignals)onCommitStart?.();
+  }
+
+  assertCommitSignals():void{
+    for(const {signal,code} of this.commitSignals)if(signal.aborted)throw new Error(code);
   }
 
   private hasPendingChanges(table: Table): boolean {
@@ -442,7 +627,7 @@ async function runAcrossPages<T>(
   if (typeof navigator === "undefined" || !navigator.locks) return work();
   try {
     return await navigator.locks.request(
-      "sensa-library-transaction-v1",
+      localLibraryScopedName('sensa-library-transaction-v1'),
       {
         mode: mode === "readonly" ? "shared" : "exclusive",
         signal: AbortSignal.timeout(45_000),
@@ -457,13 +642,14 @@ async function runAcrossPages<T>(
   }
 }
 
-/** Only local SQLite requests belong in work; network and hashing finish before entry. */
+/** No network work in the logical transaction; media serialization may yield before one final SQLite commit. */
 async function transaction<T>(
   mode: "readonly" | "readwrite",
   work: (tx: LibraryTransaction) => Promise<T>,
   kind: "content" | "state" | "cache" = "content",
 ): Promise<T> {
   const execute = async () => {
+    assertLocalLibrarySelected();
     const adapter = await storageCall(sqliteRecordAdapter, 'localFlow.storageOpen');
     const library = new LibraryTransaction(mode, adapter);
     const value = await work(library);
@@ -476,22 +662,45 @@ async function transaction<T>(
       }
       const mutation = await library.mutation();
       mutation.contentRevision = contentRevision;
-      await storageCall(() => adapter.commit(mutation));
+      library.beginCommit();
+      assertLocalLibrarySelected();
+      const storageStarted=performance.now();
+      try{await storageCall(() => adapter.commit(mutation));}
+      catch(cause){
+        // A coordinator may lose the ACK after the entire source transaction
+        // committed, then replay a now-consumed candidate ID. Only its durable
+        // transaction receipt permits treating that uncertain outcome as success.
+        let confirmed=false;
+        if(mutation.replicaCandidateRestore){
+          try{
+            const encoded=await storageCall(()=>adapter.get('meta','cloud-sync'));
+            const state=encoded===null?undefined:decode(encoded) as {restoreOperationId?:string;syncedLocalRevision?:number};
+            confirmed=state?.restoreOperationId===mutation.replicaCandidateRestore.id&&state.syncedLocalRevision===(mutation.contentRevision??mutation.replicaCandidateRestore.update?.localRevision);
+          }catch{/* Keep the original failure when the outcome cannot be read. */}
+        }
+        if(!confirmed)throw cause;
+      }
+      if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.library.sqlite-commit',{start:storageStarted,end:performance.now()});
       if (kind === "state") window.dispatchEvent(new Event("sensa-sync-state-changed"));
       else {
         const tables = [...new Set([
           ...mutation.clears,
           ...mutation.deletes.map((row) => row.table),
           ...mutation.puts.map((row) => row.table),
+          ...(mutation.replicaCandidateRestore?.tables??[]),
+          ...(mutation.replicaCandidateRestore&&!mutation.replicaCandidateRestore.update?['operations' as const]:[]),
         ])];
-        window.dispatchEvent(new CustomEvent("sensa-library-changed", { detail: { tables } }));
+        const changes={sender:libraryNotificationSender,tables,clears:[...new Set([...mutation.clears,...(mutation.replicaCandidateRestore?.update?[]:mutation.replicaCandidateRestore?.tables??[])])],
+          records:[...mutation.puts,...mutation.deletes,...(mutation.replicaCandidateRestore?.update?.records??[])].map(({table,key})=>({table,key}))};
+        window.dispatchEvent(new CustomEvent("sensa-library-changed", { detail: changes }));
         if (typeof BroadcastChannel !== "undefined") {
-          const channel = new BroadcastChannel("sensa-local-library");
-          channel.postMessage({ tables });
+          const channel = new BroadcastChannel(localLibraryScopedName('sensa-local-library'));
+          channel.postMessage(changes);
           channel.close();
         }
       }
     }
+    assertLocalLibrarySelected();
     return value;
   };
   // Web Locks already coordinate this entire logical transaction within and
@@ -503,9 +712,15 @@ async function transaction<T>(
     : runSerially(execute);
 }
 
-/** Reserved for validated full-library restore; it remains one SQLite transaction. */
+/** Reserved for validated replica/backup application; one SQLite transaction. */
 export const restoreLibraryTransaction = <T>(work: (tx: LibraryTransaction) => Promise<T>) =>
   transaction("readwrite", work);
+/** A sealed private candidate is coherent without holding the live Library's
+ * Web Lock. Its Worker fence aborts if concurrent user/owner writes occur. */
+export async function requestReplicaCandidate(request:ReplicaCandidateRequest):Promise<ReplicaCandidateResponse>{
+  assertLocalLibrarySelected();const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');
+  const result=await adapter.replicaCandidate(request);assertLocalLibrarySelected();return result;
+}
 /** Sync progress and baselines do not announce learner-content changes. */
 export const writeLibraryState = <T>(work: (tx: LibraryTransaction) => Promise<T>) =>
   transaction("readwrite", work, "state");
@@ -530,10 +745,15 @@ export const estimateLibraryRecordBytes=async(tables:readonly Table[]):Promise<n
  */
 export const readHomeLearningRecords = async (
   languageRouteId: string,
+  clock=Date.now(),
 ): Promise<HomeLearningStorageProjection> => {
   const adapter = await storageCall(sqliteRecordAdapter, 'localFlow.storageOpen');
-  return storageCall(() => adapter.homeLearningProjection(languageRouteId));
+  return storageCall(() => adapter.homeLearningProjection(languageRouteId,clock));
 };
+export const readLearningHistoryPage=async(query:import('../../learning/system/learningHistoryModel').LearningHistoryRequest)=>{const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');return storageCall(()=>adapter.learningHistoryPage(query));};
+export const readLearningSemanticMemoryRecords=async(targetId?:string)=>{const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');return storageCall(()=>adapter.learningSemanticMemory(targetId));};
+export const readLearningManagementSummary=async(query:import('./runtimeLearningCandidates').LearningManagementSummaryQuery)=>{const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');return storageCall(()=>adapter.learningManagementSummary(query));};
+export const readRuntimeLearningCandidates=async(query:import('./runtimeLearningCandidates').RuntimeLearningCandidateQuery)=>{const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');return storageCall(()=>adapter.runtimeLearningCandidates(query));};
 
 export const readLocalLibraryRevision = (tx: LibraryTransaction): Promise<number> =>
   tx.get<number>("meta", localLibraryRevisionKey).then((value) => value ?? 0);
@@ -561,6 +781,7 @@ export async function command<T>(
   const input = canonicalConsumerJson({ kind: op.kind, input: op.input });
   return transaction("readwrite", async (tx) => {
     await assertCurrentLibrary(tx);
+    if(hasLocalLibraryHint()&&!await tx.get('meta','identity'))throw new Error('localFlow.libraryMissing');
     const prior = await tx.get<{ input: string; result: T; cloudReceipt?: true }>("operations", op.id);
     if (prior) {
       if (prior.input !== input) throw new Error("localFlow.operationConflict");
@@ -584,11 +805,46 @@ export type LibraryIdentity = {
 };
 
 export async function openLibrary(): Promise<LibraryIdentity> {
-  const identity=await command({
-    id: "00000000-0000-4000-8000-000000000001",
-    kind: "library.create",
-    input: {},
-  }, async (tx) => {
+  // Opening verifies current identity, not a possibly orphaned creation receipt.
+  // Missing prior data is a recovery state, never an automatic empty replacement.
+  const key='00000000-0000-4000-8000-000000000001';
+  const input=canonicalConsumerJson({kind:'library.create',input:{}});
+  // An intact library needs only a coherent read. Do not queue a no-op writer
+  // ahead of other tabs' readers. Creation/receipt repair still rechecks under
+  // the exclusive transaction below, including the incarnation fence.
+  const verified=await transaction('readonly',async tx=>{
+    await assertCurrentLibrary(tx);
+    const prior=await tx.get<{input:string;result:unknown}>('operations',key);
+    if(prior&&prior.input!==input)throw new Error('localFlow.operationConflict');
+    const existing=await tx.get<LibraryIdentity>('meta','identity');
+    if(existing&&prior){
+      if(canonicalConsumerJson(prior.result)!==canonicalConsumerJson(existing))throw new Error('localFlow.libraryMissing');
+      return existing;
+    }
+    return undefined;
+  });
+  const identity=verified??await transaction('readwrite',async tx=>{
+    await assertCurrentLibrary(tx);
+    const prior=await tx.get<{input:string;result:unknown}>('operations',key);
+    if(prior&&prior.input!==input)throw new Error('localFlow.operationConflict');
+    const existing=await tx.get<LibraryIdentity>('meta','identity');
+    if(existing){
+      if(prior&&canonicalConsumerJson(prior.result)!==canonicalConsumerJson(existing))throw new Error('localFlow.libraryMissing');
+      // Export/replica validation requires this reserved receipt. Reconstruct a
+      // missing receipt from the actual identity, never the other way around.
+      if(!prior)tx.put('operations',key,{input,result:existing,committedAt:existing.createdAt});
+      return existing;
+    }
+    if(prior||hasLocalLibraryHint()||await tx.get('meta','service-owner'))throw new Error('localFlow.libraryMissing');
+    const meta=await tx.entries('meta');
+    const intentionalReset=meta.some(row=>row.key==='local-reset'&&row.value==='account-deletion')&&meta.some(row=>row.key==='signed-out'&&row.value===true);
+    const permittedMeta=intentionalReset?['package-catalog','local-reset','signed-out','local-incarnation','local-content-revision']:['package-catalog'];
+    if(meta.some(row=>!permittedMeta.includes(String(row.key))))throw new Error('localFlow.libraryMissing');
+    const operations=await tx.entries('operations');
+    if(operations.some(row=>JSON.parse(row.value.input).kind!=='package.catalog'))throw new Error('localFlow.libraryMissing');
+    // Public caches/catalog metadata do not claim a learner library. Any owned
+    // rows without identity, however, must remain intact for recovery.
+    for(const table of libraryTables)if(!['meta','operations','packageCache'].includes(table)&&await tx.count(table))throw new Error('localFlow.libraryMissing');
     const identity: LibraryIdentity = {
       id: crypto.randomUUID(),
       learnerId: crypto.randomUUID(),
@@ -597,26 +853,41 @@ export async function openLibrary(): Promise<LibraryIdentity> {
       schemaVersion: 2,
     };
     tx.put("meta", "identity", identity);
+    tx.delete('meta','local-reset');
+    tx.put('operations',key,{input,result:identity,committedAt:identity.createdAt});
     return identity;
   });
   markLocalLibraryPresent();
   return identity;
 }
 
-export function observeLibrary(listener: () => void, tables?: readonly Table[]): () => void {
+export function observeLibrary(listener: () => void, tables?: readonly Table[], keys?:Readonly<Partial<Record<Table,readonly string[]>>>): () => void {
   const filter = tables ? new Set<Table>(tables) : null;
-  const relevant = (changed: unknown): boolean => !filter
-    || !Array.isArray(changed)
-    || changed.some((table) => filter.has(table as Table));
+  const relevant = (change: {tables?:unknown;clears?:unknown;records?:unknown}|undefined): boolean => {
+    if(!filter||!Array.isArray(change?.tables))return true;
+    return change.tables.some((table:Table)=>{
+      if(!filter.has(table))return false;
+      const selected=keys?.[table];
+      if(!selected)return true;
+      // Notifications are hints, never facts. An incomplete hint triggers a
+      // coherent reread rather than silently missing a library replacement.
+      if(!Array.isArray(change.clears)||!Array.isArray(change.records))return true;
+      if(change.clears.includes(table))return true;
+      const records=change.records.filter(record=>record&&typeof record==='object'
+        &&record.table===table&&typeof record.key==='string');
+      return !records.length||records.some(record=>selected.includes(record.key));
+    });
+  };
   const local = (event: Event) => {
-    if (relevant((event as CustomEvent<{ tables?: unknown }>).detail?.tables)) listener();
+    if (relevant((event as CustomEvent).detail)) listener();
   };
   window.addEventListener("sensa-library-changed", local);
   const channel = typeof BroadcastChannel === "undefined"
     ? null
-    : new BroadcastChannel("sensa-local-library");
+    : new BroadcastChannel(localLibraryScopedName('sensa-local-library'));
   if (channel) channel.onmessage = (event) => {
-    if (relevant(event.data?.tables)) listener();
+    if(event.data?.sender===libraryNotificationSender)return;
+    if (relevant(event.data)) listener();
   };
   return () => {
     window.removeEventListener("sensa-library-changed", local);
@@ -638,9 +909,9 @@ export function observeCloudSyncState(listener: () => void): () => void {
   return () => window.removeEventListener("sensa-sync-state-changed", listener);
 }
 
-export async function readLibraryStorageDiagnostics(): Promise<SqliteStorageDiagnostics> {
+export async function readLibraryStorageDiagnostics(options?:Readonly<{verifyIntegrity?:boolean}>): Promise<SqliteStorageDiagnostics> {
   const adapter = await storageCall(sqliteRecordAdapter, 'localFlow.storageOpen');
-  return storageCall(() => adapter.diagnostics());
+  return storageCall(() => adapter.diagnostics(options),'localFlow.storageOpen');
 }
 
 export async function readPortableMediaStorageDiagnostics():Promise<PortableMediaStorageDiagnostics>{

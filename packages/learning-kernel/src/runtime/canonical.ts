@@ -31,47 +31,10 @@ export function canonicalizeText(value: string): string {
     .toLocaleLowerCase("und");
 }
 
-function utf8Bytes(value: string): Uint8Array {
-  const bytes: number[] = [];
-  for (let index = 0; index < value.length; index += 1) {
-    const first = value.charCodeAt(index);
-    let codePoint = first;
+const utf8Encoder=new TextEncoder();
 
-    if (first >= 0xd800 && first <= 0xdbff) {
-      const second = value.charCodeAt(index + 1);
-      if (second >= 0xdc00 && second <= 0xdfff) {
-        codePoint = 0x10000 + ((first - 0xd800) << 10) + (second - 0xdc00);
-        index += 1;
-      } else {
-        codePoint = 0xfffd;
-      }
-    } else if (first >= 0xdc00 && first <= 0xdfff) {
-      codePoint = 0xfffd;
-    }
-
-    if (codePoint <= 0x7f) {
-      bytes.push(codePoint);
-    } else if (codePoint <= 0x7ff) {
-      bytes.push(
-        0xc0 | (codePoint >> 6),
-        0x80 | (codePoint & 0x3f),
-      );
-    } else if (codePoint <= 0xffff) {
-      bytes.push(
-        0xe0 | (codePoint >> 12),
-        0x80 | ((codePoint >> 6) & 0x3f),
-        0x80 | (codePoint & 0x3f),
-      );
-    } else {
-      bytes.push(
-        0xf0 | (codePoint >> 18),
-        0x80 | ((codePoint >> 12) & 0x3f),
-        0x80 | ((codePoint >> 6) & 0x3f),
-        0x80 | (codePoint & 0x3f),
-      );
-    }
-  }
-  return Uint8Array.from(bytes);
+function utf8Bytes(value:string):Uint8Array {
+  return utf8Encoder.encode(value);
 }
 
 const SHA256_K = Object.freeze([
@@ -203,8 +166,35 @@ export function sha256(value: string | Uint8Array): string {
     .join("");
 }
 
+// Cache only exact immutable canonical strings, never objects or mutable bytes.
+// Repeated material validation still canonicalizes the current value and checks
+// its actual digest; bounded entries cannot retain an unbounded media library.
+type CanonicalDigestEntry={text:string;digest:string};
+const canonicalDigests=new Map<string,{reference:WeakRef<CanonicalDigestEntry>;length:number}>();
+const maximumCanonicalDigestChars=2*1024*1024;
+let canonicalDigestChars=0;
+
 export function canonicalJsonDigest(value: unknown): string {
-  return sha256(canonicalizeJson(value));
+  const text=canonicalizeJson(value);
+  if(typeof WeakRef==='undefined'||text.length<16*1024||text.length>256*1024)return sha256(text);
+  // The bucket is not a security digest: full text equality is mandatory.
+  // Weak values leave no new strong reference to cleared learner payloads.
+  let fingerprint=2166136261;
+  for(let index=0;index<text.length;index++)fingerprint=Math.imul(fingerprint^text.charCodeAt(index),16777619)>>>0;
+  const key=`${fingerprint}:${text.length}`,cached=canonicalDigests.get(key);
+  const previous=cached?.reference.deref();
+  if(previous?.text===text){
+    canonicalDigests.delete(key);canonicalDigests.set(key,cached!);return previous.digest;
+  }
+  const result=sha256(text);
+  if(cached){canonicalDigests.delete(key);canonicalDigestChars-=cached.length;}
+  while(canonicalDigestChars+text.length>maximumCanonicalDigestChars){
+    const oldest=canonicalDigests.keys().next().value;
+    if(oldest===undefined)break;
+    canonicalDigestChars-=canonicalDigests.get(oldest)!.length;canonicalDigests.delete(oldest);
+  }
+  canonicalDigests.set(key,{reference:new WeakRef({text,digest:result}),length:text.length});canonicalDigestChars+=text.length;
+  return result;
 }
 /** Stable UUID derived from a fact identity, with UUID v4/variant bits set. */
 export function stableUuid(value: string): string {
@@ -220,4 +210,3 @@ export function stableUuid(value: string): string {
     .join("");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
-

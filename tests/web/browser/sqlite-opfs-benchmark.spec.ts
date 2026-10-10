@@ -11,6 +11,7 @@ test.setTimeout(180_000);
 test('durable OPFS profiles survive abrupt Worker termination with intact rows',async({page})=>{
 const built=await viteBuild({
   configFile:false,
+  worker:{format:'es'},
   root:process.cwd(),
   logLevel:'silent',
   base:'/',

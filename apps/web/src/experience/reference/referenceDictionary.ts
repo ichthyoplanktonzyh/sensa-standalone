@@ -11,12 +11,11 @@ export interface ReferenceRelease {
   releaseId: string;
   provider: string;
   edition: string;
-  /** The language of the headword and its senses. A release names one target
-   * language, so a lookup for another language is another release, never the
-   * same one relabelled. */
+  /** The language of the lexical forms being looked up, not of their source
+   * definitions. Another word language is another release, not a relabelled one. */
   targetLanguage: string;
-  /** The language the learner reads the entry in. It follows the familiar
-   * language rather than the interface language. */
+  /** Requested Support Language for learner-facing glosses. Provider wording
+   * keeps its own language rather than inheriting this or the interface locale. */
   learnerLocale: string;
   rightsLabel: string;
   status: ReferenceReleaseStatus;
@@ -43,9 +42,11 @@ export interface ReferenceSense {
   referenceSenseId: string;
   order: number;
   partOfSpeech: string;
-  /** Optional learner-language wording. Live English providers may omit it. */
+  /** Optional learner-language wording, separate from the source definition. */
   glossL1?: string;
-  definitionL2?: string;
+  /** Source wording and its actual language. A Spanish headword can have an
+   * English definition; neither Target nor Support Language relabels it. */
+  definition?: {text:string;languageTag:string};
   labels?: readonly string[];
   examples?: readonly ReferenceExample[];
 }
@@ -257,7 +258,7 @@ const RICH_ENTRY_FIELDS: Readonly<Record<string, Partial<ReferenceEntry>>> = {
         order: 1,
         partOfSpeech: 'adj.',
         glossL1: '容易因碰撞、压力或搬动而损坏的；易碎的',
-        definitionL2: 'Easily broken or damaged and therefore needing careful handling.',
+        definition: {text:'Easily broken or damaged and therefore needing careful handling.',languageTag:'en'},
         labels: ['常用于物品、材料或结构'],
         examples: [{
           exampleId: 'ref.mvp.example.fragile.1',
@@ -271,7 +272,7 @@ const RICH_ENTRY_FIELDS: Readonly<Record<string, Partial<ReferenceEntry>>> = {
         order: 2,
         partOfSpeech: 'adj.',
         glossL1: '脆弱的；不稳定、容易恶化的',
-        definitionL2: 'Not strong or secure and likely to fail or become worse.',
+        definition: {text:'Not strong or secure and likely to fail or become worse.',languageTag:'en'},
         labels: ['常用于关系、健康、经济或局势'],
       },
     ],
@@ -296,7 +297,7 @@ const RICH_ENTRY_FIELDS: Readonly<Record<string, Partial<ReferenceEntry>>> = {
         order: 1,
         partOfSpeech: 'v.',
         glossL1: '使某个活动、过程或状态继续；维持',
-        definitionL2: 'To make an activity, process, or state continue over time.',
+        definition: {text:'To make an activity, process, or state continue over time.',languageTag:'en'},
         examples: [{
           exampleId: 'ref.mvp.example.sustain.1',
           textL2: 'The new funding will sustain the project through the winter.',
@@ -309,7 +310,7 @@ const RICH_ENTRY_FIELDS: Readonly<Record<string, Partial<ReferenceEntry>>> = {
         order: 2,
         partOfSpeech: 'v.',
         glossL1: '承受损伤、损失或压力',
-        definitionL2: 'To experience or suffer damage, loss, or injury.',
+        definition: {text:'To experience or suffer damage, loss, or injury.',languageTag:'en'},
       },
     ],
     usageNotes: [{
@@ -332,7 +333,7 @@ const RICH_ENTRY_FIELDS: Readonly<Record<string, Partial<ReferenceEntry>>> = {
       order: 1,
       partOfSpeech: 'v.',
       glossL1: '从别人那里暂时取得某物，之后归还；借入',
-      definitionL2: 'To take and use something that belongs to someone else, intending to return it.',
+      definition: {text:'To take and use something that belongs to someone else, intending to return it.',languageTag:'en'},
       examples: [{
         exampleId: 'ref.mvp.example.borrow.1',
         textL2: 'Could I borrow your charger for an hour?',
@@ -360,7 +361,7 @@ const RICH_ENTRY_FIELDS: Readonly<Record<string, Partial<ReferenceEntry>>> = {
       order: 1,
       partOfSpeech: 'v.',
       glossL1: '把自己的某物暂时给别人使用；借出',
-      definitionL2: 'To give something to someone for a limited time, expecting it to be returned.',
+      definition: {text:'To give something to someone for a limited time, expecting it to be returned.',languageTag:'en'},
       examples: [{
         exampleId: 'ref.mvp.example.lend.1',
         textL2: 'I can lend you my charger until this evening.',
@@ -503,6 +504,11 @@ export function lookupReferenceContextual(
   };
 }
 
+/** All Reference renderers use the same text/language pair. */
+export function referenceSenseText(sense:ReferenceSense,learnerLocale:string):{text:string;languageTag:string}|undefined{
+  return sense.glossL1?{text:sense.glossL1,languageTag:learnerLocale}:sense.definition;
+}
+
 export function projectReferenceEntryToQuick(
   result: ReferenceLookupResult,
 ): QuickDictEntry {
@@ -513,11 +519,10 @@ export function projectReferenceEntryToQuick(
     word: result.entry.headword,
     phonetic: pronunciation?.ipa ?? '',
     audioUrl: pronunciation?.audioUrl,
-    senses: quickSenses.map((sense) => ({
-      pos: sense.partOfSpeech,
-      text: sense.glossL1 ?? sense.definitionL2 ?? 'Definition unavailable',
-      referenceSenseId: sense.referenceSenseId,
-    })),
+    senses: quickSenses.map((sense) => {
+      const display=referenceSenseText(sense,result.release.learnerLocale);
+      return {pos:sense.partOfSpeech,text:display?.text??'Definition unavailable',languageTag:display?.languageTag??'en',referenceSenseId:sense.referenceSenseId};
+    }),
     hasFullDetail: true,
     isStarred: false,
     referenceLookup: result,

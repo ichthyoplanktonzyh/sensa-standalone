@@ -1,15 +1,15 @@
 import {z} from 'zod';
 
-import type {BackupRows} from '../backupValidation';
+import type {LibraryRecordRows} from '../libraryRecordReader';
 import type {PersonalContentRecord} from '../../../personalContent/system/personalContentSystem';
 import type {Table} from '../store';
 
 /** Validate Personal Content and its references into Semantic/Learning facts. */
-export function validatePersonalContentReplica(input:{rows:BackupRows;requireRow:(table:Table,id:string)=>any;fail:()=>never}){
+export function* validatePersonalContentReplicaSteps(input:{rows:LibraryRecordRows;requireRow:(table:Table,id:string)=>any;fail:()=>never}){
  const {rows,requireRow,fail}=input,uuid=z.string().uuid();
- for(const {key,value:annotation} of rows.annotations as {key:string;value:PersonalContentRecord}[]){
+ for(const {key,value:annotation} of rows.annotations as Iterable<{key:string;value:PersonalContentRecord}>){
   if(!annotation||annotation.id!==key||!['sense_note','saved_sense','saved_example','sense_context','learning_scene'].includes(annotation.kind))fail();
-  if(annotation.kind==='sense_note'){z.string().min(1).max(2000).parse(annotation.senseId);z.string().min(1).max(1000).parse(annotation.body);z.number().int().positive().parse(annotation.revision);z.number().int().nonnegative().parse(annotation.createdAt);z.number().int().nonnegative().parse(annotation.updatedAt);}
+  if(annotation.kind==='sense_note'){z.string().min(1).max(2000).parse(annotation.senseId);z.string().max(1000).parse(annotation.body);z.number().int().positive().parse(annotation.revision);z.number().int().nonnegative().parse(annotation.createdAt);z.number().int().nonnegative().parse(annotation.updatedAt);}
   if(annotation.kind==='saved_sense'){z.string().min(1).max(2000).parse(annotation.senseId);z.number().int().nonnegative().parse(annotation.createdAt);}
   if(annotation.kind==='saved_example'){z.string().min(1).max(2000).parse(annotation.exampleId);z.number().int().nonnegative().parse(annotation.createdAt);}
   if(annotation.kind==='sense_context'){
@@ -29,5 +29,6 @@ export function validatePersonalContentReplica(input:{rows:BackupRows;requireRow
    if((annotation.acceptedRevisionId===null)!==(annotation.acceptedPersonalMeaningId===null)||annotation.acceptedRevisionId!==null&&!annotation.revisions.some(revision=>revision.revisionId===annotation.acceptedRevisionId))fail();
    if(annotation.acceptedPersonalMeaningId!==null)uuid.parse(annotation.acceptedPersonalMeaningId);
   }
+  yield;
  }
 }

@@ -1,4 +1,5 @@
 import {test} from 'vitest';
+import {digestOf} from '../../../apps/web/src/experience/personalMeaningJourney/digest';
 /**
  * Intake preserves absolute language facts without consulting the learner's
  * currently selected Route. Route selection belongs to Add-to-Learning, not to
@@ -85,7 +86,9 @@ assert.equal(repository.writes,2,'editing one draft rewrites only its Inbox row 
 assert.equal(repository.reads,3,'editing a draft does not scan unrelated meanings or registry facts');
 assert.equal((await saved()).meanings.length,0,'editing the slow-track draft still does not leak it into the world');
 const clarifiedContext=gateway.getClarificationDraft(draft.intakeId)!.context!;
-const completed=await gateway.completeClarificationDraft({operationId:crypto.randomUUID(),intakeId:draft.intakeId,context:clarifiedContext,languageContext:{supportLanguageTag:'ko',targetLanguageTag:'it'},focus:null,sense:{proposedSenseKey:'hesitate-to-speak',coreMeaningFocus:'想说某件事却因为犹豫而停住',prototypeScenes:[{summary:'一个人准备开口，犹豫后停住。',participantRoles:['说话者'],states:['准备开口','犹豫'],directionOrCausality:null}],includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[],unresolvedQuestions:[]},expression:{surfaceForm:'esitare a parlare',expressionType:'phrase',languageTag:'it',relation:'realizes',semanticCoverage:'exact'},expressionCandidates:[{surfaceForm:'esitare a parlare',expressionType:'phrase',languageTag:'it',relation:'realizes',semanticCoverage:'exact'}],confirmExpression:true,transcript:[{messageId:crypto.randomUUID(),role:'learner',body:'就是想说但停住的感觉。',occurredAt:'2026-09-01T00:00:01.000Z'}],provenance:{provider:'fixture',model:'fixture',promptVersion:'v1'},semanticPolicyVersion:'fixture-v1'});
+assert.equal(clarifiedContext.languageTag,null,'adding raw material must not classify its language from a changed Route');
+assert.equal(clarifiedContext.languageObservation,null);
+const completed=await gateway.completeClarificationDraft({operationId:crypto.randomUUID(),intakeId:draft.intakeId,source:await gateway.captureClarificationSource('intake',draft.intakeId),context:clarifiedContext,languageContext:{supportLanguageTag:'ko',targetLanguageTag:'it'},focus:null,sense:{proposedSenseKey:'hesitate-to-speak',coreMeaningFocus:'想说某件事却因为犹豫而停住',prototypeScenes:[{summary:'一个人准备开口，犹豫后停住。',participantRoles:['说话者'],states:['准备开口','犹豫'],directionOrCausality:null}],includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[],unresolvedQuestions:[]},expression:{surfaceForm:'esitare a parlare',expressionType:'phrase',languageTag:'it',relation:'realizes',semanticCoverage:'exact'},expressionCandidates:[{surfaceForm:'esitare a parlare',expressionType:'phrase',languageTag:'it',relation:'realizes',semanticCoverage:'exact'}],confirmExpression:true,transcript:[{messageId:crypto.randomUUID(),role:'learner',body:'就是想说但停住的感觉。',occurredAt:'2026-09-01T00:00:01.000Z'}],provenance:{provider:'fixture',model:'fixture',promptVersion:'v1'},semanticPolicyVersion:'fixture-v1'});
 stored=await saved();assert.equal(stored.inboxItems.length,0);assert.equal(stored.clarificationDrafts.length,0);assert.equal(stored.meanings.length,1);
 assert.equal(completed.meaningFocusId,null,'an unambiguous Context completes without manufacturing a Focus');
 assert.equal(stored.meanings[0].focuses.length,0);assert.equal(stored.meanings[0].focusAcceptances.length,0);
@@ -93,14 +96,18 @@ assert.equal(stored.meanings[0].constructions[0].meaningFocusId,null);assert.equ
 const written=stored.meanings[0].personalExpressionAnchorRevisions;
 assert.equal(written.at(-1).languageTag,'it','the confirmed expression uses the clarification’s pinned Target Language');
 const blockAnchors=stored.meanings[0].personalSemanticAnchorRevisions;
-assert.equal(blockAnchors.length,1);assert.equal(blockAnchors[0].languageTag,'ko','material uses the clarification’s pinned Support Language, not a later active Route');assert.equal(blockAnchors[0].bodyText,'雨后的巷子\n\n雨停了');
+assert.equal(blockAnchors.length,1);assert.equal(blockAnchors[0].languageTag,null,'unclassified raw material remains unresolved, not stamped with a Support Route');assert.equal(blockAnchors[0].bodyText,'雨后的巷子\n\n雨停了');
 assert.equal(gateway.getWorldItems().length,1);assert.equal(gateway.getLearningSources(completed.personalMeaningId).length,1,'the atomic result is immediately eligible for the one Add-to-Learning path');
 const acceptedDetail=gateway.getDetail(completed.personalMeaningId)!;
 const acceptedSource=gateway.getLearningSources(completed.personalMeaningId)[0]!;
 const revised=await gateway.reviseContext({operationId:crypto.randomUUID(),personalMeaningId:completed.personalMeaningId,expectedRevision:acceptedDetail.revision,blocks:[{kind:'text',bodyText:'雨停以后，我在巷口想开口却又停下。'}]});
 assert.equal(revised.revision,acceptedDetail.revision+1);
 assert.equal(gateway.getDetail(completed.personalMeaningId)?.materialBlocks[0]?.bodyText,'雨停以后，我在巷口想开口却又停下。','accepted expression details expose the current Context revision');
-assert.equal(gateway.getLearningSources(completed.personalMeaningId)[0]?.context.text,acceptedSource.context.text,'editing Context preserves the originally accepted learning source rather than silently rewriting it');
+const currentLearningSource=gateway.getLearningSources(completed.personalMeaningId)[0]!;
+assert.equal(currentLearningSource.context.text,'雨停以后，我在巷口想开口却又停下。','a new explicit preparation can select the current Context');
+assert.deepEqual(currentLearningSource.reference,acceptedSource.reference,'Context revision does not replace accepted Sense, Binding or Alignment identity');
+assert.equal(acceptedSource.context.text,'雨后的巷子\n\n雨停了','the previously resolved snapshot stays unchanged');
+assert.equal((await saved()).meanings[0].personalSemanticAnchorRevisions.find((revision:any)=>revision.personalSemanticAnchorRevisionId===acceptedSource.context.personalSemanticAnchorRevisionIds[0]).bodyText,acceptedSource.context.text,'original Context remains available for pinned requests and history');
 await assert.rejects(gateway.reviseContext({operationId:crypto.randomUUID(),personalMeaningId:completed.personalMeaningId,expectedRevision:acceptedDetail.revision,blocks:[{kind:'text',bodyText:'过期页面的覆盖'}]}),/meaningChanged/,'a stale expression detail cannot overwrite a newer Context revision');
 
 // Two captures may arrive together from a batch-oriented Agent. Commands stay
@@ -156,7 +163,7 @@ await assert.rejects(
   recoverableGateway.createClarificationDraft({operationId:crypto.randomUUID(),blocks:[{kind:'text',bodyText:'stale command'}]}),
   /meaningChanged/,
 );
-assert.deepEqual(recoverableGateway.getStatus(),{ok:true,error:null,errorKind:null},'a successful conflict reload leaves the gateway usable');
+assert.deepEqual(recoverableGateway.getStatus(),{ok:true,error:null,errorKind:null,loading:false},'a successful conflict reload leaves the gateway usable');
 assert.deepEqual(recoverableGateway.getWorldItems(),[],'the reloaded semantic world remains visible after the rejected command');
 rejectCommit=false;
 await recoverableGateway.createClarificationDraft({operationId:crypto.randomUUID(),blocks:[{kind:'text',bodyText:'retry after reload'}]});
@@ -170,7 +177,7 @@ const pendingAcceptance={...fastTrackPayload('They broke the ice.','broke','en')
 const acceptanceQueued=await raceIntake.submit(pendingAcceptance);
 assert.equal(acceptanceQueued.route,'inbox');
 if(acceptanceQueued.route!=='inbox')throw new Error('fixture must enter Inbox');
-const acceptedLater=await raceIntake.resolve({operationId:crypto.randomUUID(),intakeId:acceptanceQueued.intakeId,sense:pendingAcceptance.sense!});
+const acceptedLater=await raceIntake.resolve({operationId:crypto.randomUUID(),intakeId:acceptanceQueued.intakeId,expectedItemDigest:digestOf((await raceRepository.load()).inboxItems.find(item=>item.intakeId===acceptanceQueued.intakeId)),sense:pendingAcceptance.sense!});
 assert.equal(acceptedLater.route,'fast_track');
 if(acceptedLater.route!=='fast_track')throw new Error('fixture must commit');
 const acceptedRecord=(await raceRepository.load() as any).meanings.find((meaning:any)=>meaning.personalMeaning.personalMeaningId===acceptedLater.personalMeaningId);
@@ -186,7 +193,7 @@ assert.deepEqual(waiting.map((item:any)=>item.status),['pending_expression','pen
 assert.equal((await raceRepository.load() as any).meanings.find((meaning:any)=>meaning.personalExpressionAnchorRevisions[0]?.surfaceForm==='back out'),undefined,'a missing Context cannot leak into the semantic world');
 if(noContextQueued.route!=='inbox')throw new Error('fixture must enter Inbox');
 const suppliedContext={modality:'text' as const,textSegment:'I planned to attend, but then changed my mind.',mediaReferenceIds:[],languageTag:'en',source:{client:'sensa-web',url:null,title:'Inbox clarification',sourceReferenceId:noContextQueued.intakeId,domSelector:null,paragraphContext:null}};
-const supplied=await raceGateway.completeClarificationDraft({operationId:crypto.randomUUID(),intakeId:noContextQueued.intakeId,context:suppliedContext,languageContext:slowContext,focus:null,sense:{proposedSenseKey:'back-out',coreMeaningFocus:'原本准备做某事，后来决定退出或取消',prototypeScenes:[{summary:'一个人原先准备参与，之后改变决定。',participantRoles:['行动者'],states:['原计划参与','决定退出'],directionOrCausality:'决定变化导致退出'}],includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[],unresolvedQuestions:[]},expression:{surfaceForm:'back out',expressionType:'phrase',languageTag:'en',relation:'realizes',semanticCoverage:'exact'},expressionCandidates:[{surfaceForm:'back out',expressionType:'phrase',languageTag:'en',relation:'realizes',semanticCoverage:'exact'}],confirmExpression:true,transcript:[{messageId:crypto.randomUUID(),role:'learner',body:suppliedContext.textSegment,occurredAt:'2026-09-01T00:00:02.000Z'}],provenance:{provider:'fixture',model:'fixture',promptVersion:'v1'},semanticPolicyVersion:'fixture-v1'});
+const supplied=await raceGateway.completeClarificationDraft({operationId:crypto.randomUUID(),intakeId:noContextQueued.intakeId,source:await raceGateway.captureClarificationSource('intake',noContextQueued.intakeId),context:suppliedContext,languageContext:slowContext,focus:null,sense:{proposedSenseKey:'back-out',coreMeaningFocus:'原本准备做某事，后来决定退出或取消',prototypeScenes:[{summary:'一个人原先准备参与，之后改变决定。',participantRoles:['行动者'],states:['原计划参与','决定退出'],directionOrCausality:'决定变化导致退出'}],includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[],unresolvedQuestions:[]},expression:{surfaceForm:'back out',expressionType:'phrase',languageTag:'en',relation:'realizes',semanticCoverage:'exact'},expressionCandidates:[{surfaceForm:'back out',expressionType:'phrase',languageTag:'en',relation:'realizes',semanticCoverage:'exact'}],confirmExpression:true,transcript:[{messageId:crypto.randomUUID(),role:'learner',body:suppliedContext.textSegment,occurredAt:'2026-09-01T00:00:02.000Z'}],provenance:{provider:'fixture',model:'fixture',promptVersion:'v1'},semanticPolicyVersion:'fixture-v1'});
 assert.equal(raceGateway.getLearningSources(supplied.personalMeaningId)[0]?.context.text,suppliedContext.textSegment,'clarification must supply and preserve a formerly missing Context');
 
 console.log('PASS: Intake preserves absolute language tags, ignores the active learning Route, accepts canonical/observed expression forms, and mechanically routes missing facts. Pure engine and in-memory store; no browser, network or model.');

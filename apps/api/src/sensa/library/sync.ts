@@ -1,12 +1,22 @@
 import {createHash} from 'node:crypto';
+import {Buffer} from 'node:buffer';
 import type {Hono} from 'hono';
 import type {DatabaseExecutor} from '../../database/core.js';
 import {librarySyncHash,librarySyncCommit,librarySyncManifest,librarySyncBlockFetch,librarySyncBlockFetchBytes,librarySyncBlockMissing,librarySyncBlockStore,librarySyncBlockStoreChars,type LibrarySyncManifest} from '@sensa/contracts/sensa';
+import {decodeLibrarySyncBlock} from '@sensa/contracts/sensa/library-sync-blocks';
 import {ConsumerError} from '../access/auth.js';
 import {libraryCloudCapacityBytes,libraryCloudReadLeaseMs,libraryCloudRetiredGraceMs,libraryCloudUploadLeaseMs,purgeExpiredLibraryCloudBlocks} from './retention.js';
 type Access=<T>(request:Request,work:(db:DatabaseExecutor,a:{accountId:string;installationId?:string;now?:Date})=>Promise<T>)=>Promise<T>;
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
 const conflict=(code='library_sync_conflict')=>new ConsumerError(409,code);
+function blockText(refs:string[],blocks:ReadonlyMap<string,string>){
+ const parts:string[]=[];let size=0;
+ for(const ref of refs){const data=blocks.get(ref);if(data===undefined)throw conflict('library_sync_missing_block');
+  let part:string;try{part=decodeLibrarySyncBlock(data);}catch{throw new ConsumerError(400,'library_sync_format');}
+  size+=Buffer.byteLength(part);if(size>90*1024*1024)throw new ConsumerError(413,'library_sync_capacity');parts.push(part);
+ }
+ return parts.join('');
+}
 export function registerLibrarySync(app:Hono,access:Access){
  app.use('/sensa/library-sync/*',async(c,next)=>{c.header('Cache-Control','no-store');await next();});
  const use:Access=(request,work)=>access(request,(db,a)=>{if(a.installationId)throw new ConsumerError(403,'web_authorization_required');return work(db,a);});
@@ -15,7 +25,9 @@ export function registerLibrarySync(app:Hono,access:Access){
  async function manifest(db:DatabaseExecutor,id:string,refs:string[]):Promise<LibrarySyncManifest>{
   const blocks=(await db.query('SELECT hash,data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[id,refs])).rows;
   const byHash=new Map(blocks.map(b=>[b.hash,b.data]));if(refs.some(r=>!byHash.has(r)))throw conflict('library_sync_missing_block');
-  return librarySyncManifest.parse(JSON.parse(refs.map(r=>byHash.get(r)).join('')));
+  const value=JSON.parse(blockText(refs,byHash));
+  if(value?.version!==6)throw conflict('library_sync_incompatible_checkpoint');
+  return librarySyncManifest.parse(value);
  }
  app.get('/sensa/library-sync/head',async c=>c.json(await use(c.req.raw,async(db,a)=>{
   const now=a.now??new Date(),head=await current(db,a.accountId),leaseUntil=new Date(now.getTime()+libraryCloudReadLeaseMs);
@@ -42,7 +54,7 @@ export function registerLibrarySync(app:Hono,access:Access){
   // Omit an empty deferred page so an already-open client using the previous strict
   // response schema can keep syncing while the Web and API release rolls forward.
   return deferred.length?{blocks,missing,deferred}:{blocks,missing};}));});
- app.post('/sensa/library-sync/blocks/store',async c=>{const input=librarySyncBlockStore.parse(await c.req.json());if(input.blocks.reduce((total,block)=>total+block.data.length,0)>librarySyncBlockStoreChars)throw new ConsumerError(413,'body_too_large');for(const block of input.blocks)if(hash(block.data)!==block.hash)throw new ConsumerError(400,'library_sync_hash');return c.json(await use(c.req.raw,async(db,a)=>{await current(db,a.accountId);const now=a.now??new Date(),leaseUntil=new Date(now.getTime()+libraryCloudUploadLeaseMs);
+ app.post('/sensa/library-sync/blocks/store',async c=>{const input=librarySyncBlockStore.parse(await c.req.json());if(input.blocks.reduce((total,block)=>total+block.data.length,0)>librarySyncBlockStoreChars)throw new ConsumerError(413,'body_too_large');for(const block of input.blocks)if(hash(block.data)!==block.hash)throw new ConsumerError(400,'library_sync_hash');return c.json(await use(c.req.raw,async(db,a)=>{for(const block of input.blocks){try{decodeLibrarySyncBlock(block.data);}catch{throw new ConsumerError(400,'library_sync_format');}}await current(db,a.accountId);const now=a.now??new Date(),leaseUntil=new Date(now.getTime()+libraryCloudUploadLeaseMs);
   // Reclaim expired orphan uploads before enforcing the bounded account budget.
   await purgeExpiredLibraryCloudBlocks(db,now,1_000,a.accountId);
   const hashes=input.blocks.map(b=>b.hash);
@@ -69,15 +81,18 @@ export function registerLibrarySync(app:Hono,access:Access){
   let retiredRefs:string[]=[];
   if(head.manifest){const old=await manifest(db,a.accountId,head.manifest);if(old.libraryId!==next.libraryId||old.learnerId!==next.learnerId)throw conflict('library_sync_identity');
    const byKey=new Map(next.rows.map(r=>[JSON.stringify([r.table,r.key]),r]));
+   // Session focus and endings evolve, but their historical identity may not
+   // disappear while Runs retain references to the frozen arrangement.
+   if(old.rows.some(row=>['learningSessions','learningRuns','supplementalMembershipStates'].includes(row.table)&&!byKey.has(JSON.stringify([row.table,row.key]))))throw conflict('library_sync_history');
    // Original Events and the decisions that reconcile concurrent histories are
    // durable Personal Library Facts. Neither may be deleted or rewritten by a
    // later materialized checkpoint.
-   const protectedRows=old.rows.filter(row=>row.table==='learningEvents'||row.table==='learningReconciliations').map(row=>{const replacement=byKey.get(JSON.stringify([row.table,row.key]));if(!replacement)throw conflict('library_sync_history');return {row,replacement};});
+   const protectedRows=old.rows.filter(row=>row.table==='learningEvents'||row.table==='learningReconciliations'||row.table==='studyScopes').map(row=>{const replacement=byKey.get(JSON.stringify([row.table,row.key]));if(!replacement)throw conflict('library_sync_history');return {row,replacement};});
    const changedProtected=protectedRows.filter(({row,replacement})=>JSON.stringify(row.blocks)!==JSON.stringify(replacement.blocks));
    const historyRefs=[...new Set(changedProtected.flatMap(({row,replacement})=>[...row.blocks,...replacement.blocks]))],historyBlocks=new Map<string,string>();
    if(historyRefs.length)for(const block of (await db.query('SELECT hash,data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[a.accountId,historyRefs])).rows)historyBlocks.set(block.hash as string,block.data as string);
    if(historyRefs.some(ref=>!historyBlocks.has(ref)))throw conflict('library_sync_missing_block');
-   const historyText=(refs:string[])=>refs.map(ref=>historyBlocks.get(ref)!).join('');
+   const historyText=(refs:string[])=>blockText(refs,historyBlocks);
    // Learning facts are never silently deleted or rewritten by snapshot publication.
    for(const {row,replacement} of changedProtected){
     const before=historyText(row.blocks),after=historyText(replacement.blocks);

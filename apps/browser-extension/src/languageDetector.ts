@@ -1,20 +1,25 @@
-import {francAll} from 'franc';
+import {sensaCanonicalLanguageTag,sensaLanguageForDeclaredTag} from '@sensa/contracts/sensa';
 
 /**
- * The open-set ISO 639-3 observation a local detector answers, or nothing.
+ * Chrome's local CLD observation, or nothing when it cannot reliably place text.
  *
- * `franc` reads trigram statistics, which is why it runs in the background
- * service worker rather than in the content script: its tables are a quarter of
- * a megabyte, and a page should not pay for them to detect one selection. The
- * content script messages this worker instead, and the answer travels back as a
- * plain code.
+ * Keep the browser's mature detector behind one interface instead of bundling
+ * another language model. Known plain codes use the existing ISO-639-3 wire
+ * vocabulary; variants and unsupported codes stay intact. No learner Route or
+ * supported-language candidate restriction changes the observation.
  *
- * Confidence is the separation from the runner-up, not a manufactured
- * probability. Most importantly, the candidate set is not restricted to what
- * this release supports: an unsupported observation stays unsupported.
+ * Confidence records CLD's reported text share, not a correctness probability.
+ * An unreliable/unknown observation is not guessed into English. Callers may
+ * use an actual source declaration, or keep language undetermined.
  */
-export function detectIso6393(text: string):{code:string;confidence:number}|null {
-  const [first,second]=francAll(text);
-  if(!first||first[0]==='und')return null;
-  return {code:first[0],confidence:Math.max(0,Math.min(1,first[1]-(second?.[1]??0)))};
+export async function detectSourceLanguage(text:string):Promise<{code:string;confidence:number}|null>{
+ try{
+  const result=await chrome.i18n.detectLanguage(text);
+  if(result.isReliable!==true||!Array.isArray(result.languages))return null;
+  const first=result.languages.filter(item=>typeof item.language==='string'&&Number.isFinite(item.percentage)&&item.percentage>0&&item.percentage<=100).sort((a,b)=>b.percentage-a.percentage)[0];
+  const tag=first?sensaCanonicalLanguageTag(first.language):null;
+  if(!first||!tag||tag==='und')return null;
+  const language=sensaLanguageForDeclaredTag(tag);
+  return {code:!tag.includes('-')&&language?language.iso6393:tag,confidence:first.percentage/100};
+ }catch{return null;}
 }

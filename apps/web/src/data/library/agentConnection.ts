@@ -10,8 +10,9 @@ import {
 } from '@sensa/contracts/sensa';
 
 import { auth } from '../account/auth';
+import {captureAccountSessionBoundary,assertAccountSessionBoundary,type AccountSessionBoundary} from '../account/accountSessionBoundary';
 
-async function target(): Promise<{ base: string; token: string; subject: string }> {
+async function target(): Promise<{ base: string; token: string; subject: string;boundary:AccountSessionBoundary }> {
   const session = (await auth?.getSession())?.data.session;
   if (!session) throw new Error('authentication_required');
   const configured = import.meta.env.VITE_SENSA_API_URL as string | undefined;
@@ -20,11 +21,13 @@ async function target(): Promise<{ base: string; token: string; subject: string 
     base: configured.replace(/\/+$/u, '') + '/sensa/agent',
     token: session.access_token,
     subject: session.user.id,
+    boundary:await captureAccountSessionBoundary(session.user.id),
   };
 }
 
-async function send(method: 'GET' | 'POST', path: string, body?: unknown): Promise<unknown> {
+async function send(method: 'GET' | 'POST', path: string, body?: unknown, expectedSubject?:string): Promise<unknown> {
   const destination = await target();
+  if(expectedSubject&&destination.subject!==expectedSubject)throw new Error('account_changed');
   const response = await fetch(destination.base + path, {
     method,
     headers: {
@@ -39,6 +42,7 @@ async function send(method: 'GET' | 'POST', path: string, body?: unknown): Promi
   });
   const current = (await auth?.getSession())?.data.session;
   if (!current || current.user.id !== destination.subject) throw new Error('account_changed');
+  await assertAccountSessionBoundary(destination.boundary);
   const value = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(value?.code ?? 'agent_connection_unavailable');
   return value;
@@ -57,6 +61,25 @@ export async function createAgentConnectionSetup(input: {
   label: string;
   replacesConnectionId?: string;
 }): Promise<SensaAgentConnectionSetup> {
+  // Explicitly connecting an Agent needs a stable account Library destination,
+  // even before the first Meaning exists. Ordinary empty-account boot remains
+  // read-only; this publishes the identity checkpoint, not invented learner facts.
+  const [{readCloudSync},{syncAccountLibrary},{openLibrary,readLibrary},{registerIntakeDeliveryChannel}] = await Promise.all([
+    import('./cloudSync'),import('./cloudSyncService'),import('./store'),import('./intakeDelivery'),
+  ]);
+  const owner=await readLibrary(async tx=>{
+    if(await tx.get('meta','signed-out'))throw new Error('authentication_required');
+    return tx.get<{subject:string;accountId:string}>('meta','service-owner');
+  });
+  if(!owner||(await target()).subject!==owner.subject)throw new Error('account_changed');
+  let sync = await readCloudSync();
+  if (!sync?.revision || !['synced','pending'].includes(sync.status)) {
+    await syncAccountLibrary({publishEmptyIdentity:true});
+    sync = await readCloudSync();
+  }
+  if (!sync?.revision || !['synced','pending'].includes(sync.status)) throw new Error('intake_destination_unavailable');
+  if(sync.owner.subject!==owner.subject||sync.owner.accountId!==owner.accountId)throw new Error('account_changed');
+  await registerIntakeDeliveryChannel((await openLibrary()).id,owner.subject);
   return sensaAgentConnectionSetupSchema.parse(await send('POST', '/connection-setups', {
     contractVersion: sensaAgentConnectionContractVersion,
     setupId: crypto.randomUUID(),
@@ -64,7 +87,7 @@ export async function createAgentConnectionSetup(input: {
     clientKind: input.clientKind,
     label: input.label,
     replacesConnectionId: input.replacesConnectionId ?? null,
-  }));
+  },owner.subject));
 }
 
 export async function revokeAgentConnection(connectionId: string): Promise<void> {

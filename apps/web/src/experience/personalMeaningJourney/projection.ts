@@ -6,12 +6,16 @@
  * never advance a domain phase by itself.
  */
 
+import {sensaIntakeSourceMetaSchema} from '@sensa/contracts/sensa';
+import {isAlignmentActive,alignmentStatusAt} from './alignmentLifecycle';
 import type {
   SensaPersonalMeaningAlignmentSnapshot,
   SensaSenseExpressionBindingVersionSnapshot,
   SensaSenseVersionSnapshot,
 } from '@sensa/contracts/sensa';
-import type { MeaningJourneyRecord, SenseRegistryState } from './store';
+import type { MeaningJourneyRecord } from './store';
+import {readRegistry,type RegistryRead} from './registryRead';
+import {orderedMeaningContextAnchors} from './meaningRecords';
 import type {
   JourneyAlignmentView,
   JourneyDetailView,
@@ -70,8 +74,13 @@ const activeAlignmentForFocus = (record: MeaningJourneyRecord, focusId: string) 
     (alignment) =>
       alignment.basis.kind === 'sense_construction'
       && alignment.basis.meaningFocusId === focusId
-      && alignment.status === 'active',
+      && isAlignmentActive(record,alignment),
   ) ?? null;
+
+const currentFocuses=(record:MeaningJourneyRecord)=>record.focuses.filter(focus=>{
+ const alignments=record.alignments.filter(row=>row.basis.kind==='sense_construction'&&row.basis.meaningFocusId===focus.meaningFocusId);
+ return !alignments.length||alignments.some(row=>isAlignmentActive(record,row));
+});
 
 const latestConstructionForFocus = (record: MeaningJourneyRecord, focusId: string) =>
   record.constructions
@@ -106,17 +115,17 @@ const latestProposalVersion = (
     .sort((left, right) => right.version - left.version)[0] ?? null;
 
 const senseVersionById = (
-  registry: SenseRegistryState,
+  registry: RegistryRead,
   senseVersionId: string,
 ): SensaSenseVersionSnapshot | null =>
-  registry.senseVersions.find((version) => version.senseVersionId === senseVersionId)
+  readRegistry(registry,'senseVersions',senseVersionId)
   ?? null;
 
 const bindingVersionById = (
-  registry: SenseRegistryState,
+  registry: RegistryRead,
   bindingVersionId: string,
 ): SensaSenseExpressionBindingVersionSnapshot | null =>
-  registry.bindingVersions.find((version) => version.bindingVersionId === bindingVersionId)
+  readRegistry(registry,'bindingVersions',bindingVersionId)
   ?? null;
 
 const confirmedCandidateIds = (record: MeaningJourneyRecord): Set<string> => {
@@ -164,13 +173,12 @@ const bindingBelongsToAlignment = (
 };
 
 /**
- * Read only the current version of each Binding identity for one confirmed
- * Focus. Older confirmation facts remain in the store for audit/replay, but
- * they are not current edges in the world or Sense detail projection.
+ * Read the versions explicitly confirmed on this Alignment. Another Meaning
+ * advancing a registry head does not supersede this learner's accepted edge.
  */
 const currentBindingFactsForAlignment = (
   record: MeaningJourneyRecord,
-  registry: SenseRegistryState,
+  registry: RegistryRead,
   senseId: string,
   senseVersionId: string,
   alignment: SensaPersonalMeaningAlignmentSnapshot,
@@ -184,16 +192,10 @@ const currentBindingFactsForAlignment = (
     .flatMap((confirmation) => {
       const bindingVersion = bindingVersionById(registry, confirmation.bindingVersionId);
       const binding = bindingVersion
-        ? registry.bindings.find(
-            (candidate) => candidate.senseExpressionBindingId === bindingVersion.senseExpressionBindingId,
-          )
+        ? readRegistry(registry,'bindings',bindingVersion.senseExpressionBindingId)
         : null;
-      const expressionVersion = registry.expressionVersions.find(
-        (candidate) => candidate.expressionVersionId === confirmation.expressionVersionId,
-      );
-      const expression = registry.expressions.find(
-        (candidate) => candidate.expressionId === expressionVersion?.expressionId,
-      );
+      const expressionVersion = readRegistry(registry,'expressionVersions',confirmation.expressionVersionId);
+      const expression = expressionVersion?readRegistry(registry,'expressions',expressionVersion.expressionId):undefined;
       const anchorRevision = record.personalExpressionAnchorRevisions.find(
         (candidate) => candidate.personalExpressionAnchorRevisionId === confirmation.personalExpressionAnchorRevisionId,
       );
@@ -204,7 +206,6 @@ const currentBindingFactsForAlignment = (
         || !expression
         || !anchorRevision
         || binding.senseId !== senseId
-        || binding.currentBindingVersionId !== confirmation.bindingVersionId
         || bindingVersion.senseVersionId !== senseVersionId
         || bindingVersion.expressionVersionId !== confirmation.expressionVersionId
         || seenBindingIds.has(binding.senseExpressionBindingId)
@@ -255,12 +256,12 @@ export const deriveFocusPhase = (
 export const derivePersonalMeaningPhase = (
   record: MeaningJourneyRecord,
 ): PersonalMeaningJourneyPhase => {
-  const phases = record.focuses.map((focus) =>
+  const phases = currentFocuses(record).map((focus) =>
     deriveFocusPhase(record, focus.meaningFocusId));
   for (const alignment of record.alignments) {
     const direct = alignment.basis.kind === 'contextual_resolution'
       || alignment.basis.meaningFocusId === null;
-    if (alignment.status !== 'active' || !direct) {
+    if (!isAlignmentActive(record,alignment) || !direct) {
       continue;
     }
     phases.push(record.bindingConfirmations.some(
@@ -294,8 +295,8 @@ const buildAnchorViews = (record: MeaningJourneyRecord) => {
         : [];
     });
 
-  const blocks: JourneyMaterialBlockView[] = record.personalSemanticAnchors
-    .filter((anchor) => anchor.status === 'active')
+  const capturedSources:NonNullable<JourneyDetailView['capturedSources']>=[];
+  const blocks: JourneyMaterialBlockView[] = orderedMeaningContextAnchors(record)
     .flatMap((anchor) => {
       const revision = record.personalSemanticAnchorRevisions.find(
         (candidate) =>
@@ -303,6 +304,19 @@ const buildAnchorViews = (record: MeaningJourneyRecord) => {
           && candidate.revision === anchor.currentRevision,
       );
       if (!revision) return [];
+      const intake=revision.structuredPayload.intake as Record<string,unknown>|undefined;
+      const parsedSource=sensaIntakeSourceMetaSchema.safeParse(intake&&Object.hasOwn(intake,'contextSource')?intake.contextSource:revision.structuredPayload.source);
+      const source=parsedSource.success?parsedSource.data:null;
+      const capturedRevision=record.personalExpressionAnchorRevisions.flatMap(expression=>{
+        if(!expression.contextAnchorRevisionId)return [];
+        return record.personalSemanticAnchorRevisions.filter(candidate=>candidate.personalSemanticAnchorRevisionId===expression.contextAnchorRevisionId
+          &&candidate.personalSemanticAnchorId===anchor.personalSemanticAnchorId);
+      })[0];
+      const originalText=intake&&Object.hasOwn(intake,'contextText')?(typeof intake.contextText==='string'?intake.contextText:null):capturedRevision?.bodyText??null;
+      const capturedSource=source||originalText&&(originalText!==revision.bodyText||anchor.status!=='active')?{text:originalText,source}:undefined;
+      if(capturedSource)capturedSources.push({anchorId:anchor.personalSemanticAnchorId,...capturedSource});
+      // Retirement changes the current Context, not its capture provenance.
+      if(anchor.status!=='active')return [];
       const sceneMedia = revision.anchorKind === 'scene' && Array.isArray(revision.structuredPayload.media)
         ? revision.structuredPayload.media.flatMap((value) => {
             if (!value || typeof value !== 'object') return [];
@@ -319,6 +333,7 @@ const buildAnchorViews = (record: MeaningJourneyRecord) => {
         bodyText: revision.bodyText,
         personalMediaObjectId: null,
         revision: revision.revision,
+        ...(capturedSource?{capturedSource}:{}),
       }] : [];
       const media = sceneMedia.map((item) => ({
         anchorId: `${anchor.personalSemanticAnchorId}:${item.mediaId}`,
@@ -336,6 +351,7 @@ const buildAnchorViews = (record: MeaningJourneyRecord) => {
         bodyText: revision.bodyText,
         personalMediaObjectId: revision.personalMediaObjectId,
         revision: revision.revision,
+        ...(capturedSource?{capturedSource}:{}),
       }];
     });
 
@@ -351,7 +367,7 @@ const buildAnchorViews = (record: MeaningJourneyRecord) => {
       revision: block.revision,
     }));
 
-  return { familiar, experience, blocks };
+  return { familiar, experience, blocks,capturedSources };
 };
 
 const buildProposalView = (
@@ -404,10 +420,11 @@ const buildProposalView = (
 
 const buildAlignmentView = (
   record: MeaningJourneyRecord,
-  registry: SenseRegistryState,
+  registry: RegistryRead,
   alignment: SensaPersonalMeaningAlignmentSnapshot,
+  historical=false,
 ): JourneyAlignmentView | null => {
-  if (alignment.status !== 'active') return null;
+  if (!historical&&!isAlignmentActive(record,alignment)) return null;
   const senseVersion = senseVersionById(registry, alignment.senseVersionId);
   const confirmation = record.senseConfirmations.find(
     (fact) =>
@@ -491,7 +508,7 @@ const buildAlignmentView = (
   return {
     personalMeaningAlignmentId: alignment.personalMeaningAlignmentId,
     basisKind: alignment.basis.kind,
-    status: alignment.status,
+    status: alignmentStatusAt(record.alignmentEvents,alignment.personalMeaningAlignmentId),
     senseId: alignment.senseId,
     senseVersionId: alignment.senseVersionId,
     senseShortId: shortId(alignment.senseId),
@@ -519,7 +536,7 @@ const buildAlignmentView = (
 
 export const buildFocusView = (
   record: MeaningJourneyRecord,
-  registry: SenseRegistryState,
+  registry: RegistryRead,
   focusId: string,
 ): JourneyFocusView | null => {
   const focus = record.focuses.find((item) => item.meaningFocusId === focusId);
@@ -536,7 +553,7 @@ export const buildFocusView = (
     shortId: shortId(focus.meaningFocusId),
     phase: deriveFocusPhase(record, focusId),
     statement: revision.statement,
-    distinguishingNotes: revision.distinguishingNotes,
+    distinguishingNotes: [...revision.distinguishingNotes],
     aspectLabel: record.mockState.focusAspectLabels[focusId] ?? null,
     currentRevision: focus.currentRevision,
     currentRevisionId: revision.meaningFocusRevisionId,
@@ -557,10 +574,10 @@ export const buildFocusView = (
 
 export const buildDetailView = (
   record: MeaningJourneyRecord,
-  registry: SenseRegistryState,
+  registry: RegistryRead,
 ): JourneyDetailView => {
   const anchors = buildAnchorViews(record);
-  const focuses = record.focuses
+  const focuses = currentFocuses(record)
     .map((focus) => buildFocusView(record, registry, focus.meaningFocusId))
     .filter((view): view is JourneyFocusView => view !== null);
   const directAlignments = record.alignments
@@ -569,10 +586,17 @@ export const buildDetailView = (
     .map((alignment) => buildAlignmentView(record, registry, alignment))
     .filter((view): view is JourneyAlignmentView => view !== null);
   const meaningRevision = currentMeaningRevision(record);
+  const currentAlignmentIds=new Set(record.alignments.filter(alignment=>isAlignmentActive(record,alignment)).map(alignment=>alignment.personalMeaningAlignmentId));
+  const alignmentHistory=new Map<string,JourneyAlignmentView>();
+  for(const branch of [record,...(record.conflictHistory?.branches.map(row=>row.record)??[])])for(const alignment of branch.alignments){
+    if(currentAlignmentIds.has(alignment.personalMeaningAlignmentId)||alignmentHistory.has(alignment.personalMeaningAlignmentId))continue;
+    const view=buildAlignmentView(branch,registry,alignment,true);if(view)alignmentHistory.set(alignment.personalMeaningAlignmentId,view);
+  }
   return {
     personalMeaningId: record.personalMeaning.personalMeaningId,
     shortId: shortId(record.personalMeaning.personalMeaningId),
     revision: record.personalMeaning.currentRevision,
+    status:record.personalMeaning.status,
     displayLabel: meaningRevision?.displayLabel ?? null,
     learnerIntentNote: meaningRevision?.learnerIntentNote ?? null,
     phase: derivePersonalMeaningPhase(record),
@@ -581,9 +605,11 @@ export const buildDetailView = (
     familiarAnchors: anchors.familiar,
     experienceAnchors: anchors.experience,
     materialBlocks: anchors.blocks,
+    capturedSources:anchors.capturedSources,
     startingPoint: record.mockState.startingPoint ?? null,
     focuses,
     directAlignments,
+    alignmentHistory:[...alignmentHistory.values()],
     createdAt: record.personalMeaning.createdAt,
     updatedAt: record.personalMeaning.updatedAt,
   };
@@ -591,9 +617,10 @@ export const buildDetailView = (
 
 export const buildListItemView = (
   record: MeaningJourneyRecord,
-  registry: SenseRegistryState,
-): JourneyListItemView => {
-  const detail = buildDetailView(record, registry);
+  registry: RegistryRead,
+): JourneyListItemView => listItemFromDetail(record,buildDetailView(record,registry));
+
+const listItemFromDetail = (record:MeaningJourneyRecord,detail:JourneyDetailView):JourneyListItemView => {
   return {
     personalMeaningId: record.personalMeaning.personalMeaningId,
     shortId: shortId(record.personalMeaning.personalMeaningId),
@@ -711,10 +738,10 @@ export const buildExpressionBindingView = (
  */
 export const buildWorldItemView = (
   record: MeaningJourneyRecord,
-  registry: SenseRegistryState,
+  registry: RegistryRead,
 ): JourneyWorldItemView => {
   const detail = buildDetailView(record, registry);
-  return { ...buildListItemView(record, registry), detail };
+  return { ...listItemFromDetail(record,detail), detail };
 };
 
 export const PHASE_LABELS: Record<PersonalMeaningJourneyPhase, string> = {

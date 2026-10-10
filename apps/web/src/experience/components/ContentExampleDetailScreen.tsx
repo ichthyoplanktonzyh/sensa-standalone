@@ -1,6 +1,7 @@
 import '../../i18n/contentResources';
 import { useTranslation } from 'react-i18next';
 import { uiText } from '../../i18n/uiText';
+import { localFlowText } from '../../i18n/localFlowText';
 import { useEffect, useState } from 'react';
 import { personalContentSystem } from '../../personalContent/system';
 import {contentSenseForId,exampleIdForSense} from '../../learnerSemanticProjection/system';
@@ -31,22 +32,26 @@ export const ContentExampleDetailScreen = ({
 }: ContentExampleDetailScreenProps) => {
   useTranslation();
   const item=selectedExampleId?contentSenseForId(selectedExampleId):null;
-  const [saved, setSaved] = useState(false);
+  const [, redraw] = useState(0);
+  const [busy, setBusy] = useState(false);
   const [showTranslation, setShowTranslation] = useState(true);
+  const annotationStatus = personalContentSystem.read({kind:'snapshot'}).status;
+  const annotationReady = annotationStatus === 'ready';
+  const saved = annotationReady && !!item && personalContentSystem.read({kind:'example',exampleId:exampleIdForSense(item)});
 
   useEffect(() => {
     if (!item) return;
     setShowTranslation(true);
     const exampleId = exampleIdForSense(item);
-    const refresh = () => setSaved(personalContentSystem.read({ kind: 'example', exampleId }));
-    refresh();
-    return personalContentSystem.subscribe({ kind: 'example', exampleId }, refresh);
+    return personalContentSystem.subscribe({ kind: 'example', exampleId }, () => redraw(value => value + 1));
   }, [item]);
 
   if (!item) return null;
   const exampleId = exampleIdForSense(item);
 
   const toggleSaved = async () => {
+    if (!annotationReady || busy) return;
+    setBusy(true);
     try {
       const next = await personalContentSystem.execute({
         kind: 'set_saved_example',
@@ -54,10 +59,11 @@ export const ContentExampleDetailScreen = ({
         exampleId,
         saved: !saved,
       });
-      setSaved(next);
       toast(next ? uiText('exampleSaved') : uiText('exampleRemovedFromSaved'));
     } catch {
       toast(uiText('saveFailed'));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -73,7 +79,7 @@ export const ContentExampleDetailScreen = ({
           <svg className={iconClass} aria-hidden="true"><use href="#i-chev-l" /></svg>
         </button>
         <h1>{uiText('learningExample')}</h1>
-        <button className={`grid size-11 place-items-center justify-self-end rounded-control border-0 transition-colors focus-visible:outline-2 focus-visible:outline-focus ${saved ? 'bg-accent-soft text-action-primary' : 'bg-transparent text-fg-secondary hover:bg-surface-subtle'}`} onClick={() => void toggleSaved()} aria-pressed={saved} aria-label={saved ? uiText('unsaveExample') : uiText('saveExample')}>
+        <button disabled={!annotationReady || busy} className={`grid size-11 place-items-center justify-self-end rounded-control border-0 transition-colors focus-visible:outline-2 focus-visible:outline-focus ${saved ? 'bg-accent-soft text-action-primary' : 'bg-transparent text-fg-secondary hover:bg-surface-subtle'}`} onClick={() => void toggleSaved()} aria-pressed={annotationReady ? saved : undefined} aria-label={saved ? uiText('unsaveExample') : uiText('saveExample')}>
           <svg className={`${iconClass} ${saved ? 'fill-current' : ''}`} aria-hidden="true"><use href="#i-star" /></svg>
         </button>
       </div>,
@@ -93,11 +99,12 @@ export const ContentExampleDetailScreen = ({
           <svg className={iconClass} aria-hidden="true"><use href={showTranslation ? '#i-eye-lashes' : '#i-eye'} /></svg>
           <span>{showTranslation ? uiText('hideTranslation') : uiText('showTranslation')}</span>
         </button>
-        <button className={`flex min-h-14 items-center justify-center gap-2 text-control-label hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus ${saved ? 'text-action-primary' : 'text-fg-secondary'}`} onClick={() => void toggleSaved()}>
+        <button disabled={!annotationReady || busy} className={`flex min-h-14 items-center justify-center gap-2 text-control-label hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus ${saved ? 'text-action-primary' : 'text-fg-secondary'}`} onClick={() => void toggleSaved()}>
           <svg className={`${iconClass} ${saved ? 'fill-current' : ''}`} aria-hidden="true"><use href="#i-star" /></svg>
           <span>{saved ? uiText('saved') : uiText('saveExample')}</span>
         </button>
       </div>
+      {!annotationReady && <p className="mt-3 text-body-support" role={annotationStatus === 'error' ? 'alert' : 'status'}>{localFlowText(annotationStatus === 'error' ? 'progressReadFailed' : 'loadingSensa')}{annotationStatus === 'error' && <button className="ml-3 min-h-11 underline" onClick={() => void personalContentSystem.refresh().catch(() => undefined)}>{uiText('retry')}</button>}</p>}
 
       <button className="mt-4 grid w-full grid-cols-[auto_1fr_auto] items-center gap-4 rounded-card border border-border-subtle bg-surface-panel p-5 text-left hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" onClick={() => onOpenSense(item)}>
         <span className="font-language text-2xl font-semibold text-action-primary">{item.word}</span>

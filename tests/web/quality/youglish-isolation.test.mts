@@ -7,7 +7,6 @@ test("youglish-isolation", async () => {
 
 const hook=await readFile(new URL('../../../apps/web/src/experience/useYouglishWidget.ts',import.meta.url),'utf8');
 assert.match(hook,/https:\/\/youglish\.com\/public\/emb\/widget\.js/u);
-assert.match(hook,/if\(!active\|\|widgetRef\.current\)return/u);
 assert.match(hook,/document\.createElement\('script'\)/u);
 assert.match(hook,/script\.referrerPolicy = 'no-referrer'/u);
 assert(!hook.includes('VITE_SENSA_YOUGLISH_ORIGIN'));

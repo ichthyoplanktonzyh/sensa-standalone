@@ -10,7 +10,7 @@ const settled = <T>(result: PromiseSettledResult<T>): { value: T | null; error: 
 
 export async function collectSupportDiagnostics() {
   const [libraryResult, persistenceResult, budgetResult, syncResult] = await Promise.allSettled([
-    readLibraryStorageDiagnostics(),
+    readLibraryStorageDiagnostics({verifyIntegrity:true}),
     readLocalStoragePersistence(),
     readLocalStorageBudget(),
     readCloudSync(),

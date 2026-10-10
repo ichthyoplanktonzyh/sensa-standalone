@@ -20,6 +20,7 @@ jobs:
     name: Static, build and fast smoke
     runs-on: ubuntu-latest
     timeout-minutes: 12
+    environment: web-candidate
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -32,17 +33,59 @@ jobs:
       - run: npm ci
       - name: Typecheck
         run: npm run typecheck
-      - name: Build
+      - name: Build pull-request validation surface
+        if: ${{ github.event_name == 'pull_request' }}
         run: npm run build
+      - name: Build, seal and verify the main release candidate
+        if: ${{ github.event_name == 'push' }}
+        env:
+          SENSA_RELEASE_SHA: ${{ github.sha }}
+          SENSA_WEB_ORIGIN: ${{ vars.SENSA_WEB_ORIGIN }}
+          VITE_SENSA_SUPPORT_URL: ${{ vars.SENSA_SUPPORT_URL }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_SENSA_API_URL: ${{ vars.VITE_SENSA_API_URL }}
+          SENSA_EXTENSION_WEB_URL: ${{ vars.SENSA_WEB_ORIGIN }}
+          SENSA_EXTENSION_API_URL: ${{ vars.VITE_SENSA_API_URL }}
+        run: |
+          node scripts/release/releaseCandidate.mjs --check
+          npm run build
+          node scripts/release/releaseCandidate.mjs
+          node scripts/release/verifyCandidate.mjs
+          npx wrangler versions upload --dry-run --strict
       - name: Edge compile check
         run: npm run test:edge
       - name: Fast production-path smoke suite
         run: npm test
+      - name: Preserve the tested main release candidate
+        if: ${{ github.event_name == 'push' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sensa-production-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            apps/web/dist/
+            apps/browser-extension/dist/
+            apps/api/dist/
+            packages/contracts/dist/
+            packages/learning-kernel/dist/
+            packages/content-validator/dist/
+            packages/model-runtime/dist/
+            packages/mcp-server/dist/
+            release-candidate/manifest.json
 
-  browser-integration:
-    name: Chromium production integration
+  browser-shards:
+    name: Chromium integration shard ${{ matrix.shard }}/3
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    # Full journey coverage includes isolated production builds, genuine
+    # history generators and OPFS lifecycle fixtures; spec interaction budgets
+    # remain independent and unchanged.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -58,15 +101,27 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Browser integration and OPFS durability
-        run: npm run test:browser
+        run: npm run test:browser -- --shard=${{ matrix.shard }}/3
       - name: Upload synthetic Playwright Test failure evidence
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: sensa-playwright-failure
+          name: sensa-playwright-failure-${{ matrix.shard }}
           path: .tmp/playwright-results/
           if-no-files-found: ignore
           retention-days: 7
+
+  browser-integration:
+    name: Chromium production integration
+    needs: browser-shards
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require every browser shard to pass
+        env:
+          SHARD_RESULT: ${{ needs.browser-shards.result }}
+        run: test "$SHARD_RESULT" = success
 
   database-integration:
     name: PostgreSQL and API integration

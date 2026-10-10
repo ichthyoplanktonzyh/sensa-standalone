@@ -1,4 +1,5 @@
 {
+  "videoCaptionLimit": "Os dados das legendas são grandes demais para carregar completamente.",
   "openInbox": "Abrir a caixa de entrada do Sensa",
   "deliveryHint": "Depois de salvar, abra o Sensa neste navegador. O conteúdo aparecerá automaticamente na caixa de entrada.",
   "savedInbox": "Enviado para a caixa de entrada do Sensa.",
@@ -167,7 +168,7 @@
   "videoTranslation": "Somente tradução (automática)",
   "videoHint": "Carregue as legendas e selecione uma expressão para explicá-la ou salvá-la. A seleção pausa o vídeo.",
   "videoOwnFile": "Usar seu próprio arquivo de legendas",
-  "videoFileHint": "Se não houver legendas disponíveis, carregue um arquivo VTT ou SRT deste vídeo. A transcrição por IA na nuvem ainda não está disponível.",
+  "videoFileHint": "Se não houver legendas disponíveis, carregue um arquivo VTT ou SRT deste vídeo.",
   "videoLoadFile": "Carregar arquivo de legendas",
   "videoRetry": "Tentar tradução novamente",
   "videoAd": "Anúncio em reprodução. A coleta de legendas está pausada.",

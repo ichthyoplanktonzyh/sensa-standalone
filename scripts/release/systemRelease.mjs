@@ -10,8 +10,13 @@ import {appendFile, mkdir, readFile, writeFile} from "node:fs/promises";
 import {dirname, resolve} from "node:path";
 import {pathToFileURL} from "node:url";
 
-export const systemReleasePlanFormat = "sensa-system-release-plan-v1";
-export const systemReleaseManifestFormat = "sensa-system-release-manifest-v1";
+export const systemReleasePlanFormat = "sensa-system-release-plan-v2";
+export const systemReleaseManifestFormat = "sensa-system-release-manifest-v2";
+export const automaticReleasePolicyFormat = "sensa-automatic-release-policy-v1";
+const previousSystemReleaseManifestFormats = new Set([
+  "sensa-system-release-manifest-v1",
+  systemReleaseManifestFormat,
+]);
 
 const fullSha = /^[a-f0-9]{40}$/u;
 const mediaTag = /^sensa-learning-media-([a-f0-9]{12,64})$/u;
@@ -54,6 +59,17 @@ const applicationFiles = new Set([
   "scripts/prepareWebMedia.mjs",
   "wrangler.jsonc",
 ]);
+const automaticAuthorizationFiles = new Map([
+  ["wrangler.jsonc", "Cloudflare production configuration"],
+  ["apps/api/src/server/environment.ts", "production service configuration contract"],
+]);
+const automaticAuthorizationPrefixes = new Map([
+  ["apps/api/src/auth/", "API authentication authority"],
+  ["apps/api/src/sensa/access/", "API authorization or access-control authority"],
+  ["db/migrations/", "database schema or data migration"],
+  ["infra/", "production infrastructure or trust configuration"],
+  ["supabase/", "Supabase project or Edge entry configuration"],
+]);
 
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -65,7 +81,7 @@ function assertFullSha(value, label) {
 
 function assertPreviousManifest(value) {
   if (!value) return null;
-  if (value.format !== systemReleaseManifestFormat
+  if (!previousSystemReleaseManifestFormats.has(value.format)
     || !releaseIdPattern.test(value.releaseId ?? "")
     || !fullSha.test(value.source?.commit ?? "")
     || !value.components?.application
@@ -105,7 +121,7 @@ export function classifyReleaseChanges(paths) {
   return {changes, application, learningContent};
 }
 
-function selectedComponents(scope, required, hasPrevious) {
+function selectedComponents(scope, required, hasPrevious, allowNoop) {
   if (!hasPrevious && scope !== "all" && scope !== "auto") {
     throw new Error("The first unified release must use scope=all so both production components are recorded");
   }
@@ -118,10 +134,46 @@ function selectedComponents(scope, required, hasPrevious) {
   if (required.learningContent && !selected.learningContent) {
     throw new Error("Learning-content changes cannot be omitted from this release");
   }
-  if (!selected.application && !selected.learningContent) {
+  if (!selected.application && !selected.learningContent && (!allowNoop || scope !== "auto" || !hasPrevious)) {
     throw new Error("No production component changed; choose an explicit scope only when intentionally republishing");
   }
   return selected;
+}
+
+function releaseAuthorization(mode, classified, hasPrevious) {
+  if (mode === "manual") {
+    return {
+      format: automaticReleasePolicyFormat,
+      mode: "explicit-owner",
+      outcome: "approved",
+      reasons: ["The owner explicitly authorized this exact revision and requested scope."],
+    };
+  }
+  if (mode !== "automatic") throw new Error("Release mode must be automatic or manual");
+  const blockers = [];
+  if (!hasPrevious) blockers.push("the first system release requires an explicitly authorized full bootstrap");
+  if (classified.learningContent) {
+    blockers.push("learning-content publication still requires a separately sealed authored-media input");
+  }
+  for (const {path, impact} of classified.changes) {
+    if (impact === "operational") continue;
+    const exact = automaticAuthorizationFiles.get(path);
+    if (exact) blockers.push(`${path} changes ${exact}`);
+    for (const [prefix, reason] of automaticAuthorizationPrefixes) {
+      if (path.startsWith(prefix)) blockers.push(`${path} changes ${reason}`);
+    }
+  }
+  if (blockers.length > 0) {
+    throw new Error(`Automatic release policy requires explicit owner authorization:\n- ${[...new Set(blockers)].join("\n- ")}`);
+  }
+  return {
+    format: automaticReleasePolicyFormat,
+    mode: "automatic-policy",
+    outcome: classified.application ? "approved" : "no-op",
+    reasons: classified.application
+      ? ["A green main CI candidate contains application-only changes allowed by the standing release policy."]
+      : ["The revision contains no production component changes; production state is carried forward unchanged."],
+  };
 }
 
 function verifiedMediaInput(tag, digest) {
@@ -136,6 +188,7 @@ export function planSystemRelease({
   targetCommit,
   previousManifest = null,
   requestedScope = "auto",
+  releaseMode = "manual",
   changedPaths,
   mediaReleaseTag = "",
   mediaPackSha256 = "",
@@ -149,16 +202,20 @@ export function planSystemRelease({
   if (!releaseIdPattern.test(releaseId ?? "")) throw new Error("System release id is invalid");
   const previous = assertPreviousManifest(previousManifest);
   const classified = classifyReleaseChanges(changedPaths);
+  if (releaseMode === "automatic" && requestedScope !== "auto") {
+    throw new Error("Automatic releases must use scope=auto");
+  }
+  const authorization = releaseAuthorization(releaseMode, classified, Boolean(previous));
   const required = previous
     ? {application: classified.application, learningContent: classified.learningContent}
     : {application: true, learningContent: true};
-  const selected = selectedComponents(requestedScope, required, Boolean(previous));
+  const selected = selectedComponents(requestedScope, required, Boolean(previous), releaseMode === "automatic");
   const contentInput = selected.learningContent
     ? verifiedMediaInput(mediaReleaseTag, mediaPackSha256)
     : null;
   const decision = selected.application && selected.learningContent
     ? "coupled"
-    : selected.application ? "application-only" : "content-only";
+    : selected.application ? "application-only" : selected.learningContent ? "content-only" : "no-op";
   return {
     format: systemReleasePlanFormat,
     releaseId,
@@ -172,6 +229,7 @@ export function planSystemRelease({
       releaseId: previous.releaseId,
       components: clone(previous.components),
     } : null,
+    authorization,
     request: {scope: requestedScope},
     decision: {
       kind: decision,
@@ -179,7 +237,9 @@ export function planSystemRelease({
       publishLearningContent: selected.learningContent,
       compatibility: decision === "coupled"
         ? "Both components are promoted in one workflow; shared contract changes must remain rolling-compatible."
-        : "The unchanged component is reused from the previous successful system release.",
+        : decision === "no-op"
+          ? "No production component is promoted; both component identities are carried from the previous release."
+          : "The unchanged component is reused from the previous successful system release.",
     },
     inputs: {learningContent: contentInput},
   };
@@ -189,15 +249,20 @@ function assertPlan(plan) {
   if (plan?.format !== systemReleasePlanFormat
     || !releaseIdPattern.test(plan.releaseId ?? "")
     || !fullSha.test(plan.source?.commit ?? "")
+    || plan.authorization?.format !== automaticReleasePolicyFormat
+    || !new Set(["automatic-policy", "explicit-owner"]).has(plan.authorization?.mode)
     || typeof plan.decision?.deployApplication !== "boolean"
     || typeof plan.decision?.publishLearningContent !== "boolean") {
     throw new Error("System release plan is incomplete or unsupported");
   }
 }
 
-function applicationComponent(plan, candidate, cloudflare) {
+function applicationComponent(plan, candidate, cloudflare, repository) {
   if (candidate?.format !== "sensa-release-candidate-v2"
     || candidate.commit !== plan.source.commit
+    || candidate.provenance?.repository !== repository
+    || !/^[1-9][0-9]*$/u.test(candidate.provenance?.workflowRunId ?? "")
+    || !/^[1-9][0-9]*$/u.test(candidate.provenance?.workflowRunAttempt ?? "")
     || !Array.isArray(candidate.files)
     || candidate.files.length === 0
     || candidate.database?.format !== "sensa-forward-migration-set-v1"
@@ -217,6 +282,8 @@ function applicationComponent(plan, candidate, cloudflare) {
       format: candidate.format,
       manifestSha256: sha256(`${JSON.stringify(candidate, null, 2)}\n`),
       fileCount: candidate.files.length,
+      workflowRunId: candidate.provenance.workflowRunId,
+      workflowRunAttempt: candidate.provenance.workflowRunAttempt,
     },
     web: {provider: "cloudflare-workers", versionId: cloudflare.versionId},
     api: {provider: "supabase-edge-functions", releaseSha: plan.source.commit},
@@ -273,7 +340,7 @@ export function finalizeSystemRelease({
   assertPlan(plan);
   const previousComponents = plan.previousRelease?.components;
   const application = plan.decision.deployApplication
-    ? applicationComponent(plan, applicationCandidate, cloudflareVersion)
+    ? applicationComponent(plan, applicationCandidate, cloudflareVersion, repository)
     : clone(previousComponents?.application);
   const learningContent = plan.decision.publishLearningContent
     ? learningContentComponent(plan, learningContentPublication)
@@ -296,6 +363,7 @@ export function finalizeSystemRelease({
       changes: clone(plan.source.changes),
     },
     previousReleaseId: plan.previousRelease?.releaseId ?? null,
+    authorization: clone(plan.authorization),
     decision: clone(plan.decision),
     components: {application, learningContent},
     evidence: {
@@ -354,6 +422,7 @@ async function appendSummary(plan) {
     `- Release: \`${plan.releaseId}\``,
     `- Revision: \`${plan.source.commit}\``,
     `- Decision: \`${plan.decision.kind}\``,
+    `- Authorization: \`${plan.authorization.mode}\` (\`${plan.authorization.outcome}\`)`,
     `- Production-impacting paths: ${impacted}`,
     "",
   ].join("\n"));
@@ -369,6 +438,7 @@ async function planFromEnvironment(root) {
     targetCommit,
     previousManifest,
     requestedScope: process.env.SENSA_RELEASE_SCOPE ?? "auto",
+    releaseMode: process.env.SENSA_RELEASE_MODE ?? "manual",
     changedPaths: changedPaths(root, targetCommit, previousManifest),
     mediaReleaseTag: process.env.SENSA_MEDIA_RELEASE_TAG,
     mediaPackSha256: process.env.SENSA_MEDIA_PACK_SHA256,

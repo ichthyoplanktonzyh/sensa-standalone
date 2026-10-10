@@ -94,7 +94,7 @@
     "feedbackText": "의견이나 콘텐츠 수정을 요청하려면 소개 및 지원의 연락처를 이용하세요.",
     "done": "완료"
   },
-  "cloudSync": {
+  "cloudSync": {"restoreTitle": "계정 자료",
     "title": "계정 동기화",
     "pending": "로컬 변경 사항이 동기화를 기다리고 있습니다",
     "syncing": "동기화 중…",
@@ -111,8 +111,9 @@
     "openFailed": "계정 데이터를 복원하지 못했습니다. 연결을 확인하고 다시 시도하세요.",
     "retryOpen": "복원 재시도",
     "details": "충돌한 기록 보기",
-    "conflictPrompt": "기록 {{count}}개가 충돌하여 관련 기록 {{affected}}개에 영향을 줍니다. 이 충돌 그룹에 기기 버전 또는 클라우드 버전을 선택하세요.",
-    "conflictDecision": "선택을 적용하기 전에 최신 클라우드 버전을 다시 확인합니다. 버전이 바뀌었다면 새 충돌을 보존하여 다시 확인받습니다. 관련 없는 데이터는 계속 동기화됩니다.",
+    "conflictPrompt": "아래 변경 사항을 비교하고 모두에 적용할 버전을 선택하세요.",
+    "conflictDecision": "어느 한 버전이 바뀌면 다시 비교해야 합니다.",
+    "comparison": {"local":"이 기기 버전","remote":"계정 버전","base":"변경 전 버전","removed":"이 버전에서 삭제되었거나 아직 없는 내용","unavailable":"이 버전을 완전히 표시할 수 없습니다.","unsupported":"아직 모든 변경 사항을 비교할 수 없습니다. 두 버전은 보존됩니다. 지원팀에 문의하세요.","refresh":"지금 동기화하여 비교할 버전을 불러오세요.","changed":"내용이 바뀌었습니다. 동기화한 뒤 다시 비교하세요.","item":"내용 {{number}}","fields":{"expression":"표현","meaning":"의미","context":"맥락","note":"메모","examples":"대표 상황","included":"포함되는 경우","excluded":"제외되는 경우","contrasts":"비슷한 의미와의 차이","questions":"미해결 질문","content":"내용"}},
     "keepLocal": "기기 버전 유지",
     "useCloud": "클라우드 버전 사용",
     "resolving": "확인 및 해결 중…",

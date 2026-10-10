@@ -1,5 +1,5 @@
 import type {CaptureSnapshot} from '@sensa/contracts/sensa';
-import {detectCaptureLanguage} from './language';
+import {declaredCaptureLanguage,detectBlockLanguage} from './language';
 
 const excluded='input,textarea,select,button,[contenteditable]:not([contenteditable="false"]),script,style,noscript,[hidden],[aria-hidden="true"],[data-sensa-ui]';
 const blockSelector='p,li,blockquote,td,th,dt,dd,h1,h2,h3,h4,h5,h6,pre,figcaption';
@@ -11,7 +11,7 @@ function localBlock(node:Node){
   }
   return null;
 }
-interface CapturedText{text:string;from:number;to:number;}
+interface CapturedText{text:string;from:number;to:number;declaredLanguage:string;localDeclaration:boolean;}
 /**
  * Walk the selection and freeze its text with stable Unicode offsets, including
  * cross-block selections.
@@ -36,6 +36,8 @@ function captureText(range:Range):CapturedText|null{
     },
   });
   let text='',from=-1,to=-1,previous:Element|null=null,count=0;
+  const blockSpans=new Map<Element,{start:number;end:number}>();
+  let selectedFirst:Element|null=null,selectedLast:Element|null=null;
   while(walker.nextNode()){
     const node=walker.currentNode;if(++count>12000)return null;
     if(node instanceof HTMLBRElement){if(text&&!text.endsWith('\n'))text+='\n';continue;}
@@ -43,18 +45,28 @@ function captureText(range:Range):CapturedText|null{
     const block=localBlock(node);
     if(previous&&block!==previous&&text&&!text.endsWith('\n'))text+='\n';
     const value=node.textContent,offset=text.length;text+=value;previous=block;
+    if(block){const span=blockSpans.get(block);blockSpans.set(block,{start:span?.start??offset,end:text.length});}
     if(text.length>24000)return null;
     if(range.intersectsNode(node)){
       const left=node===range.startContainer?range.startOffset:range.comparePoint(node,0)>=0?0:value.length;
       const right=node===range.endContainer?range.endOffset:range.comparePoint(node,value.length)<=0?value.length:0;
-      if(right>left){if(from<0)from=offset+left;to=offset+right;}
+      if(right>left){if(from<0)from=offset+left;to=offset+right;if(block&&value.slice(left,right).trim()){selectedFirst??=block;selectedLast=block;}}
     }
   }
   if(from<0||to<=from)return null;
   while(from<to&&/\s/u.test(text[from]))from++;
   while(to>from&&/\s/u.test(text[to-1]))to--;
   if(to<=from||to-from>2000)return null;
-  return {text,from,to};
+  // A triple-click can end at offset zero of the next paragraph. Keep the
+  // Context of blocks with actual selected text, not that empty endpoint's
+  // unrelated paragraph (which may be in another language).
+  const sourceStart=selectedFirst?blockSpans.get(selectedFirst)!.start:0;
+  const sourceEnd=selectedLast?blockSpans.get(selectedLast)!.end:text.length;
+  text=text.slice(sourceStart,sourceEnd);from-=sourceStart;to-=sourceStart;
+  if(selectedFirst&&selectedLast){bounds.setStartBefore(selectedFirst);bounds.setEndAfter(selectedLast);}
+  const surface=selectedFirst===selectedLast&&selectedFirst?selectedFirst:bounds.commonAncestorContainer instanceof Element?bounds.commonAncestorContainer:bounds.commonAncestorContainer.parentElement;
+  const declaration=surface?.closest('[lang]');
+  return {text,from,to,declaredLanguage:declaration?.getAttribute('lang')??'',localDeclaration:Boolean(declaration&&declaration!==document.documentElement)};
 }
 /**
  * Capture one visible selection, labelled with the language it is actually in.
@@ -68,7 +80,10 @@ export async function captureSelection(range:Range,scope:'sentence'|'block'='sen
   const captured=captureText(range);
   if(!captured)return null;
   const {text,from,to}=captured;
-  const {language,languageSource,languageConfidence}=await detectCaptureLanguage(text);
+  const surface={documentElement:{lang:captured.declaredLanguage}},declared=declaredCaptureLanguage(surface);
+  // A language explicitly attached to the captured block describes this text,
+  // unlike the site's global UI language. Keep it without a statistical guess.
+  const {language,languageSource,languageConfidence}=captured.localDeclaration&&declared.language?declared:await detectBlockLanguage(text,surface);
   let left=0,right=text.length;
   if(scope==='sentence'){
     const segments=Array.from(new Intl.Segmenter(language??undefined,{granularity:'sentence'}).segment(text));

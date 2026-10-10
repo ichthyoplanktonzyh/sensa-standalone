@@ -1,5 +1,6 @@
 import type { Word } from './types';
-import { BUNDLED_LEARNING_PACKAGES } from '../learning/content/bundledLearningContent';
+import { BUNDLED_LEARNING_PACKAGES,bundledLearningRelease } from '../learning/content/bundledLearningContent';
+import type {SensaPinnedLanguageContext} from '@sensa/contracts/sensa';
 import { toWordPresentation } from './learningPresentation';
 
 /**
@@ -29,6 +30,7 @@ export interface PracticeSenseItem {
   meaning: string;
   example: PracticeExample;
   sourceWord: Word;
+  referenceLanguages?:SensaPinnedLanguageContext;
 }
 
 const escapeSequenceEntities: Record<string, string> = {
@@ -76,6 +78,7 @@ export const RUNTIME_PRACTICE_SENSES: PracticeSenseItem[] = BUNDLED_LEARNING_PAC
     senseId: pkg.senseId,
     wordId: pkg.packageId,
     word: pkg.content.lemma,
+    referenceLanguages:{targetLanguageTag:bundledLearningRelease.release.targetLanguage,supportLanguageTag:bundledLearningRelease.release.learnerLocale},
     syllable: pkg.content.syllables ?? pkg.content.lemma,
     phonetic: pkg.content.ipa,
     pronunciationAudioUrl: pkg.content.pronunciations.find(pronunciation=>pronunciation.accentLocale===pkg.content.accentLocale)?.audioUrl ?? null,

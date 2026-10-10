@@ -18,12 +18,21 @@ const reliability = createBrowserReliability({
   release: __SENSA_RELEASE__,
   metricSampled: import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true' ? false : undefined,
 });
-reliability.start();
+const stopReliability=reliability.start();
 const root = createRoot(document.getElementById("root")!, {
   onCaughtError: (error, info) => reliability.reportReactError("react_caught", error, info.componentStack),
   onUncaughtError: (error, info) => reliability.reportReactError("react_uncaught", error, info.componentStack),
   onRecoverableError: (error, info) => reliability.reportReactError("react_recoverable", error, info.componentStack),
 });
+let entryActive=true;
+if(import.meta.hot){
+ import.meta.hot.accept();
+ import.meta.hot.dispose(()=>{
+  entryActive=false;
+  root.unmount();
+  stopReliability();
+ });
+}
 const skinLabRequested = import.meta.env.DEV && new URLSearchParams(window.location.search).get("skin-lab") === "1";
 const ApplicationVersionGuard = lazy(() => import('./application/ApplicationVersionGuard').then(module => ({ default: module.ApplicationVersionGuard })));
 const productRoot = (content: ReactNode) => (
@@ -37,6 +46,7 @@ const productRoot = (content: ReactNode) => (
 
 if (skinLabRequested) {
   void import("./experience/appearance/SkinSurfaceGallery").then(({ SkinSurfaceGallery }) => {
+    if(!entryActive)return;
     root.render(productRoot(<SkinSurfaceGallery />));
   });
 } else {

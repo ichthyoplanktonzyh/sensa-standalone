@@ -20,6 +20,9 @@ import type {
   JourneyWorldItemView,
 } from './types';
 import type { PersonalMeaningLearningSource } from '../../contentSupply/system';
+import {useWorldDetail} from './useWorldRead';
+import {worldReadRepository,type WorldDetailSnapshot} from './worldRepository';
+import type {ClarificationSourceWitness} from './clarificationSource';
 
 export const useJourneyGateway = (): PersonalMeaningJourneyGateway => journeyGateway;
 
@@ -31,17 +34,19 @@ export const useJourneyGateway = (): PersonalMeaningJourneyGateway => journeyGat
  * notification.
  */
 const gatewayVersionStore = createVersionStore((listener) => journeyGateway.subscribe(listener));
+const inactiveSubscription=()=>()=>undefined;
+const inactiveVersion=()=>0;
 
-const useGatewaySnapshot = <T,>(select: () => T): T => {
+const useGatewaySnapshot = <T,>(select: () => T,enabled=true): T => {
   const version = useSyncExternalStore(
-    gatewayVersionStore.subscribe,
-    gatewayVersionStore.getSnapshot,
+    enabled?gatewayVersionStore.subscribe:inactiveSubscription,
+    enabled?gatewayVersionStore.getSnapshot:inactiveVersion,
   );
   return useMemo(select, [select, version]);
 };
 
-export const useJourneyStatus = (): JourneyGatewayStatus =>
-  useGatewaySnapshot(useCallback(() => journeyGateway.getStatus(), []));
+export const useJourneyStatus = (enabled=true): JourneyGatewayStatus =>
+  useGatewaySnapshot(useCallback(() => journeyGateway.getStatus(), []),enabled);
 
 export const useJourneyList = (): JourneyListItemView[] =>
   useGatewaySnapshot(useCallback(() => journeyGateway.getListItems(), []));
@@ -52,48 +57,40 @@ export interface JourneyWorldResult {
 }
 
 /** Read the semantic world and its gateway status as one render snapshot. */
-export const useJourneyWorld = (): JourneyWorldResult =>
+export const useJourneyWorld = (enabled=true): JourneyWorldResult =>
   useGatewaySnapshot(useCallback(() => ({
-    items: journeyGateway.getWorldItems(),
+    items: enabled?journeyGateway.getWorldItems():[],
     status: journeyGateway.getStatus(),
-  }), []));
+  }), [enabled]),enabled);
 
 /** Complete, authoritative Personal Meaning sources that may become learning
  * or Free Practice targets. UI list projections are deliberately not reused. */
-export const useJourneyLearningSources = (): PersonalMeaningLearningSource[] =>
+export const useJourneyLearningSources = (enabled=true): PersonalMeaningLearningSource[] =>
   useGatewaySnapshot(useCallback(
-    () => journeyGateway.getWorldItems().flatMap(
+    () => enabled?journeyGateway.getWorldItems().flatMap(
       (item) => journeyGateway.getLearningSources(item.personalMeaningId),
-    ),
-    [],
-  ));
+    ):[],
+    [enabled],
+  ),enabled);
 
 export interface JourneyDetailResult {
   detail: JourneyDetailView | null;
   status: JourneyGatewayStatus;
+  sources:PersonalMeaningLearningSource[];
+  reload:()=>void;
+  draft:ClarificationDraftView|null;
+  source:ClarificationSourceWitness|null;
+  readCurrent:()=>Promise<WorldDetailSnapshot>;
 }
 
 export const useJourneyDetail = (
   personalMeaningId: string | null,
 ): JourneyDetailResult => {
-  const select = useCallback((): JourneyDetailResult => {
-    if (!personalMeaningId) {
-      return { detail: null, status: journeyGateway.getStatus() };
-    }
-    return {
-      detail: journeyGateway.getDetail(personalMeaningId),
-      status: journeyGateway.getStatus(),
-    };
-  }, [personalMeaningId]);
-
-  const result = useGatewaySnapshot(select);
-
-  return result;
+  const result=useWorldDetail(personalMeaningId);
+  const readCurrent=useCallback(()=>personalMeaningId?worldReadRepository.detail(personalMeaningId):Promise.reject(new Error('world_meaning_id_invalid')),[personalMeaningId]);
+  return {detail:result.value?.detail??null,status:result.status,sources:result.value?.sources??[],reload:result.reload,draft:result.value?.draft??null,source:result.value?.source??null,readCurrent};
 };
 
 export const useJourneyClarificationDraft = (
   intakeId: string | null,
-): ClarificationDraftView | null => useGatewaySnapshot(useCallback(
-  () => intakeId ? journeyGateway.getClarificationDraft(intakeId) : null,
-  [intakeId],
-));
+): ClarificationDraftView | null => useWorldDetail(intakeId).value?.draft??null;

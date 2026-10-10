@@ -2,7 +2,7 @@ import {test} from 'vitest';
 import assert from 'node:assert/strict';
 
 import {decodeBackupValue,encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec.ts';
-import {mergeLibraryReplicas,planLibraryReplicaApply,replicaEntryId} from '../../../apps/web/src/data/library/replication/libraryReplica.ts';
+import {mergeLibraryReplicas,mergeLibraryReplicasCooperatively,planLibraryReplicaApply,replicaEntryId} from '../../../apps/web/src/data/library/replication/libraryReplica.ts';
 import {assertPersonalSemanticWorldState,assertPersonalSemanticWorldTransition,PersonalSemanticWorldInvariantError} from '../../../apps/web/src/experience/personalMeaningJourney/authority.ts';
 import {emptyJourneyState} from '../../../apps/web/src/experience/personalMeaningJourney/store.ts';
 import {MemoryJourneyRepository} from '../../../apps/web/src/experience/personalMeaningJourney/repository.ts';
@@ -15,7 +15,8 @@ const at=(second:number)=>`2026-09-21T09:00:${String(second).padStart(2,'0')}.00
 let nextId=1;
 const id=()=>`00000000-0000-4000-8000-${String(nextId++).padStart(12,'0')}`;
 const entry=(table:string,key:string,value:unknown):Entry=>({table,key,value:encodeBackupValue(value)});
-const merge=(base:Entry[],local:Entry[],remote:Entry[])=>mergeLibraryReplicas({base:base as any,local:local as any,remote:remote as any});
+const cases:Array<{input:Parameters<typeof mergeLibraryReplicas>[0];result:ReturnType<typeof mergeLibraryReplicas>}>=[];
+const merge=(base:Entry[],local:Entry[],remote:Entry[])=>{const input={base,local,remote},result=mergeLibraryReplicas(input);cases.push({input,result});return result;};
 
 const meaningId=id(),anchorId=id(),anchorRevisionId=id(),meaningRevisionId=id();
 const baseMeaning={
@@ -101,6 +102,26 @@ assert(registryFork.conflicts.includes(replicaEntryId(localV2 as any))&&registry
 
 const rewrittenV1=registry('senseVersions',senseVersionOne,{contractVersion:'sensa-semantic-registry-v1',senseVersionId:senseVersionOne,senseId,versionNumber:1,definition:'rewritten'});
 assert.deepEqual(merge([senseHead,senseV1],[senseHead,rewrittenV1],[senseHead,senseV1]).conflicts,[replicaEntryId(senseV1 as any)],'an existing Registry version is immutable');
+
+for(const {input,result} of cases)assert.deepEqual(await mergeLibraryReplicasCooperatively(input),result,'cooperative execution preserves semantic facts, tombstones and conflicts');
+
+// The second Meaning read happens inside receipt admission's conflict handler.
+// A failed storage read there must escape as the original failure, not a
+// learner-resolvable semantic conflict. This fixture is not full admission.
+for(const failure of [new Error('sqlite_io_read'),undefined]){
+ const makeInput=()=>{
+  let reads=0;
+  const lazy={table:'semanticMeanings' as const,key:meaningId,get value(){if(++reads===2)throw failure;return baseRow.value;}};
+  const receipt=entry('semanticReceipts','read-failure-receipt',{command:'BeginPersonalMeaning',result:{personalMeaningId:meaningId}});
+  return {base:[],local:[lazy,receipt],remote:[]};
+ };
+ let failed=false;
+ try{mergeLibraryReplicas(makeInput());}catch(error){failed=true;assert.equal(error,failure);}
+ assert(failed,'synchronous merge must preserve a body read failure even when its value is undefined');
+ failed=false;
+ try{await mergeLibraryReplicasCooperatively(makeInput());}catch(error){failed=true;assert.equal(error,failure);}
+ assert(failed,'cooperative merge must preserve the same body read failure');
+}
 
 console.log('PASS: one Personal Semantic World authority validates local commits and replicas, preserves immutable revisions, converges valid tombstones, blocks resurrection and rejects Registry mutations or revision collisions.');
 

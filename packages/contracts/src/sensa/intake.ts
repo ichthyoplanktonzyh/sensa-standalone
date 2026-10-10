@@ -83,6 +83,12 @@ export const sensaIntakeSourceMetaSchema = z
   })
   .strict();
 
+/** How the producing surface established a language, not a learning-route role. */
+export const sensaIntakeLanguageObservationSchema=z.object({
+  source:z.enum(['declared','detector','model','learner']),
+  confidence:z.number().min(0).max(1).nullable(),
+}).strict();
+
 /**
  * `null` means the caller does not currently have a Context and therefore asks
  * for the slow track. A non-null Context has concrete text or media, but the
@@ -95,10 +101,13 @@ export const sensaIntakeContextSchema = z
     textSegment: z.string().trim().min(1).max(12000).nullable(),
     mediaReferenceIds: z.array(nonEmpty).max(20),
     languageTag: sensaLanguageTagSchema.nullable(),
+    /** Absent means the caller supplied no observation provenance; never infer it from a Route. */
+    languageObservation:sensaIntakeLanguageObservationSchema.nullable().optional(),
     source: sensaIntakeSourceMetaSchema.nullable(),
   })
   .strict()
   .superRefine((value, context) => {
+    if(value.languageObservation&&value.languageTag===null)context.addIssue({code:'custom',message:'a language observation requires an established language tag',path:['languageObservation']});
     if (value.textSegment === null && value.mediaReferenceIds.length === 0) {
       context.addIssue({
         code: "custom",
@@ -172,7 +181,7 @@ const validateOccurrence = (
     }
     return;
   }
-  if (locator.kind === "learning_target") return;
+  if (locator.kind === "learning_target" || locator.kind === "personal_meaning") return;
   const text = value.context.textSegment;
   if (!text || locator.end > text.length
     || text.slice(locator.start, locator.end) !== occurrence.surfaceForm) {

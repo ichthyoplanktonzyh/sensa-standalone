@@ -1,4 +1,5 @@
 {
+  "videoCaptionLimit": "Les données des sous-titres sont trop volumineuses pour être chargées entièrement.",
   "openInbox": "Ouvrir la boîte de réception Sensa",
   "deliveryHint": "Après l’enregistrement, ouvrez Sensa dans ce navigateur. Votre capture apparaîtra automatiquement dans la boîte de réception.",
   "savedInbox": "Élément envoyé dans la boîte de réception Sensa.",
@@ -167,7 +168,7 @@
   "videoTranslation": "Traduction seule (automatique)",
   "videoHint": "Chargez les sous-titres, puis sélectionnez une expression pour l’expliquer ou l’enregistrer. La vidéo se met en pause lors de la sélection.",
   "videoOwnFile": "Utiliser votre fichier de sous-titres",
-  "videoFileHint": "Si aucun sous-titre lisible n’est disponible, chargez un fichier VTT ou SRT pour cette vidéo. La transcription IA dans le cloud n’est pas encore disponible.",
+  "videoFileHint": "Si aucun sous-titre lisible n’est disponible, chargez un fichier VTT ou SRT pour cette vidéo.",
   "videoLoadFile": "Charger un fichier de sous-titres",
   "videoRetry": "Réessayer la traduction",
   "videoAd": "Une publicité est en cours. La collecte des sous-titres est en pause.",

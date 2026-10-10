@@ -1,19 +1,19 @@
 {
   "title": "日常经验：从场景绑定表达",
-  "description": "三个用于轻量学习的英语词义包。第一张卡建立经验，第二张卡依次完成意义、声音、形式、场景回指和用法迁移。",
+  "description": "三个英语义项：先回想场景，再查看表达、释义与例句，自评连接感受后安排复习。",
   "publisher": {"namespace": "sensa.official", "name": "Sensa Official"},
   "author": {"name": "Sensa Official"},
   "license": {"name": "All rights reserved"},
   "bookKey": "daily-exchanges",
-  "versionNumber": 7,
-  "publishedAt": "2026-09-20T13:00:00Z",
-  "changeSummary": "以三个完整词义替换旧八词包，并内嵌已审核的发音、场景例句和迁移例句音频。",
+  "versionNumber": 8,
+  "publishedAt": "2026-10-05T01:00:00Z",
+  "changeSummary": "说明实际轻量学习流程，不再把资源展示描述为迁移检验。",
   "targetLanguage": "en",
   "supportLanguage": "zh-CN",
   "entries": [
     {
       "key": "fragile-physical-object",
-      "packageVersion": 1,
+      "packageVersion": 2,
       "senseVersion": 1,
       "bindingVersion": 1,
       "expressionKind": "word",
@@ -71,7 +71,7 @@
     },
     {
       "key": "sustain-process-continuation",
-      "packageVersion": 1,
+      "packageVersion": 2,
       "senseVersion": 1,
       "bindingVersion": 1,
       "expressionKind": "word",
@@ -129,7 +129,7 @@
     },
     {
       "key": "borrow-receiver-perspective",
-      "packageVersion": 1,
+      "packageVersion": 2,
       "senseVersion": 1,
       "bindingVersion": 1,
       "expressionKind": "word",

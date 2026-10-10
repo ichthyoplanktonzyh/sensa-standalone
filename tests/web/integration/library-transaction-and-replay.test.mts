@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {afterAll,test} from 'vitest';
+import {resolveLearningQueue} from '../../../apps/web/src/learning/system/learningPlanning.ts';
 
 Object.assign(globalThis, { window: new EventTarget(), BroadcastChannel: undefined });
 
@@ -9,6 +10,10 @@ test('memory adapter preserves typed values, idempotent operations and rollback'
 const store = await import('../../../apps/web/src/data/library/store.ts');
 const identity = await store.openLibrary();
 assert.equal(identity.schemaVersion, 2);
+
+await store.restoreLibraryTransaction(async tx=>tx.delete('operations','00000000-0000-4000-8000-000000000001'));
+assert.deepEqual(await store.openLibrary(),identity,'a lost create receipt must never replace an existing library identity');
+assert.deepEqual((await store.readLibrary(tx=>tx.get<any>('operations','00000000-0000-4000-8000-000000000001')))?.result,identity);
 
 const operationId = crypto.randomUUID();
 const result = await store.command(
@@ -50,6 +55,71 @@ await assert.rejects(
 );
 assert.equal(await store.readLibrary((tx) => tx.get('drafts', 'rolled-back')), undefined);
 
+const probeRevision=await store.readLibrary(store.readLocalLibraryRevision);
+assert.equal(await store.readLibrary(tx=>tx.hasChangesSince(probeRevision,['drafts'])),false);
+await store.restoreLibraryTransaction(async tx=>{
+  tx.put('drafts','revision-probe',{text:'no payload required for invalidation'});
+  await assert.rejects(tx.hasChangesSince(probeRevision,['drafts']),/library_changes_require_snapshot/u);
+  await assert.rejects(tx.entryBatches('drafts').next(),/library_entries_require_snapshot/u);
+  await assert.rejects(tx.recordKeyBatches('drafts').next(),/library_entries_require_snapshot/u);
+});
+assert.equal(await store.readLibrary(tx=>tx.hasChangesSince(probeRevision,['drafts'])),true);
+assert.equal(await store.readLibrary(tx=>tx.hasChangesSince(probeRevision,['semanticMeanings'])),false);
+const deletionRevision=await store.readLibrary(store.readLocalLibraryRevision);
+await store.restoreLibraryTransaction(async tx=>{tx.delete('drafts','revision-probe');});
+assert.equal(await store.readLibrary(tx=>tx.hasChangesSince(deletionRevision,['drafts'])),true,'deleted rows must invalidate through tombstones');
+
+const stopped=crypto.randomUUID(),cancel=new AbortController();
+await assert.rejects(store.command({id:stopped,kind:'fixture.cancel-before-commit',input:{}},async tx=>{
+  tx.requireCommitSignal(cancel.signal,'library_transaction_cancelled',()=>assert.fail('aborted work must not reach commit'));
+  tx.put('drafts','stopped-before-commit',{text:'must not survive'});
+  cancel.abort();
+}),/library_transaction_cancelled/u);
+assert.equal(await store.readLibrary(tx=>tx.get('drafts','stopped-before-commit')),undefined);
+assert.equal(await store.readLibrary(tx=>tx.get('operations',stopped)),undefined,'a cancelled commit has no replay receipt');
+
+const committing=crypto.randomUUID(),commitCancel=new AbortController(),phases:string[]=[];
+const committed=await store.command({id:committing,kind:'fixture.cancel-after-commit-start',input:{}},async tx=>{
+  tx.requireCommitSignal(commitCancel.signal,'library_transaction_cancelled',()=>{
+    phases.push('committing');
+    commitCancel.abort();
+  });
+  tx.put('drafts','commit-started',{text:'atomic commit has started'});
+  return {committed:true};
+});
+assert.deepEqual(phases,['committing']);
+assert.deepEqual(committed,{committed:true});
+assert.equal((await store.readLibrary(tx=>tx.get<any>('drafts','commit-started')))?.text,'atomic commit has started');
+const commitReceipt=await store.readLibrary(tx=>tx.get<any>('operations',committing));
+assert.deepEqual(commitReceipt?.result,{committed:true});
+assert.equal(typeof commitReceipt?.committedAt,'string');
+assert.deepEqual(await store.command({id:committing,kind:'fixture.cancel-after-commit-start',input:{}},async()=>{
+  assert.fail('a committed operation must replay its receipt instead of repeating work');
+}),{committed:true});
+
+const yielding=crypto.randomUUID(),yieldCancel=new AbortController();
+let yieldReachedCommit=false;
+const previousDocument=Object.getOwnPropertyDescriptor(globalThis,'document');
+Object.defineProperty(globalThis,'document',{configurable:true,value:{}});
+try{
+  await assert.rejects(store.command({id:yielding,kind:'fixture.cancel-during-mutation-yield',input:{}},async tx=>{
+    tx.requireCommitSignal(yieldCancel.signal,'library_transaction_cancelled',()=>{yieldReachedCommit=true;});
+    for(let index=0;index<8;index++)tx.put('drafts',`yield-batch-${index}`,{index});
+    // If encoding continues after the scheduled yield, this unsupported value
+    // would fail before the final signal guard and mask the expected cancel.
+    tx.put('drafts','yield-batch-unsupported',{value:new Map([['x',1]])});
+    for(let index=9;index<24;index++)tx.put('drafts',`yield-batch-${index}`,{index});
+    setTimeout(()=>yieldCancel.abort(),0);
+    return {committed:false};
+  }),/library_transaction_cancelled/u);
+}finally{
+  if(previousDocument)Object.defineProperty(globalThis,'document',previousDocument);
+  else Reflect.deleteProperty(globalThis,'document');
+}
+assert.equal(yieldReachedCommit,false,'cancellation while yielding must stop before the commit phase');
+assert.equal(await store.readLibrary(tx=>tx.get('drafts','yield-batch-0')),undefined);
+assert.equal(await store.readLibrary(tx=>tx.get('operations',yielding)),undefined,'a cancelled mutation has no replay receipt');
+
 await store.restoreLibraryTransaction(async (tx) => {
   tx.put('learningTargets', 'indexed-target', {
     introducedLanguageRouteId: 'indexed-route',
@@ -83,11 +153,11 @@ await store.readLibrary(async (tx) => {
 const diagnostics = await store.readLibraryStorageDiagnostics();
 assert.deepEqual(
   { engine: diagnostics.engine, persistence: diagnostics.persistence, schemaVersion: diagnostics.schemaVersion },
-  { engine: 'memory-adapter', persistence: 'memory', schemaVersion: 12 },
+  { engine: 'memory-adapter', persistence: 'memory', schemaVersion: sqliteLibrarySchemaVersion },
 );
 });
 
-const [{ default: sqlite3InitModule }, { SqliteRecordDatabase, sqliteHomeLearningTargetsQuery }, { encodeBackupValue }, { sqliteLibrarySchema }] = await Promise.all([
+const [{ default: sqlite3InitModule }, { SqliteRecordDatabase, sqliteHomeLearningTargetsQuery }, { encodeBackupValue }, { sqliteLibrarySchema,sqliteLibrarySchemaVersion }] = await Promise.all([
   import('@sqlite.org/sqlite-wasm'),
   import('../../../apps/web/src/data/library/sqliteDatabase.ts'),
   import('../../../apps/web/src/data/library/backupCodec.ts'),
@@ -95,13 +165,13 @@ const [{ default: sqlite3InitModule }, { SqliteRecordDatabase, sqliteHomeLearnin
 ]);
 const sqlite3 = await sqlite3InitModule();
 test('unsupported physical schemas preserve owner data', () => {
-for (const version of [9, 13]) {
+for (const version of [9, sqliteLibrarySchemaVersion+1]) {
   const incompatibleRaw = new sqlite3.oo1.DB(':memory:', 'c');
   incompatibleRaw.exec(`CREATE TABLE owner_fixture(value TEXT); INSERT INTO owner_fixture VALUES('preserve-me'); PRAGMA user_version=${version}`);
   const incompatibleDatabase = new SqliteRecordDatabase(sqlite3, incompatibleRaw, 'memory');
   assert.throws(
     () => incompatibleDatabase.initialize(),
-    version < 10 ? /sqlite_schema_legacy:9/u : /sqlite_schema_future:13/u,
+    version < 10 ? /sqlite_schema_legacy:9/u : new RegExp(`sqlite_schema_future:${version}`,'u'),
     'unsupported physical schemas must stop instead of opening an empty replacement',
   );
   const preserved = incompatibleRaw.exec({ sql: 'SELECT value FROM owner_fixture', rowMode: 0, returnValue: 'resultRows' }) as unknown[];
@@ -115,7 +185,7 @@ test('schema 10 migrates in place and preserves owner tables',()=>{
                     INSERT INTO owner_fixture VALUES('preserve-me');
                     PRAGMA user_version=10`);
   const migrated=new SqliteRecordDatabase(sqlite3,migratedRaw,'memory');
-  assert.equal(migrated.initialize().schemaVersion,12);
+  assert.equal(migrated.initialize().schemaVersion,sqliteLibrarySchemaVersion);
   const preserved=migratedRaw.exec({
     sql:'SELECT value FROM owner_fixture',rowMode:0,returnValue:'resultRows',
   }) as unknown[];
@@ -125,9 +195,9 @@ test('schema 10 migrates in place and preserves owner tables',()=>{
 });
 test('SQLite initialization maintains query planner statistics', () => {
 const optimizerRawDatabase = new sqlite3.oo1.DB(':memory:', 'c');
+const optimizerDatabase = new SqliteRecordDatabase(sqlite3, optimizerRawDatabase, 'memory');
 optimizerRawDatabase.exec(sqliteLibrarySchema);
 optimizerRawDatabase.exec("INSERT INTO sensa_records(table_name,record_key,value_json) VALUES('drafts','optimizer-fixture','{}')");
-const optimizerDatabase = new SqliteRecordDatabase(sqlite3, optimizerRawDatabase, 'memory');
 optimizerDatabase.initialize();
 const plannerStatistics = optimizerRawDatabase.exec({
   sql: "SELECT COUNT(*) FROM sqlite_stat1",
@@ -189,6 +259,22 @@ assert.deepEqual(database.changesSince(1, ['drafts']), [
   { table: 'drafts', key: 'changed-c', encodedValue: '{"revision":1}', contentRevision: 2 },
 ]);
 assert.deepEqual(database.changesSince(2, ['drafts']), []);
+assert.equal(database.hasChangesSince(1,['drafts']),true);
+assert.equal(database.hasChangesSince(2,['drafts']),false);
+assert.equal(database.hasChangesSince(0,['semanticMeanings']),false);
+assert.equal(database.hasChangesSince(1,[]),false);
+assert.equal(database.hasChangesSince(-1,['drafts']),false);
+database.commit({contentRevision:3,clears:[],deletes:[{table:'drafts',key:'changed-c'}],puts:[]});
+assert.equal(database.hasChangesSince(2,['drafts']),true,'tombstone-only changes are not an unchanged snapshot');
+assert.deepEqual(database.entriesPage('drafts',null,1),[database.entries('drafts')[0]]);
+assert.deepEqual(database.entriesPage('drafts','changed-b',1),[]);
+assert.throws(()=>database.entriesPage('drafts',null,0),/sqlite_invalid_page_size/u);
+assert.throws(()=>database.entriesPage('drafts',null,257),/sqlite_invalid_page_size/u);
+assert.deepEqual(database.recordKeysPage('drafts',null,1),['changed-b']);
+assert.deepEqual(database.recordKeysPage('drafts','changed-b',1),[]);
+assert.throws(()=>database.recordKeysPage('drafts',null,0),/sqlite_invalid_page_size/u);
+assert.throws(()=>database.recordKeysPage('drafts',null,257),/sqlite_invalid_page_size/u);
+assert((rawDatabase.exec({sql:'EXPLAIN QUERY PLAN SELECT record_key FROM sensa_records WHERE table_name=? AND record_key>? ORDER BY record_key LIMIT ?',bind:['drafts','',128],rowMode:'object',returnValue:'resultRows'}) as Array<{detail:string}>).some(row=>/COVERING INDEX/iu.test(row.detail)),'key-only presence must read the existing covering index, not large fact bodies');
 database.commit({
   clears: [],
   deletes: [],
@@ -205,6 +291,18 @@ assert.deepEqual(database.syncBaseEntries(), [
 assert.deepEqual(database.syncBaseEntries([{ table: 'drafts', key: 'changed-b' }]), [
   { table: 'drafts', key: 'changed-b', valueJson: '{"revision":2}', blockRefs: ['a'.repeat(64)] },
 ]);
+assert.deepEqual(database.syncBaseReferences(),[
+ {table:'drafts',key:'changed-b',blockRefs:['a'.repeat(64)]},{table:'meta',key:'identity',blockRefs:['b'.repeat(64)]},
+]);
+const baseBefore=database.syncBaseEntries();
+rawDatabase.exec("CREATE TEMP TRIGGER fail_baseline_patch BEFORE INSERT ON sensa_sync_base WHEN NEW.record_key='changed-b' BEGIN SELECT RAISE(ABORT,'controlled baseline patch failure'); END");
+try{
+ assert.throws(()=>database.commit({clears:[],deletes:[],puts:[],syncBasePatch:{deletes:[{table:'meta',key:'identity'}],puts:[{table:'drafts',key:'changed-b',valueJson:'{"revision":3}',blockRefs:['c'.repeat(64)]}]}}),/controlled baseline patch failure/u);
+ assert.deepEqual(database.syncBaseEntries(),baseBefore,'an interrupted patch must roll its earlier deletes back');
+}finally{rawDatabase.exec('DROP TRIGGER fail_baseline_patch');}
+database.commit({clears:[],deletes:[],puts:[],syncBasePatch:{deletes:[],puts:[{table:'drafts',key:'changed-b',valueJson:'{"revision":3}',blockRefs:['c'.repeat(64)]}]}});
+assert.equal(database.syncBaseEntries([{table:'drafts',key:'changed-b'}])[0]!.valueJson,'{"revision":3}');
+assert.deepEqual(database.syncBaseEntries([{table:'meta',key:'identity'}])[0],baseBefore[1],'untouched baseline facts stay exact');
 database.commit({ clears: [], deletes: [], puts: [], syncBaseReplacement: [] });
 assert.deepEqual(database.syncBaseEntries(), []);
 assert.throws(() => database.commit({
@@ -253,7 +351,7 @@ database.commit({
 assert.equal(database.count('learningTargets'), 2);
 const projectionPlan = rawDatabase.exec({
   sql: `EXPLAIN QUERY PLAN ${sqliteHomeLearningTargetsQuery}`,
-  bind: ['route-a', 'route-a', '2026-09-14T00:00:00.000Z', '2026-09-15T00:00:00.000Z'],
+  bind: ['route-a', 'route-a', Date.parse('2026-09-14T00:00:00.000Z'), Date.parse('2026-09-15T00:00:00.000Z')],
   rowMode: 'object',
   returnValue: 'resultRows',
 }) as Array<Record<string, unknown>>;
@@ -263,7 +361,7 @@ assert(
   `route branch must use the route index: ${projectionPlanDetails.join(' | ')}`,
 );
 assert(
-  projectionPlanDetails.some((detail) => detail.includes('SEARCH target USING INDEX sensa_learning_targets_introduced')),
+  projectionPlanDetails.some((detail) => detail.includes('SEARCH introduced USING COVERING INDEX sensa_runtime_learning_day')),
   `introduced branch must use the date index: ${projectionPlanDetails.join(' | ')}`,
 );
 assert(
@@ -279,6 +377,29 @@ assert.equal(database.countIntroducedLearningTargets(
   '2026-09-14T00:00:00.000Z',
   '2026-09-15T00:00:00.000Z',
 ), 0);
+});
+test('Home uses the caller day for superseded initial introductions as well as active due Targets',()=>{
+ const retired={...target('target-retired','route-a','package-a'),introducedLanguageRouteId:'route-a',startedAt:'2026-09-17T08:00:00.000Z'};
+ retired.curriculumMemberships=retired.curriculumMemberships.map(membership=>({...membership,status:'superseded'}));
+ database.commit({clears:[],deletes:[],puts:[{table:'learningTargets',key:retired.id,encodedValue:encoded(retired)}]});
+ assert.deepEqual(database.homeLearningProjection('route-a',Date.parse('2026-09-17T12:00:00.000Z')).targets.map(entry=>entry.id),['target-a','target-retired']);
+ assert.deepEqual(database.homeLearningProjection('route-a',Date.parse('2026-09-18T12:00:00.000Z')).targets.map(entry=>entry.id),['target-a']);
+ database.commit({clears:[],deletes:[{table:'learningTargets',key:retired.id}],puts:[]});
+});
+test('offset timestamps count the same retired introduction in Home, runtime and start admission without rewriting its source',()=>{
+ const clock=Date.parse('2026-09-18T12:00:00Z'),dayStart=new Date(clock);dayStart.setHours(0,0,0,0);
+ const dayEnd=new Date(dayStart);dayEnd.setDate(dayEnd.getDate()+1);
+ const instant=dayStart.getTime()+30*60_000,at=new Date(instant-10*60*60_000).toISOString().slice(0,-1)+'-10:00';
+ const retired={...target('target-offset','route-a','package-a'),introducedLanguageRouteId:'route-a',startedAt:at};
+ retired.curriculumMemberships=retired.curriculumMemberships.map(membership=>({...membership,status:'superseded'}));
+ database.commit({clears:[],deletes:[],puts:[{table:'learningTargets',key:retired.id,encodedValue:encoded(retired)}]});
+ try{
+  assert.equal(Date.parse(at),instant);
+  assert.deepEqual(database.homeLearningProjection('route-a',clock).targets.map(entry=>entry.id),['target-a','target-offset']);
+  assert.equal(database.countIntroducedLearningTargets('route-a',dayStart.toISOString(),dayEnd.toISOString()),1);
+  assert.equal(database.runtimeLearningCandidates({languageContext:retired.curriculumMemberships[0].languageContext,clock,dailyLimit:1,supportedPolicies:['lightweight'],currentTargetIds:[],retryTargetIds:[]}).nextChangeAt,dayEnd.getTime());
+  assert.equal(database.get('learningTargets',retired.id),encoded(retired),'normalizing derived dates cannot rewrite the accepted timestamp');
+ }finally{database.commit({clears:[],deletes:[{table:'learningTargets',key:retired.id}],puts:[]});}
 });
 test('learning, content and media indexes update with commits and deletes', () => {
 database.commit({
@@ -319,10 +440,10 @@ const indexedQueryPlans = [
     expected: 'sensa_content_attempts_task_created',
   },
   {
-    sql: `EXPLAIN QUERY PLAN SELECT COUNT(*) FROM sensa_learning_targets
-          WHERE introduced_language_route_id=? AND started_at>=? AND started_at<?`,
-    bind: ['route-a', '2026-09-14T00:00:00.000Z', '2026-09-15T00:00:00.000Z'],
-    expected: 'sensa_learning_targets_introduced',
+    sql: `EXPLAIN QUERY PLAN SELECT COUNT(*) FROM sensa_runtime_learning_introductions
+          WHERE language_route_id=? AND started_at>=? AND started_at<?`,
+    bind: ['route-a', Date.parse('2026-09-14T00:00:00.000Z'), Date.parse('2026-09-15T00:00:00.000Z')],
+    expected: 'sensa_runtime_learning_day',
   },
   {
     sql: `EXPLAIN QUERY PLAN SELECT DISTINCT target_key FROM sensa_learning_route_targets
@@ -397,8 +518,8 @@ test('portable media rows deduplicate by digest and collect after the last packa
   database.commit({
     clears:[],deletes:[],
     puts:[
-      {table:'packageCache',key:'portable-a',encodedValue:'{}'},
-      {table:'packageCache',key:'portable-b',encodedValue:'{}'},
+      {table:'packageCache',key:'portable-a',encodedValue:encoded({})},
+      {table:'packageCache',key:'portable-b',encodedValue:encoded({})},
     ],
     portablePackages:[portable('portable-a'),portable('portable-b')],
   });
@@ -414,5 +535,22 @@ test('portable media rows deduplicate by digest and collect after the last packa
   assert.deepEqual(database.portableMediaDiagnostics(),{
     blobCount:0,totalBytes:0,referenceCount:0,
   });
+});
+test('synthetic 10k retained scheduling rows use compact Home planning without reading material or history',()=>{
+ const count=10_000,route='retention-capacity',clock=Date.parse('2026-09-14T12:00:00.000Z');
+ const puts=Array.from({length:count},(_,index)=>{
+  const id=`retained-${String(index).padStart(5,'0')}`;
+  const row={...target(id,route,'capacity-package'),introducedLanguageRouteId:route,startedAt:'2026-09-01T08:00:00.000Z',completedAt:'2026-09-01T08:01:00.000Z',committedPolicy:{profileId:'lightweight'},memory:{dueAt:new Date(index<count/2?'2026-09-14T00:00:00.000Z':'2026-09-15T00:00:00.000Z')}};
+  return {table:'learningTargets' as const,key:id,encodedValue:encoded(row)};
+ });
+ database.commit({clears:[],deletes:[],puts});
+ const begin=performance.now(),stored=database.homeLearningProjection(route,clock);
+ const queue=resolveLearningQueue({targets:stored.targets,languageRouteId:route,clock,dailyLimit:20,readiness:Object.fromEntries(stored.targets.map(target=>[target.id,'ready' as const]))});
+ const elapsedMs=performance.now()-begin;
+ assert.equal(stored.targets.length,count);assert.equal(queue.due.length,count/2);assert.equal(queue.initialReady.length,0);
+ assert(stored.targets.every(target=>target.curriculumMemberships.every(membership=>!('content' in membership.material))));
+ assert(elapsedMs<1500,`Compact kernel planning regression ceiling exceeded: ${elapsedMs}ms`);
+ console.info(JSON.stringify({boundary:'SQLite/Wasm in-memory kernel, not Chromium/OPFS/UI',syntheticRetainedTargets:count,dueTargets:queue.due.length,historyRuns:0,planningMs:Math.round(elapsedMs),regressionCeilingMs:1500}));
+ database.commit({clears:[],deletes:puts.map(({table,key})=>({table,key})),puts:[]});
 });
 afterAll(()=>database.close());

@@ -1,4 +1,5 @@
 {
+  "videoCaptionLimit": "Data takarir terlalu besar untuk dimuat sepenuhnya.",
   "openInbox": "Buka kotak masuk Sensa",
   "deliveryHint": "Setelah menyimpan, buka Sensa di browser ini. Hasil tangkapan Anda akan muncul otomatis di kotak masuk.",
   "savedInbox": "Terkirim ke kotak masuk Sensa.",
@@ -167,7 +168,7 @@
   "videoTranslation": "Hanya terjemahan (otomatis)",
   "videoHint": "Muat takarir, lalu pilih ekspresi untuk menjelaskan atau menyimpannya. Video dijeda saat teks dipilih.",
   "videoOwnFile": "Gunakan berkas takarir sendiri",
-  "videoFileHint": "Jika takarir tidak tersedia, muat berkas VTT / SRT untuk video ini. Transkripsi AI cloud belum tersedia.",
+  "videoFileHint": "Jika takarir tidak tersedia, muat berkas VTT / SRT untuk video ini.",
   "videoLoadFile": "Muat berkas takarir",
   "videoRetry": "Coba ulang terjemahan",
   "videoAd": "Iklan sedang diputar. Pengambilan takarir dijeda.",

@@ -9,6 +9,9 @@ const desired=desiredAuthRedirectConfig(environment);
 assert.deepEqual(desired,{projectRef:'abcdefghijklmnopqrst',siteUrl:'https://sensa.example.com',uriAllowList:'https://sensa.example.com/**'});
 assert(authRedirectConfigMatches({site_url:'https://sensa.example.com/',uri_allow_list:'https://sensa.example.com/**'},desired));
 assert(!authRedirectConfigMatches({site_url:'http://127.0.0.1:3001',uri_allow_list:'http://127.0.0.1:3001/**'},desired));
+for(const site_url of ['https://sensa.example.com/profile','https://sensa.example.com/?from=test','https://sensa.example.com/#callback','https://user@sensa.example.com']){
+ assert(!authRedirectConfigMatches({site_url,uri_allow_list:desired.uriAllowList},desired),'Site URL must be the exact configured root, not only its origin');
+}
 assert.throws(()=>desiredAuthRedirectConfig({...environment,SENSA_WEB_ORIGIN:'https://sensa.example.com/profile'}),/HTTPS origin/);
 
 const calls=[];let config={site_url:'http://127.0.0.1:3001',uri_allow_list:'http://127.0.0.1:3001/**',smtp_pass:'must-not-be-sent'};
@@ -24,6 +27,11 @@ assert(!calls[1].body.includes('smtp_pass'));
 calls.length=0;
 await reconcileSupabaseAuth({mode:'check',environment,fetchImpl});
 assert.deepEqual(calls.map(call=>call.method),['GET']);
+config={...config,site_url:'https://sensa.example.com/profile'};calls.length=0;
+await assert.rejects(reconcileSupabaseAuth({mode:'check',environment,fetchImpl}),/does not match/);
+assert.deepEqual(calls.map(call=>call.method),['GET'],'check mode must never mutate an incorrect Site URL');
+await reconcileSupabaseAuth({mode:'apply',environment,fetchImpl});
+assert.equal(config.site_url,desired.siteUrl);
 console.log('PASS: production Auth redirect config validates, patches only Site URL/allow list and verifies convergence.');
 
 });

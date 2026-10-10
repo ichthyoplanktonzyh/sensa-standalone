@@ -1,9 +1,9 @@
 import {queueWeb,pendingWeb,acknowledgeWeb,webStatus,discardPendingWeb,webOperationStatus,exportWebQueueRecovery,discardWebQueueRecovery} from './webDestination';
 import {browserCaptureToIntake} from './semanticIntakeAdapter';
 import {z} from 'zod';
-import {captureSnapshotSchema,sensaLanguageForDeclaredTag,sensaLanguageForIso6393,sensaReadingGlossaryForPair,sensaBridgeNotificationKind,sensaBridgeRequestChannel,sensaBridgeRequestSchema,sensaExtensionCredentialSchema,type SensaBridgeRequest,type SensaBridgeRequestOf,type SensaExtensionAuthorization,type SensaExtensionExchange} from '@sensa/contracts/sensa';
+import {captureSnapshotSchema,sensaCanonicalLanguageTag,sensaLanguageForIso6393,sensaReadingGlossaryForPair,sensaBridgeNotificationKind,sensaBridgeRequestChannel,sensaBridgeRequestSchema,sensaExtensionCredentialSchema,type SensaBridgeRequest,type SensaBridgeRequestOf,type SensaExtensionAuthorization,type SensaExtensionExchange} from '@sensa/contracts/sensa';
 import {webUrl,apiUrl} from './config';
-import {detectIso6393} from './languageDetector';
+import {detectSourceLanguage} from './languageDetector';
 import {maxDetectableCharacters,minSkimmableCharacters} from './language';
 import {readYoutubePlayer} from './youtubePlayer';
 import {readingLanguageContext,readingLanguageRouteSnapshot,selectReadingLanguageRoute,readingPreferences,saveReadingPreferences,readingSiteOf,publishReadingLanguageRoutes,readingGlossary,publishReadingGlossary} from './preferences';
@@ -133,6 +133,20 @@ async function localScope(){
 }
 /** A reading tab belongs to this installation even without a Sensa account. */
 async function activeScope(){return (await load()).active??await localScope();}
+
+/** A changed reading context retires page-local results and in-flight work.
+ * Use the existing surface lifecycle rather than exposing the private glossary
+ * or maintaining a second versioned cache protocol in every content script. */
+async function refreshReadingSurfaces(){
+ const active=Object.entries(await modes());if(!active.length)return;
+ const [scope,preferences]=await Promise.all([activeScope(),readingPreferences()]);
+ const current=await modes();if(await activeScope()!==scope)return;
+ await Promise.all(active.filter(([id,mode])=>mode.accountId===scope&&current[Number(id)]?.accountId===scope).map(([id])=>chrome.tabs.sendMessage(Number(id),{kind:'reading',enabled:true,accountId:scope,preferences,refresh:true}).catch(()=>undefined)));
+}
+chrome.storage.onChanged?.addListener((changes,area)=>{
+ if(area!=='local')return;
+ if(['readingActiveLanguageRouteId','readingLanguageRoutes','readingGlossary','readingPreferences','sensaLocalModels'].some(key=>changes[key]&&JSON.stringify(changes[key]!.oldValue)!==JSON.stringify(changes[key]!.newValue)))void refreshReadingSurfaces().catch(()=>undefined);
+});
 
 /**
  * `MessageSender.url` identifies the document that opened the extension
@@ -269,9 +283,9 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
  }
  // Language detection is pure local computation on text the caller already has,
  // so it needs no account and no page: the content script sends a sample and
- // gets a code back. It lives here because the detector's tables are far larger
- // than anything a content script should carry into every page.
- if(message.kind==='detect-language'){const text=typeof message.text==='string'?message.text.slice(0,2048):'';return {language:text?detectIso6393(text):null};}
+ // gets a code back. Chrome's native local detector stays behind this shared
+ // handler rather than shipping another detector into every page.
+ if(message.kind==='detect-language'){const text=typeof message.text==='string'?message.text.slice(0,2048):'';return {language:text?await detectSourceLanguage(text):null};}
  // What the learner already reads, answered here rather than in the page's
  // context because the pair lives here and only here: the published profile is
  // kept out of reach of content scripts, so a reading surface asks a question
@@ -279,11 +293,10 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
  if(message.kind==='reading-language'){
   const pair=await readingLanguageContext();
   const text=typeof message.text==='string'?message.text.trim().slice(0,maxDetectableCharacters):'';
-  const observation=text.length>=minSkimmableCharacters?detectIso6393(text):null;
-  const detected=observation?sensaLanguageForIso6393(observation.code):undefined;
-  const surface=typeof message.surfaceLanguage==='string'?sensaLanguageForDeclaredTag(message.surfaceLanguage):undefined;
-  const observedTag=observation?(detected?.tag??observation.code):surface?.tag;
-  return {supportLanguageTag:pair.supportLanguageTag,alreadyReadable:observedTag===pair.supportLanguageTag};
+  const observation=text.length>=minSkimmableCharacters?await detectSourceLanguage(text):null;
+  const declared=text.length<minSkimmableCharacters&&typeof message.surfaceLanguage==='string'?sensaCanonicalLanguageTag(message.surfaceLanguage):null;
+  const sourceLanguageTag=observation?(sensaLanguageForIso6393(observation.code)?.tag??sensaCanonicalLanguageTag(observation.code)):declared==='und'?null:declared;
+  return {supportLanguageTag:pair.supportLanguageTag,sourceLanguageTag,alreadyReadable:sourceLanguageTag===pair.supportLanguageTag};
  }
 
  if(['reading-settings','reading-settings-save','reading-test','reading-models','reading-run','youtube-captions'].includes(message.kind)){

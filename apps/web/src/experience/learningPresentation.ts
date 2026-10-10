@@ -7,12 +7,12 @@ export function toWordPresentation(content: RuntimeLearningContent): Word {
   const label=(learningKey:string,contentKey:string)=>i18n.hasResourceBundle(i18n.language,'learning')
     ? i18n.t(learningKey,{ns:'learning'})
     : i18n.t(contentKey,{ns:'content'});
-  const currentMeaning=label('assurance.currentMeaning','content.meaning3');
+  const currentMeaning=label('assurance.currentMeaning','contentUi.meaning3');
   const emphasize = (example: LearningExample): string =>
     `${example.textL2.slice(0, example.targetStart)}<b>${example.targetSurface}</b>${example.textL2.slice(example.targetEnd)}`;
   const sentences = content.learningExamples.map((example) => ({
     exampleId: example.exampleKey,
-    src: `Sensa ${i18n.t('content.learningExample')}`,
+    src: `Sensa ${i18n.t('contentUi.learningExample',{ns:'content'})}`,
     theme: 'forest',
     en: emphasize(example),
     zh: example.textL1,
@@ -48,8 +48,8 @@ export function toWordPresentation(content: RuntimeLearningContent): Word {
     })),
     sentences,
     mnemo: {
-      [label('assurance.boundary','content.scenesAndBoundaries')]: [[currentMeaning, content.guideLabelL1]],
-      [label('assurance.experienceTitle','content.typicalScene')]: content.experienceSketch.labelsL1.map((item) => [item, '']),
+      [label('assurance.boundary','contentUi.scenesAndBoundaries')]: [[currentMeaning, content.guideLabelL1]],
+      [label('assurance.experienceTitle','contentUi.typicalScene')]: content.experienceSketch.labelsL1.map((item) => [item, '']),
     },
   };
 }

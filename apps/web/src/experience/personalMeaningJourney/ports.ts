@@ -49,3 +49,8 @@ export interface LearnerLanguagePort {
 }
 
 export type CommandLanguages = SensaPinnedLanguageContext;
+/** Deterministic fact construction; persistence remains with the command executor. */
+export interface JourneyFactPorts {
+  newId(): string;
+  nowIso(): string;
+}

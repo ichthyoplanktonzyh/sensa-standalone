@@ -94,7 +94,7 @@
     "feedbackText": "Use a opção de contato em Sobre e suporte para enviar comentários e corrigir conteúdo.",
     "done": "Concluído"
   },
-  "cloudSync": {
+  "cloudSync": {"restoreTitle": "Dados da conta",
     "title": "Sincronização da conta",
     "pending": "Alterações locais aguardando sincronização",
     "syncing": "Sincronizando…",
@@ -111,8 +111,9 @@
     "openFailed": "Não foi possível restaurar os dados da conta. Verifique a conexão e tente novamente.",
     "retryOpen": "Tentar restaurar novamente",
     "details": "Ver registros em conflito",
-    "conflictPrompt": "{{count}} registros estão em conflito, afetando {{affected}} registros relacionados. Escolha a versão do dispositivo ou da nuvem para este grupo de conflitos.",
-    "conflictDecision": "A versão mais recente na nuvem será verificada novamente antes de aplicar sua escolha. Se tiver mudado, o novo conflito será preservado para outra confirmação. Os dados sem relação com ele continuarão sendo sincronizados.",
+    "conflictPrompt": "Compare as alterações e escolha uma versão para todas.",
+    "conflictDecision": "Se uma versão mudar, será necessário comparar novamente.",
+    "comparison": {"local":"Este dispositivo","remote":"Sua conta","base":"Antes das alterações","removed":"Excluído ou ausente nesta versão","unavailable":"Não é possível exibir esta versão por completo.","unsupported":"Ainda não é possível comparar todas as alterações. As duas versões estão preservadas; entre em contato com o suporte.","refresh":"Sincronize agora para carregar as versões.","changed":"O conteúdo mudou. Sincronize e compare novamente.","item":"Conteúdo {{number}}","fields":{"expression":"Expressão","meaning":"Significado","context":"Contexto","note":"Nota","examples":"Situações típicas","included":"Casos incluídos","excluded":"Casos excluídos","contrasts":"Distinções próximas","questions":"Questões em aberto","content":"Conteúdo"}},
     "keepLocal": "Manter a versão do dispositivo",
     "useCloud": "Usar a versão da nuvem",
     "resolving": "Verificando e resolvendo…",

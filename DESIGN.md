@@ -30,6 +30,12 @@ presentation and Skin contracts; it does not independently establish Sensa's bra
 
 Sensa should feel calm, attentive, and precise: a learning environment that keeps the learner focused on meaning rather than on interface chrome. Visual hierarchy must clarify the relationship among an expression, its sense, supporting language, context, and learning state without making the product feel like a dense administration dashboard.
 
+Page purpose, task sequence, state-dependent actions, and cross-page continuity are defined in
+[`Web page narratives`](docs/sensa/product-requirements-v1.md#页面职责与叙事). Presentation must make that
+primary task clear through content order, grouping, and action emphasis. A collection or reference page need not
+manufacture a primary button. Copy is limited to actual content, action labels, necessary state, recovery, and decision
+consequences; introductory explanations, repeated hints, and decorative subtitles must not compensate for unclear structure.
+
 This document defines the stable product-level design contract. Sensa ships a reviewed catalog of first-party skins; it is not a marketplace or an arbitrary runtime extension point. A skin may change presentation, but it must never change navigation, content, available actions, accepted input, learning facts, scheduling, persistence, or sync behavior.
 
 The semantic contract is the boundary between product UI and a skin. Product components consume roles such as canvas, panel, primary text, secondary text, primary action, selection, focus, and feedback. They do not depend on a skin's palette names or hard-coded visual values.
@@ -120,7 +126,7 @@ The first reusable React boundary includes `SensaAction`, `SensaChoice`, `SensaF
 - **Input, Textarea, Search, and Choice controls:** preserve labels, help and error relationships, keyboard behavior, entered values, and validation state.
 - **Navigation, Tabs, Dialog, Sheet, Toast, and Popover:** preserve destination, selection, focus management, dismissal, and announcement behavior.
 - **Sense, Expression, Context, Learning Target, Book, Package, Scene, and Review components:** preserve the domain object's identity and field order. Presentation cannot manufacture learning evidence, outcomes, schedules, or successful sync state.
-- **Quiet domain presentation:** a next-action invitation leads with the current task, supporting explanation and explicit action; a learning summary pairs modest quantities with labels and a management link; a content entry is an open row with a recognizable icon, title, supporting description and destination cue. Source information remains supporting context, and preparation or failure states stay adjacent to the action they explain. Context, expression and sense retain distinct roles rather than becoming interchangeable card titles.
+- **Quiet domain presentation:** a next-action invitation leads with the current task and its explicit action, adding state information only when needed; a learning summary pairs modest quantities with labels and a management link; a content entry is an open row with a recognizable icon, title and destination cue, plus actual content or state needed to choose it. Source information remains supporting context, and preparation or failure states stay adjacent to the relevant action. Context, expression and sense retain distinct roles rather than becoming interchangeable card titles.
 - **Learning runtime:** preserve the stage protocol, prompt, response affordance, reveal, rating choices, feedback, progress, and completion semantics. A skin cannot turn a different workflow into the same named stage.
 
 Quiet's domain adapters extend this shared grammar across the production surfaces:
@@ -129,7 +135,7 @@ Quiet's domain adapters extend this shared grammar across the production surface
 - Intake and meaning conversations keep context, proposed meaning and accepted meaning distinct. Reading width and paragraph rhythm take priority over decorative message bubbles.
 - Learning uses a reading desk: context precedes the disclosed expression, supporting examples are inset with a rule, and rating controls occupy a separate decision area. On narrow screens, tools move below the header without changing DOM order or disclosure timing.
 - My Learning separates curriculum, readiness and recorded activity. Counts remain modest, records remain language-scoped, and preparation controls retain consent, retry and cancellation.
-- Free practice is a directory of real capabilities, including explicitly unavailable activities. Reference lookup and example viewing remain reference activities, not learning evidence.
+- Free practice foregrounds the delivered real-world listening activity and its scope selection. Undelivered activities, if shown, remain unavailable and do not compete with executable actions. Reference lookup and example viewing remain reference activities, not learning evidence.
 - Settings use a divided directory, with bounded forms for model connections and explicit service feedback. Authentication, data removal, route selection and appearance retain their existing state and confirmation boundaries.
 
 These domain rules live in the scoped `quiet-*.css` adapters imported by `quiet.css`; they use existing semantic tokens, add no new product state and do not affect Clear. Small screens, large text and dark mode must retain all content and controls. Browser checks measure layout and state continuity independently of visual screenshot review.

@@ -1,5 +1,12 @@
 import { bundledLearningCatalog } from '../../learning/content/bundledLearningContent';
 import { activeSpeechLanguage } from './speechLanguage';
+import {sensaCanonicalLanguageTag,sensaLanguageForDeclaredTag} from '@sensa/contracts/sensa';
+
+export interface ReferencePronunciationInput {
+  text:string;
+  languageTag:string;
+  audioUrl?:string;
+}
 
 export interface AudioPlaybackOptions {
   playbackRate?: number;
@@ -19,6 +26,8 @@ class AudioService {
   private currentAudio: HTMLAudioElement | null = null;
   private currentPlaybackResolve: (() => void) | null = null;
   private currentSpeechCancel: (() => void) | null = null;
+  private pendingVoiceCancel: (() => void) | null = null;
+  private referencePlaybackEpoch = 0;
 
   /** Pause the current asset without completing its playback Promise. */
   public pause(): boolean {
@@ -58,6 +67,8 @@ class AudioService {
 
   /** Stop any active HTML audio or speech-synthesis playback. */
   public stop(): void {
+    this.referencePlaybackEpoch += 1;
+    this.pendingVoiceCancel?.();
     const audio = this.currentAudio;
     this.currentAudio = null;
     if (audio) {
@@ -126,6 +137,47 @@ class AudioService {
     return this.playAudioAsset(audioUrl, fallbackText, type, true, options);
   }
 
+  /** Reference owns its source language. Never read the active learner Route
+   * or silently replace a failed source recording with another pronunciation. */
+  public async playReferencePronunciation(input:ReferencePronunciationInput):Promise<void>{
+    this.stop();
+    const epoch=this.referencePlaybackEpoch;
+    const tag=sensaCanonicalLanguageTag(input.languageTag),text=input.text.trim();
+    if(!tag||tag==='und'||!text)throw new Error('reference_pronunciation_unavailable');
+    if(input.audioUrl)return this.playAudioAsset(input.audioUrl,text,'us',false,{},true);
+    if(typeof window==='undefined'||!('speechSynthesis' in window))throw new Error('reference_pronunciation_unavailable');
+    const locale=tag.includes('-')?tag:sensaLanguageForDeclaredTag(tag)?.speechLocale??tag;
+    const available=await this.referenceVoices(window.speechSynthesis);
+    if(epoch!==this.referencePlaybackEpoch||available===null)return;
+    const voices=available.filter(voice=>voice.localService===true);
+    const normalized=(voice:SpeechSynthesisVoice)=>sensaCanonicalLanguageTag(voice.lang.replaceAll('_','-'));
+    const voice=voices.find(voice=>normalized(voice)===locale)
+      ??(!tag.includes('-')?voices.find(voice=>normalized(voice)?.split('-')[0]===tag):undefined);
+    if(!voice)throw new Error('reference_pronunciation_unavailable');
+    return this.startSpeechSynthesis(text,'us',{},locale,voice);
+  }
+
+  /** Browsers may populate their local voice inventory after the first call.
+   * Wait only for that initial empty inventory; stopping cancels the wait too. */
+  private referenceVoices(synthesis:SpeechSynthesis):Promise<SpeechSynthesisVoice[]|null>{
+    const initial=synthesis.getVoices();
+    if(initial.length)return Promise.resolve(initial);
+    return new Promise(resolve=>{
+      const finish=(voices:SpeechSynthesisVoice[]|null)=>{
+        clearTimeout(timer);
+        synthesis.removeEventListener('voiceschanged',changed);
+        if(this.pendingVoiceCancel===cancel)this.pendingVoiceCancel=null;
+        resolve(voices);
+      };
+      const changed=()=>{const voices=synthesis.getVoices();if(voices.length)finish(voices);};
+      const cancel=()=>finish(null);
+      const timer=setTimeout(()=>finish(synthesis.getVoices()),1000);
+      this.pendingVoiceCancel=cancel;
+      synthesis.addEventListener('voiceschanged',changed);
+      changed();
+    });
+  }
+
   /**
    * Play a media URI declared by the installed Learning Package. A missing or
    * broken package asset fails closed; it must never be replaced with a
@@ -146,6 +198,7 @@ class AudioService {
     type: 'us' | 'uk',
     allowSpeechFallback: boolean,
     options: AudioPlaybackOptions,
+    rejectOnError=false,
   ): Promise<void> {
     // The fallback voice speaks the learner's target language, so it is resolved
     // only where a fallback is actually possible; a package asset that must fail
@@ -153,13 +206,13 @@ class AudioService {
     const speechLocale = allowSpeechFallback
       ? (await activeSpeechLanguage()).speechLocale
       : undefined;
-    return new Promise((resolve) => {
+    return new Promise((resolve,reject) => {
       this.stop();
       const audio = new Audio(audioUrl);
       audio.playbackRate = normalizedPlaybackRate(options.playbackRate);
       let settled = false;
 
-      const finish = () => {
+      const finish = (error?:Error) => {
         if (settled) return;
         settled = true;
         if (this.currentAudio === audio) {
@@ -168,7 +221,7 @@ class AudioService {
         if (this.currentPlaybackResolve === finish) {
           this.currentPlaybackResolve = null;
         }
-        resolve();
+        if(error)reject(error);else resolve();
       };
 
       const fallbackToSpeech = () => {
@@ -178,16 +231,17 @@ class AudioService {
         }
         if (!speechLocale) { finish(); return; }
         // Keep the same Promise open while the fallback voice finishes.
-        void this.startSpeechSynthesis(fallbackText, type, options, speechLocale).then(finish);
+        void this.startSpeechSynthesis(fallbackText, type, options, speechLocale).then(()=>finish());
       };
 
       this.currentPlaybackResolve = finish;
       this.currentAudio = audio;
 
-      audio.onended = finish;
-      audio.onerror = allowSpeechFallback ? fallbackToSpeech : finish;
+      audio.onended = ()=>finish();
+      const failed=()=>finish(rejectOnError?new Error('reference_pronunciation_unavailable'):undefined);
+      audio.onerror = allowSpeechFallback ? fallbackToSpeech : failed;
 
-      audio.play().catch(allowSpeechFallback ? fallbackToSpeech : finish);
+      audio.play().catch(allowSpeechFallback ? fallbackToSpeech : failed);
     });
   }
 
@@ -234,40 +288,43 @@ class AudioService {
     type: 'us' | 'uk',
     options: AudioPlaybackOptions,
     speechLocale: string,
+    sourceVoice?:SpeechSynthesisVoice,
   ): Promise<void> {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return Promise.resolve();
 
-    return new Promise((resolve) => {
+    return new Promise((resolve,reject) => {
       const synthesis = window.speechSynthesis;
       const utterance = new SpeechSynthesisUtterance(text);
       let settled = false;
 
-      const finish = () => {
+      const finish = (error?:Error) => {
         if (settled) return;
         settled = true;
         if (this.currentSpeechCancel === cancel) {
           this.currentSpeechCancel = null;
         }
-        resolve();
+        if(error)reject(error);else resolve();
       };
 
       // stop() cancels the browser utterance first, then calls this resolver.
       const cancel = () => finish();
       this.currentSpeechCancel = cancel;
-      utterance.onend = finish;
-      utterance.onerror = finish;
+      utterance.onend = ()=>finish();
+      utterance.onerror = ()=>finish(sourceVoice&&this.currentSpeechCancel===cancel?new Error('reference_pronunciation_unavailable'):undefined);
       // A learner reads the target language, so the voice has to be one: asking
       // for English over Spanish text is a wrong pronunciation presented as the
       // word's. The accent only chooses between the two locales English has.
-      const locale = speechLocale.startsWith('en')
+      const locale = sourceVoice?sourceVoice.lang:speechLocale.startsWith('en')
         ? (type === 'uk' ? 'en-GB' : 'en-US')
         : speechLocale;
       utterance.lang = locale;
       utterance.rate = normalizedPlaybackRate(options.playbackRate) * 0.92;
       utterance.pitch = 1.0;
 
+      if(sourceVoice)utterance.voice=sourceVoice;
+
       const voices = synthesis.getVoices();
-      if (voices && voices.length > 0) {
+      if (!sourceVoice&&voices && voices.length > 0) {
         const normalize = (lang: string) => lang.replace('_', '-');
         const primary = locale.split('-')[0]!;
         const pools = [
@@ -297,7 +354,7 @@ class AudioService {
       try {
         synthesis.speak(utterance);
       } catch {
-        finish();
+        finish(sourceVoice?new Error('reference_pronunciation_unavailable'):undefined);
       }
     });
   }

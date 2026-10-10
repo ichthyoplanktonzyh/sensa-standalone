@@ -1,4 +1,5 @@
 import type { ReferenceLookupResult } from './reference/referenceDictionary';
+import type { SensaPinnedLanguageContext } from '@sensa/contracts/sensa';
 
 /**
  * 4 选 1 干扰项定义
@@ -111,7 +112,8 @@ export type FormalLearningStage =
  */
 export interface QuickDictSense {
   pos: string;      // 词性，如 "conj.", "n.", "vi. vt.", "adj."
-  text: string;     // 中文简明释义，如 "和，与，又；加上；然后；那么"
+  text: string;     // 简明释义，保留其实际语言，不默认中文或目标语言。
+  languageTag: string;
   /** Stable identity from the normalized Reference entry, when available. */
   referenceSenseId?: string;
 }
@@ -157,7 +159,7 @@ export interface ContextualSenseResolution {
   modelId?: string;
   /** The selected sense rendered in the operation's Support Language. It is a
    * display layer over a provider-owned definition, never a revision of it: the
-   * provider's own wording stays in `ReferenceSense.definitionL2`, and the
+   * provider's own wording and language stay in `ReferenceSense.definition`, and the
    * rendering is recorded here so it keeps the model that produced it. */
   glossL1?: string;
 }
@@ -174,7 +176,7 @@ export interface QuickDictEntry {
   hasFullDetail?: boolean;    // 是否在词库中有完整卡片，支持「查看详细释义 >」
   isStarred?: boolean;        // 是否加入生词本/收藏
   /** Transient UI state used while an asynchronous Reference lookup settles. */
-  lookupState?: 'loading' | 'ready' | 'error';
+  lookupState?: 'loading' | 'ready' | 'missing' | 'error';
   lookupMessage?: string;
   /** The exact normalized result that produced this quick projection. */
   referenceLookup?: ReferenceLookupResult;
@@ -192,6 +194,9 @@ export type DictionaryLookup = (
 
 export interface DictionaryLookupOptions {
   signal?: AbortSignal;
+  /** Formal material queries keep their source/learner pair, independently of
+   * another tab's currently selected Route. */
+  languages?: SensaPinnedLanguageContext;
 }
 
 /**

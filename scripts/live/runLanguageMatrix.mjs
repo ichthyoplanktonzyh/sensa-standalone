@@ -4,7 +4,7 @@
  * container, local API, and local Web server. This deliberately does not reuse
  * scripts/local/sensaLocal.mjs's long-lived owner database.
  */
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
@@ -12,6 +12,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadLocalModelEnvironment } from '../local/sensaLocalModelEnvironment.mjs';
 import { summarizeRunDirectory } from './summarizeLanguageMatrix.mjs';
+import { waitForInteractiveServices } from './interactiveServiceLifecycle.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const args = parseArguments(process.argv.slice(2));
@@ -36,6 +37,10 @@ const webLog = join(logDirectory, 'web.log');
 const migrationLog = join(logDirectory, 'migration.log');
 const modelRuntimeBuildLog = join(logDirectory, 'model-runtime-build.log');
 const extensionBuildLog = join(logDirectory, 'extension-build.log');
+const extensionPath=selectedSuites.includes('extension')?join(runDirectory,'extension'):'';
+// Chromium's unpacked ID on the supported Unix hosts is SHA256(path), first
+// 16 bytes mapped from hex to a–p. Authorize only this run's exact extension.
+const extensionOrigin=extensionPath?'chrome-extension://'+createHash('sha256').update(extensionPath).digest('hex').slice(0,32).replace(/[0-9a-f]/gu,char=>String.fromCharCode(97+parseInt(char,16))):'';
 const mediaPrepareLog = join(logDirectory, 'media-prepare.log');
 const testLogs = {};
 const children = new Set();
@@ -46,13 +51,14 @@ let serviceChild;
 let webChild;
 
 function parseArguments(arguments_) {
-  const parsed = { webOnly: false, extensionOnly: false, start: 0, limit: undefined, caseKey: undefined, dryRun: false, preflight: false, slot: 0, reusePreparedArtifacts: false };
+  const parsed = { webOnly: false, extensionOnly: false, start: 0, limit: undefined, caseKey: undefined, dryRun: false, preflight: false, interactive: false, slot: 0, reusePreparedArtifacts: false };
   for (let index = 0; index < arguments_.length; index += 1) {
     const argument = arguments_[index];
     if (argument === '--web-only') parsed.webOnly = true;
     else if (argument === '--extension-only') parsed.extensionOnly = true;
     else if (argument === '--dry-run') parsed.dryRun = true;
     else if (argument === '--preflight') parsed.preflight = true;
+    else if (argument === '--interactive') parsed.interactive = true;
     else if (argument === '--reuse-prepared-artifacts') parsed.reusePreparedArtifacts = true;
     else if (argument === '--slot' || argument.startsWith('--slot=')) {
       const value = argument === '--slot' ? arguments_[++index] : argument.slice('--slot='.length);
@@ -81,6 +87,9 @@ function parseArguments(arguments_) {
     } else {
       throw new Error(`Unknown option: ${argument}`);
     }
+  }
+  if (parsed.interactive && (parsed.preflight || parsed.webOnly || parsed.extensionOnly || parsed.start || parsed.limit || parsed.caseKey)) {
+    throw new Error('--interactive starts isolated services only and does not accept preflight, suite or case selectors');
   }
   if (parsed.webOnly && parsed.extensionOnly) throw new Error('Choose only one of --web-only or --extension-only');
   if (parsed.caseKey && parsed.limit) throw new Error('Use either --case or --limit, not both');
@@ -204,7 +213,9 @@ async function createDisposableDatabase() {
   const databaseUrl = `postgresql://postgres:${password}@127.0.0.1:${port}/${database}`;
 
   for (let attempt = 0; attempt < 90; attempt += 1) {
-    const ready = result('docker', ['exec', container, 'pg_isready', '-U', 'postgres', '-d', database]);
+    // The official image's initialization server accepts local sockets before
+    // its final TCP server starts. Migrations use TCP, so readiness must too.
+    const ready = result('docker', ['exec', container, 'pg_isready', '-h', '127.0.0.1', '-U', 'postgres', '-d', database]);
     if (ready.status === 0) return { container, database, databaseUrl };
     await new Promise(resolveDelay => setTimeout(resolveDelay, 1000));
   }
@@ -269,6 +280,9 @@ async function cleanup() {
 }
 
 function handleSignal(signal) {
+  try {
+    if (runState?.mode === 'interactive') writeResults(runState, { status: 'stopped', finishedAt: new Date().toISOString() });
+  } catch { /* A diagnostic write failure must not prevent isolated-resource cleanup. */ }
   void cleanup().finally(() => process.exit(signal === 'SIGINT' ? 130 : 143));
 }
 
@@ -306,7 +320,7 @@ async function main() {
   if (!['darwin', 'linux'].includes(process.platform)) throw new Error('The isolated language-matrix runner supports macOS and Linux.');
   if (Number(process.versions.node.split('.')[0]) < 24) throw new Error('The isolated language-matrix runner requires Node.js 24 or newer.');
   if (args.dryRun) {
-    console.log(`Dry run: suites=${selectedSuites.join(',')} case=${args.caseKey ?? 'all'} start=${args.start} limit=${args.limit ?? 'none'}`);
+    console.log(args.interactive ? 'Dry run: interactive isolated services; no automatic test suite.' : `Dry run: suites=${selectedSuites.join(',')} case=${args.caseKey ?? 'all'} start=${args.start} limit=${args.limit ?? 'none'}`);
     console.log(`A live run will use a newly created --rm PostgreSQL container, ${serviceOrigin}, ${webOrigin}, and write artifacts below .sensa-local/language-matrix/${runId}/.`);
     console.log('No services, models, or TTS were started.');
     return;
@@ -320,8 +334,8 @@ async function main() {
   const state = {
     runId,
     startedAt: new Date().toISOString(),
-    mode: args.preflight ? 'preflight' : 'live',
-    suites: args.preflight ? [] : selectedSuites,
+    mode: args.preflight ? 'preflight' : args.interactive ? 'interactive' : 'live',
+    suites: args.preflight || args.interactive ? [] : selectedSuites,
     case: args.caseKey ?? null,
     start: args.start,
     limit: args.limit ?? null,
@@ -349,6 +363,7 @@ async function main() {
     DATABASE_URL: database.databaseUrl,
     SENSA_LOCAL_SERVICE_PORT: String(servicePort),
     SENSA_LOCAL_WEB_ORIGINS: webOrigin,
+    ...(extensionOrigin?{SENSA_LOCAL_EXTENSION_ORIGINS:extensionOrigin}:{}),
     SENSA_REGISTRATION_POLICY: 'registered',
     SENSA_LOCAL_MATRIX_ACCEPTANCE: '1',
     SENSA_UNLIMITED_MODEL_USAGE: 'true',
@@ -376,9 +391,16 @@ async function main() {
     return;
   }
 
-  let extensionPath = '';
+  if (args.interactive) {
+    const preflight = await verifyPreflightSessions();
+    writeResults(state, { status: 'ready', preflight, webOrigin, serviceOrigin });
+    console.log(`READY interactive acceptance: ${webOrigin}; API ${serviceOrigin}; artifacts ${runDirectory}`);
+    console.log('No automatic model/TTS requests or tests. Use an isolated browser; Ctrl-C stops these services and removes only this temporary database.');
+    await waitForInteractiveServices([['API', serviceChild], ['Web', webChild]], () => stopping);
+    return;
+  }
+
   if (selectedSuites.includes('extension')) {
-    extensionPath = join(runDirectory, 'extension');
     mkdirSync(extensionPath, { recursive: true, mode: 0o700 });
     runLogged(process.execPath, ['build.mjs'], extensionBuildLog, {
       cwd: join(root, 'apps/browser-extension'),
@@ -407,6 +429,7 @@ async function main() {
     SENSA_LIVE_CASE_START: caseStart,
     ...(limit ? { SENSA_LIVE_CASE_LIMIT: limit } : {}),
     ...(extensionPath ? { SENSA_LIVE_EXTENSION_PATH: extensionPath } : {}),
+    ...(extensionOrigin ? { SENSA_LIVE_EXTENSION_ORIGIN: extensionOrigin } : {}),
   };
 
   writeResults(state, { status: 'running' });

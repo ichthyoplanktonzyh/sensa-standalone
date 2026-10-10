@@ -10,6 +10,7 @@ import type {
   SensaExpressionBindingRelation,
   SensaExpressionType,
   SensaIntakeContext,
+  SensaIntakePayload,
   SensaPersonalMeaningAlignmentSnapshot,
   SensaPinnedLanguageContext,
   PublishedLearningSemanticFacts,
@@ -24,6 +25,7 @@ import type {
   SemanticAgentMessage,
 } from './semanticAgent';
 import type { SemanticLlmProvenance } from './semanticLlm';
+import type {ClarificationSourceWitness} from './clarificationSource';
 
 type SensaSenseProposalStatus = SensaSenseProposalSnapshot['status'];
 type SensaPersonalMeaningAlignmentStatus =
@@ -69,6 +71,8 @@ export interface JourneyMaterialBlockView {
   inlineDataUrl?: string | null;
   inlineMimeType?: string | null;
   revision: number;
+  /** Original captured source remains distinct from the accepted Context wording. */
+  capturedSource?:{text:string|null;source:SensaIntakeContext['source']};
 }
 
 export type JourneyFamiliarAnchorView = Extract<
@@ -181,6 +185,7 @@ export interface JourneyFocusView {
 
 export interface JourneyDetailView {
   personalMeaningId: string;
+  status:'active'|'deleted';
   shortId: string;
   /** Current optimistic-concurrency revision of this Personal Meaning. */
   revision: number;
@@ -193,11 +198,14 @@ export interface JourneyDetailView {
   experienceAnchors: JourneyExperienceAnchorView[];
   /** Every material block in learner order, including image blocks. */
   materialBlocks: JourneyMaterialBlockView[];
+  /** Original capture history, including sources whose current Anchor retired. */
+  capturedSources?:Array<{anchorId:string;text:string|null;source:SensaIntakeContext['source']}>;
   /** The learner's declared conversation stance; never a domain phase. */
   startingPoint: ClarificationStartingPoint | null;
   focuses: JourneyFocusView[];
   /** Active Sense resolutions that never needed a Meaning Focus. */
   directAlignments: JourneyAlignmentView[];
+  alignmentHistory?:JourneyAlignmentView[];
   createdAt: string;
   updatedAt: string;
 }
@@ -290,6 +298,23 @@ export interface CreatePersonalMeaningInput {
   startingPoint?: ClarificationStartingPoint | null;
 }
 
+export interface CorrectPersonalMeaningInput {
+  operationId:string;
+  personalMeaningId:string;
+  personalMeaningAlignmentId:string;
+  source:ClarificationSourceWitness;
+  payload:SensaIntakePayload;
+  reuseSense?:{senseId:string;senseVersionId:string};
+}
+export interface CorrectPersonalMeaningResult {
+  personalMeaningId:string;
+  personalMeaningRevisionId:string;
+  revision:number;
+  replacedAlignmentId:string;
+  personalMeaningAlignmentId:string;
+  replayed:boolean;
+}
+
 export interface AddMaterialBlockInput {
   operationId: string;
   personalMeaningId: string;
@@ -313,6 +338,21 @@ export interface ReviseContextResult {
   personalMeaningRevisionId: string;
   revision: number;
   replayed: boolean;
+}
+
+export interface ChangeMeaningLifecycleInput {
+  operationId:string;
+  personalMeaningId:string;
+  expectedRevision:number;
+  action:'delete'|'restore';
+}
+export interface ChangeMeaningLifecycleResult {
+  personalMeaningId:string;
+  personalMeaningRevisionId:string;
+  revision:number;
+  lifecycleRevision:number;
+  status:'active'|'deleted';
+  replayed:boolean;
 }
 
 export interface CreatePersonalMeaningResult {
@@ -345,6 +385,7 @@ export type CompleteClarificationDraftInput = Omit<
   intakeId: string;
   /** The complete Context explicitly carried into the final confirmation. */
   context: SensaIntakeContext;
+  contextWordingSource?: 'learner_authored' | 'llm_suggested';
 };
 
 export interface CompleteClarificationDraftResult extends ConfirmClarificationResult {
@@ -363,6 +404,8 @@ export interface CompleteClarificationDraftResult extends ConfirmClarificationRe
 export interface ConfirmClarificationInput {
   operationId: string;
   personalMeaningId: string;
+  /** Exact learner material frame used to produce/review this proposal. */
+  source:import('./clarificationSource').ClarificationSourceWitness;
   /** The context pinned by this clarification Session. */
   languageContext:SensaPinnedLanguageContext;
   focus?: {
@@ -399,6 +442,7 @@ export interface ConfirmClarificationResult {
 export interface ConfirmExpressionBindingInput {
   operationId: string;
   personalMeaningId: string;
+  source:import('./clarificationSource').ClarificationSourceWitness;
   meaningFocusId: string;
   senseVersionId: string;
   candidateId: string;
@@ -460,6 +504,8 @@ export interface PublishedLearningSceneAcceptanceInput {
 }
 
 export interface PublishedLearningSceneAcceptanceResult {
+  /** A new confirmation intent may refer to the already-current acceptance. */
+  acceptedByOperationId?: string;
   personalMeaningId: string;
   personalSemanticAnchorId: string;
   personalSemanticAnchorRevisionId: string;
