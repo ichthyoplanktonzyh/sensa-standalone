@@ -57,6 +57,14 @@ jobs:
         run: npm run test:edge
       - name: Fast production-path smoke suite
         run: npm test
+      - name: Preserve native fast-test reports and exact selection
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: sensa-fast-report-attempt-${{ github.run_attempt }}
+          path: .tmp/test-results/fast/
+          if-no-files-found: warn
+          retention-days: 7
       - name: Preserve the tested main release candidate
         if: ${{ github.event_name == 'push' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -120,11 +128,19 @@ jobs:
         env:
           SENSA_SKIP_BOOK_SCALE_BENCHMARK: 'true'
         run: npm run test:browser -- --shard=${{ matrix.shard }}/3
+      - name: Preserve native browser reports for every shard attempt
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: sensa-browser-report-${{ matrix.shard }}-attempt-${{ github.run_attempt }}
+          path: .tmp/test-results/browser/
+          if-no-files-found: warn
+          retention-days: 7
       - name: Upload synthetic Playwright Test failure evidence
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: sensa-playwright-failure-${{ matrix.shard }}
+          name: sensa-playwright-failure-${{ matrix.shard }}-attempt-${{ github.run_attempt }}
           path: .tmp/playwright-results/
           if-no-files-found: ignore
           retention-days: 7
@@ -134,9 +150,42 @@ jobs:
     needs: browser-shards
     if: always()
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 5
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Restore native reports including earlier successful shards on a partial rerun
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: sensa-browser-report-*
+          path: .tmp/browser-native-reports
+      - name: Merge native Playwright reports without erasing earlier failed attempts
+        run: |
+          node --input-type=module <<'JS'
+          import {readdir,mkdir,copyFile} from 'node:fs/promises';
+          import {basename} from 'node:path';
+          const visit=async root=>(await Promise.all((await readdir(root,{withFileTypes:true})).map(entry=>entry.isDirectory()?visit(root+'/'+entry.name):root+'/'+entry.name))).flat();
+          await mkdir('.tmp/browser-blob-reports',{recursive:true});
+          const blobs=(await visit('.tmp/browser-native-reports')).filter(path=>path.endsWith('.zip'));
+          if(!blobs.length)throw Error('Native browser report evidence is missing');
+          const names=new Set();
+          for(const path of blobs){const name=basename(path);if(names.has(name))throw Error('Ambiguous browser blob name');names.add(name);await copyFile(path,'.tmp/browser-blob-reports/'+name);}
+          JS
+          npx playwright merge-reports --reporter=html .tmp/browser-blob-reports
+      - name: Preserve merged browser report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: sensa-browser-merged-attempt-${{ github.run_attempt }}
+          path: playwright-report/
+          if-no-files-found: warn
+          retention-days: 7
       - name: Require every browser shard to pass
+        if: always()
         env:
           SHARD_RESULT: ${{ needs.browser-shards.result }}
         run: test "$SHARD_RESULT" = success
@@ -186,3 +235,11 @@ jobs:
           SENSA_FIXTURE_DATABASE_URL: ${{ env.DATABASE_URL }}
           SENSA_ADMIN_TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
         run: npm run test:db
+      - name: Preserve native database-test reports and exact selection
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: sensa-database-report-attempt-${{ github.run_attempt }}
+          path: .tmp/test-results/database/
+          if-no-files-found: warn
+          retention-days: 7

@@ -12,6 +12,12 @@
     "types": ["node", "vite/client", "chrome"]
   },
   "files": [
+    "quality/test-execution.test.mts",
+    "browser/package-center-journey.spec.ts",
+    "browser/account-recovery-journey.spec.ts",
+    "browser/reference-practice-journey.spec.ts",
+    "browser/learning-runtime-journey.spec.ts",
+    "browser/learning-workspace-journey.spec.ts",
     "integration/personal-meaning-correction.test.mts",
     "unit/scene-editor-read.test.mts",
     "integration/personal-meaning-lifecycle.test.mts",

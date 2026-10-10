@@ -995,12 +995,24 @@ Event Timing、最长任务和页面加载指标分别测量，不能互相替�
 
 `npm run test:coverage` 只生成当前 Vitest 用例所触及
 Web 学习投影的覆盖率报告，不设置全局覆盖率门槛；Playwright Test 失败时按测试项隔离保留 trace 和截图在被 Git 忽略的
-`.tmp/playwright-results/<test-id>` 中，CI 失败时上传这些诊断产物，不重试。Playwright Test 用例必须只使用合成、非敏感数据。
+`.tmp/playwright-results/<suite>-<shard>-<invocation>-<group>` 中，CI 失败时上传这些诊断产物，不重试。Playwright Test 用例必须只使用合成、非敏感数据。
 平台用例仍通过目录进入既有 CI 分层，不额外执行一遍。
 风险标签是筛选维度，不是独立的 CI job：`foundation`/`fast` 的 Vitest 与构建产物检查进入主 CI 的 `npm test`；
 Chromium 的 Playwright Test 检查进入 `npm run test:browser`；PostgreSQL 的 Vitest 和 Chromium+PostgreSQL 的 Playwright Test 检查进入 `npm run test:db`。
 运行器会拒绝把自动化测试登记到错误的 CI 环境边界。`manual` 的实际 Book 检查依赖另行生成的
 `release-candidate/portable-catalog.json`，不在普通 CI 中；普通 CI 的 `package-learning` 等测试覆盖同一安装、结算和复习代码路径，但不替代实际发布包验收。
+
+目录运行器按 runner、环境和精确环境变量分组调用原生测试引擎，不再为每个文件启动独立进程。
+Vitest 保持文件隔离与单 worker；Playwright 保持每个 spec 的 fixture 边界，不增加 worker 或拆散共享生命周期中的用例。
+原 package-center 大型 spec 已按词书、账号恢复、表达练习、学习运行和学习安排拆为独立文件，
+共享 fixture 只复用实现，各文件的可变状态、构建及输出目录独立。
+Browser shard 按已观察的文件耗时估计确定性分配；未采样文件使用保守默认权重，不将估计当作 SLO 或实际提速结果。
+
+每次调用在 `.tmp/test-results/<selection>/shard-<shard>/<invocation>/` 保存原生 JSON／blob 报告与目录选择回执，
+同时记录 GitHub attempt。成功要求原生引擎退出成功且报告包含全部、仅包含本次选择的测试文件；
+不存在的报告、遗漏文件或其他调用留下的旧产物不能代替执行结果。CI 在成功与失败时都上传原生报告，
+并用 Playwright 自带的合并器生成同一 CI run（含局部重跑 attempt）的浏览器 HTML 报告。
+聚合报告不放宽各 shard 的成功门禁；失败 trace 与重跑前的失败报告保留，诊断产物保留七天。
 
 `tests/web/support/libraryConvergenceWorld.mts` 通过一个小型测试 Interface 封装每台设备的 confirmed base、当前
 本地快照、云端发布、领域 Replica Module 合并与冲突分区。场景只提交领域有效快照、指定同步顺序，并可在确定时点

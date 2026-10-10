@@ -44,6 +44,8 @@ export type WebTestCatalogEntry = Readonly<{
  * split into named behavior scenarios.
  */
 const foundationTests = [
+  {id:'test-execution',file:'tests/web/quality/test-execution.test.mts',kind:'quality',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
+  ...['account-recovery-journey','reference-practice-journey','learning-runtime-journey','learning-workspace-journey'].map(id=>({id,file:`tests/web/browser/${id}.spec.ts`,kind:'integration' as const,risks:['local-correctness','durability','convergence','scale'] as const,environment:'chromium' as const,suite:'browser' as const,runner:'playwright' as const})),
   {id:'release-status',file:'tests/web/release/release-status.test.mjs',kind:'contract',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'candidate-source',file:'tests/web/release/candidate-source.test.mjs',kind:'contract',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'evidence-archive',file:'tests/web/quality/evidence-archive.test.mts',kind:'quality',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
