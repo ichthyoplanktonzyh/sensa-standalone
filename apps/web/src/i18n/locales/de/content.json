@@ -147,7 +147,7 @@
     "worldCounts": "{{expressions}} Ausdrücke · {{meanings}} unterschiedliche Bedeutungen",
     "worldCurrentRoute": "Aktueller Lernpfad",
     "worldGraphHint": "Punkte sind gespeicherte Ausdrücke. Linien zeigen gemeinsame bestätigte oder persönliche Bedeutungen. Abstand bedeutet keine semantische Nähe.",
-    "worldIsolated": "Keine Verbindung erfasst",
+    "worldIsolated": "Keine Verbindungen in dieser Ansicht",
     "worldLabelAll": "Alle",
     "worldLabelAuto": "Automatisch",
     "worldLabelSelected": "Ausgewählte",

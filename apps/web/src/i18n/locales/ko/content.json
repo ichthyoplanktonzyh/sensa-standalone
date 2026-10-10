@@ -147,7 +147,7 @@
     "worldCounts": "표현 {{expressions}}개 · 중복 제외 의미 {{meanings}}개",
     "worldCurrentRoute": "현재 학습 경로",
     "worldGraphHint": "점은 저장한 표현입니다. 선은 공유하는 확정된 의미나 개인 의미를 나타냅니다. 거리는 의미의 유사성을 나타내지 않습니다.",
-    "worldIsolated": "기록된 연결 없음",
+    "worldIsolated": "현재 보기에는 연결선이 없습니다",
     "worldLabelAll": "모두",
     "worldLabelAuto": "자동",
     "worldLabelSelected": "선택만",

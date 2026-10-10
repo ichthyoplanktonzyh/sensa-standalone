@@ -147,7 +147,7 @@
     "worldCounts": "{{expressions}} ungkapan · {{meanings}} makna unik",
     "worldCurrentRoute": "Jalur belajar saat ini",
     "worldGraphHint": "Titik adalah ungkapan tersimpan. Garis menunjukkan makna terkonfirmasi atau pribadi yang sama. Jarak tidak menunjukkan kedekatan semantik.",
-    "worldIsolated": "Tidak ada hubungan tercatat",
+    "worldIsolated": "Tidak ada hubungan dalam tampilan ini",
     "worldLabelAll": "Semua",
     "worldLabelAuto": "Otomatis",
     "worldLabelSelected": "Terpilih",

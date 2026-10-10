@@ -1253,7 +1253,7 @@ test('World expression languages combine with search, saved meanings and notes w
  const frId=scaleFixture.registry.expressions.find(expression=>expression.languageTag==='fr')!.expressionId,point=graph.locator(`[data-expression-id="${frId}"]`);
  await point.focus();await expect(graph.locator('[data-graph-preview]')).toContainText('emprunter');await point.press('Enter');
  const detail=graph.getByRole('complementary',{name:'表达预览',exact:true});await expect(detail.getByRole('heading',{name:'emprunter',exact:true})).toBeVisible();
- await expect(detail).toContainText('没有已记录的连线');await expect(detail).toContainText('当前学习路线');await expect(detail).toContainText('尚未加入此路线');
+ await expect(detail).toContainText('当前视图中没有连线');await expect(detail).toContainText('当前学习路线');await expect(detail).toContainText('尚未加入此路线');
  await detail.getByText('fixture · 隔离原文来源',{exact:true}).click();await expect(detail.getByRole('link',{name:'查看来源：',exact:true})).toHaveAttribute('href','https://example.test/original');
  const canvas=graph.locator('[data-graph-camera]');await canvas.scrollIntoViewIfNeeded();const box=await canvas.boundingBox();expect(box).not.toBeNull();
  const beforePan=JSON.parse((await canvas.getAttribute('data-graph-camera'))!);await page.mouse.move(box!.x+box!.width-25,box!.y+box!.height-35);await page.mouse.down();await page.mouse.move(box!.x+box!.width-55,box!.y+box!.height-55);await page.mouse.up();

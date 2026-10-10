@@ -147,7 +147,7 @@
     "worldCounts": "{{expressions}} expressions · {{meanings}} distinct meanings",
     "worldCurrentRoute": "Current learning route",
     "worldGraphHint": "Points are saved expressions. Lines show shared accepted meanings or contexts; distance has no semantic meaning.",
-    "worldIsolated": "No recorded connection",
+    "worldIsolated": "No connections in this view",
     "worldLabelAll": "All",
     "worldLabelAuto": "Automatic",
     "worldLabelSelected": "Selected",

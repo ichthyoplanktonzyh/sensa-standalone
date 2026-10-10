@@ -147,7 +147,7 @@
     "worldCounts": "{{expressions}} biểu đạt · {{meanings}} ý nghĩa không trùng lặp",
     "worldCurrentRoute": "Lộ trình học hiện tại",
     "worldGraphHint": "Mỗi điểm là một biểu đạt đã lưu. Đường nối thể hiện ý nghĩa đã xác nhận hoặc ý nghĩa cá nhân chung. Khoảng cách không thể hiện độ gần về ngữ nghĩa.",
-    "worldIsolated": "Chưa ghi nhận đường nối",
+    "worldIsolated": "Không có liên kết trong chế độ xem này",
     "worldLabelAll": "Tất cả",
     "worldLabelAuto": "Tự động",
     "worldLabelSelected": "Đã chọn",

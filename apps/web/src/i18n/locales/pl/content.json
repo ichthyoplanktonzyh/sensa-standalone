@@ -147,7 +147,7 @@
     "worldCounts": "{{expressions}} wyrażeń · {{meanings}} różnych znaczeń",
     "worldCurrentRoute": "Bieżąca ścieżka nauki",
     "worldGraphHint": "Punkty to zapisane wyrażenia. Linie pokazują wspólne potwierdzone lub osobiste znaczenia. Odległość nie oznacza bliskości semantycznej.",
-    "worldIsolated": "Brak zapisanych połączeń",
+    "worldIsolated": "Brak połączeń w tym widoku",
     "worldLabelAll": "Wszystkie",
     "worldLabelAuto": "Automatyczne",
     "worldLabelSelected": "Wybrane",

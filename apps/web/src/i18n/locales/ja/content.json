@@ -147,7 +147,7 @@
     "worldCounts": "表現 {{expressions}} 件 · 重複を除く意味 {{meanings}} 件",
     "worldCurrentRoute": "現在の学習ルート",
     "worldGraphHint": "点は保存した表現です。線は共有する確定済みの意味や個人的な意味を示します。距離に意味的な近さはありません。",
-    "worldIsolated": "記録されたつながりはありません",
+    "worldIsolated": "現在の表示には接続がありません",
     "worldLabelAll": "すべて",
     "worldLabelAuto": "自動",
     "worldLabelSelected": "選択のみ",

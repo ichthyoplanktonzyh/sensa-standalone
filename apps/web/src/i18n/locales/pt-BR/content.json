@@ -147,7 +147,7 @@
     "worldCounts": "{{expressions}} expressões · {{meanings}} significados distintos",
     "worldCurrentRoute": "Rota de aprendizado atual",
     "worldGraphHint": "Os pontos são expressões salvas. As linhas indicam significados confirmados ou pessoais compartilhados. A distância não representa proximidade semântica.",
-    "worldIsolated": "Nenhuma conexão registrada",
+    "worldIsolated": "Sem conexões nesta visualização",
     "worldLabelAll": "Todos",
     "worldLabelAuto": "Automáticos",
     "worldLabelSelected": "Selecionados",

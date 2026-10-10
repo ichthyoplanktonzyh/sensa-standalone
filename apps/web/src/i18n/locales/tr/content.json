@@ -147,7 +147,7 @@
     "worldCounts": "{{expressions}} ifade · {{meanings}} ayrı anlam",
     "worldCurrentRoute": "Geçerli öğrenme rotası",
     "worldGraphHint": "Noktalar kaydedilen ifadelerdir. Çizgiler ortak onaylanmış veya kişisel anlamları gösterir. Mesafe anlamsal yakınlık göstermez.",
-    "worldIsolated": "Kayıtlı bağlantı yok",
+    "worldIsolated": "Bu görünümde bağlantı yok",
     "worldLabelAll": "Tümü",
     "worldLabelAuto": "Otomatik",
     "worldLabelSelected": "Seçilenler",

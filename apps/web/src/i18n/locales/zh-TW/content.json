@@ -147,7 +147,7 @@
     "worldCounts": "{{expressions}} 個表達 · {{meanings}} 個去重意義",
     "worldCurrentRoute": "目前學習路線",
     "worldGraphHint": "每個點是一個已儲存表達。連線來自共同的已確認意義或個人意義；距離不表示語義接近。",
-    "worldIsolated": "沒有已記錄的連線",
+    "worldIsolated": "目前檢視中沒有連線",
     "worldLabelAll": "全部",
     "worldLabelAuto": "自動",
     "worldLabelSelected": "僅選取",

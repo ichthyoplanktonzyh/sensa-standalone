@@ -147,7 +147,7 @@
     "worldCounts": "{{expressions}} 个表达 · {{meanings}} 个去重意义",
     "worldCurrentRoute": "当前学习路线",
     "worldGraphHint": "每个点是一个已保存表达。连线来自共同的已确认意义或个人意义；距离不表示语义接近。",
-    "worldIsolated": "没有已记录的连线",
+    "worldIsolated": "当前视图中没有连线",
     "worldLabelAll": "全部",
     "worldLabelAuto": "自动",
     "worldLabelSelected": "仅选中",
