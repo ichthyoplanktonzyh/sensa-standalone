@@ -28,5 +28,7 @@ test('configuration workflow cannot deploy new app code, migrate data or change 
  expect(workflow).not.toMatch(/versions (upload|deploy)|functions deploy|db:migrate|npm run build\s*$/m);
  expect(workflow).toMatch(/git diff --exit-code/);
  expect(workflow.indexOf('name: Refuse application source drift')).toBeLessThan(workflow.indexOf('name: Change only API origin'));
- expect(workflow).toMatch(/Baseline contracts digest mismatch/);
+ expect(workflow).toMatch(/Baseline compiled files digest mismatch/);
+ expect(workflow).toMatch(/cp -R \.tmp\/domain-baseline-candidate\/apps\/web\/dist\/\. apps\/web\/dist\//);
+ expect(workflow.indexOf('name: Restore verified baseline assets')).toBeLessThan(workflow.indexOf('name: Change only API origin'));
 });
