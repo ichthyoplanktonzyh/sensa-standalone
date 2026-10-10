@@ -40,6 +40,23 @@ test.beforeAll(async()=>{
 test.afterAll(async()=>{if(server?.listening)await new Promise<void>(done=>server.close(()=>done()));});
 async function enter(page:Page){await page.goto(origin);await page.waitForFunction(()=>!!window.semanticLookupFixture);await page.evaluate(()=>window.semanticLookupFixture.initialize());}
 
+test('opening a healthy existing Library completes alongside another tab read without waiting for that reader to leave',async({page,context})=>{
+ await enter(page);const identity=await page.evaluate(()=>window.semanticLookupFixture.openIdentityForTest());
+ const other=await context.newPage();await enter(other);
+ await other.evaluate(()=>{
+  Object.assign(window,{identityReaderHeld:false,releaseIdentityReader:null});
+  void navigator.locks.request('sensa-library-transaction-v1',{mode:'shared'},async()=>{
+   (window as any).identityReaderHeld=true;
+   await new Promise<void>(resolve=>{(window as any).releaseIdentityReader=resolve;});
+  });
+ });
+ await expect.poll(()=>other.evaluate(()=>(window as any).identityReaderHeld)).toBe(true);
+ const opening=page.evaluate(()=>window.semanticLookupFixture.openIdentityForTest());
+ let completed=false;void opening.then(()=>{completed=true;},()=>undefined);
+ try{await expect.poll(()=>completed,{timeout:2000,message:'existing identity verification must not queue behind a live read'}).toBe(true);expect(await opening).toEqual(identity);}
+ finally{await other.evaluate(()=>(window as any).releaseIdentityReader());await opening.catch(()=>undefined);await other.close();}
+});
+
 test('direct stable Sense enrollment converges across OPFS tabs and reloads without a duplicate Meaning or ready Target',async({page,context})=>{
  await enter(page);await page.evaluate(()=>window.semanticLookupFixture.seed(1000));
  const item=(await page.evaluate(()=>window.semanticLookupFixture.worldPage({query:'borrow-999',filter:'all',offset:0,limit:40}))).items[0]!;

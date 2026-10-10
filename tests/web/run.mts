@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {journeyTestIds,validateJourneyMapping,type LongJourneyId} from './journeyMapping.mts';
+import {partitionTestFiles} from './support/testShards';
 
 import {
   defaultWebTestEnvironments,
@@ -28,6 +29,7 @@ type Filters = Readonly<{
   runner?: WebTestRunner;
   id?: string;
   journey?:LongJourneyId;
+  shard?:string;
   list: boolean;
 }>;
 
@@ -57,6 +59,7 @@ const parseFilters = (arguments_: readonly string[]): Filters => {
   let runner: string | undefined;
   let id: string | undefined;
   let journey:LongJourneyId|undefined;
+  let shard:string|undefined;
   let list = false;
 
   for (const argument of arguments_) {
@@ -100,6 +103,8 @@ const parseFilters = (arguments_: readonly string[]): Filters => {
       journeyTestIds(journey);
       continue;
     }
+    const parsedShard=option(argument,'shard');
+    if(parsedShard!==undefined){shard=parsedShard;continue;}
     throw new Error(`Unknown test selector ${JSON.stringify(argument)}`);
   }
 
@@ -111,6 +116,7 @@ const parseFilters = (arguments_: readonly string[]): Filters => {
     runner: allowed('runner', runner, webTestRunners),
     id,
     journey,
+    shard,
     list,
   };
 };
@@ -147,7 +153,7 @@ const formatEntry = (entry: WebTestCatalogEntry): string => [
 ].join(' | ');
 
 const filters = parseFilters(process.argv.slice(2));
-const selected = selectedTests(filters);
+const selected = partitionTestFiles(selectedTests(filters),filters.shard);
 const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
 
 const testFiles = (directory: string, relativeDirectory = 'tests/web'): string[] => readdirSync(directory, {withFileTypes: true}).flatMap((entry) => {
@@ -203,6 +209,7 @@ for (const entry of selected) {
 if (filters.list) {
   for (const entry of selected) console.log(formatEntry(entry));
 } else {
+  const failures:string[]=[];
   for (const entry of selected) {
     console.log(`\n[${entry.suite}] ${entry.id}`);
     const args = entry.runner === 'vitest'
@@ -221,7 +228,8 @@ if (filters.list) {
     if (result.error) throw result.error;
     if (result.status !== 0) {
       process.exitCode = result.status ?? 1;
-      break;
+      failures.push(entry.id);
     }
   }
+  if(failures.length)console.error(`Failed test files (${failures.length}/${selected.length}): ${failures.join(', ')}`);
 }

@@ -875,6 +875,8 @@ SENSA_TEST_DATABASE_URL=postgresql://... npm run test:web:db
 
 规模夹具生成、生产构建和用户交互须分别计时。Playwright 的 `beforeAll` 使用独立的 hook 看门限，不能仅靠文件级 `test.setTimeout` 为准备阶段配置时间；CI 整组资源看门限也不代表用户响应预算。依赖标准隔离 `page` 的大规模准备可通过 `test.extend` 的独立 fixture `timeout` 分离，保留默认 context、失败追踪与测试正文预算。调整准备或整组执行窗口时，保留具名用例的行为断言、毫秒交互预算与测量条件。
 
+浏览器 CI 通过 `--shard=1/3`、`2/3`、`3/3` 按目录文件无重叠分组；每个文件保持原隔离准备、逐例执行与交互预算。全部分组成功才通过同名 Chromium 汇总门禁。目录入口继续执行剩余文件并汇总非零结果，不因第一处失败遗漏后续证据；本机不带 shard 时仍执行完整目录。
+
 长旅程是产品收敛与验收 checkpoint 的基本单位。`user-journeys.md` 定义目标和合法出口；
 `tests/web/journeyMapping.mts` 保存稳定的 Journey → Phase → Scenario → Test Evidence 关联及共享风险检查。
 旧审计结论只作为历史输入，关联到测试不表示场景通过，更不表示整条旅程完成。

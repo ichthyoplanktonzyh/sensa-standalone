@@ -37,6 +37,23 @@ test('first use creates one actual identity; reopening verifies the current iden
  expect(await library.readLibrary(tx=>tx.count('operations'))).toBe(1);
  expect(await library.readLibrary(tx=>tx.get('meta','identity'))).toEqual(identity);
 });
+test('healthy reopening does not commit; receipt repair uses the actual identity and corrupt receipts stay rejected',async()=>{
+ const library=await store(),identity=await library.openLibrary();
+ const adapter=await (await import('../../../apps/web/src/data/library/sqliteAdapter')).sqliteRecordAdapter();
+ const commit=vi.spyOn(adapter,'commit');
+ expect(await library.openLibrary()).toEqual(identity);expect(commit).not.toHaveBeenCalled();
+ commit.mockRestore();
+ const key='00000000-0000-4000-8000-000000000001';
+ await library.restoreLibraryTransaction(async tx=>tx.delete('operations',key));
+ expect(await library.openLibrary()).toEqual(identity);
+ const receipt=await library.readLibrary(tx=>tx.get<{input:string;result:unknown}>('operations',key));
+ expect(receipt?.result).toEqual(identity);
+ await library.restoreLibraryTransaction(async tx=>tx.put('operations',key,{...receipt,result:{...identity,id:crypto.randomUUID()}}));
+ await expect(library.openLibrary()).rejects.toThrow('localFlow.libraryMissing');
+ await library.restoreLibraryTransaction(async tx=>tx.put('operations',key,{...receipt,input:'wrong creation input'}));
+ await expect(library.openLibrary()).rejects.toThrow('localFlow.operationConflict');
+ expect(await library.readLibrary(tx=>tx.get('meta','identity'))).toEqual(identity);
+});
 test('explicit selection retains the old pointer and hint, scopes draft state, and fences the old page',async()=>{
  const storage={getItem:(key:string)=>values.get(key)??null,setItem:(key:string,value:string)=>values.set(key,value),removeItem:(key:string)=>values.delete(key)};
  Object.assign(window,{localStorage:storage});

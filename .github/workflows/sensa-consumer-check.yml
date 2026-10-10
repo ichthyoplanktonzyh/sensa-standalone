@@ -75,9 +75,13 @@ jobs:
             packages/mcp-server/dist/
             release-candidate/manifest.json
 
-  browser-integration:
-    name: Chromium production integration
+  browser-shards:
+    name: Chromium integration shard ${{ matrix.shard }}/3
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     # Full journey coverage includes isolated production builds, genuine
     # history generators and OPFS lifecycle fixtures; spec interaction budgets
     # remain independent and unchanged.
@@ -97,15 +101,27 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Browser integration and OPFS durability
-        run: npm run test:browser
+        run: npm run test:browser -- --shard=${{ matrix.shard }}/3
       - name: Upload synthetic Playwright Test failure evidence
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: sensa-playwright-failure
+          name: sensa-playwright-failure-${{ matrix.shard }}
           path: .tmp/playwright-results/
           if-no-files-found: ignore
           retention-days: 7
+
+  browser-integration:
+    name: Chromium production integration
+    needs: browser-shards
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require every browser shard to pass
+        env:
+          SHARD_RESULT: ${{ needs.browser-shards.result }}
+        run: test "$SHARD_RESULT" = success
 
   database-integration:
     name: PostgreSQL and API integration

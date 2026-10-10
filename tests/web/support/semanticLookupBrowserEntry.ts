@@ -22,6 +22,7 @@ export async function directSourceForTest(meaningId:string){
 export const enrollDirectForTest=(input:Extract<import('../../../apps/web/src/learning/system/learningSystem').LearningCommand,{kind:'enroll_direct'}>)=>learningSystem.execute(input);
 export const directEnrollmentForTest=(enrollmentId:string)=>learningSystem.read({kind:'direct_enrollment',enrollmentId});
 export const directCountsForTest=()=>readLibrary(async tx=>({meanings:await tx.count('semanticMeanings'),enrollments:await tx.count('curriculumEnrollments'),targets:await tx.count('learningTargets'),runs:await tx.count('learningRuns')}));
+export const openIdentityForTest=()=>openLibrary();
 
 const repository=new LibraryJourneyRepository();
 let held=false,release:(()=>void)|undefined,entered=false;

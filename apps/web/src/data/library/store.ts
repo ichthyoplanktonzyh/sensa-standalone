@@ -807,10 +807,24 @@ export type LibraryIdentity = {
 export async function openLibrary(): Promise<LibraryIdentity> {
   // Opening verifies current identity, not a possibly orphaned creation receipt.
   // Missing prior data is a recovery state, never an automatic empty replacement.
-  const identity=await transaction('readwrite',async tx=>{
+  const key='00000000-0000-4000-8000-000000000001';
+  const input=canonicalConsumerJson({kind:'library.create',input:{}});
+  // An intact library needs only a coherent read. Do not queue a no-op writer
+  // ahead of other tabs' readers. Creation/receipt repair still rechecks under
+  // the exclusive transaction below, including the incarnation fence.
+  const verified=await transaction('readonly',async tx=>{
     await assertCurrentLibrary(tx);
-    const key='00000000-0000-4000-8000-000000000001';
-    const input=canonicalConsumerJson({kind:'library.create',input:{}});
+    const prior=await tx.get<{input:string;result:unknown}>('operations',key);
+    if(prior&&prior.input!==input)throw new Error('localFlow.operationConflict');
+    const existing=await tx.get<LibraryIdentity>('meta','identity');
+    if(existing&&prior){
+      if(canonicalConsumerJson(prior.result)!==canonicalConsumerJson(existing))throw new Error('localFlow.libraryMissing');
+      return existing;
+    }
+    return undefined;
+  });
+  const identity=verified??await transaction('readwrite',async tx=>{
+    await assertCurrentLibrary(tx);
     const prior=await tx.get<{input:string;result:unknown}>('operations',key);
     if(prior&&prior.input!==input)throw new Error('localFlow.operationConflict');
     const existing=await tx.get<LibraryIdentity>('meta','identity');

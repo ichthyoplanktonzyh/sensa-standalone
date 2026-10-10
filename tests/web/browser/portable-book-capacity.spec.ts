@@ -561,7 +561,10 @@ const runCapacityJourney=async(count:number,browser:import('@playwright/test').B
     const firstArrangement=await stage('verifyFirstSessionArrangement',()=>page!.evaluate(()=>window.__sensaBrowserSmoke!.learningArrangementCheckpointForTest()));
     assert.equal(firstArrangement.session?.dailyNewSenseLimit,20,'an unconfigured learner starts with the default daily limit');
     assert(firstArrangement.scope,'the first learning activity must have an actual captured Scope');
-    assert.deepEqual(firstArrangement.scope.members.map(member=>member.targetId).sort(),learningAfterEnrollment.targetIds.slice().sort());
+    // The queue captures only the actually started target, not a frozen copy of
+    // all future candidates. Those candidates remain independently enrolled.
+    assert.deepEqual(firstArrangement.scope.members.map(member=>member.targetId),[runtimeBeforeReveal.runtime.targetId]);
+    assert(learningAfterEnrollment.targetIds.includes(runtimeBeforeReveal.runtime.targetId));
     await stage('revealSense',async()=>{
       await runtime.getByRole('button',{name:/查看表达/}).click();
       await expect(runtime.getByRole('button',{name:/已经连上/})).toBeVisible();

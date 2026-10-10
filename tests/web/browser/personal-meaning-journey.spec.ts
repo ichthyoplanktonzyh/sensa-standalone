@@ -5,7 +5,7 @@ import {createServer,type Server} from 'node:http';
 import {once} from 'node:events';
 import {mkdir,mkdtemp,readFile,rm} from 'node:fs/promises';
 import {extname,join,resolve} from 'node:path';
-import {test,expect,type Page,type Locator,type TestInfo} from '@playwright/test';
+import {test as base,expect,type Page,type Locator,type TestInfo} from '@playwright/test';
 import {canonicalConsumerJson} from '@sensa/contracts/sensa';
 import {MemoryJourneyRepository} from '../../../apps/web/src/experience/personalMeaningJourney/repository';
 import {createJourneyModules} from '../../../apps/web/src/experience/personalMeaningJourney/gateway';
@@ -25,6 +25,36 @@ const answer={reply:'这里可以说 water，表示给植物浇水。你看这�
 const snapshot={format:'sensa-learning-content-registry-v3',publishedAt:'2026-10-03T00:00:00Z',items:[]};
 const registry={...snapshot,revision:createHash('sha256').update(canonicalConsumerJson(snapshot)).digest('hex')};
 const types:Record<string,string>={'.js':'text/javascript','.css':'text/css','.wasm':'application/wasm','.svg':'image/svg+xml','.png':'image/png','.woff2':'font/woff2','.json':'application/json'};
+const practicePreference={source:'personal',expressionIds:['pending-source-selection']};
+const test=base.extend<{meaningSetup:{size:number;world:boolean};preparedMeaningPage:{page:Page;modelCalls:string[]}}>({
+ meaningSetup:[{size:0,world:false},{option:true}],
+ preparedMeaningPage:[async({page,meaningSetup},use)=>{
+  const started=performance.now(),modelCalls:string[]=[];requests=[];plans=[];
+  page.on('request',request=>{if(/chat\/completions|semantic-agent|\/tts|model.*execute/.test(request.url()))modelCalls.push(request.url());});
+  if(meaningSetup.world)await page.addInitScript(preference=>{
+   const key='sensa:web-ui:v1:sensa.practice.materials.v4:en';
+   if(localStorage.getItem(key)===null)localStorage.setItem(key,JSON.stringify(preference));
+  },practicePreference);
+  await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+  await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+  const worldButton=page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true});
+  await expect(worldButton).toBeVisible();
+  if(!meaningSetup.world)await worldButton.click();
+  if(meaningSetup.size){
+   const repository=new MemoryJourneyRepository(),modules=createJourneyModules({repository,clock:createSeededClock(),languages:{read:async()=>({targetLanguageTag:'en',supportLanguageTag:'zh-CN'})}});
+   await modules.semanticIntake.submit(semanticLookupPayload());scaleFixture=syntheticSemanticWorld(await repository.load(),meaningSetup.size);
+   if(meaningSetup.world){
+    await modules.personalMeaningJourney.createClarificationDraft({operationId:crypto.randomUUID(),blocks:[{kind:'text',bodyText:'尚待确认的材料'}]});
+    const pending=await repository.load();scaleFixture.inboxItems=pending.inboxItems;scaleFixture.clarificationDrafts=pending.clarificationDrafts;
+   }
+   await page.waitForFunction(()=>!!window.__sensaBrowserSmoke);
+   expect(await page.evaluate(async()=>window.__sensaBrowserSmoke!.seedSemanticWorld(await (await fetch('/semantic-scale-fixture')).json()))).toBe(meaningSetup.size);
+   if(!meaningSetup.world)await page.reload();
+  }
+  console.log('Personal Meaning fixture preparation (not user interaction):',JSON.stringify({size:meaningSetup.size,world:meaningSetup.world,preparedMs:performance.now()-started}));
+  await use({page,modelCalls});
+ },{timeout:300_000}],
+});
 test.setTimeout(90_000);
 test.use({locale:'zh-CN',viewport:{width:1280,height:900}});
 
@@ -124,22 +154,11 @@ test('Today personal-content entry offers non-AI recording without reopening the
  expect(requests).toEqual([]);
 });
 
-for(const size of [0,10_000])test(`manual authoring at ${size} Meanings needs Context and explicit acceptance, stays offline, and reopens`,async({page},testInfo)=>{
+for(const size of [0,10_000])test.describe(`manual Meaning fixture ${size}`,()=>{
+test.use({meaningSetup:{size,world:false}});
+test(`manual authoring at ${size} Meanings needs Context and explicit acceptance, stays offline, and reopens`,async({preparedMeaningPage:{page,modelCalls}},testInfo)=>{
  test.setTimeout(180_000);
  page.setDefaultTimeout(15_000);
- requests=[];plans=[];
- const modelCalls:string[]=[];
- page.on('request',request=>{if(/chat\/completions|semantic-agent|\/tts|model.*execute/.test(request.url()))modelCalls.push(request.url());});
- await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
- await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
- await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
- if(size){
-  const repository=new MemoryJourneyRepository(),modules=createJourneyModules({repository,clock:createSeededClock()});
-  await modules.semanticIntake.submit(semanticLookupPayload());scaleFixture=syntheticSemanticWorld(await repository.load(),size);
-  await page.waitForFunction(()=>!!window.__sensaBrowserSmoke);
-  expect(await page.evaluate(async()=>window.__sensaBrowserSmoke!.seedSemanticWorld(await (await fetch('/semantic-scale-fixture')).json()))).toBe(size);
-  await page.reload();
- }
  const open=async()=>{await page.getByRole('button',{name:'添加内容',exact:true}).click();await page.getByRole('button',{name:'手动创建',exact:true}).click();};
  await open();const form=page.locator('.sensa-manual-meaning');
  await expect(form.getByLabel('情境或原句',{exact:true})).toBeEnabled();
@@ -195,6 +214,7 @@ for(const size of [0,10_000])test(`manual authoring at ${size} Meanings needs Co
  if(!size)expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticWorldContainsExpression('back out'))).toBe(true);
  expect(modelCalls).toEqual([]);expect(requests).toEqual([]);
  await page.screenshot({path:testInfo.outputPath('manual-meaning-detail.png'),fullPage:true});
+});
 });
 
 test('empty example favorites stay out of the default World while retained examples remain findable and cancellable after OPFS reload',async({page})=>{
@@ -344,6 +364,35 @@ test('personal meaning favorites and notes survive explicit recycle-bin deletion
 
 test('personal correction preserves the Meaning and original capture, blocks an unreviewed cross-tab Context, and saves offline with a readable history after reload',async({page,context})=>{
  page.setDefaultTimeout(15_000);
+ await context.addInitScript(()=>{
+  const trace={page:sessionStorage.getItem('correction-diagnostic-page')??crypto.randomUUID(),events:[] as Array<{id:number;phase:string;at:number;mode:string;visible:string;name:string;stack?:string}>,messages:[] as Array<Record<string,unknown>>};
+  sessionStorage.setItem('correction-diagnostic-page',trace.page);Object.assign(window,{__correctionLockTrace:trace});
+  let sequence=0;const record=(id:number,phase:string,mode:string,name:string,stack?:string)=>{trace.events.push({id,phase,at:performance.timeOrigin+performance.now(),mode,visible:document.visibilityState,name,...(stack?{stack}:{})});if(trace.events.length>256)trace.events.shift();};
+  navigator.locks.request=new Proxy(navigator.locks.request,{apply(target,receiver,args){
+   const name=String(args[0]);if(!/sensa-library-transaction-v1|sensa-sqlite-owner-v1/u.test(name))return Reflect.apply(target,receiver,args);
+   const index=typeof args[1]==='function'?1:2,callback=args[index],id=++sequence,mode=index===1?'exclusive':args[1]?.mode??'exclusive';
+   record(id,'requested',mode,name,new Error().stack);args[index]=async(lock:Lock|null)=>{
+    record(id,lock?'granted':'not-granted',mode,name);
+    try{return await callback(lock);}finally{record(id,'released',mode,name);}
+   };
+   return Reflect.apply(target,receiver,args);
+  }});
+  const message=(direction:string,value:unknown)=>{
+   if(!value||typeof value!=='object')return;
+   const row=value as {kind?:string;sender?:string;recipient?:string;requestId?:string;input?:{kind?:string};ok?:boolean};
+   trace.messages.push({at:performance.timeOrigin+performance.now(),direction,kind:row.kind,sender:row.sender,recipient:row.recipient,requestId:row.requestId,requestKind:row.input?.kind,ok:row.ok});
+   if(trace.messages.length>256)trace.messages.shift();
+  };
+  // Metadata only: never record SQLite values, request keys, auth or prose.
+  globalThis.BroadcastChannel=new Proxy(BroadcastChannel,{construct(target,args){
+   const channel=Reflect.construct(target,args) as BroadcastChannel;
+   if(channel.name.includes('sensa-sqlite-coordinator-v1')){
+    const post=channel.postMessage.bind(channel);channel.postMessage=value=>{message('sent',value);post(value);};
+    channel.addEventListener('message',event=>message('received',event.data));
+   }
+   return channel;
+  }});
+ });
  page.on('pageerror',error=>console.log('Correction browser page error:',error.message));
  page.on('console',message=>{if(message.type()==='error')console.log('Correction browser console error:',message.text());});
  requests=[];plans=[];
@@ -381,8 +430,10 @@ test('personal correction preserves the Meaning and original capture, blocks an 
  expect(new URL(page.url()).searchParams.get('meaningId')).toBe(meaningId);await page.reload();
  try{await expect(page.getByRole('heading',{name:'lend',exact:true})).toBeVisible();}
  catch(error){
-  console.log('Correction reload DOM state:',await page.evaluate(()=>({url:location.href,inert:document.querySelector<HTMLElement>('[data-sensa-page-layout="application-shell"]')?.inert,headings:[...document.querySelectorAll('h1,h2')].map(row=>row.textContent)})));
+  console.log('Correction reload DOM state:',await page.evaluate(()=>({url:location.href,inert:document.querySelector<HTMLElement>('[data-sensa-page-layout="application-shell"]')?.inert,visible:document.visibilityState,status:document.querySelector('main[role="status"]')?.outerHTML,headings:[...document.querySelectorAll('h1,h2')].map(row=>row.textContent)})));
   console.log('Correction reload lock state:',await page.evaluate(()=>navigator.locks.query()));
+  console.log('Correction reload lock requests:',JSON.stringify(await page.evaluate(()=>(window as any).__correctionLockTrace)));
+  console.log('Correction peer lock requests:',JSON.stringify(await other.evaluate(()=>(window as any).__correctionLockTrace)));
   const probes=[['storage',page.evaluate(()=>window.__sensaBrowserSmoke!.storageDiagnostics())],['meaning',page.evaluate(()=>window.__sensaBrowserSmoke!.firstMeaningId())]] as const;
   console.log('Correction reload storage state:',await Promise.all(probes.map(async([kind,probe])=>({kind,result:await Promise.race([probe.catch(error=>({error:String(error)})),new Promise(resolve=>setTimeout(()=>resolve('bounded diagnostic did not settle'),2000))])}))));
   throw error;
@@ -898,7 +949,10 @@ async function directDiscoveryJourney(page:Page,testInfo:TestInfo,size:number){
  test.setTimeout(180_000);const expression=`borrow-${size-1}`;
  requests=[];plans=[];
  await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
- await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();await page.waitForFunction(()=>!!window.__sensaBrowserSmoke);
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ // Loading the test bridge is not proof that the Shell has opened its Library.
+ // Wait for the same usable surface a learner sees before inserting fixtures.
+ await expect(page.getByRole('navigation',{name:'主要导航'})).toBeVisible();await page.waitForFunction(()=>!!window.__sensaBrowserSmoke);
  const repository=new MemoryJourneyRepository();await createJourneyModules({repository}).semanticIntake.submit(semanticLookupPayload());
  scaleFixture=syntheticSemanticWorld(await repository.load(),size);scaleFixture.meanings=[];
  expect(await page.evaluate(async()=>window.__sensaBrowserSmoke!.seedSemanticWorld(await (await fetch('/semantic-scale-fixture')).json()))).toBe(0);
@@ -985,28 +1039,12 @@ test('explicit batch confirmation saves all intentions and failed preparation re
  expect(requests).toEqual([]);
 });
 
-test('10k personal meanings keep the shipped World bounded and searchable, with real detail and refresh recovery',async({page})=>{
+test.describe('prepared 10k World',()=>{
+test.use({meaningSetup:{size:10_000,world:true}});
+test('10k personal meanings keep the shipped World bounded and searchable, with real detail and refresh recovery',async({preparedMeaningPage:{page}})=>{
  test.setTimeout(180_000);
  page.on('crash',()=>console.log('Semantic scale fixture renderer crashed during browser acceptance'));
- const preference={source:'personal',expressionIds:['pending-source-selection']};
- await page.addInitScript(preference=>{
-  const key='sensa:web-ui:v1:sensa.practice.materials.v4:en';
-  if(localStorage.getItem(key)===null)localStorage.setItem(key,JSON.stringify(preference));
- },preference);
- await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
- await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
- // The smoke bridge exists before guest bootstrap. Wait for the actual shell
- // before holding its storage transaction for a large, isolated fixture import.
- await expect(page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true})).toBeVisible();
- await page.waitForFunction(()=>!!window.__sensaBrowserSmoke);
- const repository=new MemoryJourneyRepository(),modules=createJourneyModules({repository,clock:createSeededClock(),languages:{read:async()=>({targetLanguageTag:'en',supportLanguageTag:'zh-CN'})}});
- await modules.semanticIntake.submit(semanticLookupPayload());
- scaleFixture=syntheticSemanticWorld(await repository.load(),10_000);
- await modules.personalMeaningJourney.createClarificationDraft({operationId:crypto.randomUUID(),blocks:[{kind:'text',bodyText:'尚待确认的材料'}]});
- const pendingState=await repository.load();scaleFixture.inboxItems=pendingState.inboxItems;scaleFixture.clarificationDrafts=pendingState.clarificationDrafts;
- // Deliver bulky setup through the fixture HTTP server, not one enormous CDP
- // argument serialization. This does not measure import or replace the UI flow.
- expect(await page.evaluate(async()=>window.__sensaBrowserSmoke!.seedSemanticWorld(await (await fetch('/semantic-scale-fixture')).json()))).toBe(10_000);
+ const preference=practicePreference;
  const start=await page.evaluate(()=>performance.now());
  await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
  const world=page.locator('.sensa-world.active').last();
@@ -1170,4 +1208,5 @@ test('10k personal meanings keep the shipped World bounded and searchable, with 
  expect(acceptancePhases).toEqual([]);expect(acceptanceMs).toBeLessThan(500);
  await page.reload();await expect(page.getByRole('heading',{name:'water',exact:true})).toBeVisible();
  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).targetIds).toEqual([]);
+});
 });

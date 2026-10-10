@@ -83,6 +83,7 @@ const gateway = {
   completeClarificationDraft: async () => ({}), confirmExpressionBinding: async () => ({}),
 };
 export const useJourneyGateway = () => gateway;
+export const createJourneyGateway = () => ({lookupMeanings:async()=>({meanings:[],truncated:false})});
 const source={kind:'intake',id:draft.intakeId,incarnation:'controlled-session-fixture',digest:'0'.repeat(64)};
 export const useJourneyDetail = () => ({detail: null,draft,source,status:{ok:true},readCurrent:async()=>({detail:null,draft,source}),reload:()=>{}});
 export const useJourneyClarificationDraft = (id) => id ? draft : null;
