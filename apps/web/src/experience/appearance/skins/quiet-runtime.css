@@ -418,12 +418,16 @@ html[data-sensa-skin="quiet"] .sensa-runtime-rating button span span {
 
 @media (max-width: 40rem) {
   html:root[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] {
+    /* Enlarged text can make the fixed regions taller than the viewport.
+       Keep the reading region usable and let the whole frame scroll then. */
+    overflow-y: auto;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto var(--sensa-layout-runtime-progress-size) minmax(0, 1fr) auto auto auto;
+    grid-template-rows: auto auto var(--sensa-layout-runtime-progress-size) minmax(8rem, 1fr) auto auto auto;
     grid-template-areas: "header" "tools" "progress" "primary" "supporting" "feedback" "controls";
   }
 
   html:root[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="tools"] {
+    flex-wrap: wrap;
     justify-content: flex-start;
     padding-inline: var(--sensa-layout-runtime-primary-inline-inset);
   }
@@ -459,6 +463,26 @@ html[data-sensa-skin="quiet"] .sensa-runtime-rating button span span {
   html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-runtime-rating button {
     flex-direction: column;
     padding-inline: .5rem;
+  }
+}
+
+/* The region's actual width also reflects CSS zoom, unlike a viewport media
+   query. At very small usable widths, ratings remain readable in one column. */
+html[data-sensa-skin="quiet"] #s-lightweight-runtime > [data-sensa-page-region="controls"] {
+  container-type: inline-size;
+}
+
+@container (max-width: 12rem) {
+  .sensa-runtime-rating {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #s-lightweight-runtime [data-sensa-page-region="controls"] button {
+    gap: .375rem;
+    padding-inline: .5rem;
+    overflow-wrap: anywhere;
+  }
+  #s-lightweight-runtime [data-sensa-page-region="controls"] .sensa-shortcut-hint {
+    display: none;
   }
 }
 

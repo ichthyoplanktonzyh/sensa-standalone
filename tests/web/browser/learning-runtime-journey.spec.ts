@@ -110,6 +110,16 @@ test('long learning content keeps primary controls reachable and completion repo
   await visibleAndUncovered(runtime.getByRole('button',{name:/查看表达/}));
   expect(await runtime.evaluate(element=>element.scrollWidth<=element.clientWidth+1)).toBe(true);
   await page.screenshot({path:testInfo.outputPath('runtime-long-scene-narrow.png')});
+  // 320 physical CSS pixels with 200% CSS zoom leaves about 160 usable pixels.
+  // Reachability by scrolling matters here; desktop geometry does not.
+  await page.evaluate(()=>document.documentElement.style.zoom='2');
+  const reachableAtCombinedZoom=async(button:ReturnType<Page['getByRole']>)=>{
+   await button.scrollIntoViewIfNeeded();await button.focus();await visibleAndUncovered(button);
+   expect(await runtime.evaluate(element=>element.scrollWidth<=element.clientWidth+1)).toBe(true);
+  };
+  await reachableAtCombinedZoom(runtime.getByRole('button',{name:/查看表达/}));
+  await page.screenshot({path:testInfo.outputPath('runtime-320px-200-percent-css-zoom.png')});
+  await page.evaluate(()=>document.documentElement.style.zoom='');
   await runtime.getByRole('button',{name:/查看表达/}).focus();await page.keyboard.press('Enter');
   await expect(runtime.getByRole('heading',{name:expression,exact:true})).toBeVisible();
   await visibleAndUncovered(runtime.getByRole('button',{name:/已经连上/}));
@@ -129,6 +139,14 @@ test('long learning content keeps primary controls reachable and completion repo
   await visibleAndUncovered(runtime.getByRole('button',{name:/有点印象/}));
   expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records).toHaveLength(0);
   await page.screenshot({path:testInfo.outputPath('runtime-save-failure-narrow.png')});
+  await page.evaluate(()=>document.documentElement.style.zoom='2');
+  await reachableAtCombinedZoom(runtime.getByRole('button',{name:/还没连上/}));
+  await reachableAtCombinedZoom(runtime.getByRole('button',{name:/有点印象/}));
+  await reachableAtCombinedZoom(runtime.getByRole('button',{name:/已经连上/}));
+  await runtime.locator('[data-runtime-feedback]').scrollIntoViewIfNeeded();
+  await expect(runtime.locator('[data-runtime-feedback]')).toContainText('未能保存到本机');
+  await page.screenshot({path:testInfo.outputPath('runtime-rating-320px-200-percent-css-zoom.png')});
+  await page.evaluate(()=>document.documentElement.style.zoom='');
   await primary.evaluate(element=>element.scrollTop=0);
   // Desktop CSS zoom exercises this layout only, separately from the 320px case.
   // It is explicitly not native browser zoom.
