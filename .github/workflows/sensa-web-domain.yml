@@ -79,14 +79,15 @@ jobs:
           const root='.tmp/domain-baseline-candidate/',proof=JSON.parse(readFileSync('release-candidate/domain-migration-baseline.json','utf8'));
           const raw=readFileSync(root+'release-candidate/manifest.json'),m=JSON.parse(raw),hash=b=>createHash('sha256').update(b).digest('hex');
           if(hash(raw)!==proof.candidateManifestSha256||m.commit!==proof.sourceCommit||m.provenance.workflowRunId!==proof.ciRunId||m.provenance.workflowRunAttempt!==proof.ciRunAttempt)throw Error('Baseline candidate provenance mismatch');
-          for(const prefix of ['apps/web/dist/','packages/contracts/dist/']){
+          for(const prefix of ['apps/web/dist/','packages/contracts/dist/','packages/learning-kernel/dist/']){
             const files=m.files.filter(f=>f.path.startsWith(prefix));if(!files.length)throw Error('Baseline compiled files absent');
             for(const f of files)if(hash(readFileSync(root+f.path))!==f.sha256)throw Error('Baseline compiled files digest mismatch');
           }
           JS
-          mkdir -p apps/web/dist packages/contracts/dist
+          mkdir -p apps/web/dist packages/contracts/dist packages/learning-kernel/dist
           cp -R .tmp/domain-baseline-candidate/apps/web/dist/. apps/web/dist/
           cp -R .tmp/domain-baseline-candidate/packages/contracts/dist/. packages/contracts/dist/
+          cp -R .tmp/domain-baseline-candidate/packages/learning-kernel/dist/. packages/learning-kernel/dist/
       - uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520
         with:
           version: 2.117.0
