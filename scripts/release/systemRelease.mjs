@@ -35,6 +35,7 @@ const operationalFiles = new Set([
   "README.md",
   "content/README.md",
   "infra/README.md",
+  "playwright.config.ts",
 ]);
 const sharedPrefixes = [
   "packages/contracts/",
