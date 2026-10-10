@@ -438,7 +438,19 @@
     "languageScope": "Ver registros de aprendizagem por idioma",
     "allLanguages": "Todos os idiomas",
     "language": "Idioma",
-    "languageNote": "Os registros de idiomas diferentes são contados separadamente: somar dois idiomas não representa a aprendizagem de nenhum deles."
+    "languageNote": "Os registros de idiomas diferentes são contados separadamente: somar dois idiomas não representa a aprendizagem de nenhum deles.",
+    "year": "Ano",
+    "calendarYear": "Ano do calendário",
+    "calendarMonth": "Mês do calendário",
+    "calendar": "Calendário de aprendizagem",
+    "countBasis": "Cada conclusão salva conta uma vez. O mesmo objetivo pode ter registros separados de aprendizagem, revisão e reforço.",
+    "future": "Data futura",
+    "outsideRange": "Fora do intervalo",
+    "futureOrOutside": "Futuro ou fora do intervalo",
+    "recordsUnit": "registros",
+    "trend": "Tendência de aprendizagem, revisão e reforço",
+    "trendValues": "Ver valores",
+    "timezone": "Os dias usam o fuso horário deste dispositivo: {{zone}}."
   },
   "study": {
     "calendar": {

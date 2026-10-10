@@ -438,7 +438,19 @@
     "languageScope": "Wyświetl zapisy nauki według języka",
     "allLanguages": "Wszystkie języki",
     "language": "Język",
-    "languageNote": "Zapisy dotyczące różnych języków są liczone osobno: ich suma nie opisuje nauki żadnego z nich."
+    "languageNote": "Zapisy dotyczące różnych języków są liczone osobno: ich suma nie opisuje nauki żadnego z nich.",
+    "year": "Rok",
+    "calendarYear": "Rok kalendarza",
+    "calendarMonth": "Miesiąc kalendarza",
+    "calendar": "Kalendarz nauki",
+    "countBasis": "Każde zapisane ukończenie liczy się raz. Ten sam cel może mieć osobne zapisy nauki, powtórki i utrwalenia.",
+    "future": "Przyszła data",
+    "outsideRange": "Poza zakresem",
+    "futureOrOutside": "Przyszłość lub poza zakresem",
+    "recordsUnit": "zapisy",
+    "trend": "Trend nauki, powtórek i utrwalania",
+    "trendValues": "Zobacz wartości",
+    "timezone": "Dni są liczone według strefy urządzenia: {{zone}}."
   },
   "study": {
     "calendar": {

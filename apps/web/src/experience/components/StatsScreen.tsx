@@ -3,7 +3,7 @@ import { ArrowRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { LearningRecordKind } from '../learningJourney/learningHistory';
 import { localRecordDate, type StatisticsRange } from '../learningJourney/learningStatistics';
-import i18n from '../../i18n';
+import {StatisticsCalendar} from './StatisticsCalendar';
 import {interfaceLanguageDisplayName} from '../../i18n/languageDisplayName';
 import {resolveInterfaceLocale} from '../../i18n/localeRegistry';
 import {useLearningHistory} from '../library/useLearningHistory';
@@ -21,13 +21,14 @@ export const StatsScreen = ({active,onBack,onOpenTarget}:StatsScreenProps) => {
   const {t,i18n}=useTranslation();
   const interfaceLocale=resolveInterfaceLocale(i18n.resolvedLanguage??i18n.language);
   const [now,setNow]=useState(()=>new Date());
-  const [range,setRange]=useScreenState<StatisticsRange>('stats:range','week');
+  const [range,setRange]=useScreenState<StatisticsRange>('stats:range','year');
+  const [year,setYear]=useScreenState('stats:year',()=>new Date().getFullYear());
   const [start,setStart]=useScreenState('stats:start',()=>localRecordDate(new Date()));
   const [end,setEnd]=useScreenState('stats:end',()=>localRecordDate(new Date()));
   const [kind,setKind]=useScreenState<'all'|LearningRecordKind>('stats:kind','all');
   const [limit,setLimit]=useScreenState('stats:limit',20);
   const [languageChoice,setLanguageChoice]=useScreenState<string|null>('stats:language',null);
-  const history=useLearningHistory({surface:'statistics',range,start,end,kind,languageChoice},active,limit,now.getTime());
+  const history=useLearningHistory({surface:'statistics',range,start,end,kind,languageChoice,year},active,limit,now.getTime());
   const projection=history.projection,languages=projection?.languages??[],languageScope=projection?.languageScope??'all',breakdown=projection?.breakdown??[];
   useEffect(()=>{
     if(!active)return;
@@ -44,25 +45,27 @@ export const StatsScreen = ({active,onBack,onOpenTarget}:StatsScreenProps) => {
   };
   return <LearningSetupFrame id="s-stats" active={active} onBack={onBack} title={t('statistics.title')}>
     {history.availability==='unavailable'?<div role="alert"><p>{localFlowText('progressReadFailed')}</p><button className={setupButton} onClick={history.retry}>{t('reliability.retry')}</button></div>:history.availability==='loading'?<p role="status" aria-busy="true">{localFlowText('loadingSensa')}</p>:null}
-    {projection&&<>
     <h2 className="text-3xl font-medium tracking-tight sm:text-4xl">{t('statistics.intro')}</h2>
     <div className="mt-8 flex flex-wrap items-center gap-2" role="group" aria-label={t('statistics.period')}>
-      {(['today','week','month','all','custom'] as const).map(value=><button type="button" key={value} aria-pressed={range===value} onClick={()=>{setRange(value);setLimit(20);}} className={setupButton+(range===value?' bg-surface-selected text-action-primary':' text-fg-secondary hover:bg-surface-subtle')}>{t('statistics.'+value)}</button>)}
+      {(['today','week','month','year','all','custom'] as const).map(value=><button type="button" key={value} aria-pressed={range===value} onClick={()=>{setRange(value);setLimit(20);}} className={setupButton+(range===value?' bg-surface-selected text-action-primary':' text-fg-secondary hover:bg-surface-subtle')}>{t('statistics.'+value)}</button>)}
     </div>
+    <label className="mt-4 flex items-center gap-3 text-sm text-fg-secondary">{t('statistics.year')}<input type="number" aria-label={t('statistics.calendarYear')} min={100} max={now.getFullYear()} value={year} onChange={event=>{const next=Number(event.target.value);if(Number.isInteger(next)&&next>=100&&next<=now.getFullYear()){setYear(next);setRange('year');setLimit(20);}}} className="min-h-11 w-24 rounded-control border border-border-subtle bg-surface-panel px-3"/></label>
     {languages.length>1&&<div className="mt-3 flex flex-wrap items-center gap-2" role="group" aria-label={t('statistics.languageScope')}>
       {languages.map(tag=><button type="button" key={tag} aria-pressed={languageScope===tag} onClick={()=>{setLanguageChoice(tag);setLimit(20);}} className={setupButton+(languageScope===tag?' bg-surface-selected text-action-primary':' text-fg-secondary hover:bg-surface-subtle')}>{interfaceLanguageDisplayName(tag,interfaceLocale)}</button>)}
       <button type="button" aria-pressed={languageChoice==='all'} onClick={()=>{setLanguageChoice('all');setLimit(20);}} className={setupButton+(languageChoice==='all'?' bg-surface-selected text-action-primary':' text-fg-secondary hover:bg-surface-subtle')}>{t('statistics.allLanguages')}</button>
     </div>}
     <div className="mt-4 flex flex-wrap items-end gap-4">
       {range==='custom'&&<>
-        <label className="flex flex-col gap-2 text-xs text-fg-secondary">{t('statistics.start')}<input type="date" value={start} max={end||localRecordDate(now)} aria-invalid={projection.invalidRange} aria-describedby={projection.invalidRange?'stats-date-error':undefined} onChange={event=>{setStart(event.target.value);setLimit(20);}} className="min-h-11 rounded-control border border-border-subtle bg-surface-panel px-3 text-sm focus-visible:outline-2 focus-visible:outline-focus"/></label>
-        <label className="flex flex-col gap-2 text-xs text-fg-secondary">{t('statistics.end')}<input type="date" value={end} min={start} max={localRecordDate(now)} aria-invalid={projection.invalidRange} aria-describedby={projection.invalidRange?'stats-date-error':undefined} onChange={event=>{setEnd(event.target.value);setLimit(20);}} className="min-h-11 rounded-control border border-border-subtle bg-surface-panel px-3 text-sm focus-visible:outline-2 focus-visible:outline-focus"/></label>
+        <label className="flex flex-col gap-2 text-xs text-fg-secondary">{t('statistics.start')}<input type="date" value={start} max={end||localRecordDate(now)} aria-invalid={projection?.invalidRange??false} aria-describedby={projection?.invalidRange?'stats-date-error':undefined} onChange={event=>{setStart(event.target.value);setLimit(20);}} className="min-h-11 rounded-control border border-border-subtle bg-surface-panel px-3 text-sm focus-visible:outline-2 focus-visible:outline-focus"/></label>
+        <label className="flex flex-col gap-2 text-xs text-fg-secondary">{t('statistics.end')}<input type="date" value={end} min={start} max={localRecordDate(now)} aria-invalid={projection?.invalidRange??false} aria-describedby={projection?.invalidRange?'stats-date-error':undefined} onChange={event=>{setEnd(event.target.value);setLimit(20);}} className="min-h-11 rounded-control border border-border-subtle bg-surface-panel px-3 text-sm focus-visible:outline-2 focus-visible:outline-focus"/></label>
       </>}
       <label className="flex flex-col gap-2 text-xs text-fg-secondary">{t('statistics.kind')}<select value={kind} onChange={event=>{setKind(event.target.value as typeof kind);setLimit(20);}} className="min-h-11 rounded-control border border-border-subtle bg-surface-panel px-3 text-sm focus-visible:outline-2 focus-visible:outline-focus">
         <option value="all">{t('study.all')}</option>{kinds.map(value=><option key={value} value={value}>{t('study.'+value)}</option>)}
       </select></label>
     </div>
-    {projection.invalidRange?<p id="stats-date-error" role="alert" className="mt-6 rounded-control bg-accent-soft p-4 text-sm text-feedback-danger">{t('statistics.invalid')}</p>:<>
+    {projection&&<>{projection.invalidRange?<p id="stats-date-error" role="alert" className="mt-6 rounded-control bg-accent-soft p-4 text-sm text-feedback-danger">{t('statistics.invalid')}</p>:<>
+      <p className="mt-5 text-xs text-fg-secondary">{t('statistics.timezone',{zone:Intl.DateTimeFormat().resolvedOptions().timeZone})}</p>
+      <StatisticsCalendar summary={projection} year={year} onDay={day=>{setStart(day);setEnd(day);setRange('custom');setLimit(20);}}/>
       {breakdown.length>0?<>
         <p className="mt-7 max-w-2xl text-xs leading-6 text-fg-tertiary">{t('statistics.languageNote')}</p>
         <div className="mt-4 overflow-x-auto">

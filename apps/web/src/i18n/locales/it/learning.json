@@ -438,7 +438,19 @@
     "languageScope": "Visualizza i record di apprendimento per lingua",
     "allLanguages": "Tutte le lingue",
     "language": "Lingua",
-    "languageNote": "I record in lingue diverse vengono conteggiati separatamente: sommarli non descrive l'apprendimento in nessuna delle due."
+    "languageNote": "I record in lingue diverse vengono conteggiati separatamente: sommarli non descrive l'apprendimento in nessuna delle due.",
+    "year": "Anno",
+    "calendarYear": "Anno del calendario",
+    "calendarMonth": "Mese del calendario",
+    "calendar": "Calendario di apprendimento",
+    "countBasis": "Ogni completamento salvato conta una volta. Lo stesso obiettivo può avere registrazioni distinte di apprendimento, ripasso e consolidamento.",
+    "future": "Data futura",
+    "outsideRange": "Fuori dall’intervallo",
+    "futureOrOutside": "Futuro o fuori intervallo",
+    "recordsUnit": "registrazioni",
+    "trend": "Andamento di apprendimento, ripasso e consolidamento",
+    "trendValues": "Mostra valori",
+    "timezone": "I giorni seguono il fuso orario del dispositivo: {{zone}}."
   },
   "study": {
     "calendar": {

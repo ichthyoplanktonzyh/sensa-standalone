@@ -438,7 +438,19 @@
     "languageScope": "Xem bản ghi theo ngôn ngữ",
     "allLanguages": "Tất cả ngôn ngữ",
     "language": "Ngôn ngữ",
-    "languageNote": "Bản ghi ở các ngôn ngữ khác nhau được đếm riêng: cộng hai ngôn ngữ không mô tả việc học của ngôn ngữ nào."
+    "languageNote": "Bản ghi ở các ngôn ngữ khác nhau được đếm riêng: cộng hai ngôn ngữ không mô tả việc học của ngôn ngữ nào.",
+    "year": "Năm",
+    "calendarYear": "Năm lịch",
+    "calendarMonth": "Tháng lịch",
+    "calendar": "Lịch học",
+    "countBasis": "Mỗi lần hoàn thành đã lưu được tính một lần. Cùng một mục tiêu có thể có các bản ghi học, ôn và củng cố riêng.",
+    "future": "Ngày trong tương lai",
+    "outsideRange": "Ngoài phạm vi",
+    "futureOrOutside": "Tương lai hoặc ngoài phạm vi",
+    "recordsUnit": "bản ghi",
+    "trend": "Xu hướng học, ôn và củng cố",
+    "trendValues": "Xem số liệu",
+    "timezone": "Ngày dùng múi giờ của thiết bị này: {{zone}}."
   },
   "study": {
     "calendar": {

@@ -438,7 +438,19 @@
     "languageScope": "Ver registros de aprendizaje por idioma",
     "allLanguages": "Todos los idiomas",
     "language": "Idioma",
-    "languageNote": "Los registros de idiomas distintos se cuentan por separado: sumarlos no describe el aprendizaje de ninguno de ellos."
+    "languageNote": "Los registros de idiomas distintos se cuentan por separado: sumarlos no describe el aprendizaje de ninguno de ellos.",
+    "year": "Año",
+    "calendarYear": "Año del calendario",
+    "calendarMonth": "Mes del calendario",
+    "calendar": "Calendario de aprendizaje",
+    "countBasis": "Cada finalización guardada cuenta una vez. Un objetivo puede tener registros separados de aprendizaje, repaso y refuerzo.",
+    "future": "Fecha futura",
+    "outsideRange": "Fuera del intervalo",
+    "futureOrOutside": "Futuro o fuera del intervalo",
+    "recordsUnit": "registros",
+    "trend": "Tendencia de aprendizaje, repaso y refuerzo",
+    "trendValues": "Ver valores",
+    "timezone": "Los días usan la zona horaria de este dispositivo: {{zone}}."
   },
   "study": {
     "calendar": {

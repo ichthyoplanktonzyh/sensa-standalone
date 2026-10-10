@@ -438,7 +438,19 @@
     "languageScope": "Lernaufzeichnungen nach Sprache ansehen",
     "allLanguages": "Alle Sprachen",
     "language": "Sprache",
-    "languageNote": "Einträge in verschiedenen Sprachen werden getrennt gezählt: Die Summe zweier Sprachen beschreibt das Lernen in keiner der beiden."
+    "languageNote": "Einträge in verschiedenen Sprachen werden getrennt gezählt: Die Summe zweier Sprachen beschreibt das Lernen in keiner der beiden.",
+    "year": "Jahr",
+    "calendarYear": "Kalenderjahr",
+    "calendarMonth": "Kalendermonat",
+    "calendar": "Lernkalender",
+    "countBasis": "Jeder gespeicherte Zielabschluss zählt einmal. Dasselbe Ziel kann getrennte Lern-, Wiederholungs- und Festigungsaufzeichnungen haben.",
+    "future": "Zukünftiges Datum",
+    "outsideRange": "Außerhalb des Zeitraums",
+    "futureOrOutside": "Zukünftig oder außerhalb",
+    "recordsUnit": "Einträge",
+    "trend": "Lern-, Wiederholungs- und Festigungstrend",
+    "trendValues": "Trendwerte anzeigen",
+    "timezone": "Kalendertage folgen der Gerätezeitzone: {{zone}}."
   },
   "study": {
     "calendar": {

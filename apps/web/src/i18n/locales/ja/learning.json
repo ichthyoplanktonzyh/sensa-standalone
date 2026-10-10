@@ -438,7 +438,19 @@
     "languageScope": "言語別に学習記録を表示",
     "allLanguages": "すべての言語",
     "language": "言語",
-    "languageNote": "異なる言語の記録は別々に数えます。2つの言語を合算しても、どちらの学習量も表せません。"
+    "languageNote": "異なる言語の記録は別々に数えます。2つの言語を合算しても、どちらの学習量も表せません。",
+    "year": "年",
+    "calendarYear": "カレンダーの年",
+    "calendarMonth": "カレンダーの月",
+    "calendar": "学習カレンダー",
+    "countBasis": "保存済みの目標完了記録を1件ずつ数えます。同じ目標の学習・復習・補強は別の記録です。",
+    "future": "未来の日付",
+    "outsideRange": "選択範囲外",
+    "futureOrOutside": "未来または範囲外",
+    "recordsUnit": "件",
+    "trend": "学習・復習・補強の推移",
+    "trendValues": "推移の数値を見る",
+    "timezone": "日付はこの端末のタイムゾーンで集計します：{{zone}}。"
   },
   "study": {
     "calendar": {

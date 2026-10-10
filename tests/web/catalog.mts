@@ -97,6 +97,7 @@ const foundationTests = [
   {id:'study-scope-storage',file:'tests/web/integration/study-scope-storage.test.mts',kind:'integration',risks:['local-correctness','durability','scale'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
   {id:'learning-target-view',file:'tests/web/unit/learning-target-view.test.mts',kind:'unit',risks:['local-correctness'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'scene-editor-read',file:'tests/web/unit/scene-editor-read.test.mts',kind:'unit',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
+  {id:'statistics-calendar',file:'tests/web/unit/statistics-calendar.test.mts',kind:'unit',risks:['local-correctness','scale'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'practice-material-read',file:'tests/web/unit/practice-material-read.test.mts',kind:'unit',risks:['local-correctness','scale'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'interaction-budget',file:'tests/web/unit/interaction-budget.test.mts',kind:'unit',risks:['local-correctness','scale'],environment:'node',suite:'fast',runner:'vitest'},
   {

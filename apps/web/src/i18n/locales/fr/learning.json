@@ -438,7 +438,19 @@
     "languageScope": "Voir les enregistrements par langue",
     "allLanguages": "Toutes les langues",
     "language": "Langue",
-    "languageNote": "Les enregistrements de langues différentes sont comptés séparément : leur somme ne décrit l’apprentissage d’aucune d’elles."
+    "languageNote": "Les enregistrements de langues différentes sont comptés séparément : leur somme ne décrit l’apprentissage d’aucune d’elles.",
+    "year": "Année",
+    "calendarYear": "Année du calendrier",
+    "calendarMonth": "Mois du calendrier",
+    "calendar": "Calendrier d’apprentissage",
+    "countBasis": "Chaque achèvement enregistré compte une fois. Un même objectif peut avoir plusieurs apprentissages, révisions ou renforcements.",
+    "future": "Date future",
+    "outsideRange": "Hors de la période",
+    "futureOrOutside": "Futur ou hors période",
+    "recordsUnit": "enregistrements",
+    "trend": "Tendance d’apprentissage, révision et renforcement",
+    "trendValues": "Voir les valeurs",
+    "timezone": "Les jours suivent le fuseau de cet appareil : {{zone}}."
   },
   "study": {
     "calendar": {

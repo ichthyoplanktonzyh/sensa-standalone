@@ -438,7 +438,19 @@
     "languageScope": "按语言查看学习记录",
     "allLanguages": "全部语言",
     "language": "语言",
-    "languageNote": "不同语言的记录分别计数：把两种语言加在一起得不到任何一个语言的学习量。"
+    "languageNote": "不同语言的记录分别计数：把两种语言加在一起得不到任何一个语言的学习量。",
+    "year": "年度",
+    "calendarYear": "日历年份",
+    "calendarMonth": "日历月份",
+    "calendar": "学习日历",
+    "countBasis": "每条已保存的目标完成记录计一次；同一目标在不同学习、复习或巩固中分别计数。",
+    "future": "未来日期",
+    "outsideRange": "不在所选范围",
+    "futureOrOutside": "未来或范围外",
+    "recordsUnit": "条记录",
+    "trend": "首学、复习与巩固趋势",
+    "trendValues": "查看趋势数值",
+    "timezone": "日期按此设备时区的本地日界线统计：{{zone}}。"
   },
   "study": {
     "calendar": {

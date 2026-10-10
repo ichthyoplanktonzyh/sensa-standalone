@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS sensa_learning_history_meta(key TEXT PRIMARY KEY NOT 
 /** Controlled in-memory adapter oracle; production performs these selections,
  * counts and calendar/language groups in SQLite without transferring all rows. */
 export function learningHistoryPageFromRecords(records:readonly StoredLearningRecord[],request:LearningHistoryRequest):StoredLearningHistoryPage{
+ records=[...new Map(records.map(row=>[row.recordId,row])).values()];
  if(request.runIds){const runs=new Set(request.runIds);records=records.filter(row=>runs.has(row.recordId.split(':')[0]!));}
  const window=learningHistoryWindow(request),languages=[...new Set(records.map(row=>row.languageTag))].sort();
  const languageScope=request.surface==='study'?'all':request.languageChoice??(languages.includes(request.activeLanguageTag)?request.activeLanguageTag:'all');
@@ -28,7 +29,7 @@ export function learningHistoryPageFromRecords(records:readonly StoredLearningRe
  for(const row of selected){counts[row.kind]++;breakdown.get(row.languageTag)![row.kind]++;const day=localLearningHistoryDay(new Date(row.occurredAt)),key=JSON.stringify([day,row.languageTag]),group=groups.get(key)??{day,languageTag:row.languageTag,counts:emptyLearningHistoryCounts()};group.counts[row.kind]++;groups.set(key,group);}
  const page=selected.filter(row=>!request.cursor||Date.parse(row.occurredAt)<request.cursor.occurredAt||Date.parse(row.occurredAt)===request.cursor.occurredAt&&row.recordId>request.cursor.recordId).slice(0,request.limit+1),more=page.length>request.limit;
  if(more)page.pop();const last=page.at(-1);
- return {records:page,total:selected.length,hasRecords:available.length>0,invalidRange:window.invalidRange,languages,languageScope,counts,days:[...groups.values()].sort((a,b)=>b.day.localeCompare(a.day)||a.languageTag.localeCompare(b.languageTag)),breakdown:languageScope==='all'?[...breakdown].map(([tag,counts])=>({tag,counts})):[],nextCursor:more&&last?{occurredAt:Date.parse(last.occurredAt),recordId:last.recordId,clock:request.clock}:null};
+ return {clock:request.clock,fromDay:window.fromDay,throughDay:window.throughDay,records:page,total:selected.length,hasRecords:available.length>0,invalidRange:window.invalidRange,languages,languageScope,counts,days:[...groups.values()].sort((a,b)=>b.day.localeCompare(a.day)||a.languageTag.localeCompare(b.languageTag)),breakdown:languageScope==='all'?[...breakdown].map(([tag,counts])=>({tag,counts})):[],nextCursor:more&&last?{occurredAt:Date.parse(last.occurredAt),recordId:last.recordId,clock:request.clock}:null};
 }
 
 /** Rebuildable local presentation index, not learning authority or new facts. */
@@ -85,6 +86,6 @@ export class SqliteLearningHistoryProjection{
   if(request.cursor){pageWhere.push('(occurred_at<? OR (occurred_at=? AND record_key>?))');pageBind.push(request.cursor.occurredAt,request.cursor.occurredAt,request.cursor.recordId);}
   const rows=this.database.exec({sql:`SELECT projection_json FROM sensa_learning_history${pageWhere.length?' WHERE '+pageWhere.join(' AND '):''} ORDER BY occurred_at DESC,record_key LIMIT ?`,bind:[...pageBind,request.limit+1],rowMode:0,returnValue:'resultRows'}) as unknown[];
   const more=rows.length>request.limit;if(more)rows.pop();const records=rows.map(row=>JSON.parse(String(row)) as StoredLearningRecord),last=records.at(-1);
-  return {records,total,hasRecords,invalidRange:window.invalidRange,languages,languageScope,counts,days:[...days.values()],breakdown:languageScope==='all'?[...breakdown].map(([tag,counts])=>({tag,counts})):[],nextCursor:more&&last?{occurredAt:Date.parse(last.occurredAt),recordId:last.recordId,clock:request.clock}:null};
+  return {clock:request.clock,fromDay:window.fromDay,throughDay:window.throughDay,records,total,hasRecords,invalidRange:window.invalidRange,languages,languageScope,counts,days:[...days.values()],breakdown:languageScope==='all'?[...breakdown].map(([tag,counts])=>({tag,counts})):[],nextCursor:more&&last?{occurredAt:Date.parse(last.occurredAt),recordId:last.recordId,clock:request.clock}:null};
  }
 }

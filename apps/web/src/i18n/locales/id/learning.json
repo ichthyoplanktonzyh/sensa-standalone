@@ -438,7 +438,19 @@
     "languageScope": "Lihat catatan belajar berdasarkan bahasa",
     "allLanguages": "Semua bahasa",
     "language": "Bahasa",
-    "languageNote": "Catatan untuk bahasa berbeda dihitung terpisah: menjumlahkannya tidak menggambarkan pembelajaran dalam bahasa mana pun."
+    "languageNote": "Catatan untuk bahasa berbeda dihitung terpisah: menjumlahkannya tidak menggambarkan pembelajaran dalam bahasa mana pun.",
+    "year": "Tahun",
+    "calendarYear": "Tahun kalender",
+    "calendarMonth": "Bulan kalender",
+    "calendar": "Kalender belajar",
+    "countBasis": "Setiap penyelesaian tersimpan dihitung sekali. Target yang sama dapat memiliki catatan belajar, ulasan, dan penguatan terpisah.",
+    "future": "Tanggal mendatang",
+    "outsideRange": "Di luar rentang",
+    "futureOrOutside": "Mendatang atau di luar rentang",
+    "recordsUnit": "catatan",
+    "trend": "Tren belajar, ulasan, dan penguatan",
+    "trendValues": "Lihat nilai",
+    "timezone": "Hari mengikuti zona waktu perangkat ini: {{zone}}."
   },
   "study": {
     "calendar": {

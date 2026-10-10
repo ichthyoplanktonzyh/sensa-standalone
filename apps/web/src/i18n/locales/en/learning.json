@@ -438,7 +438,19 @@
     "languageScope": "View learning records by language",
     "allLanguages": "All languages",
     "language": "Language",
-    "languageNote": "Records in different languages are counted separately: adding two languages together describes the learning of neither."
+    "languageNote": "Records in different languages are counted separately: adding two languages together describes the learning of neither.",
+    "year": "Year",
+    "calendarYear": "Calendar year",
+    "calendarMonth": "Calendar month",
+    "calendar": "Learning calendar",
+    "countBasis": "Each saved target completion counts once. The same target can have separate learning, review and reinforcement records.",
+    "future": "Future date",
+    "outsideRange": "Outside the selected range",
+    "futureOrOutside": "Future or outside range",
+    "recordsUnit": "records",
+    "trend": "Learning, review and reinforcement trend",
+    "trendValues": "Read trend values",
+    "timezone": "Calendar days use this device’s time zone: {{zone}}."
   },
   "study": {
     "calendar": {

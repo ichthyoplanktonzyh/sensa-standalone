@@ -438,7 +438,19 @@
     "languageScope": "언어별 학습 기록 보기",
     "allLanguages": "모든 언어",
     "language": "언어",
-    "languageNote": "언어가 다르면 기록도 별도로 집계됩니다. 두 언어를 합산해도 어느 한쪽 학습량을 나타내지 않습니다."
+    "languageNote": "언어가 다르면 기록도 별도로 집계됩니다. 두 언어를 합산해도 어느 한쪽 학습량을 나타내지 않습니다.",
+    "year": "연도",
+    "calendarYear": "달력 연도",
+    "calendarMonth": "달력 월",
+    "calendar": "학습 달력",
+    "countBasis": "저장된 목표 완료 기록을 한 번씩 셉니다. 같은 목표의 학습·복습·보강은 각각 별도 기록입니다.",
+    "future": "미래 날짜",
+    "outsideRange": "선택 범위 밖",
+    "futureOrOutside": "미래 또는 범위 밖",
+    "recordsUnit": "개 기록",
+    "trend": "학습·복습·보강 추이",
+    "trendValues": "추이 수치 보기",
+    "timezone": "날짜는 이 기기의 시간대로 집계합니다: {{zone}}."
   },
   "study": {
     "calendar": {
