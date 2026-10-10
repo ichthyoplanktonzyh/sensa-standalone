@@ -44,6 +44,8 @@ export type WebTestCatalogEntry = Readonly<{
  * split into named behavior scenarios.
  */
 const foundationTests = [
+  {id:'release-status',file:'tests/web/release/release-status.test.mjs',kind:'contract',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
+  {id:'candidate-source',file:'tests/web/release/candidate-source.test.mjs',kind:'contract',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'evidence-archive',file:'tests/web/quality/evidence-archive.test.mts',kind:'quality',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'test-shards',file:'tests/web/quality/test-shards.test.mts',kind:'quality',risks:['local-correctness'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'api-runtime-imports',file:'tests/web/contracts/api-runtime-imports.test.mts',kind:'contract',risks:['local-correctness'],environment:'node',suite:'fast',runner:'vitest'},

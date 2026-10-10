@@ -15,6 +15,12 @@ on:
         description: Full SHA-256 of authored-media-pack.json
         required: true
         type: string
+      release_id:
+        required: true
+        type: string
+    outputs:
+      evidence_artifact_id:
+        value: ${{ jobs.publish.outputs.artifact_id }}
 permissions:
   contents: read
   actions: read
@@ -23,6 +29,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish:
+    outputs:
+      artifact_id: ${{ steps.evidence.outputs.artifact-id }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: learning-content-production
@@ -93,10 +101,11 @@ jobs:
           trap 'rm -f "$RUNNER_TEMP/sensa-learning-registry.env"' EXIT
           supabase secrets set --env-file "$RUNNER_TEMP/sensa-learning-registry.env" --project-ref "$SUPABASE_PROJECT_REF"
       - name: Preserve publication evidence
+        id: evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: sensa-learning-content-${{ inputs.release_sha }}
+          name: sensa-learning-content-${{ inputs.release_id }}-attempt-${{ github.run_attempt }}
           retention-days: 30
           if-no-files-found: warn
           path: |

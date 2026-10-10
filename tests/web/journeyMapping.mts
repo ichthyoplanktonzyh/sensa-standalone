@@ -45,6 +45,8 @@ export const currentJourneyScenarios: readonly Readonly<{
 
 /** Shared guards run with a journey; they do not replace its user-facing evidence. */
 export const journeySupportingTests: readonly Readonly<{journeyIds:readonly LongJourneyId[];testId:string;scope:string}>[] = [
+  {journeyIds:['OJ-04'],testId:'candidate-source',scope:'Controlled GitHub metadata proves green same-repository main validation, separate immutable build attempt, exact artifact/job identity and expiry rejection. No live rerun or deployment claim.'},
+  {journeyIds:['OJ-04'],testId:'release-status',scope:'Controlled Actions step/job observations distinguish awaiting authorization, incomplete/partial mutation and complete recorded release. Not an executed provider rollback or live deployment receipt.'},
   {journeyIds:['LJ-16','SJ-03','OJ-04'],testId:'api-runtime-imports',scope:'AST checks actual API Buffer member references for explicit node:buffer runtime imports, including upload, speech and cursors. Not an executed Deno request, actual provider, deployment or full runtime-global audit.'},
   {journeyIds:['SJ-01'],testId:'language-journey',scope:'Real semantic intake/gateway over memory authority: absolute capture languages and pinned clarification survive Route changes. Not Route settings UI, OPFS or cross-device configuration convergence.'},
   {journeyIds:['SJ-01'],testId:'language-scope',scope:'Controlled local route/runtime boundaries; linked assertions protect language isolation, not a whole settings journey or a passing result.'},

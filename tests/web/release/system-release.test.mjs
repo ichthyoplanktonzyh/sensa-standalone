@@ -147,15 +147,22 @@ test("standing policy automatically releases ordinary application changes and bl
     ["apps/api/src/sensa/access/auth.ts"],
     ["apps/api/src/server/environment.ts"],
   ]) {
-    assert.throws(() => planSystemRelease({
+    const pending = planSystemRelease({
       targetCommit: sha("b"), previousManifest: previous, requestedScope: "auto",
       releaseMode: "automatic", changedPaths, releaseId: releaseId(), ...media,
-    }), /explicit owner authorization/u);
+    });
+    assert.equal(pending.authorization.outcome, 'requires-approval');
+    assert.equal(pending.decision.kind, 'awaiting-approval');
+    assert.equal(pending.decision.deployApplication, false);
+    assert.equal(pending.decision.publishLearningContent, false);
+    assert.throws(() => finalizeSystemRelease({plan: pending}), /not a successful release/u);
   }
-  assert.throws(() => planSystemRelease({
+  const bootstrapPending = planSystemRelease({
     targetCommit: sha("b"), requestedScope: "auto", releaseMode: "automatic",
     changedPaths: ["apps/web/src/App.tsx"], releaseId: releaseId(), ...media,
-  }), /full bootstrap/u);
+  });
+  assert.equal(bootstrapPending.authorization.outcome, 'requires-approval');
+  assert.match(bootstrapPending.authorization.reasons[0], /full bootstrap/u);
 
   const explicit = planSystemRelease({
     targetCommit: sha("b"), previousManifest: previous, requestedScope: "auto",
@@ -193,6 +200,9 @@ test("system release manifest records new evidence and carries an unchanged comp
   const manifest = finalizeSystemRelease({
     plan,
     applicationCandidate: candidate,
+    ciCandidateSource: {format: 'sensa-ci-candidate-source-v1', repository: 'sensa/example', commit: sha('b'),
+      workflowRunId: '100', buildAttempt: '1', validationAttempt: '2', artifactId: 9,
+      artifactName: `sensa-production-${sha('b')}-attempt-1`, artifactDigest: 'sha256:' + digest('8')},
     cloudflareVersion: {
       format: "sensa-cloudflare-version-v1",
       releaseSha: sha("b"),
@@ -207,6 +217,8 @@ test("system release manifest records new evidence and carries an unchanged comp
   assert.equal(manifest.authorization.mode, "explicit-owner");
   assert.equal(manifest.components.application.sourceCommit, sha("b"));
   assert.equal(manifest.components.application.candidate.workflowRunId, "100");
+  assert.equal(manifest.components.application.candidate.validationRunAttempt, '2');
+  assert.equal(manifest.components.application.candidate.workflowRunAttempt, '1');
   assert.equal(manifest.components.application.web.versionId, "cloudflare-version-2");
   assert.equal(manifest.components.application.database.migrationSetSha256, digest("4"));
   assert.equal(manifest.components.application.targets.webOrigin, "https://learn.example.com");
@@ -283,11 +295,18 @@ test("production promotes the exact application candidate tested by main CI", as
   assert.match(system, /application:\n\s+needs: \[plan, learning_content\]/u,
     "content promotion precedes a coupled application promotion");
   assert.match(system, /candidate_run_id: \$\{\{ steps\.ci\.outputs\.run_id \}\}/u);
-  assert.match(system, /candidate_run_attempt: \$\{\{ steps\.ci\.outputs\.run_attempt \}\}/u);
+  assert.match(system, /candidate_run_attempt: \$\{\{ steps\.candidate\.outputs\.build_attempt \}\}/u);
+  assert.match(system, /candidate_validation_attempt: \$\{\{ steps\.ci\.outputs\.run_attempt \}\}/u);
+  assert.match(system, /node scripts\/release\/candidateSource\.mjs/u);
   assert.match(system, /candidate_run_id: \$\{\{ needs\.plan\.outputs\.candidate_run_id \}\}/u);
   assert.match(system, /candidate_run_attempt: \$\{\{ needs\.plan\.outputs\.candidate_run_attempt \}\}/u);
   assert.match(ci, /name: Build, seal and verify the main release candidate/u);
-  assert.match(ci, /name: sensa-production-\$\{\{ github\.sha \}\}/u);
+  assert.match(ci, /name: sensa-production-\$\{\{ github\.sha \}\}-attempt-\$\{\{ github\.run_attempt \}\}/u);
+  assert.match(application, /artifact-ids: \$\{\{ inputs\.candidate_artifact_id \}\}/u);
+  assert.match(application, /merge-multiple: true/u);
+  assert.match(system, /needs\.plan\.outputs\.authorization_outcome != 'requires-approval'/u);
+  assert.match(application, /node scripts\/release\/releaseStatus\.mjs application/u);
+  assert.match(system, /node scripts\/release\/releaseStatus\.mjs system/u);
   assert.match(ci, /node scripts\/release\/verifyCandidate\.mjs/u);
   assert.match(ci, /npx wrangler versions upload --dry-run --strict/u);
   assert.match(application, /run-id: \$\{\{ inputs\.candidate_run_id \}\}/u);

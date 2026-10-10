@@ -9,6 +9,7 @@ import {execFileSync} from "node:child_process";
 import {appendFile, mkdir, readFile, writeFile} from "node:fs/promises";
 import {dirname, resolve} from "node:path";
 import {pathToFileURL} from "node:url";
+import {candidateArtifactName} from './candidateSource.mjs';
 
 export const systemReleasePlanFormat = "sensa-system-release-plan-v2";
 export const systemReleaseManifestFormat = "sensa-system-release-manifest-v2";
@@ -165,7 +166,7 @@ function releaseAuthorization(mode, classified, hasPrevious) {
     }
   }
   if (blockers.length > 0) {
-    throw new Error(`Automatic release policy requires explicit owner authorization:\n- ${[...new Set(blockers)].join("\n- ")}`);
+    return {format: automaticReleasePolicyFormat, mode: 'automatic-policy', outcome: 'requires-approval', reasons: [...new Set(blockers)]};
   }
   return {
     format: automaticReleasePolicyFormat,
@@ -210,11 +211,13 @@ export function planSystemRelease({
   const required = previous
     ? {application: classified.application, learningContent: classified.learningContent}
     : {application: true, learningContent: true};
-  const selected = selectedComponents(requestedScope, required, Boolean(previous), releaseMode === "automatic");
+  const awaitingApproval = authorization.outcome === 'requires-approval';
+  const selected = awaitingApproval ? {application: false, learningContent: false}
+    : selectedComponents(requestedScope, required, Boolean(previous), releaseMode === "automatic");
   const contentInput = selected.learningContent
     ? verifiedMediaInput(mediaReleaseTag, mediaPackSha256)
     : null;
-  const decision = selected.application && selected.learningContent
+  const decision = awaitingApproval ? 'awaiting-approval' : selected.application && selected.learningContent
     ? "coupled"
     : selected.application ? "application-only" : selected.learningContent ? "content-only" : "no-op";
   return {
@@ -234,9 +237,10 @@ export function planSystemRelease({
     request: {scope: requestedScope},
     decision: {
       kind: decision,
+      requiredComponents: required,
       deployApplication: selected.application,
       publishLearningContent: selected.learningContent,
-      compatibility: decision === "coupled"
+      compatibility: awaitingApproval ? 'No production mutation is authorized; explicit approval and any sealed content input are still required.' : decision === "coupled"
         ? "Both components are promoted in one workflow; shared contract changes must remain rolling-compatible."
         : decision === "no-op"
           ? "No production component is promoted; both component identities are carried from the previous release."
@@ -258,7 +262,7 @@ function assertPlan(plan) {
   }
 }
 
-function applicationComponent(plan, candidate, cloudflare, repository) {
+function applicationComponent(plan, candidate, cloudflare, repository, source) {
   if (candidate?.format !== "sensa-release-candidate-v2"
     || candidate.commit !== plan.source.commit
     || candidate.provenance?.repository !== repository
@@ -276,6 +280,13 @@ function applicationComponent(plan, candidate, cloudflare, repository) {
     || cloudflare.versionId === "") {
     throw new Error("Cloudflare promotion evidence does not match the release plan");
   }
+  if (source?.format !== 'sensa-ci-candidate-source-v1' || source.repository !== repository
+    || source.commit !== candidate.commit || source.workflowRunId !== candidate.provenance.workflowRunId
+    || source.buildAttempt !== candidate.provenance.workflowRunAttempt
+    || !Number.isSafeInteger(Number(source.validationAttempt)) || Number(source.validationAttempt) < Number(source.buildAttempt)
+    || source.artifactName !== candidateArtifactName(candidate.commit, source.buildAttempt)
+    || !Number.isSafeInteger(source.artifactId) || source.artifactId < 1
+    || !/^sha256:[a-f0-9]{64}$/.test(source.artifactDigest ?? '')) throw Error('CI candidate source evidence does not match the built artifact');
   return {
     kind: "application",
     sourceCommit: plan.source.commit,
@@ -285,6 +296,10 @@ function applicationComponent(plan, candidate, cloudflare, repository) {
       fileCount: candidate.files.length,
       workflowRunId: candidate.provenance.workflowRunId,
       workflowRunAttempt: candidate.provenance.workflowRunAttempt,
+      validationRunAttempt: source.validationAttempt,
+      artifactId: source.artifactId,
+      artifactName: source.artifactName,
+      artifactDigest: source.artifactDigest,
     },
     web: {provider: "cloudflare-workers", versionId: cloudflare.versionId},
     api: {provider: "supabase-edge-functions", releaseSha: plan.source.commit},
@@ -331,6 +346,7 @@ function learningContentComponent(plan, publication) {
 export function finalizeSystemRelease({
   plan,
   applicationCandidate = null,
+  ciCandidateSource = null,
   cloudflareVersion = null,
   learningContentPublication = null,
   completedAt = new Date().toISOString(),
@@ -339,9 +355,10 @@ export function finalizeSystemRelease({
   workflowRunAttempt,
 }) {
   assertPlan(plan);
+  if (plan.authorization.outcome === 'requires-approval') throw Error('An awaiting-approval plan is not a successful release');
   const previousComponents = plan.previousRelease?.components;
   const application = plan.decision.deployApplication
-    ? applicationComponent(plan, applicationCandidate, cloudflareVersion, repository)
+    ? applicationComponent(plan, applicationCandidate, cloudflareVersion, repository, ciCandidateSource)
     : clone(previousComponents?.application);
   const learningContent = plan.decision.publishLearningContent
     ? learningContentComponent(plan, learningContentPublication)
@@ -410,6 +427,7 @@ async function appendOutputs(plan) {
     `deploy_application=${plan.decision.deployApplication}`,
     `publish_learning_content=${plan.decision.publishLearningContent}`,
     `release_id=${plan.releaseId}`,
+    `authorization_outcome=${plan.authorization.outcome}`,
     "",
   ].join("\n"));
 }
@@ -425,6 +443,7 @@ async function appendSummary(plan) {
     `- Decision: \`${plan.decision.kind}\``,
     `- Authorization: \`${plan.authorization.mode}\` (\`${plan.authorization.outcome}\`)`,
     `- Production-impacting paths: ${impacted}`,
+    ...plan.authorization.reasons.map(reason => `- Policy: ${reason}`),
     "",
   ].join("\n"));
 }
@@ -478,6 +497,8 @@ async function finalizeFromEnvironment(root) {
     plan,
     applicationCandidate: plan.decision.deployApplication
       ? await uniqueJson(resolve(root, applicationDirectory), "manifest.json") : null,
+    ciCandidateSource: plan.decision.deployApplication
+      ? await uniqueJson(resolve(root, process.env.SENSA_RELEASE_PLAN_DIRECTORY ?? '.tmp/system-release-plan'), 'ci-candidate-source.json') : null,
     cloudflareVersion: plan.decision.deployApplication
       ? await uniqueJson(resolve(root, applicationDirectory), "cloudflare-version.json") : null,
     learningContentPublication: plan.decision.publishLearningContent

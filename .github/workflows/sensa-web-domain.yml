@@ -72,7 +72,7 @@ jobs:
         run: git diff --exit-code "$SENSA_BASELINE_APP_SHA" HEAD -- apps packages db/migrations supabase/functions content/authored
       - name: Restore verified baseline assets for routing configuration validation
         run: |
-          gh run download "$SENSA_BASELINE_CI_RUN" --name "sensa-production-$SENSA_BASELINE_APP_SHA" --dir .tmp/domain-baseline-candidate
+          gh run download "$SENSA_BASELINE_CI_RUN" --name "$SENSA_BASELINE_CANDIDATE_NAME" --dir .tmp/domain-baseline-candidate
           node --input-type=module <<'JS'
           import {readFileSync} from 'node:fs';
           import {createHash} from 'node:crypto';

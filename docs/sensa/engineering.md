@@ -1070,7 +1070,11 @@ SQL、正文、邮箱、token、堆栈或嵌套 cause。连接池连接／idle�
 提供的隐式全局。受控回归仅在应用工作范围移除全局 Buffer，保留 Node HTTP 自身依赖，验证上传、容量拒绝
 及相同块重试；Edge 编译和真实托管运行另行验证，不用 Node 回归冒充 Deno 运行证据。
 
-`.github/workflows/sensa-consumer-check.yml` 在 pull request 和 `main` push 时运行 `Sensa CI`。它执行静态检查、构建、Web 快速测试、浏览器检查以及 PostgreSQL/API 集成。Pull request 只生成验证构建；`main` 的静态／快速 job 使用 `web-candidate` 公共配置构建一次生产候选，在同一 job 内固定完整 SHA、GitHub Actions provenance、公开目标、migration 集合和每个交付文件摘要，完成 artifact 检查与 Cloudflare dry-run 后才上传 `sensa-production-<SHA>`。其余 CI job 共同决定该候选是否具备发布资格；失败 run 中即使存在 artifact 也不能被发布器接受。
+`.github/workflows/sensa-consumer-check.yml` 在 pull request 和 `main` push 时运行 `Sensa CI`。它执行静态检查、构建、Web 快速测试、浏览器检查以及 PostgreSQL/API 集成。Pull request 只生成验证构建；`main` 的静态／快速 job 使用 `web-candidate` 公共配置构建一次生产候选，在同一 job 内固定完整 SHA、GitHub Actions provenance、公开目标、migration 集合和每个交付文件摘要，完成 artifact 检查与 Cloudflare dry-run 后才上传 `sensa-production-<SHA>-attempt-<BUILD_ATTEMPT>`。其余 CI job 共同决定该候选是否具备发布资格；失败 run 中即使存在 artifact 也不能被发布器接受。
+
+候选的构建 attempt 与全套检查通过的验证 attempt 分开记录。只重跑失败测试时，候选仍属于原构建；完整重跑会上传新的独立候选，不覆盖旧产物。`candidateSource.mjs` 只读核验精确仓库、绿色 main/push run、验证 attempt、未过期 artifact ID/digest，以及生成它的成功构建 job 和时间边界。部署按 artifact ID 下载，并继续校验原构建 provenance、目标和全部文件摘要，不把测试重跑当作重新构建。
+
+Workflow 是执行规则，不是平台级合并保护。只有在 GitHub 分支保护／ruleset 实际启用并核验 required checks 后，才能认领强制合并门禁；Environment 的审批规则也需要独立核验。私有仓库的计划限制不能通过脚本或一个 `owner_accepted` 参数宣称已经解决，不默认更改仓库可见性或购买计划。
 
 整个生产系统只有一个发布编排器：`.github/workflows/sensa-release.yml`。正常路径由成功的同仓库
 `Sensa CI` main run 通过 `workflow_run` 自动触发，不需要人员或 Agent 再点击发布按钮。编排器先核对
@@ -1083,13 +1087,13 @@ SQL、正文、邮箱、token、堆栈或嵌套 cause。连接池连接／idle�
 自动路径受版本化的 `sensa-automatic-release-policy-v1` 约束，只批准已经具备绿色、不可变 CI 候选的普通
 application-only 变化。数据库迁移、`infra/`、Supabase/Cloudflare 生产配置、服务环境合同、学习内容与共享
 内容合同、Supabase Edge 入口以及 API authentication/access authority 都代表新的数据、权限、基础设施或内容发布授权，自动路径会停止并要求 owner 对精确 revision 使用
-备用 dispatch 显式授权。当前没有真实用户不会放宽这些边界；该策略就是后续存在真实用户时继续使用的
+备用 dispatch 显式授权。政策等待输出 `requires-approval`／`awaiting-approval`，不部署组件，不生成成功系统清单，也不冒充已上线；它与执行故障分别报告。当前没有真实用户不会放宽这些边界；该策略就是后续存在真实用户时继续使用的
 默认保护。手动入口只用于上述策略例外、完整 bootstrap、明确重发和灾难恢复，不是日常发布步骤。
 
 统一发布流程：
 
 1. 正常路径接收已完成的绿色 `Sensa CI` main run；备用路径接收 owner 明确授权的完整 main SHA；
-2. 固定产生候选的 CI run id / attempt；自动路径不重新查询或替换触发它的 run；
+2. 固定绿色验证的 CI run id / attempt，再独立核验候选 artifact ID 与构建 attempt；不替换触发它的 run；
 3. 读取上一份 `sensa-system-release-manifest-v1|v2`，按路径影响生成最小安全 Release Plan；新成功记录写为带授权证据的 v2；
 4. 如需发布内容，先构建、验证、上传不可变 Book/Registry 并提升 Registry；
 5. 如需发布应用，从该成功 CI run 下载已经测试和固定的 Web、扩展与 API 候选，重新核对来源、目标和全部摘要，不再重新构建；
@@ -1102,7 +1106,9 @@ application-only 变化。数据库迁移、`infra/`、Supabase/Cloudflare 生�
 兼容。任一组件未成功时不会生成成功的系统清单。首次使用统一入口，或上一份系统清单已经不可用时，
 Planner 会要求 `scope=all` 的完整 bootstrap，而不是猜测线上组件状态。
 
-应用交付遵循 `build once → verify once → promote once`：生产 workflow 没有应用 build job，也不会接受其他 run、其他 attempt 或只有相同文件名的 artifact。它仍会 checkout 同一 SHA 读取 forward-only migration 和发布脚本，在生产边界重新校验候选及目标，再执行 Supabase/Cloudflare 提升。候选保留 14 天；过期后发布应失败并重新取得当前 SHA 的绿色 CI 证据，不能在生产 job 中临时重建。
+应用交付遵循 `build once → verify → promote`：生产 workflow 没有应用 build job，不接受其他仓库／SHA／run 的候选，也不拿验证 attempt 冒充构建 attempt。它仍会 checkout 同一 SHA 读取 forward-only migration 和发布脚本，在生产边界重新校验候选及目标，再执行 Supabase/Cloudflare 提升。候选保留 14 天；过期后发布应失败并重新取得当前 SHA 的绿色 CI 证据，不能在生产 job 中临时重建。备用入口只接受已完成的绿色 CI；未完成时立即给出可操作状态，不在发布 job 内等待一个短于实际 CI 时长的固定窗口。
+
+发布计划、组件回执和完整系统清单使用独立产物身份；重跑组件后，记录器接收该成功执行返回的 artifact ID，不按同名文件猜测最新结果。`releaseStatus.mjs` 在失败后记录有限允许列表内的步骤 outcome，并区分 `not-deployed`、`partial-or-unverified` 与完成状态。迁移／配置命令失败也可能留下部分变更，不能认领“生产未变化”或“已自动回滚”。统一报告分别展示等待授权、no-op、完整记录与 incomplete；命令 outcome 不是供应商实际版本回执，也不代替用户旅程验收。
 
 普通 application-only 变化不需要运行发布命令。策略例外、明确重发或恢复时才使用备用入口：
 
