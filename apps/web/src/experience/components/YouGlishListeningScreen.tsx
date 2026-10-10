@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Play, Pause, SkipBack, SkipForward, RotateCcw, ExternalLink,ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type {PracticeExpression} from '../practiceMaterials';
@@ -7,7 +7,7 @@ import { clipAccentsFor, clipLanguageFor } from '../services/speechLanguage';
 import { practiceButton, practiceSurface } from './SensaFreePracticeScreen';
 import { useScreenState } from '../ui/ScreenHost';
 export interface YouGlishListeningScreenProps {
- active:boolean;expression:PracticeExpression|null;onBack:()=>void;onChooseExpression:()=>void;
+ active:boolean;expression:PracticeExpression|null;onBack:()=>void;onChooseExpression:()=>void;onPlaybackConfirmed?:(expressionId:string)=>void;
 }
 export const YouGlishListeningScreen=(props:YouGlishListeningScreenProps)=>{
  const [attempt,setAttempt]=useState(0);
@@ -15,7 +15,7 @@ export const YouGlishListeningScreen=(props:YouGlishListeningScreenProps)=>{
   {props.active&&<ListeningPlayer key={attempt} {...props} retry={()=>setAttempt(value=>value+1)}/>}
  </section>;
 };
-function ListeningPlayer({expression:current,onBack,onChooseExpression,retry}:YouGlishListeningScreenProps&{retry:()=>void}) {
+function ListeningPlayer({expression:current,onBack,onChooseExpression,onPlaybackConfirmed,retry}:YouGlishListeningScreenProps&{retry:()=>void}) {
  const {t}=useTranslation();
  const languageTag=current?.languageTag;
  const accents=languageTag?clipAccentsFor(languageTag):['all'];
@@ -26,7 +26,8 @@ function ListeningPlayer({expression:current,onBack,onChooseExpression,retry}:Yo
  const activeAccent=accents.includes(accent)?accent:'all';
  const mountRef=useRef<HTMLDivElement>(null);
  const controlsRef=useRef<HTMLDivElement>(null);
- const widget=useYouglishWidget({mountRef,components:0,query:current?.text,lang:languageTag?clipLanguageFor(languageTag):'',accent:activeAccent==='all'?undefined:activeAccent,active:!!current});
+ const confirmPlayback=useCallback(()=>{if(current)onPlaybackConfirmed?.(current.id);},[current?.id,onPlaybackConfirmed]);
+ const widget=useYouglishWidget({mountRef,components:0,query:current?.text,lang:languageTag?clipLanguageFor(languageTag):'',accent:activeAccent==='all'?undefined:activeAccent,active:!!current,onPlaybackConfirmed:confirmPlayback});
  const ready=widget.status==='ready';
  const canControl=widget.controlsReady;
  useEffect(()=>{if(canControl)widget.setSpeed(preferredRate.current);},[canControl,widget.setSpeed]);
@@ -51,7 +52,7 @@ function ListeningPlayer({expression:current,onBack,onChooseExpression,retry}:Yo
     <div className="relative overflow-hidden bg-surface-media">
      {/* The official provider widget mounts here only while this screen is active. */}
      <div ref={mountRef} className="min-h-56 w-full [&_iframe]:max-w-full"/>
-     {!ready&&<div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-surface-media p-6 text-center text-sm text-fg-on-media" role="status"><p>{t(widget.status==='error'?'practice.error':widget.status==='empty'?'practice.noClips':'practice.loading')}</p>{widget.status==='error'&&<button className={`${practiceButton} border border-fg-on-media/25 text-fg-on-media hover:bg-fg-on-media/10`} onClick={retry}>{t('practice.retry')}</button>}</div>}
+     {!ready&&<div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-surface-media p-6 text-center text-sm text-fg-on-media" role={widget.status==='error'?'alert':'status'} aria-busy={widget.status==='loading'}><p>{t(widget.status==='error'?'practice.error':widget.status==='empty'?'practice.noClips':'practice.loading')}</p>{widget.status==='error'&&<button className={`${practiceButton} border border-fg-on-media/25 text-fg-on-media hover:bg-fg-on-media/10`} onClick={retry}>{t('practice.retry')}</button>}</div>}
     </div>
     <div className="px-5 py-6 sm:px-9 sm:py-8">
      <span className="text-[11px] font-medium tracking-wide text-fg-tertiary">{t('practice.captions')}</span>
@@ -74,6 +75,7 @@ function ListeningPlayer({expression:current,onBack,onChooseExpression,retry}:Yo
    </div>
    <footer className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-1 text-[11px] leading-6 text-fg-tertiary">
     <p>{t('practice.boundary')}</p>
+    <button className={practiceButton} onClick={onBack}>{t('practice.finishListening')}</button>
     <a href="https://youglish.com" target="_blank" rel="noreferrer noopener" className="inline-flex min-h-11 items-center gap-1.5 hover:text-action-primary focus-visible:outline-2 focus-visible:outline-focus">{t('practice.provider')}<ExternalLink size={12}/></a>
    </footer>
   </>}

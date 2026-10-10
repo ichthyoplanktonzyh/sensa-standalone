@@ -1,5 +1,5 @@
 /** A small Expression-practice workspace, independent of Learning controllers. */
-import {useEffect,useMemo,useRef,useState,useSyncExternalStore} from 'react';
+import {useCallback,useEffect,useMemo,useRef,useState,useSyncExternalStore} from 'react';
 import '../i18n/workspaceResources';
 import {useTranslation} from 'react-i18next';
 import {observeLibrary} from '../data/library/store';
@@ -30,7 +30,11 @@ export function PracticeWorkspace({active=true}:{active?:boolean}){
  const [expression,setExpression]=useState<PracticeExpression|null>(null),[playSelection,setPlaySelection]=useState<PracticeMaterialSelection|null>(null);
  const [pickingExpression,setPickingExpression]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [restoreAttempt,setRestoreAttempt]=useState(0);
- const generation=useRef(0),mounted=useRef(true);
+ const generation=useRef(0),mounted=useRef(true),playedExpressions=useRef(new Set<string>());
+ const [recentPlaybackCount,setRecentPlaybackCount]=useState<number|null>(null);
+ const cancelStart=()=>{generation.current++;setBusy(false);setError('');};
+ const confirmPlayback=useCallback((id:string)=>{playedExpressions.current.add(id);},[]);
+ const leaveListening=()=>{setRecentPlaybackCount(playedExpressions.current.size);backMain();};
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;generation.current++;};},[]);
  const adopt=(item:PracticeExpression,selection:PracticeMaterialSelection)=>{
   setExpression(item);setPlaySelection(selection);setError('');setBusy(false);
@@ -38,13 +42,14 @@ export function PracticeWorkspace({active=true}:{active?:boolean}){
  };
  const start=async()=>{
   if(!languageTag||materials.availability!=='ready'||busy||!materials.count)return;
+  if(!navigator.onLine){setError(t('practice.offline'));return;}
   const epoch=++generation.current;setBusy(true);setError('');
   const previous=remembered();
   const candidate=previous?.languageTag===languageTag&&previous.source===materials.selection.source&&(!materials.selection.expressionIds||materials.selection.expressionIds.includes(previous.id))?previous.id:materials.preview[0]?.id;
   if(!candidate){setBusy(false);return;}
   try{const item=await resolvePracticeExpression(materials.selection,languageTag,candidate);
    if(!mounted.current||epoch!==generation.current||screenRef.current!=='s-academy'||languageRef.current!==languageTag)return;
-   if(!item)throw new Error('practice_expression_missing');adopt(item,materials.selection);goMain('s-real-world-listening');
+   if(!item)throw new Error('practice_expression_missing');playedExpressions.current.clear();setRecentPlaybackCount(null);adopt(item,materials.selection);goMain('s-real-world-listening');
   }catch{if(mounted.current&&epoch===generation.current)setError(t('content.loadError'));}
   finally{if(mounted.current&&epoch===generation.current)setBusy(false);}
  };
@@ -70,7 +75,7 @@ export function PracticeWorkspace({active=true}:{active?:boolean}){
  const readyRoute=route.status.ok&&!route.status.loading;
  const availability=!route.status.ok?'unavailable' as const:!readyRoute||busy?'loading' as const:materials.availability;
  const select=(selection:PracticeMaterialSelection)=>{
-  generation.current++;materials.select(selection);setPickingExpression(false);setExpression(null);setPlaySelection(null);
+  cancelStart();materials.select(selection);setPickingExpression(false);setExpression(null);setPlaySelection(null);
   try{previewStorage.removeItem(currentKey);}catch{/* Explicit new material choice remains usable in this mount. */}
   backMain();
  };
@@ -79,9 +84,9 @@ export function PracticeWorkspace({active=true}:{active?:boolean}){
   if(currentScreen==='s-practice-scope')return <PracticeMaterialScreen key={`${pickingExpression}:${pickingExpression?expression?.languageTag:languageTag}`} active={screenActive} languageTag={pickingExpression?expression?.languageTag??languageTag:languageTag} selection={pickingExpression?playSelection??materials.selection:materials.selection} mode={pickingExpression?'expression':'selection'} onBack={backMain} onSelect={select} onChoose={choose}/>;
   if(currentScreen==='s-real-world-listening'){
    if(!expression)return <section id="s-real-world-listening" className={practiceSurface(screenActive)}><main className={practiceBody}><button className={practiceButton} onClick={backMain}>{t('practice.back')}</button>{busy?<p role="status">{t('reliability.loading')}</p>:<div role="alert"><p>{error||t('practice.empty')}</p><button className={practiceButton} onClick={()=>setRestoreAttempt(value=>value+1)}>{t('content.retry')}</button><button className={practiceButton} onClick={()=>goMain('s-practice-scope')}>{t('practice.choose')}</button></div>}</main></section>;
-   return <YouGlishListeningScreen active={screenActive} expression={expression} onBack={backMain} onChooseExpression={()=>{setPickingExpression(true);goMain('s-practice-scope');}}/>;
+   return <YouGlishListeningScreen active={screenActive} expression={expression} onBack={leaveListening} onPlaybackConfirmed={confirmPlayback} onChooseExpression={()=>{setPickingExpression(true);goMain('s-practice-scope');}}/>;
   }
-  return <><AcademyScreen active={screenActive} onBack={backMain} onOpenPracticeScope={()=>{setPickingExpression(false);goMain('s-practice-scope');}} onOpenRealWorldListening={()=>void start()} onBrowseContent={()=>goMain('s-catalog')} onRecordContext={()=>goMain('s-personal-meaning',{meaningId:undefined,focusId:undefined,worldAction:undefined})} selection={materials.selection} preview={materials.preview} count={materials.count} scopeAvailability={availability} onRetryScope={retry}/>{error&&<p role="alert" className="absolute bottom-5 left-6 z-30 text-sm text-fg-primary">{error}</p>}</>;
+  return <><AcademyScreen active={screenActive} onBack={backMain} onOpenPracticeScope={()=>{cancelStart();setPickingExpression(false);goMain('s-practice-scope');}} onOpenRealWorldListening={()=>void start()} onBrowseContent={()=>goMain('s-catalog')} onRecordContext={()=>goMain('s-personal-meaning',{meaningId:undefined,focusId:undefined,worldAction:undefined})} selection={materials.selection} preview={materials.preview} count={materials.count} scopeAvailability={availability} onRetryScope={retry} starting={busy} onCancelStart={cancelStart} startError={error} recentPlaybackCount={recentPlaybackCount}/></>;
  };
  return <ScreenHost active={active} screenKey={currentScreen} memoryKey={currentScreen} preserveScroll>{render}</ScreenHost>;
 }

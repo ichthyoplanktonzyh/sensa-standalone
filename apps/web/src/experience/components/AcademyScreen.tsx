@@ -13,6 +13,8 @@ export interface AcademyScreenProps {
   count:number|null;
   scopeAvailability?: 'loading'|'ready'|'unavailable';
   onRetryScope?:()=>void;
+  starting?:boolean;onCancelStart?:()=>void;startError?:string;
+  recentPlaybackCount?:number|null;
 }
 
 export const AcademyScreen = (props: AcademyScreenProps) => (

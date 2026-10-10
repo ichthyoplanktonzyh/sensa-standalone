@@ -102,3 +102,20 @@ test('changing language during the one-expression start read retires its old-lan
  expect(await page.evaluate(()=>window.practiceScopeFixture.currentExpression())).toBeNull();
  await page.evaluate(()=>window.practiceScopeFixture.dispose());
 });
+
+test('cancelled start and material navigation retire held reads without adopting an expression or retaining a busy state',async({page})=>{
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());await page.goto(origin);await page.waitForFunction(()=>!!window.practiceScopeFixture);
+ const preference=await page.evaluate(()=>window.practiceScopeFixture.prepare());await page.evaluate(()=>window.practiceScopeFixture.mount());const activity=page.locator('.sensa-practice-activities').getByRole('button');await expect(activity).toBeEnabled();
+ await page.evaluate(()=>window.practiceScopeFixture.holdStartRead());await activity.click();await expect(page.getByRole('button',{name:'取消启动',exact:true})).toBeVisible();await expect(activity).toBeDisabled();
+ await page.getByRole('button',{name:'取消启动',exact:true}).click();await expect(activity).toBeEnabled();await page.evaluate(()=>window.practiceScopeFixture.releaseMaterialRead());await expect(page.locator('#s-real-world-listening')).toHaveCount(0);expect(await page.evaluate(()=>window.practiceScopeFixture.currentExpression())).toBeNull();
+ await page.evaluate(()=>window.practiceScopeFixture.holdStartRead());await activity.click();await expect(page.getByRole('button',{name:'取消启动',exact:true})).toBeVisible();await page.getByRole('button',{name:'练习材料',exact:true}).click();
+ const chooser=page.locator('#s-practice-scope');await expect(chooser).toBeVisible();await page.evaluate(()=>window.practiceScopeFixture.releaseMaterialRead());await expect(chooser).toBeVisible();await chooser.getByRole('button',{name:'使用 1 个表达',exact:true}).click();await expect(activity).toBeEnabled();
+ expect(await page.evaluate(()=>window.practiceScopeFixture.currentExpression())).toBeNull();expect(await page.evaluate(()=>window.practiceScopeFixture.preference())).toEqual(preference);expect(await page.evaluate(()=>window.practiceScopeFixture.learningReadCount())).toBe(0);await page.evaluate(()=>window.practiceScopeFixture.dispose());
+});
+
+test('offline practice retains selectable local materials and states its actual external service requirement',async({page,context})=>{
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());await page.goto(origin);await page.waitForFunction(()=>!!window.practiceScopeFixture);await page.evaluate(async()=>{await window.practiceScopeFixture.prepare();window.practiceScopeFixture.mount();});
+ const activity=page.locator('.sensa-practice-activities').getByRole('button');await expect(activity).toBeEnabled();await expect(page.getByText('本模式使用 YouGlish 在线播放，无需模型服务。',{exact:true})).toBeVisible();await expect(page.getByText('播放器尚未检查；打开聆听后再检查。',{exact:true})).toBeVisible();
+ await context.setOffline(true);try{await expect(activity).toBeDisabled();await expect(page.getByText('当前离线；已有材料仍可选择，播放需要联网。',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'练习材料',exact:true})).toBeEnabled();await page.getByRole('button',{name:'练习材料',exact:true}).click();await expect(page.locator('#s-practice-scope')).toBeVisible();}finally{await context.setOffline(false);}
+ await page.getByRole('button',{name:'使用 1 个表达',exact:true}).click();await expect(activity).toBeEnabled();expect(await page.evaluate(()=>window.practiceScopeFixture.learningReadCount())).toBe(0);await page.evaluate(()=>window.practiceScopeFixture.dispose());
+});

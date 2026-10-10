@@ -371,3 +371,31 @@ test('practice content selection and listening start stay bounded with 10000 per
  expect(timings).toHaveLength(7);
  for(const timing of timings){assertInteractionBudget(timing.elapsedMs,1500,`${timing.action}: local interaction, not provider latency`);}
 });
+
+test('practice preparation, cancel, timeout and player retry report only actual playback confirmations and preserve all learner facts',async({page},testInfo)=>{
+ fixture.setRegistry([fixture.referenceDelivery.descriptor]);await page.clock.install();await page.addInitScript(()=>{(window as any).__practiceMode='preparing';});
+ await page.route('https://youglish.com/public/emb/widget.js',route=>route.fulfill({contentType:'text/javascript',body:`
+ window.__practiceFixture={instances:[],closed:0};window.YG={Widget:class{
+ constructor(id,options){this.events=options.events;window.__practiceFixture.instances.push(this);this.root=document.getElementById(id);const frame=document.createElement('iframe');frame.title='Controlled practice player';frame.style.cssText='height:640px;width:'+options.width+'px';frame.srcdoc='<p>Controlled provider; no real playback</p>';this.root.append(frame);}
+ fetch(){if(window.__practiceMode==='ready')queueMicrotask(()=>{this.events.onFetchDone({totalResult:2});this.events.onPlayerReady();this.events.onPlayerStateChange({state:2});});}
+ play(){this.events.onPlayerStateChange({state:1});}pause(){this.events.onPlayerStateChange({state:2});}setSpeed(speed){this.events.onSpeedChange({speed});}move(){}next(){}previous(){}replay(){}close(){window.__practiceFixture.closed++;this.root.replaceChildren();}
+ }};window.onYouglishAPIReady();
+ `}));
+ await page.goto(fixture.origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();await page.locator('#s-home').getByRole('button',{name:'学习包目录',exact:true}).click();await page.locator('#s-catalog').getByRole('button',{name:/只读查词样本/}).click();await page.locator('#s-catalog-book').getByRole('button',{name:'下载学习包',exact:true}).click();await expect(page.locator('#s-catalog-book').getByText('已下载',{exact:true})).toBeVisible();
+ await page.goto(fixture.origin+'/academy');const practice=page.locator('#s-academy'),activity=practice.locator('.sensa-practice-activities').getByRole('button'),listening=page.locator('#s-real-world-listening');
+ const checkpoint=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint()),facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest()),sources=await page.evaluate(()=>window.__sensaBrowserSmoke!.curriculumSourceCheckpointForTest());
+ await expect(activity).toBeEnabled();await activity.click();await expect(listening.getByRole('button',{name:'播放',exact:true})).toBeDisabled();await expect(listening.getByRole('status').filter({hasText:'正在'})).toBeVisible();
+ await page.screenshot({path:testInfo.outputPath('practice-player-preparing.png')});await listening.locator('header').getByRole('button',{name:'返回',exact:true}).click();await expect(practice.getByText('本次尚未收到播放确认。',{exact:true})).toBeVisible();
+ await page.evaluate(()=>{const old=(window as any).__practiceFixture.instances[0].events;old.onFetchDone({totalResult:2});old.onPlayerReady();old.onPlayerStateChange({state:1});});await expect(practice.getByText('本次尚未收到播放确认。',{exact:true})).toBeVisible();await expect(listening).toHaveCount(0);
+ await activity.click();await expect.poll(()=>page.evaluate(()=>(window as any).__practiceFixture.instances.length)).toBe(2);await page.clock.fastForward(16000);await expect(listening.getByRole('alert')).toBeVisible();await expect(listening.getByRole('button',{name:'播放',exact:true})).toBeDisabled();
+ await page.evaluate(()=>{(window as any).__practiceMode='ready';});await listening.getByRole('button',{name:'重新加载',exact:true}).click();await expect(listening.getByRole('button',{name:'播放',exact:true})).toBeEnabled();
+ await page.evaluate(()=>{const instances=(window as any).__practiceFixture.instances;instances.at(-1).events.onError();});await expect(listening.getByRole('alert')).toBeVisible();await listening.getByRole('button',{name:'重新加载',exact:true}).click();await expect(listening.getByRole('button',{name:'播放',exact:true})).toBeEnabled();
+ await listening.getByRole('button',{name:'播放',exact:true}).click();await expect(listening.getByRole('button',{name:'暂停',exact:true})).toBeEnabled();await listening.getByRole('button',{name:'暂停',exact:true}).click();await listening.getByRole('button',{name:'播放',exact:true}).click();
+ await page.setViewportSize({width:320,height:740});await listening.getByRole('button',{name:'结束本次聆听',exact:true}).click();const result=practice.getByRole('region',{name:'刚才的聆听',exact:true});await expect(result.getByText('本次收到播放确认的不同表达：1 个。',{exact:true})).toBeVisible();await result.scrollIntoViewIfNeeded();await page.screenshot({path:testInfo.outputPath('practice-session-result-320px.png')});expect(await practice.evaluate(element=>element.scrollWidth<=element.clientWidth+1)).toBe(true);
+ await activity.click();await expect(listening.getByRole('button',{name:'播放',exact:true})).toBeEnabled();
+ // A confirmed play and exit in the same event turn must not rely on a later
+ // React effect to preserve the observed result.
+ await page.evaluate(()=>{const root=document.getElementById('s-real-world-listening')!;(root.querySelector('button[aria-label="播放"]') as HTMLButtonElement).click();([...root.querySelectorAll('button')].find(button=>button.textContent==='结束本次聆听') as HTMLButtonElement).click();});
+ await expect(result.getByText('本次收到播放确认的不同表达：1 个。',{exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(checkpoint);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest())).toEqual(facts);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.curriculumSourceCheckpointForTest())).toEqual(sources);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.intakeInboxCount())).toBe(0);
+});
