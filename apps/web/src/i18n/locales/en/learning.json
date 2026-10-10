@@ -450,7 +450,20 @@
     "recordsUnit": "records",
     "trend": "Learning, review and reinforcement trend",
     "trendValues": "Read trend values",
-    "timezone": "Calendar days use this device’s time zone: {{zone}}."
+    "timezone": "Calendar days use this device’s time zone: {{zone}}.",
+    "forecast": "Upcoming due work",
+    "forecastNote": "A snapshot of the current Route schedule, not a fixed commitment. The next 7/30 local calendar days include the rest of today and exclude overdue work. Dates may change after study or plan changes.",
+    "forecastPeriod": "Forecast window",
+    "forecastDays": "Next {{count}} days",
+    "forecastReset": "Show entire forecast",
+    "forecastError": "The schedule could not be read. Retry without changing your plan.",
+    "forecastInitial": "Initial learning has no confirmed due date to forecast.",
+    "forecastLanguage": "This language is outside the current Route. Select that Route to view its schedule.",
+    "forecastRoute": "Current Route: {{language}} → {{support}}",
+    "forecastCount": "{{count}} targets currently scheduled",
+    "forecastEmpty": "No targets are currently scheduled in this window.",
+    "forecastPrevious": "Previous page",
+    "forecastNext": "Next page"
   },
   "study": {
     "calendar": {

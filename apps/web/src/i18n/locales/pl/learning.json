@@ -450,7 +450,20 @@
     "recordsUnit": "zapisy",
     "trend": "Trend nauki, powtórek i utrwalania",
     "trendValues": "Zobacz wartości",
-    "timezone": "Dni są liczone według strefy urządzenia: {{zone}}."
+    "timezone": "Dni są liczone według strefy urządzenia: {{zone}}.",
+    "forecast": "Nadchodzące terminy",
+    "forecastNote": "Obraz bieżącej ścieżki, nie stałe zobowiązanie. Kolejne 7/30 lokalnych dni obejmuje resztę dziś i nie obejmuje zaległości. Nauka i zmiany planu mogą przesunąć daty.",
+    "forecastPeriod": "Okres prognozy",
+    "forecastDays": "Kolejne {{count}} dni",
+    "forecastReset": "Cała prognoza",
+    "forecastError": "Nie udało się odczytać planu. Spróbuj ponownie bez jego zmiany.",
+    "forecastInitial": "Pierwsza nauka nie ma potwierdzonego terminu do prognozowania.",
+    "forecastLanguage": "Ten język jest poza bieżącą ścieżką. Wybierz odpowiednią ścieżkę.",
+    "forecastRoute": "Bieżąca ścieżka: {{language}} → {{support}}",
+    "forecastCount": "{{count}} zaplanowanych celów",
+    "forecastEmpty": "Brak zaplanowanych celów w tym okresie.",
+    "forecastPrevious": "Poprzednia strona",
+    "forecastNext": "Następna strona"
   },
   "study": {
     "calendar": {

@@ -450,7 +450,20 @@
     "recordsUnit": "catatan",
     "trend": "Tren belajar, ulasan, dan penguatan",
     "trendValues": "Lihat nilai",
-    "timezone": "Hari mengikuti zona waktu perangkat ini: {{zone}}."
+    "timezone": "Hari mengikuti zona waktu perangkat ini: {{zone}}.",
+    "forecast": "Jadwal mendatang",
+    "forecastNote": "Cuplikan rute saat ini, bukan janji tetap. 7/30 hari lokal berikut mencakup sisa hari ini dan tidak mencakup yang terlambat. Belajar atau perubahan rencana dapat mengubah tanggal.",
+    "forecastPeriod": "Rentang perkiraan",
+    "forecastDays": "{{count}} hari berikut",
+    "forecastReset": "Lihat seluruh perkiraan",
+    "forecastError": "Jadwal tidak dapat dibaca. Coba lagi tanpa mengubah rencana.",
+    "forecastInitial": "Belajar awal belum memiliki tanggal jatuh tempo untuk diperkirakan.",
+    "forecastLanguage": "Bahasa ini di luar rute saat ini. Pilih rute yang sesuai.",
+    "forecastRoute": "Rute saat ini: {{language}} → {{support}}",
+    "forecastCount": "{{count}} target terjadwal",
+    "forecastEmpty": "Tidak ada target terjadwal dalam rentang ini.",
+    "forecastPrevious": "Halaman sebelumnya",
+    "forecastNext": "Halaman berikutnya"
   },
   "study": {
     "calendar": {

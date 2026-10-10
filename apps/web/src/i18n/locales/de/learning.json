@@ -450,7 +450,20 @@
     "recordsUnit": "Einträge",
     "trend": "Lern-, Wiederholungs- und Festigungstrend",
     "trendValues": "Trendwerte anzeigen",
-    "timezone": "Kalendertage folgen der Gerätezeitzone: {{zone}}."
+    "timezone": "Kalendertage folgen der Gerätezeitzone: {{zone}}.",
+    "forecast": "Anstehende Termine",
+    "forecastNote": "Momentaufnahme der aktuellen Route, keine feste Zusage. Die nächsten 7/30 lokalen Kalendertage schließen den Rest des heutigen Tages ein, überfällige Ziele aus. Lernen oder Planänderungen können Termine verschieben.",
+    "forecastPeriod": "Prognosezeitraum",
+    "forecastDays": "Nächste {{count}} Tage",
+    "forecastReset": "Gesamte Prognose",
+    "forecastError": "Der Plan konnte nicht gelesen werden. Erneut versuchen, ohne ihn zu ändern.",
+    "forecastInitial": "Für neues Lernen gibt es keinen bestätigten Fälligkeitstermin.",
+    "forecastLanguage": "Diese Sprache liegt außerhalb der aktuellen Route. Bitte passende Route wählen.",
+    "forecastRoute": "Aktuelle Route: {{language}} → {{support}}",
+    "forecastCount": "{{count}} aktuell geplante Ziele",
+    "forecastEmpty": "Keine geplanten Ziele in diesem Zeitraum.",
+    "forecastPrevious": "Vorherige Seite",
+    "forecastNext": "Nächste Seite"
   },
   "study": {
     "calendar": {

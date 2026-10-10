@@ -116,3 +116,18 @@ test('fresh-device replica order admits Runs before Targets without losing genui
   expect(destination.entries('learningRuns')).toEqual(database.entries('learningRuns'));expect(destination.entries('learningTargets')).toEqual(database.entries('learningTargets'));
  }finally{destination.close();}
 });
+
+test('current due forecast follows real scheduler facts, reads only its bounded target page and never writes a plan',async()=>{
+ const target=await readLibrary(tx=>tx.get<LocalLearningTarget>('learningTargets',targetId));const due=target!.memory!.dueAt.getTime(),clock=due-1000;
+ const before={targets:database.entries('learningTargets'),runs:database.entries('learningRuns'),events:database.entries('learningEvents')};
+ const adapter=await sqliteRecordAdapter(),entries=adapter.entries.bind(adapter),get=adapter.get.bind(adapter);let targetReads=0;
+ adapter.entries=async table=>{if(['learningTargets','learningRuns','packageCache'].includes(table))throw Error('forecast enumerated full facts');return entries(table);};
+ adapter.get=async(table,key)=>{if(table==='learningRuns')throw Error('forecast decoded Run');if(table==='learningTargets')targetReads++;return get(table,key);};
+ try{
+  const result=await learningSystem.read({kind:'schedule',languageContext:context,clock,days:7,recordKind:'all',day:null,offset:0});expect(result.total).toBe(1);expect(result.targets).toEqual([{targetId,dueAt:due,kind:'retention_review',expression:target!.expression}]);expect(targetReads).toBe(1);
+  expect((await learningSystem.read({kind:'schedule',languageContext:context,clock,days:30,recordKind:'relearning',day:null,offset:0})).total).toBe(0);
+  expect((await learningSystem.read({kind:'schedule',languageContext:context,clock:due,days:30,recordKind:'all',day:null,offset:0})).total).toBe(0);
+  const day=result.days[0]!.day;expect((await learningSystem.read({kind:'schedule',languageContext:context,clock,days:7,recordKind:'all',day,offset:0})).total).toBe(1);
+ }finally{adapter.entries=entries;adapter.get=get;}
+ expect({targets:database.entries('learningTargets'),runs:database.entries('learningRuns'),events:database.entries('learningEvents')}).toEqual(before);
+});

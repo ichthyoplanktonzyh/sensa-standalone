@@ -1,3 +1,4 @@
+import type {LearningScheduleQuery,LearningSchedulePage} from '../../learning/system/learningScheduleModel';
 import type {
   HomeLearningStorageProjection,
   MeaningLookupResult,
@@ -46,6 +47,7 @@ export interface SqliteRecordAdapter {
   count(table: SqliteLibraryTable): Promise<number>;
   estimateRecordBytes(tables: readonly SqliteLibraryTable[]): Promise<number>;
   homeLearningProjection(languageRouteId: string,clock?:number): Promise<HomeLearningStorageProjection>;
+  learningSchedulePage(query:LearningScheduleQuery):Promise<LearningSchedulePage>;
   learningHistoryPage(query:LearningHistoryRequest):Promise<StoredLearningHistoryPage>;
   learningManagementSummary(query:LearningManagementSummaryQuery):Promise<LearningManagementStorageSummary>;
   runtimeLearningCandidates(query:RuntimeLearningCandidateQuery):Promise<RuntimeLearningCandidates>;
@@ -161,6 +163,7 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
   runtimeLearningCandidates(query:RuntimeLearningCandidateQuery):Promise<RuntimeLearningCandidates>{return this.send({kind:'runtimeLearningCandidates',query}) as Promise<RuntimeLearningCandidates>;}
   studyScopeMember(scopeRevisionId:string,targetId:string):Promise<import('./studyScopes').LocalStudyScopeMember|null>{return this.send({kind:'studyScopeMember',scopeRevisionId,targetId}) as Promise<import('./studyScopes').LocalStudyScopeMember|null>;}
   latestLearningActionAt(runId:string):Promise<string|null>{return this.send({kind:'latestLearningActionAt',runId}) as Promise<string|null>;}
+  learningSchedulePage(query:LearningScheduleQuery):Promise<LearningSchedulePage>{return this.send({kind:'learningSchedulePage',query}) as Promise<LearningSchedulePage>;}
   learningHistoryPage(query:LearningHistoryRequest):Promise<StoredLearningHistoryPage>{return this.send({kind:'learningHistoryPage',query}) as Promise<StoredLearningHistoryPage>;}
   learningManagementSummary(query:LearningManagementSummaryQuery):Promise<LearningManagementStorageSummary>{return this.send({kind:'learningManagementSummary',query}) as Promise<LearningManagementStorageSummary>;}
 

@@ -450,7 +450,20 @@
     "recordsUnit": "筆紀錄",
     "trend": "初學、複習與鞏固趨勢",
     "trendValues": "查看趨勢數值",
-    "timezone": "日期按此裝置時區的本地日界線統計：{{zone}}。"
+    "timezone": "日期按此裝置時區的本地日界線統計：{{zone}}。",
+    "forecast": "未來到期安排",
+    "forecastNote": "這是目前學習路線的計畫快照，不是固定承諾。未來 7/30 個本地日曆日包含今天剩餘時間，不含逾期目標；學習或計畫變更後日期會改變。",
+    "forecastPeriod": "預測範圍",
+    "forecastDays": "未來 {{count}} 天",
+    "forecastReset": "查看整個預測",
+    "forecastError": "暫時無法讀取排程，請重試；不會更改計畫。",
+    "forecastInitial": "初學沒有已確定的到期日，暫不能預測。",
+    "forecastLanguage": "所選語言不在目前學習路線中；切換到對應路線後可查看安排。",
+    "forecastRoute": "目前路線：{{language}} → {{support}}",
+    "forecastCount": "目前計畫有 {{count}} 個目標到期",
+    "forecastEmpty": "目前計畫在此範圍內沒有到期目標。",
+    "forecastPrevious": "上一頁",
+    "forecastNext": "下一頁"
   },
   "study": {
     "calendar": {

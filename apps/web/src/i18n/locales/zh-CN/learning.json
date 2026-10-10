@@ -450,7 +450,20 @@
     "recordsUnit": "条记录",
     "trend": "首学、复习与巩固趋势",
     "trendValues": "查看趋势数值",
-    "timezone": "日期按此设备时区的本地日界线统计：{{zone}}。"
+    "timezone": "日期按此设备时区的本地日界线统计：{{zone}}。",
+    "forecast": "未来到期安排",
+    "forecastNote": "这是当前学习路线的计划快照，不是固定承诺。未来 7/30 个本地日历日包含今天余下时间，不含逾期目标；学习或计划变化后日期会改变。",
+    "forecastPeriod": "预测范围",
+    "forecastDays": "未来 {{count}} 天",
+    "forecastReset": "查看整个预测",
+    "forecastError": "暂时无法读取排程，请重试；不会改动计划。",
+    "forecastInitial": "初学没有已确定的到期日，暂不能预测。",
+    "forecastLanguage": "所选语言不在当前学习路线中；切换到对应路线后可查看安排。",
+    "forecastRoute": "当前路线：{{language}} → {{support}}",
+    "forecastCount": "当前计划有 {{count}} 个目标到期",
+    "forecastEmpty": "当前计划在这个范围内没有到期目标。",
+    "forecastPrevious": "上一页",
+    "forecastNext": "下一页"
   },
   "study": {
     "calendar": {

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import type { LearningRecordKind } from '../learningJourney/learningHistory';
 import { localRecordDate, type StatisticsRange } from '../learningJourney/learningStatistics';
 import {StatisticsCalendar} from './StatisticsCalendar';
+import {StatisticsForecast} from './StatisticsForecast';
 import {interfaceLanguageDisplayName} from '../../i18n/languageDisplayName';
 import {resolveInterfaceLocale} from '../../i18n/localeRegistry';
 import {useLearningHistory} from '../library/useLearningHistory';
@@ -104,7 +105,8 @@ export const StatsScreen = ({active,onBack,onOpenTarget}:StatsScreenProps) => {
           </li>)}</ol>
           {(projection.total>limit||projection.days.length>limit)&&<button type="button" disabled={history.busy} className={setupButton+' mt-4 border border-border-subtle'} onClick={()=>setLimit(value=>value+20)}>{t('statistics.more')}</button>}
         </section>
-      </>}
+    </>}
+      <StatisticsForecast history={projection} kind={kind} onOpenTarget={onOpenTarget}/>
     </>}
     </>}
   </LearningSetupFrame>;

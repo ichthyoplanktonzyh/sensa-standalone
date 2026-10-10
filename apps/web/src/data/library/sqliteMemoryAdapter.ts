@@ -1,3 +1,4 @@
+import type {LearningScheduleQuery,LearningSchedulePage} from '../../learning/system/learningScheduleModel';
 import type {SqliteRecordAdapter} from './sqliteAdapter';
 import {meaningMediaReferences,meaningHistoryRecords} from '../../experience/personalMeaningJourney/meaningHistoryRead';
 import type {HomeLearningStorageProjection,PortableMediaBlob,PortableMediaStorageDiagnostics,SqliteLibraryTable,SqliteMutation,SqliteRecordChange,SqliteSyncBaseEntry,SqliteStorageDiagnostics} from './sqliteProtocol';
@@ -5,7 +6,7 @@ import {sqliteLibrarySchemaVersion} from './sqliteProtocol';
 import {decodeBackupValue} from './backupCodec';
 import type {PackageCacheProjectionQuery,PackageCacheProjectionResult} from './packageCacheProjection';
 import {createHomeLearningStorageProjection,createHomeLearningTargetRecord} from './homeLearningRecords';
-import {runtimeLearningCandidatesFromRecords,learningManagementSummaryFromRecords,type RuntimeLearningCandidateQuery,type RuntimeLearningCandidates,type LearningManagementSummaryQuery,type LearningManagementStorageSummary} from './runtimeLearningCandidates';
+import {runtimeLearningCandidatesFromRecords,learningManagementSummaryFromRecords,learningScheduleFromRecords,type RuntimeLearningCandidateQuery,type RuntimeLearningCandidates,type LearningManagementSummaryQuery,type LearningManagementStorageSummary} from './runtimeLearningCandidates';
 import {learningHistoryPageFromRecords,type StoredLearningHistoryPage} from './learningHistoryProjection';
 import type {LearningHistoryRequest} from '../../learning/system/learningHistoryModel';
 import type {LocalLearningRun,LocalLearningTarget} from '../../learning/runtime/localProtocol';
@@ -252,6 +253,7 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
     const targets=(await this.entries('learningTargets')).map(row=>decodeBackupValue(JSON.parse(row.encodedValue)) as LocalLearningTarget).filter(target=>ids.has(target.id)||today.has(target.id)).map(createHomeLearningTargetRecord);
     return runtimeLearningCandidatesFromRecords({...stored,targets,availablePackageKeys:(await this.entries('packageCache')).map(row=>row.key)},query,scope);
   }
+  async learningSchedulePage(query:LearningScheduleQuery):Promise<LearningSchedulePage>{return learningScheduleFromRecords(await this.homeLearningProjection(query.languageContext.languageRouteId,query.clock),query);}
   async learningManagementSummary(query:LearningManagementSummaryQuery):Promise<LearningManagementStorageSummary>{return {...learningManagementSummaryFromRecords(await this.homeLearningProjection(query.languageContext.languageRouteId,query.clock),query),libraryTargetCount:query.includeInventory===false?null:(await this.entries('learningTargets')).length};}
   async learningHistoryPage(query:LearningHistoryRequest):Promise<StoredLearningHistoryPage>{return learningHistoryPageFromRecords(await this.learningHistoryProjection(),query);}
 

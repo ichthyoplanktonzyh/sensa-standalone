@@ -918,3 +918,5 @@ export async function readPortableMediaStorageDiagnostics():Promise<PortableMedi
   const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');
   return storageCall(()=>adapter.portableMediaDiagnostics());
 }
+
+export const readLearningSchedulePage=async(query:import('../../learning/system/learningScheduleModel').LearningScheduleQuery)=>{const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');return storageCall(()=>adapter.learningSchedulePage(query));};

@@ -181,6 +181,7 @@ export type LearningQuery =
   | Readonly<{kind:'supplemental_memberships';languageContext:SensaFormalPinnedLanguageContext;cursor?:string|null}>
   | Readonly<{kind:'book_plans';languageContext:SensaFormalPinnedLanguageContext}>
   | Readonly<{kind:'target';targetId:string;languageContext:SensaFormalPinnedLanguageContext;clock?:number}>
+  | Readonly<{kind:'schedule';languageContext:SensaFormalPinnedLanguageContext;clock:number;days:7|30;recordKind:'all'|'retention_review'|'relearning';day:string|null;offset:number}>
   | Readonly<{kind:'history';languageContext:SensaFormalPinnedLanguageContext;filter:import('./learningHistoryModel').LearningHistoryFilter;clock?:number;cursor?:import('./learningHistoryModel').LearningHistoryCursor|null;limit?:number}>
   | Readonly<{kind:'management';languageContext:SensaFormalPinnedLanguageContext;clock?:number}>
   | Readonly<{kind:'preferences';languageContext:SensaFormalPinnedLanguageContext}>
@@ -201,6 +202,7 @@ export type LearningQueryResult<Query extends LearningQuery> =
   Query['kind'] extends 'supplemental_memberships'?SupplementalMembershipPage
   : Query['kind'] extends 'book_plans'?readonly LearningBookPlanProjection[]
   : Query['kind'] extends 'target'?LearningTargetDetailProjection
+  : Query['kind'] extends 'schedule'?import('./learningScheduleModel').LearningScheduleProjection
   : Query['kind'] extends 'history'?LearningHistoryProjection
   : Query['kind'] extends 'management'?LearningManagementProjection
   : Query['kind'] extends 'preferences'?Pick<LearningManagementProjection,'dailyLimit'|'policyOptions'>
@@ -232,6 +234,7 @@ const queryTables = {
   supplemental_memberships:['supplementalMembershipStates','curriculumEnrollments','personalLearning','learningTargets','meta'],
   book_plans:['curriculumEnrollments','packageCache','packageInstallations','meta'],
   target:['learningTargets','learningRuns','curriculumEnrollments','supplementalMembershipStates','packageCache','settings','meta'],
+  schedule:['learningTargets','curriculumEnrollments','supplementalMembershipStates','packageCache','settings','meta'],
   history:['learningRuns','learningTargets','meta'],
   management:['packageCache','packageInstallations','learningTargets','learningRuns','curriculumEnrollments','supplementalMembershipStates','settings','meta'],
   preferences:['settings','meta'],

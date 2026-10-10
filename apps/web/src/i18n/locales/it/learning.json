@@ -450,7 +450,20 @@
     "recordsUnit": "registrazioni",
     "trend": "Andamento di apprendimento, ripasso e consolidamento",
     "trendValues": "Mostra valori",
-    "timezone": "I giorni seguono il fuso orario del dispositivo: {{zone}}."
+    "timezone": "I giorni seguono il fuso orario del dispositivo: {{zone}}.",
+    "forecast": "Scadenze future",
+    "forecastNote": "Istantanea della rotta attuale, non un impegno fisso. I prossimi 7/30 giorni locali includono il resto di oggi ed escludono gli arretrati. Studio e cambiamenti del piano possono modificare le date.",
+    "forecastPeriod": "Periodo previsto",
+    "forecastDays": "Prossimi {{count}} giorni",
+    "forecastReset": "Mostra tutta la previsione",
+    "forecastError": "Impossibile leggere il piano. Riprova senza modificarlo.",
+    "forecastInitial": "Lo studio iniziale non ha una scadenza confermata da prevedere.",
+    "forecastLanguage": "Questa lingua è fuori dalla rotta attuale. Seleziona la rotta corrispondente.",
+    "forecastRoute": "Rotta attuale: {{language}} → {{support}}",
+    "forecastCount": "{{count}} obiettivi programmati",
+    "forecastEmpty": "Nessun obiettivo programmato in questo periodo.",
+    "forecastPrevious": "Pagina precedente",
+    "forecastNext": "Pagina successiva"
   },
   "study": {
     "calendar": {

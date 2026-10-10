@@ -1,3 +1,5 @@
+import {learningScheduleWindow,learningSchedulePageFromTargets,type LearningScheduleQuery,type LearningSchedulePage} from '../../learning/system/learningScheduleModel';
+import {localLearningHistoryDay} from '../../learning/system/learningHistoryModel';
 import type {Database} from '@sqlite.org/sqlite-wasm';
 import type {SensaFormalPinnedLanguageContext} from '@sensa/contracts/sensa';
 import {canonicalJsonDigest,sha256,stableUuid} from '@sensa/learning-kernel';
@@ -68,6 +70,13 @@ export function learningManagementSummaryFromRecords(stored:HomeLearningStorageP
  const current=new Set(query.currentTargetIds);
  return {targetIds:query.includeTargetIds===false?[]:targets.map(target=>target.id),policies:query.includeTargetIds===false?[]:[...new Set(targets.map(target=>target.committedPolicy?.profileId??target.policyAssignment.profileId))],readyInitialCount:queue.initialReady.length,reviewDueCount:queue.due.length,currentCandidateCount:[...queue.initialReady,...queue.due].filter(target=>current.has(target.id)).length,routeTargetCount:query.includeInventory===false?null:targets.length,libraryTargetCount:query.includeInventory===false?null:stored.targets.length,nextReviewAt:future.length?Math.min(...future):null};
 }
+export function learningScheduleFromRecords(stored:HomeLearningStorageProjection,query:LearningScheduleQuery):LearningSchedulePage{
+ const {queue,input}=planningQueueFromRecords(stored,{...query,dailyLimit:undefined});
+ return learningSchedulePageFromTargets(queue.activeTargets.flatMap(target=>{
+  const dueAt=target.relearnAt?Date.parse(target.relearnAt):target.memory?.dueAt.getTime();
+  return !target.planningOverrides.some(override=>override.kind==='declared_mastery')&&input.readiness[target.id]==='ready'&&input.eligibility[target.id]?.ongoing&&dueAt!==undefined?[{targetId:target.id,dueAt,kind:target.relearnAt?'relearning' as const:'retention_review' as const}]:[];
+ }),query);
+}
 export function runtimeLearningCandidatesFromRecords(stored:HomeLearningStorageProjection,query:RuntimeLearningCandidateQuery,scope?:LocalStudyScope):RuntimeLearningCandidates{
  if(query.scopeRevisionId&&!scope)throw new Error('localFlow.progressReadFailed');
  const {limit}=bounds(query),{input,queue}=planningQueueFromRecords(stored,query,scope),retries=new Set(query.retryTargetIds),excluded=new Set(query.excludedTargetIds),candidate=({id,relearnAt}:RuntimeLearningCandidate)=>({id,relearnAt});
@@ -98,7 +107,7 @@ const tableNames=['sensa_runtime_learning_candidate_sources','sensa_runtime_lear
  * authoritative learning history nor an eligibility override. No material or
  * Run is decoded when selecting an ordinary continuation. */
 export class SqliteRuntimeLearningCandidates {
- constructor(private readonly database:Database,private readonly decodeTarget:(encoded:string)=>LocalLearningTarget=encoded=>decodeBackupValue(JSON.parse(encoded)) as LocalLearningTarget,private readonly decodeEnrollment:(encoded:string)=>LocalCurriculumEnrollment=encoded=>decodeBackupValue(JSON.parse(encoded)) as LocalCurriculumEnrollment,private readonly rebuiltTarget?:(id:string,target:LocalLearningTarget)=>void,private readonly decodeScope:(encoded:string)=>LocalStudyScope=encoded=>decodeBackupValue(JSON.parse(encoded)) as LocalStudyScope){}
+ constructor(private readonly database:Database,private readonly decodeTarget:(encoded:string)=>LocalLearningTarget=encoded=>decodeBackupValue(JSON.parse(encoded)) as LocalLearningTarget,private readonly decodeEnrollment:(encoded:string)=>LocalCurriculumEnrollment=encoded=>decodeBackupValue(JSON.parse(encoded)) as LocalCurriculumEnrollment,private readonly rebuiltTarget?:(id:string,target:LocalLearningTarget)=>void,private readonly decodeScope:(encoded:string)=>LocalStudyScope=encoded=>decodeBackupValue(JSON.parse(encoded)) as LocalStudyScope){database.createFunction({name:'sensa_schedule_day',arity:1,innocuous:true,xFunc:(_context,at)=>localLearningHistoryDay(new Date(Number(at)))});}
  initialize():void{
   const tables=this.database.exec({sql:"SELECT name FROM sqlite_schema WHERE type='table' AND name IN (SELECT value FROM json_each(?))",bind:[JSON.stringify(tableNames)],rowMode:0,returnValue:'resultRows'}) as unknown[];
   if(tables.length===tableNames.length){
@@ -255,6 +264,15 @@ export class SqliteRuntimeLearningCandidates {
   const future=this.database.exec({sql:`SELECT MIN(candidate.due_at) ${qualified} AND candidate.due_at>?`,bind:[...parameters,query.clock],rowMode:0,returnValue:'resultRows'}) as unknown[];
   const next=Number(introduced[0]??0)>0?end:null,futureAt=future[0]===null||future[0]===undefined?null:Number(future[0]);
   return {due,initialReady,nextChangeAt:next===null?futureAt:futureAt===null?next:Math.min(next,futureAt)};
+ }
+ schedule(query:LearningScheduleQuery):LearningSchedulePage{
+  const window=learningScheduleWindow(query),context=query.languageContext;
+  const selected=`SELECT candidate.target_key AS targetId,candidate.due_at AS dueAt,CASE WHEN candidate.relearn_at IS NULL THEN 'retention_review' ELSE 'relearning' END AS kind ${this.qualifiedSources()} AND candidate.due_at>?5 AND candidate.due_at<?6 AND (?7='all' OR CASE WHEN candidate.relearn_at IS NULL THEN 'retention_review' ELSE 'relearning' END=?7) GROUP BY candidate.target_key`;
+  const bind=[context.languageRouteId,context.targetLanguageTag,context.supportLanguageTag,JSON.stringify(query.supportedPolicies),window.from,window.until,query.kind];
+  const grouped=this.database.exec({sql:`SELECT sensa_schedule_day(dueAt) AS day,SUM(kind='retention_review') AS retention_review,SUM(kind='relearning') AS relearning FROM (${selected}) GROUP BY day ORDER BY day`,bind,rowMode:'object',returnValue:'resultRows'}) as {day:string;retention_review:number;relearning:number}[];
+  const targets=this.database.exec({sql:`SELECT * FROM (${selected}) ORDER BY dueAt,targetId LIMIT ?8 OFFSET ?9`,bind:[...bind,query.limit+1,query.offset],rowMode:'object',returnValue:'resultRows'}) as {targetId:string;dueAt:number;kind:'retention_review'|'relearning'}[];
+  const more=targets.length>query.limit;if(more)targets.pop();
+  return {clock:query.clock,total:grouped.reduce((sum,row)=>sum+Number(row.retention_review)+Number(row.relearning),0),fromDay:window.fromDay,throughDay:window.throughDay,days:grouped,targets,nextOffset:more?query.offset+targets.length:null};
  }
  management(query:LearningManagementSummaryQuery):LearningManagementStorageSummary{
   const {start,end}=bounds({...query,currentTargetIds:[],retryTargetIds:[]}),context=query.languageContext;

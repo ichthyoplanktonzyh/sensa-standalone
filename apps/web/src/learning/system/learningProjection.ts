@@ -2,7 +2,7 @@ import type { SensaFormalPinnedLanguageContext } from '@sensa/contracts/sensa';
 import {learningSupportMeaning,lightweightStepRequirements} from '@sensa/contracts/sensa';
 
 import { contentSupplySystem, type ContentSupplyRuntimePackage } from '../../contentSupply/system';
-import { readHomeLearningRecords,readLibrary,readLearningHistoryPage,readRuntimeLearningCandidates,readLearningManagementSummary,readLocalLibraryRevision,readLearningSemanticMemoryRecords } from '../../data/library/store';
+import { readHomeLearningRecords,readLibrary,readLearningHistoryPage,readLearningSchedulePage,readRuntimeLearningCandidates,readLearningManagementSummary,readLocalLibraryRevision,readLearningSemanticMemoryRecords } from '../../data/library/store';
 import {stableUuid} from '@sensa/learning-kernel';
 import type {LocalCurriculumEnrollment} from '../../data/library/curriculumEnrollments';
 import { readLearningOverview } from '../../data/library/learningOverview';
@@ -688,3 +688,11 @@ export const removeRetryTarget = (
 ) => retries.filter((retry) => retry.id !== targetId);
 
 export type { InterleavedLearningRetry } from './learningPlanning';
+
+export async function readLearningScheduleProjection(query:Extract<import('./learningSystem').LearningQuery,{kind:'schedule'}>):Promise<import('./learningScheduleModel').LearningScheduleProjection>{
+ return readLibrary(async tx=>{
+  const page=await readLearningSchedulePage({languageContext:query.languageContext,clock:query.clock,days:query.days,kind:query.recordKind,day:query.day,offset:query.offset,limit:20,supportedPolicies:policyOptions.map(option=>option.id)});
+  const targets=await Promise.all(page.targets.map(async row=>{const target=await tx.get<LocalLearningTarget>('learningTargets',row.targetId);if(!target)throw Error('localFlow.progressReadFailed');return {...row,expression:target.expression};}));
+  return {...page,targets,version:JSON.stringify([await readLocalLibraryRevision(tx),await tx.get('meta','identity'),await tx.get('meta','local-incarnation'),Intl.DateTimeFormat().resolvedOptions().timeZone])};
+ });
+}

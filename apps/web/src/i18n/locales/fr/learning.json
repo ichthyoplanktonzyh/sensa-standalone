@@ -450,7 +450,20 @@
     "recordsUnit": "enregistrements",
     "trend": "Tendance d’apprentissage, révision et renforcement",
     "trendValues": "Voir les valeurs",
-    "timezone": "Les jours suivent le fuseau de cet appareil : {{zone}}."
+    "timezone": "Les jours suivent le fuseau de cet appareil : {{zone}}.",
+    "forecast": "Échéances à venir",
+    "forecastNote": "Instantané du parcours actuel, sans engagement fixe. Les 7/30 jours locaux incluent le reste d’aujourd’hui et excluent les retards. Les dates peuvent changer avec l’étude ou le programme.",
+    "forecastPeriod": "Période prévue",
+    "forecastDays": "{{count}} prochains jours",
+    "forecastReset": "Voir toute la prévision",
+    "forecastError": "Lecture du programme impossible. Réessayez sans modifier le plan.",
+    "forecastInitial": "L’apprentissage initial n’a pas d’échéance confirmée à prévoir.",
+    "forecastLanguage": "Cette langue est hors du parcours actuel. Sélectionnez son parcours.",
+    "forecastRoute": "Parcours actuel : {{language}} → {{support}}",
+    "forecastCount": "{{count}} objectifs programmés",
+    "forecastEmpty": "Aucun objectif programmé dans cette période.",
+    "forecastPrevious": "Page précédente",
+    "forecastNext": "Page suivante"
   },
   "study": {
     "calendar": {

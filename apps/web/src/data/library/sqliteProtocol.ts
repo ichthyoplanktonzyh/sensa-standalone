@@ -1,3 +1,4 @@
+import type {LearningScheduleQuery,LearningSchedulePage} from '../../learning/system/learningScheduleModel';
 /** Internal protocol between the local-library module and its SQLite Worker. */
 
 import type {HomeLearningStorageProjection} from './homeLearningRecords';
@@ -27,7 +28,7 @@ export const sqlitePoolDirectory = "/sensa-local-library-v12";
 export const sqliteLibraryBaselineVersion = 10;
 export const sqliteLibrarySchemaVersion = 18;
 /** Cross-tab RPC changes must bump this before adding or changing messages. */
-export const sqliteCoordinatorProtocolVersion = 58;
+export const sqliteCoordinatorProtocolVersion = 59;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -120,6 +121,7 @@ export type SqliteWorkerRequest =
   | { id: number; kind: "estimateRecordBytes"; tables: SqliteLibraryTable[] }
   | { id: number; kind: "homeLearningProjection"; languageRouteId: string;clock:number }
   | { id:number;kind:'learningHistoryPage';query:LearningHistoryRequest }
+  | {id:number;kind:'learningSchedulePage';query:LearningScheduleQuery}
   | {id:number;kind:'learningManagementSummary';query:LearningManagementSummaryQuery}
   | {id:number;kind:'runtimeLearningCandidates';query:RuntimeLearningCandidateQuery}
   | {id:number;kind:'studyScopeMember';scopeRevisionId:string;targetId:string}

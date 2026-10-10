@@ -450,7 +450,20 @@
     "recordsUnit": "bản ghi",
     "trend": "Xu hướng học, ôn và củng cố",
     "trendValues": "Xem số liệu",
-    "timezone": "Ngày dùng múi giờ của thiết bị này: {{zone}}."
+    "timezone": "Ngày dùng múi giờ của thiết bị này: {{zone}}.",
+    "forecast": "Lịch đến hạn sắp tới",
+    "forecastNote": "Ảnh chụp kế hoạch của tuyến hiện tại, không phải cam kết cố định. 7/30 ngày địa phương tới gồm phần còn lại hôm nay, không gồm quá hạn. Việc học hoặc đổi kế hoạch có thể đổi ngày.",
+    "forecastPeriod": "Phạm vi dự báo",
+    "forecastDays": "{{count}} ngày tới",
+    "forecastReset": "Xem toàn bộ dự báo",
+    "forecastError": "Không đọc được lịch. Thử lại mà không đổi kế hoạch.",
+    "forecastInitial": "Học lần đầu chưa có hạn xác định để dự báo.",
+    "forecastLanguage": "Ngôn ngữ này ngoài tuyến hiện tại. Hãy chọn tuyến tương ứng.",
+    "forecastRoute": "Tuyến hiện tại: {{language}} → {{support}}",
+    "forecastCount": "{{count}} mục tiêu đã lên lịch",
+    "forecastEmpty": "Không có mục tiêu lên lịch trong phạm vi này.",
+    "forecastPrevious": "Trang trước",
+    "forecastNext": "Trang sau"
   },
   "study": {
     "calendar": {

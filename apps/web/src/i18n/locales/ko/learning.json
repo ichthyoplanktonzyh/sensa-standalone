@@ -450,7 +450,20 @@
     "recordsUnit": "개 기록",
     "trend": "학습·복습·보강 추이",
     "trendValues": "추이 수치 보기",
-    "timezone": "날짜는 이 기기의 시간대로 집계합니다: {{zone}}."
+    "timezone": "날짜는 이 기기의 시간대로 집계합니다: {{zone}}.",
+    "forecast": "예정된 복습",
+    "forecastNote": "현재 학습 경로의 일정이며 확정 약속이 아닙니다. 7/30일에는 오늘 남은 시간을 포함하고 지난 일정은 제외합니다. 학습이나 계획 변경으로 날짜가 바뀔 수 있습니다.",
+    "forecastPeriod": "예측 범위",
+    "forecastDays": "앞으로 {{count}}일",
+    "forecastReset": "전체 예측 보기",
+    "forecastError": "일정을 읽지 못했습니다. 계획 변경 없이 다시 시도하세요.",
+    "forecastInitial": "첫 학습에는 확정된 기한이 없어 예측할 수 없습니다.",
+    "forecastLanguage": "선택 언어는 현재 경로에 없습니다. 해당 경로를 선택하세요.",
+    "forecastRoute": "현재 경로: {{language}} → {{support}}",
+    "forecastCount": "현재 예정된 목표 {{count}}개",
+    "forecastEmpty": "이 범위에 예정된 목표가 없습니다.",
+    "forecastPrevious": "이전 페이지",
+    "forecastNext": "다음 페이지"
   },
   "study": {
     "calendar": {

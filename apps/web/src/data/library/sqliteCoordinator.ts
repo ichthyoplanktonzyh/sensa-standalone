@@ -1,3 +1,4 @@
+import type {LearningScheduleQuery,LearningSchedulePage} from '../../learning/system/learningScheduleModel';
 import type {
   HomeLearningStorageProjection,
   PortableMediaBlob,
@@ -29,7 +30,7 @@ const retryableOwnerReads=new Set<SqliteWorkerInput['kind']>([
   'meaningLookup','registrySelection','worldBrowse','worldSceneMeaning','worldLearningChoices','practiceExpressions',
   'existingRecordKeys','existingJourneyIdentities','packageCacheProjection',
   'learningSemanticMemory','hasChangesSince','syncBaseEntries','syncBaseReferences','count','estimateRecordBytes',
-  'homeLearningProjection','learningHistoryPage','learningManagementSummary','runtimeLearningCandidates',
+  'homeLearningProjection','learningSchedulePage','learningHistoryPage','learningManagementSummary','runtimeLearningCandidates',
   'studyScopeMember','latestLearningActionAt','countIntroducedLearningTargets','learningRunIdsForTarget',
   'openLearningRunTargets','countContentAttemptsSince','learningTargetIdsForBookUpgrade',
   'isMediaReferenced','portableMedia','portableMediaDiagnostics',
@@ -59,6 +60,7 @@ export interface CoordinatedSqliteBackend {
   count(table: SqliteLibraryTable): Promise<number>;
   estimateRecordBytes(tables: readonly SqliteLibraryTable[]): Promise<number>;
   homeLearningProjection(languageRouteId: string,clock?:number): Promise<HomeLearningStorageProjection>;
+  learningSchedulePage(query:LearningScheduleQuery):Promise<LearningSchedulePage>;
   learningHistoryPage(query:LearningHistoryRequest):Promise<StoredLearningHistoryPage>;
   learningManagementSummary(query:LearningManagementSummaryQuery):Promise<LearningManagementStorageSummary>;
   runtimeLearningCandidates(query:RuntimeLearningCandidateQuery):Promise<RuntimeLearningCandidates>;
@@ -196,6 +198,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
   runtimeLearningCandidates(query:RuntimeLearningCandidateQuery):Promise<RuntimeLearningCandidates>{return this.call({kind:'runtimeLearningCandidates',query}) as Promise<RuntimeLearningCandidates>;}
   studyScopeMember(scopeRevisionId:string,targetId:string):Promise<import('./studyScopes').LocalStudyScopeMember|null>{return this.call({kind:'studyScopeMember',scopeRevisionId,targetId}) as Promise<import('./studyScopes').LocalStudyScopeMember|null>;}
   latestLearningActionAt(runId:string):Promise<string|null>{return this.call({kind:'latestLearningActionAt',runId}) as Promise<string|null>;}
+  learningSchedulePage(query:LearningScheduleQuery):Promise<LearningSchedulePage>{return this.call({kind:'learningSchedulePage',query}) as Promise<LearningSchedulePage>;}
   learningHistoryPage(query:LearningHistoryRequest):Promise<StoredLearningHistoryPage>{return this.call({kind:'learningHistoryPage',query}) as Promise<StoredLearningHistoryPage>;}
   learningManagementSummary(query:LearningManagementSummaryQuery):Promise<LearningManagementStorageSummary>{return this.call({kind:'learningManagementSummary',query}) as Promise<LearningManagementStorageSummary>;}
 
@@ -616,6 +619,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       case 'runtimeLearningCandidates':return backend.runtimeLearningCandidates(input.query);
       case 'studyScopeMember':return backend.studyScopeMember(input.scopeRevisionId,input.targetId);
       case 'latestLearningActionAt':return backend.latestLearningActionAt(input.runId);
+      case 'learningSchedulePage':return backend.learningSchedulePage(input.query);
       case 'learningHistoryPage':return backend.learningHistoryPage(input.query);
       case 'learningManagementSummary':return backend.learningManagementSummary(input.query);
       case 'countIntroducedLearningTargets': return backend.countIntroducedLearningTargets(

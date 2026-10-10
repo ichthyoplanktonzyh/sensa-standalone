@@ -450,7 +450,20 @@
     "recordsUnit": "件",
     "trend": "学習・復習・補強の推移",
     "trendValues": "推移の数値を見る",
-    "timezone": "日付はこの端末のタイムゾーンで集計します：{{zone}}。"
+    "timezone": "日付はこの端末のタイムゾーンで集計します：{{zone}}。",
+    "forecast": "今後の予定",
+    "forecastNote": "現在の学習ルートの予定であり、確定した約束ではありません。7/30暦日には今日の残り時間を含み、期限超過は除きます。学習や計画変更で日付は変わります。",
+    "forecastPeriod": "予測期間",
+    "forecastDays": "今後{{count}}日",
+    "forecastReset": "予測全体を見る",
+    "forecastError": "予定を読み取れませんでした。計画は変更せず再試行できます。",
+    "forecastInitial": "初学には確定した期限がないため予測できません。",
+    "forecastLanguage": "選択した言語は現在のルート外です。対応するルートを選んでください。",
+    "forecastRoute": "現在のルート：{{language}} → {{support}}",
+    "forecastCount": "現在{{count}}件の予定",
+    "forecastEmpty": "この期間に予定された目標はありません。",
+    "forecastPrevious": "前のページ",
+    "forecastNext": "次のページ"
   },
   "study": {
     "calendar": {

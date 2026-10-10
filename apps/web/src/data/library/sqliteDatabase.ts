@@ -1,3 +1,4 @@
+import type {LearningScheduleQuery,LearningSchedulePage} from '../../learning/system/learningScheduleModel';
 import type { Database, Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 import {meaningMediaReferences} from '../../experience/personalMeaningJourney/meaningHistoryRead';
 import {isFatalSqliteConnectionFailure,sqliteRollbackFailure} from './sqliteConnectionFailure';
@@ -572,6 +573,7 @@ export class SqliteRecordDatabase {
   }
 
   learningHistoryProjection():StoredLearningRecord[]{return this.learningHistory.records();}
+  learningSchedulePage(query:LearningScheduleQuery):LearningSchedulePage{return this.runtimeCandidates.schedule(query);}
   learningHistoryPage(query:LearningHistoryRequest):StoredLearningHistoryPage{return this.learningHistory.page(query);}
   learningManagementSummary(query:LearningManagementSummaryQuery):LearningManagementStorageSummary{return this.runtimeCandidates.management(query);}
   runtimeLearningCandidates(query:RuntimeLearningCandidateQuery):RuntimeLearningCandidates{return this.runtimeCandidates.read(query);}

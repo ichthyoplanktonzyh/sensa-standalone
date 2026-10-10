@@ -80,6 +80,17 @@ test('Today separates empty, resumed and future-review states and its counts ope
  await expect(list.locator('[data-learning-target]')).toHaveCount(2);
  const facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
  expect(facts.records).toHaveLength(2);expect(new Set(facts.records.map(record=>record.recordId)).size).toBe(2);
+ await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的学习',exact:true}).click();await page.locator('#s-study').getByRole('button',{name:'学习统计',exact:true}).click();
+ const stats=page.locator('#s-stats'),forecast=stats.getByRole('region',{name:'未来到期安排',exact:true});
+ await forecast.getByRole('button',{name:'未来 30 天',exact:true}).click();await expect(forecast.getByRole('status')).toHaveText('当前计划有 2 个目标到期');await expect(forecast.locator('ol button')).toHaveCount(2);
+ const forecastTarget=forecast.locator('ol button').first();await forecastTarget.click();await expect(detail).toBeVisible();await detail.getByRole('button',{name:'返回',exact:true}).click();await expect(forecast.locator('ol button')).toHaveCount(2);
+ await forecast.locator('tbody button').first().click();await expect(forecast.getByRole('button',{name:'查看整个预测',exact:true})).toBeVisible();await expect(forecast.locator('ol button')).toHaveCount(2);
+ await stats.getByRole('combobox',{name:'记录类型',exact:true}).selectOption('initial_learning');await expect(forecast.getByText('初学没有已确定的到期日，暂不能预测。',{exact:true})).toBeVisible();await expect(forecast.locator('ol button')).toHaveCount(0);
+ await stats.getByRole('combobox',{name:'记录类型',exact:true}).selectOption('all');await expect(forecast.locator('ol button')).toHaveCount(2);
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningScheduleReadsForTest(true));await expect(forecast.getByRole('alert')).toBeVisible();await expect(forecast.getByRole('status')).toHaveCount(0);await forecast.getByRole('button',{name:'重试',exact:true}).click();await expect(forecast.getByRole('alert')).toBeVisible();
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningScheduleReadsForTest(false));await expect(forecast.locator('ol button')).toHaveCount(2);
+ await forecast.scrollIntoViewIfNeeded();await page.screenshot({path:testInfo.outputPath('statistics-due-forecast-desktop.png')});
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(facts);
  await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'今日',exact:true}).click();
  const due=facts.completedTargets.map(target=>Date.parse(target.nextReviewAt!));
  await page.clock.setFixedTime(new Date(Math.max(...due)+60_000));await page.reload();
@@ -318,6 +329,14 @@ test('review-only Again survives a lost receipt and reload as a separate Relearn
  const after=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest());
  expect(after.targets).toEqual(facts.targets);expect(after.behavioralEvidenceCount).toBe(0);
  await runtime.getByRole('button',{name:/完成并回到首页/}).click();await expect(home.getByRole('button',{name:'继续学习',exact:true})).toHaveCount(0);await expect(home.getByRole('button',{name:'开始学习',exact:true})).toBeEnabled();
+ const beforeStatistics=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的学习',exact:true}).click();await page.locator('#s-study').getByRole('button',{name:'学习统计',exact:true}).click();
+ const stats=page.locator('#s-stats');await stats.getByRole('button',{name:'全部可用记录',exact:true}).click();await expect(stats.locator('dl dd')).toHaveText(['1','1','1']);await expect(stats.locator('ol').first().getByRole('button')).toHaveCount(3);
+ const trend=stats.getByRole('img',{name:'首学、复习与巩固趋势',exact:true});for(const label of ['首次学习记录 1','复习记录 1','巩固记录 1'])await expect(trend.locator('desc')).toContainText(label);
+ await trend.focus();await expect(trend).toBeFocused();await stats.locator('details > summary').filter({hasText:'查看趋势数值'}).click();await expect(stats.getByRole('table',{name:'查看趋势数值',exact:true})).toBeVisible();
+ await trend.scrollIntoViewIfNeeded();await page.screenshot({path:test.info().outputPath('statistics-real-three-kind-trend.png')});
+ await stats.getByRole('combobox',{name:'记录类型',exact:true}).selectOption('retention_review');await expect(stats.locator('dl dd')).toHaveText(['0','1','0']);await expect(stats.locator('ol').first().getByRole('button')).toHaveCount(1);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(beforeStatistics);
 });
 
 test('initial Again retries the same Run, failed writes do not advance, and a lost receipt rereads saved progress',async({page})=>{

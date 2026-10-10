@@ -450,7 +450,20 @@
     "recordsUnit": "registros",
     "trend": "Tendência de aprendizagem, revisão e reforço",
     "trendValues": "Ver valores",
-    "timezone": "Os dias usam o fuso horário deste dispositivo: {{zone}}."
+    "timezone": "Os dias usam o fuso horário deste dispositivo: {{zone}}.",
+    "forecast": "Próximos vencimentos",
+    "forecastNote": "Retrato do plano da rota atual, sem compromisso fixo. Os próximos 7/30 dias locais incluem o restante de hoje e excluem atrasos. Estudar ou mudar o plano pode alterar as datas.",
+    "forecastPeriod": "Período previsto",
+    "forecastDays": "Próximos {{count}} dias",
+    "forecastReset": "Ver toda a previsão",
+    "forecastError": "Não foi possível ler o plano. Tente novamente sem alterá-lo.",
+    "forecastInitial": "O estudo inicial não tem prazo confirmado para prever.",
+    "forecastLanguage": "Este idioma está fora da rota atual. Selecione a rota correspondente.",
+    "forecastRoute": "Rota atual: {{language}} → {{support}}",
+    "forecastCount": "{{count}} objetivos programados",
+    "forecastEmpty": "Nenhum objetivo programado neste período.",
+    "forecastPrevious": "Página anterior",
+    "forecastNext": "Próxima página"
   },
   "study": {
     "calendar": {

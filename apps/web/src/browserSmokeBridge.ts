@@ -40,6 +40,7 @@ type BrowserSmokeBridge = {
   releaseDirectEnrollmentResultForTest():void;
   failLearningWorkspaceReadsForTest(active:boolean):Promise<void>;
   failLearningManagementReadsForTest(active:boolean):Promise<void>;
+  failLearningScheduleReadsForTest(active:boolean):Promise<void>;
   failLearningHistoryReadsForTest(active:boolean):Promise<void>;
   failLearningRuntimeReadsForTest(active:boolean):Promise<void>;
   failLearningTargetReadsForTest(active:boolean):Promise<void>;
@@ -302,6 +303,12 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
       if(restoreLearningReads)throw new Error('Learning read fault already active');const original=learningSystem.read;
       learningSystem.read=(async query=>{if(query.kind==='management')throw new Error('fixture-management-read-failure');return original(query);}) as typeof original;
       restoreLearningReads=()=>{learningSystem.read=original;};
+    },
+    async failLearningScheduleReadsForTest(active){
+      const {learningSystem}=await import('./learning/system');
+      let control=Reflect.get(learningSystem,'scheduleReadFailureForTest') as {active:boolean}|undefined;
+      if(control)control.active=active;else{control={active};const read=learningSystem.read;Reflect.set(learningSystem,'scheduleReadFailureForTest',control);const held=control;learningSystem.read=(async query=>{if(query.kind==='schedule'&&held.active)throw Error('fixture schedule read failed');return read(query);}) as typeof read;}
+      window.dispatchEvent(new CustomEvent('sensa-library-changed',{detail:{tables:['learningTargets']}}));
     },
     async failLearningHistoryReadsForTest(active){
       const {learningSystem}=await import('./learning/system');
