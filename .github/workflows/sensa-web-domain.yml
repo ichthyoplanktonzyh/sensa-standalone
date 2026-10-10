@@ -1,0 +1,123 @@
+name: Migrate Sensa Web address (configuration only)
+on:
+  workflow_dispatch:
+    inputs:
+      baseline_system_run:
+        description: Successful unified release whose live application version must remain unchanged
+        required: true
+        type: string
+      owner_accepted:
+        description: Authorize only the owned-domain, CORS and Auth redirect changes
+        required: true
+        default: false
+        type: boolean
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: sensa-production
+  cancel-in-progress: false
+jobs:
+  domain:
+    environment:
+      name: web-production
+      url: https://learnsensa.com
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SENSA_WEB_ORIGIN: https://learnsensa.com
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      VITE_SENSA_API_URL: ${{ vars.VITE_SENSA_API_URL }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_WORKER_NAME: ${{ vars.CLOUDFLARE_WORKER_NAME }}
+    steps:
+      - name: Require exact configuration authority
+        env:
+          OWNER_ACCEPTED: ${{ inputs.owner_accepted }}
+          BASELINE_RUN: ${{ inputs.baseline_system_run }}
+        run: |
+          node --input-type=module <<'JS'
+          if(process.env.OWNER_ACCEPTED!=='true'||!/^[1-9][0-9]*$/.test(process.env.BASELINE_RUN??'')||process.env.GITHUB_REF!=='refs/heads/main')throw Error('Explicit owner authorization on main required');
+          JS
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BASELINE_RUN" --jq '{conclusion,path,head_repository: .head_repository.full_name}' > "$RUNNER_TEMP/domain-baseline-run.json"
+          node --input-type=module <<'JS'
+          import {readFileSync} from 'node:fs';
+          const run=JSON.parse(readFileSync(process.env.RUNNER_TEMP+'/domain-baseline-run.json','utf8'));
+          if(run.conclusion!=='success'||run.path!=='.github/workflows/sensa-release.yml'||run.head_repository!==process.env.GITHUB_REPOSITORY)throw Error('Successful same-repository unified release required');
+          JS
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Focused configuration tests
+        run: |
+          node --import tsx tests/web/run.mts --suite=fast --id=domain-baseline
+          node --import tsx tests/web/run.mts --suite=fast --id=supabase-auth-config
+      - name: Restore the successful baseline and verify the unchanged live version
+        env:
+          BASELINE_RUN: ${{ inputs.baseline_system_run }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          gh run download "$BASELINE_RUN" --pattern 'sensa-system-release-*' --dir .tmp/domain-baseline
+          baseline_manifest="$(find .tmp/domain-baseline -name system-release-manifest.json -type f -print -quit)"
+          test -n "$baseline_manifest"
+          echo "SENSA_BASELINE_MANIFEST=$baseline_manifest" >> "$GITHUB_ENV"
+          SENSA_BASELINE_MANIFEST="$baseline_manifest" node scripts/release/domainBaseline.mjs
+      - name: Refuse application source drift before changing production configuration
+        run: git diff --exit-code "$SENSA_BASELINE_APP_SHA" HEAD -- apps packages db/migrations supabase/functions content/authored
+      - uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520
+        with:
+          version: 2.117.0
+      - name: Change only API origin and Auth redirect configuration
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          supabase secrets set "ALLOWED_ORIGINS=$SENSA_WEB_ORIGIN" --project-ref "$SUPABASE_PROJECT_REF"
+          node scripts/release/supabaseAuthConfig.mjs --apply
+      - name: Apply owned-domain routing without uploading or promoting application code
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler triggers deploy --name "$CLOUDFLARE_WORKER_NAME"
+      - name: Verify public domain boundaries and unchanged application version
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          node scripts/release/hostedSmoke.mjs
+          node scripts/release/domainBaseline.mjs
+      - name: Build only the extension target configuration from unchanged tested source
+        env:
+          SENSA_EXTENSION_WEB_URL: https://learnsensa.com
+          SENSA_EXTENSION_API_URL: ${{ vars.VITE_SENSA_API_URL }}
+        run: |
+          git diff --exit-code "$SENSA_BASELINE_APP_SHA" HEAD -- apps packages db/migrations supabase/functions content/authored
+          gh run download "$SENSA_BASELINE_CI_RUN" --name "sensa-production-$SENSA_BASELINE_APP_SHA" --dir .tmp/domain-baseline-candidate
+          node --input-type=module <<'JS'
+          import {readFileSync} from 'node:fs';
+          import {createHash} from 'node:crypto';
+          const root='.tmp/domain-baseline-candidate/',proof=JSON.parse(readFileSync('release-candidate/domain-migration-baseline.json','utf8'));
+          const raw=readFileSync(root+'release-candidate/manifest.json'),m=JSON.parse(raw),hash=b=>createHash('sha256').update(b).digest('hex');
+          if(hash(raw)!==proof.candidateManifestSha256||m.commit!==proof.sourceCommit||m.provenance.workflowRunId!==proof.ciRunId||m.provenance.workflowRunAttempt!==proof.ciRunAttempt)throw Error('Baseline candidate provenance mismatch');
+          const files=m.files.filter(f=>f.path.startsWith('packages/contracts/dist/'));if(!files.length)throw Error('Baseline contracts absent');
+          for(const f of files)if(hash(readFileSync(root+f.path))!==f.sha256)throw Error('Baseline contracts digest mismatch');
+          JS
+          mkdir -p packages/contracts/dist
+          cp -R .tmp/domain-baseline-candidate/packages/contracts/dist/. packages/contracts/dist/
+          npm run build -w @sensa/browser-extension
+          node --input-type=module <<'JS'
+          import {readFileSync} from 'node:fs';
+          const m=JSON.parse(readFileSync('apps/browser-extension/dist/manifest.json','utf8'));
+          if(!m.content_scripts.some(s=>s.matches.includes('https://learnsensa.com/*')))throw Error('Extension target mismatch');
+          JS
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: sensa-domain-migration-${{ github.sha }}
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            release-candidate/domain-migration-baseline.json
+            apps/browser-extension/dist/

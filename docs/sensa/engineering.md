@@ -1087,6 +1087,13 @@ gh workflow run sensa-release.yml \
 
 `.github/workflows/sensa-web-candidate.yml` 是可选的深度验证，不是日常发布前置。`.github/workflows/sensa-web-monitor.yml` 负责已启用环境的定时公网和聚合阈值检查。
 
+仅迁移已上线版本的网址时，使用 `.github/workflows/sensa-web-domain.yml` 的配置入口，不发布新的应用
+候选。它要求 owner 明确选择一份成功的统一发布记录，并核验其中的绿色 main CI 和 Cloudflare 当前
+100% 版本；切换前后版本必须不变。工作流只更新 API 的 `ALLOWED_ORIGINS`、Supabase Auth 回跳与
+Worker triggers，不上传 Web、部署 API、迁移数据或发布 Registry；扩展仅从与绿色基线相同的源码
+重新固定目标网址。限定配置测试、真实公网边界 smoke 与单独的真实邮件登录验收是该变更的检查边界；
+不能把这类配置操作冒称为未通过 CI 的新应用发布，也不能据此认领未解决的旅程回归。
+
 学习内容拥有独立于应用版本的生命周期，但 `.github/workflows/sensa-learning-content-publish.yml` 只是由
 统一 Release Planner 调用的内部执行器，不接受人工 dispatch。它从 `content/authored/*.json`
 与仓库固定的路线基础输入重建正式 Book source，再构建每个 Sense 的不可变 `.sensa` 并原样封装成 `.sensa-book`，执行无网络 Registry smoke，按 Book archive →
