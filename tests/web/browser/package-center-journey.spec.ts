@@ -188,6 +188,34 @@ test('detail metadata and real samples survive repeated download, cancel, return
  await expect(catalog.getByRole('button',{name:'紧凑列表',exact:true})).toHaveAttribute('aria-pressed','true');
 });
 
+test('an enrolled Book cold read failure keeps membership unknown and recovery retains usable 320px learning search',async({page},testInfo)=>{
+ fixture.setRegistry([fixture.reviewDelivery.descriptor]);
+ await page.goto(`${fixture.origin}/catalog`);const catalog=page.locator('#s-catalog'),book=page.locator('#s-catalog-book');
+ const key=fixture.reviewDelivery.descriptor.book.bookKey,card=catalog.locator(`[data-package-key="${key}"]`);
+ await card.click();await book.getByRole('button',{name:'下载学习包',exact:true}).click();
+ await expect(book.getByRole('button',{name:'加入学习',exact:true})).toBeEnabled();await book.getByRole('button',{name:'加入学习',exact:true}).click();
+ await expect(book.getByText('已加入学习',{exact:true})).toBeVisible();const facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());expect(facts.targetIds).toHaveLength(2);expect(facts.enrollments).toHaveLength(1);
+ const durableLearning=()=>page.evaluate(async()=>{const saved=await window.__sensaBrowserSmoke!.durableBackupFactsForTest();return {targets:saved.learningTargets,enrollments:saved.curriculumEnrollments};});
+ const storedFacts=await durableLearning();
+ await book.getByRole('button',{name:'返回',exact:true}).click();await expect(card.getByText('已加入学习',{exact:true})).toBeVisible();
+ await page.addInitScript(()=>{const timer=setInterval(()=>{if(!window.__sensaBrowserSmoke)return;clearInterval(timer);void window.__sensaBrowserSmoke.failLearningWorkspaceReadsForTest(true);},1);});
+ await page.reload();await expect(catalog.getByRole('alert')).toContainText('读取');
+ await expect(card.getByText('无法读取本机学习资料，请重试。',{exact:true})).toBeVisible();await expect(card.getByText('已下载',{exact:true})).toHaveCount(0);await expect(card.getByText('已加入学习',{exact:true})).toHaveCount(0);
+ expect(await durableLearning()).toEqual(storedFacts);
+ await page.screenshot({path:testInfo.outputPath('catalog-cold-learning-read-unavailable.png')});
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningWorkspaceReadsForTest(false));await catalog.getByRole('alert').getByRole('button',{name:'重试',exact:true}).click();
+ await expect(card.getByText('已加入学习',{exact:true})).toBeVisible();expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(facts);
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的学习',exact:true}).click();await page.locator('#s-study').getByRole('button',{name:'查看内容',exact:true}).click();
+ await page.setViewportSize({width:320,height:740});const library=page.locator('#s-learning-library'),search=library.getByRole('searchbox',{name:'搜索单词或意思',exact:true});
+ await search.pressSequentially('borow');await search.press('ArrowLeft');await search.press('ArrowLeft');await search.press('r');await expect(search).toHaveValue('borrow');await expect(search).toBeFocused();
+ await expect(library.locator('[data-learning-target]')).toHaveCount(1);await expect(library.locator('[data-learning-target]')).toContainText('borrow');
+ const searchBox=(await search.boundingBox())!,filter=library.getByRole('combobox',{name:'学习状态',exact:true}),sort=library.getByRole('combobox',{name:'排序',exact:true});
+ expect(searchBox.width).toBeGreaterThanOrEqual(200);expect((await filter.boundingBox())!.y).toBeGreaterThanOrEqual(searchBox.y+searchBox.height);expect((await sort.boundingBox())!.y).toBeGreaterThanOrEqual(searchBox.y+searchBox.height);
+ await search.press('ControlOrMeta+A');await search.press('Backspace');await expect(library.locator('[data-learning-target]')).toHaveCount(2);
+ await filter.selectOption('new');await sort.selectOption('expression');await expect(library.locator('[data-learning-target]')).toHaveCount(2);expect(await library.evaluate(element=>element.scrollWidth<=element.clientWidth)).toBe(true);
+ await search.fill('borrow');await page.screenshot({path:testInfo.outputPath('learning-search-320px-full-row.png')});expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(facts);
+});
+
 test('a missing Book in a cached catalog exposes failed discovery and retries the newly published detail without installing',async({page,context},testInfo)=>{
  await page.goto(`${fixture.origin}/catalog`);
  const catalog=page.locator('#s-catalog').last(),book=page.locator('#s-catalog-book').last();

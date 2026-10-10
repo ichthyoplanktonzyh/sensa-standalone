@@ -225,7 +225,7 @@ export function PackageCatalogScreen({active,c,params,onParamsChange,onBack,onOp
    <div role="group" aria-label={localFlowText('catalogView')} className="flex flex-wrap gap-2">{(['cards','list'] as const).map(view=><button type="button" key={view} aria-pressed={state.view===view} className={`${setupButton} ${state.view===view?'border-action-primary bg-accent-soft text-action-primary':''}`} onClick={()=>update({view})}>{state.view===view&&<Check size={14} aria-hidden="true"/>}{localFlowText(view==='cards'?'catalogCards':'catalogList')}</button>)}</div>
   </div>
   <div ref={collection}>
-   {c.catalogStatus==='unavailable'?null:<PackageCards installation={c.installation} progress={c.progress} items={c.catalogStatus==='ready'?results.items:[]} loaded={c.catalogStatus==='ready'} view={state.view} onOpen={item=>{setReturnFocus(item.key);onOpenBook(item.key);}} emptyKey={state.query||state.target||state.support?'packageNoResults':'packageEmpty'}/>}
+   {c.catalogStatus==='unavailable'?null:<PackageCards installation={c.installation} progress={c.progress} items={c.catalogStatus==='ready'?results.items:[]} loaded={c.catalogStatus==='ready'} learningStatus={c.loadStatus} view={state.view} onOpen={item=>{setReturnFocus(item.key);onOpenBook(item.key);}} emptyKey={state.query||state.target||state.support?'packageNoResults':'packageEmpty'}/>}
   </div>
   {c.catalogStatus==='ready'&&results.total>0&&<CatalogPagination page={results.page} pages={results.pages} onPage={page=>{if(page!==results.page){requestedPageFocus.current=true;update({page});}}}/>}
  </LearningSetupFrame>;
@@ -293,7 +293,7 @@ export function PackageLibraryScreen({active,c,onBack,onCatalog,onOpenBook,onOpe
   {c.loaded&&c.unavailablePackageKeys.length>0&&<p role="status" className="mb-6 rounded-xl border border-border-strong bg-surface-subtle p-4 text-sm leading-6">{localFlowText('packageFilesUnavailable',{count:c.unavailablePackageKeys.length})}</p>}
   {c.notice&&<p role="status" className="mb-6 rounded-xl border border-border-subtle bg-surface-subtle p-4 text-sm leading-6">{localFlowNotice(c.notice)}</p>}
   <div className="mb-5 flex min-h-11 items-center gap-3 rounded-2xl border border-border-strong bg-surface-panel px-4 focus-within:ring-2 focus-within:ring-focus"><Search size={20} className="shrink-0 text-fg-secondary" aria-hidden="true"/><input type="search" aria-label={localFlowText('packageSearch')} placeholder={localFlowText('packageSearch')} value={query} onChange={event=>setQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none"/></div>
-  <PackageCards items={results} installation={c.installation} progress={c.progress} loaded={c.loaded} onOpen={item=>item.kind==='published'?onOpenBook(item.key):onOpenPackage(item.listKey)} emptyKey={query?'packageNoResults':'packageEmpty'}/>
+  <PackageCards items={results} installation={c.installation} progress={c.progress} loaded={c.loaded} learningStatus={c.loadStatus} onOpen={item=>item.kind==='published'?onOpenBook(item.key):onOpenPackage(item.listKey)} emptyKey={query?'packageNoResults':'packageEmpty'}/>
   <input ref={input} hidden tabIndex={-1} aria-label={localFlowText('importPackage')} type="file" accept=".sensa,application/zip,application/octet-stream" disabled={c.busy} onChange={event=>{const file=event.target.files?.[0];event.target.value='';if(file)void c.previewImport(file).then(preview=>{if(preview)setCandidate({file,preview});});}}/>
  </LearningSetupFrame>;
 }

@@ -32,9 +32,10 @@ export function PackageStatus({children,error=false,onRetry}:{children:ReactNode
  </div>;
 }
 
-export function PackageCards({items,onOpen,emptyKey,loaded,view='cards',installation,progress}:{
+export function PackageCards({items,onOpen,emptyKey,loaded,learningStatus=loaded?'ready':'loading',view='cards',installation,progress}:{
  items:readonly PackageCenterItem[];onOpen:(item:PackageCenterItem)=>void;
  emptyKey:'packageEmpty'|'packageNoResults';loaded:boolean;view?:'cards'|'list';
+ learningStatus?:'loading'|'ready'|'unavailable';
  installation?:{bookKey:string;phase:string}|null;progress?:number|null;
 }){
  const {t}=useTranslation();
@@ -45,7 +46,7 @@ export function PackageCards({items,onOpen,emptyKey,loaded,view='cards',installa
      <div className="flex w-full flex-wrap items-start gap-3">
       <BookOpen size={19} className="mt-1 shrink-0 text-action-primary" aria-hidden="true"/>
       <h2 className="min-w-0 flex-1 break-words text-lg font-medium">{item.title}</h2>
-      {loaded?<span className="rounded-md bg-accent-soft px-2 py-1 text-xs text-action-primary">{packageItemState(item,installation,progress)}</span>:<span role="status" aria-label={t('reliability.loading')} className="h-6 w-20 animate-pulse rounded-lg bg-surface-subtle"/>}
+      {learningStatus==='ready'?<span className="rounded-md bg-accent-soft px-2 py-1 text-xs text-action-primary">{packageItemState(item,installation,progress)}</span>:learningStatus==='unavailable'?<span className="max-w-full break-words rounded-md bg-surface-subtle px-2 py-1 text-xs text-fg-secondary">{localFlowText('learningReadFailed')}</span>:<span role="status" aria-label={t('reliability.loading')} className="h-6 w-20 animate-pulse rounded-lg bg-surface-subtle"/>}
      </div>
      {item.description&&<p className={`${view==='list'?'line-clamp-2':'line-clamp-3'} w-full break-words text-sm leading-6 text-fg-secondary`}>{item.description}</p>}
      <div className="mt-auto flex w-full flex-wrap items-end justify-between gap-2">
