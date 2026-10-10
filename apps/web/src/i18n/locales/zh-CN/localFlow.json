@@ -520,6 +520,24 @@
     "packageSource": "已下载内容的来源",
     "packageInstalledVersion": "已下载版本：v{{version}}",
     "packageSampleVersion": "以下表达与含义来自已下载的 v{{version}}。",
-    "packageDownloadedAction": "已下载到本机"
+    "packageDownloadedAction": "已下载到本机",
+    "todayWaitingTitle": "学习已保存，等待到期复习",
+    "todayRouteEmptyTitle": "当前路线暂无学习任务",
+    "todayIdleTitle": "当前安排暂无可开始的任务",
+    "nextReviewLabel": "下次复习",
+    "learningFilterDue": "到期复习与巩固",
+    "learningFilterNew": "可开始新学",
+    "learningFilterPaused": "暂停",
+    "learningPaused": "已暂停",
+    "learningNotPlanned": "未在当前安排中",
+    "learningNotScheduled": "未安排",
+    "learningSource": "来源",
+    "learningExpression": "表达与意思",
+    "learningState": "状态",
+    "learningSort": "排序",
+    "learningSortDue": "下次到期",
+    "learningSortExpression": "表达",
+    "learningVisibleCount": "第 {{start}}–{{end}} 项，共 {{count}} 项",
+    "todayEmptyTitle": "还没有加入学习内容"
   }
 }

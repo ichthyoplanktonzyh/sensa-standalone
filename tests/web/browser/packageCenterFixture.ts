@@ -374,7 +374,7 @@ const emptySignedInPreflightRetry=(failure:'http-error'|'network-error')=>async(
  context.on('request',request=>{if(/\/sensa\/library-sync\/(?:commit|blocks\/store)$/u.test(new URL(request.url()).pathname))writes++;});
  await context.route(apiOrigin+'/sensa/library-sync/head',route=>{heads++;return fail?(failure==='network-error'?route.abort():route.fulfill({status:503,json:{code:'fixture_preflight_unavailable'}})):route.fulfill({json:{revision:0,manifest:null}});});
  await page.goto(origin);await expect(page.locator('#s-home').getByRole('button',{name:'重试恢复',exact:true})).toBeVisible();
- await expect(page.getByRole('heading',{name:'暂无可开始的学习',exact:true})).toHaveCount(0);
+ await expect(page.getByRole('heading',{name:'还没有加入学习内容',exact:true})).toHaveCount(0);
  await expect(page.locator('#s-home').getByText('正在加载 Sensa…',{exact:true})).toHaveCount(0);
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);expect(writes).toBe(0);
  for(const label of ['我的语义世界','我的学习','练习']){
@@ -387,7 +387,7 @@ const emptySignedInPreflightRetry=(failure:'http-error'|'network-error')=>async(
  await page.locator('#s-academy').getByRole('button',{name:'账号与设置',exact:true}).click();await expect(page.locator('#s-profile')).toBeVisible();
  await page.getByRole('button',{name:'今日',exact:true}).first().click();await expect(page.getByRole('button',{name:'重试恢复',exact:true})).toBeVisible();
  fail=false;await page.getByRole('button',{name:'重试恢复',exact:true}).click();
- await expect(page.getByRole('heading',{name:'暂无可开始的学习',exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'还没有加入学习内容',exact:true})).toBeVisible();
  expect(heads).toBeGreaterThan(1);expect(writes).toBe(0);
  await expect.poll(()=>page.evaluate(()=>window.__sensaBrowserSmoke!.syncStatus())).toBe('synced');
 };

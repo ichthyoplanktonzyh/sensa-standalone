@@ -9,11 +9,14 @@ import {localFlowNotice,localFlowText} from '../../i18n/localFlowText';
 import {useAccountExperience} from '../account/AccountContext';
 import {settleOperation} from './operationSettlement';
 import {createRefreshCoordinator} from './refreshCoordinator';
+import {homeLearningState} from './homeLearningState';
+import {interfaceLanguageDisplayName} from '../../i18n/languageDisplayName';
+import {resolveInterfaceLocale} from '../../i18n/localeRegistry';
 
 const loadLearningSystem=()=>import('../../learning/system/learningSystem').then(module=>module.learningSystem);
 
 export function HomeLearningController({active=true}:{active?:boolean}){
- const {t}=useTranslation();
+ const {t,i18n}=useTranslation();
  const {libraryAvailability}=useAccountExperience();
  const {goMain,setViewMode}=useShellNavigation();
  const languageContext=useActiveLanguageContext();
@@ -26,6 +29,7 @@ export function HomeLearningController({active=true}:{active?:boolean}){
  const [summaryEpoch,setSummaryEpoch]=useState<number|null>(null);
  const summaryReady=summaryEpoch===viewEpoch.current.version;
  const [busy,setBusy]=useState(false);
+ const operationInFlight=useRef(false);
  const [notice,setNotice]=useState('');
  const refresh=async()=>{
   const version=viewEpoch.current.version;
@@ -35,6 +39,7 @@ export function HomeLearningController({active=true}:{active?:boolean}){
   if(version!==viewEpoch.current.version)return;
   setProjection({routeKey,value:next});
   setSummaryEpoch(version);
+  setNotice('');
  };
  useEffect(()=>{
   if(!active)return;
@@ -73,6 +78,8 @@ export function HomeLearningController({active=true}:{active?:boolean}){
   return()=>window.clearTimeout(timer);
  },[active,projection?.nextChangeAt,languageContext.languageRouteId,languageContext.languageRouteRevision]);
  const perform=async(work:()=>Promise<unknown>)=>{
+  if(operationInFlight.current)return false;
+  operationInFlight.current=true;
   const version=viewEpoch.current.version;
   setBusy(true);setNotice('');
   try{
@@ -85,7 +92,7 @@ export function HomeLearningController({active=true}:{active?:boolean}){
    }
    if(outcome.projection==='stale')setNotice(localFlowText('progressReadFailed'));
    return true;
-  }finally{if(version===viewEpoch.current.version)setBusy(false);}
+  }finally{operationInFlight.current=false;if(version===viewEpoch.current.version)setBusy(false);}
  };
  const begin=async(targetId:string,limit:number,sessionIntent:'mixed'|'review_only'='mixed')=>{
   const version=viewEpoch.current.version;
@@ -101,8 +108,12 @@ export function HomeLearningController({active=true}:{active?:boolean}){
   await begin(targetId,projection?.dailyLimit??20,intent);
  };
  const authoritativeSummary=summaryReady&&libraryAvailability==='authoritative';
+ const state=homeLearningState(projection,authoritativeSummary);
+ const resumeContext=projection?.activeLanguageContext;
+ const resumeRoute=resumeContext&&(resumeContext.languageRouteId!==languageContext.languageRouteId||resumeContext.targetLanguageTag!==languageContext.targetLanguageTag||resumeContext.supportLanguageTag!==languageContext.supportLanguageTag)
+  ?`${interfaceLanguageDisplayName(resumeContext.targetLanguageTag,resolveInterfaceLocale(i18n.language))} · ${interfaceLanguageDisplayName(resumeContext.supportLanguageTag,resolveInterfaceLocale(i18n.language))}`:undefined;
  const status=notice
-  ? <p role="status">{localFlowNotice(notice)}</p>
+  ? <div role="alert"><p>{localFlowNotice(notice)}</p><button disabled={busy} onClick={()=>void perform(refresh)}>{t('reliability.retry')}</button></div>
   : libraryAvailability==='failed'
     ? <p role="alert">{t('cloudSync.openFailed')}</p>
     : libraryAvailability==='restoring'
@@ -110,6 +121,8 @@ export function HomeLearningController({active=true}:{active?:boolean}){
       : null;
  return <>
   <HomeScreen active={active} onGo={goMain}
+   state={state} nextReviewAt={projection?.nextReviewAt} resumeRoute={resumeRoute}
+   onOpenTargets={filter=>goMain('s-learning-library',{learningFilter:filter,learningQuery:undefined,learningSort:undefined,learningPage:undefined})}
    busy={busy} summaryReady={authoritativeSummary} status={status}
    onResume={projection?.activeRunId?()=>setViewMode('lightweight'):undefined}
    onStartMixed={()=>void start()} onStartReview={()=>void start(true)}

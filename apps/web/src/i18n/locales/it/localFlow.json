@@ -522,6 +522,24 @@
     "packageSource": "Fonti del contenuto scaricato",
     "packageInstalledVersion": "Versione scaricata: v{{version}}",
     "packageSampleVersion": "Queste espressioni e significati provengono dalla versione scaricata v{{version}}.",
-    "packageDownloadedAction": "Salvato su questo dispositivo"
+    "packageDownloadedAction": "Salvato su questo dispositivo",
+    "todayWaitingTitle": "Apprendimento salvato; in attesa del ripasso",
+    "todayRouteEmptyTitle": "Nessuna attività in questo percorso",
+    "todayIdleTitle": "Nessuna attività può iniziare nel piano attuale",
+    "nextReviewLabel": "Prossimo ripasso",
+    "learningFilterDue": "Ripasso in scadenza e consolidamento",
+    "learningFilterNew": "Primo apprendimento disponibile",
+    "learningFilterPaused": "In pausa",
+    "learningPaused": "In pausa",
+    "learningNotPlanned": "Fuori dal piano attuale",
+    "learningNotScheduled": "Non programmato",
+    "learningSource": "Fonte",
+    "learningExpression": "Espressione e significato",
+    "learningState": "Stato",
+    "learningSort": "Ordina",
+    "learningSortDue": "Prossima scadenza",
+    "learningSortExpression": "Espressione",
+    "learningVisibleCount": "Elementi {{start}}–{{end}} di {{count}}",
+    "todayEmptyTitle": "Nessun contenuto aggiunto da imparare"
   }
 }

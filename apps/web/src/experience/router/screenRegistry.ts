@@ -18,6 +18,10 @@ export const SHELL_PARAM_KEYS = [
   'page',
   'pageSize',
   'view',
+  'learningFilter',
+  'learningQuery',
+  'learningSort',
+  'learningPage',
 ] as const;
 
 export type ShellParamKey = (typeof SHELL_PARAM_KEYS)[number];
@@ -51,7 +55,7 @@ export const SHELL_SCREEN_DEFINITIONS = [
   { id: 's-expression-binding', host: 'app', params: ['meaningId', 'focusId'], instance: { params: ['meaningId', 'focusId'] } },
   { id: 's-learning-entry', host: 'learning' },
   { id: 's-direct-learning', host: 'learning', params: ['enrollmentId'], instance: { params: ['enrollmentId'], defaults: { enrollmentId: 'search' } } },
-  { id: 's-learning-library', host: 'learning' },
+  { id: 's-learning-library', host: 'learning',params:['learningFilter','learningQuery','learningSort','learningPage'] },
   { id: 's-learning-target', host: 'learning', params: ['targetId'], instance: { params: ['targetId'] } },
   { id: 's-library', host: 'learning' },
   { id: 's-library-package', host: 'learning', params: ['packageKey','publicationArchiveSha256'], instance: { params: ['packageKey','publicationArchiveSha256'] } },

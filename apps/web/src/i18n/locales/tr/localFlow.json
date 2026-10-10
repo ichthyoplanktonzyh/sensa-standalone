@@ -60,6 +60,24 @@
     "packageSource": "İndirilen içeriğin kaynakları",
     "packageInstalledVersion": "İndirilen sürüm: v{{version}}",
     "packageSampleVersion": "Bu ifadeler ve anlamlar indirilen v{{version}} sürümünden alınmıştır.",
-    "packageDownloadedAction": "Bu cihazda kaydedildi"
+    "packageDownloadedAction": "Bu cihazda kaydedildi",
+    "todayWaitingTitle": "Öğrenme kaydedildi; tekrar zamanı bekleniyor",
+    "todayRouteEmptyTitle": "Bu rotada görev yok",
+    "todayIdleTitle": "Mevcut planda başlayabilecek görev yok",
+    "nextReviewLabel": "Sonraki tekrar",
+    "learningFilterDue": "Zamanı gelen tekrar ve pekiştirme",
+    "learningFilterNew": "Hazır ilk öğrenme",
+    "learningFilterPaused": "Duraklatılan",
+    "learningPaused": "Duraklatıldı",
+    "learningNotPlanned": "Mevcut planın dışında",
+    "learningNotScheduled": "Planlanmadı",
+    "learningSource": "Kaynak",
+    "learningExpression": "İfade ve anlam",
+    "learningState": "Durum",
+    "learningSort": "Sırala",
+    "learningSortDue": "Sonraki tarih",
+    "learningSortExpression": "İfade",
+    "learningVisibleCount": "{{count}} öğeden {{start}}–{{end}}",
+    "todayEmptyTitle": "Henüz öğrenme içeriği eklenmedi"
   }
 }

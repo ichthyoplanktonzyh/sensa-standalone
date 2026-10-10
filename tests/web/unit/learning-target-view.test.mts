@@ -6,11 +6,22 @@ import {createRoot} from 'react-dom/client';
 import {learningSystem,type LearningSystem,type LearningTargetDetailProjection} from '../../../apps/web/src/learning/system';
 import {contentSupplySystem} from '../../../apps/web/src/contentSupply/system';
 import {usePackageLearning} from '../../../apps/web/src/experience/library/usePackageLearning';
+import {learningLibrarySelection,type LearningLibraryItem} from '../../../apps/web/src/experience/library/learningTargetBrowsing';
 
 vi.mock('react-i18next',async importOriginal=>({...await importOriginal<typeof import('react-i18next')>(),useTranslation:()=>({t:(key:string)=>key})}));
 vi.mock('../../../apps/web/src/experience/library/useActiveLanguageContext',async()=>{
  const {defaultSensaLanguageRoute,sensaPinnedLanguageContext}=await import('@sensa/contracts/sensa');
  return {useActiveLanguageContext:()=>sensaPinnedLanguageContext(defaultSensaLanguageRoute)};
+});
+
+test('Learning list keeps distinct targets with the same expression, separates paused from due, and sorts actual due instants',()=>{
+ const item=(id:string,group:LearningLibraryItem['group'],nextReviewAt:string|null):LearningLibraryItem=>({id,targetId:id,enrollmentId:null,expression:'same expression',meaning:`meaning ${id}`,sourceLabel:'verified Book',state:group,group,nextReviewAt});
+ const items=[item('B','due','2026-10-11T01:00:00+09:00'),item('A','due','2026-10-10T19:00:00Z'),item('C','paused','2026-10-01T00:00:00Z'),item('D','new',null)];
+ expect(learningLibrarySelection(items,'','all','expression','en').map(value=>value.id)).toEqual(['A','B','C','D']);
+ expect(learningLibrarySelection(items,'','due','due','en').map(value=>value.id)).toEqual(['B','A']);
+ expect(learningLibrarySelection(items,'','paused','due','en').map(value=>value.id)).toEqual(['C']);
+ expect(learningLibrarySelection(items,'meaning D','new','due','en').map(value=>value.id)).toEqual(['D']);
+ expect(learningLibrarySelection(items,'verified Book','all','due','en')).toHaveLength(4);
 });
 vi.mock('../../../apps/web/src/learning/system',async importOriginal=>({
  ...await importOriginal<typeof import('../../../apps/web/src/learning/system')>(),

@@ -520,6 +520,24 @@
     "packageSource": "ダウンロード済み内容の出典",
     "packageInstalledVersion": "ダウンロード済み：v{{version}}",
     "packageSampleVersion": "以下の表現と意味はダウンロード済みの v{{version}} の内容です。",
-    "packageDownloadedAction": "この端末に保存済み"
+    "packageDownloadedAction": "この端末に保存済み",
+    "todayWaitingTitle": "学習を保存しました。復習の時期を待っています",
+    "todayRouteEmptyTitle": "この学習ルートには課題がありません",
+    "todayIdleTitle": "現在の計画で開始できる課題はありません",
+    "nextReviewLabel": "次回の復習",
+    "learningFilterDue": "期限を迎えた復習と定着学習",
+    "learningFilterNew": "開始できる初回学習",
+    "learningFilterPaused": "一時停止",
+    "learningPaused": "一時停止中",
+    "learningNotPlanned": "現在の計画の対象外",
+    "learningNotScheduled": "未設定",
+    "learningSource": "出典",
+    "learningExpression": "表現と意味",
+    "learningState": "状態",
+    "learningSort": "並べ替え",
+    "learningSortDue": "次回の期限",
+    "learningSortExpression": "表現",
+    "learningVisibleCount": "{{count}} 件中 {{start}}–{{end}} 件",
+    "todayEmptyTitle": "まだ学習内容が追加されていません"
   }
 }

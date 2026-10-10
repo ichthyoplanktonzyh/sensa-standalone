@@ -65,7 +65,7 @@ export function useShellNavigation(): ShellNavigation {
         const kept = retainParamsForStack(merged, stack);
         const {bookKey:_pathBookKey,...searchParams}=kept;
         const encoded:Record<string,unknown>={...searchParams};
-        for(const key of ['page','pageSize'] as const){
+        for(const key of ['page','pageSize','learningPage'] as const){
           const value=searchParams[key];
           if(value&&/^\d+$/u.test(value)&&Number.isSafeInteger(Number(value)))encoded[key]=Number(value);
         }

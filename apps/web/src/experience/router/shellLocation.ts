@@ -151,7 +151,7 @@ export const parseShellParams = (search: Record<string, unknown>): ShellParams =
   for (const key of SHELL_PARAM_KEYS) {
     const value = search[key];
     if (typeof value === 'string' && value.length > 0) params[key] = value;
-    else if (['query','page','pageSize'].includes(key) && (typeof value === 'number' || typeof value === 'boolean')) params[key] = String(value);
+    else if (['query','page','pageSize','learningQuery','learningPage'].includes(key) && (typeof value === 'number' || typeof value === 'boolean')) params[key] = String(value);
   }
   return params as ShellParams;
 };

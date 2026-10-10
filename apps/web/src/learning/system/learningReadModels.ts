@@ -89,6 +89,7 @@ export interface LearningTargetProjection {
   readonly curriculumMembershipId: string;
   /** Future-source governance, distinct from material readiness and open work. */
   readonly planningActive?:boolean;
+  readonly planningPaused?:boolean;
   readonly languageContext: SensaFormalPinnedLanguageContext;
   readonly packageKey: string | null;
   readonly publicationArchiveSha256: string | null;
@@ -128,6 +129,10 @@ export interface LearningQueueProjection {
 
 export interface LearningHomeProjection {
   readonly activeRunId: string | null;
+  readonly activeLanguageContext: SensaFormalPinnedLanguageContext | null;
+  readonly hasLibraryContent: boolean;
+  readonly routeTargetCount: number;
+  readonly nextReviewAt: string | null;
   readonly dailyLimit: number | null;
   readonly readyInitialCount: number;
   readonly reviewDueCount: number;

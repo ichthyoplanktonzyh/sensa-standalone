@@ -58,6 +58,24 @@
     "packageSource": "Источники загруженного содержимого",
     "packageInstalledVersion": "Загруженная версия: v{{version}}",
     "packageSampleVersion": "Эти выражения и значения взяты из загруженной версии v{{version}}.",
-    "packageDownloadedAction": "Сохранено на этом устройстве"
+    "packageDownloadedAction": "Сохранено на этом устройстве",
+    "todayWaitingTitle": "Обучение сохранено; ожидание повторения",
+    "todayRouteEmptyTitle": "На этом маршруте нет заданий",
+    "todayIdleTitle": "В текущем плане нет заданий для начала",
+    "nextReviewLabel": "Следующее повторение",
+    "learningFilterDue": "Повторение по сроку и закрепление",
+    "learningFilterNew": "Доступное первое изучение",
+    "learningFilterPaused": "Приостановлено",
+    "learningPaused": "Приостановлено",
+    "learningNotPlanned": "Вне текущего плана",
+    "learningNotScheduled": "Не запланировано",
+    "learningSource": "Источник",
+    "learningExpression": "Выражение и значение",
+    "learningState": "Состояние",
+    "learningSort": "Сортировка",
+    "learningSortDue": "Ближайший срок",
+    "learningSortExpression": "Выражение",
+    "learningVisibleCount": "Элементы {{start}}–{{end}} из {{count}}",
+    "todayEmptyTitle": "Материалы для изучения ещё не добавлены"
   }
 }

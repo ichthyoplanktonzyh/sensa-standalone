@@ -522,6 +522,24 @@
     "packageSource": "Fuentes del contenido descargado",
     "packageInstalledVersion": "Versión descargada: v{{version}}",
     "packageSampleVersion": "Estas expresiones y significados pertenecen a la versión descargada v{{version}}.",
-    "packageDownloadedAction": "Guardado en este dispositivo"
+    "packageDownloadedAction": "Guardado en este dispositivo",
+    "todayWaitingTitle": "Aprendizaje guardado; esperando el próximo repaso",
+    "todayRouteEmptyTitle": "No hay tareas en esta ruta",
+    "todayIdleTitle": "No hay tareas que puedan comenzar en el plan actual",
+    "nextReviewLabel": "Próximo repaso",
+    "learningFilterDue": "Repaso pendiente y refuerzo",
+    "learningFilterNew": "Aprendizaje inicial disponible",
+    "learningFilterPaused": "En pausa",
+    "learningPaused": "En pausa",
+    "learningNotPlanned": "Fuera del plan actual",
+    "learningNotScheduled": "Sin programar",
+    "learningSource": "Fuente",
+    "learningExpression": "Expresión y significado",
+    "learningState": "Estado",
+    "learningSort": "Orden",
+    "learningSortDue": "Próximo vencimiento",
+    "learningSortExpression": "Expresión",
+    "learningVisibleCount": "Elementos {{start}}–{{end}} de {{count}}",
+    "todayEmptyTitle": "Aún no has añadido contenido para aprender"
   }
 }

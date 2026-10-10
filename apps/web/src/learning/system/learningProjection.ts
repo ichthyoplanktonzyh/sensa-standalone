@@ -423,6 +423,10 @@ export async function readLearningWorkspaceProjection(input: Readonly<{
   });
   const targets = snapshot.targets.flatMap((target) => {
     const planningActive=!!planningMembershipForContext(target,input.languageContext,enrollments,()=>true,sourceEligibility);
+    const planningPaused=!planningActive&&target.curriculumMemberships.some(member=>{
+      const context=member.languageContext,id=member.provenance.curriculumEnrollmentId;
+      return context.languageRouteId===input.languageContext.languageRouteId&&context.targetLanguageTag===input.languageContext.targetLanguageTag&&context.supportLanguageTag===input.languageContext.supportLanguageTag&&typeof id==='string'&&enrollments.get(id)?.bookPlan?.mode==='paused';
+    });
     const membership = planningMembershipForContext(target,input.languageContext,enrollments,member=>inspectLocalTargetReadiness(target,member,packageFor(packages,member)).status==='ready',sourceEligibility)??localCurriculumMembershipForContext(target, input.languageContext);
     return membership
       ? [{...projectLearningTarget(
@@ -432,7 +436,7 @@ export async function readLearningWorkspaceProjection(input: Readonly<{
         input.clock,
         membership.material,
         packageFor(packages, membership),
-      ),planningActive}]
+      ),planningActive,planningPaused}]
       : [];
   });
   return {
@@ -478,18 +482,24 @@ export async function readLearningTargetDetailProjection(input:Readonly<{
     const target=await tx.get<LocalLearningTarget>('learningTargets',input.targetId);
     const current=target?await currentPlanningMembership(tx,target,input.languageContext):undefined;
     const membership=current??(target?localCurriculumMembershipForContext(target,input.languageContext):undefined);
+    let planningPaused=false;
+    if(target&&!current)for(const member of target.curriculumMemberships){
+      if(!sameLearningSessionDirection(member.languageContext,input.languageContext))continue;
+      const id=member.provenance.curriculumEnrollmentId;
+      if(typeof id==='string'&&(await tx.get<LocalCurriculumEnrollment>('curriculumEnrollments',id))?.bookPlan?.mode==='paused'){planningPaused=true;break;}
+    }
     const activeId=await tx.get<string>('meta','learning-active');
     const run=activeId?await tx.get<LocalLearningRun>('learningRuns',activeId):undefined;
     if(activeId&&(!run||run.id!==activeId))throw new Error('localFlow.resourceInvalid');
     const packageKey=membership?.packageKey;
     const exportPackageKey=packageKey&&(await tx.existingRecordKeys('packageCache',[packageKey])).has(packageKey)?packageKey:null;
     const dailyLimit=(await readStudyPlans(tx))[input.languageContext.languageRouteId]?.dailyNewSenseLimit??null;
-    return {target,membership,planningActive:!!current,activeRunTargetIds:run?.targetIds??[],exportPackageKey,dailyLimit};
+    return {target,membership,planningActive:!!current,planningPaused,activeRunTargetIds:run?.targetIds??[],exportPackageKey,dailyLimit};
   });
   const packages=await contentSupplySystem.read({kind:'runtime_packages',packageKeys:snapshot.membership?.assurancePackageKey&&snapshot.membership.packageKey?[snapshot.membership.packageKey]:[]});
   const pack=packageFor(packages,snapshot.membership);
   return {
-    target:snapshot.target&&snapshot.membership?{...projectLearningTarget(snapshot.target,snapshot.membership,inspectLocalTargetReadiness(snapshot.target,snapshot.membership,pack).status,input.clock,snapshot.membership.material,pack),planningActive:snapshot.planningActive}:null,
+    target:snapshot.target&&snapshot.membership?{...projectLearningTarget(snapshot.target,snapshot.membership,inspectLocalTargetReadiness(snapshot.target,snapshot.membership,pack).status,input.clock,snapshot.membership.material,pack),planningActive:snapshot.planningActive,planningPaused:snapshot.planningPaused}:null,
     activeRunTargetIds:snapshot.activeRunTargetIds,exportPackageKey:snapshot.exportPackageKey,
     dailyLimit:snapshot.dailyLimit,policyOptions,
   };
@@ -621,15 +631,19 @@ export async function readLearningHomeProjection(input: Readonly<{
     if(activity&&activity.activeRunId!==activeId)throw new Error('localFlow.progressReadFailed');
     const dailyLimit=activity&&sameLearningSessionDirection(activity.languageContext,input.languageContext)
       ?activity.dailyNewSenseLimit:(await readStudyPlans(tx))[input.languageContext.languageRouteId]?.dailyNewSenseLimit;
-    const query={languageContext:input.languageContext,clock:input.clock,dailyLimit,supportedPolicies:policyOptions.map(option=>option.id),currentTargetIds:[],retryTargetIds:[]};
+    const query={languageContext:input.languageContext,clock:input.clock,dailyLimit,supportedPolicies:policyOptions.map(option=>option.id),currentTargetIds:[],retryTargetIds:[],includeTargetIds:false};
     const [summary,mixed,review]=await Promise.all([
       readLearningManagementSummary(query),
       readNextReadyRuntimeCandidate(tx,query,{run:null,intent:'mixed',retries:[]}),
       readNextReadyRuntimeCandidate(tx,query,{run:null,intent:'review_only',retries:[]}),
     ]);
     const nextTarget=mixed.nextTargetId?await tx.get<LocalLearningTarget>('learningTargets',mixed.nextTargetId):undefined;
+    let hasLearningIntent=false;
+    if(!summary.libraryTargetCount)for await(const keys of tx.recordKeyBatches('curriculumEnrollments')){hasLearningIntent=keys.length>0;break;}
     return {
-      activeRunId:activeRun?.id??null,dailyLimit:dailyLimit??null,
+      activeRunId:activeRun?.id??null,activeLanguageContext:activeRun?.languageContext??null,
+      hasLibraryContent:summary.libraryTargetCount>0||hasLearningIntent,routeTargetCount:summary.routeTargetCount,
+      nextReviewAt:summary.nextReviewAt===null?null:new Date(summary.nextReviewAt).toISOString(),dailyLimit:dailyLimit??null,
       readyInitialCount:summary.readyInitialCount,reviewDueCount:summary.reviewDueCount,
       mixedReadyCount:summary.readyInitialCount+summary.reviewDueCount,
       nextTargetId:activeRun?.targetId??mixed.nextTargetId,nextReviewTargetId:review.nextTargetId,

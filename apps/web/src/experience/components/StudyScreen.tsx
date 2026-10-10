@@ -24,6 +24,7 @@ interface StudyScreenProps {
   onTabChange: (tab: 'a' | 'b') => void;
   onAddLearning: () => void;
   onOpenTargetLibrary: () => void;
+  onOpenFilteredTargets?:(filter:'new'|'due')=>void;
   onOpenStats: () => void;
   onOpenTarget: (id: string) => void;
   onPolicyChange: (policy: LearningPolicy) => void;
@@ -69,7 +70,7 @@ export const StudyScreen = (props: StudyScreenProps) => {
           <h2 className="mt-5 text-3xl font-medium tracking-tight">{props.learningTargetCount?t('study.count',{count:props.learningTargetCount}):t('study.empty')}</h2>
           <p className="mt-2 text-xs text-fg-tertiary">{t('study.currentLanguage',{language:props.languageLabel})}</p>
           {props.learningTargetCount>0&&<dl className="my-7 grid grid-cols-2 divide-x divide-border-subtle">
-            {([['ready',props.readyInitialCount],['review',props.reviewCount]] as const).map(([key,value])=><div key={key} className="last:pl-6"><dt className="text-sm text-fg-secondary">{t('study.'+key)}</dt><dd className="mt-2 text-2xl tabular-nums">{value.toLocaleString(i18n.language)}</dd></div>)}
+            {([['ready',props.readyInitialCount,'new'],['review',props.reviewCount,'due']] as const).map(([key,value,filter])=><div key={key} className="last:pl-6"><dt className="text-sm text-fg-secondary">{t('study.'+key)}</dt><dd className="mt-2 text-2xl tabular-nums"><button aria-label={`${t('study.'+key)} ${value.toLocaleString(i18n.language)}`} className="rounded-control focus-visible:outline-2 focus-visible:outline-focus" onClick={()=>props.onOpenFilteredTargets?.(filter)}>{value.toLocaleString(i18n.language)}</button></dd></div>)}
           </dl>}
           <div className="mt-7 flex flex-wrap gap-2">
             {props.learningTargetCount>0&&<button className={`${studyButton} bg-action-primary text-action-on-primary hover:bg-action-primary-hover`} onClick={props.onOpenTargetLibrary}>{t('study.browse')}<ArrowRight size={16}/></button>}

@@ -58,6 +58,24 @@
     "packageSource": "Quellen heruntergeladener Inhalte",
     "packageInstalledVersion": "Heruntergeladene Version: v{{version}}",
     "packageSampleVersion": "Diese Ausdrücke und Bedeutungen stammen aus der heruntergeladenen Version v{{version}}.",
-    "packageDownloadedAction": "Auf diesem Gerät gespeichert"
+    "packageDownloadedAction": "Auf diesem Gerät gespeichert",
+    "todayWaitingTitle": "Lernen gespeichert; Wiederholung steht später an",
+    "todayRouteEmptyTitle": "Keine Aufgaben auf dieser Lernroute",
+    "todayIdleTitle": "Im aktuellen Plan kann keine Aufgabe beginnen",
+    "nextReviewLabel": "Nächste Wiederholung",
+    "learningFilterDue": "Fällige Wiederholung und Festigung",
+    "learningFilterNew": "Bereites erstes Lernen",
+    "learningFilterPaused": "Pausiert",
+    "learningPaused": "Pausiert",
+    "learningNotPlanned": "Außerhalb des aktuellen Plans",
+    "learningNotScheduled": "Nicht geplant",
+    "learningSource": "Quelle",
+    "learningExpression": "Ausdruck und Bedeutung",
+    "learningState": "Status",
+    "learningSort": "Sortierung",
+    "learningSortDue": "Nächste Fälligkeit",
+    "learningSortExpression": "Ausdruck",
+    "learningVisibleCount": "Einträge {{start}}–{{end}} von {{count}}",
+    "todayEmptyTitle": "Noch keine Lerninhalte hinzugefügt"
   }
 }

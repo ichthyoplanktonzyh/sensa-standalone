@@ -25,6 +25,55 @@ import {createPackageCenterFixture} from './packageCenterFixture';
 const fixture=createPackageCenterFixture('runtime');
 const test=fixture.test;
 
+test('Today separates empty, resumed and future-review states and its counts open the same learning filters with saved position',async({page},testInfo)=>{
+ await page.goto(fixture.origin);
+ await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ const home=page.locator('#s-home'),list=page.locator('#s-learning-library'),detail=page.locator('#s-learning-target');
+ await expect(home.getByRole('heading',{name:'还没有加入学习内容',exact:true})).toBeVisible();
+ await expect(home.getByRole('button',{name:'学习包目录',exact:true})).toBeEnabled();
+ fixture.setRegistry([fixture.reviewDelivery.descriptor]);
+ const runtime=await fixture.startOrdinaryBook(page,/到期复习样本/);
+ await runtime.getByRole('button',{name:'暂停',exact:true}).click();
+ await expect(home.getByRole('button',{name:'继续学习',exact:true})).toBeVisible();
+ await home.getByRole('button',{name:'待新学 2',exact:true}).click();
+ await expect(list.getByRole('combobox',{name:'学习状态',exact:true})).toHaveValue('new');
+ await expect(list.locator('[data-learning-target]')).toHaveCount(2);
+ await expect(list.getByRole('status')).toContainText('共 2 项');
+ const first=list.locator('[data-learning-target]').first(),id=await first.getAttribute('data-learning-target');
+ const expression=await first.locator('strong').textContent();
+ await first.focus();await first.press('Enter');await expect(detail).toBeVisible();
+ await detail.getByRole('button',{name:'返回',exact:true}).click();
+ await expect(list.locator(`[data-learning-target="${id}"]`)).toBeFocused();
+ await list.getByRole('searchbox',{name:'搜索单词或意思',exact:true}).fill(expression!);
+ await list.getByRole('combobox',{name:'排序',exact:true}).selectOption('expression');
+ await page.reload();await expect(list.getByRole('searchbox')).toHaveValue(expression!);
+ await expect(list.getByRole('combobox',{name:'排序',exact:true})).toHaveValue('expression');
+ await list.getByRole('searchbox').fill('');
+ await page.screenshot({path:testInfo.outputPath('learning-list-desktop.png')});
+ await page.setViewportSize({width:320,height:740});
+ expect(await list.evaluate(element=>element.scrollWidth<=element.clientWidth+1)).toBe(true);
+ await page.screenshot({path:testInfo.outputPath('learning-list-narrow.png')});
+ await page.setViewportSize({width:1280,height:900});
+ await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'今日',exact:true}).click();
+ await home.getByRole('button',{name:'继续学习',exact:true}).click();
+ for(let index=0;index<2;index++){
+  await runtime.getByRole('button',{name:/查看表达/}).click();await runtime.getByRole('button',{name:/已经连上/}).click();
+  if(index===0)await expect(runtime.getByRole('button',{name:/查看表达/})).toBeEnabled();
+ }
+ await expect(runtime.getByRole('heading',{name:'本轮完成',exact:true})).toBeVisible();
+ await runtime.getByRole('button',{name:/完成并回到首页/}).click();
+ await expect(home.getByRole('heading',{name:'学习已保存，等待到期复习',exact:true})).toBeVisible();
+ await expect(home.locator('time[datetime]').last()).toBeVisible();
+ await page.screenshot({path:testInfo.outputPath('today-waiting-desktop.png')});
+ await home.getByRole('button',{name:'待复习 0',exact:true}).click();
+ await expect(list.getByRole('combobox',{name:'学习状态',exact:true})).toHaveValue('due');
+ await expect(list.locator('[data-learning-target]')).toHaveCount(0);
+ await list.getByRole('combobox',{name:'学习状态',exact:true}).selectOption('all');
+ await expect(list.locator('[data-learning-target]')).toHaveCount(2);
+ const facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ expect(facts.records).toHaveLength(2);expect(new Set(facts.records.map(record=>record.recordId)).size).toBe(2);
+});
+
 test('custom statistics rejects reversed, future and empty dates and recovers without changing learning facts',async({page},testInfo)=>{
  await page.clock.setFixedTime(new Date('2026-10-10T12:00:00Z'));
  fixture.setRegistry([fixture.reviewDelivery.descriptor]);
@@ -305,7 +354,7 @@ test('finishing a pinned Run after switching to an empty Route clears its resume
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(beforeFinish);
  await runtime.getByRole('button',{name:/完成并回到首页/}).click();
  await expect(home.getByRole('heading',{name:'今天',exact:true,level:1})).toBeVisible();
- await expect(home.getByRole('heading',{name:'暂无可开始的学习',exact:true})).toBeVisible();
+ await expect(home.getByRole('heading',{name:'当前路线暂无学习任务',exact:true})).toBeVisible();
  await expect(home.getByRole('button',{name:'继续学习',exact:true})).toHaveCount(0);
  const completed=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
  expect(completed.runtime).toBeNull();expect(completed.records).toHaveLength(1);
@@ -394,6 +443,14 @@ test('Book mode and ordinal Range recover from failed writes, preserve the curre
  await expect(dialog.getByRole('alert')).toContainText('已重新读取计划');
  await dialog.getByRole('button',{name:'取消',exact:true}).click();
  await expect(plans).toContainText('暂停');await expect(plans).toContainText('第 1–1 项');
+ await study.getByRole('button',{name:'查看内容',exact:true}).click();
+ const pausedList=page.locator('#s-learning-library');
+ await pausedList.getByRole('combobox',{name:'学习状态',exact:true}).selectOption('paused');
+ await expect(pausedList.locator('[data-learning-target]')).toHaveCount(2);
+ await expect(pausedList.getByText('已暂停',{exact:true})).toHaveCount(2);
+ await pausedList.getByRole('combobox',{name:'学习状态',exact:true}).selectOption('new');
+ await expect(pausedList.locator('[data-learning-target]')).toHaveCount(0);
+ await pausedList.getByRole('button',{name:'返回',exact:true}).click();
  await plans.getByRole('button',{name:'编辑《到期复习样本》',exact:true}).click();
  await dialog.getByRole('combobox',{name:'后续学习模式',exact:true}).selectOption('maintenance');
  await page.evaluate(()=>window.__sensaBrowserSmoke!.failBookPlanReadsForTest(true));

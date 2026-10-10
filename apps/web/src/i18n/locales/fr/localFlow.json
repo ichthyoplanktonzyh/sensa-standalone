@@ -58,6 +58,24 @@
     "packageSource": "Sources du contenu téléchargé",
     "packageInstalledVersion": "Version téléchargée : v{{version}}",
     "packageSampleVersion": "Ces expressions et significations proviennent de la version téléchargée v{{version}}.",
-    "packageDownloadedAction": "Enregistré sur cet appareil"
+    "packageDownloadedAction": "Enregistré sur cet appareil",
+    "todayWaitingTitle": "Apprentissage enregistré ; en attente de révision",
+    "todayRouteEmptyTitle": "Aucune tâche sur ce parcours",
+    "todayIdleTitle": "Aucune tâche ne peut commencer dans le programme actuel",
+    "nextReviewLabel": "Prochaine révision",
+    "learningFilterDue": "Révision prévue et consolidation",
+    "learningFilterNew": "Premier apprentissage disponible",
+    "learningFilterPaused": "En pause",
+    "learningPaused": "En pause",
+    "learningNotPlanned": "Hors du programme actuel",
+    "learningNotScheduled": "Non planifié",
+    "learningSource": "Source",
+    "learningExpression": "Expression et sens",
+    "learningState": "État",
+    "learningSort": "Trier",
+    "learningSortDue": "Prochaine échéance",
+    "learningSortExpression": "Expression",
+    "learningVisibleCount": "Éléments {{start}}–{{end}} sur {{count}}",
+    "todayEmptyTitle": "Aucun contenu ajouté à apprendre"
   }
 }

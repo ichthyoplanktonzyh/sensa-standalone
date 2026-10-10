@@ -521,6 +521,24 @@
     "packageSource": "Downloaded content sources",
     "packageInstalledVersion": "Downloaded version: v{{version}}",
     "packageSampleVersion": "These expressions and meanings come from downloaded v{{version}}.",
-    "packageDownloadedAction": "Saved on this device"
+    "packageDownloadedAction": "Saved on this device",
+    "todayWaitingTitle": "Learning saved; waiting for review",
+    "todayRouteEmptyTitle": "No tasks on this route",
+    "todayIdleTitle": "No tasks can start in the current plan",
+    "nextReviewLabel": "Next review",
+    "learningFilterDue": "Due review and reinforcement",
+    "learningFilterNew": "Ready initial learning",
+    "learningFilterPaused": "Paused",
+    "learningPaused": "Paused",
+    "learningNotPlanned": "Outside the current plan",
+    "learningNotScheduled": "Not scheduled",
+    "learningSource": "Source",
+    "learningExpression": "Expression and meaning",
+    "learningState": "Status",
+    "learningSort": "Sort",
+    "learningSortDue": "Next due",
+    "learningSortExpression": "Expression",
+    "learningVisibleCount": "Items {{start}}–{{end}} of {{count}}",
+    "todayEmptyTitle": "No learning content added yet"
   }
 }

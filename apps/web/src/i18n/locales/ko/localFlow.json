@@ -520,6 +520,24 @@
     "packageSource": "다운로드한 콘텐츠의 출처",
     "packageInstalledVersion": "다운로드한 버전: v{{version}}",
     "packageSampleVersion": "다음 표현과 의미는 다운로드한 v{{version}}의 내용입니다.",
-    "packageDownloadedAction": "이 기기에 저장됨"
+    "packageDownloadedAction": "이 기기에 저장됨",
+    "todayWaitingTitle": "학습을 저장했습니다. 복습 시점을 기다립니다",
+    "todayRouteEmptyTitle": "현재 경로에 학습 과제가 없습니다",
+    "todayIdleTitle": "현재 계획에서 시작할 과제가 없습니다",
+    "nextReviewLabel": "다음 복습",
+    "learningFilterDue": "복습 시점 도래 및 강화 학습",
+    "learningFilterNew": "시작 가능한 첫 학습",
+    "learningFilterPaused": "일시 중지",
+    "learningPaused": "일시 중지됨",
+    "learningNotPlanned": "현재 계획에서 제외됨",
+    "learningNotScheduled": "예정 없음",
+    "learningSource": "출처",
+    "learningExpression": "표현과 의미",
+    "learningState": "상태",
+    "learningSort": "정렬",
+    "learningSortDue": "다음 예정일",
+    "learningSortExpression": "표현",
+    "learningVisibleCount": "전체 {{count}}개 중 {{start}}–{{end}}개",
+    "todayEmptyTitle": "아직 학습 내용이 없습니다"
   }
 }

@@ -520,6 +520,24 @@
     "packageSource": "已下載內容的來源",
     "packageInstalledVersion": "已下載版本：v{{version}}",
     "packageSampleVersion": "以下表達與含義來自已下載的 v{{version}}。",
-    "packageDownloadedAction": "已下載到本機"
+    "packageDownloadedAction": "已下載到本機",
+    "todayWaitingTitle": "學習已儲存，等待到期複習",
+    "todayRouteEmptyTitle": "目前路線暫無學習任務",
+    "todayIdleTitle": "目前安排暫無可開始的任務",
+    "nextReviewLabel": "下次複習",
+    "learningFilterDue": "到期複習與鞏固",
+    "learningFilterNew": "可開始新學",
+    "learningFilterPaused": "暫停",
+    "learningPaused": "已暫停",
+    "learningNotPlanned": "未在目前安排中",
+    "learningNotScheduled": "未安排",
+    "learningSource": "來源",
+    "learningExpression": "表達與意思",
+    "learningState": "狀態",
+    "learningSort": "排序",
+    "learningSortDue": "下次到期",
+    "learningSortExpression": "表達",
+    "learningVisibleCount": "第 {{start}}–{{end}} 項，共 {{count}} 項",
+    "todayEmptyTitle": "尚未加入學習內容"
   }
 }

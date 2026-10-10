@@ -520,6 +520,24 @@
     "packageSource": "Sumber konten yang diunduh",
     "packageInstalledVersion": "Versi yang diunduh: v{{version}}",
     "packageSampleVersion": "Ungkapan dan makna ini berasal dari versi v{{version}} yang diunduh.",
-    "packageDownloadedAction": "Disimpan di perangkat ini"
+    "packageDownloadedAction": "Disimpan di perangkat ini",
+    "todayWaitingTitle": "Pembelajaran tersimpan; menunggu jadwal ulasan",
+    "todayRouteEmptyTitle": "Tidak ada tugas di jalur ini",
+    "todayIdleTitle": "Tidak ada tugas yang dapat dimulai dalam rencana saat ini",
+    "nextReviewLabel": "Ulasan berikutnya",
+    "learningFilterDue": "Ulasan jatuh tempo dan penguatan",
+    "learningFilterNew": "Pembelajaran awal yang siap",
+    "learningFilterPaused": "Dijeda",
+    "learningPaused": "Dijeda",
+    "learningNotPlanned": "Di luar rencana saat ini",
+    "learningNotScheduled": "Belum dijadwalkan",
+    "learningSource": "Sumber",
+    "learningExpression": "Ungkapan dan makna",
+    "learningState": "Status",
+    "learningSort": "Urutkan",
+    "learningSortDue": "Jatuh tempo berikutnya",
+    "learningSortExpression": "Ungkapan",
+    "learningVisibleCount": "Item {{start}}–{{end}} dari {{count}}",
+    "todayEmptyTitle": "Belum ada konten pembelajaran yang ditambahkan"
   }
 }

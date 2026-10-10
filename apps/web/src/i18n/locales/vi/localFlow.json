@@ -520,6 +520,24 @@
     "packageSource": "Nguồn nội dung đã tải",
     "packageInstalledVersion": "Phiên bản đã tải: v{{version}}",
     "packageSampleVersion": "Các biểu đạt và ý nghĩa sau thuộc phiên bản v{{version}} đã tải.",
-    "packageDownloadedAction": "Đã lưu trên thiết bị này"
+    "packageDownloadedAction": "Đã lưu trên thiết bị này",
+    "todayWaitingTitle": "Đã lưu việc học; chờ đến lượt ôn tập",
+    "todayRouteEmptyTitle": "Không có nhiệm vụ trên lộ trình này",
+    "todayIdleTitle": "Kế hoạch hiện tại không có nhiệm vụ có thể bắt đầu",
+    "nextReviewLabel": "Lần ôn tiếp theo",
+    "learningFilterDue": "Ôn tập đến hạn và củng cố",
+    "learningFilterNew": "Học lần đầu đã sẵn sàng",
+    "learningFilterPaused": "Tạm dừng",
+    "learningPaused": "Đã tạm dừng",
+    "learningNotPlanned": "Ngoài kế hoạch hiện tại",
+    "learningNotScheduled": "Chưa lên lịch",
+    "learningSource": "Nguồn",
+    "learningExpression": "Cách diễn đạt và nghĩa",
+    "learningState": "Trạng thái",
+    "learningSort": "Sắp xếp",
+    "learningSortDue": "Lần đến hạn tiếp theo",
+    "learningSortExpression": "Cách diễn đạt",
+    "learningVisibleCount": "Mục {{start}}–{{end}} trên {{count}}",
+    "todayEmptyTitle": "Chưa thêm nội dung để học"
   }
 }
