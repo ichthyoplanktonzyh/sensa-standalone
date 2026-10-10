@@ -209,18 +209,18 @@ test('custom statistics rejects reversed, future and empty dates and recovers wi
  await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的学习',exact:true}).click();
  await page.locator('#s-study').getByRole('button',{name:'学习统计',exact:true}).click();const stats=page.locator('#s-stats');
  await stats.getByRole('button',{name:'自选日期',exact:true}).click();
- await expect(stats.locator('ol').getByRole('button')).toHaveCount(1);
+ await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(1);
  const start=stats.getByLabel('开始日期',{exact:true}),end=stats.getByLabel('结束日期',{exact:true});
  await start.fill('2026-10-11');
  await expect(stats.getByRole('alert')).toContainText('开始日期不能晚于结束日期');
- await expect(start).toHaveAttribute('aria-invalid','true');await expect(end).toHaveAttribute('aria-invalid','true');await expect(stats.locator('ol')).toHaveCount(0);
+ await expect(start).toHaveAttribute('aria-invalid','true');await expect(end).toHaveAttribute('aria-invalid','true');await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true})).toHaveCount(0);
  const screenshot=testInfo.outputPath('reversed-date-range.png');await page.screenshot({path:screenshot});await testInfo.attach('reversed-date-range',{path:screenshot,contentType:'image/png'});
- await start.fill('2026-10-10');await expect(stats.locator('ol').getByRole('button')).toHaveCount(1);
- await end.fill('2026-10-11');await expect(stats.getByRole('alert')).toContainText('结束日期不能晚于今天');await expect(stats.locator('ol')).toHaveCount(0);
- await end.fill('');await expect(stats.getByRole('alert')).toBeVisible();await expect(stats.locator('ol')).toHaveCount(0);
- await end.fill('2026-10-10');await expect(stats.locator('ol').getByRole('button')).toHaveCount(1);
+ await start.fill('2026-10-10');await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(1);
+ await end.fill('2026-10-11');await expect(stats.getByRole('alert')).toContainText('结束日期不能晚于今天');await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true})).toHaveCount(0);
+ await end.fill('');await expect(stats.getByRole('alert')).toBeVisible();await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true})).toHaveCount(0);
+ await end.fill('2026-10-10');await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(1);
  await stats.getByRole('button',{name:'返回',exact:true}).click();await page.locator('#s-study').getByRole('button',{name:'学习统计',exact:true}).click();
- await expect(stats.locator('ol').getByRole('button')).toHaveCount(1);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(facts);
+ await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(1);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(facts);
 });
 
 test('lightweight progress names the current expression and reaches full steps only after rating, retaining pause and retry semantics',async({page},testInfo)=>{
@@ -251,7 +251,7 @@ test.describe('history calendar in the actual SQLite Worker',()=>{
   await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的学习',exact:true}).click();
   const study=page.locator('#s-study');await expect(study.locator('ol').getByRole('button')).toHaveCount(1);
   await study.getByRole('button',{name:'学习统计',exact:true}).click();const stats=page.locator('#s-stats');
-  await stats.getByRole('button',{name:'今天',exact:true}).click();await expect(stats.locator('ol').getByRole('button')).toHaveCount(1);
+  await stats.getByRole('button',{name:'今天',exact:true}).click();await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(1);
   await expect(stats.getByRole('status').filter({hasText:'1 条'})).toBeVisible();
   const localDay=await page.evaluate(()=>new Intl.DateTimeFormat('zh-CN',{dateStyle:'medium'}).format(new Date(2026,9,31)));
   await expect(stats.getByRole('rowheader',{name:localDay,exact:true})).toBeVisible();
@@ -259,12 +259,12 @@ test.describe('history calendar in the actual SQLite Worker',()=>{
   const annual=stats.locator('.sensa-stat-year');await expect(annual.locator('button')).toHaveCount(365);
   const actualDay=annual.locator('button[data-day="2026-10-31"]');await expect(actualDay).toHaveAttribute('data-level','one');await expect(annual.locator('button[data-day="2026-11-01"]')).toBeDisabled();
   await actualDay.focus();await page.keyboard.press('ArrowLeft');await expect(annual.locator('button[data-day="2026-10-24"]')).toBeFocused();await page.keyboard.press('Enter');
-  await expect(stats.getByText('这个范围内没有可用记录',{exact:true})).toBeVisible();await expect(stats.locator('ol').getByRole('button')).toHaveCount(0);
-  await stats.getByRole('button',{name:'年度',exact:true}).click();await expect(stats.locator('ol').getByRole('button')).toHaveCount(1);
+  await expect(stats.getByText('这个范围内没有可用记录',{exact:true})).toBeVisible();await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(0);
+  await stats.getByRole('button',{name:'年度',exact:true}).click();await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(1);
   await stats.screenshot({path:test.info().outputPath('statistics-year-desktop.png')});
   await page.setViewportSize({width:320,height:740});await stats.getByRole('combobox',{name:'日历月份',exact:true}).selectOption('9');
   const month=stats.locator('.sensa-stat-month');await expect(month.locator('button[data-day="2026-10-31"]')).toBeVisible();await month.locator('button[data-day="2026-10-31"]').click();
-  await expect(stats.locator('ol').getByRole('button')).toHaveCount(1);expect(await stats.evaluate(element=>element.scrollWidth<=element.clientWidth+1)).toBe(true);
+  await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(1);expect(await stats.evaluate(element=>element.scrollWidth<=element.clientWidth+1)).toBe(true);
   await stats.screenshot({path:test.info().outputPath('statistics-month-320px.png')});
   await page.reload();await expect(stats.getByRole('rowheader',{name:localDay,exact:true})).toBeVisible();
  });
@@ -331,11 +331,11 @@ test('review-only Again survives a lost receipt and reload as a separate Relearn
  await runtime.getByRole('button',{name:/完成并回到首页/}).click();await expect(home.getByRole('button',{name:'继续学习',exact:true})).toHaveCount(0);await expect(home.getByRole('button',{name:'开始学习',exact:true})).toBeEnabled();
  const beforeStatistics=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
  await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的学习',exact:true}).click();await page.locator('#s-study').getByRole('button',{name:'学习统计',exact:true}).click();
- const stats=page.locator('#s-stats');await stats.getByRole('button',{name:'全部可用记录',exact:true}).click();await expect(stats.locator('dl dd')).toHaveText(['1','1','1']);await expect(stats.locator('ol').first().getByRole('button')).toHaveCount(3);
+ const stats=page.locator('#s-stats');await stats.getByRole('button',{name:'全部可用记录',exact:true}).click();await expect(stats.locator('dl dd')).toHaveText(['1','1','1']);await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(3);
  const trend=stats.getByRole('img',{name:'首学、复习与巩固趋势',exact:true});for(const label of ['首次学习记录 1','复习记录 1','巩固记录 1'])await expect(trend.locator('desc')).toContainText(label);
  await trend.focus();await expect(trend).toBeFocused();await stats.locator('details > summary').filter({hasText:'查看趋势数值'}).click();await expect(stats.getByRole('table',{name:'查看趋势数值',exact:true})).toBeVisible();
  await trend.scrollIntoViewIfNeeded();await page.screenshot({path:test.info().outputPath('statistics-real-three-kind-trend.png')});
- await stats.getByRole('combobox',{name:'记录类型',exact:true}).selectOption('retention_review');await expect(stats.locator('dl dd')).toHaveText(['0','1','0']);await expect(stats.locator('ol').first().getByRole('button')).toHaveCount(1);
+ await stats.getByRole('combobox',{name:'记录类型',exact:true}).selectOption('retention_review');await expect(stats.locator('dl dd')).toHaveText(['0','1','0']);await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(1);
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(beforeStatistics);
 });
 

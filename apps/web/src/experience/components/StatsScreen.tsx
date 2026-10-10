@@ -96,7 +96,7 @@ export const StatsScreen = ({active,onBack,onOpenTarget}:StatsScreenProps) => {
         </section>
         <section className="mt-9">
           <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="text-lg font-medium">{t('statistics.details')}</h3><span role="status" className="text-xs text-fg-tertiary">{t('statistics.count',{count:projection.total})}</span></div>
-          <ol className="mt-4 divide-y divide-border-subtle">{projection.records.slice(0,limit).map(record=><li key={record.recordId}>
+          <ol aria-label={t('statistics.details')} className="mt-4 divide-y divide-border-subtle">{projection.records.slice(0,limit).map(record=><li key={record.recordId}>
             <button type="button" onClick={()=>onOpenTarget(record.targetId)} className="flex w-full items-center gap-4 rounded-control px-1 py-5 text-left hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus">
               <span className="min-w-0 flex-1"><strong className="break-words text-lg font-medium">{record.expression}</strong><span className="mt-2 block text-xs text-fg-secondary">{t('study.'+record.kind)}</span></span>
               <time dateTime={record.occurredAt} className="text-right text-xs leading-6 tabular-nums text-fg-tertiary">{new Intl.DateTimeFormat(i18n.language,{dateStyle:'medium',timeStyle:'short'}).format(new Date(record.occurredAt))}</time>
