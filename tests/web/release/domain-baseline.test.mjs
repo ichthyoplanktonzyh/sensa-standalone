@@ -30,5 +30,6 @@ test('configuration workflow cannot deploy new app code, migrate data or change 
  expect(workflow.indexOf('name: Refuse application source drift')).toBeLessThan(workflow.indexOf('name: Change only API origin'));
  expect(workflow).toMatch(/Baseline compiled files digest mismatch/);
  expect(workflow).toMatch(/cp -R \.tmp\/domain-baseline-candidate\/apps\/web\/dist\/\. apps\/web\/dist\//);
+ expect(workflow).toMatch(/cp -R \.tmp\/domain-baseline-candidate\/packages\/learning-kernel\/dist\/\. packages\/learning-kernel\/dist\//);
  expect(workflow.indexOf('name: Restore verified baseline assets')).toBeLessThan(workflow.indexOf('name: Change only API origin'));
 });
