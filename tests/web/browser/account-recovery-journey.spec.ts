@@ -500,7 +500,7 @@ test('initial sync failure after admission actually reruns sync on the restorati
  await expect.poll(()=>page.evaluate(()=>window.__sensaBrowserSmoke!.syncStatus())).toBe('failed');
  const failedHeads=heads;failSync=false;await page.getByRole('button',{name:'重试恢复',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>window.__sensaBrowserSmoke!.syncStatus())).toBe('synced');
- await expect(page.getByRole('heading',{name:'暂无可开始的学习',exact:true})).toBeVisible();expect(heads).toBeGreaterThan(failedHeads);
+ await expect(page.getByRole('heading',{name:'还没有加入学习内容',exact:true})).toBeVisible();expect(heads).toBeGreaterThan(failedHeads);
 });
 
 test('explicit fresh start uses a separate OPFS pool, fences old tabs, and preserves the old files and facts',async({page,context},testInfo)=>{

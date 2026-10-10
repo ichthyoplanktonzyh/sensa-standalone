@@ -409,7 +409,7 @@ try{
  await expect(b.page.getByText('正在恢复账号资料…')).toBeVisible();
  assert.equal(await b.page.locator('.sensa-today-counts').count(),0,'unconfirmed account data must not mount a local inventory, even with placeholder counts');
  await expect(b.page.locator('.sensa-today-empty')).toHaveCount(0);
- await expect(b.page.getByRole('heading',{name:'暂无可开始的学习',exact:true})).toHaveCount(0);
+ await expect(b.page.getByRole('heading',{name:'还没有加入学习内容',exact:true})).toHaveCount(0);
  await b.page.locator('#s-home').getByRole('button',{name:'账号与设置',exact:true}).click();
  await expect(b.page.locator('#s-profile')).toBeVisible({timeout:SHELL_BUDGET_MS});
  await b.page.locator('[data-sensa-shell-brand-action]').click();

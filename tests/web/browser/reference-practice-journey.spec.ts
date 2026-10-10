@@ -53,7 +53,7 @@ test('delivered listening preserves learner facts and provider layout after anot
  }};window.onYouglishAPIReady();
  `}));
  await page.goto(fixture.origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
- await expect(page.locator('#s-home').getByRole('heading',{name:'暂无可开始的学习',exact:true})).toBeVisible();
+ await expect(page.locator('#s-home').getByRole('heading',{name:'还没有加入学习内容',exact:true})).toBeVisible();
  await page.locator('#s-home').getByRole('button',{name:'学习包目录',exact:true}).click();await page.locator('#s-catalog').last().getByRole('button',{name:/只读查词样本/}).click();
  const book=page.locator('#s-catalog-book').last();await book.getByRole('button',{name:'下载学习包',exact:true}).click();await expect(book.getByText('已下载',{exact:true})).toBeVisible();
  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).targetIds).toEqual([]);

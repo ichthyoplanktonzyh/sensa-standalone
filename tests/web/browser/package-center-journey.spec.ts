@@ -892,7 +892,7 @@ test('the guest Book path keeps its primary actions reachable at 320px',async({p
   await page.goto(fixture.origin);
   await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
   const home=page.locator('#s-home');
-  await expect(home.getByRole('heading',{name:'暂无可开始的学习',exact:true})).toBeVisible({timeout:15_000});
+  await expect(home.getByRole('heading',{name:'还没有加入学习内容',exact:true})).toBeVisible({timeout:15_000});
   await expect(home.getByRole('button',{name:'学习包目录',exact:true})).toBeVisible({timeout:15_000});
   await noOverflow();
   await home.getByRole('button',{name:'学习包目录',exact:true}).click();
@@ -915,7 +915,7 @@ test('the guest Book path keeps its primary actions reachable at 320px',async({p
   await runtime.getByRole('button',{name:/完成并回到首页/}).click();
   await noOverflow();
   expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records).toHaveLength(1);
-  await expect(home.getByRole('heading',{name:'暂无可开始的学习',exact:true})).toBeVisible();
+  await expect(home.getByRole('heading',{name:'学习已保存，等待到期复习',exact:true})).toBeVisible();
   await expect(home.getByRole('button',{name:'学习包目录',exact:true})).toBeEnabled();
   await page.screenshot({path:test.info().outputPath('completed-home-320.png'),fullPage:true});
 });

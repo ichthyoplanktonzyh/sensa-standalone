@@ -52,7 +52,7 @@ export function LearningTargetLibraryScreen(props:LearningTargetLibraryScreenPro
     <span className="col-start-1 min-w-0 break-words text-xs text-fg-secondary md:col-auto">{item.sourceLabel}</span>
     <span className="col-start-1 text-xs text-fg-secondary md:col-auto">{stateLabel(item.state)}</span>
     <span className="col-start-1 text-xs tabular-nums text-fg-tertiary md:col-auto">{item.nextReviewAt?<time dateTime={item.nextReviewAt}>{new Intl.DateTimeFormat(locale,{dateStyle:'medium',timeStyle:'short'}).format(new Date(item.nextReviewAt))}</time>:localFlowText('learningNotScheduled')}</span>
-    <ArrowRight size={16} className="col-start-2 row-start-1 shrink-0 text-fg-tertiary md:col-auto"/>
+    <ArrowRight size={16} className="col-start-2 row-start-1 shrink-0 text-fg-tertiary md:col-auto md:row-auto"/>
    </button></li>)}</ul>
    {visible.length>40&&<nav aria-label={localFlowText('catalogPagination')} className="my-5 flex items-center gap-3"><button className={studyButton} disabled={currentPage===1} onClick={()=>props.onParamsChange({...props.params,learningPage:String(currentPage-1)})}>{t('directLearning.previous',{ns:'learning'})}</button><span className="text-sm tabular-nums">{currentPage} / {pages}</span><button className={studyButton} disabled={currentPage===pages} onClick={()=>props.onParamsChange({...props.params,learningPage:String(currentPage+1)})}>{t('directLearning.next',{ns:'learning'})}</button></nav>}
    {!visible.length&&<p className="py-12 text-center text-sm text-fg-tertiary">{t(props.items.length?'study.noMatches':'study.empty')}</p>}

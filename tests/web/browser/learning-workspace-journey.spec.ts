@@ -176,7 +176,7 @@ test('a personal meaning created from a learning scene reuses its Book target wi
  await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
  await page.goto(fixture.origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
  const home=page.locator('#s-home');
- await expect(home.getByRole('heading',{name:'暂无可开始的学习',exact:true})).toBeVisible();
+ await expect(home.getByRole('heading',{name:'还没有加入学习内容',exact:true})).toBeVisible();
  await home.getByRole('button',{name:'学习包目录',exact:true}).click();
  await page.locator('#s-catalog').last().getByRole('button',{name:/雨天借伞/}).click();const book=page.locator('#s-catalog-book').last();
  await book.getByRole('button',{name:'下载学习包',exact:true}).click();await expect(book.getByText('已下载',{exact:true})).toBeVisible();

@@ -62,7 +62,7 @@ async function enterLibrary(page:Page){
  await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
  await page.goto(origin);
  await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
- await expect(page.locator('#s-home').getByRole('heading',{name:'暂无可开始的学习',exact:true})).toBeVisible();
+ await expect(page.locator('#s-home').getByRole('heading',{name:'还没有加入学习内容',exact:true})).toBeVisible();
  await page.locator('#s-home').getByRole('button',{name:'学习包目录',exact:true}).click();
  await page.locator('#s-catalog').last().getByRole('button',{name:'我的学习包',exact:true}).click();
  await expect(page.locator('#s-library').last().getByRole('heading',{name:'我的学习包',exact:true})).toBeVisible();

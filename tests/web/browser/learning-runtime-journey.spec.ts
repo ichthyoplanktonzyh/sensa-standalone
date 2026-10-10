@@ -49,6 +49,14 @@ test('Today separates empty, resumed and future-review states and its counts ope
  await page.reload();await expect(list.getByRole('searchbox')).toHaveValue(expression!);
  await expect(list.getByRole('combobox',{name:'排序',exact:true})).toHaveValue('expression');
  await list.getByRole('searchbox').fill('');
+ const [expressionBox,columnBox,sourceBox,sourceColumnBox,arrowBox]=await Promise.all([
+  first.locator('strong'),list.getByText('表达与意思',{exact:true}),first.getByText('到期复习样本',{exact:true}),list.getByText('来源',{exact:true}),first.locator('svg'),
+ ].map(element=>element.boundingBox()));
+ for(const box of [expressionBox,columnBox,sourceBox,sourceColumnBox,arrowBox])expect(box).not.toBeNull();
+ // Keep each field under its heading, allowing the row button's small inset.
+ expect(Math.abs(expressionBox!.x-columnBox!.x)).toBeLessThanOrEqual(8);
+ expect(Math.abs(sourceBox!.x-sourceColumnBox!.x)).toBeLessThanOrEqual(2);
+ expect(arrowBox!.x).toBeGreaterThan(expressionBox!.x+expressionBox!.width);
  await page.screenshot({path:testInfo.outputPath('learning-list-desktop.png')});
  await page.setViewportSize({width:320,height:740});
  expect(await list.evaluate(element=>element.scrollWidth<=element.clientWidth+1)).toBe(true);
@@ -386,7 +394,8 @@ test('an abrupt SQLite Worker termination restores the same adopted initial Step
  await page.reload();await expect(runtime.getByRole('button',{name:/已经连上/})).toBeEnabled({timeout:30_000});
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(before);
  await runtime.getByRole('button',{name:/已经连上/}).click();await expect(runtime.getByRole('heading',{name:'本轮完成',exact:true})).toBeVisible();
- await expect(page.getByText('borrow · 首次学习已保存',{exact:true})).toBeVisible();
+ await expect(runtime.locator('[data-completion-local]')).toHaveText('当前进度已保存在本机');
+ await expect(runtime.locator('[data-completion-kind="initial_learning"]')).toHaveText('1');
  const saved=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest());
  expect(saved.actionEventCount).toBe(2);expect(saved.behavioralEvidenceCount).toBe(0);expect(saved.targets[0]!.memoryRevision).toBe(1);
 });
