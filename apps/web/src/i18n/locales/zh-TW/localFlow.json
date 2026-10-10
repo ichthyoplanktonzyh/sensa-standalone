@@ -538,6 +538,16 @@
     "learningSortDue": "下次到期",
     "learningSortExpression": "表達",
     "learningVisibleCount": "第 {{start}}–{{end}} 項，共 {{count}} 項",
-    "todayEmptyTitle": "尚未加入學習內容"
+    "todayEmptyTitle": "尚未加入學習內容",
+    "sessionCompleted": "本輪已完成",
+    "sessionPending": "本輪待處理",
+    "sessionQueueHint": "待處理數會隨重複、自評和到期情況變化。",
+    "repeatHint": "剛才選擇了還沒連上，正在重複這條表達的場景。",
+    "completionLocalSaved": "目前進度已儲存在本機",
+    "completionSyncUnknown": "雲端同步狀態尚未確認",
+    "completionNoSchedule": "目前安排暫無後續複習時間",
+    "completionNotMastery": "完成記錄不代表已經掌握；後續複習以實際安排為準。",
+    "completionViewRecords": "查看學習記錄",
+    "sessionSummaryUnavailable": "本輪記錄暫未讀取"
   }
 }

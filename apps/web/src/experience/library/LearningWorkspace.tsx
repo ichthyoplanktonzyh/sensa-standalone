@@ -45,7 +45,7 @@ type LearningWorkspaceScreenId=LearningShellScreenId|'s-lightweight-runtime';
 /** Full learning controllers live behind this bounded screen-lifecycle seam. */
 export function LearningWorkspace({active=true}:{active?:boolean}){
  const {t}=useTranslation();
- const {viewMode,mainStack,params,setViewMode,goMain,backMain,resetMain,returnHome,setMainStack}=useShellNavigation();
+ const {viewMode,mainStack,params,setViewMode,goMain,backMain,resetMain,returnHome,leaveRuntime,setMainStack}=useShellNavigation();
  const currentScreen=viewMode==='lightweight'?'s-lightweight-runtime':mainStack.at(-1)??'s-study';
  const packageCenterOpen=viewMode==='main'&&mainStack.some(screen=>[
   's-learning-entry','s-catalog','s-catalog-book','s-library','s-library-package','s-publisher',
@@ -140,7 +140,7 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
     onConversationCreated={openPersonalMeaning} onBack={backMain} onOpenConfirmedSense={openConfirmedSense} toast={toast}
     alignmentLearningControls={(detail,alignment)=><JourneyAlignmentLearningControls detail={detail} alignment={alignment} c={personalLearning} onStart={id=>void startLocalLearning(id)}/>}/>,
   's-confirmed-sense':screenActive=><ConfirmedSenseDetailScreen active={screenActive} personalMeaningId={personalMeaningId} meaningFocusId={meaningFocusId} onBack={backMain} onOpenBinding={()=>goMain('s-expression-binding')} learningControls={(detail,alignment)=><JourneyAlignmentLearningControls detail={detail} alignment={alignment} c={personalLearning} onStart={id=>void startLocalLearning(id)}/>}/>,
-  's-study':screenActive=><StudyScreen
+  's-study':screenActive=><StudyScreen focusHistory={params.studySection==='history'} onHistoryFocused={()=>setMainStack(mainStack,{studySection:undefined},true)}
     bookPlans={<><BookPlanPanel active={screenActive}/><SupplementalPlanPanel active={screenActive}/></>}
     availability={packageLearning.loadStatus} status={managementStatus}
     preferencesBusy={preferencesBusy} preferencesStatus={preferencesStatus}
@@ -180,7 +180,7 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
   's-learning-target':renderLearningTarget,
   's-stats':screenActive=><StatsScreen active={screenActive} onBack={backMain} onOpenTarget={openLocalTarget}/>,
   's-profile':screenActive=><ProfileScreen localLibrary fixedLearningPolicy modelSettings={<ProviderPanel/>} active={screenActive} preferencesBusy={preferencesBusy} preferencesStatus={preferencesStatus} onGoStudyPlan={()=>{setStudyTab('a');goMain('s-study');}} defaultPolicy="lightweight" policyOptions={packageLearning.policyOptions} dailyNewCount={dailyNewCount} onPolicyChange={()=>{}} onDailyNewCountChange={updateLocalQuantity}/>,
-  's-lightweight-runtime':screenActive=><PackageRuntime active={screenActive} c={packageLearning} onExit={returnHome} onViewLearningLibrary={()=>setMainStack(['s-study','s-learning-library'])} onFinish={()=>void packageLearning.advance().then(continued=>{if(continued===false)returnHome();})}/>,
+  's-lightweight-runtime':screenActive=><PackageRuntime active={screenActive} c={packageLearning} onExit={returnHome} onViewLearningLibrary={()=>leaveRuntime('s-learning-library')} onViewRecords={()=>void packageLearning.advance().then(continued=>{if(continued===false){setStudyTab('a');leaveRuntime('s-study',{studySection:'history'});}})} onFinish={()=>void packageLearning.advance().then(continued=>{if(continued===false)returnHome();})}/>,
  };
  const renderScreen=(screenActive:boolean)=>learningScreenRenderers[currentScreen as LearningWorkspaceScreenId]?.(screenActive)??null;
  const fallback=<section id={currentScreen} className="screen active absolute inset-0 grid place-content-center bg-surface-canvas text-fg-primary" role="status">{localFlowText('loadingSensa')}</section>;

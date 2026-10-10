@@ -53,3 +53,18 @@ test('the public history projection decodes only a bounded list page; counts and
   await expect(learningSystem.read({kind:'history',languageContext:context,filter,limit:0})).rejects.toThrow();
  }finally{adapter.entries=entries;adapter.entriesPage=entryPage;adapter.get=get;raw.exec=exec;}
 });
+
+
+test('Session aggregates select only exact Run keys, preserve kinds and return true zero for an empty Session selection',()=>{
+ const sessionRows:StoredLearningRecord[]=[
+  {recordId:'session-a:target-a',targetId:'target-a',expression:'same',languageTag:'en',kind:'retention_review',occurredAt:'2026-10-10T12:00:00Z'},
+  {recordId:'session-b:target-a',targetId:'target-a',expression:'same',languageTag:'en',kind:'relearning',occurredAt:'2026-10-10T12:01:00Z'},
+ ];
+ for(const row of sessionRows)raw.exec({sql:'INSERT INTO sensa_learning_history(record_key,run_key,occurred_at,language_tag,record_kind,projection_json) VALUES(?,?,?,?,?,?)',bind:[row.recordId,row.recordId.split(':')[0]!,Date.parse(row.occurredAt),row.languageTag,row.kind,JSON.stringify(row)]});
+ for(const runIds of [['session-a','session-b'],['session-b'],[],['missing-session']]){
+  const request={...base,surface:'study' as const,runIds,limit:1};
+  expect(database.learningHistoryPage(request)).toEqual(learningHistoryPageFromRecords([...records,...sessionRows],request));
+ }
+ const actual=database.learningHistoryPage({...base,surface:'study',runIds:['session-a','session-b'],limit:1});
+ expect(actual.total).toBe(2);expect(actual.counts).toEqual({initial_learning:0,retention_review:1,relearning:1});expect(actual.records).toHaveLength(1);
+});

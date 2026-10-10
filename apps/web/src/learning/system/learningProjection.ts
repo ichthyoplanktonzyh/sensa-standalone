@@ -30,6 +30,7 @@ import {
 } from '../runtime/localCurriculum';
 import {
   localLightweightPhase,
+  localLightweightRetryCount,
   localLightweightAdoptedExperience,
   localLightweightStep,
 } from '../runtime/lightweightInitialProtocol';
@@ -168,7 +169,7 @@ export const projectLearningTarget = (
     reviewDue,
     relearning: target.relearnAt !== null,
     declaredMastery,
-    nextReviewAt: target.memory?.dueAt.toISOString() ?? null,
+    nextReviewAt: Number.isFinite(reviewAt)?new Date(reviewAt).toISOString():null,
     curriculumMembershipId: membership.id,
     languageContext: structuredClone(membership.languageContext),
     packageKey: membership.packageKey,
@@ -270,6 +271,7 @@ const projectRuntime = (
       ...base,
       kind: 'lightweight',
       needsRelearning: run.completionKind === 'wait_relearning',
+      repeatCount: localLightweightRetryCount(run),
       capabilities: ['toast', 'dictionary', 'personal_scenes', 'personal_content_menu', 'declared_mastery'],
       target: targetView,
       phase: localLightweightPhase(run) === 'reveal' ? 'reveal' : 'experience',
@@ -428,16 +430,12 @@ export async function readLearningWorkspaceProjection(input: Readonly<{
       return context.languageRouteId===input.languageContext.languageRouteId&&context.targetLanguageTag===input.languageContext.targetLanguageTag&&context.supportLanguageTag===input.languageContext.supportLanguageTag&&typeof id==='string'&&enrollments.get(id)?.bookPlan?.mode==='paused';
     });
     const membership = planningMembershipForContext(target,input.languageContext,enrollments,member=>inspectLocalTargetReadiness(target,member,packageFor(packages,member)).status==='ready',sourceEligibility)??localCurriculumMembershipForContext(target, input.languageContext);
-    return membership
-      ? [{...projectLearningTarget(
-        target,
-        membership,
-        inspectLocalTargetReadiness(target,membership,packageFor(packages,membership)).status,
-        input.clock,
-        membership.material,
-        packageFor(packages, membership),
-      ),planningActive,planningPaused}]
-      : [];
+    if(!membership)return [];
+    const projection=projectLearningTarget(target,membership,inspectLocalTargetReadiness(target,membership,packageFor(packages,membership)).status,input.clock,membership.material,packageFor(packages,membership));
+    const enrollmentId=membership.provenance.curriculumEnrollmentId;
+    const source=typeof enrollmentId==='string'?enrollments.get(enrollmentId)?.source:undefined;
+    const sourceTitle=source?.kind==='published_book'?source.title:undefined;
+    return [{...projection,planningActive,planningPaused,presentation:{...projection.presentation,...(sourceTitle?{sourceLabel:sourceTitle}:{})}}];
   });
   return {
     enrollments:snapshot.enrollments.filter(enrollment=>
@@ -546,7 +544,19 @@ export async function readLearningRuntimeProjection(input:Readonly<{
     if(activity&&activity.activeRunId!==activeId)throw new Error('localFlow.progressReadFailed');
     const preferencesDailyLimit=(await readStudyPlans(tx))[input.languageContext.languageRouteId]?.dailyNewSenseLimit??null;
     const dailyLimit=activity?.dailyNewSenseLimit??preferencesDailyLimit??undefined;
-    return {run,targets,dailyLimit,preferencesDailyLimit,
+    const sessionSummary=activity?await (async()=>{
+      const currentTargetIds=run&&!run.completedAt?run.targetIds.filter(id=>!run.targetCompletions?.[id]):[];
+      const [history,queue]=await Promise.all([
+        readLearningHistoryPage({surface:'study',range:'all',start:'',end:'',kind:'all',languageChoice:null,activeLanguageTag:activity.languageContext.targetLanguageTag,clock:input.clock,cursor:null,limit:1,runIds:activity.runIds}),
+        readLearningManagementSummary({languageContext:activity.languageContext,clock:input.clock,dailyLimit,supportedPolicies:policyOptions.map(option=>option.id),includeTargetIds:false,includeInventory:false,currentTargetIds}),
+      ]);
+      const pendingInitialCount=activity.intent==='review_only'?0:queue.readyInitialCount;
+      // A paused future plan does not erase the currently recoverable Run.
+      // Count it once even when it no longer belongs to the ready queue.
+      const pendingCount=pendingInitialCount+queue.reviewDueCount+Math.max(0,currentTargetIds.length-queue.currentCandidateCount);
+      return {sessionId:activity.id,completed:history.counts,completedCount:history.total,pendingCount,pendingInitialCount,pendingReviewCount:queue.reviewDueCount,nextReviewAt:queue.nextReviewAt===null?null:new Date(queue.nextReviewAt).toISOString()};
+    })():null;
+    return {run,targets,dailyLimit,preferencesDailyLimit,sessionSummary,
       // A pinned Run can finish after the surface Route changes. It cannot
       // continue its Session into a different direction or Route.
       planning:(!run||run.completedAt&&sameLearningSessionDirection(run.languageContext,input.languageContext))?await readNextReadyRuntimeCandidate(tx,{languageContext:activity?.languageContext??input.languageContext,clock:input.clock,dailyLimit,supportedPolicies:policyOptions.map(option=>option.id),currentTargetIds:run?.targetIds??[],retryTargetIds:input.retries.map(retry=>retry.id)},{run,intent:run?localRunSessionIntent(run):input.sessionIntent??'mixed',retries:input.retries}):null};
@@ -558,9 +568,10 @@ export async function readLearningRuntimeProjection(input:Readonly<{
   });
   const packages=await contentSupplySystem.read({kind:'runtime_packages',packageKeys});
   const runtime=snapshot.run?projectRuntime(snapshot.run,snapshot.targets,packages,input.clock):null;
-  if(!snapshot.planning)return {runtime,dailyLimit:snapshot.dailyLimit??null,preferencesDailyLimit:snapshot.preferencesDailyLimit,nextTargetId:null,nextChangeAt:null,policyOptions};
+  if(!snapshot.planning)return {runtime,sessionSummary:snapshot.sessionSummary,dailyLimit:snapshot.dailyLimit??null,preferencesDailyLimit:snapshot.preferencesDailyLimit,nextTargetId:null,nextChangeAt:null,policyOptions};
   return {
     runtime,
+    sessionSummary:snapshot.sessionSummary,
     dailyLimit:snapshot.dailyLimit??null,preferencesDailyLimit:snapshot.preferencesDailyLimit,...snapshot.planning,
     policyOptions,
   };
@@ -638,6 +649,7 @@ export async function readLearningHomeProjection(input: Readonly<{
       readNextReadyRuntimeCandidate(tx,query,{run:null,intent:'review_only',retries:[]}),
     ]);
     const nextTarget=mixed.nextTargetId?await tx.get<LocalLearningTarget>('learningTargets',mixed.nextTargetId):undefined;
+    if(summary.libraryTargetCount===null||summary.routeTargetCount===null)throw new Error('localFlow.progressReadFailed');
     let hasLearningIntent=false;
     if(!summary.libraryTargetCount)for await(const keys of tx.recordKeyBatches('curriculumEnrollments')){hasLearningIntent=keys.length>0;break;}
     return {

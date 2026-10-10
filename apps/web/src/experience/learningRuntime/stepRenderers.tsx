@@ -119,6 +119,7 @@ export interface StepRendererProps {
 }
 
 export interface LightweightInitialStepRendererProps {
+  readonly hidePrimaryAction?: boolean;
   readonly step: LearningLightweightStepProjection;
   readonly active: boolean;
   readonly presentation: LightweightInitialCardPresentation;
@@ -348,6 +349,7 @@ const renderLightweightExperienceRecall = (
   }
   return (
     <ExperienceRecallCard
+      hidePrimaryAction={props.hidePrimaryAction}
       key={props.step.protocolStepInstanceId}
       presentation={props.presentation}
       personalScene={props.personalScene}
@@ -365,6 +367,7 @@ const renderLightweightExpressionReveal = (
   }
   return (
     <ExpressionRevealCard
+      hidePrimaryAction={props.hidePrimaryAction}
       key={props.step.protocolStepInstanceId}
       presentation={props.presentation}
       active={props.active}

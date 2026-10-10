@@ -1,5 +1,5 @@
 import { StudyCalendar } from './StudyCalendar';
-import { type ReactNode } from 'react';
+import { useEffect,type ReactNode } from 'react';
 import { ArrowRight, BookOpen, Plus, SlidersHorizontal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {localFlowText} from '../../i18n/localFlowText';
@@ -11,6 +11,8 @@ import { useScreenState } from '../ui/ScreenHost';
 import {useLearningHistory} from '../library/useLearningHistory';
 
 interface StudyScreenProps {
+  focusHistory?:boolean;
+  onHistoryFocused?:()=>void;
   fixedPolicy?: boolean;
   active: boolean;
   status?: ReactNode;
@@ -47,6 +49,11 @@ export const StudyScreen = (props: StudyScreenProps) => {
   const [calendarOpen,setCalendarOpen]=useScreenState('study:calendar-open',false);
   const history=useLearningHistory({surface:'study',range:'all',start:'',end:'',kind:filter,languageChoice:null},props.active,limit);
   const records=history.projection?.records??[];
+  useEffect(()=>{
+    if(!props.active||!props.focusHistory||!history.projection)return;
+    const frame=requestAnimationFrame(()=>{const title=document.getElementById('study-history-title');title?.scrollIntoView({block:'start'});title?.focus({preventScroll:true});props.onHistoryFocused?.();});
+    return()=>cancelAnimationFrame(frame);
+  },[props.active,props.focusHistory,!!history.projection]);
   const closePreferences=()=>{
     props.onTabChange('a');
     requestAnimationFrame(()=>document.getElementById('study-preferences-button')?.focus());
@@ -83,7 +90,7 @@ export const StudyScreen = (props: StudyScreenProps) => {
         {managementOpen&&props.bookPlans}
       </details>}
       <section className="mt-12" aria-labelledby="study-history-title">
-        <div className="flex flex-wrap items-center justify-between gap-4"><div className="flex items-center gap-4"><h2 id="study-history-title" className="text-xl font-medium">{t('study.history')}</h2><button type="button" className={studyButton+' text-action-primary hover:bg-accent-soft'} onClick={props.onOpenStats}>{t('statistics.title')}<ArrowRight size={16}/></button></div>
+        <div className="flex flex-wrap items-center justify-between gap-4"><div className="flex items-center gap-4"><h2 id="study-history-title" tabIndex={-1} className="text-xl font-medium">{t('study.history')}</h2><button type="button" className={studyButton+' text-action-primary hover:bg-accent-soft'} onClick={props.onOpenStats}>{t('statistics.title')}<ArrowRight size={16}/></button></div>
           <div className="flex flex-wrap gap-1" aria-label={t('study.history')}>
             {(['all','initial_learning','retention_review','relearning'] as const).map(kind=><button key={kind} aria-pressed={filter===kind} className={`${studyButton} ${filter===kind?'bg-surface-selected text-action-primary':'text-fg-secondary hover:bg-surface-subtle'}`} onClick={()=>{setFilter(kind);setLimit(10);}}>{t('study.'+kind)}</button>)}
           </div>

@@ -14,6 +14,8 @@ export interface LearningHistoryFilter{
 export interface LearningHistoryRequest extends LearningHistoryFilter{
  readonly activeLanguageTag:string;readonly clock:number;
  readonly cursor:LearningHistoryCursor|null;readonly limit:number;
+ /** Exact Runs belonging to one Session, selected through the history index. */
+ readonly runIds?:readonly string[];
 }
 export interface LearningHistoryDay{readonly day:string;readonly languageTag:string;readonly counts:LearningHistoryCounts;}
 export interface LearningHistorySummary{
@@ -30,6 +32,7 @@ export const localLearningHistoryDay=(date:Date)=>`${date.getFullYear()}-${Strin
  * shows stored history; statistics excludes facts later than its read clock. */
 export function learningHistoryWindow(request:LearningHistoryRequest){
  if(!Number.isFinite(request.clock)||!Number.isInteger(request.limit)||request.limit<1||request.limit>100)throw new Error('localFlow.resourceInvalid');
+ if(request.runIds?.some(id=>typeof id!=='string'||!id.trim()))throw new Error('localFlow.resourceInvalid');
  if(request.cursor&&(!Number.isFinite(request.cursor.occurredAt)||!request.cursor.recordId.trim()||request.cursor.clock!==request.clock))throw new Error('localFlow.resourceInvalid');
  if(!['study','statistics'].includes(request.surface)||!['today','week','month','all','custom'].includes(request.range)||!['all','initial_learning','retention_review','relearning'].includes(request.kind))throw new Error('localFlow.resourceInvalid');
  if(request.surface==='study')return {from:null,until:null,availableAt:null,invalidRange:false} as const;

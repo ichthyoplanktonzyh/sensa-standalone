@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS sensa_learning_history_meta(key TEXT PRIMARY KEY NOT 
 /** Controlled in-memory adapter oracle; production performs these selections,
  * counts and calendar/language groups in SQLite without transferring all rows. */
 export function learningHistoryPageFromRecords(records:readonly StoredLearningRecord[],request:LearningHistoryRequest):StoredLearningHistoryPage{
+ if(request.runIds){const runs=new Set(request.runIds);records=records.filter(row=>runs.has(row.recordId.split(':')[0]!));}
  const window=learningHistoryWindow(request),languages=[...new Set(records.map(row=>row.languageTag))].sort();
  const languageScope=request.surface==='study'?'all':request.languageChoice??(languages.includes(request.activeLanguageTag)?request.activeLanguageTag:'all');
  const available=records.filter(row=>(languageScope==='all'||row.languageTag===languageScope)&&(window.availableAt===null||Date.parse(row.occurredAt)<=window.availableAt));
@@ -63,9 +64,11 @@ export class SqliteLearningHistoryProjection{
  }
  records():StoredLearningRecord[]{const rows=this.database.exec({sql:'SELECT projection_json FROM sensa_learning_history ORDER BY occurred_at DESC,record_key',rowMode:0,returnValue:'resultRows'}) as unknown[];return rows.map(row=>JSON.parse(String(row)) as StoredLearningRecord);}
  page(request:LearningHistoryRequest):StoredLearningHistoryPage{
-  const window=learningHistoryWindow(request),languages=(this.database.exec({sql:'SELECT DISTINCT language_tag FROM sensa_learning_history ORDER BY language_tag',rowMode:0,returnValue:'resultRows'}) as unknown[]).map(String);
+  const window=learningHistoryWindow(request),runCondition=request.runIds?' WHERE run_key IN (SELECT value FROM json_each(?))':'';
+  const languages=(this.database.exec({sql:'SELECT DISTINCT language_tag FROM sensa_learning_history'+runCondition+' ORDER BY language_tag',bind:request.runIds?[JSON.stringify(request.runIds)]:[],rowMode:0,returnValue:'resultRows'}) as unknown[]).map(String);
   const languageScope=request.surface==='study'?'all':request.languageChoice??(languages.includes(request.activeLanguageTag)?request.activeLanguageTag:'all');
   const availableWhere:string[]=[],availableBind:(string|number)[]=[];
+  if(request.runIds){availableWhere.push('run_key IN (SELECT value FROM json_each(?))');availableBind.push(JSON.stringify(request.runIds));}
   if(languageScope!=='all'){availableWhere.push('language_tag=?');availableBind.push(languageScope);}
   if(window.availableAt!==null){availableWhere.push('occurred_at<=?');availableBind.push(window.availableAt);}
   const count=(where:string[],bind:(string|number)[])=>Number((this.database.exec({sql:`SELECT COUNT(*) FROM sensa_learning_history${where.length?' WHERE '+where.join(' AND '):''}`,bind,rowMode:0,returnValue:'resultRows'}) as unknown[])[0]??0);

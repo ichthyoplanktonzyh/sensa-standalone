@@ -72,6 +72,94 @@ test('Today separates empty, resumed and future-review states and its counts ope
  await expect(list.locator('[data-learning-target]')).toHaveCount(2);
  const facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
  expect(facts.records).toHaveLength(2);expect(new Set(facts.records.map(record=>record.recordId)).size).toBe(2);
+ await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'今日',exact:true}).click();
+ const due=facts.completedTargets.map(target=>Date.parse(target.nextReviewAt!));
+ await page.clock.setFixedTime(new Date(Math.max(...due)+60_000));await page.reload();
+ await expect(home.getByRole('button',{name:'待复习 2',exact:true})).toBeVisible();
+ await home.getByRole('button',{name:'待复习 2',exact:true}).click();
+ await expect(list.getByRole('combobox',{name:'学习状态',exact:true})).toHaveValue('due');await expect(list.locator('[data-learning-target]')).toHaveCount(2);
+ await list.getByRole('combobox',{name:'学习状态',exact:true}).selectOption('new');await expect(list.locator('[data-learning-target]')).toHaveCount(0);
+});
+
+test('long learning content keeps primary controls reachable and completion reports only saved Session facts through offline sync and read recovery',async({page,context},testInfo)=>{
+ const previous=fixture.learningDelivery;
+ const expression='carry the thought through a very long conversation while keeping the original meaning and the listener in mind';
+ fixture.learningDelivery=portableBookDeliveryFixture({baseUrl:`${fixture.origin}/published/`,packageId:randomUUID(),expression,expressionKind:'phrase',usagePattern:'carry [a thought] through [a conversation]',title:'长场景验收样本',scene:'这是隔离测试场景。你与同事讨论计划，先回想情境，再连接表达。'.repeat(70)});
+ fixture.setRegistry([fixture.learningDelivery.descriptor]);
+ await page.addInitScript(({key,value})=>localStorage.setItem(key,JSON.stringify(value)),{key:fixture.storageKey,value:fixture.session()});
+ try{
+  const runtime=await fixture.startOrdinaryBook(page,/长场景验收样本/);
+  await expect(runtime.locator('[data-session-completed]')).toHaveText('本轮已完成 0');
+  await expect(runtime.locator('[data-session-pending]')).toHaveText('本轮待处理 1');
+  const primary=runtime.locator('[data-sensa-page-region="primary"]');
+  const visibleAndUncovered=async(button:ReturnType<Page['getByRole']>)=>{
+   const box=await button.boundingBox();expect(box).not.toBeNull();expect(box!.y).toBeGreaterThanOrEqual(0);expect(box!.y+box!.height).toBeLessThanOrEqual((await page.evaluate(()=>innerHeight))+1);
+   expect(await button.evaluate(element=>{const box=element.getBoundingClientRect(),hit=document.elementFromPoint(box.x+box.width/2,box.y+box.height/2);return !!hit&&(element===hit||element.contains(hit));})).toBe(true);
+  };
+  await visibleAndUncovered(runtime.getByRole('button',{name:/查看表达/}));
+  await page.screenshot({path:testInfo.outputPath('runtime-long-scene-desktop.png')});
+  await page.setViewportSize({width:320,height:740});
+  await visibleAndUncovered(runtime.getByRole('button',{name:/查看表达/}));
+  expect(await runtime.evaluate(element=>element.scrollWidth<=element.clientWidth+1)).toBe(true);
+  await page.screenshot({path:testInfo.outputPath('runtime-long-scene-narrow.png')});
+  await runtime.getByRole('button',{name:/查看表达/}).focus();await page.keyboard.press('Enter');
+  await expect(runtime.getByRole('heading',{name:expression,exact:true})).toBeVisible();
+  await visibleAndUncovered(runtime.getByRole('button',{name:/已经连上/}));
+  const usage=runtime.locator('details.sensa-expression-structure');
+  await expect(usage).not.toHaveAttribute('open','');
+  await usage.locator('summary').click();await expect(usage).toHaveAttribute('open','');
+  await usage.locator('summary').click();
+  await runtime.getByRole('button',{name:/还没连上/}).click();
+  await expect(runtime.locator('[data-session-repeat]')).toBeVisible();
+  await expect(runtime.locator('[data-session-completed]')).toHaveText('本轮已完成 0');
+  await page.reload();await expect(runtime.locator('[data-session-repeat]')).toBeVisible();
+  await runtime.getByRole('button',{name:/查看表达/}).click();
+  await expect(runtime.getByRole('button',{name:/有点印象/})).toBeEnabled();
+  await page.evaluate(()=>window.__sensaBrowserSmoke!.failNextLearningCommitForTest());
+  await runtime.getByRole('button',{name:/有点印象/}).click();
+  await expect(runtime.locator('[data-runtime-feedback]')).toContainText('未能保存到本机');
+  await visibleAndUncovered(runtime.getByRole('button',{name:/有点印象/}));
+  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records).toHaveLength(0);
+  await page.screenshot({path:testInfo.outputPath('runtime-save-failure-narrow.png')});
+  await primary.evaluate(element=>element.scrollTop=0);
+  // Desktop CSS zoom exercises this layout only, separately from the 320px case.
+  // It is explicitly not native browser zoom.
+  await page.setViewportSize({width:1280,height:900});
+  await page.evaluate(()=>document.documentElement.style.zoom='2');
+  await visibleAndUncovered(runtime.getByRole('button',{name:/有点印象/}));
+  await page.screenshot({path:testInfo.outputPath('runtime-200-percent-css-zoom.png')});
+  await page.evaluate(()=>document.documentElement.style.zoom='');
+  await page.setViewportSize({width:320,height:740});
+  await context.setOffline(true);
+  await runtime.getByRole('button',{name:/有点印象/}).click();
+  await expect(runtime.getByRole('heading',{name:'本轮完成',exact:true})).toBeVisible();
+  await expect(runtime.locator('[data-completion-kind="initial_learning"]')).toHaveText('1');
+  await expect(runtime.locator('[data-completion-kind="retention_review"]')).toHaveText('0');
+  await expect(runtime.locator('[data-completion-kind="relearning"]')).toHaveText('0');
+  await expect(runtime.locator('[data-completion-local]')).toHaveText('当前进度已保存在本机');
+  await expect(runtime.locator('[data-completion-cloud]')).not.toContainText('已同步到账号');
+  await expect(runtime.locator('[data-completion-cloud]')).toContainText(/离线|等待同步/);
+  await visibleAndUncovered(runtime.getByRole('button',{name:/完成并回到首页/}));
+  await visibleAndUncovered(runtime.getByRole('button',{name:'查看学习记录',exact:true}));
+  await expect(runtime.locator('[data-completion-next-review] time')).toBeVisible();
+  await page.screenshot({path:testInfo.outputPath('completion-offline-narrow.png')});
+  const saved=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());expect(saved.records).toHaveLength(1);
+  await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningRuntimeReadsForTest(true));
+  await expect(runtime.getByRole('alert')).toContainText('读取');
+  await expect(runtime.locator('[data-completion-kind]')).toHaveCount(0);await expect(runtime.getByRole('progressbar')).toHaveCount(0);
+  await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningRuntimeReadsForTest(false));
+  await runtime.getByRole('button',{name:'重试',exact:true}).click();
+  await expect(runtime.locator('[data-completion-kind="initial_learning"]')).toHaveText('1');
+  await context.setOffline(false);
+  await expect.poll(()=>page.evaluate(()=>window.__sensaBrowserSmoke!.syncStatus())).toBe('synced');
+  await expect(runtime.locator('[data-completion-cloud]')).toContainText('已同步到账号');
+  await page.setViewportSize({width:1280,height:900});
+  await page.screenshot({path:testInfo.outputPath('completion-synced-desktop.png')});
+  await runtime.getByRole('button',{name:'查看学习记录',exact:true}).evaluate(element=>{(element as HTMLButtonElement).click();(element as HTMLButtonElement).click();});
+  const study=page.locator('#s-study');await expect(study.getByRole('heading',{name:'最近记录',exact:true})).toBeFocused();
+  await expect(study.locator('ol li')).toHaveCount(1);
+  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records).toEqual(saved.records);
+ }finally{await context.setOffline(false);fixture.learningDelivery=previous;}
 });
 
 test('custom statistics rejects reversed, future and empty dates and recovers without changing learning facts',async({page},testInfo)=>{
@@ -140,14 +228,14 @@ test('review-only retains a paused initial Step through failed writes, two-tab H
  const revealed=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
  const beforeFacts=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest());
  await page.evaluate(()=>window.__sensaBrowserSmoke!.failNextLearningCommitForTest());
- await runtime.getByRole('button',{name:/有点印象/}).click();
+ await runtime.getByRole('button',{name:/想起但费力/}).click();
  await expect(page.getByText(/未能保存到本机/).first()).toBeVisible();
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(revealed);
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest())).toEqual(beforeFacts);
  const second=await context.newPage();await second.clock.setFixedTime(new Date(Date.parse(due)+60_000));await second.goto(page.url());
  const secondRuntime=second.locator('#s-lightweight-runtime');
- await expect(secondRuntime.getByRole('button',{name:/有点印象/})).toBeEnabled();
- await Promise.all([runtime.getByRole('button',{name:/有点印象/}).click(),secondRuntime.getByRole('button',{name:/有点印象/}).click()]);
+ await expect(secondRuntime.getByRole('button',{name:/想起但费力/})).toBeEnabled();
+ await Promise.all([runtime.getByRole('button',{name:/想起但费力/}).click(),secondRuntime.getByRole('button',{name:/想起但费力/}).click()]);
  await expect(runtime.getByRole('heading',{name:'本轮完成',exact:true})).toBeVisible();
  await expect(secondRuntime.getByRole('heading',{name:'本轮完成',exact:true})).toBeVisible();
  const saved=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
@@ -173,7 +261,7 @@ test('review-only Again survives a lost receipt and reload as a separate Relearn
  const {runtime,home,review}=await fixture.startDueReviewWithPausedInitial(page);
  await runtime.getByRole('button',{name:/查看表达/}).click();
  await page.evaluate(()=>window.__sensaBrowserSmoke!.loseNextLearningActionResponseForTest());
- await runtime.getByRole('button',{name:/还没连上/}).click();
+ await runtime.getByRole('button',{name:/没想起/}).click();
  await expect(runtime.getByRole('button',{name:/查看表达/})).toBeEnabled();
  const repair=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
  expect(repair.runtime!.targetId).toBe(review.runtime!.targetId);expect(repair.runtime!.runId).not.toBe(review.runtime!.runId);
@@ -187,6 +275,9 @@ test('review-only Again survives a lost receipt and reload as a separate Relearn
  await expect(runtime.getByRole('heading',{name:'本轮完成',exact:true})).toBeVisible();
  const saved=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
  expect(saved.records.map(record=>record.kind).sort()).toEqual(['initial_learning','relearning','retention_review']);
+ await expect(runtime.locator('[data-completion-kind="initial_learning"]')).toHaveText('0');
+ await expect(runtime.locator('[data-completion-kind="retention_review"]')).toHaveText('1');
+ await expect(runtime.locator('[data-completion-kind="relearning"]')).toHaveText('1');
  const after=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningSettlementFactsForTest());
  expect(after.targets).toEqual(facts.targets);expect(after.behavioralEvidenceCount).toBe(0);
  await runtime.getByRole('button',{name:/完成并回到首页/}).click();await expect(home.getByRole('button',{name:'继续学习',exact:true})).toHaveCount(0);await expect(home.getByRole('button',{name:'开始学习',exact:true})).toBeEnabled();
@@ -220,7 +311,7 @@ test('initial Again retries the same Run, failed writes do not advance, and a lo
  await page.evaluate(()=>window.__sensaBrowserSmoke!.loseNextLearningActionResponseForTest());
  await runtime.getByRole('button',{name:/已经连上/}).click();
  await expect(runtime.getByRole('heading',{name:'本轮完成',exact:true})).toBeVisible();
- await expect(page.getByRole('status')).toContainText('未收到操作结果');
+ await expect(runtime.locator('[data-runtime-feedback]')).toContainText('未收到操作结果');
  const reads=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningReadsForTest());
  expect(reads.workspace??0).toBe(0);expect(reads.home??0).toBe(0);expect(reads.runtime).toBeGreaterThan(0);
  const completed=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
@@ -451,6 +542,13 @@ test('Book mode and ordinal Range recover from failed writes, preserve the curre
  await pausedList.getByRole('combobox',{name:'学习状态',exact:true}).selectOption('new');
  await expect(pausedList.locator('[data-learning-target]')).toHaveCount(0);
  await pausedList.getByRole('button',{name:'返回',exact:true}).click();
+ await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'今日',exact:true}).click();
+ await expect(page.locator('#s-home').getByRole('button',{name:'待新学 0',exact:true})).toBeVisible();
+ await page.locator('#s-home').getByRole('button',{name:'继续学习',exact:true}).click();
+ await expect(runtime.locator('[data-session-pending]')).toHaveText('本轮待处理 1');
+ await runtime.getByRole('button',{name:'暂停',exact:true}).click();
+ await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的学习',exact:true}).click();
+ await fixture.openLearningManagement(page);
  await plans.getByRole('button',{name:'编辑《到期复习样本》',exact:true}).click();
  await dialog.getByRole('combobox',{name:'后续学习模式',exact:true}).selectOption('maintenance');
  await page.evaluate(()=>window.__sensaBrowserSmoke!.failBookPlanReadsForTest(true));
@@ -659,7 +757,7 @@ test('repeated Relearning failure requires explicit retry and survives offline r
   try{
     let page=context.pages()[0]!;
     const {runtime,review}=await fixture.startDueReviewWithPausedInitial(page);
-    await runtime.getByRole('button',{name:/查看表达/}).click();await runtime.getByRole('button',{name:/还没连上/}).click();
+    await runtime.getByRole('button',{name:/查看表达/}).click();await runtime.getByRole('button',{name:/没想起/}).click();
     await expect(runtime.getByRole('button',{name:/查看表达/})).toBeEnabled();
     await runtime.getByRole('button',{name:/查看表达/}).click();
     const revealed=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());

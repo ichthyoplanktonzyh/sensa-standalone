@@ -359,6 +359,7 @@ const localActionSchema=z.discriminatedUnion('kind',[z.object({kind:z.literal('r
 type LocalLightweightProtocolState={phase:'recall'|'reveal';initial:LightweightInitialProtocolRunState|null};
 const localState=(run:LocalLearningRun)=>readLocalProtocolState<LocalLightweightProtocolState>(run,'lightweight');
 export const localLightweightPhase=(run:LocalLearningRun)=>localState(run).phase;
+export const localLightweightRetryCount=(run:LocalLearningRun)=>localState(run).initial?.retryCount??0;
 /** Reveal support must use the experience actually acted on, not a later
  * materialization's possibly revised recall cue. */
 export const localLightweightAdoptedExperience=(run:LocalLearningRun,participant:LocalLearningRunParticipant):LocalLearningMaterialization|null=>{

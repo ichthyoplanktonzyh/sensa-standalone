@@ -22,6 +22,7 @@ export const SHELL_PARAM_KEYS = [
   'learningQuery',
   'learningSort',
   'learningPage',
+  'studySection',
 ] as const;
 
 export type ShellParamKey = (typeof SHELL_PARAM_KEYS)[number];
@@ -66,7 +67,7 @@ export const SHELL_SCREEN_DEFINITIONS = [
   { id: 's-real-world-listening', host: 'practice' },
   { id: 's-semantic-world', host: 'learning', params: ['worldAction'] },
   { id: 's-stats', host: 'learning' },
-  { id: 's-study', host: 'learning' },
+  { id: 's-study', host: 'learning',params:['studySection'] },
 ] as const satisfies readonly ShellScreenDefinition[];
 
 type RegisteredScreen = (typeof SHELL_SCREEN_DEFINITIONS)[number];

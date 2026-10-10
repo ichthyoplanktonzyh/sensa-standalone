@@ -17,6 +17,8 @@ export function RuntimeFrame({
   children,
   tools,
   pauseShortcut,
+  controls,
+  feedback,
 }: {
   id: string;
   active: boolean;
@@ -29,6 +31,8 @@ export function RuntimeFrame({
   children: ReactNode;
   tools?: ReactNode;
   pauseShortcut?: string;
+  controls?: ReactNode;
+  feedback?: ReactNode;
 }) {
   const { t } = useTranslation();
   return (
@@ -94,6 +98,8 @@ export function RuntimeFrame({
             {children}
           </>
         ),
+        controls,
+        feedback,
       }}
     />
   );

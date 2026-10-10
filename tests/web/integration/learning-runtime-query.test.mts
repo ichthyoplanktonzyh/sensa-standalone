@@ -40,6 +40,7 @@ test('Runtime and Target detail use exact reads, plan only at a Run boundary, an
   expect(current.runtime).toEqual(expected.runtime);
   expect(current.nextTargetId).toBeNull();
   expect(current.dailyLimit).toBe(20);
+  expect(current.sessionSummary).toMatchObject({completedCount:0,pendingCount:2,pendingInitialCount:2,pendingReviewCount:0});
   expect(targetReads).toEqual([targetId]);
   if(current.runtime?.kind!=='lightweight'||!current.runtime.target.packageKey)throw new Error('Fixture must have a current published package');
   const sourceKey=current.runtime.target.packageKey;
@@ -88,6 +89,8 @@ test('Runtime and Target detail use exact reads, plan only at a Run boundary, an
  expect(retried.runtime.completed).toBe(false);expect(retried.runtime.phase).toBe('experience');
  expect(retried.runtime.runId).toBe(revealed.runtime.runId);expect(retried.runtime.currentTargetId).toBe(targetId);
  expect(retried.runtime.revision).toBe(revealed.runtime.revision+1);
+ expect(retried.runtime).toMatchObject({repeatCount:1});
+ expect(retried.sessionSummary).toMatchObject({completedCount:0});
  const unfinished=await learningSystem.read({kind:'workspace',languageContext:context,clock:Date.parse(at)});
  expect(unfinished.records).toEqual([]);expect(unfinished.targets.find(target=>target.targetId===targetId)?.nextReviewAt).toBeNull();
  await expect(learningSystem.execute({...again,operationId:id()})).rejects.toThrow('localFlow.stepChanged');
@@ -95,6 +98,8 @@ test('Runtime and Target detail use exact reads, plan only at a Run boundary, an
  const secondReveal=await learningSystem.read({kind:'runtime',languageContext:context,clock:Date.parse(at)});
  await learningSystem.execute({kind:'act',operationId:id(),runId:secondReveal.runtime!.runId,expectedRevision:secondReveal.runtime!.revision,action:{kind:'rate',rating:'hard'},at});
  const completed=await learningSystem.read({kind:'runtime',languageContext:context,clock:Date.parse(at)});
+ expect(completed.sessionSummary).toMatchObject({completed:{initial_learning:1,retention_review:0,relearning:0},completedCount:1,pendingCount:1,pendingInitialCount:1,pendingReviewCount:0});
+ expect(completed.sessionSummary?.nextReviewAt).toBeTruthy();
  expect(completed.runtime?.completed).toBe(true);expect(completed.nextTargetId).not.toBe(targetId);expect(completed.nextTargetId).not.toBeNull();
  const saved=await learningSystem.read({kind:'workspace',languageContext:context,clock:Date.parse(at)});
  expect(saved.records).toHaveLength(1);expect(saved.targets.find(target=>target.targetId===targetId)?.nextReviewAt).toBeTruthy();

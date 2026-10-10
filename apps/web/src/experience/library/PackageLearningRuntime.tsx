@@ -31,7 +31,7 @@ import type {SensaPinnedLanguageContext} from '@sensa/contracts/sensa';
 import {projectPackageSource,type PackageCenterItem} from './packageCenterProjection';
 
 type Controller=ReturnType<typeof usePackageLearning>;
-type PackageRuntimeProps={active:boolean;c:Controller;onExit:()=>void;onFinish:()=>void;onViewLearningLibrary:()=>void};
+type PackageRuntimeProps={active:boolean;c:Controller;onExit:()=>void;onFinish:()=>void;onViewRecords:()=>void;onViewLearningLibrary:()=>void};
 const runtimeLookupLanguages=(runtime:Controller['runtime']):SensaPinnedLanguageContext|undefined=>runtime&&(runtime.kind==='lightweight'||runtime.kind==='structured')?runtime.target.languageContext:undefined;
 
 const lookupRuntimeDictionary:AssuranceSupportHost['lookupDictionary']=async(input,options)=>{
@@ -145,7 +145,7 @@ function RuntimeOverlays({c,policy,onViewLearningLibrary,onExit}:{c:Controller;p
  </>;
 }
 
-function LightweightPackageRuntime({active,runtime,c,host,onExit,onFinish}:{active:boolean;runtime:LearningLightweightRuntimeProjection;c:Controller;host:AssuranceSupportHost;onExit:()=>void;onFinish:()=>void}){
+function LightweightPackageRuntime({active,runtime,c,host,onExit,onFinish,onViewRecords}:{active:boolean;runtime:LearningLightweightRuntimeProjection;c:Controller;host:AssuranceSupportHost;onExit:()=>void;onFinish:()=>void;onViewRecords:()=>void}){
  useTranslation();
  // This command frame must not inherit a previously opened global World or
  // Practice read snapshot. SQLite receipts/indexed dependencies own races.
@@ -156,8 +156,7 @@ function LightweightPackageRuntime({active,runtime,c,host,onExit,onFinish}:{acti
  const {scene,status:sceneStatus,retry:retryScene}=usePersonalLearningScene(target.targetId,target.languageContext.languageRouteId);
  const rate=async(rating:LearningLightweightRating)=>{
   if(sceneStatus!=='ready')return;
-  const accepted=await c.act({kind:'rate',rating});
-  if(accepted&&runtime.purpose==='initial_learning'&&rating!=='again')host.toast(i18n.t('runtime.initialSaved',{expression:target.presentation.expression}));
+  await c.act({kind:'rate',rating});
  };
  const material=target.material;
  const content={senseKey:target.identity.senseId,lemma:target.presentation.expression,guideLabelL1:target.presentation.meaning};
@@ -200,7 +199,7 @@ function LightweightPackageRuntime({active,runtime,c,host,onExit,onFinish}:{acti
   </section>}
   {active&&!c.busy&&sceneStatus==='ready'&&runtime.phase==='reveal'&&<LearningQuestion key={`${learningQuestionScope(runtime)}:${sceneRevision?.revisionId??''}`} runtime={runtime} personalScene={sceneRevision?.body}/>}
  </>;
- return <><LightweightRuntimeStartScreen support={support} tools={!runtime.completed&&<RuntimeTools content={content} personalContent={runtime.phase==='reveal'?content:null} showSave={runtime.phase==='reveal'} onMarkKnown={markKnown} onOpenMenuMore={host.onOpenMenuMore} toast={host.toast} busy={sceneBusy}/>} active={active} busy={sceneBusy} completionKey={runtime.completed?`${runtime.runId}:${runtime.revision}`:null} target={target.presentation} materialization={material} step={runtime.completed?null:runtime.step} completed={runtime.completed} needsRelearning={runtime.needsRelearning} onRetryRelearning={()=>void c.retryRelearning()} hasNextTarget={!!c.nextTarget} onExit={onExit} onReveal={()=>{if(sceneStatus==='ready')void c.act({kind:'reveal'});}} onRate={rating=>void rate(rating)} onFinish={onFinish} personalScene={sceneRevision} onOpenPersonalScene={runtime.purpose==='initial_learning'&&sceneStatus==='ready'?openPersonalScene:undefined} semanticWorldState={runtime.phase==='reveal'?worldState:null} onSaveToSemanticWorld={acceptPersonalScene} onOpenDictionary={host.openDict} lookupDictionary={host.lookupDictionary} toast={host.toast} purpose={runtime.purpose}/>{active&&c.notice&&<p role="status" className="fixed bottom-4 left-4 right-4 z-[100] rounded-xl bg-accent-soft p-3">{localFlowNotice(c.notice)}</p>}</>;
+ return <LightweightRuntimeStartScreen sessionSummary={c.sessionSummary} repeatCount={runtime.repeatCount} notice={active?c.notice:undefined} onViewRecords={onViewRecords} support={support} tools={!runtime.completed&&<RuntimeTools content={content} personalContent={runtime.phase==='reveal'?content:null} showSave={runtime.phase==='reveal'} onMarkKnown={markKnown} onOpenMenuMore={host.onOpenMenuMore} toast={host.toast} busy={sceneBusy}/>} active={active} busy={sceneBusy} completionKey={runtime.completed?`${runtime.runId}:${runtime.revision}`:null} target={target.presentation} materialization={material} step={runtime.completed?null:runtime.step} completed={runtime.completed} needsRelearning={runtime.needsRelearning} onRetryRelearning={()=>void c.retryRelearning()} hasNextTarget={!!c.nextTarget} onExit={onExit} onReveal={()=>{if(sceneStatus==='ready')void c.act({kind:'reveal'});}} onRate={rating=>void rate(rating)} onFinish={onFinish} personalScene={sceneRevision} onOpenPersonalScene={runtime.purpose==='initial_learning'&&sceneStatus==='ready'?openPersonalScene:undefined} semanticWorldState={runtime.phase==='reveal'?worldState:null} onSaveToSemanticWorld={acceptPersonalScene} onOpenDictionary={host.openDict} lookupDictionary={host.lookupDictionary} toast={host.toast} purpose={runtime.purpose}/>;
 }
 
 function FourStageInitialPackageRuntime({active,runtime,c,onExit,onFinish}:{active:boolean;runtime:LearningFourStageInitialRuntimeProjection;c:Controller;onExit:()=>void;onFinish:()=>void}){
@@ -220,10 +219,10 @@ function StructuredPackageRuntime({active,runtime,c,host,onExit,onFinish}:{activ
 export function PackageRuntime(props:PackageRuntimeProps){
  const host=useRuntimeHost(runtimeLookupLanguages(props.c.runtime));
  const runtime=props.c.runtime;
- if(props.c.loadStatus==='unavailable'||props.c.endedStateNeedsRead)return <RuntimeFrame id="s-lightweight-runtime" active={props.active} title={i18n.t('runtime.learning')} stepLabel={localFlowText('progressReadFailed')} progress={0} onExit={props.onExit}><section role="alert" className="space-y-5 py-10"><p>{props.c.notice||localFlowText('progressReadFailed')}</p><button className={runtimePrimary} onClick={()=>void (props.c.endedStateNeedsRead?props.c.retryEndedStateRead():props.c.retryInitialLoad())}>{i18n.t('reliability.retry')}</button></section></RuntimeFrame>;
- if(!runtime)return <RuntimeFrame id="s-lightweight-runtime" active={props.active} title={i18n.t('runtime.learning')} stepLabel={localFlowText(props.c.busy?'runtimeSwitching':props.c.nextTarget?'startLearning':'runtimeNoPending')} progress={0} onExit={props.onExit}><section className="py-10 text-center"><h1 role="status" className="text-2xl">{localFlowText(props.c.busy?'runtimeSwitching':props.c.nextTarget?'startLearning':'runtimeNoPending')}</h1>{props.c.notice&&<p role="status" className="mt-4">{props.c.notice}</p>}{!props.c.busy&&<button className={`${runtimePrimary} mt-8`} onClick={()=>{if(props.c.nextTarget)void props.c.start(props.c.nextTarget.targetId,props.c.dailyLimit??20);else props.onExit();}}>{props.c.nextTarget?localFlowText('startLearning'):i18n.t('runtime.home')}</button>}</section></RuntimeFrame>;
+ if(props.c.loadStatus==='unavailable'||props.c.endedStateNeedsRead)return <RuntimeFrame id="s-lightweight-runtime" active={props.active} title={i18n.t('runtime.learning')} stepLabel={localFlowText('progressReadFailed')} progress={null} onExit={props.onExit}><section role="alert" className="space-y-5 py-10"><p>{props.c.notice||localFlowText('progressReadFailed')}</p><button className={runtimePrimary} onClick={()=>void (props.c.endedStateNeedsRead?props.c.retryEndedStateRead():props.c.retryInitialLoad())}>{i18n.t('reliability.retry')}</button></section></RuntimeFrame>;
+ if(!runtime)return <RuntimeFrame id="s-lightweight-runtime" active={props.active} title={i18n.t('runtime.learning')} stepLabel={localFlowText(props.c.busy?'runtimeSwitching':props.c.nextTarget?'startLearning':'runtimeNoPending')} progress={null} onExit={props.onExit}><section className="py-10 text-center"><h1 role="status" className="text-2xl">{localFlowText(props.c.busy?'runtimeSwitching':props.c.nextTarget?'startLearning':'runtimeNoPending')}</h1>{props.c.notice&&<p role="status" className="mt-4">{props.c.notice}</p>}{!props.c.busy&&<button className={`${runtimePrimary} mt-8`} onClick={()=>{if(props.c.nextTarget)void props.c.start(props.c.nextTarget.targetId,props.c.dailyLimit??20);else props.onExit();}}>{props.c.nextTarget?localFlowText('startLearning'):i18n.t('runtime.home')}</button>}</section></RuntimeFrame>;
  const surface=runtime.kind==='lightweight'
-  ?<LightweightPackageRuntime active={props.active} runtime={runtime} c={props.c} host={host} onExit={props.onExit} onFinish={props.onFinish}/>
+  ?<LightweightPackageRuntime active={props.active} runtime={runtime} c={props.c} host={host} onExit={props.onExit} onFinish={props.onFinish} onViewRecords={props.onViewRecords}/>
   :runtime.kind==='structured'
    ?<StructuredPackageRuntime active={props.active} runtime={runtime} c={props.c} host={host} onExit={props.onExit} onFinish={props.onFinish}/>
    :runtime.kind==='four_stage_initial'

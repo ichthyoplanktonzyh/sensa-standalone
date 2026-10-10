@@ -5,12 +5,14 @@ import type { ExperienceRecallCardPresentation } from "../../../learningRuntime/
 import { runtimePrimary } from "../../learning/RuntimeFrame";
 import type { PersonalLearningSceneRevision } from "../../../../personalContent/system";
 interface ExperienceRecallCardProps {
+  readonly hidePrimaryAction?: boolean;
   readonly presentation: ExperienceRecallCardPresentation;
   readonly personalScene?: PersonalLearningSceneRevision | null;
   readonly onOpenPersonalScene?: () => void;
   readonly onReveal: () => void;
 }
 export function ExperienceRecallCard({
+  hidePrimaryAction=false,
   presentation,
   personalScene,
   onOpenPersonalScene,
@@ -56,7 +58,7 @@ export function ExperienceRecallCard({
             {t(personalScene ? "runtime.editMyScene" : "runtime.addMyScene")}
           </button>
         )}
-        <button
+        {!hidePrimaryAction&&<button
           type="button"
           onClick={onReveal}
           className={`${runtimePrimary} w-full sm:w-auto`}
@@ -64,7 +66,7 @@ export function ExperienceRecallCard({
           {t("runtime.reveal")}
           <ArrowRight size={17} />
           <kbd className="sensa-shortcut-hint" aria-hidden="true">↵</kbd>
-        </button>
+        </button>}
       </div>
     </section>
   );

@@ -76,6 +76,16 @@
     "learningSortDue": "Prochaine échéance",
     "learningSortExpression": "Expression",
     "learningVisibleCount": "Éléments {{start}}–{{end}} sur {{count}}",
-    "todayEmptyTitle": "Aucun contenu ajouté à apprendre"
+    "todayEmptyTitle": "Aucun contenu ajouté à apprendre",
+    "sessionCompleted": "Terminé dans cette session",
+    "sessionPending": "À traiter dans cette session",
+    "sessionQueueHint": "Les tâches restantes changent avec les répétitions, les autoévaluations et les révisions dues.",
+    "repeatHint": "Vous avez choisi «Pas encore de lien» ; la scène de cette expression est répétée.",
+    "completionLocalSaved": "La progression actuelle est enregistrée sur cet appareil",
+    "completionSyncUnknown": "L’état de synchronisation cloud n’est pas encore confirmé",
+    "completionNoSchedule": "Aucune révision ultérieure n’est prévue dans le programme actuel",
+    "completionNotMastery": "Un enregistrement de fin ne signifie pas la maîtrise. Suivez le calendrier réel de révision.",
+    "completionViewRecords": "Voir les résultats enregistrés",
+    "sessionSummaryUnavailable": "Les résultats de cette session n’ont pas encore été lus"
   }
 }

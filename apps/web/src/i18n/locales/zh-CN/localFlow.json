@@ -538,6 +538,16 @@
     "learningSortDue": "下次到期",
     "learningSortExpression": "表达",
     "learningVisibleCount": "第 {{start}}–{{end}} 项，共 {{count}} 项",
-    "todayEmptyTitle": "还没有加入学习内容"
+    "todayEmptyTitle": "还没有加入学习内容",
+    "sessionCompleted": "本轮已完成",
+    "sessionPending": "本轮待处理",
+    "sessionQueueHint": "待处理数会随重复、自评和到期情况变化。",
+    "repeatHint": "刚才选择了还没连上，正在重复这条表达的场景。",
+    "completionLocalSaved": "当前进度已保存在本机",
+    "completionSyncUnknown": "云同步状态尚未确认",
+    "completionNoSchedule": "当前安排暂无后续复习时间",
+    "completionNotMastery": "完成记录不代表已经掌握；后续复习以实际安排为准。",
+    "completionViewRecords": "查看学习记录",
+    "sessionSummaryUnavailable": "本轮记录暂未读取"
   }
 }

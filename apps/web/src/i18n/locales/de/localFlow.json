@@ -76,6 +76,16 @@
     "learningSortDue": "Nächste Fälligkeit",
     "learningSortExpression": "Ausdruck",
     "learningVisibleCount": "Einträge {{start}}–{{end}} von {{count}}",
-    "todayEmptyTitle": "Noch keine Lerninhalte hinzugefügt"
+    "todayEmptyTitle": "Noch keine Lerninhalte hinzugefügt",
+    "sessionCompleted": "In dieser Runde abgeschlossen",
+    "sessionPending": "In dieser Runde ausstehend",
+    "sessionQueueHint": "Ausstehende Aufgaben ändern sich durch Wiederholung, Selbsteinschätzung und fällige Wiederholungen.",
+    "repeatHint": "Du hast „Noch nicht verbunden“ gewählt; die Szene dieses Ausdrucks wird wiederholt.",
+    "completionLocalSaved": "Der aktuelle Fortschritt ist auf diesem Gerät gespeichert",
+    "completionSyncUnknown": "Der Cloud-Synchronisierungsstatus ist noch nicht bestätigt",
+    "completionNoSchedule": "Im aktuellen Plan ist keine spätere Wiederholung vorgesehen",
+    "completionNotMastery": "Ein Abschluss bedeutet keine Beherrschung. Maßgeblich ist der tatsächliche Wiederholungsplan.",
+    "completionViewRecords": "Lernaufzeichnungen ansehen",
+    "sessionSummaryUnavailable": "Die Aufzeichnungen dieser Runde wurden noch nicht gelesen"
   }
 }

@@ -538,6 +538,16 @@
     "learningSortDue": "Jatuh tempo berikutnya",
     "learningSortExpression": "Ungkapan",
     "learningVisibleCount": "Item {{start}}–{{end}} dari {{count}}",
-    "todayEmptyTitle": "Belum ada konten pembelajaran yang ditambahkan"
+    "todayEmptyTitle": "Belum ada konten pembelajaran yang ditambahkan",
+    "sessionCompleted": "Selesai pada putaran ini",
+    "sessionPending": "Tertunda pada putaran ini",
+    "sessionQueueHint": "Tugas tertunda berubah mengikuti pengulangan, penilaian diri, dan jadwal ulasan.",
+    "repeatHint": "Anda memilih “Belum terhubung”; adegan ungkapan ini diulang.",
+    "completionLocalSaved": "Kemajuan saat ini tersimpan di perangkat ini",
+    "completionSyncUnknown": "Status sinkronisasi cloud belum dikonfirmasi",
+    "completionNoSchedule": "Tidak ada ulasan berikutnya yang dijadwalkan dalam rencana saat ini",
+    "completionNotMastery": "Catatan penyelesaian tidak berarti penguasaan. Ikuti jadwal ulasan yang sebenarnya.",
+    "completionViewRecords": "Lihat catatan pembelajaran",
+    "sessionSummaryUnavailable": "Catatan putaran ini belum terbaca"
   }
 }

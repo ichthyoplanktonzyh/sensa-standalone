@@ -225,6 +225,7 @@ export interface LearningLightweightRuntimeProjection extends LearningRuntimePro
   readonly kind: 'lightweight';
   /** The Run ended, but its recorded repair progress is not a Completion. */
   readonly needsRelearning: boolean;
+  readonly repeatCount: number;
   readonly target: LearningTargetProjection;
   readonly phase: 'experience' | 'reveal';
   readonly step: LearningLightweightStepProjection | null;
@@ -341,10 +342,11 @@ export interface LearningWorkspaceProjection {
   readonly policyOptions: readonly LearningPolicyOption[];
 }
 
-/** Active execution plus compact continuation planning, without collection
- * material, completed Run history or study records. */
+/** Active execution and indexed counts, without collection material or
+ * completed Run payloads. */
 export interface LearningRuntimeWorkspaceProjection {
   readonly runtime: LearningRuntimeProjection | null;
+  readonly sessionSummary: LearningSessionSummary | null;
   readonly dailyLimit: number | null;
   /** Editable future preference, distinct from this activity's fixed quota. */
   readonly preferencesDailyLimit: number | null;
@@ -352,6 +354,18 @@ export interface LearningRuntimeWorkspaceProjection {
   readonly nextTargetId: string | null;
   readonly nextChangeAt: number | null;
   readonly policyOptions: readonly LearningPolicyOption[];
+}
+
+/** Settled facts from this Session's exact Runs and current qualified queue
+ * counts. Pending work is a live snapshot, never a frozen Session total. */
+export interface LearningSessionSummary {
+ readonly sessionId:string;
+ readonly completed:import('./learningHistoryModel').LearningHistoryCounts;
+ readonly completedCount:number;
+ readonly pendingCount:number;
+ readonly pendingInitialCount:number;
+ readonly pendingReviewCount:number;
+ readonly nextReviewAt:string|null;
 }
 
 /** One current Route's Target detail, without collection planning or history.

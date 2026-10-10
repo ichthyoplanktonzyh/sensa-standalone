@@ -68,4 +68,14 @@
     "learningSortDue": "Następny termin",
     "learningSortExpression": "Wyrażenie",
     "learningVisibleCount": "Pozycje {{start}}–{{end}} z {{count}}",
-    "todayEmptyTitle": "Nie dodano jeszcze treści do nauki"}}
+    "todayEmptyTitle": "Nie dodano jeszcze treści do nauki",
+    "sessionCompleted": "Ukończone w tej rundzie",
+    "sessionPending": "Oczekujące w tej rundzie",
+    "sessionQueueHint": "Liczba oczekujących zadań zmienia się wraz z powtórkami, samooceną i terminami powtórek.",
+    "repeatHint": "Wybrano „Jeszcze nie połączone”; scena tego wyrażenia jest powtarzana.",
+    "completionLocalSaved": "Bieżące postępy zapisano na tym urządzeniu",
+    "completionSyncUnknown": "Stan synchronizacji z chmurą nie został jeszcze potwierdzony",
+    "completionNoSchedule": "W bieżącym planie nie ma kolejnej zaplanowanej powtórki",
+    "completionNotMastery": "Zapis ukończenia nie oznacza opanowania. Kieruj się rzeczywistym harmonogramem powtórek.",
+    "completionViewRecords": "Zobacz zapisy nauki",
+    "sessionSummaryUnavailable": "Zapisy tej rundy nie zostały jeszcze odczytane"}}

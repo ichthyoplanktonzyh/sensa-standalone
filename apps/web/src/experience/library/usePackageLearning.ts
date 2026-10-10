@@ -50,6 +50,7 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
  const [packages,setPackages]=useState<InstalledPackage[]>([]);
  const [catalog,setCatalog]=useState<ContentSupplyCatalogItem[]>([]);
  const [workspace,setWorkspace]=useState<LearningWorkspaceProjection>(emptyWorkspace);
+ const [sessionSummary,setSessionSummary]=useState<import('../../learning/system/learningReadModels').LearningSessionSummary|null>(null);
  const [management,setManagement]=useState<LearningManagementProjection|null>(null);
  const [notice,setNotice]=useState('');
  const [busy,setBusy]=useState(false);
@@ -112,6 +113,7 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
    if(current!==lifecycle.current||version!==viewEpoch.current.version||currentRoute.current!==routeKey)return false;
    setPackages([...sources]);
    setRuntimePreferencesDailyLimit(projection.preferencesDailyLimit);
+   setSessionSummary(projection.sessionSummary);
    setWorkspace(previous=>({...previous,runtime:projection.runtime,activeRunId:projection.runtime?.runId??null,dailyLimit:projection.dailyLimit,policyOptions:projection.policyOptions,
     queue:{...previous.queue,nextTargetId:projection.nextTargetId,nextChangeAt:projection.nextChangeAt}}));
    setRuntimeNextTargetId(projection.nextTargetId);
@@ -291,6 +293,7 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
   activeRunTargetIds:mode==='target'?targetDetail.activeRunTargetIds:workspace.runtime?.targetIds??[],
   targetExportPackageKey:mode==='target'&&loadStatus==='ready'?targetDetail.exportPackageKey:null,
   initialReady,due,nextTarget,runtime,
+  sessionSummary:runtimeOnly&&loadStatus==='ready'?sessionSummary:null,
   records:workspace.records,
   policyOptions:workspace.policyOptions,
   dailyLimit:dailyLimit??undefined,
@@ -371,6 +374,11 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
     return true;
    }finally{actInFlight.current=false;if(current===lifecycle.current&&currentRoute.current===routeKey)setBusy(false);}
   },
-  advance:()=>runtime?perform(()=>learningSystem.execute({kind:'advance',operationId:crypto.randomUUID(),runId:runtime.runId,languageContext,dailyLimit})):Promise.resolve(null),
+  advance:async()=>{
+   if(!runtime||actInFlight.current||loadStatus!=='ready')return null;
+   actInFlight.current=true;
+   try{return await perform(()=>learningSystem.execute({kind:'advance',operationId:crypto.randomUUID(),runId:runtime.runId,languageContext,dailyLimit}));}
+   finally{actInFlight.current=false;}
+  },
  };
 }

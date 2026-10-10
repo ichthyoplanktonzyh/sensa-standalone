@@ -20,6 +20,7 @@ import { cardText } from "../../../../i18n/originalCards";
 const stripMarkup = (value: string): string => value.replace(/<[^>]*>/gu, "").trim();
 
 interface ExpressionRevealCardProps {
+  readonly hidePrimaryAction?: boolean;
   readonly initial?: boolean;
   readonly active: boolean;
   readonly presentation: ExpressionRevealCardPresentation;
@@ -34,6 +35,7 @@ interface ExpressionRevealCardProps {
 }
 
 export function ExpressionRevealCard({
+  hidePrimaryAction=false,
   presentation,
   active,
   initial = true,
@@ -274,10 +276,10 @@ export function ExpressionRevealCard({
         )}
 
         {languageStructure?.usagePattern && (
-          <section className="sensa-expression-structure mt-6 grid gap-2 border-t border-border-subtle pt-5" aria-labelledby={usagePatternLabelId}>
-            <h2 id={usagePatternLabelId} className="text-xs font-medium uppercase tracking-wide text-fg-tertiary">{t("runtime.usagePattern")}</h2>
+          <details className="sensa-expression-structure sensa-expression-disclosure mt-6 border-t border-border-subtle" aria-labelledby={usagePatternLabelId}>
+            <summary id={usagePatternLabelId}>{t("runtime.usagePattern")}</summary>
             <p className="font-language text-base font-semibold leading-7 text-action-primary">{languageStructure.usagePattern}</p>
-          </section>
+          </details>
         )}
       </div>
 
@@ -348,7 +350,7 @@ export function ExpressionRevealCard({
       )}
 
       {categoryResources?.map(resource=><details key={resource.resourceKey} className="sensa-expression-disclosure"><summary>{learningResourceLabel(resource.materialRoleKey)}</summary><LearningResource resource={resource}/></details>)}
-      <RuntimeRating initial={initial} showDescriptions={false} onRate={onRate} />
+      {!hidePrimaryAction&&<RuntimeRating initial={initial} showDescriptions={false} onRate={onRate} />}
       {activeLookup && (
         <LearningExampleLookup
           entry={activeLookup.entry}

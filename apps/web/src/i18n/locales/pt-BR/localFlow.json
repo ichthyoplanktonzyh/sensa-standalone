@@ -540,6 +540,16 @@
     "learningSortDue": "Próximo vencimento",
     "learningSortExpression": "Expressão",
     "learningVisibleCount": "Itens {{start}}–{{end}} de {{count}}",
-    "todayEmptyTitle": "Nenhum conteúdo adicionado para aprender"
+    "todayEmptyTitle": "Nenhum conteúdo adicionado para aprender",
+    "sessionCompleted": "Concluído nesta rodada",
+    "sessionPending": "Pendente nesta rodada",
+    "sessionQueueHint": "As tarefas pendentes mudam com repetições, autoavaliações e revisões vencidas.",
+    "repeatHint": "Você escolheu “Ainda não conectou”; a cena desta expressão está sendo repetida.",
+    "completionLocalSaved": "O progresso atual está salvo neste dispositivo",
+    "completionSyncUnknown": "O estado da sincronização na nuvem ainda não foi confirmado",
+    "completionNoSchedule": "Não há revisão posterior agendada no plano atual",
+    "completionNotMastery": "Um registro de conclusão não significa domínio. Siga o cronograma real de revisão.",
+    "completionViewRecords": "Ver registros de aprendizagem",
+    "sessionSummaryUnavailable": "Os registros desta rodada ainda não foram lidos"
   }
 }

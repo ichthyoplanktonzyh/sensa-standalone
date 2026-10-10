@@ -248,7 +248,7 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
     const targets=(await this.entries('learningTargets')).map(row=>decodeBackupValue(JSON.parse(row.encodedValue)) as LocalLearningTarget).filter(target=>ids.has(target.id)||today.has(target.id)).map(createHomeLearningTargetRecord);
     return runtimeLearningCandidatesFromRecords({...stored,targets,availablePackageKeys:(await this.entries('packageCache')).map(row=>row.key)},query,scope);
   }
-  async learningManagementSummary(query:LearningManagementSummaryQuery):Promise<LearningManagementStorageSummary>{return {...learningManagementSummaryFromRecords(await this.homeLearningProjection(query.languageContext.languageRouteId,query.clock),query),libraryTargetCount:(await this.entries('learningTargets')).length};}
+  async learningManagementSummary(query:LearningManagementSummaryQuery):Promise<LearningManagementStorageSummary>{return {...learningManagementSummaryFromRecords(await this.homeLearningProjection(query.languageContext.languageRouteId,query.clock),query),libraryTargetCount:query.includeInventory===false?null:(await this.entries('learningTargets')).length};}
   async learningHistoryPage(query:LearningHistoryRequest):Promise<StoredLearningHistoryPage>{return learningHistoryPageFromRecords(await this.learningHistoryProjection(),query);}
 
   async learningRunIdsForTarget(targetId: string, openOnly: boolean): Promise<string[]> {

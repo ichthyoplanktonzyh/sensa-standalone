@@ -539,6 +539,16 @@
     "learningSortDue": "Next due",
     "learningSortExpression": "Expression",
     "learningVisibleCount": "Items {{start}}–{{end}} of {{count}}",
-    "todayEmptyTitle": "No learning content added yet"
+    "todayEmptyTitle": "No learning content added yet",
+    "sessionCompleted": "Completed this round",
+    "sessionPending": "Pending this round",
+    "sessionQueueHint": "Pending work changes with repetition, self-ratings and due reviews.",
+    "repeatHint": "You selected “Not connected yet”; this expression’s scene is repeating.",
+    "completionLocalSaved": "Current progress is saved on this device",
+    "completionSyncUnknown": "Cloud sync status has not been confirmed",
+    "completionNoSchedule": "No later review is scheduled in the current plan",
+    "completionNotMastery": "A completion record does not mean mastery. Follow the actual review schedule.",
+    "completionViewRecords": "View learning records",
+    "sessionSummaryUnavailable": "This round’s records have not been read"
   }
 }

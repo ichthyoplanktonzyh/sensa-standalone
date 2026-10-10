@@ -700,7 +700,7 @@ test('a guest learns a Book through the UI and resumes the revealed step after r
     expect(review.runtime!.targetId).toBe(completed.records[0]!.targetId);
     expect(review.runtime!.runId).not.toBe(revealed.runtime!.runId);
     await runtime.getByRole('button',{name:/查看表达/}).click();
-    await runtime.getByRole('button',{name:/已经连上/}).click();
+    await runtime.getByRole('button',{name:/顺利想起/}).click();
     await expect(runtime.getByRole('heading',{name:'本轮完成',exact:true})).toBeVisible();
     await runtime.getByRole('button',{name:/完成并回到首页/}).click();
     const reviewed=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());

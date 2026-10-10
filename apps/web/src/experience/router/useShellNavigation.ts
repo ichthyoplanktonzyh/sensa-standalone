@@ -35,7 +35,7 @@ export interface ShellNavigation {
   backMain: () => void;
   resetMain: () => void;
   returnHome: () => void;
-  leaveRuntime: (screenId:string) => void;
+  leaveRuntime: (screenId:string,params?:ShellParams) => void;
   setMainStack: (stack: readonly string[], params?: ShellParams, replace?: boolean) => void;
 }
 
@@ -111,8 +111,8 @@ export function useShellNavigation(): ShellNavigation {
     navigate({ to: '/', search: {} });
   }, [navigate]);
 
-  const leaveRuntime = useCallback((screenId:string) => {
-    navigate({to:'/$',params:{_splat:buildPathname([screenId]).slice(1)},search:{}});
+  const leaveRuntime = useCallback((screenId:string,nextParams?:ShellParams) => {
+    navigate({to:'/$',params:{_splat:buildPathname([screenId]).slice(1)},search:retainParamsForStack(nextParams??{},[screenId])});
   },[navigate]);
 
   const resetMain = useCallback(() => {
