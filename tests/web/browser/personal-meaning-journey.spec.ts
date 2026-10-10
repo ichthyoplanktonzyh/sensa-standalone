@@ -12,6 +12,7 @@ import {createJourneyModules} from '../../../apps/web/src/experience/personalMea
 import {createSeededClock} from '../../../apps/web/src/experience/personalMeaningJourney/ports';
 import {semanticLookupPayload,syntheticSemanticWorld} from '../support/semanticLookupFixtures';
 import type {JourneyState} from '../../../apps/web/src/experience/personalMeaningJourney/store';
+import {assertInteractionBudget} from '../support/interactionBudget';
 
 declare global{interface Window{semanticDetailPaint?:{startedAt:number;elapsedMs:number|null}}}
 
@@ -204,7 +205,7 @@ test(`manual authoring at ${size} Meanings needs Context and explicit acceptance
  const timing=await page.evaluate(started=>({durationMs:performance.now()-started,phases:performance.getEntriesByType('measure').filter(entry=>entry.startTime>=started&&entry.name.startsWith('sensa.journey.')).map(entry=>entry.name)}),started);
  console.log('Manual click to readable stable actionable detail / Chromium+OPFS / no model',JSON.stringify({size,readyMs,...timing}));
  expect(timing.phases).not.toContain('sensa.journey.records');expect(timing.phases).not.toContain('sensa.journey.authority');
- expect(readyMs).toBeLessThan(1000);
+ assertInteractionBudget(readyMs,1000,'manual meaning confirmation');
  const savedUrl=page.url();
  const learning=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());expect(learning.targetIds).toEqual([]);expect(learning.records).toEqual([]);
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.intakeInboxCount())).toBe(0);
@@ -964,7 +965,7 @@ async function directDiscoveryJourney(page:Page,testInfo:TestInfo,size:number){
  await search.evaluate((input,expression)=>{input.addEventListener('input',()=>{const started=performance.now();const measure=()=>{const rows=document.querySelectorAll('#s-direct-learning.active li');if(rows.length===1&&rows[0]?.querySelector('strong')?.textContent===expression)(window as any).__directSearchMs=performance.now()-started;else requestAnimationFrame(measure);};requestAnimationFrame(measure);},{once:true});},expression);
  await search.fill(expression);await expect(screen.getByRole('listitem')).toHaveCount(1);
  await expect.poll(()=>page.evaluate(()=>(window as any).__directSearchMs)).toBeGreaterThan(0);
- const searchMs=await page.evaluate(()=>(window as any).__directSearchMs as number);expect(searchMs).toBeLessThan(1000);console.log('Direct expression input to one visible result / Chromium+OPFS / no model',JSON.stringify({size,searchMs}));
+ const searchMs=await page.evaluate(()=>(window as any).__directSearchMs as number);assertInteractionBudget(searchMs,1000,'direct expression search');console.log('Direct expression input to one visible result / Chromium+OPFS / no model',JSON.stringify({size,searchMs}));
  await screen.getByRole('button',{name:new RegExp(expression)}).click();await expect(screen.getByRole('heading',{name:expression,exact:true})).toBeVisible();
  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).enrollments).toEqual([]);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);
  await screen.getByRole('button',{name:'取消',exact:true}).click();await expect(search).toHaveValue(expression);await screen.getByRole('button',{name:new RegExp(expression)}).click();
@@ -1073,9 +1074,9 @@ test('10k personal meanings keep the shipped World bounded and searchable, with 
  const inboxMs=await page.evaluate(start=>performance.now()-start,inboxStart);
  const inboxPhases=await page.evaluate(start=>performance.getEntriesByType('measure').filter(entry=>entry.startTime>=start&&entry.name.startsWith('sensa.journey.')).map(entry=>entry.name),start);
  console.log('Shipped Inbox / 10k confirmed Meanings and one pending material:',JSON.stringify({inboxMs,fullGatewayPhases:inboxPhases}));
- expect(inboxMs).toBeLessThan(500);expect(inboxPhases).toEqual([]);
+ assertInteractionBudget(inboxMs,500,'10k World Inbox');expect(inboxPhases).toEqual([]);
  await inbox.getByRole('button',{name:'关闭',exact:true}).click();
- expect(initial.openMs,'local unthrottled 10k first World open budget').toBeLessThan(1000);
+ assertInteractionBudget(initial.openMs,1000,'local unthrottled 10k first World open');
  expect(initial.renderedRows,'a large World must not mount every row into the DOM').toBeLessThan(80);
  await world.evaluate(element=>{element.scrollTop=element.scrollHeight;});
  await expect(world.locator('[role="listitem"][aria-posinset="10000"] .sensa-world-row')).toBeVisible();
@@ -1099,13 +1100,13 @@ test('10k personal meanings keep the shipped World bounded and searchable, with 
  expect(await page.evaluate(start=>performance.getEntriesByType('measure').filter(entry=>entry.name.startsWith('sensa.journey.')&&entry.startTime>=start).map(entry=>entry.name),start),
   'first exact detail and its learning controls must not hydrate the full gateway').toEqual([]);
  console.log('Shipped World / 10k / first detail before any batch or command:',JSON.stringify({coldDetailMs}));
- expect(coldDetailMs).toBeLessThan(500);
+ assertInteractionBudget(coldDetailMs,500,'10k first exact detail');
  await page.getByRole('button',{name:'返回我的语义世界',exact:true}).click();await search.fill('');
  const selectionStarted=await page.evaluate(()=>performance.now());
  await world.getByRole('button',{name:'批量选择',exact:true}).click();
  await expect(world.getByRole('checkbox').first()).toBeVisible();
  const selectionOpenMs=await page.evaluate(start=>performance.now()-start,selectionStarted);
- expect(selectionOpenMs,'10k selection opening must read only a compact window').toBeLessThan(1000);
+ assertInteractionBudget(selectionOpenMs,1000,'10k compact selection opening');
  expect(await world.getByRole('checkbox').count()).toBeLessThan(80);
  await world.getByRole('checkbox').first().check();
  await expect(world.getByRole('checkbox').first()).toBeChecked();
@@ -1122,7 +1123,7 @@ test('10k personal meanings keep the shipped World bounded and searchable, with 
  const selectAllMs=await page.evaluate(start=>performance.now()-start,allStarted);
  expect(await page.evaluate(start=>performance.getEntriesByType('measure').filter(entry=>entry.name.startsWith('sensa.journey.')&&entry.startTime>=start).map(entry=>entry.name),selectionStarted),'opening/selecting the full 10k result must not hydrate the command gateway').toEqual([]);
  console.log('Shipped batch selection / real Chromium+OPFS / synthetic 10k / compact pins only:',JSON.stringify({selectionOpenMs,selectAllMs,mountedChoices:await world.getByRole('checkbox').count()}));
- expect(selectAllMs,'explicit whole-result 10k selection budget').toBeLessThan(2000);
+ assertInteractionBudget(selectAllMs,2000,'explicit whole-result 10k selection');
  await search.fill('ＢＯＲＲＯＷ-９９９９');
  await expect(world.getByRole('listitem')).toHaveCount(1);await expect(world.getByRole('checkbox')).toBeChecked();
  await expect(world.getByRole('button',{name:'加入学习（10000）',exact:true})).toBeEnabled();
@@ -1160,7 +1161,7 @@ test('10k personal meanings keep the shipped World bounded and searchable, with 
  await expect(page.getByRole('article',{name:'表达详情'}).getByText('验收修改：借用同伴的雨伞，用完后归还。',{exact:true})).toBeVisible();
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('sensa:web-ui:v1:sensa.practice.materials.v4:en')!))).toEqual(preference);
  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).targetIds).toEqual([]);
- expect(searchMs).toBeLessThan(500);expect(detailMs).toBeLessThan(500);expect(saveMs).toBeLessThan(500);
+ assertInteractionBudget(searchMs,500,'10k World search');assertInteractionBudget(detailMs,500,'10k World detail');assertInteractionBudget(saveMs,500,'10k Context save');
 
  // Lifecycle operations at the same heavy-user scale must touch one Meaning,
  // not hydrate the 10k inventory. Measure actual stable actionable paint.
@@ -1177,7 +1178,7 @@ test('10k personal meanings keep the shipped World bounded and searchable, with 
  const restoreMs=await clickToMeaningReady(page,page.getByRole('button',{name:'恢复内容',exact:true}),'borrow-9999');
  const lifecyclePhases=await page.evaluate(start=>performance.getEntriesByType('measure').filter(entry=>entry.startTime>=start&&['sensa.journey.records','sensa.journey.authority'].includes(entry.name)).map(entry=>entry.name),restoreStart);
  console.log('Shipped recycle bin / Chromium+OPFS / synthetic 10k / 1x CPU / loopback / low media / no model:',JSON.stringify({deleteMs,restoreMs,fullGatewayPhases:lifecyclePhases}));
- expect(lifecyclePhases).toEqual([]);expect(deleteMs).toBeLessThan(500);expect(restoreMs).toBeLessThan(500);
+ expect(lifecyclePhases).toEqual([]);assertInteractionBudget(deleteMs,500,'10k Meaning deletion');assertInteractionBudget(restoreMs,500,'10k Meaning restoration');
  await expect(page.getByRole('article',{name:'表达详情'}).getByText('验收修改：借用同伴的雨伞，用完后归还。',{exact:true})).toBeVisible();
 
  // After a genuine reload, neither a new capture nor its explicit acceptance
@@ -1196,7 +1197,7 @@ test('10k personal meanings keep the shipped World bounded and searchable, with 
  const draftSaveMs=await page.evaluate(start=>performance.now()-start,draftStart);
  const capturePhases=await page.evaluate(start=>performance.getEntriesByType('measure').filter(entry=>entry.startTime>=start&&['sensa.journey.records','sensa.journey.authority'].includes(entry.name)).map(entry=>entry.name),draftStart);
  console.log('Shipped capture / real Chromium+OPFS / existing synthetic 10k / cold gateway / no model reply:',JSON.stringify({draftSaveMs,fullGatewayPhases:capturePhases}));
- expect(capturePhases,'first capture must not enumerate the existing semantic World').toEqual([]);expect(draftSaveMs).toBeLessThan(500);
+ expect(capturePhases,'first capture must not enumerate the existing semantic World').toEqual([]);assertInteractionBudget(draftSaveMs,500,'10k first capture');
  await expect(page.locator('.pmw-message.is-assistant')).toContainText('water');releaseStream!();
  await expect(page.getByRole('button',{name:'就是这个意思',exact:true})).toBeEnabled().catch(async cause=>{console.log('Controlled 10k teacher failure:',JSON.stringify({alerts:await page.getByRole('alert').allTextContents(),requests:requests.length,assistant:await page.locator('.pmw-message.is-assistant').allTextContents()}));throw cause;});
  await page.getByRole('button',{name:'就是这个意思',exact:true}).click();
@@ -1205,7 +1206,7 @@ test('10k personal meanings keep the shipped World bounded and searchable, with 
  const automationElapsedMs=await page.evaluate(start=>performance.now()-start,acceptanceStart);
  const acceptancePhases=await page.evaluate(start=>performance.getEntriesByType('measure').filter(entry=>entry.startTime>=start&&['sensa.journey.records','sensa.journey.authority'].includes(entry.name)).map(entry=>entry.name),acceptanceStart);
  console.log('Shipped acceptance / real Chromium+OPFS / existing synthetic 10k / new Sense+Expression / controlled teacher, excluding reply:',JSON.stringify({clickToReadyMs:acceptanceMs,automationElapsedMs,fullGatewayPhases:acceptancePhases,commandPhases:await page.evaluate(start=>performance.getEntriesByType('measure').filter(entry=>entry.startTime>=start&&(entry.name.startsWith('sensa.journey.')||entry.name==='sensa.library.sqlite-commit')).map(entry=>({name:entry.name,durationMs:entry.duration})),acceptanceStart),walMaintenance:(await page.evaluate(()=>window.__sensaBrowserSmoke!.storageDiagnostics({verifyIntegrity:false}))).walMaintenance}));
- expect(acceptancePhases).toEqual([]);expect(acceptanceMs).toBeLessThan(500);
+ expect(acceptancePhases).toEqual([]);assertInteractionBudget(acceptanceMs,500,'10k explicit acceptance');
  await page.reload();await expect(page.getByRole('heading',{name:'water',exact:true})).toBeVisible();
  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).targetIds).toEqual([]);
 });

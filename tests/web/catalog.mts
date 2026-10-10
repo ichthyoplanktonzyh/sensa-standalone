@@ -86,6 +86,7 @@ const foundationTests = [
   {id:'learning-target-view',file:'tests/web/unit/learning-target-view.test.mts',kind:'unit',risks:['local-correctness'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'scene-editor-read',file:'tests/web/unit/scene-editor-read.test.mts',kind:'unit',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'practice-material-read',file:'tests/web/unit/practice-material-read.test.mts',kind:'unit',risks:['local-correctness','scale'],environment:'node',suite:'fast',runner:'vitest'},
+  {id:'interaction-budget',file:'tests/web/unit/interaction-budget.test.mts',kind:'unit',risks:['local-correctness','scale'],environment:'node',suite:'fast',runner:'vitest'},
   {
     id: 'learning-language-matrix',
     file: 'tests/web/integration/learning-language-matrix.test.mts',

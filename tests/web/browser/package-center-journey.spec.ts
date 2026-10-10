@@ -16,6 +16,7 @@ import {cpus,tmpdir} from 'node:os';
 import {extname,join,resolve} from 'node:path';
 import {chromium,expect,test as base,type Page,type BrowserContext,type TestInfo} from '@playwright/test';
 import {unzipSync,zipSync} from 'fflate';
+import {assertInteractionBudget} from '../support/interactionBudget';
 import {portableBookMemberPath,readSensaPortableBook} from '@sensa/content-validator/portable-book';
 import {canonicalConsumerJson,sensaPortableBookManifestSchema} from '@sensa/contracts/sensa';
 import {portableBookDeliveryFixture} from '../../../scripts/support/portablePackageFixture.mts';
@@ -620,10 +621,10 @@ test('a 10000-Meaning local clear uses a bounded preview and leaves an empty reo
   expect(await page.evaluate(async()=>window.__sensaBrowserSmoke!.seedSemanticWorld(await(await fetch('/semantic-scale-fixture')).json()))).toBe(10_000);
   await page.goto(origin+'/profile');await page.locator('#settings-data').click();await page.locator('#settings-storage').click();
   const start=await page.evaluate(()=>performance.now());await page.getByRole('button',{name:'检查要清除的资料',exact:true}).click();await expect(page.getByText(/10000 个意思/)).toBeVisible();
-  const previewMs=await page.evaluate(start=>performance.now()-start,start);expect(previewMs).toBeLessThan(1500);
+  const previewMs=await page.evaluate(start=>performance.now()-start,start);assertInteractionBudget(previewMs,1500,'10k local-clear preview');
   await page.getByLabel('我已保存需要的备份，确认清除以上本机资料。').check();const clearStart=await page.evaluate(()=>performance.now());
-  await page.getByRole('button',{name:'确认清除本机资料',exact:true}).click();await expect(page.getByText('本机资料已清除。重新打开应用可开始使用空资料库。',{exact:true})).toBeVisible({timeout:15_000});
-  const clearMs=await page.evaluate(start=>performance.now()-start,clearStart);expect(clearMs).toBeLessThan(15_000);
+  await page.getByRole('button',{name:'确认清除本机资料',exact:true}).click();await expect(page.getByText('本机资料已清除。重新打开应用可开始使用空资料库。',{exact:true})).toBeVisible({timeout:20_000});
+  const clearMs=await page.evaluate(start=>performance.now()-start,clearStart);assertInteractionBudget(clearMs,15_000,'10k local-clear completion');
   await page.getByRole('button',{name:'重新打开应用',exact:true}).click();await expect(page.locator('#s-profile')).toBeVisible();
   expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);expect(Object.values(await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).every(rows=>rows.length===0)).toBe(true);
   const measurement={meanings:10_000,fixtureJsonBytes:fixtureBytes,media:0,learningHistory:0,previewMs,clearMs,browser:'Chromium OPFS persistent profile',cpu:cpus()[0]?.model,network:'loopback fixture setup; preview/clear are local',scope:'synthetic confirmed text Meaning/Registry facts; one destructive clear, not p95, physical file reclamation or heavy Learning/Media capacity'};
@@ -1920,7 +1921,7 @@ test('practice content selection and listening start stay bounded with 10000 per
   await testInfo.attach('practice-capacity-10000.json',{body:JSON.stringify(report,null,2),contentType:'application/json'});
  }
  expect(timings).toHaveLength(7);
- for(const timing of timings){expect(timing.elapsedMs).toBeGreaterThanOrEqual(0);expect(timing.elapsedMs,`${timing.action}: local interaction budget, not provider latency`).toBeLessThan(1500);}
+ for(const timing of timings){assertInteractionBudget(timing.elapsedMs,1500,`${timing.action}: local interaction, not provider latency`);}
 });
 
 test('explicit personal scene acceptance and update stay bounded with 10000 unrelated Meanings',async({preparedScenePage:page},testInfo)=>{
@@ -1948,7 +1949,7 @@ test('explicit personal scene acceptance and update stay bounded with 10000 unre
  const current=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());expect(current.runtime?.runId).toBe(original.runtime?.runId);expect(current.runtime?.targetId).toBe(original.runtime?.targetId);expect(current.records).toEqual(original.records);
  console.log('Personal Scene explicit acceptance / Chromium+OPFS / synthetic 10k unrelated Meanings / 1x CPU / loopback / text-only / no model:',JSON.stringify(timings));
  await testInfo.attach('scene-acceptance-10000-meanings.json',{body:JSON.stringify(timings,null,2),contentType:'application/json'});
- for(const timing of timings){expect(timing.elapsedMs).toBeLessThan(1500);expect(timing.phases.filter(phase=>['sensa.journey.records','sensa.journey.authority'].includes(phase.name))).toEqual([]);}
+ for(const timing of timings){assertInteractionBudget(timing.elapsedMs,1500,timing.action);expect(timing.phases.filter(phase=>['sensa.journey.records','sensa.journey.authority'].includes(phase.name))).toEqual([]);}
 });
 
 test('a personal scene and its separate accepted revision survive actual persistent Chromium close and reopen',async({},testInfo)=>{
@@ -2373,7 +2374,7 @@ test('the Book journey stays responsive with 342 catalog entries and a 100-membe
   const timings:Record<string,number>={};
   const measure=async(label:string,budget:number,work:()=>Promise<void>)=>{
     const started=performance.now();await work();timings[label]=Math.round(performance.now()-started);
-    expect(timings[label],`${label} controlled CI budget (${budget}ms)`).toBeLessThan(budget);
+    assertInteractionBudget(timings[label]!,budget,`${label} controlled CI interaction`);
   };
   try{
     await measure('catalogCold',6000,async()=>{
@@ -2443,7 +2444,7 @@ test('the Book journey stays responsive with 342 catalog entries and a 100-membe
     expect(catalogAuthorizationHeaders.length-beforeIdle).toBe(0);
     const restoredLongTasks=await page.evaluate(()=>(window as unknown as {__bookJourneyLongTasks:number[]}).__bookJourneyLongTasks);
     const maximumLongTaskMs=Math.max(0,...initialLongTasks,...restoredLongTasks);
-    expect(maximumLongTaskMs,'main-thread freeze at 4x CPU (1000ms controlled regression limit)').toBeLessThan(1000);
+    assertInteractionBudget(maximumLongTaskMs,1000,'main-thread freeze at 4x CPU');
     await test.info().attach('journey-performance.json',{body:JSON.stringify({catalogEntries:342,catalogInitialWindow:50,catalogExpandedWindow:100,bookMembers:100,bookBytes:scaleDelivery.descriptor.byteLength,cpuThrottle:4,fixtureLatencyMs:300,timings,maximumLongTaskMs,idleCatalogRequests:0,scope:'Controlled Chromium regression budgets; catalogCold ends when the first window is interactive; these are not real-device CWV or production backend SLOs.'}),contentType:'application/json'});
     console.log(`Book journey controlled performance: ${JSON.stringify({timings,maximumLongTaskMs})}`);
   }finally{
