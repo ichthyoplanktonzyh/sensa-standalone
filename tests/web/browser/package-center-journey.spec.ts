@@ -188,6 +188,34 @@ test('detail metadata and real samples survive repeated download, cancel, return
  await expect(catalog.getByRole('button',{name:'紧凑列表',exact:true})).toHaveAttribute('aria-pressed','true');
 });
 
+test('a missing Book in a cached catalog exposes failed discovery and retries the newly published detail without installing',async({page,context},testInfo)=>{
+ await page.goto(`${fixture.origin}/catalog`);
+ const catalog=page.locator('#s-catalog').last(),book=page.locator('#s-catalog-book').last();
+ await expect(catalog.getByRole('button',{name:/English route essentials/})).toBeVisible();
+ let failing=true;
+ await context.route('**/sensa/packages',route=>failing?route.fulfill({status:503,headers:{'access-control-allow-origin':fixture.origin},body:'unavailable'}):route.continue());
+ await catalog.getByRole('button',{name:'刷新',exact:true}).click();
+ await expect(catalog.getByRole('alert')).toContainText('暂时无法更新目录');
+ const initial=(fixture.registry as {items:typeof fixture.delivery.descriptor[]}).items;
+ fixture.setRegistry([...initial,fixture.reviewDelivery.descriptor]);
+ await page.evaluate(path=>window.__sensaBrowserSmoke!.navigate(path),`/catalog/${fixture.reviewDelivery.descriptor.book.bookKey}`);
+ await expect(book.getByRole('alert')).toContainText('暂时无法更新目录');
+ await expect(book.getByText('没有找到匹配的学习包',{exact:true})).toHaveCount(0);
+ await page.screenshot({path:testInfo.outputPath('cached-detail-error-retry.png')});
+ failing=false;
+ await book.getByRole('button',{name:'重试',exact:true}).click();
+ await expect(book.getByRole('heading',{name:fixture.reviewDelivery.descriptor.book.title,exact:true})).toBeVisible();
+ await expect(book.getByRole('button',{name:'下载学习包',exact:true})).toBeEnabled();
+ await expect(book.getByRole('button',{name:'加入学习',exact:true})).toBeDisabled();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.supplyCheckpoint())).toEqual([]);
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).enrollments).toEqual([]);
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.navigate('/catalog/unknown-book'));
+ await expect(book.getByText('没有找到匹配的学习包',{exact:true})).toBeVisible();
+ await book.getByRole('button',{name:'重试',exact:true}).click();
+ await expect(book.getByText('没有找到匹配的学习包',{exact:true})).toBeVisible();
+ await expect(book.getByRole('button',{name:'重试',exact:true})).toBeEnabled();
+});
+
 test('a cached public catalog refreshes across origins with its exact revision',async({page})=>{
   await page.goto(`${fixture.origin}/catalog`);
   const catalog=page.locator('#s-catalog').last();

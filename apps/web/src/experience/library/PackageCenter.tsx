@@ -86,8 +86,12 @@ function PackageDetail({active,item,c,onBack,onLearning,onTarget,screenId='s-cat
   ?projectPackageContentWindow(item.installed,targetByEntry,contentLimit)
   :{entries:[],total:0},[item?.installed,targetByEntry,contentLimit]);
  const metadata=useMemo(()=>item?projectPackageMetadata(item):null,[item]);
+ const retryDetail=()=>{
+  if(referenceOnly||c.loadStatus==='unavailable')void c.retryInitialLoad();
+  if(!referenceOnly)void c.reloadCatalog(true);
+ };
  if(!item||!metadata)return <LearningSetupFrame id={screenId} active={active} onBack={onBack} title={localFlowText('packageCatalogTitle')}>
-  {c.loadStatus==='unavailable'||c.catalogStatus==='unavailable'?<PackageStatus error onRetry={()=>{void c.retryInitialLoad();void c.reloadCatalog(true);}}>{c.notice||localFlowText('catalogFailed')}</PackageStatus>:!c.loaded||c.catalogBusy?<PackageStatus>{t('reliability.loading')}</PackageStatus>:<PackageStatus>{referenceOnly?t('reliability.errorTitle'):localFlowText('packageNoResults')}</PackageStatus>}
+  {c.loadStatus==='unavailable'||c.catalogStatus==='unavailable'||c.catalogFailed?<PackageStatus error onRetry={retryDetail}>{c.loadStatus==='unavailable'?c.notice||localFlowText('learningReadFailed'):localFlowText('catalogFailed')}</PackageStatus>:!c.loaded||c.catalogBusy?<PackageStatus>{t('reliability.loading')}</PackageStatus>:<PackageStatus onRetry={retryDetail}>{referenceOnly?t('reliability.errorTitle'):localFlowText('packageNoResults')}</PackageStatus>}
  </LearningSetupFrame>;
  const installedEntryCount=contentProjection.total,installedEntries=contentProjection.entries;
  const installing=c.installation?.bookKey===item.key?c.installation:null;
