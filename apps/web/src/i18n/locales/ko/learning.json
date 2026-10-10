@@ -327,6 +327,7 @@
     "review": "복습",
     "pause": "일시 중지",
     "progress": "세션 진도",
+    "expressionStep": "현재 표현 · {{total}}단계 중 {{current}}단계",
     "done": "세션 완료",
     "experienceStep": "개념 만들기",
     "bindingStep": "표현 연결하기",

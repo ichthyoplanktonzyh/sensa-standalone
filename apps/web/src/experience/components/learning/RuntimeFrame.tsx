@@ -11,6 +11,8 @@ export function RuntimeFrame({
   title,
   stepLabel,
   progress,
+  progressLabel,
+  progressValueText,
   onExit,
   children,
   tools,
@@ -21,6 +23,8 @@ export function RuntimeFrame({
   title: string;
   stepLabel: string;
   progress: number | null;
+  progressLabel?: string;
+  progressValueText?: string;
   onExit: () => void;
   children: ReactNode;
   tools?: ReactNode;
@@ -62,7 +66,8 @@ export function RuntimeFrame({
           <div
             className="sensa-runtime-progress"
             role="progressbar"
-            aria-label={t("runtime.progress")}
+            aria-label={progressLabel??t("runtime.progress")}
+            aria-valuetext={progressValueText}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={Math.round(progress)}

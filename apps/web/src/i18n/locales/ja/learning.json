@@ -327,6 +327,7 @@
     "review": "復習",
     "pause": "一時停止",
     "progress": "セッションの進捗",
+    "expressionStep": "現在の表現 · ステップ {{current}} / {{total}}",
     "done": "セッション完了",
     "experienceStep": "概念を築く",
     "bindingStep": "表現をつなぐ",

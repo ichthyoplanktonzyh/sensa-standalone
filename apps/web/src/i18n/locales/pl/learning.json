@@ -327,6 +327,7 @@
     "review": "Powtórka",
     "pause": "Wstrzymaj",
     "progress": "Postępy sesji",
+    "expressionStep": "Bieżące wyrażenie · krok {{current}} z {{total}}",
     "done": "Sesja ukończona",
     "experienceStep": "Zbuduj pojęcie",
     "bindingStep": "Połącz wyrażenie",

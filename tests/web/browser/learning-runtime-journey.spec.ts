@@ -25,6 +25,47 @@ import {createPackageCenterFixture} from './packageCenterFixture';
 const fixture=createPackageCenterFixture('runtime');
 const test=fixture.test;
 
+test('custom statistics rejects reversed, future and empty dates and recovers without changing learning facts',async({page},testInfo)=>{
+ await page.clock.setFixedTime(new Date('2026-10-10T12:00:00Z'));
+ fixture.setRegistry([fixture.reviewDelivery.descriptor]);
+ const runtime=await fixture.startOrdinaryBook(page,/到期复习样本/);
+ await runtime.getByRole('button',{name:/查看表达/}).click();await runtime.getByRole('button',{name:/已经连上/}).click();
+ await expect(runtime.getByRole('button',{name:/查看表达/})).toBeEnabled();await runtime.getByRole('button',{name:'暂停',exact:true}).click();
+ const facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的学习',exact:true}).click();
+ await page.locator('#s-study').getByRole('button',{name:'学习统计',exact:true}).click();const stats=page.locator('#s-stats');
+ await stats.getByRole('button',{name:'自选日期',exact:true}).click();
+ await expect(stats.locator('ol').getByRole('button')).toHaveCount(1);
+ const start=stats.getByLabel('开始日期',{exact:true}),end=stats.getByLabel('结束日期',{exact:true});
+ await start.fill('2026-10-11');
+ await expect(stats.getByRole('alert')).toContainText('开始日期不能晚于结束日期');
+ await expect(start).toHaveAttribute('aria-invalid','true');await expect(end).toHaveAttribute('aria-invalid','true');await expect(stats.locator('ol')).toHaveCount(0);
+ const screenshot=testInfo.outputPath('reversed-date-range.png');await page.screenshot({path:screenshot});await testInfo.attach('reversed-date-range',{path:screenshot,contentType:'image/png'});
+ await start.fill('2026-10-10');await expect(stats.locator('ol').getByRole('button')).toHaveCount(1);
+ await end.fill('2026-10-11');await expect(stats.getByRole('alert')).toContainText('结束日期不能晚于今天');await expect(stats.locator('ol')).toHaveCount(0);
+ await end.fill('');await expect(stats.getByRole('alert')).toBeVisible();await expect(stats.locator('ol')).toHaveCount(0);
+ await end.fill('2026-10-10');await expect(stats.locator('ol').getByRole('button')).toHaveCount(1);
+ await stats.getByRole('button',{name:'返回',exact:true}).click();await page.locator('#s-study').getByRole('button',{name:'学习统计',exact:true}).click();
+ await expect(stats.locator('ol').getByRole('button')).toHaveCount(1);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(facts);
+});
+
+test('lightweight progress names the current expression and reaches full steps only after rating, retaining pause and retry semantics',async({page},testInfo)=>{
+ fixture.setRegistry([fixture.reviewDelivery.descriptor]);
+ const runtime=await fixture.startOrdinaryBook(page,/到期复习样本/);
+ const progress=runtime.getByRole('progressbar');
+ await expect(progress).toHaveAccessibleName('当前表达 · 第 1 / 2 步');await expect(progress).toHaveAttribute('aria-valuenow','0');
+ await runtime.getByRole('button',{name:/查看表达/}).click();await expect(progress).toHaveAccessibleName('当前表达 · 第 2 / 2 步');await expect(progress).toHaveAttribute('aria-valuenow','50');
+ const screenshot=testInfo.outputPath('expression-step-before-rating.png');await page.screenshot({path:screenshot});await testInfo.attach('expression-step-before-rating',{path:screenshot,contentType:'image/png'});
+ await runtime.getByRole('button',{name:/还没连上/}).click();await expect(progress).toHaveAccessibleName('当前表达 · 第 1 / 2 步');await expect(progress).toHaveAttribute('aria-valuenow','0');
+ await runtime.getByRole('button',{name:/查看表达/}).click();await runtime.getByRole('button',{name:'暂停',exact:true}).click();
+ await page.reload();await page.locator('#s-home').getByRole('button',{name:'继续学习',exact:true}).click();await expect(progress).toHaveAttribute('aria-valuenow','50');
+ await runtime.getByRole('button',{name:/已经连上/}).click();await expect(progress).toHaveAccessibleName('当前表达 · 第 1 / 2 步');await expect(progress).toHaveAttribute('aria-valuenow','0');
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records).toHaveLength(1);
+ await runtime.getByRole('button',{name:/查看表达/}).click();await runtime.getByRole('button',{name:/已经连上/}).click();
+ await expect(runtime.getByRole('heading',{name:'本轮完成',exact:true})).toBeVisible();await expect(progress).toHaveAttribute('aria-valuenow','100');
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records).toHaveLength(2);
+});
+
 test.describe('history calendar in the actual SQLite Worker',()=>{
  test.use({timezoneId:'America/New_York'});
  test('a real completion near UTC midnight appears on the learner local calendar day',async({page})=>{

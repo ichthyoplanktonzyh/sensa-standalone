@@ -327,6 +327,7 @@
     "review": "Ôn tập",
     "pause": "Tạm dừng",
     "progress": "Tiến độ phiên",
+    "expressionStep": "Cách diễn đạt hiện tại · bước {{current}} / {{total}}",
     "done": "Hoàn tất phiên",
     "experienceStep": "Hình thành khái niệm",
     "bindingStep": "Kết nối cách diễn đạt",

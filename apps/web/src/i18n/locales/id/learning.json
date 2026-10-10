@@ -327,6 +327,7 @@
     "review": "Ulangi",
     "pause": "Jeda",
     "progress": "Progres sesi",
+    "expressionStep": "Ungkapan saat ini · langkah {{current}} dari {{total}}",
     "done": "Sesi selesai",
     "experienceStep": "Bangun konsep",
     "bindingStep": "Hubungkan ekspresi",

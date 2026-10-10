@@ -327,6 +327,7 @@
     "review": "Revisar",
     "pause": "Pausar",
     "progress": "Progresso da sessão",
+    "expressionStep": "Expressão atual · etapa {{current}} de {{total}}",
     "done": "Sessão concluída",
     "experienceStep": "Construir o conceito",
     "bindingStep": "Conectar a expressão",

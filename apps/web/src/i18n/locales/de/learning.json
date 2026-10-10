@@ -327,6 +327,7 @@
     "review": "Wiederholen",
     "pause": "Pausieren",
     "progress": "Sitzungsfortschritt",
+    "expressionStep": "Aktueller Ausdruck · Schritt {{current}} von {{total}}",
     "done": "Sitzung abgeschlossen",
     "experienceStep": "Vorstellung aufbauen",
     "bindingStep": "Ausdruck verknüpfen",

@@ -42,6 +42,7 @@ export default function AccountExperience({children,onReturnToLanding}:{children
  const [useCode,setUseCode]=useState(false);const callbackDismissed=useRef(false);
  const observedAuth=useRef<{subject:string|null;token:string|null}|null>(null);
  const generation=useRef(0),localRef=useRef(false);localRef.current=local;
+ const checkingConnection=useRef(false);
  const explicitSignIn=useRef<string|null|undefined>(undefined),callbackAccepted=useRef(false);
  const observedSignoutEpoch=useRef<string|null|undefined>(undefined);
  const extension=new URLSearchParams(location.search),extensionRequest=extension.get('extension')==='connect';
@@ -151,7 +152,7 @@ export default function AccountExperience({children,onReturnToLanding}:{children
    // The local library remains the mutation authority, while an empty device keeps
    // summary projections unknown until its first account restore settles. The App
    // Shell stays open throughout; AccountLibrarySync advances that availability.
-   setOwner(next);setLocal(true);setOnlineService(true);setPublisherAccess(access.capabilities?.publishLearningContent??false);setConnectionConflict(false);setLoginOpen(false);setNotice('');
+   setOwner(next);setLocal(true);setOnlineService(true);setPublisherAccess(access.capabilities?.publishLearningContent??false);setConnectionConflict(false);setLoginOpen(false);setSent(false);setCode('');setUseCode(false);setNotice('');
    return true;
   }catch(cause){if(gen===generation.current){if(cause instanceof Error&&(cause.message==='localFlow.libraryMissing'||(hasLocalLibraryHint()||hasLocalLibrarySelection())&&storageRecoveryCodes.has(cause.message))){setLibraryMissing(true);setLocal(false);setOnlineService(false);setPublisherAccess(false);setLoginOpen(false);}if(needsInitialRestore)setLibraryAvailability(guestAttempt&&usableLocalFacts?'authoritative':'failed');if(cause instanceof Error&&cause.message==='localFlow.accountLibraryConflict'){setConnectionConflict(true);setLoginOpen(false);}setNotice(localFlowErrorKey(cause,'localFlow.networkRetry'));}}
   finally{if(gen===generation.current)setReady(true);}
@@ -183,6 +184,12 @@ export default function AccountExperience({children,onReturnToLanding}:{children
   publisherAccess,
   connectionConflict,
   libraryAvailability,
+  connectionBusy:busy,
+  checkConnection:()=>{
+   if(checkingConnection.current)return;
+   checkingConnection.current=true;
+   void perform(recover).finally(()=>{checkingConnection.current=false;});
+  },
   login:()=>setLoginOpen(true),
   retryConnection:()=>perform(async()=>{
    if(!onlineService&&await recover()!==true)return;
@@ -195,7 +202,7 @@ export default function AccountExperience({children,onReturnToLanding}:{children
    }catch(cause){updateLibraryAvailability('failed');throw cause;}
   }),
   logout:()=>perform(logout),
- }),[notice,onlineService,webSession,publisherAccess,connectionConflict,libraryAvailability,owner?.email,perform,logout]);
+ }),[notice,onlineService,webSession,publisherAccess,connectionConflict,libraryAvailability,busy,owner?.email,perform,logout]);
  if(deletionOpen)return <Suspense fallback={<main role="status">{localFlowText('loadingSensa')}</main>}><AccountDeletion onClose={()=>{location.assign('/profile');}}/></Suspense>;
  if(!ready)return <main role="status" className="grid min-h-screen place-content-center">{localFlowText(extensionRequest?'extensionConnecting':'loadingSensa')}</main>;
  if(libraryMissing&&!loginOpen)return <Suspense fallback={<main role="status">{localFlowText('loadingSensa')}</main>}><LocalLibraryRecovery notice={notice||'localFlow.libraryMissing'} onLogin={()=>{setNotice('');setLoginOpen(true);}}/></Suspense>;

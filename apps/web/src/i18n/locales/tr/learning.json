@@ -327,6 +327,7 @@
     "review": "Tekrar et",
     "pause": "Duraklat",
     "progress": "Oturum ilerlemesi",
+    "expressionStep": "Geçerli ifade · {{total}} adımdan {{current}}. adım",
     "done": "Oturum tamamlandı",
     "experienceStep": "Kavramı oluştur",
     "bindingStep": "İfadeyi bağla",

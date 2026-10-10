@@ -25,6 +25,41 @@ import {createPackageCenterFixture} from './packageCenterFixture';
 const fixture=createPackageCenterFixture('account');
 const test=fixture.test;
 
+test('checking an admitted service after same-page email login preserves the page and automatic sync through repeated checks and failures',async({page,context},testInfo)=>{
+ fixture.cloudManifest=null;fixture.cloudRevision=0;fixture.cloudBlocks.clear();
+ await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.fallback():route.abort());
+ let sends=0,checks=0,hold=false,fail=false,release=()=>{};
+ const paused=new Promise<void>(resolve=>{release=resolve;});
+ await page.route('**/auth/v1/otp*',async route=>{sends++;await route.fulfill({json:{user:null,session:null}});});
+ await page.route('**/auth/v1/verify*',route=>route.fulfill({json:fixture.session()}));
+ await page.route('**/sensa/web/access/session',async route=>{checks++;if(hold)await paused;await route.fulfill(fail?{status:503,json:{code:'synthetic_service_unavailable'}}:{json:{authorized:true,accountId:fixture.account,capabilities:{publishLearningContent:false}}});});
+ await page.goto(fixture.origin+'/profile');await expect(page.locator('#s-profile')).toBeVisible();await page.evaluate(()=>window.__sensaBrowserSmoke!.seedDrafts(1,0));
+ await page.locator('#settings-security').click();await page.getByRole('button',{name:'登录 Sensa',exact:true}).click();
+ await page.getByRole('button',{name:'继续使用已有本机内容',exact:true}).click();await expect(page.locator('#s-profile')).toBeVisible();
+ await page.locator('#settings-security').click();await page.getByRole('button',{name:'登录 Sensa',exact:true}).click();
+ await page.getByLabel('邮箱',{exact:true}).fill('package-center@sensa.invalid');await page.getByRole('button',{name:'发送登录邮件',exact:true}).click();
+ await page.getByRole('button',{name:'邮件中有验证码？',exact:true}).click();await page.getByLabel('验证码',{exact:true}).fill('123456');await page.getByRole('button',{name:'验证并继续',exact:true}).click();
+ await expect(page.getByText('已连接账号',{exact:true})).toBeVisible();await expect.poll(()=>page.evaluate(()=>window.__sensaBrowserSmoke!.syncStatus())).toBe('synced');expect(fixture.cloudRevision).toBeGreaterThan(0);
+ const facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest());
+ await page.locator('#settings-security').click();
+ const check=page.getByRole('button',{name:'检查在线服务',exact:true});
+ for(let attempt=0;attempt<2;attempt++){
+  const before=checks;await check.click();await expect.poll(()=>checks).toBeGreaterThan(before);await expect(check).toBeEnabled();
+  await expect(page.locator('#s-profile')).toBeVisible();await expect(page.getByRole('heading',{name:'查看登录邮件',exact:true})).toHaveCount(0);
+ }
+ const before=checks;hold=true;await check.click();await expect.poll(()=>checks).toBe(before+1);await expect(check).toBeDisabled();
+ await check.dispatchEvent('click');expect(checks).toBe(before+1);
+ await page.locator('#s-profile').getByRole('button',{name:'账号与设置',exact:true}).click();await page.locator('#settings-data').click();release();hold=false;
+ await expect(page.getByText('已同步到账号',{exact:true})).toBeVisible();await expect(page.getByText(/连接账号后自动开始同步/)).toBeVisible();
+ const screenshot=testInfo.outputPath('automatic-sync-after-service-check.png');await page.screenshot({path:screenshot});await testInfo.attach('automatic-sync-after-service-check',{path:screenshot,contentType:'image/png'});
+ await page.locator('#s-profile').getByRole('button',{name:'账号与设置',exact:true}).click();await page.locator('#settings-security').click();fail=true;await check.click();
+ await expect(page.getByRole('status').filter({hasText:'在线服务暂时不可用，请稍后重试。'})).toBeVisible();
+ await expect(page.locator('#s-profile')).toBeVisible();expect(sends).toBe(1);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(facts);
+ fail=false;await page.getByRole('button',{name:'登录 Sensa',exact:true}).click();await expect(page.getByRole('heading',{name:'查看登录邮件',exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'重新检查登录',exact:true}).click();await expect(page.getByText('已连接账号',{exact:true})).toBeVisible();
+ await page.reload();await expect(page.getByText('已连接账号',{exact:true})).toBeVisible();expect(sends).toBe(1);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(facts);
+});
+
 test('ordinary email login uses a persisted PKCE challenge, preserves local facts and starts real learning after admission',async({page,context})=>{
  fixture.cloudManifest=null;fixture.cloudRevision=0;fixture.cloudBlocks.clear();
  await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.fallback():route.abort());

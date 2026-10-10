@@ -105,6 +105,7 @@ export const LightweightRuntimeStartScreen = ({
     : step?.definition.stepKind === LEARNING_LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND
       ? 0
       : 1;
+  const expressionStepLabel=t('runtime.expressionStep',{current:Math.min(2,progressStep+1),total:2});
 
   useEffect(() => {
     if (!active || busy || !completed || needsRelearning || !hasNextTarget || !completionKey) return;
@@ -146,10 +147,8 @@ export const LightweightRuntimeStartScreen = ({
       id="s-lightweight-runtime"
       active={active}
       title={purpose==='initial_learning'?t('runtime.learning'):purpose==='retention_review'?localFlowText('reviewTitle'):localFlowText('relearningTitle')}
-      stepLabel={needsRelearning?t('runtime.relearningRetryTitle'):t(
-        completed
-          ? "runtime.done"
-          : purpose === 'initial_learning' && progressStep === 0
+      stepLabel={needsRelearning?t('runtime.relearningRetryTitle'):completed?t('runtime.done'):expressionStepLabel+' · '+t(
+        purpose === 'initial_learning' && progressStep === 0
             ? "runtime.experienceStep"
             : purpose === 'initial_learning'
               ? "runtime.bindingStep"
@@ -157,7 +156,9 @@ export const LightweightRuntimeStartScreen = ({
             ? "runtime.recallStep"
             : "runtime.revealStep",
       )}
-      progress={needsRelearning?null:completed ? 100 : (progressStep + 1) * 50}
+      progress={needsRelearning?null:progressStep*50}
+      progressLabel={expressionStepLabel}
+      progressValueText={completed?t('runtime.done'):expressionStepLabel}
       tools={tools}
       onExit={onExit}
       pauseShortcut="Esc"

@@ -327,6 +327,7 @@
     "review": "Review",
     "pause": "Pause",
     "progress": "Session progress",
+    "expressionStep": "Current expression · step {{current}} of {{total}}",
     "done": "Session complete",
     "experienceStep": "Build the concept",
     "bindingStep": "Connect the expression",

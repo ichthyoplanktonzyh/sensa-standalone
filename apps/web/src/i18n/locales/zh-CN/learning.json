@@ -327,6 +327,7 @@
     "review": "复习",
     "pause": "暂停",
     "progress": "本次进度",
+    "expressionStep": "当前表达 · 第 {{current}} / {{total}} 步",
     "done": "本轮完成",
     "experienceStep": "建立概念",
     "bindingStep": "连接表达",

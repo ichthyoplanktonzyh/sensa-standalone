@@ -327,6 +327,7 @@
     "review": "複習",
     "pause": "暫停",
     "progress": "本次進度",
+    "expressionStep": "目前表達 · 第 {{current}} / {{total}} 步",
     "done": "本輪完成",
     "experienceStep": "建立概念",
     "bindingStep": "連線表達",
