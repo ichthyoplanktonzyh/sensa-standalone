@@ -19,7 +19,7 @@
     "@sqlite.org/sqlite-wasm": "^3.53.4-build1",
     "@supabase/supabase-js": "^2.115.0",
     "@tailwindcss/vite": "^4.3.3",
-    "@tanstack/react-router": "^1.170.32",
+    "@tanstack/react-router": "^1.170.41",
     "@tanstack/react-virtual": "^3.14.13",
     "compromise": "^14.16.0",
     "i18next": "^26.4.2",
