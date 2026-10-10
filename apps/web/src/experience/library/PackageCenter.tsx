@@ -28,10 +28,10 @@ import {
  buildPackageCenterItems,
  indexPackageTargets,
  projectPackageContentWindow,
+ projectPackageMetadata,
  projectPackageSource,
  type PackageCenterItem,
 } from './packageCenterProjection';
-import type {ContentSupplyInstallationPhase} from '../../contentSupply/system';
 import type {ShellParams} from '../router/screenRegistry';
 import {browseCatalog,catalogBrowsingParams,parseCatalogBrowsing,type CatalogBrowsing} from './packageCatalogBrowsing';
 import {CatalogPagination,PackageCards,PackageRoute,PackageStatus,packageItemState as itemState} from './PackageCenterParts';
@@ -60,7 +60,7 @@ function CenterNavigation({current,onCatalog,onLibrary,onPublisher}:{
    key={id}
    type="button"
    aria-current={current===id?'page':undefined}
-   className={`${setupButton} ${current===id?'border-action-primary bg-accent-soft text-action-primary':''}`}
+   className={`${setupButton} ${current===id?'border-action-primary bg-accent-soft text-action-primary underline underline-offset-4':''}`}
    onClick={action}
   ><Icon size={17}/>{label}</button>)}
  </nav>;
@@ -78,85 +78,79 @@ function PackageDetail({active,item,c,onBack,onLearning,onTarget,screenId='s-cat
 }){
  const {t,i18n}=useTranslation();
  const locale=resolveInterfaceLocale(i18n.resolvedLanguage??i18n.language);
- const [downloadKey,setDownloadKey]=useState<string|null>(null);
- const [installationPhase,setInstallationPhase]=useState<ContentSupplyInstallationPhase|null>(null);
- const installationPhaseRef=useRef<ContentSupplyInstallationPhase|null>(null);
- const [contentWindow,setContentWindow]=useState({itemKey:'',limit:50});
- const contentLimit=item&&contentWindow.itemKey===item.listKey?contentWindow.limit:50;
+ const actionInFlight=useRef(false);
+ const [contentWindow,setContentWindow]=useScreenState('package-detail:content-window',{itemKey:'',limit:3});
+ const contentLimit=item&&contentWindow.itemKey===item.listKey?contentWindow.limit:3;
  const targetByEntry=useMemo(()=>indexPackageTargets(c.targets),[c.targets]);
  const contentProjection=useMemo(()=>item
   ?projectPackageContentWindow(item.installed,targetByEntry,contentLimit)
   :{entries:[],total:0},[item?.installed,targetByEntry,contentLimit]);
- if(!item)return <LearningSetupFrame id={screenId} active={active} onBack={onBack} title={localFlowText('packageCatalogTitle')}>{!c.loaded||c.catalogBusy?<div role="status" aria-label={t('reliability.loading')} className="h-32 animate-pulse rounded-2xl bg-surface-subtle"/>:<p role="status">{referenceOnly?t('reliability.errorTitle'):localFlowText('packageNoResults')}</p>}</LearningSetupFrame>;
- const installedEntryCount=contentProjection.total;
- const installedEntries=contentProjection.entries;
+ const metadata=useMemo(()=>item?projectPackageMetadata(item):null,[item]);
+ if(!item||!metadata)return <LearningSetupFrame id={screenId} active={active} onBack={onBack} title={localFlowText('packageCatalogTitle')}>
+  {c.loadStatus==='unavailable'||c.catalogStatus==='unavailable'?<PackageStatus error onRetry={()=>{void c.retryInitialLoad();void c.reloadCatalog(true);}}>{c.notice||localFlowText('catalogFailed')}</PackageStatus>:!c.loaded||c.catalogBusy?<PackageStatus>{t('reliability.loading')}</PackageStatus>:<PackageStatus>{referenceOnly?t('reliability.errorTitle'):localFlowText('packageNoResults')}</PackageStatus>}
+ </LearningSetupFrame>;
+ const installedEntryCount=contentProjection.total,installedEntries=contentProjection.entries;
+ const installing=c.installation?.bookKey===item.key?c.installation:null;
  const enrollInstalled=()=>{
- if(!item.routeMatchesActive||!item.installed.length)return;
-  if(item.publicationArchiveSha256)void c.enrollBook(item.publicationArchiveSha256);
-  else void c.enroll(item.installed[0]!.key);
+  if(c.busy||actionInFlight.current||!item.routeMatchesActive||!item.installed.length)return;
+  actionInFlight.current=true;
+  void (item.publicationArchiveSha256?c.enrollBook(item.publicationArchiveSha256):c.enroll(item.installed[0]!.key))
+   .finally(()=>{actionInFlight.current=false;});
  };
- const reportInstallationPhase=(phase:ContentSupplyInstallationPhase)=>{
-  installationPhaseRef.current=phase;
-  setInstallationPhase(phase);
- };
- const cancelDownload=()=>{
-  if(installationPhaseRef.current==='committing')return;
-  c.cancelDownload();
- };
- const download=()=>{
-  if(!item.descriptor)return;
-  setDownloadKey(item.key);
-  reportInstallationPhase('downloading');
-  void c.download(item.descriptor,reportInstallationPhase).finally(()=>{
-   setDownloadKey(null);
-   installationPhaseRef.current=null;
-   setInstallationPhase(null);
-  });
- };
- const action=()=>{
-  if(item.updateDownloaded&&item.installed.length){enrollInstalled();return;}
-  if(item.updateAvailable&&item.descriptor){download();return;}
-  if(item.enrolled){onLearning();return;}
-  if(item.installed.length){enrollInstalled();return;}
-  if(item.descriptor)download();
- };
- const disabled=!c.loaded||c.busy||c.catalogBusy||(!item.installed.length&&!item.descriptor)
-  ||(item.installed.length>0&&!item.enrolled&&!item.routeMatchesActive);
+ const hasLatest=!!item.installed.length&&(!item.updateAvailable||item.updateDownloaded);
+ const downloadDisabled=!c.loaded||c.busy||c.catalogBusy||hasLatest;
+ const enrollmentDisabled=!c.loaded||c.busy||!item.installed.length
+  ||(!item.routeMatchesActive&&!item.enrolled)||(item.updateAvailable&&!item.updateDownloaded);
  const routeMismatch=item.installed.length>0&&!item.enrolled&&!item.routeMatchesActive;
  const redundantRouteNotice=routeMismatch&&[localFlowText('routeLanguageMismatch'),localFlowText('routeSupportMismatch')].includes(c.notice);
- const version=item.sourceVersion??item.descriptor?.book.versionNumber??(item.kind==='local'?item.installed[0]?.portableOrigin.manifest.metadata.version:undefined);
+ const safeLink=(value:string|undefined)=>{try{const url=new URL(value??'');return ['http:','https:'].includes(url.protocol)?url.href:undefined;}catch{return undefined;}};
  return <LearningSetupFrame id={screenId} active={active} onBack={onBack} title={localFlowText('packageCatalogTitle')}>
-  <div className="mb-8 space-y-4">
-   {c.loaded?<span className="inline-flex items-center gap-2 rounded-lg bg-accent-soft px-3 py-2 text-sm text-action-primary">{item.enrolled?<Check size={16}/>:<BookOpen size={16}/>} {itemState(item)}</span>:<span role="status" aria-label={t('reliability.loading')} className="inline-block h-9 w-24 animate-pulse rounded-lg bg-surface-subtle"/>}
-   <h1 className="break-words text-3xl font-medium tracking-tight outline-none sm:text-4xl">{item.title}</h1>
-   {item.description&&<p className="max-w-2xl text-sm leading-7 text-fg-secondary">{item.description}</p>}
-   <p className="text-sm text-fg-secondary">{interfaceLanguageDisplayName(item.targetLanguage,locale)} / {interfaceLanguageDisplayName(item.supportLanguage,locale)} · {localFlowText('packageExpressionCount',{count:item.count})}{version===undefined?'':` · v${version}`}</p>
-   {item.updateAvailable&&item.descriptor?.changeSummary&&<p className="max-w-2xl text-sm leading-6 text-fg-secondary">{item.descriptor.changeSummary}</p>}
+  <div className="mb-5 space-y-3">
+   {c.loaded?<span className="inline-flex items-center gap-2 rounded-lg bg-accent-soft px-3 py-2 text-sm text-action-primary">{item.enrolled?<Check size={16}/>:<BookOpen size={16}/>} {itemState(item,c.installation,c.progress)}</span>:<span role="status" aria-label={t('reliability.loading')} className="inline-block h-9 w-24 animate-pulse rounded-lg bg-surface-subtle"/>}
+   <h1 className="break-words text-3xl font-medium tracking-tight outline-none">{item.title}</h1>
+   {item.description&&<p className="max-w-3xl break-words text-sm leading-6 text-fg-secondary">{item.description}</p>}
+   <PackageRoute target={item.targetLanguage} support={item.supportLanguage}/>
+   <p className="text-sm text-fg-secondary">{localFlowText('packageExpressionCount',{count:item.count})}</p>
   </div>
-  {!referenceOnly&&<section aria-label={localFlowText('packageActions')} className="mb-8 space-y-4 rounded-2xl border border-border-strong bg-surface-panel p-5 sm:p-6">
-   {c.notice&&!redundantRouteNotice&&<p role="status" className="rounded-xl border border-border-subtle bg-surface-subtle p-4 text-sm leading-6">{localFlowNotice(c.notice)}</p>}
-   {item.installed.length>0&&!item.enrolled&&!item.routeMatchesActive&&<p role="status" className="text-sm leading-6 text-fg-secondary">{localFlowText('packageRouteMismatchHint')}</p>}
-   {!c.loaded?<div role="status" aria-label={t('reliability.loading')} className="h-11 w-40 animate-pulse rounded-control bg-surface-subtle"/>:downloadKey===item.key&&installationPhase==='committing'?<p role="status" className="text-sm">{t('composer.saving')}</p>:downloadKey===item.key&&installationPhase==='preparing'?<>
-    <p role="status" className="text-sm">{localFlowText('batchWorking')}</p>
-    <button className={setupButton} onClick={cancelDownload}>{localFlowText('cancelDownload')}</button>
-   </>:downloadKey===item.key&&installationPhase==='downloading'?<>
-    <p role="status" className="text-sm">{localFlowText('downloading')}{c.progress??0}%</p>
-    <progress aria-label={localFlowText('downloadPackage')} max={100} value={c.progress??0} className="h-2 w-full accent-action-primary"/>
-    <button className={setupButton} onClick={cancelDownload}>{localFlowText('cancelDownload')}</button>
+  <section aria-label={localFlowText('packagePublication')} className="mb-5 rounded-xl border border-border-subtle bg-surface-panel p-4 sm:p-5">
+   <dl className="grid gap-x-5 gap-y-3 text-sm sm:grid-cols-3">
+    {metadata.publisher&&<div><dt className="text-fg-secondary">{localFlowText('packagePublisher')}</dt><dd className="mt-1 break-words">{metadata.publisher.name}</dd></div>}
+    {metadata.version!==undefined&&<div><dt className="text-fg-secondary">{localFlowText('packageVersion')}</dt><dd className="mt-1">v{metadata.version}</dd></div>}
+    {metadata.publishedAt&&<div><dt className="text-fg-secondary">{localFlowText('packagePublishedAt')}</dt><dd className="mt-1"><time dateTime={metadata.publishedAt}>{new Intl.DateTimeFormat(locale,{dateStyle:'medium'}).format(new Date(metadata.publishedAt))}</time></dd></div>}
+   </dl>
+   {metadata.changeSummary&&<div className="mt-4 border-t border-border-subtle pt-3"><h2 className="text-sm font-medium">{localFlowText('packageUpdateSummary')}</h2><p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-fg-secondary">{metadata.changeSummary}</p></div>}
+  </section>
+  {!referenceOnly&&<section aria-label={localFlowText('packageActions')} className="mb-5 space-y-3 rounded-xl border border-border-strong bg-surface-panel p-4 sm:p-5">
+   {c.loadStatus==='unavailable'?<PackageStatus error onRetry={()=>void c.retryInitialLoad()}>{c.notice}</PackageStatus>:c.notice&&!redundantRouteNotice&&<PackageStatus error={c.downloadFailed}>{localFlowNotice(c.notice)}</PackageStatus>}
+   {routeMismatch&&<PackageStatus>{localFlowText('packageRouteMismatchHint')}</PackageStatus>}
+   {item.updateAvailable&&<p className="text-sm leading-6 text-fg-secondary">{localFlowText(item.updateDownloaded?'packageUpdateDownloadedHint':'packageUpdateHint')}</p>}
+   {c.loadStatus==='unavailable'?null:!c.loaded?<PackageStatus>{t('reliability.loading')}</PackageStatus>:installing?<>
+    <p role="status" className="text-sm">{installing.phase==='committing'?t('composer.saving'):installing.phase==='preparing'?localFlowText('batchWorking'):`${localFlowText('downloading')}${c.progress??0}%`}</p>
+    {installing.phase==='downloading'&&<progress aria-label={localFlowText('downloadPackage')} max={100} value={c.progress??0} className="h-2 w-full accent-action-primary"/>}
+    {installing.phase!=='committing'&&<button type="button" className={setupButton} onClick={c.cancelDownload}>{localFlowText('cancelDownload')}</button>}
    </>:<div className="flex flex-wrap gap-3">
-    <button className={setupPrimary} disabled={disabled} onClick={action}>
-     {item.enrolled?<ArrowRight size={18}/>:item.updateDownloaded||item.installed.length?<Check size={18}/>:<Download size={18}/>}
-     {localFlowText(c.busy?'processing':item.updateDownloaded?'applyPackageUpdate':item.updateAvailable?'downloadPackageUpdate':item.enrolled?'packageGoLearning':item.installed.length?'enroll':'downloadPackage')}
+    {item.descriptor&&<button type="button" className={hasLatest?setupButton:setupPrimary} disabled={downloadDisabled} aria-describedby={`${screenId}-download-hint`} onClick={()=>{if(item.descriptor)void c.download(item.descriptor);}}><Download size={18}/>{localFlowText(hasLatest?'packageDownloadedAction':item.updateAvailable?'downloadPackageUpdate':'downloadPackage')}</button>}
+    <button type="button" className={item.installed.length?setupPrimary:setupButton} disabled={enrollmentDisabled} onClick={item.enrolled?onLearning:enrollInstalled}>
+     {item.enrolled?<ArrowRight size={18}/>:<Check size={18}/>}{localFlowText(c.busy?'processing':item.updateAvailable?'applyPackageUpdate':item.enrolled?'packageGoLearning':'enroll')}
     </button>
-    {item.installed.length===1&&<button className={setupButton} disabled={c.busy} onClick={()=>void c.exportPackage(item.installed[0]!.key).then(result=>{if(result)downloadPortablePackage(result);})}><Download size={18}/>{localFlowText('exportPortablePackage')}</button>}
+    {item.installed.length===1&&<button type="button" className={setupButton} disabled={c.busy} onClick={()=>void c.exportPackage(item.installed[0]!.key).then(result=>{if(result)downloadPortablePackage(result);})}><Download size={18}/>{localFlowText('exportPortablePackage')}</button>}
    </div>}
+   <p id={`${screenId}-download-hint`} className="text-sm leading-6 text-fg-secondary">{localFlowText('packageDownloadHint')}</p>
+  </section>}
+  {!!item.installed.length&&<section aria-label={localFlowText('packageSource')} className="mb-5 rounded-xl border border-border-subtle bg-surface-panel p-4 sm:p-5">
+   <p className="mb-3 text-sm text-fg-secondary">{localFlowText('packageInstalledVersion',{version:metadata.installedVersion})}</p>
+   <dl className="grid gap-3 text-sm sm:grid-cols-2">{[
+    {label:localFlowText('packageAuthor'),values:metadata.authors},
+    {label:localFlowText('packageLicense'),values:metadata.licenses},
+   ].filter(group=>group.values.length).map(group=><div key={group.label}><dt className="text-fg-secondary">{group.label}</dt><dd className="mt-1 flex flex-wrap gap-x-3 gap-y-1">{group.values.map(value=><span key={JSON.stringify(value)} className="break-words">{safeLink(value.url)?<a href={safeLink(value.url)} target="_blank" rel="noopener noreferrer" className="underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-focus">{value.name}</a>:value.name}</span>)}</dd></div>)}</dl>
   </section>}
   <section aria-label={localFlowText('packageContents')}>
-   <h2 className="mb-4 text-lg font-medium">{localFlowText('packageContents')}</h2>
-   {!c.loaded?<div role="status" aria-label={t('reliability.loading')} className="h-40 animate-pulse rounded-2xl bg-surface-subtle"/>:installedEntries.length?<><ul className="divide-y divide-border-subtle overflow-hidden rounded-2xl border border-border-subtle bg-surface-panel">{installedEntries.map(({pack,entry,target})=><li key={`${pack.key}:${entry.bindingVersionId}:${entry.senseVersionId}`} className="flex flex-wrap items-center justify-between gap-4 p-5">
+   <h2 className="mb-3 text-lg font-medium">{localFlowText('packageContents')}</h2>
+   {installedEntries.length>0&&<p className="mb-3 text-sm text-fg-secondary">{localFlowText('packageSampleVersion',{version:metadata.installedVersion})}</p>}
+   {c.loadStatus==='unavailable'?null:!c.loaded?<div role="status" aria-label={t('reliability.loading')} className="h-40 animate-pulse rounded-2xl bg-surface-subtle"/>:installedEntries.length?<><ul className="divide-y divide-border-subtle overflow-hidden rounded-2xl border border-border-subtle bg-surface-panel">{installedEntries.map(({pack,entry,target})=><li key={`${pack.key}:${entry.bindingVersionId}:${entry.senseVersionId}`} className="flex flex-wrap items-center justify-between gap-3 p-4">
     <div className="min-w-0 flex-1"><p className="break-words text-xl font-medium">{entry.expression}</p><p className="mt-2 text-sm leading-6 text-fg-secondary">{entry.meaning}</p></div>
     {target&&<button className={setupButton+' shrink-0'} aria-label={localFlowText('packageViewExpression',{expression:entry.expression})} onClick={()=>onTarget(target.targetId)}>{localFlowText('packageViewDetails')}<ArrowRight size={16}/></button>}
-   </li>)}</ul>{installedEntries.length<installedEntryCount&&<button type="button" className={setupButton+' mt-4'} onClick={()=>setContentWindow({itemKey:item.listKey,limit:contentLimit+50})}>{t('study.more')}</button>}</>:<p className="rounded-2xl border border-dashed border-border-strong p-6 text-sm leading-6 text-fg-secondary">{localFlowText('packageContentsAfterDownload')}</p>}
+   </li>)}</ul>{installedEntries.length<installedEntryCount&&<button type="button" className={setupButton+' mt-4'} onClick={()=>setContentWindow({itemKey:item.listKey,limit:contentLimit<50?50:contentLimit+50})}>{t('study.more')}</button>}</>:<p className="rounded-2xl border border-dashed border-border-strong p-6 text-sm leading-6 text-fg-secondary">{localFlowText('packageContentsAfterDownload')}</p>}
   </section>
  </LearningSetupFrame>;
 }
@@ -169,7 +163,7 @@ export function PackageCatalogScreen({active,c,params,onParamsChange,onBack,onOp
  const state=useMemo(()=>parseCatalogBrowsing(params),[params]);
  const [returnFocus,setReturnFocus]=useScreenState('package-catalog:return-focus','');
  const collection=useRef<HTMLDivElement>(null),summary=useRef<HTMLParagraphElement>(null);
- const previousPage=useRef(state.page);
+ const requestedPageFocus=useRef(false);
  const projection=useMemo(()=>buildPackageCenterItems(c),[
   c.catalog,c.packages,c.enrollments,
   c.languageContext.targetLanguageTag,c.languageContext.supportLanguageTag,
@@ -189,8 +183,7 @@ export function PackageCatalogScreen({active,c,params,onParamsChange,onBack,onOp
    (button??summary.current)?.focus({preventScroll:true});
    setReturnFocus('');
   }
-  if(previousPage.current!==state.page){summary.current?.scrollIntoView({block:'start'});summary.current?.focus({preventScroll:true});}
-  previousPage.current=state.page;
+  if(requestedPageFocus.current){summary.current?.scrollIntoView({block:'start'});summary.current?.focus({preventScroll:true});requestedPageFocus.current=false;}
  },[active,c.catalogStatus,returnFocus,state.page]);
  const selectClass='mt-1 min-h-11 w-full min-w-0 rounded-control border border-border-strong bg-surface-panel px-3 text-sm text-fg-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus';
  return <LearningSetupFrame id="s-catalog" active={active} onBack={onBack}>
@@ -225,12 +218,12 @@ export function PackageCatalogScreen({active,c,params,onParamsChange,onBack,onOp
   </div>
   <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
    <p ref={summary} tabIndex={-1} role="status" aria-live="polite" className="text-sm text-fg-secondary focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus">{c.catalogStatus==='ready'?localFlowText('catalogResultRange',{start:results.start,end:results.end,total:results.total}):t(c.catalogStatus==='unavailable'?'reliability.errorTitle':'reliability.loading')}</p>
-   <div role="group" aria-label={localFlowText('catalogView')} className="flex flex-wrap gap-2">{(['cards','list'] as const).map(view=><button type="button" key={view} aria-pressed={state.view===view} className={`${setupButton} ${state.view===view?'border-action-primary bg-accent-soft text-action-primary':''}`} onClick={()=>update({view})}>{localFlowText(view==='cards'?'catalogCards':'catalogList')}</button>)}</div>
+   <div role="group" aria-label={localFlowText('catalogView')} className="flex flex-wrap gap-2">{(['cards','list'] as const).map(view=><button type="button" key={view} aria-pressed={state.view===view} className={`${setupButton} ${state.view===view?'border-action-primary bg-accent-soft text-action-primary':''}`} onClick={()=>update({view})}>{state.view===view&&<Check size={14} aria-hidden="true"/>}{localFlowText(view==='cards'?'catalogCards':'catalogList')}</button>)}</div>
   </div>
   <div ref={collection}>
-   {c.catalogStatus==='unavailable'?null:<PackageCards items={c.catalogStatus==='ready'?results.items:[]} loaded={c.catalogStatus==='ready'} view={state.view} onOpen={item=>{setReturnFocus(item.key);onOpenBook(item.key);}} emptyKey={state.query||state.target||state.support?'packageNoResults':'packageEmpty'}/>}
+   {c.catalogStatus==='unavailable'?null:<PackageCards installation={c.installation} progress={c.progress} items={c.catalogStatus==='ready'?results.items:[]} loaded={c.catalogStatus==='ready'} view={state.view} onOpen={item=>{setReturnFocus(item.key);onOpenBook(item.key);}} emptyKey={state.query||state.target||state.support?'packageNoResults':'packageEmpty'}/>}
   </div>
-  {c.catalogStatus==='ready'&&results.total>0&&<CatalogPagination page={results.page} pages={results.pages} onPage={page=>update({page})}/>}
+  {c.catalogStatus==='ready'&&results.total>0&&<CatalogPagination page={results.page} pages={results.pages} onPage={page=>{if(page!==results.page){requestedPageFocus.current=true;update({page});}}}/>}
  </LearningSetupFrame>;
 }
 
@@ -272,8 +265,8 @@ export function PackageLibraryScreen({active,c,onBack,onCatalog,onOpenBook,onOpe
  const normalized=query.trim().toLocaleLowerCase();
  const results=useMemo(()=>items.filter(item=>[item.title,item.description,item.targetLanguage,item.supportLanguage].join(' ').toLocaleLowerCase().includes(normalized)),[items,normalized]);
  if(candidate?.preview)return <LearningSetupFrame id="s-library" active={active} onBack={()=>setCandidate(null)} title={localFlowText('importPackageTitle')}>
-  <div className="mb-8 space-y-4"><h1 className="break-words text-3xl font-medium tracking-tight sm:text-4xl">{candidate.preview.package.metadata.title}</h1><p className="text-sm text-fg-secondary">{interfaceLanguageDisplayName(candidate.preview.package.route.targetLanguage,locale)} / {interfaceLanguageDisplayName(candidate.preview.package.route.supportLanguage,locale)} · v{candidate.preview.package.metadata.version}</p></div>
-  <section className="mb-8 space-y-5 rounded-2xl border border-border-strong bg-surface-panel p-5 sm:p-6">
+  <div className="mb-5 space-y-4"><h1 className="break-words text-3xl font-medium tracking-tight sm:text-4xl">{candidate.preview.package.metadata.title}</h1><p className="text-sm text-fg-secondary">{interfaceLanguageDisplayName(candidate.preview.package.route.targetLanguage,locale)} / {interfaceLanguageDisplayName(candidate.preview.package.route.supportLanguage,locale)} · v{candidate.preview.package.metadata.version}</p></div>
+  <section className="mb-5 space-y-5 rounded-2xl border border-border-strong bg-surface-panel p-5 sm:p-6">
    <h2 className="break-words text-2xl font-medium">{candidate.preview.package.targetExpression.text}</h2>
    <p className="break-words leading-7">{candidate.preview.package.sense.meaning}</p>
    <dl className="grid gap-4 text-sm sm:grid-cols-2">
@@ -289,14 +282,14 @@ export function PackageLibraryScreen({active,c,onBack,onCatalog,onOpenBook,onOpe
  </LearningSetupFrame>;
  return <LearningSetupFrame id="s-library" active={active} onBack={onBack}>
   <CenterNavigation current="library" onCatalog={onCatalog} onLibrary={()=>{}} onPublisher={onPublisher}/>
-  <div className="mb-8 flex flex-wrap items-start justify-between gap-5">
+  <div className="mb-5 flex flex-wrap items-start justify-between gap-5">
    <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">{localFlowText('packageCenterLibrary')}</h1>
    <button className={setupButton} disabled={c.busy} onClick={()=>input.current?.click()}><Upload size={16}/>{localFlowText(c.busy?'processing':'importPackage')}</button>
   </div>
   {c.loaded&&c.unavailablePackageKeys.length>0&&<p role="status" className="mb-6 rounded-xl border border-border-strong bg-surface-subtle p-4 text-sm leading-6">{localFlowText('packageFilesUnavailable',{count:c.unavailablePackageKeys.length})}</p>}
   {c.notice&&<p role="status" className="mb-6 rounded-xl border border-border-subtle bg-surface-subtle p-4 text-sm leading-6">{localFlowNotice(c.notice)}</p>}
-  <div className="mb-8 flex min-h-14 items-center gap-3 rounded-2xl border border-border-strong bg-surface-panel px-4 focus-within:ring-2 focus-within:ring-focus"><Search size={20} className="shrink-0 text-fg-secondary" aria-hidden="true"/><input type="search" aria-label={localFlowText('packageSearch')} placeholder={localFlowText('packageSearch')} value={query} onChange={event=>setQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent py-4 text-sm outline-none"/></div>
-  <PackageCards items={results} loaded={c.loaded} onOpen={item=>item.kind==='published'?onOpenBook(item.key):onOpenPackage(item.listKey)} emptyKey={query?'packageNoResults':'packageEmpty'}/>
+  <div className="mb-5 flex min-h-11 items-center gap-3 rounded-2xl border border-border-strong bg-surface-panel px-4 focus-within:ring-2 focus-within:ring-focus"><Search size={20} className="shrink-0 text-fg-secondary" aria-hidden="true"/><input type="search" aria-label={localFlowText('packageSearch')} placeholder={localFlowText('packageSearch')} value={query} onChange={event=>setQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none"/></div>
+  <PackageCards items={results} installation={c.installation} progress={c.progress} loaded={c.loaded} onOpen={item=>item.kind==='published'?onOpenBook(item.key):onOpenPackage(item.listKey)} emptyKey={query?'packageNoResults':'packageEmpty'}/>
   <input ref={input} hidden tabIndex={-1} aria-label={localFlowText('importPackage')} type="file" accept=".sensa,application/zip,application/octet-stream" disabled={c.busy} onChange={event=>{const file=event.target.files?.[0];event.target.value='';if(file)void c.previewImport(file).then(preview=>{if(preview)setCandidate({file,preview});});}}/>
  </LearningSetupFrame>;
 }

@@ -8,7 +8,9 @@ import {setupButton} from '../components/learning/LearningSetupFrame';
 import {catalogPageNumbers} from './packageCatalogBrowsing';
 import type {PackageCenterItem} from './packageCenterProjection';
 
-export const packageItemState=(item:PackageCenterItem)=>localFlowText(
+export const packageItemState=(item:PackageCenterItem,installation?:{bookKey:string;phase:string}|null,progress?:number|null)=>installation?.bookKey===item.key
+ ?installation.phase==='downloading'?`${localFlowText('downloading')}${progress??0}%`:localFlowText('processing')
+ :localFlowText(
  item.updateDownloaded?'packageUpdateDownloaded':item.updateAvailable?'packageUpdateAvailable'
   :item.enrolled?'enrolled':item.installed.length?'downloaded':'packageNotDownloaded',
 );
@@ -30,9 +32,10 @@ export function PackageStatus({children,error=false,onRetry}:{children:ReactNode
  </div>;
 }
 
-export function PackageCards({items,onOpen,emptyKey,loaded,view='cards'}:{
+export function PackageCards({items,onOpen,emptyKey,loaded,view='cards',installation,progress}:{
  items:readonly PackageCenterItem[];onOpen:(item:PackageCenterItem)=>void;
  emptyKey:'packageEmpty'|'packageNoResults';loaded:boolean;view?:'cards'|'list';
+ installation?:{bookKey:string;phase:string}|null;progress?:number|null;
 }){
  const {t}=useTranslation();
  return <>
@@ -42,7 +45,7 @@ export function PackageCards({items,onOpen,emptyKey,loaded,view='cards'}:{
      <div className="flex w-full flex-wrap items-start gap-3">
       <BookOpen size={19} className="mt-1 shrink-0 text-action-primary" aria-hidden="true"/>
       <h2 className="min-w-0 flex-1 break-words text-lg font-medium">{item.title}</h2>
-      {loaded?<span className="rounded-md bg-accent-soft px-2 py-1 text-xs text-action-primary">{packageItemState(item)}</span>:<span role="status" aria-label={t('reliability.loading')} className="h-6 w-20 animate-pulse rounded-lg bg-surface-subtle"/>}
+      {loaded?<span className="rounded-md bg-accent-soft px-2 py-1 text-xs text-action-primary">{packageItemState(item,installation,progress)}</span>:<span role="status" aria-label={t('reliability.loading')} className="h-6 w-20 animate-pulse rounded-lg bg-surface-subtle"/>}
      </div>
      {item.description&&<p className={`${view==='list'?'line-clamp-2':'line-clamp-3'} w-full break-words text-sm leading-6 text-fg-secondary`}>{item.description}</p>}
      <div className="mt-auto flex w-full flex-wrap items-end justify-between gap-2">
@@ -59,7 +62,7 @@ export function PackageCards({items,onOpen,emptyKey,loaded,view='cards'}:{
 export function CatalogPagination({page,pages,onPage}:{page:number;pages:number;onPage:(page:number)=>void}){
  return <nav aria-label={localFlowText('catalogPagination')} className="mt-5 flex flex-wrap items-center justify-center gap-2">
   <button type="button" className={setupButton} aria-label={localFlowText('catalogPreviousPage')} disabled={page<=1} onClick={()=>onPage(page-1)}><ChevronLeft size={18}/></button>
-  {catalogPageNumbers(page,pages).map((number,index)=>number==='gap'?<span key={`gap-${index}`} aria-hidden="true" className="px-1 text-fg-secondary">…</span>:<button type="button" key={number} aria-label={localFlowText('catalogPage',{page:number})} aria-current={page===number?'page':undefined} className={`${setupButton} min-w-11 px-3 ${page===number?'border-action-primary bg-accent-soft text-action-primary':''}`} onClick={()=>onPage(number)}>{number}</button>)}
+  {catalogPageNumbers(page,pages).map((number,index)=>number==='gap'?<span key={`gap-${index}`} aria-hidden="true" className="px-1 text-fg-secondary">…</span>:<button type="button" key={number} aria-label={localFlowText('catalogPage',{page:number})} aria-current={page===number?'page':undefined} className={`${setupButton} min-w-11 px-3 ${page===number?'border-action-primary bg-accent-soft font-semibold text-action-primary underline underline-offset-4':''}`} onClick={()=>onPage(number)}>{number}</button>)}
   <button type="button" className={setupButton} aria-label={localFlowText('catalogNextPage')} disabled={page>=pages} onClick={()=>onPage(page+1)}><ChevronRight size={18}/></button>
  </nav>;
 }

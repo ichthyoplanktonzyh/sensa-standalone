@@ -230,4 +230,32 @@ test('complete catalog browsing filters before paging, clamps stale URLs and bre
  assert.deepEqual(parseCatalogBrowsing(catalogBrowsingParams({...state,query:'日语',target:'ja',support:'zh-Hans',sort:'newest'})),{...state,query:'日语',target:'ja',support:'zh-Hans',sort:'newest'});
  assert.deepEqual(catalogPageNumbers(6,12),[1,'gap',5,6,7,'gap',12]);
  assert.deepEqual(catalogPageNumbers(1,1),[1]);
+ const offsetItems=[
+  {...items[0]!,descriptor:{...items[0]!.descriptor!,publishedAt:'2026-10-10T00:30:00+09:00'}},
+  {...items[1]!,descriptor:{...items[1]!.descriptor!,publishedAt:'2026-10-09T18:00:00Z'}},
+ ];
+ assert.deepEqual(browseCatalog(offsetItems,{...state,page:1,sort:'newest'},names,'zh-CN').items.map(item=>item.key),['book-1','book-0']);
+
+});
+
+test('detail metadata separates a newer public edition from the installed examples and never infers absent author/license',async()=>{
+ const {projectPackageMetadata}=await import('../../../apps/web/src/experience/library/packageCenterProjection');
+ const source=publication({namespace:'publisher',bookId:uuid('601'),bookKey:'meaningful-book',version:1,title:'Earlier title',archive:digest('1'),memberCount:1,targetLanguage:'en',supportLanguage:'zh-CN'});
+ const raw=packageSummary({key:'member',packageId:uuid('602'),version:1,title:'Verified member',targetLanguage:'en',supportLanguage:'zh-CN',publications:[source]});
+ const installed={...raw,portableOrigin:{...raw.portableOrigin,manifest:{...raw.portableOrigin.manifest,metadata:{...raw.portableOrigin.manifest.metadata,author:{name:'Actual author',url:'https://author.example'},license:{name:'CC0',url:'https://creativecommons.org/publicdomain/zero/1.0/'}}}}};
+ const publicItem=descriptor({namespace:'publisher',bookId:uuid('601'),bookKey:'meaningful-book',version:2,title:'Latest title',sha256:digest('2'),memberCount:1,targetLanguage:'en',supportLanguage:'zh-CN'});
+ const [item]=buildPackageCenterItems({catalog:[publicItem],packages:[installed],enrollments:[],languageContext:{targetLanguageTag:'en',supportLanguageTag:'zh-CN'} as Controller['languageContext']}).catalog;
+ const metadata=projectPackageMetadata(item!);
+ assert.equal(metadata.version,2);assert.equal(metadata.installedVersion,1);
+ assert.deepEqual(metadata.authors,[installed.portableOrigin.manifest.metadata.author]);
+ assert.deepEqual(metadata.licenses,[installed.portableOrigin.manifest.metadata.license]);
+ assert.equal(metadata.publisher?.name,'publisher');
+ const partialNewPublication={...source,book:{...source.book,versionNumber:2},bookArchiveSha256:digest('2'),memberCount:2};
+ const shared={...installed,portableOrigin:{...installed.portableOrigin,publications:[source,partialNewPublication]}};
+ const [partial]=buildPackageCenterItems({catalog:[{...publicItem,memberCount:2}],packages:[shared],enrollments:[],languageContext:{targetLanguageTag:'en',supportLanguageTag:'zh-CN'} as Controller['languageContext']}).catalog;
+ assert.equal(partial!.installedArchiveSha256,digest('1'));
+ assert.equal(projectPackageMetadata(partial!).installedVersion,1,'partial newer cache membership cannot relabel the complete installed edition');
+
+ const undownloaded=projectPackageMetadata({...item!,installed:[]});
+ assert.deepEqual(undownloaded.authors,[]);assert.deepEqual(undownloaded.licenses,[]);assert.equal(undownloaded.installedVersion,undefined);
 });

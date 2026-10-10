@@ -37,6 +37,7 @@ test('complete catalog pages retain URL, scroll and focus through details and re
  const catalog=page.locator('#s-catalog').last(),book=page.locator('#s-catalog-book').last();
  await expect(catalog.getByText('第 25–48 项，共 137 项',{exact:true})).toBeVisible();
  await expect(catalog.locator('[data-package-key]')).toHaveCount(24);
+ await page.screenshot({path:testInfo.outputPath('catalog-desktop-toolbar-page-2.png')});
  await expect(catalog.getByRole('button',{name:'第 6 页',exact:true})).toBeVisible();
  const card=catalog.locator('[data-package-key]').nth(12),key=await card.getAttribute('data-package-key');
  await card.scrollIntoViewIfNeeded();await card.focus();
@@ -52,7 +53,8 @@ test('complete catalog pages retain URL, scroll and focus through details and re
  await expect(catalog.getByText('第 121–137 项，共 137 项',{exact:true})).toBeVisible();
  await expect(catalog.locator('[data-package-key]')).toHaveCount(17);
  await expect(catalog.getByRole('button',{name:'下一页',exact:true})).toBeDisabled();
- await catalog.getByRole('searchbox',{name:'搜索学习包'}).fill('深处');
+ await catalog.getByRole('searchbox',{name:'搜索学习包'}).pressSequentially('深处',{delay:50});
+ await expect(catalog.getByRole('searchbox',{name:'搜索学习包'})).toBeFocused();
  await expect(catalog.getByText('第 1–1 项，共 1 项',{exact:true})).toBeVisible();
  expect(new URL(page.url()).searchParams.get('page')).toBe('1');
  await expect(catalog.getByRole('button',{name:/深处的真实检索样本/})).toBeVisible();
@@ -121,6 +123,69 @@ test('catalog failure is distinct from empty results and an interrupted stale re
   await page.reload();
   await expect(catalog.getByText('第 0–0 项，共 0 项',{exact:true})).toBeVisible();
  }finally{release();}
+});
+
+test('detail metadata and real samples survive repeated download, cancel, return and retry without enrolling until confirmation',async({page,context},testInfo)=>{
+ await page.goto(`${fixture.origin}/catalog?query=English&page=1&pageSize=24&view=list&sort=title`);
+ const catalog=page.locator('#s-catalog').last(),book=page.locator('#s-catalog-book').last();
+ await catalog.getByRole('button',{name:/English route essentials/}).click();
+ await expect(book.getByRole('button',{name:'加入学习',exact:true})).toBeDisabled();
+ await expect(book.getByText(fixture.delivery.descriptor.publisher.name,{exact:true})).toBeVisible();
+ await expect(book.getByText('v1',{exact:true})).toBeVisible();
+ await expect(book.getByText('许可',{exact:true})).toHaveCount(0);
+ await expect(book.getByText('下载保存内容；加入学习需另行确认。',{exact:true})).toBeVisible();
+ await page.screenshot({path:testInfo.outputPath('book-detail-before-download.png')});
+ const path=new URL(fixture.delivery.descriptor.url).pathname;
+ fixture.heldArchivePath=path;
+ await book.getByRole('button',{name:'下载学习包',exact:true}).dblclick();
+ await expect(book.getByRole('progressbar',{name:'下载学习包'})).toBeVisible();
+ await expect.poll(()=>fixture.delivered.filter(item=>item===path).length).toBe(1);
+ await book.getByRole('button',{name:'返回',exact:true}).click();
+ await expect(catalog.getByRole('button',{name:/English route essentials.*正在下载/})).toBeVisible();
+ await catalog.getByRole('button',{name:/English route essentials/}).click();
+ await expect(book.getByRole('button',{name:'取消下载',exact:true})).toBeVisible();
+ await book.getByRole('button',{name:'取消下载',exact:true}).click();
+ await expect(book.getByRole('button',{name:'下载学习包',exact:true})).toBeEnabled();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.supplyCheckpoint())).toEqual([]);
+ fixture.heldArchivePath=null;
+ let corrupt=true;
+ await context.route('**/*.sensa-book',route=>corrupt?route.fulfill({status:200,body:'invalid isolated book'}):route.continue());
+ await book.getByRole('button',{name:'下载学习包',exact:true}).click();
+ await expect(book.getByRole('alert')).toBeVisible();
+ await expect(book.getByRole('button',{name:'加入学习',exact:true})).toBeDisabled();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.supplyCheckpoint())).toEqual([]);
+ corrupt=false;
+ await book.getByRole('button',{name:'下载学习包',exact:true}).click();
+ await expect(book.getByText('已下载',{exact:true})).toBeVisible();
+ await expect(book.getByRole('button',{name:'已下载到本机',exact:true})).toBeDisabled();
+ await expect(book.getByText('Sensa test fixture',{exact:true})).toBeVisible();
+ await expect(book.getByText('CC0',{exact:true})).toBeVisible();
+ await expect(book.getByText('以下表达与含义来自已下载的 v1。',{exact:true})).toBeVisible();
+ await expect(book.getByRole('region',{name:'包内内容',exact:true}).locator('li')).toHaveCount(3);
+ let checkpoint=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ expect(checkpoint.enrollments).toEqual([]);expect(checkpoint.targetIds).toEqual([]);expect(checkpoint.records).toEqual([]);
+ await page.screenshot({path:testInfo.outputPath('book-detail-saved-metadata.png')});
+ await book.getByRole('region',{name:'包内内容',exact:true}).scrollIntoViewIfNeeded();
+ await page.screenshot({path:testInfo.outputPath('book-detail-real-samples.png')});
+ await page.evaluate(()=>document.documentElement.style.zoom='2');
+ expect(await book.evaluate(element=>element.scrollWidth<=element.clientWidth)).toBe(true);
+ await page.screenshot({path:testInfo.outputPath('book-detail-200-percent-css-zoom.png')});
+ await page.evaluate(()=>document.documentElement.style.zoom='1');
+ await page.setViewportSize({width:320,height:740});
+ expect(await book.evaluate(element=>element.scrollWidth<=element.clientWidth)).toBe(true);
+ await book.getByRole('button',{name:'加入学习',exact:true}).focus();
+ await expect(book.getByRole('button',{name:'加入学习',exact:true})).toBeFocused();
+ await page.screenshot({path:testInfo.outputPath('book-detail-narrow-keyboard.png')});
+ await book.getByRole('button',{name:'加入学习',exact:true}).press('Enter');
+ await expect(book.getByText('已加入学习',{exact:true})).toBeVisible();
+ checkpoint=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ expect(checkpoint.enrollments).toHaveLength(1);expect(checkpoint.records).toEqual([]);
+ await page.reload();
+ await expect(book.getByRole('button',{name:'去学习',exact:true})).toBeEnabled();
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).enrollments).toHaveLength(1);
+ await book.getByRole('button',{name:'返回',exact:true}).click();
+ await expect(catalog.getByRole('searchbox',{name:'搜索学习包'})).toHaveValue('English');
+ await expect(catalog.getByRole('button',{name:'紧凑列表',exact:true})).toHaveAttribute('aria-pressed','true');
 });
 
 test('a cached public catalog refreshes across origins with its exact revision',async({page})=>{
@@ -357,7 +422,7 @@ test('discovers, downloads and enrolls a Book with durable local state',async({p
 
   await entry.getByRole('button',{name:'下载学习包',exact:true}).click();
   await expect(entry.getByText('已下载',{exact:true})).toBeVisible({timeout:15_000});
-  await expect(entry.locator('section').last().locator('li')).toHaveCount(50);
+  await expect(entry.locator('section').last().locator('li')).toHaveCount(3);
   await expect(entry.getByRole('button',{name:'加入学习',exact:true})).toBeVisible();
   assert.equal(
     fixture.delivered.filter(path=>path.endsWith('.sensa-book')).length,
@@ -378,6 +443,9 @@ test('discovers, downloads and enrolls a Book with durable local state',async({p
   await expect(entry.getByText('已加入学习',{exact:true})).toBeVisible({timeout:15_000});
   await expect(entry.getByRole('button',{name:'去学习',exact:true})).toBeVisible();
   const contents=entry.locator('section').last();
+  await expect(contents.locator('li')).toHaveCount(3);
+  await expect(contents.locator('li button')).toHaveCount(3);
+  await contents.getByRole('button',{name:'查看更多',exact:true}).click();
   await expect(contents.locator('li')).toHaveCount(50);
   await expect(contents.locator('li button')).toHaveCount(20);
   await contents.getByRole('button',{name:'查看更多',exact:true}).click();
@@ -623,10 +691,10 @@ test('a corrupt Book download remains uninstalled and can be retried through the
   await page.locator('#s-catalog').last().getByRole('button',{name:/雨天借伞/}).click();
   const book=page.locator('#s-catalog-book').last();
   await book.getByRole('button',{name:'下载学习包',exact:true}).click();
-  await expect(book.getByRole('status')).toBeVisible();
+  await expect(book.getByRole('alert')).toBeVisible();
   await expect(book.getByText('未下载',{exact:true})).toBeVisible();
   await expect(book.getByText('已下载',{exact:true})).toHaveCount(0);
-  await expect(book.getByRole('button',{name:'加入学习',exact:true})).toHaveCount(0);
+  await expect(book.getByRole('button',{name:'加入学习',exact:true})).toBeDisabled();
   await page.reload();
   await expect(book.getByText('未下载',{exact:true})).toBeVisible({timeout:15_000});
   corrupt=false;
@@ -660,7 +728,7 @@ test('a failed final member and a cancelled update leave the complete previous B
   await expect(catalog.getByRole('button',{name:'刷新',exact:true})).toBeEnabled();
   await catalog.getByRole('button',{name:/English route essentials/}).click();
   await book.getByRole('button',{name:'下载更新',exact:true}).click();
-  await expect(book.getByRole('status')).toHaveText('下载结果与目录版本不一致，请刷新目录后重试。');
+  await expect(book.getByRole('alert')).toHaveText('下载结果与目录版本不一致，请刷新目录后重试。');
   await expect(book.getByText('更新已下载',{exact:true})).toHaveCount(0);
   expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.supplyCheckpoint())).toEqual(previous);
   await page.reload();
@@ -715,16 +783,17 @@ test('the Book journey stays responsive with 342 catalog entries and a 100-membe
   try{
     await measure('catalogCold',6000,async()=>{
       await page.goto(`${fixture.origin}/catalog`);
-      await page.locator('#s-catalog').last().getByRole('button',{name:/English route essentials/}).waitFor({state:'visible',timeout:15_000});
+      await page.locator('#s-catalog').last().locator('[data-package-key]').first().waitFor({state:'visible',timeout:15_000});
   });
   const catalog=page.locator('#s-catalog').last();
   const book=page.locator('#s-catalog-book').last();
-    await expect(catalog.locator('ul>li')).toHaveCount(50);
-    await expect(catalog.getByRole('button',{name:'查看更多',exact:true})).toBeVisible();
+    await expect(catalog.locator('ul>li')).toHaveCount(24);
+    await expect(catalog.getByRole('button',{name:'第 2 页',exact:true})).toBeVisible();
     const catalogExpansionStarted=performance.now();
-    await catalog.getByRole('button',{name:'查看更多',exact:true}).click();
-    await expect(catalog.locator('ul>li')).toHaveCount(100);
-    timings.catalogWindow50To100=Math.round(performance.now()-catalogExpansionStarted);
+    await catalog.getByRole('button',{name:'第 2 页',exact:true}).click();
+    await expect(catalog.getByText('第 25–48 项，共 342 项',{exact:true})).toBeVisible();
+    await expect(catalog.locator('ul>li')).toHaveCount(24);
+    timings.catalogPage1To2=Math.round(performance.now()-catalogExpansionStarted);
     await measure('searchAcrossAll342Entries',1500,async()=>{
       await catalog.getByRole('searchbox').fill('目录规模样本 339');
       await expect(catalog.locator('ul>li')).toHaveCount(1);
@@ -781,7 +850,7 @@ test('the Book journey stays responsive with 342 catalog entries and a 100-membe
     const restoredLongTasks=await page.evaluate(()=>(window as unknown as {__bookJourneyLongTasks:number[]}).__bookJourneyLongTasks);
     const maximumLongTaskMs=Math.max(0,...initialLongTasks,...restoredLongTasks);
     assertInteractionBudget(maximumLongTaskMs,1000,'main-thread freeze at 4x CPU');
-    await test.info().attach('journey-performance.json',{body:JSON.stringify({platform:process.platform,arch:process.arch,cpuModel:cpus()[0]?.model??'unknown',logicalCpus:cpus().length,node:process.versions.node,catalogEntries:342,catalogInitialWindow:50,catalogExpandedWindow:100,bookMembers:100,bookBytes:fixture.scaleDelivery.descriptor.byteLength,cpuThrottle:4,fixtureLatencyMs:300,timings,maximumLongTaskMs,idleCatalogRequests:0,scope:'Controlled Chromium regression budgets; catalogCold ends when the first window is interactive; these are not real-device CWV or production backend SLOs.'}),contentType:'application/json'});
+    await test.info().attach('journey-performance.json',{body:JSON.stringify({platform:process.platform,arch:process.arch,cpuModel:cpus()[0]?.model??'unknown',logicalCpus:cpus().length,node:process.versions.node,catalogEntries:342,catalogPageSize:24,catalogPages:15,bookMembers:100,bookBytes:fixture.scaleDelivery.descriptor.byteLength,cpuThrottle:4,fixtureLatencyMs:300,timings,maximumLongTaskMs,idleCatalogRequests:0,scope:'Controlled Chromium regression budgets; catalogCold ends when the first window is interactive; these are not real-device CWV or production backend SLOs.'}),contentType:'application/json'});
     console.log(`Book journey controlled performance: ${JSON.stringify({timings,maximumLongTaskMs})}`);
   }finally{
     await cdp.send('Emulation.setCPUThrottlingRate',{rate:1});

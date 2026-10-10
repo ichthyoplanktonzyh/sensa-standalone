@@ -312,7 +312,7 @@
     "packageActions": "Package actions",
     "packageReadyHint": "Added to learning. Go to your learning page to begin.",
     "packageJoinHint": "Resources are ready. Add the expressions to your learning collection using Lightweight Study.",
-    "packageDownloadHint": "Download the learning resources, then add the expressions to learning.",
+    "packageDownloadHint": "Downloading saves the content. Adding it to learning requires a separate confirmation.",
     "packageGoLearning": "Go to learning",
     "packageContents": "Package contents",
     "packageContentsAfterDownload": "Download to view all expressions and meanings.",
@@ -512,6 +512,15 @@
     "catalogResultRange": "{{start}}–{{end}} of {{total}} items",
     "catalogView": "View",
     "catalogCards": "Cards",
-    "catalogList": "Compact list"
+    "catalogList": "Compact list",
+    "packagePublication": "Publication",
+    "packagePublisher": "Publisher",
+    "packageVersion": "Version",
+    "packagePublishedAt": "Published",
+    "packageUpdateSummary": "Release notes",
+    "packageSource": "Downloaded content sources",
+    "packageInstalledVersion": "Downloaded version: v{{version}}",
+    "packageSampleVersion": "These expressions and meanings come from downloaded v{{version}}.",
+    "packageDownloadedAction": "Saved on this device"
   }
 }

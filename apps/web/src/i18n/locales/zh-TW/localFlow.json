@@ -311,7 +311,7 @@
     "packageActions": "學習包操作",
     "packageReadyHint": "已加入學習，可前往學習頁面開始。",
     "packageJoinHint": "資源已備好，將包內表達加入學習集合。目前使用輕量學習。",
-    "packageDownloadHint": "下載學習資源後，即可將包內表達加入學習。",
+    "packageDownloadHint": "下載儲存內容；加入學習需另行確認。",
     "packageGoLearning": "去學習",
     "packageContents": "包內內容",
     "packageContentsAfterDownload": "下載後可檢視完整的表達與含義。",
@@ -511,6 +511,15 @@
     "catalogResultRange": "第 {{start}}–{{end}} 項，共 {{total}} 項",
     "catalogView": "顯示方式",
     "catalogCards": "卡片",
-    "catalogList": "精簡列表"
+    "catalogList": "精簡列表",
+    "packagePublication": "發布資訊",
+    "packagePublisher": "發布者",
+    "packageVersion": "版本",
+    "packagePublishedAt": "發布日期",
+    "packageUpdateSummary": "版本說明",
+    "packageSource": "已下載內容的來源",
+    "packageInstalledVersion": "已下載版本：v{{version}}",
+    "packageSampleVersion": "以下表達與含義來自已下載的 v{{version}}。",
+    "packageDownloadedAction": "已下載到本機"
   }
 }

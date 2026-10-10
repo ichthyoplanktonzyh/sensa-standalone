@@ -313,7 +313,7 @@
     "packageActions": "Azioni del pacchetto",
     "packageReadyHint": "Aggiunto all'apprendimento. Vai alla pagina del tuo apprendimento per iniziare.",
     "packageJoinHint": "Le risorse sono pronte. Aggiungi le espressioni alla tua raccolta con lo studio leggero.",
-    "packageDownloadHint": "Scarica le risorse didattiche, poi aggiungi le espressioni all'apprendimento.",
+    "packageDownloadHint": "Il download salva il contenuto. Aggiungerlo allo studio richiede una conferma separata.",
     "packageGoLearning": "Vai all'apprendimento",
     "packageContents": "Contenuto del pacchetto",
     "packageContentsAfterDownload": "Scarica il pacchetto per visualizzare tutte le espressioni e i significati.",
@@ -513,6 +513,15 @@
     "catalogResultRange": "{{start}}–{{end}} di {{total}} elementi",
     "catalogView": "Vista",
     "catalogCards": "Schede",
-    "catalogList": "Elenco compatto"
+    "catalogList": "Elenco compatto",
+    "packagePublication": "Pubblicazione",
+    "packagePublisher": "Editore",
+    "packageVersion": "Versione",
+    "packagePublishedAt": "Data di pubblicazione",
+    "packageUpdateSummary": "Note di versione",
+    "packageSource": "Fonti del contenuto scaricato",
+    "packageInstalledVersion": "Versione scaricata: v{{version}}",
+    "packageSampleVersion": "Queste espressioni e significati provengono dalla versione scaricata v{{version}}.",
+    "packageDownloadedAction": "Salvato su questo dispositivo"
   }
 }

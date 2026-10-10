@@ -311,7 +311,7 @@
     "packageActions": "패키지 작업",
     "packageReadyHint": "학습에 추가했습니다. 학습 페이지에서 시작하세요.",
     "packageJoinHint": "자료가 준비되었습니다. 간편 학습을 사용해 표현을 학습 모음에 추가하세요.",
-    "packageDownloadHint": "학습 자료를 다운로드한 다음 표현을 학습에 추가하세요.",
+    "packageDownloadHint": "다운로드하면 콘텐츠가 저장됩니다. 학습에 추가하려면 별도로 확인해야 합니다.",
     "packageGoLearning": "학습으로 이동",
     "packageContents": "패키지 콘텐츠",
     "packageContentsAfterDownload": "다운로드하면 모든 표현과 의미를 볼 수 있습니다.",
@@ -511,6 +511,15 @@
     "catalogResultRange": "총 {{total}}개 중 {{start}}–{{end}}개",
     "catalogView": "보기 방식",
     "catalogCards": "카드",
-    "catalogList": "간결한 목록"
+    "catalogList": "간결한 목록",
+    "packagePublication": "출시 정보",
+    "packagePublisher": "발행자",
+    "packageVersion": "버전",
+    "packagePublishedAt": "출시일",
+    "packageUpdateSummary": "버전 안내",
+    "packageSource": "다운로드한 콘텐츠의 출처",
+    "packageInstalledVersion": "다운로드한 버전: v{{version}}",
+    "packageSampleVersion": "다음 표현과 의미는 다운로드한 v{{version}}의 내용입니다.",
+    "packageDownloadedAction": "이 기기에 저장됨"
   }
 }

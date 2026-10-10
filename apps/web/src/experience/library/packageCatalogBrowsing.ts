@@ -44,7 +44,7 @@ export function browseCatalog(
   ].join(' ').toLocaleLowerCase(locale).includes(query))
   .sort((left,right)=>{
    const primary=state.sort==='newest'
-    ?(right.descriptor?.publishedAt??'').localeCompare(left.descriptor?.publishedAt??'')
+    ?Date.parse(right.descriptor?.publishedAt??'1970-01-01T00:00:00Z')-Date.parse(left.descriptor?.publishedAt??'1970-01-01T00:00:00Z')
     :collator.compare(left.title,right.title);
    // An exact ID comparison makes ties independent of transport order/locale.
    return primary||(left.listKey<right.listKey?-1:left.listKey>right.listKey?1:0);

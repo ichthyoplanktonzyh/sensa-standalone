@@ -311,7 +311,7 @@
     "packageActions": "Tindakan paket",
     "packageReadyHint": "Ditambahkan ke pembelajaran. Buka halaman pembelajaran untuk memulai.",
     "packageJoinHint": "Sumber siap. Tambahkan ekspresi ke koleksi belajar dengan metode Belajar Ringan.",
-    "packageDownloadHint": "Unduh sumber belajar, lalu tambahkan ekspresi ke pembelajaran.",
+    "packageDownloadHint": "Mengunduh menyimpan konten. Menambahkannya ke pembelajaran memerlukan konfirmasi terpisah.",
     "packageGoLearning": "Buka pembelajaran",
     "packageContents": "Isi paket",
     "packageContentsAfterDownload": "Unduh untuk melihat semua ekspresi dan makna.",
@@ -511,6 +511,15 @@
     "catalogResultRange": "{{start}}–{{end}} dari {{total}} item",
     "catalogView": "Tampilan",
     "catalogCards": "Kartu",
-    "catalogList": "Daftar ringkas"
+    "catalogList": "Daftar ringkas",
+    "packagePublication": "Publikasi",
+    "packagePublisher": "Penerbit",
+    "packageVersion": "Versi",
+    "packagePublishedAt": "Tanggal terbit",
+    "packageUpdateSummary": "Catatan rilis",
+    "packageSource": "Sumber konten yang diunduh",
+    "packageInstalledVersion": "Versi yang diunduh: v{{version}}",
+    "packageSampleVersion": "Ungkapan dan makna ini berasal dari versi v{{version}} yang diunduh.",
+    "packageDownloadedAction": "Disimpan di perangkat ini"
   }
 }

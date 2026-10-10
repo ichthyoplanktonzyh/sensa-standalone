@@ -311,7 +311,7 @@
     "packageActions": "Thao tác gói",
     "packageReadyHint": "Đã thêm vào việc học. Vào trang học tập để bắt đầu.",
     "packageJoinHint": "Tài nguyên đã sẵn sàng. Thêm cách diễn đạt vào bộ sưu tập học bằng phương pháp Học nhẹ nhàng.",
-    "packageDownloadHint": "Tải tài nguyên học tập xuống rồi thêm cách diễn đạt vào việc học.",
+    "packageDownloadHint": "Tải xuống sẽ lưu nội dung. Thêm vào học cần xác nhận riêng.",
     "packageGoLearning": "Đến mục học tập",
     "packageContents": "Nội dung gói",
     "packageContentsAfterDownload": "Tải xuống để xem tất cả cách diễn đạt và nghĩa.",
@@ -511,6 +511,15 @@
     "catalogResultRange": "{{start}}–{{end}} trên {{total}} mục",
     "catalogView": "Kiểu hiển thị",
     "catalogCards": "Thẻ",
-    "catalogList": "Danh sách gọn"
+    "catalogList": "Danh sách gọn",
+    "packagePublication": "Thông tin phát hành",
+    "packagePublisher": "Nhà phát hành",
+    "packageVersion": "Phiên bản",
+    "packagePublishedAt": "Ngày phát hành",
+    "packageUpdateSummary": "Ghi chú phiên bản",
+    "packageSource": "Nguồn nội dung đã tải",
+    "packageInstalledVersion": "Phiên bản đã tải: v{{version}}",
+    "packageSampleVersion": "Các biểu đạt và ý nghĩa sau thuộc phiên bản v{{version}} đã tải.",
+    "packageDownloadedAction": "Đã lưu trên thiết bị này"
   }
 }

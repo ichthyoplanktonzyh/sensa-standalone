@@ -311,7 +311,7 @@
     "packageActions": "学习包操作",
     "packageReadyHint": "已加入学习，可前往学习页面开始。",
     "packageJoinHint": "资源已备好，将包内表达加入学习集合。当前使用轻量学习。",
-    "packageDownloadHint": "下载学习资源后，即可将包内表达加入学习。",
+    "packageDownloadHint": "下载保存内容；加入学习需另行确认。",
     "packageGoLearning": "去学习",
     "packageContents": "包内内容",
     "packageContentsAfterDownload": "下载后可查看完整的表达与含义。",
@@ -511,6 +511,15 @@
     "catalogResultRange": "第 {{start}}–{{end}} 项，共 {{total}} 项",
     "catalogView": "显示方式",
     "catalogCards": "卡片",
-    "catalogList": "紧凑列表"
+    "catalogList": "紧凑列表",
+    "packagePublication": "发布信息",
+    "packagePublisher": "发布者",
+    "packageVersion": "版本",
+    "packagePublishedAt": "发布日期",
+    "packageUpdateSummary": "版本说明",
+    "packageSource": "已下载内容的来源",
+    "packageInstalledVersion": "已下载版本：v{{version}}",
+    "packageSampleVersion": "以下表达与含义来自已下载的 v{{version}}。",
+    "packageDownloadedAction": "已下载到本机"
   }
 }

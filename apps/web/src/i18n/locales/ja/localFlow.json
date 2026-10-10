@@ -311,7 +311,7 @@
     "packageActions": "パッケージの操作",
     "packageReadyHint": "学習に追加済みです。学習ページに移動して開始してください。",
     "packageJoinHint": "リソースの準備ができました。軽量学習を使って表現を学習コレクションに追加してください。",
-    "packageDownloadHint": "学習リソースをダウンロードしてから、表現を学習に追加してください。",
+    "packageDownloadHint": "ダウンロードで内容を保存します。学習への追加は別途確認が必要です。",
     "packageGoLearning": "学習へ移動",
     "packageContents": "パッケージの内容",
     "packageContentsAfterDownload": "ダウンロードすると、すべての表現と意味を表示できます。",
@@ -511,6 +511,15 @@
     "catalogResultRange": "全 {{total}} 件中 {{start}}–{{end}} 件",
     "catalogView": "表示形式",
     "catalogCards": "カード",
-    "catalogList": "コンパクト一覧"
+    "catalogList": "コンパクト一覧",
+    "packagePublication": "公開情報",
+    "packagePublisher": "公開者",
+    "packageVersion": "バージョン",
+    "packagePublishedAt": "公開日",
+    "packageUpdateSummary": "更新内容",
+    "packageSource": "ダウンロード済み内容の出典",
+    "packageInstalledVersion": "ダウンロード済み：v{{version}}",
+    "packageSampleVersion": "以下の表現と意味はダウンロード済みの v{{version}} の内容です。",
+    "packageDownloadedAction": "この端末に保存済み"
   }
 }

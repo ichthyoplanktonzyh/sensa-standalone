@@ -54,6 +54,8 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
  const [notice,setNotice]=useState('');
  const [busy,setBusy]=useState(false);
  const [progress,setProgress]=useState<number|null>(null);
+ const [installation,setInstallation]=useState<{bookKey:string;phase:ContentSupplyInstallationPhase}|null>(null);
+ const [downloadFailed,setDownloadFailed]=useState(false);
  const [loaded,setLoaded]=useState(false);
  const runtimeMode=useRef(runtimeOnly);runtimeMode.current=runtimeOnly;
  const managementMode=useRef(managementOnly);managementMode.current=managementOnly;
@@ -163,7 +165,7 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
  };
 
  useEffect(()=>{
-  setLoaded(false);setManagement(null);setBusy(false);setProgress(null);setNotice('');
+  setLoaded(false);setManagement(null);setBusy(false);setProgress(null);setInstallation(null);setDownloadFailed(false);setNotice('');
   const learningCoordinator=createRefreshCoordinator(async()=>{await refreshLearning();});
   const supplyCoordinator=createRefreshCoordinator(refreshSupply);
   const current=lifecycle.current;
@@ -218,6 +220,7 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
 
  const perform=async<T,>(work:()=>Promise<T>,refreshAfter:()=>Promise<void>=async()=>{await refreshLearning();},unconfirmedNotice='runtime.actionReceiptUnavailable')=>{
   const current=lifecycle.current;
+  setDownloadFailed(false);
   setBusy(true);setNotice('');
   try{
    const outcome=await settleReconciledOperation(work,refreshAfter);
@@ -233,6 +236,7 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
   }finally{if(current===lifecycle.current&&currentRoute.current===routeKey){setBusy(false);setProgress(null);}}
  };
  const inspect=async<T,>(work:()=>Promise<T>)=>{
+  setDownloadFailed(false);
   setBusy(true);setNotice('');
   try{return await work();}
   catch(e){setNotice(e instanceof Error&&e.message.startsWith('localFlow.')?e.message:localFlowText('retryOperation'));return null;}
@@ -240,6 +244,7 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
  };
 
  const reloadCatalog=async(notify=false)=>{
+  if(notify)setDownloadFailed(false);
   const gen=++generation.current;
   catalogRequest.current?.abort();
   const request=new AbortController();catalogRequest.current=request;
@@ -290,7 +295,7 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
   policyOptions:workspace.policyOptions,
   dailyLimit:dailyLimit??undefined,
   preferencesDailyLimit:runtimeOnly?runtimePreferencesDailyLimit:dailyLimit,
-  notice:notice==='runtime.actionReceiptUnavailable'||notice==='learningPreferences.quantitySaveUnconfirmed'||notice.startsWith('sessionEnd.')?i18n.t(notice):localFlowNotice(notice),busy:busy||loadStatus!=='ready',progress,loaded:loaded&&loadStatus==='ready',loadStatus,retryInitialLoad,unavailablePackageKeys,catalogBusy,catalogStatus,catalogFailed,reloadCatalog,refresh,
+  notice:notice==='runtime.actionReceiptUnavailable'||notice==='learningPreferences.quantitySaveUnconfirmed'||notice.startsWith('sessionEnd.')?i18n.t(notice):localFlowNotice(notice),busy:busy||loadStatus!=='ready',progress,installation,downloadFailed,loaded:loaded&&loadStatus==='ready',loadStatus,retryInitialLoad,unavailablePackageKeys,catalogBusy,catalogStatus,catalogFailed,reloadCatalog,refresh,
   endedStateNeedsRead:notice==='sessionEnd.savedReadFailed',
   retryEndedStateRead:async()=>{
    if(actInFlight.current)return;const current=lifecycle.current;actInFlight.current=true;setBusy(true);
@@ -299,11 +304,18 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
    finally{actInFlight.current=false;if(current===lifecycle.current&&currentRoute.current===routeKey)setBusy(false);}
   },
   confirmQuantity:(n:number)=>perform(()=>learningSystem.execute({kind:'confirm_quantity',operationId:crypto.randomUUID(),languageContext,dailyLimit:n}),undefined,'learningPreferences.quantitySaveUnconfirmed'),
-  download:(d:ContentSupplyCatalogItem,onPhase?:(phase:ContentSupplyInstallationPhase)=>void)=>perform(async()=>{
+  download:(d:ContentSupplyCatalogItem,onPhase?:(phase:ContentSupplyInstallationPhase)=>void)=>{
+   if(transfer.current)return Promise.resolve(null);
    const c=new AbortController();transfer.current=c;
-   try{setProgress(0);return await contentSupplySystem.execute({kind:'install_catalog_item',descriptor:d,signal:AbortSignal.any([c.signal,AbortSignal.timeout(120000)]),onProgress:n=>setProgress(Math.round(100*n)),onPhase});}
-   finally{if(transfer.current===c)transfer.current=null;}
-  },refresh),
+   const current=lifecycle.current;
+   setDownloadFailed(false);
+   setInstallation({bookKey:d.book.bookKey,phase:'downloading'});
+   return perform(async()=>{
+    setProgress(0);
+    return contentSupplySystem.execute({kind:'install_catalog_item',descriptor:d,signal:AbortSignal.any([c.signal,AbortSignal.timeout(120000)]),onProgress:n=>{if(transfer.current===c)setProgress(Math.round(100*n));},onPhase:phase=>{if(transfer.current===c){setInstallation({bookKey:d.book.bookKey,phase});onPhase?.(phase);}}});
+   },refresh).then(result=>{if(current===lifecycle.current&&result===null&&!c.signal.aborted)setDownloadFailed(true);return result;})
+    .finally(()=>{if(transfer.current===c){transfer.current=null;if(current===lifecycle.current)setInstallation(null);}});
+  },
   cancelDownload:()=>transfer.current?.abort(),
   previewImport:(file:File):Promise<PortablePackagePreview|null>=>inspect(async()=>{
    if(file.size>64*1024*1024)throw new Error('localFlow.packageTooLarge');

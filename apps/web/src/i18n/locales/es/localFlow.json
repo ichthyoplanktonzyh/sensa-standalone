@@ -313,7 +313,7 @@
     "packageActions": "Acciones del paquete",
     "packageReadyHint": "Añadido al aprendizaje. Ve a tu página de aprendizaje para empezar.",
     "packageJoinHint": "Los recursos están listos. Añade las expresiones a tu colección de aprendizaje con el método ligero.",
-    "packageDownloadHint": "Descarga los recursos de aprendizaje y luego añade las expresiones al aprendizaje.",
+    "packageDownloadHint": "La descarga guarda el contenido. Añadirlo al aprendizaje requiere una confirmación aparte.",
     "packageGoLearning": "Ir al aprendizaje",
     "packageContents": "Contenido del paquete",
     "packageContentsAfterDownload": "Descarga el paquete para ver todas las expresiones y significados.",
@@ -513,6 +513,15 @@
     "catalogResultRange": "{{start}}–{{end}} de {{total}} elementos",
     "catalogView": "Vista",
     "catalogCards": "Tarjetas",
-    "catalogList": "Lista compacta"
+    "catalogList": "Lista compacta",
+    "packagePublication": "Publicación",
+    "packagePublisher": "Publicador",
+    "packageVersion": "Versión",
+    "packagePublishedAt": "Fecha de publicación",
+    "packageUpdateSummary": "Notas de versión",
+    "packageSource": "Fuentes del contenido descargado",
+    "packageInstalledVersion": "Versión descargada: v{{version}}",
+    "packageSampleVersion": "Estas expresiones y significados pertenecen a la versión descargada v{{version}}.",
+    "packageDownloadedAction": "Guardado en este dispositivo"
   }
 }
