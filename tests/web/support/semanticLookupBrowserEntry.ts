@@ -159,12 +159,18 @@ export async function restoreVersion(){
 }
 export async function seed(count:number){
   const started=performance.now();
+  // The real Shell creates this identity before learner-owned writes. Seeding
+  // facts first would correctly look like a lost identity to openLibrary().
+  await openLibrary();
   const memory=new MemoryJourneyRepository();
   const fixture=createJourneyModules({repository:memory,clock:createSeededClock(),languages:{read:async()=>({targetLanguageTag:'en',supportLanguageTag:'zh-CN'})}});
   await fixture.semanticIntake.submit(semanticLookupPayload());
   const state=syntheticSemanticWorld(await memory.load(),count),before=await repository.load();
   if(before.meanings.length)throw new Error('capacity fixture requires its own empty browser context');
-  await repository.commit({before,after:state});console.log('semantic-lookup phase: fixture committed',performance.now()-started);return state.meanings.length;
+  const generatedMs=performance.now()-started;
+  await repository.commit({before,after:state});
+  console.log('semantic-lookup phase: fixture committed',JSON.stringify({count,generatedMs,commitMs:performance.now()-started-generatedMs,totalMs:performance.now()-started}));
+  return state.meanings.length;
 }
 export async function measureQueries(query='borrow-9999',expectedEmpty=false){
   measuring=true;

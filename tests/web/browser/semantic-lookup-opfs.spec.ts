@@ -4,7 +4,7 @@ import {once} from 'node:events';
 import {join,resolve} from 'node:path';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
-import {test,expect,chromium,type Page} from '@playwright/test';
+import {test as base,expect,chromium,type Page} from '@playwright/test';
 import {build as viteBuild} from 'vite';
 import type * as Entry from '../support/semanticLookupBrowserEntry';
 import {semanticLookupPayload} from '../support/semanticLookupFixtures';
@@ -12,6 +12,17 @@ import {digestOf} from '../../../apps/web/src/experience/personalMeaningJourney/
 
 declare global {interface Window{semanticLookupFixture:typeof Entry}}
 let server:Server,origin:string;
+const test=base.extend<{preparedScalePage:Page}>({
+  // Keep the ordinary isolated page/context and failure trace. Only synthetic
+  // generation + bulk commit has this separate watchdog, not measured queries.
+  preparedScalePage:[async({page},use)=>{
+    page.on('console',message=>{if(message.text().startsWith('semantic-lookup phase:'))console.log(message.text());});
+    const started=performance.now();
+    await enter(page);expect(await page.evaluate(()=>window.semanticLookupFixture.seed(10_000))).toBe(10_000);
+    console.log('Chromium / synthetic 10k OPFS fixture preparation (not user interaction):',JSON.stringify({preparedMs:performance.now()-started}));
+    await use(page);
+  },{timeout:300_000}],
+});
 test.setTimeout(120_000);
 test.beforeAll(async()=>{
   test.setTimeout(120_000);
@@ -315,9 +326,7 @@ test('a cached exact operation cannot replay into a replaced Library before a no
   expect(await page.evaluate(()=>window.semanticLookupFixture.visible())).toEqual([]);await other.close();
 });
 
-test('10k OPFS connections keep first-after-write and warm lookup bounded without blocking the browser heartbeat',async({page})=>{
-  page.on('console',message=>{if(message.text().startsWith('semantic-lookup phase:'))console.log(message.text());});
-  await enter(page);expect(await page.evaluate(()=>window.semanticLookupFixture.seed(10_000))).toBe(10_000);
+test('10k OPFS connections keep first-after-write and warm lookup bounded without blocking the browser heartbeat',async({preparedScalePage:page})=>{
   const measured=await page.evaluate(()=>window.semanticLookupFixture.measureQueries());
   console.log('Chromium / real OPFS / synthetic 10k connections / no model latency:',JSON.stringify(measured));
   expect(measured.count).toBe(1);expect(measured.warmP95Ms).toBeLessThan(100);
