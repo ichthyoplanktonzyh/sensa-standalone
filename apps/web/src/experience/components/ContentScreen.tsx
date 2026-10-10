@@ -317,8 +317,8 @@ function ContentScreenView({
         )}
          {category==='personal'&&<div className="sensa-world-languages mt-3 flex flex-wrap items-center gap-2" role="group" aria-label={t('content.worldLanguage')}>
          <span className="mr-1 text-xs text-fg-secondary">{t('content.worldLanguage')}</span>
-         <button className={button+' border border-border-subtle'} aria-pressed={!languages.length} onClick={()=>setLanguages([])}>{t('content.worldAllLanguages')}</button>
-         {availableLanguages.map(tag=><button className={button+' border border-border-subtle'} key={tag} aria-pressed={languages.includes(tag)} onClick={()=>setLanguages(languages.includes(tag)?languages.filter(value=>value!==tag):[...languages,tag])}>{tag}</button>)}
+         <button className={button+' border '+(!languages.length?'border-border-strong bg-surface-selected font-semibold':'border-border-subtle')} aria-pressed={!languages.length} onClick={()=>setLanguages([])}>{t('content.worldAllLanguages')}</button>
+         {availableLanguages.map(tag=><button className={button+' border '+(languages.includes(tag)?'border-border-strong bg-surface-selected font-semibold':'border-border-subtle')} key={tag} aria-pressed={languages.includes(tag)} onClick={()=>setLanguages(languages.includes(tag)?languages.filter(value=>value!==tag):[...languages,tag])}>{tag}</button>)}
         </div>}
         {category==='personal'&&<label className="mt-2 inline-flex items-center gap-2 text-xs">{t('content.markers')}<select className="min-h-11 rounded-control border border-border-subtle bg-surface-panel px-3" value={referenceFilter} onChange={event=>setReferences(event.target.value as typeof referenceFilter)}>
          {(['all','saved','notes'] as const).map(value=><option key={value} value={value}>{t(value==='all'?'content.all':value==='saved'?'content.savedSenses':'content.notes')}</option>)}

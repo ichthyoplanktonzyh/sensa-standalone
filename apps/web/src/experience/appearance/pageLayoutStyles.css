@@ -420,3 +420,9 @@
   grid-row: 2;
   overflow: hidden;
 }
+
+/* Expression canvas and pinned preview share their functional layout across skins. */
+.sensa-expression-graph-workspace { display: flex; min-width: 0; }
+.sensa-expression-graph-surface { flex: 1; height: max(25rem, calc(100dvh - 22rem)); }
+.sensa-expression-graph-detail { width: min(22rem, 40%); max-height: max(25rem, calc(100dvh - 22rem)); overflow-y: auto; overflow-wrap: anywhere; }
+.sensa-expression-point:focus-visible .sensa-expression-dot { stroke: var(--sensa-fg-primary); }

@@ -1253,7 +1253,7 @@ test('World expression languages combine with search, saved meanings and notes w
  const detail=graph.getByRole('complementary',{name:'表达预览',exact:true});await expect(detail.getByRole('heading',{name:'emprunter',exact:true})).toBeVisible();
  await expect(detail).toContainText('没有已记录的连线');await expect(detail).toContainText('当前学习路线');await expect(detail).toContainText('尚未加入此路线');
  await detail.getByText('fixture · 隔离原文来源',{exact:true}).click();await expect(detail.getByRole('link',{name:'查看来源：',exact:true})).toHaveAttribute('href','https://example.test/original');
- const canvas=graph.locator('[data-graph-camera]'),box=await canvas.boundingBox();expect(box).not.toBeNull();
+ const canvas=graph.locator('[data-graph-camera]');await canvas.scrollIntoViewIfNeeded();const box=await canvas.boundingBox();expect(box).not.toBeNull();
  const beforePan=JSON.parse((await canvas.getAttribute('data-graph-camera'))!);await page.mouse.move(box!.x+box!.width-25,box!.y+box!.height-35);await page.mouse.down();await page.mouse.move(box!.x+box!.width-55,box!.y+box!.height-55);await page.mouse.up();
  expect(JSON.parse((await canvas.getAttribute('data-graph-camera'))!).x).not.toBe(beforePan.x);
  await graph.getByRole('button',{name:'放大',exact:true}).click();const camera=await graph.locator('[data-graph-camera]').getAttribute('data-graph-camera');
@@ -1268,6 +1268,12 @@ test('World expression languages combine with search, saved meanings and notes w
  await note.getByRole('button',{name:'保存笔记',exact:true}).click();await expect(note).toHaveCount(0);
  await page.goBack();await expect(detail.getByRole('heading',{name:'emprunter',exact:true})).toBeVisible();
  await expect(graph.locator('[data-graph-camera]')).toHaveAttribute('data-graph-camera',camera!);await expect(languages.getByRole('button',{name:'fr',exact:true})).toHaveAttribute('aria-pressed','true');
+ const changeSkin=async(skin:'Clear'|'Quiet')=>{await page.getByRole('button',{name:'账号与设置',exact:true}).click();await page.locator('#settings-preferences').click();await page.getByRole('radio',{name:new RegExp(`^Sensa ${skin}(?:\\s|$)`,'u')}).click();await expect(page.locator('html')).toHaveAttribute('data-sensa-skin',skin.toLowerCase());await page.goBack();};
+ await changeSkin('Clear');await expect(detail.getByRole('heading',{name:'emprunter',exact:true})).toBeVisible();
+ expect(await graph.locator('.sensa-expression-graph-workspace').evaluate(element=>getComputedStyle(element).display)).toBe('flex');
+ expect((await canvas.boundingBox())!.height).toBeGreaterThanOrEqual(400);const clearCanvas=await canvas.boundingBox(),clearDetail=await detail.boundingBox();expect(clearDetail!.x).toBeGreaterThan(clearCanvas!.x);expect(Math.abs(clearDetail!.y-clearCanvas!.y)).toBeLessThanOrEqual(2);
+ await page.screenshot({path:testInfo.outputPath('expression-graph-clear-preview.png'),animations:'disabled'});
+ await changeSkin('Quiet');await expect(detail.getByRole('heading',{name:'emprunter',exact:true})).toBeVisible();
  await detail.getByRole('button',{name:'关闭',exact:true}).click();await expect(point).toBeFocused();
  const markers=world.getByRole('combobox',{name:'收藏与笔记',exact:true});await markers.selectOption('saved');await expect(points).toHaveCount(1);await markers.selectOption('notes');await expect(points).toHaveCount(1);
  await page.evaluate(()=>window.__sensaBrowserSmoke!.failAnnotationReadsForTest(true));await expect(world.getByRole('alert')).toContainText('读取');await expect(world.locator('[data-world-counts]')).toHaveCount(0);

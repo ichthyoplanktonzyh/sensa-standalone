@@ -53,10 +53,6 @@ html[data-sensa-skin="quiet"] .sensa-world-graph-mode {
 }
 html[data-sensa-skin="quiet"] .sensa-world-graph-mode > [data-sensa-page-region="navigation"] { margin-top: .25rem; }
 html[data-sensa-skin="quiet"] .sensa-world-graph-mode > [data-sensa-page-region="controls"] .mt-6 { margin-top: .5rem; }
-html[data-sensa-skin="quiet"] .sensa-expression-graph-workspace { display: flex; min-width: 0; }
-html[data-sensa-skin="quiet"] .sensa-expression-graph-surface { flex: 1; height: max(25rem, calc(100dvh - 22rem)); }
-html[data-sensa-skin="quiet"] .sensa-expression-graph-detail { width: min(22rem, 40%); max-height: max(25rem, calc(100dvh - 22rem)); overflow-y: auto; overflow-wrap: anywhere; }
-html[data-sensa-skin="quiet"] .sensa-expression-point:focus-visible .sensa-expression-dot { stroke: var(--sensa-fg-primary); }
 @media (min-width: 48.01rem) {
   html[data-sensa-skin="quiet"] .sensa-world-graph-mode > [data-sensa-page-region="controls"] { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .5rem; }
   html[data-sensa-skin="quiet"] .sensa-world-graph-mode > [data-sensa-page-region="controls"] > * { margin-top: 0; }
