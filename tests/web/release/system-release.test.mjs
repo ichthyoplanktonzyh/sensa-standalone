@@ -59,6 +59,19 @@ test("system release planner separates independent components and couples shared
   assert.equal(application.inputs.learningContent, null);
   assert.deepEqual(application.previousRelease.components.learningContent, previous.components.learningContent);
 
+  const testConfiguration = planSystemRelease({
+    targetCommit: sha("b"), previousManifest: previous, requestedScope: "application",
+    changedPaths: ["apps/web/src/App.tsx", "playwright.config.ts"], releaseId: releaseId(),
+  });
+  assert.equal(testConfiguration.decision.kind, "application-only");
+  assert.equal(testConfiguration.inputs.learningContent, null);
+  assert.equal(testConfiguration.source.changes.find(({path}) => path === "playwright.config.ts").impact, "operational");
+  // Only this known test configuration is excluded; unfamiliar source still couples releases.
+  assert.throws(() => planSystemRelease({
+    targetCommit: sha("b"), previousManifest: previous, requestedScope: "application",
+    changedPaths: ["unknown.config.ts"], releaseId: releaseId(),
+  }), /Learning-content changes/u);
+
   assert.throws(() => planSystemRelease({
     targetCommit: sha("b"), previousManifest: previous, requestedScope: "auto",
     changedPaths: ["content/authored/book.json"], releaseId: releaseId(),
