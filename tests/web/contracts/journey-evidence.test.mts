@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 import {transform} from 'esbuild';
 import {test} from 'vitest';
 import {webTestCatalog} from '../catalog.mts';
-import {journeyTestIds,validateJourneyMapping,scenarioEvidenceContributions,currentJourneyScenarios,auditedScenarios,scenarioLongJourneyIds} from '../journeyMapping.mts';
+import {journeyTestIds,validateJourneyMapping,scenarioEvidenceContributions,currentJourneyScenarios,auditedScenarios,scenarioLongJourneyIds,longJourneyMappings} from '../journeyMapping.mts';
 
 test('journey selection includes user-facing evidence and shared performance guards',()=>{
  validateJourneyMapping(webTestCatalog);
@@ -29,6 +29,28 @@ test('current Listening requirements select their own evidence without rewriting
  }
  assert.throws(()=>scenarioLongJourneyIds('SCN-unknown'),/Unknown Scenario/u);
  validateJourneyMapping(webTestCatalog);
+});
+
+test('every current learner, supporting and operator journey explicitly selects registered evidence',()=>{
+ validateJourneyMapping(webTestCatalog);
+ assert.equal(longJourneyMappings.length,30);
+ for(const journey of longJourneyMappings){
+  const selected=journeyTestIds(journey.journeyId);
+  assert(selected.length>0,`${journey.journeyId}: no executable evidence selection`);
+  assert.equal(new Set(selected).size,selected.length);
+  for(const id of selected)assert(webTestCatalog.some(entry=>entry.id===id),`${journey.journeyId}: ${id}`);
+  if(!/^(SJ|OJ)-/u.test(journey.journeyId))continue;
+  const requirements=currentJourneyScenarios.filter(item=>item.journeyIds.includes(journey.journeyId));
+  assert(requirements.length>0,`${journey.journeyId}: needs current requirements, not only legacy capability membership`);
+  assert(scenarioEvidenceContributions.some(item=>item.journeyIds.includes(journey.journeyId)&&requirements.some(scenario=>scenario.id===item.scenarioId)),`${journey.journeyId}: needs named assertion evidence`);
+ }
+ // A link records assertion scope, not a run result or journey completion.
+ for(const contribution of scenarioEvidenceContributions.filter(item=>item.journeyIds.some(id=>/^(SJ|OJ)-/u.test(id)))){
+  assert(!('verdict'in contribution));
+  if(contribution.coverage==='partial')assert(contribution.remainingGaps.length>0);
+ }
+ assert(journeyTestIds('OJ-04').includes('system-release'));
+ assert(!journeyTestIds('OJ-04').includes('package-center-journey'),'capability crosswalk alone must not widen executable selection');
 });
 
 test('every named scenario contribution points to an executable literal test declaration',async()=>{

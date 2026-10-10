@@ -144,7 +144,7 @@ Sensa 的长旅程分成三层：
 | `LJ-07` | 完成首次正式学习 | Ready Plan → Initial Learning Run → Completion → Scheduling Handoff | 只有 Runtime 可产生正式完成事实 |
 | `LJ-08` | 完成一次到期复习 | Due Retention Target → Review Run → Memory Outcome → 新调度 | 每次 Review 至多结算一次 |
 | `LJ-09` | 在遗忘或薄弱后重新建立连接 | Relearning Eligible → 独立 Run → Completion → 返回 Retention | 不重复结算触发它的 Review |
-| `LJ-10` | 长期维护学习范围和计划 | Route/Book/补充目标 → Scope、每日数量、更新、暂停/恢复 → 可解释的未来计划 | Book 模式与整本／序号范围及明确结束活动可维护；完整补充目标移除、规模与跨设备冲突验收仍有缺口 |
+| `LJ-10` | 长期维护学习范围和计划 | Route/Book/补充目标 → Scope、每日数量、更新、暂停/恢复 → 可解释的未来计划 | Book 模式与整本／序号范围、补充目标移除／重新加入及明确结束活动可维护；规模与跨设备计划冲突验收仍有缺口 |
 | `LJ-11` | 回看和治理个人语义内容 | Personal Semantic World/Markers → 搜索、查看、修订、标记或移除 → 新 revision/明确终态 | 删除进入回收站；明确恢复原身份，历史与学习互不级联 |
 | `LJ-12` | 把学习中的个人场景长期保存 | Runtime Scene → Scene Revision → 明确接受 → Personal Meaning Anchor | 编辑场景不会自动改写已接受 Meaning |
 | `LJ-13` | 在网页中阅读、解释、写作或朗读 | Extension 阅读/写作入口 → 真实结果或准确不可用状态 | 保存到 Sensa 是可选分支，不制造学习事实 |
@@ -940,8 +940,7 @@ OPFS、Extension、Edge、Database、Content 或 Release 边界复现。诊断�
 以下项目属于已定义但尚未完整交付或仍需产品决策的边界，不能因存在 schema、按钮、占位页或局部测试而
 算作完整旅程：
 
-- direct stable-Sense 的完整用户入口；
-- Curriculum Enrollment 的 maintenance/paused、整本退出与恢复；
+- Curriculum Enrollment 的整本退出与恢复（maintenance/paused 和未来范围维护已进入当前 Web 范围）；
 - Personal Learning Scene 的用户可见删除/恢复（Personal Meaning 的回收站与明确恢复已进入当前 Web 范围）；
 - 学习揭示阶段 AI Q&A；
 - 完整 Free Practice Profile 及 speaking/reading/writing activities；

@@ -877,6 +877,7 @@ SENSA_TEST_DATABASE_URL=postgresql://... npm run test:web:db
 `tests/web/journeyMapping.mts` 保存稳定的 Journey → Phase → Scenario → Test Evidence 关联及共享风险检查。
 旧审计结论只作为历史输入，关联到测试不表示场景通过，更不表示整条旅程完成。
 历史审计未包含的当前产品场景使用同一文件的 `currentJourneyScenarios` 补充，明确旅程、阶段、分支、验收条件与最小证据层；不改写历史 verdict，也不把需求定义当作执行结果。
+学习者、支撑和运营旅程均需显式选择已登记的测试。具名证据必须指向实际可执行的断言；能力交叉表本身不扩大执行范围。Provider 的受控回归、候选的本机校验与 workflow 静态检查不能代替真实服务、生产发布或公网验收。
 旅程的关闭需要同时核对用户价值与页面衔接、必要异常和恢复分支、真实持久状态、相关性能和容量风险，
 以及独立使用验收。单个真实用户顺利走完不能替代其他证据；缺口仍在时不关闭 checkpoint。
 测试继续按现有 CI 环境执行，共享底层 Module 不按旅程复制。可在已构建产物的前提下集中列出或运行证据：
@@ -885,6 +886,8 @@ SENSA_TEST_DATABASE_URL=postgresql://... npm run test:web:db
 node --import tsx tests/web/run.mts --journey=LJ-01 --list
 node --import tsx tests/web/run.mts --journey=LJ-01 --suite=fast
 node --import tsx tests/web/run.mts --journey=LJ-01 --suite=browser
+node --import tsx tests/web/run.mts --journey=SJ-01 --list
+node --import tsx tests/web/run.mts --journey=OJ-04 --suite=fast
 ```
 
 旅程性能证据必须注明规模、设备/CPU、网络条件、预算和测量范围。构建大小、SQLite/OPFS 查询预算、
@@ -1017,6 +1020,10 @@ SQL、正文、邮箱、token、堆栈或嵌套 cause。连接池连接／idle�
 仍销毁连接并保留原异常给 caller；日志 sink 失败不得替换原异常或泄漏已借出的连接。
 分类器不执行异常属性 getter；未知值归为 `unexpected`，不能把未知原因
 视为已定位故障。实际故障须用固定 release 与 request ID 关联线上事件，测试中的受控异常不是线上根因证据。
+
+共享 API 的 Node 内建依赖须显式导入，例如同步 UTF-8 容量计算使用 `node:buffer`，不依赖 Node 开发进程
+提供的隐式全局。受控回归仅在应用工作范围移除全局 Buffer，保留 Node HTTP 自身依赖，验证上传、容量拒绝
+及相同块重试；Edge 编译和真实托管运行另行验证，不用 Node 回归冒充 Deno 运行证据。
 
 `.github/workflows/sensa-consumer-check.yml` 在 pull request 和 `main` push 时运行 `Sensa CI`。它执行静态检查、构建、Web 快速测试、浏览器检查以及 PostgreSQL/API 集成。Pull request 只生成验证构建；`main` 的静态／快速 job 使用 `web-candidate` 公共配置构建一次生产候选，在同一 job 内固定完整 SHA、GitHub Actions provenance、公开目标、migration 集合和每个交付文件摘要，完成 artifact 检查与 Cloudflare dry-run 后才上传 `sensa-production-<SHA>`。其余 CI job 共同决定该候选是否具备发布资格；失败 run 中即使存在 artifact 也不能被发布器接受。
 

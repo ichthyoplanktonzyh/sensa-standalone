@@ -44,6 +44,7 @@ export type WebTestCatalogEntry = Readonly<{
  * split into named behavior scenarios.
  */
 const foundationTests = [
+  {id:'library-sync-runtime',file:'tests/web/integration/library-sync-runtime.test.mts',kind:'integration',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'database-log-privacy',file:'tests/web/integration/database-log-privacy.test.mts',kind:'integration',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'account-admission',file:'tests/web/database/account-admission.test.mts',kind:'integration',risks:['local-correctness','convergence'],environment:'postgres',suite:'database',runner:'vitest'},
   {id:'guest-content-presence',file:'tests/web/integration/guest-content-presence.test.mts',kind:'integration',risks:['local-correctness'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
