@@ -51,7 +51,7 @@
       "login": "Se connecter à Sensa",
       "logout": "Se déconnecter",
       "synced": "Synchronisé",
-      "cloudNote": "La connexion à un compte lance automatiquement la synchronisation. Les modifications sont enregistrées localement, puis synchronisées pendant les périodes d’inactivité ou à la fin de l’apprentissage. Le résultat est indiqué dans l’état ci-dessous.",
+      "cloudNote": "La connexion à un compte lance automatiquement la synchronisation. Les modifications sont enregistrées localement, puis synchronisées pendant les périodes d’inactivité ou à la fin de l’apprentissage. Le résultat est indiqué dans l’état de synchronisation.",
       "localNote": "Vos données sont enregistrées dans ce navigateur. Exportez une sauvegarde chiffrée avant d’effacer les données du site et vérifiez la synchronisation si un compte est connecté.",
       "controls": "Les commandes de sauvegarde chiffrée et de gestion des données locales se trouvent dans Appareil et données. Les utilisateurs connectés peuvent demander ici la suppression de leur compte.",
       "syncResults": "Vérifier l’état de la synchronisation",

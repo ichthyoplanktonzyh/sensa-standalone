@@ -51,7 +51,7 @@
       "login": "Entrar no Sensa",
       "logout": "Sair",
       "synced": "Sincronizado",
-      "cloudNote": "Ao conectar uma conta, a sincronização começa automaticamente. As alterações são salvas primeiro no dispositivo e sincronizadas durante a inatividade ou ao terminar o estudo. Confira o resultado no status abaixo.",
+      "cloudNote": "Ao conectar uma conta, a sincronização começa automaticamente. As alterações são salvas primeiro no dispositivo e sincronizadas durante a inatividade ou ao terminar o estudo. Confira o resultado no status de sincronização.",
       "localNote": "Seus dados ficam neste navegador. Exporte um backup criptografado antes de apagar os dados do site e confira a sincronização se houver uma conta conectada.",
       "controls": "As opções de backup criptografado e de dados locais ficam em Dispositivo e dados. Usuários conectados podem solicitar a exclusão da conta aqui.",
       "syncResults": "Verificar status da sincronização",

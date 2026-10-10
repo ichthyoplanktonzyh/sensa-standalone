@@ -51,7 +51,7 @@
       "login": "Masuk ke Sensa",
       "logout": "Keluar",
       "synced": "Tersinkron",
-      "cloudNote": "Menghubungkan akun akan memulai sinkronisasi secara otomatis. Perubahan disimpan di perangkat terlebih dahulu, lalu disinkronkan saat tidak ada aktivitas atau setelah belajar. Periksa status di bawah untuk hasilnya.",
+      "cloudNote": "Menghubungkan akun akan memulai sinkronisasi secara otomatis. Perubahan disimpan di perangkat terlebih dahulu, lalu disinkronkan saat tidak ada aktivitas atau setelah belajar. Periksa status sinkronisasi untuk hasilnya.",
       "localNote": "Data Anda disimpan di browser ini. Ekspor cadangan terenkripsi sebelum menghapus data situs, dan periksa status sinkronisasi jika akun terhubung.",
       "controls": "Cadangan terenkripsi dan kontrol data lokal ada di Perangkat & data. Pengguna yang sudah masuk dapat meminta penghapusan akun di sini.",
       "syncResults": "Periksa status sinkronisasi",

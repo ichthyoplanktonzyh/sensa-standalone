@@ -51,7 +51,7 @@
       "login": "Sign in to Sensa",
       "logout": "Sign out",
       "synced": "Synced",
-      "cloudNote": "Connecting an account starts sync automatically. Changes save locally first, then sync when idle or after learning. Check the status below for the result.",
+      "cloudNote": "Connecting an account starts sync automatically. Changes save locally first, then sync when idle or after learning. Check sync status for the result.",
       "localNote": "Your data is saved in this browser. Export an encrypted backup before clearing site data, and check sync status if an account is connected.",
       "controls": "Encrypted backup and local data controls are under Device & data. Signed-in users can request account deletion here.",
       "syncResults": "Check sync status",

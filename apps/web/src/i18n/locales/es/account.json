@@ -51,7 +51,7 @@
       "login": "Iniciar sesión en Sensa",
       "logout": "Cerrar sesión",
       "synced": "Sincronizado",
-      "cloudNote": "Al conectar una cuenta, la sincronización comienza automáticamente. Los cambios se guardan primero en el dispositivo y se sincronizan durante la inactividad o al terminar el aprendizaje. Consulta el resultado en el estado de abajo.",
+      "cloudNote": "Al conectar una cuenta, la sincronización comienza automáticamente. Los cambios se guardan primero en el dispositivo y se sincronizan durante la inactividad o al terminar el aprendizaje. Consulta el resultado en el estado de sincronización.",
       "localNote": "Tus datos se guardan en este navegador. Exporta una copia cifrada antes de borrar los datos del sitio y comprueba la sincronización si hay una cuenta conectada.",
       "controls": "La copia de seguridad cifrada y los controles de datos locales están en Dispositivo y datos. Los usuarios que hayan iniciado sesión pueden solicitar aquí la eliminación de su cuenta.",
       "syncResults": "Comprobar el estado de sincronización",

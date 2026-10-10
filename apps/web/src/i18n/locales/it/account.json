@@ -51,7 +51,7 @@
       "login": "Accedi a Sensa",
       "logout": "Esci",
       "synced": "Sincronizzato",
-      "cloudNote": "Collegando un account, la sincronizzazione inizia automaticamente. Le modifiche vengono prima salvate sul dispositivo, poi sincronizzate durante l’inattività o al termine dello studio. Il risultato è indicato nello stato qui sotto.",
+      "cloudNote": "Collegando un account, la sincronizzazione inizia automaticamente. Le modifiche vengono prima salvate sul dispositivo, poi sincronizzate durante l’inattività o al termine dello studio. Il risultato è indicato nello stato di sincronizzazione.",
       "localNote": "I tuoi dati sono salvati in questo browser. Esporta un backup crittografato prima di cancellare i dati del sito e verifica la sincronizzazione se un account è collegato.",
       "controls": "Le opzioni per il backup crittografato e la gestione dei dati locali si trovano in Dispositivo e dati. Da qui, gli utenti che hanno effettuato l'accesso possono richiedere l'eliminazione dell'account.",
       "syncResults": "Controlla lo stato della sincronizzazione",
