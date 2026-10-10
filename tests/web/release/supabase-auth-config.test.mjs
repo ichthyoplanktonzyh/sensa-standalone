@@ -32,6 +32,14 @@ await assert.rejects(reconcileSupabaseAuth({mode:'check',environment,fetchImpl})
 assert.deepEqual(calls.map(call=>call.method),['GET'],'check mode must never mutate an incorrect Site URL');
 await reconcileSupabaseAuth({mode:'apply',environment,fetchImpl});
 assert.equal(config.site_url,desired.siteUrl);
+const migrationEnvironment={...environment,SENSA_WEB_ORIGIN:'https://learnsensa.com'};
+config={...config,site_url:'https://sensa-standalone.ichthyoplanktonzyh.workers.dev',uri_allow_list:'https://sensa-standalone.ichthyoplanktonzyh.workers.dev/**'};
+calls.length=0;
+await reconcileSupabaseAuth({mode:'apply',environment:migrationEnvironment,fetchImpl});
+assert.deepEqual(calls.map(call=>call.method),['GET','PATCH','GET']);
+assert.deepEqual(JSON.parse(calls[1].body),{site_url:'https://learnsensa.com',uri_allow_list:'https://learnsensa.com/**'});
+assert.equal(config.smtp_pass,'must-not-be-sent','domain cutover must preserve SMTP settings');
+assert(!authRedirectConfigMatches(config,desired),'the old origin is no longer an accepted production callback');
 console.log('PASS: production Auth redirect config validates, patches only Site URL/allow list and verifies convergence.');
 
 });

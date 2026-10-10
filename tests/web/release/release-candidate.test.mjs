@@ -9,6 +9,9 @@ const workerConfig=JSON.parse(await readFile(new URL('../../../wrangler.jsonc',i
 assert.equal(workerConfig.name,'sensa-standalone');
 assert.equal(workerConfig.assets.directory,'./apps/web/dist');
 assert.equal(workerConfig.assets.not_found_handling,'single-page-application');
+assert.equal(workerConfig.workers_dev,false,'the production entry point is the owned domain');
+assert.equal(workerConfig.preview_urls,true,'sealed versions still require independent preview verification');
+assert.deepEqual(workerConfig.routes,[{pattern:'learnsensa.com',custom_domain:true}]);
 const targetlessExtension=extensionBuildConfig({});
 assert.equal(targetlessExtension.output,'../../.tmp/browser-extension-build');
 assert.equal(new URL(targetlessExtension.web).hostname,'extension-build.invalid');

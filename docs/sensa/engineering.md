@@ -1055,7 +1055,7 @@ application-only 变化。数据库迁移、`infra/`、Supabase/Cloudflare 生�
 4. 如需发布内容，先构建、验证、上传不可变 Book/Registry 并提升 Registry；
 5. 如需发布应用，从该成功 CI run 下载已经测试和固定的 Web、扩展与 API 候选，重新核对来源、目标和全部摘要，不再重新构建；
 6. 应用前向数据库迁移、对齐 Supabase Auth、部署 Supabase Edge Function；
-7. 上传 Cloudflare Worker 版本，先验证预览，再提升到生产；
+7. 上传 Cloudflare Worker 版本，先验证预览，再提升到生产，并用 `wrangler triggers deploy` 应用域名路由；
 8. 执行公网非模型 smoke；
 9. 生成同时固定 Application、公开配置目标、前向 migration 集合与 Learning Content 身份的系统清单并保存发布证据。
 
@@ -1132,6 +1132,13 @@ source 目录，二者不能同时设置。分批构建时，`SENSA_PACKAGE_EXIS
 
 ## 配置与安全
 
+- 正式 Web 入口为 `https://learnsensa.com`。`wrangler.jsonc` 固定 Worker Custom Domain，禁用
+  `workers.dev` 生产入口；独立版本预览继续用于发布核验。Cloudflare 负责该 Custom Domain 的 DNS 与
+  HTTPS 证书，版本提升后必须另行应用 triggers，不能只上传或提升版本而遗漏域名。
+- `web-candidate`、`web-production` 与 `learning-content-production` 的 `SENSA_WEB_ORIGIN` 必须
+  指向同一正式入口；若启用 `web-monitor`，其检查目标也须一致。应用发布同步对齐 API CORS、
+  Supabase Site URL / redirect allow list 和浏览器扩展目标，不变更 SMTP 或账号准入。浏览器本机资料
+  按 origin 隔离，网址迁移不复制或清除旧 origin 的 OPFS、登录会话或其他本机数据。
 - 生产浏览器变量放在 GitHub environment variables；Provider token、数据库 URL 和 vault key 放在 environment secrets。
 - `learning-content-production` environment 保存公开的 `SUPABASE_PROJECT_REF`、`VITE_SUPABASE_URL`、
   `SENSA_WEB_ORIGIN`，以及只供发布使用的 `SUPABASE_SECRET_KEY` 与 `SUPABASE_ACCESS_TOKEN`；前者不得
