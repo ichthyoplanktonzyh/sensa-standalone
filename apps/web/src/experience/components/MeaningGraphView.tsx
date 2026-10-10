@@ -31,7 +31,8 @@ export function MeaningGraphView({items,languages=[],screenId,selectedExpression
  const byId=useMemo(()=>new Map(graph.nodes.map(node=>[node.id,node])),[graph]);
  const selected=byId.get(selectedExpressionId??''),highlight=byId.get(hover??'')??selected;
  const adjacent=new Set(graph.edges.filter(edge=>edge.from===highlight?.id||edge.to===highlight?.id).flatMap(edge=>[edge.from,edge.to]));
- const association=selected?.associations.find(row=>owner?.expressionId===selected.id&&associationKey(row)===owner.associationId)??selected?.associations[0];
+ const associationFor=(node:typeof graph.nodes[number])=>node.associations.find(row=>owner?.expressionId===node.id&&associationKey(row)===owner.associationId)??node.associations[0];
+ const association=selected?associationFor(selected):undefined,highlightAssociation=highlight?associationFor(highlight):undefined;
  const fit=()=>{const zoom=Math.min(1.2,(size.width-60)/graph.width,(size.height-80)/graph.height);setCamera({x:(size.width-graph.width*zoom)/2+25,y:(size.height-graph.height*zoom)/2+20,zoom:Math.max(.04,zoom)});};
  const zoomBy=(factor:number)=>setCamera(current=>{const zoom=Math.max(.04,Math.min(3,current.zoom*factor));return {x:size.width/2-(size.width/2-current.x)*zoom/current.zoom,y:size.height/2-(size.height/2-current.y)*zoom/current.zoom,zoom};});
  useEffect(()=>{const element=surface.current;if(!element)return;const observer=new ResizeObserver(entries=>{const rect=entries[0]?.contentRect;if(rect){setSize({width:Math.max(1,rect.width),height:Math.max(1,rect.height)});setMeasured(true);}});observer.observe(element);return()=>observer.disconnect();},[]);
@@ -72,7 +73,7 @@ export function MeaningGraphView({items,languages=[],screenId,selectedExpression
      onPointerUp={()=>{drag.current=null;}} onPointerCancel={()=>{drag.current=null;}}>
      <g transform={`translate(${camera.x} ${camera.y}) scale(${camera.zoom})`}>
       {graph.edges.map(edge=>{const a=byId.get(edge.from)!,b=byId.get(edge.to)!,active=highlight&&(edge.from===highlight.id||edge.to===highlight.id);return <line key={`${edge.from}:${edge.to}`} data-graph-edge={`${edge.from}:${edge.to}`} data-relation-facts={JSON.stringify(edge.facts)} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={active?'var(--sensa-fg-primary)':'var(--sensa-border-strong)'} strokeWidth={active?2.5:1} vectorEffect="non-scaling-stroke"/>;})}
-      {graph.nodes.map(node=>{const active=node.id===selected?.id||node.id===highlight?.id,related=adjacent.has(node.id),showLabel=active||searching||labels==='all'||labels==='auto'&&camera.zoom>=.65;return <g key={node.id} data-expression-id={node.id} transform={`translate(${node.x} ${node.y})`} role="button" tabIndex={0} aria-label={`${node.label} · ${node.languageTag} · ${node.associations[0]?.alignment.coreMeaningFocus??''}`} aria-pressed={selected?.id===node.id}
+      {graph.nodes.map(node=>{const active=node.id===selected?.id||node.id===highlight?.id,related=adjacent.has(node.id),showLabel=active||searching||labels==='all'||labels==='auto'&&camera.zoom>=.65;return <g key={node.id} data-expression-id={node.id} transform={`translate(${node.x} ${node.y})`} role="button" tabIndex={0} aria-label={`${node.label} · ${node.languageTag} · ${associationFor(node)?.alignment.coreMeaningFocus??''}`} aria-pressed={selected?.id===node.id}
        className="sensa-expression-point cursor-pointer outline-none" onClick={()=>onSelectExpression(node.id)} onFocus={()=>setHover(node.id)} onBlur={()=>setHover(null)} onPointerEnter={event=>{if(event.pointerType!=='touch')setHover(node.id);}} onPointerLeave={()=>setHover(null)} onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();onSelectExpression(node.id);}}}>
        <circle r={22/camera.zoom} fill="transparent"/>
        <circle className="sensa-expression-dot" r={(active?9:related?7:5)/camera.zoom} fill={active?'var(--sensa-action-primary)':'var(--sensa-fg-secondary)'} stroke="var(--sensa-surface-canvas)" strokeWidth={2/camera.zoom}/>
@@ -82,7 +83,7 @@ export function MeaningGraphView({items,languages=[],screenId,selectedExpression
      </g>
     </svg>
     {highlight&&<div className="pointer-events-none absolute left-3 top-3 max-w-[calc(100%-1.5rem)] rounded-control border border-border-strong bg-surface-panel p-3 shadow-raised" role="status" data-graph-preview>
-     <strong className="block break-words">{highlight.label}</strong><span className="text-xs">{highlight.languageTag} · {highlight.id.slice(0,8)}</span><p className="mt-1 line-clamp-2 break-words text-sm">{highlight.associations[0]?.alignment.coreMeaningFocus}</p>
+     <strong className="block break-words">{highlight.label}</strong><span className="text-xs">{highlight.languageTag} · {highlight.id.slice(0,8)}</span><p className="mt-1 line-clamp-2 break-words text-sm">{highlightAssociation?.alignment.coreMeaningFocus}</p>
     </div>}
    </div>
    {detailContent&&(narrow?<ContentDrawer title={t('content.worldPreview')} onClose={close}><div className="space-y-5">{detailContent}</div></ContentDrawer>:<aside className="sensa-expression-graph-detail space-y-5 border-l border-border-subtle bg-surface-panel p-4" aria-label={t('content.worldPreview')}>{detailContent}</aside>)}

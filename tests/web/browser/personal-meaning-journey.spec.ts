@@ -1270,7 +1270,11 @@ test('World expression languages combine with search, saved meanings and notes w
  const polysemous=graph.locator(`[data-expression-id="${scaleFixture.registry.expressions[0]!.expressionId}"]`);await polysemous.focus();await polysemous.press('Enter');
  await expect(graph.getByRole('complementary',{name:'表达预览',exact:true}).getByRole('combobox',{name:'已确认意思',exact:true}).locator('option')).toHaveCount(2);
  const polyPreview=graph.getByRole('complementary',{name:'表达预览',exact:true}),interpretation=polyPreview.getByRole('combobox',{name:'已确认意思',exact:true});await interpretation.selectOption({index:1});const selectedInterpretation=await interpretation.inputValue();
+ await expect(graph.locator('[data-graph-preview]')).toContainText('临时借用编号2的物品。');await expect(polysemous).toHaveAccessibleName('borrow · en · 临时借用编号2的物品。');
+ await interpretation.selectOption({index:0});await expect(graph.locator('[data-graph-preview]')).toContainText('临时取得他人物品，并预期归还。');await expect(polysemous).toHaveAccessibleName('borrow · en · 临时取得他人物品，并预期归还。');
+ await interpretation.selectOption({index:1});
  await polyPreview.getByRole('button',{name:'查看详情',exact:true}).click();await expect(page.locator('#s-personal-meaning').getByRole('heading',{name:'borrow',exact:true})).toBeVisible();await page.goBack();await expect(interpretation).toHaveValue(selectedInterpretation);
+ await expect(graph.locator('[data-graph-preview]')).toContainText('临时借用编号2的物品。');await expect(polysemous).toHaveAccessibleName('borrow · en · 临时借用编号2的物品。');
  expect(await graph.locator('[data-graph-edge]').count()).toBe(2);
  await page.screenshot({path:testInfo.outputPath('expression-graph-polysemy-and-real-links.png'),animations:'disabled'});
  await graph.getByRole('complementary',{name:'表达预览',exact:true}).getByRole('button',{name:'关闭',exact:true}).click();
