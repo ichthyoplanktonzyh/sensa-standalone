@@ -142,7 +142,27 @@
       "forming": "En formation",
       "established": "Acquis",
       "reinforce": "À renforcer"
-    }
+    },
+    "worldAllLanguages": "Toutes les langues",
+    "worldCounts": "{{expressions}} expressions · {{meanings}} sens distincts",
+    "worldCurrentRoute": "Parcours actuel",
+    "worldGraphHint": "Les points sont des expressions enregistrées. Les liens indiquent un sens confirmé ou personnel partagé. La distance ne traduit pas une proximité sémantique.",
+    "worldIsolated": "Aucun lien enregistré",
+    "worldLabelAll": "Toutes",
+    "worldLabelAuto": "Automatique",
+    "worldLabelSelected": "Sélection",
+    "worldLabels": "Étiquettes",
+    "worldLanguage": "Langue de l’expression",
+    "worldNoSource": "Aucune source externe enregistrée",
+    "worldNotAdded": "Non ajouté à ce parcours",
+    "worldOther": "Autres expressions de ce sens",
+    "worldPreview": "Aperçu de l’expression",
+    "worldRelated": "Expressions reliées",
+    "worldRemoved": "Retiré de l’apprentissage",
+    "worldSharedMeaning": "Sens personnel partagé",
+    "worldSharedSense": "Sens confirmé partagé",
+    "worldSource": "Source d’origine",
+    "worldBatchEmpty": "Aucune expression dans ces filtres ne peut être ajoutée au parcours {{language}} actuel."
   },
   "composer": {
     "title": "Capturer un contexte",

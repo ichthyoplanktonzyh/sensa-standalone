@@ -142,7 +142,27 @@
       "forming": "Đang hình thành",
       "established": "Đã ổn định",
       "reinforce": "Cần củng cố"
-    }
+    },
+    "worldAllLanguages": "Tất cả ngôn ngữ",
+    "worldCounts": "{{expressions}} biểu đạt · {{meanings}} ý nghĩa không trùng lặp",
+    "worldCurrentRoute": "Lộ trình học hiện tại",
+    "worldGraphHint": "Mỗi điểm là một biểu đạt đã lưu. Đường nối thể hiện ý nghĩa đã xác nhận hoặc ý nghĩa cá nhân chung. Khoảng cách không thể hiện độ gần về ngữ nghĩa.",
+    "worldIsolated": "Chưa ghi nhận đường nối",
+    "worldLabelAll": "Tất cả",
+    "worldLabelAuto": "Tự động",
+    "worldLabelSelected": "Đã chọn",
+    "worldLabels": "Nhãn",
+    "worldLanguage": "Ngôn ngữ biểu đạt",
+    "worldNoSource": "Chưa ghi nhận nguồn bên ngoài",
+    "worldNotAdded": "Chưa thêm vào lộ trình này",
+    "worldOther": "Biểu đạt khác của ý nghĩa này",
+    "worldPreview": "Xem trước biểu đạt",
+    "worldRelated": "Biểu đạt có đường nối",
+    "worldRemoved": "Đã bỏ khỏi việc học",
+    "worldSharedMeaning": "Cùng ý nghĩa cá nhân",
+    "worldSharedSense": "Ý nghĩa đã xác nhận chung",
+    "worldSource": "Nguồn gốc",
+    "worldBatchEmpty": "Không có biểu đạt nào trong bộ lọc này có thể thêm vào lộ trình {{language}} hiện tại."
   },
   "composer": {
     "title": "Ghi lại ngữ cảnh",

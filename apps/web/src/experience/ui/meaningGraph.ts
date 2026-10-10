@@ -1,105 +1,55 @@
-import type { JourneyWorldItemView } from "../personalMeaningJourney";
+import type {JourneyAlignmentView,JourneyWorldItemView} from '../personalMeaningJourney/types';
 
+export interface ExpressionAssociation {
+  item: JourneyWorldItemView;
+  alignment: JourneyAlignmentView;
+  focusId: string;
+  bindingVersionId: string;
+}
 export interface MeaningGraphNode {
   id: string;
-  kind: "context" | "focus" | "proposal" | "sense" | "expression";
   label: string;
-  meaningId: string;
-  focusId?: string;
-  confirmed: boolean;
+  languageTag: string;
+  associations: ExpressionAssociation[];
   x: number;
   y: number;
 }
 export interface MeaningGraphEdge {
   from: string;
   to: string;
+  facts: Array<{kind:'sense'|'meaning';id:string}>;
 }
 
-/** Layout follows explicit context/focus/alignment/binding facts only. */
-export function buildMeaningGraph(items: readonly JourneyWorldItemView[]) {
-  const nodes: MeaningGraphNode[] = [];
-  const edges: MeaningGraphEdge[] = [];
-  let cursor = 50;
-  for (const item of items) {
-    const rootId = `context:${item.personalMeaningId}`;
-    const branches = [
-      ...item.detail.focuses.map((f) => ({
-        id: f.meaningFocusId,
-        label: f.statement,
-        alignment: f.alignment,
-        proposal: f.proposal,
-        direct: false,
-      })),
-      ...item.detail.directAlignments.map((a) => ({
-        id: a.personalMeaningAlignmentId,
-        label: a.coreMeaningFocus,
-        alignment: a,
-        proposal: null,
-        direct: true,
-      })),
-    ];
-    const start = cursor;
-    for (const branch of branches) {
-      const bindings = branch.alignment?.confirmedBindings ?? [];
-      const height = Math.max(90, bindings.length * 80);
-      const y = cursor + height / 2;
-      const focusId = `focus:${item.personalMeaningId}:${branch.id}`;
-      const senseId = `sense:${item.personalMeaningId}:${branch.id}`;
-      const base = {
-        meaningId: item.personalMeaningId,
-        focusId: branch.id,
-        confirmed: !!branch.alignment,
-      };
-      if (!branch.direct) {
-        nodes.push({
-          ...base,
-          id: focusId,
-          kind: "focus",
-          label: branch.label,
-          x: 310,
-          y,
-        });
-        edges.push({ from: rootId, to: focusId });
+/** One point per stable Expression identity, with its accepted interpretations.
+ * Sparse stars represent actual shared Sense/Personal Meaning memberships.
+ * Coordinates are a deterministic reading layout, never semantic distance. */
+export function buildMeaningGraph(items:readonly JourneyWorldItemView[],languages:readonly string[]=[]){
+  const byId=new Map<string,MeaningGraphNode>();
+  const groups=new Map<string,{kind:'sense'|'meaning';id:string;members:Set<string>}>();
+  for(const item of items){
+    const branches=[...item.detail.focuses.flatMap(focus=>focus.alignment?[{alignment:focus.alignment,focusId:focus.meaningFocusId}]:[]),...item.detail.directAlignments.map(alignment=>({alignment,focusId:alignment.personalMeaningAlignmentId}))];
+    for(const {alignment,focusId} of branches)for(const binding of alignment.confirmedBindings){
+      if(languages.length&&!languages.includes(binding.languageTag))continue;
+      let node=byId.get(binding.expressionId);
+      if(!node){node={id:binding.expressionId,label:binding.surfaceForm,languageTag:binding.languageTag,associations:[],x:0,y:0};byId.set(node.id,node);}
+      if(!node.associations.some(association=>association.item.personalMeaningId===item.personalMeaningId&&association.alignment.personalMeaningAlignmentId===alignment.personalMeaningAlignmentId&&association.bindingVersionId===binding.bindingVersionId))node.associations.push({item,alignment,focusId,bindingVersionId:binding.bindingVersionId});
+      for(const [kind,id] of [['sense',alignment.senseId],['meaning',item.personalMeaningId]] as const){
+        const key=`${kind}:${id}`;
+        if(!groups.has(key))groups.set(key,{kind,id,members:new Set()});
+        groups.get(key)!.members.add(node.id);
       }
-      if (branch.alignment || branch.proposal) {
-        nodes.push({
-          ...base,
-          id: senseId,
-          kind: branch.alignment ? "sense" : "proposal",
-          label: branch.alignment?.coreMeaningFocus || branch.label,
-          x: 600,
-          y,
-        });
-        edges.push({ from: branch.direct ? rootId : focusId, to: senseId });
-        bindings.forEach((binding, index) => {
-          const id = `expression:${item.personalMeaningId}:${branch.id}:${binding.bindingVersionId}`;
-          nodes.push({
-            ...base,
-            id,
-            kind: "expression",
-            label: binding.surfaceForm,
-            x: 890,
-            y: cursor + 45 + index * 80,
-          });
-          edges.push({ from: senseId, to: id });
-        });
-      }
-      cursor += height + 30;
     }
-    if (!branches.length) cursor += 120;
-    nodes.push({
-      id: rootId,
-      kind: "context",
-      label:
-        item.experienceAnchors[0]?.surfaceForm ||
-        item.familiarAnchors[0]?.surfaceForm ||
-        item.primaryLabel,
-      meaningId: item.personalMeaningId,
-      confirmed: false,
-      x: 20,
-      y: (start + cursor - 30) / 2,
-    });
-    cursor += 70;
   }
-  return { nodes, edges, width: 1160, height: Math.max(400, cursor) };
+  const nodes=[...byId.values()].sort((a,b)=>a.languageTag.localeCompare(b.languageTag)||a.label.localeCompare(b.label)||a.id.localeCompare(b.id));
+  const columns=Math.max(1,Math.ceil(Math.sqrt(nodes.length*1.6))),width=Math.max(640,columns*180),rows=Math.ceil(nodes.length/columns);
+  nodes.forEach((node,index)=>{node.x=70+(index%columns)*180;node.y=65+Math.floor(index/columns)*100;});
+  const edges=new Map<string,MeaningGraphEdge>();
+  for(const {kind,id,members} of groups.values()){
+    const ids=[...members].sort(),from=ids[0];if(!from)continue;
+    for(const to of ids.slice(1)){
+      const key=`${from}:${to}`;if(!edges.has(key))edges.set(key,{from,to,facts:[]});
+      edges.get(key)!.facts.push({kind,id});
+    }
+  }
+  return {nodes,edges:[...edges.values()],width,height:Math.max(320,rows*100+80)};
 }

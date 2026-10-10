@@ -23,6 +23,7 @@ type BrowserSmokeBridge = {
   retainExampleForTest(unavailable?:boolean):Promise<{exampleId:string;word:string|null;text:string|null}>;
   retainedExampleIdsForTest():Promise<string[]>;
   failAnnotationReadsForTest(active:boolean):Promise<void>;
+  failNextSenseNoteCommitForTest():Promise<void>;
   failLearningSceneReadsForTest(active:boolean):Promise<void>;
   failNextSceneLinkCommitForTest():Promise<void>;
   personalLearningScenesForTest():Promise<import('./personalContent/system').PersonalLearningScene[]>;
@@ -372,6 +373,11 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
       restoreAnnotationReads=()=>{adapter.entries=entries;};
       await personalContentSystem.refresh().catch(()=>undefined);
       if(personalContentSystem.read({kind:'snapshot'}).status!=='error')throw Error('Annotation read fault was not exercised');
+    },
+    async failNextSenseNoteCommitForTest(){
+      const {sqliteRecordAdapter}=await import('./data/library/sqliteAdapter');
+      const adapter=await sqliteRecordAdapter(),commit=adapter.commit.bind(adapter);
+      adapter.commit=async mutation=>{if(mutation.puts.some(row=>row.table==='annotations'&&row.key.startsWith('sense_note:'))){adapter.commit=commit;throw Error('fixture note commit failed');}return commit(mutation);};
     },
     async failNextInboxCommitForTest(intakeId){
       const {sqliteRecordAdapter}=await import('./data/library/sqliteAdapter');

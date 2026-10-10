@@ -142,7 +142,27 @@
       "forming": "Em formação",
       "established": "Estabelecido",
       "reinforce": "Precisa de reforço"
-    }
+    },
+    "worldAllLanguages": "Todos os idiomas",
+    "worldCounts": "{{expressions}} expressões · {{meanings}} significados distintos",
+    "worldCurrentRoute": "Rota de aprendizado atual",
+    "worldGraphHint": "Os pontos são expressões salvas. As linhas indicam significados confirmados ou pessoais compartilhados. A distância não representa proximidade semântica.",
+    "worldIsolated": "Nenhuma conexão registrada",
+    "worldLabelAll": "Todos",
+    "worldLabelAuto": "Automáticos",
+    "worldLabelSelected": "Selecionados",
+    "worldLabels": "Rótulos",
+    "worldLanguage": "Idioma da expressão",
+    "worldNoSource": "Nenhuma fonte externa registrada",
+    "worldNotAdded": "Não adicionado a esta rota",
+    "worldOther": "Outras expressões deste significado",
+    "worldPreview": "Prévia da expressão",
+    "worldRelated": "Expressões conectadas",
+    "worldRemoved": "Removido do aprendizado",
+    "worldSharedMeaning": "Significado pessoal compartilhado",
+    "worldSharedSense": "Significado confirmado compartilhado",
+    "worldSource": "Fonte original",
+    "worldBatchEmpty": "Nenhuma expressão nestes filtros pode ser adicionada à rota atual de {{language}}."
   },
   "composer": {
     "title": "Registrar um contexto",

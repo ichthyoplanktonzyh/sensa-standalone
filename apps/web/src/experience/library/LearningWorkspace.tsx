@@ -100,6 +100,13 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
  };
  const personalMeaningId=params.meaningId??null,meaningFocusId=params.focusId??null;
  const renderContentScreen=(screenId:'s-content'|'s-semantic-world',screenActive:boolean)=><ContentScreen
+    browse={{params,change:patch=>setMainStack(mainStack,patch,true)}}
+    graphLearningState={bindingVersionId=>{
+     const task=personalLearning.tasks.find(task=>task.source.bindingVersionId===bindingVersionId&&task.languageContext.languageRouteId===personalLearning.languageContext.languageRouteId);
+     const target=personalLearning.targets.find(target=>target.identity.bindingVersionId===bindingVersionId);
+     const key=personalLearning.taskSourcesLoading?'loadingSensa':personalLearning.taskSourcesUnavailable?'preparationReadFailed':target?'learningReady':task?.curriculumActive===false?'worldRemoved':task?.status==='ready'||task?.status==='covered'?'batchReady':task?'learningPreparation':'worldNotAdded';
+     return <><h3 className="text-xs text-fg-secondary">{t('content.worldCurrentRoute')} · {personalLearning.languageContext.targetLanguageTag}</h3><p className="mt-2 text-sm" role={personalLearning.taskSourcesUnavailable?'alert':undefined}>{key==='worldRemoved'||key==='worldNotAdded'?t(`content.${key}`):localFlowText(key)}</p></>;
+    }}
     bulkLearning={(items,list,query)=><BatchPersonalLearning items={items} query={query} c={personalLearning}>{list}</BatchPersonalLearning>}
     active={screenActive} screenId={screenId}
     initialAction={params.worldAction==='create'||params.worldAction==='inbox'||params.worldAction==='add'?params.worldAction:undefined}

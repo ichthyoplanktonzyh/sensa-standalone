@@ -142,7 +142,27 @@
       "forming": "In formazione",
       "established": "Consolidato",
       "reinforce": "Da rinforzare"
-    }
+    },
+    "worldAllLanguages": "Tutte le lingue",
+    "worldCounts": "{{expressions}} espressioni · {{meanings}} significati distinti",
+    "worldCurrentRoute": "Percorso attuale",
+    "worldGraphHint": "I punti sono espressioni salvate. Le linee indicano significati confermati o personali condivisi. La distanza non indica vicinanza semantica.",
+    "worldIsolated": "Nessun collegamento registrato",
+    "worldLabelAll": "Tutte",
+    "worldLabelAuto": "Automatiche",
+    "worldLabelSelected": "Selezionate",
+    "worldLabels": "Etichette",
+    "worldLanguage": "Lingua dell’espressione",
+    "worldNoSource": "Nessuna fonte esterna registrata",
+    "worldNotAdded": "Non aggiunto a questo percorso",
+    "worldOther": "Altre espressioni di questo significato",
+    "worldPreview": "Anteprima dell’espressione",
+    "worldRelated": "Espressioni collegate",
+    "worldRemoved": "Rimosso dall’apprendimento",
+    "worldSharedMeaning": "Significato personale condiviso",
+    "worldSharedSense": "Significato confermato condiviso",
+    "worldSource": "Fonte originale",
+    "worldBatchEmpty": "Nessuna espressione con questi filtri può essere aggiunta al percorso attuale {{language}}."
   },
   "composer": {
     "title": "Raccogli un contesto",

@@ -142,7 +142,27 @@
       "forming": "형성 중",
       "established": "정착됨",
       "reinforce": "강화 필요"
-    }
+    },
+    "worldAllLanguages": "모든 언어",
+    "worldCounts": "표현 {{expressions}}개 · 중복 제외 의미 {{meanings}}개",
+    "worldCurrentRoute": "현재 학습 경로",
+    "worldGraphHint": "점은 저장한 표현입니다. 선은 공유하는 확정된 의미나 개인 의미를 나타냅니다. 거리는 의미의 유사성을 나타내지 않습니다.",
+    "worldIsolated": "기록된 연결 없음",
+    "worldLabelAll": "모두",
+    "worldLabelAuto": "자동",
+    "worldLabelSelected": "선택만",
+    "worldLabels": "이름표",
+    "worldLanguage": "표현 언어",
+    "worldNoSource": "기록된 외부 출처 없음",
+    "worldNotAdded": "이 경로에 추가되지 않음",
+    "worldOther": "이 의미의 다른 언어 표현",
+    "worldPreview": "표현 미리보기",
+    "worldRelated": "선으로 연결된 표현",
+    "worldRemoved": "학습에서 제거됨",
+    "worldSharedMeaning": "같은 개인 의미",
+    "worldSharedSense": "공유하는 확정된 의미",
+    "worldSource": "원본 출처",
+    "worldBatchEmpty": "현재 필터에는 {{language}} 학습 경로에 추가할 수 있는 표현이 없습니다."
   },
   "composer": {
     "title": "맥락 담아 두기",

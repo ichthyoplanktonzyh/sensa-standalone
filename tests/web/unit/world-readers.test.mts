@@ -107,3 +107,29 @@ test('select-all rejects an inconsistent frame or cancelled read without publish
  const controller=new AbortController();let calls=0;
  await expect(collectLearningChoices({learningChoices:async query=>{calls++;controller.abort();return choicePage(query.offset,query.limit);}},choiceQuery,controller.signal)).rejects.toThrow();expect(calls).toBe(1);
 });
+
+test('expression points preserve IDs, polysemy, real relation witnesses and isolated records under language filters',async()=>{
+ const {expressionWorldFixture}=await import('../support/expressionWorldFixture');
+ const {worldItemFromRegistry}=await import('../../../apps/web/src/experience/personalMeaningJourney/worldRead');
+ const {buildMeaningGraph}=await import('../../../apps/web/src/experience/ui/meaningGraph');
+ const state=await expressionWorldFixture(),items=state.meanings.map(record=>worldItemFromRegistry(record,state.registry));
+ const graph=buildMeaningGraph(items);
+ expect(graph.nodes).toHaveLength(6);expect(new Set(graph.nodes.map(node=>node.id)).size).toBe(6);
+ expect(graph.nodes.filter(node=>node.label==='borrow')).toHaveLength(3);
+ const polysemous=graph.nodes.find(node=>new Set(node.associations.map(row=>row.alignment.senseId)).size===2)!;
+ expect(polysemous.label).toBe('borrow');expect(polysemous.associations).toHaveLength(2);
+ expect(graph.edges.length).toBeGreaterThan(0);
+ const byId=new Map(graph.nodes.map(node=>[node.id,node]));
+ for(const edge of graph.edges)for(const fact of edge.facts){
+  const memberships=(id:string)=>byId.get(id)!.associations.map(row=>fact.kind==='sense'?row.alignment.senseId:row.item.personalMeaningId);
+  expect(memberships(edge.from)).toContain(fact.id);expect(memberships(edge.to)).toContain(fact.id);
+ }
+ expect(new Set(graph.edges.flatMap(edge=>edge.facts.map(fact=>fact.kind)))).toEqual(new Set(['sense','meaning']));
+ const isolated=graph.nodes.find(node=>node.label==='isolated expression')!;
+ expect(graph.edges.some(edge=>edge.from===isolated.id||edge.to===isolated.id)).toBe(false);
+ const fr=buildMeaningGraph(items,['fr']);expect(fr.nodes.map(node=>node.label)).toEqual(['emprunter']);expect(fr.edges).toEqual([]);
+ expect(buildMeaningGraph(items,['en','fr']).nodes).toHaveLength(6);expect(buildMeaningGraph(items,['ja']).nodes).toEqual([]);
+ expect(state.inboxItems).toHaveLength(1);expect(graph.nodes.some(node=>node.label.includes('尚待绑定'))).toBe(false);
+ const large=await expressionWorldFixture(120),largeGraph=buildMeaningGraph(large.meanings.map(record=>worldItemFromRegistry(record,large.registry)));
+ expect(largeGraph.nodes).toHaveLength(126);expect(new Set(largeGraph.nodes.map(node=>`${node.x}:${node.y}`)).size).toBe(126);
+});

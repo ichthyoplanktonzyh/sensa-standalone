@@ -142,7 +142,27 @@
       "forming": "Sedang terbentuk",
       "established": "Terbentuk",
       "reinforce": "Perlu diperkuat"
-    }
+    },
+    "worldAllLanguages": "Semua bahasa",
+    "worldCounts": "{{expressions}} ungkapan · {{meanings}} makna unik",
+    "worldCurrentRoute": "Jalur belajar saat ini",
+    "worldGraphHint": "Titik adalah ungkapan tersimpan. Garis menunjukkan makna terkonfirmasi atau pribadi yang sama. Jarak tidak menunjukkan kedekatan semantik.",
+    "worldIsolated": "Tidak ada hubungan tercatat",
+    "worldLabelAll": "Semua",
+    "worldLabelAuto": "Otomatis",
+    "worldLabelSelected": "Terpilih",
+    "worldLabels": "Label",
+    "worldLanguage": "Bahasa ungkapan",
+    "worldNoSource": "Tidak ada sumber eksternal tercatat",
+    "worldNotAdded": "Belum ditambahkan ke jalur ini",
+    "worldOther": "Ungkapan lain untuk makna ini",
+    "worldPreview": "Pratinjau ungkapan",
+    "worldRelated": "Ungkapan terhubung",
+    "worldRemoved": "Dihapus dari pembelajaran",
+    "worldSharedMeaning": "Makna pribadi yang sama",
+    "worldSharedSense": "Makna terkonfirmasi yang sama",
+    "worldSource": "Sumber asli",
+    "worldBatchEmpty": "Tidak ada ungkapan dalam filter ini yang dapat ditambahkan ke jalur {{language}} saat ini."
   },
   "composer": {
     "title": "Catat konteks",

@@ -142,7 +142,27 @@
       "forming": "Kształtowanie",
       "established": "Utrwalone",
       "reinforce": "Wymaga utrwalenia"
-    }
+    },
+    "worldAllLanguages": "Wszystkie języki",
+    "worldCounts": "{{expressions}} wyrażeń · {{meanings}} różnych znaczeń",
+    "worldCurrentRoute": "Bieżąca ścieżka nauki",
+    "worldGraphHint": "Punkty to zapisane wyrażenia. Linie pokazują wspólne potwierdzone lub osobiste znaczenia. Odległość nie oznacza bliskości semantycznej.",
+    "worldIsolated": "Brak zapisanych połączeń",
+    "worldLabelAll": "Wszystkie",
+    "worldLabelAuto": "Automatyczne",
+    "worldLabelSelected": "Wybrane",
+    "worldLabels": "Etykiety",
+    "worldLanguage": "Język wyrażenia",
+    "worldNoSource": "Brak zapisanego źródła zewnętrznego",
+    "worldNotAdded": "Nie dodano do tej ścieżki",
+    "worldOther": "Inne wyrażenia tego znaczenia",
+    "worldPreview": "Podgląd wyrażenia",
+    "worldRelated": "Połączone wyrażenia",
+    "worldRemoved": "Usunięto z nauki",
+    "worldSharedMeaning": "Wspólne osobiste znaczenie",
+    "worldSharedSense": "Wspólne potwierdzone znaczenie",
+    "worldSource": "Pierwotne źródło",
+    "worldBatchEmpty": "Przy tych filtrach brak wyrażeń do dodania do bieżącej ścieżki {{language}}."
   },
   "composer": {
     "title": "Zapisz kontekst",

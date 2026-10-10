@@ -142,7 +142,27 @@
       "forming": "正在建立",
       "established": "已建立",
       "reinforce": "待鞏固"
-    }
+    },
+    "worldAllLanguages": "全部語言",
+    "worldCounts": "{{expressions}} 個表達 · {{meanings}} 個去重意義",
+    "worldCurrentRoute": "目前學習路線",
+    "worldGraphHint": "每個點是一個已儲存表達。連線來自共同的已確認意義或個人意義；距離不表示語義接近。",
+    "worldIsolated": "沒有已記錄的連線",
+    "worldLabelAll": "全部",
+    "worldLabelAuto": "自動",
+    "worldLabelSelected": "僅選取",
+    "worldLabels": "標籤",
+    "worldLanguage": "表達語言",
+    "worldNoSource": "沒有記錄外部來源",
+    "worldNotAdded": "尚未加入此路線",
+    "worldOther": "此意義的其他語言表達",
+    "worldPreview": "表達預覽",
+    "worldRelated": "有連線的表達",
+    "worldRemoved": "已移出學習安排",
+    "worldSharedMeaning": "同一個個人意義",
+    "worldSharedSense": "共同的已確認意義",
+    "worldSource": "原始來源",
+    "worldBatchEmpty": "目前篩選中，沒有可加入 {{language}} 學習路線的表達。"
   },
   "composer": {
     "title": "記錄場景",

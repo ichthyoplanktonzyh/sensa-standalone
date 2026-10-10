@@ -142,7 +142,27 @@
       "forming": "Im Aufbau",
       "established": "Gefestigt",
       "reinforce": "Muss gefestigt werden"
-    }
+    },
+    "worldAllLanguages": "Alle Sprachen",
+    "worldCounts": "{{expressions}} Ausdrücke · {{meanings}} unterschiedliche Bedeutungen",
+    "worldCurrentRoute": "Aktueller Lernpfad",
+    "worldGraphHint": "Punkte sind gespeicherte Ausdrücke. Linien zeigen gemeinsame bestätigte oder persönliche Bedeutungen. Abstand bedeutet keine semantische Nähe.",
+    "worldIsolated": "Keine Verbindung erfasst",
+    "worldLabelAll": "Alle",
+    "worldLabelAuto": "Automatisch",
+    "worldLabelSelected": "Ausgewählte",
+    "worldLabels": "Beschriftung",
+    "worldLanguage": "Sprache des Ausdrucks",
+    "worldNoSource": "Keine externe Quelle erfasst",
+    "worldNotAdded": "In diesem Lernpfad nicht hinzugefügt",
+    "worldOther": "Weitere Ausdrücke dieser Bedeutung",
+    "worldPreview": "Ausdrucksvorschau",
+    "worldRelated": "Verbundene Ausdrücke",
+    "worldRemoved": "Aus dem Lernen entfernt",
+    "worldSharedMeaning": "Gemeinsame persönliche Bedeutung",
+    "worldSharedSense": "Gemeinsame bestätigte Bedeutung",
+    "worldSource": "Originalquelle",
+    "worldBatchEmpty": "Mit diesen Filtern gibt es keine Ausdrücke für den aktuellen Lernpfad {{language}}."
   },
   "composer": {
     "title": "Kontext festhalten",

@@ -142,7 +142,27 @@
       "forming": "Формируется",
       "established": "Закреплено",
       "reinforce": "Нужно повторить"
-    }
+    },
+    "worldAllLanguages": "Все языки",
+    "worldCounts": "Выражений: {{expressions}} · Уникальных значений: {{meanings}}",
+    "worldCurrentRoute": "Текущий учебный маршрут",
+    "worldGraphHint": "Точки — сохранённые выражения. Линии показывают общие подтверждённые или личные значения. Расстояние не означает семантическую близость.",
+    "worldIsolated": "Записанных связей нет",
+    "worldLabelAll": "Все",
+    "worldLabelAuto": "Автоматически",
+    "worldLabelSelected": "Выбранные",
+    "worldLabels": "Подписи",
+    "worldLanguage": "Язык выражения",
+    "worldNoSource": "Внешний источник не записан",
+    "worldNotAdded": "Не добавлено в этот маршрут",
+    "worldOther": "Другие выражения этого значения",
+    "worldPreview": "Просмотр выражения",
+    "worldRelated": "Связанные выражения",
+    "worldRemoved": "Удалено из обучения",
+    "worldSharedMeaning": "Общее личное значение",
+    "worldSharedSense": "Общее подтверждённое значение",
+    "worldSource": "Исходный источник",
+    "worldBatchEmpty": "С этими фильтрами нет выражений для текущего учебного маршрута {{language}}."
   },
   "composer": {
     "title": "Зафиксировать контекст",

@@ -1,233 +1,89 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Maximize, Minus, Plus, ArrowUpRight } from "lucide-react";
-import { useTranslation } from "react-i18next";
-import type { JourneyWorldItemView } from "../personalMeaningJourney";
-import { buildMeaningGraph, type MeaningGraphNode } from "../ui/meaningGraph";
+import {useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
+import {Maximize,Minus,Plus,X,ArrowUpRight} from 'lucide-react';
+import {useTranslation} from 'react-i18next';
+import type {JourneyWorldItemView} from '../personalMeaningJourney';
+import {buildMeaningGraph} from '../ui/meaningGraph';
+import {useScreenState} from '../ui/ScreenHost';
+import {localFlowText} from '../../i18n/localFlowText';
+import {ContentDrawer} from './ContentWorkspace';
+import {intakeSourceLabel,intakeSourceUrl} from '../personalMeaningJourney/sourcePresentation';
 
-export function MeaningGraphView({
-  items,
-  selectedMeaningId,
-  onSelectMeaning,
-  onOpenMeaning,
-  onOpenConfirmedSense,
-}: {
-  items: readonly JourneyWorldItemView[];
-  selectedMeaningId: string | null;
-  onSelectMeaning: (id: string) => void;
-  onOpenMeaning: (id: string, focusId?: string) => void;
-  onOpenConfirmedSense: (id: string, focusId: string) => void;
-}) {
-  const { t } = useTranslation();
-  const graph = useMemo(() => buildMeaningGraph(items), [items]);
-  const [camera, setCamera] = useState(() => {
-    const zoom = Math.min(0.85, 960 / graph.width, 530 / graph.height);
-    return { x: (1000 - graph.width * zoom) / 2, y: 25, zoom };
-  });
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const svg = useRef<SVGSVGElement>(null);
-  const drag = useRef<{
-    x: number;
-    y: number;
-    originX: number;
-    originY: number;
-  } | null>(null);
-  const byId = useMemo(
-    () => new Map(graph.nodes.map((n) => [n.id, n])),
-    [graph],
-  );
-  const selected =
-    byId.get(selectedNodeId ?? "") ??
-    graph.nodes.find(
-      (n) => n.meaningId === selectedMeaningId && n.kind === "context",
-    );
-  const fit = () => {
-    const zoom = Math.min(0.85, 960 / graph.width, 530 / graph.height);
-    setCamera({ x: (1000 - graph.width * zoom) / 2, y: 25, zoom });
-  };
-  const zoomBy = (factor: number) =>
-    setCamera((c) => {
-      const zoom = Math.max(0.08, Math.min(2, c.zoom * factor));
-      return {
-        x: 500 - ((500 - c.x) * zoom) / c.zoom,
-        y: 280 - ((280 - c.y) * zoom) / c.zoom,
-        zoom,
-      };
-    });
-  // Non-passive wheel handling keeps graph zoom from scrolling the page.
-  useEffect(() => {
-    const node = svg.current;
-    if (!node) return;
-    const wheel = (e: WheelEvent) => {
-      e.preventDefault();
-      zoomBy(e.deltaY > 0 ? 0.9 : 1.1);
-    };
-    node.addEventListener("wheel", wheel, { passive: false });
-    return () => node.removeEventListener("wheel", wheel);
-  }, []);
-  const select = (node: MeaningGraphNode) => {
-    setSelectedNodeId(node.id);
-    onSelectMeaning(node.meaningId);
-  };
-  const open = (node: MeaningGraphNode) =>
-    node.confirmed && node.focusId && node.kind !== "focus"
-      ? onOpenConfirmedSense(node.meaningId, node.focusId)
-      : onOpenMeaning(node.meaningId, node.focusId);
-  const toolbarButton =
-    "grid size-11 place-items-center rounded-control text-fg-secondary hover:bg-surface-selected focus-visible:outline-2 focus-visible:outline-focus";
-  return (
-    <section
-      className="sensa-meaning-graph overflow-hidden rounded-card border border-border-subtle bg-surface-panel"
-      aria-label={t("content.graph.title")}
-    >
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle px-4 py-3">
-        <div className="flex flex-wrap gap-3 text-xs text-fg-tertiary">
-          {(["context", "focus", "sense", "expression"] as const).map(
-            (kind) => (
-              <span key={kind} className="flex items-center gap-1.5">
-                <i
-                  className={`size-2 rounded-pill ${kind === "context" ? "bg-fg-tertiary" : kind === "focus" ? "bg-decorative" : kind === "sense" ? "bg-progress" : "bg-action-primary"}`}
-                />
-                {t(`content.graph.${kind}`)}
-              </span>
-            ),
-          )}
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            className={toolbarButton}
-            onClick={() => zoomBy(0.8)}
-            aria-label={t("content.graph.zoomOut")}
-          >
-            <Minus size={16} />
-          </button>
-          <span className="w-12 text-center text-xs tabular-nums text-fg-tertiary">
-            {Math.round(camera.zoom * 100)}%
-          </span>
-          <button
-            className={toolbarButton}
-            onClick={() => zoomBy(1.25)}
-            aria-label={t("content.graph.zoomIn")}
-          >
-            <Plus size={16} />
-          </button>
-          <button
-            className={toolbarButton}
-            onClick={fit}
-            aria-label={t("content.graph.fit")}
-          >
-            <Maximize size={16} />
-          </button>
-        </div>
-      </header>
-      <svg
-        ref={svg}
-        viewBox="0 0 1000 580"
-        className="h-[440px] w-full touch-none bg-surface-subtle select-none sm:h-[540px]"
-        aria-label={t("content.graph.canvas")}
-        onPointerDown={(e) => {
-          if ((e.target as Element).closest("[data-node]")) return;
-          svg.current?.setPointerCapture(e.pointerId);
-          drag.current = {
-            x: e.clientX,
-            y: e.clientY,
-            originX: camera.x,
-            originY: camera.y,
-          };
-        }}
-        onPointerMove={(e) => {
-          const d = drag.current;
-          const rect = svg.current?.getBoundingClientRect();
-          if (!d || !rect) return;
-          const scale = Math.min(rect.width / 1000, rect.height / 580);
-          setCamera((c) => ({
-            ...c,
-            x: d.originX + (e.clientX - d.x) / scale,
-            y: d.originY + (e.clientY - d.y) / scale,
-          }));
-        }}
-        onPointerUp={() => {
-          drag.current = null;
-        }}
-        onPointerCancel={() => {
-          drag.current = null;
-        }}
-      >
-        <g
-          transform={`translate(${camera.x} ${camera.y}) scale(${camera.zoom})`}
-        >
-          {graph.edges.map((edge) => {
-            const a = byId.get(edge.from)!,
-              b = byId.get(edge.to)!;
-            return (
-              <path
-                key={`${edge.from}:${edge.to}`}
-                d={`M ${a.x + 230} ${a.y} C ${a.x + 265} ${a.y}, ${b.x - 35} ${b.y}, ${b.x} ${b.y}`}
-                fill="none"
-                stroke="var(--sensa-border-strong)"
-                strokeWidth="1.5"
-              />
-            );
-          })}
-          {graph.nodes.map((node) => (
-            <g
-              key={node.id}
-              data-node={node.id}
-              transform={`translate(${node.x} ${node.y - 30})`}
-              role="button"
-              tabIndex={0}
-              aria-label={`${t(`content.graph.${node.kind}`)}: ${node.label}`}
-              aria-pressed={selected?.id === node.id}
-              className="cursor-pointer outline-none [&:focus-visible>rect]:stroke-focus [&:focus-visible>rect]:stroke-[3]"
-              onClick={() => select(node)}
-              onDoubleClick={() => open(node)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  select(node);
-                }
-              }}
-            >
-              <rect
-                width="230"
-                height="64"
-                rx="10"
-                fill={
-                  selected?.id === node.id
-                    ? "var(--sensa-surface-selected)"
-                    : node.kind === "expression"
-                      ? "var(--sensa-accent-soft)"
-                      : "var(--sensa-surface-panel)"
-                }
-                stroke={selected?.id === node.id ? "var(--sensa-focus)" : "var(--sensa-border-strong)"}
-                strokeWidth={selected?.id === node.id ? 2 : 1}
-              />
-              <text x="14" y="20" fill="var(--sensa-fg-tertiary)" fontSize="10">
-                {t(`content.graph.${node.kind}`)}
-              </text>
-              <text x="14" y="44" fill="var(--sensa-fg-primary)" fontSize="13">
-                {node.label.length > 25
-                  ? `${node.label.slice(0, 24)}…`
-                  : node.label}
-              </text>
-              <title>{node.label}</title>
-            </g>
-          ))}
-        </g>
-      </svg>
-      <footer className="flex min-h-20 items-center justify-between gap-4 border-t border-border-subtle px-5 py-4">
-        <p className="min-w-0 text-sm leading-6 text-fg-secondary">
-          {selected?.label ?? t("content.graph.hint")}
-        </p>
-        {selected && (
-          <button
-            onClick={() => open(selected)}
-            className="flex min-h-11 shrink-0 items-center gap-2 rounded-control px-3 text-sm text-action-primary focus-visible:outline-2 focus-visible:outline-focus"
-          >
-            {t("content.graph.open")}
-            <ArrowUpRight size={16} />
-          </button>
-        )}
-      </footer>
-    </section>
-  );
+export function MeaningGraphView({items,languages=[],screenId,selectedExpressionId,onSelectExpression,onOpenMeaning,learningState,searching=false}:{
+ items:readonly JourneyWorldItemView[];languages?:readonly string[];screenId:string;
+ selectedExpressionId:string|null;onSelectExpression:(id:string|null)=>void;
+ onOpenMeaning:(id:string,focusId?:string)=>void;
+ learningState?:(bindingVersionId:string)=>ReactNode;
+ searching?:boolean;
+}){
+ const {t}=useTranslation();
+ const graph=useMemo(()=>buildMeaningGraph(items,languages),[items,JSON.stringify(languages)]);
+ const [camera,setCamera]=useScreenState(`${screenId}:graph-camera`,{x:24,y:24,zoom:1});
+ const [labels,setLabels]=useScreenState<'auto'|'all'|'selected'>(`${screenId}:graph-labels`,'auto');
+ const [initialized,setInitialized]=useScreenState(`${screenId}:graph-initialized`,false);
+ const [narrow,setNarrow]=useState(()=>window.matchMedia('(max-width: 48rem)').matches);
+ const [hover,setHover]=useState<string|null>(null),[ownerIndex,setOwnerIndex]=useState(0);
+ const [size,setSize]=useState({width:1000,height:560}),[measured,setMeasured]=useState(false);
+ const svg=useRef<SVGSVGElement>(null),surface=useRef<HTMLDivElement>(null);
+ const drag=useRef<{x:number;y:number;originX:number;originY:number}|null>(null);
+ const byId=useMemo(()=>new Map(graph.nodes.map(node=>[node.id,node])),[graph]);
+ const selected=byId.get(selectedExpressionId??''),highlight=byId.get(hover??'')??selected;
+ const adjacent=new Set(graph.edges.filter(edge=>edge.from===highlight?.id||edge.to===highlight?.id).flatMap(edge=>[edge.from,edge.to]));
+ const association=selected?.associations[Math.min(ownerIndex,(selected?.associations.length??1)-1)];
+ const fit=()=>{const zoom=Math.min(1.2,(size.width-60)/graph.width,(size.height-80)/graph.height);setCamera({x:(size.width-graph.width*zoom)/2+25,y:(size.height-graph.height*zoom)/2+20,zoom:Math.max(.04,zoom)});};
+ const zoomBy=(factor:number)=>setCamera(current=>{const zoom=Math.max(.04,Math.min(3,current.zoom*factor));return {x:size.width/2-(size.width/2-current.x)*zoom/current.zoom,y:size.height/2-(size.height/2-current.y)*zoom/current.zoom,zoom};});
+ useEffect(()=>{const element=surface.current;if(!element)return;const observer=new ResizeObserver(entries=>{const rect=entries[0]?.contentRect;if(rect){setSize({width:Math.max(1,rect.width),height:Math.max(1,rect.height)});setMeasured(true);}});observer.observe(element);return()=>observer.disconnect();},[]);
+ useEffect(()=>{if(measured&&!initialized){fit();setInitialized(true);}},[measured,initialized,size.width,size.height]);
+ useEffect(()=>{const element=svg.current;if(!element)return;const wheel=(event:WheelEvent)=>{event.preventDefault();zoomBy(event.deltaY>0?.9:1.1);};element.addEventListener('wheel',wheel,{passive:false});return()=>element.removeEventListener('wheel',wheel);},[size.width,size.height]);
+ useEffect(()=>{setOwnerIndex(0);},[selectedExpressionId]);
+ const close=()=>{const id=selectedExpressionId;onSelectExpression(null);setHover(null);requestAnimationFrame(()=>{if(id)svg.current?.querySelector<SVGGElement>(`[data-expression-id="${id}"]`)?.focus();});};
+ const control='inline-flex min-h-11 min-w-11 items-center justify-center rounded-control px-2 text-sm hover:bg-surface-selected focus-visible:outline-2 focus-visible:outline-focus';
+ useEffect(()=>{const media=window.matchMedia('(max-width: 48rem)'),update=()=>setNarrow(media.matches);media.addEventListener('change',update);return()=>media.removeEventListener('change',update);},[]);
+ const sources=(association?.item.detail.capturedSources??[]).filter(source=>source.source!==null);
+ const detailContent=selected&&association?<>
+    <header className="flex items-start justify-between gap-2"><div className="min-w-0"><h2 className="break-words text-xl font-medium">{selected.label}</h2><p className="mt-1 text-xs text-fg-secondary">{selected.languageTag} · {selected.id.slice(0,8)}</p></div>{!narrow&&<button type="button" className={control} onClick={close} aria-label={t('content.close')}><X size={18}/></button>}</header>
+    {selected.associations.length>1&&<label className="block text-sm">{t('content.graph.sense')}<select className="mt-2 min-h-11 w-full rounded-control border border-border-subtle bg-surface-panel p-2" value={Math.min(ownerIndex,selected.associations.length-1)} onChange={event=>setOwnerIndex(Number(event.target.value))}>{selected.associations.map((row,index)=><option key={`${row.item.personalMeaningId}:${row.alignment.personalMeaningAlignmentId}:${row.bindingVersionId}`} value={index}>{row.alignment.coreMeaningFocus} · {row.item.shortId}</option>)}</select></label>}
+    <section><h3 className="text-xs text-fg-secondary">{t('content.graph.sense')}</h3><p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6">{association.alignment.coreMeaningFocus}</p></section>
+    <section><h3 className="text-xs text-fg-secondary">{t('content.graph.context')}</h3>{association.item.detail.materialBlocks.filter(block=>block.bodyText).map(block=><p key={block.anchorId} className="mt-2 whitespace-pre-wrap break-words text-sm leading-6">{block.bodyText}</p>)}</section>
+    <section><h3 className="text-xs text-fg-secondary">{t('content.worldSource')}</h3>{sources.length?sources.map(source=>{const url=intakeSourceUrl(source.source!);return <details key={source.anchorId} className="mt-2 text-sm"><summary className="min-h-11 cursor-pointer break-words">{intakeSourceLabel(source.source!)}</summary>{source.text&&<p className="whitespace-pre-wrap break-words leading-6">{source.text}</p>}{url&&<a href={url} target="_blank" rel="noreferrer" className="mt-2 inline-flex min-h-11 items-center underline">{localFlowText('viewSource')}</a>}</details>}):<p className="mt-2 text-sm">{t('content.worldNoSource')}</p>}</section>
+    {learningState&&<section>{learningState(association.bindingVersionId)}</section>}
+    <section><h3 className="text-xs text-fg-secondary">{t('content.worldRelated')}</h3>{graph.edges.filter(edge=>edge.from===selected.id||edge.to===selected.id).map(edge=>{const other=byId.get(edge.from===selected.id?edge.to:edge.from)!;return <button type="button" key={other.id} className="mt-2 min-h-11 w-full rounded-control border border-border-subtle p-2 text-left text-sm" onClick={()=>onSelectExpression(other.id)}><b>{other.label}</b> · {other.languageTag}<span className="block text-xs">{edge.facts.map(fact=>t(`content.${fact.kind==='sense'?'worldSharedSense':'worldSharedMeaning'}`)).join(' · ')}</span></button>;})}{!graph.edges.some(edge=>edge.from===selected.id||edge.to===selected.id)&&<p className="mt-2 text-sm">{t('content.worldIsolated')}</p>}</section>
+    <button type="button" className={`${control} w-full bg-action-primary text-action-on-primary`} onClick={()=>onOpenMeaning(association.item.personalMeaningId,association.focusId)}>{t('content.graph.open')}<ArrowUpRight size={16}/></button>
+   </>:null;
+ return <section className="sensa-meaning-graph overflow-hidden rounded-card border border-border-subtle bg-surface-panel" aria-label={t('content.graph.title')} onKeyDown={event=>{if(event.key==='Escape'&&selectedExpressionId){event.stopPropagation();close();}}}>
+  <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border-subtle p-2">
+   <p className="max-w-lg text-xs text-fg-secondary">{t('content.worldGraphHint')}</p>
+   <div className="flex flex-wrap items-center gap-1">
+    <label className="flex items-center gap-2 text-xs">{t('content.worldLabels')}<select value={labels} onChange={event=>setLabels(event.target.value as typeof labels)} className="min-h-11 rounded-control border border-border-subtle bg-surface-panel px-2">
+     {(['auto','all','selected'] as const).map(value=><option key={value} value={value}>{t(`content.${value==='auto'?'worldLabelAuto':value==='all'?'worldLabelAll':'worldLabelSelected'}`)}</option>)}
+    </select></label>
+    <button type="button" className={control} onClick={()=>zoomBy(.8)} aria-label={t('content.graph.zoomOut')}><Minus size={16}/></button>
+    <output className="w-12 text-center text-xs tabular-nums" aria-label={t('content.graph.zoomIn')}>{Math.round(camera.zoom*100)}%</output>
+    <button type="button" className={control} onClick={()=>zoomBy(1.25)} aria-label={t('content.graph.zoomIn')}><Plus size={16}/></button>
+    <button type="button" className={control} onClick={fit} aria-label={t('content.graph.fit')}><Maximize size={16}/></button>
+   </div>
+  </header>
+  <div className="sensa-expression-graph-workspace">
+   <div ref={surface} className="sensa-expression-graph-surface relative min-w-0 bg-surface-canvas">
+    <svg ref={svg} viewBox={`0 0 ${size.width} ${size.height}`} className="h-full w-full touch-none select-none" aria-label={t('content.graph.canvas')} data-graph-camera={JSON.stringify(camera)}
+     onPointerDown={event=>{if((event.target as Element).closest('[data-expression-id]'))return;event.currentTarget.setPointerCapture(event.pointerId);drag.current={x:event.clientX,y:event.clientY,originX:camera.x,originY:camera.y};}}
+     onPointerMove={event=>{const start=drag.current;if(start)setCamera(current=>({...current,x:start.originX+event.clientX-start.x,y:start.originY+event.clientY-start.y}));}}
+     onPointerUp={()=>{drag.current=null;}} onPointerCancel={()=>{drag.current=null;}}>
+     <g transform={`translate(${camera.x} ${camera.y}) scale(${camera.zoom})`}>
+      {graph.edges.map(edge=>{const a=byId.get(edge.from)!,b=byId.get(edge.to)!,active=highlight&&(edge.from===highlight.id||edge.to===highlight.id);return <line key={`${edge.from}:${edge.to}`} data-graph-edge={`${edge.from}:${edge.to}`} data-relation-facts={JSON.stringify(edge.facts)} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={active?'var(--sensa-fg-primary)':'var(--sensa-border-strong)'} strokeWidth={active?2.5:1} vectorEffect="non-scaling-stroke"/>;})}
+      {graph.nodes.map(node=>{const active=node.id===selected?.id||node.id===highlight?.id,related=adjacent.has(node.id),showLabel=active||searching||labels==='all'||labels==='auto'&&camera.zoom>=.65;return <g key={node.id} data-expression-id={node.id} transform={`translate(${node.x} ${node.y})`} role="button" tabIndex={0} aria-label={`${node.label} · ${node.languageTag} · ${node.associations[0]?.alignment.coreMeaningFocus??''}`} aria-pressed={selected?.id===node.id}
+       className="sensa-expression-point cursor-pointer outline-none" onClick={()=>onSelectExpression(node.id)} onFocus={()=>setHover(node.id)} onBlur={()=>setHover(null)} onPointerEnter={event=>{if(event.pointerType!=='touch')setHover(node.id);}} onPointerLeave={()=>setHover(null)} onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();onSelectExpression(node.id);}}}>
+       <circle r={22/camera.zoom} fill="transparent"/>
+       <circle className="sensa-expression-dot" r={(active?9:related?7:5)/camera.zoom} fill={active?'var(--sensa-action-primary)':'var(--sensa-fg-secondary)'} stroke="var(--sensa-surface-canvas)" strokeWidth={2/camera.zoom}/>
+       {active&&<circle r={13/camera.zoom} fill="none" stroke="var(--sensa-fg-primary)" strokeWidth={1.5/camera.zoom}/>}
+       {showLabel&&<text x={15/camera.zoom} y={4/camera.zoom} fontSize={12/camera.zoom} fill="var(--sensa-fg-primary)" paintOrder="stroke" stroke="var(--sensa-surface-canvas)" strokeWidth={4/camera.zoom}>{node.label.length>22?`${node.label.slice(0,21)}…`:node.label}</text>}
+      </g>;})}
+     </g>
+    </svg>
+    {highlight&&<div className="pointer-events-none absolute left-3 top-3 max-w-[calc(100%-1.5rem)] rounded-control border border-border-strong bg-surface-panel p-3 shadow-raised" role="status" data-graph-preview>
+     <strong className="block break-words">{highlight.label}</strong><span className="text-xs">{highlight.languageTag} · {highlight.id.slice(0,8)}</span><p className="mt-1 line-clamp-2 break-words text-sm">{highlight.associations[0]?.alignment.coreMeaningFocus}</p>
+    </div>}
+   </div>
+   {detailContent&&(narrow?<ContentDrawer title={t('content.worldPreview')} onClose={close}><div className="space-y-5">{detailContent}</div></ContentDrawer>:<aside className="sensa-expression-graph-detail space-y-5 border-l border-border-subtle bg-surface-panel p-4" aria-label={t('content.worldPreview')}>{detailContent}</aside>)}
+  </div>
+ </section>;
 }

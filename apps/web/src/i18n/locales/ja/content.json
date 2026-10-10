@@ -142,7 +142,27 @@
       "forming": "形成中",
       "established": "定着済み",
       "reinforce": "強化が必要"
-    }
+    },
+    "worldAllLanguages": "すべての言語",
+    "worldCounts": "表現 {{expressions}} 件 · 重複を除く意味 {{meanings}} 件",
+    "worldCurrentRoute": "現在の学習ルート",
+    "worldGraphHint": "点は保存した表現です。線は共有する確定済みの意味や個人的な意味を示します。距離に意味的な近さはありません。",
+    "worldIsolated": "記録されたつながりはありません",
+    "worldLabelAll": "すべて",
+    "worldLabelAuto": "自動",
+    "worldLabelSelected": "選択のみ",
+    "worldLabels": "ラベル",
+    "worldLanguage": "表現の言語",
+    "worldNoSource": "外部の出典は記録されていません",
+    "worldNotAdded": "このルートには未追加",
+    "worldOther": "この意味の他言語の表現",
+    "worldPreview": "表現のプレビュー",
+    "worldRelated": "線で結ばれた表現",
+    "worldRemoved": "学習から削除済み",
+    "worldSharedMeaning": "同じ個人的な意味",
+    "worldSharedSense": "共有する確定済みの意味",
+    "worldSource": "元の出典",
+    "worldBatchEmpty": "現在の絞り込みには、{{language}} の学習ルートに追加できる表現がありません。"
   },
   "composer": {
     "title": "文脈を記録",

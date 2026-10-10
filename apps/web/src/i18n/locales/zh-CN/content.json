@@ -142,7 +142,27 @@
       "forming": "正在建立",
       "established": "已建立",
       "reinforce": "待巩固"
-    }
+    },
+    "worldAllLanguages": "全部语言",
+    "worldCounts": "{{expressions}} 个表达 · {{meanings}} 个去重意义",
+    "worldCurrentRoute": "当前学习路线",
+    "worldGraphHint": "每个点是一个已保存表达。连线来自共同的已确认意义或个人意义；距离不表示语义接近。",
+    "worldIsolated": "没有已记录的连线",
+    "worldLabelAll": "全部",
+    "worldLabelAuto": "自动",
+    "worldLabelSelected": "仅选中",
+    "worldLabels": "标签",
+    "worldLanguage": "表达语言",
+    "worldNoSource": "没有记录外部来源",
+    "worldNotAdded": "尚未加入此路线",
+    "worldOther": "此意义的其他语言表达",
+    "worldPreview": "表达预览",
+    "worldRelated": "有连线的表达",
+    "worldRemoved": "已移出学习安排",
+    "worldSharedMeaning": "同一个个人意义",
+    "worldSharedSense": "共同的已确认意义",
+    "worldSource": "原始来源",
+    "worldBatchEmpty": "当前筛选中，没有可加入 {{language}} 学习路线的表达。"
   },
   "composer": {
     "title": "记录场景",

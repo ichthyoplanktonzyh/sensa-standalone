@@ -13,14 +13,14 @@ import {SensaPagedVirtualList,SensaVirtualList} from '../ui/SensaVirtualList';
 import {isBatchTaskReady} from './personalLearningBatch';
 const noChoices:ReadonlyMap<string,WorldLearningChoice>=new Map();
 
-export function BatchPersonalLearning({items,query,c,children}:{items:JourneyWorldItemView[];query?:Pick<WorldBrowseQuery,'query'|'filter'>;c:ReturnType<typeof usePersonalLearning>;children:ReactNode}){
+export function BatchPersonalLearning({items,query,c,children}:{items:JourneyWorldItemView[];query?:Pick<WorldBrowseQuery,'query'|'filter'|'expressionLanguages'|'referenceFilter'>;c:ReturnType<typeof usePersonalLearning>;children:ReactNode}){
  const {t}=useTranslation();
  const [selecting,setSelecting]=useState(false),[selections,setSelections]=useState<ReadonlyMap<string,ReadonlyMap<string,WorldLearningChoice>>>(new Map()),[confirming,setConfirming]=useState(false),[useContext,setUseContext]=useState(false);
  const selectionKey=JSON.stringify([c.languageContext.languageRouteId,c.languageContext.targetLanguageTag]),selected=selections.get(selectionKey)??noChoices;
  const setSelected=(update:ReadonlyMap<string,WorldLearningChoice>|((prior:ReadonlyMap<string,WorldLearningChoice>)=>ReadonlyMap<string,WorldLearningChoice>))=>setSelections(scopes=>{const next=new Map(scopes),prior=scopes.get(selectionKey)??noChoices;next.set(selectionKey,typeof update==='function'?update(prior):update);return next;});
  const [selectingAll,setSelectingAll]=useState(false),[selectionNotice,setSelectionNotice]=useState('');
  const collection=useRef<AbortController|null>(null);
- const choiceQuery={query:query?.query??'',filter:query?.filter??'all',targetLanguageTag:c.languageContext.targetLanguageTag};
+ const choiceQuery={query:query?.query??'',filter:query?.filter??'all',targetLanguageTag:c.languageContext.targetLanguageTag,expressionLanguages:query?.expressionLanguages,referenceFilter:query?.referenceFilter};
  const window=useWorldLearningChoices(choiceQuery,!!query&&selecting);
  // Graph/explicit full-read callers already own their items; ordinary list
  // selection always uses compact indexed windows, never the command gateway.
@@ -30,7 +30,7 @@ export function BatchPersonalLearning({items,query,c,children}:{items:JourneyWor
  const routeKey=JSON.stringify(c.languageContext);
  const confirmationRoute=useRef(routeKey);
  useEffect(()=>{setConfirming(false);setUseContext(false);},[routeKey]);
- useEffect(()=>()=>{collection.current?.abort();},[query?.query,query?.filter,routeKey,selecting]);
+ useEffect(()=>()=>{collection.current?.abort();},[query?.query,query?.filter,query?.referenceFilter,JSON.stringify(query?.expressionLanguages??[]),routeKey,selecting]);
  const selectAll=async()=>{
   if(selectingAll)return;
   const controller=new AbortController();collection.current=controller;setSelectingAll(true);setSelectionNotice('');
@@ -71,6 +71,6 @@ export function BatchPersonalLearning({items,query,c,children}:{items:JourneyWor
    <div className="my-3 flex flex-wrap gap-3">{c.batch.busy?<button className={setupButton} onClick={c.stopBatch}>{localFlowText('stopPreparation')}</button>:<>{!!c.batch.counts.failed&&<button className={setupPrimary} disabled={c.busy} onClick={()=>void c.retryBatch('failed')}>{localFlowText('batchRetry')}</button>}{!!c.batch.counts.waiting&&<button className={setupButton} disabled={c.busy} onClick={()=>void c.retryBatch('waiting')}>{localFlowText('batchResume')}</button>}</>}</div>
    <details><summary className="cursor-pointer">{localFlowText('batchProgress')}</summary><SensaPagedVirtualList count={c.batch.count} itemAt={c.batchRowAt} indexForKey={c.batchIndexForKey} itemKey={row=>row.choice.key} label={localFlowText('batchProgress')} estimateSize={88} renderItem={row=><div className="flex flex-wrap justify-between gap-2 py-2"><span>{row.choice.label}</span><span>{localFlowText(row.status==='ready'?'batchReady':row.status==='working'?'batchWorking':row.status==='failed'?'batchFailed':'batchWaiting')}{row.notice&&<span className="block text-sm">{localFlowNotice(row.notice)}</span>}</span></div>}/></details>
   </section>}
-  {selecting&&query?window.status.loading?<p role="status" aria-busy="true">{localFlowText('loadingSensa')}</p>:!window.status.ok?<div role="alert"><p>{window.status.error}</p><button className={setupButton} onClick={window.reload}>{localFlowText('retryPreparation')}</button></div>:!window.total?<p role="status" className="py-12 text-center text-sm text-fg-secondary">{t('content.noResults')}</p>:<SensaPagedVirtualList count={window.total} itemAt={index=>window.items.get(index)} itemKey={choice=>choice.key} indexForKey={key=>[...window.items].find(([,choice])=>choice.key===key)?.[0]??-1} request={window.request} label={localFlowText('batchSelect')} estimateSize={88} renderItem={renderChoice}/>:selecting?<SensaVirtualList items={fallback} itemKey={choice=>choice.key} label={localFlowText('batchSelect')} estimateSize={88} renderItem={renderChoice}/>:children}
+  {selecting&&query?window.status.loading?<p role="status" aria-busy="true">{localFlowText('loadingSensa')}</p>:!window.status.ok?<div role="alert"><p>{window.status.error}</p><button className={setupButton} onClick={window.reload}>{localFlowText('retryPreparation')}</button></div>:!window.total?<p role="status" className="py-12 text-center text-sm text-fg-secondary">{query.expressionLanguages?.length?t('content.worldBatchEmpty',{language:c.languageContext.targetLanguageTag}):t('content.noResults')}</p>:<SensaPagedVirtualList count={window.total} itemAt={index=>window.items.get(index)} itemKey={choice=>choice.key} indexForKey={key=>[...window.items].find(([,choice])=>choice.key===key)?.[0]??-1} request={window.request} label={localFlowText('batchSelect')} estimateSize={88} renderItem={renderChoice}/>:selecting?<SensaVirtualList items={fallback} itemKey={choice=>choice.key} label={localFlowText('batchSelect')} estimateSize={88} renderItem={renderChoice}/>:children}
  </div>;
 }

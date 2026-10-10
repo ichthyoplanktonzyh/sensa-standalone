@@ -142,7 +142,27 @@
       "forming": "Forming",
       "established": "Established",
       "reinforce": "Needs reinforcement"
-    }
+    },
+    "worldAllLanguages": "All languages",
+    "worldCounts": "{{expressions}} expressions · {{meanings}} distinct meanings",
+    "worldCurrentRoute": "Current learning route",
+    "worldGraphHint": "Points are saved expressions. Lines show shared accepted meanings or contexts; distance has no semantic meaning.",
+    "worldIsolated": "No recorded connection",
+    "worldLabelAll": "All",
+    "worldLabelAuto": "Automatic",
+    "worldLabelSelected": "Selected",
+    "worldLabels": "Labels",
+    "worldLanguage": "Expression language",
+    "worldNoSource": "No recorded external source",
+    "worldNotAdded": "Not added on this route",
+    "worldOther": "Other expressions in this meaning",
+    "worldPreview": "Expression preview",
+    "worldRelated": "Connected expressions",
+    "worldRemoved": "Removed from learning",
+    "worldSharedMeaning": "Shared personal Meaning",
+    "worldSharedSense": "Shared confirmed Sense",
+    "worldSource": "Original source",
+    "worldBatchEmpty": "No expressions in these filters can be added to the current {{language}} learning route."
   },
   "composer": {
     "title": "Capture a context",

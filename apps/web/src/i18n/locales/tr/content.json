@@ -142,7 +142,27 @@
       "forming": "Oluşuyor",
       "established": "Yerleşti",
       "reinforce": "Pekiştirme gerekiyor"
-    }
+    },
+    "worldAllLanguages": "Tüm diller",
+    "worldCounts": "{{expressions}} ifade · {{meanings}} ayrı anlam",
+    "worldCurrentRoute": "Geçerli öğrenme rotası",
+    "worldGraphHint": "Noktalar kaydedilen ifadelerdir. Çizgiler ortak onaylanmış veya kişisel anlamları gösterir. Mesafe anlamsal yakınlık göstermez.",
+    "worldIsolated": "Kayıtlı bağlantı yok",
+    "worldLabelAll": "Tümü",
+    "worldLabelAuto": "Otomatik",
+    "worldLabelSelected": "Seçilenler",
+    "worldLabels": "Etiketler",
+    "worldLanguage": "İfadenin dili",
+    "worldNoSource": "Kayıtlı dış kaynak yok",
+    "worldNotAdded": "Bu rotaya eklenmedi",
+    "worldOther": "Bu anlamın diğer ifadeleri",
+    "worldPreview": "İfade önizlemesi",
+    "worldRelated": "Bağlantılı ifadeler",
+    "worldRemoved": "Öğrenmeden çıkarıldı",
+    "worldSharedMeaning": "Ortak kişisel anlam",
+    "worldSharedSense": "Ortak onaylanmış anlam",
+    "worldSource": "Özgün kaynak",
+    "worldBatchEmpty": "Bu filtrelerde geçerli {{language}} öğrenme rotasına eklenebilecek ifade yok."
   },
   "composer": {
     "title": "Bir bağlam kaydet",
