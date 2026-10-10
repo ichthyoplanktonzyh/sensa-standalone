@@ -501,6 +501,18 @@
     "deletePending": "O acesso à conta foi interrompido. O serviço de identidade ainda está processando a exclusão. Tente novamente mais tarde para concluí-la.",
     "deleteUnavailable": "A exclusão por autoatendimento não está disponível para esta conta. Entre em contato com o suporte.",
     "modelInputLarge": "Esta solicitação é longa demais. Encurte o material ou inicie uma nova conversa de esclarecimento e tente novamente.",
-    "storageFull": "O armazenamento do navegador está cheio. Esta operação não foi salva. Libere espaço no dispositivo e tente novamente; evite apagar os dados deste site, que contêm seu conteúdo de aprendizagem."
+    "storageFull": "O armazenamento do navegador está cheio. Esta operação não foi salva. Libere espaço no dispositivo e tente novamente; evite apagar os dados deste site, que contêm seu conteúdo de aprendizagem.",
+    "catalogSort": "Ordenação",
+    "catalogSortTitle": "Título",
+    "catalogSortNewest": "Lançamento mais recente",
+    "catalogPageSize": "Itens por página",
+    "catalogPagination": "Páginas do catálogo",
+    "catalogPreviousPage": "Página anterior",
+    "catalogNextPage": "Próxima página",
+    "catalogPage": "Página {{page}}",
+    "catalogResultRange": "{{start}}–{{end}} de {{total}} itens",
+    "catalogView": "Visualização",
+    "catalogCards": "Cartões",
+    "catalogList": "Lista compacta"
   }
 }

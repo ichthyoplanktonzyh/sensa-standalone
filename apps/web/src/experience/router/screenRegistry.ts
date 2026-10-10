@@ -12,6 +12,12 @@ export const SHELL_PARAM_KEYS = [
   'publicationArchiveSha256',
   'worldAction',
   'enrollmentId',
+  'query',
+  'route',
+  'sort',
+  'page',
+  'pageSize',
+  'view',
 ] as const;
 
 export type ShellParamKey = (typeof SHELL_PARAM_KEYS)[number];
@@ -34,7 +40,7 @@ type ShellScreenDefinition = Readonly<{
  */
 export const SHELL_SCREEN_DEFINITIONS = [
   { id: 's-academy', host: 'practice' },
-  { id: 's-catalog', host: 'learning' },
+  { id: 's-catalog', host: 'learning', params: ['query','route','sort','page','pageSize','view'] },
   { id: 's-catalog-book', host: 'learning', params: ['bookKey'], instance: { params: ['bookKey'] } },
   { id: 's-confirmed-sense', host: 'learning', params: ['meaningId', 'focusId'], instance: { params: ['meaningId', 'focusId'] } },
   { id: 's-content', host: 'learning', params: ['worldAction'] },

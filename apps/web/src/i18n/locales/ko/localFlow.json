@@ -499,6 +499,18 @@
     "deletePending": "계정 접근이 중단되었습니다. ID 서비스에서 삭제를 처리하고 있습니다. 나중에 다시 시도해 완료하세요.",
     "deleteUnavailable": "이 계정에서는 셀프 서비스 삭제를 사용할 수 없습니다. 지원팀에 문의하세요.",
     "modelInputLarge": "요청이 너무 깁니다. 자료를 줄이거나 새 명확화 대화를 시작한 뒤 다시 시도하세요.",
-    "storageFull": "브라우저 저장 공간이 가득 찼습니다. 작업을 저장하지 않았습니다. 기기 공간을 확보한 뒤 재시도하세요. 학습 콘텐츠가 있는 이 사이트 데이터는 삭제하지 마세요."
+    "storageFull": "브라우저 저장 공간이 가득 찼습니다. 작업을 저장하지 않았습니다. 기기 공간을 확보한 뒤 재시도하세요. 학습 콘텐츠가 있는 이 사이트 데이터는 삭제하지 마세요.",
+    "catalogSort": "정렬",
+    "catalogSortTitle": "제목",
+    "catalogSortNewest": "최근 출시",
+    "catalogPageSize": "페이지당 항목 수",
+    "catalogPagination": "카탈로그 페이지",
+    "catalogPreviousPage": "이전 페이지",
+    "catalogNextPage": "다음 페이지",
+    "catalogPage": "{{page}}페이지",
+    "catalogResultRange": "총 {{total}}개 중 {{start}}–{{end}}개",
+    "catalogView": "보기 방식",
+    "catalogCards": "카드",
+    "catalogList": "간결한 목록"
   }
 }

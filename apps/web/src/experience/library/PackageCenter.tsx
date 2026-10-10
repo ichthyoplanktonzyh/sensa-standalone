@@ -13,7 +13,7 @@ import {
  ShieldCheck,
  Upload,
 } from 'lucide-react';
-import {useMemo,useRef,useState} from 'react';
+import {useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import {useTranslation} from 'react-i18next';
 
 import {localFlowNotice,localFlowText} from '../../i18n/localFlowText';
@@ -32,15 +32,11 @@ import {
  type PackageCenterItem,
 } from './packageCenterProjection';
 import type {ContentSupplyInstallationPhase} from '../../contentSupply/system';
+import type {ShellParams} from '../router/screenRegistry';
+import {browseCatalog,catalogBrowsingParams,parseCatalogBrowsing,type CatalogBrowsing} from './packageCatalogBrowsing';
+import {CatalogPagination,PackageCards,PackageRoute,PackageStatus,packageItemState as itemState} from './PackageCenterParts';
 
 type Controller=ReturnType<typeof usePackageLearning>;
-
-const itemState=(item:PackageCenterItem)=>localFlowText(
- item.updateDownloaded?'packageUpdateDownloaded'
-  :item.updateAvailable?'packageUpdateAvailable'
-   :item.enrolled?'enrolled'
-    :item.installed.length?'downloaded':'packageNotDownloaded',
-);
 
 const routeNames=(items:readonly PackageCenterItem[],locale:InterfaceLocale)=>new Map(
  [...new Set(items.flatMap(item=>[item.targetLanguage,item.supportLanguage]))]
@@ -59,7 +55,7 @@ function CenterNavigation({current,onCatalog,onLibrary,onPublisher}:{
   {id:'library' as const,label:localFlowText('packageCenterLibrary'),icon:LibraryBig,action:onLibrary},
   ...(publisherAccess?[{id:'publisher' as const,label:localFlowText('packageCenterPublisher'),icon:ShieldCheck,action:onPublisher}]:[]),
  ];
- return <nav aria-label={localFlowText('packageCatalogTitle')} className="mb-8 flex flex-wrap gap-2">
+ return <nav aria-label={localFlowText('packageCatalogTitle')} className="mb-5 flex flex-wrap gap-2">
   {items.map(({id,label,icon:Icon,action})=><button
    key={id}
    type="button"
@@ -68,27 +64,6 @@ function CenterNavigation({current,onCatalog,onLibrary,onPublisher}:{
    onClick={action}
   ><Icon size={17}/>{label}</button>)}
  </nav>;
-}
-
-function PackageCards({items,onOpen,emptyKey,loaded}:{
- items:readonly PackageCenterItem[];
- onOpen:(item:PackageCenterItem)=>void;
- emptyKey:'packageEmpty'|'packageNoResults';
- loaded:boolean;
-}){
- const {t,i18n}=useTranslation();
- const locale=resolveInterfaceLocale(i18n.resolvedLanguage??i18n.language);
- const names=useMemo(()=>routeNames(items,locale),[items,locale]);
- return <>
-  <ul className="grid gap-4 sm:grid-cols-2">{items.map(item=><li key={item.listKey}>
-   <button onClick={()=>onOpen(item)} className="group flex h-full w-full flex-col gap-5 rounded-2xl border border-border-strong bg-surface-panel p-6 text-left transition-colors hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus">
-    <div className="flex w-full items-center justify-between gap-4"><BookOpen size={24} className="text-action-primary" aria-hidden="true"/>{loaded?<span className="rounded-lg bg-accent-soft px-3 py-1 text-xs text-action-primary">{itemState(item)}</span>:<span role="status" aria-label={t('reliability.loading')} className="h-6 w-20 animate-pulse rounded-lg bg-surface-subtle"/>}</div>
-    <div className="min-w-0 w-full flex-1"><h2 className="break-words text-xl font-medium">{item.title}</h2>{item.description&&<p className="mt-3 line-clamp-3 text-sm leading-6 text-fg-secondary">{item.description}</p>}</div>
-    <div className="flex w-full flex-wrap items-center justify-between gap-3 text-sm text-fg-secondary"><span>{names.get(item.targetLanguage)} / {names.get(item.supportLanguage)}</span><span>{localFlowText('packageExpressionCount',{count:item.count})}</span><ArrowRight size={18} aria-hidden="true"/></div>
-   </button>
-  </li>)}</ul>
-  {!items.length&&(loaded?<div role="status" className="rounded-2xl border border-dashed border-border-strong px-6 py-12 text-center"><BookOpen size={32} className="mx-auto mb-4 text-fg-tertiary" aria-hidden="true"/><h2 className="text-lg font-medium">{localFlowText(emptyKey)}</h2></div>:<div role="status" aria-label={t('reliability.loading')} className="h-32 animate-pulse rounded-2xl bg-surface-subtle"/>)}
- </>;
 }
 
 function PackageDetail({active,item,c,onBack,onLearning,onTarget,screenId='s-catalog-book',referenceOnly=false}:{
@@ -186,53 +161,76 @@ function PackageDetail({active,item,c,onBack,onLearning,onTarget,screenId='s-cat
  </LearningSetupFrame>;
 }
 
-export function PackageCatalogScreen({active,c,onBack,onOpenBook,onLibrary,onPublisher}:{
- active:boolean;c:Controller;onBack:()=>void;onOpenBook:(bookKey:string)=>void;onLibrary:()=>void;onPublisher:()=>void;
+export function PackageCatalogScreen({active,c,params,onParamsChange,onBack,onOpenBook,onLibrary,onPublisher}:{
+ active:boolean;c:Controller;params:ShellParams;onParamsChange:(params:ShellParams)=>void;onBack:()=>void;onOpenBook:(bookKey:string)=>void;onLibrary:()=>void;onPublisher:()=>void;
 }){
  const {t,i18n}=useTranslation();
  const locale=resolveInterfaceLocale(i18n.resolvedLanguage??i18n.language);
- const [query,setQuery]=useScreenState('package-catalog:query','');
- const [targetFilter,setTargetFilter]=useScreenState('package-catalog:target','');
- const [supportFilter,setSupportFilter]=useScreenState('package-catalog:support','');
- const [visibleCount,setVisibleCount]=useState(50);
+ const state=useMemo(()=>parseCatalogBrowsing(params),[params]);
+ const [returnFocus,setReturnFocus]=useScreenState('package-catalog:return-focus','');
+ const collection=useRef<HTMLDivElement>(null),summary=useRef<HTMLParagraphElement>(null);
+ const previousPage=useRef(state.page);
  const projection=useMemo(()=>buildPackageCenterItems(c),[
   c.catalog,c.packages,c.enrollments,
   c.languageContext.targetLanguageTag,c.languageContext.supportLanguageTag,
  ]);
  const items=projection.catalog;
  const names=useMemo(()=>routeNames(items,locale),[items,locale]);
- const normalized=query.trim().toLocaleLowerCase();
- const results=useMemo(()=>items.filter(item=>(!targetFilter||item.targetLanguage===targetFilter)&&(!supportFilter||item.supportLanguage===supportFilter)&&[
-  item.title,item.description,item.targetLanguage,item.supportLanguage,item.descriptor?.publisher.name??'',
-  names.get(item.targetLanguage),names.get(item.supportLanguage),
- ].join(' ').toLocaleLowerCase().includes(normalized)),[items,targetFilter,supportFilter,names,normalized]);
- const visibleItems=useMemo(()=>results.slice(0,visibleCount),[results,visibleCount]);
+ const results=useMemo(()=>browseCatalog(items,state,names,locale),[items,state,names,locale]);
+ const update=(patch:Partial<CatalogBrowsing>,resetPage=false)=>onParamsChange(catalogBrowsingParams({...state,...patch,...(resetPage?{page:1}:{})}));
+ useEffect(()=>{
+  // Clamp only against a verified snapshot, never an initial empty placeholder.
+  if(active&&c.catalogStatus==='ready'&&state.page!==results.page)update({page:results.page});
+ },[active,c.catalogStatus,state.page,results.page]);
+ useLayoutEffect(()=>{
+  if(!active||c.catalogStatus!=='ready')return;
+  if(returnFocus){
+   const button=[...collection.current?.querySelectorAll<HTMLButtonElement>('[data-package-key]')??[]].find(button=>button.dataset.packageKey===returnFocus);
+   (button??summary.current)?.focus({preventScroll:true});
+   setReturnFocus('');
+  }
+  if(previousPage.current!==state.page){summary.current?.scrollIntoView({block:'start'});summary.current?.focus({preventScroll:true});}
+  previousPage.current=state.page;
+ },[active,c.catalogStatus,returnFocus,state.page]);
+ const selectClass='mt-1 min-h-11 w-full min-w-0 rounded-control border border-border-strong bg-surface-panel px-3 text-sm text-fg-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus';
  return <LearningSetupFrame id="s-catalog" active={active} onBack={onBack}>
   <CenterNavigation current="catalog" onCatalog={()=>{}} onLibrary={onLibrary} onPublisher={onPublisher}/>
-  <div className="mb-8 flex flex-wrap items-start justify-between gap-5">
-   <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">{localFlowText('packageCenterCatalog')}</h1>
-   <button className={setupButton} disabled={c.catalogBusy} aria-busy={c.catalogBusy} onClick={()=>void c.reloadCatalog(true)}><RefreshCw size={16}/>{localFlowText(c.catalogBusy?'refreshingCatalog':'packageRefresh')}</button>
+  <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+   <h1 className="text-3xl font-medium tracking-tight">{localFlowText('packageCenterCatalog')}</h1>
+   <button type="button" className={setupButton} disabled={c.catalogBusy} aria-busy={c.catalogBusy} onClick={()=>void c.reloadCatalog(true)}><RefreshCw size={16}/>{localFlowText(c.catalogBusy?'refreshingCatalog':'packageRefresh')}</button>
   </div>
-  {c.notice&&<p role="status" className="mb-6 rounded-xl border border-border-subtle bg-surface-subtle p-4 text-sm leading-6">{localFlowNotice(c.notice)}</p>}
-  <div className="mb-8 flex min-h-14 items-center gap-3 rounded-2xl border border-border-strong bg-surface-panel px-4 focus-within:ring-2 focus-within:ring-focus">
-   <Search size={20} className="shrink-0 text-fg-secondary" aria-hidden="true"/>
-   <input type="search" aria-label={localFlowText('packageSearch')} placeholder={localFlowText('packageSearch')} value={query} onChange={event=>{setQuery(event.target.value);setVisibleCount(50);}} className="min-w-0 flex-1 bg-transparent py-4 text-sm outline-none"/>
-   {query&&<button className={setupButton} onClick={()=>{setQuery('');setVisibleCount(50);}}>{localFlowText('packageClearSearch')}</button>}
+  <div className="mb-4 space-y-3">
+   {c.catalogFailed&&<PackageStatus error onRetry={()=>void c.reloadCatalog(true)}>{localFlowText('catalogFailed')}</PackageStatus>}
+   {c.loadStatus==='unavailable'?<PackageStatus error onRetry={()=>void c.retryInitialLoad()}>{c.notice}</PackageStatus>:c.notice&&<PackageStatus>{localFlowNotice(c.notice)}</PackageStatus>}
   </div>
-  <div className="mb-8 grid gap-4 sm:grid-cols-2">
-   {[
-    {label:localFlowText('catalogTargetLanguage'),value:targetFilter,set:setTargetFilter,tags:items.map(item=>item.targetLanguage)},
-    {label:localFlowText('catalogSupportLanguage'),value:supportFilter,set:setSupportFilter,tags:items.map(item=>item.supportLanguage)},
-   ].map(filter=><label key={filter.label} className="min-w-0 text-sm text-fg-secondary">
-    <span>{filter.label}</span>
-    <select aria-label={filter.label} value={filter.value} onChange={event=>{filter.set(event.target.value);setVisibleCount(50);}} className="mt-2 min-h-11 w-full rounded-control border border-border-strong bg-surface-panel px-3 text-sm focus-visible:outline-2 focus-visible:outline-focus">
-     <option value="">{t('statistics.allLanguages')}</option>
-     {[...new Set(filter.tags.concat(filter.value?[filter.value]:[]))].sort().map(tag=><option key={tag} value={tag}>{names.get(tag)??interfaceLanguageDisplayName(tag,locale)}</option>)}
-    </select>
-   </label>)}
+  <div className="mb-4 rounded-xl border border-border-subtle bg-surface-panel p-3 sm:p-4">
+   <div className="flex min-h-11 items-center gap-2 rounded-control border border-border-strong bg-surface-subtle px-3 focus-within:ring-2 focus-within:ring-focus">
+    <Search size={18} className="shrink-0 text-fg-secondary" aria-hidden="true"/>
+    <input type="search" aria-label={localFlowText('packageSearch')} placeholder={localFlowText('packageSearch')} value={state.query} onChange={event=>update({query:event.target.value},true)} className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none"/>
+    {state.query&&<button type="button" className="min-h-11 shrink-0 rounded-control px-2 text-sm underline focus-visible:outline-2 focus-visible:outline-focus" onClick={()=>update({query:''},true)}>{localFlowText('packageClearSearch')}</button>}
+   </div>
+   <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    {[
+     {label:localFlowText('catalogTargetLanguage'),value:state.target,key:'target' as const,tags:items.map(item=>item.targetLanguage)},
+     {label:localFlowText('catalogSupportLanguage'),value:state.support,key:'support' as const,tags:items.map(item=>item.supportLanguage)},
+    ].map(filter=><label key={filter.key} className="min-w-0 text-sm text-fg-secondary">
+     <span>{filter.label}</span><select aria-label={filter.label} value={filter.value} onChange={event=>update({[filter.key]:event.target.value},true)} className={selectClass}>
+      <option value="">{t('statistics.allLanguages')}</option>
+      {[...new Set(filter.tags.concat(filter.value?[filter.value]:[]))].sort((a,b)=>(names.get(a)??a).localeCompare(names.get(b)??b,locale)).map(tag=><option key={tag} value={tag}>{names.get(tag)??interfaceLanguageDisplayName(tag,locale)}</option>)}
+     </select>
+    </label>)}
+    <label className="min-w-0 text-sm text-fg-secondary">{localFlowText('catalogSort')}<select aria-label={localFlowText('catalogSort')} value={state.sort} onChange={event=>update({sort:event.target.value as CatalogBrowsing['sort']},true)} className={selectClass}><option value="title">{localFlowText('catalogSortTitle')}</option><option value="newest">{localFlowText('catalogSortNewest')}</option></select></label>
+    <label className="min-w-0 text-sm text-fg-secondary">{localFlowText('catalogPageSize')}<select aria-label={localFlowText('catalogPageSize')} value={state.pageSize} onChange={event=>update({pageSize:Number(event.target.value) as CatalogBrowsing['pageSize']},true)} className={selectClass}>{[24,48,96].map(size=><option key={size} value={size}>{size}</option>)}</select></label>
+   </div>
   </div>
-  <PackageCards items={visibleItems} loaded={c.loaded} onOpen={item=>onOpenBook(item.key)} emptyKey={query||targetFilter||supportFilter?'packageNoResults':'packageEmpty'}/>
-  {visibleItems.length<results.length&&<button type="button" className={setupButton+' mt-5'} onClick={()=>setVisibleCount(count=>count+50)}>{t('study.more')}</button>}
+  <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+   <p ref={summary} tabIndex={-1} role="status" aria-live="polite" className="text-sm text-fg-secondary focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus">{c.catalogStatus==='ready'?localFlowText('catalogResultRange',{start:results.start,end:results.end,total:results.total}):t(c.catalogStatus==='unavailable'?'reliability.errorTitle':'reliability.loading')}</p>
+   <div role="group" aria-label={localFlowText('catalogView')} className="flex flex-wrap gap-2">{(['cards','list'] as const).map(view=><button type="button" key={view} aria-pressed={state.view===view} className={`${setupButton} ${state.view===view?'border-action-primary bg-accent-soft text-action-primary':''}`} onClick={()=>update({view})}>{localFlowText(view==='cards'?'catalogCards':'catalogList')}</button>)}</div>
+  </div>
+  <div ref={collection}>
+   {c.catalogStatus==='unavailable'?null:<PackageCards items={c.catalogStatus==='ready'?results.items:[]} loaded={c.catalogStatus==='ready'} view={state.view} onOpen={item=>{setReturnFocus(item.key);onOpenBook(item.key);}} emptyKey={state.query||state.target||state.support?'packageNoResults':'packageEmpty'}/>}
+  </div>
+  {c.catalogStatus==='ready'&&results.total>0&&<CatalogPagination page={results.page} pages={results.pages} onPage={page=>update({page})}/>}
  </LearningSetupFrame>;
 }
 

@@ -36,7 +36,7 @@ export interface ShellNavigation {
   resetMain: () => void;
   returnHome: () => void;
   leaveRuntime: (screenId:string) => void;
-  setMainStack: (stack: readonly string[], params?: ShellParams) => void;
+  setMainStack: (stack: readonly string[], params?: ShellParams, replace?: boolean) => void;
 }
 
 export function useShellNavigation(): ShellNavigation {
@@ -57,21 +57,26 @@ export function useShellNavigation(): ShellNavigation {
    * the one place every stack change goes through.
    */
   const goToStack = useCallback(
-    (stack: readonly string[], nextParams?: ShellParams) => {
+    (stack: readonly string[], nextParams?: ShellParams, replace = false) => {
       const pathParams=retainParamsForStack({...params,...(nextParams??{})},stack);
       const path = buildPathname(stack,pathParams);
       const toSearch = (previous: Record<string, unknown>): Record<string, unknown> => {
         const merged = { ...parseShellParams(previous), ...(nextParams ?? {}) };
         const kept = retainParamsForStack(merged, stack);
         const {bookKey:_pathBookKey,...searchParams}=kept;
+        const encoded:Record<string,unknown>={...searchParams};
+        for(const key of ['page','pageSize'] as const){
+          const value=searchParams[key];
+          if(value&&/^\d+$/u.test(value)&&Number.isSafeInteger(Number(value)))encoded[key]=Number(value);
+        }
         const flow = parseViewMode(previous.flow);
-        return flow === 'main' ? searchParams : { ...searchParams, flow };
+        return flow === 'main' ? encoded : { ...encoded, flow };
       };
       if (path === '/') {
-        navigate({ to: '/', search: toSearch });
+        navigate({ to: '/', search: toSearch, replace });
         return;
       }
-      navigate({ to: '/$', params: { _splat: path.slice(1) }, search: toSearch });
+      navigate({ to: '/$', params: { _splat: path.slice(1) }, search: toSearch, replace });
     },
     [navigate,params],
   );
@@ -115,8 +120,8 @@ export function useShellNavigation(): ShellNavigation {
   }, [goToStack]);
 
   const setMainStack = useCallback(
-    (stack: readonly string[], nextParams?: ShellParams) => {
-      goToStack(stack, nextParams);
+    (stack: readonly string[], nextParams?: ShellParams, replace = false) => {
+      goToStack(stack, nextParams, replace);
     },
     [goToStack],
   );

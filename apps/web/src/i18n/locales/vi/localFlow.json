@@ -499,6 +499,18 @@
     "deletePending": "Quyền truy cập tài khoản đã dừng. Dịch vụ danh tính vẫn đang xử lý yêu cầu xóa. Thử lại sau để hoàn tất.",
     "deleteUnavailable": "Tài khoản này không hỗ trợ tự xóa. Liên hệ hỗ trợ.",
     "modelInputLarge": "Yêu cầu quá dài. Rút ngắn nội dung hoặc bắt đầu cuộc trò chuyện làm rõ mới rồi thử lại.",
-    "storageFull": "Bộ nhớ trình duyệt đã đầy. Thao tác này chưa được lưu. Giải phóng dung lượng rồi thử lại; tránh xóa dữ liệu trang web này vì có nội dung học tập của bạn."
+    "storageFull": "Bộ nhớ trình duyệt đã đầy. Thao tác này chưa được lưu. Giải phóng dung lượng rồi thử lại; tránh xóa dữ liệu trang web này vì có nội dung học tập của bạn.",
+    "catalogSort": "Sắp xếp",
+    "catalogSortTitle": "Tiêu đề",
+    "catalogSortNewest": "Phát hành mới nhất",
+    "catalogPageSize": "Mục mỗi trang",
+    "catalogPagination": "Trang danh mục",
+    "catalogPreviousPage": "Trang trước",
+    "catalogNextPage": "Trang sau",
+    "catalogPage": "Trang {{page}}",
+    "catalogResultRange": "{{start}}–{{end}} trên {{total}} mục",
+    "catalogView": "Kiểu hiển thị",
+    "catalogCards": "Thẻ",
+    "catalogList": "Danh sách gọn"
   }
 }

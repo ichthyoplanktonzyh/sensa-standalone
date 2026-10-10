@@ -100,6 +100,7 @@ export type ContentSupplyQuery =
   | Readonly<{kind:'direct_provisioning_task';enrollmentId:string}>
   | Readonly<{ kind: 'workspace' }>
   | Readonly<{kind:'catalog'}>
+  | Readonly<{kind:'catalog_snapshot'}>
   | Readonly<{kind:'route_counts'}>
   | Readonly<{kind:'runtime_packages';packageKeys:readonly string[]}>
   | Readonly<{kind:'package_summaries';packageKeys:readonly string[]}>
@@ -111,6 +112,7 @@ export type ContentSupplyQueryResult<Query extends ContentSupplyQuery> =
   Query['kind'] extends 'direct_provisioning_task'?ContentProvisioningTask|null
     : Query['kind'] extends 'workspace' ? ContentSupplyWorkspace
     :Query['kind'] extends 'catalog'?readonly ContentSupplyCatalogItem[]
+    :Query['kind'] extends 'catalog_snapshot'?Readonly<{items:readonly ContentSupplyCatalogItem[];checkedAt:string|null}>
     :Query['kind'] extends 'route_counts'?readonly PackageRouteCount[]
     :Query['kind'] extends 'runtime_packages'?readonly InstalledPackage[]
     :Query['kind'] extends 'package_summaries'?readonly ContentSupplyPackage[]

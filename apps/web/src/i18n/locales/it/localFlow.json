@@ -501,6 +501,18 @@
     "deletePending": "L'accesso all'account è stato interrotto. Il servizio di identità sta ancora elaborando l'eliminazione. Riprova più tardi per completarla.",
     "deleteUnavailable": "L'eliminazione autonoma non è disponibile per questo account. Contatta l'assistenza.",
     "modelInputLarge": "La richiesta è troppo lunga. Accorcia il materiale o avvia una nuova conversazione di chiarimento, poi riprova.",
-    "storageFull": "Lo spazio del browser è esaurito. Questa operazione non è stata salvata. Libera spazio sul dispositivo e riprova; evita di cancellare i dati di questo sito, che contengono i tuoi contenuti didattici."
+    "storageFull": "Lo spazio del browser è esaurito. Questa operazione non è stata salvata. Libera spazio sul dispositivo e riprova; evita di cancellare i dati di questo sito, che contengono i tuoi contenuti didattici.",
+    "catalogSort": "Ordine",
+    "catalogSortTitle": "Titolo",
+    "catalogSortNewest": "Pubblicazione più recente",
+    "catalogPageSize": "Elementi per pagina",
+    "catalogPagination": "Pagine del catalogo",
+    "catalogPreviousPage": "Pagina precedente",
+    "catalogNextPage": "Pagina successiva",
+    "catalogPage": "Pagina {{page}}",
+    "catalogResultRange": "{{start}}–{{end}} di {{total}} elementi",
+    "catalogView": "Vista",
+    "catalogCards": "Schede",
+    "catalogList": "Elenco compatto"
   }
 }

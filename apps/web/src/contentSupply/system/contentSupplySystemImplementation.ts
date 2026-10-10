@@ -97,7 +97,9 @@ const refreshCatalog = async (
   }
   const items = parsed?.items ?? cache.items;
   const revision = parsed?.revision ?? cache.revision;
+  signal?.throwIfAborted();
   await writeLibraryCache(async (tx) => {
+    signal?.throwIfAborted();
     tx.put('meta', 'package-catalog', {
       format: 'sensa-local-registry-cache-v3',
       items,
@@ -213,6 +215,10 @@ export const readContentSupplyQuery = async (query: ContentSupplyQuery): Promise
     case 'workspace':
       return readWorkspace();
     case 'catalog':return readLibrary(async tx=>parseCatalogCache(await tx.get<unknown>('meta','package-catalog')).items);
+    case 'catalog_snapshot':return readLibrary(async tx=>{
+      const cache=parseCatalogCache(await tx.get<unknown>('meta','package-catalog'));
+      return {items:cache.items,checkedAt:cache.checkedAt};
+    });
     case 'route_counts':return readLibrary(tx=>tx.packageCacheProjection({kind:'route_counts'}));
     case 'runtime_packages':
       return readLibrary(async tx=>Promise.all([...new Set(query.packageKeys)].map(key=>tx.get<InstalledPackage>('packageCache',key))).then(values=>values.filter((value):value is InstalledPackage=>!!value)));

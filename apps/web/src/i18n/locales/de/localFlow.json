@@ -37,6 +37,18 @@
     "deleteDonePreserved": "Konto gelöscht. Die lokale Bibliothek wurde gewechselt und nicht geleert.",
     "deleteLocalPreserved": "Die lokale Bibliothek wurde gewechselt und nicht geleert.",
     "deleteLeave": "Vorerst verlassen",
-    "deleteDone":"Konto gelöscht und dieser Browser geleert.","deleteExit":"Zur Anmeldung zurückkehren","deleteRetry":"Die Löschung wurde noch nicht bestätigt. Versuchen Sie es sicher mit derselben Löschanfrage erneut.","deletePending":"Der Kontozugriff wurde beendet. Der Identitätsdienst verarbeitet die Löschung noch. Versuchen Sie es später erneut, um abzuschließen.","deleteUnavailable":"Die Selbstbedienung zur Kontolöschung ist für dieses Konto nicht verfügbar. Wenden Sie sich an den Support.","modelInputLarge":"Diese Anfrage ist zu lang. Kürzen Sie das Material oder beginnen Sie ein neues Klärungsgespräch und versuchen Sie es erneut.","storageFull":"Der Browserspeicher ist voll. Dieser Vorgang wurde nicht gespeichert. Geben Sie Gerätespeicher frei und versuchen Sie es erneut. Löschen Sie nicht die Daten dieser Website, da sie Ihre Lerninhalte enthalten."
+    "deleteDone":"Konto gelöscht und dieser Browser geleert.","deleteExit":"Zur Anmeldung zurückkehren","deleteRetry":"Die Löschung wurde noch nicht bestätigt. Versuchen Sie es sicher mit derselben Löschanfrage erneut.","deletePending":"Der Kontozugriff wurde beendet. Der Identitätsdienst verarbeitet die Löschung noch. Versuchen Sie es später erneut, um abzuschließen.","deleteUnavailable":"Die Selbstbedienung zur Kontolöschung ist für dieses Konto nicht verfügbar. Wenden Sie sich an den Support.","modelInputLarge":"Diese Anfrage ist zu lang. Kürzen Sie das Material oder beginnen Sie ein neues Klärungsgespräch und versuchen Sie es erneut.","storageFull":"Der Browserspeicher ist voll. Dieser Vorgang wurde nicht gespeichert. Geben Sie Gerätespeicher frei und versuchen Sie es erneut. Löschen Sie nicht die Daten dieser Website, da sie Ihre Lerninhalte enthalten.",
+    "catalogSort": "Sortierung",
+    "catalogSortTitle": "Titel",
+    "catalogSortNewest": "Neueste Veröffentlichung",
+    "catalogPageSize": "Einträge pro Seite",
+    "catalogPagination": "Katalogseiten",
+    "catalogPreviousPage": "Vorherige Seite",
+    "catalogNextPage": "Nächste Seite",
+    "catalogPage": "Seite {{page}}",
+    "catalogResultRange": "{{start}}–{{end}} von {{total}} Einträgen",
+    "catalogView": "Ansicht",
+    "catalogCards": "Karten",
+    "catalogList": "Kompakte Liste"
   }
 }

@@ -29,4 +29,16 @@
     "deleteDonePreserved": "Konto usunięte. Biblioteka lokalna zmieniła się i nie została wyczyszczona.",
     "deleteLocalPreserved": "Biblioteka lokalna zmieniła się i nie została wyczyszczona.",
     "deleteLeave": "Wyjdź na razie",
-    "deleteDone":"Usunięto konto i wyczyszczono tę przeglądarkę.","deleteExit":"Wróć do logowania","deleteRetry":"Usunięcie nie zostało jeszcze potwierdzone. Bezpiecznie ponów próbę, używając tego samego żądania.","deletePending":"Dostęp do konta został zatrzymany. Usługa tożsamości nadal przetwarza usunięcie. Spróbuj ponownie później, aby zakończyć.","deleteUnavailable":"Samodzielne usuwanie konta jest niedostępne dla tego konta. Skontaktuj się z pomocą.","modelInputLarge":"To żądanie jest zbyt długie. Skróć materiał albo rozpocznij nową rozmowę wyjaśniającą, a następnie spróbuj ponownie.","storageFull":"Pamięć przeglądarki jest pełna. Ta operacja nie została zapisana. Zwolnij miejsce na urządzeniu i ponów próbę; nie czyść danych tej witryny, ponieważ zawierają treści do nauki."}}
+    "deleteDone":"Usunięto konto i wyczyszczono tę przeglądarkę.","deleteExit":"Wróć do logowania","deleteRetry":"Usunięcie nie zostało jeszcze potwierdzone. Bezpiecznie ponów próbę, używając tego samego żądania.","deletePending":"Dostęp do konta został zatrzymany. Usługa tożsamości nadal przetwarza usunięcie. Spróbuj ponownie później, aby zakończyć.","deleteUnavailable":"Samodzielne usuwanie konta jest niedostępne dla tego konta. Skontaktuj się z pomocą.","modelInputLarge":"To żądanie jest zbyt długie. Skróć materiał albo rozpocznij nową rozmowę wyjaśniającą, a następnie spróbuj ponownie.","storageFull":"Pamięć przeglądarki jest pełna. Ta operacja nie została zapisana. Zwolnij miejsce na urządzeniu i ponów próbę; nie czyść danych tej witryny, ponieważ zawierają treści do nauki.",
+    "catalogSort": "Sortowanie",
+    "catalogSortTitle": "Tytuł",
+    "catalogSortNewest": "Najnowsze wydanie",
+    "catalogPageSize": "Pozycji na stronę",
+    "catalogPagination": "Strony katalogu",
+    "catalogPreviousPage": "Poprzednia strona",
+    "catalogNextPage": "Następna strona",
+    "catalogPage": "Strona {{page}}",
+    "catalogResultRange": "{{start}}–{{end}} z {{total}} pozycji",
+    "catalogView": "Widok",
+    "catalogCards": "Karty",
+    "catalogList": "Kompaktowa lista"}}

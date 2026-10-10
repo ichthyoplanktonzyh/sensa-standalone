@@ -14,6 +14,7 @@ import {
   isKnownShellPath,
   parseMainStack,
   parsePathParams,
+  parseShellParams,
   retainParamsForStack,
 } from "../../../apps/web/src/experience/router/shellLocation.ts";
 import {
@@ -111,6 +112,10 @@ const catalogDetailPath=buildPathname(['s-catalog','s-catalog-book'],{bookKey:'e
 assert.equal(catalogDetailPath,'/catalog/english-foundation');
 assert.deepEqual(parseMainStack(catalogDetailPath),['s-catalog','s-catalog-book']);
 assert.deepEqual(parsePathParams(catalogDetailPath),{bookKey:'english-foundation'});
+const browsing={query:'日语',route:'ja:zh-Hans',sort:'newest',page:'2',pageSize:'48',view:'list'};
+assert.deepEqual(parseShellParams({...browsing,page:2,pageSize:48}),browsing);
+assert.deepEqual(retainParamsForStack(browsing,['s-catalog','s-catalog-book']),browsing);
+assert.deepEqual(retainParamsForStack(browsing,['s-library']),{});
 assert(isKnownShellPath(catalogDetailPath));
 assert(!isKnownShellPath('/catalog/not%2Fa%2Fbook'));
 assert.equal(new Set(SHELL_SCREEN_DEFINITIONS.map(({id})=>id)).size,KNOWN_SHEET_IDS.length);

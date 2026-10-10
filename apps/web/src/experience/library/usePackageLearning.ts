@@ -70,6 +70,8 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
  const setLoadStatus=(status:typeof loadState.status)=>{if(currentRoute.current===routeKey)setLoadState({routeKey,version:viewEpoch.current.version,status});};
  const [unavailablePackageKeys,setUnavailablePackageKeys]=useState<readonly string[]>([]);
  const [catalogBusy,setCatalogBusy]=useState(false);
+ const [catalogStatus,setCatalogStatus]=useState<'loading'|'ready'|'unavailable'>('loading');
+ const [catalogFailed,setCatalogFailed]=useState(false);
  const transfer=useRef<AbortController|null>(null);
  const catalogRequest=useRef<AbortController|null>(null);
  const generation=useRef(0);
@@ -120,12 +122,13 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
  };
  const refreshSupply=async()=>{
   const current=lifecycle.current;
+  const catalogGeneration=generation.current;
   const supply=await measuredWorkspaceRead('supply',()=>contentSupplySystem.read({kind:'workspace'}));
   if(current!==lifecycle.current)return;
   setPackages([...supply.packages]);
   const available=new Set(supply.packages.map(pack=>pack.key));
   setUnavailablePackageKeys(keys=>keys.filter(key=>!available.has(key)));
-  setCatalog([...supply.catalog]);
+  if(catalogGeneration===generation.current)setCatalog([...supply.catalog]);
  };
  const refresh=async()=>{
   const current=lifecycle.current,version=viewEpoch.current.version;
@@ -241,19 +244,24 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
   catalogRequest.current?.abort();
   const request=new AbortController();catalogRequest.current=request;
   setCatalogBusy(true);
+  setCatalogFailed(false);
+  let cached=false;
   try{
-   const local=await contentSupplySystem.read({kind:'catalog'});
+   const local=await contentSupplySystem.read({kind:'catalog_snapshot'});
    if(gen!==generation.current)return;
-   setCatalog([...local]);
+   cached=local.checkedAt!==null;
+   setCatalog([...local.items]);
+   setCatalogStatus(cached?'ready':'loading');
    const result=await contentSupplySystem.execute({kind:'refresh_catalog',force:notify,signal:request.signal});
    if(gen===generation.current){
     setCatalog([...result.items]);
+    setCatalogStatus('ready');
     try{
      if(notify)setNotice(localFlowText(result.status==='current'?'catalogCurrent':'catalogUpdated'));
      else setNotice(current=>current==='localFlow.audioIncomplete'?'':current);
     }catch{setNotice(localFlowText('progressReadFailed'));}
    }
-  }catch{if(gen===generation.current&&!request.signal.aborted)setNotice(localFlowText('catalogFailed'));}
+  }catch{if(gen===generation.current&&!request.signal.aborted){setCatalogFailed(true);setCatalogStatus(cached?'ready':'unavailable');}}
   finally{
    if(catalogRequest.current===request)catalogRequest.current=null;
    if(gen===generation.current)setCatalogBusy(false);
@@ -282,7 +290,7 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
   policyOptions:workspace.policyOptions,
   dailyLimit:dailyLimit??undefined,
   preferencesDailyLimit:runtimeOnly?runtimePreferencesDailyLimit:dailyLimit,
-  notice:notice==='runtime.actionReceiptUnavailable'||notice==='learningPreferences.quantitySaveUnconfirmed'||notice.startsWith('sessionEnd.')?i18n.t(notice):localFlowNotice(notice),busy:busy||loadStatus!=='ready',progress,loaded:loaded&&loadStatus==='ready',loadStatus,retryInitialLoad,unavailablePackageKeys,catalogBusy,reloadCatalog,refresh,
+  notice:notice==='runtime.actionReceiptUnavailable'||notice==='learningPreferences.quantitySaveUnconfirmed'||notice.startsWith('sessionEnd.')?i18n.t(notice):localFlowNotice(notice),busy:busy||loadStatus!=='ready',progress,loaded:loaded&&loadStatus==='ready',loadStatus,retryInitialLoad,unavailablePackageKeys,catalogBusy,catalogStatus,catalogFailed,reloadCatalog,refresh,
   endedStateNeedsRead:notice==='sessionEnd.savedReadFailed',
   retryEndedStateRead:async()=>{
    if(actInFlight.current)return;const current=lifecycle.current;actInFlight.current=true;setBusy(true);

@@ -5,6 +5,7 @@ const queryTables = {
   direct_provisioning_task:['personalLearning','learningTargets','supplementalMembershipStates','curriculumEnrollments','meta'],
   workspace: ['packageCache', 'packageInstallations', 'meta'],
   catalog:['meta'],
+  catalog_snapshot:['meta'],
   route_counts:['packageCache'],
   runtime_packages:['packageCache'],
   package_summaries:['packageCache'],
@@ -16,4 +17,4 @@ const queryTables = {
 
 export const subscribeContentSupply=(query:ContentSupplyQuery,listener:()=>void):(()=>void)=>
   observeLibrary(listener,queryTables[query.kind],
-    query.kind==='workspace'||query.kind==='catalog'?{meta:['package-catalog']}:undefined);
+    query.kind==='workspace'||query.kind==='catalog'||query.kind==='catalog_snapshot'?{meta:['package-catalog']}:undefined);

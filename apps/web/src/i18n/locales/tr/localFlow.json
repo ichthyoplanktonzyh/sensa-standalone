@@ -39,6 +39,18 @@
     "deleteDonePreserved": "Hesap silindi. Yerel kitaplık değişti ve temizlenmedi.",
     "deleteLocalPreserved": "Yerel kitaplık değişti ve temizlenmedi.",
     "deleteLeave": "Şimdilik ayrıl",
-    "deleteDone":"Hesap silindi ve bu tarayıcı temizlendi.","deleteExit":"Oturum açmaya dön","deleteRetry":"Silme henüz doğrulanmadı. Aynı silme isteğini kullanarak güvenle yeniden deneyin.","deletePending":"Hesap erişimi durduruldu. Kimlik hizmeti silme işlemini sürdürüyor. Tamamlamak için daha sonra yeniden deneyin.","deleteUnavailable":"Bu hesapta self servis silme kullanılamıyor. Destek ekibiyle iletişime geçin.","modelInputLarge":"Bu istek çok uzun. Materyali kısaltın veya yeni bir netleştirme konuşması başlatıp yeniden deneyin.","storageFull":"Tarayıcı depolaması dolu. Bu işlem kaydedilmedi. Cihazda yer açıp yeniden deneyin; öğrenme içeriğinizin bulunduğu bu sitenin verilerini temizlemeyin."
+    "deleteDone":"Hesap silindi ve bu tarayıcı temizlendi.","deleteExit":"Oturum açmaya dön","deleteRetry":"Silme henüz doğrulanmadı. Aynı silme isteğini kullanarak güvenle yeniden deneyin.","deletePending":"Hesap erişimi durduruldu. Kimlik hizmeti silme işlemini sürdürüyor. Tamamlamak için daha sonra yeniden deneyin.","deleteUnavailable":"Bu hesapta self servis silme kullanılamıyor. Destek ekibiyle iletişime geçin.","modelInputLarge":"Bu istek çok uzun. Materyali kısaltın veya yeni bir netleştirme konuşması başlatıp yeniden deneyin.","storageFull":"Tarayıcı depolaması dolu. Bu işlem kaydedilmedi. Cihazda yer açıp yeniden deneyin; öğrenme içeriğinizin bulunduğu bu sitenin verilerini temizlemeyin.",
+    "catalogSort": "Sıralama",
+    "catalogSortTitle": "Başlık",
+    "catalogSortNewest": "En yeni yayın",
+    "catalogPageSize": "Sayfa başına öğe",
+    "catalogPagination": "Katalog sayfaları",
+    "catalogPreviousPage": "Önceki sayfa",
+    "catalogNextPage": "Sonraki sayfa",
+    "catalogPage": "Sayfa {{page}}",
+    "catalogResultRange": "{{total}} öğeden {{start}}–{{end}}",
+    "catalogView": "Görünüm",
+    "catalogCards": "Kartlar",
+    "catalogList": "Kompakt liste"
   }
 }

@@ -37,6 +37,18 @@
     "deleteDonePreserved": "Compte supprimé. La bibliothèque locale a changé et n’a pas été effacée.",
     "deleteLocalPreserved": "La bibliothèque locale a changé et n’a pas été effacée.",
     "deleteLeave": "Quitter pour le moment",
-    "deleteDone":"Compte supprimé et navigateur effacé.","deleteExit":"Retour à la connexion","deleteRetry":"La suppression n’est pas encore confirmée. Réessayez sans risque avec la même demande de suppression.","deletePending":"L’accès au compte est arrêté. Le service d’identité traite toujours la suppression. Réessayez plus tard pour terminer.","deleteUnavailable":"La suppression en libre-service n’est pas disponible pour ce compte. Contactez l’assistance.","modelInputLarge":"Cette requête est trop longue. Raccourcissez le contenu ou commencez une nouvelle conversation de clarification, puis réessayez.","storageFull":"Le stockage du navigateur est plein. Cette opération n’a pas été enregistrée. Libérez de l’espace sur l’appareil et réessayez ; évitez d’effacer les données de ce site, qui contiennent vos apprentissages."
+    "deleteDone":"Compte supprimé et navigateur effacé.","deleteExit":"Retour à la connexion","deleteRetry":"La suppression n’est pas encore confirmée. Réessayez sans risque avec la même demande de suppression.","deletePending":"L’accès au compte est arrêté. Le service d’identité traite toujours la suppression. Réessayez plus tard pour terminer.","deleteUnavailable":"La suppression en libre-service n’est pas disponible pour ce compte. Contactez l’assistance.","modelInputLarge":"Cette requête est trop longue. Raccourcissez le contenu ou commencez une nouvelle conversation de clarification, puis réessayez.","storageFull":"Le stockage du navigateur est plein. Cette opération n’a pas été enregistrée. Libérez de l’espace sur l’appareil et réessayez ; évitez d’effacer les données de ce site, qui contiennent vos apprentissages.",
+    "catalogSort": "Tri",
+    "catalogSortTitle": "Titre",
+    "catalogSortNewest": "Publication récente",
+    "catalogPageSize": "Éléments par page",
+    "catalogPagination": "Pages du catalogue",
+    "catalogPreviousPage": "Page précédente",
+    "catalogNextPage": "Page suivante",
+    "catalogPage": "Page {{page}}",
+    "catalogResultRange": "{{start}}–{{end}} sur {{total}} éléments",
+    "catalogView": "Affichage",
+    "catalogCards": "Cartes",
+    "catalogList": "Liste compacte"
   }
 }

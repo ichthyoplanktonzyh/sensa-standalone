@@ -499,6 +499,18 @@
     "deletePending": "帳號存取已停止，身分服務仍在處理刪除。請稍後重試完成處理。",
     "deleteUnavailable": "此帳號目前無法自助刪除，請聯絡支援處理。",
     "modelInputLarge": "本次傳送的內容過長，請縮短材料或開始新的澄清對話後重試。",
-    "storageFull": "瀏覽器儲存空間不足，本次操作未儲存。請釋放裝置空間後重試；不要清除本站資料，以免丟失學習資料。"
+    "storageFull": "瀏覽器儲存空間不足，本次操作未儲存。請釋放裝置空間後重試；不要清除本站資料，以免丟失學習資料。",
+    "catalogSort": "排序",
+    "catalogSortTitle": "標題",
+    "catalogSortNewest": "最新發布",
+    "catalogPageSize": "每頁數量",
+    "catalogPagination": "目錄分頁",
+    "catalogPreviousPage": "上一頁",
+    "catalogNextPage": "下一頁",
+    "catalogPage": "第 {{page}} 頁",
+    "catalogResultRange": "第 {{start}}–{{end}} 項，共 {{total}} 項",
+    "catalogView": "顯示方式",
+    "catalogCards": "卡片",
+    "catalogList": "精簡列表"
   }
 }

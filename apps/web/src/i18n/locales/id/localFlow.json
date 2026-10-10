@@ -499,6 +499,18 @@
     "deletePending": "Akses akun telah dihentikan. Layanan identitas masih memproses penghapusan. Coba lagi nanti untuk menyelesaikannya.",
     "deleteUnavailable": "Penghapusan mandiri tidak tersedia untuk akun ini. Hubungi dukungan.",
     "modelInputLarge": "Permintaan ini terlalu panjang. Persingkat materi atau mulai percakapan klarifikasi baru, lalu coba lagi.",
-    "storageFull": "Penyimpanan browser penuh. Operasi ini tidak disimpan. Kosongkan ruang perangkat lalu coba lagi; jangan hapus data situs ini karena berisi konten belajar Anda."
+    "storageFull": "Penyimpanan browser penuh. Operasi ini tidak disimpan. Kosongkan ruang perangkat lalu coba lagi; jangan hapus data situs ini karena berisi konten belajar Anda.",
+    "catalogSort": "Urutan",
+    "catalogSortTitle": "Judul",
+    "catalogSortNewest": "Rilis terbaru",
+    "catalogPageSize": "Item per halaman",
+    "catalogPagination": "Halaman katalog",
+    "catalogPreviousPage": "Halaman sebelumnya",
+    "catalogNextPage": "Halaman berikutnya",
+    "catalogPage": "Halaman {{page}}",
+    "catalogResultRange": "{{start}}–{{end}} dari {{total}} item",
+    "catalogView": "Tampilan",
+    "catalogCards": "Kartu",
+    "catalogList": "Daftar ringkas"
   }
 }

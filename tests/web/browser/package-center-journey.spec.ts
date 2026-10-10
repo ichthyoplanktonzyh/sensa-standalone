@@ -25,6 +25,104 @@ import {createPackageCenterFixture} from './packageCenterFixture';
 const fixture=createPackageCenterFixture('book');
 const test=fixture.test;
 
+test('complete catalog pages retain URL, scroll and focus through details and recover filters on narrow and zoomed screens',async({page},testInfo)=>{
+ const descriptors=Array.from({length:137},(_,index)=>({
+  ...fixture.delivery.descriptor,
+  book:{...fixture.delivery.descriptor.book,bookId:randomUUID(),bookVersionId:randomUUID(),bookKey:`catalog-fixture-${index}`,title:index===136?'深处的真实检索样本':index===130?'长标题内容'.repeat(28):`目录样本 ${String(index).padStart(3,'0')}`},
+  route:{targetLanguage:index%2?'ja':'en',supportLanguage:'zh-Hans'},
+  publishedAt:'2026-10-10T00:00:00Z',
+ }));
+ fixture.setRegistry(descriptors);
+ await page.goto(`${fixture.origin}/catalog?page=2&pageSize=24&view=cards&sort=title`);
+ const catalog=page.locator('#s-catalog').last(),book=page.locator('#s-catalog-book').last();
+ await expect(catalog.getByText('第 25–48 项，共 137 项',{exact:true})).toBeVisible();
+ await expect(catalog.locator('[data-package-key]')).toHaveCount(24);
+ await expect(catalog.getByRole('button',{name:'第 6 页',exact:true})).toBeVisible();
+ const card=catalog.locator('[data-package-key]').nth(12),key=await card.getAttribute('data-package-key');
+ await card.scrollIntoViewIfNeeded();await card.focus();
+ const scroll=await catalog.evaluate(element=>element.scrollTop);
+ await card.press('Enter');
+ await expect(book.getByRole('heading',{name:descriptors.find(item=>item.book.bookKey===key)!.book.title,exact:true})).toBeVisible();
+ expect(new URL(page.url()).searchParams.get('page')).toBe('2');
+ await book.getByRole('button',{name:'返回',exact:true}).click();
+ await expect(catalog.locator(`[data-package-key="${key}"]`)).toBeFocused();
+ expect(Math.abs(await catalog.evaluate(element=>element.scrollTop)-scroll)).toBeLessThan(3);
+ await page.screenshot({path:testInfo.outputPath('catalog-desktop-page-2.png')});
+ await catalog.getByRole('button',{name:'第 6 页',exact:true}).click();
+ await expect(catalog.getByText('第 121–137 项，共 137 项',{exact:true})).toBeVisible();
+ await expect(catalog.locator('[data-package-key]')).toHaveCount(17);
+ await expect(catalog.getByRole('button',{name:'下一页',exact:true})).toBeDisabled();
+ await catalog.getByRole('searchbox',{name:'搜索学习包'}).fill('深处');
+ await expect(catalog.getByText('第 1–1 项，共 1 项',{exact:true})).toBeVisible();
+ expect(new URL(page.url()).searchParams.get('page')).toBe('1');
+ await expect(catalog.getByRole('button',{name:/深处的真实检索样本/})).toBeVisible();
+ await catalog.getByRole('searchbox',{name:'搜索学习包'}).fill('不存在的查询');
+ await expect(catalog.getByText('没有找到匹配的学习包',{exact:true})).toBeVisible();
+ await catalog.getByRole('button',{name:'清除',exact:true}).click();
+ await catalog.getByRole('combobox',{name:'目标语言',exact:true}).selectOption('ja');
+ await expect(catalog.getByText('第 1–24 项，共 68 项',{exact:true})).toBeVisible();
+ await catalog.getByRole('combobox',{name:'辅助语言',exact:true}).selectOption('zh-Hans');
+ await catalog.getByRole('combobox',{name:'每页数量',exact:true}).selectOption('48');
+ await catalog.getByRole('combobox',{name:'排序',exact:true}).selectOption('newest');
+ await catalog.getByRole('button',{name:'紧凑列表',exact:true}).click();
+ await page.reload();
+ await expect(catalog.getByText('第 1–48 项，共 68 项',{exact:true})).toBeVisible();
+ await expect(catalog.getByRole('button',{name:'紧凑列表',exact:true})).toHaveAttribute('aria-pressed','true');
+ await expect(catalog.getByRole('combobox',{name:'目标语言',exact:true})).toHaveValue('ja');
+ await catalog.getByRole('combobox',{name:'目标语言',exact:true}).selectOption('');
+ await catalog.getByRole('searchbox',{name:'搜索学习包'}).fill('长标题内容');
+ await page.setViewportSize({width:390,height:844});
+ await expect(catalog.locator('[data-package-key]')).toHaveCount(1);
+ expect(await catalog.evaluate(element=>element.scrollWidth<=element.clientWidth)).toBe(true);
+ await page.screenshot({path:testInfo.outputPath('catalog-narrow-long-title.png')});
+ await page.setViewportSize({width:1280,height:900});
+ await page.evaluate(()=>document.documentElement.style.zoom='2');
+ expect(await catalog.evaluate(element=>element.scrollWidth<=element.clientWidth)).toBe(true);
+ await catalog.getByRole('searchbox',{name:'搜索学习包'}).focus();await page.keyboard.press('Tab');
+ await expect(catalog.getByRole('button',{name:'清除',exact:true})).toBeFocused();
+ await page.screenshot({path:testInfo.outputPath('catalog-200-percent-css-zoom.png')});
+ const checkpoint=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ expect(checkpoint.enrollments).toEqual([]);expect(checkpoint.records).toEqual([]);
+});
+
+test('catalog failure is distinct from empty results and an interrupted stale response cannot replace a newer retry',async({page,context})=>{
+ let requests=0,release!:()=>void;
+ const held=new Promise<void>(resolve=>release=resolve);
+ const older=fixture.registry;
+ await context.route('**/sensa/packages',async route=>{
+  requests++;
+  if(requests===1){await route.fulfill({status:503,headers:{'access-control-allow-origin':fixture.origin},body:'unavailable'});return;}
+  if(requests===2){await held;await route.fulfill({headers:{'access-control-allow-origin':fixture.origin,'content-type':'application/json'},body:JSON.stringify(older)}).catch(()=>{});return;}
+  await route.continue();
+ });
+ try{
+  await page.goto(`${fixture.origin}/catalog?page=999`);
+  const catalog=page.locator('#s-catalog').last();
+  await expect(catalog.getByRole('alert')).toContainText('暂时无法更新目录');
+  await expect(catalog.getByText('没有找到匹配的学习包',{exact:true})).toHaveCount(0);
+  expect(new URL(page.url()).searchParams.get('page')).toBe('999');
+  await catalog.getByRole('button',{name:'重试',exact:true}).click();
+  await expect.poll(()=>requests).toBe(2);
+  await expect(catalog.getByRole('button',{name:'正在更新目录…',exact:true})).toBeDisabled();
+  fixture.setRegistry([fixture.reviewDelivery.descriptor]);
+  await catalog.getByRole('searchbox',{name:'搜索学习包'}).fill(fixture.reviewDelivery.descriptor.book.title);
+  await page.reload();
+  await expect(catalog.getByText('第 1–1 项，共 1 项',{exact:true})).toBeVisible();
+  release();
+  await expect(catalog.locator('[data-package-key]')).toHaveCount(1);
+  await expect(catalog.getByRole('alert')).toHaveCount(0);
+  await page.goto(`${fixture.origin}/catalog?page=999&pageSize=96`);
+  await expect(catalog.getByText('第 1–1 项，共 1 项',{exact:true})).toBeVisible();
+  await expect.poll(()=>new URL(page.url()).searchParams.get('page')).toBe('1');
+  fixture.setRegistry([]);
+  await catalog.getByRole('button',{name:'刷新',exact:true}).click();
+  await expect(catalog.getByText('第 0–0 项，共 0 项',{exact:true})).toBeVisible();
+  await expect(catalog.getByText('暂无学习包',{exact:true})).toBeVisible();
+  await page.reload();
+  await expect(catalog.getByText('第 0–0 项，共 0 项',{exact:true})).toBeVisible();
+ }finally{release();}
+});
+
 test('a cached public catalog refreshes across origins with its exact revision',async({page})=>{
   await page.goto(`${fixture.origin}/catalog`);
   const catalog=page.locator('#s-catalog').last();

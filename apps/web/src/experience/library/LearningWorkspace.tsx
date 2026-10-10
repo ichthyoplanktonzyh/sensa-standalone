@@ -158,7 +158,7 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
     relearningTargetIds={new Set(packageLearning.activeTargets.filter(target=>target.relearning).map(target=>target.targetId))}
     reviewingTargetIds={new Set()} relearningRepairTargetIds={new Set()} relearningRetestTargetIds={new Set()} declaredMasteryTargetIds={new Set(packageLearning.activeTargets.filter(target=>target.declaredMastery).map(target=>target.targetId))}
     onBack={backMain} onAddLearning={()=>goMain('s-learning-entry')} onOpenTarget={openLocalTarget}/>,
-  's-catalog':screenActive=><PackageCatalogScreen active={screenActive} c={packageLearning} onBack={backMain}
+  's-catalog':screenActive=><PackageCatalogScreen active={screenActive} c={packageLearning} params={params} onParamsChange={next=>setMainStack(mainStack,next,true)} onBack={backMain}
     onOpenBook={bookKey=>setMainStack(['s-catalog','s-catalog-book'],{bookKey})}
     onLibrary={()=>setMainStack(['s-library'])} onPublisher={()=>setMainStack(['s-publisher'])}/>,
   's-catalog-book':screenActive=><PackageBookScreen active={screenActive} bookKey={params.bookKey??null} c={packageLearning}

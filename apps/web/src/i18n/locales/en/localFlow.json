@@ -500,6 +500,18 @@
     "deletePending": "Account access has stopped. The identity service is still processing deletion. Retry later to finish.",
     "deleteUnavailable": "Self-service deletion is unavailable for this account. Contact support.",
     "modelInputLarge": "This request is too long. Shorten the material or start a new clarification conversation, then retry.",
-    "storageFull": "Browser storage is full. This operation was not saved. Free device space and retry; avoid clearing this site’s data, which contains your learning content."
+    "storageFull": "Browser storage is full. This operation was not saved. Free device space and retry; avoid clearing this site’s data, which contains your learning content.",
+    "catalogSort": "Sort",
+    "catalogSortTitle": "Title",
+    "catalogSortNewest": "Newest release",
+    "catalogPageSize": "Items per page",
+    "catalogPagination": "Catalog pages",
+    "catalogPreviousPage": "Previous page",
+    "catalogNextPage": "Next page",
+    "catalogPage": "Page {{page}}",
+    "catalogResultRange": "{{start}}–{{end}} of {{total}} items",
+    "catalogView": "View",
+    "catalogCards": "Cards",
+    "catalogList": "Compact list"
   }
 }

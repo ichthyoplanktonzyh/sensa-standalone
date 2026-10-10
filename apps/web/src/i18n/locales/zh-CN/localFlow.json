@@ -499,6 +499,18 @@
     "deletePending": "账号访问已停止，身份服务仍在处理删除。请稍后重试完成处理。",
     "deleteUnavailable": "此账号当前无法自助删除，请联系支持处理。",
     "modelInputLarge": "本次发送的内容过长，请缩短材料或开始新的澄清对话后重试。",
-    "storageFull": "浏览器存储空间不足，本次操作未保存。请释放设备空间后重试；不要清除本站数据，以免丢失学习资料。"
+    "storageFull": "浏览器存储空间不足，本次操作未保存。请释放设备空间后重试；不要清除本站数据，以免丢失学习资料。",
+    "catalogSort": "排序",
+    "catalogSortTitle": "标题",
+    "catalogSortNewest": "最新发布",
+    "catalogPageSize": "每页数量",
+    "catalogPagination": "目录分页",
+    "catalogPreviousPage": "上一页",
+    "catalogNextPage": "下一页",
+    "catalogPage": "第 {{page}} 页",
+    "catalogResultRange": "第 {{start}}–{{end}} 项，共 {{total}} 项",
+    "catalogView": "显示方式",
+    "catalogCards": "卡片",
+    "catalogList": "紧凑列表"
   }
 }

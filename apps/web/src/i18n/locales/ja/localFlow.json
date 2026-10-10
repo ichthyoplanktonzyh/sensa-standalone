@@ -499,6 +499,18 @@
     "deletePending": "アカウントへのアクセスを停止しました。IDサービスが削除を処理中です。後で再試行して完了してください。",
     "deleteUnavailable": "このアカウントではセルフサービス削除を利用できません。サポートにお問い合わせください。",
     "modelInputLarge": "このリクエストは長すぎます。素材を短くするか、新しい明確化の会話を始めてから再試行してください。",
-    "storageFull": "ブラウザストレージがいっぱいです。この操作は保存されませんでした。デバイスの空き容量を増やして再試行してください。学習コンテンツが含まれているため、このサイトのデータを消去しないでください。"
+    "storageFull": "ブラウザストレージがいっぱいです。この操作は保存されませんでした。デバイスの空き容量を増やして再試行してください。学習コンテンツが含まれているため、このサイトのデータを消去しないでください。",
+    "catalogSort": "並び順",
+    "catalogSortTitle": "タイトル",
+    "catalogSortNewest": "公開日の新しい順",
+    "catalogPageSize": "1ページの件数",
+    "catalogPagination": "カタログのページ",
+    "catalogPreviousPage": "前のページ",
+    "catalogNextPage": "次のページ",
+    "catalogPage": "{{page}} ページ",
+    "catalogResultRange": "全 {{total}} 件中 {{start}}–{{end}} 件",
+    "catalogView": "表示形式",
+    "catalogCards": "カード",
+    "catalogList": "コンパクト一覧"
   }
 }

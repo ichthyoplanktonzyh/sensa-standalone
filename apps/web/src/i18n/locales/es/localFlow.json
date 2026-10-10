@@ -501,6 +501,18 @@
     "deletePending": "Se detuvo el acceso a la cuenta. El servicio de identidad sigue procesando la eliminación. Vuelve más tarde para terminar.",
     "deleteUnavailable": "Esta cuenta no permite la eliminación de autoservicio. Contacta con soporte.",
     "modelInputLarge": "Esta solicitud es demasiado larga. Acorta el material o inicia una conversación nueva para aclararlo y vuelve a intentarlo.",
-    "storageFull": "El almacenamiento del navegador está lleno. Esta operación no se guardó. Libera espacio en el dispositivo e inténtalo de nuevo; evita borrar los datos de este sitio, que contienen tu contenido de aprendizaje."
+    "storageFull": "El almacenamiento del navegador está lleno. Esta operación no se guardó. Libera espacio en el dispositivo e inténtalo de nuevo; evita borrar los datos de este sitio, que contienen tu contenido de aprendizaje.",
+    "catalogSort": "Orden",
+    "catalogSortTitle": "Título",
+    "catalogSortNewest": "Publicación más reciente",
+    "catalogPageSize": "Elementos por página",
+    "catalogPagination": "Páginas del catálogo",
+    "catalogPreviousPage": "Página anterior",
+    "catalogNextPage": "Página siguiente",
+    "catalogPage": "Página {{page}}",
+    "catalogResultRange": "{{start}}–{{end}} de {{total}} elementos",
+    "catalogView": "Vista",
+    "catalogCards": "Tarjetas",
+    "catalogList": "Lista compacta"
   }
 }

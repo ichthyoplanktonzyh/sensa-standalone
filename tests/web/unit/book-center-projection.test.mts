@@ -205,3 +205,29 @@ test('learning source lookup resolves the exact admitted publication instead of 
  assert.equal(portable?.title,'First expression','without a Book identity show the exact Portable source rather than choosing a Book');
  assert.equal(portable?.sourceVersion,1);
 });
+
+test('complete catalog browsing filters before paging, clamps stale URLs and breaks title/date ties by stable identity',async()=>{
+ const {browseCatalog,parseCatalogBrowsing,catalogBrowsingParams,catalogPageNumbers}=await import('../../../apps/web/src/experience/library/packageCatalogBrowsing');
+ const items=Array.from({length:137},(_,index)=>({
+  key:`book-${index}`,listKey:`published:${String(index).padStart(3,'0')}`,kind:'published' as const,
+  title:index===136?'Deep needle':'Same title',description:'Verified public description',count:3,
+  targetLanguage:index%2?'ja':'en',supportLanguage:'zh-Hans',installed:[],updateAvailable:false,updateDownloaded:false,enrolled:false,routeMatchesActive:true,
+  descriptor:{publisher:{name:'Real publisher'},publishedAt:'2026-10-10T00:00:00Z'},
+ })) as unknown as import('../../../apps/web/src/experience/library/packageCenterProjection').PackageCenterItem[];
+ const names=new Map([['en','英语'],['ja','日语'],['zh-Hans','简体中文']]);
+ const state=parseCatalogBrowsing({page:'6',pageSize:'24',view:'list'});
+ const page=browseCatalog(items,state,names,'zh-CN');
+ assert.deepEqual([page.page,page.pages,page.total,page.start,page.end],[6,6,137,121,137]);
+ assert.equal(page.items.length,17);
+ assert.deepEqual(browseCatalog([...items].reverse(),state,names,'zh-CN').items.map(item=>item.key),page.items.map(item=>item.key));
+ assert.equal(browseCatalog(items,{...state,query:'Deep needle'},names,'zh-CN').items[0]?.key,'book-136');
+ assert.equal(browseCatalog(items,{...state,query:'英语'},names,'zh-CN').total,69);
+ assert.equal(browseCatalog(items,{...state,target:'ja',support:'zh-Hans'},names,'zh-CN').total,68);
+ const empty=browseCatalog(items,{...state,query:'absent'},names,'zh-CN');
+ assert.deepEqual([empty.start,empty.end,empty.total,empty.page],[0,0,0,1]);
+ assert.equal(browseCatalog(items,{...state,pageSize:96,page:999},names,'zh-CN').page,2);
+ assert.deepEqual(parseCatalogBrowsing({page:'-2',pageSize:'12',sort:'unknown',view:'unknown'}),{query:'',target:'',support:'',sort:'title',page:1,pageSize:24,view:'cards'});
+ assert.deepEqual(parseCatalogBrowsing(catalogBrowsingParams({...state,query:'日语',target:'ja',support:'zh-Hans',sort:'newest'})),{...state,query:'日语',target:'ja',support:'zh-Hans',sort:'newest'});
+ assert.deepEqual(catalogPageNumbers(6,12),[1,'gap',5,6,7,'gap',12]);
+ assert.deepEqual(catalogPageNumbers(1,1),[1]);
+});
