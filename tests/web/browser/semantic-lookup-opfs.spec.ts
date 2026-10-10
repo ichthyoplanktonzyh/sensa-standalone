@@ -14,6 +14,7 @@ declare global {interface Window{semanticLookupFixture:typeof Entry}}
 let server:Server,origin:string;
 test.setTimeout(120_000);
 test.beforeAll(async()=>{
+  test.setTimeout(120_000);
   const built=await viteBuild({configFile:false,worker:{format:'es'},root:process.cwd(),logLevel:'silent',base:'/',build:{write:false,minify:false,target:'es2022',rollupOptions:{preserveEntrySignatures:'strict',
     input:resolve('tests/web/support/semanticLookupBrowserEntry.ts'),output:{entryFileNames:'core.js',chunkFileNames:'assets/[name]-[hash].js',assetFileNames:'assets/[name]-[hash][extname]'}}}});
   if(Array.isArray(built)||!('output' in built))throw new Error('Expected one browser fixture bundle');

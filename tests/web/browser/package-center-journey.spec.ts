@@ -97,6 +97,7 @@ test.setTimeout(180_000);
 test.use({viewport:{width:1280,height:900},locale:'zh-CN',actionTimeout:15_000});
 
 test.beforeAll(async()=>{
+  test.setTimeout(180_000);
   server=createServer(async(request,response)=>{
     const url=new URL(request.url??'/',origin||'http://127.0.0.1');
     const json=(value:unknown,status=200)=>{

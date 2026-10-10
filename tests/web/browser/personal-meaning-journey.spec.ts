@@ -29,6 +29,7 @@ test.setTimeout(90_000);
 test.use({locale:'zh-CN',viewport:{width:1280,height:900}});
 
 test.beforeAll(async()=>{
+ test.setTimeout(180_000);
  await mkdir('.tmp',{recursive:true});output=await mkdtemp(resolve('.tmp/personal-meaning-journey-'));
  const dist=join(output,'dist');
  server=createServer(async(req,res)=>{

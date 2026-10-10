@@ -23,6 +23,7 @@ test.setTimeout(60_000);
 test.use({locale:'zh-CN',viewport:{width:1280,height:900}});
 
 test.beforeAll(async()=>{
+ test.setTimeout(180_000);
  await mkdir('.tmp',{recursive:true});
  output=await mkdtemp(resolve('.tmp/portable-package-journey-'));
  const dist=join(output,'dist');

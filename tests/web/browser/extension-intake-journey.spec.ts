@@ -27,6 +27,7 @@ const registry={...snapshot,revision:createHash('sha256').update(canonicalConsum
 const mime:Record<string,string>={'.js':'text/javascript','.css':'text/css','.wasm':'application/wasm','.svg':'image/svg+xml','.json':'application/json','.woff2':'font/woff2','.png':'image/png'};
 test.setTimeout(90_000);
 test.beforeAll(async()=>{
+ test.setTimeout(180_000);
  directory=await mkdtemp(join(tmpdir(),'sensa-extension-intake-'));const dist=join(directory,'web');
  server=createServer(async(req,res)=>{
   const url=new URL(req.url??'/',origin||'http://127.0.0.1');

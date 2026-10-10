@@ -873,6 +873,8 @@ SENSA_TEST_DATABASE_URL=postgresql://... npm run test:web:db
 入口和导入包装层已删除；原有断言现在直接属于 `tests/web` 下对应边界。较长的高风险检查已拆成具名场景，后续新增场景仍应维持既有验证语义。
 目录中的 `runner` 只有两种正式平台：不需要真实浏览器的测试用 Vitest，需要真实 Chromium、OPFS 或浏览器生命周期的测试用 Playwright Test；浏览器加数据库场景也用 Playwright Test。不得新增 `node:test` 或第三套通用测试运行器。`npm run test:vitest` 运行快速层，`npm run test:playwright` 运行浏览器层；单项和风险筛选仍通过目录入口执行。独立负载生成器和性能脚本仍是专项工具，不作为通用运行器。
 
+规模夹具生成、生产构建和用户交互须分别计时。Playwright 的 `beforeAll` 使用独立的 hook 看门限，不能仅靠文件级 `test.setTimeout` 为准备阶段配置时间；CI 整组资源看门限也不代表用户响应预算。调整准备或整组执行窗口时，保留具名用例的行为断言、毫秒交互预算与测量条件。
+
 长旅程是产品收敛与验收 checkpoint 的基本单位。`user-journeys.md` 定义目标和合法出口；
 `tests/web/journeyMapping.mts` 保存稳定的 Journey → Phase → Scenario → Test Evidence 关联及共享风险检查。
 旧审计结论只作为历史输入，关联到测试不表示场景通过，更不表示整条旅程完成。

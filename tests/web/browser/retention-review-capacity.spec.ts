@@ -18,6 +18,9 @@ const mime:Record<string,string>={'.js':'text/javascript','.css':'text/css','.ht
 test.setTimeout(15*60_000);
 test.use({viewport:{width:1280,height:900},locale:'zh-CN'});
 test.beforeAll(async()=>{
+ // Hook time is independent of the test timeout. Genuine history generation
+ // and the production build are preparation, not the interaction budgets below.
+ test.setTimeout(15*60_000);
  let fixturePath=fixtureDirectory;
  if(!fixturePath){
   const count=Number(process.env.SENSA_RETENTION_CAPACITY_TARGETS??1000);
