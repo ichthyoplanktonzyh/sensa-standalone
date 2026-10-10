@@ -2,11 +2,13 @@ import {useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
 import {Maximize,Minus,Plus,X,ArrowUpRight} from 'lucide-react';
 import {useTranslation} from 'react-i18next';
 import type {JourneyWorldItemView} from '../personalMeaningJourney';
-import {buildMeaningGraph} from '../ui/meaningGraph';
+import {buildMeaningGraph,type ExpressionAssociation} from '../ui/meaningGraph';
 import {useScreenState} from '../ui/ScreenHost';
 import {localFlowText} from '../../i18n/localFlowText';
 import {ContentDrawer} from './ContentWorkspace';
 import {intakeSourceLabel,intakeSourceUrl} from '../personalMeaningJourney/sourcePresentation';
+
+const associationKey=(row:ExpressionAssociation)=>`${row.item.personalMeaningId}:${row.alignment.personalMeaningAlignmentId}:${row.bindingVersionId}`;
 
 export function MeaningGraphView({items,languages=[],screenId,selectedExpressionId,onSelectExpression,onOpenMeaning,learningState,searching=false}:{
  items:readonly JourneyWorldItemView[];languages?:readonly string[];screenId:string;
@@ -21,27 +23,27 @@ export function MeaningGraphView({items,languages=[],screenId,selectedExpression
  const [labels,setLabels]=useScreenState<'auto'|'all'|'selected'>(`${screenId}:graph-labels`,'auto');
  const [initialized,setInitialized]=useScreenState(`${screenId}:graph-initialized`,false);
  const [narrow,setNarrow]=useState(()=>window.matchMedia('(max-width: 48rem)').matches);
- const [hover,setHover]=useState<string|null>(null),[ownerIndex,setOwnerIndex]=useState(0);
+ const [hover,setHover]=useState<string|null>(null);
+ const [owner,setOwner]=useScreenState<{expressionId:string;associationId:string}|null>(`${screenId}:graph-interpretation`,null);
  const [size,setSize]=useState({width:1000,height:560}),[measured,setMeasured]=useState(false);
  const svg=useRef<SVGSVGElement>(null),surface=useRef<HTMLDivElement>(null);
  const drag=useRef<{x:number;y:number;originX:number;originY:number}|null>(null);
  const byId=useMemo(()=>new Map(graph.nodes.map(node=>[node.id,node])),[graph]);
  const selected=byId.get(selectedExpressionId??''),highlight=byId.get(hover??'')??selected;
  const adjacent=new Set(graph.edges.filter(edge=>edge.from===highlight?.id||edge.to===highlight?.id).flatMap(edge=>[edge.from,edge.to]));
- const association=selected?.associations[Math.min(ownerIndex,(selected?.associations.length??1)-1)];
+ const association=selected?.associations.find(row=>owner?.expressionId===selected.id&&associationKey(row)===owner.associationId)??selected?.associations[0];
  const fit=()=>{const zoom=Math.min(1.2,(size.width-60)/graph.width,(size.height-80)/graph.height);setCamera({x:(size.width-graph.width*zoom)/2+25,y:(size.height-graph.height*zoom)/2+20,zoom:Math.max(.04,zoom)});};
  const zoomBy=(factor:number)=>setCamera(current=>{const zoom=Math.max(.04,Math.min(3,current.zoom*factor));return {x:size.width/2-(size.width/2-current.x)*zoom/current.zoom,y:size.height/2-(size.height/2-current.y)*zoom/current.zoom,zoom};});
  useEffect(()=>{const element=surface.current;if(!element)return;const observer=new ResizeObserver(entries=>{const rect=entries[0]?.contentRect;if(rect){setSize({width:Math.max(1,rect.width),height:Math.max(1,rect.height)});setMeasured(true);}});observer.observe(element);return()=>observer.disconnect();},[]);
  useEffect(()=>{if(measured&&!initialized){fit();setInitialized(true);}},[measured,initialized,size.width,size.height]);
  useEffect(()=>{const element=svg.current;if(!element)return;const wheel=(event:WheelEvent)=>{event.preventDefault();zoomBy(event.deltaY>0?.9:1.1);};element.addEventListener('wheel',wheel,{passive:false});return()=>element.removeEventListener('wheel',wheel);},[size.width,size.height]);
- useEffect(()=>{setOwnerIndex(0);},[selectedExpressionId]);
  const close=()=>{const id=selectedExpressionId;onSelectExpression(null);setHover(null);requestAnimationFrame(()=>{if(id)svg.current?.querySelector<SVGGElement>(`[data-expression-id="${id}"]`)?.focus();});};
  const control='inline-flex min-h-11 min-w-11 items-center justify-center rounded-control px-2 text-sm hover:bg-surface-selected focus-visible:outline-2 focus-visible:outline-focus';
  useEffect(()=>{const media=window.matchMedia('(max-width: 48rem)'),update=()=>setNarrow(media.matches);media.addEventListener('change',update);return()=>media.removeEventListener('change',update);},[]);
  const sources=(association?.item.detail.capturedSources??[]).filter(source=>source.source!==null);
  const detailContent=selected&&association?<>
     <header className="flex items-start justify-between gap-2"><div className="min-w-0"><h2 className="break-words text-xl font-medium">{selected.label}</h2><p className="mt-1 text-xs text-fg-secondary">{selected.languageTag} · {selected.id.slice(0,8)}</p></div>{!narrow&&<button type="button" className={control} onClick={close} aria-label={t('content.close')}><X size={18}/></button>}</header>
-    {selected.associations.length>1&&<label className="block text-sm">{t('content.graph.sense')}<select className="mt-2 min-h-11 w-full rounded-control border border-border-subtle bg-surface-panel p-2" value={Math.min(ownerIndex,selected.associations.length-1)} onChange={event=>setOwnerIndex(Number(event.target.value))}>{selected.associations.map((row,index)=><option key={`${row.item.personalMeaningId}:${row.alignment.personalMeaningAlignmentId}:${row.bindingVersionId}`} value={index}>{row.alignment.coreMeaningFocus} · {row.item.shortId}</option>)}</select></label>}
+    {selected.associations.length>1&&<label className="block text-sm">{t('content.graph.sense')}<select className="mt-2 min-h-11 w-full rounded-control border border-border-subtle bg-surface-panel p-2" value={associationKey(association)} onChange={event=>setOwner({expressionId:selected.id,associationId:event.target.value})}>{selected.associations.map(row=><option key={associationKey(row)} value={associationKey(row)}>{row.alignment.coreMeaningFocus} · {row.item.shortId}</option>)}</select></label>}
     <section><h3 className="text-xs text-fg-secondary">{t('content.graph.sense')}</h3><p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6">{association.alignment.coreMeaningFocus}</p></section>
     <section><h3 className="text-xs text-fg-secondary">{t('content.graph.context')}</h3>{association.item.detail.materialBlocks.filter(block=>block.bodyText).map(block=><p key={block.anchorId} className="mt-2 whitespace-pre-wrap break-words text-sm leading-6">{block.bodyText}</p>)}</section>
     <section><h3 className="text-xs text-fg-secondary">{t('content.worldSource')}</h3>{sources.length?sources.map(source=>{const url=intakeSourceUrl(source.source!);return <details key={source.anchorId} className="mt-2 text-sm"><summary className="min-h-11 cursor-pointer break-words">{intakeSourceLabel(source.source!)}</summary>{source.text&&<p className="whitespace-pre-wrap break-words leading-6">{source.text}</p>}{url&&<a href={url} target="_blank" rel="noreferrer" className="mt-2 inline-flex min-h-11 items-center underline">{localFlowText('viewSource')}</a>}</details>}):<p className="mt-2 text-sm">{t('content.worldNoSource')}</p>}</section>

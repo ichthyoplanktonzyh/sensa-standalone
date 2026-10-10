@@ -353,7 +353,7 @@ test('personal meaning favorites and notes survive explicit recycle-bin deletion
  await page.getByRole('button',{name:'我的意思',exact:true}).click();
  await expect(page.locator('.sensa-world-row').filter({hasText:'borrow'})).toHaveCount(0);
  await page.getByRole('button',{name:'回收站',exact:true}).click();await page.locator('.sensa-world-row').filter({hasText:'borrow'}).click();
- expect(page.url()).toBe(originalUrl);await page.getByRole('button',{name:'恢复内容',exact:true}).click();
+ expect(new URL(page.url()).pathname).toBe(new URL(originalUrl).pathname);expect(new URL(page.url()).searchParams.get('meaningId')).toBe(new URL(originalUrl).searchParams.get('meaningId'));expect(new URL(page.url()).searchParams.get('worldFilter')).toBe('deleted');await page.getByRole('button',{name:'恢复内容',exact:true}).click();
  await expect(more).toBeEnabled();await page.reload();await expect(page.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
  await more.click();await expect(menu.getByRole('button',{name:'取消收藏',exact:true})).toBeVisible();
  await menu.getByRole('button',{name:'写笔记',exact:true}).click();await expect(note.locator('textarea')).toHaveValue('忘带钱包时，向朋友暂借钱；之后归还。');
@@ -986,14 +986,14 @@ async function directDiscoveryJourney(page:Page,testInfo:TestInfo,size:number){
  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).enrollments).toEqual(accepted.enrollments);
  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).targetIds).toEqual([]);
  await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的学习',exact:true}).click();await page.locator('#s-study').getByRole('button',{name:'查看内容',exact:true}).click();
- const library=page.locator('#s-learning-library');await library.getByRole('textbox',{name:'搜索单词或意思',exact:true}).fill('no-such-expression');await expect(library.getByRole('button',{name:new RegExp(expression)})).toHaveCount(0);
+ const library=page.locator('#s-learning-library');await library.getByRole('searchbox',{name:'搜索单词或意思',exact:true}).fill('no-such-expression');await expect(library.getByRole('button',{name:new RegExp(expression)})).toHaveCount(0);
  if(size===250){
   await expect(library.getByText('没有符合条件的内容',{exact:true})).toBeVisible();
   await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningWorkspaceReadsForTest(true));await expect(library.getByRole('alert')).toBeVisible();
   await expect(library.getByText('没有符合条件的内容',{exact:true})).toHaveCount(0);
   await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningWorkspaceReadsForTest(false));await library.getByRole('button',{name:'重试',exact:true}).click();await expect(library.getByRole('alert')).toHaveCount(0);
  }
- await library.getByRole('textbox',{name:'搜索单词或意思',exact:true}).fill(expression);await library.getByRole('button',{name:new RegExp(expression)}).click();await expect(screen.getByRole('heading',{name:expression,exact:true})).toBeVisible();
+ await library.getByRole('searchbox',{name:'搜索单词或意思',exact:true}).fill(expression);await library.getByRole('button',{name:new RegExp(expression)}).click();await expect(screen.getByRole('heading',{name:expression,exact:true})).toBeVisible();
  await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:testInfo.outputPath('direct-preparation-mobile.png'),fullPage:true});
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);expect(requests).toEqual([]);
 }
@@ -1240,6 +1240,8 @@ test('World expression languages combine with search, saved meanings and notes w
  await page.screenshot({path:testInfo.outputPath('expression-graph-86-records.png'),animations:'disabled'});
  const polysemous=graph.locator(`[data-expression-id="${scaleFixture.registry.expressions[0]!.expressionId}"]`);await polysemous.focus();await polysemous.press('Enter');
  await expect(graph.getByRole('complementary',{name:'表达预览',exact:true}).getByRole('combobox',{name:'已确认意思',exact:true}).locator('option')).toHaveCount(2);
+ const polyPreview=graph.getByRole('complementary',{name:'表达预览',exact:true}),interpretation=polyPreview.getByRole('combobox',{name:'已确认意思',exact:true});await interpretation.selectOption({index:1});const selectedInterpretation=await interpretation.inputValue();
+ await polyPreview.getByRole('button',{name:'查看详情',exact:true}).click();await expect(page.locator('#s-personal-meaning').getByRole('heading',{name:'borrow',exact:true})).toBeVisible();await page.goBack();await expect(interpretation).toHaveValue(selectedInterpretation);
  expect(await graph.locator('[data-graph-edge]').count()).toBe(2);
  await page.screenshot({path:testInfo.outputPath('expression-graph-polysemy-and-real-links.png'),animations:'disabled'});
  await graph.getByRole('complementary',{name:'表达预览',exact:true}).getByRole('button',{name:'关闭',exact:true}).click();
