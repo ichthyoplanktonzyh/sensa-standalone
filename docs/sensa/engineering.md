@@ -896,6 +896,45 @@ node --import tsx tests/web/run.mts --journey=SJ-01 --list
 node --import tsx tests/web/run.mts --journey=OJ-04 --suite=fast
 ```
 
+### 证据保存与任务接续
+
+旅程定义、能力／场景关联和执行结果分开保存。`journeyMapping.mts` 说明一个断言证明什么与剩余边界，
+`catalog.mts` 选择执行环境；checkpoint 的 Git 提交、CI run／attempt、发布 manifest 和实际使用报告记录
+发生过的结果。历史矩阵的 verdict、报告中的旧失败以及独立验收结论均按原版本保留，不改写为当前通过。
+检查覆盖不能仅由文件存在、提交标题、当前绿色 CI 或一次真实用户顺利使用推导。
+
+新任务先按旅程列出证据，再按改动风险与执行环境选跑。快速回归不需要浏览器或费用；OPFS、离线、
+生命周期和真实扩展行为使用 Chromium；账号数据／RLS 使用隔离 PostgreSQL；真实 Provider、TTS、邮件、
+安装权限和生产发布另行授权、执行与留证。独立使用验收给予用户目标与必要边界，不预先提供操作答案，
+不让审查者修改生产实现。不同旅程使用新的独立审查视角，发现的问题由主智能体核实和固化回归。
+
+复用规模夹具时保存生成器、输入规模、实际产生的事实种类与完整性检查；性能记录注明正文与媒体、
+硬件／浏览器、网络、冷暖状态、测量起止及原预算。准备耗时、传输、校验、提交和可交互时间不混为一个数字。
+失败样本与告警保留原结果；告警不等于性能达标，供应商接收邮件不等于用户收件箱验收。
+
+原始证据可在本机建立不可覆盖的归档。归档工具只复制文件并核验字节与 SHA-256，不解释报告、判定通过、
+执行所复制脚本或调用网络。自动发现用于仓库内的 `LJ-*` 报告、历史审计、选定规模日志与发布证据；可用
+JSON 路径数组明确选择其他证据。自动发现不是“全部证据齐全”的证明，归档前应核对来源列表。
+
+```sh
+node --import tsx scripts/archiveJourneyEvidence.mts --discover \
+  --output=output/playwright/evidence-archives/<new-name>
+node --import tsx scripts/archiveJourneyEvidence.mts --sources=<paths.json> \
+  --output=output/playwright/evidence-archives/<new-name>
+node --import tsx scripts/archiveJourneyEvidence.mts \
+  --verify=output/playwright/evidence-archives/<name>/manifest.json
+```
+
+归档原文不做内容脱敏，目录与文件使用本机私有权限并保持 Git ignored；完整 profile、凭据文件和
+填充的环境文件不纳入归档。`manifest.json` 记录原路径、字节数与摘要；`inventoryGitCommit` 是整理时的
+源码版本，不自动成为报告的被测版本；路径中的 Journey hint 也不是验收结论。只有所有复制完成后才写
+manifest，重复命名或摘要不一致直接失败，不覆盖原文件或旧归档。归档应随本机工作资料另行备份；Git
+只保存工具和操作规则，不保存原始报告、生成内容、媒体或私有状态。
+
+重要 CI 证据在其配置的保留期到期前下载并核验；期限以相应 workflow 为准。任务交接只引用源码入口、
+checkpoint 提交、运行记录、归档 manifest 与 issue，不维护第二份手工通过表。保留事项区分已知缺陷、
+未验证的发布准备与明确范围外能力；把它们登记到 issue tracking，不在资料整理阶段自动扩展实施范围。
+
 旅程性能证据必须注明规模、设备/CPU、网络条件、预算和测量范围。构建大小、SQLite/OPFS 查询预算、
 慢账号恢复期间的 Shell 响应以及受控浏览器交互是不同证据，不互相冒充，也不据此宣称真实设备 CWV 达标。
 
