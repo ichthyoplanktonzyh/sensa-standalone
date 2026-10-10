@@ -45,6 +45,7 @@ export const currentJourneyScenarios: readonly Readonly<{
 
 /** Shared guards run with a journey; they do not replace its user-facing evidence. */
 export const journeySupportingTests: readonly Readonly<{journeyIds:readonly LongJourneyId[];testId:string;scope:string}>[] = [
+  {journeyIds:['LJ-16','SJ-03','OJ-04'],testId:'api-runtime-imports',scope:'AST checks actual API Buffer member references for explicit node:buffer runtime imports, including upload, speech and cursors. Not an executed Deno request, actual provider, deployment or full runtime-global audit.'},
   {journeyIds:['SJ-01'],testId:'language-journey',scope:'Real semantic intake/gateway over memory authority: absolute capture languages and pinned clarification survive Route changes. Not Route settings UI, OPFS or cross-device configuration convergence.'},
   {journeyIds:['SJ-01'],testId:'language-scope',scope:'Controlled local route/runtime boundaries; linked assertions protect language isolation, not a whole settings journey or a passing result.'},
   {journeyIds:['SJ-02'],testId:'agent-mcp',scope:'Hono Agent connection/tool authorization and operation contracts with controlled SQL/transport. Not an installed external Agent, mailbox delivery or live credential lifecycle.'},
