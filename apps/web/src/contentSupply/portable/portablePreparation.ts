@@ -4,7 +4,7 @@ import {
  sensaLightweightInitialMaterializationContentSchema,sensaPortableBookDescriptorSchema,
  type InstalledLearningContent,type SensaLightweightInitialMaterialRole,type SensaPortableBookDescriptor,
 } from '@sensa/contracts/sensa';
-import {createSensaPortableLightweightPackage,readSensaPortableLightweightPackage,type SensaPortableLightweightPackageArchive} from '@sensa/content-validator/portable-lightweight';
+import {createSensaPortableLightweightPackageArchive,readSensaPortableLightweightPackage,type SensaPortableLightweightPackageArchive} from '@sensa/content-validator/portable-lightweight';
 import {readSensaPortableBook,type SensaPortableBookPackage} from '@sensa/content-validator/portable-book';
 import {canonicalJsonDigest,stableUuid} from '@sensa/learning-kernel';
 import {portablePackageInstallationFor,publicationBookMembership,type PackageInstallation,type PortablePublicationAttestation} from '../../data/library/packageRecords';
@@ -216,8 +216,9 @@ export const preparePortablePackage=(
   let canonicalBytes:Uint8Array;
   let canonical:SensaPortableLightweightPackageArchive;
   try{
-    canonicalBytes=createSensaPortableLightweightPackage(input.package,input.mediaById);
-    canonical=readSensaPortableLightweightPackage(canonicalBytes);
+    const created=createSensaPortableLightweightPackageArchive(input.package,input.mediaById);
+    canonicalBytes=created.bytes;
+    canonical=created.archive;
   }catch(cause){return invalidPortablePackage(cause);}
   const content=validateInstalledLearningContent(compileInstalledContent(canonical,publication));
   const installation=portablePackageInstallationFor(

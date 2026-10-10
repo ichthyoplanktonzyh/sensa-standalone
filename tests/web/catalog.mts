@@ -85,6 +85,7 @@ const foundationTests = [
   {id:'study-scope-storage',file:'tests/web/integration/study-scope-storage.test.mts',kind:'integration',risks:['local-correctness','durability','scale'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
   {id:'learning-target-view',file:'tests/web/unit/learning-target-view.test.mts',kind:'unit',risks:['local-correctness'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'scene-editor-read',file:'tests/web/unit/scene-editor-read.test.mts',kind:'unit',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
+  {id:'practice-material-read',file:'tests/web/unit/practice-material-read.test.mts',kind:'unit',risks:['local-correctness','scale'],environment:'node',suite:'fast',runner:'vitest'},
   {
     id: 'learning-language-matrix',
     file: 'tests/web/integration/learning-language-matrix.test.mts',

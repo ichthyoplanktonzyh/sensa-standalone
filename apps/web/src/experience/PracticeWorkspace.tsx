@@ -25,7 +25,8 @@ export function PracticeWorkspace({active=true}:{active?:boolean}){
  const route=useSyncExternalStore(routeReader.subscribe,routeReader.read);
  const languageTag=route.status.ok&&!route.status.loading?route.value?.activeRoute.targetLanguageTag??null:null;
  const languageRef=useRef(languageTag);languageRef.current=languageTag;
- const materials=usePracticeMaterials(languageTag);
+ // Playback restores one exact expression, not the material-selection overview.
+ const materials=usePracticeMaterials(languageTag,currentScreen!=='s-real-world-listening');
  const [expression,setExpression]=useState<PracticeExpression|null>(null),[playSelection,setPlaySelection]=useState<PracticeMaterialSelection|null>(null);
  const [pickingExpression,setPickingExpression]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [restoreAttempt,setRestoreAttempt]=useState(0);

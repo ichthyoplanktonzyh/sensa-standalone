@@ -11,7 +11,7 @@ export function readPracticeMaterialSelection(language:string):PracticeMaterialS
  }catch{/* A damaged device preference is not a material or learning fact. */}return null;
 }
 const noSubscription=()=>()=>{};
-export function usePracticeMaterials(languageTag:string|null){
+export function usePracticeMaterials(languageTag:string|null,enabled=true){
  const [chosen,setChosen]=useState<{language:string;selection:PracticeMaterialSelection}|null>(null);
  const selection=useMemo(()=>languageTag?(chosen?.language===languageTag?chosen.selection:readPracticeMaterialSelection(languageTag)??emptySelection):emptySelection,[languageTag,chosen]);
  const reader=useMemo(()=>new WorldSnapshotReader({subscribe:practiceMaterialsRepository.subscribe,read:async signal=>{
@@ -23,14 +23,14 @@ export function usePracticeMaterials(languageTag:string|null){
    selected={source:'personal',expressionIds:null};page=await practiceMaterialsRepository.page({source:'personal',languageTag:language,query:'',offset:0,limit:4});signal.throwIfAborted();
   }
   return {selection:selected,page};
- }}),[languageTag,selection]);
- const snapshot=useSyncExternalStore(languageTag?reader.subscribe:noSubscription,reader.read);
- const ready=!!languageTag&&snapshot.status.ok&&!snapshot.status.loading;
+ }}),[languageTag,selection,enabled]);
+ const snapshot=useSyncExternalStore(enabled&&languageTag?reader.subscribe:noSubscription,reader.read);
+ const ready=enabled&&!!languageTag&&snapshot.status.ok&&!snapshot.status.loading;
  const resolved=ready?snapshot.value?.selection??selection:selection;
  const select=useCallback((next:PracticeMaterialSelection)=>{if(!languageTag)return;setChosen({language:languageTag,selection:next});try{previewStorage.setItem(key(languageTag),JSON.stringify(next));}catch{/* In-memory selection still works. */}},[languageTag]);
  useEffect(()=>{if(ready&&snapshot.value&&JSON.stringify(selection)!==JSON.stringify(snapshot.value.selection))setChosen({language:languageTag!,selection:snapshot.value.selection});},[ready,snapshot.value,selection,languageTag]);
  return {selection:resolved,preview:ready?snapshot.value?.page.items??[]:[],count:ready?snapshot.value?.page.total??0:null,
-  availability:!languageTag||snapshot.status.loading?'loading' as const:!snapshot.status.ok?'unavailable' as const:'ready' as const,select,reload:reader.reload};
+  availability:!enabled||!languageTag||snapshot.status.loading?'loading' as const:!snapshot.status.ok?'unavailable' as const:'ready' as const,select,reload:reader.reload};
 }
 export function usePracticeExpressionWindow(source:PracticeMaterialSource,languageTag:string|null,query:string,enabled:boolean,selectedIds?:readonly string[]){
  const selectionKey=JSON.stringify(selectedIds??null);

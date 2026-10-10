@@ -6,6 +6,7 @@ import {test} from "vitest";
 
 import {
   createSensaPortableLightweightPackage,
+  createSensaPortableLightweightPackageArchive,
   readSensaPortableLightweightPackage,
   validateSensaPortableLightweightPackage,
 } from "@sensa/content-validator/portable-lightweight";
@@ -148,6 +149,29 @@ test("portable package admits creator-chosen teaching text", () => {
   );
   const result = validateSensaPortableLightweightPackage(archive);
   assert.equal(result.status, "satisfied");
+});
+
+test("portable packer returns the exact validated canonical archive without reopening it", () => {
+  const input = new Uint8Array(audioBytes);
+  const media = new Map([["water-pronunciation", input]]);
+  const created = createSensaPortableLightweightPackageArchive(validManifest(), media);
+  assert.deepEqual(created.bytes, createSensaPortableLightweightPackage(validManifest(), media));
+  assert.deepEqual(created.archive, readSensaPortableLightweightPackage(created.bytes));
+  const decoded = created.archive.mediaById.get("water-pronunciation")!;
+  assert.notEqual(decoded.buffer, input.buffer);
+  input.fill(0);
+  assert.deepEqual(Array.from(decoded), Array.from(audioBytes));
+});
+
+test("portable canonical creation still rejects invalid media and resource references", () => {
+  assert.throws(() => createSensaPortableLightweightPackageArchive(validManifest(), new Map([
+    ["water-pronunciation", new Uint8Array(audioBytes.length)],
+  ])), /Media digest mismatch/);
+  const manifest = validManifest();
+  manifest.resources.pronunciation.audioMediaId = "missing";
+  assert.throws(() => createSensaPortableLightweightPackageArchive(manifest, new Map([
+    ["water-pronunciation", audioBytes],
+  ])), /reference.media_missing/);
 });
 
 test("portable package carries declarative experience HTML and an optional translation", () => {

@@ -26,7 +26,10 @@ const account='07bb6e9d-cf3c-4b91-9cf1-b50000005002';
 const defaultStageWaitMs=120_000;
 const maxDownloadToWorkerWaitMs=150_000;
 const maxWorkerValidationWaitMs=150_000;
-const maxAtomicInstallWaitMs=135_000;
+// CI's 5k baseline took 86s; the 135s guard cut the 10k sample off while
+// still saving. Observe completion within a finite window on slower hosts,
+// retaining actual timings/long tasks, not declaring an installation UX pass.
+const maxAtomicInstallWaitMs=300_000;
 const maxInstalledFactReadMs=180_000;
 const maxJourneyMs=15*60_000;
 const types:Record<string,string>={

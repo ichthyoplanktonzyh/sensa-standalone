@@ -14,7 +14,7 @@ import {once} from 'node:events';
 import {mkdir,mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
 import {cpus,tmpdir} from 'node:os';
 import {extname,join,resolve} from 'node:path';
-import {chromium,expect,test,type Page,type BrowserContext,type TestInfo} from '@playwright/test';
+import {chromium,expect,test as base,type Page,type BrowserContext,type TestInfo} from '@playwright/test';
 import {unzipSync,zipSync} from 'fflate';
 import {portableBookMemberPath,readSensaPortableBook} from '@sensa/content-validator/portable-book';
 import {canonicalConsumerJson,sensaPortableBookManifestSchema} from '@sensa/contracts/sensa';
@@ -93,6 +93,19 @@ const session=(userId=subject)=>({
   },
 });
 
+const test=base.extend<{preparedScenePage:Page}>({
+ preparedScenePage:[async({page,context},use)=>{
+  const started=performance.now(),repository=new MemoryJourneyRepository();
+  await createJourneyModules({repository}).semanticIntake.submit(semanticLookupPayload());
+  semanticScaleFixture=syntheticSemanticWorld(await repository.load(),10_000);
+  await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
+  await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+  await expect(page.locator('#s-home')).toBeVisible();
+  expect(await page.evaluate(async()=>window.__sensaBrowserSmoke!.seedSemanticWorld(await(await fetch('/semantic-scale-fixture')).json()))).toBe(10_000);
+  console.log('Personal Scene 10k fixture preparation (not interaction):',JSON.stringify({preparedMs:performance.now()-started}));
+  await use(page);
+ },{timeout:300_000}],
+});
 test.setTimeout(180_000);
 test.use({viewport:{width:1280,height:900},locale:'zh-CN',actionTimeout:15_000});
 
@@ -1777,7 +1790,7 @@ test('personal learning scene updates remain explicit while stale editors preser
  const providers:string[]=[];page.on('request',request=>{if(/\/model\/|chat\/completions|\/speech\//.test(request.url()))providers.push(request.url());});
  await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
  await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
- const home=page.locator('#s-home');await home.getByRole('button',{name:'学习包目录',exact:true}).click();
+ const home=page.locator('#s-home');await expect(home.locator('.sensa-today-start')).toBeEnabled();await home.getByRole('button',{name:'学习包目录',exact:true}).click();
  await page.locator('#s-catalog').last().getByRole('button',{name:/雨天借伞/}).click();const book=page.locator('#s-catalog-book').last();
  await book.getByRole('button',{name:'下载学习包',exact:true}).click();await expect(book.getByText('已下载',{exact:true})).toBeVisible();
  await book.getByRole('button',{name:'加入学习',exact:true}).click();await book.getByRole('button',{name:'去学习',exact:true}).click();
@@ -1910,13 +1923,7 @@ test('practice content selection and listening start stay bounded with 10000 per
  for(const timing of timings){expect(timing.elapsedMs).toBeGreaterThanOrEqual(0);expect(timing.elapsedMs,`${timing.action}: local interaction budget, not provider latency`).toBeLessThan(1500);}
 });
 
-test('explicit personal scene acceptance and update stay bounded with 10000 unrelated Meanings',async({page,context},testInfo)=>{
- const repository=new MemoryJourneyRepository();await createJourneyModules({repository}).semanticIntake.submit(semanticLookupPayload());
- semanticScaleFixture=syntheticSemanticWorld(await repository.load(),10_000);
- await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
- await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
- await expect(page.locator('#s-home')).toBeVisible();
- expect(await page.evaluate(async()=>window.__sensaBrowserSmoke!.seedSemanticWorld(await(await fetch('/semantic-scale-fixture')).json()))).toBe(10_000);
+test('explicit personal scene acceptance and update stay bounded with 10000 unrelated Meanings',async({preparedScenePage:page},testInfo)=>{
  await page.goto(`${origin}/content`);
  await expect(page.locator('.sensa-world.active').last().locator('.sensa-world-row').first()).toBeVisible();
  const runtime=await startOrdinaryBook(page),editor=page.getByRole('dialog').filter({has:page.getByRole('heading',{name:'我的场景',exact:true})});
