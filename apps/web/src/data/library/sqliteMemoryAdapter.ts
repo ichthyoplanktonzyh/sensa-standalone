@@ -13,7 +13,7 @@ import {localLastPresentedMaterial} from '../../learning/runtime/localCurriculum
 import {learningSupportMeaning} from '@sensa/contracts/sensa';
 import {emptyJourneyState,type MeaningJourneyRecord,type SenseRegistryState} from '../../experience/personalMeaningJourney/store';
 import {createMeaningLookup,type MeaningLookupResult} from '../../experience/personalMeaningJourney/meaningLookup';
-import {worldRegistryClosure,worldItemFromRecord,summarizeWorldItem,worldSearchText,isWorldRecordVisible,matchesWorldFilter,validateWorldQuery,type WorldBrowseQuery,type WorldBrowsePage,type WorldRecordRead} from '../../experience/personalMeaningJourney/worldRead';
+import {worldRegistryClosure,worldItemFromRecord,summarizeWorldItem,worldSearchText,isWorldRecordVisible,matchesWorldFilter,matchesWorldLanguages,worldReferenceSenseIds,validateWorldQuery,type WorldBrowseQuery,type WorldBrowsePage,type WorldRecordRead} from '../../experience/personalMeaningJourney/worldRead';
 import {validateWorldLearningChoiceQuery,worldLearningChoice,type WorldLearningChoiceQuery,type WorldLearningChoicePage} from '../../experience/personalMeaningJourney/worldRead';
 import {buildPersonalMeaningLearningSources} from '../../experience/personalMeaningJourney/learningSource';
 import {indexRegistry} from '../../experience/personalMeaningJourney/registryRead';
@@ -55,17 +55,19 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
   }
   async worldLearningChoices(raw:WorldLearningChoiceQuery):Promise<WorldLearningChoicePage>{
     const query=validateWorldLearningChoiceQuery(raw);
+    const references=query.referenceFilter&&query.referenceFilter!=='all'?worldReferenceSenseIds((await this.entries('annotations')).map(row=>decodeBackupValue(JSON.parse(row.encodedValue))),query.referenceFilter):null;
     const read:WorldRecordRead=(table,key)=>{const encoded=this.records.get(`${table}\u0000${key}`);return encoded===undefined?undefined:decodeBackupValue(JSON.parse(encoded));};
     const choices=(await this.entries('semanticMeanings')).flatMap(row=>{
       const record=decodeBackupValue(JSON.parse(row.encodedValue)) as MeaningJourneyRecord;
       const registry=worldRegistryClosure(record,read),item=worldItemFromRecord(record,read);
-      return query.filter!=='deleted'&&isWorldRecordVisible(record,registry)&&matchesWorldFilter(item,query.filter)&&worldSearchText(item).includes(query.query)&&(query.senseIds===undefined||summarizeWorldItem(item).senseIds?.some(id=>query.senseIds!.includes(id)))
-        ?buildPersonalMeaningLearningSources(record,indexRegistry(registry)).filter(source=>source.targetLanguageTag===query.targetLanguageTag).map(source=>({choice:worldLearningChoice(source),updatedAt:item.updatedAt})):[];
+      return query.filter!=='deleted'&&isWorldRecordVisible(record,registry)&&matchesWorldFilter(item,query.filter)&&matchesWorldLanguages(summarizeWorldItem(item),query.expressionLanguages)&&(references===null||summarizeWorldItem(item).senseIds?.some(id=>references.includes(id)))&&worldSearchText(item).includes(query.query)&&(query.senseIds===undefined||summarizeWorldItem(item).senseIds?.some(id=>query.senseIds!.includes(id)))
+        ?buildPersonalMeaningLearningSources(record,indexRegistry(registry)).filter(source=>source.targetLanguageTag===query.targetLanguageTag&&(!query.expressionLanguages?.length||query.expressionLanguages.includes(source.targetLanguageTag))).map(source=>({choice:worldLearningChoice(source),updatedAt:item.updatedAt})):[];
     }).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt)||(a.choice.reference.personalMeaningId<b.choice.reference.personalMeaningId?-1:a.choice.reference.personalMeaningId>b.choice.reference.personalMeaningId?1:a.choice.key<b.choice.key?-1:1));
     return {items:choices.slice(query.offset,query.offset+query.limit).map(row=>row.choice),total:choices.length};
   }
   async worldBrowse(raw:WorldBrowseQuery):Promise<WorldBrowsePage>{
     const query=validateWorldQuery(raw);
+    const references=query.referenceFilter&&query.referenceFilter!=='all'?worldReferenceSenseIds((await this.entries('annotations')).map(row=>decodeBackupValue(JSON.parse(row.encodedValue))),query.referenceFilter):null;
     const read:WorldRecordRead=(table,key)=>{const encoded=this.records.get(`${table}\u0000${key}`);return encoded===undefined?undefined:decodeBackupValue(JSON.parse(encoded));};
     const records=(await this.entries('semanticMeanings')).map(row=>{
       const record=decodeBackupValue(JSON.parse(row.encodedValue)) as MeaningJourneyRecord;
@@ -74,8 +76,10 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
     }).sort((a,b)=>b.item.updatedAt.localeCompare(a.item.updatedAt)||(a.item.personalMeaningId<b.item.personalMeaningId?-1:1));
     const visible=records.filter(row=>row.visible);
     const partition=query.filter==='deleted'?records.filter(row=>row.item.status==='deleted'):visible;
-    const selected=partition.filter(row=>matchesWorldFilter(row.item,query.filter)&&row.search.includes(query.query)&&(query.senseIds===undefined||row.item.references?.some(reference=>query.senseIds!.includes(reference.senseId))));
+    const selected=partition.filter(row=>matchesWorldFilter(row.item,query.filter)&&matchesWorldLanguages(row.item,query.expressionLanguages)&&(references===null||row.item.senseIds?.some(id=>references.includes(id)))&&row.search.includes(query.query)&&(query.senseIds===undefined||row.item.references?.some(reference=>query.senseIds!.includes(reference.senseId))));
     return {items:selected.slice(query.offset,query.offset+query.limit).map(row=>row.item),total:selected.length,
+      expressionLanguages:[...new Set(visible.flatMap(row=>row.item.expressions?.map(expression=>expression.languageTag)??[]))].sort(),
+      expressionCount:new Set(selected.flatMap(row=>row.item.expressions?.filter(expression=>!query.expressionLanguages?.length||query.expressionLanguages.includes(expression.languageTag)).map(expression=>expression.expressionId)??[])).size,
       pending:visible.filter(row=>row.item.senseFormation.phase!=='sense_confirmed'||row.item.expressionBinding.phase!=='bound').length,
       next:visible.find(row=>row.item.senseFormation.phase!=='sense_confirmed'||row.item.expressionBinding.phase!=='bound')?.item??null};
   }

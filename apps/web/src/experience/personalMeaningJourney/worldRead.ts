@@ -10,15 +10,17 @@ import type {PersonalMeaningLearningSource,PersonalMeaningLearningReference} fro
 import {personalLearningSourceKey} from '../../contentSupply/provisioning/contracts';
 
 export type WorldFilter='all'|'continue'|'binding'|'complete'|'pending'|'deleted';
-export interface WorldBrowseQuery{query:string;filter:WorldFilter;offset:number;limit:number;senseIds?:readonly string[]}
+export interface WorldBrowseQuery{query:string;filter:WorldFilter;offset:number;limit:number;senseIds?:readonly string[];expressionLanguages?:readonly string[];referenceFilter?:'all'|'saved'|'notes'}
+export interface WorldExpressionSummary{expressionId:string;surfaceForm:string;languageTag:string}
 export interface WorldBrowseItem{
  personalMeaningId:string;label:string;draftLabel?:string;primaryLabel:string;updatedAt:string;
  status:'active'|'deleted';
  senseIds?:string[];
  references?:WorldMeaningReference[];
+ expressions?:WorldExpressionSummary[];
  senseFormation:JourneySenseFormationView;expressionBinding:JourneyExpressionBindingView;
 }
-export interface WorldBrowsePage{items:WorldBrowseItem[];total:number;pending:number;next:WorldBrowseItem|null}
+export interface WorldBrowsePage{items:WorldBrowseItem[];total:number;pending:number;next:WorldBrowseItem|null;expressionLanguages?:string[];expressionCount?:number}
 /** Exact accepted interpretation, without Context, media or learning state. */
 export interface WorldMeaningReference{
  personalMeaningAlignmentId:string;senseId:string;word:string;meaning:string;historical:boolean;
@@ -82,7 +84,9 @@ export function summarizeWorldItem(item:JourneyWorldItemView):WorldBrowseItem{
  const branches=[...item.detail.focuses.map(focus=>focus.alignment),...item.detail.directAlignments];
  const expression=branches.flatMap(branch=>branch?.confirmedBindings??[])[0]?.surfaceForm;
  const references:WorldMeaningReference[]=[...branches.flatMap(branch=>branch?[{branch,historical:false}]:[]),...(item.detail.alignmentHistory??[]).map(branch=>({branch,historical:true}))].flatMap(({branch,historical})=>branch.confirmedBindings[0]?[{personalMeaningAlignmentId:branch.personalMeaningAlignmentId,senseId:branch.senseId,word:branch.confirmedBindings[0].surfaceForm,meaning:branch.coreMeaningFocus,historical}]:[]);
+ const expressions=[...new Map(branches.flatMap(branch=>branch?.confirmedBindings??[]).map(binding=>[binding.expressionId,{expressionId:binding.expressionId,surfaceForm:binding.surfaceForm,languageTag:binding.languageTag}])).values()];
  return {personalMeaningId:item.personalMeaningId,status:item.detail.status,senseIds:[...new Set(branches.flatMap(branch=>branch?[branch.senseId]:[]))],references,label:expression||item.experienceAnchors[0]?.surfaceForm||item.familiarAnchors[0]?.surfaceForm||item.primaryLabel,
+  expressions,
   ...(item.senseFormation.phase!=='sense_confirmed'||item.expressionBinding.phase!=='bound'?{draftLabel:item.experienceAnchors[0]?.surfaceForm||item.familiarAnchors[0]?.surfaceForm||item.primaryLabel}:{}),
   primaryLabel:item.primaryLabel,updatedAt:item.updatedAt,senseFormation:item.senseFormation,expressionBinding:item.expressionBinding};
 }
@@ -103,5 +107,20 @@ export function validateWorldQuery(input:WorldBrowseQuery):WorldBrowseQuery{
  if(typeof input.query!=='string'||input.query.length>200||!['all','continue','binding','complete','pending','deleted'].includes(input.filter)
   ||!Number.isSafeInteger(input.offset)||input.offset<0||!Number.isSafeInteger(input.limit)||input.limit<1||input.limit>256)throw new Error('world_query_invalid');
  if(input.senseIds!==undefined&&(!Array.isArray(input.senseIds)||input.senseIds.length>256||input.senseIds.some(id=>typeof id!=='string'||!id||id.length>200)))throw new Error('world_query_invalid');
+ if(input.expressionLanguages!==undefined&&(!Array.isArray(input.expressionLanguages)||input.expressionLanguages.length>32||input.expressionLanguages.some(tag=>typeof tag!=='string'||!tag||tag.length>100)))throw new Error('world_query_invalid');
+ if(input.referenceFilter!==undefined&&!['all','saved','notes'].includes(input.referenceFilter))throw new Error('world_query_invalid');
  return {...input,query:normalizeMeaningQuery(input.query)};
+}
+export function worldReferenceSenseIds(rows:readonly unknown[],filter:'saved'|'notes'):string[]{
+ const kind=filter==='saved'?'saved_sense':'sense_note';
+ return rows.flatMap(raw=>{
+  const row=raw as {id?:unknown;kind?:unknown;senseId?:unknown;body?:unknown}|null;
+  if(row?.kind!==kind)return [];
+  if(typeof row.senseId!=='string'||!row.senseId||row.id!==`${kind}:${encodeURIComponent(row.senseId)}`||filter==='notes'&&typeof row.body!=='string')throw new WorldSourceInvalidError('world_reference_invalid');
+  return filter==='notes'&&!row.body?[]:[row.senseId];
+ });
+}
+/** Languages qualify expressions, never the Meaning or its Context. */
+export function matchesWorldLanguages(item:Pick<WorldBrowseItem,'expressions'>,languages:readonly string[]|undefined):boolean{
+ return !languages?.length||!!item.expressions?.some(expression=>languages.includes(expression.languageTag));
 }

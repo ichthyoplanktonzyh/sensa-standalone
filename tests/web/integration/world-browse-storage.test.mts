@@ -115,7 +115,7 @@ test('World pages preserve exact labels/phases, search private Context, and neve
  const raw=new sqlite.oo1.DB(':memory:'),database=new SqliteRecordDatabase(sqlite,raw,'memory');database.initialize();
  try{
   const {state,modules}=await seed();database.commit({clears:[],deletes:[],puts:rows(state),contentRevision:1});
-  expect(database.worldBrowse(query)).toEqual({items:modules.personalMeaningJourney.getWorldItems().map(summarizeWorldItem),total:1,pending:0,next:null});
+  expect(database.worldBrowse(query)).toEqual({items:modules.personalMeaningJourney.getWorldItems().map(summarizeWorldItem),total:1,pending:0,next:null,expressionLanguages:['en'],expressionCount:1});
   const choices=modules.personalMeaningJourney.getLearningSources(state.meanings[0]!.personalMeaning.personalMeaningId).map(worldLearningChoice);
   expect(database.worldLearningChoices({...query,targetLanguageTag:'en'})).toEqual({items:choices,total:1});
   expect(database.worldLearningChoices({...query,query:'ＭＡＹ',targetLanguageTag:'en'}).items).toEqual(choices);
@@ -181,11 +181,36 @@ test('one Meaning with multiple accepted bindings exposes every exact pin and se
   database.commit({clears:[],deletes:[],puts:rows(await repository.load()),contentRevision:1});
   const sources=gateway.getLearningSources(accepted.personalMeaningId);
   expect(sources).toHaveLength(3);
+  const memory=new MemoryRecordAdapter();await memory.commit({clears:[],deletes:[],puts:rows(await repository.load()),contentRevision:1});
+  for(const expressionLanguages of [[],['en'],['fr'],['en','fr'],['ja']]){
+   const selection={...query,expressionLanguages};
+   expect(await memory.worldBrowse(selection)).toEqual(database.worldBrowse(selection));
+  }
+  expect(database.worldBrowse({...query,expressionLanguages:['fr']})).toMatchObject({total:1,expressionCount:1,expressionLanguages:['en','fr']});
+  expect(database.worldBrowse({...query,expressionLanguages:['en','fr']})).toMatchObject({total:1,expressionCount:3});
+  expect(database.worldBrowse({...query,expressionLanguages:['ja']})).toMatchObject({total:0,expressionCount:0});
+  expect(database.worldBrowse({...query,query:'May',expressionLanguages:['fr']})).toMatchObject({total:1,expressionCount:1});
+  expect(database.worldLearningChoices({...query,expressionLanguages:['ja'],targetLanguageTag:'en'})).toEqual({items:[],total:0});
+  expect(database.worldLearningChoices({...query,expressionLanguages:['fr'],targetLanguageTag:'en'})).toEqual({items:[],total:0});
+  expect(await memory.worldLearningChoices({...query,expressionLanguages:['fr'],targetLanguageTag:'en'})).toEqual({items:[],total:0});
+  expect(database.worldLearningChoices({...query,expressionLanguages:['fr'],targetLanguageTag:'fr'}).total).toBe(1);
   const en=database.worldLearningChoices({...query,targetLanguageTag:'en'});
   expect(en.total).toBe(2);expect(en.items.map(choice=>choice.label).sort()).toEqual(['borrow','take on loan']);
   expect(new Set(en.items.map(choice=>choice.reference.personalMeaningAlignmentId)).size).toBe(1);
   expect(database.worldLearningChoices({...query,targetLanguageTag:'en',limit:1,offset:1}).items[0]?.key).not.toBe(database.worldLearningChoices({...query,targetLanguageTag:'en',limit:1}).items[0]?.key);
   expect(database.worldLearningChoices({...query,targetLanguageTag:'fr'}).items).toEqual(sources.filter(source=>source.targetLanguageTag==='fr').map(worldLearningChoice));
+  const senseId=sources[0]!.reference.senseId;
+  const annotations={clears:[],deletes:[],puts:[{table:'annotations' as const,key:`saved_sense:${senseId}`,encodedValue:encode({id:`saved_sense:${senseId}`,kind:'saved_sense',senseId,createdAt:1})},{table:'annotations' as const,key:`sense_note:${senseId}`,encodedValue:encode({id:`sense_note:${senseId}`,kind:'sense_note',senseId,body:'隔离笔记',revision:1,createdAt:1,updatedAt:1})}],contentRevision:2};
+  database.commit(annotations);await memory.commit(annotations);
+  for(const referenceFilter of ['saved','notes'] as const)for(const expressionLanguages of [['en'],['fr'],['ja']]){
+   const selection={...query,query:'May',referenceFilter,expressionLanguages};
+   expect(await memory.worldBrowse(selection)).toEqual(database.worldBrowse(selection));
+   expect(database.worldBrowse(selection).total).toBe(expressionLanguages[0]==='ja'?0:1);
+  }
+  const cleared={clears:[],deletes:[],puts:[{...annotations.puts[1]!,encodedValue:encode({id:`sense_note:${senseId}`,kind:'sense_note',senseId,body:'',revision:2,createdAt:1,updatedAt:2})}],contentRevision:3};
+  database.commit(cleared);await memory.commit(cleared);
+  expect(database.worldBrowse({...query,referenceFilter:'notes'}).total).toBe(0);
+  expect(await memory.worldBrowse({...query,referenceFilter:'notes'})).toEqual(database.worldBrowse({...query,referenceFilter:'notes'}));
  }finally{database.close();}
 });
 

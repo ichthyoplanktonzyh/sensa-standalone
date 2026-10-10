@@ -15,10 +15,11 @@ const failed=(cause:unknown):JourneyGatewayStatus=>({ok:false,loading:false,
  errorKind:cause instanceof Error&&['StoreCorruptedError','WorldSourceInvalidError','ZodError'].includes(cause.name)?'corrupted':'unavailable'});
 const sameFrame=(left:WorldReadStamp,right:WorldReadStamp)=>left.incarnation===right.incarnation&&left.revision===right.revision;
 
-interface WindowPage<Item> extends WorldReadStamp{items:Item[];total:number;pending?:number;inboxCount?:number;next?:WorldBrowseItem|null}
+interface WindowPage<Item> extends WorldReadStamp{items:Item[];total:number;pending?:number;inboxCount?:number;next?:WorldBrowseItem|null;expressionLanguages?:string[];expressionCount?:number}
 interface WindowPort<Item,Query>{subscribe(listener:()=>void):()=>void;page(query:Query&{offset:number;limit:number}):Promise<WindowPage<Item>>}
 export interface WorldWindowSnapshot<Item=WorldBrowseItem>{
  items:ReadonlyMap<number,Item>;total:number;pending:number;inboxCount:number;next:WorldBrowseItem|null;status:JourneyGatewayStatus;
+ expressionLanguages?:string[];expressionCount?:number;
 }
 const pageSize=64,maxPages=8;
 /** At most eight compact pages, independent of the size of the whole World.
@@ -66,7 +67,7 @@ export class WorldWindowReader<Item=WorldBrowseItem,Query=Pick<WorldBrowseQuery,
    this.frame=page;this.pages.delete(offset);this.pages.set(offset,page.items);
    for(const key of this.pages.keys())if(this.pages.size>maxPages&&!this.wanted.has(key))this.pages.delete(key);
    const items=new Map<number,Item>();for(const [start,rows] of this.pages)rows.forEach((item,index)=>items.set(start+index,item));
-   this.publish({items,total:page.total,pending:page.pending??0,inboxCount:page.inboxCount??0,next:page.next??null,status:ready()});
+   this.publish({items,total:page.total,pending:page.pending??0,inboxCount:page.inboxCount??0,next:page.next??null,status:ready(),expressionLanguages:page.expressionLanguages,expressionCount:page.expressionCount});
   },cause=>{if(generation===this.generation&&this.listeners.size)this.publish({...this.snapshot,items:new Map(),pending:0,inboxCount:0,next:null,status:failed(cause)});})
    .finally(()=>{if(this.inFlight.get(offset)===work)this.inFlight.delete(offset);});
   this.inFlight.set(offset,work);

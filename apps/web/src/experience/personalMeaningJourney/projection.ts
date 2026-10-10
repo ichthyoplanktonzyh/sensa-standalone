@@ -494,6 +494,7 @@ const buildAlignmentView = (
     };
   }) ?? [];
   const confirmedBindings = currentBindingFacts.map(({ confirmation, binding, bindingVersion, expressionVersion, expression }) => ({
+    expressionId: expression.expressionId,
     expressionBindingConfirmationId: confirmation.expressionBindingConfirmationId,
     senseVersionId: confirmation.senseVersionId,
     expressionVersionId: confirmation.expressionVersionId,

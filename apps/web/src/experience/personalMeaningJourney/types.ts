@@ -133,6 +133,7 @@ export interface JourneyProposalView extends JourneySemanticSpecView {
 }
 
 export interface JourneyConfirmedBindingView {
+  expressionId: string;
   expressionBindingConfirmationId: string;
   senseVersionId: string;
   expressionVersionId: string;
