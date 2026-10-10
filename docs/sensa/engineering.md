@@ -1109,10 +1109,22 @@ application-only 变化。数据库迁移、`infra/`、Supabase/Cloudflare 生�
 3. 读取上一份 `sensa-system-release-manifest-v1|v2`，按路径影响生成最小安全 Release Plan；新成功记录写为带授权证据的 v2；
 4. 如需发布内容，先构建、验证、上传不可变 Book/Registry 并提升 Registry；
 5. 如需发布应用，从该成功 CI run 下载已经测试和固定的 Web、扩展与 API 候选，重新核对来源、目标和全部摘要，不再重新构建；
-6. 应用前向数据库迁移、对齐 Supabase Auth、部署 Supabase Edge Function；
-7. 上传 Cloudflare Worker 版本，先验证预览，再提升到生产，并用 `wrangler triggers deploy` 应用域名路由；
-8. 执行公网非模型 smoke；
-9. 生成同时固定 Application、公开配置目标、前向 migration 集合与 Learning Content 身份的系统清单并保存发布证据。
+6. 完整应用发布才应用前向数据库迁移、对齐 Supabase Auth／服务配置并部署 Supabase Edge Function；
+7. 上传 Cloudflare Worker 版本，先核验预览文件，再提升到生产；完整发布才用 `wrangler triggers deploy` 应用域名路由；
+8. 执行公网非模型 smoke，并核验 API 构建身份、生产 Web 文件摘要和 Cloudflare 实际 100% 流量版本；
+9. 生成同时固定 Application、公开配置目标、前向 migration 集合与 Learning Content 身份的系统清单；
+10. 独立 archive job 将已核验的候选 ZIP 与系统清单保存到 GitHub 原生 Release，核验回读摘要后发布归档。
+
+仅 `scope=auto` 且生产变化全部位于 `apps/web/`，并已有真实核验的应用基线时，Planner 才选择
+`web-only`。它保留原 API、数据库迁移集和生产配置，跳过 Supabase 写入与域名路由更新；执行前仍须
+核对候选与基线的公开目标、迁移摘要、原 API 身份及原 Web 实际流量。基线缺少证明、显式重发、
+API／扩展／共享／配置或未知路径变化均保持完整发布。目标漂移直接拒绝，不能把 Web-only 自动升级为更大写入权限。
+
+`releaseCandidate.mjs` 在密封前将完整源码 SHA 写入编译后的 API identity module；本地源码默认返回 null，
+运行时环境变量不能覆盖这个身份。公开 `/sensa/release` 只返回构建身份，不认证、不访问资料或调用模型。
+`liveVerification.mjs` 回读预览／生产的 index、Service Worker 与 assets/integrations 中的 JS、CSS、WASM、HTML
+实际解码字节，按候选校验大小和 SHA-256，并查询 Cloudflare 最新部署的精确版本及 100% 流量。
+最终系统记录必须带匹配的 live verification；Web 与 API 可以来自不同的已核验源码版本。
 
 联动发布按 Content → Application 排序；共享合同必须在旧应用/新内容和新应用/新内容的滚动窗口中保持
 兼容。任一组件未成功时不会生成成功的系统清单。首次使用统一入口，或上一份系统清单已经不可用时，
@@ -1120,7 +1132,21 @@ Planner 会要求 `scope=all` 的完整 bootstrap，而不是猜测线上组件�
 
 应用交付遵循 `build once → verify → promote`：生产 workflow 没有应用 build job，不接受其他仓库／SHA／run 的候选，也不拿验证 attempt 冒充构建 attempt。它仍会 checkout 同一 SHA 读取 forward-only migration 和发布脚本，在生产边界重新校验候选及目标，再执行 Supabase/Cloudflare 提升。候选保留 14 天；过期后发布应失败并重新取得当前 SHA 的绿色 CI 证据，不能在生产 job 中临时重建。备用入口只接受已完成的绿色 CI；未完成时立即给出可操作状态，不在发布 job 内等待一个短于实际 CI 时长的固定窗口。
 
-发布计划、组件回执和完整系统清单使用独立产物身份；重跑组件后，记录器接收该成功执行返回的 artifact ID，不按同名文件猜测最新结果。`releaseStatus.mjs` 在失败后记录有限允许列表内的步骤 outcome，并区分 `not-deployed`、`partial-or-unverified` 与完成状态。迁移／配置命令失败也可能留下部分变更，不能认领“生产未变化”或“已自动回滚”。统一报告分别展示等待授权、no-op、完整记录与 incomplete；命令 outcome 不是供应商实际版本回执，也不代替用户旅程验收。
+发布计划、组件回执和完整系统清单使用独立产物身份；重跑组件后，记录器接收该成功执行返回的 artifact ID，不按同名文件猜测最新结果。`releaseStatus.mjs` 在失败后记录有限允许列表内的步骤 outcome，并区分 `not-deployed`、`partial-or-unverified` 与完成状态。迁移／配置命令失败也可能留下部分变更，不能认领“生产未变化”或“已自动回滚”。统一报告分别展示等待授权、no-op、完整记录与 incomplete；实际应用已核验但归档失败时显示 `verified-but-unarchived`，重跑 archive job，不重跑部署。命令 outcome、线上构建证明和用户旅程验收是不同证据。
+
+`releaseArchive.mjs` 使用原生 GitHub Releases，不增加备份数据库。候选归档 tag 为
+`sensa-application-<FULL_SHA>-<BUILD_RUN>-<BUILD_ATTEMPT>`，保留 Actions ZIP 的精确原字节、摘要和密封 manifest；
+系统归档沿用 `sensa-system-<SHA_PREFIX>-<RUN>-<PLAN_ATTEMPT>`，保存完整清单与独立 checksum。
+草稿上传并回读校验后才发布；同名不同字节拒绝覆盖，部分重试保留第一份精确回执。
+GitHub token 只发送到固定 API／上传域名，签名存储下载不转发 token。
+归档 receipt 如实记录平台 `immutable` 属性，不将脚本“不覆盖”策略冒称已启用平台不可变保护。
+
+规划优先读取可核验的长期系统归档，并检查较近 Actions run 的完整记录；整体 workflow 因 archive 失败而红，
+不代表已经核验的生产状态消失，不能静默退回更旧清单。原生发现有界，较旧记录可指定精确 system tag。
+Actions candidate 过期后不允许临时构建未测代码来发布；已保存的原字节仍可用于受控恢复及配置迁移。
+恢复只读取 manifest 明确列出的成员并逐文件核验，不执行归档脚本、不按 ZIP 路径解压或创建 symlink，
+目标目录已存在时拒绝覆盖。Web-only 清单保留原 API 的独立候选归档引用，不能把新 Web ZIP 中未部署的 API 当作线上 API。
+旧组件没有归档时 receipt 明确保留缺口，不伪造恢复点；归档不会回滚数据库或替代实际恢复演练。
 
 普通 application-only 变化不需要运行发布命令。策略例外、明确重发或恢复时才使用备用入口：
 

@@ -44,6 +44,9 @@ export type WebTestCatalogEntry = Readonly<{
  * split into named behavior scenarios.
  */
 const foundationTests = [
+  {id:'release-archive',file:'tests/web/release/release-archive.test.mjs',kind:'contract',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
+  {id:'live-verification',file:'tests/web/release/live-verification.test.mjs',kind:'contract',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
+  {id:'api-release-identity',file:'tests/web/release/api-release-identity.test.mts',kind:'contract',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'test-execution',file:'tests/web/quality/test-execution.test.mts',kind:'quality',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
   ...['account-recovery-journey','reference-practice-journey','learning-runtime-journey','learning-workspace-journey'].map(id=>({id,file:`tests/web/browser/${id}.spec.ts`,kind:'integration' as const,risks:['local-correctness','durability','convergence','scale'] as const,environment:'chromium' as const,suite:'browser' as const,runner:'playwright' as const})),
   {id:'release-status',file:'tests/web/release/release-status.test.mjs',kind:'contract',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},

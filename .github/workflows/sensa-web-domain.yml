@@ -6,6 +6,10 @@ on:
         description: Successful unified release whose live application version must remain unchanged
         required: true
         type: string
+      baseline_release_tag:
+        description: Optional exact archived system tag for older runs beyond automatic discovery
+        required: false
+        type: string
       owner_accepted:
         description: Authorize only the owned-domain, CORS and Auth redirect changes
         required: true
@@ -61,18 +65,24 @@ jobs:
       - name: Restore the successful baseline and verify the unchanged live version
         env:
           BASELINE_RUN: ${{ inputs.baseline_system_run }}
+          SENSA_BASELINE_RUN: ${{ inputs.baseline_system_run }}
+          SENSA_BASELINE_RELEASE_TAG: ${{ inputs.baseline_release_tag }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          gh run download "$BASELINE_RUN" --pattern 'sensa-system-release-*' --dir .tmp/domain-baseline
-          baseline_manifest="$(find .tmp/domain-baseline -name system-release-manifest.json -type f -print -quit)"
-          test -n "$baseline_manifest"
+          node scripts/release/releaseArchive.mjs baseline
+          baseline_manifest=.tmp/previous-system-release/system-release-manifest.json
+          test -f "$baseline_manifest"
           echo "SENSA_BASELINE_MANIFEST=$baseline_manifest" >> "$GITHUB_ENV"
           SENSA_BASELINE_MANIFEST="$baseline_manifest" node scripts/release/domainBaseline.mjs
       - name: Refuse application source drift before changing production configuration
         run: git diff --exit-code "$SENSA_BASELINE_APP_SHA" HEAD -- apps packages db/migrations supabase/functions content/authored
       - name: Restore verified baseline assets for routing configuration validation
         run: |
-          gh run download "$SENSA_BASELINE_CI_RUN" --name "$SENSA_BASELINE_CANDIDATE_NAME" --dir .tmp/domain-baseline-candidate
+          if node --input-type=module -e 'import{readFileSync}from"node:fs";const manifest=JSON.parse(readFileSync(process.env.SENSA_BASELINE_MANIFEST,"utf8"));process.exit(manifest.components.application.candidate.archive?0:1)'; then
+            node scripts/release/releaseArchive.mjs candidate
+          else
+            gh run download "$SENSA_BASELINE_CI_RUN" --name "$SENSA_BASELINE_CANDIDATE_NAME" --dir .tmp/domain-baseline-candidate
+          fi
           node --input-type=module <<'JS'
           import {readFileSync} from 'node:fs';
           import {createHash} from 'node:crypto';

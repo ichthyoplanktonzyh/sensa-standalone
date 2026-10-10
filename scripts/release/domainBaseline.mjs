@@ -9,8 +9,9 @@ export function domainMigrationBaseline(manifest,environment){
  const desired=desiredAuthRedirectConfig(environment),app=manifest?.components?.application;
  if(desired.siteUrl!=='https://learnsensa.com'||environment.CLOUDFLARE_WORKER_NAME!=='sensa-standalone'||!/^[a-f0-9]{32}$/.test(environment.CLOUDFLARE_ACCOUNT_ID??''))throw Error('Domain migration target mismatch');
  const api=`https://${desired.projectRef}.supabase.co/functions/v1/sensa-api`;
- if(manifest?.format!=='sensa-system-release-manifest-v2'||!/^[a-f0-9]{40}$/.test(app?.sourceCommit??'')||app?.api?.releaseSha!==app.sourceCommit||app?.targets?.apiUrl!==api||environment.VITE_SENSA_API_URL!==api||!/^[a-f0-9-]{36}$/.test(app?.web?.versionId??'')||!/^[a-f0-9]{64}$/.test(app?.candidate?.manifestSha256??'')||!/^[1-9][0-9]*$/.test(app?.candidate?.workflowRunId??'')||!/^[1-9][0-9]*$/.test(app?.candidate?.workflowRunAttempt??''))throw Error('Successful application baseline required');
+ if(manifest?.format!=='sensa-system-release-manifest-v2'||!/^[a-f0-9]{40}$/.test(app?.sourceCommit??'')||!/^[a-f0-9]{40}$/.test(app?.api?.releaseSha??'')||app?.targets?.apiUrl!==api||environment.VITE_SENSA_API_URL!==api||!/^[a-f0-9-]{36}$/.test(app?.web?.versionId??'')||!/^[a-f0-9]{64}$/.test(app?.candidate?.manifestSha256??'')||!/^[1-9][0-9]*$/.test(app?.candidate?.workflowRunId??'')||!/^[1-9][0-9]*$/.test(app?.candidate?.workflowRunAttempt??''))throw Error('Successful application baseline required');
  const previous=new URL(app.targets.webOrigin);
+ if(app.api.releaseSha!==app.sourceCommit&&(app.verification?.apiCommit!==app.api.releaseSha||app.verification?.webVersionId!==app.web.versionId))throw Error('Separately retained API requires exact live verification');
  if(previous.protocol!=='https:'||previous.origin!==previous.href.replace(/\/$/,''))throw Error('Baseline origin invalid');
  const validationAttempt=app.candidate.validationRunAttempt??app.candidate.workflowRunAttempt;
  if(!/^[1-9][0-9]*$/.test(validationAttempt)||Number(validationAttempt)<Number(app.candidate.workflowRunAttempt))throw Error('Baseline validation attempt invalid');

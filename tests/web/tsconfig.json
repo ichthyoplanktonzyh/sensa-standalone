@@ -12,6 +12,7 @@
     "types": ["node", "vite/client", "chrome"]
   },
   "files": [
+    "release/api-release-identity.test.mts",
     "quality/test-execution.test.mts",
     "browser/package-center-journey.spec.ts",
     "browser/account-recovery-journey.spec.ts",

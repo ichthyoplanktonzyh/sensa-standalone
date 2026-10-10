@@ -45,6 +45,9 @@ export const currentJourneyScenarios: readonly Readonly<{
 
 /** Shared guards run with a journey; they do not replace its user-facing evidence. */
 export const journeySupportingTests: readonly Readonly<{journeyIds:readonly LongJourneyId[];testId:string;scope:string}>[] = [
+  {journeyIds:['OJ-04'],testId:'release-archive',scope:'Controlled native GitHub Release storage and real temporary ZIPs prove exact-byte retention, retry safety, failed-archive baseline preservation, and safe sealed-member recovery. No live archive publication or production restore.'},
+  {journeyIds:['OJ-04'],testId:'live-verification',scope:'Controlled HTTP responses prove sealed public file hashes, baked API build identity, Web-only preflight and exact provider traffic checks. No live deployment or user-journey acceptance.'},
+  {journeyIds:['OJ-04'],testId:'api-release-identity',scope:'The actual Hono route returns an unversioned local build identity without database/auth/model work and cannot be forged by a runtime environment SHA. Not an executed hosted Edge deployment.'},
   {journeyIds:['OJ-04'],testId:'candidate-source',scope:'Controlled GitHub metadata proves green same-repository main validation, separate immutable build attempt, exact artifact/job identity and expiry rejection. No live rerun or deployment claim.'},
   {journeyIds:['OJ-04'],testId:'release-status',scope:'Controlled Actions step/job observations distinguish awaiting authorization, incomplete/partial mutation and complete recorded release. Not an executed provider rollback or live deployment receipt.'},
   {journeyIds:['LJ-16','SJ-03','OJ-04'],testId:'api-runtime-imports',scope:'AST checks actual API Buffer member references for explicit node:buffer runtime imports, including upload, speech and cursors. Not an executed Deno request, actual provider, deployment or full runtime-global audit.'},

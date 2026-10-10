@@ -26,6 +26,10 @@ on:
       release_id:
         required: true
         type: string
+      application_mode:
+        description: Planner-approved full or Web-only execution; checked against the exact saved plan
+        required: true
+        type: string
     outputs:
       evidence_artifact_id:
         value: ${{ jobs.deploy.outputs.artifact_id }}
@@ -46,6 +50,7 @@ jobs:
     timeout-minutes: 15
     env:
       SENSA_RELEASE_SHA: ${{ inputs.release_sha }}
+      SENSA_APPLICATION_MODE: ${{ inputs.application_mode }}
       SENSA_CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
       SENSA_CANDIDATE_RUN_ATTEMPT: ${{ inputs.candidate_run_attempt }}
       SENSA_WEB_ORIGIN: ${{ vars.SENSA_WEB_ORIGIN }}
@@ -64,6 +69,11 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+      - name: Restore the exact authorized application plan
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: sensa-release-plan-${{ inputs.release_id }}
+          path: .tmp/application-release-plan
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           artifact-ids: ${{ inputs.candidate_artifact_id }}
@@ -81,11 +91,25 @@ jobs:
           if(!/^[a-z0-9]{20}$/.test(project)||api.hostname!==`${project}.supabase.co`||api.pathname.replace(/\/$/,'')!=='/functions/v1/sensa-api')throw Error('Supabase target mismatch');
           console.log('Verified production Supabase and Cloudflare targets.');
           JS
+      - name: Refuse Web-only target or live backend drift before any mutation
+        id: preflight
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node --input-type=module <<'JS'
+          import {readFileSync} from 'node:fs';
+          const plan=JSON.parse(readFileSync('.tmp/application-release-plan/system-release-plan.json','utf8'));
+          if(plan.decision.applicationMode!==process.env.SENSA_APPLICATION_MODE)throw Error('Application mode differs from the saved release plan');
+          JS
+          node scripts/release/liveVerification.mjs preflight
       - uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3.0.0
+        if: ${{ inputs.application_mode == 'full' }}
         with:
           version: 2.117.0
       - name: Apply pending forward migrations
         id: migrations
+        if: ${{ inputs.application_mode == 'full' }}
         env:
           MIGRATION_DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
         run: |
@@ -98,11 +122,13 @@ jobs:
           npm run db:migrate
       - name: Keep production Auth redirects aligned
         id: auth_config
+        if: ${{ inputs.application_mode == 'full' }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: node scripts/release/supabaseAuthConfig.mjs --apply
       - name: Configure accepted catalog and service boundaries
         id: service_config
+        if: ${{ inputs.application_mode == 'full' }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SENSA_RUNTIME_DATABASE_URL: ${{ secrets.SENSA_RUNTIME_DATABASE_URL }}
@@ -114,6 +140,7 @@ jobs:
           supabase secrets set --env-file "$RUNNER_TEMP/sensa-service.env" --project-ref "$SUPABASE_PROJECT_REF"
       - name: Deploy API
         id: api_deploy
+        if: ${{ inputs.application_mode == 'full' }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: supabase functions deploy sensa-api --project-ref "$SUPABASE_PROJECT_REF"
@@ -130,7 +157,10 @@ jobs:
         id: web_preview
         env:
           SENSA_WEB_ORIGIN: ${{ steps.web_version.outputs.preview_url }}
-        run: node scripts/release/hostedWebSmoke.mjs
+          SENSA_PREVIEW_URL: ${{ steps.web_version.outputs.preview_url }}
+        run: |
+          node scripts/release/hostedWebSmoke.mjs
+          node scripts/release/liveVerification.mjs preview
       - name: Promote Web version to production
         id: web_promote
         env:
@@ -139,6 +169,7 @@ jobs:
         run: npx wrangler versions deploy "${{ steps.web_version.outputs.version_id }}@100%" --name "$CLOUDFLARE_WORKER_NAME" --message "Authorized release $SENSA_RELEASE_SHA" -y
       - name: Apply production domain routing
         id: domain_routes
+        if: ${{ inputs.application_mode == 'full' }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
@@ -146,6 +177,12 @@ jobs:
       - name: Public non-model smoke
         id: public_smoke
         run: node scripts/release/hostedSmoke.mjs
+      - name: Verify actual API build, Web file bytes and Cloudflare traffic
+        id: live_verification
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/release/liveVerification.mjs live
       - name: Record actual application step outcomes even after failure
         if: always()
         env:
@@ -163,4 +200,5 @@ jobs:
             release-candidate/manifest.json
             release-candidate/cloudflare-version.json
             release-candidate/application-release-status.json
+            release-candidate/application-live-verification.json
             ${{ runner.temp }}/wrangler-output.jsonl

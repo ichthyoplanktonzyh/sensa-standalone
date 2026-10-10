@@ -1,6 +1,7 @@
 import {test} from "vitest";
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
+import {createHash} from 'node:crypto';
 
 import {
   automaticReleasePolicyFormat,
@@ -195,7 +196,7 @@ test("system release manifest records new evidence and carries an unchanged comp
       count: 1,
       latest: "db/migrations/0001_fixture.sql",
     },
-    files: [{path: "apps/web/dist/index.html", bytes: 1, sha256: digest("2")}],
+    files: [{path: "apps/web/dist/index.html", bytes: 1, sha256: digest("2")},{path:'apps/web/dist/sw.js',bytes:1,sha256:digest('3')}],
   };
   const manifest = finalizeSystemRelease({
     plan,
@@ -208,6 +209,7 @@ test("system release manifest records new evidence and carries an unchanged comp
       releaseSha: sha("b"),
       versionId: "cloudflare-version-2",
     },
+    applicationVerification: {format:'sensa-application-live-verification-v1',commit:sha('b'),webVersionId:'cloudflare-version-2',webOrigin:candidate.webOrigin,apiUrl:candidate.apiUrl,apiCommit:sha('b'),trafficPercentage:100,verifiedFileCount:2,verifiedFileSetSha256:createHash('sha256').update(JSON.stringify(candidate.files)).digest('hex'),candidateManifestSha256:createHash('sha256').update(JSON.stringify(candidate,null,2)+'\n').digest('hex')},
     repository: "sensa/example",
     workflowRunId: "123",
     workflowRunAttempt: "1",
@@ -225,6 +227,23 @@ test("system release manifest records new evidence and carries an unchanged comp
   assert.deepEqual(manifest.components.learningContent, previous.components.learningContent);
   assert.equal(manifest.previousReleaseId, previous.releaseId);
   assert.match(manifest.evidence.workflowRunUrl, /actions\/runs\/123$/u);
+  const nextCandidate={...candidate,commit:sha('c')};
+  const nextPlan=planSystemRelease({targetCommit:sha('c'),previousManifest:manifest,requestedScope:'auto',changedPaths:['apps/web/src/App.tsx'],releaseId:releaseId(sha('c'))});
+  assert.equal(nextPlan.decision.applicationMode,'web-only');
+  const nextEvidence={plan:nextPlan,applicationCandidate:nextCandidate,
+    ciCandidateSource:{format:'sensa-ci-candidate-source-v1',repository:'sensa/example',commit:sha('c'),workflowRunId:'100',buildAttempt:'1',validationAttempt:'2',artifactId:10,artifactName:`sensa-production-${sha('c')}-attempt-1`,artifactDigest:'sha256:'+digest('8')},
+    cloudflareVersion:{format:'sensa-cloudflare-version-v1',releaseSha:sha('c'),versionId:'cloudflare-version-3'},
+    applicationVerification:{...manifest.components.application.verification,commit:sha('c'),webVersionId:'cloudflare-version-3',candidateManifestSha256:createHash('sha256').update(JSON.stringify(nextCandidate,null,2)+'\n').digest('hex')},
+    repository:'sensa/example',workflowRunId:'124',workflowRunAttempt:'1'};
+  const next=finalizeSystemRelease(nextEvidence);
+  assert.equal(next.components.application.sourceCommit,sha('c'));
+  assert.deepEqual(next.components.application.api,manifest.components.application.api);
+  assert.deepEqual(next.components.application.database,manifest.components.application.database);
+  assert.throws(()=>finalizeSystemRelease({...nextEvidence,applicationVerification:null}),/Actual live/);
+  assert.throws(()=>finalizeSystemRelease({...nextEvidence,applicationVerification:{...nextEvidence.applicationVerification,apiCommit:sha('c')}}),/Actual live/);
+  for(const options of [{requestedScope:'application'}, {changedPaths:['apps/api/src/app.ts']}, {previousManifest:previous}]){
+    assert.equal(planSystemRelease({targetCommit:sha('c'),previousManifest:manifest,requestedScope:'auto',changedPaths:['apps/web/src/App.tsx'],releaseId:releaseId(sha('c')),...options}).decision.applicationMode,'full');
+  }
 });
 
 test("system release manifest rejects mismatched component evidence", () => {
@@ -287,7 +306,7 @@ test("production promotes the exact application candidate tested by main CI", as
   assert.match(system, /run\?\.head_repository\?\.full_name!==env\.GITHUB_REPOSITORY/u);
   assert.match(system, /SENSA_RELEASE_MODE: \$\{\{ github\.event_name == 'workflow_run' && 'automatic' \|\| 'manual' \}\}/u);
   assert.match(system, /github\.event_name == 'workflow_dispatch' && !inputs\.owner_accepted/u);
-  assert.match(system, /--status success --limit 20/u);
+  assert.match(system, /node scripts\/release\/releaseArchive\.mjs baseline/u);
   assert.ok(system.indexOf("Require green main CI for this revision") < system.indexOf("- uses: actions/checkout"),
     "the privileged workflow_run path must validate its same-repository main provenance before checkout");
   assert.match(system, /uses: \.\/\.github\/workflows\/sensa-web-deploy\.yml/u);

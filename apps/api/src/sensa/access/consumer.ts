@@ -33,6 +33,7 @@ import {registerBrowserTelemetry,type BrowserTelemetrySink,type BrowserTelemetry
 import {readLearningContentRegistry} from './learningContentRegistry.js';
 import {synthesizeEdgeSpeech} from '../speech/edgeTts.js';
 import {createStreamAuthorizationGate} from './streamAuthorization.js';
+import {releaseCommit} from '../releaseIdentity.js';
 
 const modelDailyLimit=30;
 const uuid=z.string().uuid();
@@ -101,6 +102,10 @@ export type ConsumerRoutesOptions={
 export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
   const clock=options.clock??(()=>new Date());
   const app=new Hono();
+  app.get('/sensa/release',context=>{
+    context.header('Cache-Control','no-store');
+    return context.json({format:'sensa-api-release-v1',commit:releaseCommit});
+  });
   const transaction=options.transaction??unsafeTransaction;
   const verify=extensionVerifier(options.verify??verifyConsumer,transaction,clock);
   const verifyAgent=agentVerifier(verify,transaction,clock);
