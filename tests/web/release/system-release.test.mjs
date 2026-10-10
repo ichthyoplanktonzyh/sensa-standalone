@@ -283,6 +283,11 @@ test("production promotes the exact application candidate tested by main CI", as
   assert.match(application, /SENSA_CANDIDATE_RUN_ATTEMPT: \$\{\{ inputs\.candidate_run_attempt \}\}/u);
   assert.doesNotMatch(application, /npm run build/u,
     "production must promote the tested CI artifact instead of rebuilding it");
+  assert.match(application, /npx wrangler triggers deploy --name "\$CLOUDFLARE_WORKER_NAME"/u,
+    "version promotion alone does not apply custom domains or the workers.dev boundary");
+  assert.ok(application.indexOf('name: Promote Web version to production') < application.indexOf('name: Apply production domain routing'));
+  assert.ok(application.indexOf('name: Apply production domain routing') < application.indexOf('name: Public non-model smoke'),
+    "release smoke must exercise the deployed custom domain");
   assert.match(application, /VITE_SUPABASE_URL: \$\{\{ format\('https:\/\/\{0\}\.supabase\.co', vars\.SUPABASE_PROJECT_REF\) \}\}/u,
     "the production verifier must derive the Supabase origin from its approved project ref instead of requiring duplicate configuration");
   for (const executor of [application, content]) {
