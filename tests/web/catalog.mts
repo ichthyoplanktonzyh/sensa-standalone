@@ -236,6 +236,7 @@ const fastBeforeMemory = [
   'integration/support-diagnostics',
   'release/learning-content-bucket',
   'release/system-release',
+  'release/domain-baseline',
   'integration/english-lightweight-release',
   'integration/semantic-session-persistence',
   'contracts/stream-authorization',
