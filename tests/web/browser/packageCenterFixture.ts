@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
-import {execFileSync} from 'node:child_process';
 import {createServer,type Server} from 'node:http';
 import {once} from 'node:events';
 import {mkdir,mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
@@ -20,14 +19,15 @@ import {MemoryJourneyRepository} from '../../../apps/web/src/experience/personal
 import {createJourneyModules} from '../../../apps/web/src/experience/personalMeaningJourney/gateway';
 import {semanticLookupPayload,syntheticSemanticWorld} from '../support/semanticLookupFixtures';
 import type {JourneyState} from '../../../apps/web/src/experience/personalMeaningJourney/store';
+import {webTestBuild,loopbackTestPort,rememberLoopbackTestPort} from '../support/webTestBuild';
 
-/** Isolated server, build directory and mutable delivery state per spec. */
+/** Isolated server and mutable delivery state per spec; exact builds are read-only. */
 export function createPackageCenterFixture(group:'book'|'account'|'reference'|'runtime'|'workspace'){
 const root=process.cwd();
 
 const output=resolve(root,'.tmp/package-center-journey',group);
 
-const dist=join(output,'dist');
+let dist:string;
 
 const subject='4c59833b-a0e2-4bd0-9d27-908ffcd81cf8';
 
@@ -244,9 +244,9 @@ test.beforeAll(async()=>{
       json({code:'fixture_error',message:error instanceof Error?error.message:'unknown'},500);
     }
   });
-  server.listen(0,'127.0.0.1');
+  server.listen(loopbackTestPort('package-web'),'127.0.0.1');
   await once(server,'listening');
-  origin=`http://127.0.0.1:${(server.address() as {port:number}).port}`;
+  origin=rememberLoopbackTestPort('package-web',server);
   // The public API is deliberately a different origin, like the shipped Web.
   const api=new Hono();
   api.use('*',cors(localSensaCorsOptions([origin])));
@@ -257,9 +257,9 @@ test.beforeAll(async()=>{
       ...(['GET','HEAD'].includes(context.req.method)?{}:{body:await context.req.arrayBuffer()}),
     });
   });
-  apiServer=serve({fetch:api.fetch,hostname:'127.0.0.1',port:0});
+  apiServer=serve({fetch:api.fetch,hostname:'127.0.0.1',port:loopbackTestPort('package-api')});
   if(!apiServer.listening)await once(apiServer,'listening');
-  apiOrigin=`http://127.0.0.1:${(apiServer.address() as {port:number}).port}`;
+  apiOrigin=rememberLoopbackTestPort('package-api',apiServer);
   storageKey=`sb-${new URL(origin).hostname.split('.')[0]}-auth-token`;
   delivery=portableBookDeliveryFixture({
     baseUrl:`${origin}/published/`,
@@ -297,18 +297,13 @@ test.beforeAll(async()=>{
   setRegistry([delivery.descriptor,learningDelivery.descriptor,mismatchedDelivery.descriptor]);
 
   await rm(output,{recursive:true,force:true});
-  await mkdir(dist,{recursive:true});
-  execFileSync('npm',['run','build','-w','@sensa/web','--','--outDir',dist,'--emptyOutDir'],{
-    cwd:root,
-    env:{
-      ...process.env,
+  await mkdir(output,{recursive:true});
+  dist=await webTestBuild({
       VITE_SENSA_MODE:'production',
       VITE_SENSA_BROWSER_SMOKE:'true',
       VITE_SUPABASE_URL:origin,
       VITE_SUPABASE_PUBLISHABLE_KEY:'fixture-publishable-key',
       VITE_SENSA_API_URL:apiOrigin,
-    },
-    stdio:'inherit',
   });
 });
 

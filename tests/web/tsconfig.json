@@ -12,6 +12,8 @@
     "types": ["node", "vite/client", "chrome"]
   },
   "files": [
+    "quality/fixture-preparation.test.mts",
+    "../../scripts/prepareRetentionCapacity.mts",
     "release/api-release-identity.test.mts",
     "quality/test-execution.test.mts",
     "browser/package-center-journey.spec.ts",

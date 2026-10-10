@@ -45,6 +45,8 @@ export const currentJourneyScenarios: readonly Readonly<{
 
 /** Shared guards run with a journey; they do not replace its user-facing evidence. */
 export const journeySupportingTests: readonly Readonly<{journeyIds:readonly LongJourneyId[];testId:string;scope:string}>[] = [
+  {journeyIds:['OJ-04'],testId:'fixture-preparation',scope:'Controlled inert data and temporary loopback servers verify exact-config build reuse, dependency/size/runtime cache identity, revalidation and corruption/foreign-path refusal. Not live GitHub cache delivery, full formal-history/browser capacity or production release evidence.'},
+  {journeyIds:['OJ-04'],testId:'test-shards',scope:'Deterministic catalog file partition and explicit quick/full selection, with static main/full and all-shards-required workflow checks. Quick evidence is not capacity acceptance; no actual CI timing or deployment claim.'},
   {journeyIds:['OJ-04'],testId:'release-archive',scope:'Controlled native GitHub Release storage and real temporary ZIPs prove exact-byte retention, retry safety, failed-archive baseline preservation, and safe sealed-member recovery. No live archive publication or production restore.'},
   {journeyIds:['OJ-04'],testId:'live-verification',scope:'Controlled HTTP responses prove sealed public file hashes, baked API build identity, Web-only preflight and exact provider traffic checks. No live deployment or user-journey acceptance.'},
   {journeyIds:['OJ-04'],testId:'api-release-identity',scope:'The actual Hono route returns an unversioned local build identity without database/auth/model work and cannot be forged by a runtime environment SHA. Not an executed hosted Edge deployment.'},

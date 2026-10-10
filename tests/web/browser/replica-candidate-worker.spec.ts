@@ -109,7 +109,7 @@ for(const scenario of ['reads','close','native-failure','crash'] as const)test(`
  }
 });
 
-for(const scenario of ['restore','write-during-validation','meaning-scale','meaning-profile'] as const)test(scenario==='meaning-profile'?'instrumented Meaning OPFS restore diagnostic':`normal staged OPFS sync over 64 MiB: ${scenario}`,async({browser},testInfo)=>{
+for(const scenario of ['restore','write-during-validation','meaning-scale','meaning-profile'] as const)test(scenario==='meaning-profile'?'instrumented Meaning OPFS restore diagnostic':`normal staged OPFS sync over 64 MiB: ${scenario}`,{tag:'@capacity'},async({browser},testInfo)=>{
  test.skip(scenario==='meaning-profile'&&process.env.SENSA_RESTORE_SQL_PROFILE!=='true','Optional CPU/SQL diagnostic, not an unmodified-Worker latency guarantee');
  test.setTimeout(scenario==='meaning-scale'?420_000:240_000);
  const profileCount=Number(process.env.SENSA_RESTORE_PROFILE_MEANINGS??1000),profileCache=process.env.SENSA_RESTORE_PROFILE_CACHE_KIB,profileJournal=process.env.SENSA_RESTORE_PROFILE_JOURNAL??'wal';

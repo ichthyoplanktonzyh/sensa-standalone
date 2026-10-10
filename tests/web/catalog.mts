@@ -36,6 +36,8 @@ export type WebTestCatalogEntry = Readonly<{
   runner: WebTestRunner;
   memoryLibrary?: boolean;
   env?: Readonly<Record<string, string>>;
+  /** Full release validation only; default/local selection is still full. */
+  browserDepth?: 'full';
 }>;
 
 /**
@@ -44,6 +46,7 @@ export type WebTestCatalogEntry = Readonly<{
  * split into named behavior scenarios.
  */
 const foundationTests = [
+  {id:'fixture-preparation',file:'tests/web/quality/fixture-preparation.test.mts',kind:'quality',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'release-archive',file:'tests/web/release/release-archive.test.mjs',kind:'contract',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'live-verification',file:'tests/web/release/live-verification.test.mjs',kind:'contract',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'api-release-identity',file:'tests/web/release/api-release-identity.test.mts',kind:'contract',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
@@ -483,6 +486,7 @@ const migratedEntry = ({path, suite, memoryLibrary, env}: MigratedTest): WebTest
     environment,
     suite,
     runner: playwrightPaths.has(path) ? 'playwright' : 'vitest',
+    ...(['browser/retention-review-capacity','browser/portable-book-capacity'].includes(path)?{browserDepth:'full' as const}:{}),
     ...(memoryLibrary ? {memoryLibrary} : {}),
     ...(env ? {env} : {}),
   };

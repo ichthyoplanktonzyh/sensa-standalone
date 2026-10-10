@@ -47,7 +47,9 @@ try {
       // Skin Lab is a self-contained presentation matrix. Do not inherit a
       // developer's local API endpoint and accidentally emit telemetry while
       // validating browser-only surfaces.
-      env: { ...process.env, VITE_SENSA_API_URL: "" },
+      // A previous in-process Vite build can set NODE_ENV=production. This is
+      // explicitly a development-only server even when specs share a worker.
+      env: { ...process.env, NODE_ENV: "development", VITE_SENSA_API_URL: "" },
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
@@ -71,7 +73,7 @@ try {
     });
     const response = await page.goto(`${origin}/?skin-lab=1`, { waitUntil: "networkidle" });
     assert(response?.ok(), "Skin Lab did not serve");
-    await page.locator("[data-sensa-skin-lab]").waitFor({ state: "visible" });
+    await expect(page.locator("[data-sensa-skin-lab]"),"Development server must expose Skin Lab before matrix checks").toBeVisible({timeout:15_000});
     const appearanceControls = page.getByLabel("Appearance controls");
     const layoutSpecimen = page.locator('[data-sensa-page-layout="learning-runtime"][data-sensa-contract-specimen="full"]');
     const shellSpecimen = page.locator('[data-sensa-page-layout="application-shell"][data-sensa-contract-specimen="full"]');

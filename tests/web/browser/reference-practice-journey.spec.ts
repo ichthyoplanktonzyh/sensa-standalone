@@ -302,7 +302,7 @@ test('learning questions are optional, readonly, cancellable and unavailable off
  }finally{await context.setOffline(false);}
 });
 
-test('practice content selection and listening start stay bounded with 10000 personal Meanings',async({page,context,browser},testInfo)=>{
+test('practice content selection and listening start stay bounded with 10000 personal Meanings',{tag:'@capacity'},async({page,context,browser},testInfo)=>{
  // Bulk fixture construction is outside the interaction budget below.
  test.setTimeout(300_000);
  const repository=new MemoryJourneyRepository();await createJourneyModules({repository}).semanticIntake.submit(semanticLookupPayload());

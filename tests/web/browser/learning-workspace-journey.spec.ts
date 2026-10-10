@@ -122,7 +122,7 @@ test('personal learning scene updates remain explicit while stale editors preser
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await other.close();
 });
 
-test('explicit personal scene acceptance and update stay bounded with 10000 unrelated Meanings',async({preparedScenePage:page},testInfo)=>{
+test('explicit personal scene acceptance and update stay bounded with 10000 unrelated Meanings',{tag:'@capacity'},async({preparedScenePage:page},testInfo)=>{
  await page.goto(`${fixture.origin}/content`);
  await expect(page.locator('.sensa-world.active').last().locator('.sensa-world-row').first()).toBeVisible();
  const runtime=await fixture.startOrdinaryBook(page),editor=page.getByRole('dialog').filter({has:page.getByRole('heading',{name:'我的场景',exact:true})});

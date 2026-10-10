@@ -4,8 +4,9 @@ import { spawnSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {journeyTestIds,validateJourneyMapping,type LongJourneyId} from './journeyMapping.mts';
-import {partitionTestFiles,browserFileWeights} from './support/testShards';
+import {partitionTestFiles,browserFileWeights,browserQuickFileWeights} from './support/testShards';
 import {executionGroups, reportCoversSelection} from './support/executionGroups';
+import {browserDepths,selectBrowserDepth,type BrowserDepth} from './support/browserDepth';
 
 import {
   defaultWebTestEnvironments,
@@ -32,6 +33,7 @@ type Filters = Readonly<{
   id?: string;
   journey?:LongJourneyId;
   shard?:string;
+  depth?:BrowserDepth;
   list: boolean;
 }>;
 
@@ -62,6 +64,7 @@ const parseFilters = (arguments_: readonly string[]): Filters => {
   let id: string | undefined;
   let journey:LongJourneyId|undefined;
   let shard:string|undefined;
+  let depth:BrowserDepth|undefined;
   let list = false;
 
   for (const argument of arguments_) {
@@ -107,6 +110,8 @@ const parseFilters = (arguments_: readonly string[]): Filters => {
     }
     const parsedShard=option(argument,'shard');
     if(parsedShard!==undefined){shard=parsedShard;continue;}
+    const parsedDepth=option(argument,'depth');
+    if(parsedDepth!==undefined){depth=allowed('depth',parsedDepth,browserDepths);continue;}
     throw new Error(`Unknown test selector ${JSON.stringify(argument)}`);
   }
 
@@ -119,13 +124,15 @@ const parseFilters = (arguments_: readonly string[]): Filters => {
     id,
     journey,
     shard,
+    depth,
     list,
   };
 };
 
 const selectedTests = (filters: Filters): readonly WebTestCatalogEntry[] => {
   const journeyIds=filters.journey?new Set(journeyTestIds(filters.journey)):null;
-  return catalog.filter((entry) => (
+  if(filters.depth!==undefined&&filters.suite!=='browser')throw Error('Validation depth only applies to the browser suite');
+  return selectBrowserDepth(catalog.filter((entry) => (
     (filters.kind === undefined || entry.kind === filters.kind)
     && (filters.runner === undefined || entry.runner === filters.runner)
     && (filters.risk === undefined || entry.risks.includes(filters.risk))
@@ -141,7 +148,7 @@ const selectedTests = (filters: Filters): readonly WebTestCatalogEntry[] => {
             : entry.suite === 'foundation' && defaultWebTestEnvironments.includes(entry.environment as (typeof defaultWebTestEnvironments)[number])
     )
     && (filters.environment === undefined || entry.environment === filters.environment)
-  ));
+  )),filters.depth??'full');
 };
 
 const formatEntry = (entry: WebTestCatalogEntry): string => [
@@ -156,7 +163,7 @@ const formatEntry = (entry: WebTestCatalogEntry): string => [
 
 const filters = parseFilters(process.argv.slice(2));
 const selected = partitionTestFiles(selectedTests(filters),filters.shard,
-  filters.suite==='browser'?entry=>browserFileWeights[entry.id]??5:undefined);
+  filters.suite==='browser'?entry=>(filters.depth==='quick'?browserQuickFileWeights:browserFileWeights)[entry.id]??5:undefined);
 const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
 
 const testFiles = (directory: string, relativeDirectory = 'tests/web'): string[] => readdirSync(directory, {withFileTypes: true}).flatMap((entry) => {
@@ -182,6 +189,7 @@ if (wrongRunner.length !== 0) {
 const unclassified = catalog.filter((entry) => entry.risks.length === 0);
 if (unclassified.length !== 0) throw new Error(`Tests missing risk tags: ${unclassified.map((entry) => entry.id).join(', ')}`);
 const wrongCiBoundary = catalog.filter((entry) => {
+  if(entry.browserDepth!==undefined&&(entry.suite!=='browser'||entry.runner!=='playwright'))return true;
   if (entry.suite === 'manual') return false;
   if (entry.environment === 'node' || entry.environment === 'built-web-artifact') {
     return entry.suite !== 'foundation' && entry.suite !== 'fast';
@@ -224,6 +232,7 @@ if (filters.list) {
   for (const [index, group] of executionGroups(selected).entries()) {
     const ids=group.entries.map(entry=>entry.id),files=group.entries.map(entry=>entry.file);
     console.log(`\n[${group.runner}/${group.environment}] ${ids.join(', ')}`);
+    if(group.runner==='playwright')console.log(`Browser depth: ${filters.depth??'full'}${filters.depth==='quick'?' (capacity cases excluded; not full release evidence)':''}`);
     const prefix=`shard-${shardName}-attempt-${runAttempt}-${executionId}-group-${index+1}`;
     const reportPath=join(reportRoot,`${prefix}.json`);
     const args = group.runner === 'vitest'
@@ -239,6 +248,7 @@ if (filters.list) {
           SENSA_PLAYWRIGHT_OUTPUT_DIR: process.env.SENSA_PLAYWRIGHT_OUTPUT_DIR ?? `.tmp/playwright-results/${selectionName}-${shardName}-${executionId}-${index+1}`,
           PLAYWRIGHT_JSON_OUTPUT_FILE:reportPath,
           PLAYWRIGHT_BLOB_OUTPUT_FILE:join(reportRoot,`${prefix}.zip`),
+          SENSA_BROWSER_DEPTH:filters.depth??'full',
         } : {}),
       },
       stdio: 'inherit',
@@ -254,6 +264,6 @@ if (filters.list) {
       if(!selectionReported)console.error('Native report did not account for every selected file:',ids.join(', '));
     }
   }
-  writeFileSync(join(reportRoot,'selection-summary.json'),JSON.stringify({format:'sensa-test-execution-v1',selectedFiles:selected.map(entry=>entry.file),groups:observations},null,2)+'\n');
+  writeFileSync(join(reportRoot,'selection-summary.json'),JSON.stringify({format:'sensa-test-execution-v1',depth:filters.depth??'full',excludedCaseTag:filters.depth==='quick'?'@capacity':null,selectedFiles:selected.map(entry=>entry.file),groups:observations},null,2)+'\n');
   if(failures.length)console.error(`Failed test files (${failures.length}/${selected.length}): ${failures.join(', ')}`);
 }

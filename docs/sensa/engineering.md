@@ -877,7 +877,9 @@ SENSA_TEST_DATABASE_URL=postgresql://... npm run test:web:db
 
 Personal Meaning 与 Package Center 重旅程的单次受控 UI 耗时区分产品目标和发布硬上限：原目标、实测值与条件继续记录；超过目标即输出明确 `PERFORMANCE_WARNING`，不认领该样本已达到目标。发布容差为 `max(100ms, 目标 × 20%)`，避免用很窄的百分比边界阻挡亚秒交互；超过目标加容差的样本以及无效测量仍失败。这是显式工程发布约定，不是实测噪声置信区间，也不代替持续性能基线。功能、权限、数据保存、原子性、完整性、无全库读取与有界 DOM 的断言保持严格；不得通过容差隐藏持续退化或大规模架构问题。
 
-浏览器 CI 通过 `--shard=1/3`、`2/3`、`3/3` 按目录文件无重叠分组；每个文件保持原隔离准备、逐例执行与交互预算。全部分组成功才通过同名 Chromium 汇总门禁。目录入口继续执行剩余文件并汇总非零结果，不因第一处失败遗漏后续证据；本机不带 shard 时仍执行完整目录。
+浏览器 CI 通过 `--shard=1/3`、`2/3`、`3/3` 按目录文件无重叠分组；每个文件保持独立服务器、浏览器状态、逐例执行与交互预算。全部分组成功才通过同名 Chromium 汇总门禁。目录入口继续执行剩余文件并汇总非零结果，不因第一处失败遗漏后续证据；本机不带 shard 时仍执行完整目录。
+
+`--suite=browser --depth=quick` 是 PR 的日常反馈层：不选择目录中 `browserDepth:full` 的成熟历史／大 Book 文件，并由原生 Playwright 排除具名 `@capacity` 大规模用例。普通规模的真实保存、并发、失败恢复、持久化和生命周期回归仍运行。主分支 CI 必须使用 `--depth=full`，发布资格仍依赖包括容量检查在内的全部分片；本机默认也是 full。快速报告明确记录 depth 和排除 tag，不是完整旅程或容量验收证据，不把历史绿色结果代入本次运行。
 
 长旅程是产品收敛与验收 checkpoint 的基本单位。`user-journeys.md` 定义目标和合法出口；
 `tests/web/journeyMapping.mts` 保存稳定的 Journey → Phase → Scenario → Test Evidence 关联及共享风险检查。
@@ -1005,8 +1007,12 @@ Chromium 的 Playwright Test 检查进入 `npm run test:browser`；PostgreSQL �
 目录运行器按 runner、环境和精确环境变量分组调用原生测试引擎，不再为每个文件启动独立进程。
 Vitest 保持文件隔离与单 worker；Playwright 保持每个 spec 的 fixture 边界，不增加 worker 或拆散共享生命周期中的用例。
 原 package-center 大型 spec 已按词书、账号恢复、表达练习、学习运行和学习安排拆为独立文件，
-共享 fixture 只复用实现，各文件的可变状态、构建及输出目录独立。
+共享 fixture 只复用实现，各文件的可变状态与输出目录独立；相同配置的只读构建按下述规则复用。
 Browser shard 按已观察的文件耗时估计确定性分配；未采样文件使用保守默认权重，不将估计当作 SLO 或实际提速结果。
+
+相同 worker 调用内，Package Center 各文件复用 `webTestBuild.ts` 生成的只读产物。它按完整公开构建配置区分，固定本次调用中首次分配的临时 Web/API 端口；每个文件关闭旧服务器后才建立自己的新 handler，浏览器 context、OPFS、账号和可变夹具不共享。不同配置仍构建新产物，失败构建不会成为成功缓存；缓存不跨 invocation，也不是生产候选。开发态 Skin Lab 显式使用 `NODE_ENV=development`，不继承前一文件的 Vite 构建模式。
+
+完整 CI 中，`prepareRetentionCapacity.mts` 使用原生 GitHub Actions cache 保存纯合成成熟历史数据。key 固定生成／校验的源码依赖、workspace package source、lockfile、Node 版本、平台和输入规模，没有跨版本 restore-key。命中后仍执行当前 digest、数量和完整领域 replay 校验；不一致、非数据文件、symlink 或不完整准备直接失败，不静默覆盖、清空或重建旧缓存。每个浏览器用例仍复制到自己的空隔离 OPFS，复制耗时与交互耗时分开报告。缓存减少正式历史的重复生成，不能省略浏览器写入、恢复或性能测量。
 
 每次调用在 `.tmp/test-results/<selection>/shard-<shard>/<invocation>/` 保存原生 JSON／blob 报告与目录选择回执，
 同时记录 GitHub attempt。成功要求原生引擎退出成功且报告包含全部、仅包含本次选择的测试文件；

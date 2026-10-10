@@ -1,13 +1,22 @@
 /** Partition selected catalog files, not cases: each isolated fixture stays whole. */
-// Bootstrap scheduling estimates from CI 38042467589, in seconds. Relocated
-// groups use summed case durations. These are not product performance budgets.
+// CI 38063623362 native blob wall intervals, including hooks and fixture setup.
+// These are scheduling estimates, not product performance budgets. Skin uses
+// the prior healthy estimate rather than preserving a 180s harness timeout.
 export const browserFileWeights:Readonly<Record<string,number>>={
- 'personal-meaning-journey':870,'semantic-lookup-opfs':350,'retention-review-capacity':325,
- 'portable-book-capacity':320,'replica-candidate-worker':230,'web-bootstrap-budget':180,
- 'account-recovery-journey':280,'reference-practice-journey':305,'learning-runtime-journey':185,
- 'learning-workspace-journey':270,'package-center-journey':150,'sqlite-runtime-failure':100,
- 'portable-package-journey':90,'extension-intake-journey':60,'practice-source-loading':25,
- 'web-entry-hmr':20,'youglish-lifecycle':20,'skin-surface':12,'reference-presentation':12,
+ 'personal-meaning-journey':735,'semantic-lookup-opfs':309,'retention-review-capacity':393,
+ 'portable-book-capacity':313,'replica-candidate-worker':252,'web-bootstrap-budget':167,
+ 'account-recovery-journey':252,'reference-practice-journey':264,'learning-runtime-journey':149,
+ 'learning-workspace-journey':390,'package-center-journey':126,'sqlite-runtime-failure':99,
+ 'portable-package-journey':75,'extension-intake-journey':46,'practice-source-loading':16,
+ 'web-entry-hmr':8,'youglish-lifecycle':12,'skin-surface':12,'reference-presentation':9,
+};
+
+// Same sampled run minus wall intervals of now-tagged capacity cases. The new
+// build cache and CI quick lane still need their own actual timing samples.
+export const browserQuickFileWeights:Readonly<Record<string,number>>={
+ ...browserFileWeights,
+ 'personal-meaning-journey':219,'semantic-lookup-opfs':81,'replica-candidate-worker':34,
+ 'account-recovery-journey':170,'reference-practice-journey':90,'learning-workspace-journey':206,
 };
 
 export function partitionTestFiles<T>(files:readonly T[],selector:string|undefined,weight?:(file:T)=>number):readonly T[]{

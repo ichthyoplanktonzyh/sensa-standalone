@@ -343,7 +343,7 @@ test('a cached exact operation cannot replay into a replaced Library before a no
   expect(await page.evaluate(()=>window.semanticLookupFixture.visible())).toEqual([]);await other.close();
 });
 
-test('10k OPFS connections keep first-after-write and warm lookup bounded without blocking the browser heartbeat',async({preparedScalePage:page})=>{
+test('10k OPFS connections keep first-after-write and warm lookup bounded without blocking the browser heartbeat',{tag:'@capacity'},async({preparedScalePage:page})=>{
   const measured=await page.evaluate(()=>window.semanticLookupFixture.measureQueries());
   console.log('Chromium / real OPFS / synthetic 10k connections / no model latency:',JSON.stringify(measured));
   expect(measured.count).toBe(1);expect(measured.warmP95Ms).toBeLessThan(100);
@@ -380,7 +380,7 @@ test('10k OPFS connections keep first-after-write and warm lookup bounded withou
   expect(confirmation.saveMs,'first confirmation must not hydrate all existing Meanings').toBeLessThan(500);expect(confirmation.maxTimerGapMs).toBeLessThan(100);
 });
 
-test('100/1k/10k persisted facts remain queryable after closing and relaunching Chromium, with separate open and lookup budgets',async()=>{
+test('100/1k/10k persisted facts remain queryable after closing and relaunching Chromium, with separate open and lookup budgets',{tag:'@capacity'},async()=>{
   for(const count of [100,1000,10_000]){
     const profile=await mkdtemp(join(tmpdir(),'sensa-meaning-reopen-'));
     const options={headless:true,...(process.env.SENSA_CHROMIUM_PATH?{executablePath:process.env.SENSA_CHROMIUM_PATH}:{})};

@@ -272,7 +272,7 @@ test('a delayed account admission in another tab cannot reopen online services a
  }finally{resume();await page.evaluate(()=>window.__sensaBrowserSmoke!.releaseAccountSignoutForTest());await other.close();}
 });
 
-test('a 10000-Meaning local clear uses a bounded preview and leaves an empty reopened library',async({},testInfo)=>{
+test('a 10000-Meaning local clear uses a bounded preview and leaves an empty reopened library',{tag:'@capacity'},async({},testInfo)=>{
  const profile=await mkdtemp(join(tmpdir(),'sensa-lj19-clear-'));
  const context=await chromium.launchPersistentContext(profile,{headless:true,viewport:{width:1280,height:900},locale:'zh-CN'}),page=await context.newPage();
  let completed=false;

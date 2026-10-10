@@ -155,7 +155,7 @@ test('Today personal-content entry offers non-AI recording without reopening the
  expect(requests).toEqual([]);
 });
 
-for(const size of [0,10_000])test.describe(`manual Meaning fixture ${size}`,()=>{
+for(const size of [0,10_000])test.describe(`manual Meaning fixture ${size}`,{tag:size?'@capacity':[]},()=>{
 test.use({meaningSetup:{size,world:false}});
 test(`manual authoring at ${size} Meanings needs Context and explicit acceptance, stays offline, and reopens`,async({preparedMeaningPage:{page,modelCalls}},testInfo)=>{
  test.setTimeout(180_000);
@@ -998,7 +998,7 @@ async function directDiscoveryJourney(page:Page,testInfo:TestInfo,size:number){
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);expect(requests).toEqual([]);
 }
 test('direct discovery at 250 connections stays read-only until enrollment and recovers without a Personal Meaning',async({page},testInfo)=>directDiscoveryJourney(page,testInfo,250));
-test('direct discovery at 10000 connections stays read-only until enrollment and recovers without a Personal Meaning',async({page},testInfo)=>directDiscoveryJourney(page,testInfo,10_000));
+test('direct discovery at 10000 connections stays read-only until enrollment and recovers without a Personal Meaning',{tag:'@capacity'},async({page},testInfo)=>directDiscoveryJourney(page,testInfo,10_000));
 
 test('explicit batch confirmation saves all intentions and failed preparation retries without duplicate enrollments',async({page})=>{
  requests=[];plans=[];
@@ -1040,7 +1040,7 @@ test('explicit batch confirmation saves all intentions and failed preparation re
  expect(requests).toEqual([]);
 });
 
-test.describe('prepared 10k World',()=>{
+test.describe('prepared 10k World',{tag:'@capacity'},()=>{
 test.use({meaningSetup:{size:10_000,world:true}});
 test('10k personal meanings keep the shipped World bounded and searchable, with real detail and refresh recovery',async({preparedMeaningPage:{page}})=>{
  test.setTimeout(180_000);
