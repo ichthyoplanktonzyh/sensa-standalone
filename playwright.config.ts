@@ -1,6 +1,7 @@
 import {defineConfig, devices} from '@playwright/test';
 
 export default defineConfig({
+  grepInvert: process.env.SENSA_SKIP_BOOK_SCALE_BENCHMARK === 'true' ? /@book-scale-performance/ : undefined,
   // CI uploads failed traces; specs here must use synthetic, non-sensitive data.
   testDir: 'tests/web',
   testMatch: '**/*.spec.ts',

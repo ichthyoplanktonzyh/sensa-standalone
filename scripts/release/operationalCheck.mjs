@@ -11,7 +11,7 @@ try{
  const managed=Number((await db.query("SELECT count(*) n FROM sensa_consumer.model_requests WHERE execution_started_at>now()-interval '24 hours'")).rows[0].n);
  const reading=Number((await db.query("SELECT count(*) n FROM sensa_consumer.reading_requests WHERE created_at>now()-interval '24 hours'")).rows[0].n);
  const modelFailures=Number((await db.query("SELECT count(*) n FROM sensa_consumer.model_requests WHERE state IN ('failed_after_execution','execution_unknown') AND completed_at>now()-interval '1 hour'")).rows[0].n);
- const lockWaits=Number((await db.query("SELECT count(*) n FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND state<>'idle' AND query_start<now()-interval '30 seconds'")).rows[0].n);
+ const lockWaits=Number((await db.query('SELECT sensa_consumer.operational_lock_wait_count() n')).rows[0].n);
  await db.query('COMMIT');const calls=managed+reading;
  console.log(JSON.stringify({event:'sensa.operational_check',pendingDeletionOverOneHour:pending,requests24h:calls,requestAlertThreshold:threshold,modelFailures1h:modelFailures,modelFailureAlertThreshold:failureThreshold,lockWaitsOver30s:lockWaits}));
  if(pending>0||calls>=threshold||modelFailures>=failureThreshold||lockWaits>0){console.error('Operational threshold exceeded. Inspect deletion recovery, database waits, or managed-service health; do not log user payloads.');process.exitCode=1;}

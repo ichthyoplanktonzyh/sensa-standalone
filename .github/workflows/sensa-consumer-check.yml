@@ -100,7 +100,12 @@ jobs:
           npm run build -w @sensa/content-validator
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
+      - name: Isolated Book scale benchmark before large journey fixtures
+        if: matrix.shard == 2
+        run: npx playwright test tests/web/browser/package-center-journey.spec.ts --grep @book-scale-performance --output .tmp/playwright-results/book-scale-performance
       - name: Browser integration and OPFS durability
+        env:
+          SENSA_SKIP_BOOK_SCALE_BENCHMARK: 'true'
         run: npm run test:browser -- --shard=${{ matrix.shard }}/3
       - name: Upload synthetic Playwright Test failure evidence
         if: failure()

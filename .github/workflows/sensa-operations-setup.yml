@@ -1,0 +1,50 @@
+name: Configure Sensa operational access
+on:
+  workflow_dispatch:
+    inputs:
+      owner_accepted:
+        description: Configure only dedicated monitoring and expired-data retention access
+        required: true
+        default: false
+        type: boolean
+permissions:
+  contents: read
+concurrency:
+  group: sensa-production
+  cancel-in-progress: false
+jobs:
+  configure:
+    environment: web-production
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require scoped main authority
+        env:
+          ACCEPTED: ${{ inputs.owner_accepted }}
+        run: test "$ACCEPTED" = true && test "$GITHUB_REF" = refs/heads/main
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: node --import tsx tests/web/run.mts --suite=fast --id=operations-access
+      - name: Configure restricted roles without changing learner records
+        env:
+          SENSA_OPERATIONS_ACCEPTED: ${{ inputs.owner_accepted }}
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          MIGRATION_DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
+          SENSA_MONITOR_PASSWORD: ${{ secrets.SENSA_MONITOR_PASSWORD }}
+          SENSA_RETENTION_PASSWORD: ${{ secrets.SENSA_RETENTION_PASSWORD }}
+        run: node scripts/release/operationsAccess.mjs --apply
+      - name: Read available provider recovery points without restoring production
+        env:
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          node --input-type=module <<'JS'
+          const ref=process.env.SUPABASE_PROJECT_REF;if(ref!=='kwwmukqzlxxsnviyhwmr')throw Error('Unexpected backup project');
+          const r=await fetch('https://api.supabase.com/v1/projects/'+ref+'/database/backups',{headers:{authorization:'Bearer '+process.env.SUPABASE_ACCESS_TOKEN},signal:AbortSignal.timeout(20000),redirect:'error'});
+          if(!r.ok)throw Error('Backup inventory request failed ('+r.status+')');
+          const v=await r.json();console.log(JSON.stringify({event:'sensa.backup_inventory',pitrEnabled:v.pitr_enabled===true,completedBackups:(v.backups??[]).filter(b=>b.status==='COMPLETED').map(b=>({createdAt:b.inserted_at,physical:b.is_physical_backup===true})),restoreDrillPerformed:false,storageObjectsIncluded:false}));
+          JS

@@ -929,6 +929,7 @@ test('delivered listening preserves learner facts and provider layout after anot
  }};window.onYouglishAPIReady();
  `}));
  await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ await expect(page.locator('#s-home').getByRole('heading',{name:'暂无可开始的学习',exact:true})).toBeVisible();
  await page.locator('#s-home').getByRole('button',{name:'学习包目录',exact:true}).click();await page.locator('#s-catalog').last().getByRole('button',{name:/只读查词样本/}).click();
  const book=page.locator('#s-catalog-book').last();await book.getByRole('button',{name:'下载学习包',exact:true}).click();await expect(book.getByText('已下载',{exact:true})).toBeVisible();
  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).targetIds).toEqual([]);
@@ -1977,7 +1978,9 @@ test('a personal meaning created from a learning scene reuses its Book target wi
  page.on('request',request=>{if(/\/model\/|chat\/completions|\/speech\//.test(request.url()))providerRequests.push(request.url());});
  await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
  await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
- const home=page.locator('#s-home');await home.getByRole('button',{name:'学习包目录',exact:true}).click();
+ const home=page.locator('#s-home');
+ await expect(home.getByRole('heading',{name:'暂无可开始的学习',exact:true})).toBeVisible();
+ await home.getByRole('button',{name:'学习包目录',exact:true}).click();
  await page.locator('#s-catalog').last().getByRole('button',{name:/雨天借伞/}).click();const book=page.locator('#s-catalog-book').last();
  await book.getByRole('button',{name:'下载学习包',exact:true}).click();await expect(book.getByText('已下载',{exact:true})).toBeVisible();
  await book.getByRole('button',{name:'加入学习',exact:true}).click();await book.getByRole('button',{name:'去学习',exact:true}).click();
@@ -2356,7 +2359,7 @@ test('a failed final member and a cancelled update leave the complete previous B
   expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(learningBefore);
 });
 
-test('the Book journey stays responsive with 342 catalog entries and a 100-member Book at 4x CPU',async({page,context})=>{
+test('the Book journey stays responsive with 342 catalog entries and a 100-member Book at 4x CPU',{tag:'@book-scale-performance'},async({page,context})=>{
   const entries=Array.from({length:340},(_,index)=>({
     ...learningDelivery.descriptor,
     book:{...learningDelivery.descriptor.book,bookId:randomUUID(),bookVersionId:randomUUID(),bookKey:`scale-fixture-${index}`,title:`目录规模样本 ${index}`},
@@ -2445,7 +2448,7 @@ test('the Book journey stays responsive with 342 catalog entries and a 100-membe
     const restoredLongTasks=await page.evaluate(()=>(window as unknown as {__bookJourneyLongTasks:number[]}).__bookJourneyLongTasks);
     const maximumLongTaskMs=Math.max(0,...initialLongTasks,...restoredLongTasks);
     assertInteractionBudget(maximumLongTaskMs,1000,'main-thread freeze at 4x CPU');
-    await test.info().attach('journey-performance.json',{body:JSON.stringify({catalogEntries:342,catalogInitialWindow:50,catalogExpandedWindow:100,bookMembers:100,bookBytes:scaleDelivery.descriptor.byteLength,cpuThrottle:4,fixtureLatencyMs:300,timings,maximumLongTaskMs,idleCatalogRequests:0,scope:'Controlled Chromium regression budgets; catalogCold ends when the first window is interactive; these are not real-device CWV or production backend SLOs.'}),contentType:'application/json'});
+    await test.info().attach('journey-performance.json',{body:JSON.stringify({platform:process.platform,arch:process.arch,cpuModel:cpus()[0]?.model??'unknown',logicalCpus:cpus().length,node:process.versions.node,catalogEntries:342,catalogInitialWindow:50,catalogExpandedWindow:100,bookMembers:100,bookBytes:scaleDelivery.descriptor.byteLength,cpuThrottle:4,fixtureLatencyMs:300,timings,maximumLongTaskMs,idleCatalogRequests:0,scope:'Controlled Chromium regression budgets; catalogCold ends when the first window is interactive; these are not real-device CWV or production backend SLOs.'}),contentType:'application/json'});
     console.log(`Book journey controlled performance: ${JSON.stringify({timings,maximumLongTaskMs})}`);
   }finally{
     await cdp.send('Emulation.setCPUThrottlingRate',{rate:1});
@@ -2459,6 +2462,7 @@ test('the guest Book path keeps its primary actions reachable at 320px',async({p
   await page.goto(origin);
   await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
   const home=page.locator('#s-home');
+  await expect(home.getByRole('heading',{name:'暂无可开始的学习',exact:true})).toBeVisible({timeout:15_000});
   await expect(home.getByRole('button',{name:'学习包目录',exact:true})).toBeVisible({timeout:15_000});
   await noOverflow();
   await home.getByRole('button',{name:'学习包目录',exact:true}).click();

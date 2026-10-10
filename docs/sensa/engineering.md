@@ -1087,6 +1087,20 @@ gh workflow run sensa-release.yml \
 
 `.github/workflows/sensa-web-candidate.yml` 是可选的深度验证，不是日常发布前置。`.github/workflows/sensa-web-monitor.yml` 负责已启用环境的定时公网和聚合阈值检查。
 
+监测与保留期维护沿用 `web-production` 的正式目标，但各自使用独立的数据库登录身份。由
+`.github/workflows/sensa-operations-setup.yml` 的 owner 明确授权入口配置权限；管理员连接只在这次配置中使用，
+定时任务从受保护的独立密码与无凭据的 `SENSA_OPERATIONS_DATABASE_TARGET` 连接目标派生连接，不取得应用或管理员连接密码。监测只可读取指定元数据列，数据库
+默认只读；锁等待由私有函数仅返回计数，不开放全量活动查询文本。维护不能写入账号、学习事实或活动 head；
+RLS 删除条件另外限制已过期快照／回执、退役引用和无保护引用的过期块。`SENSA_MONITOR_ENABLED` 与
+`SENSA_RETENTION_ENABLED` 分别在 repository variables 启用。首次启用必须检查聚合清理预检、真实 job 结果与
+一次 incident 创建／健康复测关闭；任务日志不包含正文、身份或连接凭据。备份记录的只读清单不是恢复演练，
+没有经核验的恢复点时仍按支持手册报告缺口，不恢复或覆盖生产库来做演练。
+
+4× CPU 的 Book 规模基准在 browser shard 2 的独立进程中先执行，再运行常规长旅程；后者只排除这一个
+已单独执行的 tag，不省略其他行为检查。独立基准仍是必要的 CI 步骤，预算不变，并保存主机、架构、CPU、
+Node、实际规模与耗时。它避免同一测试进程此前的大库 fixture 留存影响新空库安装样本，不将共享 runner
+结果冒充生产设备 SLO；先前的失败和本机样本不能代替当前 CI 的独立复测。
+
 仅迁移已上线版本的网址时，使用 `.github/workflows/sensa-web-domain.yml` 的配置入口，不发布新的应用
 候选。它要求 owner 明确选择一份成功的统一发布记录，并核验其中的绿色 main CI 和 Cloudflare 当前
 100% 版本；切换前后版本必须不变。工作流只更新 API 的 `ALLOWED_ORIGINS`、Supabase Auth 回跳与

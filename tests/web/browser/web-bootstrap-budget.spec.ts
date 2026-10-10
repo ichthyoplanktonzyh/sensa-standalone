@@ -54,6 +54,7 @@ type Cloud={blocks:Map<string,string>;revision:number;manifest:string[]|null;com
 const clouds=new Map<string,Cloud>();
 let intakeLibraryId:string|null=null;
 let remoteDeliveryAvailable=false,remoteIncompleteAvailable=false,remoteAcknowledgement:any=null,remoteIncompleteAcknowledgement:any=null;
+let holdRemoteAck=false,releaseRemoteAck:(()=>void)|undefined;
 let extensionAuthorization:any=null;
 const remoteSubmission={contractVersion:'sensa-intake-delivery-v1',client:{clientId:'19ba48d1-03af-489e-a352-a16f05a03d5c',kind:'agent',label:'Codex'},intake:{contractVersion:'sensa-intake-v3',operationId:REMOTE_OPERATION,capturedAt:REMOTE_QUEUED_AT,context:{modality:'text',textSegment:'I backed out.',mediaReferenceIds:[],languageTag:'en',source:{client:'codex',url:null,title:'GPT Live conversation',sourceReferenceId:'conversation-1',domSelector:null,paragraphContext:null}},expression:{surfaceForm:'back out',languageTag:'en',occurrence:{surfaceForm:'backed out',locator:{kind:'text_span',start:2,end:12}},expressionTypeHint:'phrase'},sense:{senseKey:null,semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1',coreMeaningFocus:'原本准备做某事，后来决定退出或取消',prototypeScenes:[{summary:'I backed out.',participantRoles:[],states:[],directionOrCausality:null}],includedCases:['I backed out.'],excludedCases:[],neighborContrasts:[],openQuestions:[]},wordingSource:'llm_suggested',resolutionProvenance:{resolverKind:'language_model',provider:'codex',model:'fixture',policyVersion:'sensa-agent-intake-v1',sourceReferenceIds:['conversation-1']}},acceptance:{mode:'delegated_agent',actorId:'codex',basis:'explicit_user_request',authorizationReference:null}}};
 const remoteIncompleteSubmission={...remoteSubmission,intake:{...remoteSubmission.intake,operationId:REMOTE_INCOMPLETE_OPERATION,sense:null}};
@@ -130,6 +131,7 @@ const server=createServer(async(request,response)=>{
    const input=await body() as any;
    if(input.libraryId!==intakeLibraryId||![REMOTE_OPERATION,REMOTE_INCOMPLETE_OPERATION].includes(input.deliveryId)){json({code:'library_mismatch'},409);return;}
    if(input.deliveryId===REMOTE_OPERATION)remoteAcknowledgement=input;else remoteIncompleteAcknowledgement=input;
+   if(input.deliveryId===REMOTE_OPERATION&&holdRemoteAck)await new Promise<void>(resolve=>{releaseRemoteAck=resolve;});
    json({contractVersion:'sensa-intake-delivery-v1',deliveryId:input.deliveryId,operationId:input.deliveryId,deliveryState:'applied',queuedAt:REMOTE_QUEUED_AT,appliedAt:input.appliedAt,result:input.result});return;
   }
   if(url.pathname==='/sensa/library-sync'||url.pathname.startsWith('/sensa/library-sync/')){
@@ -203,6 +205,7 @@ test.beforeAll(async()=>{
 });
 
 test.afterAll(async()=>{
+ releaseRemoteAck?.();
  if(server.listening)await new Promise<void>(resolve=>server.close(()=>resolve()));
 });
 
@@ -392,7 +395,7 @@ try{
  log('3/4 measuring the first restore on a new browser');
  // The complete Agent save exists before any Sensa Web page is open. It must
  // remain queued until this new page restores the local authority and applies it.
- remoteDeliveryAvailable=true;
+ holdRemoteAck=true;remoteDeliveryAvailable=true;
  assert.equal(remoteAcknowledgement,null,'a closed Web application cannot claim an Agent delivery was applied');
  const b=await pageContext();
  served.length=0;
@@ -424,6 +427,9 @@ try{
  await finishCheckpoint(b.page,'Agent Intake was not published after its local commit');
  remoteIncompleteAvailable=true;
  await b.page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+ // The previous acknowledgement is still in flight: a later focus must request
+ // a follow-up drain, not disappear into that older promise.
+ holdRemoteAck=false;releaseRemoteAck?.();
  await expect.poll(()=>remoteIncompleteAcknowledgement?.result?.route,{timeout:30000,message:'incomplete remote Intake was not routed to the Inbox'}).toBe('inbox');
  assert.equal(remoteIncompleteAcknowledgement.result.status,'pending_sense');
  await finishCheckpoint(b.page,'incomplete Agent Intake was not published after its Inbox commit');
