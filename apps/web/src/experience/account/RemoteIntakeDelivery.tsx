@@ -9,8 +9,7 @@ import {
 import { readCloudSync } from "../../data/library/cloudSync";
 import { observeCloudSyncState, openLibrary } from "../../data/library/store";
 import { useSemanticIntake } from "../intake";
-
-let activeRun: Promise<void> | undefined;
+import { createRefreshCoordinator } from "../library/refreshCoordinator";
 
 /**
  * Applies remote mailbox items only after account restore has settled the local
@@ -23,9 +22,8 @@ export function RemoteIntakeDelivery({ online }: { online: boolean }) {
   useEffect(() => {
     if (!online) return;
     let active = true;
-    const run = async () => {
-      if (activeRun) return activeRun;
-      const work = async () => {
+    const coordinator = createRefreshCoordinator(async () => {
+        if (!active) return;
         // The mailbox never starts a full-library transfer. Wait until the account
         // adapter has settled which library identity this browser owns.
         const sync = await readCloudSync();
@@ -49,11 +47,8 @@ export function RemoteIntakeDelivery({ online }: { online: boolean }) {
           }
           if (deliveries.length < 20) break;
         }
-      };
-      activeRun = work().finally(() => { activeRun = undefined; });
-      return activeRun;
-    };
-    const attempt = () => { void run().catch(() => {}); };
+    });
+    const attempt = () => { void coordinator.request().catch(() => {}); };
     const visible = () => { if (document.visibilityState === "visible") attempt(); };
     attempt();
     const stop = observeCloudSyncState(attempt);
