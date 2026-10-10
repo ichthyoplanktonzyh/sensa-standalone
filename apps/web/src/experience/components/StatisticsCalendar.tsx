@@ -1,16 +1,21 @@
-import {useState} from 'react';
+import {useRef,useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import type {LearningHistorySummary} from '../../learning/system/learningHistoryModel';
 import {statisticsCalendar,statisticsKinds,statisticsTrend} from '../learningJourney/statisticsCalendar';
 
 export function StatisticsCalendar({summary,year,onDay}:{summary:LearningHistorySummary;year:number;onDay:(day:string)=>void}){
  const {t,i18n}=useTranslation(),days=statisticsCalendar(summary,year),today=new Date(summary.clock);
- const [month,setMonth]=useState(today.getFullYear()===year?today.getMonth():0),[focused,setFocused]=useState('');
+ const [month,setMonth]=useState(today.getFullYear()===year?today.getMonth():0),[focused,setFocused]=useState(''),[monthFocused,setMonthFocused]=useState('');
+ const monthGrid=useRef<HTMLDivElement>(null);
  const format=(day:string)=>new Intl.DateTimeFormat(i18n.language,{dateStyle:'medium'}).format(new Date(day+'T12:00:00'));
  const describe=(day:typeof days[number])=>`${format(day.day)} · ${day.future?t('statistics.future'):!day.inRange?t('statistics.outsideRange'):statisticsKinds.map(kind=>`${t('statistics.'+kind)} ${day.counts[kind]}`).join(' · ')}`;
  const focusDay=days.find(day=>day.day===focused&&day.inRange&&!day.future)??days.filter(day=>day.inRange&&!day.future).at(-1)??days[0]!;
- const dayButton=(day:typeof days[number],compact:boolean)=><button key={day.day} type="button" data-day={day.day} data-level={!day.inRange||day.future?'unavailable':day.total===0?'zero':day.total<2?'one':day.total<5?'few':'many'} disabled={day.future||!day.inRange} tabIndex={day.day===focusDay.day?0:-1} aria-label={describe(day)} title={describe(day)} onFocus={()=>setFocused(day.day)} onMouseEnter={()=>setFocused(day.day)} onClick={()=>onDay(day.day)} onKeyDown={event=>{
-  const move={ArrowRight:compact?7:1,ArrowLeft:compact?-7:-1,ArrowDown:compact?1:7,ArrowUp:compact?-1:-7}[event.key];if(move===undefined)return;event.preventDefault();const next=days[days.indexOf(day)+move];if(next&&!next.future&&next.inRange)(event.currentTarget.closest(compact?'.sensa-stat-year':'.sensa-stat-month-grid')?.querySelector(`button[data-day="${next.day}"]`) as HTMLButtonElement|null)?.focus();
+ const monthDays=days.filter(day=>day.month===month),monthFocusDay=monthDays.find(day=>day.day===monthFocused&&day.inRange&&!day.future)??monthDays.filter(day=>day.inRange&&!day.future).at(-1)??monthDays[0]!;
+ const chooseMonth=(value:number)=>{setMonth(value);setMonthFocused(days.filter(day=>day.month===value&&day.inRange&&!day.future).at(-1)?.day??'');};
+ const dayButton=(day:typeof days[number],compact:boolean)=><button key={day.day} type="button" data-day={day.day} data-level={!day.inRange||day.future?'unavailable':day.total===0?'zero':day.total<2?'one':day.total<5?'few':'many'} disabled={day.future||!day.inRange} tabIndex={!day.future&&day.inRange&&day.day===(compact?focusDay:monthFocusDay).day?0:-1} aria-label={describe(day)} title={describe(day)} onFocus={()=>compact?setFocused(day.day):setMonthFocused(day.day)} onMouseEnter={()=>compact?setFocused(day.day):setMonthFocused(day.day)} onClick={()=>onDay(day.day)} onKeyDown={event=>{
+  const move={ArrowRight:compact?7:1,ArrowLeft:compact?-7:-1,ArrowDown:compact?1:7,ArrowUp:compact?-1:-7}[event.key];if(move===undefined)return;event.preventDefault();const next=days[days.indexOf(day)+move];if(!next||next.future||!next.inRange)return;
+  if(!compact&&next.month!==month){setMonth(next.month);setMonthFocused(next.day);requestAnimationFrame(()=>(monthGrid.current?.querySelector(`button[data-day="${next.day}"]`) as HTMLButtonElement|null)?.focus());}
+  else (event.currentTarget.closest(compact?'.sensa-stat-year':'.sensa-stat-month-grid')?.querySelector(`button[data-day="${next.day}"]`) as HTMLButtonElement|null)?.focus();
  }} className={compact?'sensa-stat-day sensa-stat-day-compact':'sensa-stat-day sensa-stat-day-month'}>{compact?<span className="sr-only">{day.total}</span>:<><span>{day.date}</span><small>{day.future?'—':day.inRange?day.total:'·'}</small></>}</button>;
  const trend=statisticsTrend(summary),rows=trend.rows;const max=Math.max(1,...rows.flatMap(row=>statisticsKinds.map(kind=>row.counts[kind])));
  return <>
@@ -20,10 +25,11 @@ export function StatisticsCalendar({summary,year,onDay}:{summary:LearningHistory
    <div className="sensa-stat-year-months mt-4" aria-hidden="true" style={{gridTemplateColumns:`repeat(${Math.ceil((days.length+days[0]!.weekday)/7)},minmax(0,1fr))`}}>{Array.from({length:12},(_,month)=><span key={month} style={{gridColumnStart:1+Math.floor((days.findIndex(day=>day.month===month)+days[0]!.weekday)/7)}}>{new Intl.DateTimeFormat(i18n.language,{month:'short'}).format(new Date(year,month,1))}</span>)}</div>
    <div className="sensa-stat-year mt-2" aria-label={t('statistics.calendar')}><span style={{gridRow:`span ${days[0]!.weekday||1}`,display:days[0]!.weekday?'block':'none'}}/>{days.map(day=>dayButton(day,true))}</div>
    <div className="sensa-stat-month mt-4">
-    <label className="text-sm">{t('statistics.calendar')} <select aria-label={t('statistics.calendarMonth')} value={month} onChange={event=>setMonth(Number(event.target.value))} className="ml-2 min-h-11 rounded-control border border-border-subtle bg-surface-panel px-3">{Array.from({length:12},(_,value)=><option key={value} value={value}>{new Intl.DateTimeFormat(i18n.language,{month:'long'}).format(new Date(year,value,1))}</option>)}</select></label>
-    <div className="sensa-stat-month-grid mt-4">{Array.from({length:7},(_,day)=><span className="text-center text-xs text-fg-secondary" key={'week'+day}>{new Intl.DateTimeFormat(i18n.language,{weekday:'narrow'}).format(new Date(2026,9,5+day))}</span>)}{days.filter(day=>day.month===month).map((day,index)=><span key={day.day} style={index===0?{gridColumnStart:day.weekday+1}:undefined}>{dayButton(day,false)}</span>)}</div>
+    <label className="text-sm">{t('statistics.calendar')} <select aria-label={t('statistics.calendarMonth')} value={month} onChange={event=>chooseMonth(Number(event.target.value))} className="ml-2 min-h-11 rounded-control border border-border-subtle bg-surface-panel px-3">{Array.from({length:12},(_,value)=><option key={value} value={value}>{new Intl.DateTimeFormat(i18n.language,{month:'long'}).format(new Date(year,value,1))}</option>)}</select></label>
+    <div ref={monthGrid} className="sensa-stat-month-grid mt-4">{Array.from({length:7},(_,day)=><span className="text-center text-xs text-fg-secondary" key={'week'+day}>{new Intl.DateTimeFormat(i18n.language,{weekday:'narrow'}).format(new Date(2026,9,5+day))}</span>)}{monthDays.map((day,index)=><span key={day.day} style={index===0?{gridColumnStart:day.weekday+1}:undefined}>{dayButton(day,false)}</span>)}</div>
    </div>
-   <p className="mt-4 text-sm" role="status">{describe(focusDay)}</p>
+   <p className="sensa-stat-year-status mt-4 text-sm" role="status">{describe(focusDay)}</p>
+   <p className="sensa-stat-month-status mt-4 text-sm" role="status">{describe(monthFocusDay)}</p>
    <p className="mt-3 flex flex-wrap gap-3 text-xs text-fg-secondary">{[['zero','0'],['one','1'],['few','2–4'],['many','5+'],['unavailable','—']].map(([level,label])=><span key={level} className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="sensa-stat-key" data-level={level}/>{label==='—'?t('statistics.futureOrOutside'):label+' '+t('statistics.recordsUnit')}</span>)}</p>
   </section>
   <section className="mt-8" aria-label={t('statistics.trend')}>
