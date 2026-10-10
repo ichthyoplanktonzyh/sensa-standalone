@@ -239,7 +239,7 @@ test('target source lookup keeps its exact publication when another Book shares 
    try{
    await target.getByRole('button',{name:/内容来源/}).click();const source=page.locator('#s-library-package');
    await expect(source.getByRole('heading',{name:first.manifest.book.title,exact:true})).toBeVisible();
-   await expect(source.getByText(/v1/u)).toBeVisible();await expect(source.getByRole('button',{name:/加入学习|应用更新|下载更新/u})).toHaveCount(0);
+   await expect(source.getByText('v1',{exact:true})).toBeVisible();await expect(source.getByRole('button',{name:/加入学习|应用更新|下载更新/u})).toHaveCount(0);
    await source.getByRole('button',{name:'返回',exact:true}).click();await expect(target.getByRole('button',{name:/内容来源/})).toBeVisible();expect(new URL(page.url()).searchParams.get('targetId')).toBe(targetId);
    expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(before);
    }finally{if(offline)await context.setOffline(false);}

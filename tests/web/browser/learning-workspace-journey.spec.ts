@@ -331,7 +331,7 @@ test('a failed Statistics code module recovers after reconnect without losing sa
   await page.unroute(blockedModule);
   await recovery.getByRole('button',{name:'重新加载',exact:true}).click();
   const stats=page.locator('#s-stats');
-  await expect(stats.locator('ol').getByRole('button',{name:/borrow/})).toHaveCount(1,{timeout:15_000});
+  await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button',{name:/borrow/})).toHaveCount(1,{timeout:15_000});
   expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(saved);
  }finally{await context.close();}
 });

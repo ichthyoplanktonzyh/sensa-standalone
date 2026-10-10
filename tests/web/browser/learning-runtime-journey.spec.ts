@@ -263,9 +263,10 @@ test.describe('history calendar in the actual SQLite Worker',()=>{
   await stats.getByRole('button',{name:'年度',exact:true}).click();await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(1);
   await stats.screenshot({path:test.info().outputPath('statistics-year-desktop.png')});
   await page.setViewportSize({width:320,height:740});await stats.getByRole('combobox',{name:'日历月份',exact:true}).selectOption('9');
-  const month=stats.locator('.sensa-stat-month');await expect(month.locator('button[data-day="2026-10-31"]')).toBeVisible();await month.locator('button[data-day="2026-10-31"]').click();
+  const month=stats.locator('.sensa-stat-month');await expect(month.locator('button[data-day="2026-10-31"]')).toBeVisible();
+  await stats.getByRole('region',{name:'学习日历',exact:true}).screenshot({path:test.info().outputPath('statistics-month-320px.png')});
+  await month.locator('button[data-day="2026-10-31"]').click();
   await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(1);expect(await stats.evaluate(element=>element.scrollWidth<=element.clientWidth+1)).toBe(true);
-  await stats.screenshot({path:test.info().outputPath('statistics-month-320px.png')});
   await page.reload();await expect(stats.getByRole('rowheader',{name:localDay,exact:true})).toBeVisible();
  });
 });

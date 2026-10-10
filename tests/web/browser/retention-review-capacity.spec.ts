@@ -166,8 +166,8 @@ test('mature retained Targets and formal Review history keep actual reveal, rati
  await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningManagementReadsForTest(false));await study.getByRole('button',{name:'重试',exact:true}).click();await expect(study.locator('ol').getByRole('button')).toHaveCount(10);
  begin=performance.now();await study.getByRole('button',{name:'学习统计',exact:true}).click();
  const stats=page.locator('#s-stats');await stats.getByRole('button',{name:'全部可用记录',exact:true}).click();
- await expect(stats.locator('ol').getByRole('button')).toHaveCount(20);await expect(stats.getByRole('status').filter({hasText:`${manifest.targets*2+1} 条`})).toBeVisible();timings.statistics=performance.now()-begin;
- const selectedRecord=stats.locator('ol').getByRole('button').first(),recordExpression=await selectedRecord.locator('strong').innerText();
+ await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(20);await expect(stats.getByRole('status').filter({hasText:`${manifest.targets*2+1} 条`})).toBeVisible();timings.statistics=performance.now()-begin;
+ const selectedRecord=stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button').first(),recordExpression=await selectedRecord.locator('strong').innerText();
  begin=performance.now();await selectedRecord.click();
  const target=page.locator('#s-learning-target');await expect(target.locator('summary').filter({hasText:'查看学习资源'})).toBeVisible({timeout:30_000});timings.historyToTarget=performance.now()-begin;
  await expect(target.getByRole('heading',{name:recordExpression,level:2,exact:true})).toBeVisible();
@@ -176,23 +176,23 @@ test('mature retained Targets and formal Review history keep actual reveal, rati
  await expect(target.getByRole('heading',{name:recordExpression,level:2,exact:true})).toHaveCount(0);
  await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningTargetReadsForTest(false));await target.getByRole('button',{name:'重试',exact:true}).click();
  await expect(target.getByRole('heading',{name:recordExpression,level:2,exact:true})).toBeVisible();
- await target.getByRole('button',{name:'返回',exact:true}).click();await expect(stats.locator('ol').getByRole('button')).toHaveCount(20);
+ await target.getByRole('button',{name:'返回',exact:true}).click();await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(20);
  const interactionWorkspaceReads=await page.evaluate(()=>performance.getEntriesByType('measure').filter(entry=>entry.name.startsWith('sensa.workspace.')).map(entry=>({phase:'interaction',name:entry.name,durationMs:entry.duration})));
  // Screen-memory filters intentionally reset on a full page reload. Readiness
  // is the actual recent Review; explicitly select all again to verify history.
- begin=performance.now();await page.reload();await expect(stats.locator('ol').getByRole('button').first()).toBeVisible({timeout:30_000});timings.statisticsReload=performance.now()-begin;
- await stats.getByRole('button',{name:'全部可用记录',exact:true}).click();await expect(stats.locator('ol').getByRole('button')).toHaveCount(20);await expect(stats.getByRole('status').filter({hasText:`${manifest.targets*2+1} 条`})).toBeVisible();
+ begin=performance.now();await page.reload();await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button').first()).toBeVisible({timeout:30_000});timings.statisticsReload=performance.now()-begin;
+ await stats.getByRole('button',{name:'全部可用记录',exact:true}).click();await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(20);await expect(stats.getByRole('status').filter({hasText:`${manifest.targets*2+1} 条`})).toBeVisible();
  // Pagination changes only the rendered list, never the complete-range count.
- await stats.getByRole('button',{name:'显示更多记录',exact:true}).click();await expect(stats.locator('ol').getByRole('button')).toHaveCount(40);
+ await stats.getByRole('button',{name:'显示更多记录',exact:true}).click();await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(40);
  await expect(stats.getByRole('status').filter({hasText:`${manifest.targets*2+1} 条`})).toBeVisible();
- await stats.getByRole('combobox').selectOption('initial_learning');await expect(stats.locator('ol').getByRole('button')).toHaveCount(20);
+ await stats.getByRole('combobox',{name:'记录类型',exact:true}).selectOption('initial_learning');await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(20);
  await expect(stats.getByRole('status').filter({hasText:`${manifest.targets} 条`})).toBeVisible();
- await stats.getByRole('combobox').selectOption('retention_review');await expect(stats.locator('ol').getByRole('button')).toHaveCount(20);
+ await stats.getByRole('combobox',{name:'记录类型',exact:true}).selectOption('retention_review');await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(20);
  await expect(stats.getByRole('status').filter({hasText:`${manifest.targets+1} 条`})).toBeVisible();
  await page.evaluate(async()=>{await window.__sensaBrowserSmoke!.failLearningHistoryReadsForTest(true);window.dispatchEvent(new Event('sensa-library-changed'));});
- await expect(stats.getByRole('alert')).toBeVisible();await expect(stats.locator('ol')).toHaveCount(0);
+ await expect(stats.getByRole('alert')).toBeVisible();await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true})).toHaveCount(0);
  await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningHistoryReadsForTest(false));await stats.getByRole('button',{name:'重试',exact:true}).click();
- await expect(stats.locator('ol').getByRole('button')).toHaveCount(20);await expect(stats.getByRole('status').filter({hasText:`${manifest.targets+1} 条`})).toBeVisible();
+ await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(20);await expect(stats.getByRole('status').filter({hasText:`${manifest.targets+1} 条`})).toBeVisible();
  const directory=resolve('.tmp/retention-capacity-evidence');await mkdir(directory,{recursive:true});
  const workspaceReads=[...interactionWorkspaceReads,...await page.evaluate(()=>performance.getEntriesByType('measure').filter(entry=>entry.name.startsWith('sensa.workspace.')).map(entry=>({phase:'reload',name:entry.name,durationMs:entry.duration})))];
  const evidence={fixture:'formal LearningSystem command results, fully replay-validated by the Node producer before digest-checked bounded copying into isolated OPFS; not product backup restore',targets:manifest.targets,initialRuns:manifest.targets,reviewRuns:manifest.targets,events:manifest.events,sourceBytes:manifest.bytes,generatorSeconds:manifest.setupSeconds,fixtureCopyMs,clock:manifest.clock,timingsMs:timings,cpuProfiling:!!profiler,activityStartKind:arrangementBefore.session?'existing_session_start':'first_session_and_bounded_selection',arrangement:{hadSessionBefore:!!arrangementBefore.session,newScopeCaptured:arrangementBefore.scope?.id!==arrangementStarted.scope!.id,members:arrangementStarted.scope!.members.length,inventoryTargets:after.targets,selectedScopeMatchesRequestedTarget:true,nextSelectionMatchesActiveTarget:true,completeInventorySnapshot:false,pinnedDailyLimit:arrangementStarted.session!.dailyNewSenseLimit,visiblePreference:20},workspaceReads,readDurations,conditions:'Chromium 1x CPU / 1280x900 / loopback / synthetic low-media source; no audio-quality or real-provider claim; query trace durations are diagnostic Node-console arrival intervals, not budget measurements. Optional CPU profiling is diagnostic overhead, not an uncontended performance baseline. Activity start creates only the actual selected origin snapshot when no Session existed; the complete Target inventory remains stored; reveal, rating-to-next and existing-activity resume are measured only after that Scope is persisted.'};
