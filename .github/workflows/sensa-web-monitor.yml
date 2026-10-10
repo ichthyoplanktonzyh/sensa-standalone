@@ -18,7 +18,7 @@ concurrency:
 jobs:
   retention:
     if: vars.SENSA_RETENTION_ENABLED == 'true'
-    environment: web-retention
+    environment: web-production
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -29,20 +29,20 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+      - name: Prepare restricted retention connection
+        env:
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          SENSA_OPERATIONS_DATABASE_TARGET: ${{ vars.SENSA_OPERATIONS_DATABASE_TARGET }}
+          SENSA_RETENTION_PASSWORD: ${{ secrets.SENSA_RETENTION_PASSWORD }}
+        run: node scripts/release/operationsAccess.mjs --retention-env
       - name: Erase expired semantic lookup snapshots
         id: semantic-retention
-        env:
-          SENSA_MAINTENANCE_DATABASE_URL: ${{ secrets.SENSA_MAINTENANCE_DATABASE_URL }}
         run: node --import tsx scripts/release/semanticLookupRetention.mts
       - name: Erase expired unreferenced sync blocks
         id: sync-retention
-        env:
-          SENSA_MAINTENANCE_DATABASE_URL: ${{ secrets.SENSA_MAINTENANCE_DATABASE_URL }}
         run: node --import tsx scripts/release/libraryCloudRetention.mts
       - name: Erase expired model request receipts
         id: model-retention
-        env:
-          SENSA_MAINTENANCE_DATABASE_URL: ${{ secrets.SENSA_MAINTENANCE_DATABASE_URL }}
         run: node --import tsx scripts/release/modelRequestRetention.mts
       - name: Deliver retention incident or recovery
         if: always() && steps.checkout.outcome == 'success'
@@ -54,7 +54,7 @@ jobs:
         run: node scripts/release/reportOperationalIncident.mjs
   monitor:
     if: vars.SENSA_MONITOR_ENABLED == 'true' || (github.event_name == 'workflow_dispatch' && inputs.alert_drill)
-    environment: web-monitor
+    environment: web-production
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -65,6 +65,12 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+      - name: Prepare read-only monitor connection
+        env:
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          SENSA_OPERATIONS_DATABASE_TARGET: ${{ vars.SENSA_OPERATIONS_DATABASE_TARGET }}
+          SENSA_MONITOR_PASSWORD: ${{ secrets.SENSA_MONITOR_PASSWORD }}
+        run: node scripts/release/operationsAccess.mjs --monitor-env
       - name: Check public surfaces
         id: public-surfaces
         env:
@@ -74,7 +80,6 @@ jobs:
       - name: Check aggregate service thresholds
         id: service-thresholds
         env:
-          MONITOR_DATABASE_URL: ${{ secrets.MONITOR_DATABASE_URL }}
           SENSA_ALERT_MODEL_CALLS_24H: ${{ vars.SENSA_ALERT_MODEL_CALLS_24H || '500' }}
           SENSA_ALERT_MODEL_FAILURES_1H: ${{ vars.SENSA_ALERT_MODEL_FAILURES_1H || '10' }}
           SENSA_ALERT_DRILL: ${{ inputs.alert_drill || 'false' }}
