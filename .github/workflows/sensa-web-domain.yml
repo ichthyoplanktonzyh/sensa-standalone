@@ -70,6 +70,23 @@ jobs:
           SENSA_BASELINE_MANIFEST="$baseline_manifest" node scripts/release/domainBaseline.mjs
       - name: Refuse application source drift before changing production configuration
         run: git diff --exit-code "$SENSA_BASELINE_APP_SHA" HEAD -- apps packages db/migrations supabase/functions content/authored
+      - name: Restore verified baseline assets for routing configuration validation
+        run: |
+          gh run download "$SENSA_BASELINE_CI_RUN" --name "sensa-production-$SENSA_BASELINE_APP_SHA" --dir .tmp/domain-baseline-candidate
+          node --input-type=module <<'JS'
+          import {readFileSync} from 'node:fs';
+          import {createHash} from 'node:crypto';
+          const root='.tmp/domain-baseline-candidate/',proof=JSON.parse(readFileSync('release-candidate/domain-migration-baseline.json','utf8'));
+          const raw=readFileSync(root+'release-candidate/manifest.json'),m=JSON.parse(raw),hash=b=>createHash('sha256').update(b).digest('hex');
+          if(hash(raw)!==proof.candidateManifestSha256||m.commit!==proof.sourceCommit||m.provenance.workflowRunId!==proof.ciRunId||m.provenance.workflowRunAttempt!==proof.ciRunAttempt)throw Error('Baseline candidate provenance mismatch');
+          for(const prefix of ['apps/web/dist/','packages/contracts/dist/']){
+            const files=m.files.filter(f=>f.path.startsWith(prefix));if(!files.length)throw Error('Baseline compiled files absent');
+            for(const f of files)if(hash(readFileSync(root+f.path))!==f.sha256)throw Error('Baseline compiled files digest mismatch');
+          }
+          JS
+          mkdir -p apps/web/dist packages/contracts/dist
+          cp -R .tmp/domain-baseline-candidate/apps/web/dist/. apps/web/dist/
+          cp -R .tmp/domain-baseline-candidate/packages/contracts/dist/. packages/contracts/dist/
       - uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520
         with:
           version: 2.117.0
@@ -95,18 +112,6 @@ jobs:
           SENSA_EXTENSION_API_URL: ${{ vars.VITE_SENSA_API_URL }}
         run: |
           git diff --exit-code "$SENSA_BASELINE_APP_SHA" HEAD -- apps packages db/migrations supabase/functions content/authored
-          gh run download "$SENSA_BASELINE_CI_RUN" --name "sensa-production-$SENSA_BASELINE_APP_SHA" --dir .tmp/domain-baseline-candidate
-          node --input-type=module <<'JS'
-          import {readFileSync} from 'node:fs';
-          import {createHash} from 'node:crypto';
-          const root='.tmp/domain-baseline-candidate/',proof=JSON.parse(readFileSync('release-candidate/domain-migration-baseline.json','utf8'));
-          const raw=readFileSync(root+'release-candidate/manifest.json'),m=JSON.parse(raw),hash=b=>createHash('sha256').update(b).digest('hex');
-          if(hash(raw)!==proof.candidateManifestSha256||m.commit!==proof.sourceCommit||m.provenance.workflowRunId!==proof.ciRunId||m.provenance.workflowRunAttempt!==proof.ciRunAttempt)throw Error('Baseline candidate provenance mismatch');
-          const files=m.files.filter(f=>f.path.startsWith('packages/contracts/dist/'));if(!files.length)throw Error('Baseline contracts absent');
-          for(const f of files)if(hash(readFileSync(root+f.path))!==f.sha256)throw Error('Baseline contracts digest mismatch');
-          JS
-          mkdir -p packages/contracts/dist
-          cp -R .tmp/domain-baseline-candidate/packages/contracts/dist/. packages/contracts/dist/
           npm run build -w @sensa/browser-extension
           node --input-type=module <<'JS'
           import {readFileSync} from 'node:fs';
