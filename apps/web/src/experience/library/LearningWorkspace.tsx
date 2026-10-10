@@ -104,8 +104,9 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
     graphLearningState={bindingVersionId=>{
      const task=personalLearning.tasks.find(task=>task.source.bindingVersionId===bindingVersionId&&task.languageContext.languageRouteId===personalLearning.languageContext.languageRouteId);
      const target=personalLearning.targets.find(target=>target.identity.bindingVersionId===bindingVersionId);
-     const key=personalLearning.taskSourcesLoading?'loadingSensa':personalLearning.taskSourcesUnavailable?'preparationReadFailed':target?'learningReady':task?.curriculumActive===false?'worldRemoved':task?.status==='ready'||task?.status==='covered'?'batchReady':task?'learningPreparation':'worldNotAdded';
-     return <><h3 className="text-xs text-fg-secondary">{t('content.worldCurrentRoute')} · {personalLearning.languageContext.targetLanguageTag}</h3><p className="mt-2 text-sm" role={personalLearning.taskSourcesUnavailable?'alert':undefined}>{key==='worldRemoved'||key==='worldNotAdded'?t(`content.${key}`):localFlowText(key)}</p></>;
+     const unavailable=personalLearning.projectionStatus==='unavailable';
+     const key=personalLearning.projectionStatus==='loading'?'loadingSensa':unavailable?'preparationReadFailed':target?'learningReady':task?.curriculumActive===false?'worldRemoved':task?.status==='ready'||task?.status==='covered'?'batchReady':task?'learningPreparation':'worldNotAdded';
+     return <><h3 className="text-xs text-fg-secondary">{t('content.worldCurrentRoute')} · {personalLearning.languageContext.targetLanguageTag}</h3><div className="mt-2 text-sm" role={unavailable?'alert':personalLearning.projectionStatus==='loading'?'status':undefined}><p>{key==='worldRemoved'||key==='worldNotAdded'?t(`content.${key}`):localFlowText(key)}</p>{unavailable&&<button type="button" className={setupButton+' mt-2'} onClick={personalLearning.retryTaskSources}>{t('reliability.retry')}</button>}</div></>;
     }}
     bulkLearning={(items,list,query)=><BatchPersonalLearning items={items} query={query} c={personalLearning}>{list}</BatchPersonalLearning>}
     active={screenActive} screenId={screenId}

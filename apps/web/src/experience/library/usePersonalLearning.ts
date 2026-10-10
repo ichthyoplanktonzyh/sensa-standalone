@@ -43,6 +43,7 @@ export function usePersonalLearning(sourceView:{kind:'library'}|{kind:'target';t
   // complete task/workspace projection after each of thousands of intentions.
   if(!enabled||batchRunner.read().busy)return;
   const generation=++readGeneration.current;
+  try{
   const [supply,learning]=await Promise.all([contentSupplySystem.read({kind:'provisioning_control'}),compactControl?Promise.resolve({targets:[] as readonly LearningTargetProjection[]}):sourceView?.kind==='target'
    ?learningSystem.read({kind:'target',targetId:sourceView.targetId,languageContext,clock:Date.now()}).then(detail=>({targets:detail.target?[detail.target]:[]}))
    :learningSystem.read({kind:'workspace',languageContext,clock:Date.now()})]);
@@ -57,10 +58,14 @@ export function usePersonalLearning(sourceView:{kind:'library'}|{kind:'target';t
   setSourceFailureKey(null);
   setTargets(learning.targets);setTasks(personalTasks);setPreparationAvailable(supply.preparationAvailable);setClock(Date.now());
   for(const task of personalTasks)if(task.curriculumActive===false)backgroundPreparation.cancel(task.id);
+  }catch(error){
+   if(currentRoute.current===routeKey&&generation===readGeneration.current)failedSourceRead();
+   throw error;
+  }
  };
  const failedSourceRead=()=>{if(currentRoute.current===routeKey){setNotice(localFlowText('preparationReadFailed'));setSourceFailureKey(routeKey);setSourceReadKey(routeKey);setTaskSources(new Map());}};
- latestRefresh.current=()=>refresh().catch(failedSourceRead);
- useEffect(()=>{if(!enabled)return;const coordinator=createRefreshCoordinator(refresh);const read=()=>void coordinator.request().catch(failedSourceRead);read();const stopSupply=contentSupplySystem.subscribe({kind:'provisioning_control'},read);const stopLearning=learningSystem.subscribe({kind:'workspace',languageContext},read);const stopJourney=worldReadRepository.subscribe(read);const focus=()=>setClock(Date.now());window.addEventListener('focus',focus);return()=>{stopSupply();stopLearning();stopJourney();readGeneration.current++;window.removeEventListener('focus',focus);};},[languageContext.languageRouteId,languageContext.languageRouteRevision,sourceViewKey]);
+ latestRefresh.current=()=>refresh().catch(()=>{});
+ useEffect(()=>{if(!enabled)return;const coordinator=createRefreshCoordinator(refresh);const read=()=>void coordinator.request().catch(()=>{});read();const stopSupply=contentSupplySystem.subscribe({kind:'provisioning_control'},read);const stopLearning=learningSystem.subscribe({kind:'workspace',languageContext},read);const stopJourney=worldReadRepository.subscribe(read);const focus=()=>setClock(Date.now());window.addEventListener('focus',focus);return()=>{stopSupply();stopLearning();stopJourney();readGeneration.current++;window.removeEventListener('focus',focus);};},[languageContext.languageRouteId,languageContext.languageRouteRevision,sourceViewKey]);
  const nextLeaseExpiry=nextPersonalLearningLeaseExpiry(tasks,clock);
  useEffect(()=>{
   if(nextLeaseExpiry===null)return;
@@ -81,7 +86,8 @@ export function usePersonalLearning(sourceView:{kind:'library'}|{kind:'target';t
   if(saved.context?.languageRouteId!==languageContext.languageRouteId||saved.context.targetLanguageTag!==languageContext.targetLanguageTag){setNotice('localFlow.routeMembershipMissing');return;}
   await enrollBatch(batchRunner.choices(status),saved.useContext);
  };
- return {batch,batchRowAt:batchRunner.rowAt,batchIndexForKey:batchRunner.indexForKey,retryBatch,enrollBatch,sourceForTask,taskSourcesLoading:!!sourceView&&sourceReadKey!==routeKey,taskSourcesUnavailable:!!sourceView&&sourceFailureKey===routeKey,retryTaskSources:()=>{setSourceReadKey(null);void refresh().catch(failedSourceRead);},stopBatch:()=>void batchRunner.stop(),tasks,targets,preparationAvailable,notice:localFlowNotice(notice),busy,clock,languageContext,
+ const projectionStatus=sourceReadKey!==routeKey?'loading':sourceFailureKey===routeKey?'unavailable':'ready';
+ return {batch,batchRowAt:batchRunner.rowAt,batchIndexForKey:batchRunner.indexForKey,retryBatch,enrollBatch,sourceForTask,projectionStatus,taskSourcesLoading:!!sourceView&&projectionStatus==='loading',taskSourcesUnavailable:!!sourceView&&projectionStatus==='unavailable',retryTaskSources:()=>{setSourceReadKey(null);setSourceFailureKey(null);void refresh().catch(()=>{});},stopBatch:()=>void batchRunner.stop(),tasks,targets,preparationAvailable,notice:localFlowNotice(notice),busy,clock,languageContext,
   enroll:(source:PersonalMeaningLearningSource,useContext:boolean)=>perform(async()=>{const enrollment=await learningSystem.execute({kind:'enroll_personal',operationId:crypto.randomUUID(),source,languageContext,useContext});if(enrollment.provisioningStatus!=='ready')await prepare(enrollment.provisioningTaskId,source);}),
   update:(taskId:string,source:PersonalMeaningLearningSource,useContext:boolean)=>perform(async()=>{const revised=await contentSupplySystem.execute({kind:'revise_provisioning',operationId:crypto.randomUUID(),taskId,source,languageContext,useContext});if(revised.status!=='covered')await prepare(taskId,source);}),
   prepare:(id:string)=>perform(()=>prepare(id)),

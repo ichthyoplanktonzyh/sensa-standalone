@@ -1212,6 +1212,35 @@ test('10k personal meanings keep the shipped World bounded and searchable, with 
 });
 });
 
+test('World route learning read failure and cold reload remain unknown until explicit retry confirms membership',async({page},testInfo)=>{
+ requests=[];plans=[];
+ const {expressionWorldFixture}=await import('../support/expressionWorldFixture');scaleFixture=await expressionWorldFixture();
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ const navigation=page.getByRole('navigation',{name:'主要导航'});await navigation.getByRole('button',{name:'我的语义世界',exact:true}).click();
+ await page.waitForFunction(()=>!!window.__sensaBrowserSmoke);
+ await expect.poll(()=>page.evaluate(async()=>!!(await window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest()).identity)).toBe(true);
+ await page.evaluate(async()=>window.__sensaBrowserSmoke!.seedSemanticWorld(await (await fetch('/semantic-scale-fixture')).json()));
+ await navigation.getByRole('button',{name:'我的语义世界',exact:true}).click();
+ const world=page.locator('.sensa-world.active').last();await world.getByRole('button',{name:'语义世界',exact:true}).click();
+ const graph=world.getByRole('region',{name:'词义图谱',exact:true}),point=graph.locator(`[data-expression-id="${scaleFixture.registry.expressions[0]!.expressionId}"]`);
+ await point.focus();await point.press('Enter');const detail=graph.getByRole('complementary',{name:'表达预览',exact:true});
+ await expect(detail.getByText('尚未加入此路线',{exact:true})).toBeVisible();
+ const facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningWorkspaceReadsForTest(true));
+ await expect(detail.getByRole('alert')).toContainText('无法读取学习准备状态');await expect(detail.getByText('尚未加入此路线',{exact:true})).toHaveCount(0);
+ await detail.getByRole('button',{name:'重试',exact:true}).click();await expect(detail.getByRole('alert')).toBeVisible();
+ await page.screenshot({path:testInfo.outputPath('graph-route-read-unavailable.png')});
+ await page.evaluate(async()=>{await window.__sensaBrowserSmoke!.failLearningWorkspaceReadsForTest(false);await window.__sensaBrowserSmoke!.holdLearningWorkspaceReadsForTest();});
+ await detail.getByRole('button',{name:'重试',exact:true}).click();
+ await expect(detail.getByRole('status')).toContainText('正在读取');await expect(detail.getByText('尚未加入此路线',{exact:true})).toHaveCount(0);
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.releaseLearningWorkspaceReadsForTest());await expect(detail.getByText('尚未加入此路线',{exact:true})).toBeVisible();
+ await page.addInitScript(()=>{const timer=setInterval(()=>{if(!window.__sensaBrowserSmoke)return;clearInterval(timer);void window.__sensaBrowserSmoke.failLearningWorkspaceReadsForTest(true);},1);});
+ await page.reload();await expect(detail.getByRole('alert')).toContainText('无法读取学习准备状态');await expect(detail.getByText('尚未加入此路线',{exact:true})).toHaveCount(0);
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningWorkspaceReadsForTest(false));await detail.getByRole('button',{name:'重试',exact:true}).click();
+ await expect(detail.getByText('尚未加入此路线',{exact:true})).toBeVisible();expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(facts);expect(requests).toEqual([]);
+});
+
 test('World expression languages combine with search, saved meanings and notes while point details preserve camera and exact identities',async({page},testInfo)=>{
  requests=[];plans=[];
  const {expressionWorldFixture}=await import('../support/expressionWorldFixture');

@@ -39,6 +39,8 @@ type BrowserSmokeBridge = {
   holdDirectEnrollmentResultForTest():Promise<void>;
   releaseDirectEnrollmentResultForTest():void;
   failLearningWorkspaceReadsForTest(active:boolean):Promise<void>;
+  holdLearningWorkspaceReadsForTest():Promise<void>;
+  releaseLearningWorkspaceReadsForTest():void;
   failLearningManagementReadsForTest(active:boolean):Promise<void>;
   failLearningScheduleReadsForTest(active:boolean):Promise<void>;
   failLearningHistoryReadsForTest(active:boolean):Promise<void>;
@@ -132,6 +134,7 @@ const randomDataUrl = (size: number): string => {
 
 if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
   let releaseWorldReads:(()=>void)|undefined;
+  let releaseWorkspaceReads:(()=>void)|undefined;
   let releaseInboxReads:((fail?:boolean)=>void)|undefined;
   let hiddenInboxMedia:import('./data/library/media').StoredMedia|undefined;
   let releaseDirectResult:(()=>void)|undefined,restoreLearningReads:(()=>void)|undefined,restoreAnnotationReads:(()=>void)|undefined,restoreSceneReads:(()=>void)|undefined;
@@ -297,6 +300,14 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
       restoreLearningReads=()=>{learningSystem.read=original;};
       window.dispatchEvent(new CustomEvent('sensa-library-changed',{detail:{tables:['curriculumEnrollments']}}));
     },
+    async holdLearningWorkspaceReadsForTest(){
+      if(releaseWorkspaceReads)throw new Error('Learning workspace read already held');
+      const {learningSystem}=await import('./learning/system');const read=learningSystem.read;
+      let release!:()=>void;const held=new Promise<void>(resolve=>{release=resolve;});
+      learningSystem.read=(async query=>{if(query.kind==='workspace')await held;return read(query);}) as typeof read;
+      releaseWorkspaceReads=()=>{learningSystem.read=read;release();releaseWorkspaceReads=undefined;};
+    },
+    releaseLearningWorkspaceReadsForTest(){releaseWorkspaceReads?.();},
     async failLearningManagementReadsForTest(active){
       const {learningSystem}=await import('./learning/system');
       if(!active){restoreLearningReads?.();restoreLearningReads=undefined;return;}
