@@ -1,5 +1,5 @@
 /** Actual SQLite/Wasm: bounded PRIVATE browsing, shared authority and atomic derivation. */
-import {test,expect} from 'vitest';
+import {test,expect,describe,beforeAll,afterAll} from 'vitest';
 import init from '@sqlite.org/sqlite-wasm';
 import {SqliteRecordDatabase} from '../../../apps/web/src/data/library/sqliteDatabase';
 import {SqliteMeaningLookupProjection} from '../../../apps/web/src/data/library/meaningLookupProjection';
@@ -215,11 +215,21 @@ test('a SQLite read failure during World maintenance is not converted into commi
  }finally{database.close();}
 });
 
-test('10k World facts page/search without reading source rows or transporting private details/media',async()=>{
- const raw=new sqlite.oo1.DB(':memory:'),database=new SqliteRecordDatabase(sqlite,raw,'memory');database.initialize();
- try{
+describe('private World reads over a prepared synthetic 10k library',()=>{
+ let raw:InstanceType<typeof sqlite.oo1.DB>,database:SqliteRecordDatabase;
+ beforeAll(async()=>{
+  const started=performance.now();
+  raw=new sqlite.oo1.DB(':memory:');database=new SqliteRecordDatabase(sqlite,raw,'memory');database.initialize();
   const {state}=await seed(),world=syntheticSemanticWorld(state,10_000);
-  database.commit({clears:[],deletes:[],puts:rows(world),contentRevision:1});
+  const puts=rows(world);
+  database.commit({clears:[],deletes:[],puts,contentRevision:1});
+  console.log('SQLite synthetic fixture preparation:',{meanings:10_000,records:puts.length,preparationMs:Math.round(performance.now()-started)});
+ // This watchdog covers synthetic generation, encoding and bulk index setup,
+ // not user-facing lookup latency. CI's initial full fixture exceeded 60s.
+ },120_000);
+ afterAll(()=>database?.close());
+ test('10k World facts page/search without reading source rows or transporting private details/media',()=>{
+  const started=performance.now();
   const originalGet=database.get.bind(database);let sourceReads=0;
   database.get=(table,key)=>{if(table==='semanticMeanings'||table==='semanticRegistry')sourceReads++;return originalGet(table,key);};
   const page=database.worldBrowse({...query,limit:40}),last=database.worldBrowse({...query,offset:9960,limit:40});
@@ -266,8 +276,9 @@ test('10k World facts page/search without reading source rows or transporting pr
   const plans=raw.exec({sql:'EXPLAIN QUERY PLAN SELECT summary_json FROM sensa_world_browse WHERE visible=1 ORDER BY updated_at DESC,meaning_id LIMIT 40',rowMode:'object',returnValue:'resultRows'}) as {detail:string}[];
   expect(plans.some(row=>row.detail.includes('USING INDEX sensa_world_browse_order'))).toBe(true);
   expect(()=>database.worldBrowse({...query,limit:257})).toThrow('world_query_invalid');
- }finally{database.close();}
-},60_000);
+  console.log('SQLite prepared synthetic 10k read assertions:',{queryAndAssertionMs:Math.round(performance.now()-started)});
+ },60_000);
+});
 
 test('Expression cache rebuild and failed updates preserve all source facts, with independent downloaded material',async()=>{
  const raw=new sqlite.oo1.DB(':memory:'),database=new SqliteRecordDatabase(sqlite,raw,'memory');database.initialize();
