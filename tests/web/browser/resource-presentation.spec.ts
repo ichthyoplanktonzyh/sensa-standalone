@@ -12,6 +12,8 @@ let port: number;
 test.setTimeout(60_000);
 
 test.beforeAll(async () => {
+  // Bundle preparation has its own allowance; interaction assertions stay bounded.
+  test.setTimeout(90_000);
   const entry=resolve('.tmp/resource-presentation-entry.tsx');
   const compiled=await build({configFile:false,root:process.cwd(),logLevel:'silent',plugins:[react(),tailwindcss(),{
     name:'resource-renderer-fixture',async resolveId(id,importer){if(id===entry)return entry;if(importer===entry&&id.startsWith('./'))return this.resolve(resolve(id),undefined,{skipSelf:true});},
