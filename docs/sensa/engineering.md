@@ -587,7 +587,7 @@ Learning System 使用相同的单一准入模式：逻辑事务在 SQLite commi
 交给 Learning authority；authority 只读取改变的 Target、Run、Event、active Run / Study Plan 及直接依赖，
 重放新 Event 并核对 Target、Run、Evidence、Completion 与 Memory/Schedule 投影。Run/Event history 的
 物理删除、旧 Event 改写、无 Event 的派生进度以及本地伪造 Reconciliation 都在提交前拒绝。Cloud Sync
-与手动备份继续通过同一个 authority 的完整状态入口 replay 全部历史；日常学习动作不扫描所有 Run 或
+与手动备份继续通过同一个 authority 的完整状态入口 replay 普通 lightweight 全部历史，包括 history-only 分支；缓存缺失的 Structured Run 保留受限材料准入，待精确资源恢复后完成 runtime 校验，不自动收敛这类未经完整重放的分叉。日常学习动作不扫描所有 Run 或
 Event。具体规则见 [ADR 0005](../adr/0005-concurrent-learning-history-reconciliation.md)。
 新 Checkpoint 成功提交后，服务端只回收旧清单曾引用且新清单不再引用的块；另一设备尚未提交的上传
 不在这次回收范围内。

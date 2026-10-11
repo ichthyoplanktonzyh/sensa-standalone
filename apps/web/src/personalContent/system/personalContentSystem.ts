@@ -1,4 +1,5 @@
 import { canonicalJsonDigest } from '@sensa/learning-kernel';
+import {emptySceneConflictHistory,type SceneConflictHistory} from './sceneConflictHistory';
 
 import {
   assertCurrentLibrary,
@@ -83,6 +84,7 @@ export interface PersonalLearningScene {
   bindingVersionId: string;
   currentRevision: number;
   revisions: PersonalLearningSceneRevision[];
+  conflictHistory: SceneConflictHistory;
   acceptedRevisionId: string | null;
   acceptedPersonalMeaningId: string | null;
   createdAt: number;
@@ -471,6 +473,7 @@ async function saveLearningScene(
       bindingVersionId: input.bindingVersionId,
       currentRevision: revision.revision,
       revisions: [...(current?.revisions ?? []), revision],
+      conflictHistory: current?.conflictHistory ?? emptySceneConflictHistory(),
       acceptedRevisionId: current?.acceptedRevisionId ?? null,
       acceptedPersonalMeaningId: current?.acceptedPersonalMeaningId ?? null,
       createdAt: current?.createdAt ?? now,

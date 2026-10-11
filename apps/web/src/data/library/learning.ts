@@ -18,6 +18,7 @@ import {learningRunReceipt,readVerifiedLearningRunReceipt,sameLearningSessionDir
 import {publishedCurriculumSourceKey,publishedCurriculumMembershipId} from './publishedCurriculumSources';
 import {runBaselineMaterial,runStepMaterial,runMaterialDigest,pinRunStepMaterial} from '../../learning/runtime/runMaterialPins';
 import {learningOwner} from './libraryOwnership';
+import {retentionBaseline} from '../../learning/runtime/retentionBaseline';
 import type {InstalledPackage,InstalledPackageSummary,PackageInstallation} from './packageRecords';
 import {validateLightweightInitialMaterialization,type LightweightInitialLearningMaterialization} from '../../contentSupply/provisioning/lightweightInitialContent';
 import {
@@ -647,7 +648,7 @@ async function startLearningInTransaction(tx:LibraryTransaction,operationId:stri
   const resolvedPlan=resolveRunPlan(participant,policyCommitment,purpose,material,at);
   participant.committedPolicy=policyCommitment;
   const materialReference=runMaterialDigest(material);
-  return [participant.id,{protocolRunId,curriculumMembershipId:membership.id,languageContext:context,startReason:{kind:purpose==='initial_learning'?'initial_learning_ready':purpose==='retention_review'?'due_review':'relearning_ready',selectionReason:participant.id===targetId?'requested_target':'cohort_candidate',triggerAt:at,triggerMemoryRevision:participant.memoryRevision},outcomePermissions:localProtocolOutcomePermissions(purpose,binding),material:materialReference,materializations:{[materialReference]:material},presentedMaterials:{},presentationOrder:[],policyCommitment,resolvedPlan,progress:createLocalProtocolProgress(protocolRunId,binding),memoryRevision:participant.memoryRevision,dueAt:participant.memory?.dueAt.toISOString()??null,evidenceIds:[]}];
+  return [participant.id,{retentionBaseline:retentionBaseline(participant),protocolRunId,curriculumMembershipId:membership.id,languageContext:context,startReason:{kind:purpose==='initial_learning'?'initial_learning_ready':purpose==='retention_review'?'due_review':'relearning_ready',selectionReason:participant.id===targetId?'requested_target':'cohort_candidate',triggerAt:at,triggerMemoryRevision:participant.memoryRevision},outcomePermissions:localProtocolOutcomePermissions(purpose,binding),material:materialReference,materializations:{[materialReference]:material},presentedMaterials:{},presentationOrder:[],policyCommitment,resolvedPlan,progress:createLocalProtocolProgress(protocolRunId,binding),memoryRevision:participant.memoryRevision,dueAt:participant.memory?.dueAt.toISOString()??null,evidenceIds:[]}];
  }));
  const run:LocalLearningRun={
   id:sessionId,startedByOperationId:operationId,...(continuedFromRunId?{continuedFromRunId}:{}),learningSessionId:reuse?activity!.id:stableUuid(`local-learning-session:${operationId}`),studyScopeRevisionId:scope.id,targetId,targetIds:participants.map(v=>v.id),

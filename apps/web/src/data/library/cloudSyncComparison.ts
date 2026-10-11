@@ -52,6 +52,19 @@ export function buildCloudSyncComparison(ids:readonly string[],branches:{base:Br
     view.available=view.available&&(view.removed||view.fields.length>0||view.images.length>0);
    }else if(row.table==='drafts'){
     field('content',value?.text);view.available=view.fields.length>0;
+   }else if(row.table==='annotations'&&value?.kind==='learning_scene'){
+    const revision=value.revisions.find((candidate:any)=>candidate.revision===value.currentRevision);
+    const target=read('learningTargets',value.learningTargetId);view.title=text(target?.expression);
+    field('expression',target?.expression);field('context',revision?.body);
+    for(const media of revision?.media??[])if(typeof media.dataUrl==='string'&&media.dataUrl.startsWith('data:image/'))view.images.push(image(media.dataUrl));else view.available=false;
+    if(value.acceptedPersonalMeaningId){
+     const meaning=read('semanticMeanings',value.acceptedPersonalMeaningId);
+     const registry:IndexedRegistryRead=(kind,id)=>{const fact=read('semanticRegistry',`${kind}:${id}`)?.value;if(!fact)view.available=false;return fact;};
+     const detail=buildDetailView(meaning as MeaningJourneyRecord,registry);
+     field('meaning',detail.displayLabel);
+     for(const alignment of [...detail.directAlignments,...detail.focuses.flatMap(focus=>focus.alignment?[focus.alignment]:[])])field('meaning',alignment.coreMeaningFocus);
+    }
+    view.available=view.available&&!!revision&&(view.fields.length>0||view.images.length>0);
    }else if(row.table==='meanings'){
     view.title=text(value?.expression)??text(value?.title);field('meaning',value?.meaning??value?.text);view.available=view.fields.length>0;
    }else if(row.table==='semanticRegistry'){

@@ -19,7 +19,9 @@ import {validateLightweightInitialMaterialization} from '../../contentSupply/pro
 import {materialReadyAt} from '../../contentSupply/provisioning/materialReadiness';
 import {hasDeclaredMasteryOverride} from '../../learning/runtime/targetPlanningOverrides';
 import {personalLearningSceneRowId} from '../../personalContent/system/personalContentSystem';
-import {backupEqual} from './backupCodec';
+import {findSceneRevision} from '../../personalContent/system/sceneConflictHistory';
+import {backupEqual,encodeBackupValue} from './backupCodec';
+import {retentionBaseline,retentionReplayFields,initialRetentionBaseline,type LocalRetentionBaseline} from '../../learning/runtime/retentionBaseline';
 import {findLibraryRow,everyLibraryRow,type LibraryRecordRows,type LibraryRecordLookups} from './libraryRecordReader';
 import type {LearningEvent,LearningStepPresentation} from './learning';
 import {validateLearningReconciliationRecordSteps} from './learningReconciliation';
@@ -216,10 +218,14 @@ export function* assertLearningSystemStateSteps(input:LearningSystemStateInput):
  const packageCacheComplete=everyLibraryRow(rows.learningTargets,({value:target})=>target.curriculumMemberships.every((membership:any)=>!membership.packageKey||maps.packageCache.has(membership.packageKey)));
  let historyOnlyRunIds=new Set<string>();
  try{({historyOnlyRunIds}=yield*validateLearningReconciliationRecordSteps({get:(table,key)=>maps[table].get(key),has:(table,key)=>maps[table].has(key),entries:table=>rows[table]}));}catch{fail();}
- const replayFields=['memory','memoryRevision','startedAt','completedAt','relearnAt','relearningState'] as const;
+ const replayFields=retentionReplayFields;
  type TargetReplay=Pick<LocalLearningTarget,typeof replayFields[number]>;
  const replayStates=new Map<string,TargetReplay>();
- for(const {key} of rows.learningTargets){replayStates.set(key,{memory:null,memoryRevision:0,completedAt:null,relearnAt:null,relearningState:null,startedAt:null});yield;}
+ const causalStates=new Set<string>();
+ const runStates=new Map<string,Map<string,{before:string;after:string}>>();
+ const effectiveCommitments=new Map<string,LocalLearningTarget['committedPolicy']>();
+ const causalKey=(targetId:string,state:LocalRetentionBaseline,commitment:LocalLearningTarget['committedPolicy'])=>canonicalJsonDigest(encodeBackupValue({targetId,state,commitment}));
+ for(const {key} of rows.learningTargets){const state=initialRetentionBaseline();replayStates.set(key,state);effectiveCommitments.set(key,null);causalStates.add(causalKey(key,state,null));yield;}
  const unfinished=new Set<string>(),knownProtocolRunIds=new Set<string>();
  const unreplayedTargets=new Set<string>();
  const eventKeysByRun=new Map<string,string[]>();
@@ -252,7 +258,7 @@ export function* assertLearningSystemStateSteps(input:LearningSystemStateInput):
    if(!Object.hasOwn(event.detail,'personalLearningScene'))fail();
    if(event.detail.personalLearningScene!==null){
     const scene=requireRow('annotations',personalLearningSceneRowId(event.targetId,participant.languageContext.languageRouteId));
-    const pinned=z.object({sceneId:uuid,revisionId:uuid,revision:z.number().int().positive()}).strict().parse(event.detail.personalLearningScene),sceneRevision=scene.kind==='learning_scene'&&scene.sceneId===pinned.sceneId?scene.revisions.find((candidate:any)=>candidate.revisionId===pinned.revisionId):undefined;
+    const pinned=z.object({sceneId:uuid,revisionId:uuid,revision:z.number().int().positive()}).strict().parse(event.detail.personalLearningScene),sceneRevision=scene.kind==='learning_scene'?findSceneRevision(scene,pinned):undefined;
     if(!sceneRevision||sceneRevision.revision!==pinned.revision||sceneRevision.createdAt>Date.parse(event.at))fail();
    }
    if(!Object.hasOwn(event.detail,'nextPresentation'))fail();
@@ -270,16 +276,37 @@ export function* assertLearningSystemStateSteps(input:LearningSystemStateInput):
   if(!saved.completedAt&&saved.id!==active&&!localRunOpenPlanningInterruption(saved)&&!localRunOpenSessionPause(saved))fail();
   return headers;
  }
- for(const header of runs){
+ const pendingRuns=[...runs];
+ while(pendingRuns.length){
+  // A clock can order unrelated branches differently. Select by an exact,
+  // already replayed causal input rather than interpreting wall time as ancestry.
+  const index=pendingRuns.findIndex(header=>{const candidate=requireRow('learningRuns',header.key) as LocalLearningRun;
+   // Structured cacheless restore retains its explicitly limited admission
+   // contract until its exact runtime resource has been restored.
+   if(!packageCacheComplete&&candidate.protocolBinding.runtimeAdapterId!=='lightweight')return true;
+   return Object.entries(candidate.participants).every(([id,participant])=>{
+   const baseline=participant.retentionBaseline;
+   if(!baseline||!backupEqual(Object.keys(baseline).sort(),[...replayFields].sort()))return false;
+   const commitment=participant.policyCommitment;
+   return causalStates.has(causalKey(id,baseline,commitment))
+    ||commitment.committedByProtocolRunId===participant.protocolRunId&&causalStates.has(causalKey(id,baseline,null));
+  });});
+  if(index<0)fail();const header=pendingRuns.splice(index,1)[0]!;
   yield;
   const saved=requireRow('learningRuns',header.key) as LocalLearningRun;
+  const deferredStructured=!packageCacheComplete&&saved.protocolBinding.runtimeAdapterId!=='lightweight';
+  if(deferredStructured&&historyOnlyRunIds.has(saved.id))fail();
+  if(!historyOnlyRunIds.has(saved.id)&&!deferredStructured)for(const [id,participant] of Object.entries(saved.participants)){
+   if(!backupEqual(participant.retentionBaseline,replayStates.get(id)))fail();
+   const prior=effectiveCommitments.get(id);
+   if(prior?!backupEqual(prior,participant.policyCommitment):participant.policyCommitment.committedByProtocolRunId!==participant.protocolRunId)fail();
+  }
   try{for(const participant of Object.values(saved.participants)){validateRunMaterialPins(participant);yield;}}catch{fail();}
   const eventHeaders=yield*assertStoredRunFacts(saved,eventKeysByRun.get(saved.id)??[]);
-  if(historyOnlyRunIds.has(saved.id))continue;
   // Only this Run's participant bodies and Action facts remain decoded during
   // replay. The cross-Run state consists of the small retention projection.
   const targets=new Map<string,LocalLearningTarget>();
-  for(const id of localRunTargetIds(saved)){const state=replayStates.get(id);if(state)targets.set(id,{...requireRow('learningTargets',id),...state});}
+  for(const id of localRunTargetIds(saved)){const participant=saved.participants[id]??fail();targets.set(id,{...requireRow('learningTargets',id),...structuredClone(participant.retentionBaseline),committedPolicy:participant.policyCommitment});}
   const runLanguageContext=validateLanguageContext(saved.languageContext),ids=localRunTargetIds(saved);
   try{for(const field of ['startedByOperationId','continuedFromRunId'] as const)if(Object.hasOwn(saved,field))uuid.parse(saved[field]);}catch{fail();}
   if(saved.continuedFromRunId!==undefined){
@@ -396,6 +423,7 @@ export function* assertLearningSystemStateSteps(input:LearningSystemStateInput):
    for(const material of Object.values(participant.materializations))validateRunMaterial(material);
    const commitment=participant.policyCommitment,plan=participant.resolvedPlan;
    uuid.parse(commitment.commitmentId);uuid.parse(commitment.committedByProtocolRunId);uuid.parse(plan.resolvedLearningPlanRevisionId);
+   if(commitment.commitmentId!==stableUuid(`local-policy-commitment:${target.retentionId}`)||commitment.revision!==1||commitment.assignmentId!==target.policyAssignment.assignmentId||commitment.assignmentRevision!==target.policyAssignment.revision||commitment.profileId!==target.policyAssignment.profileId||commitment.committedByProtocolRunId===participant.protocolRunId&&commitment.committedAt!==saved.startedAt)fail();
    if(!backupEqual(commitment,target.committedPolicy)||plan.learningTargetId!==id||plan.retentionTargetId!==target.retentionId||plan.purpose!==saved.purpose||plan.profileId!==commitment.profileId||plan.profileVersion!==commitment.profileVersion||plan.readiness!=='ready'||!backupEqual(plan.protocolBinding,saved.protocolBinding)||!backupEqual(plan.contentDemands,saved.protocolBinding.contentDemands)||!backupEqual(plan.learningMaterializationIds,[runBaselineMaterial(participant).snapshot.learningMaterializationId]))fail();
    const progress=participant.progress;
    if(progress.protocolRunId!==participant.protocolRunId||progress.protocolId!==saved.protocolBinding.protocolId||progress.protocolVersion!==saved.protocolBinding.protocolVersion||!backupEqual(Object.keys(progress.checkpointCredits).sort(),[...saved.protocolBinding.checkpointDefinitionIds].sort()))fail();
@@ -448,9 +476,19 @@ export function* assertLearningSystemStateSteps(input:LearningSystemStateInput):
    try{replayNextPresentation(run,execution,detail.nextPresentation,saved,event.at);}catch{fail();}
   }
   if(!backupEqual(run,saved))fail();if(!run.completedAt)ids.forEach(id=>unfinished.add(id));
-  for(const [id,target] of targets)replayStates.set(id,Object.fromEntries(replayFields.map(field=>[field,target[field]])) as TargetReplay);
+  const states=new Map<string,{before:string;after:string}>();
+  for(const [id,target] of targets){const state=retentionBaseline(target),participant=saved.participants[id]!,after=causalKey(id,state,target.committedPolicy);states.set(id,{before:causalKey(id,participant.retentionBaseline,participant.policyCommitment),after});causalStates.add(after);if(!historyOnlyRunIds.has(saved.id)){replayStates.set(id,state);effectiveCommitments.set(id,target.committedPolicy);}}
+  runStates.set(saved.id,states);
  }
- for(const {value:target} of rows.learningTargets){if(target.committedPolicy&&!knownProtocolRunIds.has(target.committedPolicy.committedByProtocolRunId))fail();yield;}
+ // Superseded decisions remain audit facts. Their applied Runs must describe
+ // one possible continuous branch, even after they cease driving today's state.
+ for(const {value:decision} of rows.learningReconciliations){
+  const transitions=decision.appliedRunIds.map((id:string)=>runStates.get(id)?.get(decision.targetId)??fail()) as Array<{before:string;after:string}>;
+  const outputs=new Set(transitions.filter(row=>row.before!==row.after).map(row=>row.after)),roots=new Set(transitions.filter(row=>!outputs.has(row.before)).map(row=>row.before));
+  if(roots.size!==1)fail();let cursor=[...roots][0]!;const remaining=[...transitions];
+  while(remaining.length){let index=remaining.findIndex(row=>row.before===cursor&&row.after===cursor);if(index<0)index=remaining.findIndex(row=>row.before===cursor);if(index<0)fail();cursor=remaining.splice(index,1)[0]!.after;yield;}
+ }
+ for(const {value:target} of rows.learningTargets){if(!unreplayedTargets.has(target.id)&&!backupEqual(target.committedPolicy,effectiveCommitments.get(target.id))||target.committedPolicy&&!knownProtocolRunIds.has(target.committedPolicy.committedByProtocolRunId))fail();yield;}
  for(const {value:target} of rows.learningTargets){if(!unreplayedTargets.has(target.id))for(const key of replayFields)if(!backupEqual(replayStates.get(target.id)![key],target[key]))fail();yield;}
  if(active){const run=requireRow('learningRuns',active);if(localRunOpenPlanningInterruption(run)||localRunOpenSessionPause(run)||localRunTargetIds(run).some(id=>hasDeclaredMasteryOverride(requireRow('learningTargets',id))))fail();}
  for(const {key,value:operation} of rows.operations){
@@ -1021,6 +1059,8 @@ export async function assertLearningSystemTransition(input:LearningSystemTransit
    const initialTargetId=localProtocolActiveTargetId(execution,replayed),initialStepId=localProtocolStepId(execution,replayed);
    for(const [targetId,pin] of Object.entries(after.participants)){
     const target=requireFact(await input.read('learningTargets',targetId) as LocalLearningTarget|undefined,'Learning Run Target is missing.'),membership=requireFact(target.curriculumMemberships.find(member=>member.id===pin.curriculumMembershipId),'Learning Run source is missing.');
+    const targetChange=targets.find(change=>change.key===targetId),before=targetChange?.before as LocalLearningTarget|undefined;
+    if(!backupEqual(pin.retentionBaseline,retentionBaseline(before??target)))reject('New Learning Run must pin its exact pre-command retention state.');
     const expected={snapshot:{...membership.material.snapshot,learningMaterializationId:stableUuid(`local-run-materialization:${pin.protocolRunId}:${membership.material.snapshot.learningMaterializationId}`),protocolPurpose:after.purpose,createdAt:after.startedAt},content:membership.material.content};
     if(!backupEqual(runBaselineMaterial(pin),expected)||!backupEqual(Object.keys(pin.materializations),[pin.material])||!backupEqual(pin.presentedMaterials,targetId===initialTargetId?{[initialStepId]:pin.material}:{})||!backupEqual(pin.presentationOrder,targetId===initialTargetId?[initialStepId]:[]))reject('New Learning Run must begin with its selected baseline and initial presentation.');
    }

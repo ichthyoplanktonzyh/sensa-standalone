@@ -34,7 +34,7 @@ function publish(drafts:typeof first[]){
 }
 function publishEntries(entries:Array<{table:string;key:string;value:unknown}>){
  const rows=entries.map(row=>({table:row.table,key:row.key,blocks:[block(JSON.stringify(encodeBackupValue(row.value)))]}));
- manifest=splitLibrarySyncText(JSON.stringify({version:6,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows})).map(block);revision++;
+ manifest=splitLibrarySyncText(JSON.stringify({version:7,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows})).map(block);revision++;
 }
 let onFetch:(()=>Promise<void>)|undefined;
 const request:SyncRequest=async(path,body)=>{
@@ -89,7 +89,7 @@ test('repacked remote facts patch references without a content revision and reco
  publish([first]);await synchronizeLibrary(request);const before=await facts();
  const entries=[{table:'meta',key:'identity',value:remoteIdentity},{table:'drafts',key:first.id,value:first}];
  const rows=entries.map(row=>({table:row.table,key:row.key,blocks:[block(' '+JSON.stringify(encodeBackupValue(row.value))+' ')]}));
- manifest=splitLibrarySyncText(JSON.stringify({version:6,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows})).map(block);revision++;
+ manifest=splitLibrarySyncText(JSON.stringify({version:7,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows})).map(block);revision++;
  sql.exec(`CREATE TEMP TRIGGER repack_no_source_write BEFORE INSERT ON sensa_records WHEN NEW.table_name='drafts' BEGIN SELECT RAISE(ABORT,'repack rewrote source'); END`);
  const adapter=await sqliteRecordAdapter(),commit=adapter.commit.bind(adapter);let lost=false;
  adapter.commit=async mutation=>{await commit(mutation);if(mutation.replicaCandidateRestore?.update){expect(mutation.contentRevision).toBeUndefined();lost=true;throw Error('sqlite_coordination_timeout');}};
@@ -393,7 +393,7 @@ test('a legal row with over 512 unique fragments proves in batches before its bo
  for(let at=0;at<wire.length;at+=16)refs.push(block(wire.slice(at,at+16)));
  expect(new Set(refs).size).toBeGreaterThan(512);expect(refs.length).toBeLessThanOrEqual(2048);
  const rows=[{table:'meta',key:'identity',blocks:[block(JSON.stringify(encodeBackupValue(remoteIdentity)))]},{table:'settings',key:'fragmented-opaque',blocks:refs}];
- manifest=splitLibrarySyncText(JSON.stringify({version:6,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows})).map(block);revision++;
+ manifest=splitLibrarySyncText(JSON.stringify({version:7,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows})).map(block);revision++;
  const adapter=await sqliteRecordAdapter(),original=adapter.replicaCandidate.bind(adapter);let proofs=0;
  adapter.replicaCandidate=async message=>{if(message.kind==='prove')proofs++;return original(message);};
  try{await synchronizeLibrary(request);}finally{adapter.replicaCandidate=original;}
@@ -406,7 +406,7 @@ test('dense repeated fragments split by total reference work without changing th
  const rows=[{table:'meta',key:'identity',blocks:[block(JSON.stringify(encodeBackupValue(remoteIdentity)))]},...settings.map(setting=>{
   const wire=JSON.stringify(encodeBackupValue(setting.value)),refs=[block('['),...Array.from({length:2046},()=>block(' ')),block(wire.slice(1))];refsByKey.set(setting.key,refs);return {table:'settings',key:setting.key,blocks:refs};
  })];
- manifest=splitLibrarySyncText(JSON.stringify({version:6,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows})).map(block);revision++;
+ manifest=splitLibrarySyncText(JSON.stringify({version:7,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows})).map(block);revision++;
  const adapter=await sqliteRecordAdapter(),original=adapter.replicaCandidate.bind(adapter);let appends=0,maximumReferences=0;
  adapter.replicaCandidate=async message=>{if(message.kind==='append'){appends++;maximumReferences=Math.max(maximumReferences,message.records.reduce((sum,row)=>sum+row.blockRefs.length,0));}return original(message);};
  try{await synchronizeLibrary(request);}finally{adapter.replicaCandidate=original;}
@@ -425,7 +425,7 @@ for(const kind of ['compressed','high-entropy'] as const)test(`large ${kind} sin
  }
  const refs=splitLibrarySyncText(JSON.stringify(encodeBackupValue(setting))).map(block);
  const rows=[{table:'meta',key:'identity',blocks:[block(JSON.stringify(encodeBackupValue(remoteIdentity)))]},{table:'settings',key:'large-opaque',blocks:refs}];
- manifest=splitLibrarySyncText(JSON.stringify({version:6,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows})).map(block);revision++;
+ manifest=splitLibrarySyncText(JSON.stringify({version:7,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows})).map(block);revision++;
  const adapter=await sqliteRecordAdapter(),original=adapter.replicaCandidate.bind(adapter);let proofs=0;
  adapter.replicaCandidate=async message=>{
   if(message.kind==='prove'){

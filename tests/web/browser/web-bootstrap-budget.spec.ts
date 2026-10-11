@@ -64,7 +64,7 @@ const cloudFor=(account:string):Cloud=>{const existing=clouds.get(account);if(ex
 const repackCloud=(cloud:Cloud,chars:number)=>{
  if(!cloud.manifest)throw Error('nothing to repack');
  const manifest=JSON.parse(cloud.manifest.map(hash=>decodeLibrarySyncBlock(cloud.blocks.get(hash)!)).join('')) as {version:number;rows:{table:string;key:string;blocks:string[]}[]};
- if(manifest.version!==6||manifest.rows.some(row=>row.table==='operations'||row.table==='packageCache'))throw Error('current Checkpoint carried device-local state');
+ if(manifest.version!==7||manifest.rows.some(row=>row.table==='operations'||row.table==='packageCache'))throw Error('current Checkpoint carried device-local state');
  const added=new Map<string,string>(),rows:{table:string;key:string;blocks:string[]}[]=[];
  for(const [rowIndex,row] of manifest.rows.entries()){
   const text=row.blocks.map(hash=>decodeLibrarySyncBlock(cloud.blocks.get(hash)!)).join(''),refs:string[]=[];

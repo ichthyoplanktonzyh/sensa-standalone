@@ -902,9 +902,9 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  await repackedReceiver.evaluate(()=>(window as any).sync());
  assert.equal((await readHead()).revision,head.revision,'restoring identical facts with a different block layout must not republish');
  assert.equal(fixture.requests().filter(call=>call.path.endsWith('/commit')).length,0);
- assert.equal((await repackedReceiver.evaluate(()=>(window as any).core.readCloudSync())).checkpointVersion,6);
+ assert.equal((await repackedReceiver.evaluate(()=>(window as any).core.readCloudSync())).checkpointVersion,7);
  await repackedReceiver.context().close();
- assert.equal(head.manifest.version,6);assert.equal(head.manifest.rows.some((row:any)=>row.table==='operations'),false,'new Checkpoints must not contain the device ledger');
+ assert.equal(head.manifest.version,7);assert.equal(head.manifest.rows.some((row:any)=>row.table==='operations'),false,'new Checkpoints must not contain the device ledger');
  assert.equal(head.manifest.rows.some((row:any)=>row.table==='packageCache'),false,'new Checkpoints must not contain public artifact cache bytes');
  assert.equal(head.manifest.rows.some((row:any)=>row.table==='packageInstallations'),true,'new Checkpoints must contain exact package installation facts');
  assert.equal(head.manifest.rows.some((row:any)=>row.table==='meta'&&row.key==='package-catalog'),false,'package catalog cache must not enter account checkpoints');

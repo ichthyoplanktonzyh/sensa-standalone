@@ -31,11 +31,12 @@ const draftTexts = (drafts: readonly Readonly<{ text: string }>[]): string[] => 
 );
 
 for(const scenario of [
- {name:'equal projections A first',first:'a',rating:'good',extraRun:false,offset:0,stale:false},
- {name:'equal projections B first',first:'b',rating:'good',extraRun:false,offset:0,stale:false},
- {name:'different rating and time',first:'a',rating:'hard',extraRun:false,offset:60_000,stale:false},
- {name:'one branch has two serial Runs',first:'b',rating:'good',extraRun:true,offset:0,stale:false},
- {name:'a third stale client is preserved behind the prior-decision gate',first:'a',rating:'good',extraRun:false,offset:0,stale:true},
+ {name:'equal projections A first',first:'a',rating:'good',extraRun:false,offset:0,stale:false,thirdOffset:0},
+ {name:'equal projections B first',first:'b',rating:'good',extraRun:false,offset:0,stale:false,thirdOffset:0},
+ {name:'different rating and time',first:'a',rating:'hard',extraRun:false,offset:60_000,stale:false,thirdOffset:0},
+ {name:'one branch has two serial Runs',first:'b',rating:'good',extraRun:true,offset:0,stale:false,thirdOffset:0},
+ {name:'previous winner survives a third stale client',first:'a',rating:'good',extraRun:false,offset:60_000,stale:true,thirdOffset:30_000},
+ {name:'third stale client wins and supersedes the previous decision',first:'b',rating:'good',extraRun:false,offset:60_000,stale:true,thirdOffset:120_000},
 ] as const)test(`[integration][durability][convergence] completed review branches survive retry and restore: ${scenario.name}`,async()=>{
  const account=await fixture.createAccount(),a=await fixture.createClient(account),b=await fixture.createClient(account);
  let stale:import('@playwright/test').Page|null=null;
@@ -66,7 +67,7 @@ for(const scenario of [
   await second.evaluate(()=>(window as any).sync());
   expect((await second.evaluate(()=>(window as any).request('/head'))).revision).toBe(revision);
   await first.evaluate(()=>(window as any).sync());
-  const converged=await snapshot(first);
+  let converged=await snapshot(first);
   expect(await snapshot(second)).toEqual(converged);
   expect(converged.runs.map((r:any)=>r.id).sort()).toEqual([initial,runA,runB,...extra?[extra]:[]].sort());
   expect(converged.events).toHaveLength(converged.runs.length*2);
@@ -80,13 +81,15 @@ for(const scenario of [
   const fresh=await fixture.createClient(account);
   try{await fresh.evaluate(()=>(window as any).sync());expect(await snapshot(fresh)).toEqual(converged);const backup=await fresh.evaluate(()=>(window as any).core.exportLibraryBackup('review-branch-backup-fixture'));expect(backup.summary.events).toBe(converged.events.length);}finally{await fresh.context().close();}
   if(stale){
-   await settle(stale,targetId,'good',600_000);const before=await snapshot(stale),head=(await first.evaluate(()=>(window as any).request('/head'))).revision;
-   // Existing immutable decisions have no supersession representation. Keep
-   // this limitation explicit: reject the candidate, never lose C or A/B.
-   await expect(stale.evaluate(()=>(window as any).sync())).rejects.toThrow('libraryBackup.errors.inconsistent');
-   expect(await snapshot(stale)).toEqual(before);expect((await first.evaluate(()=>(window as any).request('/head'))).revision).toBe(head);
-   expect((await stale.evaluate(()=>(window as any).core.readCloudSync())).status).toBe('conflict');
-   expect((await stale.evaluate(()=>(window as any).core.exportLibraryBackup('stale-device-backup-fixture'))).summary.events).toBe(before.events.length);
+   const runC=await settle(stale,targetId,'good',scenario.thirdOffset),branchC=await snapshot(stale),originalDecision=structuredClone(decision);
+   await stale.evaluate(()=>(window as any).sync());await first.evaluate(()=>(window as any).sync());await second.evaluate(()=>(window as any).sync());
+   converged=await snapshot(first);expect(await snapshot(stale)).toEqual(converged);expect(await snapshot(second)).toEqual(converged);
+   expect(converged.decisions).toHaveLength(2);expect(converged.decisions.find((row:any)=>row.id===originalDecision.id)).toEqual(originalDecision);
+   const next=converged.decisions.find((row:any)=>row.id!==originalDecision.id);expect(next.supersededDecisionIds).toEqual([originalDecision.id]);
+   expect(next.appliedRunIds).toContain(scenario.thirdOffset>scenario.offset?runC:runB);expect(next.historyOnlyRunIds).toContain(runA);
+   expect(converged.targets).toEqual(scenario.thirdOffset>scenario.offset?branchC.targets:branchB.targets);
+   for(const before of [...branchA.events,...branchB.events,...branchC.events])expect(converged.events.find((e:any)=>e.id===before.id)).toEqual(before);
+   const restored=await fixture.createClient(account);try{await restored.evaluate(()=>(window as any).sync());expect(await snapshot(restored)).toEqual(converged);expect((await restored.evaluate(()=>(window as any).core.exportLibraryBackup('third-branch-backup-fixture'))).summary.events).toBe(converged.events.length);}finally{await restored.context().close();}
   }
   await second.reload();
   const reopened=await second.evaluate(async()=>{const path='/core.js',c=await import(/* @vite-ignore */path);await c.openLibrary();return JSON.parse(JSON.stringify(await c.readLearning()));});
@@ -94,7 +97,7 @@ for(const scenario of [
  }finally{await stale?.context().close();await a.context().close();await b.context().close();}
 });
 
-test('[integration][durability][convergence] a Scene choice cannot orphan either original learning history',async()=>{
+for(const choice of ['local','remote'] as const)test(`[integration][durability][convergence] a Scene ${choice} choice preserves both original learning histories through edit, retry and restore`,async()=>{
  const account=await fixture.createAccount(),a=await fixture.createClient(account),b=await fixture.createClient(account);
  const facts=(page:import('@playwright/test').Page)=>page.evaluate(async()=>{const c=(window as any).core;return JSON.parse(JSON.stringify({learning:await c.readLearning(),scenes:await c.readLibrary((tx:any)=>tx.entries('annotations'))}));});
  try{
@@ -108,14 +111,23 @@ test('[integration][durability][convergence] a Scene choice cannot orphan either
   const originalA=await facts(a),originalB=await facts(b);
   await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());
   expect((await b.evaluate(()=>(window as any).core.readCloudSync())).status).toBe('conflict');
-  const head=(await b.evaluate(()=>(window as any).request('/head'))).revision;
-  for(const choice of ['local','remote']){
-   await expect(b.evaluate(async choice=>{const c=(window as any).core;await c.resolveCloudSyncConflicts(choice,(await c.readCloudSync()).conflict);await (window as any).sync();},choice)).rejects.toThrow('libraryBackup.errors.inconsistent');
-   expect(await facts(b)).toEqual(originalB);expect((await b.evaluate(()=>(window as any).request('/head'))).revision).toBe(head);
-   expect((await b.evaluate(()=>(window as any).core.exportLibraryBackup('scene-protection-backup-fixture'))).summary.events).toBe(2);
-  }
-  expect(await facts(a)).toEqual(originalA);
-  const fresh=await fixture.createClient(account);try{await fresh.evaluate(()=>(window as any).sync());expect(await facts(fresh)).toEqual(originalA);}finally{await fresh.context().close();}
+  await b.evaluate(async choice=>{const c=(window as any).core;await c.resolveCloudSyncConflicts(choice,(await c.readCloudSync()).conflict);},choice);
+  await b.evaluate(()=>{(window as any).failAck=true;});await expect(b.evaluate(()=>(window as any).sync())).rejects.toThrow('lost_ack');
+  const committedHead=(await b.evaluate(()=>(window as any).request('/head'))).revision;await b.evaluate(()=>(window as any).sync());expect((await b.evaluate(()=>(window as any).request('/head'))).revision).toBe(committedHead);
+  await a.evaluate(()=>(window as any).sync());const chosen=await facts(b);expect(await facts(a)).toEqual(chosen);
+  const selected=choice==='local'?originalB:originalA,scene=chosen.scenes[0].value;
+  expect(scene.sceneId).toBe(selected.scenes[0].value.sceneId);expect(scene.revisions).toEqual(selected.scenes[0].value.revisions);expect(scene.conflictHistory.decisions).toHaveLength(1);expect(scene.conflictHistory.branches).toHaveLength(2);
+  for(const before of [originalA,originalB])for(const event of before.learning.events)expect(chosen.learning.events.find((row:any)=>row.id===event.id)).toEqual(event);
+  expect(chosen.learning.events).toHaveLength(4);expect(chosen.learning.runs).toHaveLength(2);
+  await b.clock.setFixedTime(new Date('2026-10-01T08:02:00Z'));
+  await b.evaluate(async seed=>{const c=(window as any).core,scene=await c.personalContentSystem.readScene({kind:'learning_scene',learningTargetId:seed.targetId,languageRouteId:seed.input.languageRouteId});await c.personalContentSystem.execute({...seed.input,operationId:crypto.randomUUID(),body:'Chosen timeline edited after convergence',media:[],expected:c.personalLearningSceneEditBase(scene)});},{...seed});
+  await b.evaluate(()=>(window as any).sync());await a.evaluate(()=>(window as any).sync());const edited=await facts(b);expect(await facts(a)).toEqual(edited);expect(edited.scenes[0].value.sceneId).toBe(scene.sceneId);expect(edited.scenes[0].value.revisions[0]).toEqual(scene.revisions[0]);expect(edited.scenes[0].value.conflictHistory).toEqual(scene.conflictHistory);
+  expect((await b.evaluate(()=>(window as any).core.exportLibraryBackup('scene-branch-backup-fixture'))).summary.events).toBe(4);
+  const fresh=await fixture.createClient(account);try{await fresh.evaluate(()=>(window as any).sync());expect(await facts(fresh)).toEqual(edited);expect((await fresh.evaluate(()=>(window as any).core.exportLibraryBackup('scene-restored-backup-fixture'))).summary.events).toBe(4);}finally{await fresh.context().close();}
+  for(const [page,body] of [[a,'Second red branch'],[b,'Second blue branch']] as const){await page.clock.setFixedTime(new Date('2026-10-01T08:03:00Z'));await page.evaluate(async({seed,body})=>{const c=(window as any).core,scene=await c.personalContentSystem.readScene({kind:'learning_scene',learningTargetId:seed.targetId,languageRouteId:seed.input.languageRouteId});await c.personalContentSystem.execute({...seed.input,operationId:crypto.randomUUID(),body,media:[],expected:c.personalLearningSceneEditBase(scene)});},{seed,body});}
+  await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());expect((await b.evaluate(()=>(window as any).core.readCloudSync())).status).toBe('conflict');
+  await b.evaluate(async choice=>{const c=(window as any).core;await c.resolveCloudSyncConflicts(choice,(await c.readCloudSync()).conflict);await (window as any).sync();},choice);await a.evaluate(()=>(window as any).sync());const twice=await facts(b);expect(await facts(a)).toEqual(twice);expect(twice.scenes[0].value.conflictHistory.decisions).toHaveLength(2);expect(twice.learning.events).toEqual(edited.learning.events);
+  const freshAgain=await fixture.createClient(account);try{await freshAgain.evaluate(()=>(window as any).sync());expect(await facts(freshAgain)).toEqual(twice);await freshAgain.evaluate(()=>(window as any).core.exportLibraryBackup('second-scene-choice-backup-fixture'));}finally{await freshAgain.context().close();}
  }finally{await a.context().close();await b.context().close();}
 });
 

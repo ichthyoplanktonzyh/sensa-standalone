@@ -137,6 +137,7 @@ export interface LocalProtocolOutcomePermissions {
 }
 
 export interface LocalLearningRunParticipant {
+  retentionBaseline:import('./retentionBaseline').LocalRetentionBaseline;
   protocolRunId:string;
   curriculumMembershipId:string;
   languageContext:SensaFormalPinnedLanguageContext;

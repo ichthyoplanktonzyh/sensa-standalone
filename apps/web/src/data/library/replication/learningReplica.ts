@@ -120,6 +120,7 @@ export const learningReplica:DomainReplicaModule={
    ...reference('learningTargets',fact.targetId),
   ];
   if(entry.table==='learningReconciliations')return [
+   ...references('learningReconciliations',fact.supersededDecisionIds),
    ...reference('learningTargets',fact.targetId),
    ...references('learningRuns',[...values(fact.appliedRunIds),...values(fact.historyOnlyRunIds),fact.selectedRunId]),
    ...references('learningEvents',[...values(fact.candidateEventIds),...values(fact.appliedEventIds),...values(fact.historyOnlyEventIds),fact.selectedEventId]),

@@ -15,6 +15,9 @@ import type {LocalLearningTarget} from '../../../apps/web/src/learning/runtime/l
 import {createJourneyGateway} from '../../../apps/web/src/experience/personalMeaningJourney/gateway';
 import {LibraryJourneyRepository} from '../../../apps/web/src/experience/personalMeaningJourney/repository';
 import type {PublishedLearningSceneAcceptanceInput} from '../../../apps/web/src/experience/personalMeaningJourney/types';
+import {assertSceneConflictHistory,decideSceneConflict,findSceneRevision,mergeSceneHistory} from '../../../apps/web/src/personalContent/system/sceneConflictHistory';
+import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec';
+import {mergeLibraryReplicas} from '../../../apps/web/src/data/library/replication/libraryReplica';
 
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined,location:new URL('http://personal-learning-scene.fixture.invalid')});
 const database=await useNodeLearningCapacityStorage();afterAll(()=>database.close());await openLibrary();
@@ -38,6 +41,34 @@ async function startedBook(){
   input:{kind:'save_learning_scene' as const,learningTargetId:target.id,languageRouteId:context.languageRouteId,curriculumMembershipId:selected.curriculumMembershipId,senseId:selected.identity.senseId,senseVersionId:selected.identity.senseVersionId,bindingVersionId:selected.identity.bindingVersionId,media:[]}};
 }
 const learningFacts=()=>readLibrary(async tx=>Object.fromEntries(await Promise.all((['learningTargets','learningRuns','learningEvents','learningSessions','studyScopes'] as const).map(async table=>[table,await tx.entries(table)]))));
+
+test('flat Scene histories preserve exact alternative revisions across repeated choices and subsequent edits',async()=>{
+ const {input}=await startedBook(),{scene:base}=await personalContentSystem.execute({...input,operationId:id(),body:'共同的借伞经历。',expected:null});
+ // Pure history representation boundary. Actual two-client commands and
+ // learning pins are exercised by the browser-plus-database journey.
+ const fork=(body:string)=>({...structuredClone(base),currentRevision:2,updatedAt:base.updatedAt+1,revisions:[...structuredClone(base.revisions),{...base.revisions[0]!,revisionId:id(),revision:2,body,createdAt:base.updatedAt+1}]});
+ const local=fork('红色雨伞'),remote=fork('蓝色雨伞'),decision={id:id(),createdAt:new Date().toISOString()},chosen=decideSceneConflict(local,remote,local,decision,base);
+ assertSceneConflictHistory(chosen);expect(chosen.revisions).toEqual(local.revisions);expect(chosen.conflictHistory.branches).toHaveLength(3);
+ for(const scene of [base,local,remote])for(const revision of scene.revisions)expect(findSceneRevision(chosen,{sceneId:scene.sceneId,revisionId:revision.revisionId,revision:revision.revision})).toEqual(revision);
+ expect(decideSceneConflict(local,remote,local,decision,base)).toEqual(chosen);expect(mergeSceneHistory(base,chosen,remote)).toEqual(chosen);
+ const edited={...structuredClone(chosen),currentRevision:3,updatedAt:chosen.updatedAt+1,revisions:[...structuredClone(chosen.revisions),{...chosen.revisions[1]!,revisionId:id(),revision:3,body:'确认后继续编辑',createdAt:chosen.updatedAt+1}]};
+ expect(mergeSceneHistory(chosen,edited,chosen)).toEqual(edited);expect(edited.conflictHistory).toEqual(chosen.conflictHistory);
+ const laterRemote={...structuredClone(remote),currentRevision:3,updatedAt:remote.updatedAt+1,revisions:[...structuredClone(remote.revisions),{...remote.revisions[1]!,revisionId:id(),revision:3,body:'旧分支继续编辑',createdAt:remote.updatedAt+1}]};
+ const second=decideSceneConflict(edited,laterRemote,laterRemote,{id:id(),createdAt:new Date().toISOString()},base);assertSceneConflictHistory(second);expect(second.conflictHistory.decisions).toHaveLength(2);expect(second.conflictHistory.branches.every(branch=>!('conflictHistory'in branch.record))).toBe(true);
+ const broken=structuredClone(second);broken.conflictHistory.branches[0]!.record.revisions[0]!.body='改写历史';expect(()=>assertSceneConflictHistory(broken)).toThrow();
+ const accepted={...structuredClone(base),acceptedRevisionId:base.revisions[0]!.revisionId,acceptedPersonalMeaningId:id(),updatedAt:base.updatedAt+1};
+ const otherAccepted={...structuredClone(accepted),acceptedPersonalMeaningId:id()};
+ for(const [a,b] of [[accepted,otherAccepted],[local,accepted]] as const){
+  assertSceneConflictHistory(a);assertSceneConflictHistory(b);
+  expect(mergeSceneHistory(base,a,b)).toBeUndefined();expect(mergeSceneHistory(base,b,a)).toBeUndefined();
+ }
+ expect(mergeSceneHistory(base,base,accepted)).toEqual(accepted);
+ const rewritten=structuredClone(base);rewritten.revisions[0]!.body='无声改写旧正文';expect(()=>mergeSceneHistory(base,rewritten,rewritten)).toThrow();
+ const sceneRow={table:'annotations' as const,key:base.id,value:encodeBackupValue(base)},substitute={...sceneRow,value:encodeBackupValue({id:base.id,kind:'sense_note',senseId:base.senseId,body:'替换了场景',revision:1,createdAt:base.createdAt,updatedAt:base.updatedAt})};
+ expect(()=>mergeLibraryReplicas({base:[sceneRow],local:[sceneRow],remote:[substitute]})).toThrow('library_sync_history');
+ const rows=await readLibrary(async tx=>Object.fromEntries(await Promise.all(libraryTables.map(async table=>[table,await tx.entries(table)])))) as BackupRows;
+ rows.annotations.find(row=>row.key===base.id)!.value={id:base.id,kind:'sense_note',senseId:base.senseId,body:'替换了场景',revision:1,createdAt:base.createdAt,updatedAt:base.updatedAt};expect(()=>validateBackupRows(rows)).toThrow();
+});
 
 test('scene edits require the actual read version; stale drafts cannot replace the current scene or change learning',async()=>{
  const {input,query}=await startedBook(),before=await learningFacts();

@@ -73,6 +73,25 @@ test(`completed learning facts reconcile with ${identicalProjection?'identical':
 });
 }
 
+for(const minute of ['02','04'])for(const reverse of [false,true])test(`a stale third branch at minute ${minute} inherits the previous decision, reverse=${reverse}`,()=>{
+ const id=(n:number)=>`30000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+ const entry=(table:LibraryReplicaEntry['table'],key:string,value:unknown):LibraryReplicaEntry=>({table,key,value:encodeBackupValue(value)});
+ const target={id:id(1),retentionId:id(2),memory:null,memoryRevision:0},base=[entry('learningTargets',target.id,target)];
+ const branch=(n:number,minute:string)=>[entry('learningTargets',target.id,{...target,memory:{dueAt:`2026-10-02T00:${minute}:00Z`},memoryRevision:1}),entry('learningRuns',id(n),{id:id(n),targetIds:[target.id],completedAt:`2026-10-01T00:${minute}:00Z`}),entry('learningEvents',id(n+10),{id:id(n+10),runId:id(n),targetId:target.id,at:`2026-10-01T00:${minute}:00Z`})];
+ const a=branch(3,'01'),b=branch(4,'03'),c=branch(5,minute),first=mergeLibraryReplicas({base,local:a,remote:b});
+ const second=mergeLibraryReplicas({base,local:reverse?first.entries:c,remote:reverse?c:first.entries});
+ assert.deepEqual(second.conflicts,[]);const decisions=second.entries.filter(row=>row.table==='learningReconciliations').map(row=>decodeBackupValue(row.value));
+ assert.equal(decisions.length,2);const original=decodeBackupValue(first.entries.find(row=>row.table==='learningReconciliations')!.value),next=decisions.find(row=>row.id!==original.id)!;
+ assert.deepEqual(decisions.find(row=>row.id===original.id),original);assert.deepEqual(next.supersededDecisionIds,[original.id]);
+ assert.deepEqual(next.appliedRunIds,[minute==='02'?id(4):id(5)]);assert.deepEqual(next.historyOnlyRunIds,[id(3),minute==='02'?id(5):id(4)].sort());
+ const rows=Object.fromEntries(sqliteLibraryTables.map(table=>[table,second.entries.filter(row=>row.table===table).map(row=>({key:row.key,value:decodeBackupValue(row.value)}))])) as unknown as LibraryRecordRows;
+ const roles=validateLearningReconciliationRecords(libraryRowsReader(rows));assert.deepEqual([...roles.historyOnlyRunIds].sort(),next.historyOnlyRunIds);
+ assert.deepEqual(decodeBackupValue(second.entries.find(row=>row.table==='learningTargets')!.value),decodeBackupValue((minute==='02'?b:c)[0]!.value));
+ assert.deepEqual(mergeLibraryReplicas({base,local:reverse?c:first.entries,remote:reverse?first.entries:c}),second);
+ assert.deepEqual(mergeLibraryReplicas({base:second.entries,local:second.entries,remote:second.entries}).entries.map(({table,key,value})=>({table,key,value})),second.entries.map(({table,key,value})=>({table,key,value})));
+ const tampered=structuredClone(rows);[...tampered.learningReconciliations].find(row=>row.key===next.id)!.value.supersededDecisionIds=[id(999)];assert.throws(()=>validateLearningReconciliationRecords(libraryRowsReader(tampered)),/inconsistent/u);
+});
+
 test("learning-reconciliation", async () => {
 
 type Entry=LibraryReplicaEntry;
@@ -178,7 +197,7 @@ const dependencyRows=[
  entry('learningRuns',ids.localRun,{id:ids.localRun,targetId:ids.target,targetIds:[ids.target],participants:{[ids.target]:{presentedMaterials:{}}}}),
  entry('learningEvents',ids.localEvent,{id:ids.localEvent,runId:ids.localRun,targetId:ids.target}),
  entry('learningReconciliations',dependencies.reconciliation,{id:dependencies.reconciliation,targetId:ids.target,candidateEventIds:[ids.localEvent],appliedEventIds:[ids.localEvent],historyOnlyEventIds:[],appliedRunIds:[ids.localRun],historyOnlyRunIds:[],selectedRunId:ids.localRun,selectedEventId:ids.localEvent}),
- entry('annotations',dependencies.annotation,{id:dependencies.annotation,kind:'learning_scene',learningTargetId:ids.target}),
+ entry('annotations',dependencies.annotation,{id:dependencies.annotation,kind:'learning_scene',learningTargetId:ids.target,conflictHistory:{version:1,head:null,branches:[],decisions:[]}}),
  entry('drafts',dependencies.draft,{id:dependencies.draft,text:JSON.stringify({targetId:ids.target})}),
 ];
 const targetConflict=replicaEntryId({table:'learningTargets',key:ids.target} as any);

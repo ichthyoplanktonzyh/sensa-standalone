@@ -9,6 +9,16 @@ import {semanticRecords} from '../support/semanticWorldRecordFixture.mts';
 
 const id=(table:string,key:string)=>JSON.stringify([table,key]);
 const branch=(rows:Iterable<{table:LibraryReplicaEntry['table'];key:string;value:unknown}>)=>new Map([...rows].map(row=>[id(row.table,row.key),{...row,value:encodeBackupValue(row.value)}]));
+test('Scene previews show each original branch body and image, with its own expression label',()=>{
+ const key=id('annotations','scene'),rows=(body:string,url:string,expression:string)=>branch([
+  {table:'annotations',key:'scene',value:{kind:'learning_scene',learningTargetId:'target',currentRevision:2,revisions:[{revision:1,body:'Old context',media:[]},{revision:2,body,media:[{dataUrl:url}]}]}},
+  {table:'learningTargets',key:'target',value:{expression}},
+ ]);
+ const result=buildCloudSyncComparison([key],{base:branch([]),local:rows('Red umbrella','data:image/png;base64,red','borrow'),remote:rows('Blue umbrella','data:image/png;base64,blue','borrow an umbrella')});
+ expect(result.records[0]!.local).toMatchObject({available:true,title:'borrow',fields:[{label:'expression',text:'borrow'},{label:'context',text:'Red umbrella'}]});
+ expect(result.records[0]!.remote).toMatchObject({available:true,title:'borrow an umbrella',fields:[{label:'expression',text:'borrow an umbrella'},{label:'context',text:'Blue umbrella'}]});
+ expect(result.images[result.records[0]!.local.images[0]!]).toBe('data:image/png;base64,red');expect(result.images[result.records[0]!.remote.images[0]!]).toBe('data:image/png;base64,blue');
+});
 test('each Meaning preview reads its own branch Registry and retains Context and semantic boundaries',async()=>{
  const repository=new MemoryJourneyRepository();await createJourneyModules({repository}).semanticIntake.submit(semanticLookupPayload());
  const base=await repository.load(),local=structuredClone(base),remote=structuredClone(base);

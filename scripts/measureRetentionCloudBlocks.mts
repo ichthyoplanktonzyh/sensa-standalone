@@ -32,7 +32,7 @@ for(const batch of fixture.batches){
   const refs=librarySyncRecordSegments(value).flatMap(pack);rows.push({table:batch.table,key,blocks:refs});
  }
 }
-const manifest=librarySyncManifest.parse({version:6,libraryId:identity.id,learnerId:identity.learnerId,rows});
+const manifest=librarySyncManifest.parse({version:7,libraryId:identity.id,learnerId:identity.learnerId,rows});
 pack(JSON.stringify(manifest));
 const uniqueTransportBytes=[...blocks.values()].reduce((sum,size)=>sum+size,0);
 console.log(JSON.stringify({targets:fixture.targets,runs:fixture.runs,events:fixture.events,replicatedRows:rows.length,logicalBytes,uniqueBlocks:blocks.size,uniqueTransportBytes,scope:'Verified fixture batches and exact per-block roundtrip; not cloud HTTP, encryption, actual restore, browser latency or heap evidence'}));

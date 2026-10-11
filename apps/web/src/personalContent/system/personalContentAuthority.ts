@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import type { LibraryTransaction } from '../../data/library/store';
 import type { PersonalContentRecord } from './personalContentSystem';
+import {assertSceneAcceptance,assertSceneConflictHistory,sceneHistoryRecords} from './sceneConflictHistory';
 
 const uuid = z.string().uuid();
 const timestamp = z.number().int().nonnegative();
@@ -81,6 +82,7 @@ const assertRecord = async (
       return;
     }
     case 'learning_scene': {
+      assertSceneConflictHistory(record);
       uuid.parse(record.sceneId);
       uuid.parse(record.learningTargetId);
       uuid.parse(record.languageRouteId);
@@ -101,6 +103,8 @@ const assertRecord = async (
           membership.languageContext.languageRouteId === record.languageRouteId
         ))
         .map((membership: any) => membership.id));
+      for(const snapshot of sceneHistoryRecords(record))for(const revision of snapshot.revisions)if(!memberships.has(revision.curriculumMembershipId))throw new Error('localFlow.annotationInvalid');
+      for(const snapshot of sceneHistoryRecords(record))if(snapshot.acceptedPersonalMeaningId)assertSceneAcceptance(snapshot,await tx.get('semanticMeanings',snapshot.acceptedPersonalMeaningId));
       if (record.revisions.length !== record.currentRevision
         || new Set(record.revisions.map((revision) => revision.revisionId)).size
           !== record.revisions.length) throw new Error('localFlow.annotationInvalid');
@@ -124,6 +128,7 @@ const assertRecord = async (
         throw new Error('localFlow.annotationInvalid');
       }
       if (previous?.kind === 'learning_scene') {
+        if(!unchanged(previous.conflictHistory,record.conflictHistory))throw new Error('localFlow.annotationInvalid');
         for (const field of [
           'sceneId',
           'learningTargetId',

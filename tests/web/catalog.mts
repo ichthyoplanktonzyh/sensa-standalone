@@ -157,6 +157,16 @@ const foundationTests = [
     runner: 'playwright',
   },
   {
+    id: 'learning-branch-replay',
+    file: 'tests/web/integration/learning-branch-replay.test.mts',
+    kind: 'integration',
+    risks: ['local-correctness', 'durability', 'convergence'],
+    environment: 'node',
+    suite: 'foundation',
+    runner: 'vitest',
+    memoryLibrary: true,
+  },
+  {
     id: 'personal-semantic-world-merge',
     file: 'tests/web/integration/personal-semantic-world-merge.test.mts',
     kind: 'integration',
