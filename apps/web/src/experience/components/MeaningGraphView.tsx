@@ -36,7 +36,7 @@ export function MeaningGraphView({items,languages=[],screenId,selectedExpression
  const adjacent=new Set(graph.edges.filter(edge=>edge.from===highlight?.id||edge.to===highlight?.id).flatMap(edge=>[edge.from,edge.to]));
  const associationFor=(node:typeof graph.nodes[number])=>node.associations.find(row=>owner?.expressionId===node.id&&associationKey(row)===owner.associationId)??node.associations[0];
  const association=selected?associationFor(selected):undefined,highlightAssociation=highlight?associationFor(highlight):undefined;
- const fit=()=>{const zoom=Math.min(1.2,(size.width-60)/graph.width,(size.height-80)/graph.height);setCamera({x:(size.width-graph.width*zoom)/2+25,y:(size.height-graph.height*zoom)/2+20,zoom:Math.max(.04,zoom)});};
+ const fit=()=>{const zoom=Math.min(1.2,(size.width-60)/graph.width,(size.height-80)/graph.height);setCamera({x:(size.width-graph.width*zoom)/2+25,y:narrow?20:(size.height-graph.height*zoom)/2+20,zoom:Math.max(.04,zoom)});};
  const zoomBy=(factor:number)=>setCamera(current=>{const zoom=Math.max(.04,Math.min(3,current.zoom*factor));return {x:size.width/2-(size.width/2-current.x)*zoom/current.zoom,y:size.height/2-(size.height/2-current.y)*zoom/current.zoom,zoom};});
  useEffect(()=>{const element=surface.current;if(!element)return;const observer=new ResizeObserver(entries=>{const rect=entries[0]?.contentRect;if(rect){setSize({width:Math.max(1,rect.width),height:Math.max(1,rect.height)});setMeasured(true);}});observer.observe(element);return()=>observer.disconnect();},[]);
  useEffect(()=>{if(measured&&!initialized){fit();setInitialized(true);}},[measured,initialized,size.width,size.height]);
