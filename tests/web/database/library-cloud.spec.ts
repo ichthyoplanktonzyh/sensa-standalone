@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
 import {libraryCloudPackageFixture} from '../../../scripts/support/libraryCloudPackageFixture.mts';
 import {portableBookDeliveryFixture} from '../../../scripts/support/portablePackageFixture.mts';
-import {expect,test,type Browser} from '@playwright/test';
+import {expect,test,type Browser,type TestInfo} from '@playwright/test';
 import {purgeExpiredLibraryCloudBlocks} from '../../../apps/api/src/sensa/library/retention.ts';
 import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec.ts';
 import {librarySyncBlockChars,librarySyncBlockStoreBatch} from '../../../packages/contracts/src/sensa/librarySync.ts';
@@ -19,7 +19,7 @@ test.setTimeout(300_000);
 const meaningFactIds:Record<string,string>={personalMeaningRevisions:'personalMeaningRevisionId',personalSemanticAnchors:'personalSemanticAnchorId',personalSemanticAnchorRevisions:'personalSemanticAnchorRevisionId',personalExpressionAnchors:'personalExpressionAnchorId',personalExpressionAnchorRevisions:'personalExpressionAnchorRevisionId',focuses:'meaningFocusId',focusRevisions:'meaningFocusRevisionId',focusAcceptances:'meaningFocusAcceptanceId',constructions:'senseConstructionId',constructionTurns:'constructionTurnId',proposals:'senseProposalId',proposalVersions:'senseProposalVersionId',senseConfirmations:'senseProposalConfirmationId',semanticAcceptances:'semanticAcceptanceId',alignments:'personalMeaningAlignmentId',alignmentEvents:'personalMeaningAlignmentEventId',bindingConfirmations:'expressionBindingConfirmationId'};
 const retainedMeaningFacts=(record:any)=>Object.fromEntries(Object.entries(record).map(([key,value])=>[key,Array.isArray(value)&&meaningFactIds[key]?[...value].sort((a,b)=>a[meaningFactIds[key]!].localeCompare(b[meaningFactIds[key]!])):value]));
 
-for(const withLearning of [false,true])test(withLearning?'two rated understandings sharing one Context retain both memories through Context edits, Cloud and empty-client backup recovery':'independent Context and two staged understandings preserve exact shared pins through Cloud and empty-client backup recovery',async({browser},testInfo)=>{
+const runSharedContextRecovery=async(browser:Browser,testInfo:TestInfo,withLearning:boolean)=>{
  const fixture=await createLibraryCloudBrowserFixture(browser);
  try{
   const account=await fixture.createAccount(withLearning?'shared-context-learned':'shared-context-stages'),a=await fixture.createClient(account),b=await fixture.createClient(account);
@@ -81,7 +81,9 @@ for(const withLearning of [false,true])test(withLearning?'two rated understandin
   const archive=await b.evaluate(async()=>[...(await (window as any).core.exportLibraryBackup('shared-context-stage-fixture')).file]),fresh=await fixture.createClient(account);
   try{assert.equal(await fresh.evaluate(()=>(window as any).core.isLibraryBackupDestinationEmpty()),true);await fresh.evaluate(bytes=>(window as any).core.restoreLibraryBackup(new Uint8Array(bytes),'shared-context-stage-fixture'),archive);assert.deepEqual(await inspect(fresh),settled);await fresh.reload();await fresh.evaluate(async()=>{const path='/core.js';(window as any).core=await import(/* @vite-ignore */ path);await (window as any).core.openLibrary();});assert.deepEqual(await inspect(fresh),settled);assert.deepEqual(await pins(fresh),await pins(b));assert.deepEqual(await domain(fresh),expectedDomain);await testInfo.attach(withLearning?'learned-shared-context-cloud-evidence':'shared-context-cloud-evidence',{contentType:'application/json',body:JSON.stringify({created,edited,tombstone,restored:expectedDomain,pins:await pins(fresh),paidCalls:0,withLearning,boundary:'gateway/domain + real Chromium/OPFS + disposable Hono/Postgres; rated variant uses controlled free HTTP and synthetic speech, genuine reveal/rate/finish; not rendered UI, provider quality or physical machines'})});}finally{await fresh.context().close();}
  }finally{await fixture.close();}
-});
+};
+test('independent Context and two staged understandings preserve exact shared pins through Cloud and empty-client backup recovery',async({browser},testInfo)=>runSharedContextRecovery(browser,testInfo,false));
+test('two rated understandings sharing one Context retain both memories through Context edits, Cloud and empty-client backup recovery',async({browser},testInfo)=>runSharedContextRecovery(browser,testInfo,true));
 
 test('clearing a device through the UI survives reload until explicit Cloud restoration',async({browser},testInfo)=>{
  const fixture=await createLibraryCloudBrowserFixture(browser);
