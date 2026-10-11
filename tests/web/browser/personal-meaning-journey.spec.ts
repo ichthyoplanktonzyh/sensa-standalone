@@ -1404,7 +1404,7 @@ const localizedWorldSurface=(locale:string)=>async({page}:{page:Page},testInfo:T
  await expect.poll(()=>graph.locator('.sensa-expression-dot').evaluateAll(points=>points.filter(point=>{const box=point.getBoundingClientRect();return box.x>=0&&box.right<=innerWidth&&box.y>=0&&box.bottom<innerHeight-80;}).length)).toBeGreaterThan(0);
  await shot('graph',390);await shot('graph',1280);
  await page.setViewportSize({width:1280,height:900});
- const french=graph.locator(`[data-expression-id="${scaleFixture.registry.expressions.find(row=>row.languageTag==='fr')!.expressionId}"]`);await french.focus();await french.press('Enter');
+ const french=graph.locator(`[data-expression-id="${scaleFixture.registry.expressions.find(row=>row.languageTag==='fr')!.expressionId}"]`);await page.mouse.move(1,1);await french.focus();await french.press('Enter');
  const detail=graph.locator('.sensa-expression-graph-detail');await expect(detail.getByRole('heading',{name:'emprunter',exact:true})).toBeVisible();await expect(detail.locator('h2 bdi')).toHaveAttribute('lang','fr');await expect(graph.locator('[data-graph-preview]')).toHaveCount(0);
  await shot('drawer',1280);await shot('drawer',320);await shot('drawer',390);
  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records).toHaveLength(0);expect(requests).toHaveLength(0);
