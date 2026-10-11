@@ -204,6 +204,9 @@ export const sensaPersonalMeaningRevisionSnapshotSchema = z
     learnerIntentNote: nonEmpty.nullable(),
     /** Learner wording of a published meaning; never edits its issued definition. */
     personalSenseWording: nonEmpty.nullable().optional(),
+    /** Learner wording saved before any expression identity or confirmation. */
+    draftExpression: z.object({surfaceForm:nonEmpty,languageTag:nonEmpty.nullable(),expressionType:sensaExpressionTypeSchema}).strict().nullable().optional(),
+    savedDraft:z.literal(true).optional(),
     provenance: sensaPersonalProvenanceSchema,
     createdAt: timestamp,
     /** Present only for an explicit move to/from the learner's recycle bin. */
@@ -278,6 +281,11 @@ export const sensaPersonalSemanticAnchorSnapshotSchema = z
   .strict()
   .superRefine(validatePersonalLifecycle);
 
+export const sensaContextMaterialBlockSchema = z.discriminatedUnion('kind',[
+  z.object({kind:z.literal('text'),bodyText:nonEmpty}).strict(),
+  z.object({kind:z.literal('image'),personalMediaObjectId:uuid}).strict(),
+]);
+
 export const sensaPersonalSemanticAnchorRevisionSnapshotSchema = z
   .object({
     contractVersion: z.literal(sensaPersonalSemanticWorldContractVersion),
@@ -289,10 +297,29 @@ export const sensaPersonalSemanticAnchorRevisionSnapshotSchema = z
     bodyText: nonEmpty.nullable(),
     personalMediaObjectId: uuid.nullable(),
     structuredPayload: jsonObject,
+    lifecycle:z.object({kind:z.enum(['delete','restore']),revision:positiveInteger.min(2)}).strict().optional(),
     provenance: sensaPersonalProvenanceSchema,
     createdAt: timestamp,
   })
-  .strict();
+  .strict().superRefine((revision,ctx)=>{
+    const payload=revision.structuredPayload;
+    if(payload.media!==undefined){
+      const result=z.array(z.object({mediaId:uuid,kind:z.literal('image'),dataUrl:z.string().startsWith('data:image/').max(8*1024*1024),mimeType:z.string().min(1).max(200),fileName:z.string().min(1).max(500),altText:z.string().max(80)}).strict()).max(3).safeParse(payload.media);
+      if(!result.success||new Set(result.data?.map(row=>row.mediaId)).size!==result.data?.length)ctx.addIssue({code:'custom',message:'Context inline media is invalid',path:['structuredPayload','media']});
+    }
+    if(payload.mediaReferenceIds!==undefined){
+      const result=z.array(uuid).safeParse(payload.mediaReferenceIds);
+      if(!result.success)ctx.addIssue({code:'custom',message:'Context media references are invalid',path:['structuredPayload','mediaReferenceIds']});
+    }
+    if(payload.blocks!==undefined){
+      const result=z.array(sensaContextMaterialBlockSchema).min(1).safeParse(payload.blocks);
+      if(!result.success){ctx.addIssue({code:'custom',message:'Context blocks are invalid',path:['structuredPayload','blocks']});return;}
+      const text=result.data.flatMap(block=>block.kind==='text'?[block.bodyText]:[]).join('\n\n')||null;
+      const images=result.data.flatMap(block=>block.kind==='image'?[block.personalMediaObjectId]:[]);
+      const inlineIds=Array.isArray(payload.media)?payload.media.map(row=>row&&typeof row==='object'&&'mediaId'in row?row.mediaId:null):[];
+      if(revision.anchorKind!=='scene'||revision.personalMediaObjectId!==null||revision.bodyText!==text||images.length>3||inlineIds.some(id=>!images.includes(id as string))||JSON.stringify(payload.mediaReferenceIds)!==JSON.stringify(images.filter(id=>!inlineIds.includes(id))))ctx.addIssue({code:'custom',message:'Context blocks do not match their text and media references',path:['structuredPayload']});
+    }
+  });
 
 export const sensaMeaningFocusSemanticAnchorLinkSnapshotSchema = z
   .object({
@@ -519,15 +546,17 @@ export const sensaSemanticAcceptanceFactSchema = z
     learnerUserId: nonEmpty,
     authority: sensaSemanticAcceptanceAuthoritySchema,
     personalSemanticAnchorRevisionId: uuid,
-    personalExpressionAnchorRevisionId: uuid,
-    expressionOccurrence: sensaExpressionOccurrenceLocatorSchema,
+    personalExpressionAnchorRevisionId: uuid.nullable(),
+    expressionOccurrence: sensaExpressionOccurrenceLocatorSchema.nullable(),
     resolution: z.enum(["create_new", "reuse_existing"]),
     senseId: uuid,
     senseVersionId: uuid,
     resolutionProvenance: sensaSemanticResolutionProvenanceSchema,
     acceptedAt: timestamp,
   })
-  .strict();
+  .strict().superRefine((value,ctx)=>{
+    if((value.personalExpressionAnchorRevisionId===null)!==(value.expressionOccurrence===null))ctx.addIssue({code:'custom',message:'Expression acceptance must have both its identity and occurrence'});
+  });
 
 export const sensaPersonalMeaningAlignmentBasisSchema =
   z.discriminatedUnion("kind", [

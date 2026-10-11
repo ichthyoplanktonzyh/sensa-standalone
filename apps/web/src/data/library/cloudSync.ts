@@ -249,7 +249,7 @@ class Blocks{
   return prepared;
  }
  async packManifest(identity:LibraryIdentity,rows:LibrarySyncManifest['rows']){
-  return this.pack(JSON.stringify(librarySyncManifest.parse({version:7,libraryId:identity.id,learnerId:identity.learnerId,rows})));
+  return this.pack(JSON.stringify(librarySyncManifest.parse({version:8,libraryId:identity.id,learnerId:identity.learnerId,rows})));
  }
  async manifest(entries:Entry[]){
   const identity=decodeBackupValue(entries.find(r=>r.table==='meta'&&r.key==='identity')!.value),prepared=await this.prepare(entries);
@@ -261,7 +261,7 @@ class Blocks{
   if(!head.manifest)throw Error('library_sync_candidate_invalid');
   await this.fetch(head.manifest);
   let raw:unknown;try{raw=JSON.parse(await this.text(head.manifest));}catch{throw Error('library_sync_format');}
-  if(!raw||typeof raw!=='object'||!('version' in raw)||raw.version!==7)throw Error('library_sync_incompatible_checkpoint');
+  if(!raw||typeof raw!=='object'||!('version' in raw)||raw.version!==8)throw Error('library_sync_incompatible_checkpoint');
   const parsed=librarySyncManifest.safeParse(raw);if(!parsed.success)throw Error('library_sync_format');const manifest=parsed.data;
   const begun=await send({kind:'begin',fence,expected:{head,manifestBlocks:[...new Set(head.manifest)].map(hash=>({hash,data:this.cache.get(hash)!}))}});
   if(begun.kind!=='begun')throw Error('library_sync_candidate_invalid');
@@ -325,7 +325,7 @@ class Blocks{
   if(!head.manifest)return [];
   await this.fetch(head.manifest);
   let raw:unknown;try{raw=JSON.parse(await this.text(head.manifest));}catch{throw new Error('library_sync_format');}
-  if(!raw||typeof raw!=='object'||!('version' in raw)||(raw as {version?:unknown}).version!==7)throw new Error('library_sync_incompatible_checkpoint');
+  if(!raw||typeof raw!=='object'||!('version' in raw)||(raw as {version?:unknown}).version!==8)throw new Error('library_sync_incompatible_checkpoint');
   const parsed=librarySyncManifest.safeParse(raw);if(!parsed.success)throw new Error('library_sync_format');const manifest=parsed.data;
   const checkpointRows=manifest.rows;
   const prior=new Map(base.map(entry=>[entryId(entry),entry]));

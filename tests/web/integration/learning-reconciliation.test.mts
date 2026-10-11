@@ -172,7 +172,7 @@ const restoredTask=normalizeLibraryReplicaEntry({table:'personalLearning',key:cr
 assert.deepEqual(restoredTask.value,{status:'failed',leaseUntil:0,notice:'localFlow.restoredPreparation'},'Content Supply owns interrupted preparation recovery');
 
 const dependencies={
- package:'package-fixture',task:crypto.randomUUID(),attempt:crypto.randomUUID(),meaning:crypto.randomUUID(),media:crypto.randomUUID(),
+ package:'package-fixture',task:crypto.randomUUID(),attempt:crypto.randomUUID(),meaning:crypto.randomUUID(),media:crypto.randomUUID(),context:crypto.randomUUID(),contextRevision:crypto.randomUUID(),
  registrySenseVersion:crypto.randomUUID(),unrelatedRegistrySenseVersion:crypto.randomUUID(),annotation:'learning-scene:fixture',draft:crypto.randomUUID(),reconciliation:crypto.randomUUID(),
 };
 const continuationParent=crypto.randomUUID(),selectionParent=crypto.randomUUID();
@@ -190,7 +190,9 @@ const dependencyRows=[
  entry('learningTargets',ids.target,{id:ids.target,curriculumMemberships:[{packageKey:dependencies.package,provenance:{}}]}),
  entry('personalLearning',dependencies.task,{id:dependencies.task,targetId:ids.target,attemptId:dependencies.attempt,source:{personalMeaningId:dependencies.meaning}}),
  entry('contentAttempts',dependencies.attempt,{id:dependencies.attempt,taskId:dependencies.task,resumedFrom:null}),
- entry('semanticMeanings',dependencies.meaning,{personalMeaning:{personalMeaningId:dependencies.meaning},alignments:[{senseVersionId:dependencies.registrySenseVersion}],personalSemanticAnchorRevisions:[{personalMediaObjectId:dependencies.media,structuredPayload:{senseVersionId:dependencies.unrelatedRegistrySenseVersion}}]}),
+ entry('semanticMeanings',dependencies.meaning,{contextStorageVersion:1,personalMeaning:{personalMeaningId:dependencies.meaning},alignments:[{senseVersionId:dependencies.registrySenseVersion}],personalSemanticAnchors:[{personalSemanticAnchorId:dependencies.context,selectedRevisionId:dependencies.contextRevision}],personalSemanticAnchorRevisions:[{personalSemanticAnchorId:dependencies.context,personalSemanticAnchorRevisionId:dependencies.contextRevision}]}),
+ entry('semanticContexts',`anchors:${dependencies.context}`,{kind:'anchors',value:{currentRevisionId:dependencies.contextRevision}}),
+ entry('semanticContexts',`anchorRevisions:${dependencies.contextRevision}`,{kind:'anchorRevisions',parentRevisionId:null,value:{personalSemanticAnchorId:dependencies.context,personalMediaObjectId:dependencies.media,structuredPayload:{senseVersionId:dependencies.unrelatedRegistrySenseVersion}}}),
  entry('semanticRegistry',`senseVersions:${dependencies.registrySenseVersion}`,{kind:'senseVersions',value:{senseVersionId:dependencies.registrySenseVersion}}),
  entry('semanticRegistry',`senseVersions:${dependencies.unrelatedRegistrySenseVersion}`,{kind:'senseVersions',value:{senseVersionId:dependencies.unrelatedRegistrySenseVersion}}),
  entry('media',dependencies.media,{mediaId:dependencies.media}),

@@ -199,7 +199,7 @@ Package key；运行恢复、策略锁定和生成频控通过领域索引查询
 已完整恢复的内容缓存复用一次一致的安装／来源快照；下载或缓存修复后重新读取当前快照，避免把期间新增但未恢复的来源误报为就绪。
 学习状态变化只刷新学习投影，语言选择只读取当前语言方向；通知按记录 key 过滤，当前页面不重复处理自己发出的跨页通知。
 数据结构调整不要求保留历史格式兼容层；当前源事实和可重建索引分开处理，不通过清空用户库恢复初始化错误。
-物理 schema 18 沿用共享摘要存储材料内容、协议绑定和步骤定义，记录仍独立保存身份、版本、时间、provenance
+物理 schema 19 沿用共享摘要存储材料内容、协议绑定和步骤定义，并将 learner-owned Context 头、不可变版本和父链保存为独立 `semanticContexts` 源事实；Meaning 和冲突历史只持准确版本引用。Worker RPC 60 与 Cloud manifest 8 共同验证这些引用、接受回执依赖和正文一致性。记录仍独立保存身份、版本、时间、provenance
 及结算事实。`sharedRecordContent.ts` 只改变无损存储表示；普通 record 接口读取还原后的原值，页面和协议
 不解析存储引用。共享 body 与 record／sync baseline 的直接 owner 关系同事务写入；只回收本次事务解除引用
 后确实无 owner 的 body，不在日常评分时扫描全部 body。同一无损压缩 envelope 也用于普通记录与基线，
@@ -207,9 +207,7 @@ Package key；运行恢复、策略锁定和生成频控通过领域索引查询
 可用时用标准 Uint8Array Base64 字节方法代替逐字节字符串转换；缺少方法的平台仍使用既有 btoa／atob 路径，
 不改变 envelope、压缩、长度预算或摘要校验，参见
 [原生字节转换规范](https://tc39.es/ecma262/multipage/indexed-collections.html#sec-uint8array.frombase64)。
-16／17→18 只在完整源结构上原子调整 sync baseline 的 B-tree 布局并推进版本；基线以普通 rowid 表保存较大正文，
-保留两列 NOT NULL 与复合唯一主键。影子表原样复制 value/ref 字节、交换表名并保留显式索引，与版本号同事务；
-不解码、重编码或改变源 facts／共享正文所有权，失败保留原版本、字节和索引。
+当前实现只接受 schema 19 或完整的新空库，不猜测迁移历史格式。发现不支持版本时显式拒绝，保留原数据库、基线、媒体与恢复文件；失败连接关闭也不得回收旧候选。既有 v12 OPFS 文件池名称继续用于定位原数据，不代表 schema 12 可被接受。基线以普通 rowid 表保存较大正文，保留两列 NOT NULL 与复合唯一主键。
 大正文与紧凑关系表分别实测布局，不一律使用 `WITHOUT ROWID`，参见
 [SQLite 适用条件](https://sqlite.org/withoutrowid.html)。暂存候选的正文同样使用 rowid；冷连接只在私有候选事务内
 清理旧代及重建正文表，manifest／proof 随父记录级联清除，不触及本机事实。

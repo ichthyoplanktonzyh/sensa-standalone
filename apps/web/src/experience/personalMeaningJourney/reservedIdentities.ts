@@ -2,7 +2,7 @@ import {isUuid} from './ids';
 import {meaningHistoryRecords} from './meaningHistoryRead';
 import type {MeaningJourneyRecord,CommandReceipt,JourneyState} from './store';
 
-export const journeyIdentityTables=['semanticMeanings','semanticRegistry','semanticInbox','semanticDrafts','semanticReceipts'] as const;
+export const journeyIdentityTables=['semanticMeanings','semanticContexts','semanticRegistry','semanticInbox','semanticDrafts','semanticReceipts'] as const;
 export type JourneyIdentityTable=typeof journeyIdentityTables[number];
 /** The same shallow fact fields reserved by the command ID generator. Opaque
  * Context, learner prose, provenance payloads and arbitrary JSON are not edges. */
@@ -17,7 +17,8 @@ export function journeyReservedIdentities(table:JourneyIdentityTable,value:unkno
    for(const version of branch.proposalVersions??[])for(const candidate of version.expressionCandidates??[])fact(candidate);
   }
   for(const decision of record.conflictHistory?.decisions??[])if(isUuid(decision.id))ids.add(decision.id);
- }else if(table==='semanticRegistry')fact((value as {value:unknown}).value);
+ }else if(table==='semanticContexts')fact((value as {value:unknown}).value);
+ else if(table==='semanticRegistry')fact((value as {value:unknown}).value);
  else if(table==='semanticInbox'){
   const item=value as JourneyState['inboxItems'][number];fact(item);fact(item.payload);
   for(const id of item.payload?.context?.mediaReferenceIds??[])if(isUuid(id))ids.add(id);

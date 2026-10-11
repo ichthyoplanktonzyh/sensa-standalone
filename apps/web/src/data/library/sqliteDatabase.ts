@@ -1,3 +1,5 @@
+import type {ContextBrowseQuery,ContextBrowsePage} from '../../experience/personalMeaningJourney/contextRead';
+import {contextMediaReferences} from '../../experience/personalMeaningJourney/contextRecords';
 import type {LearningScheduleQuery,LearningSchedulePage} from '../../learning/system/learningScheduleModel';
 import type { Database, Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 import {meaningMediaReferences} from '../../experience/personalMeaningJourney/meaningHistoryRead';
@@ -28,9 +30,6 @@ import type {LocalLearningRun,LocalLearningTarget} from '../../learning/runtime/
 import type {PackageBookMembership} from './packageRecords';
 import {
   sqliteLibrarySchema,
-  sqliteSyncBaseSchema,
-  sqlitePortableMediaSchema,
-  sqliteSharedRecordContentSchema,
   sqliteLibraryBaselineVersion,
   sqliteLibrarySchemaVersion,
   sqliteLibraryTables,
@@ -57,7 +56,7 @@ type SemanticInboxMediaSource = {
 };
 
 const sqliteOptimizeIntervalMs = 24 * 60 * 60 * 1000;
-const sqliteRequiredTables=[...sqliteLibrarySchema.matchAll(/CREATE TABLE IF NOT EXISTS (\w+)/gu)].map(match=>match[1]!);
+const sqliteRequiredTables=[...sqliteLibrarySchema.matchAll(/CREATE TABLE IF NOT EXISTS (\w+)/gu)].map(match=>match[1]!).filter(name=>name!=='sensa_package_cache_projection');
 const sqliteRuntimePragmas=sqliteLibrarySchema.slice(0,sqliteLibrarySchema.indexOf('CREATE TABLE'));
 
 /** Kept beside the storage kernel so diagnostics exercise the exact shipped query. */
@@ -160,65 +159,6 @@ export class SqliteRecordDatabase {
     // migrations belong here as ordered, transactional version steps; older
     // prototype formats are intentionally not imported.
     if(before===0)this.database.exec(sqliteLibrarySchema);
-    else if(before===10){
-      this.database.exec('BEGIN IMMEDIATE');
-      try{
-        this.database.exec(sqlitePortableMediaSchema);
-        this.database.exec(sqliteSharedRecordContentSchema);
-        this.database.exec(sqlitePackageCacheProjectionSchema);
-        this.rebuildPackageCacheProjection();
-        this.allowStudyScopeRecords();
-        this.database.exec(`PRAGMA user_version=${sqliteLibrarySchemaVersion}`);
-        this.database.exec('COMMIT');
-      }catch(error){
-        try{this.database.exec('ROLLBACK');}catch{/* Preserve the migration failure. */}
-        throw error;
-      }
-      this.database.exec(sqliteLibrarySchema);
-    }
-    else if(before===12){
-      this.database.exec('BEGIN IMMEDIATE');
-      try{
-        this.database.exec(sqlitePackageCacheProjectionSchema);
-        this.database.exec(sqliteSharedRecordContentSchema);
-        this.rebuildPackageCacheProjection();
-        this.allowStudyScopeRecords();
-        this.database.exec(`PRAGMA user_version=${sqliteLibrarySchemaVersion}`);
-        this.database.exec('COMMIT');
-      }catch(error){
-        try{this.database.exec('ROLLBACK');}catch{/* Retain the authoritative cache. */}
-        throw error;
-      }
-      this.database.exec(sqliteLibrarySchema);
-    }
-    else if(before===13){
-      // Add private representation storage only. Existing facts are neither
-      // decoded nor rewritten; ordinary future writes may use shared bodies.
-      this.database.exec('BEGIN IMMEDIATE');
-      try{this.database.exec(sqliteSharedRecordContentSchema);this.allowStudyScopeRecords();this.database.exec(`PRAGMA user_version=${sqliteLibrarySchemaVersion}`);this.database.exec('COMMIT');}
-      catch(error){try{this.database.exec('ROLLBACK');}catch{/* Preserve the migration failure. */}throw error;}
-      this.database.exec(sqliteLibrarySchema);
-    }
-    else if(before===14||before===15){
-      this.database.exec('BEGIN IMMEDIATE');
-      try{this.allowStudyScopeRecords();this.database.exec(`PRAGMA user_version=${sqliteLibrarySchemaVersion}`);this.database.exec('COMMIT');}
-      catch(error){try{this.database.exec('ROLLBACK');}catch{/* Preserve the original records and constraint. */}throw error;}
-      this.database.exec(sqliteLibrarySchema);
-    }
-    else if(before===16||before===17){
-      // Keep source facts, stored bytes and indexes. Only the sync baseline's
-      // physical B-tree layout changes, atomically with the version header.
-      this.database.exec(sqliteRuntimePragmas);
-      this.database.exec('BEGIN IMMEDIATE');
-      try{
-        const present=this.database.exec({sql:"SELECT name FROM sqlite_schema WHERE type='table' AND name IN (SELECT value FROM json_each(?))",bind:[JSON.stringify(sqliteRequiredTables)],rowMode:'object',returnValue:'resultRows'}) as unknown[];
-        if(present.length!==sqliteRequiredTables.length)throw new Error('sqlite_source_schema_incomplete');
-        this.useRowidSyncBase();
-        ensureSqliteSchemaIndexes(this.database,sqliteLibrarySchema);
-        this.database.exec(`PRAGMA user_version=${sqliteLibrarySchemaVersion}`);this.database.exec('COMMIT');
-      }
-      catch(cause){try{this.database.exec('ROLLBACK');}catch(rollbackCause){throw sqliteRollbackFailure(cause,rollbackCause);}throw cause;}
-    }
     else if (before !== sqliteLibrarySchemaVersion) {
       throw new Error(`sqlite_schema_migration_missing:${before}`);
     } else {
@@ -229,6 +169,9 @@ export class SqliteRecordDatabase {
       runtimeReady=performance.now();
       const present=this.database.exec({sql:"SELECT name FROM sqlite_schema WHERE type='table' AND name IN (SELECT value FROM json_each(?))",bind:[JSON.stringify(sqliteRequiredTables)],rowMode:'object',returnValue:'resultRows'}) as unknown[];
       if(present.length!==sqliteRequiredTables.length)throw new Error('sqlite_source_schema_incomplete');
+      if(!this.scalarNumber("SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name='sensa_package_cache_projection'")){
+        this.database.exec(sqlitePackageCacheProjectionSchema);this.rebuildPackageCacheProjection();
+      }
       ensureSqliteSchemaIndexes(this.database,sqliteLibrarySchema);
     }
     sourceSchemaReady=performance.now();
@@ -286,46 +229,6 @@ export class SqliteRecordDatabase {
     return value===null?null:this.logicalEncoded(table,value);
   }
 
-  /** SQLite cannot ALTER a CHECK allow-list. Copy encoded rows byte-for-byte,
-   * preserve rowids and indexes, then replace the physical table atomically.
-   * No learner fact, content revision or shared-body ownership is rewritten. */
-  private allowStudyScopeRecords():void{
-    const exists=this.database.exec({sql:"SELECT 1 FROM sqlite_schema WHERE type='table' AND name='sensa_records'",rowMode:0,returnValue:'resultRows'}) as unknown[];
-    if(!exists.length){if(this.scalarNumber('PRAGMA user_version')===10)return;throw new Error('sqlite_source_schema_incomplete');}
-    const allowed=sqliteLibraryTables.map(table=>`'${table}'`).join(',');
-    const keyColumns=`table_name TEXT NOT NULL CHECK(table_name IN (${allowed})),record_key TEXT NOT NULL CHECK(length(record_key) BETWEEN 1 AND 2000)`;
-    const tables=[
-      {name:'sensa_records',columns:'rowid,table_name,record_key,value_json,content_revision',definition:`${keyColumns},value_json TEXT NOT NULL CHECK(json_valid(value_json)),content_revision INTEGER NOT NULL DEFAULT 0 CHECK(content_revision>=0),PRIMARY KEY(table_name,record_key)`,suffix:''},
-      {name:'sensa_record_tombstones',columns:'table_name,record_key,content_revision',definition:`${keyColumns},content_revision INTEGER NOT NULL CHECK(content_revision>0),PRIMARY KEY(table_name,record_key)`,suffix:' WITHOUT ROWID'},
-      {name:'sensa_sync_base',columns:'table_name,record_key,value_json,block_refs_json',definition:`${keyColumns},value_json TEXT NOT NULL CHECK(json_valid(value_json)),block_refs_json TEXT NOT NULL CHECK(json_valid(block_refs_json)),PRIMARY KEY(table_name,record_key)`,suffix:''},
-    ];
-    for(const table of tables){
-      const present=this.database.exec({sql:"SELECT 1 FROM sqlite_schema WHERE type='table' AND name=?",bind:[table.name],rowMode:0,returnValue:'resultRows'}) as unknown[];
-      if(!present.length){if(this.scalarNumber('PRAGMA user_version')===10)continue;throw new Error('sqlite_source_schema_incomplete');}
-      const indexes=this.database.exec({sql:"SELECT sql FROM sqlite_schema WHERE type='index' AND tbl_name=? AND sql IS NOT NULL ORDER BY name",bind:[table.name],rowMode:0,returnValue:'resultRows'}) as string[];
-      const replacement=`${table.name}_v15_upgrade`;
-      this.database.exec(`CREATE TABLE ${replacement}(${table.definition})${table.suffix}`);
-      this.database.exec(`INSERT INTO ${replacement}(${table.columns}) SELECT ${table.columns} FROM ${table.name}`);
-      this.database.exec(`DROP TABLE ${table.name}`);
-      this.database.exec(`ALTER TABLE ${replacement} RENAME TO ${table.name}`);
-      for(const sql of indexes)this.database.exec(sql);
-    }
-  }
-
-  /** Called inside the header upgrade transaction. Copy opaque stored bytes,
-   * ordered refs and explicit indexes, never decode or rewrite owner facts. */
-  private useRowidSyncBase():void{
-    const definition=this.scalarText("SELECT sql FROM sqlite_schema WHERE type='table' AND name='sensa_sync_base'");
-    if(!/WITHOUT\s+ROWID\s*$/iu.test(definition))return;
-    const replacement='sensa_sync_base_v18_upgrade';
-    const indexes=this.database.exec({sql:"SELECT sql FROM sqlite_schema WHERE type='index' AND tbl_name='sensa_sync_base' AND sql IS NOT NULL ORDER BY name",rowMode:0,returnValue:'resultRows'}) as string[];
-    this.database.exec(sqliteSyncBaseSchema.replace('IF NOT EXISTS sensa_sync_base',replacement));
-    this.database.exec(`INSERT INTO ${replacement}(table_name,record_key,value_json,block_refs_json) SELECT table_name,record_key,value_json,block_refs_json FROM sensa_sync_base`);
-    this.database.exec('DROP TABLE sensa_sync_base');
-    this.database.exec(`ALTER TABLE ${replacement} RENAME TO sensa_sync_base`);
-    for(const index of indexes)this.database.exec(index);
-  }
-
   entries(table: SqliteLibraryTable): StoredEntry[] {
     const rows = this.database.exec({
       sql: "SELECT record_key,value_json FROM sensa_records WHERE table_name=? ORDER BY record_key",
@@ -340,6 +243,7 @@ export class SqliteRecordDatabase {
   }
   learningSemanticMemory(targetId?:string):import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection{return this.semanticMemoryProjection.read(targetId);}
   lookupMeanings(query:string):MeaningLookupResult{return this.meaningLookup.query(query);}
+  contextBrowse(query:ContextBrowseQuery):ContextBrowsePage{return this.worldBrowseProjection.contexts(query);}
   worldBrowse(query:WorldBrowseQuery):WorldBrowsePage{return this.worldBrowseProjection.query(query);}
   worldSceneMeaning(sceneId:string):string|null{return this.worldBrowseProjection.sceneMeaning(sceneId);}
   registrySelection(query:RegistrySelectionQuery):RegistrySelection{
@@ -755,6 +659,7 @@ export class SqliteRecordDatabase {
     if(this.closed)throw Error('sqlite_database_closed');
     if(this.fatalStorageFailure)throw this.fatalStorageFailure;
     if(this.integrityFailed)throw new Error('sqlite_integrity_failed');
+    if(!this.initialized)this.initialize();
     if (
       !mutation.clears.length
       && !mutation.deletes.length
@@ -862,7 +767,7 @@ export class SqliteRecordDatabase {
         if(table==='studyScopes')this.runtimeCandidates.clearScopes();
         if (table === 'learningRuns'){this.database.exec('DELETE FROM sensa_learning_runs');this.learningHistory.clear();}
         if (table === 'contentAttempts') this.database.exec('DELETE FROM sensa_content_attempts');
-        if (table === 'semanticMeanings' || table === 'semanticInbox') {
+        if (table === 'semanticContexts' || table === 'semanticInbox') {
           this.database.exec({
             sql: 'DELETE FROM sensa_media_references WHERE owner_table=?',
             bind: [table],
@@ -911,7 +816,7 @@ export class SqliteRecordDatabase {
             bind: [item.key],
           });
         }
-        if (item.table === 'semanticMeanings' || item.table === 'semanticInbox') {
+        if (item.table === 'semanticContexts' || item.table === 'semanticInbox') {
           this.database.exec({
             sql: 'DELETE FROM sensa_media_references WHERE owner_table=? AND owner_key=?',
             bind: [item.table, item.key],
@@ -949,7 +854,7 @@ export class SqliteRecordDatabase {
         const copied=staged?.copiedTables.has(item.table)??false;
         // Copied ordinary rows already live in this transaction. Read their
         // body only for a derived projection that actually consumes it.
-        const needsBody=!copied||['packageCache','curriculumEnrollments','supplementalMembershipStates','studyScopes','learningTargets','learningRuns','contentAttempts','semanticMeanings','semanticInbox'].includes(item.table);
+        const needsBody=!copied||['packageCache','curriculumEnrollments','supplementalMembershipStates','studyScopes','learningTargets','learningRuns','contentAttempts','semanticMeanings','semanticContexts','semanticInbox'].includes(item.table);
         const encodedValue=needsBody?item.encodedValue:undefined;
         if(!copied){
         encodedWriteSize+=encodedValue!.length;
@@ -987,7 +892,7 @@ export class SqliteRecordDatabase {
         if (item.table === 'contentAttempts') {
           this.upsertContentAttemptProjection(item.key, encodedValue!);
         }
-        if (item.table === 'semanticMeanings' || item.table === 'semanticInbox') {
+        if (item.table === 'semanticContexts' || item.table === 'semanticInbox') {
           this.replaceMediaReferences(item.table, item.key, encodedValue!);
         }
       }
@@ -1093,11 +998,11 @@ export class SqliteRecordDatabase {
     this.replicaCandidateStore?.abortAll(Error('sqlite_database_closed'));
     let optimizeFailed=false;
     let optimizeFailure:unknown;
-    if(optimize&&!this.connectionFailed){
+    if(optimize&&this.initialized&&!this.connectionFailed){
       try{this.database.exec("PRAGMA optimize");}
       catch(cause){if(isFatalSqliteConnectionFailure(cause))this.quarantineConnection(cause as Error);optimizeFailed=true;optimizeFailure=cause;}
     }
-    if(!this.connectionFailed){
+    if(this.initialized&&!this.connectionFailed){
       try{this.purgeReplicaCandidates();}
       catch(cause){if(isFatalSqliteConnectionFailure(cause))this.quarantineConnection(cause as Error);optimizeFailed=true;optimizeFailure??=cause;}
     }
@@ -1286,12 +1191,12 @@ export class SqliteRecordDatabase {
   }
 
   private replaceMediaReferences(
-    table: 'semanticMeanings' | 'semanticInbox',
+    table: 'semanticContexts' | 'semanticInbox',
     key: string,
     encodedValue: string,
   ): void {
-    const mediaIds = table === 'semanticMeanings'
-      ? meaningMediaReferences(this.decode<SemanticMeaningMediaSource>(encodedValue))
+    const mediaIds = table === 'semanticContexts'
+      ? contextMediaReferences(this.decode(encodedValue))
       : (this.decode<SemanticInboxMediaSource>(encodedValue).payload?.context?.mediaReferenceIds ?? []);
     this.database.exec({
       sql: 'DELETE FROM sensa_media_references WHERE owner_table=? AND owner_key=?',

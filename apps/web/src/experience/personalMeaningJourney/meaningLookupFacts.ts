@@ -47,7 +47,7 @@ export function confirmedLookupConnections(record:MeaningLookupFacts,read:Lookup
   if(record.personalMeaning?.status!=='active'&&!(includeDeleted&&record.personalMeaning?.status==='deleted'))return [];
   const meaningId=record.personalMeaning.personalMeaningId;
   const revisions=new Set(record.personalMeaningRevisions.filter(row=>row.personalMeaningId===meaningId).map(row=>row.personalMeaningRevisionId));
-  const contexts=new Set(record.personalSemanticAnchors.filter(row=>row.personalMeaningId===meaningId).map(row=>row.personalSemanticAnchorId));
+  const contexts=new Set(record.personalSemanticAnchors.filter(row=>row.personalMeaningId===undefined||row.personalMeaningId===meaningId).map(row=>row.personalSemanticAnchorId));
   const contextRevisions=new Set(record.personalSemanticAnchorRevisions.filter(row=>contexts.has(row.personalSemanticAnchorId)).map(row=>row.personalSemanticAnchorRevisionId));
   const expressions=new Set(record.personalExpressionAnchors.filter(row=>row.personalMeaningId===meaningId).map(row=>row.personalExpressionAnchorId));
   const expressionRevisions=new Set(record.personalExpressionAnchorRevisions.filter(row=>expressions.has(row.personalExpressionAnchorId)).map(row=>row.personalExpressionAnchorRevisionId));
@@ -73,7 +73,7 @@ export function confirmedLookupConnections(record:MeaningLookupFacts,read:Lookup
     const accepted=construction??acceptance;
     if(!accepted||accepted.learnerUserId!==alignment.learnerUserId||accepted.senseId!==alignment.senseId||accepted.senseVersionId!==alignment.senseVersionId)continue;
     if(construction&&!proposals.has(construction.senseProposalVersionId))continue;
-    if(acceptance&&(!contextRevisions.has(acceptance.personalSemanticAnchorRevisionId)||!expressionRevisions.has(acceptance.personalExpressionAnchorRevisionId)))continue;
+    if(acceptance&&(!contextRevisions.has(acceptance.personalSemanticAnchorRevisionId)||acceptance.personalExpressionAnchorRevisionId!==null&&!expressionRevisions.has(acceptance.personalExpressionAnchorRevisionId)))continue;
     for(const confirmation of byVersion.get(version.senseVersionId)??[]){
       if(confirmation.learnerUserId!==alignment.learnerUserId||!expressionRevisions.has(confirmation.personalExpressionAnchorRevisionId)
         ||confirmation.senseProposalVersionId!==null&&!proposals.has(confirmation.senseProposalVersionId))continue;

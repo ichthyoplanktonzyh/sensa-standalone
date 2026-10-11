@@ -1,3 +1,4 @@
+import {semanticRecords} from '../support/semanticWorldRecordFixture.mts';
 /** Actual SQLite/Wasm: bounded PRIVATE browsing, shared authority and atomic derivation. */
 import {test,expect,describe,beforeAll,afterAll} from 'vitest';
 import init from '@sqlite.org/sqlite-wasm';
@@ -17,10 +18,7 @@ import {directPublishedFixture} from '../support/directPublishedFixture';
 const sqlite=await init(),encode=(value:unknown)=>JSON.stringify(encodeBackupValue(value));
 const ids={senses:'senseId',senseVersions:'senseVersionId',expressions:'expressionId',expressionVersions:'expressionVersionId',bindings:'senseExpressionBindingId',bindingVersions:'bindingVersionId'} as const;
 function rows(state:JourneyState):SqliteMutation['puts']{
- const result:SqliteMutation['puts']=[{table:'semanticState',key:'root',encodedValue:encode({version:state.version})}];
- for(const value of state.meanings)result.push({table:'semanticMeanings',key:value.personalMeaning.personalMeaningId,encodedValue:encode(value)});
- for(const kind of Object.keys(ids) as Array<keyof typeof ids>)state.registry[kind].forEach((value,ordinal)=>result.push({table:'semanticRegistry',key:`${kind}:${(value as unknown as Record<string,string>)[ids[kind]]}`,encodedValue:encode({kind,ordinal,value})}));
- return result;
+ return [...semanticRecords(state)].map(row=>({...row,encodedValue:encode(row.value)}));
 }
 async function seed(){
  const repository=new MemoryJourneyRepository(),modules=createJourneyModules({repository,clock:createSeededClock(),languages:{read:async()=>({targetLanguageTag:'en',supportLanguageTag:'zh-CN'})}});
@@ -222,7 +220,7 @@ test('a SQLite read failure during World maintenance is not converted into commi
   const id=state.meanings[0]!.personalMeaning.personalMeaningId;
   await modules.personalMeaningJourney.reviseContext({operationId:crypto.randomUUID(),personalMeaningId:id,expectedRevision:state.meanings[0]!.personalMeaning.currentRevision,blocks:[{kind:'text',bodyText:'Changed private source'}]});
   expect(modules.personalMeaningJourney.getDetail(id)?.materialBlocks[0]?.bodyText).toBe('Changed private source');
-  const replacement=rows(await repository.load()).filter(row=>row.table==='semanticMeanings');
+  const replacement=rows(await repository.load()).filter(row=>row.table==='semanticMeanings'||row.table==='semanticContexts');
   const get=database.get.bind(database);let meaningReads=0,injected=false;
   database.get=(table,key)=>{
    if(table==='semanticMeanings'&&key===id)meaningReads++;

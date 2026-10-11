@@ -4,7 +4,9 @@ import {z} from 'zod';
 import type {LibraryRecordRows} from '../libraryRecordReader';
 import type {PersonalContentRecord} from '../../../personalContent/system/personalContentSystem';
 import type {Table} from '../store';
-import {assertSceneAcceptance,assertSceneConflictHistory,sceneHistoryRecords} from '../../../personalContent/system/sceneConflictHistory';
+import {assertSceneAcceptance,assertSceneConflictHistory,sceneHistoryRecords,findSceneRevision} from '../../../personalContent/system/sceneConflictHistory';
+import {hydrateMeaningContexts,type ContextRecord} from '../../../experience/personalMeaningJourney/contextRecords';
+import {backupEqual} from '../backupCodec';
 
 /** Validate Personal Content and its references into Semantic/Learning facts. */
 export function* validatePersonalContentReplicaSteps(input:{rows:LibraryRecordRows;requireRow:(table:Table,id:string)=>any;fail:()=>never}){
@@ -36,6 +38,15 @@ export function* validatePersonalContentReplicaSteps(input:{rows:LibraryRecordRo
    if((annotation.acceptedRevisionId===null)!==(annotation.acceptedPersonalMeaningId===null)||annotation.acceptedRevisionId!==null&&!annotation.revisions.some(revision=>revision.revisionId===annotation.acceptedRevisionId))fail();
    if(annotation.acceptedPersonalMeaningId!==null)uuid.parse(annotation.acceptedPersonalMeaningId);
   }
+  yield;
+ }
+ const scenes=new Map([...rows.annotations].flatMap(({value})=>value?.kind==='learning_scene'?[[value.sceneId,value] as const]:[]));
+ for(const {value} of rows.semanticContexts){
+  const context=value as ContextRecord;if(context.kind!=='anchorRevisions')continue;
+  const pin=context.value.structuredPayload.learningScene as {sceneId:string;revisionId:string;revision:number;learningTargetId:string;curriculumMembershipId:string}|undefined;
+  if(!pin)continue;
+  const scene=scenes.get(pin.sceneId)??fail(),revision=findSceneRevision(scene,pin)??fail();
+  if(pin.learningTargetId!==scene.learningTargetId||pin.curriculumMembershipId!==revision.curriculumMembershipId||context.value.bodyText!==(revision.body.trim()||null)||!backupEqual(context.value.structuredPayload.media,revision.media))fail();
   yield;
  }
 }

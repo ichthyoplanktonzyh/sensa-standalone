@@ -94,7 +94,7 @@ export function* validateContentSupplyReplicaSteps(input:{
    const source=resolvePinnedPersonalMeaningLearningSource(record,(kind,id)=>requireRow('semanticRegistry',`${kind}:${id}`).value,attempt.fixedInput.source,attempt.contextPin);
    if(!source)throw new Error('Personal preparation has a different accepted source.');
    const ids=new Set(source.context.personalSemanticAnchorRevisionIds);
-   const mediaIds=[...new Set<string>(record.personalSemanticAnchorRevisions.filter((revision:any)=>ids.has(revision.personalSemanticAnchorRevisionId)).flatMap((revision:any)=>revision.personalMediaObjectId?[revision.personalMediaObjectId]:[]))];
+   const mediaIds=[...new Set<string>(record.personalSemanticAnchorRevisions.filter((revision:any)=>ids.has(revision.personalSemanticAnchorRevisionId)).flatMap((revision:any)=>[...(revision.personalMediaObjectId?[revision.personalMediaObjectId]:[]),...(Array.isArray(revision.structuredPayload.mediaReferenceIds)?revision.structuredPayload.mediaReferenceIds:[])]))];
    const images=mediaIds.map(mediaId=>({id:mediaId,name:'personal-context-image',dataUrl:parseStoredMedia(requireRow('media',mediaId)).dataUrl}));
    source.context.images=orderPersonalContextImages(record,source.context.personalSemanticAnchorRevisionIds,[...source.context.images,...images]);
    assertPersonalAttemptSource(attempt,task,source,identity.learnerId);

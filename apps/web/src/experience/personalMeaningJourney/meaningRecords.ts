@@ -111,6 +111,9 @@ export function appendMeaningRevision(
     revision: nextRevision,
     displayLabel: displayLabel(record,sourceReferenceIds),
     learnerIntentNote: latestMeaningRevision(record)?.learnerIntentNote ?? null,
+    ...(latestMeaningRevision(record)?.savedDraft?{savedDraft:true as const}:{}),
+    ...(latestMeaningRevision(record)?.draftExpression!==undefined?{draftExpression:latestMeaningRevision(record)!.draftExpression}:{}),
+    ...(latestMeaningRevision(record)?.personalSenseWording!==undefined?{personalSenseWording:latestMeaningRevision(record)!.personalSenseWording}:{}),
     provenance: {
       kind: 'learner_authored',
       sourceReferenceIds: sourceReferenceIds.length > 0

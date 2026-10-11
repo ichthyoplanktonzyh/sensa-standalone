@@ -1,3 +1,4 @@
+import {contextFlowText} from '../../i18n/contextFlowText';
 import {useEffect,useRef,useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {X} from 'lucide-react';
@@ -14,12 +15,14 @@ import {InboxMedia} from './InboxMedia';
 import {intakeSourceLabel} from '../personalMeaningJourney/sourcePresentation';
 import {ExistingMeaningPicker} from './ExistingMeaningPicker';
 import {SenseSpec} from './SenseSpec';
+import {useJourneyGateway} from '../personalMeaningJourney';
+import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 
 const control='mt-2 block w-full rounded-control border border-border-subtle bg-surface-panel px-3 py-3 text-sm text-fg-primary focus-visible:outline-2 focus-visible:outline-focus';
 const button='inline-flex min-h-11 items-center justify-center rounded-control px-4 text-sm focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-50';
 
 export function ManualMeaningComposer({onClose,onCreated,original}:{onClose:()=>void;onCreated:(id:string)=>void;original?:SensaIntakeItem}){
-  const {t,i18n}=useTranslation(),intake=useSemanticIntake();
+  const {t,i18n}=useTranslation(),intake=useSemanticIntake(),gateway=useJourneyGateway();
   const [draft,setDraft]=useState(()=>original?manualDraftFromIntake(original):newManualMeaningDraft()),[key,setKey]=useState<string|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[stale,setStale]=useState(false);
   const storageKeyFor=(libraryId:string)=>`manual-meaning:${libraryId}${original?`:inbox:${original.intakeId}`:''}`;
   const draftJson=(value:ManualMeaningDraft)=>JSON.stringify(original?{sourceDigest:digestOf(original),draft:value}:value);
@@ -48,6 +51,17 @@ export function ManualMeaningComposer({onClose,onCreated,original}:{onClose:()=>
     try{previewStorage.setItem(key,draftJson(next));}catch{setError('manualMeaning.draftError');}
   };
   const positions=occurrencePositions(draft.context,draft.occurrence);
+  const saveDraft=async()=>{
+    if(saving.current||!key||stale||original)return;
+    saving.current=true;setBusy(true);setError('');
+    try{
+      const identity=await openLibrary();if(key!==storageKeyFor(identity.id))throw Error('library_changed');
+      previewStorage.setItem(key,draftJson(draft));
+      const result=await gateway.createMeaningDraft({operationId:draft.operationId,blocks:draft.context.trim()?[{kind:'text',bodyText:draft.context.trim()}]:[],learnerIntentNote:draft.meaning.trim()||null,draftExpression:(draft.canonicalForm.trim()||draft.occurrence.trim())?{surfaceForm:draft.canonicalForm.trim()||draft.occurrence.trim(),languageTag:draft.languageTag||null,expressionType:draft.expressionType}:null});
+      try{previewStorage.removeItem(key);}catch{}
+      onCreated(result.personalMeaningId);
+    }catch(cause){setError(cause instanceof Error&&cause.message.startsWith('localFlow.')?cause.message:'manualMeaning.saveError');}finally{saving.current=false;setBusy(false);}
+  };
   const save=async()=>{
     if(saving.current||!key||stale)return;
     setError('');
@@ -85,10 +99,10 @@ export function ManualMeaningComposer({onClose,onCreated,original}:{onClose:()=>
         {draft.existingSense&&<><SenseSpec spec={draft.existingSense.semanticSpec}/><button type="button" className={button} onClick={()=>change({existingSense:null})}>{t('manualMeaning.writeOwn')}</button></>}
         <details><summary className="cursor-pointer text-sm text-fg-secondary">{t('manualMeaning.canonical')}</summary><input aria-label={t('manualMeaning.canonical')} className={control} maxLength={2000} value={draft.canonicalForm} placeholder={draft.occurrence} onChange={event=>change({canonicalForm:event.target.value})}/></details>
       </fieldset>
-      {error&&<p role="alert" className="text-sm text-status-error">{t(error)}</p>}
+      {error&&<p role="alert" className="text-sm text-status-error">{error.startsWith('localFlow.')?localFlowNotice(error):t(error)}</p>}
       {stale&&original&&key&&<button type="button" className={button} onClick={()=>{const next=manualDraftFromIntake(original);setDraft(next);setStale(false);setError('');try{previewStorage.setItem(key,draftJson(next));}catch{setError('manualMeaning.draftError');}}}>{t('manualMeaning.restart')}</button>}
       {error&&!key&&<button type="button" className={button} onClick={()=>setLoadAttempt(value=>value+1)}>{t('content.retry')}</button>}
     </form>,
-    controls:<button type="submit" form="manual-meaning-form" disabled={busy||!key||stale} className={`${button} bg-action-primary text-action-on-primary`}>{t(busy?'manualMeaning.saving':'manualMeaning.save')}</button>,
+    controls:<div className="flex flex-wrap gap-3">{!original&&<button type="button" disabled={busy||!key||stale} className={`${button} border border-border-subtle`} onClick={()=>void saveDraft()}>{contextFlowText('saveMeaningDraft')}</button>}<button type="submit" form="manual-meaning-form" disabled={busy||!key||stale} className={`${button} bg-action-primary text-action-on-primary`}>{t(busy?'manualMeaning.saving':'manualMeaning.save')}</button></div>,
   }}/>;
 }

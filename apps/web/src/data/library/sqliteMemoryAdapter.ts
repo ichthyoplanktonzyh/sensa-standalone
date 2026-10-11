@@ -1,3 +1,7 @@
+import {contextBrowseFacts,validateContextQuery,type ContextBrowseQuery,type ContextBrowsePage} from '../../experience/personalMeaningJourney/contextRead';
+import type {ContextRecord} from '../../experience/personalMeaningJourney/contextRecords';
+import {learningScenePersonalMeaningId} from './personalSceneIdentity';
+import {hydrateMeaningContexts,contextMediaReferences} from '../../experience/personalMeaningJourney/contextRecords';
 import type {LearningScheduleQuery,LearningSchedulePage} from '../../learning/system/learningScheduleModel';
 import type {SqliteRecordAdapter} from './sqliteAdapter';
 import {meaningMediaReferences,meaningHistoryRecords} from '../../experience/personalMeaningJourney/meaningHistoryRead';
@@ -25,6 +29,11 @@ import {memoryRegistrySelection,type RegistrySelectionQuery,type RegistrySelecti
 
 /** Test/non-browser Adapter. Production never selects this path. */
 export class MemoryRecordAdapter implements SqliteRecordAdapter {
+  async contextBrowse(raw:ContextBrowseQuery):Promise<ContextBrowsePage>{
+    const query=validateContextQuery(raw),decode=(table:string,key:string)=>{const value=this.records.get(`${table}\u0000${key}`);return value===undefined?undefined:decodeBackupValue(JSON.parse(value));},counts=new Map<string,number>();
+    for(const [key,encoded] of this.records)if(key.startsWith('semanticMeanings\u0000')){const record=decodeBackupValue(JSON.parse(encoded));if(record.personalMeaning.status==='active')for(const ref of record.personalSemanticAnchors)if(ref.status==='active')counts.set(ref.personalSemanticAnchorId,(counts.get(ref.personalSemanticAnchorId)??0)+1);}
+    const rows=[...this.records].filter(([key])=>key.startsWith('semanticContexts\u0000anchors:')).flatMap(([,encoded])=>{const head=decodeBackupValue(JSON.parse(encoded)) as ContextRecord;if(head.kind!=='anchors'||(query.status??'active')!=='all'&&head.value.status!==(query.status??'active')||query.contextId!==undefined&&head.value.personalSemanticAnchorId!==query.contextId)return [];const revision=decode('semanticContexts',`anchorRevisions:${head.value.currentRevisionId}`) as ContextRecord|undefined;if(revision?.kind!=='anchorRevisions')throw Error('semantic_context_invalid');return [contextBrowseFacts(head.value,revision.value,counts.get(head.value.personalSemanticAnchorId)??0)];}).filter(row=>row.text.includes(query.query)).sort((a,b)=>b.item.updatedAt.localeCompare(a.item.updatedAt)||a.item.contextId.localeCompare(b.item.contextId));return {items:rows.slice(query.offset,query.offset+query.limit).map(row=>row.item),total:rows.length};
+  }
   async replicaCandidate(_request:import('./replicaCandidateProtocol').ReplicaCandidateRequest):Promise<import('./replicaCandidateProtocol').ReplicaCandidateResponse>{throw Error('sqlite_replica_candidate_unavailable');}
   private practiceRevision=0;
   async practiceExpressions(raw:PracticeExpressionQuery):Promise<PracticeExpressionPage>{
@@ -59,7 +68,7 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
     const references=query.referenceFilter&&query.referenceFilter!=='all'?worldReferenceSenseIds((await this.entries('annotations')).map(row=>decodeBackupValue(JSON.parse(row.encodedValue))),query.referenceFilter):null;
     const read:WorldRecordRead=(table,key)=>{const encoded=this.records.get(`${table}\u0000${key}`);return encoded===undefined?undefined:decodeBackupValue(JSON.parse(encoded));};
     const choices=(await this.entries('semanticMeanings')).flatMap(row=>{
-      const record=decodeBackupValue(JSON.parse(row.encodedValue)) as MeaningJourneyRecord;
+      const record=hydrateMeaningContexts(decodeBackupValue(JSON.parse(row.encodedValue)),key=>read('semanticContexts',key));
       const registry=worldRegistryClosure(record,read),item=worldItemFromRecord(record,read);
       return query.filter!=='deleted'&&isWorldRecordVisible(record,registry)&&matchesWorldFilter(item,query.filter)&&matchesWorldLanguages(summarizeWorldItem(item),query.expressionLanguages)&&(references===null||summarizeWorldItem(item).senseIds?.some(id=>references.includes(id)))&&worldSearchText(item).includes(query.query)&&(query.senseIds===undefined||summarizeWorldItem(item).senseIds?.some(id=>query.senseIds!.includes(id)))
         ?buildPersonalMeaningLearningSources(record,indexRegistry(registry)).filter(source=>source.targetLanguageTag===query.targetLanguageTag&&(!query.expressionLanguages?.length||query.expressionLanguages.includes(source.targetLanguageTag))).map(source=>({choice:worldLearningChoice(source),updatedAt:item.updatedAt})):[];
@@ -71,7 +80,7 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
     const references=query.referenceFilter&&query.referenceFilter!=='all'?worldReferenceSenseIds((await this.entries('annotations')).map(row=>decodeBackupValue(JSON.parse(row.encodedValue))),query.referenceFilter):null;
     const read:WorldRecordRead=(table,key)=>{const encoded=this.records.get(`${table}\u0000${key}`);return encoded===undefined?undefined:decodeBackupValue(JSON.parse(encoded));};
     const records=(await this.entries('semanticMeanings')).map(row=>{
-      const record=decodeBackupValue(JSON.parse(row.encodedValue)) as MeaningJourneyRecord;
+      const record=hydrateMeaningContexts(decodeBackupValue(JSON.parse(row.encodedValue)),key=>read('semanticContexts',key));
       const registry=worldRegistryClosure(record,read),item=worldItemFromRecord(record,read);
       return {item:summarizeWorldItem(item),search:worldSearchText(item),visible:isWorldRecordVisible(record,registry)};
     }).sort((a,b)=>b.item.updatedAt.localeCompare(a.item.updatedAt)||(a.item.personalMeaningId<b.item.personalMeaningId?-1:1));
@@ -86,15 +95,14 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
   }
   async worldSceneMeaning(sceneId:string):Promise<string|null>{
     if(!isUuid(sceneId))throw new Error('scene_identity_invalid');
-    const owners=[...this.records].filter(([key])=>key.startsWith('semanticMeanings\u0000')).flatMap(([,encoded])=>{
-      const record=decodeBackupValue(JSON.parse(encoded)) as MeaningJourneyRecord;
-      return meaningHistoryRecords(record).some(branch=>branch.personalSemanticAnchorRevisions.some(revision=>(revision.structuredPayload.learningScene as {sceneId?:string}|undefined)?.sceneId===sceneId))?[record.personalMeaning.personalMeaningId]:[];
-    });
-    if(owners.length>1)throw new Error('scene_owner_ambiguous');return owners[0]??null;
+    const owner=learningScenePersonalMeaningId(sceneId),encoded=this.records.get(`semanticMeanings\u0000${owner}`);
+    if(encoded===undefined)return null;
+    const record=hydrateMeaningContexts(decodeBackupValue(JSON.parse(encoded)),key=>{const encoded=this.records.get(`semanticContexts\u0000${key}`);return encoded===undefined?undefined:decodeBackupValue(JSON.parse(encoded));});
+    return meaningHistoryRecords(record).some(branch=>branch.personalSemanticAnchorRevisions.some(revision=>(revision.structuredPayload.learningScene as {sceneId?:string}|undefined)?.sceneId===sceneId))?owner:null;
   }
   async lookupMeanings(query:string):Promise<MeaningLookupResult>{
     const state=emptyJourneyState();
-    state.meanings=(await this.entries('semanticMeanings')).map(row=>decodeBackupValue(JSON.parse(row.encodedValue)) as MeaningJourneyRecord);
+    state.meanings=(await this.entries('semanticMeanings')).map(row=>hydrateMeaningContexts(decodeBackupValue(JSON.parse(row.encodedValue)),key=>{const encoded=this.records.get(`semanticContexts\u0000${key}`);return encoded===undefined?undefined:decodeBackupValue(JSON.parse(encoded));}));
     for(const row of await this.entries('semanticRegistry')){
       const decoded=decodeBackupValue(JSON.parse(row.encodedValue)) as {kind:keyof SenseRegistryState;value:unknown};
       (state.registry[decoded.kind] as unknown[]).push(decoded.value);
@@ -348,8 +356,8 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
   }
 
   async isMediaReferenced(mediaId: string): Promise<boolean> {
-    const meanings = await this.entries('semanticMeanings');
-    if (meanings.some(row=>meaningMediaReferences(decodeBackupValue(JSON.parse(row.encodedValue))).includes(mediaId))) return true;
+    const contexts = await this.entries('semanticContexts');
+    if (contexts.some(row=>contextMediaReferences(decodeBackupValue(JSON.parse(row.encodedValue))).includes(mediaId))) return true;
     const inbox = await this.entries('semanticInbox');
     return inbox.some((row) => (
       decodeBackupValue(JSON.parse(row.encodedValue)) as {

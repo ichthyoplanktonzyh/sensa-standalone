@@ -279,7 +279,9 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
     async setSpeechFixtureForTest(unavailable){
       // Provider-boundary fixture only. Preparation still constructs requests,
       // validates all candidates and admits material through production code.
-      const {replaceClientSpeechProvider}=await import('./data/library/speech/provider');
+      // Initialize the composition root before installing the fixture: a later
+      // lazy default-provider import must not overwrite the isolated substitute.
+      const {replaceClientSpeechProvider}=await import('./data/library/speech/defaultProvider');
       replaceClientSpeechProvider({id:'browser-fixture',revision:1,displayName:'Synthetic browser fixture',synthesize:async input=>{
         if(unavailable)throw new Error('speech_language_unavailable');
         return {...input,audioUrl:'data:audio/mpeg;base64,UklGRg==',phoneticNotation:null,accentLabel:'en-US',source:'Synthetic browser fixture, not audible quality evidence',method:'tts'};

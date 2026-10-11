@@ -26,7 +26,7 @@ export function registerLibrarySync(app:Hono,access:Access){
   const blocks=(await db.query('SELECT hash,data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[id,refs])).rows;
   const byHash=new Map(blocks.map(b=>[b.hash,b.data]));if(refs.some(r=>!byHash.has(r)))throw conflict('library_sync_missing_block');
   const value=JSON.parse(blockText(refs,byHash));
-  if(value?.version!==7)throw conflict('library_sync_incompatible_checkpoint');
+  if(value?.version!==8)throw conflict('library_sync_incompatible_checkpoint');
   return librarySyncManifest.parse(value);
  }
  app.get('/sensa/library-sync/head',async c=>c.json(await use(c.req.raw,async(db,a)=>{

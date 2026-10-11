@@ -1,3 +1,4 @@
+import {hydrateMeaningContexts,contextMediaReferences} from '../../../experience/personalMeaningJourney/contextRecords';
 import {semanticProposalSchema} from '@sensa/contracts/sensa';
 import {z} from 'zod';
 
@@ -24,7 +25,7 @@ export function* validatePersonalSemanticWorldReplicaSteps(input:{
  const {rows,maps,requireRow,fail}=input,uuid=z.string().uuid(),timestamp=z.string().datetime({offset:true});
  try{yield*assertPersonalSemanticWorldRecordSteps({get:(table,key)=>maps[table].get(key),entries:table=>rows[table]});}catch{fail();}
  for(const {key,value} of rows.media){const media=parseStoredMedia(value);if(media.mediaId!==key)fail();uuid.parse(key);yield;}
- for(const {value:meaning} of rows.semanticMeanings){for(const branch of meaningHistoryRecords(meaning))for(const revision of branch.personalSemanticAnchorRevisions)if(revision.personalMediaObjectId&&!maps.media.has(revision.personalMediaObjectId))fail();yield;}
+ for(const {value:context} of rows.semanticContexts){for(const mediaId of contextMediaReferences(context))if(!maps.media.has(mediaId))fail();yield;}
  for(const {value:item} of rows.semanticInbox){for(const mediaId of item.payload.context?.mediaReferenceIds??[])if(!maps.media.has(mediaId))fail();yield;}
  const requirePersonalSource=(source:any)=>{
   if(!maps.semanticState.has('root'))fail();
@@ -32,7 +33,7 @@ export function* validatePersonalSemanticWorldReplicaSteps(input:{
   z.number().int().positive().parse(source.alignmentRevision);if(source.meaningFocusId!==null)uuid.parse(source.meaningFocusId);
   // A durable learning source pins historical facts, not today's World view.
   // Tombstoning the personal origin must not invalidate already accepted learning.
-  const current=(maps.semanticMeanings.get(source.personalMeaningId) as MeaningJourneyRecord|undefined)??fail();
+  const current=hydrateMeaningContexts(maps.semanticMeanings.get(source.personalMeaningId)??fail(),key=>maps.semanticContexts.get(key));
   const record=meaningHistoryRecords(current).find(branch=>branch.personalMeaningRevisions.some(row=>row.personalMeaningRevisionId===source.personalMeaningRevisionId)&&branch.alignments.some(row=>row.personalMeaningAlignmentId===source.personalMeaningAlignmentId))??fail();
   if(!record.personalMeaningRevisions.some((candidate:any)=>candidate.personalMeaningRevisionId===source.personalMeaningRevisionId))fail();
   const alignment=record.alignments.find((candidate:any)=>candidate.personalMeaningAlignmentId===source.personalMeaningAlignmentId)??fail();

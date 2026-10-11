@@ -1,7 +1,7 @@
 import {z} from 'zod';
 /** Durable Personal Library Facts carried by a Cloud Checkpoint. `operations` is
  * deliberately absent: it is a device-local command ledger, not learner data. */
-export const librarySyncTables=['meta','drafts','settings','sessions','meanings','identities','packageInstallations','curriculumEnrollments','supplementalMembershipStates','studyScopes','learningSessions','learningTargets','learningRuns','learningEvents','learningReconciliations','personalLearning','contentAttempts','annotations','semanticState','semanticMeanings','semanticRegistry','semanticInbox','semanticDrafts','semanticReceipts','media'] as const;
+export const librarySyncTables=['meta','drafts','settings','sessions','meanings','identities','packageInstallations','curriculumEnrollments','supplementalMembershipStates','studyScopes','learningSessions','learningTargets','learningRuns','learningEvents','learningReconciliations','personalLearning','contentAttempts','annotations','semanticState','semanticMeanings','semanticContexts','semanticRegistry','semanticInbox','semanticDrafts','semanticReceipts','media'] as const;
 export const librarySyncHash=z.string().regex(/^[a-f0-9]{64}$/);
 /** Content-addressed block size in JavaScript string units. Restoring a library is
  * a bounded number of block requests, so one block already carries a real payload.
@@ -26,7 +26,7 @@ export const librarySyncRow=z.object({table:z.enum(librarySyncTables),key:z.stri
 const refineManifest=(v:{rows:readonly {table:string;key:string}[]},c:z.RefinementCtx)=>{
  const ids=new Set<string>();for(const row of v.rows){const id=JSON.stringify([row.table,row.key]);if(ids.has(id))c.addIssue({code:'custom',message:'duplicate row'});ids.add(id);if(row.table==='meta'&&!['identity','learning-active','learning-session-active','package-catalog'].includes(row.key))c.addIssue({code:'custom',message:'private metadata'});}
 };
-export const librarySyncManifest=z.object({version:z.literal(7),libraryId:z.string().uuid(),learnerId:z.string().uuid(),rows:z.array(librarySyncRow).max(200000)}).strict().superRefine(refineManifest);
+export const librarySyncManifest=z.object({version:z.literal(8),libraryId:z.string().uuid(),learnerId:z.string().uuid(),rows:z.array(librarySyncRow).max(200000)}).strict().superRefine(refineManifest);
 export const librarySyncStorage=z.object({usedBytes:z.number().int().nonnegative(),capacityBytes:z.number().int().positive()}).strict();
 export const librarySyncHead=z.object({revision:z.number().int().nonnegative(),manifest:librarySyncRefs.nullable(),storage:librarySyncStorage.optional()}).strict();
 export const librarySyncCommit=z.object({operationId:z.string().uuid(),baseRevision:z.number().int().nonnegative(),manifest:librarySyncRefs}).strict();

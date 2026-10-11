@@ -185,6 +185,7 @@ export interface JourneyFocusView {
 }
 
 export interface JourneyDetailView {
+  editableDraft?:boolean;
   personalMeaningId: string;
   status:'active'|'deleted';
   shortId: string;
@@ -297,7 +298,21 @@ export interface CreatePersonalMeaningInput {
   };
   blocks?: MaterialBlockInput[];
   startingPoint?: ClarificationStartingPoint | null;
+  /** Exact independently saved Contexts. Reuse is an explicit learner choice. */
+  contextReferences?:ContextReference[];
+  learnerIntentNote?:string|null;
+  draftExpression?:{surfaceForm:string;languageTag:string|null;expressionType:SensaExpressionType}|null;
 }
+
+export interface ContextReference {contextId:string;revisionId:string}
+export interface SaveContextInput {operationId:string;blocks:MaterialBlockInput[];languageTag?:string|null}
+export interface SaveContextResult {contextId:string;revisionId:string;replayed:boolean}
+export interface ReviseSavedContextInput {operationId:string;contextId:string;expectedRevisionId:string;blocks:MaterialBlockInput[]}
+export interface ChangeContextLifecycleInput {operationId:string;contextId:string;expectedRevisionId:string;action:'delete'|'restore'}
+export interface CreateMeaningDraftInput extends CreatePersonalMeaningInput {}
+export interface UpdateMeaningDraftInput {operationId:string;personalMeaningId:string;expectedRevision:number;learnerIntentNote:string|null;draftExpression:CreatePersonalMeaningInput['draftExpression']}
+export interface ConfirmMeaningDraftInput {operationId:string;personalMeaningId:string;source:ClarificationSourceWitness;payload:SensaIntakePayload}
+export interface ConfirmMeaningDraftResult {personalMeaningId:string;personalMeaningRevisionId:string;personalMeaningAlignmentId:string;revision:number;replayed:boolean}
 
 export interface CorrectPersonalMeaningInput {
   operationId:string;
@@ -491,6 +506,8 @@ export interface PublishedLearningSceneAcceptanceInput {
   semantic: PublishedLearningSemanticFacts;
   scene: {
     sceneId: string;
+    /** Original Scene birth, distinct from the selected revision timestamp. */
+    contextCreatedAt?:number;
     revisionId: string;
     revision: number;
     body: string;

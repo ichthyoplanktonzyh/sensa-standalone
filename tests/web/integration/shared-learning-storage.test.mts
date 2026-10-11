@@ -200,115 +200,21 @@ test('encrypted backup preview and actual empty-destination restore retain the c
  }finally{refresh.mockRestore();}
 });
 
-test('v14 upgrades all fact, tombstone and sync-base constraints atomically without changing encoded bytes or body ownership',async()=>{
- const sqlite=await sqlite3InitModule();
- for(const version of [14,15])for(const interrupt of [false,true]){
-  const storage=new sqlite.oo1.DB(':memory:','c'),copy=new SqliteRecordDatabase(sqlite,storage,'memory');
-  try{
-   storage.exec((version===14?sqliteLibrarySchema.replaceAll("'studyScopes',",'').replaceAll("'learningSessions',",''):sqliteLibrarySchema).replaceAll("'supplementalMembershipStates',",''));
-   storage.exec(`PRAGMA user_version=${version}`);
-   const records=raw.exec({sql:"SELECT rowid,* FROM sensa_records WHERE table_name NOT IN ('studyScopes','learningSessions') ORDER BY rowid",rowMode:'object',returnValue:'resultRows'}) as {rowid:number;table_name:string;record_key:string;value_json:string;content_revision:number}[];
-   for(const row of records)storage.exec({sql:'INSERT INTO sensa_records(rowid,table_name,record_key,value_json,content_revision) VALUES(?,?,?,?,?)',bind:[row.rowid,row.table_name,row.record_key,row.value_json,row.content_revision]});
-   const bodies=raw.exec({sql:'SELECT * FROM sensa_shared_record_content',rowMode:'object',returnValue:'resultRows'}) as {digest:string;value_json:string}[];
-   for(const row of bodies)storage.exec({sql:'INSERT INTO sensa_shared_record_content VALUES(?,?)',bind:[row.digest,row.value_json]});
-   const owners=raw.exec({sql:"SELECT * FROM sensa_shared_record_content_owners WHERE table_name NOT IN ('studyScopes','learningSessions')",rowMode:'object',returnValue:'resultRows'}) as {owner_kind:string;table_name:string;record_key:string;digest:string}[];
-   for(const row of owners)storage.exec({sql:'INSERT INTO sensa_shared_record_content_owners VALUES(?,?,?,?)',bind:[row.owner_kind,row.table_name,row.record_key,row.digest]});
-   storage.exec("INSERT INTO sensa_record_tombstones VALUES('drafts','old-deleted',7)");
-   storage.exec("INSERT INTO sensa_sync_base VALUES('drafts','old-base','{\"text\":\"exact\"}','[]')");
-   const snapshot=()=>['sensa_records','sensa_record_tombstones','sensa_sync_base','sensa_shared_record_content','sensa_shared_record_content_owners'].map(table=>storage.exec({sql:`SELECT ${table==='sensa_records'?'rowid,*':'*'} FROM ${table} ORDER BY 1,2`,rowMode:'object',returnValue:'resultRows'}));
-   const before=snapshot(),indexes=storage.exec({sql:"SELECT name,sql FROM sqlite_schema WHERE type='index' AND tbl_name IN ('sensa_records','sensa_record_tombstones','sensa_sync_base') ORDER BY name",rowMode:'object',returnValue:'resultRows'});
-   if(interrupt){
-    const exec=storage.exec.bind(storage);storage.exec=((input:any)=>{if((typeof input==='string'?input:input.sql).startsWith('CREATE TABLE sensa_sync_base_v15_upgrade'))throw Error('fixture upgrade interrupted');return exec(input);}) as typeof storage.exec;
-    try{expect(()=>copy.initialize()).toThrow('fixture upgrade interrupted');}finally{storage.exec=exec;}
-    expect(snapshot()).toEqual(before);expect(storage.exec({sql:'PRAGMA user_version',rowMode:0,returnValue:'resultRows'})).toEqual([version]);
-   }
-   expect(copy.initialize().schemaVersion).toBe(sqliteLibrarySchemaVersion);expect(snapshot()).toEqual(before);
-   expect(storage.exec({sql:"SELECT name,sql FROM sqlite_schema WHERE type='index' AND tbl_name IN ('sensa_records','sensa_record_tombstones','sensa_sync_base') ORDER BY name",rowMode:'object',returnValue:'resultRows'})).toEqual(indexes);
-   const scope=database.entries('studyScopes')[0]!,session=database.entries('learningSessions')[0]!;
-   copy.commit({clears:[],deletes:[],puts:[{table:'studyScopes',...scope},{table:'learningSessions',...session}],syncBaseReplacement:[{table:'studyScopes',key:scope.key,valueJson:scope.encodedValue,blockRefs:[]},{table:'learningSessions',key:session.key,valueJson:session.encodedValue,blockRefs:[]}]});
-   expect(copy.syncBaseEntries().map(row=>row.table).sort()).toEqual(['learningSessions','studyScopes']);
-   copy.commit({clears:[],puts:[],deletes:[{table:'learningSessions',key:session.key}],contentRevision:10000});
-   expect(storage.exec({sql:"SELECT COUNT(*) FROM sensa_record_tombstones WHERE table_name='learningSessions' AND record_key=?",bind:[session.key],rowMode:0,returnValue:'resultRows'})).toEqual([1]);
-  }finally{copy.close();}
- }
-});
-
-test('schema 13 upgrade creates only representation storage and does not rewrite existing source rows',async()=>{
- const sqlite=await sqlite3InitModule(),legacyRaw=new sqlite.oo1.DB(':memory:','c'),legacy=new SqliteRecordDatabase(sqlite,legacyRaw,'memory');
- try{
-  legacyRaw.exec(sqliteLibrarySchema);legacyRaw.exec('DROP TABLE sensa_shared_record_content_owners; DROP TABLE sensa_shared_record_content; PRAGMA user_version=13');
-  const sources=[...database.entries('learningTargets').map(row=>({table:'learningTargets',...row})),...database.entries('learningRuns').map(row=>({table:'learningRuns',...row}))];
-  for(const row of sources)legacyRaw.exec({sql:'INSERT INTO sensa_records(table_name,record_key,value_json) VALUES(?,?,?)',bind:[row.table,row.key,row.encodedValue]});
-  const before=legacyRaw.exec({sql:'SELECT * FROM sensa_records ORDER BY table_name,record_key',rowMode:'object',returnValue:'resultRows'});
-  expect(legacy.initialize().schemaVersion).toBe(sqliteLibrarySchemaVersion);
-  expect(legacyRaw.exec({sql:'SELECT * FROM sensa_records ORDER BY table_name,record_key',rowMode:'object',returnValue:'resultRows'})).toEqual(before);
-  expect(legacyRaw.exec({sql:'SELECT COUNT(*) FROM sensa_shared_record_content',rowMode:0,returnValue:'resultRows'})).toEqual([0]);
-  expect(legacy.learningHistoryProjection()).toEqual(database.learningHistoryProjection());
- }finally{legacy.close();}
-});
-
-test('schema 16 admits compressed future writes without rewriting existing owner bytes; a failed header update rolls back',async()=>{
- const sqlite=await sqlite3InitModule();
- for(const interrupt of [false,true]){
-  const storage=new sqlite.oo1.DB(':memory:','c'),copy=new SqliteRecordDatabase(sqlite,storage,'memory');
-  try{
-   storage.exec(sqliteLibrarySchema);storage.exec('PRAGMA user_version=16');
-   const value={text:'Existing owner data '.repeat(1024),at:new Date('2026-10-09T00:00:00.000Z'),optional:undefined},encoded=JSON.stringify(encodeBackupValue(value));
-   storage.exec({sql:'INSERT INTO sensa_records(table_name,record_key,value_json,content_revision) VALUES(?,?,?,7)',bind:['settings','owner-opaque',encoded]});
-   storage.exec({sql:'INSERT INTO sensa_sync_base VALUES(?,?,?,?)',bind:['settings','owner-opaque',encoded,'[]']});
-   const snapshot=()=>['sensa_records','sensa_sync_base'].map(table=>storage.exec({sql:`SELECT * FROM ${table} ORDER BY 1,2`,rowMode:'object',returnValue:'resultRows'})),before=snapshot();
-   if(interrupt){
-    const exec=storage.exec.bind(storage);storage.exec=((input:any)=>{if(input===`PRAGMA user_version=${sqliteLibrarySchemaVersion}`)throw Error('fixture schema header interrupted');return exec(input);}) as typeof storage.exec;
-    try{expect(()=>copy.initialize()).toThrow('fixture schema header interrupted');}finally{storage.exec=exec;}
-    expect(snapshot()).toEqual(before);expect(storage.exec({sql:'PRAGMA user_version',rowMode:0,returnValue:'resultRows'})).toEqual([16]);
-   }
-   expect(copy.initialize().schemaVersion).toBe(sqliteLibrarySchemaVersion);expect(snapshot()).toEqual(before);expect(copy.get('settings','owner-opaque')).toBe(encoded);
-   copy.commit({clears:[],deletes:[],puts:[{table:'settings',key:'new-opaque',encodedValue:encoded}]});
-   expect(copy.get('settings','new-opaque')).toBe(encoded);expect(copy.syncBaseEntries()[0]?.valueJson).toBe(encoded);
-   const stored=String((storage.exec({sql:"SELECT value_json FROM sensa_records WHERE table_name='settings' AND record_key='new-opaque'",rowMode:0,returnValue:'resultRows'}) as string[])[0]);expect(stored.length).toBeLessThan(encoded.length);expect(stored).toContain('sensa-record-gzip-v1');
-  }finally{copy.close(false);}
- }
-});
-
-test('schema 16 cannot manufacture a missing source table or advance its header after a damaged-library open',async()=>{
+for(const version of [10,12,13,14,15,16,17,18])test(`unsupported schema ${version} retains exact source, baseline, recovery and shared owner bytes`,async()=>{
  const sqlite=await sqlite3InitModule(),storage=new sqlite.oo1.DB(':memory:','c'),copy=new SqliteRecordDatabase(sqlite,storage,'memory');
  try{
-  storage.exec(sqliteLibrarySchema);storage.exec('DROP TABLE sensa_sync_base; PRAGMA user_version=16');
-  const encoded=JSON.stringify(encodeBackupValue('Owner data must remain'));storage.exec({sql:'INSERT INTO sensa_records(table_name,record_key,value_json) VALUES(?,?,?)',bind:['settings','owner-proof',encoded]});
-  expect(()=>copy.initialize()).toThrow('sqlite_source_schema_incomplete');expect(storage.exec({sql:'PRAGMA user_version',rowMode:0,returnValue:'resultRows'})).toEqual([16]);
-  expect(storage.exec({sql:"SELECT value_json FROM sensa_records WHERE record_key='owner-proof'",rowMode:0,returnValue:'resultRows'})).toEqual([encoded]);expect(storage.exec({sql:"SELECT name FROM sqlite_schema WHERE name='sensa_sync_base'",rowMode:0,returnValue:'resultRows'})).toEqual([]);
- }finally{copy.close(false);}
-});
-
-for(const schema of [16,17])for(const fault of ['none','copy','swap','header'] as const)test(`schema ${schema} baseline layout upgrade preserves exact owner bytes and shared ownership (${fault})`,async()=>{
- const sqlite=await sqlite3InitModule(),storage=new sqlite.oo1.DB(':memory:','c'),copy=new SqliteRecordDatabase(sqlite,storage,'memory');
- try{
-  const oldBase=sqliteSyncBaseSchema.replace(/\);$/u,') WITHOUT ROWID;');
-  storage.exec(sqliteLibrarySchema.replace(sqliteSyncBaseSchema,oldBase));storage.exec(`PRAGMA user_version=${schema}`);
+  storage.exec(sqliteLibrarySchema);storage.exec(`PRAGMA user_version=${version}`);
   for(const table of ['sensa_records','sensa_shared_record_content','sensa_shared_record_content_owners','sensa_record_tombstones','sensa_sync_base']){
    const rows=raw.exec({sql:`SELECT ${table==='sensa_records'?'rowid,*':'*'} FROM ${table}`,rowMode:'array',returnValue:'resultRows'}) as (string|number|null)[][];
    for(const row of rows)storage.exec({sql:`INSERT INTO ${table} VALUES(${row.map(()=>'?').join(',')})`.replace('INSERT INTO sensa_records VALUES','INSERT INTO sensa_records(rowid,table_name,record_key,value_json,content_revision) VALUES'),bind:row});
   }
-  const encoded=JSON.stringify(encodeBackupValue({text:'Owner layout witness '.repeat(1024),date:new Date('2026-10-09T00:00:00.000Z'),optional:undefined}));
-  storage.exec({sql:'INSERT INTO sensa_records VALUES(?,?,?,7)',bind:['settings','layout-owner-opaque',encoded]});
-  storage.exec({sql:'INSERT INTO sensa_sync_base VALUES(?,?,?,?)',bind:['settings','layout-owner-opaque',encoded,'["ordered-first","ordered-last"]']});
-  storage.exec('CREATE INDEX retained_baseline_key ON sensa_sync_base(record_key)');
-  const tables=['sensa_records','sensa_sync_base','sensa_shared_record_content','sensa_shared_record_content_owners','sensa_record_tombstones'];
-  const snapshot=()=>tables.map(table=>storage.exec({sql:`SELECT ${table==='sensa_records'?'rowid,*':'*'} FROM ${table} ORDER BY 1,2`,rowMode:'array',returnValue:'resultRows'})),before=snapshot();
-  if(fault!=='none'){
-   const exec=storage.exec.bind(storage);storage.exec=((input:any)=>{const sql=typeof input==='string'?input:input.sql;
-    if(fault==='copy'&&sql.startsWith('INSERT INTO sensa_sync_base_v18_upgrade')||fault==='swap'&&sql.startsWith('ALTER TABLE sensa_sync_base_v18_upgrade')||fault==='header'&&sql===`PRAGMA user_version=${sqliteLibrarySchemaVersion}`)throw Error('fixture layout upgrade interrupted');return exec(input);
-   }) as typeof storage.exec;
-   try{expect(()=>copy.initialize()).toThrow('fixture layout upgrade interrupted');}finally{storage.exec=exec;}
-   expect(snapshot()).toEqual(before);expect(storage.exec({sql:'PRAGMA user_version',rowMode:0,returnValue:'resultRows'})).toEqual([schema]);
-   expect(storage.exec({sql:"SELECT name FROM sqlite_schema WHERE name='sensa_sync_base_v18_upgrade'",rowMode:0,returnValue:'resultRows'})).toEqual([]);
-   expect(String((storage.exec({sql:"SELECT sql FROM sqlite_schema WHERE name='sensa_sync_base'",rowMode:0,returnValue:'resultRows'}) as string[])[0])).toMatch(/WITHOUT ROWID/);
-  }
-  expect(copy.initialize().schemaVersion).toBe(sqliteLibrarySchemaVersion);expect(snapshot()).toEqual(before);
-  expect(storage.exec({sql:"SELECT sql FROM sqlite_schema WHERE name='retained_baseline_key'",rowMode:0,returnValue:'resultRows'})).toEqual(['CREATE INDEX retained_baseline_key ON sensa_sync_base(record_key)']);
-  expect(String((storage.exec({sql:"SELECT sql FROM sqlite_schema WHERE name='sensa_sync_base'",rowMode:0,returnValue:'resultRows'}) as string[])[0])).not.toMatch(/WITHOUT ROWID/);
-  expect(()=>storage.exec({sql:'INSERT INTO sensa_sync_base VALUES(?,?,?,?)',bind:['settings','layout-owner-opaque',encoded,'[]']})).toThrow();
-  expect(()=>storage.exec({sql:'INSERT INTO sensa_sync_base VALUES(?,?,?,?)',bind:['settings',null,encoded,'[]']})).toThrow();
-  expect(snapshot()).toEqual(before);
+  storage.exec("CREATE TABLE retained_recovery(value TEXT); INSERT INTO retained_recovery VALUES('owner-recovery-proof')");
+  const snapshot=()=>storage.exec({sql:'SELECT name,sql FROM sqlite_schema ORDER BY name',rowMode:'array',returnValue:'resultRows'});
+  const before=snapshot(),bytes=sqlite.capi.sqlite3_js_db_export(storage);
+  expect(()=>copy.initialize()).toThrow(`sqlite_schema_legacy:${version}`);
+  expect(snapshot()).toEqual(before);expect(storage.selectValue('PRAGMA user_version')).toBe(version);
+  expect(sqlite.capi.sqlite3_js_db_export(storage)).toEqual(bytes);
+  expect(()=>copy.commit({clears:[],deletes:[],puts:[]})).toThrow(`sqlite_schema_legacy:${version}`);
+  expect(sqlite.capi.sqlite3_js_db_export(storage)).toEqual(bytes);
  }finally{copy.close(false);}
 });

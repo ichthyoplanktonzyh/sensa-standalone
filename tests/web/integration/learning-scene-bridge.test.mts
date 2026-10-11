@@ -118,13 +118,27 @@ assert.equal(retired.status,'deleted');
 const third={...second,operationId:id(),existingPersonalMeaningId:accepted.personalMeaningId,scene:{...second.scene,revisionId:id(),revision:3,body:'学习页里另一次明确保存的蓝盘子经历。'}};
 const reintroduced=await gateway.acceptPublishedLearningScene(third);
 assert.equal(reintroduced.personalMeaningId,accepted.personalMeaningId);
-assert.notEqual(reintroduced.personalSemanticAnchorId,accepted.personalSemanticAnchorId,'a retired Context anchor must not be revived in place');
+assert.notEqual(reintroduced.personalSemanticAnchorId,accepted.personalSemanticAnchorId,'reintroduction preserves the retired association and creates a new Context');
 state=await read();record=state.meanings[0];
-assert.deepEqual(record.personalSemanticAnchors.find((anchor:any)=>anchor.personalSemanticAnchorId===accepted.personalSemanticAnchorId),retired);
-assert.deepEqual(gateway.getDetail(accepted.personalMeaningId)!.materialBlocks.filter(block=>block.kind==='text').map(block=>block.bodyText),[authoredContext,third.scene.body],'explicit reacceptance preserves the independently authored current Context and adds the reviewed scene');
+assert.equal(record.personalSemanticAnchors.find((anchor:any)=>anchor.personalSemanticAnchorId===accepted.personalSemanticAnchorId).status,'deleted');
+assert.equal(state.contexts.anchors.find((anchor:any)=>anchor.personalSemanticAnchorId===accepted.personalSemanticAnchorId).status,'active','detaching one Meaning never deletes the independently saved Context');
+assert.deepEqual(gateway.getDetail(accepted.personalMeaningId)!.materialBlocks.filter(block=>block.kind==='text').map(block=>block.bodyText),[authoredContext,third.scene.body],'reassociation retains the original Context order and the independently authored material');
 const fourth=await gateway.acceptPublishedLearningScene({...third,operationId:id(),scene:{...third.scene,revisionId:id(),revision:4,body:'这次更新同一条新场景锚点。'}});
 assert.equal(fourth.personalSemanticAnchorId,reintroduced.personalSemanticAnchorId);
 assert.deepEqual(gateway.getDetail(accepted.personalMeaningId)!.materialBlocks.filter(block=>block.kind==='text').map(block=>block.bodyText),[authoredContext,'这次更新同一条新场景锚点。']);
+
+// Scene-managed Context lifecycle advances the canonical lineage independently
+// of the Meaning's old pin. A later acceptance extends that exact restored head.
+const contextBeforeLifecycle=(await read()).contexts.anchors.find((row:any)=>row.personalSemanticAnchorId===fourth.personalSemanticAnchorId);
+const deletedContext=await gateway.changeContextLifecycle({operationId:id(),contextId:fourth.personalSemanticAnchorId,expectedRevisionId:contextBeforeLifecycle.currentRevisionId,action:'delete'});
+await assert.rejects(gateway.acceptPublishedLearningScene({...third,operationId:id(),scene:{...third.scene,revisionId:id(),revision:5,body:'回收站中的情境不能被接受。'}}),/meaningChanged/);
+const restoredContext=await gateway.changeContextLifecycle({operationId:id(),contextId:fourth.personalSemanticAnchorId,expectedRevisionId:deletedContext.revisionId,action:'restore'});
+const afterRestore=await gateway.acceptPublishedLearningScene({...third,operationId:id(),scene:{...third.scene,revisionId:id(),revision:5,body:'恢复后接受的新经历。'}});
+state=await read();
+const canonical=(state.contexts.anchorRevisions as any[]).find(row=>row.personalSemanticAnchorRevisionId===afterRestore.personalSemanticAnchorRevisionId);
+assert.equal(canonical.revision,contextBeforeLifecycle.currentRevision+3);
+assert.equal(state.contexts.anchorRevisionParents[canonical.personalSemanticAnchorRevisionId],restoredContext.revisionId);
+assertPersonalSemanticWorldState(state);
 
 const foreignRepository=new MemoryJourneyRepository(),foreignGateway=createJourneyGateway({repository:foreignRepository});
 await foreignGateway.acceptPublishedLearningScene({...first,operationId:id(),scene:{...first.scene,sceneId:id(),revisionId:id()}});

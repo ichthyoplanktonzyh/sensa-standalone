@@ -9,13 +9,15 @@ import {journeyIdentityTables,journeyReservedIdentities,type JourneyIdentityTabl
 import {isUuid} from '../../experience/personalMeaningJourney/ids';
 
 const schema=`
-CREATE TABLE IF NOT EXISTS sensa_journey_identity_records(id INTEGER PRIMARY KEY,table_name TEXT NOT NULL,record_key TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS sensa_journey_identity_records(id INTEGER PRIMARY KEY,table_name INTEGER NOT NULL,record_key TEXT NOT NULL);
 CREATE UNIQUE INDEX IF NOT EXISTS sensa_journey_identity_record_key ON sensa_journey_identity_records(table_name,record_key);
 CREATE TABLE IF NOT EXISTS sensa_journey_identities(record_id INTEGER NOT NULL,identity_id BLOB NOT NULL CHECK(typeof(identity_id)='blob' AND length(identity_id)=16),PRIMARY KEY(record_id,identity_id)) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS sensa_journey_identity_lookup ON sensa_journey_identities(identity_id);
 CREATE TABLE IF NOT EXISTS sensa_journey_identity_meta(id INTEGER PRIMARY KEY CHECK(id=1),version INTEGER NOT NULL);
 `;
-const version=3;
+const version=5;
+const tableCode=(table:string)=>journeyIdentityTables.indexOf(table as JourneyIdentityTable);
+const tableNameSql=`CASE owner.table_name ${journeyIdentityTables.map((table,index)=>`WHEN ${index} THEN '${table}'`).join(' ')} END`;
 const uuidBytes=(id:string)=>{const hex=id.replaceAll('-','');return Uint8Array.from({length:16},(_,index)=>Number.parseInt(hex.slice(index*2,index*2+2),16));};
 const uuidString=(bytes:Uint8Array)=>{const hex=Array.from(bytes,byte=>byte.toString(16).padStart(2,'0')).join('');return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;};
 export class SqliteJourneyIdentityProjection{
@@ -52,10 +54,10 @@ export class SqliteJourneyIdentityProjection{
   this.sourceRows((table,row)=>{
    recordsChecked++;
    const expected=journeyReservedIdentities(table,decodeBackupValue(JSON.parse(unpackStoredRecord(row.value_json)))).sort();
-   const actual=this.rows('SELECT identity.identity_id FROM sensa_journey_identities AS identity JOIN sensa_journey_identity_records AS owner ON owner.id=identity.record_id WHERE owner.table_name=? AND owner.record_key=? ORDER BY identity.identity_id',[table,row.record_key]).map(row=>uuidString(row.identity_id));
+   const actual=this.rows('SELECT identity.identity_id FROM sensa_journey_identities AS identity JOIN sensa_journey_identity_records AS owner ON owner.id=identity.record_id WHERE owner.table_name=? AND owner.record_key=? ORDER BY identity.identity_id',[tableCode(table),row.record_key]).map(row=>uuidString(row.identity_id));
    if(expected.length!==actual.length||expected.some((id,index)=>id!==actual[index]))stale=true;
   });
-  if(this.rows('SELECT 1 FROM sensa_journey_identity_records AS owner LEFT JOIN sensa_records AS source ON source.table_name=owner.table_name AND source.record_key=owner.record_key WHERE source.record_key IS NULL LIMIT 1').length
+  if(this.rows(`SELECT 1 FROM sensa_journey_identity_records AS owner LEFT JOIN sensa_records AS source ON source.table_name=${tableNameSql} AND source.record_key=owner.record_key WHERE source.record_key IS NULL LIMIT 1`).length
    ||this.rows('SELECT 1 FROM sensa_journey_identities AS identity LEFT JOIN sensa_journey_identity_records AS owner ON owner.id=identity.record_id WHERE owner.id IS NULL LIMIT 1').length)stale=true;
   if(stale){
    this.invalid=true;
@@ -79,7 +81,7 @@ export class SqliteJourneyIdentityProjection{
   return {status:stale?'rebuilt':'ok',checkedAt:new Date().toISOString(),durationMs:Math.round(performance.now()-started),recordsChecked};
  }
  private replace(table:JourneyIdentityTable,key:string,encoded:string){
-  const recordId=this.rows('INSERT INTO sensa_journey_identity_records(table_name,record_key) VALUES(?,?) ON CONFLICT(table_name,record_key) DO UPDATE SET record_key=excluded.record_key RETURNING id',[table,key])[0]!.id;
+  const recordId=this.rows('INSERT INTO sensa_journey_identity_records(table_name,record_key) VALUES(?,?) ON CONFLICT(table_name,record_key) DO UPDATE SET record_key=excluded.record_key RETURNING id',[tableCode(table),key])[0]!.id;
   this.rows('DELETE FROM sensa_journey_identities WHERE record_id=?',[recordId]);
   const ids=journeyReservedIdentities(table,decodeBackupValue(JSON.parse(unpackStoredRecord(encoded))));
   if(ids.length)this.rows('INSERT INTO sensa_journey_identities SELECT ?,unhex(value) FROM json_each(?)',[recordId,JSON.stringify(ids.map(id=>id.replaceAll('-','')))]);
@@ -88,8 +90,8 @@ export class SqliteJourneyIdentityProjection{
   const relevant=(table:string)=>journeyIdentityTables.includes(table as JourneyIdentityTable);
   if(!mutation.clears.some(relevant)&&!mutation.deletes.some(row=>relevant(row.table))&&!mutation.puts.some(row=>relevant(row.table)))return;
   if(this.invalid)throw new Error('journey_identity_cache_invalid');
-  for(const table of mutation.clears)if(relevant(table)){this.rows('DELETE FROM sensa_journey_identities WHERE record_id IN (SELECT id FROM sensa_journey_identity_records WHERE table_name=?)',[table]);this.rows('DELETE FROM sensa_journey_identity_records WHERE table_name=?',[table]);}
-  for(const row of mutation.deletes)if(relevant(row.table)){this.rows('DELETE FROM sensa_journey_identities WHERE record_id IN (SELECT id FROM sensa_journey_identity_records WHERE table_name=? AND record_key=?)',[row.table,row.key]);this.rows('DELETE FROM sensa_journey_identity_records WHERE table_name=? AND record_key=?',[row.table,row.key]);}
+  for(const table of mutation.clears)if(relevant(table)){this.rows('DELETE FROM sensa_journey_identities WHERE record_id IN (SELECT id FROM sensa_journey_identity_records WHERE table_name=?)',[tableCode(table)]);this.rows('DELETE FROM sensa_journey_identity_records WHERE table_name=?',[tableCode(table)]);}
+  for(const row of mutation.deletes)if(relevant(row.table)){this.rows('DELETE FROM sensa_journey_identities WHERE record_id IN (SELECT id FROM sensa_journey_identity_records WHERE table_name=? AND record_key=?)',[tableCode(row.table),row.key]);this.rows('DELETE FROM sensa_journey_identity_records WHERE table_name=? AND record_key=?',[tableCode(row.table),row.key]);}
   for(const row of mutation.puts)if(journeyIdentityTables.includes(row.table as JourneyIdentityTable))this.replace(row.table as JourneyIdentityTable,row.key,row.encodedValue);
  }
  existing(raw:readonly string[]):string[]{

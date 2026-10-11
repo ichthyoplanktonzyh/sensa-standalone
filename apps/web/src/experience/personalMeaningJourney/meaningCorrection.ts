@@ -14,7 +14,7 @@ export function meaningCorrectionContext(record:MeaningJourneyRecord,revisionIds
  const revisions=currentMeaningContextRevisions(record),ids=revisions.map(row=>row.personalSemanticAnchorRevisionId);
  if(record.personalMeaning.status!=='active'||!ids.length||digestOf(ids)!==digestOf(revisionIds))throw Error('localFlow.meaningChanged');
  const text=revisions.flatMap(row=>row.bodyText?[row.bodyText]:[]).join('\n\n')||null;
- const mediaReferenceIds=[...new Set(revisions.flatMap(row=>[...(row.personalMediaObjectId?[row.personalMediaObjectId]:[]),...(Array.isArray(row.structuredPayload.media)?row.structuredPayload.media.map((item:any)=>item.mediaId):[])]))];
+ const mediaReferenceIds=[...new Set(revisions.flatMap(row=>[...(row.personalMediaObjectId?[row.personalMediaObjectId]:[]),...(Array.isArray(row.structuredPayload.media)?row.structuredPayload.media.map((item:any)=>item.mediaId):[]),...(Array.isArray(row.structuredPayload.mediaReferenceIds)?row.structuredPayload.mediaReferenceIds:[])]))];
  const languageTags=[...new Set(revisions.map(row=>row.languageTag))],sources=revisions.map(row=>row.structuredPayload.source??null);
  return sensaIntakeContextSchema.parse({modality:text?mediaReferenceIds.length?'mixed':'text':revisions.every(row=>row.anchorKind==='audio')?'audio':'image',textSegment:text,mediaReferenceIds,languageTag:languageTags.length===1?languageTags[0]:null,languageObservation:revisions.length===1?revisions[0]!.structuredPayload.languageObservation??null:null,source:sources.every(source=>digestOf(source)===digestOf(sources[0]))?sources[0]:null});
 }
@@ -29,18 +29,22 @@ export function meaningCorrectionPayload(record:MeaningJourneyRecord,registry:Re
  const confirmation=meaningCorrectionBinding(record,alignment);
  const expressionVersion=confirmation&&readRegistry(registry,'expressionVersions',confirmation.expressionVersionId),expression=expressionVersion&&readRegistry(registry,'expressions',expressionVersion.expressionId);
  const sense=readRegistry(registry,'senses',alignment.senseId),senseVersion=readRegistry(registry,'senseVersions',alignment.senseVersionId);
- if(!contextIds.length||!expression||!expressionVersion||!sense||!senseVersion)throw Error('localFlow.meaningChanged');
+ if(!contextIds.length||!sense||!senseVersion)throw Error('localFlow.meaningChanged');
  return sensaIntakePayloadSchema.parse({contractVersion:'sensa-intake-v3',operationId:record.alignmentEvents.find(row=>row.personalMeaningAlignmentId===alignmentId&&row.ordinal===1)!.operationId,capturedAt:record.personalMeaning.updatedAt,
   context:meaningCorrectionContext(record,contextIds),
-  expression:{surfaceForm:expressionVersion.surfaceForm,languageTag:expression.languageTag,expressionTypeHint:expression.expressionType,occurrence:{surfaceForm:expressionVersion.surfaceForm,locator:{kind:'personal_meaning',personalMeaningId:record.personalMeaning.personalMeaningId,personalSemanticAnchorRevisionIds:contextIds}}},
+  expression:expression&&expressionVersion?{surfaceForm:expressionVersion.surfaceForm,languageTag:expression.languageTag,expressionTypeHint:expression.expressionType,occurrence:{surfaceForm:expressionVersion.surfaceForm,locator:{kind:'personal_meaning',personalMeaningId:record.personalMeaning.personalMeaningId,personalSemanticAnchorRevisionIds:contextIds}}}:null,
   sense:{senseKey:sense.senseKey,semanticSpec:senseVersion.semanticSpec,wordingSource:acceptance?record.personalMeaningRevisions.find(row=>row.personalMeaningRevisionId===alignment.personalMeaningRevisionId)?.provenance.kind??'imported':'imported',resolutionProvenance:{resolverKind:'learner',provider:'sensa-web-correction',model:null,policyVersion:null,sourceReferenceIds:[senseVersion.senseVersionId]}},acceptance:null,
  });
 }
 export function meaningCorrectionBinding(record:MeaningJourneyRecord,alignment:MeaningJourneyRecord['alignments'][number]){
+ return meaningCorrectionBindings(record,alignment)[0];
+}
+/** All exact confirmations are retained; conflict decisions require a unique pin. */
+export function meaningCorrectionBindings(record:MeaningJourneyRecord,alignment:MeaningJourneyRecord['alignments'][number]){
  const basis=alignment.basis;
  const acceptance=basis.kind==='contextual_resolution'?record.semanticAcceptances.find(row=>row.semanticAcceptanceId===basis.semanticAcceptanceId):null;
  const proposal=basis.kind==='sense_construction'?record.senseConfirmations.find(row=>row.senseProposalConfirmationId===basis.senseProposalConfirmationId):null;
- return record.bindingConfirmations.find(row=>row.senseVersionId===alignment.senseVersionId&&(basis.kind==='contextual_resolution'?row.senseProposalVersionId===null&&row.personalExpressionAnchorRevisionId===acceptance?.personalExpressionAnchorRevisionId:row.senseProposalVersionId===proposal?.senseProposalVersionId));
+ return record.bindingConfirmations.filter(row=>row.senseVersionId===alignment.senseVersionId&&(basis.kind==='contextual_resolution'?row.senseProposalVersionId===null&&row.personalExpressionAnchorRevisionId===acceptance?.personalExpressionAnchorRevisionId:row.senseProposalVersionId===proposal?.senseProposalVersionId));
 }
 
 /** Structural source validation is also used by the read-only World index. */

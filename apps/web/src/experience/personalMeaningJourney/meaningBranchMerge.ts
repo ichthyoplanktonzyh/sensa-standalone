@@ -15,7 +15,7 @@ function threeWay(base:unknown,local:unknown,remote:unknown):ValueResult{
  return failed;
 }
 const tombstoneFields=new Set(['status','lifecycleRevision','updatedAt','deletedAt','deletedByOperationId']);
-const mutableSnapshotFields=new Set([...tombstoneFields,'currentRevision','acceptedRevision']);
+const mutableSnapshotFields=new Set([...tombstoneFields,'currentRevision','selectedRevisionId','acceptedRevision']);
 function withoutFields(value:JsonRecord,fields:ReadonlySet<string>){return Object.fromEntries(Object.entries(value).filter(([key])=>!fields.has(key)));}
 function withoutTombstone(value:JsonRecord){return withoutFields(value,tombstoneFields);}
 function compareTombstones(left:JsonRecord,right:JsonRecord){
@@ -50,7 +50,7 @@ type ArraySpec={name:string;id:string;mutable?:boolean;lifecycle?:boolean;slot?:
 const arraySpecs:ArraySpec[]=[
  {name:'personalMeaningRevisions',id:'personalMeaningRevisionId',slot:value=>`${value.personalMeaningId}:${value.revision}`},
  {name:'personalSemanticAnchors',id:'personalSemanticAnchorId',mutable:true,lifecycle:true},
- {name:'personalSemanticAnchorRevisions',id:'personalSemanticAnchorRevisionId',slot:value=>`${value.personalSemanticAnchorId}:${value.revision}`},
+ {name:'personalSemanticAnchorRevisions',id:'personalSemanticAnchorRevisionId'},
  {name:'personalExpressionAnchors',id:'personalExpressionAnchorId',mutable:true,lifecycle:true},
  {name:'personalExpressionAnchorRevisions',id:'personalExpressionAnchorRevisionId',slot:value=>`${value.personalExpressionAnchorId}:${value.revision}`},
  {name:'focuses',id:'meaningFocusId',mutable:true,lifecycle:true},
@@ -121,7 +121,7 @@ export function mergeMeaningBranch(base:unknown,local:unknown,remote:unknown):Va
  const prior=record(base),ours=record(local),theirs=record(remote);if(!prior||!ours||!theirs)return failed;
  if(!validMeaningLifecycleDescendant(prior as MeaningLifecycleRecord,ours as MeaningLifecycleRecord)||!validMeaningLifecycleDescendant(prior as MeaningLifecycleRecord,theirs as MeaningLifecycleRecord))return failed;
  const personalMeaning=threeWay(prior.personalMeaning,ours.personalMeaning,theirs.personalMeaning);if(!personalMeaning.ok)return failed;
- const merged:JsonRecord={personalMeaning:structuredClone(personalMeaning.value)};
+ const merged:JsonRecord={personalMeaning:structuredClone(personalMeaning.value),...(prior.contextStorageVersion===1?{contextStorageVersion:1}:{})};
  for(const spec of arraySpecs){const result=mergeArray(spec,prior[spec.name],ours[spec.name],theirs[spec.name]);if(!result.ok)return failed;merged[spec.name]=result.value;}
  const mockState=mergeMockState(prior.mockState,ours.mockState,theirs.mockState);if(!mockState.ok)return failed;merged.mockState=mockState.value;
  try{assertMeaningLifecycle(merged as MeaningLifecycleRecord);}catch{return failed;}
@@ -131,6 +131,7 @@ export function mergeMeaningBranch(base:unknown,local:unknown,remote:unknown):Va
 
 export const meaningBranchExtends=(before:unknown,after:unknown)=>{const base=canonicalMeaningFacts(before as MeaningJourneyRecord);return mergeMeaningBranch(base,base,canonicalMeaningFacts(after as MeaningJourneyRecord)).ok;};
 export function* stableMeaningFacts(snapshot:MeaningJourneyRecord):Generator<{key:string;value:unknown}>{
+ snapshot=canonicalMeaningFacts(snapshot);
  for(const spec of arraySpecs){const rows=(snapshot as unknown as JsonRecord)[spec.name];if(!Array.isArray(rows))throw Error('meaning_conflict_history_invalid');
   for(const fact of rows){const id=fact?.[spec.id];if(typeof id!=='string')throw Error('meaning_conflict_history_invalid');yield {key:`${spec.name}:${id}`,value:spec.lifecycle?withoutFields(fact,mutableSnapshotFields):fact};}
  }

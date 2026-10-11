@@ -192,6 +192,7 @@ const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
     case 'existingRecordKeys':return current.database.existingRecordKeys(request.table,request.keys);
     case 'packageCacheProjection':return current.database.packageCacheProjection(request.query);
     case 'meaningLookup':return current.database.lookupMeanings(request.query);
+    case 'contextBrowse':return current.database.contextBrowse(request.query);
     case 'worldBrowse':return current.database.worldBrowse(request.query);
     case 'worldSceneMeaning':return current.database.worldSceneMeaning(request.sceneId);
     case 'registrySelection':return current.database.registrySelection(request.query);

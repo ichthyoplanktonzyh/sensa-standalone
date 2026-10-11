@@ -1,3 +1,5 @@
+import {learningScenePersonalMeaningId} from './personalSceneIdentity';
+import {hydrateMeaningContexts,meaningContextKeys} from '../../experience/personalMeaningJourney/contextRecords';
 /** Worker-owned, rebuildable PRIVATE World index; source facts remain authoritative. */
 import type {Database,PreparedStatement,SqlValue} from '@sqlite.org/sqlite-wasm';
 import {decodeBackupValue} from './backupCodec';
@@ -9,6 +11,8 @@ import {buildPersonalMeaningLearningSources} from '../../experience/personalMean
 import {indexRegistry} from '../../experience/personalMeaningJourney/registryRead';
 import {isUuid} from '../../experience/personalMeaningJourney/ids';
 import {meaningHistoryRecords} from '../../experience/personalMeaningJourney/meaningHistoryRead';
+import {contextBrowseFacts,validateContextQuery,type ContextBrowseQuery,type ContextBrowsePage} from '../../experience/personalMeaningJourney/contextRead';
+import type {ContextRecord} from '../../experience/personalMeaningJourney/contextRecords';
 
 const schema=`
 CREATE TABLE IF NOT EXISTS sensa_world_browse(
@@ -29,13 +33,18 @@ CREATE TABLE IF NOT EXISTS sensa_world_browse_dependencies(meaning_id TEXT NOT N
 CREATE INDEX IF NOT EXISTS sensa_world_browse_dependency_key ON sensa_world_browse_dependencies(registry_key,meaning_id);
 CREATE VIRTUAL TABLE IF NOT EXISTS sensa_world_browse_search USING fts5(text,tokenize='trigram');
 CREATE TABLE IF NOT EXISTS sensa_world_browse_meta(id INTEGER PRIMARY KEY CHECK(id=1),version INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS sensa_context_browse(id INTEGER PRIMARY KEY,context_id TEXT NOT NULL UNIQUE,revision_id TEXT NOT NULL,updated_at TEXT NOT NULL,summary_json TEXT NOT NULL CHECK(json_valid(summary_json)),search_text TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS sensa_context_browse_order ON sensa_context_browse(updated_at DESC,context_id);
+CREATE TABLE IF NOT EXISTS sensa_context_meanings(context_id TEXT NOT NULL,meaning_id TEXT NOT NULL,PRIMARY KEY(context_id,meaning_id)) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS sensa_context_meaning_owner ON sensa_context_meanings(meaning_id);
+CREATE VIRTUAL TABLE IF NOT EXISTS sensa_context_search USING fts5(text,tokenize='trigram');
 `;
-const version=17,tables=[...['search','dependencies','meta',''].map(name=>`sensa_world_browse${name?'_'+name:''}`),'sensa_world_learning_choices','sensa_world_scene_meanings'];
+const version=20,tables=[...['search','dependencies','meta',''].map(name=>`sensa_world_browse${name?'_'+name:''}`),'sensa_world_learning_choices','sensa_world_scene_meanings','sensa_context_browse','sensa_context_meanings','sensa_context_search'];
 type Row=Record<string,any>;
 export class SqliteWorldBrowseProjection{
  private statements=new Map<string,PreparedStatement>();
  private read:WorldRecordRead;
- constructor(private database:Database,private get:(table:'semanticRegistry'|'semanticMeanings',key:string)=>string|null){
+ constructor(private database:Database,private get:(table:'semanticRegistry'|'semanticMeanings'|'semanticContexts',key:string)=>string|null){
   this.read=(table,key)=>{const encoded=this.get(table,key);return encoded===null?undefined:decodeBackupValue(JSON.parse(encoded));};
  }
  private statement(sql:string,bind:unknown[]):PreparedStatement{
@@ -59,8 +68,11 @@ export class SqliteWorldBrowseProjection{
    this.write('DELETE FROM sensa_world_browse WHERE meaning_id=?',[id]);this.write('DELETE FROM sensa_world_browse_dependencies WHERE meaning_id=?',[id]);
    this.write('DELETE FROM sensa_world_learning_choices WHERE meaning_id=?',[id]);
    this.write('DELETE FROM sensa_world_scene_meanings WHERE meaning_id=?',[id]);
-   const record=this.read('semanticMeanings',id) as MeaningJourneyRecord|undefined;if(!record)continue;
-   const dependencies=new Set<string>();
+   this.write('DELETE FROM sensa_context_meanings WHERE meaning_id=?',[id]);
+   const raw=this.read('semanticMeanings',id);if(!raw)continue;
+   const record=hydrateMeaningContexts(raw,key=>this.read('semanticContexts',key));
+   if(record.personalMeaning.status==='active')for(const anchor of record.personalSemanticAnchors)if(anchor.status==='active')this.write('INSERT INTO sensa_context_meanings VALUES(?,?)',[anchor.personalSemanticAnchorId,id]);
+   const dependencies=new Set<string>(meaningContextKeys(raw as MeaningJourneyRecord).map(key=>`context:${key}`));
    let derived:{summary:WorldBrowseItem;text:string;visible:boolean;choices:WorldLearningChoice[]}|undefined;
    try{
     if(record.personalMeaning?.personalMeaningId!==id)throw new WorldSourceInvalidError('world_record_identity_invalid');
@@ -90,14 +102,30 @@ export class SqliteWorldBrowseProjection{
  rebuild(){
   for(const table of tables.filter(table=>!table.endsWith('_meta')))this.write(`DELETE FROM ${table}`);
   const ids=this.rows("SELECT record_key FROM sensa_records WHERE table_name='semanticMeanings' ORDER BY record_key").map(row=>row.record_key);this.replace(ids);
+  this.replaceContexts(this.rows("SELECT record_key FROM sensa_records WHERE table_name='semanticContexts' AND record_key>='anchors:' AND record_key<'anchors;'").map(row=>row.record_key.slice('anchors:'.length)));
   this.write('INSERT INTO sensa_world_browse_meta VALUES(1,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version',[version]);
  }
  update(mutation:SqliteMutation){
-  if(mutation.clears.some(table=>table==='semanticMeanings'||table==='semanticRegistry')){this.rebuild();return;}
+  if(mutation.clears.some(table=>table==='semanticMeanings'||table==='semanticRegistry'||table==='semanticContexts')){this.rebuild();return;}
   const affected=new Set([...mutation.puts,...mutation.deletes].filter(row=>row.table==='semanticMeanings').map(row=>row.key));
-  const keys=[...mutation.puts,...mutation.deletes].filter(row=>row.table==='semanticRegistry').map(row=>row.key);
+  const keys=[...mutation.puts,...mutation.deletes].filter(row=>row.table==='semanticRegistry'||row.table==='semanticContexts').map(row=>row.table==='semanticContexts'?`context:${row.key}`:row.key);
   if(keys.length)for(const row of this.rows('SELECT DISTINCT meaning_id FROM sensa_world_browse_dependencies WHERE registry_key IN (SELECT value FROM json_each(?))',[JSON.stringify(keys)]))affected.add(row.meaning_id);
   this.replace([...affected]);
+  const contexts=new Set<string>();for(const row of [...mutation.puts,...mutation.deletes])if(row.table==='semanticContexts'){if(row.key.startsWith('anchors:'))contexts.add(row.key.slice('anchors:'.length));else {const fact=this.read('semanticContexts',row.key) as ContextRecord|undefined;if(fact?.kind==='anchorRevisions')contexts.add(fact.value.personalSemanticAnchorId);}}
+  this.replaceContexts([...contexts]);
+ }
+ private replaceContexts(ids:readonly string[]){
+  for(const id of ids){const old=this.rows('SELECT id FROM sensa_context_browse WHERE context_id=?',[id])[0];if(old)this.write('DELETE FROM sensa_context_search WHERE rowid=?',[old.id]);this.write('DELETE FROM sensa_context_browse WHERE context_id=?',[id]);
+   const head=this.read('semanticContexts',`anchors:${id}`) as ContextRecord|undefined;if(!head)continue;if(head.kind!=='anchors')throw Error('semantic_context_invalid');
+   const revision=this.read('semanticContexts',`anchorRevisions:${head.value.currentRevisionId}`) as ContextRecord|undefined;if(revision?.kind!=='anchorRevisions')throw Error('semantic_context_invalid');
+   const {item,text}=contextBrowseFacts(head.value,revision.value);const inserted=this.rows('INSERT INTO sensa_context_browse(context_id,revision_id,updated_at,summary_json,search_text) VALUES(?,?,?,?,?) RETURNING id',[id,item.revisionId,item.updatedAt,JSON.stringify(item),text])[0]!;this.write('INSERT INTO sensa_context_search(rowid,text) VALUES(?,?)',[inserted.id,text]);
+  }
+ }
+ contexts(raw:ContextBrowseQuery):ContextBrowsePage{
+  const query=validateContextQuery(raw),bind:unknown[]=[],clauses:string[]=[];let join='';if(query.query){if(Array.from(query.query).length>=3){join='JOIN sensa_context_search ON sensa_context_search.rowid=ctx.id';clauses.push('sensa_context_search MATCH ?');bind.push(`"${query.query.replaceAll('"','""')}"`);}clauses.push('instr(ctx.search_text,?)>0');bind.push(query.query);}
+  if((query.status??'active')!=='all'){clauses.push("json_extract(ctx.summary_json,'$.status')=?");bind.push(query.status??'active');}if(query.contextId){clauses.push('ctx.context_id=?');bind.push(query.contextId);}
+  const where=clauses.length?`WHERE ${clauses.join(' AND ')}`:'',total=this.rows(`SELECT count(*) AS total FROM sensa_context_browse ctx ${join} ${where}`,bind)[0]!.total;
+  const items=this.rows(`SELECT ctx.summary_json,(SELECT count(*) FROM sensa_context_meanings WHERE context_id=ctx.context_id) AS meaning_count FROM sensa_context_browse ctx ${join} ${where} ORDER BY ctx.updated_at DESC,ctx.context_id LIMIT ? OFFSET ?`,[...bind,query.limit,query.offset]).map(row=>({...JSON.parse(row.summary_json),meaningCount:row.meaning_count}));return {items,total};
  }
  private selection(query:WorldBrowseQuery){
   if(this.rows('SELECT 1 FROM sensa_world_browse WHERE valid=0 LIMIT 1').length)throw new Error('world_source_invalid');
@@ -131,7 +159,7 @@ export class SqliteWorldBrowseProjection{
   if(this.rows('SELECT 1 FROM sensa_world_browse WHERE valid=0 LIMIT 1').length)throw new Error('world_source_invalid');
   // Include recycled owners: a missing local link must not manufacture a new
   // identity for a scene whose original Meaning has been explicitly deleted.
-  const owners=this.rows('SELECT meaning_id FROM sensa_world_scene_meanings WHERE scene_id=? LIMIT 2',[sceneId]);
+  const owners=this.rows('SELECT meaning_id FROM sensa_world_scene_meanings WHERE scene_id=? AND meaning_id=? LIMIT 2',[sceneId,learningScenePersonalMeaningId(sceneId)]);
   if(owners.length>1)throw new Error('scene_owner_ambiguous');
   return owners[0]?.meaning_id??null;
  }

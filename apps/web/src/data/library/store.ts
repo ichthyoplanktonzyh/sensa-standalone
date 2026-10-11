@@ -1,3 +1,4 @@
+import {contextMediaReferences} from '../../experience/personalMeaningJourney/contextRecords';
 /** Production local-library storage: SQLite WASM in an OPFS Worker. */
 import {canonicalConsumerJson} from '@sensa/contracts/sensa/canonical-json';
 import {meaningMediaReferences} from '../../experience/personalMeaningJourney/meaningHistoryRead';
@@ -177,6 +178,7 @@ export class LibraryTransaction {
     if(this.wrote)throw new Error('library_projection_requires_snapshot');
     return storageCall(()=>this.adapter.lookupMeanings(query));
   }
+  async contextBrowse(query:import('../../experience/personalMeaningJourney/contextRead').ContextBrowseQuery):Promise<import('../../experience/personalMeaningJourney/contextRead').ContextBrowsePage>{if(this.wrote)throw new Error('library_projection_requires_snapshot');return storageCall(()=>this.adapter.contextBrowse(query));}
   async worldBrowse(query:import('./sqliteProtocol').WorldBrowseQuery):Promise<import('./sqliteProtocol').WorldBrowsePage>{
     if(this.wrote)throw new Error('library_projection_requires_snapshot');
     return storageCall(()=>this.adapter.worldBrowse(query));
@@ -450,13 +452,11 @@ export class LibraryTransaction {
 
   async isMediaReferenced(inputMediaId: string): Promise<boolean> {
     const mediaId = recordKey(inputMediaId);
-    if (!this.hasPendingChanges('semanticMeanings') && !this.hasPendingChanges('semanticInbox')) {
+    if (!this.hasPendingChanges('semanticContexts') && !this.hasPendingChanges('semanticInbox')) {
       return storageCall(() => this.adapter.isMediaReferenced(mediaId));
     }
-    const meanings = await this.all<{
-      personalSemanticAnchorRevisions?: Array<{ personalMediaObjectId?: string | null }>;
-    }>('semanticMeanings');
-    if (meanings.some(meaning=>meaningMediaReferences(meaning).includes(mediaId))) return true;
+    const contexts=await this.all('semanticContexts');
+    if(contexts.some(row=>contextMediaReferences(row).includes(mediaId)))return true;
     const inbox = await this.all<{
       payload?: { context?: { mediaReferenceIds?: string[] } | null };
     }>('semanticInbox');

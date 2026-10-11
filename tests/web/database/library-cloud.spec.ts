@@ -18,6 +18,45 @@ test.setTimeout(300_000);
 const meaningFactIds:Record<string,string>={personalMeaningRevisions:'personalMeaningRevisionId',personalSemanticAnchors:'personalSemanticAnchorId',personalSemanticAnchorRevisions:'personalSemanticAnchorRevisionId',personalExpressionAnchors:'personalExpressionAnchorId',personalExpressionAnchorRevisions:'personalExpressionAnchorRevisionId',focuses:'meaningFocusId',focusRevisions:'meaningFocusRevisionId',focusAcceptances:'meaningFocusAcceptanceId',constructions:'senseConstructionId',constructionTurns:'constructionTurnId',proposals:'senseProposalId',proposalVersions:'senseProposalVersionId',senseConfirmations:'senseProposalConfirmationId',semanticAcceptances:'semanticAcceptanceId',alignments:'personalMeaningAlignmentId',alignmentEvents:'personalMeaningAlignmentEventId',bindingConfirmations:'expressionBindingConfirmationId'};
 const retainedMeaningFacts=(record:any)=>Object.fromEntries(Object.entries(record).map(([key,value])=>[key,Array.isArray(value)&&meaningFactIds[key]?[...value].sort((a,b)=>a[meaningFactIds[key]!].localeCompare(b[meaningFactIds[key]!])):value]));
 
+test('independent Context and two staged understandings preserve exact shared pins through Cloud and empty-client backup recovery',async({browser},testInfo)=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await fixture.createAccount('shared-context-stages'),a=await fixture.createClient(account),b=await fixture.createClient(account);
+  const created=await a.evaluate(async()=>{const c=(window as any).core,g=c.createJourneyModules().personalMeaningJourney,id=()=>crypto.randomUUID();
+   const context=await g.saveContext({operationId:id(),blocks:[{kind:'text',bodyText:'Maya borrowed my umbrella. I expect it back tomorrow.'}]});
+   const first=await g.createMeaningDraft({operationId:id(),contextReferences:[context],learnerIntentNote:'临时借用并归还。'}),second=await g.createMeaningDraft({operationId:id(),contextReferences:[context],learnerIntentNote:'礼貌提出请求。'});return {context,first,second};
+  });
+  const inspect=(page:import('@playwright/test').Page)=>page.evaluate(async()=>{const c=(window as any).core;return c.readLibrary(async(tx:any)=>Object.fromEntries(await Promise.all(['semanticContexts','semanticMeanings','semanticReceipts','learningTargets','learningRuns','learningEvents'].map(async table=>[table,(await tx.entries(table)).sort((a:any,b:any)=>a.key.localeCompare(b.key))]))));});
+  await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());assert.deepEqual(await inspect(b),await inspect(a));
+  const edited=await b.evaluate(async created=>{const c=(window as any).core,g=c.createJourneyModules().personalMeaningJourney,id=()=>crypto.randomUUID(),sense=(meaning:string)=>({senseKey:null,semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1',coreMeaningFocus:meaning,prototypeScenes:[],includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[]},wordingSource:'learner_authored',resolutionProvenance:{resolverKind:'learner',provider:'fixture',model:null,policyVersion:null,sourceReferenceIds:[]}});
+   const first=await c.worldReadRepository.draftConfirmation(created.first.personalMeaningId),firstOp=id();await g.confirmMeaningDraft({operationId:firstOp,personalMeaningId:created.first.personalMeaningId,source:first.source,payload:{contractVersion:'sensa-intake-v3',operationId:firstOp,capturedAt:new Date().toISOString(),context:first.context,sense:sense(first.meaning),expression:null,acceptance:{mode:'learner_direct'}}});
+   const detail=await c.worldReadRepository.detail(created.first.personalMeaningId);if(detail.sources.length)throw Error('Sense-only draft became learnable');
+   const senseOnly=detail.detail.directAlignments[0];
+   const seed=await c.worldReadRepository.correction(created.first.personalMeaningId,detail.detail.directAlignments[0].personalMeaningAlignmentId),operationId=id();await g.correctPersonalMeaning({operationId,personalMeaningId:created.first.personalMeaningId,personalMeaningAlignmentId:detail.detail.directAlignments[0].personalMeaningAlignmentId,source:seed.source,reuseSense:seed.reuseSense,payload:{...seed.payload,operationId,expression:{surfaceForm:'borrow',languageTag:'en',expressionTypeHint:'word',occurrence:{surfaceForm:'borrow',locator:{kind:'personal_meaning',personalMeaningId:created.first.personalMeaningId,personalSemanticAnchorRevisionIds:seed.contextRevisionIds}}},acceptance:{mode:'learner_direct'}}});
+   const withExpression=await c.worldReadRepository.detail(created.first.personalMeaningId);
+   const second=await c.worldReadRepository.draftConfirmation(created.second.personalMeaningId),op=id();await g.confirmMeaningDraft({operationId:op,personalMeaningId:created.second.personalMeaningId,source:second.source,payload:{contractVersion:'sensa-intake-v3',operationId:op,capturedAt:new Date().toISOString(),context:second.context,sense:sense(second.meaning),expression:{surfaceForm:'could I',languageTag:'en',expressionTypeHint:'phrase',occurrence:{surfaceForm:'could I',locator:{kind:'personal_meaning',personalMeaningId:created.second.personalMeaningId,personalSemanticAnchorRevisionIds:second.contextRevisionIds}}},acceptance:{mode:'learner_direct'}}});
+   const changed=await g.reviseSavedContext({operationId:id(),contextId:created.context.contextId,expectedRevisionId:created.context.revisionId,blocks:[{kind:'text',bodyText:'Maya returned my umbrella today.'}]});
+   const third=await g.createMeaningDraft({operationId:id(),contextReferences:[changed],learnerIntentNote:'归还之后的理解。'});
+   for(const item of [created.first,created.second]){const pinned=await c.worldReadRepository.detail(item.personalMeaningId);if(pinned.detail.materialBlocks[0].bodyText!=='Maya borrowed my umbrella. I expect it back tomorrow.')throw Error('Shared edit replaced accepted pin');}
+   return {changed,third,senseOnly:{senseId:senseOnly.senseId,alignmentId:senseOnly.personalMeaningAlignmentId},withExpression:{senseId:withExpression.detail.directAlignments[0].senseId,alignmentId:withExpression.detail.directAlignments[0].personalMeaningAlignmentId}};
+  },created);
+  assert.equal(edited.withExpression.senseId,edited.senseOnly.senseId,'adding Expression keeps the accepted stable Sense');assert.notEqual(edited.withExpression.alignmentId,edited.senseOnly.alignmentId,'the explicit later acceptance retains a new connection fact');
+  const pins=(page:import('@playwright/test').Page)=>page.evaluate(async ids=>{const c=(window as any).core;return c.readLibrary(async(tx:any)=>Promise.all(ids.map(async id=>{const record=await tx.get('semanticMeanings',id);return record.personalSemanticAnchors.filter((row:any)=>row.status==='active').map((row:any)=>({contextId:row.personalSemanticAnchorId,revisionId:row.selectedRevisionId}));})));},[created.first.personalMeaningId,created.second.personalMeaningId,edited.third.personalMeaningId]);
+  assert.deepEqual(await pins(b),[[{contextId:created.context.contextId,revisionId:created.context.revisionId}],[{contextId:created.context.contextId,revisionId:created.context.revisionId}],[{contextId:edited.changed.contextId,revisionId:edited.changed.revisionId}]],'two old pins share one Context; new draft selects its revised head');
+  const deleted=await b.evaluate(async changed=>(window as any).core.createJourneyModules().personalMeaningJourney.changeContextLifecycle({operationId:crypto.randomUUID(),contextId:changed.contextId,expectedRevisionId:changed.revisionId,action:'delete'}),edited.changed);
+  await b.evaluate(()=>(window as any).sync());await a.evaluate(()=>(window as any).sync());
+  const tombstone=await a.evaluate(async id=>(await (window as any).core.worldReadRepository.contextDetail(id)).detail,created.context.contextId);
+  assert.equal(tombstone.head.status,'deleted');assert.equal(tombstone.head.currentRevisionId,deleted.revisionId);assert.deepEqual(await pins(a),await pins(b));
+  await a.evaluate(async deleted=>(window as any).core.createJourneyModules().personalMeaningJourney.changeContextLifecycle({operationId:crypto.randomUUID(),contextId:deleted.contextId,expectedRevisionId:deleted.revisionId,action:'restore'}),deleted);
+  await a.evaluate(()=>(window as any).sync());
+  await b.evaluate(()=>(window as any).sync());await a.evaluate(()=>(window as any).sync());const settled=await inspect(b);assert.deepEqual(await inspect(a),settled);for(const table of ['learningTargets','learningRuns','learningEvents'])assert.deepEqual(settled[table],[]);
+  const domain=(page:import('@playwright/test').Page)=>page.evaluate(async input=>{const c=(window as any).core;return {context:(await c.worldReadRepository.contextDetail(input.contextId)).detail,meanings:await Promise.all(input.ids.map(async id=>(await c.worldReadRepository.detail(id)).detail.materialBlocks))};},{contextId:created.context.contextId,ids:[created.first.personalMeaningId,created.second.personalMeaningId,edited.third.personalMeaningId]});
+  const expectedDomain=await domain(b);assert.equal(expectedDomain.context.head.status,'active');assert.equal(expectedDomain.context.meaningCount,3);assert.equal(expectedDomain.context.blocks[0].bodyText,'Maya returned my umbrella today.');assert.equal(expectedDomain.meanings[2][0].bodyText,'Maya returned my umbrella today.');
+  const archive=await b.evaluate(async()=>[...(await (window as any).core.exportLibraryBackup('shared-context-stage-fixture')).file]),fresh=await fixture.createClient(account);
+  try{assert.equal(await fresh.evaluate(()=>(window as any).core.isLibraryBackupDestinationEmpty()),true);await fresh.evaluate(bytes=>(window as any).core.restoreLibraryBackup(new Uint8Array(bytes),'shared-context-stage-fixture'),archive);assert.deepEqual(await inspect(fresh),settled);await fresh.reload();await fresh.evaluate(async()=>{const path='/core.js';(window as any).core=await import(/* @vite-ignore */ path);await (window as any).core.openLibrary();});assert.deepEqual(await inspect(fresh),settled);assert.deepEqual(await pins(fresh),await pins(b));assert.deepEqual(await domain(fresh),expectedDomain);await testInfo.attach('shared-context-cloud-evidence',{contentType:'application/json',body:JSON.stringify({created,edited,tombstone,restored:expectedDomain,pins:await pins(fresh),paidCalls:0,boundary:'gateway/domain + real Chromium/OPFS + disposable Hono/Postgres; not rendered UI or physical machines'})});}finally{await fresh.context().close();}
+ }finally{await fixture.close();}
+});
+
 test('clearing a device through the UI survives reload until explicit Cloud restoration',async({browser},testInfo)=>{
  const fixture=await createLibraryCloudBrowserFixture(browser);
  try{
@@ -223,9 +262,9 @@ test('personal scenes and original action pins restore while offline first accep
    const expected=c.personalLearningSceneEditBase(prior);
    const {scene}=await c.personalContentSystem.execute({...seed.input,operationId:crypto.randomUUID(),body,media:old.media,expected});
    const revision=scene.revisions.find((r:any)=>r.revision===scene.currentRevision),operationId=crypto.randomUUID();
-   const accepted=await c.createJourneyModules().personalMeaningJourney.acceptPublishedLearningScene({...seed.acceptance,operationId,existingPersonalMeaningId:scene.acceptedPersonalMeaningId,scene:{...revision,sceneId:scene.sceneId}});
+   const accepted=await c.createJourneyModules().personalMeaningJourney.acceptPublishedLearningScene({...seed.acceptance,operationId,existingPersonalMeaningId:scene.acceptedPersonalMeaningId,scene:{...revision,sceneId:scene.sceneId,contextCreatedAt:scene.createdAt}});
    await c.personalContentSystem.execute({kind:'mark_learning_scene_accepted',operationId:crypto.randomUUID(),sceneId:scene.sceneId,revisionId:revision.revisionId,personalMeaningId:accepted.personalMeaningId});
-   return {accepted,request:{...seed.acceptance,operationId,existingPersonalMeaningId:scene.acceptedPersonalMeaningId,scene:{...revision,sceneId:scene.sceneId}}};
+   return {accepted,request:{...seed.acceptance,operationId,existingPersonalMeaningId:scene.acceptedPersonalMeaningId,scene:{...revision,sceneId:scene.sceneId,contextCreatedAt:scene.createdAt}}};
   },{seed,body,query});
   const branchA=await editAndAccept(a,'设备 A 明确接受的借伞经历。'),branchB=await editAndAccept(b,'设备 B 离线独立接受的借伞经历。'),acceptedA=branchA.accepted,acceptedB=branchB.accepted;assert.equal(acceptedA.personalMeaningId,acceptedB.personalMeaningId,'the same Scene has one owner identity even before devices meet');
   const beforeB=await inspect(b);await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());
@@ -246,7 +285,7 @@ test('personal scenes and original action pins restore while offline first accep
   // Confirming the selected Scene must neither duplicate nor rewrite its facts.
   const confirmed=await b.evaluate(async({request,scene})=>{
    const revision=scene.revisions.find((r:any)=>r.revision===scene.currentRevision);
-   return (window as any).core.createJourneyModules().personalMeaningJourney.acceptPublishedLearningScene({...request,operationId:crypto.randomUUID(),existingPersonalMeaningId:scene.acceptedPersonalMeaningId,scene:{...revision,sceneId:scene.sceneId}});
+   return (window as any).core.createJourneyModules().personalMeaningJourney.acceptPublishedLearningScene({...request,operationId:crypto.randomUUID(),existingPersonalMeaningId:scene.acceptedPersonalMeaningId,scene:{...revision,sceneId:scene.sceneId,contextCreatedAt:scene.createdAt}});
   },{request:branchA.request,scene:settled.scene});
   assert.equal(confirmed.personalMeaningId,acceptedA.personalMeaningId);assert.equal(confirmed.personalSemanticAnchorRevisionId,acceptedA.personalSemanticAnchorRevisionId);assert.equal(confirmed.acceptedByOperationId,branchA.request.operationId);
   assert.deepEqual((await inspect(b)).meanings,settled.meanings);assert.deepEqual((await inspect(b)).learning,settled.learning);
@@ -259,7 +298,7 @@ test('personal scenes and original action pins restore while offline first accep
   await note(gA,'共同笔记基线');await gA.evaluate(()=>(window as any).sync());const gB=await fixture.createClient(ghostAccount);await gB.evaluate(()=>(window as any).sync());
   await note(gA,'远端笔记分叉');await note(gB,'明确选择保留的本机笔记分叉');
   const fixedRequest=await gA.evaluate(async seed=>{
-   const c=(window as any).core,revision=seed.scene.revisions[0],ids=c.learningSceneSemanticOperationIds(revision.revisionId),request={...seed.acceptance,operationId:ids.accept,existingPersonalMeaningId:null,scene:{...revision,sceneId:seed.scene.sceneId}};
+   const c=(window as any).core,revision=seed.scene.revisions[0],ids=c.learningSceneSemanticOperationIds(revision.revisionId),request={...seed.acceptance,operationId:ids.accept,existingPersonalMeaningId:null,scene:{...revision,sceneId:seed.scene.sceneId,contextCreatedAt:seed.scene.createdAt}};
    const accepted=await c.createJourneyModules().personalMeaningJourney.acceptPublishedLearningScene(request);
    await c.personalContentSystem.execute({kind:'mark_learning_scene_accepted',operationId:ids.link,sceneId:seed.scene.sceneId,revisionId:revision.revisionId,personalMeaningId:accepted.personalMeaningId});return request;
   },gSeed);
@@ -279,7 +318,7 @@ test('personal scenes and original action pins restore while offline first accep
   await gB.evaluate(()=>(window as any).sync());await gA.evaluate(()=>(window as any).sync());
   await note(gA,'后续更新时的远端笔记分叉');await note(gB,'后续更新时保留的本机笔记分叉');
   const laterRequest=await gA.evaluate(async({seed,scene})=>{
-   const c=(window as any).core,revision=scene.revisions.find((r:any)=>r.revision===scene.currentRevision),ids=c.learningSceneSemanticOperationIds(revision.revisionId),request={...seed.acceptance,operationId:ids.accept,existingPersonalMeaningId:scene.acceptedPersonalMeaningId,scene:{...revision,sceneId:scene.sceneId}};
+   const c=(window as any).core,revision=scene.revisions.find((r:any)=>r.revision===scene.currentRevision),ids=c.learningSceneSemanticOperationIds(revision.revisionId),request={...seed.acceptance,operationId:ids.accept,existingPersonalMeaningId:scene.acceptedPersonalMeaningId,scene:{...revision,sceneId:scene.sceneId,contextCreatedAt:scene.createdAt}};
    const accepted=await c.createJourneyModules().personalMeaningJourney.acceptPublishedLearningScene(request);await c.personalContentSystem.execute({kind:'mark_learning_scene_accepted',operationId:ids.link,sceneId:scene.sceneId,revisionId:revision.revisionId,personalMeaningId:accepted.personalMeaningId});return request;
   },{seed:gSeed,scene:laterScene});
   await gA.evaluate(()=>(window as any).sync());await gB.evaluate(()=>(window as any).sync());assert.equal((await gB.evaluate(()=>(window as any).core.readCloudSync())).status,'conflict');
@@ -311,13 +350,13 @@ test('ordered Context paragraphs survive Cloud fact reordering, correction and l
   const before=await inspect(sender);assert.deepEqual(before.detailText,paragraphs);assert.equal(before.learningText,paragraphs.join('\n\n'));assert.equal(before.correctionText,paragraphs.join('\n\n'));
   const reviewed=await sender.evaluate(async({meaningId,alignmentId})=>(window as any).core.worldReadRepository.correction(meaningId,alignmentId),identity);
   await sender.evaluate(()=>(window as any).sync());await receiver.evaluate(()=>(window as any).sync());
-  const restored=await inspect(receiver);assert.notDeepEqual(restored.rawActiveIds,before.rawActiveIds,'fixture must exercise actual aggregate-array reordering, not a no-op transport');
+  const restored=await inspect(receiver);assert.deepEqual(restored.rawActiveIds,before.rawActiveIds,'one ordered Context retains its stable ID through transport');
   assert.deepEqual(restored.detailText,paragraphs);assert.equal(restored.learningText,paragraphs.join('\n\n'));assert.equal(restored.correctionText,paragraphs.join('\n\n'));
   // Another device adds only a note. Its canonical fact arrays return to the
   // original device without changing the reviewed Meaning or user Context.
   await receiver.evaluate(async({meaningId})=>{const c=(window as any).core,senseId=(await c.worldReadRepository.detail(meaningId)).sources[0].reference.senseId;await c.personalContentSystem.execute({kind:'set_sense_note',operationId:crypto.randomUUID(),senseId,body:'补充笔记，但没有修改已审阅的情境。',expected:{body:'',revision:0}});},{meaningId:identity.meaningId});
   await receiver.evaluate(()=>(window as any).sync());await sender.evaluate(()=>(window as any).sync());
-  assert.notDeepEqual((await inspect(sender)).rawActiveIds,before.rawActiveIds,'the reviewed device must actually receive reordered facts');
+  assert.deepEqual((await inspect(sender)).rawActiveIds,before.rawActiveIds,'a note update cannot change the independent Context association');
   const newAlignment=await sender.evaluate(async({identity,reviewed})=>{
    const c=(window as any).core,operationId=crypto.randomUUID();
    return c.createJourneyModules().personalMeaningJourney.correctPersonalMeaning({operationId,personalMeaningId:identity.meaningId,personalMeaningAlignmentId:identity.alignmentId,source:reviewed.source,reuseSense:reviewed.reuseSense,payload:{...reviewed.payload,operationId,capturedAt:new Date().toISOString(),acceptance:{mode:'learner_direct'}}});
@@ -328,7 +367,7 @@ test('ordered Context paragraphs survive Cloud fact reordering, correction and l
   await receiver.evaluate(async({meaningId,bodyText})=>{const c=(window as any).core;await c.createJourneyModules().personalMeaningJourney.addMaterialBlock({operationId:crypto.randomUUID(),personalMeaningId:meaningId,block:{kind:'text',bodyText}});},{meaningId:identity.meaningId,bodyText:third});
   await receiver.evaluate(()=>(window as any).sync());await sender.evaluate(()=>(window as any).sync());
   const fresh=await fixture.createClient(account);await fresh.evaluate(()=>(window as any).sync());
-  for(const page of [sender,receiver,fresh]){const value=await inspect(page);assert.deepEqual(value.detailText,[...paragraphs,third]);assert.equal(value.learningText,[...paragraphs,third].join('\n\n'));assert.equal(value.correctionText,[...paragraphs,third].join('\n\n'));assert.equal(value.label,paragraphs[0]!.length>24?paragraphs[0]!.slice(0,24)+'…':paragraphs[0]);}
+  for(const page of [sender,receiver,fresh]){const value=await inspect(page);assert.deepEqual(value.detailText,[...paragraphs,third]);assert.equal(value.learningText,[...paragraphs,third].join('\n\n'));assert.equal(value.correctionText,[...paragraphs,third].join('\n\n'));const text=[...paragraphs,third].join('\n\n');assert.equal(value.label,text.length>24?text.slice(0,24)+'…':text);}
   await fresh.reload();await fresh.evaluate(async()=>{const path='/core.js';(window as any).core=await import(/* @vite-ignore */ path);await (window as any).core.openLibrary();});assert.deepEqual((await inspect(fresh)).detailText,[...paragraphs,third]);
  }finally{await fixture.close();}
 });
@@ -910,7 +949,7 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  assert.equal(fixture.requests().filter(call=>call.path.endsWith('/commit')).length,0);
  assert.equal((await repackedReceiver.evaluate(()=>(window as any).core.readCloudSync())).checkpointVersion,7);
  await repackedReceiver.context().close();
- assert.equal(head.manifest.version,7);assert.equal(head.manifest.rows.some((row:any)=>row.table==='operations'),false,'new Checkpoints must not contain the device ledger');
+ assert.equal(head.manifest.version,8);assert.equal(head.manifest.rows.some((row:any)=>row.table==='operations'),false,'new Checkpoints must not contain the device ledger');
  assert.equal(head.manifest.rows.some((row:any)=>row.table==='packageCache'),false,'new Checkpoints must not contain public artifact cache bytes');
  assert.equal(head.manifest.rows.some((row:any)=>row.table==='packageInstallations'),true,'new Checkpoints must contain exact package installation facts');
  assert.equal(head.manifest.rows.some((row:any)=>row.table==='meta'&&row.key==='package-catalog'),false,'package catalog cache must not enter account checkpoints');

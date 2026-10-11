@@ -3,10 +3,13 @@ import type {ReplicaEntry,ReplicaMergeInput,ReplicaMergeSteps} from './domainRep
 import {assertMeaningLifecycle,assertMeaningLifecycleReceipts,assertMeaningLifecycleOperationReceipt,type MeaningLifecycleRecord} from '../../../experience/personalMeaningJourney/meaningLifecycle';
 import type {CommandReceipt} from '../../../experience/personalMeaningJourney/store';
 import type {MeaningJourneyRecord} from '../../../experience/personalMeaningJourney/store';
-import {assertMeaningCorrectionReceipts} from '../../../experience/personalMeaningJourney/meaningCorrection';
+import {assertMeaningCorrectionReceipts,meaningCorrectionBindings} from '../../../experience/personalMeaningJourney/meaningCorrection';
 import {mergeMeaningConflictHistory,assertMeaningConflictHistory} from '../../../experience/personalMeaningJourney/meaningConflictHistory';
 import {meaningHistoryRecords} from '../../../experience/personalMeaningJourney/meaningHistoryRead';
 import {registryVersionSlot} from '../../../experience/personalMeaningJourney/registryVersionSlot';
+import {isAlignmentActive} from '../../../experience/personalMeaningJourney/alignmentLifecycle';
+import {mergeContextHeads} from '../../../experience/personalMeaningJourney/contextConflictHistory';
+import type {ContextRecord} from '../../../experience/personalMeaningJourney/contextRecords';
 
 type JsonRecord=Record<string,any>;
 type ValueResult={ok:true;value:any}|{ok:false};
@@ -70,13 +73,45 @@ function mergeRegistry(base:unknown,local:unknown,remote:unknown,versions:Readon
  return {ok:true,value:{kind,ordinal:Math.min(...ordinals),value:structuredClone(value.value)}};
 }
 
+/** The retained Meaning decision witnesses the two exact wording versions.
+ * It can settle their Registry pointer too, but cannot cover a later peer edit. */
+function registryHeadDecision(kind:string,local:JsonRecord,remote:JsonRecord,meanings:readonly MeaningJourneyRecord[],versions:ReadonlyMap<string,JsonRecord>):JsonRecord|undefined{
+ const field=registryPointerFields[kind]?.[0];if(!field||kind==='expressions')return;
+ const entity=kind==='senses'?local.senseId:local.senseExpressionBindingId;
+ const refs=(meaning:MeaningJourneyRecord)=>{
+  const alignments=meaning.alignments.filter(alignment=>isAlignmentActive(meaning,alignment));
+  if(kind==='senses')return alignments.filter(row=>row.senseId===entity).map(row=>row.senseVersionId);
+  return alignments.flatMap(alignment=>{
+   return meaningCorrectionBindings(meaning,alignment).filter(confirmation=>versions.get(`bindingVersions:${confirmation.bindingVersionId}`)?.senseExpressionBindingId===entity).map(confirmation=>confirmation.bindingVersionId);
+  });
+ };
+ const choices=new Set<string>();
+ for(const meaning of meanings){
+  const history=meaning.conflictHistory;if(!history)continue;
+  const decision=history.decisions.find(row=>row.id===history.head),selected=history.branches.find(row=>row.digest===decision?.selected);if(!selected)continue;
+  const parents=decision!.parents.map(id=>history.branches.find(branch=>branch.digest===id)!).filter(Boolean);
+  if(parents.length!==2)continue;
+  const parentRefs=parents.map(branch=>refs(branch.record));
+  if(!((parentRefs[0]!.includes(local[field])&&parentRefs[1]!.includes(remote[field]))||(parentRefs[1]!.includes(local[field])&&parentRefs[0]!.includes(remote[field]))))continue;
+  const observed=new Set(parentRefs.flat());
+  if(!observed.has(local[field])||!observed.has(remote[field]))continue;
+  // The active branch must still select one of the exact observed pointers.
+  // Descendant edits are handled by ancestry above, not by an older decision.
+  const current=[...new Set(refs(meaning))],selectedRefs=[...new Set(refs(selected.record))];
+  if(current.length!==1||selectedRefs.length!==1||current[0]!==selectedRefs[0]||![local[field],remote[field]].includes(current[0]))continue;
+  choices.add(current[0]!);
+ }
+ if(choices.size!==1)return;
+ const chosen=[...choices][0];return chosen===local[field]?local:chosen===remote[field]?remote:undefined;
+}
+
 function mergedEntry(value:unknown,...candidates:Array<ReplicaEntry|undefined>):ReplicaEntry{
  for(const candidate of candidates)if(candidate&&equal(decodeBackupValue(candidate.value),value))return candidate;
  const source=candidates.find(Boolean)!;
  return {table:source.table,key:source.key,value:encodeBackupValue(value)};
 }
 
-const durableTables=new Set<ReplicaEntry['table']>(['semanticState','semanticMeanings','semanticRegistry','semanticReceipts','meanings','identities']);
+const durableTables=new Set<ReplicaEntry['table']>(['semanticState','semanticMeanings','semanticContexts','semanticRegistry','semanticReceipts','meanings','identities']);
 const registrySlot=(entry:ReplicaEntry)=>{
  const wrapper=record(decodeBackupValue(entry.value)),fact=record(wrapper?.value);if(!wrapper||!fact)return undefined;
  return registryVersionSlot(String(wrapper.kind),fact);
@@ -90,6 +125,7 @@ export function* mergePersonalSemanticWorldReplica(
  const result=yield* ordinary(input),entries=new Map(result.entries.map(entry=>[entryId(entry),entry])),conflicts=new Set(result.conflicts);
  const base=byId(input.base),local=byId(input.local),remote=byId(input.remote);
  const versions=new Map<string,JsonRecord>();for(const row of [...input.base,...input.local,...input.remote])if(row.table==='semanticRegistry'){const wrapper=record(decodeBackupValue(row.value)),fact=record(wrapper?.value);if(wrapper&&fact&&registryVersions.has(wrapper.kind))versions.set(row.key,fact);}
+ const contextVersions=new Map<string,{personalSemanticAnchorId:string;parentRevisionId:string|null}>();for(const row of [...input.base,...input.local,...input.remote])if(row.table==='semanticContexts'){const fact=decodeBackupValue(row.value) as ContextRecord;if(fact.kind==='anchorRevisions')contextVersions.set(fact.value.personalSemanticAnchorRevisionId,{personalSemanticAnchorId:fact.value.personalSemanticAnchorId,parentRevisionId:fact.parentRevisionId});}
  const admissionConflicts=new Set<string>();
  // Validate each branch against its own durable operation facts, before any
  // ordinary three-way choice can import a well-shaped but unwitnessed restore.
@@ -127,6 +163,12 @@ export function* mergePersonalSemanticWorldReplica(
   const prior=base.get(id),ours=local.get(id),theirs=remote.get(id),sample=ours??theirs??prior!;
   if(prior&&durableTables.has(sample.table)&&(!ours||!theirs)){conflicts.add(id);continue;}
   if(!prior||!ours||!theirs)continue;
+  if(sample.table==='semanticContexts'){
+   const before=decodeBackupValue(prior.value) as ContextRecord,left=decodeBackupValue(ours.value) as ContextRecord,right=decodeBackupValue(theirs.value) as ContextRecord;
+   const merged=before.kind==='anchors'&&left.kind==='anchors'&&right.kind==='anchors'?mergeContextHeads(before.value,left.value,right.value,contextVersions):equal(before,left)&&equal(before,right)?{ok:true as const,value:before}: {ok:false as const};
+   if(merged.ok){const value=before.kind==='anchors'?{kind:'anchors',value:merged.value}:merged.value;entries.set(id,mergedEntry(value,ours,theirs,prior));conflicts.delete(id);}else conflicts.add(id);
+   continue;
+  }
   if(sample.table!=='semanticMeanings'&&sample.table!=='semanticRegistry')continue;
   const merge=sample.table==='semanticMeanings'?mergeMeaningConflictHistory:mergeRegistry;
   const merged=merge===mergeRegistry?mergeRegistry(decodeBackupValue(prior.value),decodeBackupValue(ours.value),decodeBackupValue(theirs.value),versions):mergeMeaningConflictHistory(decodeBackupValue(prior.value),decodeBackupValue(ours.value),decodeBackupValue(theirs.value));
@@ -134,6 +176,21 @@ export function* mergePersonalSemanticWorldReplica(
   entries.set(id,mergedEntry(merged.value,ours,theirs,prior));
   // A successful content merge cannot erase failed branch admission above.
   if(!admissionConflicts.has(id))conflicts.delete(id);
+ }
+ // Ordinary Meaning decisions also settle the exact stable Registry pointers
+ // they observed. Immutable versions and all archived Meanings stay retained.
+ const decidedMeanings=[...entries.values()].filter(row=>row.table==='semanticMeanings'&&!conflicts.has(entryId(row))).map(row=>decodeBackupValue(row.value) as MeaningJourneyRecord);
+ for(const id of [...conflicts]){
+  const prior=base.get(id),ours=local.get(id),theirs=remote.get(id);if(!prior||!ours||!theirs||ours.table!=='semanticRegistry')continue;
+  const before=decodeBackupValue(prior.value),left=decodeBackupValue(ours.value),right=decodeBackupValue(theirs.value),kind=String(left.kind),fields=registryPointerFields[kind];
+  if(before.kind!==kind||right.kind!==kind||!fields||![left.value,right.value].every(fact=>equal(withoutNamedFields(before.value,fields),withoutNamedFields(fact,fields))&&Number.isSafeInteger(fact[fields[1]])&&fact[fields[1]]>=before.value[fields[1]]))continue;
+  const entity=kind==='senses'?left.value.senseId:left.value.senseExpressionBindingId;
+  const unresolved=[...conflicts].some(key=>[local.get(key),remote.get(key)].some(row=>{
+   if(row?.table!=='semanticMeanings')return false;const meaning=decodeBackupValue(row.value) as MeaningJourneyRecord;
+   return kind==='senses'?meaning.alignments.some(alignment=>alignment.senseId===entity):meaning.bindingConfirmations.some(confirmation=>versions.get(`bindingVersions:${confirmation.bindingVersionId}`)?.senseExpressionBindingId===entity);
+  }));if(unresolved)continue;
+  const selected=registryHeadDecision(kind,left.value,right.value,decidedMeanings,versions);if(!selected)continue;
+  entries.set(id,mergedEntry({...left,ordinal:Math.min(before.ordinal,left.ordinal,right.ordinal),value:selected},ours,theirs,prior));conflicts.delete(id);
  }
  const slots=new Map<string,string>();
  for(const entry of entries.values())if(entry.table==='semanticRegistry'){

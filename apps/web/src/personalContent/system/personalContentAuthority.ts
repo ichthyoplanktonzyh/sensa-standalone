@@ -1,3 +1,4 @@
+import {readMeaningContexts} from '../../experience/personalMeaningJourney/contextRecords';
 import {materialSourcePin,sameLearningSourcePin} from '../../learning/runtime/learningIdentity';
 import { z } from 'zod';
 
@@ -103,7 +104,7 @@ const assertRecord = async (
         ))
         .map((membership: any) => membership.id));
       for(const snapshot of sceneHistoryRecords(record))for(const revision of snapshot.revisions)if(!memberships.has(revision.curriculumMembershipId)||!sameLearningSourcePin(revision.sourcePin,materialSourcePin(target.curriculumMemberships.find((row:any)=>row.id===revision.curriculumMembershipId).material)))throw new Error('localFlow.annotationInvalid');
-      for(const snapshot of sceneHistoryRecords(record))if(snapshot.acceptedPersonalMeaningId)assertSceneAcceptance(snapshot,await tx.get('semanticMeanings',snapshot.acceptedPersonalMeaningId));
+      for(const snapshot of sceneHistoryRecords(record))if(snapshot.acceptedPersonalMeaningId)assertSceneAcceptance(snapshot,await readMeaningContexts(tx,snapshot.acceptedPersonalMeaningId));
       if (record.revisions.length !== record.currentRevision
         || new Set(record.revisions.map((revision) => revision.revisionId)).size
           !== record.revisions.length) throw new Error('localFlow.annotationInvalid');

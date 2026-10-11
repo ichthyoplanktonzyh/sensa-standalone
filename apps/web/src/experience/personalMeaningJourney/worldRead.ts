@@ -34,7 +34,7 @@ export function validateWorldLearningChoiceQuery(input:WorldLearningChoiceQuery)
  if(typeof input.targetLanguageTag!=='string'||!input.targetLanguageTag||input.targetLanguageTag.length>100)throw new Error('world_learning_query_invalid');
  return {...validateWorldQuery(input),targetLanguageTag:input.targetLanguageTag};
 }
-export type WorldRecordRead=(table:'semanticRegistry'|'semanticMeanings',key:string)=>unknown|undefined;
+export type WorldRecordRead=(table:'semanticRegistry'|'semanticMeanings'|'semanticContexts',key:string)=>unknown|undefined;
 export class WorldSourceInvalidError extends Error{
  constructor(message:string,options?:ErrorOptions){super(message,options);this.name='WorldSourceInvalidError';}
 }
@@ -99,7 +99,7 @@ export function worldSearchText(item:JourneyWorldItemView):string{
   ...branches.flatMap(branch=>[branch.label,...(branch.alignment?.confirmedBindings.map(binding=>binding.surfaceForm)??[])])].join(' '));
 }
 export function isWorldRecordVisible(record:MeaningJourneyRecord,registry:SenseRegistryState,includeDeleted=false):boolean{
- return (record.personalMeaning.status==='active'||includeDeleted&&record.personalMeaning.status==='deleted')&&confirmedLookupConnections(record,indexRegistry(registry),includeDeleted).length>0;
+ return (record.personalMeaning.status==='active'||includeDeleted&&record.personalMeaning.status==='deleted')&&(confirmedLookupConnections(record,indexRegistry(registry),includeDeleted).length>0||record.personalSemanticAnchors.some(row=>row.status==='active')||!!record.personalMeaningRevisions.at(-1)?.learnerIntentNote);
 }
 export function matchesWorldFilter(item:Pick<WorldBrowseItem,'senseFormation'|'expressionBinding'>,filter:WorldFilter):boolean{
  return filter==='all'||filter==='deleted'||filter==='pending'&&(item.senseFormation.phase!=='sense_confirmed'||item.expressionBinding.phase!=='bound')||filter==='continue'&&item.senseFormation.phase!=='sense_confirmed'

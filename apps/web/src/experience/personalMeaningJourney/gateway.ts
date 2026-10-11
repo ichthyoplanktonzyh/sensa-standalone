@@ -1,3 +1,7 @@
+import {contextMaterialBlocks} from './contextRead';
+import {storeMeaningContexts} from './contextRecords';
+import {saveContextFacts,reviseSavedContextFacts,contextBlocks} from './contextFacts';
+import type {UpdateMeaningDraftInput,ReviseSavedContextInput,ChangeContextLifecycleInput} from './types';
 /**
  * Deep gateway for the Personal Meaning → confirmed Sense journey.
  *
@@ -36,6 +40,7 @@ import {
   dismissInboxItem,
   evaluateIntakeRoute,
   executeFastTrack,
+  resolveIntakeSense,
   resolveInboxItemWithSense,
   type IntakeEnginePorts,
 } from './intakeEngine';
@@ -43,9 +48,9 @@ import { digestOf } from './digest';
 import {appendMaterialAnchor,createPersonalMeaningFacts} from './materialFacts';
 import {applyClarificationFacts} from './clarificationFacts';
 import {isAlignmentActive} from './alignmentLifecycle';
-import {meaningCorrectionContext,meaningCorrectionPayload,meaningCorrectionBinding,correctionReason} from './meaningCorrection';
+import {meaningCorrectionContext,meaningCorrectionPayload,meaningCorrectionBinding,correctionReason,currentMeaningContextRevisions} from './meaningCorrection';
 import {installPublishedLearningFacts,learningSceneAnchorRevision} from './publishedSceneFacts';
-import {learningScenePersonalMeaningId} from '../../data/library/personalSceneIdentity';
+import {learningScenePersonalMeaningId,learningSceneContextId} from '../../data/library/personalSceneIdentity';
 import {settleExpressionBinding} from './expressionBindingFacts';
 import {appendMeaningRevision,latestMeaningRevision} from './meaningRecords';
 import {assertClarificationSource,sourceWitnessFromState,sameClarificationSource,ClarificationSourceChangedError,type ClarificationSourceKind,type ClarificationSourceWitness} from './clarificationSource';
@@ -103,6 +108,7 @@ import type {
   ReviseContextResult,
   ChangeMeaningLifecycleInput,
   ChangeMeaningLifecycleResult,
+  SaveContextInput,SaveContextResult,CreateMeaningDraftInput,ConfirmMeaningDraftInput,ConfirmMeaningDraftResult,
 } from './types';
 
 const LEARNER_USER_ID = 'sensa-local-learner';
@@ -135,6 +141,12 @@ export interface PersonalMeaningJourneyGateway {
   /** Bounded, owner-local confirmed semantics; no Context, drafts or detail projection. */
   lookupMeanings(query: string): Promise<MeaningLookupResult>;
   getDetail(personalMeaningId: string): JourneyDetailView | null;
+  saveContext(input:SaveContextInput):Promise<SaveContextResult>;
+  reviseSavedContext(input:ReviseSavedContextInput):Promise<SaveContextResult>;
+  changeContextLifecycle(input:ChangeContextLifecycleInput):Promise<SaveContextResult>;
+  createMeaningDraft(input:CreateMeaningDraftInput):Promise<CreatePersonalMeaningResult>;
+  updateMeaningDraft(input:UpdateMeaningDraftInput):Promise<ReviseContextResult>;
+  confirmMeaningDraft(input:ConfirmMeaningDraftInput):Promise<ConfirmMeaningDraftResult>;
   getClarificationDraft(intakeId: string): ClarificationDraftView | null;
   /** Exact owner-local learner witness; no full gateway load in the Library adapter. */
   captureClarificationSource(kind:ClarificationSourceKind,id:string):Promise<ClarificationSourceWitness>;
@@ -216,6 +228,7 @@ const localSemanticAcceptanceAuthority: SemanticAcceptanceAuthorityPort = {
 const createJourneyDraft = (state: JourneyState): JourneyState => ({
   ...state,
   meanings: [...state.meanings],
+  contexts: {anchors:[...state.contexts.anchors],anchorRevisions:[...state.contexts.anchorRevisions],anchorRevisionParents:{...state.contexts.anchorRevisionParents}},
   registry: {
     senses: [...state.registry.senses],
     senseVersions: [...state.registry.senseVersions],
@@ -452,7 +465,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
     // Validate again under the write lock, including an otherwise untouched
     // draft hint. A valid check before an async operation is not a commit guard.
     const preconditions=this.transaction!.preconditions;
-    if(kind==='personal_meaning')preconditions.push({table:'semanticMeanings',key:id,expected:state.meanings.find(record=>record.personalMeaning.personalMeaningId===id)});
+    if(kind==='personal_meaning')preconditions.push({table:'semanticMeanings',key:id,expected:storeMeaningContexts(state.meanings.find(record=>record.personalMeaning.personalMeaningId===id)!)});
     else preconditions.push({table:'semanticInbox',key:id,expected:state.inboxItems.find(item=>item.intakeId===id)},
       {table:'semanticDrafts',key:id,expected:state.clarificationDrafts.find(draft=>draft.intakeId===id)});
   }
@@ -752,6 +765,78 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
 
   // -- material ------------------------------------------------------------
 
+  async saveContext(input:SaveContextInput):Promise<SaveContextResult>{
+    if(!this.loadStarted&&this.deps.repository.withContextCreation)return this.isolatedCommand(input.operationId,'SaveContext',digestOf(input),()=>this.deps.repository.withContextCreation!({operationId:input.operationId,contextReferences:[],reservedIds:input.blocks.flatMap(row=>row.personalMediaObjectId?[row.personalMediaObjectId]:[])},this.deps.ids,(repository,ids)=>new JourneyGatewayImpl({...this.deps,repository,ids}).saveContext(input)));
+    return this.exclusive(async()=>{const replay=await this.replay<SaveContextResult>(input.operationId,'SaveContext',digestOf(input));if(replay)return replay;const result=saveContextFacts(this.requireState(),this.enginePorts(),input);this.recordReceipt(input.operationId,'SaveContext',result,digestOf(input));await this.persist();return {...result,replayed:false};});
+  }
+
+  async createMeaningDraft(input:CreateMeaningDraftInput):Promise<CreatePersonalMeaningResult>{
+    if(!this.loadStarted&&this.deps.repository.withContextCreation)return this.isolatedCommand(input.operationId,'CreateMeaningDraft',digestOf(input),()=>this.deps.repository.withContextCreation!({operationId:input.operationId,contextReferences:input.contextReferences??[],reservedIds:(input.blocks??[]).flatMap(row=>row.personalMediaObjectId?[row.personalMediaObjectId]:[])},this.deps.ids,(repository,ids)=>new JourneyGatewayImpl({...this.deps,repository,ids}).createMeaningDraft(input)));
+    return this.exclusive(async()=>{
+      const replay=await this.replay<CreatePersonalMeaningResult>(input.operationId,'CreateMeaningDraft',digestOf(input));if(replay)return replay;
+      const references=[...(input.contextReferences??[])];
+      if(input.blocks?.length){const saved=saveContextFacts(this.requireState(),this.enginePorts(),{operationId:input.operationId,blocks:input.blocks});references.push({contextId:saved.contextId,revisionId:saved.revisionId});}
+      const result=await this.writePersonalMeaning({...input,blocks:[],contextReferences:references},{persist:false,receipt:false});
+      latestMeaningRevision(this.requireRecord(result.personalMeaningId))!.savedDraft=true;
+      const {replayed:_,...facts}=result;this.recordReceipt(input.operationId,'CreateMeaningDraft',facts,digestOf(input));await this.persist();return result;
+    });
+  }
+
+  async reviseSavedContext(input:ReviseSavedContextInput):Promise<SaveContextResult>{return this.writeSavedContext(input,'ReviseSavedContext');}
+  async changeContextLifecycle(input:ChangeContextLifecycleInput):Promise<SaveContextResult>{return this.writeSavedContext(input,'ChangeContextLifecycle');}
+  private async writeSavedContext(input:ReviseSavedContextInput|ChangeContextLifecycleInput,command:string):Promise<SaveContextResult>{
+    if(!this.loadStarted&&this.deps.repository.withContextCreation)return this.isolatedCommand(input.operationId,command,digestOf(input),()=>this.deps.repository.withContextCreation!({operationId:input.operationId,contextReferences:[{contextId:input.contextId,revisionId:input.expectedRevisionId}],reservedIds:'blocks'in input?input.blocks.flatMap(row=>row.personalMediaObjectId?[row.personalMediaObjectId]:[]):[]},this.deps.ids,(repository,ids)=>new JourneyGatewayImpl({...this.deps,repository,ids}).writeSavedContext(input,command)));
+    return this.exclusive(async()=>{
+      const replay=await this.replay<SaveContextResult>(input.operationId,command,digestOf(input));if(replay)return replay;
+      const {changed,...result}=reviseSavedContextFacts(this.requireState(),this.enginePorts(),input);
+      if(!changed)return {...result,replayed:false};
+      this.recordReceipt(input.operationId,command,{...result,...('action'in input?{status:input.action==='delete'?'deleted':'active'}:{})},digestOf(input));await this.persist();return {...result,replayed:false};
+    });
+  }
+
+  async updateMeaningDraft(input:UpdateMeaningDraftInput):Promise<ReviseContextResult>{
+    if(!this.loadStarted&&this.deps.repository.withMeaningCommand)return this.isolatedCommand(input.operationId,'UpdateMeaningDraft',digestOf(input),()=>this.deps.repository.withMeaningCommand!({personalMeaningId:input.personalMeaningId,operationId:input.operationId,identityCount:1},this.deps.ids,(repository,ids)=>new JourneyGatewayImpl({...this.deps,repository,ids}).updateMeaningDraft(input)));
+    return this.exclusive(async()=>{
+      const replay=await this.replay<ReviseContextResult>(input.operationId,'UpdateMeaningDraft',digestOf(input));if(replay)return replay;
+      const record=this.requireRecord(input.personalMeaningId),prior=latestMeaningRevision(record)!;
+      if(record.personalMeaning.currentRevision!==input.expectedRevision||record.alignments.some(row=>isAlignmentActive(record,row)))throw Error('localFlow.meaningChanged');
+      const note=input.learnerIntentNote?.trim()||null,expression=input.draftExpression??null;
+      if(note===(prior.learnerIntentNote??null)&&digestOf(expression)===digestOf(prior.draftExpression??null))return {personalMeaningRevisionId:prior.personalMeaningRevisionId,revision:prior.revision,replayed:false};
+      const id=appendMeaningRevision(this.enginePorts(),record,input.operationId,[]),next=latestMeaningRevision(record)!;next.learnerIntentNote=note;next.draftExpression=expression;next.savedDraft=true;next.displayLabel=note??prior.displayLabel;
+      const result={personalMeaningRevisionId:id,revision:next.revision};this.recordReceipt(input.operationId,'UpdateMeaningDraft',result,digestOf(input));await this.persist();return {...result,replayed:false};
+    });
+  }
+
+  async confirmMeaningDraft(input:ConfirmMeaningDraftInput):Promise<ConfirmMeaningDraftResult>{
+    const payload=sensaIntakePayloadSchema.parse(input.payload);
+    if(payload.operationId!==input.operationId||payload.acceptance?.mode!=='learner_direct'||!payload.context||!payload.sense||(payload.expression!==null&&evaluateIntakeRoute(payload).route!=='fast_track'))throw Error('localFlow.annotationInvalid');
+    if(!this.loadStarted&&this.deps.repository.withMeaningConfirmation)return this.isolatedCommand(input.operationId,'ConfirmMeaningDraft',digestOf(input),()=>this.deps.repository.withMeaningConfirmation!(input,this.deps.ids,(repository,ids)=>new JourneyGatewayImpl({...this.deps,repository,ids}).confirmMeaningDraft(input)));
+    return this.exclusive(async()=>{
+      const replay=await this.replay<ConfirmMeaningDraftResult>(input.operationId,'ConfirmMeaningDraft',digestOf(input));if(replay)return replay;
+      await this.requireClarificationSource(input.source,'personal_meaning',input.personalMeaningId);
+      const record=this.requireRecord(input.personalMeaningId),contextIds=currentMeaningContextRevisions(record).map(row=>row.personalSemanticAnchorRevisionId);
+      if(payload.expression===null){
+        if(record.alignments.some(row=>isAlignmentActive(record,row))||digestOf(payload.context)!==digestOf(meaningCorrectionContext(record,contextIds)))throw Error('localFlow.meaningChanged');
+        const now=this.now(),acceptanceId=this.id(),alignmentId=this.id();
+        const resolved=resolveIntakeSense(this.requireState(),payload.sense!,input.operationId,acceptanceId,this.enginePorts());
+        this.requireState().registry=resolved.registry;
+        const revisionId=appendMeaningRevision(this.enginePorts(),record,input.operationId,contextIds);
+        record.semanticAcceptances.push({contractVersion:'sensa-personal-semantic-world-v3',semanticAcceptanceId:acceptanceId,operationId:input.operationId,learnerUserId:record.personalMeaning.learnerUserId,authority:this.deps.semanticAcceptanceAuthority.verify(payload.acceptance!),personalSemanticAnchorRevisionId:contextIds[0]!,personalExpressionAnchorRevisionId:null,expressionOccurrence:null,resolution:resolved.resolution,senseId:resolved.senseId,senseVersionId:resolved.senseVersionId,resolutionProvenance:payload.sense!.resolutionProvenance,acceptedAt:now});
+        record.alignments.push({contractVersion:'sensa-personal-semantic-world-v3',personalMeaningAlignmentId:alignmentId,learnerUserId:record.personalMeaning.learnerUserId,personalMeaningId:input.personalMeaningId,personalMeaningRevisionId:revisionId,basis:{kind:'contextual_resolution',semanticAcceptanceId:acceptanceId},senseId:resolved.senseId,senseVersionId:resolved.senseVersionId,status:'active',revision:1,createdAt:now,updatedAt:now});
+        record.alignmentEvents.push({contractVersion:'sensa-personal-semantic-world-v3',personalMeaningAlignmentEventId:this.id(),personalMeaningAlignmentId:alignmentId,ordinal:1,eventType:'confirmed',operationId:input.operationId,reason:null,occurredAt:now});
+        const result={personalMeaningId:input.personalMeaningId,personalMeaningRevisionId:revisionId,personalMeaningAlignmentId:alignmentId,revision:record.personalMeaning.currentRevision};
+        this.recordReceipt(input.operationId,'ConfirmMeaningDraft',result,digestOf(input));await this.persist();return {...result,replayed:false};
+      }
+      const locator=payload.expression!.occurrence!.locator;
+      if(record.alignments.some(row=>isAlignmentActive(record,row))||locator.kind!=='personal_meaning'||locator.personalMeaningId!==input.personalMeaningId||digestOf(payload.context)!==digestOf(meaningCorrectionContext(record,locator.personalSemanticAnchorRevisionIds)))throw Error('localFlow.meaningChanged');
+      const outcome=executeFastTrack(this.requireState(),{payload,operationId:input.operationId,authority:this.deps.semanticAcceptanceAuthority.verify(payload.acceptance!),pinnedSense:payload.sense!.reuseSense,existingMeaning:{record,contextAnchorRevisionId:locator.personalSemanticAnchorRevisionIds[0]!}},this.enginePorts());
+      this.state=outcome.nextState;settleExpressionBinding(this.requireState(),this.enginePorts(),outcome.record,outcome.alignment,outcome.bindingCandidate,{operationId:input.operationId,...outcome.bindingInput},null);
+      const revision=outcome.record.personalMeaningRevisions.at(-1)!;
+      const result={personalMeaningId:input.personalMeaningId,personalMeaningRevisionId:revision.personalMeaningRevisionId,personalMeaningAlignmentId:outcome.alignment.personalMeaningAlignmentId,revision:revision.revision};
+      this.recordReceipt(input.operationId,'ConfirmMeaningDraft',result,digestOf(input));await this.persist();return {...result,replayed:false};
+    });
+  }
+
   /** Save unconfirmed material in the Inbox; this does not accept a Meaning. */
   async createClarificationDraft(
     input: CreatePersonalMeaningInput,
@@ -952,41 +1037,29 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
       if (record.personalMeaning.currentRevision !== input.expectedRevision) {
         throw new Error('localFlow.meaningChanged');
       }
-      if (input.blocks.length === 0) throw new Error('localFlow.messageRequired');
-      const imageCount = input.blocks.filter((block) => block.kind === 'image').length;
-      if (imageCount > 3) throw new Error('localFlow.sceneImageRequirements');
-
-      // Validate the full replacement before retiring any current anchor.
-      for (const block of input.blocks) {
-        if (block.kind === 'image') {
-          if (!block.personalMediaObjectId || !isUuid(block.personalMediaObjectId)) {
-            throw new Error('图片材料块必须引用本地媒体对象。');
-          }
-        } else if (!block.bodyText?.trim()) {
-          throw new Error('文字材料块不能为空。');
-        }
+      const blocks=contextBlocks(input.blocks),current=currentMeaningContextRevisions(record);
+      const prior=latestMeaningRevision(record)!;
+      if(digestOf(current.flatMap(contextMaterialBlocks))===digestOf(blocks))return {personalMeaningRevisionId:prior.personalMeaningRevisionId,revision:prior.revision,replayed:false};
+      const active=record.personalSemanticAnchors.filter(anchor=>anchor.status==='active'),first=active[0];
+      let anchorIds:string[];
+      if(first&&!current[0]?.structuredPayload.learningScene){
+        const selected=current[0]!;
+        const result=reviseSavedContextFacts(this.requireState(),this.enginePorts(),{operationId:input.operationId,contextId:first.personalSemanticAnchorId,expectedRevisionId:selected.personalSemanticAnchorRevisionId,blocks});
+        const version=this.requireState().contexts.anchorRevisions.find(row=>row.personalSemanticAnchorRevisionId===result.revisionId)!;
+        first.currentRevision=version.revision;first.updatedAt=version.createdAt;record.personalSemanticAnchorRevisions.push(version);
+        for(const anchor of active.slice(1)){anchor.status='deleted';anchor.lifecycleRevision++;anchor.updatedAt=version.createdAt;anchor.deletedAt=version.createdAt;anchor.deletedByOperationId=input.operationId;}
+        anchorIds=[first.personalSemanticAnchorId];
+      }else{
+        const now=this.now();
+        for(const anchor of active){anchor.status='deleted';anchor.lifecycleRevision++;anchor.updatedAt=now;anchor.deletedAt=now;anchor.deletedByOperationId=input.operationId;}
+        const saved=saveContextFacts(this.requireState(),this.enginePorts(),{operationId:input.operationId,blocks});
+        const head=this.requireState().contexts.anchors.find(row=>row.personalSemanticAnchorId===saved.contextId)!;
+        const {learnerUserId:_,currentRevisionId:__,conflictHistory:___,...facts}=head;
+        record.personalSemanticAnchors.push({...facts,personalMeaningId:input.personalMeaningId});
+        record.personalSemanticAnchorRevisions.push(this.requireState().contexts.anchorRevisions.find(row=>row.personalSemanticAnchorRevisionId===saved.revisionId)!);
+        anchorIds=[saved.contextId];
       }
-
-      const now = this.now();
-      record.personalSemanticAnchors
-        .filter((anchor) => anchor.status === 'active')
-        .forEach((anchor) => {
-          anchor.status = 'deleted';
-          anchor.lifecycleRevision += 1;
-          anchor.updatedAt = now;
-          anchor.deletedAt = now;
-          anchor.deletedByOperationId = input.operationId;
-        });
-      const anchorIds = input.blocks.map((block) => appendMaterialAnchor(this.enginePorts(),
-        record,
-        input.operationId,
-        block,
-      ).anchorId);
-      const personalMeaningRevisionId = appendMeaningRevision(this.enginePorts(),
-        record,
-        input.operationId,
-        anchorIds,
-      );
+      const personalMeaningRevisionId=appendMeaningRevision(this.enginePorts(),record,input.operationId,anchorIds);
       const result = {
         personalMeaningRevisionId,
         revision: record.personalMeaning.currentRevision,
@@ -1022,7 +1095,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
       if(!alignment||locator.kind!=='personal_meaning'||locator.personalMeaningId!==request.personalMeaningId||payload.expression!.surfaceForm!==occurrence.surfaceForm)throw Error('localFlow.meaningChanged');
       if(digestOf(payload.context)!==digestOf(meaningCorrectionContext(record,locator.personalSemanticAnchorRevisionIds)))throw Error('localFlow.meaningChanged');
       const prior=meaningCorrectionPayload(record,indexRegistry(this.requireState().registry),alignment.personalMeaningAlignmentId).expression!;
-      const sameExpression=payload.expression!.surfaceForm===prior.surfaceForm&&payload.expression!.languageTag===prior.languageTag&&payload.expression!.expressionTypeHint===prior.expressionTypeHint;
+      const sameExpression=!!prior&&payload.expression!.surfaceForm===prior.surfaceForm&&payload.expression!.languageTag===prior.languageTag&&payload.expression!.expressionTypeHint===prior.expressionTypeHint;
       const priorBinding=meaningCorrectionBinding(record,alignment);
       const originalAnchor=record.personalExpressionAnchorRevisions.find(row=>row.personalExpressionAnchorRevisionId===priorBinding?.personalExpressionAnchorRevisionId);
       let pinnedSense=request.reuseSense,reviseSense:CorrectPersonalMeaningInput['reuseSense'],personalSenseWording:string|null|undefined;
@@ -1285,30 +1358,33 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
         ));
         if (!sceneRevisions.length) throw new Error('找不到已接受的个人场景。');
         let anchor = record.personalSemanticAnchors.find((candidate) => candidate.status==='active'&&sceneRevisions.some(revision=>revision.personalSemanticAnchorId===candidate.personalSemanticAnchorId));
+        const priorAnchor=anchor??record.personalSemanticAnchors.filter(candidate=>sceneRevisions.some(revision=>revision.personalSemanticAnchorId===candidate.personalSemanticAnchorId)).at(-1);
+        const canonicalHead=this.requireState().contexts.anchors.find(row=>row.personalSemanticAnchorId===priorAnchor?.personalSemanticAnchorId);
+        if(!canonicalHead||canonicalHead.status!=='active')throw Error('localFlow.meaningChanged');
         const current=anchor&&sceneRevisions.find(revision=>revision.personalSemanticAnchorId===anchor!.personalSemanticAnchorId&&revision.revision===anchor!.currentRevision);
         const pin=current?.structuredPayload.learningScene as {revisionId?:string;learningTargetId?:string}|undefined;
         if(current&&pin?.revisionId===input.scene.revisionId&&pin.learningTargetId===input.target.learningTargetId&&current.bodyText===(input.scene.body.trim()||null)&&digestOf(current.structuredPayload.media??[])===digestOf(input.scene.media)){
           // A fresh user intent or a reopened page confirms existing content;
           // it does not append the same Scene version again. Keep the actual
           // accepting operation as the witness for this confirmation receipt.
-          this.transaction!.preconditions.push({table:'semanticMeanings',key:record.personalMeaning.personalMeaningId,expected:this.transaction!.before.meanings.find(meaning=>meaning.personalMeaning.personalMeaningId===record.personalMeaning.personalMeaningId)});
+          this.transaction!.preconditions.push({table:'semanticMeanings',key:record.personalMeaning.personalMeaningId,expected:storeMeaningContexts(this.transaction!.before.meanings.find(meaning=>meaning.personalMeaning.personalMeaningId===record.personalMeaning.personalMeaningId)!)});
           const result={personalMeaningId:record.personalMeaning.personalMeaningId,personalSemanticAnchorId:current.personalSemanticAnchorId,personalSemanticAnchorRevisionId:current.personalSemanticAnchorRevisionId,acceptedByOperationId:current.provenance.createdByOperationId};
           this.recordReceipt(input.operationId,'AcceptPublishedLearningScene',result,requestDigest);await this.persist();return {...result,replayed:false};
         }
         const introduced=!anchor;
         if(!anchor){
-          // A separately authored Context replacement retired the old anchor.
-          // Keep that tombstone and the new Context untouched; the learner's
-          // explicit scene acceptance introduces an additional current anchor.
-          const at=this.now();
-          anchor={contractVersion:'sensa-personal-semantic-world-v3',personalSemanticAnchorId:this.id(),personalMeaningId:record.personalMeaning.personalMeaningId,currentRevision:1,lifecycleRevision:1,status:'active',createdAt:at,updatedAt:at,deletedAt:null,deletedByOperationId:null};
+          const now=this.enginePorts().nowIso();
+          anchor={contractVersion:'sensa-personal-semantic-world-v3',personalSemanticAnchorId:this.enginePorts().newId(),personalMeaningId:record.personalMeaning.personalMeaningId,currentRevision:1,lifecycleRevision:1,status:'active',createdAt:now,updatedAt:now,deletedAt:null,deletedByOperationId:null};
           record.personalSemanticAnchors.push(anchor);
         }
         const nextRevision = learningSceneAnchorRevision(this.enginePorts(),
           anchor.personalSemanticAnchorId,
-          introduced?1:anchor.currentRevision + 1,
+          introduced?1:canonicalHead.currentRevision + 1,
           input,
         );
+        let ancestor:string|null=introduced?null:canonicalHead.currentRevisionId;
+        while(ancestor){const prior=this.requireState().contexts.anchorRevisions.find(row=>row.personalSemanticAnchorRevisionId===ancestor);if(!prior)throw Error('semantic_context_invalid');if(!record.personalSemanticAnchorRevisions.some(row=>row.personalSemanticAnchorRevisionId===ancestor))record.personalSemanticAnchorRevisions.push(prior);ancestor=this.requireState().contexts.anchorRevisionParents[ancestor]??null;}
+        this.requireState().contexts.anchorRevisionParents[nextRevision.personalSemanticAnchorRevisionId]=introduced?null:canonicalHead.currentRevisionId;
         anchor.currentRevision = nextRevision.revision;
         anchor.updatedAt = nextRevision.createdAt;
         record.personalSemanticAnchorRevisions.push(nextRevision);
@@ -1385,6 +1461,8 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
           authority,
           materializeContextMedia:false,
           personalMeaningId:learningScenePersonalMeaningId(input.scene.sceneId),
+          contextAnchorId:learningSceneContextId(input.scene.sceneId),
+          contextCreatedAt:new Date(input.scene.contextCreatedAt??input.scene.createdAt).toISOString(),
           pinnedSense: {
             senseId: input.target.senseId,
             senseVersionId: input.target.senseVersionId,

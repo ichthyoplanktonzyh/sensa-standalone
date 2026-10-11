@@ -14,7 +14,7 @@ import {semanticLookupPayload,syntheticSemanticWorld} from '../support/semanticL
 import type {JourneyState} from '../../../apps/web/src/experience/personalMeaningJourney/store';
 import {assertInteractionBudget} from '../support/interactionBudget';
 
-declare global{interface Window{semanticDetailPaint?:{startedAt:number;elapsedMs:number|null}}}
+declare global{interface Window{semanticDetailPaint?:{startedAt:number;elapsedMs:number|null};semanticSearchPaint?:{startedAt:number;elapsedMs:number|null}}}
 
 let server:Server,origin:string,output:string;
 type Plan={value:unknown;hold?:boolean;fail?:boolean};
@@ -170,7 +170,7 @@ test(`manual authoring at ${size} Meanings needs Context and explicit acceptance
  await form.getByLabel('表达语言',{exact:true}).selectOption('en');
  await form.getByLabel('表达类型',{exact:true}).selectOption('phrase');
  await form.getByLabel('这里表达的意思',{exact:true}).fill('退出已经答应参加的活动。');
- await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('有人答应参加活动，后来改变主意不再参加。');
+ await form.getByText('这个意思适用的典型场景',{exact:true}).click();await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('有人答应参加活动，后来改变主意不再参加。');
  await form.getByText('表达原形（可选）',{exact:true}).click();
  await form.getByLabel('表达原形（可选）',{exact:true}).fill('back out');
  await form.getByRole('button',{name:'确认并保存',exact:true}).click();await expect(form.getByRole('alert')).toContainText('准确位置');
@@ -264,7 +264,7 @@ test('confirmed Context image limits preserve editing input and saved sources, t
  const form=page.locator('.sensa-manual-meaning'),originalText='I water the plants before work.';
  await form.getByLabel('情境或原句',{exact:true}).fill(originalText);await form.getByLabel('原文中的表达（可在上方选中）',{exact:true}).fill('water');
  await form.getByLabel('表达语言',{exact:true}).selectOption('en');await form.getByLabel('这里表达的意思',{exact:true}).fill('给植物供水。');
- await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('上班前给家中的植物浇水。');await form.getByRole('button',{name:'确认并保存',exact:true}).click();
+ await form.getByText('这个意思适用的典型场景',{exact:true}).click();await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('上班前给家中的植物浇水。');await form.getByRole('button',{name:'确认并保存',exact:true}).click();
  await expect(page.getByRole('heading',{name:'water',exact:true})).toBeVisible();
  const meaningId=await page.evaluate(()=>window.__sensaBrowserSmoke!.firstMeaningId()),pins=await page.evaluate(id=>window.__sensaBrowserSmoke!.meaningPinsForTest(id!),meaningId);
  const before=await facts(page);await page.getByRole('button',{name:'编辑场景',exact:true}).click();
@@ -302,7 +302,7 @@ test('personal meaning favorites and notes survive explicit recycle-bin deletion
  await form.getByLabel('原文中的表达（可在上方选中）',{exact:true}).fill('borrow');
  await form.getByLabel('表达语言',{exact:true}).selectOption('en');await form.getByLabel('表达类型',{exact:true}).selectOption('word');
  await form.getByLabel('这里表达的意思',{exact:true}).fill('暂时借用他人的东西，之后归还。');
- await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('向朋友暂借钱，并会归还。');
+ await form.getByText('这个意思适用的典型场景',{exact:true}).click();await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('向朋友暂借钱，并会归还。');
  await form.getByRole('button',{name:'确认并保存',exact:true}).click();
  await expect(page.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();const originalUrl=page.url();
  const more=page.getByRole('button',{name:'更多',exact:true}),menu=page.getByRole('dialog',{name:'更多',exact:true});
@@ -403,7 +403,7 @@ test('personal correction preserves the Meaning and original capture, blocks an 
  await page.getByRole('button',{name:'添加内容',exact:true}).click();await page.getByRole('button',{name:'手动创建',exact:true}).click();
  const initial=page.locator('.sensa-manual-meaning'),capture='Jo asked to borrow my umbrella. I gave it to her.';
  await initial.getByLabel('情境或原句',{exact:true}).fill(capture);await initial.getByLabel('原文中的表达（可在上方选中）',{exact:true}).fill('borrow');
- await initial.getByLabel('表达语言',{exact:true}).selectOption('en');await initial.getByLabel('这里表达的意思',{exact:true}).fill('暂时取得别人的物品，之后归还。');await initial.getByLabel('这个意思适用的典型场景',{exact:true}).fill('向朋友暂借雨伞。');
+ await initial.getByLabel('表达语言',{exact:true}).selectOption('en');await initial.getByLabel('这里表达的意思',{exact:true}).fill('暂时取得别人的物品，之后归还。');await initial.getByText('这个意思适用的典型场景',{exact:true}).click();await initial.getByLabel('这个意思适用的典型场景',{exact:true}).fill('向朋友暂借雨伞。');
  await initial.getByRole('button',{name:'确认并保存',exact:true}).click();await expect(page.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
  const meaningId=new URL(page.url()).searchParams.get('meaningId'),originalUrl=page.url();
  await page.getByRole('button',{name:'更多',exact:true}).click();await page.getByRole('dialog',{name:'更多',exact:true}).getByRole('button',{name:'收藏',exact:true}).click();
@@ -411,7 +411,7 @@ test('personal correction preserves the Meaning and original capture, blocks an 
  const note=page.locator('.sensa-note-editor');await note.locator('textarea').fill('起初理解为从别人那里借入。');await note.getByRole('button',{name:'保存笔记',exact:true}).click();await expect(note).toHaveCount(0);
  const open=async()=>{await page.getByRole('button',{name:'更多',exact:true}).click();await page.getByRole('dialog',{name:'更多',exact:true}).getByRole('button',{name:'修改意思和表达',exact:true}).click();};
  await open();const editor=page.locator('.sensa-meaning-correction');await expect(editor.getByLabel('表达',{exact:true})).toHaveValue('borrow');await expect(editor.getByText(capture,{exact:true})).toBeVisible();
- const write=async()=>{await editor.getByLabel('表达',{exact:true}).fill('lend');await editor.getByLabel('这里表达的意思',{exact:true}).fill('把自己的物品暂时交给别人使用，之后收回。');await editor.getByLabel('这个意思适用的典型场景',{exact:true}).fill('把雨伞暂借给同事，用完后收回。');};
+ const write=async()=>{await editor.getByLabel('编辑方式',{exact:true}).selectOption('different_meaning');const usage=editor.locator('#meaning-correction-usage').locator('..');if(!(await usage.evaluate(node=>node.hasAttribute('open'))))await usage.locator('summary').click();await editor.getByLabel('表达',{exact:true}).fill('lend');await editor.getByLabel('这里表达的意思',{exact:true}).fill('把自己的物品暂时交给别人使用，之后收回。');await editor.getByLabel('这个意思适用的典型场景',{exact:true}).fill('把雨伞暂借给同事，用完后收回。');};
  await write();await editor.getByRole('button',{name:'关闭',exact:true}).click();
  // A corrupt UI-only pending request must not lock the valid typed draft into
  // an endless retry. Recovery is explicit and cannot accept the old request.
@@ -465,7 +465,7 @@ test('note editors preserve stale drafts and require an explicit choice after an
  await form.getByLabel('原文中的表达（可在上方选中）',{exact:true}).fill('borrow');
  await form.getByLabel('表达语言',{exact:true}).selectOption('en');await form.getByLabel('表达类型',{exact:true}).selectOption('word');
  await form.getByLabel('这里表达的意思',{exact:true}).fill('暂时借用他人的东西，之后归还。');
- await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('向朋友暂借钱，并会归还。');
+ await form.getByText('这个意思适用的典型场景',{exact:true}).click();await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('向朋友暂借钱，并会归还。');
  await form.getByRole('button',{name:'确认并保存',exact:true}).click();
  await expect(page.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();const url=page.url();
  const openNote=async(tab:Page)=>{
@@ -513,7 +513,7 @@ async function manualInboxCompletion(page:Page,missing:'context'|'expression'|'s
  await open();await expect(form.getByLabel('情境或原句',{exact:true})).toBeEnabled();
  if(missing==='context')await form.getByLabel('情境或原句',{exact:true}).fill('I asked to borrow an umbrella on a rainy day.');
  if(missing==='expression'){await form.getByLabel('原文中的表达（可在上方选中）',{exact:true}).fill('borrow');await form.getByLabel('表达语言',{exact:true}).selectOption('en');}
- const fillSense=async()=>{await form.getByLabel('这里表达的意思',{exact:true}).fill('临时取得物品使用，之后归还。');await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('下雨时向同事借伞，回家后再把伞还给同事。');};
+ const fillSense=async()=>{await form.getByLabel('这里表达的意思',{exact:true}).fill('临时取得物品使用，之后归还。');await form.getByText('这个意思适用的典型场景',{exact:true}).click();await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('下雨时向同事借伞，回家后再把伞还给同事。');};
  if(missing==='sense'||missing==='image')await fillSense();
  if(missing==='image')await expect(form.getByLabel('表达语言',{exact:true})).toHaveValue('en-US');
  await form.getByRole('button',{name:'关闭',exact:true}).click();await expect(inbox.getByRole('article')).toHaveCount(1);
@@ -700,6 +700,34 @@ async function clickToMeaningReady(page:Page,action:Locator,label:string,readyAc
  return (await page.evaluate(()=>window.semanticDetailPaint!.elapsedMs))!;
 }
 
+
+/** Input-to-stable actionable row is timed inside Chromium; assertion polling
+ * and the driver's fill round-trip are retained separately as diagnostics. */
+async function searchToWorldRowReady(page:Page,input:Locator,value:string,label:string){
+ await input.evaluate((element,{value,label})=>{
+  element.addEventListener('input',()=>{
+   const measure=window.semanticSearchPaint={startedAt:performance.now(),elapsedMs:null as number|null};
+   let previousGeometry:string|null=null;
+   const painted=()=>{
+    const rows=[...document.querySelectorAll<HTMLElement>('.sensa-world.active [role="listitem"]')];
+    const row=rows.length===1&&rows[0].getAttribute('aria-setsize')==='1'?rows[0]:null;
+    const button=row?.querySelector<HTMLButtonElement>('button.sensa-world-row'),heading=button?.querySelector('strong');
+    const rect=button?.getBoundingClientRect();
+    const top=rect?document.elementFromPoint(rect.left+rect.width/2,rect.top+rect.height/2):null;
+    const ready=(element as HTMLInputElement).value===value&&heading?.textContent===label&&button&&!button.disabled&&button.checkVisibility({checkOpacity:true,checkVisibilityCSS:true})&&rect&&rect.width>0&&rect.top>=0&&rect.bottom<=innerHeight&&top&&button.contains(top)&&!button.closest('[inert],[aria-hidden="true"]');
+    const geometry=ready?JSON.stringify(rect.toJSON()):null;
+    if(geometry!==null&&geometry===previousGeometry){measure.elapsedMs=performance.now()-measure.startedAt;return;}
+    previousGeometry=geometry;if(performance.now()-measure.startedAt<30_000)requestAnimationFrame(painted);
+   };requestAnimationFrame(painted);
+  },{once:true,capture:true});
+ },{value,label});
+ const driverStart=await page.evaluate(()=>performance.now());await input.fill(value);
+ await expect(page.locator('.sensa-world.active').getByRole('button',{name:new RegExp('^'+label+'(?:\\s|$)','u')})).toBeVisible();
+ const driverMs=await page.evaluate(start=>performance.now()-start,driverStart);
+ await expect.poll(()=>page.evaluate(()=>window.semanticSearchPaint?.elapsedMs)).not.toBeNull();
+ return {searchMs:(await page.evaluate(()=>window.semanticSearchPaint!.elapsedMs))!,driverMs};
+}
+
 test('reply streams before candidate disclosure, explicit acceptance persists, and the learning bridge stays optional',async({page})=>{
  await enterAndConfigureTeacher(page);plans=[{value:answer,hold:true}];await send(page);
  const workspace=page.locator('.pmw-screen.active'),originalSkin=await page.evaluate(()=>document.documentElement.getAttribute('data-sensa-skin'));
@@ -785,7 +813,7 @@ test('personal preparation pins explicit Context updates, preserves the active R
  await form.getByLabel('原文中的表达（可在上方选中）',{exact:true}).fill('water');
  await form.getByLabel('表达语言',{exact:true}).selectOption('en');
  await form.getByLabel('这里表达的意思',{exact:true}).fill('给植物供水。');
- await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('一个人给植物浇水，让它们获得需要的水分。');
+ await form.getByText('这个意思适用的典型场景',{exact:true}).click();await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('一个人给植物浇水，让它们获得需要的水分。');
  await form.getByRole('button',{name:'确认并保存',exact:true}).click();await expect(form).toHaveCount(0);
  const meaningId=await page.evaluate(()=>window.__sensaBrowserSmoke!.firstMeaningId());
  const sensePins=await page.evaluate(id=>window.__sensaBrowserSmoke!.meaningPinsForTest(id!),meaningId);
@@ -864,6 +892,22 @@ test('personal preparation pins explicit Context updates, preserves the active R
  await expect(page.locator('#s-lightweight-runtime').getByRole('button',{name:/查看表达/})).toHaveCount(0);
  expect((await facts(page)).learning).toEqual(finalLearning);
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.operatedStepMaterialsForTest())).toEqual(operated);
+ // Complete real UI actions before asserting that ordinary edits retain progress.
+ const runtime=page.locator('#s-lightweight-runtime');
+ const reveal=runtime.getByRole('button',{name:/查看表达/});if(await reveal.count())await reveal.click();
+ await runtime.getByRole('button',{name:/已经连上/}).click();
+ await expect(runtime.getByRole('heading',{name:'本轮完成',exact:true})).toBeVisible();
+ await runtime.getByRole('button',{name:'完成并回到首页',exact:true}).click();
+ const completed=(await facts(page)).learning;expect(completed.records.length).toBeGreaterThan(0);expect(completed.completedTargets.length).toBeGreaterThan(0);
+ const ratedPins=await page.evaluate(()=>window.__sensaBrowserSmoke!.operatedStepMaterialsForTest());for(const pin of operated)expect(ratedPins).toContainEqual(pin);
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();await page.locator(`[data-world-meaning="${meaningId}"]`).click();
+ await page.getByRole('button',{name:'更多',exact:true}).click();await page.getByRole('dialog',{name:'更多',exact:true}).getByRole('button',{name:'修改意思和表达',exact:true}).click();
+ const correction=page.locator('.sensa-meaning-correction');await expect(correction.getByLabel('编辑方式',{exact:true})).toHaveValue('wording');await correction.getByLabel('这里表达的意思',{exact:true}).fill('为植物补充需要的水分。');await correction.getByRole('button',{name:'确认并保存',exact:true}).click();await expect(correction).toHaveCount(0);
+ expect((await page.evaluate(id=>window.__sensaBrowserSmoke!.meaningPinsForTest(id!),meaningId)).map(row=>row.senseId)).toEqual(sensePins.map(row=>row.senseId));
+ expect((await facts(page)).learning).toEqual(completed);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.operatedStepMaterialsForTest())).toEqual(ratedPins);
+ await page.getByRole('button',{name:'编辑场景',exact:true}).click();await page.getByRole('textbox',{name:'场景',exact:true}).fill('Private-C: I water the balcony plants in the evening.');await page.getByRole('button',{name:'保存场景',exact:true}).click();
+ await page.reload();await expect(page.getByRole('heading',{name:'water',exact:true})).toBeVisible();expect((await facts(page)).learning).toEqual(completed);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.operatedStepMaterialsForTest())).toEqual(ratedPins);
+ await page.screenshot({path:test.info().outputPath('learned-wording-context-revision-preserves-progress.png'),fullPage:true});
 });
 
 test('field-specific correction recovers a rejected final object without creating duplicate meaning facts',async({page})=>{
@@ -1137,10 +1181,10 @@ test('10k personal meanings keep the shipped World bounded and searchable, with 
  await search.fill('');
  await world.getByRole('button',{name:'清空选择',exact:true}).click();
  await world.getByRole('button',{name:'完成选择',exact:true}).click();
- const searchStart=await page.evaluate(()=>performance.now());await search.fill('ＢＯＲＲＯＷ-９９９９');
+ const {searchMs,driverMs:searchDriverMs}=await searchToWorldRowReady(page,search,'ＢＯＲＲＯＷ-９９９９','borrow-9999');
  const row=world.getByRole('button',{name:/^borrow-9999(?:\s|$)/u});
  await expect(row).toBeVisible();
- const searchMs=await page.evaluate(start=>performance.now()-start,searchStart);
+
  // Readable, stable detail and an enabled editing action are measured inside
  // the browser, independently of the driver's assertion polling schedule.
  const profiler=process.env.SENSA_UI_PROFILE?await page.context().newCDPSession(page):null;
@@ -1162,7 +1206,7 @@ test('10k personal meanings keep the shipped World bounded and searchable, with 
  await expect(page.getByRole('article',{name:'表达详情'}).getByText('验收修改：借用同伴的雨伞，用完后归还。',{exact:true})).toBeVisible();
  await expect(context).toHaveCount(0);
  const saveMs=await page.evaluate(start=>performance.now()-start,saveStart);
- console.log('Shipped World / 10k synthetic / UI actions / no model:',JSON.stringify({searchMs,detailMs,saveMs}));
+ console.log('Shipped World / 10k synthetic / UI actions / no model:',JSON.stringify({searchMs,searchDriverMs,detailMs,saveMs}));
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('sensa:web-ui:v1:sensa.practice.materials.v4:en')!))).toEqual(preference);
  await page.reload();await expect(page.getByRole('heading',{name:'borrow-9999',exact:true})).toBeVisible({timeout:30_000});
  await expect(page.getByRole('article',{name:'表达详情'}).getByText('验收修改：借用同伴的雨伞，用完后归还。',{exact:true})).toBeVisible();
@@ -1442,3 +1486,111 @@ const localizedWorldSurface=(locale:string)=>async({page}:{page:Page},testInfo:T
 test('World content-led list and drawer retain 86 actual expressions in zh-CN UI',localizedWorldSurface('zh-CN'));
 test('World content-led list and drawer retain 86 actual expressions in en UI',localizedWorldSurface('en'));
 test('World content-led list and drawer retain 86 actual expressions in de UI',localizedWorldSurface('de'));
+
+test('saved Context and staged understanding stay separate, reopen offline, and restore after deletion',async({preparedMeaningPage:{page,modelCalls}},testInfo)=>{
+ test.setTimeout(180_000);page.setDefaultTimeout(15_000);
+ const openContexts=async()=>{await page.getByRole('button',{name:'添加内容',exact:true}).click();await page.getByRole('button',{name:'保存的情境',exact:true}).click();};
+ const original='Maya borrowed my umbrella. I expect it back tomorrow.';
+ await page.getByRole('button',{name:'添加内容',exact:true}).click();await page.getByRole('button',{name:'只保存情境',exact:true}).click();
+ const composer=page.getByRole('dialog');
+ await composer.getByRole('textbox').first().fill(original);await composer.getByRole('button',{name:'保存情境',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'保存的情境',exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);
+ const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ await page.getByRole('button',{name:'开始一条理解',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'继续完善理解',exact:true})).toBeVisible();
+ await page.getByLabel('这里表达的意思',{exact:true}).fill('临时借用并归还。');
+ await page.getByRole('button',{name:'先保存',exact:true}).click();
+ await expect(page.getByLabel('这里表达的意思',{exact:true})).toHaveValue('临时借用并归还。',{timeout:15_000});
+ const firstId=await page.evaluate(()=>window.__sensaBrowserSmoke!.firstMeaningId());
+ // An unreadable device draft cannot overwrite saved facts or be silently erased.
+ const damagedCache=await page.evaluate(id=>{
+  const key=Object.keys(localStorage).find(key=>key.includes(`meaning-editor:${id}:draft`));if(!key)throw Error('Missing editor draft cache');
+  const value='{"selection":{"senseId":"untrusted"},"meaning":42}';localStorage.setItem(key,value);return {key,value};
+ },firstId);
+ await page.reload();await expect(page.getByRole('button',{name:'确认这个意思',exact:true})).toBeDisabled();
+ expect(await page.evaluate(key=>localStorage.getItem(key),damagedCache.key)).toBe(damagedCache.value);
+ await page.getByRole('button',{name:'从最新材料重新填写',exact:true}).click();await expect(page.getByLabel('这里表达的意思',{exact:true})).toHaveValue('临时借用并归还。');
+ await page.getByRole('button',{name:'确认这个意思',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'确认这个表达',exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(before);
+ await page.getByLabel('表达（可稍后填写）',{exact:true}).fill('borrow');await page.getByRole('combobox',{name:'表达语言',exact:true}).selectOption('en');
+ await page.reload();
+ await expect(page.getByLabel('表达（可稍后填写）',{exact:true})).toHaveValue('borrow');
+ await page.getByRole('button',{name:'确认这个表达',exact:true}).click();
+ await expect(page.getByRole('region',{name:'个人内容学习准备',exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(before);
+ await page.getByRole('button',{name:'返回我的语义世界',exact:true}).click();
+ await openContexts();await page.getByRole('button',{name:new RegExp(original.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'))}).click();
+ await expect(page.getByText('1 条理解',{exact:true})).toBeVisible();await page.getByRole('button',{name:'开始一条理解',exact:true}).click();
+ await page.getByLabel('这里表达的意思',{exact:true}).fill('物品所有者暂借给别人。');await page.getByRole('button',{name:'先保存',exact:true}).click();
+ await page.getByRole('button',{name:'返回',exact:true}).click();await openContexts();await page.getByRole('dialog').getByRole('button',{name:new RegExp('Maya borrowed my umbrella')}).click();
+ await expect(page.getByText('2 条理解',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'编辑情境',exact:true}).click();await page.getByLabel('场景',{exact:true}).fill('Maya returned my umbrella today.');await page.getByRole('button',{name:'保存情境',exact:true}).click();
+ await expect(page.getByText('Maya returned my umbrella today.',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'移到情境回收站',exact:true}).click();await page.getByRole('button',{name:'恢复情境',exact:true}).click();
+ await expect(page.getByRole('button',{name:'开始一条理解',exact:true})).toBeEnabled();await page.getByRole('button',{name:'关闭',exact:true}).click();
+ await page.locator(`[data-world-meaning="${firstId}"]`).click();
+ await expect(page.getByText(original,{exact:true}).first()).toBeVisible();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(2);expect(firstId).toBeTruthy();expect(modelCalls).toEqual([]);
+ await page.screenshot({path:testInfo.outputPath('staged-context-desktop.png'),fullPage:true});
+ await page.setViewportSize({width:390,height:844});await page.screenshot({path:testInfo.outputPath('staged-context-mobile.png'),fullPage:true});
+});
+
+test('shared Contexts, explicit Sense reuse and multilingual expressions keep real memories distinct through a changed meaning',async({preparedMeaningPage:{page}},testInfo)=>{
+ test.setTimeout(300_000);page.setDefaultTimeout(15_000);
+ await page.evaluate(()=>{(window as unknown as {__name:(value:unknown)=>unknown}).__name=value=>value;});
+ await configureTeacher(page,true);await page.evaluate(()=>window.__sensaBrowserSmoke!.setSpeechFixtureForTest(false));
+ const world=async()=>page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
+ const savedContext='Maya borrowed my umbrella. I lent it to her until tomorrow.';
+ const createContext=async(text:string)=>{
+  await world();await page.getByRole('button',{name:'添加内容',exact:true}).click();await page.getByRole('button',{name:'只保存情境',exact:true}).click();
+  const composer=page.getByRole('dialog');await composer.getByRole('textbox').first().fill(text);await composer.getByRole('button',{name:'保存情境',exact:true}).click();
+  await expect(page.getByRole('button',{name:'开始一条理解',exact:true})).toBeEnabled();
+ };
+ const fromContext=async(meaning:string,expression:string,language:string,reuse=false)=>{
+  await page.getByRole('button',{name:'开始一条理解',exact:true}).click();
+  if(reuse){await page.getByText('选择已有意思',{exact:true}).click();await page.getByLabel('按意思或表达查找',{exact:true}).fill('borrow');await page.getByRole('button',{name:'查找',exact:true}).click();await page.getByRole('button',{name:'使用这个意思',exact:true}).click();}
+  else await page.getByLabel('这里表达的意思',{exact:true}).fill(meaning);
+  await page.getByLabel('表达（可稍后填写）',{exact:true}).fill(expression);await page.getByRole('combobox',{name:'表达语言',exact:true}).selectOption(language);await page.getByRole('button',{name:'确认这个意思',exact:true}).click();
+  await expect(page.getByRole('heading',{name:expression,exact:true})).toBeVisible();
+  const meaningId=new URL(page.url()).searchParams.get('meaningId');if(!meaningId)throw Error('Missing accepted understanding URL');
+  return {meaningId,pins:await page.evaluate(id=>window.__sensaBrowserSmoke!.meaningPinsForTest(id),meaningId)};
+ };
+ const candidate=(surface:string,meaning:string,example:string)=>({resources:[
+  {role:'experience_recall_cue',payload:{scene:meaning,senseFocus:meaning}},
+  {role:'scene_bridge',payload:{text:'把这个动作联系到表达。',meaningRendering:{meaning,languageTag:'zh-CN'}}},
+  {role:'scene_realization',payload:{example,targetStart:example.indexOf(surface),targetEnd:example.indexOf(surface)+surface.length,experienceResourceKey:'experience_recall_cue:0'}},
+ ]});
+ const enroll=async(surface:string,meaning:string,example:string)=>{
+  const preparation=page.getByRole('region',{name:'个人内容学习准备',exact:true});plans=[{value:candidate(surface,meaning,example)}];
+  await preparation.getByRole('button',{name:'加入学习',exact:true}).click();try{await expect(preparation.getByRole('button',{name:'开始 / 继续学习',exact:true})).toBeEnabled();}catch(error){console.log('Controlled preparation failure:',JSON.stringify({facts:await facts(page),requests,remainingPlans:plans.length}));throw error;}return preparation;
+ };
+ const learn=async(preparation:Locator)=>{
+  await preparation.getByRole('button',{name:'开始 / 继续学习',exact:true}).click();const runtime=page.locator('#s-lightweight-runtime');
+  await runtime.getByRole('button',{name:/查看表达/}).click();await runtime.getByRole('button',{name:/已经连上/}).click();await expect(runtime.getByRole('heading',{name:'本轮完成',exact:true})).toBeVisible();await runtime.getByRole('button',{name:'完成并回到首页',exact:true}).click();
+  return page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ };
+ const route=async(tag:string)=>{
+  await page.getByRole('button',{name:'账号与设置',exact:true}).click();await page.locator('#s-profile').getByRole('button',{name:/使用偏好/}).click();await page.locator('#account-languages').click();
+  const languages=page.getByRole('dialog',{name:'语言路线',exact:true});const radio=languages.getByRole('radio',{name:tag==='fr'?/Français/:/English/});
+  if(!await radio.count()){await languages.getByRole('combobox',{name:'选择目标语言',exact:true}).selectOption(tag);await languages.getByRole('button',{name:'添加路线',exact:true}).click();}
+  if(await radio.getAttribute('aria-checked')!=='true')await radio.click();await expect(radio).toHaveAttribute('aria-checked','true');await languages.getByRole('button',{name:'完成',exact:true}).click();
+ };
+ await createContext(savedContext);const borrower=await fromContext('临时借用并归还。','borrow','en');
+ const borrowedMemory=await learn(await enroll('borrow','临时借用并归还。','May I borrow your umbrella?'));expect(borrowedMemory.records).toHaveLength(1);
+ await world();await page.getByRole('button',{name:'添加内容',exact:true}).click();await page.getByRole('button',{name:'保存的情境',exact:true}).click();await page.getByRole('dialog').getByRole('button').filter({hasText:savedContext}).click();
+ const lender=await fromContext('把自己的物品暂时交给别人使用，之后收回。','lend','en');expect(lender.pins[0]!.senseId).not.toBe(borrower.pins[0]!.senseId);
+ const twoMemories=await learn(await enroll('lend','把自己的物品暂时交给别人使用，之后收回。','I can lend you my umbrella.'));expect(twoMemories.targetIds).toHaveLength(2);expect(twoMemories.records).toEqual(expect.arrayContaining(borrowedMemory.records));
+ await createContext('I asked Jo to borrow a book and promised to return it.');const otherContext=await fromContext('','borrow','en',true);expect(otherContext.pins).toEqual(borrower.pins);
+ await enroll('borrow','临时借用并归还。','I borrow a book from Jo.');const shared=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());expect(shared.targetIds).toEqual(twoMemories.targetIds);expect(shared.records).toEqual(twoMemories.records);expect(shared.completedTargets).toEqual(twoMemories.completedTargets);
+ await route('fr');await createContext('Puis-je emprunter ton livre ?');const french=await fromContext('','emprunter','fr',true);expect(french.pins).toEqual(borrower.pins);
+ const frenchMemory=await learn(await enroll('emprunter','临时借用并归还。','Puis-je emprunter ton livre ?'));expect(frenchMemory.targetIds).toHaveLength(1);expect(frenchMemory.targetIds.some(id=>twoMemories.targetIds.includes(id))).toBe(false);expect(frenchMemory.records.filter(row=>frenchMemory.targetIds.includes(row.targetId))).toHaveLength(1);expect(frenchMemory.records).toEqual(expect.arrayContaining(twoMemories.records));
+ await world();await page.locator(`[data-world-meaning="${french.meaningId}"]`).click();await page.getByRole('button',{name:'更多',exact:true}).click();await page.getByRole('dialog',{name:'更多',exact:true}).getByRole('button',{name:'修改意思和表达',exact:true}).click();
+ const correction=page.locator('.sensa-meaning-correction');await correction.getByLabel('编辑方式',{exact:true}).selectOption('different_meaning');await correction.getByLabel('表达',{exact:true}).fill('prêter');await correction.getByLabel('这里表达的意思',{exact:true}).fill('把自己的物品暂时交给别人使用，之后收回。');await correction.getByRole('button',{name:'确认并保存',exact:true}).click();await expect(correction).toHaveCount(0);
+ const newPins=await page.evaluate(id=>window.__sensaBrowserSmoke!.meaningPinsForTest(id),french.meaningId);expect(newPins.at(-1)!.senseId).not.toBe(french.pins[0]!.senseId);
+ const changed=await learn(await enroll('prêter','把自己的物品暂时交给别人使用，之后收回。','Je peux te prêter mon livre.'));expect(changed.targetIds).toHaveLength(2);expect(changed.records).toEqual(expect.arrayContaining(frenchMemory.records));expect(changed.completedTargets).toEqual(expect.arrayContaining(frenchMemory.completedTargets));
+ await route('en');const english=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());expect(english.targetIds).toEqual(twoMemories.targetIds);expect(english.records).toEqual(changed.records);expect(english.records.filter(row=>english.targetIds.includes(row.targetId))).toEqual(twoMemories.records);expect(english.completedTargets).toEqual(twoMemories.completedTargets);
+ await page.reload();expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records).toEqual(changed.records);
+ await testInfo.attach('stable-multilingual-memory-evidence',{contentType:'application/json',body:JSON.stringify({borrower,lender,otherContext,french,newPins,borrowedMemory,twoMemories,shared,frenchMemory,changed,english,provider:'controlled free HTTP and synthetic speech bytes; no live provider quality claim'})});
+});

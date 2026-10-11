@@ -1,3 +1,4 @@
+import type {ContextBrowseQuery,ContextBrowsePage} from '../../experience/personalMeaningJourney/contextRead';
 import type {LearningScheduleQuery,LearningSchedulePage} from '../../learning/system/learningScheduleModel';
 /** Internal protocol between the local-library module and its SQLite Worker. */
 
@@ -25,10 +26,10 @@ import type {
 export const sqliteLibraryFile = "/sensa-local-library-v12.sqlite3";
 export const sqlitePoolDirectory = "/sensa-local-library-v12";
 /** First supported production-user baseline; prototype formats stay unsupported. */
-export const sqliteLibraryBaselineVersion = 10;
-export const sqliteLibrarySchemaVersion = 18;
+export const sqliteLibraryBaselineVersion = 19;
+export const sqliteLibrarySchemaVersion = 19;
 /** Cross-tab RPC changes must bump this before adding or changing messages. */
-export const sqliteCoordinatorProtocolVersion = 59;
+export const sqliteCoordinatorProtocolVersion = 60;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -54,6 +55,7 @@ export const sqliteLibraryTables = [
   "annotations",
   "semanticState",
   "semanticMeanings",
+  "semanticContexts",
   "semanticRegistry",
   "semanticInbox",
   "semanticDrafts",
@@ -106,6 +108,7 @@ export type SqliteWorkerRequest =
   | {id:number;kind:'existingRecordKeys';table:SqliteLibraryTable;keys:string[]}
   | { id:number;kind:'packageCacheProjection';query:PackageCacheProjectionQuery }
   | {id:number;kind:'meaningLookup';query:string}
+  | {id:number;kind:'contextBrowse';query:ContextBrowseQuery}
   | {id:number;kind:'worldBrowse';query:WorldBrowseQuery}
   | {id:number;kind:'worldSceneMeaning';sceneId:string}
   | {id:number;kind:'registrySelection';query:RegistrySelectionQuery}
@@ -300,7 +303,7 @@ CREATE INDEX IF NOT EXISTS sensa_content_attempts_task_created
   ON sensa_content_attempts(task_id,created_at);
 CREATE TABLE IF NOT EXISTS sensa_media_references(
   media_id TEXT NOT NULL,
-  owner_table TEXT NOT NULL CHECK(owner_table IN ('semanticMeanings','semanticInbox')),
+  owner_table TEXT NOT NULL CHECK(owner_table IN ('semanticContexts','semanticInbox')),
   owner_key TEXT NOT NULL,
   PRIMARY KEY(media_id,owner_table,owner_key)
 ) WITHOUT ROWID;

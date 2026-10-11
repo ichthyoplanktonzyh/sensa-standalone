@@ -1,3 +1,4 @@
+import {contextFlowText} from '../../i18n/contextFlowText';
 import {ContentDrawer,ContentHeader} from './ContentWorkspace';
 import { MeaningGraphView } from "./MeaningGraphView";
 import { useEffect, useMemo, useState } from "react";
@@ -27,6 +28,7 @@ import {
 } from "../personalMeaningJourney";
 import { PersonalMeaningComposer } from "./PersonalMeaningComposer";
 import {ManualMeaningComposer} from './ManualMeaningComposer';
+import {ContextLibrary} from './ContextLibrary';
 import { IntakeInboxDrawer } from "./IntakeInboxDrawer";
 import { SensaCollectionBrowserLayout } from "../ui/SensaPageLayouts";
 import { useScreenState } from "../ui/ScreenHost";
@@ -151,6 +153,7 @@ function ContentScreenView({
   const setExpression=(value:string|null)=>browse?browse.change({worldExpression:value??undefined}):rememberExpression(value);
   const [adding, setAdding] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
+  const [contextOnly,setContextOnly]=useState(false),[contextsOpen,setContextsOpen]=useState(false),[contextId,setContextId]=useState<string|null>(null);
   const [manualOpen,setManualOpen]=useState(false);
   const [manualIntake,setManualIntake]=useState<import('@sensa/contracts/sensa').SensaIntakeItem|null>(null);
   const [inboxOpen, setInboxOpen] = useState(false);
@@ -466,7 +469,7 @@ function ContentScreenView({
                 icon: MessageSquareText,
                 action: () => onStartConversation?onStartConversation():setComposerOpen(true),
               },
-              ...(onStartConversation?[{title:"record",hint:"recordHint",icon:StickyNote,action:()=>setComposerOpen(true)}]:[]),
+              ...(onStartConversation?[{title:"record",hint:"recordHint",icon:StickyNote,action:()=>{setContextOnly(false);setComposerOpen(true);}}]:[]),
               {
                 title: "existing",
                 hint: "existingHint",
@@ -498,18 +501,22 @@ function ContentScreenView({
                 <ArrowRight size={16} />
               </button>
             ))}
+            {!providedSource&&<div className="flex flex-wrap gap-3"><button className={button+' border border-border-subtle'} onClick={()=>{setAdding(false);setContextOnly(true);setComposerOpen(true);}}>{contextFlowText('saveContextOnly')}</button><button className={button+' border border-border-subtle'} onClick={()=>{setAdding(false);setContextId(null);setContextsOpen(true);}}>{contextFlowText('savedContexts')}</button></div>}
         </ContentDrawer>
       )}
       <PersonalMeaningComposer
+        key={contextOnly?'context':'material'}
+        contextOnly={contextOnly}
         persistence={providedSource?.composer}
         open={composerOpen}
-        onClose={() => setComposerOpen(false)}
+        onClose={() => {setComposerOpen(false);setContextOnly(false);}}
         onSaved={toast}
         onCreated={(id) => {
           setComposerOpen(false);
-          open(id);
+          if(contextOnly){setContextId(id);setContextsOpen(true);setContextOnly(false);}else open(id);
         }}
       />
+      {contextsOpen&&<ContextLibrary initialId={contextId} onClose={()=>setContextsOpen(false)} onCreated={id=>{setContextsOpen(false);source.reload();onOpenPersonalMeaning(id);}}/>}
       {manualOpen&&<ManualMeaningComposer onClose={()=>setManualOpen(false)} onCreated={id=>{setManualOpen(false);source.reload();onOpenPersonalMeaning(id);}}/>}
       {manualIntake&&<ManualMeaningComposer key={manualIntake.intakeId} original={manualIntake} onClose={()=>{setManualIntake(null);setInboxOpen(true);}} onCreated={id=>{setManualIntake(null);source.reload();onOpenPersonalMeaning(id);}}/>}
       <IntakeInboxDrawer

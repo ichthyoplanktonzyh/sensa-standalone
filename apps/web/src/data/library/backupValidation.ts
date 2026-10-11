@@ -1,3 +1,4 @@
+import {hydrateMeaningContexts} from '../../experience/personalMeaningJourney/contextRecords';
 import {canonicalConsumerJson,defaultSensaLanguageRouteCollection,sensaFormalPinnedLanguageContextSchema,sensaLanguageRouteCollectionSchema,sensaReadingGlossarySchema} from '@sensa/contracts/sensa';
 import {z} from 'zod';
 
@@ -63,7 +64,7 @@ function* validateLibraryRecordFacts(reader:LibraryRecordReader){
   const keys=new Set<string>();
   for(const {key} of rows[table]){if(typeof key!=='string'||key.length===0||key.length>2000||keys.has(key))fail();keys.add(key);yield;}
  }
- const requireRow=(table:Table,id:string)=>maps[table].get(id)??fail();
+ const requireRow=(table:Table,id:string)=>{const raw=maps[table].get(id)??fail();return table==='semanticMeanings'?hydrateMeaningContexts(raw,key=>maps.semanticContexts.get(key)):raw;};
  const routeCollection=sensaLanguageRouteCollectionSchema.parse(maps.settings.get('language-learning-routes')??defaultSensaLanguageRouteCollection);
  const routes=new Map(routeCollection.routes.map(route=>[route.id,route]));
  const validateLanguageContext=(value:unknown)=>{const context=sensaFormalPinnedLanguageContextSchema.parse(value);const route=routes.get(context.languageRouteId);if(!route||route.targetLanguageTag!==context.targetLanguageTag||context.languageRouteRevision>route.revision)fail();return context;};

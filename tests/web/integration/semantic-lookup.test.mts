@@ -1,3 +1,4 @@
+import {semanticRecords} from '../support/semanticWorldRecordFixture.mts';
 import assert from 'node:assert/strict';
 import {test,expect} from 'vitest';
 import {sensaIntakePayloadSchema} from '@sensa/contracts/sensa';
@@ -267,13 +268,7 @@ test('backup/sync resolve a pinned learning source after head advancement and or
   const before=await repository.load(),source=gateway.getLearningSources(before.meanings[0]!.personalMeaning.personalMeaningId)[0]!.reference;
   const resolver=(state:JourneyState)=>{
     const rows=Object.fromEntries(libraryTables.map(table=>[table,[]])) as unknown as BackupRows;
-    rows.semanticState.push({key:'root',value:{version:state.version}});
-    rows.semanticMeanings=state.meanings.map(value=>({key:value.personalMeaning.personalMeaningId,value}));
-    rows.semanticReceipts=state.commandReceipts.map(value=>({key:value.operationId,value}));
-    const idFields={senses:'senseId',senseVersions:'senseVersionId',expressions:'expressionId',expressionVersions:'expressionVersionId',bindings:'senseExpressionBindingId',bindingVersions:'bindingVersionId'} as const;
-    for(const kind of Object.keys(idFields) as Array<keyof typeof idFields>)state.registry[kind].forEach((value,ordinal)=>rows.semanticRegistry.push({
-      key:`${kind}:${(value as unknown as Record<string,string>)[idFields[kind]]}`,value:{kind,ordinal,value},
-    }));
+    for(const row of semanticRecords(state))rows[row.table].push({key:row.key,value:row.value} as never);
     const maps=Object.fromEntries(libraryTables.map(table=>[table,new Map(rows[table].map(row=>[row.key,row.value]))])) as Record<Table,Map<string,any>>;
     return validatePersonalSemanticWorldReplica({rows,maps,requireRow:(table,key)=>maps[table].get(key),fail:()=>{throw new Error('invalid pinned source');}});
   };
@@ -366,7 +361,7 @@ test('a rejected read witness writes no receipt or draft, while semantic-key col
   const after={...before,meanings:[...before.meanings,...addition.meanings],registry:Object.fromEntries(Object.keys(before.registry).map(kind=>[
     kind,[...before.registry[kind as keyof typeof before.registry],...addition.registry[kind as keyof typeof before.registry]],
   ])) as unknown as typeof before.registry};
-  const draftAfter={...before,commandReceipts:[...before.commandReceipts,{operationId:crypto.randomUUID(),command:'ReadWitnessFixture',result:{},committedAt:'2026-10-03T02:00:00.000Z'}]};
+  const draftAfter={...before,commandReceipts:[...before.commandReceipts,{operationId:crypto.randomUUID(),command:'ReadWitnessFixture',result:{}}]};
   await assert.rejects(repository.commit({before,after:draftAfter,preconditions:[{table:'semanticRegistry',key:`senseVersions:${version.senseVersionId}`,
     expected:{kind:'senseVersions',ordinal:0,value:{...version,semanticSpec:{...spec,coreMeaningFocus:'not the observed version'}}}}]}),/meaningChanged/u);
   assert.deepEqual(await repository.load(),before);

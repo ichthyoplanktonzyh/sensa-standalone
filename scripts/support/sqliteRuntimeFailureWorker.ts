@@ -15,8 +15,7 @@ let diagnosticRollbackArmed=false;
 let inCheckpoint=false;
 let writeCalls=0;
 let fault:Readonly<{requested:number;returned:number;offset:number;phase:'request'|'post-commit-checkpoint'}>|undefined;
-let openedDatabase:SqliteRecordDatabase|undefined,probeBaselineUpgrade=false;
-let baselineUpgradeEvidence:unknown;
+let openedDatabase:SqliteRecordDatabase|undefined;
 const layoutSnapshot=(database:Database)=>({
   version:database.exec({sql:'PRAGMA user_version',rowMode:0,returnValue:'resultRows'})[0],
   definition:database.exec({sql:"SELECT sql FROM sqlite_schema WHERE name='sensa_sync_base'",rowMode:0,returnValue:'resultRows'})[0],
@@ -24,24 +23,7 @@ const layoutSnapshot=(database:Database)=>({
   facts:['sensa_records','sensa_sync_base','sensa_record_tombstones','sensa_shared_record_content','sensa_shared_record_content_owners'].map(table=>database.exec({sql:`SELECT ${table==='sensa_records'?'rowid,*':'*'} FROM ${table} ORDER BY 1,2`,rowMode:'array',returnValue:'resultRows'})),
 });
 const originalInitialize=SqliteRecordDatabase.prototype.initialize;
-SqliteRecordDatabase.prototype.initialize=function(){
-  openedDatabase=this;
-  if(!probeBaselineUpgrade)return originalInitialize.call(this);
-  probeBaselineUpgrade=false;
-  const raw=Reflect.get(this,'database') as Database,database=raw as unknown as {exec(...args:unknown[]):unknown},exec=database.exec;
-  let before:ReturnType<typeof layoutSnapshot>|undefined;
-  database.exec=function(...args){
-    const result=Reflect.apply(exec,this,args),input=args[0],sql=typeof input==='string'?input:(input as {sql?:string})?.sql;
-    // The shipped initialize has already set exclusive locking first. This
-    // read-only snapshot precedes the migration transaction, not pool open.
-    if(sql==='PRAGMA user_version'&&!before){database.exec=exec;before=layoutSnapshot(raw);database.exec=wrapped;}
-    return result;
-  };
-  const wrapped=database.exec;
-  try{const result=originalInitialize.call(this);database.exec=exec;baselineUpgradeEvidence={before,after:layoutSnapshot(raw)};return result;}
-  catch(cause){baselineUpgradeEvidence={before,error:String(cause)};throw cause;}
-  finally{database.exec=exec;}
-};
+SqliteRecordDatabase.prototype.initialize=function(){openedDatabase=this;return originalInitialize.call(this);};
 FileSystemSyncAccessHandle.prototype.write=function(data,options){
   writeCalls++;
   const bytes=ArrayBuffer.isView(data)?new Uint8Array(data.buffer,data.byteOffset,data.byteLength):new Uint8Array(data);
@@ -100,7 +82,7 @@ SqliteRecordDatabase.prototype.commit=function(mutation){
 };
 
 scope.addEventListener('message',event=>{
-  const request=event.data as {id:number;kind:string};
+  const request=event.data as {id:number;kind:string;schemaVersion?:17|18};
   if(!request.kind.startsWith('test_'))return;
   event.stopImmediatePropagation();
   const action=async()=>{
@@ -116,18 +98,16 @@ scope.addEventListener('message',event=>{
       return (await navigator.locks.query()).held?.map(lock=>lock.name)??[];
     }
     if(request.kind==='test_native_write_stats')return {writeCalls,fault};
-    if(request.kind==='test_probe_baseline_upgrade'){probeBaselineUpgrade=true;return null;}
-    if(request.kind==='test_baseline_upgrade_evidence')return baselineUpgradeEvidence;
-    if(request.kind==='test_seed_baseline_layout17'){
+    if(request.kind==='test_seed_unsupported_schema'){
       if(!openedDatabase)throw Error('sqlite_runtime_fixture_not_initialized');
       const database=Reflect.get(openedDatabase,'database') as Database;
       database.exec('BEGIN IMMEDIATE');
       try{
-        database.exec(sqliteSyncBaseSchema.replace('IF NOT EXISTS sensa_sync_base','fixture_baseline17').replace(/\);\s*$/u,') WITHOUT ROWID;'));
+        if(request.schemaVersion===17){database.exec(sqliteSyncBaseSchema.replace('IF NOT EXISTS sensa_sync_base','fixture_baseline17').replace(/\);\s*$/u,') WITHOUT ROWID;'));
         database.exec('INSERT INTO fixture_baseline17 SELECT * FROM sensa_sync_base');
         database.exec('DROP TABLE sensa_sync_base');database.exec('ALTER TABLE fixture_baseline17 RENAME TO sensa_sync_base');
-        database.exec('CREATE INDEX retained_baseline_key ON sensa_sync_base(record_key)');
-        database.exec('PRAGMA user_version=17');database.exec('COMMIT');
+        database.exec('CREATE INDEX retained_baseline_key ON sensa_sync_base(record_key)');}
+        if(![17,18].includes(request.schemaVersion!))throw Error('unsupported_fixture_version');database.exec(`PRAGMA user_version=${request.schemaVersion}`);database.exec('COMMIT');
       }catch(cause){database.exec('ROLLBACK');throw cause;}
       return layoutSnapshot(database);
     }

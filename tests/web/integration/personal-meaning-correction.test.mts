@@ -1,3 +1,5 @@
+import {readMeaningContexts,hydrateMeaningContexts} from '../../../apps/web/src/experience/personalMeaningJourney/contextRecords';
+import {semanticRecords} from '../support/semanticWorldRecordFixture.mts';
 /** Actual owner commands and SQLite/Wasm; no model or fabricated learning outcome. */
 import {afterAll,expect,test} from 'vitest';
 import {useNodeLearningCapacityStorage} from '../../../scripts/support/nodeLearningCapacity.mts';
@@ -27,7 +29,7 @@ const {personalContentSystem}=await import('../../../apps/web/src/personalConten
 const {buildLearnerSemanticProjection}=await import('../../../apps/web/src/learnerSemanticProjection/system/learnerSemanticProjectionSystem');
 const clock=createSeededClock('2026-10-06T12:00:00Z'),id=()=>crypto.randomUUID();
 const modules=()=>createJourneyModules({repository:new LibraryJourneyRepository(),clock,languages:{read:async()=>({targetLanguageTag:'en',supportLanguageTag:'zh-CN'})}});
-const record=(key:string)=>readLibrary(tx=>tx.get<MeaningJourneyRecord>('semanticMeanings',key));
+const record=(key:string)=>readLibrary(tx=>readMeaningContexts(tx,key));
 const snapshot=()=>readLibrary(async tx=>Object.fromEntries(await Promise.all(libraryTables.map(async table=>[table,await tx.entries(table)]))));
 const replicas=(rows:Awaited<ReturnType<typeof snapshot>>):ReplicaEntry[]=>semanticJourneyTables.flatMap(table=>(rows[table] as {key:string;value:unknown}[]).map(row=>({table,key:row.key,value:encodeBackupValue(row.value)})));
 
@@ -91,7 +93,7 @@ test('correction reviews the complete current Context while preserving earlier c
  await modules().personalMeaningJourney.reviseContext({operationId:id(),personalMeaningId:accepted.personalMeaningId,expectedRevision:1,blocks:[{kind:'text',bodyText:'现在审阅的情境：把自己的伞借给同事。'},{kind:'text',bodyText:'同事约好第二天归还。'}]});
  const reviewed=await worldReadRepository.correction(accepted.personalMeaningId,alignment.personalMeaningAlignmentId),locator=reviewed.payload.expression!.occurrence!.locator;
  expect(reviewed.payload.context?.textSegment).toBe('现在审阅的情境：把自己的伞借给同事。\n\n同事约好第二天归还。');
- if(locator.kind!=='personal_meaning')throw Error('Expected existing Context locator');expect(locator.personalSemanticAnchorRevisionIds).toHaveLength(2);
+ if(locator.kind!=='personal_meaning')throw Error('Expected existing Context locator');expect(locator.personalSemanticAnchorRevisionIds).toHaveLength(1);
  const operationId=id(),request={operationId,personalMeaningId:accepted.personalMeaningId,personalMeaningAlignmentId:alignment.personalMeaningAlignmentId,source:reviewed.source,reuseSense:reviewed.reuseSense,payload:{...reviewed.payload,operationId,acceptance:{mode:'learner_direct' as const}}};
  await modules().personalMeaningJourney.reviseContext({operationId:id(),personalMeaningId:accepted.personalMeaningId,expectedRevision:2,blocks:[{kind:'text',bodyText:'另一页刚更新的情境，尚未审阅。'}]});
  await expect(modules().personalMeaningJourney.correctPersonalMeaning(request)).rejects.toThrow('clarificationSourceChanged');
@@ -180,12 +182,7 @@ test.each([false,true])('two offline private wording branches keep both immutabl
   return repository.load();
  };
  const local=await fork('临时借来，之后归还。'),remote=await fork('借来用一段时间，用完归还。');
- const stateEntries=(state:typeof baseline):ReplicaEntry[]=>[
-  {table:'semanticState',key:'root',value:encodeBackupValue({version:state.version})},
-  ...state.meanings.map(record=>({table:'semanticMeanings' as const,key:record.personalMeaning.personalMeaningId,value:encodeBackupValue(record)})),
-  ...Object.entries(state.registry).flatMap(([kind,rows])=>rows.map((value:any,ordinal:number)=>({table:'semanticRegistry' as const,key:`${kind}:${value[{senses:'senseId',senseVersions:'senseVersionId',expressions:'expressionId',expressionVersions:'expressionVersionId',bindings:'senseExpressionBindingId',bindingVersions:'bindingVersionId'}[kind]!]}`,value:encodeBackupValue({kind,ordinal,value})}))),
-  ...state.commandReceipts.map(value=>({table:'semanticReceipts' as const,key:value.operationId,value:encodeBackupValue(value)})),
- ];
+ const stateEntries=(state:typeof baseline):ReplicaEntry[]=>[...semanticRecords(state)].map(row=>({...row,value:encodeBackupValue(row.value)}));
  const base=stateEntries(baseline),ours=stateEntries(local),theirs=stateEntries(remote),merged=mergeLibraryReplicas({base,local:ours,remote:theirs});
  expect(merged.conflicts).toContain(JSON.stringify(['semanticMeanings',accepted.personalMeaningId]));
  const versionIds=[local,remote].map(state=>state.meanings.find(row=>row.personalMeaning.personalMeaningId===accepted.personalMeaningId)!.alignments.at(-1)!.senseVersionId);
@@ -200,7 +197,7 @@ test.each([false,true])('two offline private wording branches keep both immutabl
  expect(mergeLibraryReplicas({base,local:ours,remote:deeperRows}).conflicts).toContain(JSON.stringify(['semanticRegistry',`senses:${alignment.senseId}`]));
  expect(mergeLibraryReplicas({base,local:theirs,remote:deeperRows}).conflicts).toEqual([]);
  const chosen=finalizeLibraryReplicaConflictChoice(ours,merged.entries,{base,conflicts:merged.conflicts,local:ours,remote:theirs,decision:{id:id(),createdAt:'2026-10-11T12:00:00.000Z'}});
- const restored=structuredClone(baseline);restored.meanings=chosen.filter(row=>row.table==='semanticMeanings').map(row=>decodeBackupValue(row.value));restored.commandReceipts=chosen.filter(row=>row.table==='semanticReceipts').map(row=>decodeBackupValue(row.value));
+ const restored=structuredClone(baseline);const contextRows=new Map(chosen.filter(row=>row.table==='semanticContexts').map(row=>[row.key,decodeBackupValue(row.value)]));restored.contexts={anchors:[...contextRows.values()].filter(row=>row.kind==='anchors').map(row=>row.value),anchorRevisions:[...contextRows.values()].filter(row=>row.kind==='anchorRevisions').map(row=>row.value),anchorRevisionParents:Object.fromEntries([...contextRows.values()].filter(row=>row.kind==='anchorRevisions').map(row=>[row.value.personalSemanticAnchorRevisionId,row.parentRevisionId]))};restored.meanings=chosen.filter(row=>row.table==='semanticMeanings').map(row=>hydrateMeaningContexts(decodeBackupValue(row.value),key=>contextRows.get(key)));restored.commandReceipts=chosen.filter(row=>row.table==='semanticReceipts').map(row=>decodeBackupValue(row.value));
  for(const kind of Object.keys(restored.registry) as Array<keyof typeof restored.registry>)(restored.registry[kind] as unknown[])=chosen.filter(row=>row.table==='semanticRegistry').map(row=>decodeBackupValue(row.value)).filter(row=>row.kind===kind).map(row=>row.value);
  assertPersonalSemanticWorldState(restored);
  const selected=restored.meanings.find(row=>row.personalMeaning.personalMeaningId===accepted.personalMeaningId)!;

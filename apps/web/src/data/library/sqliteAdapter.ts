@@ -1,3 +1,4 @@
+import type {ContextBrowseQuery,ContextBrowsePage} from '../../experience/personalMeaningJourney/contextRead';
 import type {LearningScheduleQuery,LearningSchedulePage} from '../../learning/system/learningScheduleModel';
 import type {
   HomeLearningStorageProjection,
@@ -34,6 +35,7 @@ export interface SqliteRecordAdapter {
   existingRecordKeys(table:SqliteLibraryTable,keys:readonly string[]):Promise<string[]>;
   packageCacheProjection<Query extends PackageCacheProjectionQuery>(query:Query):Promise<PackageCacheProjectionResult<Query>>;
   lookupMeanings(query:string):Promise<MeaningLookupResult>;
+  contextBrowse(query:ContextBrowseQuery):Promise<ContextBrowsePage>;
   worldBrowse(query:WorldBrowseQuery):Promise<WorldBrowsePage>;
   worldSceneMeaning(sceneId:string):Promise<string|null>;
   registrySelection(query:import('./sqliteProtocol').RegistrySelectionQuery):Promise<import('./sqliteProtocol').RegistrySelection>;
@@ -126,6 +128,7 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
     return this.send({ kind: "changesSince", contentRevision, tables: [...tables] }) as Promise<SqliteRecordChange[]>;
   }
   lookupMeanings(query:string):Promise<MeaningLookupResult>{return this.send({kind:'meaningLookup',query}) as Promise<MeaningLookupResult>;}
+  contextBrowse(query:ContextBrowseQuery):Promise<ContextBrowsePage>{return this.send({kind:'contextBrowse',query}) as Promise<ContextBrowsePage>;}
   worldBrowse(query:WorldBrowseQuery):Promise<WorldBrowsePage>{return this.send({kind:'worldBrowse',query}) as Promise<WorldBrowsePage>;}
   worldSceneMeaning(sceneId:string):Promise<string|null>{return this.send({kind:'worldSceneMeaning',sceneId}) as Promise<string|null>;}
   registrySelection(query:import('./sqliteProtocol').RegistrySelectionQuery):Promise<import('./sqliteProtocol').RegistrySelection>{return this.send({kind:'registrySelection',query}) as Promise<import('./sqliteProtocol').RegistrySelection>;}

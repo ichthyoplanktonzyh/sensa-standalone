@@ -10,6 +10,7 @@ import { SensaDetailWorkspaceLayout } from '../ui/SensaPageLayouts';
 import { SensaOverlayLayout } from '../ui/SensaComponents';
 import './PersonalMeaningDetailScreen.css';
 import {PersonalMeaningGovernance} from './PersonalMeaningGovernance';
+import {MeaningDraftEditor} from './MeaningDraftEditor';
 /**
  * The AI clarification workspace.
  *
@@ -389,6 +390,7 @@ export const PersonalMeaningDetailScreen=(props:PersonalMeaningDetailScreenProps
   </div>
  </MeaningWorkspaceFrame>;
  const governed={...props,governanceControls:controls};
+ if(detail&&!props.conversation&&(detail.editableDraft||detail.directAlignments.some(row=>!row.confirmedBindings.length)))return <MeaningDraftEditor detail={detail} onBack={props.onBack} onSaved={snapshot.reload} governanceControls={controls}/>;
  return props.conversation
   ? <ConnectedMeaningConversation {...governed} conversation={props.conversation}/>
   : !props.personalMeaningId && props.onConversationCreated

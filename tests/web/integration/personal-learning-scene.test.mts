@@ -178,10 +178,11 @@ test('published scene acceptance reads only its indexed owner and fixed facts, i
   expect(await readLibrary(tx=>tx.get('semanticMeanings',result.personalMeaningId))).toEqual(old);
   expect(await readLibrary(tx=>tx.get('semanticReceipts',failure.operationId))).toBeUndefined();
   expect(await adapter.worldSceneMeaning(scene.sceneId)).toBe(result.personalMeaningId);
-  // Same admitted public facts, but a new supplied Scene identity and two
-  // different operations/versions. This is the command seam race, not another
-  // public Scene-creation or rating action.
-  const raceSceneId=id(),raceRequests=[1,2].map(revision=>({...request,operationId:id(),scene:{...request.scene,sceneId:raceSceneId,revisionId:id(),revision,body:`同时明确接受的版本 ${revision}`}}));
+  // Two actual saved revisions compete against one indexed owner. Both
+  // immutable source revisions remain present regardless of which wins.
+  const third=await personalContentSystem.execute({...input,operationId:id(),body:'同时明确接受的版本 3',expected:editBase(next.scene)});
+  const fourth=await personalContentSystem.execute({...input,operationId:id(),body:'同时明确接受的版本 4',expected:editBase(third.scene)});
+  const raceSceneId=scene.sceneId,raceRequests=[third.scene,fourth.scene].map(source=>({...request,operationId:id(),scene:{...currentPersonalLearningSceneRevision(source)!,sceneId:raceSceneId}}));
   const race=await Promise.allSettled(raceRequests.map(request=>gateway().acceptPublishedLearningScene(request)));
   expect(race.filter(result=>result.status==='fulfilled')).toHaveLength(1);
   expect(race.filter(result=>result.status==='rejected')).toHaveLength(1);

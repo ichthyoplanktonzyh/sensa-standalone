@@ -4,6 +4,8 @@ import type {LibraryReplicaEntry} from './replication/libraryReplica';
 import {buildDetailView} from '../../experience/personalMeaningJourney/projection';
 import type {MeaningJourneyRecord} from '../../experience/personalMeaningJourney/store';
 import type {IndexedRegistryRead} from '../../experience/personalMeaningJourney/registryRead';
+import {hydrateMeaningContexts,type ContextRecord} from '../../experience/personalMeaningJourney/contextRecords';
+import {contextMaterialBlocks} from '../../experience/personalMeaningJourney/contextRead';
 import {parseStoredMedia} from './media';
 
 export type ConflictPreviewField={label:'expression'|'meaning'|'context'|'note'|'examples'|'included'|'excluded'|'contrasts'|'questions'|'content';text:string};
@@ -28,7 +30,8 @@ export function buildCloudSyncComparison(ids:readonly string[],branches:{base:Br
    const value=decodeBackupValue(row.value);
    if(row.table==='semanticMeanings'){
     const registry:IndexedRegistryRead=(kind,id)=>{const value=read('semanticRegistry',`${kind}:${id}`)?.value;if(!value)view.available=false;return value;};
-    const detail=buildDetailView(value as MeaningJourneyRecord,registry);
+    const meaning=hydrateMeaningContexts(value,id=>read('semanticContexts',id) as ContextRecord|undefined);
+    const detail=buildDetailView(meaning,registry);
     view.removed=detail.status==='deleted';
     const alignments=[...detail.directAlignments,...detail.focuses.flatMap(focus=>focus.alignment?[focus.alignment]:[])];
     const expressions=[...new Set(alignments.flatMap(alignment=>alignment.confirmedBindings.map(binding=>binding.surfaceForm)))];
@@ -60,11 +63,20 @@ export function buildCloudSyncComparison(ids:readonly string[],branches:{base:Br
     if(value.acceptedPersonalMeaningId){
      const meaning=read('semanticMeanings',value.acceptedPersonalMeaningId);
      const registry:IndexedRegistryRead=(kind,id)=>{const fact=read('semanticRegistry',`${kind}:${id}`)?.value;if(!fact)view.available=false;return fact;};
-     const detail=buildDetailView(meaning as MeaningJourneyRecord,registry);
+     const detail=buildDetailView(hydrateMeaningContexts(meaning,id=>read('semanticContexts',id) as ContextRecord|undefined),registry);
      field('meaning',detail.displayLabel);
      for(const alignment of [...detail.directAlignments,...detail.focuses.flatMap(focus=>focus.alignment?[focus.alignment]:[])])field('meaning',alignment.coreMeaningFocus);
     }
     view.available=view.available&&!!revision&&(view.fields.length>0||view.images.length>0);
+   }else if(row.table==='semanticContexts'){
+    const revision=value.kind==='anchorRevisions'?value.value:value.kind==='anchors'?read('semanticContexts',`anchorRevisions:${value.value.currentRevisionId}`)?.value:null;
+    if(!revision)throw Error('semantic_context_invalid');
+    view.removed=value.kind==='anchors'&&value.value.status==='deleted';
+    for(const block of contextMaterialBlocks(revision)){
+     field('context',block.bodyText);
+     if(block.personalMediaObjectId){const inline=revision.structuredPayload.media?.find((media:any)=>media.mediaId===block.personalMediaObjectId);const url=inline?.dataUrl??parseStoredMedia(read('media',block.personalMediaObjectId)).dataUrl;if(!url.startsWith('data:image/'))view.available=false;else view.images.push(image(url));}
+    }
+    view.available=view.available&&(view.fields.length>0||view.images.length>0);
    }else if(row.table==='meanings'){
     view.title=text(value?.expression)??text(value?.title);field('meaning',value?.meaning??value?.text);view.available=view.fields.length>0;
    }else if(row.table==='semanticRegistry'){

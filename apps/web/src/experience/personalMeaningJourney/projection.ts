@@ -1,3 +1,4 @@
+import {contextMaterialBlocks} from './contextRead';
 /**
  * Pure read-model projection for the Personal Meaning journey.
  *
@@ -317,6 +318,10 @@ const buildAnchorViews = (record: MeaningJourneyRecord) => {
       if(capturedSource)capturedSources.push({anchorId:anchor.personalSemanticAnchorId,...capturedSource});
       // Retirement changes the current Context, not its capture provenance.
       if(anchor.status!=='active')return [];
+      if(Array.isArray(revision.structuredPayload.blocks))return contextMaterialBlocks(revision).map((block,index)=>{
+        const inline=Array.isArray(revision.structuredPayload.media)?revision.structuredPayload.media.find((row:any)=>row.mediaId===block.personalMediaObjectId) as {dataUrl:string;mimeType:string}|undefined:undefined;
+        return {anchorId:`${anchor.personalSemanticAnchorId}:${index}`,kind:block.kind,bodyText:block.kind==='text'?block.bodyText??null:null,personalMediaObjectId:block.kind==='image'&&!inline?block.personalMediaObjectId??null:null,...(inline?{inlineDataUrl:inline.dataUrl,inlineMimeType:inline.mimeType}:{}),revision:revision.revision};
+      });
       const sceneMedia = revision.anchorKind === 'scene' && Array.isArray(revision.structuredPayload.media)
         ? revision.structuredPayload.media.flatMap((value) => {
             if (!value || typeof value !== 'object') return [];
@@ -595,6 +600,7 @@ export const buildDetailView = (
   }
   return {
     personalMeaningId: record.personalMeaning.personalMeaningId,
+    editableDraft:record.personalMeaningRevisions.at(-1)?.savedDraft===true&&currentAlignmentIds.size===0,
     shortId: shortId(record.personalMeaning.personalMeaningId),
     revision: record.personalMeaning.currentRevision,
     status:record.personalMeaning.status,

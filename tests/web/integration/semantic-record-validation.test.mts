@@ -27,7 +27,7 @@ for(let index=0;index<2;index++){
 const corrected=await correctionRepository.load();
 const oldComplete=(records:SemanticCandidateRecord[])=>journeyStateFromRows(Object.fromEntries(semanticJourneyTables.map(table=>[table,records.filter(row=>row.table===table)])) as unknown as Parameters<typeof journeyStateFromRows>[0]);
 const accepted=(work:()=>unknown)=>{try{work();return true;}catch{return false;}};
-const corrupt=(state:JourneyState,work:(state:JourneyState)=>void)=>{const copy=structuredClone(state);work(copy);return copy;};
+const corrupt=(state:JourneyState,work:(state:JourneyState)=>void)=>{const copy=structuredClone(state);work(copy);for(const meaning of copy.meanings)for(const revision of meaning.personalSemanticAnchorRevisions){const index=copy.contexts.anchorRevisions.findIndex(row=>row.personalSemanticAnchorRevisionId===revision.personalSemanticAnchorRevisionId);if(index>=0)copy.contexts.anchorRevisions[index]=structuredClone(revision);}return copy;};
 const cases:Array<{name:string;state:JourneyState;valid:boolean}>=[
  {name:'complete accepted World',state:valid,valid:true},
  {name:'deleted Meaning and exact lifecycle witness',state:deleted,valid:true},
@@ -41,11 +41,11 @@ const cases:Array<{name:string;state:JourneyState;valid:boolean}>=[
  {name:'duplicate Sense key',state:corrupt(valid,s=>{s.registry.senses[1]!.senseKey=s.registry.senses[0]!.senseKey;}),valid:false},
  {name:'duplicate version slot',state:corrupt(valid,s=>{s.registry.senseVersions.push({...s.registry.senseVersions[0]!,senseVersionId:crypto.randomUUID()});}),valid:false},
  {name:'BindingVersion crosses another Expression',state:corrupt(valid,s=>{s.registry.bindingVersions[0]!.expressionVersionId=s.registry.expressionVersions[1]!.expressionVersionId;}),valid:false},
- {name:'Context locator exceeds its original text',state:corrupt(valid,s=>{s.meanings[0]!.personalSemanticAnchorRevisions[0]!.bodyText='short';}),valid:false},
+ {name:'Context locator exceeds its original text',state:corrupt(valid,s=>{s.meanings[0]!.personalSemanticAnchorRevisions[0]!.bodyText='short';s.contexts.anchorRevisions.find(row=>row.personalSemanticAnchorRevisionId===s.meanings[0]!.personalSemanticAnchorRevisions[0]!.personalSemanticAnchorRevisionId)!.bodyText='short';}),valid:false},
  {name:'Alignment belongs to a different learner',state:corrupt(valid,s=>{s.meanings[0]!.alignments[0]!.learnerUserId=crypto.randomUUID();}),valid:false},
  {name:'one scene belongs to two Meanings',state:corrupt(valid,s=>{const sceneId=crypto.randomUUID();for(const meaning of s.meanings)meaning.personalSemanticAnchorRevisions[0]!.structuredPayload.learningScene={sceneId};}),valid:false},
  {name:'missing delete receipt',state:corrupt(deleted,s=>{s.commandReceipts=[];}),valid:false},
- {name:'orphan lifecycle receipt',state:corrupt(deleted,s=>{s.commandReceipts.push({...s.commandReceipts[0]!,operationId:crypto.randomUUID()});}),valid:false},
+ {name:'orphan lifecycle receipt',state:corrupt(deleted,s=>{s.commandReceipts.push({...s.commandReceipts.find(row=>row.command==='ChangeMeaningLifecycle')!,operationId:crypto.randomUUID()});}),valid:false},
  {name:'orphan correction receipt',state:corrupt(valid,s=>{s.commandReceipts.push({operationId:crypto.randomUUID(),command:'CorrectPersonalMeaning',requestDigest:'d'.repeat(64),result:{personalMeaningId:s.meanings[0]!.personalMeaning.personalMeaningId}});}),valid:false},
 ];
 for(const sample of cases)test(`complete and indexed candidate validation agree: ${sample.name}`,async()=>{
@@ -73,7 +73,7 @@ test('storage identities, orphan receipts and a missing root cannot be hidden by
 test('indexed validation reads 1000 complete Meanings in bounded pages without rebuilding JourneyState',async()=>{
  const candidate=await sqliteLibraryCandidate(semanticRecords(syntheticSemanticWorld(await repository.load(),1000)));
  try{
-  assertPersonalSemanticWorldRecords(candidate.reader);expect(candidate.recordCount).toBe(7001);expect(candidate.metrics.largestPage).toBe(64);
+  assertPersonalSemanticWorldRecords(candidate.reader);expect(candidate.recordCount).toBe(11001);expect(candidate.metrics.largestPage).toBe(64);
   expect(candidate.metrics.pointReads).toBeGreaterThan(1000);expect(candidate.metrics.iteratedRecords).toBe(candidate.recordCount);
  }finally{candidate.close();}
 },30_000);

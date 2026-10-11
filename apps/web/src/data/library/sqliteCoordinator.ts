@@ -1,3 +1,4 @@
+import type {ContextBrowseQuery,ContextBrowsePage} from '../../experience/personalMeaningJourney/contextRead';
 import type {LearningScheduleQuery,LearningSchedulePage} from '../../learning/system/learningScheduleModel';
 import type {
   HomeLearningStorageProjection,
@@ -27,7 +28,7 @@ const remoteTimeoutMs = 15_000;
 const leaderWaitMs = 10_000;
 const retryableOwnerReads=new Set<SqliteWorkerInput['kind']>([
   'initialize','get','entries','entriesPage','recordKeysPage','changesSince','diagnostics',
-  'meaningLookup','registrySelection','worldBrowse','worldSceneMeaning','worldLearningChoices','practiceExpressions',
+  'meaningLookup','registrySelection','contextBrowse','worldBrowse','worldSceneMeaning','worldLearningChoices','practiceExpressions',
   'existingRecordKeys','existingJourneyIdentities','packageCacheProjection',
   'learningSemanticMemory','hasChangesSince','syncBaseEntries','syncBaseReferences','count','estimateRecordBytes',
   'homeLearningProjection','learningSchedulePage','learningHistoryPage','learningManagementSummary','runtimeLearningCandidates',
@@ -47,6 +48,7 @@ export interface CoordinatedSqliteBackend {
   entriesPage(table:SqliteLibraryTable,afterKey:string|null,limit:number):Promise<Array<{key:string;encodedValue:string}>>;
   recordKeysPage(table:SqliteLibraryTable,afterKey:string|null,limit:number):Promise<string[]>;
   lookupMeanings(query:string):Promise<import('./sqliteProtocol').MeaningLookupResult>;
+  contextBrowse(query:ContextBrowseQuery):Promise<ContextBrowsePage>;
   worldBrowse(query:import('./sqliteProtocol').WorldBrowseQuery):Promise<import('./sqliteProtocol').WorldBrowsePage>;
   worldSceneMeaning(sceneId:string):Promise<string|null>;
   registrySelection(query:import('./sqliteProtocol').RegistrySelectionQuery):Promise<import('./sqliteProtocol').RegistrySelection>;
@@ -157,6 +159,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
   }
   lookupMeanings(query:string):Promise<import('./sqliteProtocol').MeaningLookupResult>{return this.call({kind:'meaningLookup',query}) as Promise<import('./sqliteProtocol').MeaningLookupResult>;}
   learningSemanticMemory(targetId?:string):Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>{return this.call({kind:'learningSemanticMemory',targetId}) as Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>;}
+  contextBrowse(query:ContextBrowseQuery):Promise<ContextBrowsePage>{return this.call({kind:'contextBrowse',query}) as Promise<ContextBrowsePage>;}
   worldBrowse(query:import('./sqliteProtocol').WorldBrowseQuery):Promise<import('./sqliteProtocol').WorldBrowsePage>{return this.call({kind:'worldBrowse',query}) as Promise<import('./sqliteProtocol').WorldBrowsePage>;}
   worldSceneMeaning(sceneId:string):Promise<string|null>{return this.call({kind:'worldSceneMeaning',sceneId}) as Promise<string|null>;}
   registrySelection(query:import('./sqliteProtocol').RegistrySelectionQuery):Promise<import('./sqliteProtocol').RegistrySelection>{return this.call({kind:'registrySelection',query}) as Promise<import('./sqliteProtocol').RegistrySelection>;}
@@ -602,6 +605,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       case 'existingRecordKeys':return backend.existingRecordKeys(input.table,input.keys);
       case 'packageCacheProjection':return backend.packageCacheProjection(input.query);
       case 'meaningLookup':return backend.lookupMeanings(input.query);
+      case 'contextBrowse':return backend.contextBrowse(input.query);
       case 'worldBrowse':return backend.worldBrowse(input.query);
       case 'worldSceneMeaning':return backend.worldSceneMeaning(input.sceneId);
       case 'registrySelection':return backend.registrySelection(input.query);

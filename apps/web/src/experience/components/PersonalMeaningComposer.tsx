@@ -1,3 +1,4 @@
+import {contextFlowText} from '../../i18n/contextFlowText';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import { previewStorage } from "../services/previewStorage";
 import { useTranslation } from "react-i18next";
@@ -39,6 +40,7 @@ export interface MaterialComposerPort {
   save: (input: {texts:string[]; familiarExpression:string; startingPoint:ClarificationStartingPoint|null}) => Promise<string>;
 }
 interface PersonalMeaningComposerProps {
+  contextOnly?:boolean;
   persistence?: MaterialComposerPort;
   open: boolean;
   onClose: () => void;
@@ -69,6 +71,7 @@ export const PersonalMeaningComposer = ({
   onSaved,
   onCreated,
   persistence,
+  contextOnly=false,
 }: PersonalMeaningComposerProps) => {
   const { t } = useTranslation();
   useMediaStoreVersion();
@@ -157,7 +160,7 @@ export const PersonalMeaningComposer = ({
   const filled = blocks.filter((block) =>
     block.kind === "text" ? block.bodyText.trim() : block.mediaId,
   );
-  const canSave = filled.length > 0 || Boolean(familiarExpression.trim());
+  const canSave = filled.length > 0 || !contextOnly&&Boolean(familiarExpression.trim());
   const imageCount = blocks.filter((block) => block.kind === "image" && block.mediaId).length;
 
   useEffect(() => {
@@ -239,6 +242,7 @@ export const PersonalMeaningComposer = ({
           ? { kind: "image", personalMediaObjectId: block.mediaId! }
           : { kind: "text", bodyText: block.bodyText.trim() },
       );
+      if(contextOnly){const result=await gateway.saveContext({operationId:newUuid(),blocks:payload});onSaved(contextFlowText('contextSaved'));return result.contextId;}
       const result = await gateway.createClarificationDraft({
         operationId: newUuid(),
         blocks: payload,
@@ -413,7 +417,7 @@ export const PersonalMeaningComposer = ({
               {localFlowText('sceneImageCount',{count:imageCount,max:MAX_SCENE_IMAGES})}
             </span>
           </div>
-          <details className="mt-7 border-t border-border-subtle pt-5">
+          {!contextOnly&&<details className="mt-7 border-t border-border-subtle pt-5">
             <summary className="cursor-pointer text-sm text-fg-tertiary">
               {t("composer.optional")}
             </summary>
@@ -450,7 +454,7 @@ export const PersonalMeaningComposer = ({
                 </label>
               ))}
             </fieldset>
-          </details>
+          </details>}
           {error && (
             <p className="mt-5 text-sm text-feedback-danger" role="alert">
               {localFlowNotice(error)}
@@ -467,15 +471,15 @@ export const PersonalMeaningComposer = ({
             disabled={!canSave || unavailable}
             onClick={() => void saveAndClarify()}
           >
-            {t(busy ? "composer.saving" : "composer.clarify")}
+            {contextOnly?contextFlowText('saveContext'):t(busy ? "composer.saving" : "composer.clarify")}
           </button>
-          <button
+          {!contextOnly&&<button
             className={`${action} text-fg-secondary hover:bg-surface-selected`}
             disabled={!canSave || unavailable}
             onClick={() => void saveOnly()}
           >
             {t("composer.save")}
-          </button>
+          </button>}
         </div>,
       }}
     />
