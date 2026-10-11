@@ -1,6 +1,7 @@
 export type CloudSyncFailureKind='transient'|'terminal';
 
 export const cloudSyncRetryDelaysMs=[15_000,60_000,300_000] as const;
+export const cloudCheckpointSchedule={idleMs:30_000,maxDirtyMs:60_000,pullStaleMs:60_000} as const;
 
 const transientErrors=new Set([
  'library_sync_network',

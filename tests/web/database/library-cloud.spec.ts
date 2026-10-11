@@ -8,6 +8,7 @@ import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec.
 import {librarySyncBlockChars,librarySyncBlockStoreBatch} from '../../../packages/contracts/src/sensa/librarySync.ts';
 import {decodeLibrarySyncBlock,encodeLibrarySyncBlock} from '../../../packages/contracts/src/sensa/librarySyncBlocks.ts';
 import {createLibraryCloudBrowserFixture} from '../../../tests/web/support/libraryCloudBrowserFixture.mts';
+import {cloudCheckpointSchedule} from '../../../apps/web/src/data/library/cloudSyncPolicy';
 import type {LearningHistoryProjection,LearningRuntimeProjection} from '../../../apps/web/src/learning/system';
 import {manualMeaningPayload,newManualMeaningDraft} from '../../../apps/web/src/experience/intake/manualMeaning';
 test.setTimeout(300_000);
@@ -115,7 +116,10 @@ test('local clear releases a live failed restoration gate without an automatic C
   await page.evaluate(async()=>{const c=(window as any).core;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Explicitly disposable local material.'});await (window as any).sync();});
   let attempts=0;
   await page.route('https://service.fixture.invalid/**',route=>{attempts++;return route.fulfill({status:503,json:{code:'fixture_server_unavailable'}});});
-  await page.clock.install();
+  // An automatic failure needs an expired checkpoint; a fresh mount reuses
+  // its durable confirmation instead of manufacturing a network attempt.
+  const checkedAt=await page.evaluate(async()=>(await (window as any).core.readCloudSync()).lastCheckedAt);
+  await page.clock.install({time:new Date(Date.parse(checkedAt)+cloudCheckpointSchedule.pullStaleMs+1)});
   await page.evaluate(async account=>{(window as any).__fixtureAuthSession={access_token:account.token,user:{id:account.subject}};const path='/local-clear.js',ui=await import(/* @vite-ignore */ path);ui.mountCloudSyncControl({initialAvailability:'restoring'});},account);
   await expect(page.getByTestId('library-availability')).toHaveText('failed');await expect(page.locator('#restore-fixture')).toBeVisible();
   const beforeClear=attempts;
@@ -177,6 +181,8 @@ test('an explicit sync queued behind a failed ordinary attempt retains its own r
  try{
   const account=await fixture.createAccount('queued-retry'),page=await fixture.createClient(account);let attempts=0,release:()=>void=()=>{};
   await page.evaluate(async()=>{const c=(window as any).core;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Keep this fact across failed ordinary sync and queued explicit retry.'});await (window as any).sync();});
+  const checkedAt=await page.evaluate(async()=>(await (window as any).core.readCloudSync()).lastCheckedAt);
+  await page.clock.install({time:new Date(Date.parse(checkedAt)+cloudCheckpointSchedule.pullStaleMs+1)});
   await page.route('https://service.fixture.invalid/**',async route=>{const url=new URL(route.request().url());if(url.pathname.endsWith('/head')&&++attempts===1){await new Promise<void>(resolve=>{release=resolve;});await route.fulfill({status:503,json:{code:'fixture_server_unavailable'}});return;}const response=await route.fetch({url:fixture.origin+url.pathname+url.search});await route.fulfill({response});});
   await page.evaluate(async account=>{(window as any).__fixtureAuthSession={access_token:account.token,user:{id:account.subject}};const path='/local-clear.js',ui=await import(/* @vite-ignore */ path);ui.mountCloudSyncControl();},account);
   await expect.poll(()=>attempts).toBe(1);

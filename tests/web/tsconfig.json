@@ -12,6 +12,7 @@
     "types": ["node", "vite/client", "chrome"]
   },
   "files": [
+    "integration/library-sync-coordination.spec.ts",
     "quality/fixture-preparation.test.mts",
     "../../scripts/prepareRetentionCapacity.mts",
     "release/api-release-identity.test.mts",

@@ -681,7 +681,14 @@ async function transaction<T>(
         if(!confirmed)throw cause;
       }
       if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.library.sqlite-commit',{start:storageStarted,end:performance.now()});
-      if (kind === "state") window.dispatchEvent(new Event("sensa-sync-state-changed"));
+      if (kind === "state") {
+        window.dispatchEvent(new Event("sensa-sync-state-changed"));
+        if (typeof BroadcastChannel !== "undefined") {
+          const channel = new BroadcastChannel(localLibraryScopedName('sensa-local-library'));
+          channel.postMessage({sender:libraryNotificationSender,kind:'state'});
+          channel.close();
+        }
+      }
       else {
         const tables = [...new Set([
           ...mutation.clears,
@@ -757,6 +764,8 @@ export const readRuntimeLearningCandidates=async(query:import('./runtimeLearning
 
 export const readLocalLibraryRevision = (tx: LibraryTransaction): Promise<number> =>
   tx.get<number>("meta", localLibraryRevisionKey).then((value) => value ?? 0);
+export const readLocalArtifactRevision = (tx: LibraryTransaction): Promise<number> =>
+  tx.get<number>('meta','local-artifact-revision').then(value=>value??0);
 
 /** A meaningful product milestone asks the account adapter for an early Checkpoint. */
 export function requestCloudCheckpoint(): void {
@@ -838,7 +847,7 @@ export async function openLibrary(): Promise<LibraryIdentity> {
     if(prior||hasLocalLibraryHint()||await tx.get('meta','service-owner'))throw new Error('localFlow.libraryMissing');
     const meta=await tx.entries('meta');
     const intentionalReset=meta.some(row=>row.key==='local-reset'&&row.value==='account-deletion')&&meta.some(row=>row.key==='signed-out'&&row.value===true);
-    const permittedMeta=intentionalReset?['package-catalog','local-reset','signed-out','local-incarnation','local-content-revision']:['package-catalog'];
+    const permittedMeta=intentionalReset?['package-catalog','local-artifact-revision','local-reset','signed-out','local-incarnation','local-content-revision']:['package-catalog','local-artifact-revision'];
     if(meta.some(row=>!permittedMeta.includes(String(row.key))))throw new Error('localFlow.libraryMissing');
     const operations=await tx.entries('operations');
     if(operations.some(row=>JSON.parse(row.value.input).kind!=='package.catalog'))throw new Error('localFlow.libraryMissing');
@@ -887,6 +896,7 @@ export function observeLibrary(listener: () => void, tables?: readonly Table[], 
     : new BroadcastChannel(localLibraryScopedName('sensa-local-library'));
   if (channel) channel.onmessage = (event) => {
     if(event.data?.sender===libraryNotificationSender)return;
+    if(event.data?.kind==='state')return;
     if (relevant(event.data)) listener();
   };
   return () => {
@@ -896,17 +906,19 @@ export function observeLibrary(listener: () => void, tables?: readonly Table[], 
 }
 
 export function observeCloudSync(listener: () => void): () => void {
-  window.addEventListener("sensa-sync-state-changed", listener);
+  const stopState=observeCloudSyncState(listener);
   const stop = observeLibrary(listener);
   return () => {
-    window.removeEventListener("sensa-sync-state-changed", listener);
+    stopState();
     stop();
   };
 }
 
 export function observeCloudSyncState(listener: () => void): () => void {
   window.addEventListener("sensa-sync-state-changed", listener);
-  return () => window.removeEventListener("sensa-sync-state-changed", listener);
+  const channel=typeof BroadcastChannel==='undefined'?null:new BroadcastChannel(localLibraryScopedName('sensa-local-library'));
+  if(channel)channel.onmessage=event=>{if(event.data?.sender!==libraryNotificationSender&&event.data?.kind==='state')listener();};
+  return () => {window.removeEventListener("sensa-sync-state-changed", listener);channel?.close();};
 }
 
 export async function readLibraryStorageDiagnostics(options?:Readonly<{verifyIntegrity?:boolean}>): Promise<SqliteStorageDiagnostics> {

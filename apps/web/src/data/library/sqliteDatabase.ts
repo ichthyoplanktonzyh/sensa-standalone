@@ -806,6 +806,15 @@ export class SqliteRecordDatabase {
         }
         discardCandidates=true;
       }
+      // Validate the sealed candidate before adding device-only bookkeeping.
+      // This durable generation makes cache invalidation authoritative even
+      // when a peer's BroadcastChannel notification has not arrived yet.
+      if(mutation.replicaCandidateRestore||mutation.clears.some(table=>table==='packageCache'||table==='packageInstallations')||[...mutation.puts,...mutation.deletes].some(row=>row.table==='packageCache'||row.table==='packageInstallations'||row.table==='meta'&&row.key==='package-catalog')){
+        const storedGeneration=this.get('meta','local-artifact-revision');
+        const priorGeneration=storedGeneration===null?0:decodeBackupValue(JSON.parse(storedGeneration)) as number;
+        if(!Number.isSafeInteger(priorGeneration)||priorGeneration<0||priorGeneration===Number.MAX_SAFE_INTEGER)throw Error('sqlite_artifact_revision_invalid');
+        mutation={...mutation,puts:[...mutation.puts,{table:'meta',key:'local-artifact-revision',encodedValue:JSON.stringify(encodeBackupValue(priorGeneration+1))}]};
+      }
       if (mutation.syncBaseReplacement) {
         for(const row of this.database.exec({sql:"SELECT DISTINCT digest FROM sensa_shared_record_content_owners WHERE owner_kind='sync'",rowMode:0,returnValue:'resultRows'}) as string[])removedContent.add(row);
         this.database.exec("DELETE FROM sensa_shared_record_content_owners WHERE owner_kind='sync'");

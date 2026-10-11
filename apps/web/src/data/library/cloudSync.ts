@@ -19,7 +19,7 @@ import {applyLibraryReplicaMutation} from './replication/libraryReplicaApplicati
 import {validateLibraryReplicaCooperatively,libraryReplicaValidationVersion,type ValidatedLibraryReplica} from './replication/libraryReplicaValidation';
 import {replicaCandidateAppendRecordLimit,replicaCandidateAppendReferenceLimit,type ReplicaCandidateFence,type ReplicaCandidateRequest,type ReplicaCandidateResponse,type ReplicaCandidateRecord,type ReplicaCandidateValidation} from './replicaCandidateProtocol';
 export type SyncRequest=(path:string,body?:unknown)=>Promise<any>;
-export type LibrarySyncOptions={publishEmptyIdentity?:boolean;restoreAfterLocalClear?:boolean};
+export type LibrarySyncOptions={publishEmptyIdentity?:boolean;restoreAfterLocalClear?:boolean;backgroundVerification?:boolean};
 export type CloudSyncEntry=LibraryReplicaEntry;
 type Entry=CloudSyncEntry;
 type Owner={subject:string;accountId:string};
@@ -411,10 +411,15 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
  };
  const blocks=new Blocks(request);
  try{
-  await saveState(expected,old=>({...old??defaults,status:'syncing',syncStartedAt:new Date().toISOString(),error:undefined}));
+  // A confirmed, clean verification keeps its durable checkpoint while the
+  // head is in flight. Success updates it once; failure still saves a real
+  // error. This avoids two OPFS commits for an unchanged background check.
+  const cleanVerification=options.backgroundVerification===true&&validatedCheckpoint(prior)&&prior!.status==='synced'&&prior!.syncedLocalRevision===header.localRevision&&!options.publishEmptyIdentity&&!consumeReconnect;
+  if(!cleanVerification)await saveState(expected,old=>({...old??defaults,status:'syncing',syncStartedAt:new Date().toISOString(),error:undefined}));
   let observedHead:LibrarySyncHead|undefined;
   if(validatedCheckpoint(prior)&&prior!.syncedLocalRevision!<=header.localRevision){
    observedHead=librarySyncHead.parse(await request('/head'));
+   if(cleanVerification&&observedHead.revision!==prior!.revision)await saveState(expected,old=>({...old??defaults,status:'syncing',syncStartedAt:new Date().toISOString(),error:undefined}));
    if(observedHead.revision===prior!.revision&&!(observedHead.manifest===null&&options.publishEmptyIdentity)){
     const delta=await readLibrary(tx=>captureDelta(tx,header,observedHead!));
     if(delta.puts.length||delta.deletes.length){

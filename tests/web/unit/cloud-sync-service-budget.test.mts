@@ -6,6 +6,10 @@ vi.mock('../../../apps/web/src/data/account/auth',()=>({auth:undefined}));
 vi.mock('../../../apps/web/src/data/library/store',()=>({
  readLibrary:async(work:(tx:unknown)=>unknown)=>work({get:async(_table:string,key:string)=>key==='service-owner'?fixture.owner:undefined}),
  assertCurrentLibrary:async()=> 'fixture-incarnation',
+ readLocalLibraryRevision:async()=>0,
+ readLocalArtifactRevision:async()=>0,
+ writeLibraryState:async(work:(tx:unknown)=>unknown)=>work({get:async()=>undefined,put:()=>{}}),
+ observeLibrary:()=>()=>{},
 }));
 vi.mock('../../../apps/web/src/data/library/cloudSync',()=>({synchronizeLibrary:fixture.sync,readCloudReconnectRequired:async()=>false}));
 vi.mock('../../../apps/web/src/contentSupply/system/contentSupplySystem',()=>({contentSupplySystem:{execute:fixture.rehydrate}}));

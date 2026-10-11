@@ -156,6 +156,7 @@ const foundationTests = [
     suite: 'database',
     runner: 'playwright',
   },
+  {id:'library-sync-coordination',file:'tests/web/integration/library-sync-coordination.spec.ts',kind:'integration',risks:['local-correctness','durability','convergence'],environment:'browser-postgres',suite:'database',runner:'playwright'},
   {
     id: 'learning-branch-replay',
     file: 'tests/web/integration/learning-branch-replay.test.mts',
