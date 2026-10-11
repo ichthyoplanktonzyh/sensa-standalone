@@ -5,8 +5,15 @@ const isolated = new Map<HTMLElement, boolean>();
 
 function visibleFocusable(dialog: HTMLElement): HTMLElement[] {
   return [...dialog.querySelectorAll<HTMLElement>(
-    'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
-  )].filter((node) => !node.closest("[inert]")
+    'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], summary, audio[controls], iframe, [tabindex]:not([tabindex="-1"])',
+  )].filter((node) => !node.hasAttribute('data-sensa-focus-guard')
+    && (() => {
+      for (let disclosure = node.closest('details:not([open])'); disclosure; disclosure = disclosure.parentElement?.closest('details:not([open])') ?? null) {
+        if (!disclosure.querySelector(':scope > summary')?.contains(node)) return false;
+      }
+      return true;
+    })()
+    && !node.closest("[inert]")
     && node.getClientRects().length > 0
     && getComputedStyle(node).visibility !== "hidden");
 }
@@ -62,25 +69,35 @@ export function useDialogFocus(
       : null;
     dialogs.push(dialog);
     focusDialog(synchronizeIsolation() ?? dialog);
+    // Sentinels wrap only after native controls finish their own Tab sequence.
+    // Audio controls and iframe contents expose several stops behind one host.
+    const guard = (atStart: boolean) => {
+      const node = document.createElement('span');
+      node.tabIndex = 0;
+      node.dataset.sensaFocusGuard = '';
+      Object.assign(node.style, {position: 'fixed', width: '1px', height: '1px', opacity: '0', pointerEvents: 'none'});
+      node.addEventListener('focus', () => {
+        if (topDialog() !== dialog) return;
+        const items = visibleFocusable(dialog);
+        (atStart ? items.at(-1) : items[0])?.focus();
+        if (!items.length) dialog.focus();
+      });
+      return node;
+    };
+    const startGuard = guard(true), endGuard = guard(false);
+    dialog.prepend(startGuard);
+    dialog.append(endGuard);
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Tab" || topDialog() !== dialog) return;
-      const items = visibleFocusable(dialog);
-      const first = items[0];
-      const last = items.at(-1);
-      if (!first || !last) {
+      if (event.key === 'Tab' && topDialog() === dialog && !visibleFocusable(dialog).length) {
         event.preventDefault();
         dialog.focus();
-      } else if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
-        event.preventDefault();
-        first.focus();
       }
     };
     dialog.addEventListener("keydown", onKeyDown);
     return () => {
       dialog.removeEventListener("keydown", onKeyDown);
+      startGuard.remove();
+      endGuard.remove();
       const index = dialogs.lastIndexOf(dialog);
       if (index >= 0) dialogs.splice(index, 1);
       const next = synchronizeIsolation();

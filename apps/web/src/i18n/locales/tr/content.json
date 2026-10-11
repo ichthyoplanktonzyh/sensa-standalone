@@ -80,6 +80,7 @@
     "findExpression": "Sensa ile konuş",
     "findExpressionHint": "Bağlamı, anlamı ve ifadeyi netleştirmek için metin veya görsel paylaş",
     "graph": {
+      "browse": "İfadeleri gözden geçir",
       "title": "Anlam grafiği",
       "context": "Bağlam",
       "focus": "Odak",

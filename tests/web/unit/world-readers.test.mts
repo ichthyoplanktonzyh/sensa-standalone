@@ -111,7 +111,7 @@ test('select-all rejects an inconsistent frame or cancelled read without publish
 test('expression points preserve IDs, polysemy, real relation witnesses and isolated records under language filters',async()=>{
  const {expressionWorldFixture}=await import('../support/expressionWorldFixture');
  const {worldItemFromRegistry}=await import('../../../apps/web/src/experience/personalMeaningJourney/worldRead');
- const {buildMeaningGraph}=await import('../../../apps/web/src/experience/ui/meaningGraph');
+ const {buildMeaningGraph,relatedMeaningExpressions}=await import('../../../apps/web/src/experience/ui/meaningGraph');
  const state=await expressionWorldFixture(),items=state.meanings.map(record=>worldItemFromRegistry(record,state.registry));
  const graph=buildMeaningGraph(items);
  expect(graph.nodes).toHaveLength(6);expect(new Set(graph.nodes.map(node=>node.id)).size).toBe(6);
@@ -119,6 +119,7 @@ test('expression points preserve IDs, polysemy, real relation witnesses and isol
  const polysemous=graph.nodes.find(node=>new Set(node.associations.map(row=>row.alignment.senseId)).size===2)!;
  expect(polysemous.label).toBe('borrow');expect(polysemous.associations).toHaveLength(2);
  expect(graph.edges.length).toBeGreaterThan(0);
+ for(const node of graph.nodes){const expected=graph.nodes.filter(other=>other.id!==node.id&&other.associations.some(right=>node.associations.some(left=>left.alignment.senseId===right.alignment.senseId||left.item.personalMeaningId===right.item.personalMeaningId))).map(other=>other.id).sort();expect(relatedMeaningExpressions(graph,node.id).map(edge=>edge.to).sort()).toEqual(expected);}
  const byId=new Map(graph.nodes.map(node=>[node.id,node]));
  for(const edge of graph.edges)for(const fact of edge.facts){
   const memberships=(id:string)=>byId.get(id)!.associations.map(row=>fact.kind==='sense'?row.alignment.senseId:row.item.personalMeaningId);

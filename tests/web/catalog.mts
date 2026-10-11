@@ -546,6 +546,7 @@ export const webTestCatalog: readonly WebTestCatalogEntry[] = [
     runner: 'vitest',
   },
   {
+    // Real shared reader: localization, disclosures, native media focus and iframe dismissal.
     id: 'resource-presentation',
     file: 'tests/web/browser/resource-presentation.spec.ts',
     kind: 'integration',

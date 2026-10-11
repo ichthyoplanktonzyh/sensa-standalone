@@ -80,6 +80,7 @@
     "findExpression": "Trò chuyện với Sensa",
     "findExpressionHint": "Chia sẻ văn bản hoặc hình ảnh để làm rõ ngữ cảnh, ý nghĩa và cách diễn đạt",
     "graph": {
+      "browse": "Duyệt các cách diễn đạt",
       "title": "Đồ thị ý nghĩa",
       "context": "Ngữ cảnh",
       "focus": "Trọng tâm",

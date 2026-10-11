@@ -9,6 +9,8 @@
 @import "./experience/appearance/assetStyles.css";
 @import "./experience/appearance/motionStyles.css";
 @import "./experience/library/packagePresentation.css";
+@import "./experience/components/MeaningGraphView.css";
+@import "./experience/components/learning/LearningResourceDetails.css";
 @source "./experience";
 
 html {

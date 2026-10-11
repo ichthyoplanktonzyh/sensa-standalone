@@ -1,5 +1,8 @@
 {
   "localFlow": {
+    "learningResources": "Учебные материалы",
+    "resourcesEmpty": "Учебные материалы недоступны.",
+    "studyResources": "Дополнительные учебные материалы",
     "outsideLearningPlan": "Не входит в будущий план обучения",
     "supplementalEmpty":"Отдельные материалы ещё не добавлены","supplementalLearning": "Дополнительное обучение",
     "removeFromLearning": "Убрать из обучения",

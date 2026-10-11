@@ -1,4 +1,7 @@
 {"localFlow":{
+    "learningResources": "Materiały do nauki",
+    "resourcesEmpty": "Brak dostępnych materiałów do nauki.",
+    "studyResources": "Dodatkowe materiały do nauki",
     "libraryRecovery": "Odzyskaj dane lokalne",
     "libraryMissing": "Nie można odczytać poprzednich danych lokalnych. Spróbuj ponownie lub przywróć kopię zapasową; nie usuwaj danych przeglądarki.",
     "libraryRecoveryLogin": "Zaloguj się na pierwotne konto",

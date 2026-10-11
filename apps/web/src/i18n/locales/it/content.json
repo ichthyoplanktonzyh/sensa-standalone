@@ -80,6 +80,7 @@
     "findExpression": "Parla con Sensa",
     "findExpressionHint": "Condividi testi o immagini per chiarire contesto, significato ed espressione",
     "graph": {
+      "browse": "Esplora le espressioni",
       "title": "Grafo dei significati",
       "context": "Contesto",
       "focus": "Fuoco",

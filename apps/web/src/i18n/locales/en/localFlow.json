@@ -1,5 +1,8 @@
 {
   "localFlow": {
+    "learningResources": "Learning resources",
+    "resourcesEmpty": "No learning resources are available.",
+    "studyResources": "Additional learning material",
     "outsideLearningPlan": "Outside the future learning plan",
     "supplementalEmpty":"No individually added content yet","supplementalLearning": "Supplemental learning",
     "removeFromLearning": "Remove from learning",

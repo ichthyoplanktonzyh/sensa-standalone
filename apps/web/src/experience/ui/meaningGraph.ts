@@ -20,6 +20,20 @@ export interface MeaningGraphEdge {
   facts: Array<{kind:'sense'|'meaning';id:string}>;
 }
 
+/** Visible stars are sparse. Details retain every proven shared membership,
+ * including members joined through the same hub rather than a direct stroke. */
+export function relatedMeaningExpressions(graph:ReturnType<typeof buildMeaningGraph>,expressionId:string):MeaningGraphEdge[]{
+ const selected=graph.nodes.find(node=>node.id===expressionId);if(!selected)return [];
+ return graph.nodes.filter(node=>node.id!==expressionId).flatMap(node=>{
+  const facts=new Map<string,{kind:'sense'|'meaning';id:string}>();
+  for(const a of selected.associations)for(const b of node.associations){
+   if(a.alignment.senseId===b.alignment.senseId)facts.set(`sense:${a.alignment.senseId}`,{kind:'sense',id:a.alignment.senseId});
+   if(a.item.personalMeaningId===b.item.personalMeaningId)facts.set(`meaning:${a.item.personalMeaningId}`,{kind:'meaning',id:a.item.personalMeaningId});
+  }
+  return facts.size?[{from:expressionId,to:node.id,facts:[...facts.values()]}]:[];
+ });
+}
+
 /** One point per stable Expression identity, with its accepted interpretations.
  * Sparse stars represent actual shared Sense/Personal Meaning memberships.
  * Coordinates are a deterministic reading layout, never semantic distance. */

@@ -1,5 +1,8 @@
 {
   "localFlow": {
+    "learningResources": "Sumber belajar",
+    "resourcesEmpty": "Tidak ada sumber belajar yang tersedia.",
+    "studyResources": "Materi belajar tambahan",
     "outsideLearningPlan": "Di luar rencana pembelajaran berikutnya",
     "supplementalEmpty":"Belum ada konten yang ditambahkan secara terpisah","supplementalLearning": "Pembelajaran tambahan",
     "removeFromLearning": "Keluarkan dari pembelajaran",

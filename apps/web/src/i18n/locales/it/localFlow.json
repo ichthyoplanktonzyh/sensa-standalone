@@ -1,5 +1,8 @@
 {
   "localFlow": {
+    "learningResources": "Risorse di apprendimento",
+    "resourcesEmpty": "Nessuna risorsa di apprendimento disponibile.",
+    "studyResources": "Altri materiali di apprendimento",
     "outsideLearningPlan": "Fuori dal piano di apprendimento futuro",
     "supplementalEmpty":"Nessun contenuto aggiunto singolarmente","supplementalLearning": "Apprendimento supplementare",
     "removeFromLearning": "Rimuovi dall’apprendimento",

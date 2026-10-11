@@ -1,5 +1,8 @@
 {
   "localFlow": {
+    "learningResources": "学习资源",
+    "resourcesEmpty": "暂无可用的学习资源。",
+    "studyResources": "其他学习材料",
     "outsideLearningPlan": "不在后续学习计划中",
     "supplementalEmpty":"还没有单独加入的内容","supplementalLearning": "补充学习",
     "removeFromLearning": "移出学习",

@@ -126,6 +126,7 @@ function ContentScreenView({
 }: ContentScreenProps) {
   const { t, i18n } = useTranslation();
   const locale=resolveInterfaceLocale(i18n.resolvedLanguage??i18n.language);
+  const [graphFiltersOpen,setGraphFiltersOpen]=useState(false);
   const [filtersOpen,setFiltersOpen]=useState(()=>window.matchMedia('(min-width:48rem)').matches);
   useEffect(()=>{const media=window.matchMedia('(min-width:48rem)'),update=()=>setFiltersOpen(media.matches);media.addEventListener('change',update);return()=>media.removeEventListener('change',update);},[]);
   const [category, setCategory] = useScreenState<Category>(`${screenId}:category`, "personal");
@@ -323,7 +324,7 @@ function ContentScreenView({
           </button>
         )}
         {category !== "markers" && (
-          <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="sensa-world-query-row flex flex-wrap items-center justify-between gap-4">
             <label className="flex min-h-11 w-full items-center gap-3 rounded-control border border-border-subtle bg-surface-panel px-3 focus-within:outline-2 focus-within:outline-focus sm:max-w-sm">
               <Search size={17} className="shrink-0 text-fg-tertiary" />
               <input
@@ -353,19 +354,19 @@ function ContentScreenView({
                 {(["list", "world"] as const).map((id) => (
                   <button
                     className={`${button} min-h-9 ${view === id ? "bg-surface-selected text-action-primary" : "text-fg-secondary"}`}
-                    aria-pressed={view === id}
+                    data-world-view aria-label={t(`content.${id}`)} aria-pressed={view === id}
                     key={id}
                     onClick={() => setView(id)}
                   >
                     {id === "list" ? <List size={16} /> : <Network size={16} />}{" "}
-                    {t(`content.${id}`)}
+                    <span data-world-view-text>{t(`content.${id}`)}</span>
                   </button>
                 ))}
               </div>
             )}
           </div>
         )}
-        {category==='personal'&&<details className="sensa-world-filters" open={filtersOpen} onToggle={event=>setFiltersOpen(event.currentTarget.open)}><summary className="min-h-11 cursor-pointer py-3 text-sm text-fg-secondary"><SlidersHorizontal size={15} className="mr-2 inline-block" aria-hidden="true"/>{t('content.filters')}{filterSummary&&<span className="ml-2 text-xs">· {filterSummary}</span>}</summary><div className="space-y-3 pb-2">
+        {category==='personal'&&<details className="sensa-world-filters" open={view==='world'?graphFiltersOpen:filtersOpen} onToggle={event=>view==='world'?setGraphFiltersOpen(event.currentTarget.open):setFiltersOpen(event.currentTarget.open)}><summary className="min-h-11 cursor-pointer py-3 text-sm text-fg-secondary"><SlidersHorizontal size={15} className="mr-2 inline-block" aria-hidden="true"/>{t('content.filters')}{filterSummary&&<span className="ml-2 text-xs">· {filterSummary}</span>}</summary><div className="space-y-3 pb-2">
          {category==='personal'&&<div className="sensa-world-languages mt-3 flex flex-wrap items-center gap-2" role="group" aria-label={t('content.worldLanguage')}>
          <span className="mr-1 text-xs text-fg-secondary">{t('content.worldLanguage')}</span>
          <button className={button+' border '+(!languages.length?'border-border-strong bg-surface-selected font-semibold':'border-border-subtle')} aria-pressed={!languages.length} onClick={()=>setLanguages([])}>{t('content.worldAllLanguages')}</button>

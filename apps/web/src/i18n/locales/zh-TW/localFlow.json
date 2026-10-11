@@ -1,5 +1,8 @@
 {
   "localFlow": {
+    "learningResources": "學習資源",
+    "resourcesEmpty": "暫無可用的學習資源。",
+    "studyResources": "其他學習材料",
     "outsideLearningPlan": "不在後續學習計畫中",
     "supplementalEmpty":"尚無單獨加入的內容","supplementalLearning": "補充學習",
     "removeFromLearning": "移出學習",

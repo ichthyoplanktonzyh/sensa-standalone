@@ -1,5 +1,8 @@
 {
   "localFlow": {
+    "learningResources": "학습 자료",
+    "resourcesEmpty": "사용 가능한 학습 자료가 없습니다.",
+    "studyResources": "추가 학습 자료",
     "libraryRecovery": "로컬 데이터 복구",
     "libraryMissing": "이전 로컬 데이터를 읽을 수 없습니다. 다시 시도하거나 백업을 복원하세요. 브라우저 데이터를 삭제하지 마세요.",
     "libraryRecoveryLogin": "원래 계정으로 로그인",

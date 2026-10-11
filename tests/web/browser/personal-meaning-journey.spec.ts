@@ -818,11 +818,16 @@ test('personal preparation pins explicit Context updates, preserves the active R
  await page.getByRole('button',{name:'保存场景',exact:true}).click();
  await expect(preparation).toContainText('场景已修改');expect(requests).toHaveLength(1);
  await preparation.getByText('查看学习资源',{exact:true}).click();
- await expect(preparation.getByText('清晨，一个人用水壶给室内的植物浇水。',{exact:true})).toBeVisible();
+ await expect(page.getByRole('dialog',{name:/^学习资源/u}).getByText('清晨，一个人用水壶给室内的植物浇水。',{exact:true})).toBeVisible();
+ await page.keyboard.press('Escape');await expect(preparation.getByRole('button',{name:'查看学习资源',exact:true})).toBeFocused();
  await expect(preparation.getByRole('button',{name:'开始 / 继续学习',exact:true})).toBeEnabled();
  plans=[{value:candidate('傍晚，一个人在阳台上给花浇水。','At dusk I water the flowers on the balcony.')}];
  await preparation.getByRole('button',{name:'使用当前场景设置更新资源',exact:true}).click();
- await expect(preparation.getByText('傍晚，一个人在阳台上给花浇水。',{exact:true})).toBeVisible();
+ await expect.poll(async()=>(await facts(page)).learning.runtime?.materializationId).not.toBe(suspended.runtime!.materializationId);
+ await expect(preparation.getByRole('button',{name:'开始 / 继续学习',exact:true})).toBeEnabled();
+ await preparation.getByRole('button',{name:'查看学习资源',exact:true}).click();
+ await expect(page.getByRole('dialog',{name:/^学习资源/u}).getByText('傍晚，一个人在阳台上给花浇水。',{exact:true})).toBeVisible();
+ await page.goBack();await expect(page.getByRole('dialog',{name:/^学习资源/u})).toHaveCount(0);
  expect(requests).toHaveLength(2);expect(JSON.stringify(requests[1])).toContain(nextContext);expect(JSON.stringify(requests[1])).not.toContain(oldContext);
  const updated=(await facts(page)).learning;
  expect(updated).toEqual({...suspended,runtime:{...suspended.runtime!,materializationId:updated.runtime!.materializationId}});
@@ -837,7 +842,9 @@ test('personal preparation pins explicit Context updates, preserves the active R
  await expect(preparation.getByRole('button',{name:'重试 / 恢复准备',exact:true})).toBeVisible();
  await expect.poll(async()=>(await facts(page)).provisioning[0]).toMatchObject({status:'failed',useContext:false});
  expect((await facts(page)).learning).toEqual(updated);
- await expect(preparation.getByText('傍晚，一个人在阳台上给花浇水。',{exact:true})).toBeVisible();
+ await preparation.getByRole('button',{name:'查看学习资源',exact:true}).click();
+ await expect(page.getByRole('dialog',{name:/^学习资源/u}).getByText('傍晚，一个人在阳台上给花浇水。',{exact:true})).toBeVisible();
+ await page.goBack();await expect(page.getByRole('dialog',{name:/^学习资源/u})).toHaveCount(0);
  await expect(preparation.getByRole('button',{name:'使用原有资源学习',exact:true})).toBeEnabled();
  expect(JSON.stringify(requests.slice(2))).not.toMatch(/Private-A|Private-B/);
  await page.evaluate(()=>window.__sensaBrowserSmoke!.setSpeechFixtureForTest(false));
@@ -1325,8 +1332,10 @@ test('World expression languages combine with search, saved meanings and notes w
  await graph.getByRole('complementary',{name:'表达预览',exact:true}).getByRole('button',{name:'关闭',exact:true}).click();
  const borrow=scaleFixture.registry.expressionVersions.filter(version=>version.surfaceForm==='borrow');
  expect(new Set(borrow.map(version=>version.expressionId)).size).toBe(3);
+ await world.locator('.sensa-world-filters > summary').click();
  for(const version of borrow)await expect(graph.locator(`[data-expression-id="${version.expressionId}"]`)).toHaveCount(1);
  await languages.getByRole('button',{name:'en',exact:true}).click();await expect(points).toHaveCount(1);
+ await world.locator('.sensa-world-filters > summary').click();
  await graph.getByRole('button',{name:'显示全部',exact:true}).click();
  const frId=scaleFixture.registry.expressions.find(expression=>expression.languageTag==='fr')!.expressionId,point=graph.locator(`[data-expression-id="${frId}"]`);
  await point.focus();await expect(graph.locator('[data-graph-preview]')).toContainText('emprunter');await point.press('Enter');
@@ -1334,8 +1343,8 @@ test('World expression languages combine with search, saved meanings and notes w
  await expect(detail).toContainText('当前视图中没有连线');await expect(detail).toContainText('当前学习路线');await expect(detail).toContainText('尚未加入此路线');
  await detail.getByText('原始来源',{exact:true}).click();await detail.getByText('fixture · 隔离原文来源',{exact:true}).click();await expect(detail.getByRole('link',{name:'查看来源：',exact:true})).toHaveAttribute('href','https://example.test/original');
  const canvas=graph.locator('[data-graph-camera]');await canvas.scrollIntoViewIfNeeded();const box=await canvas.boundingBox();expect(box).not.toBeNull();
- const beforePan=JSON.parse((await canvas.getAttribute('data-graph-camera'))!);await page.mouse.move(box!.x+box!.width-25,box!.y+box!.height-35);await page.mouse.down();await page.mouse.move(box!.x+box!.width-55,box!.y+box!.height-55);await page.mouse.up();
- expect(JSON.parse((await canvas.getAttribute('data-graph-camera'))!).x).not.toBe(beforePan.x);
+ const beforePan=JSON.parse((await canvas.getAttribute('data-graph-camera'))!);await page.mouse.move(box!.x+box!.width-25,box!.y+box!.height-35);await page.mouse.down();await page.mouse.move(box!.x+box!.width-55,box!.y+box!.height-55,{steps:8});await page.mouse.up();
+ await expect.poll(async()=>JSON.parse((await canvas.getAttribute('data-graph-camera'))!).x).not.toBe(beforePan.x);
  await graph.getByRole('button',{name:'放大',exact:true}).click();const camera=await graph.locator('[data-graph-camera]').getAttribute('data-graph-camera');
  await page.screenshot({path:testInfo.outputPath('expression-graph-desktop-fr-preview.png'),animations:'disabled'});
  await detail.getByRole('button',{name:'查看详情',exact:true}).click();
@@ -1347,7 +1356,7 @@ test('World expression languages combine with search, saved meanings and notes w
  await expect(note.getByRole('alert')).toBeVisible();await expect(note.locator('textarea')).toHaveValue('隔离的图谱详情笔记');
  await note.getByRole('button',{name:'保存笔记',exact:true}).click();await expect(note).toHaveCount(0);
  await page.goBack();await expect(detail.getByRole('heading',{name:'emprunter',exact:true})).toBeVisible();
- await expect(graph.locator('[data-graph-camera]')).toHaveAttribute('data-graph-camera',camera!);await expect(languages.getByRole('button',{name:'fr',exact:true})).toHaveAttribute('aria-pressed','true');
+ await expect(graph.locator('[data-graph-camera]')).toHaveAttribute('data-graph-camera',camera!);await expect(world.locator('.sensa-world-filters > summary')).toContainText('法语');
  const changeSkin=async(skin:'Clear'|'Quiet')=>{await page.getByRole('button',{name:'账号与设置',exact:true}).click();await page.locator('#settings-preferences').click();await page.getByRole('radio',{name:new RegExp(`^Sensa ${skin}(?:\\s|$)`,'u')}).click();await expect(page.locator('html')).toHaveAttribute('data-sensa-skin',skin.toLowerCase());await page.goBack();};
  await changeSkin('Clear');await expect(detail.getByRole('heading',{name:'emprunter',exact:true})).toBeVisible();
  expect(await graph.locator('.sensa-expression-graph-workspace').evaluate(element=>getComputedStyle(element).display)).toBe('flex');
@@ -1355,10 +1364,10 @@ test('World expression languages combine with search, saved meanings and notes w
  await page.screenshot({path:testInfo.outputPath('expression-graph-clear-preview.png'),animations:'disabled'});
  await changeSkin('Quiet');await expect(detail.getByRole('heading',{name:'emprunter',exact:true})).toBeVisible();
  await detail.getByRole('button',{name:'关闭',exact:true}).click();await expect(point).toBeFocused();
- const markers=world.getByRole('combobox',{name:'收藏与笔记',exact:true});await markers.selectOption('saved');await expect(points).toHaveCount(1);await markers.selectOption('notes');await expect(points).toHaveCount(1);
+ await world.locator('.sensa-world-filters > summary').click();const markers=world.getByRole('combobox',{name:'收藏与笔记',exact:true});await markers.selectOption('saved');await expect(points).toHaveCount(1);await markers.selectOption('notes');await expect(points).toHaveCount(1);
  await page.evaluate(()=>window.__sensaBrowserSmoke!.failAnnotationReadsForTest(true));await expect(world.getByRole('alert')).toContainText('读取');await expect(world.locator('[data-world-counts]')).toHaveCount(0);
  await page.evaluate(()=>window.__sensaBrowserSmoke!.failAnnotationReadsForTest(false));await world.getByRole('button',{name:'重试',exact:true}).click();await expect(points).toHaveCount(1);
- await page.reload();await expect(points).toHaveCount(1);await expect(markers).toHaveValue('notes');await expect(languages.getByRole('button',{name:'fr',exact:true})).toHaveAttribute('aria-pressed','true');
+ await page.reload();await expect(points).toHaveCount(1);await world.locator('.sensa-world-filters > summary').click();await expect(markers).toHaveValue('notes');await expect(languages.getByRole('button',{name:'fr',exact:true})).toHaveAttribute('aria-pressed','true');
  await world.getByRole('button',{name:'列表',exact:true}).click();await expect(counts).toHaveText('1 个表达 · 1 个去重意义');
  await markers.selectOption('all');await languages.getByRole('button',{name:'全部语言',exact:true}).click();await expect(counts).toHaveText('86 个表达 · 85 个去重意义');
  await world.getByRole('button',{name:/^收件箱/u}).click();await expect(page.getByRole('dialog')).toContainText('尚待绑定的隔离材料');await page.getByRole('dialog').getByRole('button',{name:'关闭',exact:true}).click();
@@ -1377,8 +1386,18 @@ test.describe('World touch preview',()=>{
   await page.evaluate(async()=>window.__sensaBrowserSmoke!.seedSemanticWorld(await (await fetch('/semantic-scale-fixture')).json()));
   await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
   const world=page.locator('.sensa-world.active').last(),languages=world.getByRole('group',{name:'表达语言',exact:true});await world.getByText('筛选',{exact:true}).click();await languages.getByRole('button',{name:'fr',exact:true}).click();await world.getByRole('button',{name:'语义世界',exact:true}).click();
-  const graph=world.getByRole('region',{name:'词义图谱',exact:true});await graph.getByRole('button',{name:'显示全部',exact:true}).click();
-  const point=graph.locator('[data-expression-id]');await expect(point).toHaveCount(1);const location=new URL(page.url()).pathname;await point.tap();
+  const graph=world.getByRole('region',{name:'词义图谱',exact:true});
+  const surfaceBefore=graph.locator('[data-cy-surface]'),gestureBounds=await surfaceBefore.boundingBox();
+  const cyBefore=graph.locator('[data-graph-camera]'),zoomBefore=JSON.parse((await cyBefore.getAttribute('data-graph-camera'))!).zoom;
+  const cdp=await page.context().newCDPSession(page),cx=gestureBounds!.x+gestureBounds!.width/2,cy=gestureBounds!.y+gestureBounds!.height/2;
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:cx-30,y:cy,id:0},{x:cx+30,y:cy,id:1}]});
+  for(const spread of [40,50,65])await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:cx-spread,y:cy,id:0},{x:cx+spread,y:cy,id:1}]});
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  await expect.poll(async()=>JSON.parse((await cyBefore.getAttribute('data-graph-camera'))!).zoom).toBeGreaterThan(zoomBefore);await cdp.detach();
+  await graph.getByRole('button',{name:'显示全部',exact:true}).click();
+  const point=graph.locator('[data-expression-id]');await expect(point).toHaveCount(1);const location=new URL(page.url()).pathname;
+  const surface=graph.locator('[data-cy-surface]'),bounds=await surface.boundingBox(),position=JSON.parse((await point.getAttribute('data-graph-position'))!);
+  await page.touchscreen.tap(bounds!.x+position.x,bounds!.y+position.y);
   const drawer=page.getByRole('dialog',{name:/^表达预览(?:\s|$)/u});await expect(drawer.getByRole('heading',{name:'emprunter',exact:true})).toBeVisible();expect(new URL(page.url()).pathname).toBe(location);
   expect(await drawer.evaluate(element=>element.scrollWidth<=element.clientWidth+1)).toBe(true);await expect(drawer.getByRole('button',{name:'查看详情',exact:true})).toBeVisible();
   await page.screenshot({path:testInfo.outputPath('expression-graph-320px-touch-drawer.png'),animations:'disabled'});
@@ -1400,9 +1419,20 @@ const localizedWorldSurface=(locale:string)=>async({page}:{page:Page},testInfo:T
  const world=page.locator('.sensa-world.active').last();await expect(world.locator('[data-world-counts]')).toContainText(new Intl.NumberFormat(locale).format(86));await expect(world.locator('[data-world-meaning]').first()).toBeVisible();
  const shot=async(name:string,width:number)=>{await page.setViewportSize({width,height:width<768?844:900});await world.evaluate(element=>element.scrollTo(0,0));expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);await page.screenshot({path:testInfo.outputPath(`${locale}-world-${name}-${width}.png`),animations:'disabled'});};
  await shot('list',1280);await shot('list',320);await shot('list',390);
- await world.getByRole('button',{name:content.world,exact:true}).click();const graph=world.getByRole('region',{name:content.graph.title,exact:true});await expect(graph.locator('[data-expression-id]')).toHaveCount(86);await graph.getByRole('button',{name:content.graph.fit,exact:true}).click();await world.evaluate(element=>element.scrollTo(0,0));
- await expect.poll(()=>graph.locator('.sensa-expression-dot').evaluateAll(points=>points.filter(point=>{const box=point.getBoundingClientRect();return box.x>=0&&box.right<=innerWidth&&box.y>=0&&box.bottom<innerHeight-80;}).length)).toBeGreaterThan(0);
- await shot('graph',390);await shot('graph',1280);
+ await world.getByRole('button',{name:content.world,exact:true}).click();const graph=world.getByRole('region',{name:content.graph.title,exact:true});await expect(graph.locator('[data-expression-id]')).toHaveCount(86);await world.evaluate(element=>element.scrollTo(0,0));
+ await expect.poll(()=>graph.locator('[data-graph-position]').evaluateAll(points=>{const canvas=points[0]?.closest('[data-graph-camera]')?.getBoundingClientRect();return points.filter(point=>{const p=JSON.parse(point.getAttribute('data-graph-position')!);return canvas&&p.x>0&&p.x<canvas.width&&p.y>0&&p.y<canvas.height;}).length;})).toBeGreaterThan(0);
+ await shot('graph',390);await shot('graph',320);await shot('graph',1280);
+ if(locale==='zh-CN'){
+  const appearance=async(skin:'Clear'|'Quiet',mode:'浅色'|'深色')=>{
+   await page.getByRole('button',{name:'账号与设置',exact:true}).click();await page.locator('#settings-preferences').click();
+   await page.getByRole('radio',{name:new RegExp(`^Sensa ${skin}(?:\\s|$)`,'u')}).click();await page.getByRole('radio',{name:mode,exact:true}).click();await page.goBack();
+   await expect(graph).toBeVisible();
+  };
+  await appearance('Clear','浅色');await shot('graph-clear',1280);await shot('graph-clear',320);
+  await appearance('Quiet','深色');await shot('graph-dark',1280);await shot('graph-dark',320);
+  await appearance('Quiet','浅色');
+ }
+ await graph.getByRole('button',{name:content.graph.fit,exact:true}).click();await shot('overview',1280);
  await page.setViewportSize({width:1280,height:900});
  const french=graph.locator(`[data-expression-id="${scaleFixture.registry.expressions.find(row=>row.languageTag==='fr')!.expressionId}"]`);await page.mouse.move(1,1);await french.focus();await french.press('Enter');
  const detail=graph.locator('.sensa-expression-graph-detail');await expect(detail.getByRole('heading',{name:'emprunter',exact:true})).toBeVisible();await expect(detail.locator('h2 bdi')).toHaveAttribute('lang','fr');await expect(graph.locator('[data-graph-preview]')).toHaveCount(0);

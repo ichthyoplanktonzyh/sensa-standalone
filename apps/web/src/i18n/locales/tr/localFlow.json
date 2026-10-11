@@ -1,5 +1,8 @@
 {
   "localFlow": {
+    "learningResources": "Öğrenme kaynakları",
+    "resourcesEmpty": "Kullanılabilir öğrenme kaynağı yok.",
+    "studyResources": "Ek öğrenme materyalleri",
     "libraryRecovery": "Yerel verileri kurtar",
     "libraryMissing": "Önceki yerel verilerin okunamadı. Yeniden dene veya yedeği geri yükle; tarayıcı verilerini silme.",
     "libraryRecoveryLogin": "Asıl hesaba giriş yap",

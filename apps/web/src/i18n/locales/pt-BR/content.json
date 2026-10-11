@@ -80,6 +80,7 @@
     "findExpression": "Converse com o Sensa",
     "findExpressionHint": "Compartilhe textos ou imagens para esclarecer contexto, sentido e expressão",
     "graph": {
+      "browse": "Explorar expressões",
       "title": "Grafo de sentidos",
       "context": "Contexto",
       "focus": "Foco",

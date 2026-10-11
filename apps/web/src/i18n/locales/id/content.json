@@ -80,6 +80,7 @@
     "findExpression": "Berbicara dengan Sensa",
     "findExpressionHint": "Bagikan teks atau gambar untuk memperjelas konteks, makna, dan ekspresi",
     "graph": {
+      "browse": "Jelajahi ungkapan",
       "title": "Grafik makna",
       "context": "Konteks",
       "focus": "Fokus",

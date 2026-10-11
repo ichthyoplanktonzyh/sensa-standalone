@@ -1,5 +1,8 @@
 {
   "localFlow": {
+    "learningResources": "Tài nguyên học tập",
+    "resourcesEmpty": "Chưa có tài nguyên học tập.",
+    "studyResources": "Tài liệu học tập bổ sung",
     "libraryRecovery": "Khôi phục dữ liệu cục bộ",
     "libraryMissing": "Không thể đọc dữ liệu cục bộ trước đây. Hãy thử lại hoặc khôi phục bản sao lưu; đừng xóa dữ liệu trình duyệt.",
     "libraryRecoveryLogin": "Đăng nhập tài khoản gốc",

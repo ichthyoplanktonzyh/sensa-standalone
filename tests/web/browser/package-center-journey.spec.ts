@@ -340,8 +340,8 @@ test('an enrolled Book cold read failure keeps membership unknown and recovery r
  await page.screenshot({path:testInfo.outputPath('catalog-cold-learning-read-unavailable.png')});
  await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningWorkspaceReadsForTest(false));await catalog.getByRole('alert').getByRole('button',{name:'重试',exact:true}).click();
  await expect(card.getByText('已加入学习',{exact:true})).toBeVisible();expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(facts);
- await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的学习',exact:true}).click();await page.locator('#s-study').getByRole('button',{name:'查看内容',exact:true}).click();
- await page.setViewportSize({width:320,height:740});const library=page.locator('#s-learning-library'),search=library.getByRole('searchbox',{name:'搜索单词或意思',exact:true});
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的学习',exact:true}).click();
+ await page.setViewportSize({width:320,height:740});const library=page.locator('#s-study'),search=library.getByRole('searchbox',{name:'搜索表达或意思',exact:true});
  await search.pressSequentially('borow');await search.press('ArrowLeft');await search.press('ArrowLeft');await search.press('r');await expect(search).toHaveValue('borrow');await expect(search).toBeFocused();
  await expect(library.locator('[data-learning-target]')).toHaveCount(1);await expect(library.locator('[data-learning-target]')).toContainText('borrow');
  await library.locator('.sensa-learning-options > summary').click();
@@ -730,8 +730,12 @@ test('direct published discovery enrolls only the selected expression and resume
  const added=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());expect(added.enrollments).toHaveLength(1);expect(added.enrollments[0]!.sourceKind).toBe('stable_sense');expect(added.targetIds).toHaveLength(1);expect(added.records).toEqual([]);expect(added.runtime).toBeNull();
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);
  await page.reload();await expect(direct.getByRole('button',{name:'查看学习',exact:true})).toBeEnabled();await direct.getByRole('button',{name:'查看学习',exact:true}).click();
- const targetUrl=page.url();
- await page.locator('#s-learning-target').getByRole('button',{name:'开始 / 继续学习',exact:true}).click();
+ const targetUrl=page.url(),target=page.locator('#s-learning-target'),resourceTrigger=target.getByRole('button',{name:'查看学习资源',exact:true});
+ await resourceTrigger.click();const reader=page.getByRole('dialog',{name:/^学习资源/u});await expect(reader.getByText('borrow',{exact:true}).first()).toBeVisible();
+ expect(new URL(page.url()).searchParams.has('resourceMaterialization')).toBe(true);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(added);
+ await page.goBack();await expect(reader).toHaveCount(0);await expect(resourceTrigger).toBeFocused();expect(page.url()).toBe(targetUrl);
+ await resourceTrigger.click();await expect(reader).toBeVisible();await page.keyboard.press('Escape');await expect(reader).toHaveCount(0);await expect(resourceTrigger).toBeFocused();expect(page.url()).toBe(targetUrl);
+ await target.getByRole('button',{name:'开始 / 继续学习',exact:true}).click();
  await expect(page.getByRole('dialog',{name:'学习偏好',exact:true})).toHaveCount(0);
  const runtime=page.locator('#s-lightweight-runtime');await runtime.getByRole('button',{name:/查看表达/}).click();await expect(runtime.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
  const revealed=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());expect(revealed.runtime?.runId).toBeTruthy();expect(revealed.targetIds).toEqual(added.targetIds);expect(revealed.records).toEqual([]);

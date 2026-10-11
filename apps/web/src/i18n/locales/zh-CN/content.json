@@ -80,6 +80,7 @@
     "findExpression": "和 Sensa 聊聊",
     "findExpressionHint": "发送文字或图片，一起澄清场景、意思和表达",
     "graph": {
+      "browse": "浏览表达",
       "title": "词义图谱",
       "context": "场景",
       "focus": "关注点",

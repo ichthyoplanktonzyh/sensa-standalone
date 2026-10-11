@@ -169,7 +169,7 @@ test('mature retained Targets and formal Review history keep actual reveal, rati
  await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(20);await expect(stats.getByRole('status').filter({hasText:`${manifest.targets*2+1} 条`})).toBeVisible();timings.statistics=performance.now()-begin;
  const selectedRecord=stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button').first(),recordExpression=await selectedRecord.locator('strong').innerText();
  begin=performance.now();await selectedRecord.click();
- const target=page.locator('#s-learning-target');await expect(target.locator('summary').filter({hasText:'查看学习资源'})).toBeVisible({timeout:30_000});timings.historyToTarget=performance.now()-begin;
+ const target=page.locator('#s-learning-target');await expect(target.getByRole('button',{name:'查看学习资源',exact:true})).toBeVisible({timeout:30_000});timings.historyToTarget=performance.now()-begin;
  await expect(target.getByRole('heading',{name:recordExpression,level:2,exact:true})).toBeVisible();
  await page.evaluate(async()=>{await window.__sensaBrowserSmoke!.failLearningTargetReadsForTest(true);window.dispatchEvent(new Event('sensa-library-changed'));});
  await expect(target.getByRole('alert')).toBeVisible();await expect(target.locator('summary')).toHaveCount(0);

@@ -80,6 +80,7 @@
     "findExpression": "Sensaに相談",
     "findExpressionHint": "テキストや画像を共有して、文脈・意味・表現を明確にする",
     "graph": {
+      "browse": "表現を探す",
       "title": "意味グラフ",
       "context": "文脈",
       "focus": "焦点",

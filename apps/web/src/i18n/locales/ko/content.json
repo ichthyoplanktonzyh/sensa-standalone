@@ -80,6 +80,7 @@
     "findExpression": "Sensa와 대화하기",
     "findExpressionHint": "텍스트나 이미지를 공유해 맥락, 의미, 표현을 명확히 하세요",
     "graph": {
+      "browse": "표현 살펴보기",
       "title": "의미 그래프",
       "context": "맥락",
       "focus": "초점",

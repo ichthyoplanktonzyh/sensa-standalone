@@ -29,6 +29,7 @@ export const SHELL_PARAM_KEYS = [
   'learningSort',
   'learningPage',
   'studySection',
+  'resourceMaterialization',
 ] as const;
 
 export type ShellParamKey = (typeof SHELL_PARAM_KEYS)[number];
@@ -53,7 +54,7 @@ export const SHELL_SCREEN_DEFINITIONS = [
   { id: 's-academy', host: 'practice' },
   { id: 's-catalog', host: 'learning', params: ['query','route','sort','page','pageSize','view'] },
   { id: 's-catalog-book', host: 'learning', params: ['bookKey'], instance: { params: ['bookKey'] } },
-  { id: 's-confirmed-sense', host: 'learning', params: ['meaningId', 'focusId'], instance: { params: ['meaningId', 'focusId'] } },
+  { id: 's-confirmed-sense', host: 'learning', params: ['meaningId', 'focusId','resourceMaterialization'], instance: { params: ['meaningId', 'focusId'] } },
   { id: 's-content', host: 'learning', params: ['worldAction','worldQuery','worldFilter','worldView','worldLanguages','worldReferences','worldExpression'] },
   { id: 's-content-coming', host: 'app', params: ['coming'], instance: { params: ['coming'], defaults: { coming: 'scenes' } } },
   { id: 's-content-example', host: 'app', params: ['exampleId'], instance: { params: ['exampleId'] } },
@@ -63,10 +64,10 @@ export const SHELL_SCREEN_DEFINITIONS = [
   { id: 's-learning-entry', host: 'learning' },
   { id: 's-direct-learning', host: 'learning', params: ['enrollmentId'], instance: { params: ['enrollmentId'], defaults: { enrollmentId: 'search' } } },
   { id: 's-learning-library', host: 'learning',params:['learningFilter','learningQuery','learningSort','learningPage'] },
-  { id: 's-learning-target', host: 'learning', params: ['targetId'], instance: { params: ['targetId'] } },
+  { id: 's-learning-target', host: 'learning', params: ['targetId','resourceMaterialization'], instance: { params: ['targetId'] } },
   { id: 's-library', host: 'learning' },
   { id: 's-library-package', host: 'learning', params: ['packageKey','publicationArchiveSha256'], instance: { params: ['packageKey','publicationArchiveSha256'] } },
-  { id: 's-personal-meaning', host: 'learning', params: ['meaningId', 'focusId'], instance: { params: ['meaningId'], defaults: { meaningId: 'new' } } },
+  { id: 's-personal-meaning', host: 'learning', params: ['meaningId', 'focusId','resourceMaterialization'], instance: { params: ['meaningId'], defaults: { meaningId: 'new' } } },
   { id: 's-practice-scope', host: 'practice' },
   { id: 's-profile', host: 'learning' },
   { id: 's-publisher', host: 'learning' },
