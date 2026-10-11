@@ -24,6 +24,40 @@ test.beforeAll(async()=>{
 });
 test.afterAll(async()=>{if(server?.listening)await new Promise<void>(done=>server.close(()=>done()));});
 
+test('Language settings waits for saved Routes before exposing an active choice, and persists the next selection',async({page})=>{
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.waitForFunction(()=>!!window.practiceScopeFixture);
+ await page.evaluate(async()=>{await window.practiceScopeFixture.prepare();await window.practiceScopeFixture.changeLanguage('ja');await window.practiceScopeFixture.holdAndMount(true);});
+ const panel=page.getByRole('dialog',{name:'语言路线',exact:true});
+ await expect(panel.getByRole('status')).toHaveText('正在加载 Sensa…');await expect(panel.getByRole('radio')).toHaveCount(0);
+ await page.evaluate(()=>window.practiceScopeFixture.releaseRead());
+ await expect(panel.getByRole('radio',{name:/Français/})).toHaveAttribute('aria-checked','true');
+ await expect(panel.getByRole('combobox',{name:'选择辅助语言',exact:true})).toHaveValue('ja');
+ const english=panel.getByRole('radio',{name:/English/});await expect(english).toHaveAttribute('aria-checked','false');await english.click();await expect(english).toHaveAttribute('aria-checked','true');
+ await page.reload();await page.waitForFunction(()=>!!window.practiceScopeFixture);await page.evaluate(()=>window.practiceScopeFixture.mount(true));
+ await expect(page.getByRole('dialog',{name:'语言路线',exact:true}).getByRole('radio',{name:/English/})).toHaveAttribute('aria-checked','true');await page.evaluate(()=>window.practiceScopeFixture.dispose());
+});
+
+test('Language settings exposes a failed saved read and retry, while failed availability never hides readable Routes',async({page})=>{
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.waitForFunction(()=>!!window.practiceScopeFixture);
+ await page.evaluate(async()=>{await window.practiceScopeFixture.prepare();await window.practiceScopeFixture.changeLanguage('ja');await window.practiceScopeFixture.breakLanguageRead();window.practiceScopeFixture.mount(true);});
+ const panel=page.getByRole('dialog',{name:'语言路线',exact:true}),retry=panel.getByRole('button',{name:'重试',exact:true});
+ await expect(retry).toBeEnabled();await expect(panel.getByRole('radio')).toHaveCount(0);await expect(panel.getByText('正在加载 Sensa…',{exact:true})).toHaveCount(0);
+ await page.evaluate(()=>{window.practiceScopeFixture.repairLanguageRead();window.practiceScopeFixture.breakAvailability();});await retry.click();
+ await expect(panel.getByRole('radio',{name:/Français/})).toHaveAttribute('aria-checked','true');await expect(retry).toBeEnabled();await expect(panel.getByRole('combobox',{name:'选择辅助语言',exact:true})).toHaveValue('ja');
+ await page.evaluate(()=>window.practiceScopeFixture.repairAvailability());await retry.click();await expect(retry).toHaveCount(0);await expect(panel.getByRole('status')).toHaveCount(0);
+ const english=panel.getByRole('radio',{name:/English/});await english.click();await expect(english).toHaveAttribute('aria-checked','true');
+ await page.evaluate(()=>window.practiceScopeFixture.breakLanguageRead());await panel.getByRole('radio',{name:/Français/}).click();
+ await expect(retry).toBeEnabled();await expect(panel.getByRole('radio')).toHaveCount(0);
+ await page.evaluate(()=>window.practiceScopeFixture.repairLanguageRead());await retry.click();await expect(english).toHaveAttribute('aria-checked','true');
+ await page.evaluate(()=>window.practiceScopeFixture.loseNextRouteCommitReply());await panel.getByRole('radio',{name:/Français/}).click();
+ await expect(panel.getByRole('radio',{name:/Français/})).toHaveAttribute('aria-checked','true');await expect(panel.getByRole('status')).toHaveText('未能确认保存结果，请核对当前状态后再操作。');await expect(retry).toHaveCount(0);
+ expect(await page.evaluate(()=>window.practiceScopeFixture.lostRouteCommitReplyCount())).toBe(1);
+ expect(await page.evaluate(()=>window.practiceScopeFixture.routeCommitCallCount())).toBe(1);
+ await page.reload();await page.waitForFunction(()=>!!window.practiceScopeFixture);await page.evaluate(()=>window.practiceScopeFixture.mount(true));await expect(page.getByRole('dialog',{name:'语言路线',exact:true}).getByRole('radio',{name:/Français/})).toHaveAttribute('aria-checked','true');await page.evaluate(()=>window.practiceScopeFixture.dispose());
+});
+
 test('saved Expression material selection survives loading, read failure and retry without fallback',async({page})=>{
  await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
  await page.goto(origin);await page.waitForFunction(()=>!!window.practiceScopeFixture);

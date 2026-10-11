@@ -12,6 +12,7 @@ import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec'
 import type {SqliteWorkerInput,SqliteWorkerResult} from '../../../apps/web/src/data/library/sqliteProtocol';
 import type {ReplicaCandidateRecord} from '../../../apps/web/src/data/library/replicaCandidateProtocol';
 import {candidateExpected,candidateBlocksFor,candidateFixture} from '../support/replicaCandidateFixture.mts';
+import {storeMeaningContexts} from '../../../apps/web/src/experience/personalMeaningJourney/contextRecords';
 import {librarySyncBlockFetch,librarySyncBlockFetchBytes} from '@sensa/contracts/sensa';
 
 for(const scenario of ['reads','close','native-failure','crash'] as const)test(`private OPFS candidate lifecycle: ${scenario}`,async({browser},testInfo)=>{
@@ -126,19 +127,19 @@ for(const scenario of ['restore','write-during-validation','meaning-scale','mean
  const id=crypto.randomUUID(),identity={id,learnerId:crypto.randomUUID(),deviceId:id,createdAt:'2026-10-03T00:00:00.000Z',schemaVersion:2 as const},owner={subject:crypto.randomUUID(),accountId:crypto.randomUUID()};
  const fixture=await(async()=>{
   const records:ReplicaCandidateRecord[]=[{table:'meta',key:'identity',valueJson:JSON.stringify(encodeBackupValue(identity)),blockRefs:[]}];
-  let first:any,last:any,table:'drafts'|'semanticMeanings'='drafts',count=5000;
+  let first:any,last:any,hydratedFirst:any,hydratedLast:any,table:'drafts'|'semanticMeanings'='drafts',count=5000;
   if(scenario==='meaning-scale'||scenario==='meaning-profile'){
    const [{MemoryJourneyRepository},{createJourneyModules},{createSeededClock},{semanticLookupPayload,syntheticSemanticWorld},{semanticRecords}]=await Promise.all([import('../../../apps/web/src/experience/personalMeaningJourney/repository'),import('../../../apps/web/src/experience/personalMeaningJourney/gateway'),import('../../../apps/web/src/experience/personalMeaningJourney/ports'),import('../support/semanticLookupFixtures'),import('../support/semanticWorldRecordFixture.mts')]);
    const repository=new MemoryJourneyRepository();await createJourneyModules({repository,clock:createSeededClock('2026-10-03T00:00:00Z')}).semanticIntake.submit(semanticLookupPayload());
    count=scenario==='meaning-profile'?profileCount:10000;
-   const world=syntheticSemanticWorld(await repository.load(),count);table='semanticMeanings';first=world.meanings[0]!;last=world.meanings.at(-1)!;
+   const world=syntheticSemanticWorld(await repository.load(),count);table='semanticMeanings';hydratedFirst=world.meanings[0]!;hydratedLast=world.meanings.at(-1)!;first=storeMeaningContexts(hydratedFirst);last=storeMeaningContexts(hydratedLast);
    for(const row of semanticRecords(world))records.push({...row,valueJson:JSON.stringify(encodeBackupValue(row.value)),blockRefs:[]});
   }else for(let index=0;index<5000;index++){
    const value={id:crypto.randomUUID(),revision:1,text:`Synthetic remote draft ${index}: `+'x'.repeat(15000),createdAt:identity.createdAt,updatedAt:identity.createdAt};
    first??=value;last=value;records.push({table:'drafts',key:value.id,valueJson:JSON.stringify(encodeBackupValue(value)),blockRefs:[]});
   }
   const {expected,blocks}=candidateFixture(records,identity),wire=new Map([...expected.manifestBlocks,...blocks].map(block=>[block.hash,block.data]));
-  return {expected,wire,first,last,table,count,recordCount:records.length,firstKey:table==='drafts'?first.id:first.personalMeaning.personalMeaningId,lastKey:table==='drafts'?last.id:last.personalMeaning.personalMeaningId,logicalBytes:records.reduce((sum,row)=>sum+Buffer.byteLength(row.valueJson,'utf8'),0)};
+  return {expected,wire,first,last,hydratedFirst,hydratedLast,table,count,recordCount:records.length,firstKey:table==='drafts'?first.id:first.personalMeaning.personalMeaningId,lastKey:table==='drafts'?last.id:last.personalMeaning.personalMeaningId,logicalBytes:records.reduce((sum,row)=>sum+Buffer.byteLength(row.valueJson,'utf8'),0)};
  })();
  // Use Vite's canonical /src URLs so the synchronizer and the instrumented
  // adapter share one module instance rather than /@fs aliases of that file.
@@ -217,12 +218,15 @@ for(const scenario of ['restore','write-during-validation','meaning-scale','mean
   if(scenario!=='write-during-validation'){
    expect(measured.error).toBeUndefined();expect(measured.count).toBe(fixture.count);expect(measured.state.status).toBe('synced');expect(measured.identity).toEqual({...identity,deviceId:measured.originalIdentity.deviceId});
    await page.reload();
-   const restored=await page.evaluate(async({storeUrl,syncUrl,firstKey,lastKey,table})=>{
+   const restored=await page.evaluate(async({storeUrl,syncUrl,contextUrl,firstKey,lastKey,table})=>{
     const store=await import(/* @vite-ignore */ storeUrl),sync=await import(/* @vite-ignore */ syncUrl);const identity=await store.openLibrary();
-    return {identity,state:await sync.readCloudSync(),count:await store.readLibrary((tx:any)=>tx.count(table)),first:await store.readLibrary((tx:any)=>tx.get(table,firstKey)),last:await store.readLibrary((tx:any)=>tx.get(table,lastKey)),lookup:table==='semanticMeanings'?await store.readLibrary((tx:any)=>tx.lookupMeanings('借用编号0')):undefined};
-   },{storeUrl,syncUrl,firstKey:fixture.firstKey,lastKey:fixture.lastKey,table:fixture.table});
+    const contexts=table==='semanticMeanings'?await import(/* @vite-ignore */ contextUrl):undefined;
+    return {identity,state:await sync.readCloudSync(),count:await store.readLibrary((tx:any)=>tx.count(table)),first:await store.readLibrary((tx:any)=>tx.get(table,firstKey)),last:await store.readLibrary((tx:any)=>tx.get(table,lastKey)),hydratedFirst:contexts?await store.readLibrary((tx:any)=>contexts.readMeaningContexts(tx,firstKey)):undefined,hydratedLast:contexts?await store.readLibrary((tx:any)=>contexts.readMeaningContexts(tx,lastKey)):undefined,lookup:table==='semanticMeanings'?await store.readLibrary((tx:any)=>tx.lookupMeanings('借用编号0')):undefined};
+   },{storeUrl,syncUrl,contextUrl:'/src/experience/personalMeaningJourney/contextRecords.ts',firstKey:fixture.firstKey,lastKey:fixture.lastKey,table:fixture.table});
    expect(restored.identity).toEqual(measured.identity);expect(restored.count).toBe(fixture.count);expect(restored.first).toEqual(fixture.first);expect(restored.last).toEqual(fixture.last);expect(restored.state.status).toBe('synced');
-   if(fixture.table==='semanticMeanings')expect(restored.lookup.meanings).toHaveLength(1);
+   if(fixture.table==='semanticMeanings'){
+    expect(restored.hydratedFirst).toEqual(fixture.hydratedFirst);expect(restored.hydratedLast).toEqual(fixture.hydratedLast);expect(restored.lookup.meanings).toHaveLength(1);
+   }
   }else{
    // The write can invalidate and finish validation before its own Promise
    // resolves. A rejected fence proves concurrent progress, unlike waiting for

@@ -125,7 +125,7 @@ export function buildPackageCenterItems(c:Pick<Controller,'catalog'|'packages'|'
     targetLanguage:pack.content.targetLanguage,
     supportLanguage:pack.content.supportLanguage,
     installed:[pack],
-    updateAvailable:false,
+    updateAvailable:enrolledVersion>0&&version>enrolledVersion,
     updateDownloaded:enrolledVersion>0&&version>enrolledVersion,
     enrolled:enrolledVersion>=version,
     routeMatchesActive:routeMatches(pack.content.targetLanguage,pack.content.supportLanguage,c),

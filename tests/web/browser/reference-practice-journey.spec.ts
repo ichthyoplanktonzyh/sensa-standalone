@@ -243,6 +243,7 @@ test('target source lookup keeps its exact publication when another Book shares 
    try{
    await target.getByRole('button',{name:/内容来源/}).click();const source=page.locator('#s-library-package');
    await expect(source.getByRole('heading',{name:first.manifest.book.title,exact:true})).toBeVisible();
+   await source.locator('details.sensa-package-disclosure > summary').click();
    await expect(source.getByText('v1',{exact:true})).toBeVisible();await expect(source.getByRole('button',{name:/加入学习|应用更新|下载更新/u})).toHaveCount(0);
    await source.getByRole('button',{name:'返回',exact:true}).click();await expect(target.getByRole('button',{name:/内容来源/})).toBeVisible();expect(new URL(page.url()).searchParams.get('targetId')).toBe(targetId);
    expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(before);
@@ -342,8 +343,9 @@ test('practice content selection and listening start stay bounded with 10000 per
    expect(await scope.getByRole('listitem').count()).toBeLessThan(80);await expect(scope).not.toContainText('May asked');
   });
   await timed('selectAndUseAllPersonalContent',async()=>{
-   await scope.getByRole('button',{name:'全选',exact:true}).click();await scope.getByRole('button',{name:'使用 10000 个表达',exact:true}).click();
-   await expect(practice.getByText('10000 个表达',{exact:true})).toBeVisible();
+   const count=new Intl.NumberFormat('zh-CN').format(10_000);
+   await scope.getByRole('button',{name:'全选',exact:true}).click();await scope.getByRole('button',{name:`使用 ${count} 个表达`,exact:true}).click();
+   await expect(practice.getByText(`${count} 个表达`,{exact:true})).toBeVisible();
    expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('sensa:web-ui:v1:sensa.practice.materials.v4:en')!))).toEqual({source:'personal',expressionIds:null});
   });
   await timed('startListeningWithPersonalContent',async()=>{

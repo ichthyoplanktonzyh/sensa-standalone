@@ -156,10 +156,12 @@ test('independent Portable versions share one card and require an explicit updat
  assert.equal(library.length,1);
  assert.equal(library[0]?.installed[0]?.key,next.key);
  assert.equal(library[0]?.updateDownloaded,true);
+ assert.equal(library[0]?.updateAvailable,true);
  assert.equal(library[0]?.enrolled,false);
  const applied=buildPackageCenterItems({...controller,enrollments:[{source:{kind:'portable_package',packageId,packageVersion:2}}] as Controller['enrollments']}).library;
  assert.equal(applied[0]?.listKey,library[0]?.listKey,'detail selection must survive a version change');
  assert.equal(applied[0]?.updateDownloaded,false);
+ assert.equal(applied[0]?.updateAvailable,false);
  assert.equal(applied[0]?.enrolled,true);
 });
 
