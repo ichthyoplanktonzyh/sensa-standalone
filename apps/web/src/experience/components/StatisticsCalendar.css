@@ -16,8 +16,8 @@
 .sensa-activity-month .rdp-root { --rdp-accent-color:var(--sensa-action-primary); --rdp-accent-background-color:var(--sensa-accent-soft); --rdp-day-width:calc((100vw - 56px)/7); --rdp-day-height:3.25rem; --rdp-day_button-width:100%; --rdp-day_button-height:100%; --rdp-day_button-border-radius:6px; }
 .sensa-activity-month .rdp-months,.sensa-activity-month .rdp-month,.sensa-activity-month .rdp-month_grid { width:100%; max-width:100%; }
 .sensa-activity-month .rdp-day_button { flex-direction:column; gap:3px; font-size:.8125rem; }
-.sensa-activity-month .rdp-day_button small { font-size:.625rem; color:var(--sensa-fg-secondary); }
-.sensa-activity-month .rdp-day_button[data-level=one] { background:color-mix(in srgb, var(--sensa-action-primary) 40%, var(--sensa-surface-panel)); }.sensa-activity-month .rdp-day_button[data-level=few] { background:color-mix(in srgb, var(--sensa-action-primary) 60%, var(--sensa-surface-panel)); }.sensa-activity-month .rdp-day_button[data-level=many] { background:color-mix(in srgb, var(--sensa-action-primary) 80%, var(--sensa-surface-panel)); }
+.sensa-activity-month .rdp-day_button small { font-size:.625rem; color:inherit; }
+.sensa-activity-month .rdp-day_button[data-level=one] { background:color-mix(in srgb, var(--sensa-action-primary) 40%, var(--sensa-surface-panel)); }.sensa-activity-month .rdp-day_button[data-level=few] { color:var(--sensa-action-on-primary); background:color-mix(in srgb, var(--sensa-action-primary) 75%, var(--sensa-surface-panel)); }.sensa-activity-month .rdp-day_button[data-level=many] { color:var(--sensa-action-on-primary); background:color-mix(in srgb, var(--sensa-action-primary) 100%, var(--sensa-surface-panel)); }
 .sensa-activity-month .rdp-selected .rdp-day_button { border:2px solid var(--sensa-focus); }
 .sensa-activity-month .rdp-disabled { opacity:.45; }
 .sensa-activity-month .rdp-month_caption { font-size:1rem; font-weight:500; }

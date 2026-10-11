@@ -356,6 +356,13 @@ test('review-only Again survives a lost receipt and reload as a separate Relearn
  await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(3);
  const records=stats.getByRole('list',{name:'所选范围的记录',exact:true});for(const label of ['首次学习','复习','巩固'])await expect(records.getByText(label,{exact:true})).toHaveCount(1);
  await page.screenshot({path:test.info().outputPath('statistics-real-three-kind-activity.png')});
+ await page.setViewportSize({width:320,height:844});await stats.getByRole('heading',{name:'学习统计',exact:true}).scrollIntoViewIfNeeded();await page.mouse.move(5,5);await page.screenshot({path:test.info().outputPath('statistics-real-three-kind-month-320.png')});
+ const activeDay=stats.locator('.sensa-activity-month button[data-level=few]').first();await expect(activeDay).toBeVisible();
+ const countContrast=await activeDay.evaluate(element=>{
+  const fg=getComputedStyle(element.querySelector('small')!).color,bg=getComputedStyle(element).backgroundColor;
+  const lum=(color:string)=>{const v=color.match(/[\d.]+/g)!.slice(0,3).map(Number).map(n=>{n/=255;return n<=.04045?n/12.92:((n+.055)/1.055)**2.4;});return v[0]!*.2126+v[1]!*.7152+v[2]!*.0722;};const a=lum(fg),b=lum(bg);return (Math.max(a,b)+.05)/(Math.min(a,b)+.05);
+ });expect(countContrast).toBeGreaterThanOrEqual(4.5);
+ await page.setViewportSize({width:1280,height:900});
  await stats.getByRole('combobox',{name:'记录类型',exact:true}).selectOption('retention_review');await expect(records.getByRole('button')).toHaveCount(1);
 
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(beforeStatistics);
