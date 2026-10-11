@@ -1384,7 +1384,7 @@ test.describe('World touch preview',()=>{
   await page.screenshot({path:testInfo.outputPath('expression-graph-320px-touch-drawer.png'),animations:'disabled'});
   await page.keyboard.press('Escape');await expect(drawer).toHaveCount(0);await expect(point).toBeFocused();await point.press('Enter');await expect(drawer).toBeVisible();
   await drawer.getByRole('button',{name:'查看详情',exact:true}).click();await expect(page.locator('#s-personal-meaning')).toBeVisible();await page.goBack();await expect(drawer.getByRole('heading',{name:'emprunter',exact:true})).toBeVisible();
-  await drawer.getByRole('button',{name:'关闭',exact:true}).first().click();await page.reload();await expect(graph.locator('[data-expression-id]')).toHaveCount(1);await expect(languages.getByRole('button',{name:'fr',exact:true})).toHaveAttribute('aria-pressed','true');
+  await drawer.getByRole('button',{name:'关闭',exact:true}).first().click();await page.reload();await expect(graph.locator('[data-expression-id]')).toHaveCount(1);await expect(world.locator('.sensa-world-filters > summary')).toContainText('法语');await world.locator('.sensa-world-filters > summary').click();await expect(languages.getByRole('button',{name:'fr',exact:true})).toHaveAttribute('aria-pressed','true');
   expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records).toHaveLength(0);expect(requests).toHaveLength(0);
  });
 });
