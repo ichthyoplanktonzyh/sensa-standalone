@@ -49,6 +49,7 @@ test('nonbundled Book favorites and notes remain findable without a Personal Mea
  await expect(runtime.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();await runtime.getByRole('button',{name:/已经连上/}).click();
  await expect.poll(async()=>(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records.length).toBe(1);
  if(await runtime.getByRole('button',{name:'暂停',exact:true}).isVisible())await runtime.getByRole('button',{name:'暂停',exact:true}).click();
+ else await runtime.getByRole('button',{name:/完成并回到首页/}).click();
  await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的语义世界',exact:true}).click();
  await page.getByRole('button',{name:'学习连接',exact:true}).click();await page.getByRole('button',{name:/borrow/}).click();await expect(detail.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();expect(new URL(page.url()).searchParams.get('targetId')).toBe(targetId);
  await page.reload();await expect(detail.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records).toHaveLength(1);expect(providers).toEqual([]);

@@ -252,7 +252,7 @@ test.describe('history calendar in the actual SQLite Worker',()=>{
   await runtime.getByRole('button',{name:/查看表达/}).click();await runtime.getByRole('button',{name:/已经连上/}).click();
   await expect(runtime.getByRole('button',{name:/查看表达/})).toBeEnabled();await runtime.getByRole('button',{name:'暂停',exact:true}).click();
   await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的学习',exact:true}).click();
-  const study=page.locator('#s-study');await expect(study.locator('ol').getByRole('button')).toHaveCount(1);
+  const study=page.locator('#s-study');await study.locator('summary').filter({hasText:'最近记录'}).click();await expect(study.locator('ol').getByRole('button')).toHaveCount(1);
   await study.getByRole('button',{name:'学习统计',exact:true}).click();const stats=page.locator('#s-stats');
   await stats.getByRole('button',{name:'今天',exact:true}).click();await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(1);
   await expect(stats.getByRole('status').filter({hasText:'1 条'})).toBeVisible();
