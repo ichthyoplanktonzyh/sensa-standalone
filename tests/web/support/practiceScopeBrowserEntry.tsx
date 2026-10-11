@@ -22,6 +22,7 @@ const preferenceKey='sensa.practice.materials.v4:en';
 let root:Root|undefined,release:(()=>void)|undefined,barrier:Promise<unknown>|undefined;
 let failPersonal=false,failBooks=false,failLearning=false,learningReads=0,heldLanguage:string|null=null;
 let failLanguage=false,failAvailability=false;
+let holdRouteAvailability=false;const routeAvailabilityHolds:Array<()=>void>=[];
 let lostRouteCommitReplies=0,routeCommitCalls=0;
 const materialListeners=new Set<()=>void>();
 let holdStart=false;
@@ -41,7 +42,7 @@ Object.defineProperty(practiceMaterialsRepository,'page',{value:(query:Parameter
 }});
 Object.defineProperty(learningSystem,'read',{value:(query:Parameters<typeof readLearning>[0])=>{learningReads++;return failLearning?Promise.reject(new Error('fixture learning failure')):readLearning(query);}});
 const readSupply=contentSupplySystem.read.bind(contentSupplySystem);
-contentSupplySystem.read=async query=>{if(query.kind==='route_counts'&&failAvailability)throw new Error('fixture availability read failure');return readSupply(query);};
+contentSupplySystem.read=async query=>{if(query.kind==='route_counts'&&failAvailability)throw new Error('fixture availability read failure');const result=await readSupply(query);if(query.kind==='route_counts'&&holdRouteAvailability)await new Promise<void>(resolve=>routeAvailabilityHolds.push(resolve));return result;};
 export async function prepare(){
  await i18n.changeLanguage('zh-CN');
  const memory=new MemoryJourneyRepository(),modules=createJourneyModules({repository:memory,clock:createSeededClock(),languages:{read:async()=>({targetLanguageTag:'en',supportLanguageTag:'zh-CN'})}});
@@ -72,6 +73,10 @@ export async function breakLanguageRead(){
 export function repairLanguageRead(){failLanguage=false;}
 export function breakAvailability(){failAvailability=true;}
 export function repairAvailability(){failAvailability=false;}
+export function holdAvailabilityReads(){holdRouteAvailability=true;}
+export function availabilityReadsHeld(){return routeAvailabilityHolds.length;}
+export function releaseFirstAvailabilityRead(){routeAvailabilityHolds.shift()?.();}
+export function releaseAvailabilityReads(){holdRouteAvailability=false;for(const release of routeAvailabilityHolds.splice(0))release();}
 export async function loseNextRouteCommitReply(){
  const adapter=await sqliteRecordAdapter(),commit=adapter.commit.bind(adapter);let armed=true;
  adapter.commit=async mutation=>{await commit(mutation);if(mutation.puts.some(row=>row.table==='meta'&&row.key==='active-language-route:web')){routeCommitCalls++;if(armed){armed=false;lostRouteCommitReplies++;throw new Error('fixture route commit reply lost');}}};
@@ -93,4 +98,4 @@ export async function changeLanguageWhileHoldingRead(){
 }
 export function readIsHeld(){return pendingReads.length>0;}
 export async function releaseMaterialRead(){heldLanguage=null;holdStart=false;const pending=pendingReads.splice(0);await Promise.all(pending.map(run=>run()));}
-export function dispose(){release?.();root?.unmount();}
+export function dispose(){release?.();root?.unmount();releaseAvailabilityReads();}

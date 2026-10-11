@@ -54,14 +54,16 @@ export function useLanguageRoutes(){
   const [state,setState]=useState<Snapshot|null>(null);
   const [notice,setNotice]=useState({text:'',retryable:false}),[busy,setBusy]=useState(false);
   const [loadStatus,setLoadStatus]=useState<'loading'|'ready'|'unavailable'>('loading');
+  const loadStatusRef=useRef(loadStatus);
+  const updateLoadStatus=(next:typeof loadStatus)=>{loadStatusRef.current=next;setLoadStatus(next);};
   const mounted=useRef(true);
   const refreshGeneration=useRef(0);
   const refresh=async()=>{
     const generation=++refreshGeneration.current;
     try{
       let next:Awaited<ReturnType<typeof languageRoutesSnapshot>>;
-      try{next=await languageRoutesSnapshot();}catch(error){if(mounted.current&&generation===refreshGeneration.current)setLoadStatus('unavailable');throw error;}
-      if(mounted.current&&generation===refreshGeneration.current){setState(previous=>({...next,packageCounts:previous?.packageCounts??{},speechConfiguredLanguages:previous?.speechConfiguredLanguages??[],availabilityLoaded:false}));setLoadStatus('ready');}
+      try{next=await languageRoutesSnapshot();}catch(error){if(mounted.current&&generation===refreshGeneration.current)updateLoadStatus('unavailable');throw error;}
+      if(mounted.current&&generation===refreshGeneration.current){setState(previous=>({...next,packageCounts:previous?.packageCounts??{},speechConfiguredLanguages:previous?.speechConfiguredLanguages??[],availabilityLoaded:false}));updateLoadStatus('ready');}
       const [supplyModule,speechApi]=await Promise.all([
         import('../../contentSupply/system/contentSupplySystem'),
         import('../../data/library/speech/edgeVoiceCatalog'),
@@ -97,7 +99,9 @@ export function useLanguageRoutes(){
       if(outcome.kind==='unconfirmed'){
         if(outcome.projection==='current'){
           const error=outcome.error,domainError=error instanceof Error&&/^localFlow\.(?:lastLanguageRoute|duplicateLanguageRoute|unknownLanguageRoute|unknownTargetLanguage|unknownSupportLanguage|languageRouteChanged|noActiveLanguageRoute)$/u.test(error.message);
-          setNotice({text:domainError?error.message:'localFlow.membershipUnconfirmed',retryable:false});
+          // A newer observation may have failed while this superseded refresh
+          // finished. Its read recovery must survive the older command result.
+          setNotice(current=>loadStatusRef.current==='unavailable'?{text:'localFlow.languageReadFailed',retryable:true}:current.retryable?current:{text:domainError?error.message:'localFlow.membershipUnconfirmed',retryable:false});
         }
         return null;
       }
@@ -118,7 +122,7 @@ export function useLanguageRoutes(){
     notice:localFlowNotice(notice.text),
     retryable:notice.retryable,
     refresh,
-    retry:()=>{setLoadStatus('loading');setNotice({text:'',retryable:false});void refresh().catch(()=>{if(mounted.current)setNotice({text:'localFlow.languageReadFailed',retryable:true});});},
+    retry:()=>{updateLoadStatus('loading');setNotice({text:'',retryable:false});void refresh().catch(()=>{if(mounted.current)setNotice({text:'localFlow.languageReadFailed',retryable:true});});},
     addRoute:(targetLanguageTag:string,supportLanguageTag:string)=>perform(()=>addLanguageRoute(crypto.randomUUID(),targetLanguageTag,supportLanguageTag)),
     updateSupport:(routeId:string,supportLanguageTag:string)=>perform(()=>updateLanguageRouteSupport(crypto.randomUUID(),routeId,supportLanguageTag)),
     setStatus:(routeId:string,status:SensaLanguageRouteStatus)=>perform(()=>setLanguageRouteStatus(crypto.randomUUID(),routeId,status)),

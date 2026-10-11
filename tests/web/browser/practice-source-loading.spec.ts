@@ -58,6 +58,26 @@ test('Language settings exposes a failed saved read and retry, while failed avai
  await page.reload();await page.waitForFunction(()=>!!window.practiceScopeFixture);await page.evaluate(()=>window.practiceScopeFixture.mount(true));await expect(page.getByRole('dialog',{name:'语言路线',exact:true}).getByRole('radio',{name:/Français/})).toHaveAttribute('aria-checked','true');await page.evaluate(()=>window.practiceScopeFixture.dispose());
 });
 
+test('Language settings retains read recovery when an older unconfirmed refresh finishes after a newer failed observation',async({page})=>{
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.waitForFunction(()=>!!window.practiceScopeFixture);
+ await page.evaluate(async()=>{await window.practiceScopeFixture.prepare();await window.practiceScopeFixture.changeLanguage('ja');window.practiceScopeFixture.mount(true);});
+ const panel=page.getByRole('dialog',{name:'语言路线',exact:true}),retry=panel.getByRole('button',{name:'重试',exact:true});
+ await expect(panel.getByRole('radio',{name:/Français/})).toHaveAttribute('aria-checked','true');
+ await page.evaluate(()=>{window.practiceScopeFixture.holdAvailabilityReads();window.dispatchEvent(new Event('sensa-library-changed'));});
+ await expect.poll(()=>page.evaluate(()=>window.practiceScopeFixture.availabilityReadsHeld())).toBe(1);
+ await page.evaluate(()=>window.practiceScopeFixture.loseNextRouteCommitReply());await panel.getByRole('radio',{name:/English/}).click();
+ await expect.poll(()=>page.evaluate(()=>window.practiceScopeFixture.availabilityReadsHeld())).toBe(2);
+ await page.evaluate(async()=>{await window.practiceScopeFixture.breakLanguageRead();window.dispatchEvent(new Event('sensa-library-changed'));window.practiceScopeFixture.releaseFirstAvailabilityRead();});
+ await expect(retry).toBeVisible();await expect(panel.getByRole('radio')).toHaveCount(0);
+ await page.evaluate(()=>window.practiceScopeFixture.releaseAvailabilityReads());
+ await expect(panel.getByRole('button',{name:'完成',exact:true})).toBeEnabled();await expect(retry).toBeEnabled();await expect(panel.getByRole('radio')).toHaveCount(0);
+ await page.evaluate(()=>window.practiceScopeFixture.repairLanguageRead());await retry.click();
+ await expect(panel.getByRole('radio',{name:/English/})).toHaveAttribute('aria-checked','true');
+ expect(await page.evaluate(()=>window.practiceScopeFixture.lostRouteCommitReplyCount())).toBe(1);expect(await page.evaluate(()=>window.practiceScopeFixture.routeCommitCallCount())).toBe(1);
+ await page.evaluate(()=>window.practiceScopeFixture.dispose());
+});
+
 test('saved Expression material selection survives loading, read failure and retry without fallback',async({page})=>{
  await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
  await page.goto(origin);await page.waitForFunction(()=>!!window.practiceScopeFixture);
