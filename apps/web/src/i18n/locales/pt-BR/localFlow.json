@@ -306,14 +306,14 @@
     "assuranceContinue": "Continuar",
     "assuranceSupported": "Concluído com apoio; as verificações independentes virão depois.",
     "packageNotDownloaded": "Não baixado",
-    "packageExpressionCount": "{{count}} expressões",
-    "packageExpressionCount_one": "{{count}} expressão",
-    "packageExpressionCount_many": "{{count}} expressões",
-    "packageExpressionCount_other": "{{count}} expressões",
+    "packageExpressionCount": "{{formattedCount}} expressões",
+    "packageExpressionCount_one": "{{formattedCount}} expressão",
+    "packageExpressionCount_many": "{{formattedCount}} expressões",
+    "packageExpressionCount_other": "{{formattedCount}} expressões",
     "packageActions": "Ações do pacote",
     "packageReadyHint": "Adicionado à aprendizagem. Acesse sua página de aprendizagem para começar.",
     "packageJoinHint": "Os recursos estão prontos. Adicione as expressões à sua coleção de aprendizagem usando Aprendizagem leve.",
-    "packageDownloadHint": "O download salva o conteúdo. Adicioná-lo ao aprendizado exige uma confirmação separada.",
+
     "packageGoLearning": "Ir para aprendizagem",
     "packageContents": "Conteúdo do pacote",
     "packageContentsAfterDownload": "Baixe para ver todas as expressões e os sentidos.",
@@ -552,16 +552,22 @@
     "completionViewRecords": "Ver registros de aprendizagem",
     "sessionSummaryUnavailable": "Os registros desta rodada ainda não foram lidos",
 "packagePreviewLoad":"Prévia do conteúdo",
-"packagePreviewHint":"A prévia não salva o livro na biblioteca nem o adiciona ao aprendizado.",
-"packagePreviewLegacyHint":"Esta edição não tem uma prévia separada. O arquivo de {{size}} MB é lido e validado na memória.",
+
+
 "packagePreviewLoading":"Carregando a prévia…",
 "packagePreviewFailed":"Não foi possível carregar a prévia. Verifique a conexão e tente novamente.",
 "packagePreviewUnavailable":"Esta edição não oferece uma prévia antes do download.",
-"packagePreviewVersion":"Este conteúdo vem da edição v{{version}} do catálogo.",
-"packagePreviewSamples":"Exemplos reais de aprendizado",
-"packagePreviewDirectory":"Conteúdo: {{count}} expressões",
+"packagePreviewVersion": "Edição do catálogo v{{version}}",
+"packagePreviewSamples": "Amostra do conteúdo",
+"packagePreviewDirectory": "Conteúdo: {{formattedCount}} expressões",
 "packagePreviewUnknown":"Ainda não informado",
 "packagePreviewVisual":"Esta cena também contém imagens ou conteúdo visual omitido da prévia em texto.",
-"packagePreviewMeaning":"Significado"
-}
+    "catalogOptions": "Opções de exibição",
+    "packageOriginalTitle": "Título original",
+    "packagePreviewMetadataPending": "Disponível após carregar a prévia",
+    "packagePreviewDirectory_one": "Conteúdo: {{formattedCount}} expressão",
+    "packagePreviewDirectory_many": "Conteúdo: {{formattedCount}} expressões",
+    "packagePreviewDirectory_other": "Conteúdo: {{formattedCount}} expressões",
+    "packageDirectorySearch": "Buscar expressões"
+  }
 }

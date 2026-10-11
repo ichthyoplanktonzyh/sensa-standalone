@@ -306,12 +306,12 @@
     "assuranceContinue": "继续",
     "assuranceSupported": "在提示帮助下完成；接下来继续独立检验。",
     "packageNotDownloaded": "未下载",
-    "packageExpressionCount": "{{count}} 个表达",
-    "packageExpressionCount_other": "{{count}} 个表达",
+    "packageExpressionCount": "{{formattedCount}} 个表达",
+    "packageExpressionCount_other": "{{formattedCount}} 个表达",
     "packageActions": "学习包操作",
     "packageReadyHint": "已加入学习，可前往学习页面开始。",
     "packageJoinHint": "资源已备好，将包内表达加入学习集合。当前使用轻量学习。",
-    "packageDownloadHint": "下载保存内容；加入学习需另行确认。",
+
     "packageGoLearning": "去学习",
     "packageContents": "包内内容",
     "packageContentsAfterDownload": "下载后可查看完整的表达与含义。",
@@ -550,16 +550,20 @@
     "completionViewRecords": "查看学习记录",
     "sessionSummaryUnavailable": "本轮记录暂未读取",
 "packagePreviewLoad":"查看内容预览",
-"packagePreviewHint":"预览用于了解内容，不会保存到我的资料库或加入学习。",
-"packagePreviewLegacyHint":"此版本没有独立预览文件。查看会读取 {{size}} MB 的原包，仅在内存中校验。",
+
+
 "packagePreviewLoading":"正在读取内容预览…",
 "packagePreviewFailed":"暂时无法读取预览，请检查网络并重试。",
 "packagePreviewUnavailable":"此版本暂未提供可用的下载前预览。",
-"packagePreviewVersion":"以下真实内容来自目录中的 v{{version}}。",
-"packagePreviewSamples":"真实学习样例",
-"packagePreviewDirectory":"内容目录：{{count}} 条表达",
+"packagePreviewVersion": "目录版本 v{{version}}",
+"packagePreviewSamples": "内容选读",
+"packagePreviewDirectory": "内容目录：{{formattedCount}} 条表达",
 "packagePreviewUnknown":"尚未提供",
 "packagePreviewVisual":"此场景还包含图片或可视内容，文本预览未展示。",
-"packagePreviewMeaning":"意思"
-}
+    "catalogOptions": "浏览选项",
+    "packageOriginalTitle": "原始标题",
+    "packagePreviewMetadataPending": "加载预览后可查看",
+    "packagePreviewDirectory_other": "内容目录：{{formattedCount}} 个表达",
+    "packageDirectorySearch": "搜索表达"
+  }
 }

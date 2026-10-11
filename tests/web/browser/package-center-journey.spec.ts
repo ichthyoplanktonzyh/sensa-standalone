@@ -64,8 +64,10 @@ test('complete catalog pages retain URL, scroll and focus through details and re
  await catalog.getByRole('combobox',{name:'目标语言',exact:true}).selectOption('ja');
  await expect(catalog.getByText('第 1–24 项，共 68 项',{exact:true})).toBeVisible();
  await catalog.getByRole('combobox',{name:'辅助语言',exact:true}).selectOption('zh-Hans');
+ await catalog.locator('summary').filter({hasText:'浏览选项'}).click();
  await catalog.getByRole('combobox',{name:'每页数量',exact:true}).selectOption('48');
  await catalog.getByRole('combobox',{name:'排序',exact:true}).selectOption('newest');
+ await catalog.locator('summary').filter({hasText:'浏览选项'}).click();
  await catalog.getByRole('button',{name:'紧凑列表',exact:true}).click();
  await page.reload();
  await expect(catalog.getByText('第 1–48 项，共 68 项',{exact:true})).toBeVisible();
@@ -85,6 +87,44 @@ test('complete catalog pages retain URL, scroll and focus through details and re
  await page.screenshot({path:testInfo.outputPath('catalog-200-percent-css-zoom.png')});
  const checkpoint=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
  expect(checkpoint.enrollments).toEqual([]);expect(checkpoint.records).toEqual([]);
+});
+
+test('catalog disclosures and real preview content retain their meaning across Chinese English and German at desktop and narrow widths',async({page},testInfo)=>{
+ fixture.setRegistry([fixture.learningDelivery.descriptor]);
+ await page.goto(`${fixture.origin}/catalog`);
+ const catalog=page.locator('#s-catalog'),book=page.locator('#s-catalog-book');
+ const ui=[
+  {locale:'zh-CN',search:'搜索学习包',options:'浏览选项',pageSize:'每页数量',download:'下载学习包',join:'加入学习',back:'返回',publication:'发布信息'},
+  {locale:'en',search:'Search learning packages',options:'Browse options',pageSize:'Items per page',download:'Download package',join:'Add to learning',back:'Back',publication:'Publication'},
+  {locale:'de',search:'Lernpakete durchsuchen',options:'Ansichtsoptionen',pageSize:'Einträge pro Seite',download:'Paket herunterladen',join:'Zum Lernen hinzufügen',back:'Zurück',publication:'Veröffentlichung'},
+ ];
+ for(const copy of ui){
+  await page.getByRole('combobox',{name:/界面语言|Interface language|Oberflächensprache/}).selectOption(copy.locale);
+  await expect(catalog.getByRole('searchbox',{name:copy.search,exact:true})).toBeVisible();
+  await expect(catalog.getByRole('combobox',{name:copy.pageSize,exact:true})).toBeHidden();
+  await catalog.locator('summary').filter({hasText:copy.options}).click();
+  await catalog.getByRole('combobox',{name:copy.pageSize,exact:true}).selectOption('96');
+  expect(new URL(page.url()).searchParams.get('pageSize')).toBe('96');
+  await catalog.locator('summary').filter({hasText:copy.options}).click();
+  for(const width of [1440,390]){
+   await page.setViewportSize({width,height:900});
+   expect(await catalog.evaluate(element=>element.scrollWidth<=element.clientWidth)).toBe(true);
+   await page.screenshot({path:testInfo.outputPath(`catalog-${copy.locale}-${width}.png`)});
+  }
+  await catalog.getByRole('button',{name:/雨天借伞/}).click();
+  await expect(book.getByRole('heading',{name:'雨天借伞',level:1,exact:true})).toBeVisible();
+  await expect(book.getByRole('article',{name:'borrow',exact:true})).toBeVisible();
+  await expect(book.getByRole('button',{name:copy.download,exact:true})).toBeEnabled();
+  await expect(book.getByRole('button',{name:copy.join,exact:true})).toBeDisabled();
+  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.supplyCheckpoint())).toEqual([]);
+  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).targetIds).toEqual([]);
+  for(const width of [1440,390]){
+   await page.setViewportSize({width,height:900});
+   expect(await book.evaluate(element=>element.scrollWidth<=element.clientWidth)).toBe(true);
+   await page.screenshot({path:testInfo.outputPath(`detail-${copy.locale}-${width}.png`)});
+  }
+  await book.getByRole('button',{name:copy.back,exact:true}).click();
+ }
 });
 
 test('catalog failure is distinct from empty results and an interrupted stale response cannot replace a newer retry',async({page,context})=>{
@@ -140,7 +180,8 @@ const previewBeforeDownload=(mode:'legacy'|'lightweight')=>async({page,context}:
  const bytes=createSensaPortableBook(manifest,new Map(members.map(member=>[portableBookMemberKey(member.package.metadata),member.bytes])));
  const archive=readSensaPortableBook(bytes),previewBytes=Buffer.from(canonicalConsumerJson(createPortableBookPreview(archive)));
  const url=`${fixture.origin}/published/preview-${mode}.sensa-book`,previewUrl=`${fixture.origin}/published/preview-${mode}.preview.json`;
- const descriptor=sensaPortableBookDescriptorSchema.parse({...fixture.delivery.descriptor,book:manifest.book,memberCount:3,byteLength:bytes.byteLength,sha256:archive.archiveDigest,url,
+ const {preview:_sourcePreview,...baseDescriptor}=fixture.delivery.descriptor;
+ const descriptor=sensaPortableBookDescriptorSchema.parse({...baseDescriptor,book:manifest.book,memberCount:3,byteLength:bytes.byteLength,sha256:archive.archiveDigest,url,
   ...(mode==='lightweight'?{preview:{url:previewUrl,sha256:createHash('sha256').update(previewBytes).digest('hex'),byteLength:previewBytes.byteLength}}:{}),
  });
  fixture.setRegistry([descriptor]);
@@ -150,9 +191,7 @@ const previewBeforeDownload=(mode:'legacy'|'lightweight')=>async({page,context}:
  await page.goto(`${fixture.origin}/catalog`);
  await page.locator('#s-catalog').getByRole('button',{name:new RegExp(manifest.book.title)}).click();
  const book=page.locator('#s-catalog-book'),preview=book.getByRole('region',{name:'查看内容预览',exact:true});
- await expect(preview.getByText('尚未提供',{exact:true})).toHaveCount(2);
- expect(previewRequests).toBe(0);
- await preview.getByRole('button',{name:'查看内容预览',exact:true}).click();
+ await expect(preview.getByText('尚未提供',{exact:true})).toHaveCount(0);
  await expect(preview.getByRole('alert')).toBeVisible();
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.supplyCheckpoint())).toEqual([]);
  await expect(book.getByRole('button',{name:'加入学习',exact:true})).toBeDisabled();
@@ -165,8 +204,9 @@ const previewBeforeDownload=(mode:'legacy'|'lightweight')=>async({page,context}:
   await expect(sample.getByText(value.meaning,{exact:true}).first()).toBeVisible();
   await expect(sample.getByText(value.example,{exact:true})).toBeVisible();
  }
- await expect(preview.getByText('内容目录：3 条表达',{exact:true})).toBeVisible();
+ await expect(preview.getByText('内容目录：3 个表达',{exact:true})).toBeVisible();
  await expect(preview.locator('li')).toHaveCount(3);
+ await preview.locator('summary').filter({hasText:'发布信息'}).click();
  await expect(preview.getByText('Sensa test fixture',{exact:true})).toBeVisible();
  await expect(preview.getByText('CC0',{exact:true})).toBeVisible();
  await expect(book.getByRole('button',{name:'下载学习包',exact:true})).toBeEnabled();
@@ -181,7 +221,7 @@ const previewBeforeDownload=(mode:'legacy'|'lightweight')=>async({page,context}:
  await page.screenshot({path:testInfo.outputPath(`${mode}-preview-320px.png`)});
  await page.reload();
  await expect(book.getByRole('button',{name:'加入学习',exact:true})).toBeDisabled();
- await expect(preview.getByText('尚未提供',{exact:true})).toHaveCount(2);
+ await expect(preview.getByRole('article')).toHaveCount(3);
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.supplyCheckpoint())).toEqual([]);
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(facts);
 };
@@ -192,23 +232,21 @@ test('leaving a pending legacy preview cancels it and cannot replace another Boo
  fixture.setRegistry([fixture.delivery.descriptor,fixture.reviewDelivery.descriptor]);
  let started=false,release!:()=>void;
  const held=new Promise<void>(resolve=>release=resolve);
- await context.route(fixture.delivery.descriptor.url,async route=>{
+ await context.route(fixture.delivery.descriptor.preview!.url,async route=>{
   started=true;await held;
-  await route.fulfill({body:Buffer.from(fixture.delivery.bookBytes)}).catch(()=>{});
+  await route.fulfill({body:Buffer.from(fixture.delivery.responses.get(fixture.delivery.descriptor.preview!.url)!)}).catch(()=>{});
  });
  try{
   await page.goto(`${fixture.origin}/catalog`);
   const catalog=page.locator('#s-catalog'),book=page.locator('#s-catalog-book');
   await catalog.getByRole('button',{name:/English route essentials/}).click();
-  await book.getByRole('button',{name:'查看内容预览',exact:true}).click();
   await expect.poll(()=>started).toBe(true);
   await book.getByRole('button',{name:'返回',exact:true}).click();
   await catalog.getByRole('button',{name:/到期复习样本/}).click();
-  await book.getByRole('button',{name:'查看内容预览',exact:true}).click();
   const preview=book.getByRole('region',{name:'查看内容预览',exact:true});
   await expect(preview.getByRole('article')).toHaveCount(2);
   release();
-  await expect(preview.getByText('内容目录：2 条表达',{exact:true})).toBeVisible();
+  await expect(preview.getByText('内容目录：2 个表达',{exact:true})).toBeVisible();
   await expect(preview.getByText('fixture-002',{exact:true})).toHaveCount(0);
   expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.supplyCheckpoint())).toEqual([]);
   const facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
@@ -222,10 +260,11 @@ test('detail metadata and real samples survive repeated download, cancel, return
  const catalog=page.locator('#s-catalog').last(),book=page.locator('#s-catalog-book').last();
  await catalog.getByRole('button',{name:/English route essentials/}).click();
  await expect(book.getByRole('button',{name:'加入学习',exact:true})).toBeDisabled();
+ await book.locator('summary').filter({hasText:'发布信息'}).click();
  await expect(book.getByText(fixture.delivery.descriptor.publisher.name,{exact:true})).toBeVisible();
  await expect(book.getByText('v1',{exact:true})).toBeVisible();
- await expect(book.getByText('尚未提供',{exact:true})).toHaveCount(2);
- await expect(book.getByText('下载保存内容；加入学习需另行确认。',{exact:true})).toBeVisible();
+ await expect(book.getByText('尚未提供',{exact:true})).toHaveCount(0);
+ await expect(book.getByText('下载保存内容；加入学习需另行确认。',{exact:true})).toHaveCount(0);
  await page.screenshot({path:testInfo.outputPath('book-detail-before-download.png')});
  const path=new URL(fixture.delivery.descriptor.url).pathname;
  fixture.heldArchivePath=path;
@@ -243,13 +282,14 @@ test('detail metadata and real samples survive repeated download, cancel, return
  let corrupt=true;
  await context.route('**/*.sensa-book',route=>corrupt?route.fulfill({status:200,body:'invalid isolated book'}):route.continue());
  await book.getByRole('button',{name:'下载学习包',exact:true}).click();
- await expect(book.getByRole('alert')).toBeVisible();
+ await expect(book.getByRole('region',{name:'学习包操作',exact:true}).getByRole('alert')).toBeVisible();
  await expect(book.getByRole('button',{name:'加入学习',exact:true})).toBeDisabled();
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.supplyCheckpoint())).toEqual([]);
  corrupt=false;
  await book.getByRole('button',{name:'下载学习包',exact:true}).click();
  await expect(book.getByText('已下载',{exact:true})).toBeVisible();
  await expect(book.getByRole('button',{name:'已下载到本机',exact:true})).toBeDisabled();
+ await book.locator('summary').filter({hasText:'发布信息'}).click();
  await expect(book.getByText('Sensa test fixture',{exact:true})).toBeVisible();
  await expect(book.getByText('CC0',{exact:true})).toBeVisible();
  await expect(book.getByText('以下表达与含义来自已下载的 v1。',{exact:true})).toBeVisible();
@@ -469,10 +509,13 @@ test('overlapping Book admissions and an explicit Book upgrade preserve the reve
   await expect(catalog.getByRole('button',{name:'刷新',exact:true})).toBeEnabled();
   await catalog.getByRole('button',{name:/到期复习样本/}).click();
   const beforeUpdate=await page.evaluate(()=>window.__sensaBrowserSmoke!.curriculumSourceCheckpointForTest());
+  await expect(book.getByRole('button',{name:'去学习',exact:true})).toBeEnabled();
   await book.getByRole('button',{name:'下载更新',exact:true}).click();
   await expect(book.getByText('更新已下载',{exact:true})).toBeVisible();
   expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.curriculumSourceCheckpointForTest())).toEqual(beforeUpdate);
   await book.getByRole('button',{name:'应用更新',exact:true}).click();
+  await expect(book.getByRole('button',{name:'应用更新',exact:true})).toHaveCount(0);
+  await expect(book.getByText('已加入学习',{exact:true})).toBeVisible();
   await expect(book.getByRole('button',{name:'去学习',exact:true})).toBeVisible();
   const upgraded=await page.evaluate(()=>window.__sensaBrowserSmoke!.curriculumSourceCheckpointForTest());
   expect(upgraded.runs).toEqual(beforeUpdate.runs);
@@ -502,9 +545,15 @@ test('overlapping Book admissions and an explicit Book upgrade preserve the reve
 
 test('cancelling admission after complete transfer closes its Worker without installing any members',async({page})=>{
   fixture.setRegistry([fixture.scaleDelivery.descriptor]);
+  // Hold the owned Worker before computation so cancellation never races a fast CPU.
+  await page.route('**/*portablePreparationWorker*',async route=>{
+    const response=await route.fetch(),body=await response.text();
+    await route.fulfill({response,body:`self.addEventListener('message',event=>{if(event.data?.kind==='book')event.stopImmediatePropagation();});\n${body}`});
+  });
   await page.goto(`${fixture.origin}/catalog`);
   await page.locator('#s-catalog').last().getByRole('button',{name:/English route essentials/}).click();
   const book=page.locator('#s-catalog-book').last();
+  await expect(book.getByRole('article')).toHaveCount(3);
   let workerClosed=false;
   let closed:Promise<void>|undefined;
   const admission=page.waitForEvent('worker',{predicate:worker=>worker.url().includes('portablePreparationWorker')}).then(worker=>{
@@ -568,6 +617,23 @@ test('discovers, downloads and enrolls a Book with durable local state',async({p
   await expect(entry.getByText('未下载',{exact:true})).toBeVisible();
   await expect(entry.getByText(/100 个表达/)).toBeVisible();
 
+  const preview=entry.getByRole('region',{name:'查看内容预览',exact:true});
+  await expect(preview.getByRole('article')).toHaveCount(3);
+  await expect(preview.locator('li')).toHaveCount(24);
+  await preview.getByRole('button',{name:'第 5 页',exact:true}).click();
+  await expect(preview.locator('li')).toHaveCount(4);
+  await expect(preview.getByText('第 97–100 项，共 100 项',{exact:true})).toBeVisible();
+  await preview.getByRole('searchbox',{name:'搜索表达',exact:true}).fill('borrow');
+  await expect(preview.locator('li')).toHaveCount(1);
+  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.supplyCheckpoint())).toEqual([]);
+  await preview.getByRole('searchbox').fill('');
+  for(const width of [1440,390,320]){
+    await page.setViewportSize({width,height:900});
+    expect(await entry.evaluate(element=>element.scrollWidth<=element.clientWidth)).toBe(true);
+    await page.screenshot({path:test.info().outputPath(`book-100-preview-${width}.png`),fullPage:true});
+  }
+  await page.setViewportSize({width:1440,height:900});
+
   await entry.getByRole('button',{name:'下载学习包',exact:true}).click();
   await expect(entry.getByText('已下载',{exact:true})).toBeVisible({timeout:15_000});
   await expect(entry.locator('section').last().locator('li')).toHaveCount(3);
@@ -594,10 +660,19 @@ test('discovers, downloads and enrolls a Book with durable local state',async({p
   await expect(contents.locator('li')).toHaveCount(3);
   await expect(contents.locator('li button')).toHaveCount(3);
   await contents.getByRole('button',{name:'查看更多',exact:true}).click();
-  await expect(contents.locator('li')).toHaveCount(50);
+  await expect(contents.locator('li')).toHaveCount(24);
   await expect(contents.locator('li button')).toHaveCount(20);
-  await contents.getByRole('button',{name:'查看更多',exact:true}).click();
-  await expect(contents.locator('li')).toHaveCount(100);
+  await contents.getByRole('button',{name:'第 5 页',exact:true}).click();
+  await expect(contents.locator('li')).toHaveCount(4);
+  await expect(contents.getByText('第 97–100 项，共 100 项',{exact:true})).toBeVisible();
+  await contents.getByRole('searchbox',{name:'搜索表达',exact:true}).fill('borrow');
+  await expect(contents.locator('li')).toHaveCount(1);
+  await expect(contents.getByText('borrow',{exact:true})).toBeVisible();
+  await contents.getByRole('searchbox').fill('missing expression');
+  await expect(contents.locator('li')).toHaveCount(0);
+  await expect(contents.getByText('第 0–0 项，共 0 项',{exact:true})).toBeVisible();
+  await contents.getByRole('searchbox').fill('');
+  await expect(contents.locator('li')).toHaveCount(24);
   await expect(contents.getByRole('button',{name:'查看更多',exact:true})).toHaveCount(0);
   assert.equal(
     await page.evaluate(()=>(window as unknown as {__packageEnrollmentCommits:{learningTargetCommits:number}}).__packageEnrollmentCommits.learningTargetCommits),
@@ -615,7 +690,8 @@ test('discovers, downloads and enrolls a Book with durable local state',async({p
   const restored=page.locator('#s-catalog-book').last();
   await expect(restored.getByRole('heading',{name:'English route essentials'})).toBeVisible({timeout:15_000});
   await expect(restored.getByText('已加入学习',{exact:true})).toBeVisible();
-  await restored.getByRole('button',{name:'查看更多',exact:true}).click();
+  await restored.getByRole('region',{name:'包内内容',exact:true}).getByRole('button',{name:'查看更多',exact:true}).click();
+  await restored.getByRole('searchbox',{name:'搜索表达',exact:true}).fill('borrow');
   await expect(restored.getByText('borrow',{exact:true})).toBeVisible();
 
   await page.evaluate(()=>window.__sensaBrowserSmoke!.navigate('/publisher'));
@@ -839,7 +915,7 @@ test('a corrupt Book download remains uninstalled and can be retried through the
   await page.locator('#s-catalog').last().getByRole('button',{name:/雨天借伞/}).click();
   const book=page.locator('#s-catalog-book').last();
   await book.getByRole('button',{name:'下载学习包',exact:true}).click();
-  await expect(book.getByRole('alert')).toBeVisible();
+  await expect(book.getByRole('region',{name:'学习包操作',exact:true}).getByRole('alert')).toBeVisible();
   await expect(book.getByText('未下载',{exact:true})).toBeVisible();
   await expect(book.getByText('已下载',{exact:true})).toHaveCount(0);
   await expect(book.getByRole('button',{name:'加入学习',exact:true})).toBeDisabled();
@@ -875,13 +951,16 @@ test('a failed final member and a cancelled update leave the complete previous B
   await catalog.getByRole('button',{name:'刷新',exact:true}).click();
   await expect(catalog.getByRole('button',{name:'刷新',exact:true})).toBeEnabled();
   await catalog.getByRole('button',{name:/English route essentials/}).click();
+  await expect(book.getByRole('button',{name:'去学习',exact:true})).toBeEnabled();
   await book.getByRole('button',{name:'下载更新',exact:true}).click();
-  await expect(book.getByRole('alert')).toHaveText('下载结果与目录版本不一致，请刷新目录后重试。');
+  await expect(book.getByRole('region',{name:'学习包操作',exact:true}).getByRole('alert')).toHaveText('下载结果与目录版本不一致，请刷新目录后重试。');
   await expect(book.getByText('更新已下载',{exact:true})).toHaveCount(0);
   expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.supplyCheckpoint())).toEqual(previous);
   await page.reload();
-  await book.getByRole('button',{name:'查看更多',exact:true}).click();
-  await expect(book.getByText('borrow',{exact:true})).toBeVisible({timeout:15_000});
+  const previousContents=book.getByRole('region',{name:'包内内容',exact:true});
+  await previousContents.getByRole('button',{name:'查看更多',exact:true}).click();
+  await previousContents.getByRole('searchbox',{name:'搜索表达',exact:true}).fill('borrow');
+  await expect(previousContents.getByText('borrow',{exact:true})).toBeVisible({timeout:15_000});
   expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.supplyCheckpoint())).toEqual(previous);
   expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(learningBefore);
 
@@ -891,17 +970,21 @@ test('a failed final member and a cancelled update leave the complete previous B
   await expect(catalog.getByRole('button',{name:'刷新',exact:true})).toBeEnabled();
   await catalog.getByRole('button',{name:/English route essentials/}).click();
   fixture.heldArchivePath=new URL(fixture.updateDelivery.descriptor.url).pathname;
+  await expect(book.getByRole('button',{name:'去学习',exact:true})).toBeEnabled();
   await book.getByRole('button',{name:'下载更新',exact:true}).click();
   await expect(book.getByRole('progressbar')).toBeVisible();
   await book.getByRole('button',{name:'取消下载',exact:true}).click();
   await expect(book.getByText('下载已取消。',{exact:true})).toBeVisible();
   expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.supplyCheckpoint())).toEqual(previous);
   await page.reload();
-  await book.getByRole('button',{name:'查看更多',exact:true}).click();
-  await expect(book.getByText('borrow',{exact:true})).toBeVisible({timeout:15_000});
+
+  await previousContents.getByRole('button',{name:'查看更多',exact:true}).click();
+  await previousContents.getByRole('searchbox',{name:'搜索表达',exact:true}).fill('borrow');
+  await expect(previousContents.getByText('borrow',{exact:true})).toBeVisible({timeout:15_000});
   expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.supplyCheckpoint())).toEqual(previous);
   expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(learningBefore);
   fixture.heldArchivePath=null;
+  await expect(book.getByRole('button',{name:'去学习',exact:true})).toBeEnabled();
   await book.getByRole('button',{name:'下载更新',exact:true}).click();
   await expect(book.getByText('更新已下载',{exact:true})).toBeVisible({timeout:15_000});
   expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.supplyCheckpoint())).filter(pack=>pack.version===2)).toHaveLength(100);

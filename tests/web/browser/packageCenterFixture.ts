@@ -8,7 +8,7 @@ import {extname,join,resolve} from 'node:path';
 import {chromium,expect,test as base,type Page,type BrowserContext,type TestInfo} from '@playwright/test';
 import {unzipSync,zipSync} from 'fflate';
 import {assertInteractionBudget} from '../support/interactionBudget';
-import {portableBookMemberPath,readSensaPortableBook} from '@sensa/content-validator/portable-book';
+import {createPortableBookPreview,portableBookMemberPath,readSensaPortableBook} from '@sensa/content-validator/portable-book';
 import {canonicalConsumerJson,sensaPortableBookManifestSchema} from '@sensa/contracts/sensa';
 import {portableBookDeliveryFixture} from '../../../scripts/support/portablePackageFixture.mts';
 import {serve} from '@hono/node-server';
@@ -287,6 +287,13 @@ test.beforeAll(async()=>{
     memberExpressions:['borrow',...Array.from({length:99},(_,index)=>`fixture-${String(index+2).padStart(3,'0')}`)],
   });
   mismatchedDelivery=portableBookDeliveryFixture({baseUrl:`${origin}/published/`,packageId:'48b61326-4246-4aa6-b94e-f13412f15a93',targetLanguage:'es',expression:'prestar',title:'西班牙语借物'});
+  for(const value of [delivery,learningDelivery,referenceDelivery,reviewDelivery,updateDelivery,scaleDelivery,mismatchedDelivery]){
+    const bytes=new TextEncoder().encode(canonicalConsumerJson(createPortableBookPreview(readSensaPortableBook(value.bookBytes))));
+    const url=value.descriptor.url.replace('.sensa-book','.preview.json');
+    value.responses.set(url,bytes);
+    value.descriptor={...value.descriptor,preview:{url,byteLength:bytes.byteLength,sha256:createHash('sha256').update(bytes).digest('hex')}};
+  }
+
   const files=unzipSync(updateDelivery.bookBytes);
   const lastMember=updateDelivery.manifest.members.at(-1)!;
   files[portableBookMemberPath(lastMember)]=new TextEncoder().encode('invalid final .sensa member');

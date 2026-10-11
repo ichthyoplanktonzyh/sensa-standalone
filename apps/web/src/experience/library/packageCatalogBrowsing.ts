@@ -1,5 +1,6 @@
 import type {ShellParams} from '../router/screenRegistry';
 import type {PackageCenterItem} from './packageCenterProjection';
+import {packagePresentation} from './packagePresentation';
 
 export type CatalogBrowsing = Readonly<{
  query:string;
@@ -39,15 +40,15 @@ export function browseCatalog(
  const collator=new Intl.Collator(locale,{numeric:true,sensitivity:'base'});
  const results=items.filter(item=>(!state.target||item.targetLanguage===state.target)
   &&(!state.support||item.supportLanguage===state.support)
-  &&[item.title,item.description,item.targetLanguage,item.supportLanguage,
+  &&[item.title,packagePresentation(item).title,item.description,item.targetLanguage,item.supportLanguage,
    item.descriptor?.publisher.name,languageNames.get(item.targetLanguage),languageNames.get(item.supportLanguage),
   ].join(' ').toLocaleLowerCase(locale).includes(query))
   .sort((left,right)=>{
    const primary=state.sort==='newest'
     ?Date.parse(right.descriptor?.publishedAt??'1970-01-01T00:00:00Z')-Date.parse(left.descriptor?.publishedAt??'1970-01-01T00:00:00Z')
-    :collator.compare(left.title,right.title);
+    :collator.compare(packagePresentation(left).title,packagePresentation(right).title);
    // An exact ID comparison makes ties independent of transport order/locale.
-   return primary||(left.listKey<right.listKey?-1:left.listKey>right.listKey?1:0);
+   return primary||(state.sort==='title'?collator.compare(left.title,right.title):0)||(left.listKey<right.listKey?-1:left.listKey>right.listKey?1:0);
   });
  const total=results.length,pages=Math.max(1,Math.ceil(total/state.pageSize));
  const page=Math.min(state.page,pages),start=total?(page-1)*state.pageSize+1:0;

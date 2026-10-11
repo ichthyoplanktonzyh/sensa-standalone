@@ -332,13 +332,19 @@ export function projectPackageContentWindow(
  packages:readonly InstalledPackage[],
  targetByEntry:ReadonlyMap<string,LearningTarget>,
  requestedLimit:number,
-):Readonly<{entries:PackageContentRow[];total:number}>{
- const total=packages.reduce((count,pack)=>count+pack.content.entries.length,0);
+ browsing:{query?:string;locale?:string;offset?:number}={},
+):Readonly<{entries:PackageContentRow[];total:number;offset:number}>{
+ const query=browsing.query?.trim().toLocaleLowerCase(browsing.locale)??'';
+ const matches=(entry:InstalledPackage['content']['entries'][number])=>!query||entry.expression.toLocaleLowerCase(browsing.locale).includes(query);
+ const total=packages.reduce((count,pack)=>count+pack.content.entries.reduce((sum,entry)=>sum+Number(matches(entry)),0),0);
  const limit=Math.max(0,Math.floor(requestedLimit));
+ const offset=limit?Math.min(Math.max(0,Math.floor(browsing.offset??0)),Math.max(0,Math.ceil(total/limit)-1)*limit):0;
  const entries:PackageContentRow[]=[];
+ let position=0;
  for(const pack of packages){
   for(const entry of pack.content.entries){
-   if(entries.length>=limit)return {entries,total};
+   if(!matches(entry)||position++<offset)continue;
+   if(entries.length>=limit)return {entries,total,offset};
    entries.push({
     pack,
     entry,
@@ -346,5 +352,5 @@ export function projectPackageContentWindow(
    });
   }
  }
- return {entries,total};
+ return {entries,total,offset};
 }

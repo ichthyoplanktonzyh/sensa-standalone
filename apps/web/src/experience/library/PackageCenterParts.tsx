@@ -7,6 +7,7 @@ import {localFlowText} from '../../i18n/localFlowText';
 import {setupButton} from '../components/learning/LearningSetupFrame';
 import {catalogPageNumbers} from './packageCatalogBrowsing';
 import type {PackageCenterItem} from './packageCenterProjection';
+import {packagePresentation} from './packagePresentation';
 
 export const packageItemState=(item:PackageCenterItem,installation?:{bookKey:string;phase:string}|null,progress?:number|null)=>installation?.bookKey===item.key
  ?installation.phase==='downloading'?`${localFlowText('downloading')}${progress??0}%`:localFlowText('processing')
@@ -15,12 +16,12 @@ export const packageItemState=(item:PackageCenterItem,installation?:{bookKey:str
   :item.enrolled?'enrolled':item.installed.length?'downloaded':'packageNotDownloaded',
 );
 
-export function PackageRoute({target,support}:{target:string;support:string}){
+export function PackageRoute({target,support,compact=false}:{target:string;support:string;compact?:boolean}){
  const {i18n}=useTranslation();
  const locale=resolveInterfaceLocale(i18n.resolvedLanguage??i18n.language);
- return <dl className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-fg-secondary">
-  <div><dt className="inline">{localFlowText('catalogTargetLanguage')}: </dt><dd className="inline">{interfaceLanguageDisplayName(target,locale)}</dd></div>
-  <div><dt className="inline">{localFlowText('catalogSupportLanguage')}: </dt><dd className="inline">{interfaceLanguageDisplayName(support,locale)}</dd></div>
+ return <dl className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-fg-secondary">
+  <div><dt className={compact?'sr-only':'inline'}>{localFlowText('catalogTargetLanguage')}: </dt><dd className="inline"><bdi>{interfaceLanguageDisplayName(target,locale)}</bdi></dd></div>
+  <div>{compact&&<span aria-hidden="true" className="me-2">/</span>}<dt className={compact?'sr-only':'inline'}>{localFlowText('catalogSupportLanguage')}: </dt><dd className="inline"><bdi>{interfaceLanguageDisplayName(support,locale)}</bdi></dd></div>
  </dl>;
 }
 
@@ -38,32 +39,41 @@ export function PackageCards({items,onOpen,emptyKey,loaded,learningStatus=loaded
  learningStatus?:'loading'|'ready'|'unavailable';
  installation?:{bookKey:string;phase:string}|null;progress?:number|null;
 }){
- const {t}=useTranslation();
+ const {t,i18n}=useTranslation();
+ const locale=resolveInterfaceLocale(i18n.resolvedLanguage??i18n.language);
  return <>
-  <ul aria-busy={!loaded} className={view==='list'?'space-y-2':'grid gap-3 sm:grid-cols-2 xl:grid-cols-3'}>
-   {items.map(item=><li key={item.listKey}>
-    <button type="button" data-package-key={item.key} onClick={()=>onOpen(item)} className={`group flex h-full w-full flex-col gap-3 rounded-xl border border-border-strong bg-surface-panel text-left transition-colors hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus ${view==='list'?'p-4':'p-4 sm:p-5'}`}>
-     <div className="flex w-full flex-wrap items-start gap-3">
-      <BookOpen size={19} className="mt-1 shrink-0 text-action-primary" aria-hidden="true"/>
-      <h2 className="min-w-0 flex-1 break-words text-lg font-medium">{item.title}</h2>
-      {learningStatus==='ready'?<span className="rounded-md bg-accent-soft px-2 py-1 text-xs text-action-primary">{packageItemState(item,installation,progress)}</span>:learningStatus==='unavailable'?<span className="max-w-full break-words rounded-md bg-surface-subtle px-2 py-1 text-xs text-fg-secondary">{localFlowText('learningReadFailed')}</span>:<span role="status" aria-label={t('reliability.loading')} className="h-6 w-20 animate-pulse rounded-lg bg-surface-subtle"/>}
-     </div>
-     {item.description&&<p className={`${view==='list'?'line-clamp-2':'line-clamp-3'} w-full break-words text-sm leading-6 text-fg-secondary`}>{item.description}</p>}
-     <div className="mt-auto flex w-full flex-wrap items-end justify-between gap-2">
-      <PackageRoute target={item.targetLanguage} support={item.supportLanguage}/>
-      <span className="inline-flex items-center gap-2 text-sm text-fg-secondary">{localFlowText('packageExpressionCount',{count:item.count})}<ArrowRight size={16} aria-hidden="true"/></span>
-     </div>
-    </button>
-   </li>)}
+  <ul aria-busy={!loaded} className={view==='list'?'sensa-package-list':'sensa-package-grid'}>
+   {items.map(item=>{
+    const presentation=packagePresentation(item);
+    return <li key={item.listKey}>
+     <button type="button" data-package-key={item.key} onClick={()=>onOpen(item)} className="sensa-package-entry group">
+      <div className="sensa-package-entry-heading">
+       <BookOpen size={20} className="shrink-0 text-action-primary" aria-hidden="true"/>
+       <h2 className="min-w-0 break-words text-section-title font-medium"><bdi>{presentation.title}</bdi></h2>
+       <ArrowRight size={17} className="sensa-package-entry-arrow text-fg-tertiary" aria-hidden="true"/>
+      </div>
+      {presentation.description&&<p className="line-clamp-2 break-words text-body-support text-fg-secondary"><bdi>{presentation.description}</bdi></p>}
+      <div className="sensa-package-entry-footer">
+       <PackageRoute target={item.targetLanguage} support={item.supportLanguage} compact/>
+       <span className="text-sm text-fg-secondary">{localFlowText('packageExpressionCount',{count:item.count,formattedCount:new Intl.NumberFormat(locale).format(item.count)})}</span>
+      </div>
+      {learningStatus==='ready'?<span className={`sensa-package-state ${item.installed.length||item.updateAvailable?'text-action-primary':'text-fg-tertiary'}`}>{packageItemState(item,installation,progress)}</span>:learningStatus==='unavailable'?<span className="sensa-package-state text-fg-secondary">{localFlowText('learningReadFailed')}</span>:<span role="status" aria-label={t('reliability.loading')} className="h-4 w-20 animate-pulse rounded-control bg-surface-subtle"/>}
+     </button>
+    </li>;
+   })}
   </ul>
   {!items.length&&(loaded?<PackageStatus><BookOpen size={20} className="mb-2 text-fg-tertiary" aria-hidden="true"/>{localFlowText(emptyKey)}</PackageStatus>:<PackageStatus>{t('reliability.loading')}</PackageStatus>)}
  </>;
 }
 
-export function CatalogPagination({page,pages,onPage}:{page:number;pages:number;onPage:(page:number)=>void}){
- return <nav aria-label={localFlowText('catalogPagination')} className="mt-5 flex flex-wrap items-center justify-center gap-2">
-  <button type="button" className={setupButton} aria-label={localFlowText('catalogPreviousPage')} disabled={page<=1} onClick={()=>onPage(page-1)}><ChevronLeft size={18}/></button>
-  {catalogPageNumbers(page,pages).map((number,index)=>number==='gap'?<span key={`gap-${index}`} aria-hidden="true" className="px-1 text-fg-secondary">…</span>:<button type="button" key={number} aria-label={localFlowText('catalogPage',{page:number})} aria-current={page===number?'page':undefined} className={`${setupButton} min-w-11 px-3 ${page===number?'border-action-primary bg-accent-soft font-semibold text-action-primary underline underline-offset-4':''}`} onClick={()=>onPage(number)}>{number}</button>)}
-  <button type="button" className={setupButton} aria-label={localFlowText('catalogNextPage')} disabled={page>=pages} onClick={()=>onPage(page+1)}><ChevronRight size={18}/></button>
+export function CatalogPagination({page,pages,onPage,label}:{page:number;pages:number;onPage:(page:number)=>void;label?:string}){
+ const {i18n}=useTranslation();
+ const numberFormat=new Intl.NumberFormat(resolveInterfaceLocale(i18n.resolvedLanguage??i18n.language));
+ return <nav aria-label={label??localFlowText('catalogPagination')} className="sensa-package-pagination mt-5">
+  <button type="button" className={setupButton+' sensa-package-page-previous'} aria-label={localFlowText('catalogPreviousPage')} disabled={page<=1} onClick={()=>onPage(page-1)}><ChevronLeft size={18}/></button>
+  <div className="sensa-package-page-numbers">
+  {catalogPageNumbers(page,pages).map((number,index)=>number==='gap'?<span key={`gap-${index}`} aria-hidden="true" className="px-1 text-fg-secondary">…</span>:<button type="button" key={number} aria-label={localFlowText('catalogPage',{page:numberFormat.format(number)})} aria-current={page===number?'page':undefined} className={`${setupButton} min-w-11 px-3 ${page===number?'border-action-primary bg-accent-soft font-semibold text-action-primary underline underline-offset-4':''}`} onClick={()=>onPage(number)}>{numberFormat.format(number)}</button>)}
+  </div>
+  <button type="button" className={setupButton+' sensa-package-page-next'} aria-label={localFlowText('catalogNextPage')} disabled={page>=pages} onClick={()=>onPage(page+1)}><ChevronRight size={18}/></button>
  </nav>;
 }

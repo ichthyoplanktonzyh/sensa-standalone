@@ -306,12 +306,12 @@
     "assuranceContinue": "Lanjutkan",
     "assuranceSupported": "Selesai dengan bantuan; pemeriksaan mandiri akan menyusul.",
     "packageNotDownloaded": "Belum diunduh",
-    "packageExpressionCount": "{{count}} ekspresi",
-    "packageExpressionCount_other": "{{count}} ekspresi",
+    "packageExpressionCount": "{{formattedCount}} ekspresi",
+    "packageExpressionCount_other": "{{formattedCount}} ekspresi",
     "packageActions": "Tindakan paket",
     "packageReadyHint": "Ditambahkan ke pembelajaran. Buka halaman pembelajaran untuk memulai.",
     "packageJoinHint": "Sumber siap. Tambahkan ekspresi ke koleksi belajar dengan metode Belajar Ringan.",
-    "packageDownloadHint": "Mengunduh menyimpan konten. Menambahkannya ke pembelajaran memerlukan konfirmasi terpisah.",
+
     "packageGoLearning": "Buka pembelajaran",
     "packageContents": "Isi paket",
     "packageContentsAfterDownload": "Unduh untuk melihat semua ekspresi dan makna.",
@@ -550,16 +550,20 @@
     "completionViewRecords": "Lihat catatan pembelajaran",
     "sessionSummaryUnavailable": "Catatan putaran ini belum terbaca",
 "packagePreviewLoad":"Pratinjau isi",
-"packagePreviewHint":"Pratinjau tidak menyimpan buku ke pustaka atau menambahkannya ke pembelajaran.",
-"packagePreviewLegacyHint":"Edisi ini tidak memiliki pratinjau terpisah. Arsip {{size}} MB dibaca dan diverifikasi dalam memori.",
+
+
 "packagePreviewLoading":"Memuat pratinjau…",
 "packagePreviewFailed":"Pratinjau tidak dapat dimuat. Periksa koneksi dan coba lagi.",
 "packagePreviewUnavailable":"Edisi ini belum menyediakan pratinjau sebelum diunduh.",
-"packagePreviewVersion":"Isi ini berasal dari edisi v{{version}} dalam katalog.",
-"packagePreviewSamples":"Contoh pembelajaran asli",
-"packagePreviewDirectory":"Isi: {{count}} ungkapan",
+"packagePreviewVersion": "Edisi katalog v{{version}}",
+"packagePreviewSamples": "Contoh konten",
+"packagePreviewDirectory": "Isi: {{formattedCount}} ungkapan",
 "packagePreviewUnknown":"Belum tersedia",
 "packagePreviewVisual":"Adegan ini juga memuat gambar atau konten visual yang tidak ditampilkan dalam pratinjau teks.",
-"packagePreviewMeaning":"Makna"
-}
+    "catalogOptions": "Opsi tampilan",
+    "packageOriginalTitle": "Judul asli",
+    "packagePreviewMetadataPending": "Tersedia setelah pratinjau dimuat",
+    "packagePreviewDirectory_other": "Isi: {{formattedCount}} ekspresi",
+    "packageDirectorySearch": "Cari ungkapan"
+  }
 }

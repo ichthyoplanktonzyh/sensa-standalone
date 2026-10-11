@@ -1,61 +1,85 @@
-import type {SensaPortableBookDescriptor,SensaPortableBookPreview} from '@sensa/contracts/sensa';
-import {useEffect,useRef,useState} from 'react';
+import {maxLegacyBookPreviewArchiveBytes,type SensaPortableBookDescriptor,type SensaPortableBookPreview} from '@sensa/contracts/sensa';
+import {useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
 import {useTranslation} from 'react-i18next';
 import {contentSupplySystem} from '../../contentSupply/system';
 import {localFlowErrorKey,localFlowNotice,localFlowText} from '../../i18n/localFlowText';
-import {setupButton} from '../components/learning/LearningSetupFrame';
-import {PackageStatus} from './PackageCenterParts';
+import {resolveInterfaceLocale} from '../../i18n/localeRegistry';
+import {CatalogPagination,PackageStatus} from './PackageCenterParts';
 
-type State={key:string;status:'idle'|'loading'|'failed'|'ready';preview?:SensaPortableBookPreview;error?:string;limit:number};
+type State={key:string;status:'idle'|'loading'|'failed'|'ready';preview?:SensaPortableBookPreview;error?:string};
 
-/** Catalog inspection is independent of installation and learning admission. */
-export function BookPreview({active,descriptor}:{active:boolean;descriptor:SensaPortableBookDescriptor}){
- const {t}=useTranslation();
+/** Entering a Book reads a bounded, verified text preview. It never installs content. */
+export function BookPreview({active,descriptor,publication}:{active:boolean;descriptor:SensaPortableBookDescriptor;publication?:ReactNode}){
+ const {i18n}=useTranslation();
+ const locale=resolveInterfaceLocale(i18n.resolvedLanguage??i18n.language),numbers=new Intl.NumberFormat(locale);
  const key=JSON.stringify(descriptor),request=useRef<AbortController|null>(null);
- const [state,setState]=useState<State>({key,status:'idle',limit:24});
- const current=state.key===key?state:{key,status:'idle' as const,limit:24};
- useEffect(()=>{
-  request.current?.abort();request.current=null;
-  setState({key,status:'idle',limit:24});
-  return ()=>{request.current?.abort();request.current=null;};
- },[key,active]);
+ const [state,setState]=useState<State>({key,status:'idle'});
+ const current=state.key===key?state:{key,status:'idle' as const};
+ const [directory,setDirectory]=useState({key,query:'',page:1});
+ const browsing=directory.key===key?directory:{key,query:'',page:1};
  const load=()=>{
   if(request.current||!active)return;
+  if(!descriptor.preview&&descriptor.byteLength>maxLegacyBookPreviewArchiveBytes){
+   setState({key,status:'failed',error:'localFlow.packagePreviewUnavailable'});return;
+  }
   const controller=new AbortController();request.current=controller;
   const signal=AbortSignal.any([controller.signal,AbortSignal.timeout(45_000)]);
-  setState({key,status:'loading',limit:24});
+  setState({key,status:'loading'});
   void contentSupplySystem.read({kind:'book_preview',descriptor,signal}).then(preview=>{
-   if(request.current===controller&&!controller.signal.aborted)setState({key,status:'ready',preview,limit:24});
+   if(request.current===controller&&!controller.signal.aborted)setState({key,status:'ready',preview});
   },error=>{
-   if(request.current===controller&&!controller.signal.aborted)setState({key,status:'failed',error:(localFlowErrorKey(error,'localFlow.packagePreviewFailed')==='localFlow.packagePreviewUnavailable'?'localFlow.packagePreviewUnavailable':'localFlow.packagePreviewFailed'),limit:24});
+   if(request.current===controller&&!controller.signal.aborted)setState({key,status:'failed',error:(localFlowErrorKey(error,'localFlow.packagePreviewFailed')==='localFlow.packagePreviewUnavailable'?'localFlow.packagePreviewUnavailable':'localFlow.packagePreviewFailed')});
   }).finally(()=>{if(request.current===controller)request.current=null;});
  };
+ useEffect(()=>{
+  request.current?.abort();request.current=null;
+  setState({key,status:'idle'});
+  setDirectory({key,query:'',page:1});
+  if(active)load();
+  return ()=>{request.current?.abort();request.current=null;};
+ },[key,active]);
  const preview=current.preview;
- return <section aria-label={localFlowText('packagePreviewLoad')} className="mb-5 space-y-4 rounded-xl border border-border-subtle bg-surface-panel p-4 sm:p-5">
-  <h2 className="text-lg font-medium">{localFlowText('packagePreviewLoad')}</h2>
-  <p className="text-sm leading-6 text-fg-secondary">{localFlowText('packagePreviewHint')}</p>
-  {!preview&&<>
-   <dl className="grid gap-3 text-sm sm:grid-cols-2">{(['packageAuthor','packageLicense'] as const).map(label=><div key={label}><dt className="text-fg-secondary">{localFlowText(label)}</dt><dd>{localFlowText('packagePreviewUnknown')}</dd></div>)}</dl>
-   {!descriptor.preview&&<p className="text-sm leading-6 text-fg-secondary">{localFlowText('packagePreviewLegacyHint',{size:(descriptor.byteLength/1024/1024).toFixed(1)})}</p>}
-   {current.status==='loading'?<PackageStatus>{localFlowText('packagePreviewLoading')}</PackageStatus>:current.status==='failed'?<PackageStatus error onRetry={load}>{localFlowNotice(current.error)}</PackageStatus>:<button type="button" className={setupButton} onClick={load}>{localFlowText('packagePreviewLoad')}</button>}
-  </>}
+ const filteredEntries=useMemo(()=>preview?.entries.filter(entry=>entry.expression.toLocaleLowerCase(locale).includes(browsing.query.trim().toLocaleLowerCase(locale)))??[],[preview,browsing.query,locale]);
+ const pages=Math.max(1,Math.ceil(filteredEntries.length/24)),page=Math.min(browsing.page,pages);
+ const directoryLabel=preview?localFlowText('packagePreviewDirectory',{count:preview.memberCount}):'';
+
+ return <section aria-label={localFlowText('packagePreviewLoad')} className="space-y-6">
+  <div className="flex flex-wrap items-baseline justify-between gap-2">
+   <h2 className="text-section-title font-medium">{localFlowText('packagePreviewSamples')}</h2>
+   {preview&&<p className="text-metadata text-fg-secondary">{localFlowText('packagePreviewVersion',{version:numbers.format(preview.book.versionNumber)})}</p>}
+  </div>
+  {!preview&&(current.status==='loading'||current.status==='idle'?<div role="status" className="min-h-32 text-body-support text-fg-secondary">{localFlowText('packagePreviewLoading')}</div>:<PackageStatus error={current.error!=='localFlow.packagePreviewUnavailable'} onRetry={current.error==='localFlow.packagePreviewUnavailable'?undefined:load}>{localFlowNotice(current.error)}</PackageStatus>)}
   {preview&&<>
-   <p className="text-sm text-fg-secondary">{localFlowText('packagePreviewVersion',{version:preview.book.versionNumber})}</p>
-   <dl className="grid gap-3 text-sm sm:grid-cols-2">{[
-    {label:'packageAuthor' as const,values:preview.authors},{label:'packageLicense' as const,values:preview.licenses},
-   ].map(group=><div key={group.label}><dt className="text-fg-secondary">{localFlowText(group.label)}</dt><dd className="break-words">{group.values.map(party=>party.name).join(' · ')}</dd></div>)}</dl>
-   <h3 className="font-medium">{localFlowText('packagePreviewSamples')}</h3>
-   <div className="space-y-4">{preview.samples.map(sample=><article key={`${sample.packageId}:${sample.version}`} aria-label={sample.expression} className="space-y-3 rounded-xl border border-border-subtle p-4">
-    <h4 className="break-words text-xl font-medium">{sample.expression}</h4>
-    <dl className="space-y-3 text-sm leading-6">
-     <div><dt className="font-medium">{localFlowText('context')}</dt><dd className="whitespace-pre-wrap break-words text-fg-secondary">{sample.scene}{sample.hasVisualCue&&<p>{localFlowText('packagePreviewVisual')}</p>}</dd></div>
-     <div><dt className="font-medium">{localFlowText('packagePreviewMeaning')}</dt><dd className="whitespace-pre-wrap break-words text-fg-secondary">{sample.meaning}</dd></div>
-     <div><dt className="font-medium">{localFlowText('expression')}</dt><dd className="space-y-2 break-words"><p className="whitespace-pre-wrap text-fg-secondary">{sample.bridge}</p><p className="whitespace-pre-wrap">{sample.example}</p>{sample.translation&&<p className="whitespace-pre-wrap text-fg-secondary">{sample.translation}</p>}</dd></div>
-    </dl>
+   <div className="sensa-package-samples">{preview.samples.map(sample=><article key={`${sample.packageId}:${sample.version}`} aria-label={sample.expression} className="sensa-package-sample space-y-4">
+    <h3 className="break-words font-language text-2xl font-medium"><bdi>{sample.expression}</bdi></h3>
+    {sample.scene&&<p className="whitespace-pre-wrap break-words text-body"><bdi>{sample.scene}</bdi></p>}
+    {sample.senseFocus!==sample.meaning&&sample.senseFocus!==sample.bridge&&<p className="whitespace-pre-wrap break-words text-body-support text-fg-secondary"><bdi>{sample.senseFocus}</bdi></p>}
+    {sample.hasVisualCue&&<p className="text-metadata text-fg-secondary">{localFlowText('packagePreviewVisual')}</p>}
+    <p className="whitespace-pre-wrap break-words text-body-support text-fg-secondary"><bdi>{sample.meaning}</bdi></p>
+    {sample.bridge!==sample.meaning&&<p className="whitespace-pre-wrap break-words text-body-support text-fg-secondary"><bdi>{sample.bridge}</bdi></p>}
+    <div className="space-y-1 border-t border-border-subtle pt-3 text-body-support">
+     <p className="whitespace-pre-wrap break-words"><bdi>{sample.example}</bdi></p>
+     {sample.translation&&<p className="whitespace-pre-wrap break-words text-fg-secondary"><bdi>{sample.translation}</bdi></p>}
+    </div>
    </article>)}</div>
-   <h3 className="font-medium">{localFlowText('packagePreviewDirectory',{count:preview.memberCount})}</h3>
-   <ul className="grid gap-2 text-sm sm:grid-cols-2">{preview.entries.slice(0,current.limit).map(entry=><li key={`${entry.packageId}:${entry.version}`} className="break-words rounded-lg bg-surface-subtle px-3 py-2">{entry.expression}</li>)}</ul>
-   {current.limit<preview.memberCount&&<button type="button" className={setupButton} onClick={()=>setState(previous=>({...previous,limit:previous.limit+24}))}>{t('study.more')}</button>}
+   <section aria-label={directoryLabel} className="border-t border-border-subtle pt-5">
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+     <h3 className="font-medium">{directoryLabel}</h3>
+     {preview.memberCount>24&&<input type="search" aria-label={localFlowText('packageDirectorySearch')} placeholder={localFlowText('packageDirectorySearch')} value={browsing.query} onChange={event=>setDirectory({key,query:event.target.value,page:1})} className="min-h-11 w-full min-w-0 rounded-control border border-border-subtle bg-surface-panel px-3 text-sm focus-visible:outline-2 focus-visible:outline-focus sm:w-64"/>}
+    </div>
+    <ul className="grid grid-cols-2 gap-x-6 gap-y-3 text-body-support sm:grid-cols-3 lg:grid-cols-4">{filteredEntries.slice((page-1)*24,page*24).map(entry=><li key={`${entry.packageId}:${entry.version}`} className="break-words"><bdi>{entry.expression}</bdi></li>)}</ul>
+    {preview.memberCount>24&&<p role="status" className="mt-4 text-metadata text-fg-secondary">{localFlowText('catalogResultRange',{start:numbers.format(filteredEntries.length?(page-1)*24+1:0),end:numbers.format(Math.min(page*24,filteredEntries.length)),total:numbers.format(filteredEntries.length)})}</p>}
+    {pages>1&&<CatalogPagination label={directoryLabel} page={page} pages={pages} onPage={next=>setDirectory({...browsing,page:next})}/>}
+   </section>
   </>}
+  <details className="sensa-package-disclosure">
+   <summary>{localFlowText('packagePublication')}</summary>
+   <div className="mt-2 space-y-4">
+    {publication}
+    <dl className="grid gap-4 text-body-support sm:grid-cols-2">{[
+     {label:'packageAuthor' as const,values:preview?.authors},{label:'packageLicense' as const,values:preview?.licenses},
+    ].map(group=><div key={group.label}><dt className="text-fg-secondary">{localFlowText(group.label)}</dt><dd className="mt-1 break-words"><bdi>{group.values?group.values.map(party=>party.name).join(' · ')||localFlowText('packagePreviewUnknown'):localFlowText('packagePreviewMetadataPending')}</bdi></dd></div>)}</dl>
+   </div>
+  </details>
  </section>;
 }

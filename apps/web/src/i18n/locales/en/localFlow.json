@@ -306,13 +306,13 @@
     "assuranceContinue": "Continue",
     "assuranceSupported": "Completed with support; independent checks will follow.",
     "packageNotDownloaded": "Not downloaded",
-    "packageExpressionCount": "{{count}} expressions",
-    "packageExpressionCount_one": "{{count}} expression",
-    "packageExpressionCount_other": "{{count}} expressions",
+    "packageExpressionCount": "{{formattedCount}} expressions",
+    "packageExpressionCount_one": "{{formattedCount}} expression",
+    "packageExpressionCount_other": "{{formattedCount}} expressions",
     "packageActions": "Package actions",
     "packageReadyHint": "Added to learning. Go to your learning page to begin.",
     "packageJoinHint": "Resources are ready. Add the expressions to your learning collection using Lightweight Study.",
-    "packageDownloadHint": "Downloading saves the content. Adding it to learning requires a separate confirmation.",
+
     "packageGoLearning": "Go to learning",
     "packageContents": "Package contents",
     "packageContentsAfterDownload": "Download to view all expressions and meanings.",
@@ -551,16 +551,21 @@
     "completionViewRecords": "View learning records",
     "sessionSummaryUnavailable": "This round’s records have not been read",
 "packagePreviewLoad":"Preview contents",
-"packagePreviewHint":"Previewing does not save the Book to your library or add it to learning.",
-"packagePreviewLegacyHint":"This edition has no separate preview. Inspection reads the {{size}} MB archive and validates it in memory.",
+
+
 "packagePreviewLoading":"Loading content preview…",
 "packagePreviewFailed":"The preview could not be loaded. Check your connection and retry.",
 "packagePreviewUnavailable":"This edition has no available preview before download.",
-"packagePreviewVersion":"This content comes from catalog edition v{{version}}.",
-"packagePreviewSamples":"Real learning examples",
-"packagePreviewDirectory":"Contents: {{count}} expressions",
+"packagePreviewVersion": "Catalog edition v{{version}}",
+"packagePreviewSamples": "Sample content",
+"packagePreviewDirectory": "Contents: {{formattedCount}} expressions",
 "packagePreviewUnknown":"Not provided yet",
 "packagePreviewVisual":"This scene also contains images or visual content omitted from the text preview.",
-"packagePreviewMeaning":"Meaning"
-}
+    "catalogOptions": "Browse options",
+    "packageOriginalTitle": "Original title",
+    "packagePreviewMetadataPending": "Available after loading the preview",
+    "packagePreviewDirectory_one": "Contents: {{formattedCount}} expression",
+    "packagePreviewDirectory_other": "Contents: {{formattedCount}} expressions",
+    "packageDirectorySearch": "Search expressions"
+  }
 }

@@ -306,14 +306,14 @@
     "assuranceContinue": "Continuar",
     "assuranceSupported": "Completado con ayuda; después se harán comprobaciones independientes.",
     "packageNotDownloaded": "No descargado",
-    "packageExpressionCount": "{{count}} expresiones",
-    "packageExpressionCount_one": "{{count}} expresión",
-    "packageExpressionCount_many": "{{count}} expresiones",
-    "packageExpressionCount_other": "{{count}} expresiones",
+    "packageExpressionCount": "{{formattedCount}} expresiones",
+    "packageExpressionCount_one": "{{formattedCount}} expresión",
+    "packageExpressionCount_many": "{{formattedCount}} expresiones",
+    "packageExpressionCount_other": "{{formattedCount}} expresiones",
     "packageActions": "Acciones del paquete",
     "packageReadyHint": "Añadido al aprendizaje. Ve a tu página de aprendizaje para empezar.",
     "packageJoinHint": "Los recursos están listos. Añade las expresiones a tu colección de aprendizaje con el método ligero.",
-    "packageDownloadHint": "La descarga guarda el contenido. Añadirlo al aprendizaje requiere una confirmación aparte.",
+
     "packageGoLearning": "Ir al aprendizaje",
     "packageContents": "Contenido del paquete",
     "packageContentsAfterDownload": "Descarga el paquete para ver todas las expresiones y significados.",
@@ -552,16 +552,22 @@
     "completionViewRecords": "Ver registros de aprendizaje",
     "sessionSummaryUnavailable": "Los registros de esta ronda aún no se han leído",
 "packagePreviewLoad":"Ver contenido",
-"packagePreviewHint":"La vista previa no guarda el libro en tu biblioteca ni lo añade al aprendizaje.",
-"packagePreviewLegacyHint":"Esta edición no tiene una vista previa separada. Se lee el archivo de {{size}} MB y se valida en memoria.",
+
+
 "packagePreviewLoading":"Cargando vista previa…",
 "packagePreviewFailed":"No se pudo cargar la vista previa. Comprueba la conexión y reinténtalo.",
 "packagePreviewUnavailable":"Esta edición no ofrece una vista previa antes de la descarga.",
-"packagePreviewVersion":"Este contenido pertenece a la edición v{{version}} del catálogo.",
-"packagePreviewSamples":"Ejemplos reales de aprendizaje",
-"packagePreviewDirectory":"Contenido: {{count}} expresiones",
+"packagePreviewVersion": "Edición del catálogo v{{version}}",
+"packagePreviewSamples": "Muestra del contenido",
+"packagePreviewDirectory": "Contenido: {{formattedCount}} expresiones",
 "packagePreviewUnknown":"Aún no indicado",
 "packagePreviewVisual":"Esta escena también incluye imágenes o contenido visual que no aparece en la vista previa de texto.",
-"packagePreviewMeaning":"Significado"
-}
+    "catalogOptions": "Opciones de vista",
+    "packageOriginalTitle": "Título original",
+    "packagePreviewMetadataPending": "Disponible al cargar la vista previa",
+    "packagePreviewDirectory_one": "Contenido: {{formattedCount}} expresión",
+    "packagePreviewDirectory_many": "Contenido: {{formattedCount}} expresiones",
+    "packagePreviewDirectory_other": "Contenido: {{formattedCount}} expresiones",
+    "packageDirectorySearch": "Buscar expresiones"
+  }
 }

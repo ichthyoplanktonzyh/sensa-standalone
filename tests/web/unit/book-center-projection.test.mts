@@ -185,6 +185,12 @@ test('Book content windows retain the full count while projecting only visible r
  assert.equal(projection.entries[0]?.entry.expression,'entry-0');
  assert.equal(projection.entries[0]?.target?.targetId,'target-0');
  assert.equal(projection.entries[49]?.entry.expression,'entry-49');
+ const last=projectPackageContentWindow([pack],indexPackageTargets(targets),24,{offset:9_984});
+ assert.equal(last.entries.length,16);assert.equal(last.entries[15]?.entry.expression,'entry-9999');
+ assert.equal(last.total,10_000);assert.equal(last.offset,9_984);
+ const searched=projectPackageContentWindow([pack],indexPackageTargets(targets),24,{query:'entry-9999',locale:'en',offset:9_984});
+ assert.equal(searched.total,1);assert.equal(searched.offset,0);assert.equal(searched.entries[0]?.entry.expression,'entry-9999');
+ assert.equal(projectPackageContentWindow([pack],indexPackageTargets(targets),24,{query:'absent'}).entries.length,0);
 });
 
 test('learning source lookup resolves the exact admitted publication instead of a shared Book or latest edition',()=>{
@@ -258,4 +264,15 @@ test('detail metadata separates a newer public edition from the installed exampl
 
  const undownloaded=projectPackageMetadata({...item!,installed:[]});
  assert.deepEqual(undownloaded.authors,[]);assert.deepEqual(undownloaded.licenses,[]);assert.equal(undownloaded.installedVersion,undefined);
+});
+
+
+test('generated catalog display names use exact description phrases and preserve unknown titles',async()=>{
+ const {packagePresentation}=await import('../../../apps/web/src/experience/library/packagePresentation');
+ const source={title:'IDS Route Foundation: ar / de',description:'Three shared everyday Senses for target ar with support de.'};
+ assert.deepEqual(packagePresentation(source),{title:'Three shared everyday Senses',description:'',originalTitle:source.title});
+ assert.equal(source.title,'IDS Route Foundation: ar / de');
+ assert.deepEqual(packagePresentation({title:'IDS 轻量学习：英语 → de',description:'以英语为目标语言、de 为支持语言的常用共同概念学习包。'}),{title:'常用共同概念',description:'',originalTitle:'IDS 轻量学习：英语 → de'});
+ assert.deepEqual(packagePresentation({title:'An author’s own title',description:'A real description'}),{title:'An author’s own title',description:'A real description',originalTitle:undefined});
+ assert.equal(packagePresentation({title:source.title,description:'Unrecognized description'}).title,source.title);
 });

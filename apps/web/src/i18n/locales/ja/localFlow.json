@@ -306,12 +306,12 @@
     "assuranceContinue": "続ける",
     "assuranceSupported": "サポート付きで完了しました。自力でのチェックが続きます。",
     "packageNotDownloaded": "未ダウンロード",
-    "packageExpressionCount": "{{count}}件の表現",
-    "packageExpressionCount_other": "{{count}}件の表現",
+    "packageExpressionCount": "{{formattedCount}}件の表現",
+    "packageExpressionCount_other": "{{formattedCount}}件の表現",
     "packageActions": "パッケージの操作",
     "packageReadyHint": "学習に追加済みです。学習ページに移動して開始してください。",
     "packageJoinHint": "リソースの準備ができました。軽量学習を使って表現を学習コレクションに追加してください。",
-    "packageDownloadHint": "ダウンロードで内容を保存します。学習への追加は別途確認が必要です。",
+
     "packageGoLearning": "学習へ移動",
     "packageContents": "パッケージの内容",
     "packageContentsAfterDownload": "ダウンロードすると、すべての表現と意味を表示できます。",
@@ -550,16 +550,20 @@
     "completionViewRecords": "学習記録を見る",
     "sessionSummaryUnavailable": "今回の記録はまだ読み取れていません",
 "packagePreviewLoad":"内容をプレビュー",
-"packagePreviewHint":"プレビューではライブラリへの保存や学習への追加は行いません。",
-"packagePreviewLegacyHint":"この版には独立したプレビューがありません。{{size}} MB のアーカイブを読み込み、メモリ内で検証します。",
+
+
 "packagePreviewLoading":"内容プレビューを読み込み中…",
 "packagePreviewFailed":"プレビューを読み込めません。接続を確認して再試行してください。",
 "packagePreviewUnavailable":"この版にはダウンロード前に利用できるプレビューがありません。",
-"packagePreviewVersion":"以下はカタログの v{{version}} に含まれる実際の内容です。",
-"packagePreviewSamples":"実際の学習例",
-"packagePreviewDirectory":"内容一覧：{{count}} 件の表現",
+"packagePreviewVersion": "カタログ版 v{{version}}",
+"packagePreviewSamples": "内容サンプル",
+"packagePreviewDirectory": "内容一覧：{{formattedCount}} 件の表現",
 "packagePreviewUnknown":"未提供",
 "packagePreviewVisual":"この場面には画像や視覚的内容も含まれますが、テキストプレビューには表示されません。",
-"packagePreviewMeaning":"意味"
-}
+    "catalogOptions": "表示設定",
+    "packageOriginalTitle": "元のタイトル",
+    "packagePreviewMetadataPending": "プレビュー読み込み後に表示",
+    "packagePreviewDirectory_other": "内容一覧：{{formattedCount}}件の表現",
+    "packageDirectorySearch": "表現を検索"
+  }
 }

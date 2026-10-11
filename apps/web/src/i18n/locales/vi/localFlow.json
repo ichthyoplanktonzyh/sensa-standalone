@@ -306,12 +306,12 @@
     "assuranceContinue": "Tiếp tục",
     "assuranceSupported": "Hoàn thành với hỗ trợ; các bước kiểm tra độc lập sẽ tiếp theo.",
     "packageNotDownloaded": "Chưa tải xuống",
-    "packageExpressionCount": "{{count}} cách diễn đạt",
-    "packageExpressionCount_other": "{{count}} cách diễn đạt",
+    "packageExpressionCount": "{{formattedCount}} cách diễn đạt",
+    "packageExpressionCount_other": "{{formattedCount}} cách diễn đạt",
     "packageActions": "Thao tác gói",
     "packageReadyHint": "Đã thêm vào việc học. Vào trang học tập để bắt đầu.",
     "packageJoinHint": "Tài nguyên đã sẵn sàng. Thêm cách diễn đạt vào bộ sưu tập học bằng phương pháp Học nhẹ nhàng.",
-    "packageDownloadHint": "Tải xuống sẽ lưu nội dung. Thêm vào học cần xác nhận riêng.",
+
     "packageGoLearning": "Đến mục học tập",
     "packageContents": "Nội dung gói",
     "packageContentsAfterDownload": "Tải xuống để xem tất cả cách diễn đạt và nghĩa.",
@@ -550,16 +550,20 @@
     "completionViewRecords": "Xem bản ghi học tập",
     "sessionSummaryUnavailable": "Bản ghi của lượt này chưa được đọc",
 "packagePreviewLoad":"Xem trước nội dung",
-"packagePreviewHint":"Xem trước không lưu sách vào thư viện hoặc thêm sách vào việc học.",
-"packagePreviewLegacyHint":"Phiên bản này không có bản xem trước riêng. Tệp {{size}} MB được đọc và kiểm tra trong bộ nhớ.",
+
+
 "packagePreviewLoading":"Đang tải bản xem trước…",
 "packagePreviewFailed":"Không thể tải bản xem trước. Hãy kiểm tra kết nối và thử lại.",
 "packagePreviewUnavailable":"Phiên bản này chưa có bản xem trước trước khi tải xuống.",
-"packagePreviewVersion":"Nội dung này thuộc phiên bản v{{version}} trong danh mục.",
-"packagePreviewSamples":"Ví dụ học thực tế",
-"packagePreviewDirectory":"Nội dung: {{count}} cách diễn đạt",
+"packagePreviewVersion": "Phiên bản danh mục v{{version}}",
+"packagePreviewSamples": "Nội dung mẫu",
+"packagePreviewDirectory": "Nội dung: {{formattedCount}} cách diễn đạt",
 "packagePreviewUnknown":"Chưa cung cấp",
 "packagePreviewVisual":"Tình huống này còn có hình ảnh hoặc nội dung trực quan không hiển thị trong bản xem trước văn bản.",
-"packagePreviewMeaning":"Nghĩa"
-}
+    "catalogOptions": "Tùy chọn hiển thị",
+    "packageOriginalTitle": "Tiêu đề gốc",
+    "packagePreviewMetadataPending": "Có sau khi tải bản xem trước",
+    "packagePreviewDirectory_other": "Nội dung: {{formattedCount}} cách diễn đạt",
+    "packageDirectorySearch": "Tìm cách diễn đạt"
+  }
 }
