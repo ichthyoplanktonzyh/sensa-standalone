@@ -550,6 +550,18 @@
     "completionNoSchedule": "Nessun ripasso successivo è previsto nel piano attuale",
     "completionNotMastery": "Un completamento registrato non significa padronanza. Segui il calendario effettivo dei ripassi.",
     "completionViewRecords": "Visualizza i registri di apprendimento",
-    "sessionSummaryUnavailable": "I registri di questa sessione non sono ancora stati letti"
-  }
+    "sessionSummaryUnavailable": "I registri di questa sessione non sono ancora stati letti",
+"packagePreviewLoad":"Anteprima dei contenuti",
+"packagePreviewHint":"L’anteprima non salva il libro nella libreria né lo aggiunge all’apprendimento.",
+"packagePreviewLegacyHint":"Questa edizione non ha un’anteprima separata. L’archivio di {{size}} MB viene letto e verificato in memoria.",
+"packagePreviewLoading":"Caricamento dell’anteprima…",
+"packagePreviewFailed":"Impossibile caricare l’anteprima. Controlla la connessione e riprova.",
+"packagePreviewUnavailable":"Questa edizione non offre un’anteprima prima del download.",
+"packagePreviewVersion":"Questi contenuti provengono dall’edizione v{{version}} del catalogo.",
+"packagePreviewSamples":"Esempi reali di apprendimento",
+"packagePreviewDirectory":"Contenuti: {{count}} espressioni",
+"packagePreviewUnknown":"Non ancora indicato",
+"packagePreviewVisual":"Questa scena contiene anche immagini o contenuti visivi non mostrati nell’anteprima testuale.",
+"packagePreviewMeaning":"Significato"
+}
 }

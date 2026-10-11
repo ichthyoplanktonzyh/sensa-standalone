@@ -78,4 +78,17 @@
     "completionNoSchedule": "W bieżącym planie nie ma kolejnej zaplanowanej powtórki",
     "completionNotMastery": "Zapis ukończenia nie oznacza opanowania. Kieruj się rzeczywistym harmonogramem powtórek.",
     "completionViewRecords": "Zobacz zapisy nauki",
-    "sessionSummaryUnavailable": "Zapisy tej rundy nie zostały jeszcze odczytane"}}
+    "sessionSummaryUnavailable": "Zapisy tej rundy nie zostały jeszcze odczytane",
+"packagePreviewLoad":"Podgląd treści",
+"packagePreviewHint":"Podgląd nie zapisuje książki w bibliotece ani nie dodaje jej do nauki.",
+"packagePreviewLegacyHint":"To wydanie nie ma osobnego podglądu. Archiwum {{size}} MB jest odczytywane i sprawdzane w pamięci.",
+"packagePreviewLoading":"Wczytywanie podglądu…",
+"packagePreviewFailed":"Nie udało się wczytać podglądu. Sprawdź połączenie i spróbuj ponownie.",
+"packagePreviewUnavailable":"To wydanie nie udostępnia podglądu przed pobraniem.",
+"packagePreviewVersion":"Ta treść pochodzi z wydania v{{version}} w katalogu.",
+"packagePreviewSamples":"Rzeczywiste przykłady nauki",
+"packagePreviewDirectory":"Treść: {{count}} wyrażeń",
+"packagePreviewUnknown":"Jeszcze nie podano",
+"packagePreviewVisual":"Ta scena zawiera też obrazy lub treści wizualne niewidoczne w podglądzie tekstowym.",
+"packagePreviewMeaning":"Znaczenie"
+}}

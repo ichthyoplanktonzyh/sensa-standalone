@@ -19,6 +19,7 @@ import {
   createSensaPortableLightweightPackage,
 } from "@sensa/content-validator/portable-lightweight";
 import {
+  createPortableBookPreview,
   createSensaPortableBook,
   portableBookMemberKey,
   readSensaPortableBook,
@@ -468,6 +469,10 @@ for (const path of [...sourcePaths].sort()) {
   const bookOutput = resolve(outputRoot, bookRelative);
   await mkdir(dirname(bookOutput), {recursive: true});
   await writeFile(bookOutput, bookBytes);
+  const previewBytes = new TextEncoder().encode(canonicalConsumerJson(createPortableBookPreview(bookArchive)));
+  const previewDigest = sha256(previewBytes);
+  const previewRelative = ['books',bookId,bookVersionId,`${previewDigest}.preview.json`].join('/');
+  await writeFile(resolve(outputRoot,previewRelative),previewBytes);
   descriptors.push(sensaPortableBookDescriptorSchema.parse({
     format: "sensa-portable-book-descriptor-v1",
     publisher: source.publisher,
@@ -479,6 +484,7 @@ for (const path of [...sourcePaths].sort()) {
     memberCount: bookManifest.members.length,
     byteLength: bookBytes.byteLength,
     sha256: bookArchive.archiveDigest,
+    preview:{url:new URL(previewRelative,base).href,sha256:previewDigest,byteLength:previewBytes.byteLength},
     url: new URL(bookRelative, base).href,
   }));
   totalMembers += members.length;

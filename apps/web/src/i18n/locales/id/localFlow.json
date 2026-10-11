@@ -548,6 +548,18 @@
     "completionNoSchedule": "Tidak ada ulasan berikutnya yang dijadwalkan dalam rencana saat ini",
     "completionNotMastery": "Catatan penyelesaian tidak berarti penguasaan. Ikuti jadwal ulasan yang sebenarnya.",
     "completionViewRecords": "Lihat catatan pembelajaran",
-    "sessionSummaryUnavailable": "Catatan putaran ini belum terbaca"
-  }
+    "sessionSummaryUnavailable": "Catatan putaran ini belum terbaca",
+"packagePreviewLoad":"Pratinjau isi",
+"packagePreviewHint":"Pratinjau tidak menyimpan buku ke pustaka atau menambahkannya ke pembelajaran.",
+"packagePreviewLegacyHint":"Edisi ini tidak memiliki pratinjau terpisah. Arsip {{size}} MB dibaca dan diverifikasi dalam memori.",
+"packagePreviewLoading":"Memuat pratinjau…",
+"packagePreviewFailed":"Pratinjau tidak dapat dimuat. Periksa koneksi dan coba lagi.",
+"packagePreviewUnavailable":"Edisi ini belum menyediakan pratinjau sebelum diunduh.",
+"packagePreviewVersion":"Isi ini berasal dari edisi v{{version}} dalam katalog.",
+"packagePreviewSamples":"Contoh pembelajaran asli",
+"packagePreviewDirectory":"Isi: {{count}} ungkapan",
+"packagePreviewUnknown":"Belum tersedia",
+"packagePreviewVisual":"Adegan ini juga memuat gambar atau konten visual yang tidak ditampilkan dalam pratinjau teks.",
+"packagePreviewMeaning":"Makna"
+}
 }

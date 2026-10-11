@@ -550,6 +550,18 @@
     "completionNoSchedule": "Não há revisão posterior agendada no plano atual",
     "completionNotMastery": "Um registro de conclusão não significa domínio. Siga o cronograma real de revisão.",
     "completionViewRecords": "Ver registros de aprendizagem",
-    "sessionSummaryUnavailable": "Os registros desta rodada ainda não foram lidos"
-  }
+    "sessionSummaryUnavailable": "Os registros desta rodada ainda não foram lidos",
+"packagePreviewLoad":"Prévia do conteúdo",
+"packagePreviewHint":"A prévia não salva o livro na biblioteca nem o adiciona ao aprendizado.",
+"packagePreviewLegacyHint":"Esta edição não tem uma prévia separada. O arquivo de {{size}} MB é lido e validado na memória.",
+"packagePreviewLoading":"Carregando a prévia…",
+"packagePreviewFailed":"Não foi possível carregar a prévia. Verifique a conexão e tente novamente.",
+"packagePreviewUnavailable":"Esta edição não oferece uma prévia antes do download.",
+"packagePreviewVersion":"Este conteúdo vem da edição v{{version}} do catálogo.",
+"packagePreviewSamples":"Exemplos reais de aprendizado",
+"packagePreviewDirectory":"Conteúdo: {{count}} expressões",
+"packagePreviewUnknown":"Ainda não informado",
+"packagePreviewVisual":"Esta cena também contém imagens ou conteúdo visual omitido da prévia em texto.",
+"packagePreviewMeaning":"Significado"
+}
 }

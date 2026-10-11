@@ -88,6 +88,18 @@
     "completionNoSchedule": "Mevcut planda sonraki bir tekrar planlanmadı",
     "completionNotMastery": "Tamamlama kaydı, ustalık anlamına gelmez. Gerçek tekrar programını izleyin.",
     "completionViewRecords": "Öğrenme kayıtlarını gör",
-    "sessionSummaryUnavailable": "Bu turun kayıtları henüz okunmadı"
-  }
+    "sessionSummaryUnavailable": "Bu turun kayıtları henüz okunmadı",
+"packagePreviewLoad":"İçeriği önizle",
+"packagePreviewHint":"Önizleme kitabı kütüphaneye kaydetmez veya öğrenmeye eklemez.",
+"packagePreviewLegacyHint":"Bu sürümün ayrı önizlemesi yok. {{size}} MB arşiv okunur ve bellekte doğrulanır.",
+"packagePreviewLoading":"İçerik önizlemesi yükleniyor…",
+"packagePreviewFailed":"Önizleme yüklenemedi. Bağlantıyı kontrol edip yeniden deneyin.",
+"packagePreviewUnavailable":"Bu sürüm için indirmeden önce önizleme mevcut değil.",
+"packagePreviewVersion":"Bu içerik katalogdaki v{{version}} sürümünden alınmıştır.",
+"packagePreviewSamples":"Gerçek öğrenme örnekleri",
+"packagePreviewDirectory":"İçerik: {{count}} ifade",
+"packagePreviewUnknown":"Henüz belirtilmedi",
+"packagePreviewVisual":"Bu sahnede metin önizlemesinde gösterilmeyen resimler veya görsel içerik de var.",
+"packagePreviewMeaning":"Anlam"
+}
 }

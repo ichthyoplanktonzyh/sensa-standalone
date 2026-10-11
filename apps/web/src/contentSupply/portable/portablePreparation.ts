@@ -5,7 +5,7 @@ import {
  type InstalledLearningContent,type SensaLightweightInitialMaterialRole,type SensaPortableBookDescriptor,
 } from '@sensa/contracts/sensa';
 import {createSensaPortableLightweightPackageArchive,readSensaPortableLightweightPackage,type SensaPortableLightweightPackageArchive} from '@sensa/content-validator/portable-lightweight';
-import {readSensaPortableBook,type SensaPortableBookPackage} from '@sensa/content-validator/portable-book';
+import {createPortableBookPreview,readPortableBookPreview,readSensaPortableBook,type SensaPortableBookPackage} from '@sensa/content-validator/portable-book';
 import {canonicalJsonDigest,stableUuid} from '@sensa/learning-kernel';
 import {portablePackageInstallationFor,publicationBookMembership,type PackageInstallation,type PortablePublicationAttestation} from '../../data/library/packageRecords';
 import {validateInstalledLearningContent} from './installedLearningContent';
@@ -244,9 +244,14 @@ export function readPublishedBook(bytes:Uint8Array,raw:SensaPortableBookDescript
   contentRelease:manifest.contentRelease,route:manifest.route,publishedAt:manifest.publishedAt,
   changeSummary:manifest.changeSummary,memberCount:manifest.members.length,
   byteLength:bytes.byteLength,sha256:archive.archiveDigest,url:descriptor.url,
+  ...(descriptor.preview?{preview:descriptor.preview}:{}),
  });
  if(canonicalConsumerJson(actual)!==canonicalConsumerJson(descriptor))throw new Error('localFlow.catalogMismatch');
  return archive;
+}
+
+export function inspectPublishedBookPreview(bytes:Uint8Array,descriptor:SensaPortableBookDescriptor){
+ return descriptor.preview?readPortableBookPreview(bytes,descriptor):createPortableBookPreview(readPublishedBook(bytes,descriptor));
 }
 
 export function preparePublishedBook(bytes:Uint8Array,descriptor:SensaPortableBookDescriptor):readonly PreparedPortableInstallation[]{

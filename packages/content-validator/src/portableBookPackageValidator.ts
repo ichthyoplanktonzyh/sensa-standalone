@@ -3,9 +3,13 @@ import {
   maxPortableBookArchiveBytes,
   maxPortableBookManifestBytes,
   maxPortableBookMembers,
+  maxPortableBookPreviewBytes,
+  sensaPortableBookPreviewSchema,
   sensaPortableBookManifestSchema,
   type SensaPortableBookManifest,
   type SensaPortableBookMember,
+  type SensaPortableBookPreview,
+  type SensaPortableBookDescriptor,
 } from "@sensa/contracts/sensa";
 import {sha256} from "@sensa/learning-kernel";
 import {strToU8, unzipSync, zipSync, type Zippable} from "fflate";
@@ -39,6 +43,50 @@ export type SensaPortableBookPackage = Readonly<{
   manifest: SensaPortableBookManifest;
   members: readonly SensaPortableBookPackageMember[];
 }>;
+
+/** A projection of admitted content, never generated examples or media payloads. */
+export function createPortableBookPreview(archive:SensaPortableBookPackage):SensaPortableBookPreview {
+  const {manifest}=archive;
+  const parties=(field:'author'|'license')=>[...new Map(archive.members.map(({archive:member})=>{
+    const party=member.package.metadata[field];return [canonicalConsumerJson(party),party] as const;
+  })).values()];
+  const entries=archive.members.map(({member,archive:value})=>({...member,expression:value.package.targetExpression.text}));
+  const preview=sensaPortableBookPreviewSchema.parse({
+    format:'sensa-portable-book-preview-v1',publisher:manifest.publisher,book:manifest.book,
+    contentRelease:manifest.contentRelease,route:manifest.route,publishedAt:manifest.publishedAt,
+    changeSummary:manifest.changeSummary,archiveSha256:archive.archiveDigest,memberCount:entries.length,
+    authors:parties('author'),licenses:parties('license'),entries,
+    samples:archive.members.slice(0,3).map(({member,archive:{package:value}})=>({
+      ...member,expression:value.targetExpression.text,
+      ...(value.resources.experienceRecallCue.text?{scene:value.resources.experienceRecallCue.text}:{}),
+      senseFocus:value.resources.experienceRecallCue.senseFocus,
+      hasVisualCue:!!(value.resources.experienceRecallCue.html||value.resources.experienceRecallCue.images?.length),
+      meaning:value.resources.senseConfirmation.text,bridge:value.resources.sceneBridge.text,
+      example:value.resources.sceneRealization.example,
+      ...(value.resources.sceneRealization.translation?{translation:value.resources.sceneRealization.translation}:{}),
+    })),
+  });
+  if(new TextEncoder().encode(canonicalConsumerJson(preview)).byteLength>maxPortableBookPreviewBytes)
+    throw new Error('Public Book preview exceeds the text artifact limit');
+  return preview;
+}
+
+/** Bind the preview to the exact catalog edition; the catalog also pins its byte digest. */
+export function readPortableBookPreview(bytes:Uint8Array,descriptor:SensaPortableBookDescriptor):SensaPortableBookPreview {
+  if(bytes.byteLength>maxPortableBookPreviewBytes||!descriptor.preview
+    ||bytes.byteLength!==descriptor.preview.byteLength||sha256(bytes)!==descriptor.preview.sha256)
+    throw new Error('localFlow.catalogMismatch');
+  try {
+    const value=sensaPortableBookPreviewSchema.parse(JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes)));
+    const identity=(item:SensaPortableBookDescriptor|SensaPortableBookPreview)=>({
+      publisher:item.publisher,book:item.book,contentRelease:item.contentRelease,route:item.route,
+      publishedAt:item.publishedAt,changeSummary:item.changeSummary,memberCount:item.memberCount,
+    });
+    if(value.archiveSha256!==descriptor.sha256||canonicalConsumerJson(identity(value))!==canonicalConsumerJson(identity(descriptor)))
+      throw new Error('Preview does not match its catalog edition');
+    return value;
+  }catch(cause){throw new Error('localFlow.catalogMismatch',{cause});}
+}
 
 const fail = (message: string, cause?: unknown): never => {
   throw new Error(`Portable Book is invalid: ${message}`, cause === undefined ? undefined : {cause});

@@ -1,5 +1,6 @@
 import type {
   SensaPortableBookDescriptor,
+  SensaPortableBookPreview,
   SensaFormalPinnedLanguageContext,
 } from '@sensa/contracts/sensa';
 
@@ -97,6 +98,7 @@ export type ContentSupplyCommandResult<Command extends ContentSupplyCommand> =
                   : InstalledPackage;
 
 export type ContentSupplyQuery =
+  | Readonly<{kind:'book_preview';descriptor:SensaPortableBookDescriptor;signal:AbortSignal}>
   | Readonly<{kind:'direct_provisioning_task';enrollmentId:string}>
   | Readonly<{ kind: 'workspace' }>
   | Readonly<{kind:'catalog'}>
@@ -109,7 +111,8 @@ export type ContentSupplyQuery =
   | Readonly<{kind:'personal_provisioning_source';taskId:string}>
   | Readonly<{ kind: 'provisioning_tasks' }>;
 export type ContentSupplyQueryResult<Query extends ContentSupplyQuery> =
-  Query['kind'] extends 'direct_provisioning_task'?ContentProvisioningTask|null
+  Query['kind'] extends 'book_preview'?SensaPortableBookPreview
+    :Query['kind'] extends 'direct_provisioning_task'?ContentProvisioningTask|null
     : Query['kind'] extends 'workspace' ? ContentSupplyWorkspace
     :Query['kind'] extends 'catalog'?readonly ContentSupplyCatalogItem[]
     :Query['kind'] extends 'catalog_snapshot'?Readonly<{items:readonly ContentSupplyCatalogItem[];checkedAt:string|null}>

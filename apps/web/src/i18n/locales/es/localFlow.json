@@ -550,6 +550,18 @@
     "completionNoSchedule": "No hay un repaso posterior programado en el plan actual",
     "completionNotMastery": "Un registro de finalización no significa dominio. Sigue el calendario real de repaso.",
     "completionViewRecords": "Ver registros de aprendizaje",
-    "sessionSummaryUnavailable": "Los registros de esta ronda aún no se han leído"
-  }
+    "sessionSummaryUnavailable": "Los registros de esta ronda aún no se han leído",
+"packagePreviewLoad":"Ver contenido",
+"packagePreviewHint":"La vista previa no guarda el libro en tu biblioteca ni lo añade al aprendizaje.",
+"packagePreviewLegacyHint":"Esta edición no tiene una vista previa separada. Se lee el archivo de {{size}} MB y se valida en memoria.",
+"packagePreviewLoading":"Cargando vista previa…",
+"packagePreviewFailed":"No se pudo cargar la vista previa. Comprueba la conexión y reinténtalo.",
+"packagePreviewUnavailable":"Esta edición no ofrece una vista previa antes de la descarga.",
+"packagePreviewVersion":"Este contenido pertenece a la edición v{{version}} del catálogo.",
+"packagePreviewSamples":"Ejemplos reales de aprendizaje",
+"packagePreviewDirectory":"Contenido: {{count}} expresiones",
+"packagePreviewUnknown":"Aún no indicado",
+"packagePreviewVisual":"Esta escena también incluye imágenes o contenido visual que no aparece en la vista previa de texto.",
+"packagePreviewMeaning":"Significado"
+}
 }

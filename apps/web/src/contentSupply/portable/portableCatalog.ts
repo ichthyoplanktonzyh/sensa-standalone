@@ -1,5 +1,6 @@
 import {
   maxPortableBookArchiveBytes,
+  maxPortableBookPreviewBytes,maxLegacyBookPreviewArchiveBytes,
   sensaPortableBookDescriptorSchema,
   type SensaPortableBookDescriptor,
   type SensaPortableBookManifest,
@@ -20,7 +21,7 @@ import {readLibrary,writeLibraryCache} from '../../data/library/store';
 import type {PackagePublicationIdentity} from '../../data/library/packageCacheProjection';
 import {installPreparedPortablePackages,installPublishedPortableBookMembers} from './portablePackage';
 import {readPublishedBook} from './portablePreparation';
-import {preparePublishedBookOffThread} from './portablePreparationClient';
+import {inspectPublishedBookPreviewOffThread,preparePublishedBookOffThread} from './portablePreparationClient';
 import type {ContentSupplyInstallationPhase} from '../system/contentSupplySystem';
 
 const fetchExactBytes=async(
@@ -31,6 +32,7 @@ const fetchExactBytes=async(
   progress:(received:number)=>void,
 ):Promise<Uint8Array>=>{
   if(byteLength>maximumBytes)throw new Error('localFlow.packageTooLarge');
+  if(signal.aborted)throw new Error('localFlow.downloadCancelled');
   const response=await fetch(url,{signal,redirect:'error',credentials:'omit'});
   if(!response.ok||!response.body)throw new Error('localFlow.downloadFailed');
   const contentLength=response.headers.get('content-length');
@@ -59,6 +61,16 @@ const fetchExactBytes=async(
   let offset=0;
   for(const part of parts){bytes.set(part,offset);offset+=part.byteLength;}
   return bytes;
+};
+
+/** Public inspection only. No library reads/writes, media caching or installation. */
+export const fetchPublishedBookPreview=async(raw:SensaPortableBookDescriptor,signal:AbortSignal)=>{
+  const descriptor=sensaPortableBookDescriptorSchema.parse(raw),artifact=descriptor.preview??descriptor;
+  if(!descriptor.preview&&descriptor.byteLength>maxLegacyBookPreviewArchiveBytes)
+    throw new Error('localFlow.packagePreviewUnavailable');
+  const bytes=await fetchExactBytes(artifact.url,artifact.byteLength,
+    descriptor.preview?maxPortableBookPreviewBytes:maxLegacyBookPreviewArchiveBytes,signal,()=>{});
+  return inspectPublishedBookPreviewOffThread(bytes,descriptor,signal);
 };
 
 /** Fetch and fully validate the single distributable unit represented by a Registry item. */

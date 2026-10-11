@@ -548,6 +548,18 @@
     "completionNoSchedule": "目前安排暫無後續複習時間",
     "completionNotMastery": "完成記錄不代表已經掌握；後續複習以實際安排為準。",
     "completionViewRecords": "查看學習記錄",
-    "sessionSummaryUnavailable": "本輪記錄暫未讀取"
-  }
+    "sessionSummaryUnavailable": "本輪記錄暫未讀取",
+"packagePreviewLoad":"查看內容預覽",
+"packagePreviewHint":"預覽用於瞭解內容，不會儲存到我的資料庫或加入學習。",
+"packagePreviewLegacyHint":"此版本沒有獨立預覽檔案。查看會讀取 {{size}} MB 的原包，僅在記憶體中驗證。",
+"packagePreviewLoading":"正在讀取內容預覽…",
+"packagePreviewFailed":"暫時無法讀取預覽，請檢查網路並重試。",
+"packagePreviewUnavailable":"此版本暫未提供可用的下載前預覽。",
+"packagePreviewVersion":"以下真實內容來自目錄中的 v{{version}}。",
+"packagePreviewSamples":"真實學習範例",
+"packagePreviewDirectory":"內容目錄：{{count}} 條表達",
+"packagePreviewUnknown":"尚未提供",
+"packagePreviewVisual":"此場景還包含圖片或視覺內容，文字預覽未展示。",
+"packagePreviewMeaning":"意思"
+}
 }

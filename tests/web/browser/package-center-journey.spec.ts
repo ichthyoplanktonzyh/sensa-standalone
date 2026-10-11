@@ -10,9 +10,9 @@ import {extname,join,resolve} from 'node:path';
 import {chromium,expect,test as base,type Page,type BrowserContext,type TestInfo} from '@playwright/test';
 import {unzipSync,zipSync} from 'fflate';
 import {assertInteractionBudget} from '../support/interactionBudget';
-import {portableBookMemberPath,readSensaPortableBook} from '@sensa/content-validator/portable-book';
-import {canonicalConsumerJson,sensaPortableBookManifestSchema} from '@sensa/contracts/sensa';
-import {portableBookDeliveryFixture} from '../../../scripts/support/portablePackageFixture.mts';
+import {createPortableBookPreview,createSensaPortableBook,portableBookMemberKey,portableBookMemberPath,readSensaPortableBook} from '@sensa/content-validator/portable-book';
+import {canonicalConsumerJson,sensaPortableBookDescriptorSchema,sensaPortableBookManifestSchema} from '@sensa/contracts/sensa';
+import {portablePackageFixture,portableBookDeliveryFixture} from '../../../scripts/support/portablePackageFixture.mts';
 import {serve} from '@hono/node-server';
 import {Hono} from 'hono';
 import {cors} from 'hono/cors';
@@ -125,6 +125,98 @@ test('catalog failure is distinct from empty results and an interrupted stale re
  }finally{release();}
 });
 
+
+const previewBeforeDownload=(mode:'legacy'|'lightweight')=>async({page,context}:{page:Page;context:BrowserContext},testInfo:TestInfo)=>{
+ const source=[
+  {expression:'borrow',scene:'下雨时，Mia 向同事借了一把伞，并约定明天归还。',meaning:'暂时取得他人的物品，预期归还。',example:'Could I borrow your umbrella?'},
+  {expression:'lend',scene:'同事把自己的伞暂时交给 Mia 使用，并希望明天收回。',meaning:'把物品暂时交给别人，预期收回。',example:'I can lend you my umbrella.'},
+  {expression:'return',scene:'第二天，Mia 把借来的伞交回给同事。',meaning:'把借来的物品交回给原来的人。',example:'I will return your umbrella tomorrow.'},
+ ];
+ const members=source.map(value=>portablePackageFixture({...value,packageId:randomUUID()}));
+ const manifest=sensaPortableBookManifestSchema.parse({...fixture.delivery.manifest,
+  book:{...fixture.delivery.manifest.book,bookId:randomUUID(),bookVersionId:randomUUID(),bookKey:`preview-${mode}`,title:`下载前内容预览 ${mode}`},
+  members:members.map(member=>({packageId:member.package.metadata.packageId,version:member.package.metadata.version})),
+ });
+ const bytes=createSensaPortableBook(manifest,new Map(members.map(member=>[portableBookMemberKey(member.package.metadata),member.bytes])));
+ const archive=readSensaPortableBook(bytes),previewBytes=Buffer.from(canonicalConsumerJson(createPortableBookPreview(archive)));
+ const url=`${fixture.origin}/published/preview-${mode}.sensa-book`,previewUrl=`${fixture.origin}/published/preview-${mode}.preview.json`;
+ const descriptor=sensaPortableBookDescriptorSchema.parse({...fixture.delivery.descriptor,book:manifest.book,memberCount:3,byteLength:bytes.byteLength,sha256:archive.archiveDigest,url,
+  ...(mode==='lightweight'?{preview:{url:previewUrl,sha256:createHash('sha256').update(previewBytes).digest('hex'),byteLength:previewBytes.byteLength}}:{}),
+ });
+ fixture.setRegistry([descriptor]);
+ let fail=true,previewRequests=0,archiveRequests=0;
+ await context.route(url,route=>{archiveRequests++;return mode==='legacy'?(previewRequests++,route.fulfill({status:fail?503:200,body:fail?Buffer.from('unavailable'):Buffer.from(bytes)})):route.fulfill({status:500,body:'preview must not fetch this archive'});});
+ if(mode==='lightweight')await context.route(previewUrl,route=>{previewRequests++;return route.fulfill({status:fail?503:200,contentType:'application/json',body:fail?Buffer.from('unavailable'):previewBytes});});
+ await page.goto(`${fixture.origin}/catalog`);
+ await page.locator('#s-catalog').getByRole('button',{name:new RegExp(manifest.book.title)}).click();
+ const book=page.locator('#s-catalog-book'),preview=book.getByRole('region',{name:'查看内容预览',exact:true});
+ await expect(preview.getByText('尚未提供',{exact:true})).toHaveCount(2);
+ expect(previewRequests).toBe(0);
+ await preview.getByRole('button',{name:'查看内容预览',exact:true}).click();
+ await expect(preview.getByRole('alert')).toBeVisible();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.supplyCheckpoint())).toEqual([]);
+ await expect(book.getByRole('button',{name:'加入学习',exact:true})).toBeDisabled();
+ fail=false;
+ await preview.getByRole('button',{name:'重试',exact:true}).click();
+ await expect(preview.getByRole('article')).toHaveCount(3);
+ for(const value of source){
+  const sample=preview.getByRole('article',{name:value.expression,exact:true});
+  await expect(sample.getByText(value.scene,{exact:true})).toBeVisible();
+  await expect(sample.getByText(value.meaning,{exact:true}).first()).toBeVisible();
+  await expect(sample.getByText(value.example,{exact:true})).toBeVisible();
+ }
+ await expect(preview.getByText('内容目录：3 条表达',{exact:true})).toBeVisible();
+ await expect(preview.locator('li')).toHaveCount(3);
+ await expect(preview.getByText('Sensa test fixture',{exact:true})).toBeVisible();
+ await expect(preview.getByText('CC0',{exact:true})).toBeVisible();
+ await expect(book.getByRole('button',{name:'下载学习包',exact:true})).toBeEnabled();
+ await expect(book.getByRole('button',{name:'加入学习',exact:true})).toBeDisabled();
+ expect(previewRequests).toBe(2);expect(archiveRequests).toBe(mode==='legacy'?2:0);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.supplyCheckpoint())).toEqual([]);
+ const facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ expect(facts.enrollments).toEqual([]);expect(facts.targetIds).toEqual([]);expect(facts.records).toEqual([]);
+ await preview.scrollIntoViewIfNeeded();await page.screenshot({path:testInfo.outputPath(`${mode}-preview-three-real-samples.png`)});
+ await page.setViewportSize({width:320,height:740});
+ expect(await book.evaluate(element=>element.scrollWidth<=element.clientWidth)).toBe(true);
+ await page.screenshot({path:testInfo.outputPath(`${mode}-preview-320px.png`)});
+ await page.reload();
+ await expect(book.getByRole('button',{name:'加入学习',exact:true})).toBeDisabled();
+ await expect(preview.getByText('尚未提供',{exact:true})).toHaveCount(2);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.supplyCheckpoint())).toEqual([]);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(facts);
+};
+test('before-download legacy preview shows real scenes, meanings and expressions and retries without installation',previewBeforeDownload('legacy'));
+test('before-download lightweight preview shows real scenes, meanings and expressions and retries without installation',previewBeforeDownload('lightweight'));
+
+test('leaving a pending legacy preview cancels it and cannot replace another Book preview',async({page,context},testInfo)=>{
+ fixture.setRegistry([fixture.delivery.descriptor,fixture.reviewDelivery.descriptor]);
+ let started=false,release!:()=>void;
+ const held=new Promise<void>(resolve=>release=resolve);
+ await context.route(fixture.delivery.descriptor.url,async route=>{
+  started=true;await held;
+  await route.fulfill({body:Buffer.from(fixture.delivery.bookBytes)}).catch(()=>{});
+ });
+ try{
+  await page.goto(`${fixture.origin}/catalog`);
+  const catalog=page.locator('#s-catalog'),book=page.locator('#s-catalog-book');
+  await catalog.getByRole('button',{name:/English route essentials/}).click();
+  await book.getByRole('button',{name:'查看内容预览',exact:true}).click();
+  await expect.poll(()=>started).toBe(true);
+  await book.getByRole('button',{name:'返回',exact:true}).click();
+  await catalog.getByRole('button',{name:/到期复习样本/}).click();
+  await book.getByRole('button',{name:'查看内容预览',exact:true}).click();
+  const preview=book.getByRole('region',{name:'查看内容预览',exact:true});
+  await expect(preview.getByRole('article')).toHaveCount(2);
+  release();
+  await expect(preview.getByText('内容目录：2 条表达',{exact:true})).toBeVisible();
+  await expect(preview.getByText('fixture-002',{exact:true})).toHaveCount(0);
+  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.supplyCheckpoint())).toEqual([]);
+  const facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+  expect(facts.enrollments).toEqual([]);expect(facts.targetIds).toEqual([]);expect(facts.records).toEqual([]);
+  await page.screenshot({path:testInfo.outputPath('preview-late-old-response-preserves-current-book.png')});
+ }finally{release();}
+});
+
 test('detail metadata and real samples survive repeated download, cancel, return and retry without enrolling until confirmation',async({page,context},testInfo)=>{
  await page.goto(`${fixture.origin}/catalog?query=English&page=1&pageSize=24&view=list&sort=title`);
  const catalog=page.locator('#s-catalog').last(),book=page.locator('#s-catalog-book').last();
@@ -132,7 +224,7 @@ test('detail metadata and real samples survive repeated download, cancel, return
  await expect(book.getByRole('button',{name:'加入学习',exact:true})).toBeDisabled();
  await expect(book.getByText(fixture.delivery.descriptor.publisher.name,{exact:true})).toBeVisible();
  await expect(book.getByText('v1',{exact:true})).toBeVisible();
- await expect(book.getByText('许可',{exact:true})).toHaveCount(0);
+ await expect(book.getByText('尚未提供',{exact:true})).toHaveCount(2);
  await expect(book.getByText('下载保存内容；加入学习需另行确认。',{exact:true})).toBeVisible();
  await page.screenshot({path:testInfo.outputPath('book-detail-before-download.png')});
  const path=new URL(fixture.delivery.descriptor.url).pathname;

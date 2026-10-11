@@ -86,6 +86,18 @@
     "completionNoSchedule": "Aucune révision ultérieure n’est prévue dans le programme actuel",
     "completionNotMastery": "Un enregistrement de fin ne signifie pas la maîtrise. Suivez le calendrier réel de révision.",
     "completionViewRecords": "Voir les résultats enregistrés",
-    "sessionSummaryUnavailable": "Les résultats de cette session n’ont pas encore été lus"
-  }
+    "sessionSummaryUnavailable": "Les résultats de cette session n’ont pas encore été lus",
+"packagePreviewLoad":"Aperçu du contenu",
+"packagePreviewHint":"L’aperçu n’enregistre pas le livre dans votre bibliothèque et ne l’ajoute pas à l’apprentissage.",
+"packagePreviewLegacyHint":"Cette édition n’a pas d’aperçu séparé. L’archive de {{size}} Mo est lue et vérifiée en mémoire.",
+"packagePreviewLoading":"Chargement de l’aperçu…",
+"packagePreviewFailed":"Impossible de charger l’aperçu. Vérifiez la connexion et réessayez.",
+"packagePreviewUnavailable":"Cette édition ne propose pas d’aperçu avant le téléchargement.",
+"packagePreviewVersion":"Ce contenu provient de l’édition v{{version}} du catalogue.",
+"packagePreviewSamples":"Exemples réels d’apprentissage",
+"packagePreviewDirectory":"Contenu : {{count}} expressions",
+"packagePreviewUnknown":"Pas encore indiqué",
+"packagePreviewVisual":"Cette scène contient aussi des images ou du contenu visuel absent de l’aperçu textuel.",
+"packagePreviewMeaning":"Sens"
+}
 }

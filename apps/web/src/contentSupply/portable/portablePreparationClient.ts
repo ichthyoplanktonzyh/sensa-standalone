@@ -1,8 +1,9 @@
 import type {SensaPortableBookDescriptor} from '@sensa/contracts/sensa';
-import {inspectPortablePackage,prepareStandalonePortablePackage,preparePublishedBook,type PreparedPortableInstallation} from './portablePreparation';
+import {inspectPublishedBookPreview,inspectPortablePackage,prepareStandalonePortablePackage,preparePublishedBook,type PreparedPortableInstallation} from './portablePreparation';
 
 export type PortablePreparationRequest=
  |{kind:'book';bytes:Uint8Array;descriptor:SensaPortableBookDescriptor}
+ |{kind:'book_preview';bytes:Uint8Array;descriptor:SensaPortableBookDescriptor}
  |{kind:'preview';bytes:Uint8Array}
  |{kind:'package';bytes:Uint8Array;expectedArchiveDigest:string};
 
@@ -14,6 +15,10 @@ export async function preparePublishedBookOffThread(bytes:Uint8Array,descriptor:
 export function inspectPortablePackageOffThread(bytes:Uint8Array){
  // Preview and installation share the caller's original archive; don't detach it.
  return runPreparation({kind:'preview',bytes:bytes.slice()},new AbortController().signal,()=>inspectPortablePackage(bytes));
+}
+
+export function inspectPublishedBookPreviewOffThread(bytes:Uint8Array,descriptor:SensaPortableBookDescriptor,signal:AbortSignal){
+ return runPreparation({kind:'book_preview',bytes,descriptor},signal,()=>inspectPublishedBookPreview(bytes,descriptor));
 }
 
 export function prepareStandalonePortablePackageOffThread(bytes:Uint8Array,expectedArchiveDigest:string,signal=new AbortController().signal){

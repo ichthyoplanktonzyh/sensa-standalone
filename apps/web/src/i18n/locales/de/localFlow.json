@@ -86,6 +86,18 @@
     "completionNoSchedule": "Im aktuellen Plan ist keine spätere Wiederholung vorgesehen",
     "completionNotMastery": "Ein Abschluss bedeutet keine Beherrschung. Maßgeblich ist der tatsächliche Wiederholungsplan.",
     "completionViewRecords": "Lernaufzeichnungen ansehen",
-    "sessionSummaryUnavailable": "Die Aufzeichnungen dieser Runde wurden noch nicht gelesen"
-  }
+    "sessionSummaryUnavailable": "Die Aufzeichnungen dieser Runde wurden noch nicht gelesen",
+"packagePreviewLoad":"Inhalte ansehen",
+"packagePreviewHint":"Die Vorschau speichert das Buch nicht in deiner Bibliothek und fügt es nicht zum Lernen hinzu.",
+"packagePreviewLegacyHint":"Diese Ausgabe hat keine eigene Vorschau. Das {{size}} MB große Archiv wird gelesen und im Arbeitsspeicher geprüft.",
+"packagePreviewLoading":"Inhaltsvorschau wird geladen…",
+"packagePreviewFailed":"Die Vorschau konnte nicht geladen werden. Prüfe die Verbindung und versuche es erneut.",
+"packagePreviewUnavailable":"Für diese Ausgabe gibt es keine Vorschau vor dem Download.",
+"packagePreviewVersion":"Diese Inhalte stammen aus Katalogausgabe v{{version}}.",
+"packagePreviewSamples":"Echte Lernbeispiele",
+"packagePreviewDirectory":"Inhalt: {{count}} Ausdrücke",
+"packagePreviewUnknown":"Noch nicht angegeben",
+"packagePreviewVisual":"Diese Szene enthält auch Bilder oder visuelle Inhalte, die in der Textvorschau fehlen.",
+"packagePreviewMeaning":"Bedeutung"
+}
 }

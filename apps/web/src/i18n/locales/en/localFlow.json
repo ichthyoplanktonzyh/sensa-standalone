@@ -549,6 +549,18 @@
     "completionNoSchedule": "No later review is scheduled in the current plan",
     "completionNotMastery": "A completion record does not mean mastery. Follow the actual review schedule.",
     "completionViewRecords": "View learning records",
-    "sessionSummaryUnavailable": "This round’s records have not been read"
-  }
+    "sessionSummaryUnavailable": "This round’s records have not been read",
+"packagePreviewLoad":"Preview contents",
+"packagePreviewHint":"Previewing does not save the Book to your library or add it to learning.",
+"packagePreviewLegacyHint":"This edition has no separate preview. Inspection reads the {{size}} MB archive and validates it in memory.",
+"packagePreviewLoading":"Loading content preview…",
+"packagePreviewFailed":"The preview could not be loaded. Check your connection and retry.",
+"packagePreviewUnavailable":"This edition has no available preview before download.",
+"packagePreviewVersion":"This content comes from catalog edition v{{version}}.",
+"packagePreviewSamples":"Real learning examples",
+"packagePreviewDirectory":"Contents: {{count}} expressions",
+"packagePreviewUnknown":"Not provided yet",
+"packagePreviewVisual":"This scene also contains images or visual content omitted from the text preview.",
+"packagePreviewMeaning":"Meaning"
+}
 }

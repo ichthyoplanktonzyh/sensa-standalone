@@ -207,6 +207,10 @@ export const executeContentSupplyCommand = async (command: ContentSupplyCommand)
 
 export const readContentSupplyQuery = async (query: ContentSupplyQuery): Promise<unknown> => {
   switch (query.kind) {
+    case 'book_preview':{
+      const {fetchPublishedBookPreview}=await import('../portable/portableCatalog');
+      return fetchPublishedBookPreview(query.descriptor,query.signal);
+    }
     case 'direct_provisioning_task': {
       const {directProvisioningTaskId}=await import('../../data/library/directProvisioning');
       const {personalLearningTaskSnapshot}=await import('../../data/library/personalLearning');

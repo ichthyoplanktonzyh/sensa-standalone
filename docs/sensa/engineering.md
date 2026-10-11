@@ -1305,7 +1305,9 @@ digest 和内嵌 Manifest，再校验全部 `.sensa` 成员并用一个 transact
 Portable 准入、编译、安装和导出 authority。区别只在信任来源：Catalog 路径可依据 Registry 对 Book
 archive 的精确 digest 采用官方 semantic declaration，本地文件只能形成 Package-local
 identity。UI 不解析 ZIP、Manifest 或媒体，也不能绕过 Content Supply 直接构造 Runtime content。
-浏览器中的 Book 准入、独立 `.sensa` 导入预览和安装准备共用单任务 Worker，把 ZIP、摘要与内容编译移出
+Registry 描述符可携带固定 URL、byteLength 与 SHA-256 的只读 `preview` 文本制品（最多 8 MiB）。构建器从通过验证的 Book 生成完整表达目录及最多三个真实场景、意思和例句；发布器再次与原 Book 比较后先上传制品，最后发布 Registry。`book_preview` query 校验制品字节与精确版本身份，不访问学习库。旧描述符仍有效：无预览制品且原 archive 不超过 8 MiB 时，在内存中读取、完整校验并提取同一文本投影；较大的旧包明确显示预览不可用。页面离开、版本切换或超时终止读取与 Worker，不写安装、媒体或学习事实。
+
+浏览器中的 Book 准入、下载前内容预览、独立 `.sensa` 导入预览和安装准备共用单任务 Worker，把 ZIP、摘要与内容编译移出
 UI 主线程；预览只返回已校验的 Manifest 和媒体统计，不把解码媒体传回界面。确认安装仍校验原归档摘要，
 Worker 不访问学习库；安装事实只由主流程的统一事务提交。无 Worker 的 Node 验证使用同一纯计算实现。
 

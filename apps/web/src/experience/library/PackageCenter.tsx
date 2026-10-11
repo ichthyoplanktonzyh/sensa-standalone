@@ -22,6 +22,7 @@ import {resolveInterfaceLocale,type InterfaceLocale} from '../../i18n/localeRegi
 import {useAccountExperience} from '../account/AccountContext';
 import {LearningSetupFrame,setupButton,setupPrimary} from '../components/learning/LearningSetupFrame';
 import {useScreenState} from '../ui/ScreenHost';
+import {BookPreview} from './BookPreview';
 import {downloadPortablePackage} from './portableDownload';
 import type {usePackageLearning} from './usePackageLearning';
 import {
@@ -148,14 +149,15 @@ function PackageDetail({active,item,c,onBack,onLearning,onTarget,screenId='s-cat
     {label:localFlowText('packageLicense'),values:metadata.licenses},
    ].filter(group=>group.values.length).map(group=><div key={group.label}><dt className="text-fg-secondary">{group.label}</dt><dd className="mt-1 flex flex-wrap gap-x-3 gap-y-1">{group.values.map(value=><span key={JSON.stringify(value)} className="break-words">{safeLink(value.url)?<a href={safeLink(value.url)} target="_blank" rel="noopener noreferrer" className="underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-focus">{value.name}</a>:value.name}</span>)}</dd></div>)}</dl>
   </section>}
-  <section aria-label={localFlowText('packageContents')}>
+  {!referenceOnly&&item.descriptor&&(!item.installed.length||(item.updateAvailable&&!item.updateDownloaded))&&<BookPreview active={active} descriptor={item.descriptor}/>}
+  {!!item.installed.length&&<section aria-label={localFlowText('packageContents')}>
    <h2 className="mb-3 text-lg font-medium">{localFlowText('packageContents')}</h2>
    {installedEntries.length>0&&<p className="mb-3 text-sm text-fg-secondary">{localFlowText('packageSampleVersion',{version:metadata.installedVersion})}</p>}
    {c.loadStatus==='unavailable'?null:!c.loaded?<div role="status" aria-label={t('reliability.loading')} className="h-40 animate-pulse rounded-2xl bg-surface-subtle"/>:installedEntries.length?<><ul className="divide-y divide-border-subtle overflow-hidden rounded-2xl border border-border-subtle bg-surface-panel">{installedEntries.map(({pack,entry,target})=><li key={`${pack.key}:${entry.bindingVersionId}:${entry.senseVersionId}`} className="flex flex-wrap items-center justify-between gap-3 p-4">
     <div className="min-w-0 flex-1"><p className="break-words text-xl font-medium">{entry.expression}</p><p className="mt-2 text-sm leading-6 text-fg-secondary">{entry.meaning}</p></div>
     {target&&<button className={setupButton+' shrink-0'} aria-label={localFlowText('packageViewExpression',{expression:entry.expression})} onClick={()=>onTarget(target.targetId)}>{localFlowText('packageViewDetails')}<ArrowRight size={16}/></button>}
    </li>)}</ul>{installedEntries.length<installedEntryCount&&<button type="button" className={setupButton+' mt-4'} onClick={()=>setContentWindow({itemKey:item.listKey,limit:contentLimit<50?50:contentLimit+50})}>{t('study.more')}</button>}</>:<p className="rounded-2xl border border-dashed border-border-strong p-6 text-sm leading-6 text-fg-secondary">{localFlowText('packageContentsAfterDownload')}</p>}
-  </section>
+  </section>}
  </LearningSetupFrame>;
 }
 
