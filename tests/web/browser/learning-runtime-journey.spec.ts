@@ -911,8 +911,7 @@ test('closing and reopening Chromium restores the same revealed learning step',a
   }
 });
 
-for(const scenario of [{locale:'zh-CN',target:'en'},{locale:'en',target:'en'},{locale:'de',target:'en'},{locale:'zh-CN',target:'ar'}]){
- test(`content-led learning surfaces preserve real task facts in ${scenario.locale} UI with ${scenario.target} source`,async({page},testInfo)=>{
+const contentLedLearningSurface=(scenario:{locale:string;target:string})=>async({page}:{page:Page},testInfo:TestInfo)=>{
   test.setTimeout(120_000);
   const previous=fixture.learningDelivery;
   const expression=scenario.target==='ar'?'خذ وقتك':'Take your time.';
@@ -1013,5 +1012,8 @@ for(const scenario of [{locale:'zh-CN',target:'en'},{locale:'en',target:'en'},{l
    await shot('today-due',1280);
    await writeFile(testInfo.outputPath('surface-conditions.json'),JSON.stringify({scenario,screenshots,contrast,conditions:'Fresh isolated Chromium/OPFS; actual UI download, enrollment, initial learning and completion; due clock derived from saved nextReviewAt; locale preference changes only.',ready,complete},null,2));
   }finally{fixture.learningDelivery=previous;}
- });
-}
+};
+test('content-led learning surfaces preserve real task facts in zh-CN UI with en source',contentLedLearningSurface({locale:'zh-CN',target:'en'}));
+test('content-led learning surfaces preserve real task facts in en UI with en source',contentLedLearningSurface({locale:'en',target:'en'}));
+test('content-led learning surfaces preserve real task facts in de UI with en source',contentLedLearningSurface({locale:'de',target:'en'}));
+test('content-led learning surfaces preserve real task facts in zh-CN UI with ar source',contentLedLearningSurface({locale:'zh-CN',target:'ar'}));
