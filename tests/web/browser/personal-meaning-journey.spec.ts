@@ -21,7 +21,7 @@ type Plan={value:unknown;hold?:boolean;fail?:boolean};
 let plans:Plan[]=[],requests:Array<{messages:Array<{role:string;content:string}>;tools:Array<{function:{name:string}}>}> = [];
 let releaseStream:(()=>void)|undefined;
 let scaleFixture:JourneyState|undefined;
-const proposal={context:'上班前，学习者给家里的植物浇水。',sense:'给植物供水的动作。',senseKey:'water_plants',scene:'学习者用水壶给家里的植物浇水。',expression:'water',expressionType:'word',relation:'realizes',coverage:'exact',reason:'water 可以作动词表示给植物浇水。'};
+const proposal={context:'上班前，学习者给家里的植物浇水。',sense:'给植物供水的动作。',scene:'学习者用水壶给家里的植物浇水。',expression:'water',expressionType:'word',reason:'water 可以作动词表示给植物浇水。'};
 const answer={reply:'这里可以说 water，表示给植物浇水。你看这个表达合适吗？',clarity:{context:true,sense:true,expression:true},proposal};
 const snapshot={format:'sensa-learning-content-registry-v3',publishedAt:'2026-10-03T00:00:00Z',items:[]};
 const registry={...snapshot,revision:createHash('sha256').update(canonicalConsumerJson(snapshot)).digest('hex')};
