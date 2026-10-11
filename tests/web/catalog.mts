@@ -372,6 +372,7 @@ const playwrightPaths = new Set<string>([
 ]);
 
 const durabilityTests = new Set<string>([
+  'integration/backup-restore',
   'integration/personal-learning-scene',
   'integration/personal-meaning-correction',
   'integration/learner-library-projection',

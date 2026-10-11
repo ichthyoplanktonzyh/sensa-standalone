@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {test,vi} from 'vitest';
 import {canonicalConsumerJson,defaultSensaLanguageRoute,sensaPinnedLanguageContext} from '@sensa/contracts/sensa';
 import {portablePackageFixture} from '../../../scripts/support/portablePackageFixture.mts';
+import {gzipSync,gunzipSync,strFromU8,strToU8} from 'fflate';
 
 const resourceModule=vi.hoisted(()=>({failImport:false}));
 vi.mock('../../../apps/web/src/contentSupply/system/contentSupplySystem.ts',()=>{
@@ -55,3 +56,40 @@ test('a backup without public packages needs no resource module and reports its 
  assert.equal(restored.summary.packages,0);assert.equal(restored.resourceRefresh,'complete');
  assert.equal((await library.readLibrary(tx=>tx.get<{id:string}>('meta','identity')))?.id,source.id);
 });
+
+// Authenticate each malformed archive so rejection exercises frame admission,
+// rather than stopping at an unrelated password/digest failure.
+const rejectArchiveFrame=async(mutate:(frames:any[])=>void)=>{
+ vi.resetModules();
+ const library=await import('../../../apps/web/src/data/library/store'),backup=await import('../../../apps/web/src/data/library/backup');
+ const {encodeBackupValue}=await import('../../../apps/web/src/data/library/backupCodec');
+ await library.openLibrary();
+ const {saveDraft}=await import('../../../apps/web/src/data/library/drafts');
+ await saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'This destination fact must survive invalid archive admission.'});
+ const snapshot=()=>library.readLibrary(async tx=>encodeBackupValue(Object.fromEntries(await Promise.all(library.libraryTables.map(async table=>[table,await tx.entries(table)])))));
+ const before=await snapshot(),password='malformed-frame-fixture-password',exported=await backup.exportLibraryBackup(password);
+ const envelope=JSON.parse(new TextDecoder().decode(exported.file));
+ const aad=new TextEncoder().encode('sensa-web-library-backup-v2:PBKDF2-SHA256:600000:AES-256-GCM:gzip');
+ const derive=async(salt:Uint8Array)=>{
+  const base=await crypto.subtle.importKey('raw',strToU8(password),{name:'PBKDF2'},false,['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2',hash:'SHA-256',salt:salt as BufferSource,iterations:600000},base,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+ };
+ const decoded=await crypto.subtle.decrypt({name:'AES-GCM',iv:Buffer.from(envelope.iv,'base64'),additionalData:aad},await derive(Buffer.from(envelope.salt,'base64')),Buffer.from(envelope.data,'base64'));
+ const frames=strFromU8(gunzipSync(new Uint8Array(decoded))).trimEnd().split('\n').map(line=>JSON.parse(line));
+ mutate(frames);
+ const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));
+ const encrypted=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:aad},await derive(salt),gzipSync(strToU8(frames.map(frame=>JSON.stringify(frame)).join('\n')+'\n')) as BufferSource);
+ const malformed=strToU8(JSON.stringify({...envelope,salt:Buffer.from(salt).toString('base64'),iv:Buffer.from(iv).toString('base64'),data:Buffer.from(encrypted).toString('base64')}));
+ await assert.rejects(backup.restoreLibraryBackup(malformed,password),/libraryBackup.errors.invalidFile/);
+ assert.deepEqual(await snapshot(),before,'rejected archive must preserve every destination table');
+};
+
+test('an authenticated backup with an unknown table is rejected without changing the library',async()=>rejectArchiveFrame(frames=>{
+ frames.find(frame=>frame.kind==='row').table='unknownTable';
+}));
+test('an authenticated backup with an unknown frame is rejected without changing the library',async()=>rejectArchiveFrame(frames=>{
+ frames.splice(frames.length-1,0,{kind:'unknownFrame'});
+}));
+test('an authenticated backup with an extra row field is rejected without changing the library',async()=>rejectArchiveFrame(frames=>{
+ frames.find(frame=>frame.kind==='row').extra='unrecognized';
+}));

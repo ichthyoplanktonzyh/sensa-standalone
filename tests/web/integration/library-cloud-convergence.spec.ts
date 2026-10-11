@@ -97,16 +97,16 @@ for(const scenario of [
  }finally{await stale?.context().close();await a.context().close();await b.context().close();}
 });
 
-for(const choice of ['local','remote'] as const)test(`[integration][durability][convergence] a Scene ${choice} choice preserves both original learning histories through edit, retry and restore`,async()=>{
+for(const choice of ['local','remote'] as const)test(`[integration][durability][convergence] a Scene ${choice} choice preserves both original learning histories through edit, retry and restore`,async({},testInfo)=>{
  const account=await fixture.createAccount(),a=await fixture.createClient(account),b=await fixture.createClient(account);
- const facts=(page:import('@playwright/test').Page)=>page.evaluate(async()=>{const c=(window as any).core;return JSON.parse(JSON.stringify({learning:await c.readLearning(),scenes:await c.readLibrary((tx:any)=>tx.entries('annotations'))}));});
+ const facts=(page:import('@playwright/test').Page)=>page.evaluate(async()=>{const c=(window as any).core;const tables=['curriculumEnrollments','supplementalMembershipStates','studyScopes','learningSessions','learningTargets','learningRuns','learningEvents','learningReconciliations','personalLearning','contentAttempts','media'];return JSON.parse(JSON.stringify({learning:await c.readLearning(),scenes:await c.readLibrary((tx:any)=>tx.entries('annotations')),decisions:await c.readLibrary((tx:any)=>tx.entries('learningReconciliations')),durable:await c.readLibrary(async(tx:any)=>Object.fromEntries(await Promise.all(tables.map(async table=>[table,(await tx.entries(table)).map((row:any)=>({key:row.key,value:c.encodeBackupValue(row.value)})).sort((a:any,b:any)=>a.key.localeCompare(b.key))]))))}));});
  try{
   await a.clock.setFixedTime(new Date('2026-10-01T08:00:00Z'));await b.clock.setFixedTime(new Date('2026-10-01T08:00:00Z'));
   const source=portablePackageFixture({packageId:crypto.randomUUID(),expression:'borrow',audioByteLength:32});
   const pack=await a.evaluate(async bytes=>{const c=(window as any).core,data=new Uint8Array(bytes),preview=await c.contentSupplySystem.execute({kind:'preview_portable_package',bytes:data});return c.contentSupplySystem.execute({kind:'install_portable_package',bytes:data,expectedArchiveDigest:preview.archiveDigest});},[...source.bytes]);
   const seed=await a.evaluate(async pack=>{const c=(window as any).core,ctx=(await c.languageRoutesSnapshot()).context;await c.confirmLearningQuantity(crypto.randomUUID(),ctx,20);const [targetId]=await c.enrollPackage(crypto.randomUUID(),pack.key,ctx),t=(await c.readLearning()).targets.find((t:any)=>t.id===targetId);return {targetId,input:{kind:'save_learning_scene',learningTargetId:targetId,languageRouteId:ctx.languageRouteId,curriculumMembershipId:t.curriculumMemberships[0].id,senseId:t.identity.senseId,senseVersionId:t.curriculumMemberships[0].sourcePin.senseVersionId,bindingVersionId:t.curriculumMemberships[0].sourcePin.bindingVersionId}};},pack);
   await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());await b.evaluate(pack=>(window as any).core.writeLibraryCache((tx:any)=>tx.put('packageCache',pack.key,pack)),pack);
-  await a.clock.setFixedTime(new Date('2026-10-01T08:01:00Z'));
+  await (choice==='local'?b:a).clock.setFixedTime(new Date('2026-10-01T08:01:00Z'));
   for(const [page,body] of [[a,'The original red umbrella scene'],[b,'The original blue umbrella scene']] as const)await page.evaluate(async({seed,body})=>{const c=(window as any).core,at=new Date().toISOString(),ctx=(await c.languageRoutesSnapshot()).context;let run=await c.startLearning(crypto.randomUUID(),seed.targetId,ctx,20,at);const runtime=(await c.learningSystem.read({kind:'runtime',languageContext:ctx})).runtime;if(runtime.kind!=='lightweight'||runtime.purpose!=='initial_learning')throw Error('Expected shipped initial Scene editor boundary');await c.personalContentSystem.execute({...seed.input,operationId:crypto.randomUUID(),body,media:[],expected:null});run=await c.actLearning(crypto.randomUUID(),run.id,run.revision,{kind:'reveal'},at);run=await c.actLearning(crypto.randomUUID(),run.id,run.revision,{kind:'rate',rating:'good'},at);await c.finishLearning(crypto.randomUUID(),run.id);},{seed,body});
   const originalA=await facts(a),originalB=await facts(b);
   await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());
@@ -119,6 +119,25 @@ for(const choice of ['local','remote'] as const)test(`[integration][durability][
   expect(scene.sceneId).toBe(selected.scenes[0].value.sceneId);expect(scene.revisions).toEqual(selected.scenes[0].value.revisions);expect(scene.conflictHistory.decisions).toHaveLength(1);expect(scene.conflictHistory.branches).toHaveLength(2);
   for(const before of [originalA,originalB])for(const event of before.learning.events)expect(chosen.learning.events.find((row:any)=>row.id===event.id)).toEqual(event);
   expect(chosen.learning.events).toHaveLength(4);expect(chosen.learning.runs).toHaveLength(2);
+  const discarded=choice==='local'?originalA:originalB,learningDecision=chosen.decisions[0].value;
+  expect(learningDecision.historyOnlyRunIds).toEqual([discarded.learning.runs[0].id]);
+  expect(chosen.learning.targets[0].memory).toEqual(selected.learning.targets[0].memory);
+  const assertArchivedPins=(state:typeof chosen)=>{
+   const current=state.scenes[0].value;
+   for(const event of discarded.learning.events){
+    expect(learningDecision.historyOnlyEventIds).toContain(event.id);
+    expect(state.learning.events.find((row:any)=>row.id===event.id)).toEqual(event);
+    const pin=event.detail.personalLearningScene,old=discarded.scenes[0].value;
+    expect(current.revisions.some((revision:any)=>current.sceneId===pin.sceneId&&revision.revisionId===pin.revisionId)).toBe(false);
+    const archive=current.conflictHistory.branches.find((branch:any)=>branch.record.sceneId===pin.sceneId&&branch.record.revisions.some((revision:any)=>revision.revisionId===pin.revisionId));
+    expect(archive).toBeDefined();
+    expect(archive.record.revisions.find((revision:any)=>revision.revisionId===pin.revisionId)).toEqual(old.revisions.find((revision:any)=>revision.revisionId===pin.revisionId));
+    expect(state.learning.runs.find((row:any)=>row.id===event.runId)).toEqual(discarded.learning.runs.find((row:any)=>row.id===event.runId));
+   }
+   expect(state.decisions).toEqual(chosen.decisions);
+   expect(state.learning.targets).toEqual(chosen.learning.targets);
+  };
+  assertArchivedPins(chosen);
   await b.clock.setFixedTime(new Date('2026-10-01T08:02:00Z'));
   await b.evaluate(async seed=>{const c=(window as any).core,scene=await c.personalContentSystem.readScene({kind:'learning_scene',learningTargetId:seed.targetId,languageRouteId:seed.input.languageRouteId});await c.personalContentSystem.execute({...seed.input,operationId:crypto.randomUUID(),body:'Chosen timeline edited after convergence',media:[],expected:c.personalLearningSceneEditBase(scene)});},{...seed});
   await b.evaluate(()=>(window as any).sync());await a.evaluate(()=>(window as any).sync());const edited=await facts(b);expect(await facts(a)).toEqual(edited);expect(edited.scenes[0].value.sceneId).toBe(scene.sceneId);expect(edited.scenes[0].value.revisions[0]).toEqual(scene.revisions[0]);expect(edited.scenes[0].value.conflictHistory).toEqual(scene.conflictHistory);
@@ -127,9 +146,33 @@ for(const choice of ['local','remote'] as const)test(`[integration][durability][
   for(const [page,body] of [[a,'Second red branch'],[b,'Second blue branch']] as const){await page.clock.setFixedTime(new Date('2026-10-01T08:03:00Z'));await page.evaluate(async({seed,body})=>{const c=(window as any).core,scene=await c.personalContentSystem.readScene({kind:'learning_scene',learningTargetId:seed.targetId,languageRouteId:seed.input.languageRouteId});await c.personalContentSystem.execute({...seed.input,operationId:crypto.randomUUID(),body,media:[],expected:c.personalLearningSceneEditBase(scene)});},{seed,body});}
   await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());expect((await b.evaluate(()=>(window as any).core.readCloudSync())).status).toBe('conflict');
   await b.evaluate(async choice=>{const c=(window as any).core;await c.resolveCloudSyncConflicts(choice,(await c.readCloudSync()).conflict);await (window as any).sync();},choice);await a.evaluate(()=>(window as any).sync());const twice=await facts(b);expect(await facts(a)).toEqual(twice);expect(twice.scenes[0].value.conflictHistory.decisions).toHaveLength(2);expect(twice.learning.events).toEqual(edited.learning.events);
-  const archive=await b.evaluate(async()=>[...(await (window as any).core.exportLibraryBackup('second-scene-choice-backup-fixture')).file]);
-  const imported=await fixture.createClient(account);try{expect(await imported.evaluate(()=>(window as any).core.isLibraryBackupDestinationEmpty())).toBe(true);const restored=await imported.evaluate(async bytes=>(window as any).core.restoreLibraryBackup(new Uint8Array(bytes),'second-scene-choice-backup-fixture'),archive);expect(restored.summary.events).toBe(4);expect(await facts(imported)).toEqual(twice);}finally{await imported.context().close();}
-  const freshAgain=await fixture.createClient(account);try{await freshAgain.evaluate(()=>(window as any).sync());expect(await facts(freshAgain)).toEqual(twice);await freshAgain.evaluate(()=>(window as any).core.exportLibraryBackup('second-scene-choice-backup-fixture'));}finally{await freshAgain.context().close();}
+  // D3 inherits every D1/D2 branch and decision; the old losing timeline
+  // remains archival even after another fork on the selected current Scene.
+  for(const [page,body] of [[a,'Third red branch'],[b,'Third blue branch']] as const){await page.clock.setFixedTime(new Date('2026-10-01T08:04:00Z'));await page.evaluate(async({seed,body})=>{const c=(window as any).core,scene=await c.personalContentSystem.readScene({kind:'learning_scene',learningTargetId:seed.targetId,languageRouteId:seed.input.languageRouteId});await c.personalContentSystem.execute({...seed.input,operationId:crypto.randomUUID(),body,media:[],expected:c.personalLearningSceneEditBase(scene)});},{seed,body});}
+  await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());expect((await b.evaluate(()=>(window as any).core.readCloudSync())).status).toBe('conflict');
+  await b.evaluate(async choice=>{const c=(window as any).core;await c.resolveCloudSyncConflicts(choice,(await c.readCloudSync()).conflict);await (window as any).sync();},choice);await a.evaluate(()=>(window as any).sync());
+  const third=await facts(b);expect(await facts(a)).toEqual(third);expect(third.scenes[0].value.conflictHistory.decisions).toHaveLength(3);
+  for(const decision of twice.scenes[0].value.conflictHistory.decisions)expect(third.scenes[0].value.conflictHistory.decisions.find((row:any)=>row.id===decision.id)).toEqual(decision);
+  for(const branch of twice.scenes[0].value.conflictHistory.branches)expect(third.scenes[0].value.conflictHistory.branches.find((row:any)=>row.digest===branch.digest)).toEqual(branch);
+  expect(third.durable).toEqual(chosen.durable);assertArchivedPins(third);
+  await expect(b.evaluate(async({seed,discarded})=>{const c=(window as any).core;await c.personalContentSystem.execute({...seed.input,operationId:crypto.randomUUID(),body:'Attempted activation of the discarded timeline',media:[],expected:c.personalLearningSceneEditBase(discarded.scenes[0].value)});},{seed,discarded})).rejects.toThrow('personalContent.sceneChanged');
+  expect(await facts(b)).toEqual(third);
+  const archive=await b.evaluate(async()=>[...(await (window as any).core.exportLibraryBackup('third-scene-choice-backup-fixture')).file]);
+  const imported=await fixture.createClient(account);
+  try{
+   expect(await imported.evaluate(()=>(window as any).core.isLibraryBackupDestinationEmpty())).toBe(true);
+   await imported.evaluate(async bytes=>(window as any).core.restoreLibraryBackup(new Uint8Array(bytes),'third-scene-choice-backup-fixture'),archive);
+   expect(await facts(imported)).toEqual(third);assertArchivedPins(await facts(imported));
+   await imported.reload();
+   await imported.evaluate(async()=>{const path='/core.js';(window as any).core=await import(/* @vite-ignore */path);await (window as any).core.openLibrary();});
+   // Complete Learning authority deterministically replays the selected Runs,
+   // checks the historical-only pins and validates the final Memory projection.
+   // Match export admission: device service receipts stay outside this authority.
+   await imported.evaluate(async()=>{const c=(window as any).core,rows=await c.readLibrary(async(tx:any)=>Object.fromEntries(await Promise.all(c.libraryTables.map(async(table:string)=>[table,await tx.entries(table)]))));rows.operations=rows.operations.filter((row:any)=>!JSON.parse(row.value.input).kind.startsWith('service.'));c.validateBackupRows(rows);});
+   expect(await facts(imported)).toEqual(third);assertArchivedPins(await facts(imported));
+   await testInfo.attach('scene-history-combined-recovery',{contentType:'application/json',body:JSON.stringify({choice,historyOnlyRunIds:learningDecision.historyOnlyRunIds,historyOnlyEventIds:learningDecision.historyOnlyEventIds,originalDiscarded:discarded,restored:await facts(imported),decisions:3,encryptedBackupBytes:archive.length,completeAuthorityReplay:true,paidCalls:0,boundary:'isolated Chromium OPFS + disposable Hono/Postgres; export, empty import, reload and complete replay; controlled auth, no physical-device or cohort claim'})});
+  }finally{await imported.context().close();}
+  const freshAgain=await fixture.createClient(account);try{await freshAgain.evaluate(()=>(window as any).sync());expect(await facts(freshAgain)).toEqual(third);}finally{await freshAgain.context().close();}
  }finally{await a.context().close();await b.context().close();}
 });
 
