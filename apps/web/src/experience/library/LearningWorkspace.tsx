@@ -62,7 +62,7 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
  const activePendingPersonal=pendingPersonal.filter(task=>task.curriculumActive!==false&&task.languageContext.languageRouteId===activeRoute.id&&task.languageContext.targetLanguageTag===packageLearning.languageContext.targetLanguageTag&&task.languageContext.supportLanguageTag===packageLearning.languageContext.supportLanguageTag);
  const pendingDirect=packageLearning.management?.pendingDirect??packageLearning.enrollments.flatMap(enrollment=>{
   const source=enrollment.source;
-  return source.kind==='stable_sense'&&enrollment.languageRouteId===activeRoute.id&&!packageLearning.activeTargets.some(target=>target.identity.senseVersionId===source.senseVersionId&&target.identity.bindingVersionId===source.bindingVersionId)
+  return source.kind==='stable_sense'&&enrollment.languageRouteId===activeRoute.id&&!packageLearning.activeTargets.some(target=>target.identity.senseId===source.senseId&&target.identity.expressionId===source.expressionId)
    ?[{enrollmentId:enrollment.enrollmentId,expression:source.expression,meaning:source.meaning,active:true}]:[];
  });
  const openDirect=(enrollmentId?:string)=>goMain('s-direct-learning',{enrollmentId});

@@ -1,3 +1,4 @@
+import {materialSourcePin} from '../runtime/learningIdentity';
 import type { SensaFormalPinnedLanguageContext } from '@sensa/contracts/sensa';
 import {learningSupportMeaning,lightweightStepRequirements} from '@sensa/contracts/sensa';
 
@@ -110,7 +111,7 @@ const targetPresentation = (
   material: LocalLearningMaterialization = membership.material,
 ): LearningTargetPresentation => ({
   targetId: target.id,
-  expression: target.expression,
+  expression: String(material.content.resources.find(resource=>resource.materialRoleKey==='target_expression')?.contentPayload.surface??''),
   meaning: localCurriculumMeaning({ ...membership, material }),
   targetLanguageTag: target.targetLanguageTag,
   supportLanguageTag: membership.languageContext.supportLanguageTag,
@@ -181,12 +182,7 @@ export const projectLearningTarget = (
     studyContent: pack && membership.assurancePackageKey
       ? assuranceContent(pack, membership.assurancePackageKey)?.template.content ?? null
       : null,
-    identity: {
-      senseId: target.identity.senseId,
-      senseVersionId: target.identity.senseVersionId,
-      bindingId: target.identity.senseExpressionBindingId,
-      bindingVersionId: target.identity.bindingVersionId,
-    },
+    identity: materialSourcePin(material),
     personalMeaningId,
   };
 };
@@ -206,7 +202,7 @@ const recordProjection = (
     return {
       recordId: `${run.id}:${targetId}`,
       targetId,
-      expression: target?.expression ?? '',
+      expression: String(material?.content.resources.find(resource=>resource.materialRoleKey==='target_expression')?.contentPayload.surface??''),
       languageTag: target?.targetLanguageTag ?? '',
       ...(typeof meaning === 'string' ? { meaning } : {}),
       occurredAt: run.targetCompletions?.[targetId]?.at ?? run.completedAt!,
@@ -444,7 +440,7 @@ export async function readLearningWorkspaceProjection(input: Readonly<{
       &&enrollment.languageContext.targetLanguageTag===input.languageContext.targetLanguageTag
       &&enrollment.languageContext.supportLanguageTag===input.languageContext.supportLanguageTag)
       .map(enrollment=>({enrollmentId:enrollment.id,languageRouteId:enrollment.languageContext.languageRouteId,source:enrollment.source.kind==='stable_sense'
-        ?{kind:'stable_sense' as const,senseId:enrollment.source.selection.reference.senseId,senseVersionId:enrollment.source.selection.reference.senseVersionId,
+        ?{kind:'stable_sense' as const,expressionId:enrollment.source.selection.reference.expressionId,senseId:enrollment.source.selection.reference.senseId,senseVersionId:enrollment.source.selection.reference.senseVersionId,
           bindingId:enrollment.source.selection.reference.bindingId,bindingVersionId:enrollment.source.selection.reference.bindingVersionId,
           expression:enrollment.source.selection.expression.surfaceForm,meaning:enrollment.source.selection.semanticSpec.coreMeaningFocus}
         :structuredClone(enrollment.source)})),
@@ -663,11 +659,14 @@ export async function readLearningHomeProjection(input: Readonly<{
     const currentId=activeRun?(activeRun.completedAt?activeRun.targetId:localProtocolActiveTargetId(localExecutionForRun(activeRun),activeRun)):mixed.nextTargetId;
     const currentTarget=currentId===nextTarget?.id?nextTarget:currentId?await tx.get<LocalLearningTarget>('learningTargets',currentId):undefined;
     if(currentId&&!currentTarget)throw new Error('localFlow.progressReadFailed');
+    const currentMaterial=currentTarget?(activeRun&&currentId&&activeRun.participants[currentId]
+      ?activeRun.completedAt?localLastPresentedMaterial(activeRun.participants[currentId]!):localPresentedMaterial(activeRun.participants[currentId]!,localProtocolStepId(localExecutionForRun(activeRun),activeRun))
+      :(await currentPlanningMembership(tx,currentTarget,input.languageContext))?.material):undefined;
     if(summary.libraryTargetCount===null||summary.routeTargetCount===null)throw new Error('localFlow.progressReadFailed');
     let hasLearningIntent=false;
     if(!summary.libraryTargetCount)for await(const keys of tx.recordKeyBatches('curriculumEnrollments')){hasLearningIntent=keys.length>0;break;}
     return {
-      currentTask:currentTarget?{expression:currentTarget.expression,targetLanguageTag:currentTarget.targetLanguageTag,purpose:activeRun?.purpose??localLearningPurpose(currentTarget)}:null,
+      currentTask:currentTarget&&currentMaterial?{expression:String(currentMaterial.content.resources.find(resource=>resource.materialRoleKey==='target_expression')?.contentPayload.surface??''),targetLanguageTag:currentTarget.targetLanguageTag,purpose:activeRun?.purpose??localLearningPurpose(currentTarget)}:null,
       activeRunId:activeRun?.id??null,activeLanguageContext:activeRun?.languageContext??null,
       hasLibraryContent:summary.libraryTargetCount>0||hasLearningIntent,routeTargetCount:summary.routeTargetCount,
       nextReviewAt:summary.nextReviewAt===null?null:new Date(summary.nextReviewAt).toISOString(),dailyLimit:dailyLimit??null,

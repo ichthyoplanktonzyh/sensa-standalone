@@ -67,8 +67,8 @@ export interface FastTrackOutcome {
     surfaceForm: string;
     languageTag: string;
     expressionType: SensaExpressionType;
-    relation: 'realizes';
-    semanticCoverage: 'exact';
+    relation: null;
+    semanticCoverage: null;
   };
 }
 
@@ -184,6 +184,8 @@ export const executeFastTrack = (
     /** Published adoption and explicit local reuse pin the reviewed version,
      * rather than following the registry aggregate's current-version pointer. */
     pinnedSense?: { senseId: string; senseVersionId: string };
+    reviseSense?: { senseId: string; senseVersionId: string };
+    personalSenseWording?:string|null;
     sourcePayload?:SensaIntakePayload;
     expressionWordingSource?:PersonalProvenanceKind;
     /** Published scene adoption supplies its own inline-media Anchor. */
@@ -255,42 +257,39 @@ export const executeFastTrack = (
   //    resolution. No Focus, Construction or Proposal is invented.
   const semanticAcceptanceId = ports.newId();
 
-  // 4) Sense resolution: reuse an existing registry Sense by key first; only
-  //    register a new learner-confirmed SenseVersion when nothing matches.
-  const senseKey =
-    sense.senseKey?.trim()
-    || `intake-${digestOf(sense.semanticSpec).slice(0, 24)}`;
-  const existingSense = state.registry.senses.find(
-    (candidate) => candidate.senseKey === senseKey,
-  );
+  // 4) Identity is assigned independently of prose. Reuse is an explicit
+  // immutable selection, never inferred from a producer key or text digest.
+  const pinnedReference = input.reviseSense ?? input.pinnedSense ?? sense.reuseSense;
+  const selectedSense = pinnedReference && state.registry.senses.find(candidate => candidate.senseId === pinnedReference.senseId);
+  const senseKey = selectedSense?.senseKey ?? `personal-${operationId}`;
   let senseId: string;
   let senseVersionId: string;
   let resolution: SensaSemanticAcceptanceFact['resolution'];
   let registry = state.registry;
-  if (input.pinnedSense) {
+  if (pinnedReference) {
     const pinnedSense = state.registry.senses.find(
-      (candidate) => candidate.senseId === input.pinnedSense!.senseId,
+      (candidate) => candidate.senseId === pinnedReference.senseId,
     );
     const pinnedVersion = state.registry.senseVersions.find(
-      (candidate) => candidate.senseVersionId === input.pinnedSense!.senseVersionId,
+      (candidate) => candidate.senseVersionId === pinnedReference.senseVersionId,
     );
     if (!pinnedSense || pinnedSense.senseKey !== senseKey
-      || !pinnedVersion || pinnedVersion.senseId !== pinnedSense.senseId||digestOf(pinnedVersion.semanticSpec)!==digestOf(sense.semanticSpec)) {
+      || !pinnedVersion || pinnedVersion.senseId !== pinnedSense.senseId) {
       throw new Error('固定的已发布 Sense Version 不存在。');
     }
     senseId = pinnedSense.senseId;
     senseVersionId = pinnedVersion.senseVersionId;
     resolution = 'reuse_existing';
-  } else if (existingSense) {
-    const existingVersion = state.registry.senseVersions.find(
-      candidate => candidate.senseVersionId === existingSense.currentSenseVersionId,
-    );
-    if (!existingVersion || digestOf(existingVersion.semanticSpec) !== digestOf(sense.semanticSpec)) {
-      throw new Error('语义 key 与已保存的 Sense 不一致，不能静默替换提交的意思。');
-    }
-    senseId = existingSense.senseId;
-    senseVersionId = existingSense.currentSenseVersionId;
-    resolution = 'reuse_existing';
+    if(input.reviseSense){
+      if(pinnedVersion.origin!=='learner_confirmed'||pinnedVersion.contentReleaseId!==null||pinnedSense.currentSenseVersionId!==pinnedVersion.senseVersionId)throw Error('localFlow.meaningChanged');
+      if(digestOf(pinnedVersion.semanticSpec)!==digestOf(sense.semanticSpec)){
+        senseVersionId=ports.newId();const versionNumber=pinnedSense.currentVersionNumber+1;
+        registry={...state.registry,
+          senses:state.registry.senses.map(row=>row.senseId===senseId?{...row,currentSenseVersionId:senseVersionId,currentVersionNumber:versionNumber}:row),
+          senseVersions:[...state.registry.senseVersions,{...pinnedVersion,senseVersionId,versionNumber,parentSenseVersionId:pinnedVersion.senseVersionId,semanticSpec:sense.semanticSpec,provenance:{sourceKind:'learner_confirmed',sourceReferenceIds:[semanticAcceptanceId],generator:null},createdAt:now}],
+        };
+      }
+    }else if(digestOf(pinnedVersion.semanticSpec)!==digestOf(sense.semanticSpec))throw new Error('选择的 Sense Version 与提交的语义不一致。');
   } else {
     senseId = ports.newId();
     senseVersionId = ports.newId();
@@ -380,6 +379,7 @@ export const executeFastTrack = (
         // to the captured context sentence.
         displayLabel: truncateWithEllipsis(contextSummary, 24),
         learnerIntentNote: null,
+        ...(input.personalSenseWording!==undefined?{personalSenseWording:input.personalSenseWording}:{}),
         provenance: {
           kind: provenanceKind,
           sourceReferenceIds: [semanticAnchorId, expressionAnchorId],
@@ -542,8 +542,8 @@ export const executeFastTrack = (
       surfaceForm: expression.surfaceForm.trim(),
       languageTag,
       expressionType,
-      relation: 'realizes',
-      semanticCoverage: 'exact',
+      relation: null,
+      semanticCoverage: null,
     },
   };
 };

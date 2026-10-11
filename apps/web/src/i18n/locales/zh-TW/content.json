@@ -23,7 +23,7 @@
   "contextRequired": "請填寫情境或原句。",
   "occurrenceRequired": "請標出情境中這個表達的準確位置。",
   "languageRequired": "請選擇表達的語言。",
-  "meaningRequired": "請填寫意思和典型使用場景。",
+  "meaningRequired": "寫下這個情境中的意思。",
   "invalid": "請檢查填寫的內容。",
   "draftError": "暫時無法將草稿儲存到本機，請保留頁面後重試。",
   "saveError": "未能確認儲存結果，內容已保留，請重試。",
@@ -73,7 +73,12 @@
     "all": "全部內容",
     "unconfirmed": "未能確認操作結果，已重新讀取內容。請核對後重試。",
     "savedReadFailed": "操作已儲存，但暫時無法重新讀取內容。請重試讀取。",
-    "retryRead": "重試讀取"
+    "retryRead": "重試讀取",
+    "editIntent": "編輯方式",
+    "wordingOnly": "只改表述",
+    "differentMeaning": "這是另一個意思",
+    "wordingHint": "保留這個意思及其學習進度。",
+    "publishedWordingHint": "儲存為你的個人表述，保留原公開定義。"
   },
   "content": {
     "manual": "手動建立",

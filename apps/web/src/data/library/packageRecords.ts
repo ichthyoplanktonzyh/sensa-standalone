@@ -52,7 +52,7 @@ export type InstalledPackageSummary=Readonly<{
  content:Readonly<{
   targetLanguage:InstalledPackage['content']['targetLanguage'];
   supportLanguage:InstalledPackage['content']['supportLanguage'];
-  entries:readonly Pick<InstalledEntry,'senseId'|'senseVersionId'|'bindingId'|'bindingVersionId'|'expression'|'meaning'|'semantic'|'assurancePackageKey'>[];
+  entries:readonly Pick<InstalledEntry,'senseId'|'senseVersionId'|'expressionId'|'expressionVersionId'|'bindingId'|'bindingVersionId'|'expression'|'meaning'|'semantic'|'assurancePackageKey'>[];
  }>;
  portableOrigin:Readonly<{
   manifest:Readonly<{metadata:InstalledPackage['portableOrigin']['manifest']['metadata']}>;

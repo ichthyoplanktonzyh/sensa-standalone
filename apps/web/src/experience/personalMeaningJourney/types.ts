@@ -306,6 +306,8 @@ export interface CorrectPersonalMeaningInput {
   source:ClarificationSourceWitness;
   payload:SensaIntakePayload;
   reuseSense?:{senseId:string;senseVersionId:string};
+  /** Ordinary wording retains semantic identity. A different meaning is explicit. */
+  senseEdit?:'wording'|'different_meaning';
 }
 export interface CorrectPersonalMeaningResult {
   personalMeaningId:string;

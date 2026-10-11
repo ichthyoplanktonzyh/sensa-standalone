@@ -83,13 +83,18 @@ export const sensaSenseSemanticSpecSchema = z
   .object({
     schemaVersion: z.literal("sensa-sense-semantic-spec-v1"),
     coreMeaningFocus: nonEmpty,
-    prototypeScenes: z.array(sensaPrototypeSceneSchema).min(1),
+    prototypeScenes: z.array(sensaPrototypeSceneSchema),
     includedCases: z.array(nonEmpty),
     excludedCases: z.array(nonEmpty),
     neighborContrasts: z.array(sensaNeighborContrastSchema),
     openQuestions: z.array(nonEmpty),
   })
   .strict();
+
+/** Issued public declarations retain their explicit prototype requirement. */
+export const sensaPublishedSenseSemanticSpecSchema = sensaSenseSemanticSpecSchema.extend({
+  prototypeScenes: z.array(sensaPrototypeSceneSchema).min(1),
+});
 
 export const sensaSenseSnapshotSchema = z
   .object({
@@ -108,6 +113,8 @@ export const sensaSenseVersionSnapshotSchema = z
     senseVersionId: uuid,
     senseId: uuid,
     versionNumber: positiveInteger,
+    /** Private revisions branch from an immutable version; ordinal is branch depth. */
+    parentSenseVersionId: uuid.optional(),
     origin: sensaSenseVersionOriginSchema,
     semanticPolicyVersion: nonEmpty,
     semanticSpec: sensaSenseSemanticSpecSchema,
@@ -151,7 +158,8 @@ export const sensaSenseExpressionBindingSnapshotSchema = z
     senseExpressionBindingId: uuid,
     senseId: uuid,
     expressionId: uuid,
-    relation: sensaExpressionBindingRelationSchema,
+    /** A private contextual confirmation makes no global coverage claim. */
+    relation: sensaExpressionBindingRelationSchema.nullable(),
     currentBindingVersionId: uuid,
     currentVersionNumber: positiveInteger,
     createdAt: timestamp,
@@ -164,9 +172,10 @@ export const sensaSenseExpressionBindingVersionSnapshotSchema = z
     bindingVersionId: uuid,
     senseExpressionBindingId: uuid,
     versionNumber: positiveInteger,
+    parentBindingVersionId: uuid.optional(),
     senseVersionId: uuid,
     expressionVersionId: uuid,
-    semanticCoverage: sensaSemanticCoverageSchema,
+    semanticCoverage: sensaSemanticCoverageSchema.nullable(),
     registerLabel: nonEmpty.nullable(),
     usageConstraints: z.array(nonEmpty),
     provenance: sensaSemanticProvenanceSchema,
@@ -176,10 +185,10 @@ export const sensaSenseExpressionBindingVersionSnapshotSchema = z
   .strict();
 
 export type SensaExpressionType = z.infer<typeof sensaExpressionTypeSchema>;
-export type SensaSemanticCoverage = z.infer<typeof sensaSemanticCoverageSchema>;
+export type SensaSemanticCoverage = z.infer<typeof sensaSemanticCoverageSchema> | null;
 export type SensaExpressionBindingRelation = z.infer<
   typeof sensaExpressionBindingRelationSchema
->;
+> | null;
 export type SensaSemanticReviewStatus = z.infer<
   typeof sensaSemanticReviewStatusSchema
 >;

@@ -164,6 +164,14 @@ export function readSensaPortableBook(archiveBytes: Uint8Array): SensaPortableBo
     return Object.freeze({member, bytes, archive});
   });
 
+  const targets=new Set<string>();
+  for(const {archive} of members){
+    const declaration=archive.package.semanticDeclaration!;
+    const key=JSON.stringify([declaration.sense.senseId,declaration.expression.expressionId]);
+    if(targets.has(key))fail('duplicate stable Sense/Expression target in one Book');
+    targets.add(key);
+  }
+
   return Object.freeze({
     archiveDigest: sha256(archiveBytes),
     manifest,

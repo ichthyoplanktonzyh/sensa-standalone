@@ -1,3 +1,6 @@
+import {portableEntryIdentity} from '../../../contentSupply/portable/portableEntryIdentity';
+import {sameLearningSourcePin} from '../../../learning/runtime/learningIdentity';
+import {stableLearningTargetId} from '../../../learning/runtime/learningIdentity';
 import {
   sensaContentGenerationRequestSchema,
   sensaMaterialCandidateBundleSchema,
@@ -37,6 +40,8 @@ export function* validateContentSupplyReplicaSteps(input:{
   const manifest=sensaPortableLightweightPackageSchema.parse(p.portableOrigin.manifest);
   if(key!==p.key||key!==portablePackageKey(manifest.metadata.packageId,manifest.metadata.version))fail();
   z.string().regex(/^[a-f0-9]{64}$/u).parse(p.digest);
+  const expectedPin=portableEntryIdentity(manifest,p.portableOrigin.publications.length>0);
+  if(p.content.entries.length!==1||!sameLearningSourcePin(p.content.entries[0],expectedPin))fail();
   const installation=packageInstallationSchema.parse(requireRow('packageInstallations',key));
   if(
    installation.artifact.digest!==p.digest
@@ -57,14 +62,14 @@ export function* validateContentSupplyReplicaSteps(input:{
   if(direct&&task.contextPin!==undefined)fail();
   if(!direct&&task.contextPin!==undefined)assertPersonalContextPin(personalMeaningPinnedRecord(requireRow('semanticMeanings',task.source.personalMeaningId),task.source,task.contextPin)??fail(),task.contextPin);
   const context=validateLanguageContext(task.languageContext);
-  if(task.id!==provisioningTaskId(task.source,context.languageRouteId)||task.targetId!==stableUuid(`sensa-learning-target:${identity.learnerId}:${task.source.senseVersionId}:${task.source.bindingVersionId}`)
+  if(task.id!==provisioningTaskId(task.source,context.languageRouteId)||task.targetId!==stableLearningTargetId(identity.learnerId,task.source.senseId,task.source.expressionId)
     ||task.curriculumMembershipId!==provisioningMembershipId(task.source,task.targetId,context.languageRouteId))fail();
   z.string().uuid().parse(task.curriculumMembershipId);
   if(task.attemptId&&requireRow('contentAttempts',task.attemptId).taskId!==task.id)fail();
   if(task.status==='ready'&&!requireRow('learningTargets',task.targetId).curriculumMemberships.some((membership:any)=>membership.id===task.curriculumMembershipId))fail();
   if(task.status==='covered'){
    const target=requireRow('learningTargets',task.targetId),member=target.curriculumMemberships.find((candidate:any)=>candidate.id===task.coveredByMembershipId);
-   if(target.identity.senseId!==task.source.senseId||target.identity.senseVersionId!==task.source.senseVersionId||target.identity.senseExpressionBindingId!==task.source.bindingId||target.identity.bindingVersionId!==task.source.bindingVersionId)fail();
+   if(target.identity.senseId!==task.source.senseId||target.identity.expressionId!==task.source.expressionId)fail();
    if(!member||member.languageContext.languageRouteId!==task.languageContext.languageRouteId||member.languageContext.targetLanguageTag!==task.languageContext.targetLanguageTag||member.languageContext.supportLanguageTag!==task.languageContext.supportLanguageTag)fail();
   }else if(task.coveredByMembershipId!==undefined)fail();
   if(!['waiting','generating','reviewing','failed','rejected','stopped','ready','covered'].includes(task.status))fail();

@@ -544,6 +544,13 @@ Registry 依赖，重新构造已接受的来源。调用者携带相同 ID 但�
 去重，准备意图不能遮住另一来源提供的同目标。覆盖引用在本机写入与恢复时均校验真实 membership 和固定身份。
 保存的 coverage 结果可作为历史保留；准备查询仍重新检查当前 active membership，并订阅 Target 变化。
 Book 更新移除覆盖时，查询显示 waiting 而不在读取中改写事实；用户再次明确加入时才持久化新的待准备状态。
+Target 身份由 learner、稳定 Sense 和 Expression ID 共同确定；Sense、Expression 与 Binding 的版本不进入
+长期记忆身份。membership、materialization、Scope source 与 Scene revision 各自固定六个来源 ID，旧 Run
+继续使用实际呈现的 membership 和材料；公共包升级或普通描述修订不能重置进度或把旧记录解释成最新版本。
+私人 Sense 的自然语言说明足以保存，prototype 可空，relation／coverage 可空；空值不声明全球同义或精确覆盖。
+新建与复用由明确意图区分，描述摘要只验证内容。普通编辑默认保留 Sense／Expression／Binding 身份，
+无变化保存不追加事实；实质改义需明确操作。私人版本以不可变 UUID 和 parent 引用保留离线分支，revision
+是分支深度；同深度不是同一版本，较深的旁支不能自动覆盖另一分支，显式冲突选择保留所有原版本及来源引用。
 个人准备任务与每次尝试分别保存 `contextPin`，固定该次选中的 Anchor Revision ID 列表；它不改变 Alignment、
 Sense 或 Binding 引用。新的来源预览读取当前 active Context，普通等待、重试和在途进度按任务 pins 重构输入。
 明确更新才选择新 pins 与 plan revision，失败继续保留原材料；恢复校验允许历史 pins 引用已退役 Anchor。

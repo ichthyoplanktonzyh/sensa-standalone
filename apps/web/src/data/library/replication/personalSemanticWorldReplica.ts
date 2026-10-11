@@ -37,7 +37,7 @@ function meaningDependencies(value:unknown){return meaningHistoryRecords(value a
 function registryDependencies(value:unknown){
  const row=record(value),fact=record(row?.value);if(!row||!fact)return [];
  if(row.kind==='senses')return registryReference('senseVersions',fact.currentSenseVersionId);
- if(row.kind==='senseVersions')return registryReference('senses',fact.senseId);
+ if(row.kind==='senseVersions')return [...registryReference('senses',fact.senseId),...registryReference('senseVersions',fact.parentSenseVersionId)];
  if(row.kind==='expressions')return registryReference('expressionVersions',fact.currentExpressionVersionId);
  if(row.kind==='expressionVersions')return registryReference('expressions',fact.expressionId);
  if(row.kind==='bindings')return [
@@ -49,6 +49,7 @@ function registryDependencies(value:unknown){
   ...registryReference('bindings',fact.senseExpressionBindingId),
   ...registryReference('senseVersions',fact.senseVersionId),
   ...registryReference('expressionVersions',fact.expressionVersionId),
+  ...registryReference('bindingVersions',fact.parentBindingVersionId),
  ];
  return [];
 }

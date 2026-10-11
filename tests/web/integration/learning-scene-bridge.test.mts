@@ -12,6 +12,25 @@ import {MemoryJourneyRepository} from '../../../apps/web/src/experience/personal
 import type {PublishedLearningSceneAcceptanceInput} from '../../../apps/web/src/experience/personalMeaningJourney/types.ts';
 import {worldItemFromRegistry} from '../../../apps/web/src/experience/personalMeaningJourney/worldRead';
 import {assertPersonalSemanticWorldState} from '../../../apps/web/src/experience/personalMeaningJourney/authority';
+import {meaningCorrectionPayload} from '../../../apps/web/src/experience/personalMeaningJourney/meaningCorrection';
+import {indexRegistry} from '../../../apps/web/src/experience/personalMeaningJourney/registryRead';
+import {directPublishedFixture} from '../support/directPublishedFixture';
+
+test('ordinary published wording is a personal description and preserves all issued semantic facts',async()=>{
+ const id=()=>crypto.randomUUID(),repository=new MemoryJourneyRepository(),gateway=createJourneyGateway({repository,clock:createSeededClock('2026-10-11T08:00:00.000Z')}),pack=directPublishedFixture().pack,entry=pack.content.entries[0]!;
+ const accepted=await gateway.acceptPublishedLearningScene({operationId:id(),existingPersonalMeaningId:null,source:{packageKey:pack.key,bookId:id(),bookVersionId:id(),contentReleaseId:id(),publishedAt:'2026-10-10T08:00:00.000Z',title:'Borrowing'},target:{learningTargetId:id(),curriculumMembershipId:id(),senseId:entry.senseId,senseVersionId:entry.senseVersionId,bindingId:entry.bindingId,bindingVersionId:entry.bindingVersionId,expression:entry.expression,targetLanguageTag:'en'},semantic:entry.semantic!,scene:{sceneId:id(),revisionId:id(),revision:1,body:'向同事借一把伞。',media:[],createdAt:Date.parse('2026-10-11T07:00:00.000Z')}});
+ const before=await repository.load(),record=before.meanings[0]!,alignment=record.alignments[0]!,payload=meaningCorrectionPayload(record,indexRegistry(before.registry),alignment.personalMeaningAlignmentId),operationId=id();
+ const changedSceneId=id();
+ await assert.rejects(gateway.correctPersonalMeaning({operationId:changedSceneId,personalMeaningId:accepted.personalMeaningId,personalMeaningAlignmentId:alignment.personalMeaningAlignmentId,source:await repository.captureSource('personal_meaning',accepted.personalMeaningId),payload:{...payload,operationId:changedSceneId,acceptance:{mode:'learner_direct'},sense:{...payload.sense!,semanticSpec:{...payload.sense!.semanticSpec,prototypeScenes:[]}}}}),/annotationInvalid/);
+ assert.deepEqual(await repository.load(),before);
+ await gateway.correctPersonalMeaning({operationId,personalMeaningId:accepted.personalMeaningId,personalMeaningAlignmentId:alignment.personalMeaningAlignmentId,source:await repository.captureSource('personal_meaning',accepted.personalMeaningId),senseEdit:'wording',reuseSense:{senseId:alignment.senseId,senseVersionId:alignment.senseVersionId},payload:{...payload,operationId,acceptance:{mode:'learner_direct'},sense:{...payload.sense!,semanticSpec:{...payload.sense!.semanticSpec,coreMeaningFocus:'我理解为临时借来，用完归还。'}}}});
+ const after=await repository.load(),updated=after.meanings[0]!;
+ assert.deepEqual(after.registry.senses,before.registry.senses);assert.deepEqual(after.registry.senseVersions,before.registry.senseVersions);
+ assert.deepEqual(after.registry.bindings,before.registry.bindings);assert.deepEqual(after.registry.bindingVersions,before.registry.bindingVersions);
+ assert.equal(updated.alignments.at(-1)!.senseId,alignment.senseId);assert.equal(updated.alignments.at(-1)!.senseVersionId,alignment.senseVersionId);
+ assert.equal(updated.personalMeaningRevisions.at(-1)!.personalSenseWording,'我理解为临时借来，用完归还。');
+ assertPersonalSemanticWorldState(after);
+});
 
 test("learning-scene-bridge", async () => {
 

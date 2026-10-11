@@ -100,7 +100,7 @@ test('synthetic 10k read-projection stress keeps list payload bounded, opens one
  try{
   // Projection stress only: these direct clones are not a validated learner
   // collection or evidence of 10k completed learning journeys.
-  const targets=Array.from({length:10_000},(_,index)=>({...structuredClone(seed),id:crypto.randomUUID(),identity:{...seed.identity,senseId:crypto.randomUUID()},expression:`borrow-${index}`}));
+  const targets=Array.from({length:10_000},(_,index)=>{const target={...structuredClone(seed),id:crypto.randomUUID(),identity:{...seed.identity,senseId:crypto.randomUUID()},expression:`borrow-${index}`};for(const member of target.curriculumMemberships)member.material.content.resources.find(resource=>resource.materialRoleKey==='target_expression')!.contentPayload.surface=target.expression;return target;});
   const puts=targets.map(target=>({table:'learningTargets' as const,key:target.id,encodedValue:JSON.stringify(encodeBackupValue(target))}));
   db.commit({clears:[],deletes:[],puts,contentRevision:1});
   const sourceFacts=()=>raw.exec({sql:"SELECT record_key,value_json FROM sensa_records WHERE table_name='learningTargets' ORDER BY record_key",rowMode:'object',returnValue:'resultRows'});

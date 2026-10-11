@@ -23,7 +23,7 @@ export function learningSemanticMemoryTarget(target:LocalLearningTarget,full=fal
  const preview=(value:string)=>full||value.length<=240?value:value.slice(0,240)+'…';
  return {
   targetId:target.id,senseId:target.identity.senseId,declaredMastery:hasDeclaredMasteryOverride(target),
-  presentation:{expression:target.expression,meaning:preview(meaning),scene:typeof scene==='string'?preview(scene):'',targetLanguageTag:target.targetLanguageTag,supportLanguageTag:member.languageContext.supportLanguageTag,
+  presentation:{expression:String(resources.find(row=>row.materialRoleKey==='target_expression')?.contentPayload.surface??''),meaning:preview(meaning),scene:typeof scene==='string'?preview(scene):'',targetLanguageTag:target.targetLanguageTag,supportLanguageTag:member.languageContext.supportLanguageTag,
    personalMeaningId:member.sourceKind==='personal_meaning_alignment'&&typeof member.provenance.personalMeaningId==='string'?member.provenance.personalMeaningId:null},
   memory:target.memory?{dueAt:target.memory.dueAt,fsrsCardState:target.memory.fsrsCardState,fsrsLastReviewedAt:target.memory.fsrsLastReviewedAt,fsrsStability:target.memory.fsrsStability,reps:target.memory.reps}:null,
  };

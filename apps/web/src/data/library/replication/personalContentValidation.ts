@@ -1,3 +1,4 @@
+import {materialSourcePin,sameLearningSourcePin} from '../../../learning/runtime/learningIdentity';
 import {z} from 'zod';
 
 import type {LibraryRecordRows} from '../libraryRecordReader';
@@ -22,11 +23,11 @@ export function* validatePersonalContentReplicaSteps(input:{rows:LibraryRecordRo
   }
   if(annotation.kind==='learning_scene'){
    assertSceneConflictHistory(annotation);
-   uuid.parse(annotation.sceneId);uuid.parse(annotation.learningTargetId);uuid.parse(annotation.languageRouteId);uuid.parse(annotation.senseId);uuid.parse(annotation.senseVersionId);uuid.parse(annotation.bindingVersionId);z.number().int().positive().parse(annotation.currentRevision);z.number().int().nonnegative().parse(annotation.createdAt);z.number().int().nonnegative().parse(annotation.updatedAt);
+   uuid.parse(annotation.sceneId);uuid.parse(annotation.learningTargetId);uuid.parse(annotation.languageRouteId);uuid.parse(annotation.senseId);uuid.parse(annotation.expressionId);z.number().int().positive().parse(annotation.currentRevision);z.number().int().nonnegative().parse(annotation.createdAt);z.number().int().nonnegative().parse(annotation.updatedAt);
    const target=requireRow('learningTargets',annotation.learningTargetId),membershipIds=new Set(target.curriculumMemberships.filter((membership:any)=>membership.languageContext.languageRouteId===annotation.languageRouteId).map((membership:any)=>membership.id));
-   for(const snapshot of sceneHistoryRecords(annotation))for(const revision of snapshot.revisions)if(!membershipIds.has(revision.curriculumMembershipId))fail();
+   for(const snapshot of sceneHistoryRecords(annotation))for(const revision of snapshot.revisions)if(!membershipIds.has(revision.curriculumMembershipId)||!sameLearningSourcePin(revision.sourcePin,materialSourcePin(target.curriculumMemberships.find((row:any)=>row.id===revision.curriculumMembershipId).material)))fail();
    for(const snapshot of sceneHistoryRecords(annotation))if(snapshot.acceptedPersonalMeaningId)assertSceneAcceptance(snapshot,requireRow('semanticMeanings',snapshot.acceptedPersonalMeaningId));
-   if(target.identity.senseId!==annotation.senseId||target.identity.senseVersionId!==annotation.senseVersionId||target.identity.bindingVersionId!==annotation.bindingVersionId||annotation.revisions.length!==annotation.currentRevision||new Set(annotation.revisions.map(revision=>revision.revisionId)).size!==annotation.revisions.length)fail();
+   if(target.identity.senseId!==annotation.senseId||target.identity.expressionId!==annotation.expressionId||annotation.revisions.length!==annotation.currentRevision||new Set(annotation.revisions.map(revision=>revision.revisionId)).size!==annotation.revisions.length)fail();
    for(const [index,revision] of annotation.revisions.entries()){
     uuid.parse(revision.revisionId);if(revision.revision!==index+1||!membershipIds.has(revision.curriculumMembershipId))fail();z.string().max(1000).parse(revision.body);z.number().int().nonnegative().parse(revision.createdAt);
     z.array(z.object({mediaId:uuid,kind:z.literal('image'),dataUrl:z.string().startsWith('data:image/').max(8*1024*1024),mimeType:z.string().min(1).max(200),fileName:z.string().min(1).max(500),altText:z.string().max(80)}).strict()).max(3).parse(revision.media);

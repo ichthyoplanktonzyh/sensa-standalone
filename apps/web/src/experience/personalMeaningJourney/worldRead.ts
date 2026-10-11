@@ -40,8 +40,10 @@ export class WorldSourceInvalidError extends Error{
 }
 const fields={
  senseId:'senses',senseVersionId:'senseVersions',currentSenseVersionId:'senseVersions',
+ parentSenseVersionId:'senseVersions',
  expressionId:'expressions',expressionVersionId:'expressionVersions',currentExpressionVersionId:'expressionVersions',
  senseExpressionBindingId:'bindings',bindingId:'bindings',bindingVersionId:'bindingVersions',currentBindingVersionId:'bindingVersions',
+ parentBindingVersionId:'bindingVersions',
 } as const;
 const ownIds={senses:'senseId',senseVersions:'senseVersionId',expressions:'expressionId',expressionVersions:'expressionVersionId',bindings:'senseExpressionBindingId',bindingVersions:'bindingVersionId'} as const;
 export function worldFactRegistryReferences(value:object):string[]{

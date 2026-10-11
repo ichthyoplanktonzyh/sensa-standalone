@@ -28,7 +28,7 @@ export const SenseSpec = ({
   spec: JourneySemanticSpecView;
   version?: number | null;
   unresolvedQuestions?: readonly string[];
-}) => (
+}) => (!spec.prototypeScenes.length && !spec.includedCases.length && !spec.excludedCases.length && !spec.neighborContrasts.length && !spec.openQuestions.length && !unresolvedQuestions.length ? null : (
   <details className="group rounded-card border border-border-subtle bg-surface-panel px-5 shadow-raised">
       <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 text-control-label font-semibold text-fg-primary marker:hidden after:text-lg after:text-fg-tertiary after:content-['＋'] group-open:after:content-['−'] [&::-webkit-details-marker]:hidden">{uiText('scenesAndBoundaries')}{version!==null&&<span className="text-metadata font-medium text-fg-tertiary">v{version}</span>}</summary>
       <div className="pb-5">
@@ -81,4 +81,4 @@ export const SenseSpec = ({
         ) : null}
       </div>
   </details>
-);
+));

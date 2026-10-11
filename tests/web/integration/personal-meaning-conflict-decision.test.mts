@@ -23,7 +23,7 @@ async function correct(base:JourneyState,text:string){
  const repository=new MemoryJourneyRepository();await repository.commit({before:await repository.load(),after:structuredClone(base)});
  const api=modules(repository),record=base.meanings[0]!,alignment=record.alignments.at(-1)!,operationId=crypto.randomUUID();
  const payload=meaningCorrectionPayload(record,base.registry,alignment.personalMeaningAlignmentId);
- const request={operationId,personalMeaningId:record.personalMeaning.personalMeaningId,personalMeaningAlignmentId:alignment.personalMeaningAlignmentId,source:await api.personalMeaningJourney.captureClarificationSource('personal_meaning',record.personalMeaning.personalMeaningId),payload:{...payload,operationId,sense:{...payload.sense!,senseKey:crypto.randomUUID(),semanticSpec:{...payload.sense!.semanticSpec,coreMeaningFocus:text}},acceptance:{mode:'learner_direct' as const}}};
+ const request={operationId,senseEdit:'different_meaning' as const,personalMeaningId:record.personalMeaning.personalMeaningId,personalMeaningAlignmentId:alignment.personalMeaningAlignmentId,source:await api.personalMeaningJourney.captureClarificationSource('personal_meaning',record.personalMeaning.personalMeaningId),payload:{...payload,operationId,sense:{...payload.sense!,senseKey:crypto.randomUUID(),semanticSpec:{...payload.sense!.semanticSpec,coreMeaningFocus:text}},acceptance:{mode:'learner_direct' as const}}};
  await api.personalMeaningJourney.correctPersonalMeaning(request);return {state:await repository.load(),request};
 }
 async function fork(){

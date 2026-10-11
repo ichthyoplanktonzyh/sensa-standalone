@@ -106,6 +106,10 @@ export function mergeMeaningConflictHistory(base:MeaningJourneyRecord,local:Mean
   if(covers(remote,local))return {ok:true as const,value:remote};
   if(covers(local,remote))return {ok:true as const,value:local};
   if((local.conflictHistory?.head??null)!==(remote.conflictHistory?.head??null))return {ok:false as const};
+  // A later revision can contain the exact earlier branch even when both
+  // devices have moved past the checkpoint. Compare retained facts, not clocks.
+  if(remote.personalMeaning.currentRevision>local.personalMeaning.currentRevision&&meaningBranchExtends(plain(local),plain(remote)))return {ok:true as const,value:remote};
+  if(local.personalMeaning.currentRevision>remote.personalMeaning.currentRevision&&meaningBranchExtends(plain(remote),plain(local)))return {ok:true as const,value:local};
   const merged=mergeMeaningBranch(plain(base),plain(local),plain(remote));if(!merged.ok)return merged;
   const head=local.conflictHistory?.head;
   if(head)merged.value.conflictHistory={version:1,head,...histories(local,remote)};

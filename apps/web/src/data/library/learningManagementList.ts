@@ -9,6 +9,7 @@ export function learningManagementListRecord(target:LocalLearningTarget){
   dueAt:target.relearnAt??target.memory?.dueAt.toISOString()??null,relearning:!!target.relearnAt,
   policy:target.committedPolicy?.profileId??target.policyAssignment.profileId,
   members:target.curriculumMemberships.map((member,index)=>({id:member.id??`${target.id}:${index}`,status:member.status,context:member.languageContext,
+   expression:String(member.material.content.resources.find(resource=>resource.materialRoleKey==='target_expression')?.contentPayload.surface??''),
    meaning:learningSupportMeaning(member.material.content.resources,member.languageContext.supportLanguageTag),
    sourceKind:member.sourceKind,enrollmentId:typeof member.provenance.curriculumEnrollmentId==='string'?member.provenance.curriculumEnrollmentId:null,
    packageKey:member.packageKey,assurancePackageKey:member.assurancePackageKey,validated:member.material.snapshot.validationStatus==='validated'}))};
@@ -23,7 +24,7 @@ export function learningManagementListItem(record:ReturnType<typeof learningMana
  const planningActive=members.some(active),paused=!planningActive&&members.some(member=>!!member.enrollmentId&&enrollments.get(member.enrollmentId)?.paused);
  const due=!!record.dueAt&&Date.parse(record.dueAt)<=clock;
  const state=paused?'paused':record.declared?'declared':!planningActive?'not_planned':record.relearning?'relearning':record.completed&&due?'review-due':record.completed?'completed':record.started?'committed':ready(member)?'ready':'blocked';
- return {targetId:record.id,expression:record.expression,meaning:member.meaning,targetLanguageTag:record.targetLanguageTag,supportLanguageTag:context.supportLanguageTag,
+ return {targetId:record.id,expression:member.expression,meaning:member.meaning,targetLanguageTag:record.targetLanguageTag,supportLanguageTag:context.supportLanguageTag,
   sourceKind:member.sourceKind,sourceTitle:member.enrollmentId?enrollments.get(member.enrollmentId)?.title??null:null,started:record.started,state,
   group:paused?'paused':!record.declared&&ready(member)&&due?'due':!record.declared&&ready(member)&&!record.completed?'new':record.completed||record.declared?'complete':record.started?'active':'other',nextReviewAt:record.dueAt};
 }

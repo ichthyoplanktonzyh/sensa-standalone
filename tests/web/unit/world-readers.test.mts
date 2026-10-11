@@ -84,7 +84,7 @@ test('detail/draft/learning consumers share one connection; latest invalidation 
  const detach=reader.subscribe(()=>{});detach();const before=reader.read();f.details[4]!.resolve(detail(4));await tick();expect(reader.read()).toBe(before);
 });
 
-const choice=(index:number):WorldLearningChoice=>({key:`choice-${index}`,reference:{personalMeaningId:`meaning-${index}`,personalMeaningRevisionId:'revision',personalMeaningAlignmentId:`alignment-${index}`,alignmentRevision:1,alignmentBasisReferenceId:'basis',meaningFocusId:null,senseId:'sense',senseVersionId:'sense-version',bindingId:'binding',bindingVersionId:'binding-version'},targetLanguageTag:'en',label:`borrow-${index}`});
+const choice=(index:number):WorldLearningChoice=>({key:`choice-${index}`,reference:{personalMeaningId:`meaning-${index}`,personalMeaningRevisionId:'revision',personalMeaningAlignmentId:`alignment-${index}`,alignmentRevision:1,alignmentBasisReferenceId:'basis',meaningFocusId:null,senseId:'sense',senseVersionId:'sense-version',expressionId:'expression',expressionVersionId:'expression-version',bindingId:'binding',bindingVersionId:'binding-version'},targetLanguageTag:'en',label:`borrow-${index}`});
 const choicePage=(offset:number,limit:number,revision=1,incarnation='one'):WorldLearningChoiceSnapshot=>({revision,incarnation,total:10_000,items:Array.from({length:Math.min(limit,10_000-offset)},(_,index)=>choice(offset+index))});
 const choiceQuery={query:'borrow',filter:'all' as const,targetLanguageTag:'en'};
 

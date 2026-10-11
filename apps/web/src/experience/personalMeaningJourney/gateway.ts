@@ -1007,6 +1007,10 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
 
   async correctPersonalMeaning(input:CorrectPersonalMeaningInput):Promise<CorrectPersonalMeaningResult>{
     const request=structuredClone(input),payload=sensaIntakePayloadSchema.parse(request.payload);request.payload=payload;
+    if(request.senseEdit===undefined)request.senseEdit='wording';
+    if(request.senseEdit!=='wording'&&request.senseEdit!=='different_meaning')throw Error('localFlow.annotationInvalid');
+    if(request.reuseSense&&payload.sense?.reuseSense&&digestOf(request.reuseSense)!==digestOf(payload.sense.reuseSense))throw Error('localFlow.annotationInvalid');
+    if(!request.reuseSense&&payload.sense?.reuseSense)request.reuseSense={...payload.sense.reuseSense};
     if(payload.operationId!==request.operationId||evaluateIntakeRoute(payload).route!=='fast_track'||payload.acceptance?.mode!=='learner_direct')throw Error('localFlow.annotationInvalid');
     if(!this.loadStarted&&this.deps.repository.withCorrectionCommand)return this.isolatedCommand(request.operationId,'CorrectPersonalMeaning',digestOf(request),()=>
       this.deps.repository.withCorrectionCommand!(request,this.deps.ids,(repository,ids)=>new JourneyGatewayImpl({...this.deps,repository,ids}).correctPersonalMeaning(request)));
@@ -1021,9 +1025,38 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
       const sameExpression=payload.expression!.surfaceForm===prior.surfaceForm&&payload.expression!.languageTag===prior.languageTag&&payload.expression!.expressionTypeHint===prior.expressionTypeHint;
       const priorBinding=meaningCorrectionBinding(record,alignment);
       const originalAnchor=record.personalExpressionAnchorRevisions.find(row=>row.personalExpressionAnchorRevisionId===priorBinding?.personalExpressionAnchorRevisionId);
-      const outcome=executeFastTrack(this.requireState(),{payload,operationId:request.operationId,authority:this.deps.semanticAcceptanceAuthority.verify(payload.acceptance!),pinnedSense:request.reuseSense,expressionWordingSource:sameExpression?originalAnchor?.provenanceKind??'imported':'learner_authored',existingMeaning:{record,contextAnchorRevisionId:locator.personalSemanticAnchorRevisionIds[0]!}},this.enginePorts());
+      let pinnedSense=request.reuseSense,reviseSense:CorrectPersonalMeaningInput['reuseSense'],personalSenseWording:string|null|undefined;
+      if(request.senseEdit==='wording'&&pinnedSense&&pinnedSense.senseId!==alignment.senseId)throw Error('localFlow.annotationInvalid');
+      if(request.senseEdit==='wording'&&(!pinnedSense||pinnedSense.senseId===alignment.senseId)){
+        const original=this.requireState().registry.senseVersions.find(row=>row.senseVersionId===alignment.senseVersionId)!;
+        const reference={senseId:alignment.senseId,senseVersionId:alignment.senseVersionId};
+        if(original.origin==='learner_confirmed'&&original.contentReleaseId===null)reviseSense=reference;
+        else{
+          if(digestOf({...payload.sense!.semanticSpec,coreMeaningFocus:original.semanticSpec.coreMeaningFocus})!==digestOf(original.semanticSpec))throw Error('localFlow.annotationInvalid');
+          personalSenseWording=payload.sense!.semanticSpec.coreMeaningFocus===original.semanticSpec.coreMeaningFocus?null:payload.sense!.semanticSpec.coreMeaningFocus;
+          payload.sense={...payload.sense!,semanticSpec:original.semanticSpec};pinnedSense=reference;
+        }
+      }
+      if(request.senseEdit==='different_meaning'&&pinnedSense?.senseId===alignment.senseId)throw Error('localFlow.annotationInvalid');
+      const originalSense=this.requireState().registry.senseVersions.find(row=>row.senseVersionId===alignment.senseVersionId)!;
+      const oldNote=record.personalMeaningRevisions.find(row=>row.personalMeaningRevisionId===alignment.personalMeaningRevisionId)?.personalSenseWording??null;
+      const originalLocator=originalAnchor?.occurrence;
+      const confirmedContextIds=originalLocator?.kind==='personal_meaning'?originalLocator.personalSemanticAnchorRevisionIds:originalAnchor?.contextAnchorRevisionId?[originalAnchor.contextAnchorRevisionId]:[];
+      // Saving the same confirmed wording is a read. Changed Context pins still
+      // require another acceptance, even when the visible wording is identical.
+      if(request.senseEdit==='wording'&&sameExpression&&(!pinnedSense||pinnedSense.senseId===alignment.senseId&&pinnedSense.senseVersionId===alignment.senseVersionId)
+        &&digestOf(payload.sense!.semanticSpec)===digestOf(originalSense.semanticSpec)
+        &&(personalSenseWording===undefined||personalSenseWording===oldNote)
+        &&confirmedContextIds.length>0&&digestOf(confirmedContextIds)===digestOf(locator.personalSemanticAnchorRevisionIds)){
+        const revision=record.personalMeaningRevisions.find(row=>row.revision===record.personalMeaning.currentRevision)!;
+        return {personalMeaningId:request.personalMeaningId,personalMeaningRevisionId:revision.personalMeaningRevisionId,revision:revision.revision,replacedAlignmentId:alignment.personalMeaningAlignmentId,personalMeaningAlignmentId:alignment.personalMeaningAlignmentId,replayed:false};
+      }
+      const outcome=executeFastTrack(this.requireState(),{payload,operationId:request.operationId,authority:this.deps.semanticAcceptanceAuthority.verify(payload.acceptance!),pinnedSense,reviseSense,personalSenseWording,expressionWordingSource:sameExpression?originalAnchor?.provenanceKind??'imported':'learner_authored',existingMeaning:{record,contextAnchorRevisionId:locator.personalSemanticAnchorRevisionIds[0]!}},this.enginePorts());
       this.state=outcome.nextState;
-      settleExpressionBinding(this.requireState(),this.enginePorts(),outcome.record,outcome.alignment,outcome.bindingCandidate,{operationId:request.operationId,...outcome.bindingInput},null);
+      const retainedVersion=sameExpression&&outcome.alignment.senseId===alignment.senseId&&priorBinding?this.requireState().registry.bindingVersions.find(row=>row.bindingVersionId===priorBinding.bindingVersionId):undefined;
+      const retainedBinding=retainedVersion&&this.requireState().registry.bindings.find(row=>row.senseExpressionBindingId===retainedVersion.senseExpressionBindingId);
+      const pinRetained=retainedVersion?.senseVersionId===outcome.alignment.senseVersionId;
+      settleExpressionBinding(this.requireState(),this.enginePorts(),outcome.record,outcome.alignment,outcome.bindingCandidate,{operationId:request.operationId,...outcome.bindingInput,...(retainedBinding&&retainedVersion?{relation:retainedBinding.relation,semanticCoverage:retainedVersion.semanticCoverage}:{})},null,retainedBinding&&retainedVersion?{expressionId:retainedBinding.expressionId,expressionVersionId:retainedVersion.expressionVersionId,senseExpressionBindingId:retainedBinding.senseExpressionBindingId,...(pinRetained?{bindingVersionId:retainedVersion.bindingVersionId}:{})}:undefined);
       outcome.record.alignmentEvents.push({contractVersion:'sensa-personal-semantic-world-v3',personalMeaningAlignmentEventId:this.id(),personalMeaningAlignmentId:alignment.personalMeaningAlignmentId,ordinal:Math.max(...record.alignmentEvents.filter(row=>row.personalMeaningAlignmentId===alignment.personalMeaningAlignmentId).map(row=>row.ordinal))+1,eventType:'withdrawn',operationId:request.operationId,reason:correctionReason,occurredAt:outcome.alignment.createdAt});
       const revision=outcome.record.personalMeaningRevisions.at(-1)!;
       const result={personalMeaningId:request.personalMeaningId,personalMeaningRevisionId:revision.personalMeaningRevisionId,revision:revision.revision,replacedAlignmentId:alignment.personalMeaningAlignmentId,personalMeaningAlignmentId:outcome.alignment.personalMeaningAlignmentId};
@@ -1169,10 +1202,10 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
     if (!surfaceForm) throw new Error('目标表达不能为空。');
     const languageTag = input.languageTag.trim();
     if (!languageTag) throw new Error('目标表达必须带语言标签。');
-    if (!['realizes', 'approximates', 'evokes'].includes(input.relation)) {
+    if (input.relation!==null&&!['realizes', 'approximates', 'evokes'].includes(input.relation)) {
       throw new Error('请明确选择目标表达与 Sense 的关系。');
     }
-    if (!['exact', 'broader', 'narrower', 'overlapping'].includes(input.semanticCoverage)) {
+    if (input.semanticCoverage!==null&&!['exact', 'broader', 'narrower', 'overlapping'].includes(input.semanticCoverage)) {
       throw new Error('请明确选择目标表达的语义覆盖范围。');
     }
     const result = settleExpressionBinding(this.requireState(),this.enginePorts(),
@@ -1382,7 +1415,8 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
         outcome.record,
         outcome.alignment,
         outcome.bindingCandidate,
-        { operationId: input.operationId, ...outcome.bindingInput },
+        { operationId: input.operationId, ...outcome.bindingInput,
+          relation: input.semantic.relation, semanticCoverage: input.semantic.semanticCoverage },
         null,
         {
           expressionId: input.semantic.expressionId,

@@ -518,7 +518,7 @@ const buildAlignmentView = (
     origin: senseVersion?.origin ?? 'learner_confirmed',
     reviewStatus: senseVersion?.reviewStatus ?? 'learner_confirmed',
     resolution: confirmation?.resolution ?? contextualAcceptance?.resolution ?? 'create_new',
-    coreMeaningFocus: senseVersion?.semanticSpec.coreMeaningFocus ?? '',
+    coreMeaningFocus: record.personalMeaningRevisions.find(row=>row.personalMeaningRevisionId===alignment.personalMeaningRevisionId)?.personalSenseWording??senseVersion?.semanticSpec.coreMeaningFocus ?? '',
     semanticSpec,
     semanticSpecVersion: senseVersion?.versionNumber ?? null,
     semanticPolicyVersion: senseVersion?.semanticPolicyVersion ?? null,

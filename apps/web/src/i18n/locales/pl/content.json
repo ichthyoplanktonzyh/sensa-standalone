@@ -23,7 +23,7 @@
   "contextRequired": "Wpisz kontekst lub oryginalne zdanie.",
   "occurrenceRequired": "Wskaż dokładną pozycję wyrażenia w kontekście.",
   "languageRequired": "Wybierz język wyrażenia.",
-  "meaningRequired": "Wpisz znaczenie i typową sytuację.",
+  "meaningRequired": "Wpisz znaczenie w tym kontekście.",
   "invalid": "Sprawdź wpisaną treść.",
   "draftError": "Nie można zapisać szkicu lokalnie. Pozostaw stronę otwartą i spróbuj ponownie.",
   "saveError": "Nie udało się potwierdzić zapisu. Treść została zachowana; spróbuj ponownie.",
@@ -73,7 +73,12 @@
     "all": "Cała treść",
     "unconfirmed": "Nie potwierdzono wyniku. Treść odczytano ponownie; sprawdź ją przed ponowieniem.",
     "savedReadFailed": "Zmiana została zapisana, ale nie można było odczytać treści. Ponów odczyt.",
-    "retryRead": "Ponów odczyt"
+    "retryRead": "Ponów odczyt",
+    "editIntent": "Rodzaj zmiany",
+    "wordingOnly": "Tylko przeformułuj",
+    "differentMeaning": "To inne znaczenie",
+    "wordingHint": "Zachowuje to znaczenie i postępy nauki.",
+    "publishedWordingHint": "Zapisane jako osobiste sformułowanie; opublikowana definicja pozostaje."
   },
   "content": {
     "manual": "Utwórz ręcznie",

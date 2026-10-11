@@ -97,6 +97,8 @@ export interface LearningTargetProjection {
   readonly material: LightweightInitialLearningMaterialization;
   readonly studyContent: RuntimeLearningContent | null;
   readonly identity: Readonly<{
+    expressionId: string;
+    expressionVersionId: string;
     senseId: string;
     senseVersionId: string;
     bindingId: string;
@@ -335,7 +337,7 @@ export type LearningCurriculumEnrollmentProjection=Readonly<{
   packageVersion:number;
   packageKey:string;
  }>|Readonly<{
-  kind:'stable_sense';senseId:string;senseVersionId:string;bindingId:string;bindingVersionId:string;expression:string;meaning:string;
+  kind:'stable_sense';senseId:string;expressionId:string;senseVersionId:string;bindingId:string;bindingVersionId:string;expression:string;meaning:string;
  }>;
 }>;
 

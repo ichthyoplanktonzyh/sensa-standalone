@@ -7,7 +7,7 @@ import type {DirectLearningReference} from '../../../apps/web/src/learning/syste
 import {semanticLookupSpec} from './semanticLookupFixtures';
 
 /** Real Portable compilation; publication discovery/transport is not exercised here. */
-export function directPublishedFixture(versions?:{senseVersionId:string;bindingVersionId:string},semantic?:{senseId:string;bindingId:string;senseKey:string;semanticSpec:SensaSenseSemanticSpec}){
+export function directPublishedFixture(versions?:{senseVersionId:string;bindingVersionId:string;expressionId?:string;expressionVersionId?:string},semantic?:{senseId:string;bindingId:string;senseKey:string;semanticSpec:SensaSenseSemanticSpec}){
  const id=()=>crypto.randomUUID(),packageId=id(),at='2026-10-05T00:00:00Z',audio=new TextEncoder().encode('ID3 direct learning fixture');
  const manifest:SensaPortableLightweightPackage={format:'sensa-portable-lightweight-package-v2',
   metadata:{packageId,version:1,title:'Borrow fixture',description:'Direct learning fixture',createdAt:at,author:{name:'Fixture'},license:{name:'CC0'}},
@@ -16,7 +16,7 @@ export function directPublishedFixture(versions?:{senseVersionId:string;bindingV
   media:[{mediaId:'pronunciation',kind:'audio',mimeType:'audio/x-fixture',sha256:sha256(audio),sizeBytes:audio.byteLength}],
   semanticDeclaration:{contractVersion:'sensa-portable-semantic-declaration-v1',
    sense:{senseId:semantic?.senseId??id(),senseVersionId:versions?.senseVersionId??id(),senseKey:semantic?.senseKey??'published-borrow',versionNumber:1,semanticPolicyVersion:'fixture',semanticSpec:semantic?.semanticSpec??semanticLookupSpec},
-   expression:{expressionId:id(),expressionVersionId:id(),versionNumber:1,expressionType:'word',structure:{}},
+   expression:{expressionId:versions?.expressionId??id(),expressionVersionId:versions?.expressionVersionId??id(),versionNumber:1,expressionType:'word',structure:{}},
    binding:{senseExpressionBindingId:semantic?.bindingId??id(),bindingVersionId:versions?.bindingVersionId??id(),versionNumber:1,relation:'realizes',semanticCoverage:'exact',registerLabel:null,usageConstraints:[]}},
  };
  const bytes=createSensaPortableLightweightPackage(manifest,new Map([['pronunciation',audio]])),archive=readSensaPortableLightweightPackage(bytes);

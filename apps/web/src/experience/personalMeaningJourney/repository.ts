@@ -347,7 +347,8 @@ export class LibraryJourneyRepository implements JourneyRepository{
     const selections:RegistrySelectionCondition[]=[],keys=new Set<string>();
     const select=async(query:RegistrySelectionQuery)=>{const expected=await tx.registrySelection(query);selections.push({query,expected});for(const key of expected.keys)keys.add(key);return expected.keys;};
     const sense=input.sense!,expression=input.expression!;
-    const senseKeys=await select({kind:'senseKey',senseKey:sense.senseKey?.trim()||`intake-${digestOf(sense.semanticSpec).slice(0,24)}`});
+    pinnedSense ??= sense.reuseSense;
+    const senseKeys=pinnedSense?[`senses:${pinnedSense.senseId}`]:await select({kind:'senseKey',senseKey:`personal-${input.operationId}`});
     if(pinnedSense){if(!isUuid(pinnedSense.senseId)||!isUuid(pinnedSense.senseVersionId))throw new Error('journey_command_scope_invalid');keys.add(`senses:${pinnedSense.senseId}`);keys.add(`senseVersions:${pinnedSense.senseVersionId}`);}
     const expressionKeys=await select({kind:'expression',normalizedForm:expression.surfaceForm.trim().toLocaleLowerCase(expression.languageTag!),languageTag:expression.languageTag!,expressionType:expression.expressionTypeHint??'word'});
     if(senseKeys.length&&expressionKeys.length){
@@ -355,8 +356,8 @@ export class LibraryJourneyRepository implements JourneyRepository{
       const selectedSense=await tx.get<RegistryRow>('semanticRegistry',senseKeys[0]!);
       if(!selectedSense||selectedSense.kind!=='senses')throw new StoreCorruptedError('语义索引与源事实不一致。');
       const senseVersionId=pinnedSense?.senseVersionId??(selectedSense.value as SenseRegistryState['senses'][number]).currentSenseVersionId;
-      const bindings=await select({kind:'binding',senseId,expressionId,relation:'realizes'});
-      if(bindings.length)await select({kind:'bindingVersion',bindingId:bindings[0]!.slice('bindings:'.length),senseVersionId,expressionVersionId:expressionKeys[1]!.slice('expressionVersions:'.length),coverage:'exact'});
+      const bindings=await select({kind:'binding',senseId,expressionId,relation:null});
+      if(bindings.length)await select({kind:'bindingVersion',bindingId:bindings[0]!.slice('bindings:'.length),senseVersionId,expressionVersionId:expressionKeys[1]!.slice('expressionVersions:'.length),coverage:null});
     }
     const closure=await readRegistryRecords(tx,[...keys]);
     const dependencies:JourneyReadCondition[]=[];
@@ -533,7 +534,8 @@ export class LibraryJourneyRepository implements JourneyRepository{
         }
         if(scope.kind==='correction'){
           if(change.table==='semanticMeanings')return change.key!==scope.input.personalMeaningId||change.before===undefined||change.after===undefined;
-          if(change.table==='semanticRegistry')return change.after===undefined||(change.before!==undefined?(change.before as RegistryRow).kind!=='bindings':!scope.allocatedIds.has(change.key.slice(change.key.indexOf(':')+1)));
+          const senseId=input.before.meanings.find(row=>row.personalMeaning.personalMeaningId===scope.input.personalMeaningId)?.alignments.find(row=>row.personalMeaningAlignmentId===scope.input.personalMeaningAlignmentId)?.senseId;
+          if(change.table==='semanticRegistry')return change.after===undefined||(change.before!==undefined?((change.before as RegistryRow).kind!=='bindings'&&!(scope.input.senseEdit==='wording'&&change.key===`senses:${senseId}`)):!scope.allocatedIds.has(change.key.slice(change.key.indexOf(':')+1)));
           return true;
         }
         if(scope.kind==='clarification'||scope.kind==='intake'||scope.kind==='inbox'){

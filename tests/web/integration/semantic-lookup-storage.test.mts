@@ -91,8 +91,8 @@ test('registry selectors use source expression indexes, historical forms and fix
   const cases:Array<{query:RegistrySelectionQuery;keys:string[];index:string}>=[
    {query:{kind:'senseKey',senseKey:sense.senseKey},keys:[`senses:${sense.senseId}`],index:'sensa_registry_sense_key'},
    {query:{kind:'expression',normalizedForm:'borrow',languageTag:'en',expressionType:'word'},keys:[`expressions:${expression.expressionId}`,`expressionVersions:${version.expressionVersionId}`],index:'sensa_registry_expression_form'},
-   {query:{kind:'binding',senseId:sense.senseId,expressionId:expression.expressionId,relation:'realizes'},keys:[`bindings:${binding.senseExpressionBindingId}`],index:'sensa_registry_binding_pair'},
-   {query:{kind:'bindingVersion',bindingId:binding.senseExpressionBindingId,senseVersionId:bindingVersion.senseVersionId,expressionVersionId:version.expressionVersionId,coverage:'exact'},keys:[`bindingVersions:${bindingVersion.bindingVersionId}`],index:'sensa_registry_binding_versions'},
+   {query:{kind:'binding',senseId:sense.senseId,expressionId:expression.expressionId,relation:binding.relation},keys:[`bindings:${binding.senseExpressionBindingId}`],index:'sensa_registry_binding_pair'},
+   {query:{kind:'bindingVersion',bindingId:binding.senseExpressionBindingId,senseVersionId:bindingVersion.senseVersionId,expressionVersionId:version.expressionVersionId,coverage:bindingVersion.semanticCoverage},keys:[`bindingVersions:${bindingVersion.bindingVersionId}`],index:'sensa_registry_binding_versions'},
    {query:{kind:'ordinal',registryKind:'senses'},keys:[],index:'sensa_registry_kind_ordinal'},
   ];
   for(const {query,keys,index} of cases){

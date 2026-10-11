@@ -23,7 +23,7 @@
   "contextRequired": "Nhập ngữ cảnh hoặc câu gốc.",
   "occurrenceRequired": "Xác định chính xác vị trí của cách diễn đạt trong ngữ cảnh.",
   "languageRequired": "Chọn ngôn ngữ của cách diễn đạt.",
-  "meaningRequired": "Nhập ý nghĩa và tình huống điển hình.",
+  "meaningRequired": "Nhập nghĩa trong ngữ cảnh này.",
   "invalid": "Kiểm tra nội dung đã nhập.",
   "draftError": "Không thể lưu bản nháp trên thiết bị. Giữ trang mở và thử lại.",
   "saveError": "Chưa thể xác nhận đã lưu. Nội dung vẫn được giữ lại; hãy thử lại.",
@@ -73,7 +73,12 @@
     "all": "Tất cả nội dung",
     "unconfirmed": "Chưa xác nhận được kết quả. Nội dung đã được đọc lại; hãy kiểm tra trước khi thử lại.",
     "savedReadFailed": "Thay đổi đã lưu nhưng không đọc lại được nội dung. Hãy thử đọc lại.",
-    "retryRead": "Đọc lại"
+    "retryRead": "Đọc lại",
+    "editIntent": "Cách chỉnh sửa",
+    "wordingOnly": "Chỉ đổi cách diễn đạt",
+    "differentMeaning": "Đây là nghĩa khác",
+    "wordingHint": "Giữ nghĩa này và tiến độ học.",
+    "publishedWordingHint": "Lưu cách diễn đạt riêng của bạn; giữ nguyên định nghĩa đã công bố."
   },
   "content": {
     "manual": "Tạo thủ công",

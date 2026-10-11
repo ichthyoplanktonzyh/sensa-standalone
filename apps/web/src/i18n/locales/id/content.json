@@ -23,7 +23,7 @@
   "contextRequired": "Masukkan konteks atau kalimat asli.",
   "occurrenceRequired": "Tentukan posisi ungkapan yang tepat dalam konteks.",
   "languageRequired": "Pilih bahasa ungkapan.",
-  "meaningRequired": "Masukkan makna dan situasi umumnya.",
+  "meaningRequired": "Tuliskan makna dalam konteks ini.",
   "invalid": "Periksa isian Anda.",
   "draftError": "Draf tidak dapat disimpan secara lokal. Biarkan halaman terbuka dan coba lagi.",
   "saveError": "Penyimpanan belum terkonfirmasi. Isi tetap tersimpan di formulir; coba lagi.",
@@ -73,7 +73,12 @@
     "all": "Semua konten",
     "unconfirmed": "Hasil belum dapat dikonfirmasi. Konten telah dibaca ulang; periksa sebelum mencoba lagi.",
     "savedReadFailed": "Perubahan disimpan, tetapi konten tidak dapat dibaca ulang. Coba baca lagi.",
-    "retryRead": "Baca ulang"
+    "retryRead": "Baca ulang",
+    "editIntent": "Tujuan penyuntingan",
+    "wordingOnly": "Hanya ubah redaksi",
+    "differentMeaning": "Ini makna yang berbeda",
+    "wordingHint": "Mempertahankan makna ini dan kemajuan belajar.",
+    "publishedWordingHint": "Disimpan sebagai redaksi pribadi; definisi terbitan tetap dipertahankan."
   },
   "content": {
     "manual": "Buat secara manual",

@@ -202,6 +202,8 @@ export const sensaPersonalMeaningRevisionSnapshotSchema = z
     revision: positiveInteger,
     displayLabel: nonEmpty.nullable(),
     learnerIntentNote: nonEmpty.nullable(),
+    /** Learner wording of a published meaning; never edits its issued definition. */
+    personalSenseWording: nonEmpty.nullable().optional(),
     provenance: sensaPersonalProvenanceSchema,
     createdAt: timestamp,
     /** Present only for an explicit move to/from the learner's recycle bin. */

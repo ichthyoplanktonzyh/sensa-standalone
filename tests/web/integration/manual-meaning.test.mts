@@ -1,5 +1,5 @@
 import {test,expect} from 'vitest';
-import {manualMeaningPayload,manualDraftFromIntake,newManualMeaningDraft,occurrencePositions} from '../../../apps/web/src/experience/intake/manualMeaning';
+import {manualMeaningSense,manualMeaningPayload,manualDraftFromIntake,newManualMeaningDraft,occurrencePositions} from '../../../apps/web/src/experience/intake/manualMeaning';
 import {digestOf} from '../../../apps/web/src/experience/personalMeaningJourney/digest';
 import {semanticLookupPayload,advanceSemanticHeads} from '../support/semanticLookupFixtures';
 import {createJourneyModules} from '../../../apps/web/src/experience/personalMeaningJourney/gateway';
@@ -7,6 +7,16 @@ import {MemoryJourneyRepository} from '../../../apps/web/src/experience/personal
 import {createSeededClock} from '../../../apps/web/src/experience/personalMeaningJourney/ports';
 
 const draft=()=>({...newManualMeaningDraft(),context:'  📝 She backed out of the trip.  ',occurrence:'backed out',canonicalForm:'back out',languageTag:'en',expressionType:'phrase' as const,meaning:'退出已经答应参加的活动。',usage:'有人答应参加一次活动，后来改变主意不再参加。'});
+test('wording edits retain unseen boundaries, other prototypes and the edited scene structure',()=>{
+ const prior=semanticLookupPayload(),spec=prior.sense!.semanticSpec;
+ const first={...spec.prototypeScenes[0]!,participantRoles:['借用者'],states:['用后归还'],directionOrCausality:'借用后归还'};
+ prior.sense!.semanticSpec={...spec,prototypeScenes:[first,{...first,summary:'借一本书。'}],includedCases:['借用'],excludedCases:['赠送'],neighborContrasts:[{label:'lend',distinction:'方向相反'}],openQuestions:['期限尚未说明']};
+ const value={...newManualMeaningDraft(),meaning:'临时借用，之后归还。',usage:'借用雨伞。'};
+ const edited=manualMeaningSense(value,prior,{preserveDefinition:true}).semanticSpec;
+ expect(edited).toEqual({...prior.sense!.semanticSpec,coreMeaningFocus:value.meaning,prototypeScenes:[{...first,summary:value.usage},prior.sense!.semanticSpec.prototypeScenes[1]!]});
+ expect(manualMeaningSense({...value,usage:''},prior,{preserveDefinition:true}).semanticSpec.prototypeScenes).toEqual([prior.sense!.semanticSpec.prototypeScenes[1]]);
+ expect(manualMeaningSense(value,prior).semanticSpec.excludedCases).toEqual([]);
+});
 test('manual authoring requires genuine contextual occurrence and preserves only learner-authored meaning',async()=>{
   const value=draft(),payload=manualMeaningPayload(value);
   expect(payload.expression?.occurrence).toEqual({surfaceForm:'backed out',locator:{kind:'text_span',start:7,end:17}});
@@ -15,7 +25,7 @@ test('manual authoring requires genuine contextual occurrence and preserves only
   expect(payload.sense?.resolutionProvenance).toMatchObject({resolverKind:'learner',model:null,policyVersion:null});
   expect(()=>manualMeaningPayload({...value,context:''})).toThrow('contextRequired');
   expect(()=>manualMeaningPayload({...value,occurrence:'back out'})).toThrow('occurrenceRequired');
-  expect(()=>manualMeaningPayload({...value,usage:''})).toThrow('meaningRequired');
+  expect(manualMeaningPayload({...value,usage:''}).sense?.semanticSpec.prototypeScenes).toEqual([]);
   expect(()=>manualMeaningPayload({...value,languageTag:''})).toThrow('languageRequired');
   const repeated={...value,context:'backed out, then backed out again.'};
   expect(occurrencePositions(repeated.context,repeated.occurrence)).toEqual([0,17]);
@@ -37,6 +47,25 @@ test('explicit manual save creates the complete ordinary Meaning once with no mo
   expect(meaning.bindingConfirmations).toHaveLength(1);
   expect(state.registry.senseVersions[0]?.semanticSpec).toEqual(payload.sense!.semanticSpec);
   expect(meaning.focuses).toHaveLength(0);
+  expect(state.registry.bindings[0]?.relation).toBeNull();
+  expect(state.registry.bindingVersions[0]?.semanticCoverage).toBeNull();
+});
+
+test('natural-language meaning needs no prototype and equal prose does not infer identity; explicit selection reuses it',async()=>{
+ const repository=new MemoryJourneyRepository(),modules=createJourneyModules({repository,clock:createSeededClock()});
+ const first={...draft(),usage:''};
+ await modules.semanticIntake.submit(manualMeaningPayload(first));
+ await modules.semanticIntake.submit(manualMeaningPayload({...first,operationId:crypto.randomUUID()}));
+ let state=await repository.load();
+ expect(state.registry.senses).toHaveLength(2);
+ expect(new Set(state.registry.senses.map(row=>row.senseId)).size).toBe(2);
+ expect(state.registry.senseVersions.every(row=>row.semanticSpec.prototypeScenes.length===0)).toBe(true);
+ const sense=state.registry.senses[0]!,version=state.registry.senseVersions[0]!;
+ const selected={...first,operationId:crypto.randomUUID(),existingSense:{senseId:sense.senseId,senseVersionId:version.senseVersionId,senseKey:sense.senseKey,semanticSpec:version.semanticSpec}};
+ await modules.semanticIntake.submit(manualMeaningPayload(selected));
+ state=await repository.load();
+ expect(state.registry.senses).toHaveLength(2);
+ expect(state.meanings.at(-1)?.semanticAcceptances[0]).toMatchObject({senseId:sense.senseId,senseVersionId:version.senseVersionId,resolution:'reuse_existing'});
 });
 
 test('manual Inbox completion retains original source/media while accepting learner-written context and meaning atomically',async()=>{
@@ -84,7 +113,7 @@ test('choosing an existing meaning pins the reviewed version and rejects edited 
  const before=await repository.load();await repository.commit({before,after:advanceSemanticHeads(before)});
  const intake=createJourneyModules({repository,clock:createSeededClock()}).semanticIntake;
  const command={operationId:draft.operationId,intakeId:item.intakeId,expectedItemDigest:digestOf(item),context:payload.context!,expression:payload.expression!,sense:payload.sense!,reuseSense:{senseId:selected.senseId,senseVersionId:selected.senseVersionId}};
- await expect(intake.resolve({...command,sense:{...command.sense,semanticSpec:{...command.sense.semanticSpec,coreMeaningFocus:'tampered pinned meaning'}}})).rejects.toThrow('固定');
+ await expect(intake.resolve({...command,sense:{...command.sense,semanticSpec:{...command.sense.semanticSpec,coreMeaningFocus:'tampered pinned meaning'}}})).rejects.toThrow('语义不一致');
  expect((await repository.load()).inboxItems).toHaveLength(1);expect(await repository.readReceipt(command.operationId)).toBeNull();
  const result=await intake.resolve(command);if(result.route!=='fast_track')throw new Error('expected Meaning');
  const after=await repository.load(),record=after.meanings.find(record=>record.personalMeaning.personalMeaningId===result.personalMeaningId)!;

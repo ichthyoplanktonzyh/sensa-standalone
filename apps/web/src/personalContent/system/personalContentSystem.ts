@@ -1,3 +1,5 @@
+import {materialSourcePin,sameLearningSourcePin,type LearningSourcePin} from '../../learning/runtime/learningIdentity';
+import type {LocalLearningTarget} from '../../learning/runtime/localProtocol';
 import { canonicalJsonDigest } from '@sensa/learning-kernel';
 import {emptySceneConflictHistory,type SceneConflictHistory} from './sceneConflictHistory';
 
@@ -66,6 +68,7 @@ export interface PersonalLearningSceneRevision {
   revisionId: string;
   revision: number;
   curriculumMembershipId: string;
+  sourcePin: LearningSourcePin;
   body: string;
   media: PersonalContentImage[];
   createdAt: number;
@@ -80,8 +83,7 @@ export interface PersonalLearningScene {
   learningTargetId: string;
   languageRouteId: string;
   senseId: string;
-  senseVersionId: string;
-  bindingVersionId: string;
+  expressionId: string;
   currentRevision: number;
   revisions: PersonalLearningSceneRevision[];
   conflictHistory: SceneConflictHistory;
@@ -439,25 +441,30 @@ async function saveLearningScene(
       contentDigest: canonicalJsonDigest({ body, media: input.media }),
     },
   }, async (tx) => {
+    const target=await tx.get<LocalLearningTarget>('learningTargets',input.learningTargetId);
+    const membership=target?.curriculumMemberships.find(row=>row.id===input.curriculumMembershipId&&row.languageContext.languageRouteId===input.languageRouteId);
+    if(!target||!membership)throw new Error('localFlow.annotationInvalid');
+    const sourcePin=materialSourcePin(membership.material);
+    if(sourcePin.senseId!==input.senseId||sourcePin.senseVersionId!==input.senseVersionId||sourcePin.bindingVersionId!==input.bindingVersionId)throw new Error('localFlow.annotationInvalid');
     const current = await tx.get<PersonalLearningScene>('annotations', id);
     if (current && (
       current.learningTargetId !== input.learningTargetId
       || current.languageRouteId !== input.languageRouteId
       || current.senseId !== input.senseId
-      || current.senseVersionId !== input.senseVersionId
-      || current.bindingVersionId !== input.bindingVersionId
+      || current.expressionId !== sourcePin.expressionId
     )) throw new Error('localFlow.annotationInvalid');
     const currentValue = current?.revisions.find((revision) => revision.revision === current.currentRevision);
     if(canonicalJsonDigest(personalLearningSceneEditBase(current??null))!==canonicalJsonDigest(input.expected)) {
       throw new PersonalLearningSceneConflictError(currentValue?{expected:personalLearningSceneEditBase(current!),body:currentValue.body,media:cloneImages(currentValue.media)}:null);
     }
-    if (currentValue && canonicalJsonDigest({ body: currentValue.body, media: currentValue.media })
+    if (currentValue && currentValue.curriculumMembershipId===input.curriculumMembershipId&&sameLearningSourcePin(currentValue.sourcePin,sourcePin)&&canonicalJsonDigest({ body: currentValue.body, media: currentValue.media })
       === canonicalJsonDigest({ body, media: input.media })) return current;
     const now = Date.now();
     const revision: PersonalLearningSceneRevision = {
       revisionId: crypto.randomUUID(),
       revision: (current?.currentRevision ?? 0) + 1,
       curriculumMembershipId: input.curriculumMembershipId,
+      sourcePin,
       body,
       media: cloneImages(input.media),
       createdAt: now,
@@ -469,8 +476,7 @@ async function saveLearningScene(
       learningTargetId: input.learningTargetId,
       languageRouteId: input.languageRouteId,
       senseId: input.senseId,
-      senseVersionId: input.senseVersionId,
-      bindingVersionId: input.bindingVersionId,
+      expressionId: sourcePin.expressionId,
       currentRevision: revision.revision,
       revisions: [...(current?.revisions ?? []), revision],
       conflictHistory: current?.conflictHistory ?? emptySceneConflictHistory(),

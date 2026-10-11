@@ -50,7 +50,7 @@ const sortedUnique=(values:readonly string[])=>[...new Set(values)].sort();
  * settling a Protocol Run; every learner/content/policy field must still agree. */
 function structuralTarget(target:LearningTargetLike){
  const value=structuredClone(target) as Record<string,unknown>;
- for(const key of ['startedAt','completedAt','memory','memoryRevision','relearnAt','relearningState','introducedLanguageRouteId'])delete value[key];
+ for(const key of ['startedAt','completedAt','memory','memoryRevision','relearnAt','relearningState','introducedLanguageRouteId','curriculumMemberships'])delete value[key];
  const commitment=value.committedPolicy as Record<string,unknown>|null|undefined;
  if(commitment)value.committedPolicy={
   commitmentId:commitment.commitmentId,revision:commitment.revision,
@@ -59,6 +59,24 @@ function structuralTarget(target:LearningTargetLike){
  };
  return value;
 }
+
+/** Source additions do not choose a scheduling branch. A shared membership
+ * must retain exactly the same immutable source and revision on both sides. */
+function sourceUnion(base:LearningTargetLike|undefined,left:LearningTargetLike,right:LearningTargetLike):unknown[]|null{
+ const ours=left.curriculumMemberships,theirs=right.curriculumMemberships;
+ if(ours===undefined&&theirs===undefined)return [];
+ if(!Array.isArray(ours)||!Array.isArray(theirs))return null;
+ const rows=new Map<string,any>();
+ for(const row of [...ours,...theirs]){
+  if(!row||typeof row.id!=='string'||rows.has(row.id)&&!backupEqual(rows.get(row.id),row))return null;
+  rows.set(row.id,row);
+ }
+ const retained=Array.isArray(base?.curriculumMemberships)?base.curriculumMemberships:[];
+ if(retained.some(row=>!ours.some(item=>item.id===row.id)||!theirs.some(item=>item.id===row.id)))return null;
+ const ordered=retained.map(row=>rows.get(row.id)),known=new Set(retained.map(row=>row.id));
+ return [...ordered,...[...rows.values()].filter(row=>!known.has(row.id)).sort((a,b)=>String(a.createdAt).localeCompare(String(b.createdAt))||a.id.localeCompare(b.id))];
+}
+const withoutSources=(target:LearningTargetLike)=>{const value=structuredClone(target);delete value.curriculumMemberships;return value;};
 
 function decisionId(targetId:string,retentionId:string,candidateEventIds:readonly string[],parents:readonly string[]){
  return stableUuid(canonicalJsonDigest({algorithm:learningReconciliationAlgorithm,targetId,retentionId,candidateEventIds:sortedUnique(candidateEventIds),supersededDecisionIds:sortedUnique(parents)}));
@@ -109,6 +127,17 @@ export function reconcileConcurrentLearningEntries(input:{
   const conflictId=entryId('learningTargets',targetId),localEntry=local.get(conflictId),remoteEntry=remote.get(conflictId);
   const ours=decoded<LearningTargetLike>(localEntry),theirs=decoded<LearningTargetLike>(remoteEntry);
   if(!ours||!theirs||ours.id!==targetId||theirs.id!==targetId||ours.retentionId!==theirs.retentionId)continue;
+  const ancestor=decoded<LearningTargetLike>(base.get(conflictId)),memberships=sourceUnion(ancestor,ours,theirs);
+  if(memberships===null)continue;
+  const withSources=(entry:SyncEntry,target:LearningTargetLike):SyncEntry=>({...entry,value:encodeBackupValue({...target,...(target.curriculumMemberships===undefined?{}:{curriculumMemberships:memberships})})});
+  // A source-only branch can join a causal progress branch without deciding
+  // between learning histories or manufacturing a reconciliation receipt.
+  const learningFork=localOnly.some(entry=>decoded<LearningEventLike>(entry)?.targetId===targetId)&&remoteOnly.some(entry=>decoded<LearningEventLike>(entry)?.targetId===targetId);
+  if(!learningFork&&(byTarget.get(targetId)?.length??0)<2&&(backupEqual(withoutSources(ours),withoutSources(theirs))||ancestor&&(
+    backupEqual(withoutSources(ours),withoutSources(ancestor))||backupEqual(withoutSources(theirs),withoutSources(ancestor))))){
+   const selected=ancestor&&backupEqual(withoutSources(theirs),withoutSources(ancestor))?localEntry!:remoteEntry!;
+   merged.set(conflictId,withSources(selected,decoded<LearningTargetLike>(selected)!));remaining.delete(conflictId);continue;
+  }
   if(!backupEqual(structuralTarget(ours),structuralTarget(theirs)))continue;
   const eventHeader=(entry:SyncEntry)=>{const event=decoded<LearningEventLike>(entry);return event?{id:event.id,runId:event.runId,targetId:event.targetId,at:event.at}:undefined;};
   const localNew=localOnly.map(eventHeader).filter((event):event is LearningEventLike=>event?.targetId===targetId),remoteNew=remoteOnly.map(eventHeader).filter((event):event is LearningEventLike=>event?.targetId===targetId);
@@ -149,7 +178,7 @@ export function reconcileConcurrentLearningEntries(input:{
   const decisionEntry:SyncEntry={table:'learningReconciliations',key:decision.id,value:encodeBackupValue(decision)};
   const existing=[local.get(entryId(decisionEntry.table,decision.id)),remote.get(entryId(decisionEntry.table,decision.id))].filter(Boolean) as SyncEntry[];
   if(existing.some(entry=>!backupEqual(entry.value,decisionEntry.value)))continue;
-  merged.set(conflictId,localWins?localEntry!:remoteEntry!);
+  merged.set(conflictId,withSources(localWins?localEntry!:remoteEntry!,localWins?ours:theirs));
   merged.set(entryId(decisionEntry.table,decision.id),existing[0]??decisionEntry);
   remaining.delete(conflictId);
  }

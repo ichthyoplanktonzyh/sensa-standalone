@@ -1,3 +1,4 @@
+import {stableLearningTargetId} from '../../learning/runtime/learningIdentity';
 import {z} from 'zod';
 import {stableUuid,canonicalJsonDigest} from '@sensa/learning-kernel';
 import {sensaFormalPinnedLanguageContextSchema,type SensaFormalPinnedLanguageContext} from '@sensa/contracts/sensa';
@@ -32,12 +33,12 @@ export function supplementalSourceDescriptor(source:SupplementalSourceReference,
   const enrollment=curriculumEnrollmentSchema.parse(raw);
   if(enrollment.id!==source.id||enrollment.learnerUserId!==learnerId||enrollment.source.kind!=='stable_sense'||enrollment.status!=='active')throw new Error('localFlow.invalidTarget');
   const reference=enrollment.source.selection.reference;
-  const targetId=stableUuid(`sensa-learning-target:${learnerId}:${reference.senseVersionId}:${reference.bindingVersionId}`);
+  const targetId=stableLearningTargetId(learnerId,reference.senseId,reference.expressionId);
   return {id:stableUuid(`local-curriculum-membership:${targetId}:${enrollment.languageContext.languageRouteId}:stable_sense:${source.id}`),targetId,source,languageContext:enrollment.languageContext,expression:enrollment.source.selection.expression.surfaceForm};
  }
  const task=raw as ContentProvisioningTask|undefined;
  if(!task||task.id!==source.id||isDirectProvisioningReference(task.source)||task.id!==provisioningTaskId(task.source,task.languageContext.languageRouteId))throw new Error('localFlow.invalidTarget');
- const targetId=stableUuid(`sensa-learning-target:${learnerId}:${task.source.senseVersionId}:${task.source.bindingVersionId}`);
+ const targetId=stableLearningTargetId(learnerId,task.source.senseId,task.source.expressionId);
  const id=provisioningMembershipId(task.source,targetId,task.languageContext.languageRouteId);
  if(task.targetId!==targetId||task.curriculumMembershipId!==id)throw new Error('localFlow.invalidTarget');
  return {id,targetId,source,languageContext:sensaFormalPinnedLanguageContextSchema.parse(task.languageContext),expression:''};

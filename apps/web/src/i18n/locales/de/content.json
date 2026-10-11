@@ -23,7 +23,7 @@
   "contextRequired": "Gib einen Kontext oder Originalsatz ein.",
   "occurrenceRequired": "Markiere die genaue Stelle des Ausdrucks im Kontext.",
   "languageRequired": "Wähle die Sprache des Ausdrucks.",
-  "meaningRequired": "Gib die Bedeutung und eine typische Situation ein.",
+  "meaningRequired": "Gib die Bedeutung in diesem Kontext an.",
   "invalid": "Prüfe die eingegebenen Inhalte.",
   "draftError": "Der Entwurf kann nicht lokal gespeichert werden. Lass die Seite geöffnet und versuche es erneut.",
   "saveError": "Speicherung nicht bestätigt. Die Inhalte bleiben erhalten; versuche es erneut.",
@@ -73,7 +73,12 @@
     "all": "Alle Inhalte",
     "unconfirmed": "Das Ergebnis konnte nicht bestätigt werden. Der Inhalt wurde neu gelesen; bitte vor dem erneuten Versuch prüfen.",
     "savedReadFailed": "Die Änderung wurde gespeichert, der Inhalt konnte aber nicht neu gelesen werden. Lesen erneut versuchen.",
-    "retryRead": "Erneut lesen"
+    "retryRead": "Erneut lesen",
+    "editIntent": "Art der Änderung",
+    "wordingOnly": "Nur umformulieren",
+    "differentMeaning": "Eine andere Bedeutung",
+    "wordingHint": "Behält diese Bedeutung und ihren Lernfortschritt.",
+    "publishedWordingHint": "Als persönliche Formulierung gespeichert; die veröffentlichte Definition bleibt erhalten."
   },
   "content": {
     "manual": "Manuell erstellen",

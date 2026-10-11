@@ -230,3 +230,28 @@ assert.throws(()=>validateLearningReconciliationRecords(reader({...rows,learning
 console.log('PASS: domain Replica Modules own normalization, deletion and explicit conflict dependencies; learner prose stays opaque while concurrent Learning histories reconcile deterministically.');
 
 });
+
+test('independent source additions join causal progress and completed forks retain both sources',()=>{
+ // This header-level merge test isolates source union; actual material admission
+ // and historical source pins are exercised by personal-learning.
+ const id=(n:number)=>`30000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+ const entry=(table:LibraryReplicaEntry['table'],key:string,value:unknown):LibraryReplicaEntry=>({table,key,value:encodeBackupValue(value)});
+ const member=(n:number)=>({id:id(n),revision:1,sourcePin:{senseId:id(2),senseVersionId:id(n+10),expressionId:id(3),expressionVersionId:id(n+20),bindingId:id(n+30),bindingVersionId:id(n+40)},createdAt:`2026-10-11T09:0${n-4}:00.000Z`});
+ const original={id:id(1),retentionId:id(9),identity:{senseId:id(2),expressionId:id(3)},memory:null,memoryRevision:0,curriculumMemberships:[member(4)]};
+ const base=[entry('learningTargets',original.id,original)];
+ const ours={...original,curriculumMemberships:[...original.curriculumMemberships,member(5)]},theirs={...original,memoryRevision:1,curriculumMemberships:[...original.curriculumMemberships,member(6)]};
+ const merge=(left:typeof ours,right:typeof theirs)=>mergeLibraryReplicas({base,local:[entry('learningTargets',original.id,left)],remote:[entry('learningTargets',original.id,right)]});
+ for(const reversed of [false,true]){
+  const result=reversed?merge(theirs,ours):merge(ours,theirs);
+  assert.equal(result.conflicts.length,0);const target=decodeBackupValue(result.entries.find(row=>row.table==='learningTargets')!.value) as typeof theirs;
+  assert.equal(target.memoryRevision,1);assert.deepEqual(target.curriculumMemberships.map(row=>row.id),[id(4),id(5),id(6)]);
+ }
+ const changed=structuredClone(theirs);changed.curriculumMemberships[0]!.sourcePin.expressionVersionId=id(99);
+ assert(merge(ours,changed).conflicts.includes(replicaEntryId({table:'learningTargets',key:original.id})),'one membership cannot silently acquire another version');
+ const at='2026-10-11T10:00:00.000Z';
+ const branch=(target:typeof theirs,run:number)=>[entry('learningTargets',original.id,target),entry('learningRuns',id(run),{id:id(run),targetIds:[original.id],completedAt:at}),entry('learningEvents',id(run+1),{id:id(run+1),runId:id(run),targetId:original.id,at})];
+ const fork=mergeLibraryReplicas({base,local:branch({...ours,memoryRevision:1},70),remote:branch(theirs,80)});
+ assert.equal(fork.conflicts.length,0);assert.equal(fork.entries.filter(row=>row.table==='learningReconciliations').length,1,'equal progress projections still need a real fork decision');
+ const joined=decodeBackupValue(fork.entries.find(row=>row.table==='learningTargets')!.value) as typeof theirs;
+ assert.deepEqual(joined.curriculumMemberships.map(row=>row.id),[id(4),id(5),id(6)]);
+});

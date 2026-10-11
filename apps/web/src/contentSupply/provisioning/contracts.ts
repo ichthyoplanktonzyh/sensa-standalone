@@ -17,6 +17,8 @@ export interface PersonalMeaningLearningReference {
   meaningFocusId: string | null;
   senseId: string;
   senseVersionId: string;
+  expressionId: string;
+  expressionVersionId: string;
   bindingId: string;
   bindingVersionId: string;
 }
@@ -43,7 +45,7 @@ export interface PersonalMeaningLearningSource {
 
 export const directProvisioningReferenceSchema=z.object({
   kind:z.literal('stable_sense'),enrollmentId:z.string().uuid(),sourceDigest:z.string().regex(/^[a-f0-9]{64}$/u),
-  senseId:z.string().uuid(),senseVersionId:z.string().uuid(),bindingId:z.string().uuid(),bindingVersionId:z.string().uuid(),
+  senseId:z.string().uuid(),senseVersionId:z.string().uuid(),expressionId:z.string().uuid(),expressionVersionId:z.string().uuid(),bindingId:z.string().uuid(),bindingVersionId:z.string().uuid(),
 }).strict();
 export type DirectProvisioningReference=z.infer<typeof directProvisioningReferenceSchema>;
 export type ContentProvisioningReference=PersonalMeaningLearningReference|DirectProvisioningReference;

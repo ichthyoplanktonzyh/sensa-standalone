@@ -23,7 +23,7 @@
   "contextRequired": "Enter a context or original sentence.",
   "occurrenceRequired": "Locate this expression exactly in the context.",
   "languageRequired": "Choose the expression’s language.",
-  "meaningRequired": "Enter the meaning and a typical situation.",
+  "meaningRequired": "Enter the meaning in this context.",
   "invalid": "Check the entered content.",
   "draftError": "Cannot save the draft locally. Keep this page open and try again.",
   "saveError": "Could not confirm the save. Your content is kept; try again.",
@@ -73,7 +73,12 @@
     "all": "All content",
     "unconfirmed": "Could not confirm the result. Content was re-read; check it before retrying.",
     "savedReadFailed": "The change is saved, but the content could not be re-read. Retry reading.",
-    "retryRead": "Retry reading"
+    "retryRead": "Retry reading",
+    "editIntent": "Editing intent",
+    "wordingOnly": "Only change the wording",
+    "differentMeaning": "This is a different meaning",
+    "wordingHint": "Keeps this meaning and its learning progress.",
+    "publishedWordingHint": "Saved as your personal wording; the published definition stays intact."
   },
   "content": {
     "manual": "Create manually",

@@ -155,6 +155,8 @@ const meaningLearningSources = (
             : null,
           senseId: alignment.senseId,
           senseVersionId: alignment.senseVersionId,
+          expressionId: expression.expressionId,
+          expressionVersionId: expressionVersion.expressionVersionId,
           bindingId: binding.senseExpressionBindingId,
           bindingVersionId: bindingVersion.bindingVersionId,
         },

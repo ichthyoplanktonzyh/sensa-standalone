@@ -1,3 +1,4 @@
+import {learningSourcePinSchema} from '../../learning/runtime/learningIdentity';
 import {canonicalJsonDigest} from '@sensa/learning-kernel';
 import {z} from 'zod';
 import {backupEqual} from '../../data/library/backupCodec';
@@ -10,7 +11,7 @@ export type SceneConflictHistory={version:1;head:string|null;branches:SceneConfl
 export const emptySceneConflictHistory=():SceneConflictHistory=>({version:1,head:null,branches:[],decisions:[]});
 const uuidSchema=z.string().uuid(),timeSchema=z.number().int().nonnegative();
 const image=z.object({mediaId:uuidSchema,kind:z.literal('image'),dataUrl:z.string().startsWith('data:image/').max(8*1024*1024),mimeType:z.string().min(1).max(200),fileName:z.string().min(1).max(500),altText:z.string().max(80)}).strict();
-const snapshotSchema=z.object({id:z.string(),kind:z.literal('learning_scene'),sceneId:uuidSchema,learningTargetId:uuidSchema,languageRouteId:uuidSchema,senseId:uuidSchema,senseVersionId:uuidSchema,bindingVersionId:uuidSchema,currentRevision:z.number().int().positive(),revisions:z.array(z.object({revisionId:uuidSchema,revision:z.number().int().positive(),curriculumMembershipId:uuidSchema,body:z.string().max(1000),media:z.array(image).max(3),createdAt:timeSchema}).strict()).min(1),acceptedRevisionId:uuidSchema.nullable(),acceptedPersonalMeaningId:uuidSchema.nullable(),createdAt:timeSchema,updatedAt:timeSchema}).strict();
+const snapshotSchema=z.object({id:z.string(),kind:z.literal('learning_scene'),sceneId:uuidSchema,learningTargetId:uuidSchema,languageRouteId:uuidSchema,senseId:uuidSchema,expressionId:uuidSchema,currentRevision:z.number().int().positive(),revisions:z.array(z.object({revisionId:uuidSchema,revision:z.number().int().positive(),curriculumMembershipId:uuidSchema,sourcePin:learningSourcePinSchema,body:z.string().max(1000),media:z.array(image).max(3),createdAt:timeSchema}).strict()).min(1),acceptedRevisionId:uuidSchema.nullable(),acceptedPersonalMeaningId:uuidSchema.nullable(),createdAt:timeSchema,updatedAt:timeSchema}).strict();
 export function assertSceneTimeline(snapshot:SceneSnapshot):void{
  snapshotSchema.parse(snapshot);
  if(snapshot.revisions.length!==snapshot.currentRevision||new Set(snapshot.revisions.map(row=>row.revisionId)).size!==snapshot.revisions.length)invalid();
@@ -22,7 +23,7 @@ const plain=(scene:PersonalLearningScene):SceneSnapshot=>{const {conflictHistory
 const version=(scene:PersonalLearningScene):SceneConflictBranch=>{const value={head:scene.conflictHistory.head,record:plain(scene)};return {...value,digest:canonicalJsonDigest(value)};};
 const uuid=(value:unknown)=>typeof value==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value);
 export function sceneBranchExtends(before:SceneSnapshot,after:SceneSnapshot):boolean{
- return (['id','kind','sceneId','learningTargetId','languageRouteId','senseId','senseVersionId','bindingVersionId','createdAt'] as const).every(key=>backupEqual(before[key],after[key]))
+ return (['id','kind','sceneId','learningTargetId','languageRouteId','senseId','expressionId','createdAt'] as const).every(key=>backupEqual(before[key],after[key]))
   &&after.updatedAt>=before.updatedAt&&after.currentRevision>=before.currentRevision
   &&before.revisions.every((revision,index)=>backupEqual(revision,after.revisions[index]));
 }
@@ -58,7 +59,7 @@ export function assertSceneConflictHistory(scene:PersonalLearningScene):void{
  const branches=new Map<string,SceneConflictBranch>(),decisions=new Map<string,SceneConflictDecision>();
  for(const branch of history.branches){
   if(!branch?.record||'conflictHistory'in branch.record||branch.digest!==canonicalJsonDigest({head:branch.head,record:branch.record})||branches.has(branch.digest)||(branch.head!==null&&!uuid(branch.head)))invalid();
-  for(const key of ['id','kind','learningTargetId','languageRouteId','senseId','senseVersionId','bindingVersionId'] as const)if(branch.record[key]!==scene[key])invalid();
+  for(const key of ['id','kind','learningTargetId','languageRouteId','senseId','expressionId'] as const)if(branch.record[key]!==scene[key])invalid();
   assertSceneTimeline(branch.record);
   branches.set(branch.digest,branch);
  }

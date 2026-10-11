@@ -59,8 +59,9 @@ test('cold Context and draft commands are bounded, replay-safe, isolated and ato
   expect(reads.some(row=>['semanticMeanings','semanticRegistry','semanticInbox','semanticDrafts'].includes(row.table))).toBe(false);
   await expect(intake().submit({...manual,capturedAt:'2026-10-05T12:00:00Z'})).rejects.toThrow('operationId');
   // Another contextual Meaning may reuse the exact immutable Sense/Expression/Binding tuple.
-  const again=await intake().submit({...manual,operationId:crypto.randomUUID()});
-  const firstManual=await api.worldReadRepository.detail(manualSaved.personalMeaningId),secondManual=await api.worldReadRepository.detail(again.personalMeaningId);
+  const firstManual=await api.worldReadRepository.detail(manualSaved.personalMeaningId),selected=firstManual.detail.directAlignments[0];
+  const again=await intake().submit({...manual,operationId:crypto.randomUUID(),sense:{...manual.sense!,reuseSense:{senseId:selected.senseId,senseVersionId:selected.senseVersionId}}});
+  const secondManual=await api.worldReadRepository.detail(again.personalMeaningId);
   expect(secondManual.detail.directAlignments[0].senseId).toBe(firstManual.detail.directAlignments[0].senseId);
   expect(secondManual.detail.directAlignments[0].confirmedBindings[0]).toMatchObject({surfaceForm:'back out'});
   const commitManual=adapter.commit.bind(adapter),failedManual={...manual,operationId:crypto.randomUUID()};
@@ -185,7 +186,7 @@ test('cold Context and draft commands are bounded, replay-safe, isolated and ato
   const manualWinner=await intake().submit({...racedManual,operationId:crypto.randomUUID()});
   manualRace.release();await manualRejected;expect(await library.readReceipt(racedManual.operationId)).toBeNull();
   const manualRetry=await intake().submit(racedManual);expect(manualRetry.route).toBe('fast_track');expect(manualRetry.personalMeaningId).not.toBe(manualWinner.personalMeaningId);
-  expect((await api.worldReadRepository.detail(manualRetry.personalMeaningId)).detail.directAlignments[0].senseId).toBe((await api.worldReadRepository.detail(manualWinner.personalMeaningId)).detail.directAlignments[0].senseId);
+  expect((await api.worldReadRepository.detail(manualRetry.personalMeaningId)).detail.directAlignments[0].senseId).not.toBe((await api.worldReadRepository.detail(manualWinner.personalMeaningId)).detail.directAlignments[0].senseId);
   const raceDraft=await appendDraft(),raceInput=await confirmation(raceDraft.intakeId,crypto.randomUUID(),'a-foreign-concurrent-key');
   const race=hold(),raceWriting=race.gateway.completeClarificationDraft(raceInput),raceRejected=expect(raceWriting).rejects.toThrow('meaningChanged');await wait(race.entered);
   const winningDraft=await appendDraft(),winning=await gateway().completeClarificationDraft(await confirmation(winningDraft.intakeId,crypto.randomUUID(),'a-foreign-concurrent-key'));
@@ -195,7 +196,7 @@ test('cold Context and draft commands are bounded, replay-safe, isolated and ato
   const expressionForeignDraft=await appendDraft(),expressionForeign=await confirmation(expressionForeignDraft.intakeId,crypto.randomUUID(),'concurrent-expression-foreign');expressionForeign.expression.surfaceForm='concurrent-form';await gateway().completeClarificationDraft(expressionForeign);
   expressionRace.release();await expressionRejected;expect((await api.worldReadRepository.detail(expressionDraft.intakeId)).draft).not.toBeNull();expect(await library.readReceipt(expressionInput.operationId)).toBeNull();
   expect((await gateway().completeClarificationDraft(expressionInput)).resolution).toBe('create_new');
-  const distant=state.registry.senses.length-1,distantDraft=await appendDraft(),distantInput=await confirmation(distantDraft.intakeId);distantInput.sense={...state.registry.senseVersions[distant]!.semanticSpec,proposedSenseKey:state.registry.senses[distant]!.senseKey,reuseSense:{senseId:state.registry.senses[distant]!.senseId,senseVersionId:state.registry.senseVersions[distant]!.senseVersionId},unresolvedQuestions:[]};distantInput.expression.surfaceForm=`borrow-${distant}`;distantInput.expression.semanticCoverage='narrower';
+  const distant=state.registry.senses.length-1,distantDraft=await appendDraft(),distantInput=await confirmation(distantDraft.intakeId);distantInput.sense={...state.registry.senseVersions[distant]!.semanticSpec,proposedSenseKey:state.registry.senses[distant]!.senseKey,reuseSense:{senseId:state.registry.senses[distant]!.senseId,senseVersionId:state.registry.senseVersions[distant]!.senseVersionId},unresolvedQuestions:[]};distantInput.expression.surfaceForm=`borrow-${distant}`;distantInput.expression.semanticCoverage='narrower';distantInput.expression.relation=state.registry.bindings[distant]!.relation;
   const bindingKey=`bindings:${state.registry.bindings[distant]!.senseExpressionBindingId}`,bindingBefore=await api.readLibrary((tx:any)=>tx.get('semanticRegistry',bindingKey));
   await gateway().completeClarificationDraft(distantInput);
   const bindingAfter=await api.readLibrary((tx:any)=>tx.get('semanticRegistry',bindingKey));expect(bindingAfter.ordinal).toBe(bindingBefore.ordinal);expect(bindingAfter.value.currentVersionNumber).toBe(2);

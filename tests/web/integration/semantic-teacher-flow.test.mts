@@ -34,7 +34,7 @@ const input=(onAssistantText?:(text:string)=>void):SemanticAgentTurnInput=>({
   messages:[],workingSet:{context:null,focus:null,sense:null,expression:null,expressions:[]},readyToConfirm:false,learnerEditedTracks:[],focusLocked:false,
   languages:{targetLanguageTag:'en',supportLanguageTag:'zh-CN'},onAssistantText,
 });
-const answer={context:'学习者想给植物浇水。',sense:'给植物供水的动作。',senseKey:'give_plant_water',scene:'学习者给家里的植物浇水。',expression:'water',expressionType:'word',relation:'realizes',coverage:'exact',reason:'water 可作动词表达这个动作。'};
+const answer={context:'学习者想给植物浇水。',sense:'给植物供水的动作。',scene:'学习者给家里的植物浇水。',expression:'water',expressionType:'word',reason:'water 可作动词表达这个动作。'};
 const final=(reply:string,proposal:unknown=null,deltas:string[]=[])=>({model:'fixture-teacher',choices:[{finish_reason:'stop',message:{content:JSON.stringify({reply,clarity:{context:proposal!==null,sense:proposal!==null,expression:proposal!==null},proposal})}}],deltas});
 const call=(name:string,args:unknown)=>({model:'fixture-teacher',choices:[{finish_reason:'tool_calls',message:{content:null,tool_calls:[{id:crypto.randomUUID(),type:'function',function:{name,arguments:JSON.stringify(args)}}]}}]});
 beforeEach(()=>{fixture.responses=[];fixture.requests=[];fixture.lookups=0;});
@@ -115,7 +115,7 @@ test('the only teacher tool reads bounded existing semantics without private sou
 });
 
 test('reuse preserves the exact looked-up semantic version and boundaries, not a guessed key',async()=>{
-  const {sense:_sense,senseKey:_key,scene:_scene,...newContextAndExpression}=answer;
+  const {sense:_sense,scene:_scene,...newContextAndExpression}=answer;
   const selection={...newContextAndExpression,reuseSense:{senseId:reusedSenseId,senseVersionId:reusedVersionId}};
   fixture.responses.push(call('lookup_meanings',{query:'water'}),final('可以说 water。',selection));
   const result=await createRealSemanticAgent().turn(input());

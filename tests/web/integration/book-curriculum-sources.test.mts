@@ -2,6 +2,7 @@ import {afterAll,expect,test} from 'vitest';
 import {randomUUID,createHash} from 'node:crypto';
 import {unzipSync} from 'fflate';
 import {createSensaPortableBook,portableBookMemberKey,portableBookMemberPath} from '@sensa/content-validator/portable-book';
+import {createSensaPortableLightweightPackage,readSensaPortableLightweightPackage} from '@sensa/content-validator/portable-lightweight';
 import {sensaPortableBookManifestSchema,defaultSensaLanguageRoute,sensaPinnedLanguageContext} from '@sensa/contracts/sensa';
 import {portableBookDeliveryFixture} from '../../../scripts/support/portablePackageFixture.mts';
 import {useNodeLearningCapacityStorage} from '../../../scripts/support/nodeLearningCapacity.mts';
@@ -18,6 +19,13 @@ Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined,lo
 const database=await useNodeLearningCapacityStorage();afterAll(()=>database.close());await openLibrary();
 const {validateBackupRows}=await import('../../../apps/web/src/data/library/backupValidation');
 const context=sensaPinnedLanguageContext(defaultSensaLanguageRoute);
+
+test('one Book rejects two package identities for the same stable Sense/Expression target',()=>{
+ const fixture=portableBookDeliveryFixture({packageId:randomUUID()}),member=fixture.manifest.members[0]!,bytes=unzipSync(fixture.bookBytes)[portableBookMemberPath(member)]!;
+ const archive=readSensaPortableLightweightPackage(bytes),copyId=randomUUID(),copy=createSensaPortableLightweightPackage({...archive.package,metadata:{...archive.package.metadata,packageId:copyId}},archive.mediaById);
+ const duplicate={packageId:copyId,version:member.version},manifest={...fixture.manifest,members:[member,duplicate]};
+ expect(()=>createSensaPortableBook(manifest,new Map([[portableBookMemberKey(member),bytes],[portableBookMemberKey(duplicate),copy]]))).toThrow('duplicate stable Sense/Expression');
+});
 
 test('a shared Target retains independent Book admissions without replacing the active source or admitting a foreign member',async()=>{
  const first=portableBookDeliveryFixture({packageId:randomUUID(),memberExpressions:['shared','another-shared','only-a']});
@@ -114,7 +122,8 @@ test('a shared Target retains independent Book admissions without replacing the 
  await learningSystem.execute({kind:'enroll_book',operationId:randomUUID(),languageContext:context,publicationArchiveSha256:updated.sha256});
  const upgraded=(await readLibrary(tx=>tx.get<LocalLearningTarget>('learningTargets',shared.id)))!;
  expect(upgraded.curriculumMemberships).toHaveLength(3);
- expect(upgraded.curriculumMemberships.find(member=>member.id===firstMembership.id)).toEqual(firstMembership);
+ const superseded=upgraded.curriculumMemberships.find(member=>member.id===firstMembership.id)!;
+ expect(superseded).toMatchObject({...firstMembership,status:'superseded',revision:firstMembership.revision+1,updatedAt:expect.any(String)});
  expect(new Set(upgraded.curriculumMemberships.map(member=>member.material.snapshot.learningMaterializationId)).size).toBe(3);
  expect((await readLibrary(tx=>tx.get<LocalLearningRun>('learningRuns',newRun.id)))!.participants[another.id]).toEqual(pinned);
  expect(await readLibrary(tx=>tx.get<LocalLearningRun>('learningRuns',before!.id))).toEqual(oldBookRun);

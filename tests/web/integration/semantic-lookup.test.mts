@@ -200,16 +200,19 @@ test('clarifying an imported Context preserves the original occurrence revision 
 test('lookup is deduplicated, bounded and private; failed key collisions preserve the original draft',async()=>{
   const {repository,personalMeaningJourney:gateway,semanticIntake:intake}=setup();
   const first=await intake.submit(payload());assert.equal(first.route,'fast_track');
-  await intake.submit(payload());
+  const selected=(await gateway.lookupMeanings('borrow')).meanings[0]!;
+  const reused=payload();reused.sense!.reuseSense={senseId:selected.senseId,senseVersionId:selected.senseVersionId};
+  await intake.submit(reused);
   const found=await gateway.lookupMeanings('ＢＯＲＲＯＷ');
-  assert.equal(found.meanings.length,1);assert.equal(found.meanings[0]!.senseKey,'temporary-borrow');
+  assert.equal(found.meanings.length,1);assert.equal(found.meanings[0]!.senseId,selected.senseId);
   assert.deepEqual(found.meanings[0]!.semanticSpec,spec);
   assert(!JSON.stringify(found).includes('Private source'));assert(!JSON.stringify(found).includes('private-provenance'));
   found.meanings[0]!.semanticSpec.excludedCases.push('caller mutation');
   assert.deepEqual((await gateway.lookupMeanings('borrow')).meanings[0]!.semanticSpec.excludedCases,['永久赠送']);
   await assert.rejects(gateway.lookupMeanings(' '),/invalid_tool_arguments/u);
   const before=await repository.load();
-  await assert.rejects(intake.submit(payload({...spec,coreMeaningFocus:'永久接受赠送'})),/不能静默替换/u);
+  const incompatible=payload({...spec,coreMeaningFocus:'永久接受赠送'});incompatible.sense!.reuseSense={senseId:selected.senseId,senseVersionId:selected.senseVersionId};
+  await assert.rejects(intake.submit(incompatible),/语义不一致/u);
   assert.deepEqual(await repository.load(),before);
   const draft=await gateway.createClarificationDraft({operationId:crypto.randomUUID(),blocks:[{kind:'text',bodyText:'另一个临时借用物品的场景。'}]});
   const sense=found.meanings[0]!;
@@ -359,6 +362,7 @@ test('a rejected read witness writes no receipt or draft, while semantic-key col
   const {repository,semanticIntake:intake}=setup();await intake.submit(payload());
   const before=await repository.load(),version=before.registry.senseVersions[0]!;
   const unrelated=setup();await unrelated.semanticIntake.submit(payload());const addition=await unrelated.repository.load();
+  addition.registry.senses[0]!.senseKey=before.registry.senses[0]!.senseKey;
   const after={...before,meanings:[...before.meanings,...addition.meanings],registry:Object.fromEntries(Object.keys(before.registry).map(kind=>[
     kind,[...before.registry[kind as keyof typeof before.registry],...addition.registry[kind as keyof typeof before.registry]],
   ])) as unknown as typeof before.registry};
@@ -368,7 +372,7 @@ test('a rejected read witness writes no receipt or draft, while semantic-key col
   assert.deepEqual(await repository.load(),before);
   // Both worlds are valid independently, but the stale writer's chosen key is
   // now occupied by a foreign identity. No part of that second world may stick.
-  const empty=await unrelated.repository.load();
+  const empty=addition;
   const fresh=new MemoryJourneyRepository(),stale=await fresh.load();
   await fresh.commit({before:stale,after:before});
   await assert.rejects(fresh.commit({before:stale,after:empty}),(error:unknown)=>

@@ -23,7 +23,7 @@
   "contextRequired": "Bir bağlam veya özgün cümle girin.",
   "occurrenceRequired": "İfadenin bağlamdaki tam konumunu belirtin.",
   "languageRequired": "İfadenin dilini seçin.",
-  "meaningRequired": "Anlamı ve tipik bir durumu girin.",
+  "meaningRequired": "Bu bağlamdaki anlamı yazın.",
   "invalid": "Girilen içeriği kontrol edin.",
   "draftError": "Taslak yerel olarak kaydedilemiyor. Sayfayı açık tutup tekrar deneyin.",
   "saveError": "Kaydetme doğrulanamadı. İçerik korunuyor; tekrar deneyin.",
@@ -73,7 +73,12 @@
     "all": "Tüm içerik",
     "unconfirmed": "Sonuç doğrulanamadı. İçerik yeniden okundu; tekrar denemeden önce kontrol edin.",
     "savedReadFailed": "Değişiklik kaydedildi ancak içerik yeniden okunamadı. Okumayı tekrar deneyin.",
-    "retryRead": "Yeniden oku"
+    "retryRead": "Yeniden oku",
+    "editIntent": "Düzenleme amacı",
+    "wordingOnly": "Yalnızca yeniden ifade et",
+    "differentMeaning": "Bu farklı bir anlam",
+    "wordingHint": "Bu anlamı ve öğrenme ilerlemesini korur.",
+    "publishedWordingHint": "Kişisel ifadeniz olarak kaydedilir; yayımlanan tanım korunur."
   },
   "content": {
     "manual": "Elle oluştur",

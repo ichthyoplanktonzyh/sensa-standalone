@@ -6,6 +6,7 @@ import type {MeaningJourneyRecord} from '../../../experience/personalMeaningJour
 import {assertMeaningCorrectionReceipts} from '../../../experience/personalMeaningJourney/meaningCorrection';
 import {mergeMeaningConflictHistory,assertMeaningConflictHistory} from '../../../experience/personalMeaningJourney/meaningConflictHistory';
 import {meaningHistoryRecords} from '../../../experience/personalMeaningJourney/meaningHistoryRead';
+import {registryVersionSlot} from '../../../experience/personalMeaningJourney/registryVersionSlot';
 
 type JsonRecord=Record<string,any>;
 type ValueResult={ok:true;value:any}|{ok:false};
@@ -39,22 +40,30 @@ function validRegistryHeadTransition(base:JsonRecord,candidate:JsonRecord,fields
  if(!Number.isSafeInteger(prior)||!Number.isSafeInteger(next)||next<prior)return false;
  return next!==prior||candidate[pointerField]===base[pointerField];
 }
-function mergeRegistryHead(kind:string,base:unknown,local:unknown,remote:unknown):ValueResult{
+function mergeRegistryHead(kind:string,base:unknown,local:unknown,remote:unknown,versions:ReadonlyMap<string,JsonRecord>):ValueResult{
  const prior=record(base),left=record(local),right=record(remote),fields=registryPointerFields[kind];
  if(!prior||!left||!right||!fields||!validRegistryHeadTransition(prior,left,fields)||!validRegistryHeadTransition(prior,right,fields))return failed;
  const ordinary=threeWay(base,local,remote);if(ordinary.ok)return ordinary;
  if(!equal(withoutNamedFields(left,fields),withoutNamedFields(right,fields)))return failed;
  const leftRevision=left.currentVersionNumber,rightRevision=right.currentVersionNumber;
  if(!Number.isSafeInteger(leftRevision)||!Number.isSafeInteger(rightRevision))return failed;
+ const versionKind=kind==='senses'?'senseVersions':kind==='bindings'?'bindingVersions':null,parentField=kind==='senses'?'parentSenseVersionId':'parentBindingVersionId';
+ if(versionKind){
+  const leftId=left[fields[0]],rightId=right[fields[0]],leftVersion=versions.get(`${versionKind}:${leftId}`),rightVersion=versions.get(`${versionKind}:${rightId}`);
+  if(leftVersion?.[parentField]||rightVersion?.[parentField]){
+   const follows=(start:string,ancestor:string)=>{const seen=new Set<string>();let cursor:string|undefined=start;while(cursor&&!seen.has(cursor)){if(cursor===ancestor)return true;seen.add(cursor);cursor=versions.get(`${versionKind}:${cursor}`)?.[parentField];}return false;};
+   if(follows(leftId,rightId))return {ok:true,value:left};if(follows(rightId,leftId))return {ok:true,value:right};return failed;
+  }
+ }
  if(leftRevision===rightRevision)return left[fields[0]]===right[fields[0]]?{ok:true,value:left}:failed;
  return {ok:true,value:leftRevision>rightRevision?left:right};
 }
 
-function mergeRegistry(base:unknown,local:unknown,remote:unknown):ValueResult{
+function mergeRegistry(base:unknown,local:unknown,remote:unknown,versions:ReadonlyMap<string,JsonRecord>):ValueResult{
  const prior=record(base),ours=record(local),theirs=record(remote);if(!prior||!ours||!theirs||prior.kind!==ours.kind||prior.kind!==theirs.kind)return failed;
  const kind=String(prior.kind);let value:ValueResult;
  if(registryVersions.has(kind))value=equal(prior.value,ours.value)&&equal(prior.value,theirs.value)?{ok:true,value:prior.value}:failed;
- else if(registryHeads.has(kind))value=mergeRegistryHead(kind,prior.value,ours.value,theirs.value);
+ else if(registryHeads.has(kind))value=mergeRegistryHead(kind,prior.value,ours.value,theirs.value,versions);
  else return failed;
  if(!value.ok)return failed;
  const ordinals=[prior.ordinal,ours.ordinal,theirs.ordinal].filter(Number.isSafeInteger) as number[];
@@ -70,10 +79,7 @@ function mergedEntry(value:unknown,...candidates:Array<ReplicaEntry|undefined>):
 const durableTables=new Set<ReplicaEntry['table']>(['semanticState','semanticMeanings','semanticRegistry','semanticReceipts','meanings','identities']);
 const registrySlot=(entry:ReplicaEntry)=>{
  const wrapper=record(decodeBackupValue(entry.value)),fact=record(wrapper?.value);if(!wrapper||!fact)return undefined;
- if(wrapper.kind==='senseVersions')return `senseVersions:${fact.senseId}:${fact.versionNumber}`;
- if(wrapper.kind==='expressionVersions')return `expressionVersions:${fact.expressionId}:${fact.versionNumber}`;
- if(wrapper.kind==='bindingVersions')return `bindingVersions:${fact.senseExpressionBindingId}:${fact.versionNumber}`;
- return undefined;
+ return registryVersionSlot(String(wrapper.kind),fact);
 };
 
 /** Domain merge for revisioned Personal Semantic World facts and durable tombstones. */
@@ -83,6 +89,7 @@ export function* mergePersonalSemanticWorldReplica(
 ):ReplicaMergeSteps{
  const result=yield* ordinary(input),entries=new Map(result.entries.map(entry=>[entryId(entry),entry])),conflicts=new Set(result.conflicts);
  const base=byId(input.base),local=byId(input.local),remote=byId(input.remote);
+ const versions=new Map<string,JsonRecord>();for(const row of [...input.base,...input.local,...input.remote])if(row.table==='semanticRegistry'){const wrapper=record(decodeBackupValue(row.value)),fact=record(wrapper?.value);if(wrapper&&fact&&registryVersions.has(wrapper.kind))versions.set(row.key,fact);}
  const admissionConflicts=new Set<string>();
  // Validate each branch against its own durable operation facts, before any
  // ordinary three-way choice can import a well-shaped but unwitnessed restore.
@@ -122,7 +129,7 @@ export function* mergePersonalSemanticWorldReplica(
   if(!prior||!ours||!theirs)continue;
   if(sample.table!=='semanticMeanings'&&sample.table!=='semanticRegistry')continue;
   const merge=sample.table==='semanticMeanings'?mergeMeaningConflictHistory:mergeRegistry;
-  const merged=merge(decodeBackupValue(prior.value),decodeBackupValue(ours.value),decodeBackupValue(theirs.value));
+  const merged=merge===mergeRegistry?mergeRegistry(decodeBackupValue(prior.value),decodeBackupValue(ours.value),decodeBackupValue(theirs.value),versions):mergeMeaningConflictHistory(decodeBackupValue(prior.value),decodeBackupValue(ours.value),decodeBackupValue(theirs.value));
   if(!merged.ok){if(!equal(ours.value,theirs.value))conflicts.add(id);continue;}
   entries.set(id,mergedEntry(merged.value,ours,theirs,prior));
   // A successful content merge cannot erase failed branch admission above.

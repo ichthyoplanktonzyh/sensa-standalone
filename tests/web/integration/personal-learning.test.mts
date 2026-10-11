@@ -94,7 +94,7 @@ try{
   // Personal Meaning shape used by direct intake, preserving captured context.
   const slow=canonicalIntake(false),queued=await intake.submit(slow);
   assert.equal(queued.route,'inbox');
-  const completed=await gateway.completeClarificationDraft({operationId:id(),intakeId:queued.intakeId,source:await gateway.captureClarificationSource('intake',queued.intakeId),context:slow.context!,languageContext:{supportLanguageTag:'zh-CN',targetLanguageTag:'en'},focus:null,sense:{proposedSenseKey:'borrow-temporarily',coreMeaningFocus:semanticSpec.coreMeaningFocus,prototypeScenes:semanticSpec.prototypeScenes,includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[],unresolvedQuestions:[]},expression:{surfaceForm:'borrow',expressionType:'word',languageTag:'en',relation:'realizes',semanticCoverage:'exact'},expressionCandidates:[{surfaceForm:'borrow',expressionType:'word',languageTag:'en',relation:'realizes',semanticCoverage:'exact'}],confirmExpression:true,transcript:[{messageId:id(),role:'learner',body:'这里强调临时使用并归还。',occurredAt:'2026-09-16T01:01:00.000Z'}],provenance:{provider:'fixture',model:'fixture',promptVersion:'v1'},semanticPolicyVersion:'fixture-v1'});
+  const completed=await gateway.completeClarificationDraft({operationId:id(),intakeId:queued.intakeId,source:await gateway.captureClarificationSource('intake',queued.intakeId),context:slow.context!,languageContext:{supportLanguageTag:'zh-CN',targetLanguageTag:'en'},focus:null,sense:{proposedSenseKey:'borrow-temporarily',coreMeaningFocus:semanticSpec.coreMeaningFocus,prototypeScenes:semanticSpec.prototypeScenes,includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[],unresolvedQuestions:[]},expression:{surfaceForm:'borrow',expressionType:'word',languageTag:'en',relation:null,semanticCoverage:null},expressionCandidates:[{surfaceForm:'borrow',expressionType:'word',languageTag:'en',relation:null,semanticCoverage:null}],confirmExpression:true,transcript:[{messageId:id(),role:'learner',body:'这里强调临时使用并归还。',occurredAt:'2026-09-16T01:01:00.000Z'}],provenance:{provider:'fixture',model:'fixture',promptVersion:'v1'},semanticPolicyVersion:'fixture-v1'});
   assert.equal((await api.worldReadRepository.inbox()).items.length,0);
   const slowDetail=await api.worldReadRepository.detail(completed.personalMeaningId);
   const slowSource=slowDetail.sources[0];
@@ -155,8 +155,10 @@ try{
   mode='good';await prepare();
   assert.equal((await api.personalLearningSnapshot())[0].status,'ready');
   const learning=await api.readLearning();assert.equal(learning.targets.length,1);
-  assert.equal(learning.targets[0].identity.senseVersionId,slowSource.reference.senseVersionId);
-  assert.equal(learning.targets[0].identity.bindingVersionId,slowSource.reference.bindingVersionId);
+  assert.equal(learning.targets[0].identity.senseId,slowSource.reference.senseId);
+  assert.equal(learning.targets[0].identity.expressionId,slowSource.reference.expressionId);
+  assert.equal(learning.targets[0].curriculumMemberships[0].material.snapshot.provenance.senseVersionId,slowSource.reference.senseVersionId);
+  assert.equal(learning.targets[0].curriculumMemberships[0].material.snapshot.provenance.bindingVersionId,slowSource.reference.bindingVersionId);
   const saved=await api.readLibrary(async(tx:any)=>Object.fromEntries(await Promise.all(api.libraryTables.map(async(table:string)=>[table,await tx.entries(table)]))));
   api.validateBackupRows(saved);
   // A failed checkpoint is resumable, so its fixed input and consent require
@@ -247,7 +249,7 @@ try{
 
   // A complete payload from any entry bypasses Inbox mechanically and yields
   // the same learning-source shape; provenance remains data on that record.
-  const fast=canonicalIntake(true);fast.sense!.senseKey='borrow-temporarily';const accepted=await intake.submit(fast);
+  const fast=canonicalIntake(true);fast.sense!.reuseSense={senseId:slowSource.reference.senseId,senseVersionId:slowSource.reference.senseVersionId};const accepted=await intake.submit(fast);
   assert.equal(accepted.route,'fast_track');
   const fastDetail=await api.worldReadRepository.detail(accepted.personalMeaningId);
   const fastSource=fastDetail.sources[0];
@@ -370,14 +372,14 @@ try{
     contractVersion:'sensa-portable-semantic-declaration-v1' as const,
     sense:{senseId:flightSource.reference.senseId,senseVersionId:flightSource.reference.senseVersionId,senseKey:registry.sense.senseKey,versionNumber:registry.senseVersion.versionNumber,semanticPolicyVersion:registry.senseVersion.semanticPolicyVersion,semanticSpec:flightSource.semanticSpec},
     expression:{expressionId:registry.expression.expressionId,expressionVersionId:registry.expressionVersion.expressionVersionId,versionNumber:registry.expressionVersion.versionNumber,expressionType:registry.expression.expressionType,structure:registry.expressionVersion.structure},
-    binding:{senseExpressionBindingId:flightSource.reference.bindingId,bindingVersionId:flightSource.reference.bindingVersionId,versionNumber:registry.bindingVersion.versionNumber,relation:registry.binding.relation,semanticCoverage:registry.bindingVersion.semanticCoverage,registerLabel:registry.bindingVersion.registerLabel,usageConstraints:registry.bindingVersion.usageConstraints},
+    binding:{senseExpressionBindingId:id(),bindingVersionId:id(),versionNumber:1,relation:'realizes' as const,semanticCoverage:'exact' as const,registerLabel:registry.bindingVersion.registerLabel,usageConstraints:registry.bindingVersion.usageConstraints},
   }};
   let mixedRun=await api.startLearning(id(),flightTask.targetId,languageContext,20);
   mixedRun=await api.actLearning(id(),mixedRun.id,mixedRun.revision,{kind:'reveal'});
   const personalStep=await api.readLibrary(async(tx:any)=>(await tx.all('learningEvents')).find((event:any)=>event.runId===mixedRun.id&&event.kind==='reveal').detail.stepId);
   const publicationTemplate=directPublishedFixture().pack.portableOrigin.publications[0]!;
-  const installPublished=async(version:number,scene?:string)=>{
-    const fixture=portablePackageFixture({...portableOptions,version,...(scene?{scene}:{})}),archive=readSensaPortableLightweightPackage(fixture.bytes);
+  const installPublished=async(version:number,scene?:string,semanticDeclaration=portableOptions.semanticDeclaration)=>{
+    const fixture=portablePackageFixture({...portableOptions,semanticDeclaration,version,...(scene?{scene}:{})}),archive=readSensaPortableLightweightPackage(fixture.bytes);
     const publication={...publicationTemplate,book:{...publicationTemplate.book,bookVersionId:id(),versionNumber:version},contentRelease:{...publicationTemplate.contentRelease,contentReleaseId:id(),versionNumber:version},member:{packageId:portableOptions.packageId,version}};
     return (await api.installPublishedPortableBookMembers([{bytes:fixture.bytes,archive,publication}]))[0];
   };
@@ -395,6 +397,23 @@ try{
   assert(Object.values(mixedParticipant.presentedMaterials).some((reference:any)=>mixedParticipant.materializations[reference].snapshot.provenance.packageKey===installedV3.key));
   mixedRows.packageCache=[];api.validateBackupRows(mixedRows);
   await api.actLearning(id(),mixedSaved.id,mixedSaved.revision,{kind:'rate',rating:'good'});
+
+  // Source versions can advance without creating another memory identity.
+  const beforeRevision=(await api.readLearning()).targets.find((target:any)=>target.id===flightTask.targetId),newDeclaration={...portableOptions.semanticDeclaration,
+    sense:{...portableOptions.semanticDeclaration.sense,senseVersionId:id(),versionNumber:2,semanticSpec:{...flightSource.semanticSpec,coreMeaningFocus:'暂时使用他人的东西，随后归还。'}},
+    expression:{...portableOptions.semanticDeclaration.expression,expressionVersionId:id(),versionNumber:2},
+    binding:{...portableOptions.semanticDeclaration.binding,bindingVersionId:id(),versionNumber:2}};
+  const revisedPackage=await installPublished(4,'临时借用，约好之后归还。',newDeclaration);await api.enrollPackage(id(),revisedPackage.key,languageContext);
+  const afterRevision=(await api.readLearning()).targets.find((target:any)=>target.id===flightTask.targetId);
+  for(const field of ['id','retentionId','identity','startedAt','completedAt','memory','memoryRevision'])assert.deepEqual(afterRevision[field],beforeRevision[field],`${field} is stable across source wording/version edits`);
+  const revisedMember=afterRevision.curriculumMemberships.find((member:any)=>member.packageKey===revisedPackage.key);
+  assert.equal(revisedMember.sourcePin.expressionVersionId,newDeclaration.expression.expressionVersionId);
+  assert.equal(revisedMember.sourcePin.senseVersionId,newDeclaration.sense.senseVersionId);
+  const corruptionRows=await api.readLibrary(async(tx:any)=>Object.fromEntries(await Promise.all(api.libraryTables.map(async(table:string)=>[table,await tx.entries(table)]))));
+  const forgedMember=structuredClone(corruptionRows);forgedMember.learningTargets.find((row:any)=>row.key===flightTask.targetId).value.curriculumMemberships.find((member:any)=>member.packageKey===revisedPackage.key).material.snapshot.provenance.expressionVersionId=id();
+  assert.throws(()=>api.validateBackupRows(forgedMember),'material cannot rewrite an admitted expression version');
+  const forgedCache=structuredClone(corruptionRows);forgedCache.packageCache.find((row:any)=>row.key===revisedPackage.key).value.content.entries[0].expressionId=id();
+  assert.throws(()=>api.validateBackupRows(forgedCache),'publication identity cannot change on restore');
 
   // Language roles are frozen into requests and prompts, not inferred from UI locale.
   const spanish={supportLanguageTag:'zh-CN',targetLanguageTag:'es'};
@@ -430,7 +449,7 @@ try{
   assert(historicalBefore.learningTargets.some((row:any)=>row.value.memory),'this is actual saved learning, not empty-table no-cascade evidence');
   const correctionSeed=await api.worldReadRepository.correction(completed.personalMeaningId,slowSource.reference.personalMeaningAlignmentId),correctionId=id();
   const correctedSense={...correctionSeed.payload.sense,senseKey:null,wordingSource:'learner_authored',resolutionProvenance:{resolverKind:'learner',provider:'sensa-web-manual',model:null,policyVersion:null,sourceReferenceIds:[]},semanticSpec:{...correctionSeed.payload.sense.semanticSpec,coreMeaningFocus:'把自己的物品暂时交给别人使用，之后收回。'}};
-  await gateway.correctPersonalMeaning({operationId:correctionId,personalMeaningId:completed.personalMeaningId,personalMeaningAlignmentId:slowSource.reference.personalMeaningAlignmentId,source:correctionSeed.source,payload:{...correctionSeed.payload,operationId:correctionId,acceptance:{mode:'learner_direct'},sense:correctedSense,expression:{...correctionSeed.payload.expression,surfaceForm:'lend',occurrence:{...correctionSeed.payload.expression.occurrence,surfaceForm:'lend'}}}});
+  await gateway.correctPersonalMeaning({operationId:correctionId,senseEdit:'different_meaning',personalMeaningId:completed.personalMeaningId,personalMeaningAlignmentId:slowSource.reference.personalMeaningAlignmentId,source:correctionSeed.source,payload:{...correctionSeed.payload,operationId:correctionId,acceptance:{mode:'learner_direct'},sense:correctedSense,expression:{...correctionSeed.payload.expression,surfaceForm:'lend',occurrence:{...correctionSeed.payload.expression.occurrence,surfaceForm:'lend'}}}});
   const historicalAfter=await api.readLibrary(async(tx:any)=>Object.fromEntries(await Promise.all(api.libraryTables.map(async(table:string)=>[table,await tx.entries(table)]))));
   for(const table of api.libraryTables as string[])if(!table.startsWith('semantic')&&table!=='meta')assert.deepEqual(historicalAfter[table],historicalBefore[table],`${table} is independent of personal correction`);
   api.validateBackupRows(historicalAfter);

@@ -1,7 +1,7 @@
 # Sensa product context
 
 > Status: canonical ubiquitous language  
-> Updated: 2026-10-08
+> Updated: 2026-10-11
 > Domain document index: [`docs/sensa/README.md`](docs/sensa/README.md)
 
 Sensa is a sense-first language-learning product. Its durable learning identity
@@ -78,6 +78,9 @@ reproduce through one or more expressions. It can come from curated content or
 confirmed on-demand Sense Construction; it is not a word, translation label or
 learner's private experience. It has no learner-relative Target or Support Language
 role and may bind expressions across languages only when the semantic boundary holds.
+For a private connection, a confirmed natural-language description is sufficient;
+prototypes and boundary analysis are added when needed. Identity is a stable UUID,
+never a description hash. Reuse is explicit; ordinary wording revisions retain it.
 
 **Sense Version**:  
 The immutable semantic contract for one Sense, including its focus, boundary
@@ -87,6 +90,8 @@ and expression bindings. Published Packages and on-demand materializations pin i
 A versioned relation from one Sense to a typed word, phrase, construction or
 utterance in one language. It records how that expression covers the Sense and
 never asserts a reversible translation equality.
+Private bindings may leave global relation and coverage unasserted. Contextual
+Acceptance records the learner's confirmed use; it does not imply global exactness.
 
 **Sense Proposal**:
 An LLM-generated, revisable semantic specification offered during Sense

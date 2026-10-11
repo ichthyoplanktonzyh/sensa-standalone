@@ -55,7 +55,7 @@ try{
     referenceFacts:[],requestedAt:'2026-09-01T00:00:00.000Z',
   }));
   assert.equal(material.status,'ready');
-  const entry={senseId:id(),senseVersionId:id(),bindingId:id(),bindingVersionId:id(),expression:'tomarse su tiempo',meaning:'从容地花时间做一件事。',content:material.materialization.content};
+  const entry={senseId:id(),senseVersionId:id(),expressionId:id(),expressionVersionId:id(),bindingId:id(),bindingVersionId:id(),expression:'tomarse su tiempo',meaning:'从容地花时间做一件事。',content:material.materialization.content};
   const pack=(over:Record<string,unknown>={})=>({format:'sensa-installed-learning-content-v1',targetLanguage:'es',supportLanguage:'zh-CN',entries:[entry],...over});
 
   // A package says which languages its own text is in; the two roles may be
@@ -75,8 +75,11 @@ try{
   assert.notEqual(authored.targetLanguage,authored.supportLanguage);
 
   // The Target owns the target language; its Route membership owns Support.
-  const membership={id:'membership-es',packageKey:'fixture-package',assurancePackageKey:null,status:'active',provenance:material.materialization.snapshot.provenance,languageContext:{languageRouteId:id(),languageRouteRevision:1,targetLanguageTag:'es',supportLanguageTag:'zh-CN'},material:material.materialization};
-  const localTarget={id:'fixture',retentionId:'fixture-retention',identity:{senseId:entry.senseId,senseVersionId:entry.senseVersionId,senseExpressionBindingId:entry.bindingId,bindingVersionId:entry.bindingVersionId},curriculumMemberships:[membership],expression:'tomarse su tiempo',policyAssignment:{assignmentId:'fixture-assignment',revision:1,scope:'system_default',profileId:'lightweight',assignedByOperationId:'fixture-operation',assignedAt:'2026-09-01T00:00:00.000Z',provenance:{}},committedPolicy:null,planningOverrides:[],targetLanguageTag:'es',introducedLanguageRouteId:null,createdAt:'2026-09-01T00:00:00.000Z',startedAt:null,completedAt:null,memory:null,memoryRevision:0,relearnAt:null,relearningState:null};
+  const materialization=structuredClone(material.materialization);
+  const sourcePin={senseId:entry.senseId,senseVersionId:entry.senseVersionId,expressionId:entry.expressionId,expressionVersionId:entry.expressionVersionId,bindingId:entry.bindingId,bindingVersionId:entry.bindingVersionId};
+  materialization.snapshot.provenance={...materialization.snapshot.provenance,...sourcePin};
+  const membership={id:'membership-es',packageKey:'fixture-package',assurancePackageKey:null,status:'active',sourcePin,provenance:materialization.snapshot.provenance,languageContext:{languageRouteId:id(),languageRouteRevision:1,targetLanguageTag:'es',supportLanguageTag:'zh-CN'},material:materialization};
+  const localTarget={id:'fixture',retentionId:'fixture-retention',identity:{senseId:entry.senseId,expressionId:entry.expressionId},curriculumMemberships:[membership],expression:'tomarse su tiempo',policyAssignment:{assignmentId:'fixture-assignment',revision:1,scope:'system_default',profileId:'lightweight',assignedByOperationId:'fixture-operation',assignedAt:'2026-09-01T00:00:00.000Z',provenance:{}},committedPolicy:null,planningOverrides:[],targetLanguageTag:'es',introducedLanguageRouteId:null,createdAt:'2026-09-01T00:00:00.000Z',startedAt:null,completedAt:null,memory:null,memoryRevision:0,relearnAt:null,relearningState:null};
   const localView=api.projectLearningTarget(localTarget as never,membership as never,'ready',Date.now()).presentation;
   assert.equal(localView.targetLanguageTag,'es','an enrolled target view names the package language');
   assert.equal(localView.supportLanguageTag,'zh-CN');

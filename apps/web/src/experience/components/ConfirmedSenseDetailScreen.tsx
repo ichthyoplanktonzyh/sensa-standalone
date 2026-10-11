@@ -39,13 +39,13 @@ export interface ConfirmedSenseDetailScreenProps {
   learningControls?: (detail: NonNullable<ReturnType<typeof useJourneyDetail>['detail']>, alignment: JourneyAlignmentView) => ReactNode;
 }
 
-const relationLabels: Record<SensaExpressionBindingRelation, string> = {
+const relationLabels: Record<NonNullable<SensaExpressionBindingRelation>, string> = {
   get realizes() { return uiText('expressesThisMeaning'); },
   get approximates() { return uiText('approximatesThisMeaning'); },
   get evokes() { return uiText('evokesThisMeaning'); },
 };
 
-const coverageLabels: Record<SensaSemanticCoverage, string> = {
+const coverageLabels: Record<NonNullable<SensaSemanticCoverage>, string> = {
   get exact() { return uiText('exactCoverage'); },
   get broader() { return uiText('broaderScope'); },
   get narrower() { return uiText('narrowerScope'); },
@@ -93,7 +93,7 @@ const BindingSummary = ({ alignment }: { alignment: JourneyAlignmentView }) => {
                 <strong className="font-language text-lg text-fg-primary">{binding.surfaceForm}</strong>
                 <span className="text-metadata text-fg-secondary">{expressionTypeLabels[binding.expressionType]} · {interfaceLanguageDisplayName(binding.languageTag,locale)}</span>
               </div>
-              <small className="mt-2 block text-metadata text-fg-secondary">{relationLabels[binding.relation]} · {coverageLabels[binding.semanticCoverage]}</small>
+              {(binding.relation||binding.semanticCoverage)&&<small className="mt-2 block text-metadata text-fg-secondary">{binding.relation&&relationLabels[binding.relation]}{binding.relation&&binding.semanticCoverage&&' · '}{binding.semanticCoverage&&coverageLabels[binding.semanticCoverage]}</small>}
             </li>
           ))}
         </ul>

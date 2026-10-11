@@ -23,7 +23,7 @@
   "contextRequired": "状況または原文を入力してください。",
   "occurrenceRequired": "文脈内の表現の正確な位置を指定してください。",
   "languageRequired": "表現の言語を選択してください。",
-  "meaningRequired": "意味と典型的な場面を入力してください。",
+  "meaningRequired": "この文脈での意味を入力してください。",
   "invalid": "入力内容を確認してください。",
   "draftError": "下書きを端末に保存できません。ページを開いたまま再試行してください。",
   "saveError": "保存結果を確認できませんでした。内容は保持されています。再試行してください。",
@@ -73,7 +73,12 @@
     "all": "すべての内容",
     "unconfirmed": "結果を確認できませんでした。内容を再読み込みしたので、確認してから再試行してください。",
     "savedReadFailed": "変更は保存されましたが、内容を再読み込みできません。読み込みを再試行してください。",
-    "retryRead": "読み込みを再試行"
+    "retryRead": "読み込みを再試行",
+    "editIntent": "編集の目的",
+    "wordingOnly": "表現だけを変更",
+    "differentMeaning": "別の意味に変更",
+    "wordingHint": "この意味と学習の進捗を保持します。",
+    "publishedWordingHint": "個人の説明として保存し、公開された定義は保持します。"
   },
   "content": {
     "manual": "手動で作成",

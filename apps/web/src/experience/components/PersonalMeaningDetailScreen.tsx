@@ -118,13 +118,13 @@ const expressionTypeLabels: Record<SensaExpressionType, string> = {
   get utterance_strategy() { return uiText('expressionStrategy'); },
 };
 
-const relationLabels: Record<SensaExpressionBindingRelation, string> = {
+const relationLabels: Record<NonNullable<SensaExpressionBindingRelation>, string> = {
   get realizes() { return uiText('expressesThisMeaning'); },
   get approximates() { return uiText('approximatesThisMeaning'); },
   get evokes() { return uiText('evokesThisMeaning'); },
 };
 
-const coverageLabels: Record<SensaSemanticCoverage, string> = {
+const coverageLabels: Record<NonNullable<SensaSemanticCoverage>, string> = {
   get exact() { return uiText('matchingScope'); },
   get broader() { return uiText('broaderScope'); },
   get narrower() { return uiText('narrowerScope'); },
@@ -463,8 +463,7 @@ const ConfirmedExpressionDetail = ({
           <p className="text-sm text-fg-secondary">{uiText('expression')}</p>
           <h2 className="mt-2 text-3xl font-semibold">{expression.surfaceForm}</h2>
           <p className="mt-2 text-sm text-fg-tertiary">
-            {expressionTypeLabels[expression.expressionType]} · {relationLabels[expression.relation]} ·{' '}
-            {coverageLabels[expression.semanticCoverage]}
+            {expressionTypeLabels[expression.expressionType]}{expression.relation&&<> · {relationLabels[expression.relation]}</>}{expression.semanticCoverage&&<> · {coverageLabels[expression.semanticCoverage]}</>}
           </p>
         </div>
         {focus && (

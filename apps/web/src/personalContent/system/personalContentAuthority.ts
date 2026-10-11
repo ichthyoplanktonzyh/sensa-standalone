@@ -1,3 +1,4 @@
+import {materialSourcePin,sameLearningSourcePin} from '../../learning/runtime/learningIdentity';
 import { z } from 'zod';
 
 import type { LibraryTransaction } from '../../data/library/store';
@@ -87,15 +88,13 @@ const assertRecord = async (
       uuid.parse(record.learningTargetId);
       uuid.parse(record.languageRouteId);
       uuid.parse(record.senseId);
-      uuid.parse(record.senseVersionId);
-      uuid.parse(record.bindingVersionId);
+      uuid.parse(record.expressionId);
       z.number().int().positive().parse(record.currentRevision);
       timestamp.parse(record.createdAt);
       timestamp.parse(record.updatedAt);
       const target = await tx.get<any>('learningTargets', record.learningTargetId);
       if (!target || target.identity?.senseId !== record.senseId
-        || target.identity?.senseVersionId !== record.senseVersionId
-        || target.identity?.bindingVersionId !== record.bindingVersionId) {
+        || target.identity?.expressionId !== record.expressionId) {
         throw new Error('localFlow.annotationInvalid');
       }
       const memberships = new Set<string>(target.curriculumMemberships
@@ -103,7 +102,7 @@ const assertRecord = async (
           membership.languageContext.languageRouteId === record.languageRouteId
         ))
         .map((membership: any) => membership.id));
-      for(const snapshot of sceneHistoryRecords(record))for(const revision of snapshot.revisions)if(!memberships.has(revision.curriculumMembershipId))throw new Error('localFlow.annotationInvalid');
+      for(const snapshot of sceneHistoryRecords(record))for(const revision of snapshot.revisions)if(!memberships.has(revision.curriculumMembershipId)||!sameLearningSourcePin(revision.sourcePin,materialSourcePin(target.curriculumMemberships.find((row:any)=>row.id===revision.curriculumMembershipId).material)))throw new Error('localFlow.annotationInvalid');
       for(const snapshot of sceneHistoryRecords(record))if(snapshot.acceptedPersonalMeaningId)assertSceneAcceptance(snapshot,await tx.get('semanticMeanings',snapshot.acceptedPersonalMeaningId));
       if (record.revisions.length !== record.currentRevision
         || new Set(record.revisions.map((revision) => revision.revisionId)).size
@@ -134,8 +133,7 @@ const assertRecord = async (
           'learningTargetId',
           'languageRouteId',
           'senseId',
-          'senseVersionId',
-          'bindingVersionId',
+          'expressionId',
           'createdAt',
         ] as const) {
           if (previous[field] !== record[field]) throw new Error('localFlow.annotationInvalid');

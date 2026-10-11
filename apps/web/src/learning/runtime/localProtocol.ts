@@ -1,3 +1,4 @@
+import {materialSourcePin,type LearningSourcePin} from './learningIdentity';
 import type {
   InstalledLearningContent,
   SensaFormalPinnedLanguageContext,
@@ -24,9 +25,7 @@ export interface LocalLearningMaterialization {
 export interface LocalLearningTargetIdentity {
   readonly learnerUserId:string;
   readonly senseId:string;
-  readonly senseVersionId:string;
-  readonly senseExpressionBindingId:string;
-  readonly bindingVersionId:string;
+  readonly expressionId:string;
   readonly targetLanguageTag:string;
 }
 
@@ -42,6 +41,7 @@ export interface LocalCurriculumMembership {
   readonly languageContext:SensaFormalPinnedLanguageContext;
   readonly sourceKind:'sense_learning_package'|'personal_meaning_alignment'|'stable_sense';
   readonly provenance:Readonly<Record<string,unknown>>;
+  readonly sourcePin:LearningSourcePin;
   readonly packageKey:string|null;
   readonly assurancePackageKey?:string;
   readonly material:LocalLearningMaterialization;
@@ -481,14 +481,12 @@ export function assertLocalTargetMaterialIdentity(
   target:LocalLearningTarget,
   material:LocalLearningMaterialization,
 ):void{
-  const provenance=material.snapshot.provenance;
+  const provenance=materialSourcePin(material);
   if(
     material.snapshot.learnerUserId!==target.identity.learnerUserId
     || material.snapshot.learningTargetId!==target.id
     || provenance.senseId!==target.identity.senseId
-    || provenance.senseVersionId!==target.identity.senseVersionId
-    || provenance.bindingId!==target.identity.senseExpressionBindingId
-    || provenance.bindingVersionId!==target.identity.bindingVersionId
+    || provenance.expressionId!==target.identity.expressionId
   )throw new Error('localFlow.resourceInvalid');
 }
 

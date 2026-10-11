@@ -145,6 +145,8 @@ export const sensaIntakeExpressionSchema = z
 export const sensaIntakeSenseSchema = z
   .object({
     senseKey: nonEmpty.max(500).nullable(),
+    /** Explicit selection; equal wording or a producer key does not imply identity. */
+    reuseSense: z.object({senseId: uuid, senseVersionId: uuid}).strict().optional(),
     semanticSpec: sensaSenseSemanticSpecSchema,
     wordingSource: sensaIntakeWordingSourceSchema,
     /** Who resolved the Sense. This is independent from both Context source

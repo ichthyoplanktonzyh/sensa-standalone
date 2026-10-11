@@ -24,9 +24,9 @@ const input = (): SemanticAgentTurnInput => ({
 });
 
 const candidate = {
-  context: '上班前给植物浇水。', sense: '给植物供水的动作。', senseKey: 'give_plant_water',
+  context: '上班前给植物浇水。', sense: '给植物供水的动作。',
   scene: '上班前，学习者给家里的植物浇水。', expression: 'water', expressionType: 'word',
-  relation: 'realizes', coverage: 'exact', reason: '这个词可作动词表达给植物浇水。',
+  reason: '这个词可作动词表达给植物浇水。',
 };
 
 test('organize_answer stages a source-grounded candidate without changing learner edits', () => {
@@ -53,6 +53,15 @@ test('reply_to_learner announces a staged expression and explains changes', () =
   assert.equal(parseLearnerReply({ text: 'water 比较日常；这里需要更正式的动词。所以可以说 irrigate。' }, answer, 'water'),
     'water 比较日常；这里需要更正式的动词。所以可以说 irrigate。');
   assert.equal(parseLearnerReply({ text: '你想说的是给植物浇水吗？' }, null, 'water'), '你想说的是给植物浇水吗？');
+});
+
+test('a private proposal uses host identity and makes no global coverage claim or invented prototype',()=>{
+ const {scene:_scene,...minimal}=candidate;
+ const answer=parseOrganizedAnswer(minimal,input()),working=workingSetForAnswer(answer,input());
+ assert.deepEqual(working.sense?.prototypeScenes,[]);
+ assert.match(working.sense!.proposedSenseKey,/^personal-[0-9a-f-]{36}$/u);
+ assert.equal(working.expression?.relation,null);assert.equal(working.expression?.semanticCoverage,null);
+ assert.throws(()=>parseOrganizedAnswer({...minimal,coverage:'exact'},input()),/Unrecognized/u);
 });
 
 test('private clarity admits a complete tuple only in a validated final teacher reply',()=>{
@@ -82,7 +91,7 @@ test('reuse selects the looked-up immutable contract without forcing it through 
   const match={...reference,senseKey:'existing-key-'.repeat(40),semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1' as const,
     coreMeaningFocus:'已确认的意义'.repeat(750),prototypeScenes:[{summary:'已确认的原型'.repeat(750),participantRoles:[],states:[],directionOrCausality:null}],
     includedCases:[],excludedCases:['完整边界'],neighborContrasts:[],openQuestions:[]},expressions:[{expression:'water',languageTag:'en'}],expressionsTruncated:false};
-  const {sense:_sense,senseKey:_key,scene:_scene,...fields}=candidate;
+  const {sense:_sense,scene:_scene,...fields}=candidate;
   const result=parseTeacherTurn({reply:'可以说 water。',clarity:{context:true,sense:true,expression:true},proposal:{...fields,reuseSense:reference}},turn,[match]);
   const working=workingSetForAnswer(result.proposal!,turn,result.reused);
   assert.equal(working.sense!.proposedSenseKey,match.senseKey);assert.equal(working.sense!.coreMeaningFocus,match.semanticSpec.coreMeaningFocus);

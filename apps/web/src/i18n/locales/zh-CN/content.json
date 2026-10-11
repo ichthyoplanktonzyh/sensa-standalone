@@ -23,7 +23,7 @@
   "contextRequired": "请填写情境或原句。",
   "occurrenceRequired": "请标出情境中这条表达的准确位置。",
   "languageRequired": "请选择表达的语言。",
-  "meaningRequired": "请填写意思和典型使用场景。",
+  "meaningRequired": "写下这个情境中的意思。",
   "invalid": "请检查填写的内容。",
   "draftError": "草稿暂时无法保存到本机，请保留页面后重试。",
   "saveError": "未能确认保存结果，内容已保留，请重试。",
@@ -73,7 +73,12 @@
     "all": "全部内容",
     "unconfirmed": "未能确认操作结果，已重读内容。请核对后重试。",
     "savedReadFailed": "操作已保存，但内容暂时无法重读。请重试读取。",
-    "retryRead": "重试读取"
+    "retryRead": "重试读取",
+    "editIntent": "编辑方式",
+    "wordingOnly": "只改表述",
+    "differentMeaning": "这是另一个意思",
+    "wordingHint": "保留这个意思及其学习进度。",
+    "publishedWordingHint": "保存为你的个人表述，保留原公开定义。"
   },
   "content": {
     "manual": "手动创建",

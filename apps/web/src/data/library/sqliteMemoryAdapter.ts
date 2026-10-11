@@ -292,7 +292,7 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
     const targets=new Map((await this.entries('learningTargets')).map(row=>[row.key,decodeBackupValue(JSON.parse(row.encodedValue)) as LocalLearningTarget]));
     return (await this.entries('learningRuns')).flatMap(row=>{const run=decodeBackupValue(JSON.parse(row.encodedValue)) as LocalLearningRun;if(!run.completedAt||run.completionKind==='wait_relearning')return [];
       return run.targetIds.map(targetId=>{const target=targets.get(targetId)!,participant=run.participants[targetId]!,material=localLastPresentedMaterial(participant),meaning=material?learningSupportMeaning(material.content.resources,participant.languageContext.supportLanguageTag):undefined;
-        return {recordId:`${run.id}:${targetId}`,targetId,expression:target.expression,languageTag:target.targetLanguageTag,...(typeof meaning==='string'?{meaning}:{}),occurredAt:run.targetCompletions?.[targetId]?.at??run.completedAt!,kind:run.purpose};});
+        return {recordId:`${run.id}:${targetId}`,targetId,expression:String(material.content.resources.find(resource=>resource.materialRoleKey==='target_expression')?.contentPayload.surface??''),languageTag:target.targetLanguageTag,...(typeof meaning==='string'?{meaning}:{}),occurredAt:run.targetCompletions?.[targetId]?.at??run.completedAt!,kind:run.purpose};});
     }).sort((left,right)=>right.occurredAt.localeCompare(left.occurredAt)||left.recordId.localeCompare(right.recordId));
   }
 

@@ -1,3 +1,4 @@
+import {stableLearningTargetId,materialSourcePin,sameLearningSourcePin} from '../../learning/runtime/learningIdentity';
 import {
   defaultSensaLanguageRouteCollection,
   sensaFormalPinnedLanguageContextSchema,
@@ -91,7 +92,7 @@ function assertDirectPublishedMembership(enrollment:LocalCurriculumEnrollment,ta
  if(!selection.publishedContent||selection.publishedContent.packageKey!==membership.packageKey||selection.publishedContent.archiveDigest!==archiveDigest
    ||membership.material.snapshot.provenance.packageKey!==membership.packageKey||membership.material.snapshot.provenance.packageDigest!==archiveDigest
    ||!backupEqual(membership.languageContext,enrollment.languageContext)
-   ||reference.senseId!==target.identity.senseId||reference.senseVersionId!==target.identity.senseVersionId||reference.bindingId!==target.identity.senseExpressionBindingId||reference.bindingVersionId!==target.identity.bindingVersionId
+   ||reference.senseId!==target.identity.senseId||reference.expressionId!==target.identity.expressionId||!sameLearningSourcePin(reference,materialSourcePin(membership.material))
    ||membership.id!==stableUuid(`local-curriculum-membership:${target.id}:${membership.languageContext.languageRouteId}:stable_sense:${enrollment.id}`))reject('Direct membership differs from the explicitly selected connection.');
 }
 function assertDirectGeneratedMembership(enrollment:LocalCurriculumEnrollment,target:LocalLearningTarget,membership:LocalLearningTarget['curriculumMemberships'][number],task:any,attempt:any):void{
@@ -99,7 +100,7 @@ function assertDirectGeneratedMembership(enrollment:LocalCurriculumEnrollment,ta
  assertDirectAttemptSource(attempt,task,selection,target.identity.learnerUserId);
  if(membership.sourceKind!=='stable_sense'||membership.packageKey!==null||membership.assurancePackageKey!==undefined||task.status!=='ready'||task.targetId!==target.id||task.curriculumMembershipId!==membership.id
    ||membership.provenance.kind!=='stable_sense'||provenance.kind!=='stable_sense'||membership.id!==stableUuid(`local-curriculum-membership:${target.id}:${membership.languageContext.languageRouteId}:stable_sense:${enrollment.id}`)
-   ||selection.reference.senseId!==target.identity.senseId||selection.reference.senseVersionId!==target.identity.senseVersionId||selection.reference.bindingId!==target.identity.senseExpressionBindingId||selection.reference.bindingVersionId!==target.identity.bindingVersionId
+   ||selection.reference.senseId!==target.identity.senseId||selection.reference.expressionId!==target.identity.expressionId||!sameLearningSourcePin(selection.reference,materialSourcePin(membership.material))
    ||membership.provenance.curriculumEnrollmentId!==enrollment.id||membership.provenance.sourceDigest!==selection.sourceDigest
    ||provenance.curriculumEnrollmentId!==enrollment.id||provenance.sourceDigest!==selection.sourceDigest||membership.material.snapshot.personalAnchorUseGrantIds.length
    ||!backupEqual(membership.languageContext,enrollment.languageContext)||attempt.taskId!==task.id||attempt.status!=='ready'
@@ -176,9 +177,9 @@ export function* assertLearningSystemStateSteps(input:LearningSystemStateInput):
   learningPolicyProfileRegistry.get(localTargetPolicy(target));
   const assignment=target.policyAssignment;
   uuid.parse(assignment.assignmentId);z.number().int().positive().parse(assignment.revision);timestamp.parse(assignment.assignedAt);learningPolicyProfileRegistry.get(assignment.profileId);
-  const identityFields=['learnerUserId','senseId','senseVersionId','senseExpressionBindingId','bindingVersionId','targetLanguageTag'] as const;
+  const identityFields=['learnerUserId','senseId','expressionId','targetLanguageTag'] as const;
   for(const field of identityFields)z.string().min(1).parse(target.identity[field]);
-  if(target.identity.learnerUserId!==identity.learnerId||target.identity.targetLanguageTag!==target.targetLanguageTag||target.id!==stableUuid(`sensa-learning-target:${identity.learnerId}:${target.identity.senseVersionId}:${target.identity.bindingVersionId}`)||target.retentionId!==stableUuid(`sensa-retention:${target.id}`))fail();
+  if(target.identity.learnerUserId!==identity.learnerId||target.identity.targetLanguageTag!==target.targetLanguageTag||target.id!==stableLearningTargetId(identity.learnerId,target.identity.senseId,target.identity.expressionId)||target.retentionId!==stableUuid(`sensa-retention:${target.id}`))fail();
   if(target.committedPolicy){const commitment=target.committedPolicy;uuid.parse(commitment.commitmentId);uuid.parse(commitment.committedByProtocolRunId);z.number().int().positive().parse(commitment.revision);timestamp.parse(commitment.committedAt);const profile=learningPolicyProfileRegistry.get(commitment.profileId,commitment.profileVersion);if(!target.startedAt||commitment.assignmentId!==assignment.assignmentId||commitment.assignmentRevision!==assignment.revision||profile.profileId!==commitment.profileId)fail();}else if(target.startedAt)fail();
   z.array(z.object({kind:z.literal('declared_mastery'),source:z.literal('learner'),operationId:uuid,createdAt:timestamp}).strict()).max(1).parse(target.planningOverrides);
   for(const override of target.planningOverrides){const operation=operationInput(override.operationId);if(operation&&(operation.kind!=='learning.declareMastery'||operation.input.targetId!==target.id||operation.input.active!==true||operation.input.at!==override.createdAt))fail();}
@@ -190,8 +191,8 @@ export function* assertLearningSystemStateSteps(input:LearningSystemStateInput):
    assertMaterialAdmissionTime(membership.material,membership,membership.packageKey?undefined:requireRow('contentAttempts',membership.material.snapshot.provenance.attemptId));
    learningSupportMeaning(membership.material.content.resources,context.supportLanguageTag);
    const provenance=membership.material.snapshot.provenance;
-   if(membership.material.snapshot.learnerUserId!==identity.learnerId||membership.material.snapshot.learningTargetId!==target.id||provenance.senseId!==target.identity.senseId||provenance.senseVersionId!==target.identity.senseVersionId||provenance.bindingId!==target.identity.senseExpressionBindingId||provenance.bindingVersionId!==target.identity.bindingVersionId)fail();
-   if(target.expression!==membership.material.content.resources.find((resource:any)=>resource.materialRoleKey==='target_expression')?.contentPayload.surface)fail();
+   if(!sameLearningSourcePin(membership.sourcePin,materialSourcePin(membership.material)))fail();
+   assertLocalTargetMaterialIdentity(target,membership.material);
    if(membership.sourceKind==='sense_learning_package'||membership.sourceKind==='stable_sense'&&membership.packageKey!==null){
     if(!membership.packageKey)fail();
     const enrollment=requireRow('curriculumEnrollments',z.string().uuid().parse(membership.provenance.curriculumEnrollmentId));
@@ -200,7 +201,7 @@ export function* assertLearningSystemStateSteps(input:LearningSystemStateInput):
     assertPublishedCurriculumSource(target,membership,enrollment,installation);
     if(membership.sourceKind==='stable_sense')assertDirectPublishedMembership(enrollment,target,membership,installation.artifact.digest);
     const pack=maps.packageCache.get(membership.packageKey),entry=pack?.content.entries.find((candidate:any)=>candidate.senseVersionId===provenance.senseVersionId&&candidate.bindingVersionId===provenance.bindingVersionId);
-    if(pack&&(!entry||pack.content.targetLanguage!==context.targetLanguageTag||pack.content.supportLanguage!==context.supportLanguageTag||!backupEqual(entry.content,baseContentBeforeSupplement(membership.material,context.supportLanguageTag))||entry.assurancePackageKey!==membership.assurancePackageKey))fail();
+    if(pack&&(!entry||!sameLearningSourcePin(entry,materialSourcePin(membership.material))||pack.content.targetLanguage!==context.targetLanguageTag||pack.content.supportLanguage!==context.supportLanguageTag||!backupEqual(entry.content,baseContentBeforeSupplement(membership.material,context.supportLanguageTag))||entry.assurancePackageKey!==membership.assurancePackageKey))fail();
    }else if(membership.sourceKind==='stable_sense'){
     const attempt=requireRow('contentAttempts',provenance.attemptId),task=requireRow('personalLearning',attempt.taskId);
     const enrollment=curriculumEnrollmentSchema.parse(requireRow('curriculumEnrollments',task.source.enrollmentId));
@@ -385,7 +386,7 @@ export function* assertLearningSystemStateSteps(input:LearningSystemStateInput):
      const provenance=material.snapshot.provenance,packageKey=provenance.packageKey?z.string().min(1).parse(provenance.packageKey):null;
      const attempt=packageKey?undefined:requireRow('contentAttempts',z.string().uuid().parse(provenance.attemptId)),task=attempt?requireRow('personalLearning',attempt.taskId):undefined;
      const source=(packageKey?publishedMaterialMembership(target,material,participant.languageContext):target.curriculumMemberships.find((candidate:LocalLearningTarget['curriculumMemberships'][number])=>candidate.id===task?.curriculumMembershipId))??fail();
-     assertMaterialAdmissionTime(material,source,attempt);
+     assertMaterialAdmissionTime(material,source,attempt);if(!sameLearningSourcePin(source.sourcePin,materialSourcePin(material))||task&&!sameLearningSourcePin(task.source,materialSourcePin(material)))fail();
      if(packageKey&&provenance.packageDigest!==packageInstallationSchema.parse(requireRow('packageInstallations',packageKey)).artifact.digest)fail();
     }
     unreplayedTargets.add(id);
@@ -405,17 +406,18 @@ export function* assertLearningSystemStateSteps(input:LearningSystemStateInput):
    uuid.parse(participant.protocolRunId);if(knownProtocolRunIds.has(participant.protocolRunId))fail();knownProtocolRunIds.add(participant.protocolRunId);
    const validateRunMaterial=(material:ReturnType<typeof runBaselineMaterial>)=>{
     validateLightweightInitialMaterialization(material);const materialProvenance=material.snapshot.provenance as any;
-    if(material.snapshot.learningTargetId!==id||material.snapshot.learnerUserId!==identity.learnerId||material.snapshot.protocolPurpose!==saved.purpose||materialProvenance.senseId!==target.identity.senseId||materialProvenance.senseVersionId!==target.identity.senseVersionId||materialProvenance.bindingId!==target.identity.senseExpressionBindingId||materialProvenance.bindingVersionId!==target.identity.bindingVersionId)fail();
+    assertLocalTargetMaterialIdentity(target,material);if(material.snapshot.protocolPurpose!==saved.purpose)fail();
     if(materialProvenance.packageKey){
      const materialPackageKey=z.string().min(1).parse(materialProvenance.packageKey),pack=maps.packageCache.get(materialPackageKey),installation=packageInstallationSchema.parse(requireRow('packageInstallations',materialPackageKey));
      const source=publishedMaterialMembership(target,material,participant.languageContext);if(!source)fail();
      assertMaterialAdmissionTime(material,source!);
+     if(!sameLearningSourcePin(source!.sourcePin,materialSourcePin(material)))fail();
      if(materialProvenance.packageDigest!==installation.artifact.digest)fail();
-     if(pack){const entry=pack.content.entries.find((candidate:any)=>candidate.senseVersionId===materialProvenance.senseVersionId&&candidate.bindingVersionId===materialProvenance.bindingVersionId);if(!entry||!backupEqual(entry.content,baseContentBeforeSupplement(material,participant.languageContext.supportLanguageTag)))fail();}
+     if(pack){const entry=pack.content.entries.find((candidate:any)=>candidate.senseVersionId===materialProvenance.senseVersionId&&candidate.bindingVersionId===materialProvenance.bindingVersionId);if(!entry||!sameLearningSourcePin(entry,materialSourcePin(material))||!backupEqual(entry.content,baseContentBeforeSupplement(material,participant.languageContext.supportLanguageTag)))fail();}
      else if(saved.protocolBinding.runtimeAdapterId!=='lightweight')fail();
     }else{
      const attempt=requireRow('contentAttempts',materialProvenance.attemptId),task=requireRow('personalLearning',attempt.taskId);
-     const source=target.curriculumMemberships.find(member=>member.id===task.curriculumMembershipId)??fail();assertMaterialAdmissionTime(material,source,attempt);
+     const source=target.curriculumMemberships.find(member=>member.id===task.curriculumMembershipId)??fail();assertMaterialAdmissionTime(material,source,attempt);if(!sameLearningSourcePin(task.source,materialSourcePin(material)))fail();
      if(task.targetId!==id||!target.curriculumMemberships.some(member=>member.id===task.curriculumMembershipId)||!samePinnedDirection(attempt.fixedInput?.languageContext,participant.languageContext)||attempt.status!=='ready'||!backupEqual(attempt.validation?.content,baseContentBeforeSupplement(material,participant.languageContext.supportLanguageTag)))fail();
      if(material===runBaselineMaterial(participant)&&task.curriculumMembershipId!==participant.curriculumMembershipId)fail();
     }
@@ -523,11 +525,11 @@ export type LearningSystemTransitionInput={
 };
 
 function assertScopeMember(member:LocalStudyScopeMember,scope:LocalStudyScope,target:LocalLearningTarget):void{
- if(member.targetId!==target.id||member.retentionTargetId!==target.retentionId||member.senseId!==target.identity.senseId||member.senseVersionId!==target.identity.senseVersionId||member.bindingId!==target.identity.senseExpressionBindingId||member.bindingVersionId!==target.identity.bindingVersionId||member.policy.assignmentId!==target.policyAssignment.assignmentId||member.policy.assignmentRevision>target.policyAssignment.revision)reject('Study Scope Target identity is inconsistent.');
+ if(member.targetId!==target.id||member.retentionTargetId!==target.retentionId||member.senseId!==target.identity.senseId||member.expressionId!==target.identity.expressionId||member.policy.assignmentId!==target.policyAssignment.assignmentId||member.policy.assignmentRevision>target.policyAssignment.revision)reject('Study Scope Target identity is inconsistent.');
  const profile=learningPolicyProfileRegistry.get(member.policy.profileId as LearningPolicyId,member.policy.profileVersion);
  for(const source of member.sources){
   const original=requireFact(target.curriculumMemberships.find(item=>item.id===source.membershipId),'Study Scope source is missing.');
-  if(original.sourceKind!==source.sourceKind||original.packageKey!==source.packageKey||original.revision<source.membershipRevision||!sameLearningSessionDirection(original.languageContext,scope.languageContext)||source.enrollmentId!==(typeof original.provenance.curriculumEnrollmentId==='string'?original.provenance.curriculumEnrollmentId:null)||original.revision===source.membershipRevision&&!backupEqual(original.provenance,source.provenance))reject('Study Scope source identity is inconsistent.');
+  if(!sameLearningSourcePin(source.sourcePin,materialSourcePin(original.material))||original.sourceKind!==source.sourceKind||original.packageKey!==source.packageKey||original.revision<source.membershipRevision||!sameLearningSessionDirection(original.languageContext,scope.languageContext)||source.enrollmentId!==(typeof original.provenance.curriculumEnrollmentId==='string'?original.provenance.curriculumEnrollmentId:null)||original.revision===source.membershipRevision&&!backupEqual(original.provenance,source.provenance))reject('Study Scope source identity is inconsistent.');
   const snapshot={...original,status:source.membershipStatus,provenance:source.provenance};
   if(source.supplementalState&&(source.supplementalState.id!==source.membershipId||source.supplementalState.targetId!==target.id||source.supplementalState.status!=='active'||source.supplementalState.languageContext.languageRouteId!==scope.languageContext.languageRouteId||source.supplementalState.languageContext.targetLanguageTag!==scope.languageContext.targetLanguageTag))reject('Study Scope supplemental decision is inconsistent.');
   const caps=curriculumSourceEligibility(snapshot,source.enrollmentId?scope.enrollments.find(enrollment=>enrollment.id===source.enrollmentId):undefined,!!target.startedAt&&Date.parse(target.startedAt)<=Date.parse(scope.createdAt));
@@ -624,10 +626,10 @@ async function validateTransitionTarget(
  uuid.parse(assignment.assignmentId);z.number().int().positive().parse(assignment.revision);
  uuid.parse(assignment.assignedByOperationId);timestamp.parse(assignment.assignedAt);
  learningPolicyProfileRegistry.get(assignment.profileId);
- for(const field of ['learnerUserId','senseId','senseVersionId','senseExpressionBindingId','bindingVersionId','targetLanguageTag'] as const)z.string().min(1).parse(target.identity[field]);
+ for(const field of ['learnerUserId','senseId','expressionId','targetLanguageTag'] as const)z.string().min(1).parse(target.identity[field]);
  if(target.identity.learnerUserId!==input.identity.learnerId
   ||target.identity.targetLanguageTag!==target.targetLanguageTag
-  ||target.id!==stableUuid(`sensa-learning-target:${input.identity.learnerId}:${target.identity.senseVersionId}:${target.identity.bindingVersionId}`)
+  ||target.id!==stableLearningTargetId(input.identity.learnerId,target.identity.senseId,target.identity.expressionId)
   ||target.retentionId!==stableUuid(`sensa-retention:${target.id}`))reject('Learning Target identity is inconsistent.');
  timestamp.parse(target.createdAt);
  if(target.startedAt!==null)timestamp.parse(target.startedAt);
@@ -654,8 +656,8 @@ async function validateTransitionTarget(
   validateLightweightInitialMaterialization(membership.material);
   assertMaterialAdmissionTime(membership.material,membership,membership.packageKey?undefined:await input.read('contentAttempts',membership.material.snapshot.provenance.attemptId as string));
   learningSupportMeaning(membership.material.content.resources,context.supportLanguageTag);
+  if(!sameLearningSourcePin(membership.sourcePin,materialSourcePin(membership.material)))reject('Curriculum material has another admitted source.');
   assertLocalTargetMaterialIdentity(target,membership.material);
-  if(target.expression!==membership.material.content.resources.find(resource=>resource.materialRoleKey==='target_expression')?.contentPayload.surface)reject('Learning Target expression does not match its material.');
   const provenance=membership.material.snapshot.provenance as Record<string,any>;
   if(membership.sourceKind==='sense_learning_package'||membership.sourceKind==='stable_sense'&&membership.packageKey!==null){
    const packageKey=requireFact(membership.packageKey,'Published Curriculum package identity is missing.');
@@ -668,7 +670,7 @@ async function validateTransitionTarget(
    const pack=await input.read('packageCache',packageKey) as any;
    if(pack){
     const entry=pack.content.entries.find((candidate:any)=>candidate.senseVersionId===provenance.senseVersionId&&candidate.bindingVersionId===provenance.bindingVersionId);
-    if(!entry||pack.content.targetLanguage!==context.targetLanguageTag||pack.content.supportLanguage!==context.supportLanguageTag||!backupEqual(entry.content,baseContentBeforeSupplement(membership.material,context.supportLanguageTag))||entry.assurancePackageKey!==membership.assurancePackageKey)reject('Published Curriculum material is inconsistent.');
+    if(!entry||!sameLearningSourcePin(entry,materialSourcePin(membership.material))||pack.content.targetLanguage!==context.targetLanguageTag||pack.content.supportLanguage!==context.supportLanguageTag||!backupEqual(entry.content,baseContentBeforeSupplement(membership.material,context.supportLanguageTag))||entry.assurancePackageKey!==membership.assurancePackageKey)reject('Published Curriculum material is inconsistent.');
    }
   }else if(membership.sourceKind==='stable_sense'){
    const attempt=requireFact(await input.read('contentAttempts',provenance.attemptId) as any,'Direct material attempt is missing.');
@@ -692,6 +694,7 @@ function assertMembershipTransition(before:LocalLearningTarget,after:LocalLearni
  for(const previous of before.curriculumMemberships){
   const current=next.get(previous.id)!;
   if(backupEqual(previous,current))continue;
+  if(!sameLearningSourcePin(materialSourcePin(previous.material),materialSourcePin(current.material)))reject('Curriculum source versions are immutable.');
   if(current.revision!==previous.revision+1||!unchangedExcept(previous as unknown as Record<string,unknown>,current as unknown as Record<string,unknown>,['revision','status','material','updatedAt']))reject('Curriculum membership revision is invalid.');
   if(operation.kind==='learning.enroll'&&!backupEqual(previous.material,current.material))reject('A Book update cannot rewrite historical material.');
   if(operation.kind==='personal.progress'&&previous.status!==current.status)reject('Personal material refresh cannot change membership lifecycle.');
@@ -769,7 +772,8 @@ async function assertCurriculumEnrollmentTransition(
   const reviewed=z.object({reference:directLearningReferenceSchema,expectedDigest:z.string().regex(/^[a-f0-9]{64}$/u),languageContext:sensaFormalPinnedLanguageContextSchema}).parse(input.operation.input);
   if(selection.targetLanguageTag!==after.languageContext.targetLanguageTag)reject('Direct Curriculum source language is inconsistent.');
   const source=await resolveDirectLearningSource({get:(table,key)=>input.read(table,key)},selection.reference,selection.sourceDigest);
-  if(after.createdByOperationId!==input.operation.id||!backupEqual(source,selection)||!backupEqual(reviewed.reference,selection.reference)||reviewed.expectedDigest!==selection.sourceDigest
+  const reviewedSource=await resolveDirectLearningSource({get:(table,key)=>input.read(table,key)},reviewed.reference,reviewed.expectedDigest);
+  if(after.createdByOperationId!==input.operation.id||!backupEqual(source,selection)||!backupEqual(reviewedSource,selection)||reviewed.expectedDigest!==selection.sourceDigest
     ||!backupEqual(reviewed.languageContext,after.languageContext))reject('Direct Curriculum source was not the reviewed selection.');
  }else{
   // Each materialized member is checked again at the Learning Target boundary.
@@ -813,6 +817,7 @@ async function validateTransitionRun(
    const source=provenance.packageKey?publishedMaterialMembership(target,material,participant.languageContext):target.curriculumMemberships.find(candidate=>candidate.id===task?.curriculumMembershipId);
    if(!source)reject('Learning material has no admitted Curriculum source.');
    assertMaterialAdmissionTime(material,source!,attempt);
+   if(!sameLearningSourcePin(source!.sourcePin,materialSourcePin(material))||task&&!sameLearningSourcePin(task.source,materialSourcePin(material)))reject('Run material has another accepted source.');
   }
   const commitment=participant.policyCommitment,plan=participant.resolvedPlan;
   uuid.parse(commitment.commitmentId);uuid.parse(commitment.committedByProtocolRunId);uuid.parse(plan.resolvedLearningPlanRevisionId);

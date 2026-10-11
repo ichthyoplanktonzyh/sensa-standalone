@@ -25,9 +25,7 @@ import {
   type JourneyExpressionCandidateView,
 } from '../personalMeaningJourney';
 import type {
-  SensaExpressionBindingRelation,
   SensaExpressionType,
-  SensaSemanticCoverage,
 } from '@sensa/contracts/sensa';
 import { newUuid } from '../personalMeaningJourney/ids';
 
@@ -40,7 +38,7 @@ export interface ExpressionBindingScreenProps {
 }
 
 const opId = newUuid;
-type BindingStep = 'candidate' | 'form' | 'relation';
+type BindingStep = 'candidate' | 'form';
 
 const expressionTypeLabels: Record<SensaExpressionType, string> = {
   get word() { return uiText('word'); },
@@ -48,32 +46,6 @@ const expressionTypeLabels: Record<SensaExpressionType, string> = {
   get construction() { return uiText('construction'); },
   get sentence() { return uiText('sentence'); },
   get utterance_strategy() { return uiText('expressionStrategy'); },
-};
-
-const relationLabels: Record<SensaExpressionBindingRelation, string> = {
-  get realizes() { return uiText('naturalExpression'); },
-  get approximates() { return uiText('approximateExpression'); },
-  get evokes() { return uiText('evokesAnAssociation'); },
-};
-
-const relationDescriptions: Record<SensaExpressionBindingRelation, string> = {
-  get realizes() { return uiText('aNaturalEnglishExpressionForThisMeaning'); },
-  get approximates() { return uiText('similarMeaningWithADifferentEmphasisOr'); },
-  get evokes() { return uiText('evokesThisMeaningButHasABroader'); },
-};
-
-const coverageLabels: Record<SensaSemanticCoverage, string> = {
-  get exact() { return uiText('exactCoverage'); },
-  get broader() { return uiText('broaderScope'); },
-  get narrower() { return uiText('narrowerScope'); },
-  get overlapping() { return uiText('partialOverlap'); },
-};
-
-const coverageDescriptions: Record<SensaSemanticCoverage, string> = {
-  get exact() { return uiText('theExpressionMatchesTheMeaningSScope'); },
-  get broader() { return uiText('includesThisMeaningAndAppliesToMore'); },
-  get narrower() { return uiText('coversOnlyPartOfThisMeaning'); },
-  get overlapping() { return uiText('overlapsButIsNotInterchangeableInEvery'); },
 };
 
 const unavailable = (title: string, reason: string) => (
@@ -129,8 +101,6 @@ export const ExpressionBindingScreen = ({
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
   const [surfaceForm, setSurfaceForm] = useState('');
   const [expressionType, setExpressionType] = useState<SensaExpressionType>('word');
-  const [relation, setRelation] = useState<SensaExpressionBindingRelation | null>(null);
-  const [semanticCoverage, setSemanticCoverage] = useState<SensaSemanticCoverage | null>(null);
   const [bindingStep, setBindingStep] = useState<BindingStep>('candidate');
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -141,8 +111,6 @@ export const ExpressionBindingScreen = ({
   }, [active, personalMeaningId, meaningFocusId]);
 
   useEffect(() => {
-    setRelation(null);
-    setSemanticCoverage(null);
     setBindingStep('candidate');
     setFormError(null);
   }, [active, personalMeaningId, meaningFocusId, candidateKey]);
@@ -171,8 +139,6 @@ export const ExpressionBindingScreen = ({
       || !personalMeaningId
       || !meaningFocusId
       || !surfaceForm.trim()
-      || !relation
-      || !semanticCoverage
     ) return;
     setFormError(null);
     setBusy(true);
@@ -187,8 +153,8 @@ export const ExpressionBindingScreen = ({
         languageTag: selectedCandidate.languageTag,
         surfaceForm: surfaceForm.trim(),
         expressionType,
-        relation,
-        semanticCoverage,
+        relation: null,
+        semanticCoverage: null,
       });
       toast(uiText('targetExpressionConfirmed2'));
       onBack();
@@ -224,11 +190,11 @@ export const ExpressionBindingScreen = ({
                   <h2 className="mt-3 text-page-title font-semibold">{alignment.semanticSpec?.coreMeaningFocus ?? focus.statement}</h2>
                 </section>
 
-                <ol className="my-6 grid grid-cols-3 gap-2" aria-label={uiText('expressionConnectionSteps')}>
-                  {(['candidate', 'form', 'relation'] as const).map((step, index) => (
+                <ol className="my-6 grid grid-cols-2 gap-2" aria-label={uiText('expressionConnectionSteps')}>
+                  {(['candidate', 'form'] as const).map((step, index) => (
                     <li key={step} className={`flex flex-col items-center gap-2 rounded-control p-3 text-center ${bindingStep === step ? 'bg-accent-soft text-action-primary' : 'bg-surface-subtle text-fg-secondary'}`}>
                       <span className="grid size-7 place-items-center rounded-full border border-current text-metadata font-bold">{index + 1}</span>
-                      <small className="text-metadata font-semibold">{index === 0 ? uiText('chooseExpression') : index === 1 ? uiText('confirmForm') : uiText('confirmRelation')}</small>
+                      <small className="text-metadata font-semibold">{index === 0 ? uiText('chooseExpression') : uiText('confirmForm')}</small>
                     </li>
                   ))}
                 </ol>
@@ -249,8 +215,6 @@ export const ExpressionBindingScreen = ({
                             setSelectedCandidateId(candidate.candidateId);
                             setSurfaceForm(candidate.surfaceForm);
                             setExpressionType(candidate.expressionType);
-                            setRelation(null);
-                            setSemanticCoverage(null);
                             setFormError(null);
                           }}
                         />
@@ -288,8 +252,8 @@ export const ExpressionBindingScreen = ({
                       </select>
                     </label>
                     <div className="mt-5 grid gap-3">
-                      <button type="button" className="min-h-12 rounded-control border-0 bg-action-primary px-5 text-control-label font-semibold text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-45" disabled={!surfaceForm.trim()} onClick={() => setBindingStep('relation')}>
-                        {uiText('continue')}<span aria-hidden="true">→</span>
+                      <button type="submit" className="min-h-12 rounded-control border-0 bg-action-primary px-5 text-control-label font-semibold text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-45" disabled={busy || !selectedCandidate || !surfaceForm.trim()}>
+                        {busy ? uiText('confirming') : uiText('confirmThisExpression')}<span aria-hidden="true">→</span>
                       </button>
                       <button className="min-h-11 rounded-control border-0 bg-transparent px-4 text-control-label font-semibold text-fg-secondary hover:bg-surface-subtle" type="button" onClick={() => setBindingStep('candidate')}>{uiText('backToExpressions')}</button>
                     </div>
@@ -297,54 +261,6 @@ export const ExpressionBindingScreen = ({
 
                   {formError && <p className="mt-4 rounded-control border border-feedback-danger bg-surface-panel p-3 text-body-support text-feedback-danger" role="alert">{localFlowNotice(formError)}</p>}
 
-                  {bindingStep === 'relation' && <section className="rounded-card border border-border-subtle bg-surface-panel p-5" aria-labelledby="ebs-relation-heading">
-                    <header>
-                      <div><h2 className="text-section-title font-semibold" id="ebs-relation-heading">{uiText('howDoesItExpressThisMeaning')}</h2></div>
-                    </header>
-                    <fieldset className="mt-5 grid gap-2 border-0 p-0">
-                      <legend className="mb-2 text-control-label font-semibold">{uiText('relation')}</legend>
-                      {(Object.keys(relationLabels) as SensaExpressionBindingRelation[]).map((value) => (
-                        <label key={value} className={`flex min-h-14 cursor-pointer items-start gap-3 rounded-control border p-3 ${relation === value ? 'border-border-strong bg-surface-selected' : 'border-border-subtle bg-surface-panel'}`}>
-                          <input
-                            type="radio"
-                            name="binding-relation"
-                            value={value}
-                            checked={relation === value}
-                            onChange={() => setRelation(value)}
-                          />
-                          <span className="flex flex-col gap-1"><b className="text-body-support">{relationLabels[value]}</b><small className="text-metadata leading-5 text-fg-secondary">{relationDescriptions[value]}</small></span>
-                        </label>
-                      ))}
-                    </fieldset>
-                    <fieldset className="mt-5 grid gap-2 border-0 p-0">
-                      <legend className="mb-2 text-control-label font-semibold">{uiText('semanticCoverage')}</legend>
-                      {(Object.keys(coverageLabels) as SensaSemanticCoverage[]).map((value) => (
-                        <label key={value} className={`flex min-h-14 cursor-pointer items-start gap-3 rounded-control border p-3 ${semanticCoverage === value ? 'border-border-strong bg-surface-selected' : 'border-border-subtle bg-surface-panel'}`}>
-                          <input
-                            type="radio"
-                            name="semantic-coverage"
-                            value={value}
-                            checked={semanticCoverage === value}
-                            onChange={() => setSemanticCoverage(value)}
-                          />
-                          <span className="flex flex-col gap-1"><b className="text-body-support">{coverageLabels[value]}</b><small className="text-metadata leading-5 text-fg-secondary">{coverageDescriptions[value]}</small></span>
-                        </label>
-                      ))}
-                    </fieldset>
-                    {(!relation || !semanticCoverage) && (
-                      <p className="mt-4 text-metadata text-fg-tertiary">{uiText('selectBothARelationAndACoverage')}</p>
-                    )}
-                    <div className="mt-5 grid gap-3">
-                      <button
-                        type="submit"
-                        className="min-h-12 rounded-control border-0 bg-action-primary px-5 text-control-label font-semibold text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-45"
-                        disabled={busy || !selectedCandidate || !surfaceForm.trim() || !relation || !semanticCoverage}
-                      >
-                        {busy ? uiText('confirming') : uiText('confirmThisExpression')} <span aria-hidden="true">→</span>
-                      </button>
-                      <button className="min-h-11 rounded-control border-0 bg-transparent px-4 text-control-label font-semibold text-fg-secondary hover:bg-surface-subtle" type="button" disabled={busy} onClick={() => setBindingStep('form')}>{uiText('backToForm')}</button>
-                    </div>
-                  </section>}
                 </fieldset></form>
               </>
             );

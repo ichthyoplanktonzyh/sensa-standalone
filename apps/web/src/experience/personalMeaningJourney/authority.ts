@@ -33,6 +33,7 @@ import {meaningHistoryRecords,assertArchivedSceneReceipts,hasSceneReceiptWitness
 import {assertMeaningCorrectionReceipts,assertMeaningCorrectionReceiptFacts,assertMeaningCorrectionOperationReceipt,meaningCorrectionFacts} from './meaningCorrection';
 import type {z} from 'zod';
 import {runCooperatively,runSynchronously} from './cooperative';
+import {registryVersionSlot} from './registryVersionSlot';
 
 import {
   JOURNEY_STORE_VERSION,
@@ -113,7 +114,11 @@ function validateRegistryReference(kind:keyof SenseRegistryState,fact:Fact,regis
    const version=requireFact(registry.senseVersions,fact.currentSenseVersionId,'Sense head');
    requireInvariant(version.senseId===fact.senseId&&version.versionNumber===fact.currentVersionNumber,'Sense head 指针无效。');break;
   }
-  case 'senseVersions':requireFact(registry.senses,fact.senseId,'Sense Version');break;
+  case 'senseVersions':{
+   requireFact(registry.senses,fact.senseId,'Sense Version');
+   if(fact.parentSenseVersionId){const parent=requireFact(registry.senseVersions,fact.parentSenseVersionId,'Private Sense revision');requireInvariant(fact.origin==='learner_confirmed'&&fact.contentReleaseId===null&&parent.senseId===fact.senseId&&parent.versionNumber+1===fact.versionNumber,'Private Sense revision parent 无效。');}
+   break;
+  }
   case 'expressions':{
    const version=requireFact(registry.expressionVersions,fact.currentExpressionVersionId,'Expression head');
    requireInvariant(version.expressionId===fact.expressionId&&version.versionNumber===fact.currentVersionNumber,'Expression head 指针无效。');break;
@@ -128,16 +133,18 @@ function validateRegistryReference(kind:keyof SenseRegistryState,fact:Fact,regis
    const binding=requireFact(registry.bindings,fact.senseExpressionBindingId,'Binding Version');
    const senseVersion=requireFact(registry.senseVersions,fact.senseVersionId,'Binding Version');
    const expressionVersion=requireFact(registry.expressionVersions,fact.expressionVersionId,'Binding Version');
-   requireInvariant(senseVersion.senseId===binding.senseId&&expressionVersion.expressionId===binding.expressionId,'Binding Version 跨越了错误的 Sense 或 Expression。');break;
+   requireInvariant(senseVersion.senseId===binding.senseId&&expressionVersion.expressionId===binding.expressionId,'Binding Version 跨越了错误的 Sense 或 Expression。');
+   if(fact.parentBindingVersionId){const parent=requireFact(registry.bindingVersions,fact.parentBindingVersionId,'Private Binding revision');requireInvariant(fact.provenance.sourceKind==='learner_confirmed'&&senseVersion.origin==='learner_confirmed'&&senseVersion.contentReleaseId===null&&parent.senseExpressionBindingId===fact.senseExpressionBindingId&&parent.versionNumber+1===fact.versionNumber,'Private Binding revision parent 无效。');}
+   break;
   }
  }
 }
 
 function* validateRegistrySteps(registry:SenseRegistryState):Generator<void,RegistryIndex>{
  for(const [field,schema,id] of registrySpecs){for(const fact of registry[field]){parse(schema,fact,`Semantic Registry ${field}`);yield;}unique(registry[field] as Fact[],fact=>fact[id],`Semantic Registry ${field}`);yield;}
- unique(registry.senseVersions,fact=>fact.senseVersionId,'Sense Version',fact=>`${fact.senseId}:${fact.versionNumber}`);
+ unique(registry.senseVersions,fact=>fact.senseVersionId,'Sense Version',fact=>registryVersionSlot('senseVersions',fact)!);
  unique(registry.expressionVersions,fact=>fact.expressionVersionId,'Expression Version',fact=>`${fact.expressionId}:${fact.versionNumber}`);
- unique(registry.bindingVersions,fact=>fact.bindingVersionId,'Binding Version',fact=>`${fact.senseExpressionBindingId}:${fact.versionNumber}`);
+ unique(registry.bindingVersions,fact=>fact.bindingVersionId,'Binding Version',fact=>registryVersionSlot('bindingVersions',fact)!);
  unique(registry.senses,fact=>fact.senseId,'Sense key',fact=>fact.senseKey);
  const result=indexRegistry(registry);
  for(const [kind] of registrySpecs)for(const fact of registry[kind]){validateRegistryReference(kind,fact,result);yield;}
@@ -430,7 +437,7 @@ export function* assertPersonalSemanticWorldRecordSteps(reader:SemanticWorldReco
   requireInvariant(Number.isSafeInteger(row.ordinal)&&row.ordinal>=0,'Semantic Registry ordinal 无效。');
   if(kind==='senses'){requireInvariant(!senseKeys.has(fact!.senseKey),'Sense key 重复。');senseKeys.add(fact!.senseKey);}
   const parent=kind==='senseVersions'?'senseId':kind==='expressionVersions'?'expressionId':kind==='bindingVersions'?'senseExpressionBindingId':null;
-  if(parent){const slot=JSON.stringify([kind,fact![parent],fact!.versionNumber]);requireInvariant(!slots.has(slot),'Semantic Registry version 槽重复。');slots.add(slot);}
+  if(parent){const slot=registryVersionSlot(kind,fact!)!;requireInvariant(!slots.has(slot),'Semantic Registry version 槽重复。');slots.add(slot);}
   validateRegistryReference(kind,fact!,registry);
   yield;
  }

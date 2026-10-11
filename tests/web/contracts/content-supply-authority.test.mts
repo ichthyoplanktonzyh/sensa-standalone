@@ -31,11 +31,13 @@ test('[contract][local-correctness] Content Supply admits only its own transitio
     meaningFocusId: null,
     senseId: id(),
     senseVersionId: id(),
+    expressionId: id(),
+    expressionVersionId: id(),
     bindingId: id(),
     bindingVersionId: id(),
   };
   const targetId = stableUuid(
-    `sensa-learning-target:${identity.learnerId}:${source.senseVersionId}:${source.bindingVersionId}`,
+    `sensa-learning-target:${identity.learnerId}:${source.senseId}:${source.expressionId}`,
   );
   const taskId = stableUuid(
     `sensa-personal-learning:${source.personalMeaningAlignmentId}:${source.bindingVersionId}:${languageContext.languageRouteId}`,

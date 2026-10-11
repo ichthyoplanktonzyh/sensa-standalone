@@ -52,7 +52,8 @@ export function settleExpressionBinding(
     expressionId: string;
     expressionVersionId: string;
     senseExpressionBindingId: string;
-    bindingVersionId: string;
+    /** Omit only when appending a new version on these exact stable identities. */
+    bindingVersionId?: string;
   },
 ): {
   expressionBindingConfirmationId: string;
@@ -94,7 +95,7 @@ export function settleExpressionBinding(
         ? version.expressionVersionId === pinned.expressionVersionId
         : version.expressionId === expression.expressionId && version.normalizedForm === form,
     )!;
-    if (!expressionVersion || expression.expressionType !== input.expressionType
+    if (!expressionVersion || expressionVersion.expressionId!==expression.expressionId || expression.expressionType !== input.expressionType
       || expression.languageTag !== input.languageTag || expressionVersion.normalizedForm !== form) {
       throw new Error('固定的已发布 Expression Version 与学习目标不一致。');
     }
@@ -145,15 +146,16 @@ export function settleExpressionBinding(
   }
   if (existingBinding) {
     binding = existingBinding;
+    if(binding.senseId!==alignment.senseId||binding.expressionId!==expression.expressionId||binding.relation!==input.relation)throw new Error('固定的 Binding identity 与连接不一致。');
     bindingVersion = state.registry.bindingVersions.find(
-      (version) => pinned
+      (version) => pinned?.bindingVersionId
         ? version.bindingVersionId === pinned.bindingVersionId
         : version.senseExpressionBindingId === binding.senseExpressionBindingId
           && version.senseVersionId === input.senseVersionId
           && version.expressionVersionId === expressionVersion.expressionVersionId
           && version.semanticCoverage === input.semanticCoverage,
     );
-    if (pinned && (!bindingVersion || binding.senseId !== alignment.senseId
+    if (pinned?.bindingVersionId && (!bindingVersion || binding.senseId !== alignment.senseId
       || binding.expressionId !== expression.expressionId || binding.relation !== input.relation
       || bindingVersion.senseVersionId !== input.senseVersionId
       || bindingVersion.expressionVersionId !== expressionVersion.expressionVersionId
@@ -163,6 +165,7 @@ export function settleExpressionBinding(
     if (!bindingVersion) {
       const nextVersion = binding.currentVersionNumber + 1;
       const nextBindingVersionId = ports.newId();
+      const parentBindingVersionId=binding.currentBindingVersionId;
       const updatedBinding={
         ...binding,
         currentVersionNumber:nextVersion,
@@ -175,6 +178,7 @@ export function settleExpressionBinding(
         bindingVersionId: nextBindingVersionId,
         senseExpressionBindingId: binding.senseExpressionBindingId,
         versionNumber: nextVersion,
+        ...(state.registry.senseVersions.some(version=>version.senseVersionId===input.senseVersionId&&version.origin==='learner_confirmed'&&version.contentReleaseId===null)?{parentBindingVersionId}:{}),
         senseVersionId: input.senseVersionId,
         expressionVersionId: expressionVersion.expressionVersionId,
         semanticCoverage: input.semanticCoverage,

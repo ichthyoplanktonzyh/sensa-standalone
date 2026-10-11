@@ -83,7 +83,7 @@ test('direct published source requires exact installation and semantic declarati
  }};
  const archiveDigest='b'.repeat(64);
  const pack={key:packageKey,digest:archiveDigest,portableOrigin:{packageDigest,archiveDigest,manifest,publications:[publication]},content:{targetLanguage:'en',supportLanguage:'zh-CN',entries:[{
-  senseId:reference.senseId,senseVersionId:reference.senseVersionId,bindingId:reference.bindingId,bindingVersionId:reference.bindingVersionId,expression:'borrow',
+  senseId:reference.senseId,senseVersionId:reference.senseVersionId,expressionId:registry.expressions[0]!.expressionId,expressionVersionId:registry.expressionVersions[0]!.expressionVersionId,bindingId:reference.bindingId,bindingVersionId:reference.bindingVersionId,expression:'borrow',
   content:{fixture:'large runtime media must not enter the selection'},semantic:{senseKey:'temporary-borrow',senseVersionNumber:1,semanticPolicyVersion:'fixture-v1',semanticSpec:registry.senseVersions[0]!.semanticSpec,
    expressionId:registry.expressions[0]!.expressionId,expressionVersionId:registry.expressionVersions[0]!.expressionVersionId,expressionType:'word',expressionVersionNumber:1,expressionStructure:{},bindingVersionNumber:1,relation:'realizes',semanticCoverage:'exact',registerLabel:null,usageConstraints:[]},
  }]}};
@@ -153,6 +153,8 @@ test('a production-compiled published archive keeps separate digests and its act
  const reference:DirectLearningReference={...f.reference,origin:{kind:'published_package',packageKey:key,packageDigest:canonical.packageDigest}};
   const source=await resolveDirectLearningSource(f.reader,reference);
   expect(source.expression.spokenForm).toBe('borrow');expect(source.publishedContent).toMatchObject({archiveDigest:canonical.archiveDigest,packageDigest:canonical.packageDigest});
+  const entry=pack.content.entries[0]!,originalExpressionId=entry.expressionId;entry.expressionId=crypto.randomUUID();
+  await expect(resolveDirectLearningSource(f.reader,reference)).rejects.toMatchObject({reason:'changed'});entry.expressionId=originalExpressionId;
   pack.portableOrigin.archiveDigest='d'.repeat(64);await expect(resolveDirectLearningSource(f.reader,reference)).rejects.toMatchObject({reason:'changed'});
   f.rows.delete(`packageCache/${key}`);
   expect(()=>assertDirectEnrollmentSource(source,(table,key)=>f.rows.get(`${table}/${key}`))).not.toThrow();

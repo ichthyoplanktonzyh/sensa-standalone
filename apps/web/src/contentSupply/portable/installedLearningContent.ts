@@ -34,6 +34,7 @@ export const validateInstalledLearningContent=(raw:unknown):InstalledLearningCon
     throw new Error('localFlow.packageMismatch');
   }
   for(const entry of content.entries){
+    if(entry.semantic&&(entry.expressionId!==entry.semantic.expressionId||entry.expressionVersionId!==entry.semantic.expressionVersionId))throw new Error('localFlow.packageMismatch');
     const expression=entry.content.resources.find(
       resource=>resource.materialRoleKey==='target_expression',
     )?.contentPayload.surface;

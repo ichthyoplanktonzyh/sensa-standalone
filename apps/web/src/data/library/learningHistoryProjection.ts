@@ -59,7 +59,7 @@ export class SqliteLearningHistoryProjection{
   for(const targetId of run.targetIds){
    const participant=run.participants[targetId],target=this.target(targetId);if(!participant||!target)continue;
    const material=localLastPresentedMaterial(participant),meaning=material?learningSupportMeaning(material.content.resources,participant.languageContext.supportLanguageTag):undefined;
-   const row:StoredLearningRecord={recordId:`${run.id}:${targetId}`,targetId,expression:target.expression,languageTag:target.targetLanguageTag,...(typeof meaning==='string'?{meaning}:{}),occurredAt:run.targetCompletions?.[targetId]?.at??run.completedAt,kind:run.purpose};
+   const row:StoredLearningRecord={recordId:`${run.id}:${targetId}`,targetId,expression:String(material.content.resources.find(resource=>resource.materialRoleKey==='target_expression')?.contentPayload.surface??''),languageTag:target.targetLanguageTag,...(typeof meaning==='string'?{meaning}:{}),occurredAt:run.targetCompletions?.[targetId]?.at??run.completedAt,kind:run.purpose};
    this.database.exec({sql:'INSERT INTO sensa_learning_history(record_key,run_key,occurred_at,language_tag,record_kind,projection_json) VALUES(?,?,?,?,?,?)',bind:[row.recordId,runId,Date.parse(row.occurredAt),row.languageTag,row.kind,JSON.stringify(row)]});
   }
  }

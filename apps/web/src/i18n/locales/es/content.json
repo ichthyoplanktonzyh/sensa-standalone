@@ -23,7 +23,7 @@
   "contextRequired": "Introduce un contexto o una frase original.",
   "occurrenceRequired": "Localiza la expresión exacta en el contexto.",
   "languageRequired": "Elige el idioma de la expresión.",
-  "meaningRequired": "Introduce el significado y una situación típica.",
+  "meaningRequired": "Escribe el significado en este contexto.",
   "invalid": "Revisa el contenido introducido.",
   "draftError": "No se puede guardar el borrador localmente. Mantén abierta esta página y reinténtalo.",
   "saveError": "No se pudo confirmar el guardado. El contenido se conserva; reinténtalo.",
@@ -73,7 +73,12 @@
     "all": "Todo el contenido",
     "unconfirmed": "No se pudo confirmar el resultado. Se volvió a leer el contenido; revísalo antes de reintentar.",
     "savedReadFailed": "El cambio está guardado, pero no se pudo volver a leer el contenido. Reintenta la lectura.",
-    "retryRead": "Volver a leer"
+    "retryRead": "Volver a leer",
+    "editIntent": "Tipo de edición",
+    "wordingOnly": "Solo reformular",
+    "differentMeaning": "Es otro significado",
+    "wordingHint": "Conserva este significado y su progreso.",
+    "publishedWordingHint": "Se guarda como tu formulación personal; se conserva la definición publicada."
   },
   "content": {
     "manual": "Crear manualmente",

@@ -17,6 +17,7 @@ import {meaningHistoryRecords} from './meaningHistoryRead';
 export interface PersonalMeaningCorrectionSeed extends WorldReadStamp{
  personalMeaningId:string;personalMeaningAlignmentId:string;source:ClarificationSourceWitness;
  payload:import('@sensa/contracts/sensa').SensaIntakePayload;reuseSense:{senseId:string;senseVersionId:string};
+ personalSenseWording:string|null;published:boolean;
  images:import('@sensa/contracts/sensa').SensaContextImage[];
 }
 
@@ -131,7 +132,8 @@ export const worldReadRepository={
    const inline=locator.personalSemanticAnchorRevisionIds.map(id=>record.personalSemanticAnchorRevisions.find(row=>row.personalSemanticAnchorRevisionId===id)!).flatMap(context=>Array.isArray(context.structuredPayload.media)?context.structuredPayload.media:[]);
    const byId=new Map(inline.map((item:any)=>[item.mediaId,{id:item.mediaId,name:item.fileName??'personal-scene',dataUrl:item.dataUrl}]));
    const images=await Promise.all(payload.context!.mediaReferenceIds.map(async mediaId=>{const available=byId.get(mediaId);if(available)return available;const media=parseStoredMedia(await tx.get('media',mediaId));if(media.mediaId!==mediaId)throw Error('localFlow.meaningChanged');return {id:mediaId,name:'personal-context',dataUrl:media.dataUrl};}));
-   return {...stamp,personalMeaningId:id,personalMeaningAlignmentId:alignmentId,source:clarificationSourceWitness(stamp.incarnation,'personal_meaning',id,meaningSourceValue(record)),payload,images,reuseSense:{senseId:alignment.senseId,senseVersionId:alignment.senseVersionId}};
+   const senseVersion=registry.senseVersions.find(row=>row.senseVersionId===alignment.senseVersionId)!;
+   return {...stamp,personalMeaningId:id,personalMeaningAlignmentId:alignmentId,source:clarificationSourceWitness(stamp.incarnation,'personal_meaning',id,meaningSourceValue(record)),payload,images,personalSenseWording:record.personalMeaningRevisions.find(row=>row.personalMeaningRevisionId===alignment.personalMeaningRevisionId)?.personalSenseWording??null,published:senseVersion.origin!=='learner_confirmed'||senseVersion.contentReleaseId!==null,reuseSense:{senseId:alignment.senseId,senseVersionId:alignment.senseVersionId}};
   });
  },
  detail(id:string):Promise<WorldDetailSnapshot>{
