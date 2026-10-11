@@ -63,7 +63,7 @@ export function usePersonalLearning(sourceView:{kind:'library'}|{kind:'target';t
    throw error;
   }
  };
- const failedSourceRead=()=>{if(currentRoute.current===routeKey){setNotice(localFlowText('preparationReadFailed'));setSourceFailureKey(routeKey);setSourceReadKey(routeKey);setTaskSources(new Map());}};
+ const failedSourceRead=()=>{if(currentRoute.current===routeKey){setSourceFailureKey(routeKey);setSourceReadKey(routeKey);setTaskSources(new Map());}};
  latestRefresh.current=()=>refresh().catch(()=>{});
  useEffect(()=>{if(!enabled)return;const coordinator=createRefreshCoordinator(refresh);const read=()=>void coordinator.request().catch(()=>{});read();const stopSupply=contentSupplySystem.subscribe({kind:'provisioning_control'},read);const stopLearning=learningSystem.subscribe({kind:'workspace',languageContext},read);const stopJourney=worldReadRepository.subscribe(read);const focus=()=>setClock(Date.now());window.addEventListener('focus',focus);return()=>{stopSupply();stopLearning();stopJourney();readGeneration.current++;window.removeEventListener('focus',focus);};},[languageContext.languageRouteId,languageContext.languageRouteRevision,sourceViewKey]);
  const nextLeaseExpiry=nextPersonalLearningLeaseExpiry(tasks,clock);
@@ -72,7 +72,7 @@ export function usePersonalLearning(sourceView:{kind:'library'}|{kind:'target';t
   const timer=window.setTimeout(()=>setClock(Date.now()),Math.min(2_147_483_647,Math.max(20,nextLeaseExpiry-Date.now()+20)));
   return()=>window.clearTimeout(timer);
  },[nextLeaseExpiry]);
- const perform=async<T,>(work:()=>Promise<T>)=>{if(batchRunner.read().busy)return null;setBusy(true);setNotice('');try{const outcome=await settleOperation(work,refresh);if(outcome.kind==='rejected'){const error=outcome.error;setNotice(error instanceof Error&&error.message.startsWith('localFlow.')?error.message:localFlowText('preparationPreserved'));return null;}if(outcome.projection==='stale')setNotice(localFlowText('preparationReadFailed'));return outcome.value;}finally{setBusy(false);}};
+ const perform=async<T,>(work:()=>Promise<T>)=>{if(batchRunner.read().busy)return null;setBusy(true);setNotice('');try{const outcome=await settleOperation(work,refresh);if(outcome.kind==='rejected'){const error=outcome.error;setNotice(error instanceof Error&&error.message.startsWith('localFlow.')?error.message:localFlowText('preparationPreserved'));return null;}return outcome.value;}finally{setBusy(false);}};
  const sourceForTask=(task:ContentProvisioningTask)=>taskSources.get(personalLearningSourceKey(task.source))??null;
  const prepare=async(id:string,source?:PersonalMeaningLearningSource)=>{if(!preparationAvailable)throw new Error('localFlow.checkModels');const current=source??await contentSupplySystem.read({kind:'personal_provisioning_source',taskId:id});if(!current)throw new Error('localFlow.meaningChanged');await backgroundPreparation.run(id,signal=>contentSupplySystem.execute({kind:'prepare_materialization',taskId:id,source:current,signal}));};
  const enrollBatch=async(choices:readonly WorldLearningChoice[],useContext:boolean)=>{
@@ -87,7 +87,10 @@ export function usePersonalLearning(sourceView:{kind:'library'}|{kind:'target';t
   await enrollBatch(batchRunner.choices(status),saved.useContext);
  };
  const projectionStatus=sourceReadKey!==routeKey?'loading':sourceFailureKey===routeKey?'unavailable':'ready';
- return {batch,batchRowAt:batchRunner.rowAt,batchIndexForKey:batchRunner.indexForKey,retryBatch,enrollBatch,sourceForTask,projectionStatus,taskSourcesLoading:!!sourceView&&projectionStatus==='loading',taskSourcesUnavailable:!!sourceView&&projectionStatus==='unavailable',retryTaskSources:()=>{setSourceReadKey(null);setSourceFailureKey(null);void refresh().catch(()=>{});},stopBatch:()=>void batchRunner.stop(),tasks,targets,preparationAvailable,notice:localFlowNotice(notice),busy,clock,languageContext,
+ // Read failures belong to the guarded projection, not the durable operation
+ // notice. Recovery clears only its own error and cannot erase a newer command.
+ const visibleNotice=[localFlowNotice(notice),projectionStatus==='unavailable'?localFlowText('preparationReadFailed'):''].filter(Boolean).join('\n');
+ return {batch,batchRowAt:batchRunner.rowAt,batchIndexForKey:batchRunner.indexForKey,retryBatch,enrollBatch,sourceForTask,projectionStatus,taskSourcesLoading:!!sourceView&&projectionStatus==='loading',taskSourcesUnavailable:!!sourceView&&projectionStatus==='unavailable',retryTaskSources:()=>{setSourceReadKey(null);setSourceFailureKey(null);void refresh().catch(()=>{});},stopBatch:()=>void batchRunner.stop(),tasks,targets,preparationAvailable,notice:visibleNotice,busy,clock,languageContext,
   enroll:(source:PersonalMeaningLearningSource,useContext:boolean)=>perform(async()=>{const enrollment=await learningSystem.execute({kind:'enroll_personal',operationId:crypto.randomUUID(),source,languageContext,useContext});if(enrollment.provisioningStatus!=='ready')await prepare(enrollment.provisioningTaskId,source);}),
   update:(taskId:string,source:PersonalMeaningLearningSource,useContext:boolean)=>perform(async()=>{const revised=await contentSupplySystem.execute({kind:'revise_provisioning',operationId:crypto.randomUUID(),taskId,source,languageContext,useContext});if(revised.status!=='covered')await prepare(taskId,source);}),
   prepare:(id:string)=>perform(()=>prepare(id)),

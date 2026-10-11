@@ -1234,11 +1234,56 @@ test('World route learning read failure and cold reload remain unknown until exp
  await page.evaluate(async()=>{await window.__sensaBrowserSmoke!.failLearningWorkspaceReadsForTest(false);await window.__sensaBrowserSmoke!.holdLearningWorkspaceReadsForTest();});
  await detail.getByRole('button',{name:'重试',exact:true}).click();
  await expect(detail.getByRole('status')).toContainText('正在读取');await expect(detail.getByText('尚未加入此路线',{exact:true})).toHaveCount(0);
- await page.evaluate(()=>window.__sensaBrowserSmoke!.releaseLearningWorkspaceReadsForTest());await expect(detail.getByText('尚未加入此路线',{exact:true})).toBeVisible();
+ // Retire the held successful read, then create a failure in the new view.
+ await navigation.getByRole('button',{name:'我的学习',exact:true}).click();
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningWorkspaceReadsForTest(true));
+ await navigation.getByRole('button',{name:'我的语义世界',exact:true}).click();await world.getByRole('button',{name:'语义世界',exact:true}).click();
+ await point.focus();await point.press('Enter');await expect(detail.getByRole('alert')).toContainText('无法读取学习准备状态');
+ await page.evaluate(async()=>{window.__sensaBrowserSmoke!.releaseLearningWorkspaceReadsForTest();await window.__sensaBrowserSmoke!.provisioningCheckpoint();await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));});
+ await expect(detail.getByRole('alert')).toContainText('无法读取学习准备状态');await expect(detail.getByText('尚未加入此路线',{exact:true})).toHaveCount(0);
+ await world.getByRole('button',{name:'列表',exact:true}).click();await expect(world.getByRole('status').filter({hasText:'无法读取学习准备状态'})).toBeVisible();
+ await world.getByRole('button',{name:'语义世界',exact:true}).click();await point.focus();await point.press('Enter');
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningWorkspaceReadsForTest(false));await detail.getByRole('button',{name:'重试',exact:true}).click();await expect(detail.getByText('尚未加入此路线',{exact:true})).toBeVisible();
+ await world.getByRole('button',{name:'列表',exact:true}).click();await expect(world.getByText('无法读取学习准备状态，请重试。',{exact:true})).toHaveCount(0);
+ await page.screenshot({path:testInfo.outputPath('world-list-after-read-recovery.png')});
+ await world.getByRole('button',{name:'语义世界',exact:true}).click();await point.focus();await point.press('Enter');
  await page.addInitScript(()=>{const timer=setInterval(()=>{if(!window.__sensaBrowserSmoke)return;clearInterval(timer);void window.__sensaBrowserSmoke.failLearningWorkspaceReadsForTest(true);},1);});
  await page.reload();await expect(detail.getByRole('alert')).toContainText('无法读取学习准备状态');await expect(detail.getByText('尚未加入此路线',{exact:true})).toHaveCount(0);
  await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningWorkspaceReadsForTest(false));await detail.getByRole('button',{name:'重试',exact:true}).click();
- await expect(detail.getByText('尚未加入此路线',{exact:true})).toBeVisible();expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(facts);expect(requests).toEqual([]);
+ await expect(detail.getByText('尚未加入此路线',{exact:true})).toBeVisible();
+ await world.getByRole('button',{name:'列表',exact:true}).click();await expect(world.getByText('无法读取学习准备状态，请重试。',{exact:true})).toHaveCount(0);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(facts);expect(requests).toEqual([]);
+});
+
+test('World read recovery removes only its read error and preserves a failed preparation operation notice',async({page},testInfo)=>{
+ requests=[];plans=[];
+ const {expressionWorldFixture}=await import('../support/expressionWorldFixture');scaleFixture=await expressionWorldFixture();
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ const navigation=page.getByRole('navigation',{name:'主要导航'});await navigation.getByRole('button',{name:'我的语义世界',exact:true}).click();
+ await page.waitForFunction(()=>!!window.__sensaBrowserSmoke);
+ await expect.poll(()=>page.evaluate(async()=>!!(await window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest()).identity)).toBe(true);
+ await page.evaluate(async()=>window.__sensaBrowserSmoke!.seedSemanticWorld(await (await fetch('/semantic-scale-fixture')).json()));
+ const world=page.locator('.sensa-world.active').last();await world.getByRole('button',{name:'语义世界',exact:true}).click();
+ const graph=world.getByRole('region',{name:'词义图谱',exact:true}),point=graph.locator(`[data-expression-id="${scaleFixture.registry.expressions[0]!.expressionId}"]`);
+ await point.focus();await point.press('Enter');const detail=graph.getByRole('complementary',{name:'表达预览',exact:true});
+ await detail.getByRole('button',{name:'查看详情',exact:true}).click();
+ const preparation=page.getByRole('region',{name:'个人内容学习准备',exact:true}).filter({has:page.getByRole('heading',{name:/^borrow ·/u})});
+ await preparation.getByRole('button',{name:'加入学习',exact:true}).click();
+ await expect(preparation.getByRole('status')).toContainText('请先登录 Sensa 在线服务');
+ const operationNotice=(await preparation.getByRole('status').innerText()).trim();
+ const saved=await page.evaluate(async()=>({learning:await window.__sensaBrowserSmoke!.learningCheckpoint(),provisioning:await window.__sensaBrowserSmoke!.provisioningCheckpoint()}));
+ expect(saved.provisioning).toHaveLength(1);expect(saved.provisioning[0]!.status).toBe('failed');expect(saved.learning.records).toEqual([]);expect(saved.learning.runtime).toBeNull();
+ await page.goBack();await expect(detail).toBeVisible();
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningWorkspaceReadsForTest(true));await expect(detail.getByRole('alert')).toContainText('无法读取学习准备状态');
+ await world.getByRole('button',{name:'列表',exact:true}).click();
+ const notice=world.getByRole('status').filter({hasText:operationNotice});await expect(notice).toContainText('无法读取学习准备状态');
+ await world.getByRole('button',{name:'语义世界',exact:true}).click();await point.focus();await point.press('Enter');
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningWorkspaceReadsForTest(false));await detail.getByRole('button',{name:'重试',exact:true}).click();await expect(detail.getByRole('alert')).toHaveCount(0);
+ await world.getByRole('button',{name:'列表',exact:true}).click();await expect(notice).toHaveText(operationNotice);await expect(world.getByText('无法读取学习准备状态，请重试。',{exact:true})).toHaveCount(0);
+ await page.screenshot({path:testInfo.outputPath('world-list-preserved-operation-notice.png')});
+ expect(await page.evaluate(async()=>({learning:await window.__sensaBrowserSmoke!.learningCheckpoint(),provisioning:await window.__sensaBrowserSmoke!.provisioningCheckpoint()}))).toEqual(saved);
+ expect(requests,'unavailable account must not call a real or paid model').toEqual([]);
 });
 
 test('World expression languages combine with search, saved meanings and notes while point details preserve camera and exact identities',async({page},testInfo)=>{
