@@ -611,7 +611,8 @@ export async function readLearningManagementProjection(input:{languageContext:Se
   return {summary,dailyLimit,pending:{identity,enrollments}};
  });
  const ids=new Set(summary.targetIds);
- return {...summary,policies:summary.policies as LearningPolicy[],pendingDirectCount:pending.enrollments.filter(enrollment=>enrollment.status==='active'&&enrollment.source.kind==='stable_sense'&&enrollment.languageContext.languageRouteId===input.languageContext.languageRouteId&&enrollment.languageContext.targetLanguageTag===input.languageContext.targetLanguageTag&&enrollment.languageContext.supportLanguageTag===input.languageContext.supportLanguageTag&&!ids.has(stableUuid(`sensa-learning-target:${pending.identity.learnerId}:${enrollment.source.selection.reference.senseVersionId}:${enrollment.source.selection.reference.bindingVersionId}`))).length,dailyLimit:dailyLimit??null,policyOptions};
+ const content=pending.enrollments.filter(enrollment=>enrollment.status==='active'&&sameLearningSessionDirection(enrollment.languageContext,input.languageContext)).slice(0,3).map(enrollment=>({id:enrollment.id,title:enrollment.source.kind==='published_book'?enrollment.source.title??localFlowText('downloadedPackages'):enrollment.source.kind==='stable_sense'?enrollment.source.selection.expression.surfaceForm:localFlowText('downloadedPackages'),state:enrollment.bookPlan?.mode??'active' as const,kind:enrollment.source.kind==='published_book'?'book' as const:enrollment.source.kind==='stable_sense'?'direct' as const:'book' as const}));
+ return {...summary,content,policies:summary.policies as LearningPolicy[],pendingDirectCount:pending.enrollments.filter(enrollment=>enrollment.status==='active'&&enrollment.source.kind==='stable_sense'&&enrollment.languageContext.languageRouteId===input.languageContext.languageRouteId&&enrollment.languageContext.targetLanguageTag===input.languageContext.targetLanguageTag&&enrollment.languageContext.supportLanguageTag===input.languageContext.supportLanguageTag&&!ids.has(stableUuid(`sensa-learning-target:${pending.identity.learnerId}:${enrollment.source.selection.reference.senseVersionId}:${enrollment.source.selection.reference.bindingVersionId}`))).length,dailyLimit:dailyLimit??null,policyOptions};
 }
 export async function readLearningBookPlans(context:SensaFormalPinnedLanguageContext):Promise<import('./learningReadModels').LearningBookPlanProjection[]>{
  const enrollments=await readLibrary(async tx=>(await tx.all<LocalCurriculumEnrollment>('curriculumEnrollments')).filter(enrollment=>enrollment.status==='active'&&enrollment.source.kind==='published_book'&&sameLearningSessionDirection(enrollment.languageContext,context)));
@@ -649,10 +650,14 @@ export async function readLearningHomeProjection(input: Readonly<{
       readNextReadyRuntimeCandidate(tx,query,{run:null,intent:'review_only',retries:[]}),
     ]);
     const nextTarget=mixed.nextTargetId?await tx.get<LocalLearningTarget>('learningTargets',mixed.nextTargetId):undefined;
+    const currentId=activeRun?(activeRun.completedAt?activeRun.targetId:localProtocolActiveTargetId(localExecutionForRun(activeRun),activeRun)):mixed.nextTargetId;
+    const currentTarget=currentId===nextTarget?.id?nextTarget:currentId?await tx.get<LocalLearningTarget>('learningTargets',currentId):undefined;
+    if(currentId&&!currentTarget)throw new Error('localFlow.progressReadFailed');
     if(summary.libraryTargetCount===null||summary.routeTargetCount===null)throw new Error('localFlow.progressReadFailed');
     let hasLearningIntent=false;
     if(!summary.libraryTargetCount)for await(const keys of tx.recordKeyBatches('curriculumEnrollments')){hasLearningIntent=keys.length>0;break;}
     return {
+      currentTask:currentTarget?{expression:currentTarget.expression,targetLanguageTag:currentTarget.targetLanguageTag,purpose:activeRun?.purpose??localLearningPurpose(currentTarget)}:null,
       activeRunId:activeRun?.id??null,activeLanguageContext:activeRun?.languageContext??null,
       hasLibraryContent:summary.libraryTargetCount>0||hasLearningIntent,routeTargetCount:summary.routeTargetCount,
       nextReviewAt:summary.nextReviewAt===null?null:new Date(summary.nextReviewAt).toISOString(),dailyLimit:dailyLimit??null,

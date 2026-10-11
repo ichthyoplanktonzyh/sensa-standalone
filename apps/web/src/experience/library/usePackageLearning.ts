@@ -274,7 +274,9 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
    if(gen===generation.current)setCatalogBusy(false);
   }
  };
- useEffect(()=>{if(entryOpen)void reloadCatalog();},[entryOpen]);
+ // Restoring a saved Route aborts the previous catalog request in cleanup.
+ // Restart that read even when the Catalog remains the active entry.
+ useEffect(()=>{if(entryOpen)void reloadCatalog();},[entryOpen,languageContext.languageRouteId,languageContext.languageRouteRevision]);
 
  const targetById=new Map(workspace.targets.map(target=>[target.targetId,target]));
  const initialReady=workspace.queue.initialReadyTargetIds.flatMap(id=>targetById.get(id)??[]);

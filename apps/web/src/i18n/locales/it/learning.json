@@ -498,7 +498,8 @@
     "manageContent":"Gestisci i contenuti di studio","preferences": "Preferenze di apprendimento",
     "library": "Contenuti didattici",
     "scope": "Biblioteca di apprendimento",
-    "count": "{{count}} significati",
+    "count": "{{formattedCount}} significati",
+    "count_many": "{{formattedCount}} significati",
     "browse": "Visualizza contenuti",
     "plan": "Piano di apprendimento",
     "daily": "Limite giornaliero di nuovi significati",
@@ -546,7 +547,9 @@
       "active": "In corso",
       "review": "Ripasso e rinforzo",
       "complete": "Apprendimento iniziale completato / noto"
-    }
+    },
+    "count_one": "{{formattedCount}} significato",
+    "count_other": "{{formattedCount}} significati"
   },
   "quickDict": {
     "detailUnavailable": "La voce Reference completa per “{{word}}” non è attualmente disponibile",

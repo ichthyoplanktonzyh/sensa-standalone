@@ -541,12 +541,13 @@
     "todayEmptyTitle": "还没有加入学习内容",
     "sessionCompleted": "本轮已完成",
     "sessionPending": "本轮待处理",
-    "sessionQueueHint": "待处理数会随重复、自评和到期情况变化。",
+
     "repeatHint": "刚才选择了还没连上，正在重复这条表达的场景。",
     "completionLocalSaved": "当前进度已保存在本机",
+    "completionSyncDisabled": "未启用云端同步",
     "completionSyncUnknown": "云同步状态尚未确认",
     "completionNoSchedule": "当前安排暂无后续复习时间",
-    "completionNotMastery": "完成记录不代表已经掌握；后续复习以实际安排为准。",
+
     "completionViewRecords": "查看学习记录",
     "sessionSummaryUnavailable": "本轮记录暂未读取",
 "packagePreviewLoad":"查看内容预览",
@@ -564,6 +565,7 @@
     "packageOriginalTitle": "原始标题",
     "packagePreviewMetadataPending": "加载预览后可查看",
     "packagePreviewDirectory_other": "内容目录：{{formattedCount}} 个表达",
-    "packageDirectorySearch": "搜索表达"
+    "packageDirectorySearch": "搜索表达",
+    "packagePreviewMore": "补充内容"
   }
 }

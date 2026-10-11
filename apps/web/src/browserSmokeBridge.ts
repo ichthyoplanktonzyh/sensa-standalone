@@ -42,6 +42,7 @@ type BrowserSmokeBridge = {
   holdLearningWorkspaceReadsForTest():Promise<void>;
   releaseLearningWorkspaceReadsForTest():void;
   failLearningManagementReadsForTest(active:boolean):Promise<void>;
+  failLearningHomeReadsForTest(active:boolean):Promise<void>;
   failLearningScheduleReadsForTest(active:boolean):Promise<void>;
   failLearningHistoryReadsForTest(active:boolean):Promise<void>;
   failLearningRuntimeReadsForTest(active:boolean):Promise<void>;
@@ -308,6 +309,14 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
       releaseWorkspaceReads=()=>{learningSystem.read=read;release();releaseWorkspaceReads=undefined;};
     },
     releaseLearningWorkspaceReadsForTest(){releaseWorkspaceReads?.();},
+    async failLearningHomeReadsForTest(active){
+      const {learningSystem}=await import('./learning/system');
+      if(!active){restoreLearningReads?.();restoreLearningReads=undefined;return;}
+      if(restoreLearningReads)throw new Error('Learning read fault already active');const original=learningSystem.read;
+      learningSystem.read=(async query=>{if(query.kind==='home')throw new Error('fixture-home-read-failure');return original(query);}) as typeof original;
+      restoreLearningReads=()=>{learningSystem.read=original;};
+      window.dispatchEvent(new CustomEvent('sensa-library-changed',{detail:{tables:['learningTargets']}}));
+    },
     async failLearningManagementReadsForTest(active){
       const {learningSystem}=await import('./learning/system');
       if(!active){restoreLearningReads?.();restoreLearningReads=undefined;return;}

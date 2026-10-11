@@ -39,6 +39,9 @@
 .sensa-package-disclosure > summary:focus-visible { outline: 2px solid var(--sensa-focus); outline-offset: 3px; }
 .sensa-package-samples { display: grid; gap: 2rem; }
 .sensa-package-sample { min-width: 0; border-inline-start: 2px solid var(--sensa-border-subtle); padding-inline-start: 1.25rem; }
+.sensa-package-sample-more { border-top: 1px solid var(--sensa-border-subtle); }
+.sensa-package-sample-more > summary { cursor: pointer; min-height: 2.75rem; padding-block: .75rem; font-size: .875rem; color: var(--sensa-fg-secondary); }
+.sensa-package-sample-more > summary:focus-visible { outline: 2px solid var(--sensa-focus); outline-offset: 2px; }
 .sensa-package-pagination { display: grid; grid-template-columns: 2.75rem minmax(0, auto) 2.75rem; justify-content: center; align-items: center; gap: 0.5rem; }
 .sensa-package-page-numbers { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.5rem; }
 .sensa-package-pagination > button { width: 2.75rem; padding-inline: 0; }

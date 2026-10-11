@@ -543,12 +543,13 @@
     "todayEmptyTitle": "Nessun contenuto aggiunto da imparare",
     "sessionCompleted": "Completato in questa sessione",
     "sessionPending": "Da elaborare in questa sessione",
-    "sessionQueueHint": "Le attività in sospeso cambiano con ripetizioni, autovalutazioni e ripassi dovuti.",
+
     "repeatHint": "Hai scelto «Non ancora collegato»; la scena di questa espressione viene ripetuta.",
     "completionLocalSaved": "I progressi attuali sono salvati su questo dispositivo",
+    "completionSyncDisabled": "La sincronizzazione cloud non è attiva",
     "completionSyncUnknown": "Lo stato della sincronizzazione cloud non è ancora confermato",
     "completionNoSchedule": "Nessun ripasso successivo è previsto nel piano attuale",
-    "completionNotMastery": "Un completamento registrato non significa padronanza. Segui il calendario effettivo dei ripassi.",
+
     "completionViewRecords": "Visualizza i registri di apprendimento",
     "sessionSummaryUnavailable": "I registri di questa sessione non sono ancora stati letti",
 "packagePreviewLoad":"Anteprima dei contenuti",
@@ -568,6 +569,7 @@
     "packagePreviewDirectory_one": "Contenuti: {{formattedCount}} espressione",
     "packagePreviewDirectory_many": "Contenuti: {{formattedCount}} espressioni",
     "packagePreviewDirectory_other": "Contenuti: {{formattedCount}} espressioni",
-    "packageDirectorySearch": "Cerca espressioni"
+    "packageDirectorySearch": "Cerca espressioni",
+    "packagePreviewMore": "Altri contenuti"
   }
 }

@@ -158,7 +158,8 @@
     "reviewOnlyHint": "今天先巩固这些意思。",
     "reviewOnly": "只复习",
     "noReview": "暂无到期复习",
-    "reviewCount": "只复习 {{count}} 个意思",
+    "reviewCount": "只复习 {{formattedCount}} 个意思",
+    "reviewCount_other": "只复习 {{formattedCount}} 个意思",
     "manage": "我的学习",
     "add": "添加学习内容",
     "existing": "从已有内容开始",
@@ -168,6 +169,8 @@
     "open": "打开",
     "emptyAction": "添加内容",
     "resume": "继续学习",
-    "resumeHint": "有一段尚未结束的学习，可以接着完成。"
+    "resumeHint": "有一段尚未结束的学习，可以接着完成。",
+    "newCount": "待新学 {{formattedCount}}",
+    "dueCount": "待复习 {{formattedCount}}"
   }
 }

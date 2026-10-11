@@ -81,12 +81,13 @@
     "todayEmptyTitle": "Henüz öğrenme içeriği eklenmedi",
     "sessionCompleted": "Bu turda tamamlanan",
     "sessionPending": "Bu turda bekleyen",
-    "sessionQueueHint": "Bekleyen işler tekrarlar, öz değerlendirmeler ve zamanı gelen tekrarlarla değişir.",
+
     "repeatHint": "“Henüz bağlantı kurulmadı” seçildi; bu ifadenin sahnesi tekrarlanıyor.",
     "completionLocalSaved": "Mevcut ilerleme bu cihaza kaydedildi",
+    "completionSyncDisabled": "Bulut senkronizasyonu etkin değil",
     "completionSyncUnknown": "Bulut eşitleme durumu henüz doğrulanmadı",
     "completionNoSchedule": "Mevcut planda sonraki bir tekrar planlanmadı",
-    "completionNotMastery": "Tamamlama kaydı, ustalık anlamına gelmez. Gerçek tekrar programını izleyin.",
+
     "completionViewRecords": "Öğrenme kayıtlarını gör",
     "sessionSummaryUnavailable": "Bu turun kayıtları henüz okunmadı",
 "packagePreviewLoad":"İçeriği önizle",
@@ -105,6 +106,7 @@
     "packagePreviewMetadataPending": "Önizleme yüklendikten sonra kullanılabilir",
     "packagePreviewDirectory_one": "İçerik: {{formattedCount}} ifade",
     "packagePreviewDirectory_other": "İçerik: {{formattedCount}} ifade",
-    "packageDirectorySearch": "İfade ara"
+    "packageDirectorySearch": "İfade ara",
+    "packagePreviewMore": "Ek içerik"
   }
 }

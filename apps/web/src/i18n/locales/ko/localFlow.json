@@ -541,12 +541,13 @@
     "todayEmptyTitle": "아직 학습 내용이 없습니다",
     "sessionCompleted": "이번 회차 완료",
     "sessionPending": "이번 회차 남은 항목",
-    "sessionQueueHint": "반복, 자기 평가 및 복습 시점에 따라 남은 항목이 달라집니다.",
+
     "repeatHint": "아직 연결되지 않음을 선택하여 이 표현의 장면을 반복합니다.",
     "completionLocalSaved": "현재 진행 상황이 이 기기에 저장되었습니다",
+    "completionSyncDisabled": "클라우드 동기화가 활성화되지 않았습니다",
     "completionSyncUnknown": "클라우드 동기화 상태가 아직 확인되지 않았습니다",
     "completionNoSchedule": "현재 계획에 다음 복습 일정이 없습니다",
-    "completionNotMastery": "완료 기록이 숙달을 의미하지는 않습니다. 실제 복습 일정을 따르세요.",
+
     "completionViewRecords": "학습 기록 보기",
     "sessionSummaryUnavailable": "이번 회차의 기록을 아직 읽지 못했습니다",
 "packagePreviewLoad":"내용 미리 보기",
@@ -564,6 +565,7 @@
     "packageOriginalTitle": "원래 제목",
     "packagePreviewMetadataPending": "미리보기 로드 후 확인 가능",
     "packagePreviewDirectory_other": "내용 목록: 표현 {{formattedCount}}개",
-    "packageDirectorySearch": "표현 검색"
+    "packageDirectorySearch": "표현 검색",
+    "packagePreviewMore": "추가 내용"
   }
 }

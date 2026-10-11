@@ -543,12 +543,13 @@
     "todayEmptyTitle": "Nenhum conteúdo adicionado para aprender",
     "sessionCompleted": "Concluído nesta rodada",
     "sessionPending": "Pendente nesta rodada",
-    "sessionQueueHint": "As tarefas pendentes mudam com repetições, autoavaliações e revisões vencidas.",
+
     "repeatHint": "Você escolheu “Ainda não conectou”; a cena desta expressão está sendo repetida.",
     "completionLocalSaved": "O progresso atual está salvo neste dispositivo",
+    "completionSyncDisabled": "A sincronização na nuvem não está ativada",
     "completionSyncUnknown": "O estado da sincronização na nuvem ainda não foi confirmado",
     "completionNoSchedule": "Não há revisão posterior agendada no plano atual",
-    "completionNotMastery": "Um registro de conclusão não significa domínio. Siga o cronograma real de revisão.",
+
     "completionViewRecords": "Ver registros de aprendizagem",
     "sessionSummaryUnavailable": "Os registros desta rodada ainda não foram lidos",
 "packagePreviewLoad":"Prévia do conteúdo",
@@ -568,6 +569,7 @@
     "packagePreviewDirectory_one": "Conteúdo: {{formattedCount}} expressão",
     "packagePreviewDirectory_many": "Conteúdo: {{formattedCount}} expressões",
     "packagePreviewDirectory_other": "Conteúdo: {{formattedCount}} expressões",
-    "packageDirectorySearch": "Buscar expressões"
+    "packageDirectorySearch": "Buscar expressões",
+    "packagePreviewMore": "Mais conteúdo"
   }
 }

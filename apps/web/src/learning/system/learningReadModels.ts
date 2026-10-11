@@ -128,6 +128,7 @@ export interface LearningQueueProjection {
 }
 
 export interface LearningHomeProjection {
+  readonly currentTask?:Readonly<{expression:string;targetLanguageTag:string;purpose:LearningPurpose}>|null;
   readonly activeRunId: string | null;
   readonly activeLanguageContext: SensaFormalPinnedLanguageContext | null;
   readonly hasLibraryContent: boolean;
@@ -145,6 +146,7 @@ export interface LearningHomeProjection {
 }
 
 export interface LearningManagementProjection{
+ readonly content?:readonly Readonly<{id:string;title:string;state:'active'|'maintenance'|'paused';kind:'book'|'direct'|'personal_semantic_world'}>[];
  readonly targetIds:readonly string[];readonly pendingDirectCount:number;readonly policies:readonly LearningPolicy[];readonly dailyLimit:number|null;
  readonly readyInitialCount:number;readonly reviewDueCount:number;
  readonly policyOptions:readonly LearningPolicyOption[];

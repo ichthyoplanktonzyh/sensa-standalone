@@ -79,12 +79,13 @@
     "todayEmptyTitle": "Материалы для изучения ещё не добавлены",
     "sessionCompleted": "Завершено в этом занятии",
     "sessionPending": "Осталось в этом занятии",
-    "sessionQueueHint": "Число оставшихся заданий меняется при повторах, самооценке и наступлении срока повторения.",
+
     "repeatHint": "Вы выбрали «Пока не связал»; сцена этого выражения повторяется.",
     "completionLocalSaved": "Текущий прогресс сохранён на этом устройстве",
+    "completionSyncDisabled": "Синхронизация с облаком не включена",
     "completionSyncUnknown": "Статус синхронизации с облаком ещё не подтверждён",
     "completionNoSchedule": "В текущем плане нет следующего запланированного повторения",
-    "completionNotMastery": "Запись о завершении не означает освоение. Следуйте фактическому расписанию повторений.",
+
     "completionViewRecords": "Посмотреть записи обучения",
     "sessionSummaryUnavailable": "Записи этого занятия ещё не прочитаны",
 "packagePreviewLoad":"Предпросмотр содержимого",
@@ -105,6 +106,7 @@
     "packagePreviewDirectory_few": "Содержимое: {{formattedCount}} выражения",
     "packagePreviewDirectory_many": "Содержимое: {{formattedCount}} выражений",
     "packagePreviewDirectory_other": "Содержимое: {{formattedCount}} выражения",
-    "packageDirectorySearch": "Поиск выражений"
+    "packageDirectorySearch": "Поиск выражений",
+    "packagePreviewMore": "Дополнительные материалы"
   }
 }

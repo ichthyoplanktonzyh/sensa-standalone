@@ -79,12 +79,13 @@
     "todayEmptyTitle": "Aucun contenu ajouté à apprendre",
     "sessionCompleted": "Terminé dans cette session",
     "sessionPending": "À traiter dans cette session",
-    "sessionQueueHint": "Les tâches restantes changent avec les répétitions, les autoévaluations et les révisions dues.",
+
     "repeatHint": "Vous avez choisi «Pas encore de lien» ; la scène de cette expression est répétée.",
     "completionLocalSaved": "La progression actuelle est enregistrée sur cet appareil",
+    "completionSyncDisabled": "La synchronisation cloud n’est pas activée",
     "completionSyncUnknown": "L’état de synchronisation cloud n’est pas encore confirmé",
     "completionNoSchedule": "Aucune révision ultérieure n’est prévue dans le programme actuel",
-    "completionNotMastery": "Un enregistrement de fin ne signifie pas la maîtrise. Suivez le calendrier réel de révision.",
+
     "completionViewRecords": "Voir les résultats enregistrés",
     "sessionSummaryUnavailable": "Les résultats de cette session n’ont pas encore été lus",
 "packagePreviewLoad":"Aperçu du contenu",
@@ -104,6 +105,7 @@
     "packagePreviewDirectory_one": "Contenu : {{formattedCount}} expression",
     "packagePreviewDirectory_many": "Contenu : {{formattedCount}} expressions",
     "packagePreviewDirectory_other": "Contenu : {{formattedCount}} expressions",
-    "packageDirectorySearch": "Rechercher des expressions"
+    "packageDirectorySearch": "Rechercher des expressions",
+    "packagePreviewMore": "Contenu complémentaire"
   }
 }

@@ -113,6 +113,11 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+[data-sensa-shell-item-short-label] { display: none; }
+@media (max-width: 63.99rem) {
+ [data-sensa-shell-item-label] { display: none; }
+ [data-sensa-shell-item-short-label] { display: block; max-width: 100%; font-size: inherit; line-height: 1.3; white-space: normal; overflow-wrap: anywhere; hyphens: auto; }
+}
 
 [data-sensa-shell-utility-label] {
   position: absolute;

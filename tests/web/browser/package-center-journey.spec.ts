@@ -201,8 +201,11 @@ const previewBeforeDownload=(mode:'legacy'|'lightweight')=>async({page,context}:
  for(const value of source){
   const sample=preview.getByRole('article',{name:value.expression,exact:true});
   await expect(sample.getByText(value.scene,{exact:true})).toBeVisible();
-  await expect(sample.getByText(value.meaning,{exact:true}).first()).toBeVisible();
+  await expect(sample.locator('.sensa-package-sample-more').getByText(value.meaning,{exact:true})).not.toBeVisible();
   await expect(sample.getByText(value.example,{exact:true})).toBeVisible();
+  await sample.locator('summary').filter({hasText:'补充内容'}).click();
+  await expect(sample.locator('.sensa-package-sample-more').getByText(value.meaning,{exact:true})).toBeVisible();
+  await sample.locator('summary').filter({hasText:'补充内容'}).click();
  }
  await expect(preview.getByText('内容目录：3 个表达',{exact:true})).toBeVisible();
  await expect(preview.locator('li')).toHaveCount(3);
@@ -341,6 +344,7 @@ test('an enrolled Book cold read failure keeps membership unknown and recovery r
  await page.setViewportSize({width:320,height:740});const library=page.locator('#s-learning-library'),search=library.getByRole('searchbox',{name:'搜索单词或意思',exact:true});
  await search.pressSequentially('borow');await search.press('ArrowLeft');await search.press('ArrowLeft');await search.press('r');await expect(search).toHaveValue('borrow');await expect(search).toBeFocused();
  await expect(library.locator('[data-learning-target]')).toHaveCount(1);await expect(library.locator('[data-learning-target]')).toContainText('borrow');
+ await library.locator('.sensa-learning-options > summary').click();
  const searchBox=(await search.boundingBox())!,filter=library.getByRole('combobox',{name:'学习状态',exact:true}),sort=library.getByRole('combobox',{name:'排序',exact:true});
  expect(searchBox.width).toBeGreaterThanOrEqual(200);expect((await filter.boundingBox())!.y).toBeGreaterThanOrEqual(searchBox.y+searchBox.height);expect((await sort.boundingBox())!.y).toBeGreaterThanOrEqual(searchBox.y+searchBox.height);
  await search.press('ControlOrMeta+A');await search.press('Backspace');await expect(library.locator('[data-learning-target]')).toHaveCount(2);
@@ -871,6 +875,7 @@ test('a guest learns a Book through the UI and resumes the revealed step after r
   await expect(home.getByRole('button',{name:'继续学习',exact:true})).toHaveCount(0);
   await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的学习',exact:true}).click();
   const study=page.locator('#s-study');
+  await study.locator('summary').filter({hasText:'最近记录'}).click();
   const history=study.locator('ol');
   await expect(history.getByRole('button',{name:/borrow/})).toHaveCount(1);
   const completed=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
@@ -881,16 +886,17 @@ test('a guest learns a Book through the UI and resumes the revealed step after r
   expect(completed.completedTargets).toHaveLength(1);
   expect(completed.completedTargets[0]!.nextReviewAt).not.toBeNull();
   await page.reload();
+  await study.locator('summary').filter({hasText:'最近记录'}).click();
   await expect(history.getByRole('button',{name:/borrow/})).toHaveCount(1);
   expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(completed);
   // Move only the browser clock to the due date actually produced by learning.
   // Neither a target nor a scheduling result is seeded by the test.
   await page.clock.setFixedTime(new Date(Date.parse(completed.completedTargets[0]!.nextReviewAt!)+60_000));
   await page.goto(fixture.origin);
-  await expect(home.getByRole('button',{name:'开始学习',exact:true})).toBeVisible({timeout:15_000});
+  await expect(home.getByRole('button',{name:'开始 / 继续复习',exact:true})).toBeVisible({timeout:15_000});
   await page.context().setOffline(true);
   try{
-    await home.getByRole('button',{name:'开始学习',exact:true}).click();
+    await home.getByRole('button',{name:'开始 / 继续复习',exact:true}).click();
     await expect(runtime.getByRole('button',{name:/查看表达/})).toBeVisible();
     const review=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
     expect(review.runtime!.targetId).toBe(completed.records[0]!.targetId);

@@ -541,12 +541,13 @@
     "todayEmptyTitle": "Chưa thêm nội dung để học",
     "sessionCompleted": "Đã hoàn thành trong lượt này",
     "sessionPending": "Đang chờ trong lượt này",
-    "sessionQueueHint": "Số mục đang chờ thay đổi theo việc lặp lại, tự đánh giá và các lần ôn đến hạn.",
+
     "repeatHint": "Bạn đã chọn “Chưa kết nối được”; cảnh của cách diễn đạt này đang lặp lại.",
     "completionLocalSaved": "Tiến độ hiện tại đã được lưu trên thiết bị này",
+    "completionSyncDisabled": "Chưa bật đồng bộ đám mây",
     "completionSyncUnknown": "Trạng thái đồng bộ đám mây chưa được xác nhận",
     "completionNoSchedule": "Kế hoạch hiện tại chưa có thời gian ôn tiếp theo",
-    "completionNotMastery": "Bản ghi hoàn thành không có nghĩa là đã thành thạo. Hãy theo lịch ôn thực tế.",
+
     "completionViewRecords": "Xem bản ghi học tập",
     "sessionSummaryUnavailable": "Bản ghi của lượt này chưa được đọc",
 "packagePreviewLoad":"Xem trước nội dung",
@@ -564,6 +565,7 @@
     "packageOriginalTitle": "Tiêu đề gốc",
     "packagePreviewMetadataPending": "Có sau khi tải bản xem trước",
     "packagePreviewDirectory_other": "Nội dung: {{formattedCount}} cách diễn đạt",
-    "packageDirectorySearch": "Tìm cách diễn đạt"
+    "packageDirectorySearch": "Tìm cách diễn đạt",
+    "packagePreviewMore": "Nội dung bổ sung"
   }
 }

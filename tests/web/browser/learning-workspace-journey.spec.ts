@@ -320,6 +320,7 @@ test('a failed Statistics code module recovers after reconnect without losing sa
   await runtime.getByRole('button',{name:/完成并回到首页/}).click();
   await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的学习',exact:true}).click();
   const study=page.locator('#s-study');
+  await study.locator('summary').filter({hasText:'最近记录'}).click();
   await expect(study.locator('ol').getByRole('button',{name:/borrow/})).toHaveCount(1);
   const saved=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
   const blockedModule='**/assets/StatsScreen-*.js';let blockedRequests=0;

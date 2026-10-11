@@ -498,7 +498,8 @@
     "manageContent":"Gestionar contenido de aprendizaje","preferences": "Preferencias de aprendizaje",
     "library": "Contenido de aprendizaje",
     "scope": "Biblioteca de aprendizaje",
-    "count": "{{count}} significados",
+    "count": "{{formattedCount}} significados",
+    "count_many": "{{formattedCount}} significados",
     "browse": "Ver contenido",
     "plan": "Plan de aprendizaje",
     "daily": "Límite diario de significados nuevos",
@@ -546,7 +547,9 @@
       "active": "En curso",
       "review": "Repaso y refuerzo",
       "complete": "Aprendizaje inicial completado / conocido"
-    }
+    },
+    "count_one": "{{formattedCount}} significado",
+    "count_other": "{{formattedCount}} significados"
   },
   "quickDict": {
     "detailUnavailable": "La entrada completa de Referencia para «{{word}}» no está disponible en este momento",

@@ -158,7 +158,8 @@
     "reviewOnlyHint": "今日はこれらの意味を確かなものにしましょう。",
     "reviewOnly": "復習のみ",
     "noReview": "期限の来た復習はありません",
-    "reviewCount": "{{count}}個の意味だけを復習",
+    "reviewCount": "{{formattedCount}}個の意味だけを復習",
+    "reviewCount_other": "{{formattedCount}}個の意味だけを復習",
     "manage": "私の学習",
     "add": "学ぶ内容を追加",
     "existing": "既存の内容から始める",
@@ -168,6 +169,8 @@
     "open": "開く",
     "emptyAction": "内容を追加",
     "resume": "学習を続ける",
-    "resumeHint": "未完了の学習セッションがあります。続きから再開できます。"
+    "resumeHint": "未完了の学習セッションがあります。続きから再開できます。",
+    "newCount": "新規学習 {{formattedCount}}",
+    "dueCount": "復習 {{formattedCount}}"
   }
 }

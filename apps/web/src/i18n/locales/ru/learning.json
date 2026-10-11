@@ -498,7 +498,7 @@
     "manageContent":"Управлять учебным материалом","preferences": "Настройки обучения",
     "library": "Учебные материалы",
     "scope": "Библиотека обучения",
-    "count": "Значений: {{count}}",
+    "count": "Значений: {{formattedCount}}",
     "browse": "Просмотреть материалы",
     "plan": "План обучения",
     "daily": "Дневной лимит новых значений",
@@ -546,7 +546,11 @@
       "active": "В процессе",
       "review": "Повторение и закрепление",
       "complete": "Первичное обучение завершено / знакомо"
-    }
+    },
+    "count_one": "{{formattedCount}} значение",
+    "count_few": "{{formattedCount}} значения",
+    "count_many": "{{formattedCount}} значений",
+    "count_other": "{{formattedCount}} значения"
   },
   "quickDict": {
     "detailUnavailable": "Полная словарная статья Reference для «{{word}}» сейчас недоступна",

@@ -5,13 +5,14 @@ export type LearningLibrarySort='due'|'expression';
 export interface LearningLibraryItem{
  readonly id:string;readonly targetId:string|null;readonly enrollmentId:string|null;
  readonly expression:string;readonly meaning:string;readonly sourceLabel:string;
+ readonly targetLanguageTag?:string;readonly supportLanguageTag?:string;
  readonly state:string;readonly group:Exclude<LearningLibraryFilter,'all'>|'other';readonly nextReviewAt:string|null;
 }
 export function learningLibraryTarget(target:LearningTargetProjection,initialIds:ReadonlySet<string>,dueIds:ReadonlySet<string>):LearningLibraryItem{
  const paused=target.planningPaused===true;
  const state=paused?'paused':target.declaredMastery?'declared':target.planningActive===false?'not_planned':target.state.replaceAll('_','-');
  const group=paused?'paused':dueIds.has(target.targetId)?'due':initialIds.has(target.targetId)?'new':target.completed||target.declaredMastery?'complete':target.started?'active':'other';
- return {id:target.targetId,targetId:target.targetId,enrollmentId:null,expression:target.presentation.expression,meaning:target.presentation.meaning,sourceLabel:target.presentation.sourceLabel,state,group,nextReviewAt:target.nextReviewAt};
+ return {id:target.targetId,targetId:target.targetId,enrollmentId:null,expression:target.presentation.expression,meaning:target.presentation.meaning,targetLanguageTag:target.presentation.targetLanguageTag,supportLanguageTag:target.presentation.supportLanguageTag,sourceLabel:target.presentation.sourceLabel,state,group,nextReviewAt:target.nextReviewAt};
 }
 export function learningLibrarySelection(items:readonly LearningLibraryItem[],query:string,filter:LearningLibraryFilter,sort:LearningLibrarySort,locale:string){
  const needle=query.trim().toLocaleLowerCase(locale),collator=new Intl.Collator(locale,{numeric:true,sensitivity:'base'});

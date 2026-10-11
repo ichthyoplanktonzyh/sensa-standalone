@@ -71,12 +71,13 @@
     "todayEmptyTitle": "Nie dodano jeszcze treści do nauki",
     "sessionCompleted": "Ukończone w tej rundzie",
     "sessionPending": "Oczekujące w tej rundzie",
-    "sessionQueueHint": "Liczba oczekujących zadań zmienia się wraz z powtórkami, samooceną i terminami powtórek.",
+
     "repeatHint": "Wybrano „Jeszcze nie połączone”; scena tego wyrażenia jest powtarzana.",
     "completionLocalSaved": "Bieżące postępy zapisano na tym urządzeniu",
+    "completionSyncDisabled": "Synchronizacja w chmurze nie jest włączona",
     "completionSyncUnknown": "Stan synchronizacji z chmurą nie został jeszcze potwierdzony",
     "completionNoSchedule": "W bieżącym planie nie ma kolejnej zaplanowanej powtórki",
-    "completionNotMastery": "Zapis ukończenia nie oznacza opanowania. Kieruj się rzeczywistym harmonogramem powtórek.",
+
     "completionViewRecords": "Zobacz zapisy nauki",
     "sessionSummaryUnavailable": "Zapisy tej rundy nie zostały jeszcze odczytane",
 "packagePreviewLoad":"Podgląd treści",
@@ -97,5 +98,6 @@
     "packagePreviewDirectory_few": "Treść: {{formattedCount}} wyrażenia",
     "packagePreviewDirectory_many": "Treść: {{formattedCount}} wyrażeń",
     "packagePreviewDirectory_other": "Treść: {{formattedCount}} wyrażenia",
-    "packageDirectorySearch": "Szukaj wyrażeń"
+    "packageDirectorySearch": "Szukaj wyrażeń",
+    "packagePreviewMore": "Dodatkowe treści"
   }}

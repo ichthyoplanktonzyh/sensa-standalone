@@ -98,6 +98,8 @@ export const LightweightRuntimeStartScreen = ({
           step.definition.stepKind,
         )({
           hidePrimaryAction:true,
+          targetLanguageTag:target?.targetLanguageTag,
+          supportLanguageTag:target?.supportLanguageTag,
           step,
           active,
           presentation,
@@ -158,6 +160,7 @@ export const LightweightRuntimeStartScreen = ({
     <RuntimeFrame
       id="s-lightweight-runtime"
       active={active}
+      completed={completed}
       title={purpose==='initial_learning'?t('runtime.learning'):purpose==='retention_review'?localFlowText('reviewTitle'):localFlowText('relearningTitle')}
       stepLabel={needsRelearning?t('runtime.relearningRetryTitle'):completed?t('runtime.done'):expressionStepLabel+' · '+t(
         purpose === 'initial_learning' && progressStep === 0
@@ -181,8 +184,8 @@ export const LightweightRuntimeStartScreen = ({
        {needsRelearning&&<button className="min-h-11 rounded-control px-4 text-sm text-fg-secondary focus-visible:outline-2 focus-visible:outline-focus" onClick={onExit}>{t('runtime.relearningBackHome')}</button>}
       </fieldset>:undefined}
     >
-      {!completed&&<LearningSessionStatus summary={sessionSummary} repeatCount={progressStep===0?repeatCount:0}/>}
       {!completed && renderedStep && <fieldset disabled={busy} className="m-0 min-w-0 border-0 p-0">{renderedStep}</fieldset>}
+      {!completed&&<LearningSessionStatus summary={sessionSummary} repeatCount={progressStep===0?repeatCount:0}/>}
       {!completed && renderedStep && support && <div className="mt-4">{support}</div>}
       {!completed && !renderedStep && (
         <div

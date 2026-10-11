@@ -34,12 +34,14 @@ export function HomeLearningController({active=true}:{active?:boolean}){
  const refresh=async()=>{
   const version=viewEpoch.current.version;
   if(!active||viewEpoch.current.key!==viewKey)return;
-  const learningSystem=await loadLearningSystem();
-  const next=await learningSystem.read({kind:'home',languageContext,clock:Date.now()});
-  if(version!==viewEpoch.current.version)return;
-  setProjection({routeKey,value:next});
-  setSummaryEpoch(version);
-  setNotice('');
+  try{
+   const learningSystem=await loadLearningSystem();
+   const next=await learningSystem.read({kind:'home',languageContext,clock:Date.now()});
+   if(version!==viewEpoch.current.version)return;
+   setProjection({routeKey,value:next});
+   setSummaryEpoch(version);
+   setNotice('');
+  }catch(error){if(version===viewEpoch.current.version)setSummaryEpoch(null);throw error;}
  };
  useEffect(()=>{
   if(!active)return;
@@ -47,7 +49,7 @@ export function HomeLearningController({active=true}:{active?:boolean}){
   setSummaryEpoch(null);
   setNotice('');
   const coordinator=createRefreshCoordinator(refresh);
-  const read=()=>void coordinator.request().catch(()=>{if(current)setNotice(localFlowText('learningReadFailed'));});
+  const read=()=>void coordinator.request().catch(()=>{if(current){setSummaryEpoch(null);setNotice(localFlowText('learningReadFailed'));}});
   const prepare=async()=>{
    const learningSystem=await loadLearningSystem();
    if(!current)return;
@@ -60,8 +62,8 @@ export function HomeLearningController({active=true}:{active?:boolean}){
    if(!current)return;
    stop=system.subscribe({kind:'home',languageContext},read);
    return import('../../data/library/store').then(module=>module.openLibrary()).then(prepare);
-  }).catch(()=>{if(current)setNotice(localFlowText('learningReadFailed'));});
-  const focus=()=>void prepare().catch(()=>{if(current)setNotice(localFlowText('learningReadFailed'));});
+  }).catch(()=>{if(current){setSummaryEpoch(null);setNotice(localFlowText('learningReadFailed'));}});
+  const focus=()=>void prepare().catch(()=>{if(current){setSummaryEpoch(null);setNotice(localFlowText('learningReadFailed'));}});
   window.addEventListener('focus',focus);
   return()=>{current=false;stop();window.removeEventListener('focus',focus);};
  },[active,languageContext.languageRouteId,languageContext.languageRouteRevision]);
@@ -74,7 +76,7 @@ export function HomeLearningController({active=true}:{active?:boolean}){
    if(version!==viewEpoch.current.version)return;
    await learningSystem.execute({kind:'prepare_queue',languageContext,at:new Date().toISOString()});
    await refresh();
-  }).catch(()=>setNotice(localFlowText('learningReadFailed'))),Math.min(2_147_483_647,Math.max(20,projection.nextChangeAt-Date.now()+20)));
+  }).catch(()=>{if(version===viewEpoch.current.version){setSummaryEpoch(null);setNotice(localFlowText('learningReadFailed'));}}),Math.min(2_147_483_647,Math.max(20,projection.nextChangeAt-Date.now()+20)));
   return()=>window.clearTimeout(timer);
  },[active,projection?.nextChangeAt,languageContext.languageRouteId,languageContext.languageRouteRevision]);
  const perform=async(work:()=>Promise<unknown>)=>{
@@ -90,7 +92,7 @@ export function HomeLearningController({active=true}:{active?:boolean}){
     setNotice(error instanceof Error&&error.message.startsWith('localFlow.')?error.message:localFlowText('retryOperation'));
     return false;
    }
-   if(outcome.projection==='stale')setNotice(localFlowText('progressReadFailed'));
+   if(outcome.projection==='stale'){setSummaryEpoch(null);setNotice(localFlowText('progressReadFailed'));}
    return true;
   }finally{operationInFlight.current=false;if(version===viewEpoch.current.version)setBusy(false);}
  };
@@ -121,10 +123,11 @@ export function HomeLearningController({active=true}:{active?:boolean}){
       : null;
  return <>
   <HomeScreen active={active} onGo={goMain}
-   state={state} nextReviewAt={projection?.nextReviewAt} resumeRoute={resumeRoute}
+   currentTask={authoritativeSummary?projection?.currentTask:undefined}
+   state={state} nextReviewAt={projection?.nextReviewAt} resumeRoute={authoritativeSummary?resumeRoute:undefined}
    onOpenTargets={filter=>goMain('s-learning-library',{learningFilter:filter,learningQuery:undefined,learningSort:undefined,learningPage:undefined})}
    busy={busy} summaryReady={authoritativeSummary} status={status}
-   onResume={projection?.activeRunId?()=>setViewMode('lightweight'):undefined}
+   onResume={authoritativeSummary&&projection?.activeRunId?()=>setViewMode('lightweight'):undefined}
    onStartMixed={()=>void start()} onStartReview={()=>void start(true)}
    reviewDueN={projection?.reviewDueCount??0} newAvailable={projection?.readyInitialCount??0}
    onRecordContext={()=>goMain('s-semantic-world',{worldAction:'add'})}

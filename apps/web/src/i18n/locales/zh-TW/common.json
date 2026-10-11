@@ -158,7 +158,8 @@
     "reviewOnlyHint": "今天先鞏固這些意思。",
     "reviewOnly": "只複習",
     "noReview": "暫無到期複習",
-    "reviewCount": "只複習 {{count}} 個意思",
+    "reviewCount": "只複習 {{formattedCount}} 個意思",
+    "reviewCount_other": "只複習 {{formattedCount}} 個意思",
     "manage": "我的學習",
     "add": "新增學習內容",
     "existing": "從已有內容開始",
@@ -168,6 +169,8 @@
     "open": "開啟",
     "emptyAction": "新增內容",
     "resume": "繼續學習",
-    "resumeHint": "有一段尚未結束的學習，可以接著完成。"
+    "resumeHint": "有一段尚未結束的學習，可以接著完成。",
+    "newCount": "待新學 {{formattedCount}}",
+    "dueCount": "待複習 {{formattedCount}}"
   }
 }

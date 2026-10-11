@@ -498,7 +498,7 @@
     "manageContent":"Manage learning content","preferences": "Learning preferences",
     "library": "Learning content",
     "scope": "Learning library",
-    "count": "{{count}} meanings",
+    "count": "{{formattedCount}} meanings",
     "browse": "View content",
     "plan": "Learning plan",
     "daily": "Daily new-meaning limit",
@@ -546,7 +546,9 @@
       "active": "In progress",
       "review": "Review & reinforcement",
       "complete": "Initial learning completed / known"
-    }
+    },
+    "count_one": "{{formattedCount}} meaning",
+    "count_other": "{{formattedCount}} meanings"
   },
   "quickDict": {
     "detailUnavailable": "The full Reference entry for “{{word}}” is currently unavailable",

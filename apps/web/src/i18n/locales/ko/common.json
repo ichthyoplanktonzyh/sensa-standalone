@@ -158,7 +158,8 @@
     "reviewOnlyHint": "오늘 이 의미들과 다시 연결해 보세요.",
     "reviewOnly": "복습만 하기",
     "noReview": "복습할 항목 없음",
-    "reviewCount": "의미 {{count}}개만 복습",
+    "reviewCount": "의미 {{formattedCount}}개만 복습",
+    "reviewCount_other": "의미 {{formattedCount}}개만 복습",
     "manage": "내 학습",
     "add": "학습할 내용 추가",
     "existing": "기존 콘텐츠 살펴보기",
@@ -168,6 +169,8 @@
     "open": "열기",
     "emptyAction": "콘텐츠 추가",
     "resume": "학습 계속하기",
-    "resumeHint": "계속할 수 있는 미완료 세션이 있습니다."
+    "resumeHint": "계속할 수 있는 미완료 세션이 있습니다.",
+    "newCount": "새 학습 {{formattedCount}}",
+    "dueCount": "복습 {{formattedCount}}"
   }
 }

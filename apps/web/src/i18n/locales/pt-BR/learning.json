@@ -498,7 +498,8 @@
     "manageContent":"Gerenciar conteúdo de estudo","preferences": "Preferências de aprendizagem",
     "library": "Conteúdo de aprendizagem",
     "scope": "Biblioteca de aprendizado",
-    "count": "{{count}} sentidos",
+    "count": "{{formattedCount}} sentidos",
+    "count_many": "{{formattedCount}} sentidos",
     "browse": "Ver conteúdo",
     "plan": "Plano de aprendizagem",
     "daily": "Limite diário de novos sentidos",
@@ -546,7 +547,9 @@
       "active": "Em andamento",
       "review": "Revisão e reforço",
       "complete": "Aprendizagem inicial concluída / conhecida"
-    }
+    },
+    "count_one": "{{formattedCount}} sentido",
+    "count_other": "{{formattedCount}} sentidos"
   },
   "quickDict": {
     "detailUnavailable": "O verbete completo de referência para “{{word}}” está indisponível no momento",

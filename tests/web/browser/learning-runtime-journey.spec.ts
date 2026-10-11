@@ -45,9 +45,12 @@ test('Today separates empty, resumed and future-review states and its counts ope
  await detail.getByRole('button',{name:'返回',exact:true}).click();
  await expect(list.locator(`[data-learning-target="${id}"]`)).toBeFocused();
  await list.getByRole('searchbox',{name:'搜索单词或意思',exact:true}).fill(expression!);
+ await list.locator('.sensa-learning-options > summary').click();
  await list.getByRole('combobox',{name:'排序',exact:true}).selectOption('expression');
  await page.reload();await expect(list.getByRole('searchbox')).toHaveValue(expression!);
+ await list.locator('.sensa-learning-options > summary').click();
  await expect(list.getByRole('combobox',{name:'排序',exact:true})).toHaveValue('expression');
+ await list.locator('.sensa-learning-options > summary').click();
  await list.getByRole('searchbox').fill('');
  const [expressionBox,columnBox,sourceBox,sourceColumnBox,arrowBox]=await Promise.all([
   first.locator('strong'),list.getByText('表达与意思',{exact:true}),first.getByText('到期复习样本',{exact:true}),list.getByText('来源',{exact:true}),first.locator('svg'),
@@ -907,3 +910,108 @@ test('closing and reopening Chromium restores the same revealed learning step',a
     await rm(profile,{recursive:true,force:true});
   }
 });
+
+for(const scenario of [{locale:'zh-CN',target:'en'},{locale:'en',target:'en'},{locale:'de',target:'en'},{locale:'zh-CN',target:'ar'}]){
+ test(`content-led learning surfaces preserve real task facts in ${scenario.locale} UI with ${scenario.target} source`,async({page},testInfo)=>{
+  test.setTimeout(120_000);
+  const previous=fixture.learningDelivery;
+  const expression=scenario.target==='ar'?'خذ وقتك':'Take your time.';
+  const title='让朋友安心，不必着急';
+  fixture.learningDelivery=portableBookDeliveryFixture({baseUrl:`${fixture.origin}/published/`,packageId:randomUUID(),title,targetLanguage:scenario.target,expression,expressionKind:'utterance',meaning:'让对方知道不必着急，可以按自己的节奏来。',scene:'朋友发来消息：还没有准备好，正匆忙出门。你不赶时间，想让他安心。',example:scenario.target==='ar'?'خذ وقتك، أنا لست مستعجلاً.':'Take your time. I’m in no hurry.'});
+  fixture.setRegistry([fixture.learningDelivery.descriptor]);
+  const common=JSON.parse(await readFile(`apps/web/src/i18n/locales/${scenario.locale}/common.json`,'utf8'));
+  const learning=JSON.parse(await readFile(`apps/web/src/i18n/locales/${scenario.locale}/learning.json`,'utf8'));
+  const flow=JSON.parse(await readFile(`apps/web/src/i18n/locales/${scenario.locale}/localFlow.json`,'utf8')).localFlow;
+  const home=page.locator('#s-home'),study=page.locator('#s-study'),list=page.locator('#s-learning-library'),runtime=page.locator('#s-lightweight-runtime');
+  const screenshots:string[]=[];
+  const shot=async(name:string,width:number)=>{
+   await page.setViewportSize({width,height:width<768?844:900});
+   await page.evaluate(()=>window.scrollTo(0,0));
+   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+   const file=`${scenario.locale}-${scenario.target}-${name}-${width}.png`;
+   await page.screenshot({path:testInfo.outputPath(file),animations:'disabled'});screenshots.push(file);
+   // The bottom navigation must not lose long localized labels at 320px.
+   const nav=page.locator('[data-sensa-shell-navigation]');
+   if(await nav.count())expect(await nav.evaluate(element=>[...element.querySelectorAll('button')].every(button=>button.scrollWidth<=button.clientWidth+1))).toBe(true);
+  };
+  try{
+   if(scenario.target==='ar'){
+    await page.goto(`${fixture.origin}/profile`);
+    await page.locator('#s-profile').getByRole('button',{name:/使用偏好/}).click();
+    await page.locator('#account-languages').click();
+    const routes=page.getByRole('dialog',{name:'语言路线',exact:true});
+    await routes.getByRole('combobox',{name:'选择目标语言',exact:true}).selectOption('ar');
+    await routes.getByRole('button',{name:'添加路线',exact:true}).click();
+    const arabic=routes.getByRole('radio',{name:/العربية/});
+    if(await arabic.getAttribute('aria-checked')!=='true')await arabic.click();
+    await routes.getByRole('button',{name:'完成',exact:true}).click();
+    await expect(routes).toHaveCount(0);
+    await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的学习',exact:true}).click();
+    await expect(study.getByRole('button',{name:'添加内容',exact:true})).toBeEnabled();
+   }
+   await page.goto(`${fixture.origin}/catalog`);
+   await page.locator('#s-catalog').getByRole('button',{name:new RegExp(title)}).click();
+   const book=page.locator('#s-catalog-book');
+   await book.getByRole('button',{name:'下载学习包',exact:true}).click();
+   await expect(book.getByRole('button',{name:'加入学习',exact:true})).toBeEnabled({timeout:15_000});
+   await book.getByRole('button',{name:'加入学习',exact:true}).click();
+   await expect(book.getByText('已加入学习',{exact:true})).toBeVisible();
+   await book.getByRole('button',{name:'去学习',exact:true}).click();
+   await expect(home.getByRole('heading',{name:expression,exact:true})).toBeVisible();
+   await page.evaluate(locale=>localStorage.setItem('sensa:interface-language:v1',locale),scenario.locale);await page.reload();
+   await expect(home.getByRole('heading',{name:expression,exact:true})).toBeVisible();
+   await expect(home.getByRole('button',{name:common.home.start,exact:true})).toBeEnabled();
+   const ready=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+   expect(ready.runtime).toBeNull();expect(ready.records).toHaveLength(0);expect(ready.targetIds).toHaveLength(1);
+   await shot('today-ready',1280);await shot('today-ready',320);
+   if(scenario.locale==='zh-CN'&&scenario.target==='en'){
+    await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningHomeReadsForTest(true));
+    await expect(home.getByRole('alert')).toBeVisible();
+    await expect(home.getByRole('heading',{name:expression,exact:true})).toHaveCount(0);
+    await expect(home.locator('.sensa-today-counts strong')).toHaveText(['—','—']);
+    expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(ready);
+    await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningHomeReadsForTest(false));
+    await home.getByRole('button',{name:common.reliability.retry,exact:true}).click();
+    await expect(home.getByRole('heading',{name:expression,exact:true})).toBeVisible();
+   }
+   await page.locator('[data-sensa-shell-navigation]').getByRole('button',{name:common.nav.learning,exact:true}).click();
+   await expect(study.getByText(title,{exact:true})).toBeVisible();
+   await shot('my-learning',1280);await shot('my-learning',390);
+   await study.getByRole('button',{name:learning.study.browse,exact:true}).click();
+   await expect(list.locator('[data-learning-target] strong')).toHaveText(expression);
+   await expect(list.locator('[data-learning-target] strong')).toHaveAttribute('lang',scenario.target);
+   await shot('learning-list',1280);await shot('learning-list',320);
+   await page.locator('[data-sensa-shell-navigation]').getByRole('button',{name:common.nav.home,exact:true}).click();
+   await home.getByRole('button',{name:common.home.start,exact:true}).click();
+   await expect(runtime.getByRole('button',{name:new RegExp(learning.runtime.reveal)})).toBeEnabled();
+   await shot('runtime-recall',390);
+   await runtime.getByRole('button',{name:learning.runtime.pause,exact:true}).click();
+   await expect(home.getByRole('heading',{name:expression,exact:true})).toBeVisible();
+   await shot('today-resumed',390);
+   await home.getByRole('button',{name:common.home.resume,exact:true}).click();
+   await runtime.getByRole('button',{name:new RegExp(learning.runtime.reveal)}).click();
+   await expect(runtime.getByRole('heading',{name:expression,exact:true})).toHaveAttribute('lang',scenario.target);
+   if(scenario.target==='ar')expect(await runtime.getByRole('heading',{name:expression,exact:true}).evaluate(element=>getComputedStyle(element).direction)).toBe('rtl');
+   await shot('runtime-reveal',1280);await shot('runtime-reveal',320);
+   const contrast=await runtime.locator('.sensa-expression-meaning').evaluate(element=>{
+    const foreground=getComputedStyle(element).color;
+    let node:Element|null=element,background='';while(node){background=getComputedStyle(node).backgroundColor;if(background!=='rgba(0, 0, 0, 0)'&&background!=='transparent')break;node=node.parentElement;}
+    const luminance=(color:string)=>{const values=color.match(/[\d.]+/g)!.slice(0,3).map(Number).map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;});return values[0]!*.2126+values[1]!*.7152+values[2]!*.0722;};
+    const a=luminance(foreground),b=luminance(background);return {foreground,background,ratio:(Math.max(a,b)+.05)/(Math.min(a,b)+.05)};
+   });expect(contrast.ratio).toBeGreaterThanOrEqual(4.5);
+   await runtime.locator('[data-sensa-page-region="controls"] .sensa-runtime-rating button').last().click();
+   await expect(runtime.getByRole('heading',{name:learning.runtime.done,exact:true})).toBeVisible();
+   const complete=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+   expect(complete.records).toHaveLength(1);expect(complete.records[0]!.kind).toBe('initial_learning');expect(complete.completedTargets[0]!.nextReviewAt).not.toBeNull();
+   await expect(runtime.getByRole('progressbar')).toHaveAttribute('aria-valuenow','100');
+   await shot('completion',390);
+   await runtime.getByRole('button',{name:new RegExp(learning.runtime.home)}).click();
+   await expect(home).toBeVisible();
+   await page.clock.setFixedTime(new Date(Date.parse(complete.completedTargets[0]!.nextReviewAt!)+60_000));await page.reload();
+   await expect(home.getByRole('heading',{name:expression,exact:true})).toBeVisible();
+   await expect(home.getByRole('button',{name:flow.startReview,exact:true})).toBeEnabled();
+   await shot('today-due',1280);
+   await writeFile(testInfo.outputPath('surface-conditions.json'),JSON.stringify({scenario,screenshots,contrast,conditions:'Fresh isolated Chromium/OPFS; actual UI download, enrollment, initial learning and completion; due clock derived from saved nextReviewAt; locale preference changes only.',ready,complete},null,2));
+  }finally{fixture.learningDelivery=previous;}
+ });
+}

@@ -498,7 +498,7 @@
     "manageContent":"Lerninhalte verwalten","preferences": "Lernpräferenzen",
     "library": "Lerninhalte",
     "scope": "Lernbibliothek",
-    "count": "{{count}} Bedeutungen",
+    "count": "{{formattedCount}} Bedeutungen",
     "browse": "Inhalte ansehen",
     "plan": "Lernplan",
     "daily": "Tägliches Limit für neue Bedeutungen",
@@ -546,7 +546,9 @@
       "active": "In Bearbeitung",
       "review": "Wiederholung & Festigung",
       "complete": "Erstes Lernen abgeschlossen / bekannt"
-    }
+    },
+    "count_one": "{{formattedCount}} Bedeutung",
+    "count_other": "{{formattedCount}} Bedeutungen"
   },
   "quickDict": {
     "detailUnavailable": "Der vollständige Wörterbucheintrag zu „{{word}}“ ist derzeit nicht verfügbar",

@@ -158,7 +158,7 @@
     "reviewOnlyHint": "Reconnect with these meanings today.",
     "reviewOnly": "Review only",
     "noReview": "No reviews due",
-    "reviewCount": "Review {{count}} meanings only",
+    "reviewCount": "Review {{formattedCount}} meanings only",
     "manage": "My learning",
     "add": "Add something to learn",
     "existing": "Explore existing content",
@@ -168,6 +168,10 @@
     "open": "Open",
     "emptyAction": "Add content",
     "resume": "Continue learning",
-    "resumeHint": "You have an unfinished session to continue."
+    "resumeHint": "You have an unfinished session to continue.",
+    "newCount": "New {{formattedCount}}",
+    "dueCount": "To review {{formattedCount}}",
+    "reviewCount_one": "Review {{formattedCount}} meaning only",
+    "reviewCount_other": "Review {{formattedCount}} meanings only"
   }
 }

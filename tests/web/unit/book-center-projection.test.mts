@@ -275,4 +275,8 @@ test('generated catalog display names use exact description phrases and preserve
  assert.deepEqual(packagePresentation({title:'IDS 轻量学习：英语 → de',description:'以英语为目标语言、de 为支持语言的常用共同概念学习包。'}),{title:'常用共同概念',description:'',originalTitle:'IDS 轻量学习：英语 → de'});
  assert.deepEqual(packagePresentation({title:'An author’s own title',description:'A real description'}),{title:'An author’s own title',description:'A real description',originalTitle:undefined});
  assert.equal(packagePresentation({title:source.title,description:'Unrecognized description'}).title,source.title);
+ const distinctive={...source,title:'IDS Route Foundation: ar / de — Weather'};
+ assert.equal(packagePresentation(distinctive).title,distinctive.title);
+ const Chinese={title:'IDS 轻量学习：英语 → de：天气',description:'以英语为目标语言、de 为支持语言的常用共同概念学习包。'};
+ assert.equal(packagePresentation(Chinese).title,Chinese.title);
 });

@@ -158,7 +158,8 @@
     "reviewOnlyHint": "Hubungkan kembali dengan makna ini hari ini.",
     "reviewOnly": "Hanya mengulang",
     "noReview": "Tidak ada pengulangan yang jatuh tempo",
-    "reviewCount": "Ulangi hanya {{count}} makna",
+    "reviewCount": "Ulangi hanya {{formattedCount}} makna",
+    "reviewCount_other": "Ulangi hanya {{formattedCount}} makna",
     "manage": "Pembelajaran Saya",
     "add": "Tambahkan sesuatu untuk dipelajari",
     "existing": "Jelajahi konten yang ada",
@@ -168,6 +169,8 @@
     "open": "Buka",
     "emptyAction": "Tambahkan konten",
     "resume": "Lanjutkan belajar",
-    "resumeHint": "Ada sesi yang belum selesai untuk dilanjutkan."
+    "resumeHint": "Ada sesi yang belum selesai untuk dilanjutkan.",
+    "newCount": "Baru {{formattedCount}}",
+    "dueCount": "Untuk diulang {{formattedCount}}"
   }
 }

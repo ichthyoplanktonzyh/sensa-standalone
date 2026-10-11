@@ -74,8 +74,8 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
  const libraryItems:LearningLibraryItem[]=[...packageLearning.activeTargets.map(target=>learningLibraryTarget(target,initialIds,dueIds)),
   ...activePendingPersonal.map(task=>{
    const view=pendingPersonalTargetView(task,personalLearning.sourceForTask(task),personalLearning.taskSourcesLoading);
-   return {id:task.targetId,targetId:task.targetId,enrollmentId:null,expression:view.expression,meaning:view.meaning,sourceLabel:localFlowText('semanticWorld'),state:task.status==='failed'||task.status==='rejected'?'blocked':'preparing',group:'other' as const,nextReviewAt:null};
-  }),...pendingDirect.map(entry=>({id:`enrollment:${entry.enrollmentId}`,targetId:null,enrollmentId:entry.enrollmentId,expression:entry.expression,meaning:entry.meaning,sourceLabel:t('study.sources.direct'),state:'awaiting_content',group:'other' as const,nextReviewAt:null}))];
+   return {id:task.targetId,targetId:task.targetId,enrollmentId:null,expression:view.expression,meaning:view.meaning,targetLanguageTag:view.targetLanguageTag,supportLanguageTag:view.supportLanguageTag,sourceLabel:localFlowText('semanticWorld'),state:task.status==='failed'||task.status==='rejected'?'blocked':'preparing',group:'other' as const,nextReviewAt:null};
+  }),...pendingDirect.map(entry=>({id:`enrollment:${entry.enrollmentId}`,targetId:null,enrollmentId:entry.enrollmentId,expression:entry.expression,meaning:entry.meaning,targetLanguageTag:packageLearning.languageContext.targetLanguageTag,supportLanguageTag:packageLearning.languageContext.supportLanguageTag,sourceLabel:t('study.sources.direct'),state:'awaiting_content',group:'other' as const,nextReviewAt:null}))];
  const openContentSection=useCallback((section:ContentSectionId)=>goMain('s-content-library',{section}),[goMain]);
  const openContentSense=useCallback((item:PracticeSenseItem)=>goMain('s-content-sense',{senseId:item.senseId}),[goMain]);
  const openSemanticWorldSense=useCallback((senseId:string)=>{const item=contentSenseForId(senseId);if(item)openContentSense(item);},[openContentSense]);
@@ -153,6 +153,7 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
     availability={packageLearning.loadStatus} status={managementStatus}
     preferencesBusy={preferencesBusy} preferencesStatus={preferencesStatus}
     active={screenActive} tab={studyTab} onTabChange={setStudyTab} onAddLearning={()=>goMain('s-learning-entry')}
+    joinedContent={packageLearning.management?.content}
     onOpenTargetLibrary={()=>openTargetLibrary()} onOpenFilteredTargets={openTargetLibrary} onOpenTarget={openLocalTarget}
     onPolicyChange={()=>{}} defaultPolicy="lightweight" policyOptions={packageLearning.policyOptions} fixedPolicy
     learningTargetCount={(packageLearning.management?.targetIds.length??packageLearning.activeTargets.length)+activePendingPersonal.length+(packageLearning.management?.pendingDirectCount??pendingDirect.length)}

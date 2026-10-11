@@ -5,6 +5,7 @@ import type { ExperienceRecallCardPresentation } from "../../../learningRuntime/
 import { runtimePrimary } from "../../learning/RuntimeFrame";
 import type { PersonalLearningSceneRevision } from "../../../../personalContent/system";
 interface ExperienceRecallCardProps {
+  readonly supportLanguageTag?: string;
   readonly hidePrimaryAction?: boolean;
   readonly presentation: ExperienceRecallCardPresentation;
   readonly personalScene?: PersonalLearningSceneRevision | null;
@@ -13,6 +14,7 @@ interface ExperienceRecallCardProps {
 }
 export function ExperienceRecallCard({
   hidePrimaryAction=false,
+  supportLanguageTag,
   presentation,
   personalScene,
   onOpenPersonalScene,
@@ -23,12 +25,12 @@ export function ExperienceRecallCard({
   return (
     <section className="sensa-experience-recall sensa-lightweight-card" aria-label={t("runtime.recallStep")}>
       <div className="sensa-experience-scene">
-        <div className="sensa-experience-body text-xl leading-[1.9] text-fg-primary sm:text-2xl">
+        <div lang={personalScene?'':supportLanguageTag} dir="auto" className="sensa-experience-body text-xl leading-[1.9] text-fg-primary sm:text-2xl">
           {personalScene
             ? <RichExperience scene={personalScene.body} images={personalScene.media.map((image) => ({id:image.mediaId,name:image.fileName,dataUrl:image.dataUrl}))}/>
             : <RichExperience scene={experienceSketch.scene} images={experienceSketch.images} html={experienceSketch.html}/>}
         </div>
-        <p className="sensa-experience-focus text-learning-support leading-7 text-fg-secondary">
+        <p lang={supportLanguageTag} dir="auto" className="sensa-experience-focus text-learning-support leading-7 text-fg-secondary">
           {experienceSketch.senseFocus}
         </p>
       </div>

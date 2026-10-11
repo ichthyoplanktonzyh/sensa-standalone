@@ -492,3 +492,14 @@ html[data-sensa-skin="quiet"] #s-lightweight-runtime > [data-sensa-page-region="
     transition: none;
   }
 }
+
+/* Content-led learning checkpoint: keep skin presentation here. */
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-runtime-summary { padding-block: 1rem; }
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-hero h1 { line-height: 1.15; }
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-structure { display: block; margin-top: 0; padding-top: 0; }
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-experience-action .sensa-experience-personal-action {
+ width: fit-content; min-height: 2.75rem; padding: .5rem .75rem; border-color: transparent;
+ border-radius: var(--sensa-radius-control); background: transparent; box-shadow: none;
+ color: var(--sensa-fg-secondary); font-weight: 400;
+}
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-experience-action .sensa-experience-personal-action:hover { background: var(--sensa-surface-subtle); }

@@ -541,12 +541,13 @@
     "todayEmptyTitle": "まだ学習内容が追加されていません",
     "sessionCompleted": "今回の完了数",
     "sessionPending": "今回の未処理数",
-    "sessionQueueHint": "未処理数は繰り返し、自己評価、復習期限によって変わります。",
+
     "repeatHint": "「まだつながらない」を選んだため、この表現の場面を繰り返しています。",
     "completionLocalSaved": "現在の進捗はこの端末に保存済みです",
+    "completionSyncDisabled": "クラウド同期は有効になっていません",
     "completionSyncUnknown": "クラウド同期の状態は未確認です",
     "completionNoSchedule": "現在の計画に次回の復習予定はありません",
-    "completionNotMastery": "完了記録は習得を意味しません。実際の復習予定に従ってください。",
+
     "completionViewRecords": "学習記録を見る",
     "sessionSummaryUnavailable": "今回の記録はまだ読み取れていません",
 "packagePreviewLoad":"内容をプレビュー",
@@ -564,6 +565,7 @@
     "packageOriginalTitle": "元のタイトル",
     "packagePreviewMetadataPending": "プレビュー読み込み後に表示",
     "packagePreviewDirectory_other": "内容一覧：{{formattedCount}}件の表現",
-    "packageDirectorySearch": "表現を検索"
+    "packageDirectorySearch": "表現を検索",
+    "packagePreviewMore": "補足内容"
   }
 }

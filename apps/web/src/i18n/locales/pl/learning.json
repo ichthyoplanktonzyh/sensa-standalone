@@ -498,7 +498,7 @@
     "manageContent":"Zarządzaj treścią nauki","preferences": "Preferencje nauki",
     "library": "Treści do nauki",
     "scope": "Biblioteka nauki",
-    "count": "Znaczenia: {{count}}",
+    "count": "Znaczenia: {{formattedCount}}",
     "browse": "Pokaż treści",
     "plan": "Plan nauki",
     "daily": "Dzienny limit nowych znaczeń",
@@ -546,7 +546,11 @@
       "active": "W toku",
       "review": "Powtórki i utrwalanie",
       "complete": "Pierwsza nauka ukończona / znane"
-    }
+    },
+    "count_one": "{{formattedCount}} znaczenie",
+    "count_few": "{{formattedCount}} znaczenia",
+    "count_many": "{{formattedCount}} znaczeń",
+    "count_other": "{{formattedCount}} znaczenia"
   },
   "quickDict": {
     "detailUnavailable": "Pełne hasło słownikowe dla „{{word}}” jest obecnie niedostępne",

@@ -50,24 +50,26 @@ export function BookPreview({active,descriptor,publication}:{active:boolean;desc
   </div>
   {!preview&&(current.status==='loading'||current.status==='idle'?<div role="status" className="min-h-32 text-body-support text-fg-secondary">{localFlowText('packagePreviewLoading')}</div>:<PackageStatus error={current.error!=='localFlow.packagePreviewUnavailable'} onRetry={current.error==='localFlow.packagePreviewUnavailable'?undefined:load}>{localFlowNotice(current.error)}</PackageStatus>)}
   {preview&&<>
-   <div className="sensa-package-samples">{preview.samples.map(sample=><article key={`${sample.packageId}:${sample.version}`} aria-label={sample.expression} className="sensa-package-sample space-y-4">
-    <h3 className="break-words font-language text-2xl font-medium"><bdi>{sample.expression}</bdi></h3>
-    {sample.scene&&<p className="whitespace-pre-wrap break-words text-body"><bdi>{sample.scene}</bdi></p>}
-    {sample.senseFocus!==sample.meaning&&sample.senseFocus!==sample.bridge&&<p className="whitespace-pre-wrap break-words text-body-support text-fg-secondary"><bdi>{sample.senseFocus}</bdi></p>}
-    {sample.hasVisualCue&&<p className="text-metadata text-fg-secondary">{localFlowText('packagePreviewVisual')}</p>}
-    <p className="whitespace-pre-wrap break-words text-body-support text-fg-secondary"><bdi>{sample.meaning}</bdi></p>
-    {sample.bridge!==sample.meaning&&<p className="whitespace-pre-wrap break-words text-body-support text-fg-secondary"><bdi>{sample.bridge}</bdi></p>}
+   <div className="sensa-package-samples">{preview.samples.map(sample=>{const extra=[...new Set([sample.senseFocus,sample.meaning,sample.bridge])].filter(text=>text!==(sample.scene??sample.meaning));return <article key={`${sample.packageId}:${sample.version}`} aria-label={sample.expression} className="sensa-package-sample space-y-4">
+    <h3 className="break-words font-language text-2xl font-medium"><bdi lang={descriptor.route.targetLanguage}>{sample.expression}</bdi></h3>
+    <p className="whitespace-pre-wrap break-words text-body"><bdi lang={descriptor.route.supportLanguage}>{sample.scene??sample.meaning}</bdi></p>
     <div className="space-y-1 border-t border-border-subtle pt-3 text-body-support">
-     <p className="whitespace-pre-wrap break-words"><bdi>{sample.example}</bdi></p>
-     {sample.translation&&<p className="whitespace-pre-wrap break-words text-fg-secondary"><bdi>{sample.translation}</bdi></p>}
+     <p className="whitespace-pre-wrap break-words"><bdi lang={descriptor.route.targetLanguage}>{sample.example}</bdi></p>
+     {sample.translation&&<p className="whitespace-pre-wrap break-words text-fg-secondary"><bdi lang={descriptor.route.supportLanguage}>{sample.translation}</bdi></p>}
     </div>
-   </article>)}</div>
+    {(extra.length>0||sample.hasVisualCue)&&<details className="sensa-package-sample-more">
+     <summary>{localFlowText('packagePreviewMore')}</summary>
+     <div className="space-y-3 pb-2 text-body-support">{extra.map(text=><p key={text} className="whitespace-pre-wrap break-words"><bdi lang={descriptor.route.supportLanguage}>{text}</bdi></p>)}
+      {sample.hasVisualCue&&<p className="text-metadata text-fg-secondary">{localFlowText('packagePreviewVisual')}</p>}
+     </div>
+    </details>}
+   </article>;})}</div>
    <section aria-label={directoryLabel} className="border-t border-border-subtle pt-5">
     <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
      <h3 className="font-medium">{directoryLabel}</h3>
      {preview.memberCount>24&&<input type="search" aria-label={localFlowText('packageDirectorySearch')} placeholder={localFlowText('packageDirectorySearch')} value={browsing.query} onChange={event=>setDirectory({key,query:event.target.value,page:1})} className="min-h-11 w-full min-w-0 rounded-control border border-border-subtle bg-surface-panel px-3 text-sm focus-visible:outline-2 focus-visible:outline-focus sm:w-64"/>}
     </div>
-    <ul className="grid grid-cols-2 gap-x-6 gap-y-3 text-body-support sm:grid-cols-3 lg:grid-cols-4">{filteredEntries.slice((page-1)*24,page*24).map(entry=><li key={`${entry.packageId}:${entry.version}`} className="break-words"><bdi>{entry.expression}</bdi></li>)}</ul>
+    <ul className="grid grid-cols-2 gap-x-6 gap-y-3 text-body-support sm:grid-cols-3 lg:grid-cols-4">{filteredEntries.slice((page-1)*24,page*24).map(entry=><li key={`${entry.packageId}:${entry.version}`} className="break-words"><bdi lang={descriptor.route.targetLanguage}>{entry.expression}</bdi></li>)}</ul>
     {preview.memberCount>24&&<p role="status" className="mt-4 text-metadata text-fg-secondary">{localFlowText('catalogResultRange',{start:numbers.format(filteredEntries.length?(page-1)*24+1:0),end:numbers.format(Math.min(page*24,filteredEntries.length)),total:numbers.format(filteredEntries.length)})}</p>}
     {pages>1&&<CatalogPagination label={directoryLabel} page={page} pages={pages} onPage={next=>setDirectory({...browsing,page:next})}/>}
    </section>
