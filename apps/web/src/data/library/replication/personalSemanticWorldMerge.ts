@@ -136,7 +136,7 @@ export function* mergePersonalSemanticWorldReplica(
   for(const entry of side)if(entry.table==='semanticReceipts'){
    yield;
    const receipt=decodeBackupValue(entry.value) as CommandReceipt;
-   const groups=receipt.command==='CorrectPersonalMeaning'?correctionReceipts:receipt.command==='ChangeMeaningLifecycle'?lifecycleReceipts:undefined;
+   const groups=(receipt.command==='CorrectPersonalMeaning'||receipt.command==='AcceptPublishedLearningScene')?correctionReceipts:receipt.command==='ChangeMeaningLifecycle'?lifecycleReceipts:undefined;
    if(groups){const id=String(receipt.result.personalMeaningId),group=groups.get(id)??[];group.push(entry);groups.set(id,group);}
   }
   const receiptsFor=(groups:Map<string,ReplicaEntry[]>,id:string)=>(groups.get(id)??[]).map(entry=>decodeBackupValue(entry.value) as CommandReceipt);

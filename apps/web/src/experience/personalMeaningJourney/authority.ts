@@ -31,7 +31,7 @@ import {assertMeaningLifecycle,assertMeaningLifecycleReceipt,assertMeaningLifecy
 import {assertAlignmentHistory} from './alignmentLifecycle';
 import {assertMeaningConflictHistory,assertUnchangedMeaningConflictHistory} from './meaningConflictHistory';
 import {meaningHistoryRecords,assertArchivedSceneReceipts,hasSceneReceiptWitness,hasSceneContextReceiptWitness} from './meaningHistoryRead';
-import {assertMeaningCorrectionReceipts,assertMeaningCorrectionReceiptFacts,assertMeaningCorrectionOperationReceipt,meaningCorrectionFacts} from './meaningCorrection';
+import {assertMeaningCorrectionReceipts,assertMeaningCorrectionReceiptFacts,assertMeaningCorrectionOperationReceipt,meaningCorrectionFacts,assertPublishedVersionAcceptanceBindings} from './meaningCorrection';
 import type {z} from 'zod';
 import {runCooperatively,runSynchronously} from './cooperative';
 import {registryVersionSlot} from './registryVersionSlot';
@@ -323,6 +323,7 @@ function validateMeaning(meaning:MeaningJourneyRecord,registry:RegistryIndex){
  }
  for(const event of meaning.alignmentEvents)requireFact(alignments,event.personalMeaningAlignmentId,'Alignment event');
  meaningCorrectionFacts(meaning);
+ assertPublishedVersionAcceptanceBindings(meaning,id=>registry.bindingVersions.get(id),id=>registry.bindings.get(id),id=>registry.senseVersions.get(id),id=>registry.expressionVersions.get(id));
  for(const confirmation of meaning.bindingConfirmations){
   requireInvariant(confirmation.learnerUserId===meaning.personalMeaning.learnerUserId,'Binding confirmation 属于错误的 learner。');
   if(confirmation.senseProposalVersionId)requireFact(proposalVersions,confirmation.senseProposalVersionId,'Binding confirmation');
@@ -366,7 +367,7 @@ function validateAuxiliaryState(state:JourneyState){
   requireInvariant(meaning&&meaningHistoryRecords(meaning).some(branch=>hasSceneReceiptWitness(branch,receipt)),'Scene receipt 缺少来源理解见证。');
  }
  const corrections=new Map<string,JourneyState['commandReceipts']>();
- for(const receipt of state.commandReceipts)if(receipt.command==='CorrectPersonalMeaning'){
+ for(const receipt of state.commandReceipts)if(receipt.command==='CorrectPersonalMeaning'||receipt.command==='AcceptPublishedLearningScene'){
   const id=String(receipt.result.personalMeaningId),group=corrections.get(id)??[];group.push(receipt);corrections.set(id,group);
  }
  for(const meaning of state.meanings){const id=meaning.personalMeaning.personalMeaningId;assertMeaningCorrectionReceipts(meaning,corrections.get(id)??[]);corrections.delete(id);}

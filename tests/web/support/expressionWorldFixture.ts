@@ -28,6 +28,9 @@ export async function expressionWorldFixture(extra=0):Promise<JourneyState>{
  const mapped=JSON.parse(JSON.stringify(additions,(_key,value)=>value===oldExpression.expressionId?original.expressionId:value===oldVersion.expressionVersionId?originalVersion.expressionVersionId:value)) as JourneyState;
  mapped.registry.expressions.splice(2,1);mapped.registry.expressionVersions.splice(2,1);
  state.meanings.push(...mapped.meanings);
+ state.contexts.anchors.push(...mapped.contexts.anchors);
+ state.contexts.anchorRevisions.push(...mapped.contexts.anchorRevisions);
+ Object.assign(state.contexts.anchorRevisionParents,mapped.contexts.anchorRevisionParents);
  for(const kind of Object.keys(state.registry) as Array<keyof JourneyState['registry']>)(state.registry[kind] as unknown[]).push(...mapped.registry[kind]);
  return state;
 }

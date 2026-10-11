@@ -48,7 +48,7 @@ import { digestOf } from './digest';
 import {appendMaterialAnchor,createPersonalMeaningFacts} from './materialFacts';
 import {applyClarificationFacts} from './clarificationFacts';
 import {isAlignmentActive} from './alignmentLifecycle';
-import {meaningCorrectionContext,meaningCorrectionPayload,meaningCorrectionBinding,correctionReason,currentMeaningContextRevisions} from './meaningCorrection';
+import {meaningCorrectionContext,meaningCorrectionPayload,meaningCorrectionBinding,correctionReason,publishedVersionAcceptanceReason,currentMeaningContextRevisions} from './meaningCorrection';
 import {installPublishedLearningFacts,learningSceneAnchorRevision} from './publishedSceneFacts';
 import {learningScenePersonalMeaningId,learningSceneContextId} from '../../data/library/personalSceneIdentity';
 import {settleExpressionBinding} from './expressionBindingFacts';
@@ -1344,15 +1344,22 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
       if (recordForScene) {
         const record = recordForScene;
         if (record.personalMeaning.status !== 'active') throw new Error('个人意义已不可更新。');
-        const alignment = record.alignments.find((candidate) => (
-          isAlignmentActive(record,candidate)
-          && candidate.senseId === input.target.senseId
-          && candidate.senseVersionId === input.target.senseVersionId
-        ));
-        if (!alignment || !record.bindingConfirmations.some((confirmation) => (
-          confirmation.senseVersionId === input.target.senseVersionId
-          && confirmation.bindingVersionId === input.target.bindingVersionId
-        ))) throw new Error('个人场景不能更新到另一个意思或表达。');
+        const registry=this.requireState().registry;
+        const priorConnection=record.alignments.filter(candidate=>isAlignmentActive(record,candidate)
+          && candidate.senseId===input.target.senseId).flatMap(alignment=>record.bindingConfirmations
+          .filter(confirmation=>confirmation.senseVersionId===alignment.senseVersionId)
+          .flatMap(confirmation=>{
+            const version=registry.bindingVersions.find(row=>row.bindingVersionId===confirmation.bindingVersionId);
+            const binding=version&&registry.bindings.find(row=>row.senseExpressionBindingId===version.senseExpressionBindingId);
+            return binding?.senseExpressionBindingId===input.target.bindingId
+              && binding.expressionId===input.semantic.expressionId?[{alignment,confirmation}]:[];
+          })).at(-1);
+        if(!priorConnection)throw new Error('个人场景不能更新到另一个意思或表达。');
+        const versionChanged=priorConnection.alignment.senseVersionId!==input.target.senseVersionId
+          || priorConnection.confirmation.bindingVersionId!==input.target.bindingVersionId;
+        if(versionChanged&&(input.semantic.bindingVersionNumber<=registry.bindingVersions.find(row=>row.bindingVersionId===priorConnection.confirmation.bindingVersionId)!.versionNumber
+          ||input.semantic.senseVersionNumber<registry.senseVersions.find(row=>row.senseVersionId===priorConnection.alignment.senseVersionId)!.versionNumber
+          ||input.semantic.expressionVersionNumber<registry.expressionVersions.find(row=>row.expressionVersionId===priorConnection.confirmation.expressionVersionId)!.versionNumber))throw Error('localFlow.meaningChanged');
         const sceneRevisions = record.personalSemanticAnchorRevisions.filter((candidate) => (
           (candidate.structuredPayload.learningScene as {sceneId?:string}|undefined)?.sceneId === input.scene.sceneId
         ));
@@ -1363,7 +1370,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
         if(!canonicalHead||canonicalHead.status!=='active')throw Error('localFlow.meaningChanged');
         const current=anchor&&sceneRevisions.find(revision=>revision.personalSemanticAnchorId===anchor!.personalSemanticAnchorId&&revision.revision===anchor!.currentRevision);
         const pin=current?.structuredPayload.learningScene as {revisionId?:string;learningTargetId?:string}|undefined;
-        if(current&&pin?.revisionId===input.scene.revisionId&&pin.learningTargetId===input.target.learningTargetId&&current.bodyText===(input.scene.body.trim()||null)&&digestOf(current.structuredPayload.media??[])===digestOf(input.scene.media)){
+        if(!versionChanged&&current&&pin?.revisionId===input.scene.revisionId&&pin.learningTargetId===input.target.learningTargetId&&current.bodyText===(input.scene.body.trim()||null)&&digestOf(current.structuredPayload.media??[])===digestOf(input.scene.media)){
           // A fresh user intent or a reopened page confirms existing content;
           // it does not append the same Scene version again. Keep the actual
           // accepting operation as the witness for this confirmation receipt.
@@ -1389,10 +1396,29 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntak
         anchor.updatedAt = nextRevision.createdAt;
         record.personalSemanticAnchorRevisions.push(nextRevision);
         record.personalMeaning.updatedAt = nextRevision.createdAt;
-        if(introduced){
+        if(introduced&&!versionChanged){
           const previous=latestMeaningRevision(record)!;
           appendMeaningRevision(this.enginePorts(),record,input.operationId,[anchor.personalSemanticAnchorId]);
           latestMeaningRevision(record)!.displayLabel=previous.displayLabel;
+        }
+        if(versionChanged){
+          // Explicit re-acceptance may advance published versions on the same
+          // Sense/Expression/Binding identities. Preserve the old facts and
+          // their historical sources while confirming the newly pinned source.
+          let alignment=priorConnection.alignment;
+          const now=nextRevision.createdAt;
+          {
+            const acceptanceId=this.id();
+            record.semanticAcceptances.push({contractVersion:'sensa-personal-semantic-world-v3',semanticAcceptanceId:acceptanceId,operationId:input.operationId,learnerUserId:record.personalMeaning.learnerUserId,authority:this.deps.semanticAcceptanceAuthority.verify({mode:'learner_direct'}),personalSemanticAnchorRevisionId:nextRevision.personalSemanticAnchorRevisionId,personalExpressionAnchorRevisionId:priorConnection.confirmation.personalExpressionAnchorRevisionId,expressionOccurrence:{kind:'learning_target',learningTargetId:input.target.learningTargetId,curriculumMembershipId:input.target.curriculumMembershipId},resolution:'reuse_existing',senseId:input.target.senseId,senseVersionId:input.target.senseVersionId,resolutionProvenance:{resolverKind:'external_tool',provider:'sensa-published-content',model:null,policyVersion:input.semantic.semanticPolicyVersion,sourceReferenceIds:[input.source.contentReleaseId,input.source.bookVersionId]},acceptedAt:now});
+            record.alignmentEvents.push({contractVersion:'sensa-personal-semantic-world-v3',personalMeaningAlignmentEventId:this.id(),personalMeaningAlignmentId:alignment.personalMeaningAlignmentId,ordinal:Math.max(...record.alignmentEvents.filter(row=>row.personalMeaningAlignmentId===alignment.personalMeaningAlignmentId).map(row=>row.ordinal))+1,eventType:'withdrawn',operationId:input.operationId,reason:publishedVersionAcceptanceReason,occurredAt:now});
+            alignment={...alignment,personalMeaningAlignmentId:this.id(),personalMeaningRevisionId:latestMeaningRevision(record)!.personalMeaningRevisionId,basis:{kind:'contextual_resolution',semanticAcceptanceId:acceptanceId},senseVersionId:input.target.senseVersionId,revision:1,createdAt:now,updatedAt:now};
+            record.alignments.push(alignment);
+            record.alignmentEvents.push({contractVersion:'sensa-personal-semantic-world-v3',personalMeaningAlignmentEventId:this.id(),personalMeaningAlignmentId:alignment.personalMeaningAlignmentId,ordinal:1,eventType:'confirmed',operationId:input.operationId,reason:null,occurredAt:now});
+          }
+          const acceptance=record.semanticAcceptances.find(row=>row.operationId===input.operationId)!;
+          const confirmed=settleExpressionBinding(this.requireState(),this.enginePorts(),record,alignment,{candidateId:acceptance.semanticAcceptanceId,expressionType:input.semantic.expressionType,languageTag:input.target.targetLanguageTag,surfaceForm:input.target.expression,provenanceKind:'reviewed'},{operationId:input.operationId,senseVersionId:input.target.senseVersionId,surfaceForm:input.target.expression,languageTag:input.target.targetLanguageTag,expressionType:input.semantic.expressionType,relation:input.semantic.relation,semanticCoverage:input.semantic.semanticCoverage},null,{expressionId:input.semantic.expressionId,expressionVersionId:input.semantic.expressionVersionId,senseExpressionBindingId:input.target.bindingId,bindingVersionId:input.target.bindingVersionId});
+          acceptance.personalExpressionAnchorRevisionId=confirmed.personalExpressionAnchorRevisionId;
+          alignment.personalMeaningRevisionId=latestMeaningRevision(record)!.personalMeaningRevisionId;
         }
         const result = {
           personalMeaningId: record.personalMeaning.personalMeaningId,
