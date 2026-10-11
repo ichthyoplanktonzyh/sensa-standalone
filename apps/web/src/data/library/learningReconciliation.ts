@@ -79,10 +79,12 @@ export function reconcileConcurrentLearningEntries(input:{
  const localOnly=input.local.filter(entry=>entry.table==='learningEvents'&&!baseEventIds.has(entry.key)&&!remote.has(entryId(entry.table,entry.key)));
  const remoteOnly=input.remote.filter(entry=>entry.table==='learningEvents'&&!baseEventIds.has(entry.key)&&!local.has(entryId(entry.table,entry.key)));
 
- for(const conflictId of input.conflicts){
-  let parsed:unknown;try{parsed=JSON.parse(conflictId);}catch{continue;}
-  if(!Array.isArray(parsed)||parsed[0]!=='learningTargets'||typeof parsed[1]!=='string')continue;
-  const targetId=parsed[1],localEntry=local.get(conflictId),remoteEntry=remote.get(conflictId);
+ // Two independent histories can produce the same materialized Target. The
+ // facts, rather than inequality of the projection row, establish a fork.
+ const localEventTargets=new Set(localOnly.map(entry=>decoded<LearningEventLike>(entry)?.targetId));
+ const concurrentTargets=new Set(remoteOnly.map(entry=>decoded<LearningEventLike>(entry)?.targetId).filter((id):id is string=>typeof id==='string'&&localEventTargets.has(id)));
+ for(const targetId of concurrentTargets){
+  const conflictId=entryId('learningTargets',targetId),localEntry=local.get(conflictId),remoteEntry=remote.get(conflictId);
   const ours=decoded<LearningTargetLike>(localEntry),theirs=decoded<LearningTargetLike>(remoteEntry);
   if(!ours||!theirs||ours.id!==targetId||theirs.id!==targetId||ours.retentionId!==theirs.retentionId)continue;
   if(!backupEqual(structuralTarget(ours),structuralTarget(theirs)))continue;

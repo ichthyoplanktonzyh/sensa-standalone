@@ -136,6 +136,19 @@ test('conflict markers and an unknown validation version cannot use an unchanged
  }
 });
 
+test('an old validation marker must pass the complete authority before publication or confirmation',async()=>{
+ const validation=await import('../../../apps/web/src/data/library/replication/libraryReplicaValidation');
+ for(const validationVersion of [undefined,libraryReplicaValidationVersion-1]){
+  const state=(await readCloudSync())!;await writeLibraryState(async tx=>tx.put('meta','cloud-sync',{...state,validationVersion}));
+  calls.length=0;const beforeRevision=revision;
+  const reject=vi.spyOn(validation,'validateLibraryReplicaCooperatively').mockRejectedValue(new Error('libraryBackup.errors.inconsistent'));
+  try{await expect(synchronizeLibrary(request)).rejects.toThrow('libraryBackup.errors.inconsistent');expect(reject).toHaveBeenCalled();}finally{reject.mockRestore();}
+  expect(calls).not.toContain('/commit');expect(revision).toBe(beforeRevision);
+  const rejected=(await readCloudSync())!;expect(rejected.status).not.toBe('synced');expect(rejected.validationVersion).not.toBe(libraryReplicaValidationVersion);
+  await synchronizeLibrary(request);expect((await readCloudSync())?.validationVersion).toBe(libraryReplicaValidationVersion);
+ }
+});
+
 test('signout and changed owner or incarnation during a head check cannot confirm convergence',async()=>{
  const state=(await readCloudSync())!,incarnation=await readLibrary(assertCurrentLibrary);
  for(const fault of ['signout','owner','incarnation'] as const){

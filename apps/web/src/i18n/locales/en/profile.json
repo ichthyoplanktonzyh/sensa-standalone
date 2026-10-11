@@ -238,5 +238,11 @@
     "clearConfirm": "I have saved any backup I need and confirm erasing this local content.",
     "clearAction": "Erase local content",
     "clearDone": "Local content cleared. Reopen the app to use the empty library."
+  },
+  "syncRecovery": {
+    "blocked": "Sync needs to be checked before it can continue. Your local data is still saved. Export a backup and download diagnostics, then contact support.",
+    "hint": "A backup saves only this device’s data. It does not resolve the sync problem or include cloud changes that have not been downloaded.",
+    "backup": "Back up this device",
+    "hideBackup": "Hide backup"
   }
 }

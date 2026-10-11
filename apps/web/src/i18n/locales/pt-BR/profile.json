@@ -232,5 +232,11 @@
     "clearConfirm": "Salvei os backups necessários e confirmo a exclusão deste conteúdo local.",
     "clearAction": "Excluir conteúdo local",
     "clearDone": "Conteúdo local apagado. Abra o aplicativo novamente para usar a biblioteca vazia."
+  },
+  "syncRecovery": {
+    "blocked": "A sincronização precisa ser verificada antes de continuar. Seus dados locais estão salvos. Exporte um backup, baixe o diagnóstico e entre em contato com o suporte.",
+    "hint": "O backup salva apenas os dados deste dispositivo. Ele não resolve o problema de sincronização nem inclui alterações da nuvem que ainda não foram baixadas.",
+    "backup": "Fazer backup deste dispositivo",
+    "hideBackup": "Ocultar backup"
   }
 }

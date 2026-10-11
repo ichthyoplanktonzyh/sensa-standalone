@@ -226,5 +226,11 @@
     "clearConfirm": "J’ai enregistré les sauvegardes nécessaires et confirme l’effacement de ce contenu local.",
     "clearAction": "Effacer le contenu local",
     "clearDone": "Contenu local effacé. Rouvrez l’application pour utiliser la bibliothèque vide."
+  },
+  "syncRecovery": {
+    "blocked": "La synchronisation doit être vérifiée avant de continuer. Vos données locales sont enregistrées. Exportez une sauvegarde, téléchargez le diagnostic, puis contactez l’assistance.",
+    "hint": "Une sauvegarde contient uniquement les données de cet appareil. Elle ne résout pas le problème de synchronisation et n’inclut pas les modifications du cloud qui n’ont pas encore été téléchargées.",
+    "backup": "Sauvegarder cet appareil",
+    "hideBackup": "Masquer la sauvegarde"
   }
 }

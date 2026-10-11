@@ -239,5 +239,11 @@
     "clearConfirm": "He guardado las copias de seguridad que necesito y confirmo el borrado de este contenido local.",
     "clearAction": "Borrar contenido local",
     "clearDone": "Se borró el contenido local. Vuelve a abrir la aplicación para usar la biblioteca vacía."
+  },
+  "syncRecovery": {
+    "blocked": "Hay que revisar la sincronización antes de continuar. Tus datos locales siguen guardados. Exporta una copia de seguridad, descarga el diagnóstico y contacta con soporte.",
+    "hint": "La copia de seguridad solo guarda los datos de este dispositivo. No resuelve el problema de sincronización ni incluye cambios de la nube que aún no se han descargado.",
+    "backup": "Respaldar este dispositivo",
+    "hideBackup": "Ocultar copia de seguridad"
   }
 }

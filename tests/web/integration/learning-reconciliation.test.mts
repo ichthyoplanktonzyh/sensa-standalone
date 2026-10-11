@@ -19,6 +19,60 @@ import {
   type LibraryReplicaEntry,
 } from '../../../apps/web/src/data/library/replication/libraryReplica.ts';
 
+test('a shared Run cannot be applied for one Target and history-only for another',()=>{
+ // A header-only domain gate. This does not manufacture an admitted cohort
+ // or claim that the current ordinary UI can start this structured protocol.
+ const id=(n:number)=>`20000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+ const entry=(table:LibraryReplicaEntry['table'],key:string,value:unknown):LibraryReplicaEntry=>({table,key,value:encodeBackupValue(value)});
+ const target=(n:number)=>({id:id(n),retentionId:id(n+10),memory:null,memoryRevision:0});
+ const a=target(1),b=target(2),at=(minute:string)=>`2026-09-21T09:${minute}:00.000Z`;
+ const event=(n:number,run:number,targetId:string,minute:string)=>entry('learningEvents',id(n),{id:id(n),runId:id(run),targetId,at:at(minute)});
+ const run=(n:number,targetIds:string[],minute:string)=>entry('learningRuns',id(n),{id:id(n),targetIds,completedAt:at(minute)});
+ const base=[entry('learningTargets',a.id,a),entry('learningTargets',b.id,b)];
+ const local=[entry('learningTargets',a.id,{...a,memoryRevision:1}),entry('learningTargets',b.id,{...b,memoryRevision:1}),run(3,[a.id,b.id],'05'),event(6,3,a.id,'05'),event(7,3,b.id,'05')];
+ const remote=[entry('learningTargets',a.id,{...a,memoryRevision:1}),entry('learningTargets',b.id,{...b,memoryRevision:1}),run(4,[a.id],'00'),run(5,[b.id],'10'),event(8,4,a.id,'00'),event(9,5,b.id,'10')];
+ const merged=mergeLibraryReplicas({base,local,remote});
+ const rows=Object.fromEntries(sqliteLibraryTables.map(table=>[table,merged.entries.filter(row=>row.table===table).map(row=>({key:row.key,value:decodeBackupValue(row.value)}))])) as unknown as LibraryRecordRows;
+ assert.throws(()=>validateLearningReconciliationRecords(libraryRowsReader(rows)),/libraryBackup\.errors\.inconsistent/u,'global Run consistency must reject a partial cohort decision');
+});
+
+for(const identicalProjection of [true,false])for(const tied of [true,false])for(const reverse of [true,false]){
+test(`completed learning facts reconcile with ${identicalProjection?'identical':'different'} projections, ${tied?'tied':'different'} completion times, ${reverse?'remote':'local'} first`,()=>{
+ const id=(n:number)=>`10000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+ const entry=(table:LibraryReplicaEntry['table'],key:string,value:unknown):LibraryReplicaEntry=>({table,key,value:encodeBackupValue(value)});
+ const target={id:id(1),retentionId:id(2),expression:'raincoat',memory:null,memoryRevision:0};
+ const firstAt='2026-09-21T09:00:00.000Z',lastAt=tied?firstAt:'2026-09-21T09:05:00.000Z';
+ const projection={...target,memory:{dueAt:'2026-09-24T09:00:00.000Z'},memoryRevision:2};
+ const local=[entry('learningTargets',target.id,projection),
+  entry('learningRuns',id(3),{id:id(3),targetIds:[target.id],completedAt:firstAt}),
+  entry('learningEvents',id(5),{id:id(5),runId:id(3),targetId:target.id,at:firstAt})];
+ // Two serial Runs on this device belong to one branch. A parallel branch
+ // must not be inserted between them to manufacture a third scheduling step.
+ const remote=[entry('learningTargets',target.id,identicalProjection?projection:{...projection,memory:{dueAt:'2026-09-25T09:05:00.000Z'}}),
+  entry('learningRuns',id(4),{id:id(4),targetIds:[target.id],completedAt:firstAt}),
+  entry('learningRuns',id(8),{id:id(8),targetIds:[target.id],completedAt:lastAt}),
+  entry('learningEvents',id(6),{id:id(6),runId:id(4),targetId:target.id,at:firstAt}),
+  entry('learningEvents',id(7),{id:id(7),runId:id(8),targetId:target.id,at:lastAt})];
+ const base=[entry('learningTargets',target.id,target)];
+ const merged=mergeLibraryReplicas({base,local:reverse?remote:local,remote:reverse?local:remote});
+ assert.deepEqual(merged.conflicts,[]);
+ const decisions=merged.entries.filter(row=>row.table==='learningReconciliations');
+ assert.equal(decisions.length,1,'independent completed facts require a persisted branch decision even when Target rows are equal');
+ const decision=decodeBackupValue(decisions[0]!.value) as any;
+ assert.deepEqual(decision.appliedRunIds,[id(4),id(8)]);
+ assert.deepEqual(decision.historyOnlyRunIds,[id(3)]);
+ assert.deepEqual(decision.appliedEventIds,[id(6),id(7)]);
+ assert.deepEqual(decision.historyOnlyEventIds,[id(5)]);
+ assert.equal(decision.selectedRunId,id(8));
+ assert.deepEqual(decodeBackupValue(merged.entries.find(row=>row.table==='learningTargets')!.value),decodeBackupValue(remote[0]!.value));
+ assert.deepEqual(merged.entries.filter(row=>row.table==='learningEvents').map(row=>row.key).sort(),[id(5),id(6),id(7)]);
+ assert.deepEqual(mergeLibraryReplicas({base,local:reverse?remote:local,remote:reverse?local:remote}),merged,'repeating a lost-ack merge is deterministic');
+ const converged=mergeLibraryReplicas({base:merged.entries,local:merged.entries,remote:merged.entries});
+ assert.deepEqual(converged.conflicts,[]);
+ assert.deepEqual(converged.entries.map(({table,key,value})=>({table,key,value})),merged.entries.map(({table,key,value})=>({table,key,value})),'a converged checkpoint needs no second decision');
+});
+}
+
 test("learning-reconciliation", async () => {
 
 type Entry=LibraryReplicaEntry;

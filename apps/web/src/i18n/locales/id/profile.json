@@ -237,5 +237,11 @@
     "clearConfirm": "Saya telah menyimpan cadangan yang diperlukan dan mengonfirmasi penghapusan konten lokal ini.",
     "clearAction": "Hapus konten lokal",
     "clearDone": "Konten lokal dihapus. Buka ulang aplikasi untuk menggunakan pustaka kosong."
+  },
+  "syncRecovery": {
+    "blocked": "Sinkronisasi perlu diperiksa sebelum dilanjutkan. Data lokal Anda masih tersimpan. Ekspor cadangan, unduh diagnostik, lalu hubungi dukungan.",
+    "hint": "Cadangan hanya menyimpan data perangkat ini. Cadangan tidak menyelesaikan masalah sinkronisasi atau menyertakan perubahan cloud yang belum diunduh.",
+    "backup": "Cadangkan perangkat ini",
+    "hideBackup": "Sembunyikan cadangan"
   }
 }

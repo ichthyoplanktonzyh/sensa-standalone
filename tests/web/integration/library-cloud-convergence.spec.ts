@@ -7,6 +7,7 @@ import {
 } from '../support/libraryCloudBrowserFixture.mts';
 import { createRealLibraryConvergenceWorld } from '../support/realLibraryConvergenceWorld.mts';
 import {manualMeaningPayload,newManualMeaningDraft} from '../../../apps/web/src/experience/intake/manualMeaning';
+import {portablePackageFixture} from '../../../scripts/support/portablePackageFixture.mts';
 
 let fixture: LibraryCloudBrowserFixture;
 const worlds = new Set<Awaited<ReturnType<typeof createRealLibraryConvergenceWorld>>>();
@@ -28,6 +29,95 @@ test.afterAll(async () => {
 const draftTexts = (drafts: readonly Readonly<{ text: string }>[]): string[] => (
   drafts.map(({ text }) => text).sort((left, right) => left.localeCompare(right))
 );
+
+for(const scenario of [
+ {name:'equal projections A first',first:'a',rating:'good',extraRun:false,offset:0,stale:false},
+ {name:'equal projections B first',first:'b',rating:'good',extraRun:false,offset:0,stale:false},
+ {name:'different rating and time',first:'a',rating:'hard',extraRun:false,offset:60_000,stale:false},
+ {name:'one branch has two serial Runs',first:'b',rating:'good',extraRun:true,offset:0,stale:false},
+ {name:'a third stale client is preserved behind the prior-decision gate',first:'a',rating:'good',extraRun:false,offset:0,stale:true},
+] as const)test(`[integration][durability][convergence] completed review branches survive retry and restore: ${scenario.name}`,async()=>{
+ const account=await fixture.createAccount(),a=await fixture.createClient(account),b=await fixture.createClient(account);
+ let stale:import('@playwright/test').Page|null=null;
+ const settle=async(page:import('@playwright/test').Page,targetId:string,rating:string,offset=0)=>{
+  const at=await page.evaluate(async({targetId,offset})=>{const t=(await (window as any).core.readLearning()).targets.find((t:any)=>t.id===targetId);return new Date((t.memory?.dueAt.getTime()??Date.now())+offset).toISOString();},{targetId,offset});
+  await page.clock.setFixedTime(new Date(at));
+  return page.evaluate(async({targetId,at,rating})=>{const c=(window as any).core,ctx=(await c.languageRoutesSnapshot()).context;let run=await c.startLearning(crypto.randomUUID(),targetId,ctx,20,at);const runtime=(await c.learningSystem.read({kind:'runtime',languageContext:ctx})).runtime;if(runtime.kind!=='lightweight')throw Error('Expected ordinary lightweight protocol');run=await c.actLearning(crypto.randomUUID(),run.id,run.revision,{kind:'reveal'},at);run=await c.actLearning(crypto.randomUUID(),run.id,run.revision,{kind:'rate',rating},at);await c.finishLearning(crypto.randomUUID(),run.id);return run.id;},{targetId,at,rating});
+ };
+ const snapshot=(page:import('@playwright/test').Page)=>page.evaluate(async()=>{const c=(window as any).core,s=await c.readLearning();return JSON.parse(JSON.stringify({targets:s.targets,runs:s.runs,events:s.events,decisions:await c.readLibrary((tx:any)=>tx.all('learningReconciliations'))}));});
+ try{
+  await a.clock.setFixedTime(new Date('2026-10-01T08:00:00Z'));
+  const source=portablePackageFixture({packageId:crypto.randomUUID(),expression:'borrow',audioByteLength:32});
+  const pack=await a.evaluate(async bytes=>{const c=(window as any).core,data=new Uint8Array(bytes),preview=await c.contentSupplySystem.execute({kind:'preview_portable_package',bytes:data});return c.contentSupplySystem.execute({kind:'install_portable_package',bytes:data,expectedArchiveDigest:preview.archiveDigest});},[...source.bytes]);
+  const targetId=await a.evaluate(async pack=>{const c=(window as any).core,ctx=(await c.languageRoutesSnapshot()).context;await c.confirmLearningQuantity(crypto.randomUUID(),ctx,20);const [targetId]=await c.enrollPackage(crypto.randomUUID(),pack.key,ctx),t=(await c.readLearning()).targets.find((t:any)=>t.id===targetId);await c.personalContentSystem.execute({kind:'save_learning_scene',operationId:crypto.randomUUID(),learningTargetId:targetId,languageRouteId:ctx.languageRouteId,curriculumMembershipId:t.curriculumMemberships[0].id,senseId:t.identity.senseId,senseVersionId:t.identity.senseVersionId,bindingVersionId:t.identity.bindingVersionId,body:'I borrowed an umbrella and returned it the next day.',media:[],expected:null});return targetId;},pack);
+  const initial=await settle(a,targetId,'good');await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());
+  if(scenario.stale){stale=await fixture.createClient(account);await stale.evaluate(()=>(window as any).sync());await stale.evaluate(pack=>(window as any).core.writeLibraryCache((tx:any)=>tx.put('packageCache',pack.key,pack)),pack);}
+  // Public material acquisition is a separate boundary. Copy the exact
+  // already-validated device cache; learner facts still use real cloud sync.
+  await b.evaluate(pack=>(window as any).core.writeLibraryCache((tx:any)=>tx.put('packageCache',pack.key,pack)),pack);
+  const runA=await settle(a,targetId,'good'),runB=await settle(b,targetId,scenario.rating,scenario.offset),extra=scenario.extraRun?await settle(b,targetId,'good'):null;
+  const branchA=await snapshot(a),branchB=await snapshot(b);
+  if(scenario.offset===0&&!scenario.extraRun&&scenario.rating==='good')expect(branchA.targets).toEqual(branchB.targets);
+  const first=scenario.first==='a'?a:b,second=scenario.first==='a'?b:a;
+  await first.evaluate(()=>(window as any).sync());
+  await second.evaluate(()=>{(window as any).failAck=true;});
+  await expect(second.evaluate(()=>(window as any).sync())).rejects.toThrow('lost_ack');
+  const revision=(await second.evaluate(()=>(window as any).request('/head'))).revision;
+  await second.evaluate(()=>(window as any).sync());
+  expect((await second.evaluate(()=>(window as any).request('/head'))).revision).toBe(revision);
+  await first.evaluate(()=>(window as any).sync());
+  const converged=await snapshot(first);
+  expect(await snapshot(second)).toEqual(converged);
+  expect(converged.runs.map((r:any)=>r.id).sort()).toEqual([initial,runA,runB,...extra?[extra]:[]].sort());
+  expect(converged.events).toHaveLength(converged.runs.length*2);
+  expect(converged.decisions).toHaveLength(1);
+  const decision=converged.decisions[0],winner=decision.appliedRunIds.includes(runA)?branchA:branchB;
+  // Preserve the selected device projection instead of serializing reviews.
+  expect(converged.targets).toEqual(winner.targets);
+  expect(new Set([...decision.appliedRunIds,...decision.historyOnlyRunIds])).toEqual(new Set([runA,runB,...extra?[extra]:[]]));
+  for(const before of [...branchA.events,...branchB.events])expect(converged.events.find((e:any)=>e.id===before.id)).toEqual(before);
+  expect(await second.evaluate(async()=>{const c=(window as any).core,rows=await c.readLibrary(async(tx:any)=>Object.fromEntries(await Promise.all(c.libraryTables.map(async(table:string)=>[table,await tx.entries(table)]))));const decision=rows.learningReconciliations[0].value,event=rows.learningEvents.find((row:any)=>decision.historyOnlyEventIds.includes(row.key));event.value.detail.personalLearningScene.revisionId=crypto.randomUUID();try{c.validateBackupRows(rows);return null;}catch(error){return (error as Error).message;}})).toBe('libraryBackup.errors.inconsistent');
+  const fresh=await fixture.createClient(account);
+  try{await fresh.evaluate(()=>(window as any).sync());expect(await snapshot(fresh)).toEqual(converged);const backup=await fresh.evaluate(()=>(window as any).core.exportLibraryBackup('review-branch-backup-fixture'));expect(backup.summary.events).toBe(converged.events.length);}finally{await fresh.context().close();}
+  if(stale){
+   await settle(stale,targetId,'good',600_000);const before=await snapshot(stale),head=(await first.evaluate(()=>(window as any).request('/head'))).revision;
+   // Existing immutable decisions have no supersession representation. Keep
+   // this limitation explicit: reject the candidate, never lose C or A/B.
+   await expect(stale.evaluate(()=>(window as any).sync())).rejects.toThrow('libraryBackup.errors.inconsistent');
+   expect(await snapshot(stale)).toEqual(before);expect((await first.evaluate(()=>(window as any).request('/head'))).revision).toBe(head);
+   expect((await stale.evaluate(()=>(window as any).core.readCloudSync())).status).toBe('conflict');
+   expect((await stale.evaluate(()=>(window as any).core.exportLibraryBackup('stale-device-backup-fixture'))).summary.events).toBe(before.events.length);
+  }
+  await second.reload();
+  const reopened=await second.evaluate(async()=>{const path='/core.js',c=await import(/* @vite-ignore */path);await c.openLibrary();return JSON.parse(JSON.stringify(await c.readLearning()));});
+  expect(reopened.targets).toEqual(converged.targets);expect(reopened.events).toEqual(converged.events);
+ }finally{await stale?.context().close();await a.context().close();await b.context().close();}
+});
+
+test('[integration][durability][convergence] a Scene choice cannot orphan either original learning history',async()=>{
+ const account=await fixture.createAccount(),a=await fixture.createClient(account),b=await fixture.createClient(account);
+ const facts=(page:import('@playwright/test').Page)=>page.evaluate(async()=>{const c=(window as any).core;return JSON.parse(JSON.stringify({learning:await c.readLearning(),scenes:await c.readLibrary((tx:any)=>tx.entries('annotations'))}));});
+ try{
+  await a.clock.setFixedTime(new Date('2026-10-01T08:00:00Z'));await b.clock.setFixedTime(new Date('2026-10-01T08:00:00Z'));
+  const source=portablePackageFixture({packageId:crypto.randomUUID(),expression:'borrow',audioByteLength:32});
+  const pack=await a.evaluate(async bytes=>{const c=(window as any).core,data=new Uint8Array(bytes),preview=await c.contentSupplySystem.execute({kind:'preview_portable_package',bytes:data});return c.contentSupplySystem.execute({kind:'install_portable_package',bytes:data,expectedArchiveDigest:preview.archiveDigest});},[...source.bytes]);
+  const seed=await a.evaluate(async pack=>{const c=(window as any).core,ctx=(await c.languageRoutesSnapshot()).context;await c.confirmLearningQuantity(crypto.randomUUID(),ctx,20);const [targetId]=await c.enrollPackage(crypto.randomUUID(),pack.key,ctx),t=(await c.readLearning()).targets.find((t:any)=>t.id===targetId);return {targetId,input:{kind:'save_learning_scene',learningTargetId:targetId,languageRouteId:ctx.languageRouteId,curriculumMembershipId:t.curriculumMemberships[0].id,senseId:t.identity.senseId,senseVersionId:t.identity.senseVersionId,bindingVersionId:t.identity.bindingVersionId}};},pack);
+  await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());await b.evaluate(pack=>(window as any).core.writeLibraryCache((tx:any)=>tx.put('packageCache',pack.key,pack)),pack);
+  await a.clock.setFixedTime(new Date('2026-10-01T08:01:00Z'));
+  for(const [page,body] of [[a,'The original red umbrella scene'],[b,'The original blue umbrella scene']] as const)await page.evaluate(async({seed,body})=>{const c=(window as any).core,at=new Date().toISOString(),ctx=(await c.languageRoutesSnapshot()).context;let run=await c.startLearning(crypto.randomUUID(),seed.targetId,ctx,20,at);const runtime=(await c.learningSystem.read({kind:'runtime',languageContext:ctx})).runtime;if(runtime.kind!=='lightweight'||runtime.purpose!=='initial_learning')throw Error('Expected shipped initial Scene editor boundary');await c.personalContentSystem.execute({...seed.input,operationId:crypto.randomUUID(),body,media:[],expected:null});run=await c.actLearning(crypto.randomUUID(),run.id,run.revision,{kind:'reveal'},at);run=await c.actLearning(crypto.randomUUID(),run.id,run.revision,{kind:'rate',rating:'good'},at);await c.finishLearning(crypto.randomUUID(),run.id);},{seed,body});
+  const originalA=await facts(a),originalB=await facts(b);
+  await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());
+  expect((await b.evaluate(()=>(window as any).core.readCloudSync())).status).toBe('conflict');
+  const head=(await b.evaluate(()=>(window as any).request('/head'))).revision;
+  for(const choice of ['local','remote']){
+   await expect(b.evaluate(async choice=>{const c=(window as any).core;await c.resolveCloudSyncConflicts(choice,(await c.readCloudSync()).conflict);await (window as any).sync();},choice)).rejects.toThrow('libraryBackup.errors.inconsistent');
+   expect(await facts(b)).toEqual(originalB);expect((await b.evaluate(()=>(window as any).request('/head'))).revision).toBe(head);
+   expect((await b.evaluate(()=>(window as any).core.exportLibraryBackup('scene-protection-backup-fixture'))).summary.events).toBe(2);
+  }
+  expect(await facts(a)).toEqual(originalA);
+  const fresh=await fixture.createClient(account);try{await fresh.evaluate(()=>(window as any).sync());expect(await facts(fresh)).toEqual(originalA);}finally{await fresh.context().close();}
+ }finally{await a.context().close();await b.context().close();}
+});
 
 test('[integration][durability][convergence] a Meaning correction decision reaches the other device without discarding either history',async()=>{
  const account=await fixture.createAccount(),a=await fixture.createClient(account),b=await fixture.createClient(account);
@@ -101,7 +191,7 @@ test('[integration][local-correctness][convergence] conflict UI compares version
   await b.route('https://service.fixture.invalid/**',async route=>{const url=new URL(route.request().url());const response=await route.fetch({url:fixture.origin+url.pathname+url.search});await route.fulfill({response});});
   await b.evaluate(async account=>{(window as any).__fixtureAuthSession={access_token:account.token,user:{id:account.subject}};const path='/local-clear.js',ui=await import(/* @vite-ignore */ path);ui.mountCloudSyncControl({automatic:false});},account);
   await expect(b.getByText('The device context',{exact:true})).toBeVisible();await expect(b.getByText('The cloud context',{exact:true})).toBeVisible();
-  await b.locator('summary').click();await expect(b.getByText('The original context',{exact:true})).toBeVisible();
+  await b.locator('summary').filter({hasText:/^Before these changes$|^这些修改之前$/u}).click();await expect(b.getByText('The original context',{exact:true})).toBeVisible();
   await expect(b.getByText(shared.id,{exact:false})).toHaveCount(0);
   await b.evaluate(async id=>{const c=(window as any).core;await c.saveDraft(crypto.randomUUID(),{id,expectedRevision:2,text:'A newer device context'});},shared.id);
   const rejection=await b.evaluate(async conflict=>{try{await (window as any).core.resolveCloudSyncConflicts('remote',conflict);return null;}catch(e){return (e as Error).message;}},shown.conflict);

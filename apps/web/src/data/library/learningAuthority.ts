@@ -247,6 +247,14 @@ export function* assertLearningSystemStateSteps(input:LearningSystemStateInput):
    const event=requireRow('learningEvents',key) as LearningEvent;
    const eventRun=saved,operation=operationInput(key),participant=eventRun.participants[event.targetId]??fail(),presented=runStepMaterial(participant,event.detail.stepId);if(event.detail.materializationId!==presented.snapshot.learningMaterializationId||operation&&(operation.kind!=='learning.act'||operation.input.runId!==event.runId||operation.input.revision!==event.detail.runRevision||operation.input.at!==event.at||!backupEqual(operation.input.action,event.detail.action)))fail();
    assertRunMaterialPresentedBy(presented,eventRun,event.at);
+   // A non-contributing learning branch still records what the learner saw.
+   // Validate its historical Scene pins before skipping scheduling replay.
+   if(!Object.hasOwn(event.detail,'personalLearningScene'))fail();
+   if(event.detail.personalLearningScene!==null){
+    const scene=requireRow('annotations',personalLearningSceneRowId(event.targetId,participant.languageContext.languageRouteId));
+    const pinned=z.object({sceneId:uuid,revisionId:uuid,revision:z.number().int().positive()}).strict().parse(event.detail.personalLearningScene),sceneRevision=scene.kind==='learning_scene'&&scene.sceneId===pinned.sceneId?scene.revisions.find((candidate:any)=>candidate.revisionId===pinned.revisionId):undefined;
+    if(!sceneRevision||sceneRevision.revision!==pinned.revision||sceneRevision.createdAt>Date.parse(event.at))fail();
+   }
    if(!Object.hasOwn(event.detail,'nextPresentation'))fail();
    if(event.detail.nextPresentation!==null){
     const next=z.object({targetId:z.string().uuid(),stepId:z.string().min(1),material:z.string().regex(/^[a-f0-9]{64}$/u)}).strict().parse(event.detail.nextPresentation);
@@ -433,11 +441,6 @@ export function* assertLearningSystemStateSteps(input:LearningSystemStateInput):
    const detail=event.detail as any;
    if(detail.stepId!==localProtocolStepId(execution,run)||!Object.hasOwn(detail,'nextPresentation')||localRunOpenPlanningInterruption(run)||localRunOpenSessionPause(run))fail();
    const presented=runStepMaterial(participant,detail.stepId);if(event.kind!==detail.action?.kind||detail.materializationId!==presented.snapshot.learningMaterializationId||Date.parse(presented.snapshot.createdAt)>Date.parse(event.at)||!Object.hasOwn(detail,'personalLearningScene'))fail();
-   if(detail.personalLearningScene!==null){
-    const scene=requireRow('annotations',personalLearningSceneRowId(targetId,participant.languageContext.languageRouteId));
-    const pinned=z.object({sceneId:uuid,revisionId:uuid,revision:z.number().int().positive()}).strict().parse(detail.personalLearningScene),sceneRevision=scene.kind==='learning_scene'&&scene.sceneId===pinned.sceneId?scene.revisions.find((candidate:any)=>candidate.revisionId===pinned.revisionId):undefined;
-    if(!sceneRevision||sceneRevision.revision!==pinned.revision||sceneRevision.createdAt>Date.parse(event.at))fail();
-   }
    const executable=localExecutableTargetForParticipant(target,participant,presented);
    const executed=reduceLocalProtocolAction({operationId:event.id,stepKey:detail.stepId,execution,target:executable,run,resource:executable.packageKey?maps.packageCache.get(executable.packageKey):undefined,action:detail.action,at:event.at});
    const applied=applyLocalProtocolTransition({operationId:event.id,stepId:detail.stepId,at:event.at,target,run:executed.run,transition:executed.transition});

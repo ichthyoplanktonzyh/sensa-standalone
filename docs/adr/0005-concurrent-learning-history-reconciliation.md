@@ -11,6 +11,10 @@ status: accepted
 当两个设备从同一已确认基线出发，为同一 Learning Target 分别产生互不重叠且都已完成的 Run 时，
 同步执行以下确定性规则：
 
+分叉由双方新增的互不重叠学习事实识别；两端 Target 投影恰好相等也必须显式记录决定，不能把两个
+并行 Review 当作先后发生的学习。history-only 只排除调度贡献，完整备份和同步准入仍校验每个
+Action 的材料与个人场景版本引用；无法解释原 pin 的内容选择必须拒绝，并保留两端原资料。
+
 - 两端原始 Run 与 Learning Event 全部保留，仍是不可改写的 Personal Library Fact；
 - 以最后完成 Run 的 `(completedAt, runId)` 全序选择负责当前 Target、Memory 与 Schedule 投影的分支；
 - 另一分支标记为 history-only，不再次参与当前投影重放，也不产生第二份 Scheduling contribution；

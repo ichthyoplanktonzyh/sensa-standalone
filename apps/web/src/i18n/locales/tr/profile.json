@@ -48,5 +48,11 @@
     "clearConfirm": "Gerekli yedekleri kaydettim ve bu yerel içeriği silmeyi onaylıyorum.",
     "clearAction": "Yerel içeriği sil",
     "clearDone": "Yerel içerik temizlendi. Boş kitaplığı kullanmak için uygulamayı yeniden açın."
+  },
+  "syncRecovery": {
+    "blocked": "Devam etmeden önce senkronizasyonun kontrol edilmesi gerekiyor. Yerel verileriniz kayıtlıdır. Yedek dışa aktarın, tanılama dosyasını indirin ve destekle iletişime geçin.",
+    "hint": "Yedek yalnızca bu cihazın verilerini kaydeder. Senkronizasyon sorununu çözmez ve henüz indirilmemiş bulut değişikliklerini içermez.",
+    "backup": "Bu cihazı yedekle",
+    "hideBackup": "Yedeği gizle"
   }
 }

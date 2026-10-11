@@ -99,7 +99,7 @@ const foundationTests = [
   {id:'scene-editor-read',file:'tests/web/unit/scene-editor-read.test.mts',kind:'unit',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'statistics-calendar',file:'tests/web/unit/statistics-calendar.test.mts',kind:'unit',risks:['local-correctness','scale'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'cloud-sync-panel-read',file:'tests/web/unit/cloud-sync-panel-read.test.mts',kind:'unit',risks:['local-correctness'],environment:'node',suite:'fast',runner:'vitest'},
-  {id:'cloud-sync-panel-read-browser',file:'tests/web/browser/cloud-sync-panel-read.spec.ts',kind:'integration',risks:['local-correctness'],environment:'chromium',suite:'browser',runner:'playwright'},
+  {id:'cloud-sync-panel-read-browser',file:'tests/web/browser/cloud-sync-panel-read.spec.ts',kind:'integration',risks:['local-correctness','durability','convergence'],environment:'chromium',suite:'browser',runner:'playwright'},
   {id:'practice-material-read',file:'tests/web/unit/practice-material-read.test.mts',kind:'unit',risks:['local-correctness','scale'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'interaction-budget',file:'tests/web/unit/interaction-budget.test.mts',kind:'unit',risks:['local-correctness','scale'],environment:'node',suite:'fast',runner:'vitest'},
   {

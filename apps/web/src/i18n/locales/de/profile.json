@@ -120,5 +120,11 @@
     "clearConfirm": "Ich habe benötigte Sicherungen gespeichert und bestätige das Löschen dieser lokalen Inhalte.",
     "clearAction": "Lokale Inhalte löschen",
     "clearDone": "Lokale Inhalte gelöscht. Öffnen Sie die App erneut, um die leere Bibliothek zu verwenden."
+  },
+  "syncRecovery": {
+    "blocked": "Die Synchronisierung muss geprüft werden, bevor sie fortgesetzt werden kann. Deine lokalen Daten sind gespeichert. Exportiere eine Sicherung, lade die Diagnose herunter und kontaktiere den Support.",
+    "hint": "Eine Sicherung enthält nur die Daten dieses Geräts. Sie löst das Synchronisierungsproblem nicht und enthält keine noch nicht heruntergeladenen Cloud-Änderungen.",
+    "backup": "Dieses Gerät sichern",
+    "hideBackup": "Sicherung ausblenden"
   }
 }

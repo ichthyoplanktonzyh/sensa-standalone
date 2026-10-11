@@ -44,5 +44,11 @@
     "clearConfirm": "Zapisałem potrzebną kopię zapasową i potwierdzam usunięcie tych treści lokalnych.",
     "clearAction": "Usuń treści lokalne",
     "clearDone": "Wyczyszczono treści lokalne. Otwórz ponownie aplikację, aby korzystać z pustej biblioteki."
+  },
+  "syncRecovery": {
+    "blocked": "Synchronizację trzeba sprawdzić przed kontynuowaniem. Dane lokalne są zapisane. Wyeksportuj kopię zapasową, pobierz diagnostykę i skontaktuj się z pomocą.",
+    "hint": "Kopia zapasowa zapisuje tylko dane tego urządzenia. Nie rozwiązuje problemu synchronizacji i nie zawiera zmian z chmury, które nie zostały jeszcze pobrane.",
+    "backup": "Utwórz kopię tego urządzenia",
+    "hideBackup": "Ukryj kopię zapasową"
   }
 }

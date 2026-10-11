@@ -237,5 +237,11 @@
     "clearConfirm": "Tôi đã lưu mọi bản sao lưu cần thiết và xác nhận xóa nội dung cục bộ này.",
     "clearAction": "Xóa nội dung cục bộ",
     "clearDone": "Đã xóa nội dung cục bộ. Mở lại ứng dụng để dùng thư viện trống."
+  },
+  "syncRecovery": {
+    "blocked": "Cần kiểm tra đồng bộ trước khi tiếp tục. Dữ liệu cục bộ vẫn được lưu. Hãy xuất bản sao lưu, tải tệp chẩn đoán rồi liên hệ hỗ trợ.",
+    "hint": "Bản sao lưu chỉ lưu dữ liệu của thiết bị này. Nó không giải quyết vấn đề đồng bộ và không chứa thay đổi trên đám mây chưa được tải xuống.",
+    "backup": "Sao lưu thiết bị này",
+    "hideBackup": "Ẩn bản sao lưu"
   }
 }

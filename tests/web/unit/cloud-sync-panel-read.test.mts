@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {readCloudSyncPanel,cloudSyncPanelMessage} from '../../../apps/web/src/experience/components/cloudSyncPanelRead';
+import {readCloudSyncPanel,cloudSyncPanelMessage,cloudSyncCanChoose,cloudSyncNeedsRecovery} from '../../../apps/web/src/experience/components/cloudSyncPanelRead';
 import type {CloudSyncState} from '../../../apps/web/src/data/library/cloudSync';
 
 describe('Sync panel reads only confirmed status',()=>{
@@ -18,5 +18,13 @@ describe('Sync panel reads only confirmed status',()=>{
  it('missing state stays unknown and a paused local copy stays local',async()=>{
   expect(cloudSyncPanelMessage(await readCloudSyncPanel(async()=>[undefined,false]))).toBe('account.unknown');
   expect(cloudSyncPanelMessage(await readCloudSyncPanel(async()=>[undefined,true]))).toBe('account.localSync');
+ });
+ it('conflict status without a usable comparison has a recovery exit rather than a choice',()=>{
+  const state={status:'conflict',error:'libraryBackup.errors.inconsistent'} as CloudSyncState;
+  expect(cloudSyncCanChoose(state)).toBe(false);
+  expect(cloudSyncNeedsRecovery(state)).toBe(true);
+  expect(cloudSyncPanelMessage({availability:'ready',state,reconnectRequired:false})).toBe('profile:syncRecovery.blocked');
+  expect(cloudSyncNeedsRecovery({status:'failed',failureKind:'terminal'} as CloudSyncState)).toBe(true);
+  expect(cloudSyncNeedsRecovery({status:'pending'} as CloudSyncState)).toBe(false);
  });
 });

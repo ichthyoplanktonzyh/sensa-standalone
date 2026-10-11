@@ -239,5 +239,11 @@
     "clearConfirm": "Ho salvato tutti i backup necessari e confermo la cancellazione di questi contenuti locali.",
     "clearAction": "Cancella contenuti locali",
     "clearDone": "Contenuti locali cancellati. Riapri l'app per usare la libreria vuota."
+  },
+  "syncRecovery": {
+    "blocked": "La sincronizzazione va verificata prima di continuare. I dati locali sono salvati. Esporta un backup, scarica la diagnostica e contatta l’assistenza.",
+    "hint": "Il backup salva solo i dati di questo dispositivo. Non risolve il problema di sincronizzazione e non include modifiche del cloud non ancora scaricate.",
+    "backup": "Crea un backup del dispositivo",
+    "hideBackup": "Nascondi backup"
   }
 }
