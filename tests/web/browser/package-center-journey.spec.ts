@@ -21,6 +21,8 @@ import {MemoryJourneyRepository} from '../../../apps/web/src/experience/personal
 import {createJourneyModules} from '../../../apps/web/src/experience/personalMeaningJourney/gateway';
 import {semanticLookupPayload,syntheticSemanticWorld} from '../support/semanticLookupFixtures';
 import type {JourneyState} from '../../../apps/web/src/experience/personalMeaningJourney/store';
+import type {ContextRecord,StoredMeaningRecord} from '../../../apps/web/src/experience/personalMeaningJourney/contextRecords';
+import {decodeBackupValue} from '../../../apps/web/src/data/library/backupCodec';
 import {createPackageCenterFixture} from './packageCenterFixture';
 const fixture=createPackageCenterFixture('book');
 const test=fixture.test;
@@ -545,6 +547,64 @@ test('overlapping Book admissions and an explicit Book upgrade preserve the reve
    expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records).toEqual([]);
   }finally{await context.setOffline(false);}
  }finally{first.responses.delete(second.url);first.responses.delete(updated.url);}
+});
+
+test('a rated Book target keeps its real memory and private Scene when a newer public Sense version is explicitly applied',async({page,context},testInfo)=>{
+ const first=fixture.learningDelivery,semantic=structuredClone(first.package.semanticDeclaration!);
+ const updatedMeaning='临时借用他人的物品，并在约定之后归还。',updatedScene='向邻居借一把梯子，用完之后按照约定归还。',sceneBody='昨天我向同事借了一把雨伞，并约好今天归还。';
+ semantic.sense={...semantic.sense,senseVersionId:randomUUID(),versionNumber:semantic.sense.versionNumber+1,semanticSpec:{...semantic.sense.semanticSpec,coreMeaningFocus:updatedMeaning,prototypeScenes:[{summary:updatedScene,participantRoles:[],states:[],directionOrCausality:null}]}};
+ semantic.binding={...semantic.binding,bindingVersionId:randomUUID(),versionNumber:semantic.binding.versionNumber+1};
+ const member=portablePackageFixture({packageId:first.package.metadata.packageId,version:2,expression:first.package.targetExpression.text,meaning:updatedMeaning,scene:updatedScene,semanticDeclaration:semantic});
+ const manifest=sensaPortableBookManifestSchema.parse({...first.manifest,book:{...first.manifest.book,bookVersionId:randomUUID(),versionNumber:2},contentRelease:{...first.manifest.contentRelease,contentReleaseId:randomUUID(),versionNumber:2},members:[{packageId:member.package.metadata.packageId,version:2}]});
+ const bytes=createSensaPortableBook(manifest,new Map([[portableBookMemberKey(manifest.members[0]!),member.bytes]])),sha256=createHash('sha256').update(bytes).digest('hex');
+ const updated={...first.descriptor,book:manifest.book,contentRelease:manifest.contentRelease,sha256,byteLength:bytes.byteLength,url:`${fixture.origin}/published/${sha256}.sensa-book`};
+ first.responses.set(updated.url,bytes);fixture.setRegistry([first.descriptor]);
+ const snapshot=()=>page.evaluate(()=>window.__sensaBrowserSmoke!.curriculumSourceCheckpointForTest());
+ const privateFacts=()=>page.evaluate(async()=>{const rows=await window.__sensaBrowserSmoke!.durableBackupFactsForTest();return Object.fromEntries(['semanticMeanings','semanticContexts','semanticRegistry','annotations','learningEvents','studyScopes','learningSessions'].map(table=>[table,rows[table]]));});
+ try{
+  const runtime=await fixture.startOrdinaryBook(page,/雨天借伞/);
+  await runtime.getByRole('button',{name:/查看表达/}).click();
+  const revealed=await snapshot(),target=revealed.targets[0]!;expect(target.memory).toBeNull();
+  await runtime.getByRole('button',{name:'添加我的场景',exact:true}).click();
+  const editor=page.getByRole('dialog').filter({has:page.getByRole('heading',{name:'我的场景',exact:true})});
+  await editor.getByRole('textbox').fill(sceneBody);await editor.getByRole('button',{name:'保存我的场景',exact:true}).click();
+  await runtime.getByRole('button',{name:'存入我的语义世界',exact:true}).click();await expect(runtime.getByRole('button',{name:'已存入我的语义世界',exact:true})).toBeVisible();
+  await runtime.getByRole('button',{name:/已经连上/}).click();await expect(runtime.getByRole('heading',{name:'本轮完成',exact:true})).toBeVisible();
+  await runtime.getByRole('button',{name:/完成并回到首页/}).click();
+  const before=await snapshot(),facts=await privateFacts(),learning=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint()),learned=before.targets[0]!;
+  expect(facts.semanticMeanings).toHaveLength(1);expect(facts.semanticContexts.length).toBeGreaterThanOrEqual(2);expect(learned.memory).not.toBeNull();expect(learned.memoryRevision).toBeGreaterThan(0);expect(learning.records).toHaveLength(1);expect(learning.completedTargets[0]!.nextReviewAt).not.toBeNull();
+  const scenes=await page.evaluate(()=>window.__sensaBrowserSmoke!.personalLearningScenesForTest()),scene=scenes.find(row=>row.learningTargetId===learned.id)!;
+  expect(scene).toBeDefined();const sceneRevision=scene.revisions.find(row=>row.revisionId===scene.acceptedRevisionId)!;
+  expect(sceneRevision.body).toBe(sceneBody);expect(sceneRevision.sourcePin).toEqual(learned.curriculumMemberships[0]!.sourcePin);
+  const meaning=decodeBackupValue(facts.semanticMeanings[0]!.value) as StoredMeaningRecord;expect(meaning.personalMeaning.personalMeaningId).toBe(scene.acceptedPersonalMeaningId);
+  const contexts=facts.semanticContexts.map(row=>decodeBackupValue(row.value) as ContextRecord),sceneContexts=contexts.filter((row):row is Extract<ContextRecord,{kind:'anchorRevisions'}>=>row.kind==='anchorRevisions'&&row.value.bodyText===sceneBody);
+  expect(sceneContexts).toHaveLength(1);const sceneContext=sceneContexts[0]!.value;
+  const sceneContextHead=contexts.find(row=>row.kind==='anchors'&&row.value.personalSemanticAnchorId===sceneContext.personalSemanticAnchorId);expect(sceneContextHead?.kind).toBe('anchors');
+  if(sceneContextHead?.kind!=='anchors')throw Error('Accepted Scene Context head missing');expect(sceneContextHead.value.currentRevisionId).toBe(sceneContext.personalSemanticAnchorRevisionId);
+  expect(sceneContext.structuredPayload.learningScene).toEqual({sceneId:scene.sceneId,revisionId:sceneRevision.revisionId,revision:sceneRevision.revision,learningTargetId:learned.id,curriculumMembershipId:learned.curriculumMemberships[0]!.id});
+  expect(meaning.personalSemanticAnchors).toContainEqual(expect.objectContaining({personalSemanticAnchorId:sceneContext.personalSemanticAnchorId,selectedRevisionId:sceneContext.personalSemanticAnchorRevisionId}));
+  expect(meaning.personalSemanticAnchorRevisions).toContainEqual({personalSemanticAnchorId:sceneContext.personalSemanticAnchorId,personalSemanticAnchorRevisionId:sceneContext.personalSemanticAnchorRevisionId});
+  const stable=(value:typeof learned)=>{const {curriculumMemberships:_,...progress}=value;return progress;};
+  fixture.setRegistry([updated]);await page.goto(`${fixture.origin}/catalog`);
+  const catalog=page.locator('#s-catalog').last(),book=page.locator('#s-catalog-book').last();
+  await catalog.getByRole('button',{name:'刷新',exact:true}).click();await expect(catalog.getByRole('button',{name:'刷新',exact:true})).toBeEnabled();
+  await catalog.getByRole('button',{name:/雨天借伞/}).click();await book.getByRole('button',{name:'下载更新',exact:true}).click();await expect(book.getByText('更新已下载',{exact:true})).toBeVisible();
+  expect(await snapshot()).toEqual(before);expect(await privateFacts()).toEqual(facts);
+  await book.getByRole('button',{name:'应用更新',exact:true}).click();await expect(book.getByRole('button',{name:'应用更新',exact:true})).toHaveCount(0);await expect(book.getByText('已加入学习',{exact:true})).toBeVisible();
+  const after=await snapshot(),current=after.targets[0]!;
+  expect(after.targets).toHaveLength(1);expect(stable(current)).toEqual(stable(learned));expect(after.runs).toEqual(before.runs);expect(await privateFacts()).toEqual(facts);
+  expect(current.curriculumMemberships).toHaveLength(2);
+  const oldMember=current.curriculumMemberships.find(row=>row.id===learned.curriculumMemberships[0]!.id)!;
+  const immutableMembership=(row:typeof oldMember)=>{const {revision:_,status:__,updatedAt:___,...source}=row;return source;};
+  expect(immutableMembership(oldMember)).toEqual(immutableMembership(learned.curriculumMemberships[0]!));expect(oldMember.status).toBe('superseded');expect(oldMember.revision).toBe(learned.curriculumMemberships[0]!.revision+1);
+  const newMember=current.curriculumMemberships.find(row=>row.provenance.bookVersionId===manifest.book.bookVersionId)!;
+  expect(newMember.sourcePin).toEqual({...learned.curriculumMemberships[0]!.sourcePin,senseVersionId:semantic.sense.senseVersionId,bindingVersionId:semantic.binding.bindingVersionId});
+  expect(newMember.material.snapshot.provenance).toMatchObject({...newMember.sourcePin,publicationArchiveSha256:sha256,packageVersion:'2'});
+  expect(newMember.material.snapshot.learningMaterializationId).not.toBe(learned.curriculumMemberships[0]!.material.snapshot.learningMaterializationId);
+  const latest=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());expect(latest.targetIds).toEqual(learning.targetIds);expect(latest.records).toEqual(learning.records);expect(latest.completedTargets).toEqual(learning.completedTargets);
+  await context.setOffline(true);try{await page.reload();await expect(book.getByText('已加入学习',{exact:true})).toBeVisible();expect(await snapshot()).toEqual(after);expect(await privateFacts()).toEqual(facts);}finally{await context.setOffline(false);}
+  await testInfo.attach('rated-public-upgrade-evidence',{contentType:'application/json',body:JSON.stringify({before,after,learning,latest,scene,sceneContext,oldSenseVersion:first.package.semanticDeclaration!.sense.senseVersionId,newSenseVersion:semantic.sense.senseVersionId,privateFacts:facts,paidCalls:0,scope:'actual UI reveal/rate/learner-owned Scene acceptance and newer Book/Sense material admission; real Chromium/OPFS offline reload; synthetic publication/audio'})});
+ }finally{first.responses.delete(updated.url);}
 });
 
 test('cancelling admission after complete transfer closes its Worker without installing any members',async({page})=>{
