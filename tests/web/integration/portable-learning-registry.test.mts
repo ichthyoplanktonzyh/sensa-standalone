@@ -232,7 +232,7 @@ test("official Registry delivers one atomic Book while preserving independent Se
     globalThis.fetch=async input=>{
       const bytes=delivered.get(String(input));
       return bytes
-        ?new Response(bytes)
+        ?new Response(bytes,{headers:String(input)===descriptor.preview!.url?{'content-length':'1','content-encoding':'gzip'}:{}})
         :new Response(null,{status:404});
     };
     await openLibrary();

@@ -30,13 +30,14 @@ const fetchExactBytes=async(
   maximumBytes:number,
   signal:AbortSignal,
   progress:(received:number)=>void,
+  checkDeclaredLength=true,
 ):Promise<Uint8Array>=>{
   if(byteLength>maximumBytes)throw new Error('localFlow.packageTooLarge');
   if(signal.aborted)throw new Error('localFlow.downloadCancelled');
   const response=await fetch(url,{signal,redirect:'error',credentials:'omit'});
   if(!response.ok||!response.body)throw new Error('localFlow.downloadFailed');
   const contentLength=response.headers.get('content-length');
-  if(contentLength!==null){
+  if(checkDeclaredLength&&contentLength!==null){
     const declared=Number(contentLength);
     if(!Number.isInteger(declared)||declared!==byteLength)throw new Error('localFlow.downloadSizeMismatch');
   }
@@ -68,8 +69,10 @@ export const fetchPublishedBookPreview=async(raw:SensaPortableBookDescriptor,sig
   const descriptor=sensaPortableBookDescriptorSchema.parse(raw),artifact=descriptor.preview??descriptor;
   if(!descriptor.preview&&descriptor.byteLength>maxLegacyBookPreviewArchiveBytes)
     throw new Error('localFlow.packagePreviewUnavailable');
+  // JSON may be transparently decoded by fetch; Content-Length can describe compressed wire bytes.
+  // The decoded stream remains bounded to the exact artifact length and its pinned SHA-256.
   const bytes=await fetchExactBytes(artifact.url,artifact.byteLength,
-    descriptor.preview?maxPortableBookPreviewBytes:maxLegacyBookPreviewArchiveBytes,signal,()=>{});
+    descriptor.preview?maxPortableBookPreviewBytes:maxLegacyBookPreviewArchiveBytes,signal,()=>{},!descriptor.preview);
   return inspectPublishedBookPreviewOffThread(bytes,descriptor,signal);
 };
 
