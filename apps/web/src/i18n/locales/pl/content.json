@@ -91,7 +91,8 @@
       "fit": "Pokaż całość",
       "canvas": "Relacje między znaczeniami. Przeciągnij, aby przesunąć.",
       "hint": "Wybierz węzeł, aby go sprawdzić. Przeciągnij tło, aby przesunąć widok.",
-      "open": "Otwórz szczegóły"
+      "open": "Otwórz szczegóły",
+      "zoom": "Poziom powiększenia"
     },
     "title": "Mój świat znaczeń",
     "add": "Dodaj treść",
@@ -162,7 +163,9 @@
     "worldSharedMeaning": "Wspólne osobiste znaczenie",
     "worldSharedSense": "Wspólne potwierdzone znaczenie",
     "worldSource": "Pierwotne źródło",
-    "worldBatchEmpty": "Przy tych filtrach brak wyrażeń do dodania do bieżącej ścieżki {{language}}."
+    "worldBatchEmpty": "Przy tych filtrach brak wyrażeń do dodania do bieżącej ścieżki {{language}}.",
+    "worldHelp": "O tym grafie",
+    "filters": "Filtry"
   },
   "composer": {
     "title": "Zapisz kontekst",

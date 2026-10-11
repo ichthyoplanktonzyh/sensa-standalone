@@ -91,7 +91,8 @@
       "fit": "Fit all",
       "canvas": "Meaning relationships. Drag to pan.",
       "hint": "Select a node to inspect it. Drag the background to pan.",
-      "open": "Open details"
+      "open": "Open details",
+      "zoom": "Zoom level"
     },
     "title": "My semantic world",
     "add": "Add content",
@@ -162,7 +163,9 @@
     "worldSharedMeaning": "Shared personal Meaning",
     "worldSharedSense": "Shared confirmed Sense",
     "worldSource": "Original source",
-    "worldBatchEmpty": "No expressions in these filters can be added to the current {{language}} learning route."
+    "worldBatchEmpty": "No expressions in these filters can be added to the current {{language}} learning route.",
+    "worldHelp": "About this graph",
+    "filters": "Filters"
   },
   "composer": {
     "title": "Capture a context",

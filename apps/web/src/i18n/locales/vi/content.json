@@ -91,7 +91,8 @@
       "fit": "Hiển thị tất cả",
       "canvas": "Các mối quan hệ ý nghĩa. Kéo để di chuyển.",
       "hint": "Chọn một nút để xem chi tiết. Kéo nền để di chuyển.",
-      "open": "Mở chi tiết"
+      "open": "Mở chi tiết",
+      "zoom": "Mức thu phóng"
     },
     "title": "Thế giới ngữ nghĩa của tôi",
     "add": "Thêm nội dung",
@@ -162,7 +163,9 @@
     "worldSharedMeaning": "Cùng ý nghĩa cá nhân",
     "worldSharedSense": "Ý nghĩa đã xác nhận chung",
     "worldSource": "Nguồn gốc",
-    "worldBatchEmpty": "Không có biểu đạt nào trong bộ lọc này có thể thêm vào lộ trình {{language}} hiện tại."
+    "worldBatchEmpty": "Không có biểu đạt nào trong bộ lọc này có thể thêm vào lộ trình {{language}} hiện tại.",
+    "worldHelp": "Giới thiệu đồ thị",
+    "filters": "Bộ lọc"
   },
   "composer": {
     "title": "Ghi lại ngữ cảnh",

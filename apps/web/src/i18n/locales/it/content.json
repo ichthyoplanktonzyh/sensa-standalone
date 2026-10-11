@@ -91,7 +91,8 @@
       "fit": "Adatta tutto",
       "canvas": "Relazioni tra significati. Trascina per spostarti.",
       "hint": "Seleziona un nodo per esaminarlo. Trascina lo sfondo per spostarti.",
-      "open": "Apri dettagli"
+      "open": "Apri dettagli",
+      "zoom": "Livello di zoom"
     },
     "title": "Il mio mondo semantico",
     "add": "Aggiungi contenuto",
@@ -162,7 +163,9 @@
     "worldSharedMeaning": "Significato personale condiviso",
     "worldSharedSense": "Significato confermato condiviso",
     "worldSource": "Fonte originale",
-    "worldBatchEmpty": "Nessuna espressione con questi filtri può essere aggiunta al percorso attuale {{language}}."
+    "worldBatchEmpty": "Nessuna espressione con questi filtri può essere aggiunta al percorso attuale {{language}}.",
+    "worldHelp": "Informazioni sul grafico",
+    "filters": "Filtri"
   },
   "composer": {
     "title": "Raccogli un contesto",

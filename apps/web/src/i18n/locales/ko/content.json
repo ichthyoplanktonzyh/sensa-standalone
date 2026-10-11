@@ -91,7 +91,8 @@
       "fit": "전체 보기",
       "canvas": "의미 관계입니다. 드래그하여 이동하세요.",
       "hint": "노드를 선택해 살펴보세요. 배경을 드래그하면 이동합니다.",
-      "open": "세부 정보 열기"
+      "open": "세부 정보 열기",
+      "zoom": "확대 비율"
     },
     "title": "내 시맨틱 월드",
     "add": "콘텐츠 추가",
@@ -162,7 +163,9 @@
     "worldSharedMeaning": "같은 개인 의미",
     "worldSharedSense": "공유하는 확정된 의미",
     "worldSource": "원본 출처",
-    "worldBatchEmpty": "현재 필터에는 {{language}} 학습 경로에 추가할 수 있는 표현이 없습니다."
+    "worldBatchEmpty": "현재 필터에는 {{language}} 학습 경로에 추가할 수 있는 표현이 없습니다.",
+    "worldHelp": "그래프 안내",
+    "filters": "필터"
   },
   "composer": {
     "title": "맥락 담아 두기",

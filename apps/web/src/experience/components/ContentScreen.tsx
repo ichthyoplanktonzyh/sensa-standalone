@@ -12,6 +12,7 @@ import {
   Network,
   Plus,
   Search,
+  SlidersHorizontal,
   StickyNote,
   X,
 } from "lucide-react";
@@ -35,6 +36,8 @@ import {normalizeMeaningQuery} from '../personalMeaningJourney/meaningLookupFact
 import {useWorldWindow,useWorldInbox} from '../personalMeaningJourney/useWorldRead';
 import {summarizeWorldItem,matchesWorldLanguages,type WorldBrowseItem,type WorldBrowseQuery} from '../personalMeaningJourney/worldRead';
 import type {ShellParams} from '../router/shellLocation';
+import {interfaceLanguageDisplayName} from '../../i18n/languageDisplayName';
+import {resolveInterfaceLocale} from '../../i18n/localeRegistry';
 import {personalContentSystem} from '../../personalContent/system';
 
 export interface ContentScreenSource {
@@ -122,6 +125,9 @@ function ContentScreenView({
   toast,source:providedSource,notice,bulkLearning,browse,graphLearningState,
 }: ContentScreenProps) {
   const { t, i18n } = useTranslation();
+  const locale=resolveInterfaceLocale(i18n.resolvedLanguage??i18n.language);
+  const [filtersOpen,setFiltersOpen]=useState(()=>window.matchMedia('(min-width:48rem)').matches);
+  useEffect(()=>{const media=window.matchMedia('(min-width:48rem)'),update=()=>setFiltersOpen(media.matches);media.addEventListener('change',update);return()=>media.removeEventListener('change',update);},[]);
   const [category, setCategory] = useScreenState<Category>(`${screenId}:category`, "personal");
   const [rememberedView, rememberView] = useScreenState<"list" | "world">(`${screenId}:view`, "list");
   const [rememberedFilter, rememberFilter] = useScreenState<Filter>(`${screenId}:filter`, "all");
@@ -138,6 +144,7 @@ function ContentScreenView({
   const [rememberedReferences,rememberReferences]=useScreenState<'all'|'saved'|'notes'>(`${screenId}:references`,'all');
   const referenceFilter=browse?(browse.params.worldReferences==='saved'||browse.params.worldReferences==='notes'?browse.params.worldReferences:'all'):rememberedReferences;
   const setReferences=(value:typeof referenceFilter)=>browse?browse.change({worldReferences:value==='all'?undefined:value}):rememberReferences(value);
+  const filterSummary=[...languages.map(tag=>interfaceLanguageDisplayName(tag,locale)),...(referenceFilter==='all'?[]:[t(referenceFilter==='saved'?'content.savedSenses':'content.notes')]),...(filter==='all'?[]:[t(filter==='deleted'?'meaningGovernance.trash':`content.${filter}`)])].join(' · ');
   const [rememberedExpression,rememberExpression]=useScreenState<string|null>(`${screenId}:expression`,null);
   const selectedExpression=browse?browse.params.worldExpression??null:rememberedExpression;
   const setExpression=(value:string|null)=>browse?browse.change({worldExpression:value??undefined}):rememberExpression(value);
@@ -260,10 +267,10 @@ function ContentScreenView({
                     <MessageSquareText size={18} strokeWidth={1.5} />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <strong className="block truncate text-sm font-medium">
-                      {label}
+                    <strong className="block break-words text-lg font-medium">
+                      {matches.length?matches.map((expression,index)=><span key={expression.expressionId}>{index>0?' / ':''}<bdi lang={expression.languageTag} dir="auto">{expression.surfaceForm}</bdi></span>):label}
                     </strong>
-                    {!!matches.length&&<span className="mt-1 block text-xs text-fg-secondary" data-matching-expressions>{matches.map(expression=>`${expression.surfaceForm} · ${expression.languageTag}`).join(' / ')}</span>}
+                    {!!matches.length&&<span className="mt-1 block text-xs text-fg-secondary" data-matching-expressions>{[...new Set(matches.map(expression=>expression.languageTag))].map(tag=>interfaceLanguageDisplayName(tag,locale)).join(' · ')}</span>}
                     {item.primaryLabel !== label && <span className="sensa-world-context mt-2 block line-clamp-2 text-sm leading-6 text-fg-secondary">{item.primaryLabel}</span>}
                     <span className="mt-2 block text-xs text-fg-tertiary">
                       {('status'in item?item.status:item.detail.status)==='deleted'?t('meaningGovernance.deleted'):t(`content.phase.${item.senseFormation.phase}`)} ·{" "}
@@ -286,7 +293,7 @@ function ContentScreenView({
         measure="wide"
         className={`screen sensa-world z-10 ${view==='world'&&category==='personal'?'sensa-world-graph-mode':''} ${active ? "active" : "invisible pointer-events-none"}`}
         regions={{
-          header: <>{notice}<ContentHeader inboxCount={providedSource?inbox.length+drafts.length:page.inboxCount+page.pending} onInbox={()=>setInboxOpen(true)} onAdd={()=>setAdding(true)}/>{category==='personal'&&<button className={button+' mt-3 text-fg-secondary'} aria-pressed={filter==='deleted'} onClick={()=>{setFilter(filter==='deleted'?'all':'deleted');setView('list');}}>{t(filter==='deleted'?'meaningGovernance.all':'meaningGovernance.trash')}</button>}</>,
+          header: <>{notice}<ContentHeader inboxCount={providedSource?inbox.length+drafts.length:page.inboxCount+page.pending} onInbox={()=>setInboxOpen(true)} onAdd={()=>setAdding(true)}/></>,
           navigation: <div
           aria-label={t("content.categories")}
           className="grid grid-cols-3 gap-2 border-b border-border-subtle sm:flex sm:gap-6"
@@ -296,7 +303,7 @@ function ContentScreenView({
               key={id}
               aria-current={category === id ? "page" : undefined}
               onClick={() => setCategory(id)}
-              className={`min-h-12 min-w-0 border-b-2 px-1 py-2 text-balance text-sm break-words focus-visible:outline-2 focus-visible:outline-focus ${category === id ? "border-action-primary font-medium text-action-primary" : "border-transparent text-fg-secondary"}`}
+              className={`min-h-12 min-w-0 border-b-2 px-1 py-2 text-sm focus-visible:outline-2 focus-visible:outline-focus ${category === id ? "border-action-primary font-medium text-action-primary" : "border-transparent text-fg-secondary"}`}
             >
               {t(`content.${id}`)}
             </button>
@@ -315,14 +322,6 @@ function ContentScreenView({
             <ArrowRight size={16} />
           </button>
         )}
-         {category==='personal'&&<div className="sensa-world-languages mt-3 flex flex-wrap items-center gap-2" role="group" aria-label={t('content.worldLanguage')}>
-         <span className="mr-1 text-xs text-fg-secondary">{t('content.worldLanguage')}</span>
-         <button className={button+' border '+(!languages.length?'border-border-strong bg-surface-selected font-semibold':'border-border-subtle')} aria-pressed={!languages.length} onClick={()=>setLanguages([])}>{t('content.worldAllLanguages')}</button>
-         {availableLanguages.map(tag=><button className={button+' border '+(languages.includes(tag)?'border-border-strong bg-surface-selected font-semibold':'border-border-subtle')} key={tag} aria-pressed={languages.includes(tag)} onClick={()=>setLanguages(languages.includes(tag)?languages.filter(value=>value!==tag):[...languages,tag])}>{tag}</button>)}
-        </div>}
-        {category==='personal'&&<label className="mt-2 inline-flex items-center gap-2 text-xs">{t('content.markers')}<select className="min-h-11 rounded-control border border-border-subtle bg-surface-panel px-3" value={referenceFilter} onChange={event=>setReferences(event.target.value as typeof referenceFilter)}>
-         {(['all','saved','notes'] as const).map(value=><option key={value} value={value}>{t(value==='all'?'content.all':value==='saved'?'content.savedSenses':'content.notes')}</option>)}
-        </select></label>}
         {category !== "markers" && (
           <div className="flex flex-wrap items-center justify-between gap-4">
             <label className="flex min-h-11 w-full items-center gap-3 rounded-control border border-border-subtle bg-surface-panel px-3 focus-within:outline-2 focus-within:outline-focus sm:max-w-sm">
@@ -366,25 +365,22 @@ function ContentScreenView({
             )}
           </div>
         )}
-        {category==='personal'&&!status.loading&&status.ok&&expressionCount!==undefined&&<p role="status" className="mt-3 text-xs text-fg-secondary" data-world-counts>{t('content.worldCounts',{expressions:expressionCount,meanings:paged?page.total:visible.length})}</p>}
-        {category === "personal" && filter!=='deleted'&& (
-          <div
-            className="mt-6 flex flex-wrap gap-2"
-            role="group"
-            aria-label={t("content.filter")}
-          >
-            {(["all", "continue", "binding", "complete"] as const).map((id) => (
-              <button
-                key={id}
-                aria-pressed={filter === id}
-                onClick={() => setFilter(id)}
-                className={`min-h-11 rounded-pill px-3 py-2 text-xs focus-visible:outline-2 focus-visible:outline-focus ${filter === id ? "bg-surface-selected text-action-primary" : "text-fg-secondary hover:bg-surface-subtle"}`}
-              >
-                {t(`content.${id}`)}
-              </button>
-            ))}
-          </div>
-        )}
+        {category==='personal'&&<details className="sensa-world-filters" open={filtersOpen} onToggle={event=>setFiltersOpen(event.currentTarget.open)}><summary className="min-h-11 cursor-pointer py-3 text-sm text-fg-secondary"><SlidersHorizontal size={15} className="mr-2 inline-block" aria-hidden="true"/>{t('content.filters')}{filterSummary&&<span className="ml-2 text-xs">· {filterSummary}</span>}</summary><div className="space-y-3 pb-2">
+         {category==='personal'&&<div className="sensa-world-languages mt-3 flex flex-wrap items-center gap-2" role="group" aria-label={t('content.worldLanguage')}>
+         <span className="mr-1 text-xs text-fg-secondary">{t('content.worldLanguage')}</span>
+         <button className={button+' border '+(!languages.length?'border-border-strong bg-surface-selected font-semibold':'border-border-subtle')} aria-pressed={!languages.length} onClick={()=>setLanguages([])}>{t('content.worldAllLanguages')}</button>
+         {availableLanguages.map(tag=><button className={button+' border '+(languages.includes(tag)?'border-border-strong bg-surface-selected font-semibold':'border-border-subtle')} key={tag} aria-pressed={languages.includes(tag)} onClick={()=>setLanguages(languages.includes(tag)?languages.filter(value=>value!==tag):[...languages,tag])}>{tag}</button>)}
+        </div>}
+        {category==='personal'&&<div className="sensa-world-secondary flex flex-wrap items-center gap-3">
+        {category==='personal'&&<label className="mt-2 inline-flex items-center gap-2 text-xs">{t('content.markers')}<select className="min-h-11 rounded-control border border-border-subtle bg-surface-panel px-3" value={referenceFilter} onChange={event=>setReferences(event.target.value as typeof referenceFilter)}>
+         {(['all','saved','notes'] as const).map(value=><option key={value} value={value}>{t(value==='all'?'content.all':value==='saved'?'content.savedSenses':'content.notes')}</option>)}
+        </select></label>}
+          <label className="inline-flex min-w-0 flex-wrap items-center gap-2 text-xs text-fg-secondary">{t('content.filter')}<select value={filter} onChange={event=>{setFilter(event.target.value as Filter);if(event.target.value==='deleted')setView('list');}} className="min-h-11 max-w-full rounded-control border border-border-subtle bg-surface-panel px-3 text-sm">
+            {(['all','continue','binding','complete','deleted'] as const).map(id=><option key={id} value={id}>{t(id==='deleted'?'meaningGovernance.trash':`content.${id}`)}</option>)}
+          </select></label>
+        </div>}
+        </div></details>}
+        {category==='personal'&&!status.loading&&status.ok&&expressionCount!==undefined&&<p role="status" className="mt-3 text-xs text-fg-secondary" data-world-counts>{t('content.worldCounts',{expressions:fmt(expressionCount),meanings:fmt(paged?page.total:visible.length)})}</p>}
           </>,
           collection: <>
         {category === 'personal' && (view==='list'&&bulkLearning&&filter!=='deleted'?bulkLearning(visible,personalCollection,paged?{query,filter,expressionLanguages:languages,referenceFilter}:undefined):personalCollection)}
@@ -441,15 +437,15 @@ function ContentScreenView({
               <button
                 key={id}
                 onClick={() => onOpenSection(id)}
-                className="rounded-card border border-border-subtle bg-surface-panel p-6 text-left transition-colors hover:border-border-strong focus-visible:outline-2 focus-visible:outline-focus"
+                className="flex min-h-20 items-center gap-3 border-b border-border-subtle py-4 text-left transition-colors hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus"
               >
                 <Icon
                   size={22}
                   strokeWidth={1.5}
-                  className="mb-6 text-fg-secondary"
+                  className="shrink-0 text-fg-secondary"
                 />
                 <span className="block text-sm">{t(`content.${label}`)}</span>
-                <strong className="mt-3 block text-3xl font-normal text-action-primary">
+                <strong className="ml-auto block text-lg font-medium tabular-nums text-fg-secondary">
                   {(id==='saved-examples'?projection.annotationStatus:projection.personalReferenceStatus)!=='ready'?'—':fmt(count)}
                 </strong>
               </button>

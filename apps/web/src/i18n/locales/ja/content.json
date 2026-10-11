@@ -91,7 +91,8 @@
       "fit": "全体を表示",
       "canvas": "意味の関係。ドラッグして移動します。",
       "hint": "ノードを選択して確認します。背景をドラッグして移動します。",
-      "open": "詳細を開く"
+      "open": "詳細を開く",
+      "zoom": "拡大率"
     },
     "title": "私の意味世界",
     "add": "コンテンツを追加",
@@ -162,7 +163,9 @@
     "worldSharedMeaning": "同じ個人的な意味",
     "worldSharedSense": "共有する確定済みの意味",
     "worldSource": "元の出典",
-    "worldBatchEmpty": "現在の絞り込みには、{{language}} の学習ルートに追加できる表現がありません。"
+    "worldBatchEmpty": "現在の絞り込みには、{{language}} の学習ルートに追加できる表現がありません。",
+    "worldHelp": "グラフについて",
+    "filters": "絞り込み"
   },
   "composer": {
     "title": "文脈を記録",

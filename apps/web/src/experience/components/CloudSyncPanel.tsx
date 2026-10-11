@@ -1,7 +1,8 @@
 import '../../i18n/accountResources';
 import {useEffect,useState} from 'react';
 import {useTranslation} from 'react-i18next';
-import {readCloudSync,readCloudReconnectRequired,resolveCloudSyncConflicts,type CloudSyncConflictChoice} from '../../data/library/cloudSync';
+import {resolveCloudSyncConflicts,type CloudSyncConflictChoice} from '../../data/library/cloudSync';
+import {readCloudSyncPanel,cloudSyncPanelMessage,type CloudSyncPanelRead} from './cloudSyncPanelRead';
 import {syncAccountLibrary} from '../../data/library/cloudSyncService';
 import {observeCloudSync} from '../../data/library/store';
 import {useAccountExperience} from '../account/AccountContext';
@@ -18,24 +19,25 @@ function VersionPreview({version,label,images}:{version:ConflictPreview;label:st
 }
 export function CloudSyncPanel(){
  const {t,i18n}=useTranslation(),account=useAccountExperience();
- const [state,setState]=useState<Awaited<ReturnType<typeof readCloudSync>>>(),[busy,setBusy]=useState<CloudSyncConflictChoice|null>(null);
- const [reconnectRequired,setReconnectRequired]=useState(false);
+ const [snapshot,setSnapshot]=useState<CloudSyncPanelRead>({availability:'loading'}),[readAttempt,setReadAttempt]=useState(0),[busy,setBusy]=useState<CloudSyncConflictChoice|null>(null);
+ const state=snapshot.availability==='ready'?snapshot.state:undefined;
+ const reconnectRequired=snapshot.availability==='ready'&&snapshot.reconnectRequired;
  const [decisionError,setDecisionError]=useState<string|null>(null);
- useEffect(()=>{let active=true,revision=0;const refresh=()=>{const current=++revision;void Promise.all([readCloudSync(),readCloudReconnectRequired()]).then(([state,paused])=>{if(active&&current===revision){setState(state);setReconnectRequired(paused);}}).catch(()=>{});};refresh();const stop=observeCloudSync(refresh);return()=>{active=false;stop();};},[]);
- const status=state?.error==='library_sync_identity'?'identity':state?.error==='library_sync_incompatible_checkpoint'?'incompatible':state?.failureKind==='terminal'?'attention':state?.status??'pending';
+ useEffect(()=>{let active=true,revision=0;const refresh=()=>{const current=++revision;setSnapshot({availability:'loading'});void readCloudSyncPanel().then(value=>{if(active&&current===revision)setSnapshot(value);});};refresh();const stop=observeCloudSync(refresh);return()=>{active=false;stop();};},[readAttempt]);
  const resolve=async(choice:CloudSyncConflictChoice)=>{if(!state?.conflict)return;setBusy(choice);setDecisionError(null);try{await resolveCloudSyncConflicts(choice,{localRevision:state.conflict.localRevision,remoteRevision:state.conflict.remoteRevision});await syncAccountLibrary();}catch(error){setDecisionError(error instanceof Error&&error.message==='library_sync_conflict_changed'?'cloudSync.comparison.changed':'cloudSync.failed');}finally{setBusy(null);}};
- const storage=state?.storage,usedMiB=storage?(storage.usedBytes/1024/1024).toFixed(1):'',capacityMiB=storage?(storage.capacityBytes/1024/1024).toFixed(0):'',storageWarning=storage&&storage.usedBytes/storage.capacityBytes>=.8;
+ const storage=state?.storage,usedMiB=storage?new Intl.NumberFormat(i18n.language,{maximumFractionDigits:1}).format(storage.usedBytes/1024/1024):'',capacityMiB=storage?new Intl.NumberFormat(i18n.language,{maximumFractionDigits:0}).format(storage.capacityBytes/1024/1024):'',storageWarning=storage&&storage.usedBytes/storage.capacityBytes>=.8;
  const comparison=state?.conflict?.comparison;
  const covered=comparison?.coveredRecordIds??comparison?.records.map(record=>record.id)??[];
  const canChoose=state?.error!=='library_sync_conflict_unsupported'&&!!comparison&&comparison.records.length>0&&covered.length===state?.conflict?.records.length&&state.conflict.records.every(record=>covered.includes(record.id))&&Number.isSafeInteger(state?.conflict?.localRevision)&&comparison.records.every(record=>record.local.available&&record.remote.available);
  if(!account.onlineService)return <section className="rounded-card border border-border-strong bg-surface-panel p-5"><h3 className="text-lg font-semibold">{t('cloudSync.title')}</h3><p className="mt-3 text-sm">{account.connectionConflict?account.notice:t('account.localSync')}</p>{!account.connectionConflict&&<button className={setupButton+' mt-4'} onClick={account.login}>{t('account.localWeb.login')}</button>}</section>;
- return <section className="rounded-card border border-border-strong bg-surface-panel p-5"><h3 className="text-lg font-semibold">{t('cloudSync.title')}</h3><p role="status" className="mt-3 text-sm">{t(reconnectRequired&&!state?'account.localSync':'cloudSync.'+status)}</p>
-  {!reconnectRequired&&<p className="mt-3 text-xs leading-6 text-fg-secondary">{t('account.localWeb.cloudNote')}</p>}
+ return <section className="sensa-cloud-sync border-y border-border-subtle py-5"><h3 className="text-lg font-medium">{t('cloudSync.title')}</h3><p role={snapshot.availability==='error'?'alert':'status'} aria-busy={snapshot.availability==='loading'} className="mt-3 text-sm">{t(cloudSyncPanelMessage(snapshot))}</p>
+  {snapshot.availability==='error'&&<button className={setupButton+' mt-3'} onClick={()=>setReadAttempt(value=>value+1)}>{t('reliability.retry')}</button>}
+  {!reconnectRequired&&<details className="mt-2 text-sm"><summary className="min-h-11 cursor-pointer py-3 text-fg-secondary">{t('account.sync')}</summary><p className="pb-3 leading-6 text-fg-secondary">{t('account.localWeb.cloudNote')}</p></details>}
   {state?.status==='conflict'&&state.conflict&&<div className="mt-4 rounded-control border border-border-subtle bg-surface-subtle p-4 text-sm"><p>{t('cloudSync.conflictPrompt')}</p>
    {comparison?.records.map((record,index)=><article key={record.id} className="mt-4"><h4 className="mb-2 break-words font-semibold">{record.local.title??record.remote.title??t('cloudSync.comparison.item',{number:index+1})}</h4><div className="grid gap-3 md:grid-cols-2"><VersionPreview version={record.local} label={t('cloudSync.comparison.local')} images={comparison.images}/><VersionPreview version={record.remote} label={t('cloudSync.comparison.remote')} images={comparison.images}/></div><details className="mt-2"><summary className="cursor-pointer text-fg-secondary">{t('cloudSync.comparison.base')}</summary><VersionPreview version={record.base} label={t('cloudSync.comparison.base')} images={comparison.images}/></details></article>)}
    {!canChoose&&<p role="alert" className="mt-3">{t(comparison?'cloudSync.comparison.unsupported':'cloudSync.comparison.refresh')}</p>}
    <div className="mt-4 flex flex-wrap gap-3"><button className={setupButton} disabled={!canChoose||busy!==null||!account.onlineService} onClick={()=>void resolve('local')}>{t(busy==='local'?'cloudSync.resolving':'cloudSync.keepLocal')}</button><button className={setupButton} disabled={!canChoose||busy!==null||!account.onlineService} onClick={()=>void resolve('remote')}>{t(busy==='remote'?'cloudSync.resolving':'cloudSync.useCloud')}</button></div><p className="mt-3 text-xs leading-5 text-fg-secondary">{t('cloudSync.conflictDecision')}</p></div>}
   {decisionError&&<p role="alert" className="mt-3 text-sm text-feedback-danger">{t(decisionError)}</p>}
   {storage&&<p className={'mt-3 text-sm '+(storageWarning?'text-feedback-danger':'text-fg-secondary')}>{t(storageWarning?'cloudSync.storageWarning':'cloudSync.storage',{used:usedMiB,capacity:capacityMiB})}</p>}
-  {state?.lastSyncedAt&&<p className="mt-2 text-sm text-fg-secondary">{t('cloudSync.last')} <time dateTime={state.lastSyncedAt}>{new Date(state.lastSyncedAt).toLocaleString(i18n.resolvedLanguage??i18n.language)}</time></p>}<button className={setupButton+' mt-4'} disabled={!account.onlineService||state?.status==='syncing'||busy!==null} onClick={()=>void syncAccountLibrary({restoreAfterLocalClear:true}).catch(()=>{})}>{t('cloudSync.retry')}</button></section>;
+  {state?.lastSyncedAt&&<p className="mt-2 text-sm text-fg-secondary">{t('cloudSync.last')} <time dateTime={state.lastSyncedAt}>{new Date(state.lastSyncedAt).toLocaleString(i18n.resolvedLanguage??i18n.language)}</time></p>}{snapshot.availability==='ready'&&<button className={setupButton+' mt-4'} disabled={!account.onlineService||state?.status==='syncing'||busy!==null} onClick={()=>void syncAccountLibrary({restoreAfterLocalClear:true}).catch(()=>{})}>{t('cloudSync.retry')}</button>}</section>;
 }

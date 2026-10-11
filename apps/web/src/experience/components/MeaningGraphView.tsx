@@ -6,6 +6,8 @@ import {buildMeaningGraph,type ExpressionAssociation} from '../ui/meaningGraph';
 import {useScreenState} from '../ui/ScreenHost';
 import {localFlowText} from '../../i18n/localFlowText';
 import {ContentDrawer} from './ContentWorkspace';
+import {interfaceLanguageDisplayName} from '../../i18n/languageDisplayName';
+import {resolveInterfaceLocale} from '../../i18n/localeRegistry';
 import {intakeSourceLabel,intakeSourceUrl} from '../personalMeaningJourney/sourcePresentation';
 
 const associationKey=(row:ExpressionAssociation)=>`${row.item.personalMeaningId}:${row.alignment.personalMeaningAlignmentId}:${row.bindingVersionId}`;
@@ -17,7 +19,8 @@ export function MeaningGraphView({items,languages=[],screenId,selectedExpression
  learningState?:(bindingVersionId:string)=>ReactNode;
  searching?:boolean;
 }){
- const {t}=useTranslation();
+ const {t,i18n}=useTranslation();
+ const locale=resolveInterfaceLocale(i18n.resolvedLanguage??i18n.language);
  const graph=useMemo(()=>buildMeaningGraph(items,languages),[items,JSON.stringify(languages)]);
  const [camera,setCamera]=useScreenState(`${screenId}:graph-camera`,{x:24,y:24,zoom:1});
  const [labels,setLabels]=useScreenState<'auto'|'all'|'selected'>(`${screenId}:graph-labels`,'auto');
@@ -43,24 +46,24 @@ export function MeaningGraphView({items,languages=[],screenId,selectedExpression
  useEffect(()=>{const media=window.matchMedia('(max-width: 48rem)'),update=()=>setNarrow(media.matches);media.addEventListener('change',update);return()=>media.removeEventListener('change',update);},[]);
  const sources=(association?.item.detail.capturedSources??[]).filter(source=>source.source!==null);
  const detailContent=selected&&association?<>
-    <header className="flex items-start justify-between gap-2"><div className="min-w-0"><h2 className="break-words text-xl font-medium">{selected.label}</h2><p className="mt-1 text-xs text-fg-secondary">{selected.languageTag} · {selected.id.slice(0,8)}</p></div>{!narrow&&<button type="button" className={control} onClick={close} aria-label={t('content.close')}><X size={18}/></button>}</header>
+    <header className="flex items-start justify-between gap-2"><div className="min-w-0"><h2 className="break-words text-xl font-medium"><bdi lang={selected.languageTag} dir="auto">{selected.label}</bdi></h2><p className="mt-1 text-xs text-fg-secondary">{interfaceLanguageDisplayName(selected.languageTag,locale)}</p></div>{!narrow&&<button type="button" className={control} onClick={close} aria-label={t('content.close')}><X size={18}/></button>}</header>
     {selected.associations.length>1&&<label className="block text-sm">{t('content.graph.sense')}<select className="mt-2 min-h-11 w-full rounded-control border border-border-subtle bg-surface-panel p-2" value={associationKey(association)} onChange={event=>setOwner({expressionId:selected.id,associationId:event.target.value})}>{selected.associations.map(row=><option key={associationKey(row)} value={associationKey(row)}>{row.alignment.coreMeaningFocus} · {row.item.shortId}</option>)}</select></label>}
     <section><h3 className="text-xs text-fg-secondary">{t('content.graph.sense')}</h3><p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6">{association.alignment.coreMeaningFocus}</p></section>
     <section><h3 className="text-xs text-fg-secondary">{t('content.graph.context')}</h3>{association.item.detail.materialBlocks.filter(block=>block.bodyText).map(block=><p key={block.anchorId} className="mt-2 whitespace-pre-wrap break-words text-sm leading-6">{block.bodyText}</p>)}</section>
-    <section><h3 className="text-xs text-fg-secondary">{t('content.worldSource')}</h3>{sources.length?sources.map(source=>{const url=intakeSourceUrl(source.source!);return <details key={source.anchorId} className="mt-2 text-sm"><summary className="min-h-11 cursor-pointer break-words">{intakeSourceLabel(source.source!)}</summary>{source.text&&<p className="whitespace-pre-wrap break-words leading-6">{source.text}</p>}{url&&<a href={url} target="_blank" rel="noreferrer" className="mt-2 inline-flex min-h-11 items-center underline">{localFlowText('viewSource')}</a>}</details>}):<p className="mt-2 text-sm">{t('content.worldNoSource')}</p>}</section>
+    <details><summary className="min-h-11 cursor-pointer text-sm text-fg-secondary">{t('content.worldSource')}</summary>{sources.length?sources.map(source=>{const url=intakeSourceUrl(source.source!);return <details key={source.anchorId} className="mt-2 text-sm"><summary className="min-h-11 cursor-pointer break-words">{intakeSourceLabel(source.source!)}</summary>{source.text&&<p className="whitespace-pre-wrap break-words leading-6">{source.text}</p>}{url&&<a href={url} target="_blank" rel="noreferrer" className="mt-2 inline-flex min-h-11 items-center underline">{localFlowText('viewSource')}</a>}</details>}):<p className="mt-2 text-sm">{t('content.worldNoSource')}</p>}</details>
     {learningState&&<section>{learningState(association.bindingVersionId)}</section>}
-    <section><h3 className="text-xs text-fg-secondary">{t('content.worldRelated')}</h3>{graph.edges.filter(edge=>edge.from===selected.id||edge.to===selected.id).map(edge=>{const other=byId.get(edge.from===selected.id?edge.to:edge.from)!;return <button type="button" key={other.id} className="mt-2 min-h-11 w-full rounded-control border border-border-subtle p-2 text-left text-sm" onClick={()=>onSelectExpression(other.id)}><b>{other.label}</b> · {other.languageTag}<span className="block text-xs">{edge.facts.map(fact=>t(`content.${fact.kind==='sense'?'worldSharedSense':'worldSharedMeaning'}`)).join(' · ')}</span></button>;})}{!graph.edges.some(edge=>edge.from===selected.id||edge.to===selected.id)&&<p className="mt-2 text-sm">{t('content.worldIsolated')}</p>}</section>
+    <section><h3 className="text-xs text-fg-secondary">{t('content.worldRelated')}</h3>{graph.edges.filter(edge=>edge.from===selected.id||edge.to===selected.id).map(edge=>{const other=byId.get(edge.from===selected.id?edge.to:edge.from)!;return <button type="button" key={other.id} className="mt-2 min-h-11 w-full rounded-control border border-border-subtle p-2 text-left text-sm" onClick={()=>onSelectExpression(other.id)}><b><bdi lang={other.languageTag} dir="auto">{other.label}</bdi></b> · {interfaceLanguageDisplayName(other.languageTag,locale)}<span className="block text-xs">{edge.facts.map(fact=>t(`content.${fact.kind==='sense'?'worldSharedSense':'worldSharedMeaning'}`)).join(' · ')}</span></button>;})}{!graph.edges.some(edge=>edge.from===selected.id||edge.to===selected.id)&&<p className="mt-2 text-sm">{t('content.worldIsolated')}</p>}</section>
     <button type="button" className={`${control} w-full bg-action-primary text-action-on-primary`} onClick={()=>onOpenMeaning(association.item.personalMeaningId,association.focusId)}>{t('content.graph.open')}<ArrowUpRight size={16}/></button>
    </>:null;
  return <section className="sensa-meaning-graph overflow-hidden rounded-card border border-border-subtle bg-surface-panel" aria-label={t('content.graph.title')} onKeyDown={event=>{if(event.key==='Escape'&&selectedExpressionId){event.stopPropagation();close();}}}>
   <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border-subtle p-2">
-   <p className="max-w-lg text-xs text-fg-secondary">{t('content.worldGraphHint')}</p>
+   <details className="sensa-graph-help min-w-0 text-sm"><summary className="min-h-11 cursor-pointer py-3 text-fg-secondary">{t('content.worldHelp')}</summary><p className="max-w-lg py-2 leading-6 text-fg-secondary">{t('content.graph.hint')}</p><p className="max-w-lg pb-3 leading-6 text-fg-secondary">{t('content.worldGraphHint')}</p></details>
    <div className="flex flex-wrap items-center gap-1">
     <label className="flex items-center gap-2 text-xs">{t('content.worldLabels')}<select value={labels} onChange={event=>setLabels(event.target.value as typeof labels)} className="min-h-11 rounded-control border border-border-subtle bg-surface-panel px-2">
      {(['auto','all','selected'] as const).map(value=><option key={value} value={value}>{t(`content.${value==='auto'?'worldLabelAuto':value==='all'?'worldLabelAll':'worldLabelSelected'}`)}</option>)}
     </select></label>
     <button type="button" className={control} onClick={()=>zoomBy(.8)} aria-label={t('content.graph.zoomOut')}><Minus size={16}/></button>
-    <output className="w-12 text-center text-xs tabular-nums" aria-label={t('content.graph.zoomIn')}>{Math.round(camera.zoom*100)}%</output>
+    <output className="w-12 text-center text-xs tabular-nums" aria-label={t('content.graph.zoom')}>{new Intl.NumberFormat(i18n.language,{style:'percent',maximumFractionDigits:0}).format(camera.zoom)}</output>
     <button type="button" className={control} onClick={()=>zoomBy(1.25)} aria-label={t('content.graph.zoomIn')}><Plus size={16}/></button>
     <button type="button" className={control} onClick={fit} aria-label={t('content.graph.fit')}><Maximize size={16}/></button>
    </div>
@@ -82,8 +85,8 @@ export function MeaningGraphView({items,languages=[],screenId,selectedExpression
       </g>;})}
      </g>
     </svg>
-    {highlight&&<div className="pointer-events-none absolute left-3 top-3 max-w-[calc(100%-1.5rem)] rounded-control border border-border-strong bg-surface-panel p-3 shadow-raised" role="status" data-graph-preview>
-     <strong className="block break-words">{highlight.label}</strong><span className="text-xs">{highlight.languageTag} · {highlight.id.slice(0,8)}</span><p className="mt-1 line-clamp-2 break-words text-sm">{highlightAssociation?.alignment.coreMeaningFocus}</p>
+    {highlight&&highlight.id!==selected?.id&&<div className="pointer-events-none absolute left-3 top-3 max-w-[calc(100%-1.5rem)] rounded-control border border-border-strong bg-surface-panel p-3 shadow-raised" role="status" data-graph-preview>
+     <strong className="block break-words"><bdi lang={highlight.languageTag} dir="auto">{highlight.label}</bdi></strong><span className="text-xs">{interfaceLanguageDisplayName(highlight.languageTag,locale)}</span><p className="mt-1 line-clamp-2 break-words text-sm">{highlightAssociation?.alignment.coreMeaningFocus}</p>
     </div>}
    </div>
    {detailContent&&(narrow?<ContentDrawer title={t('content.worldPreview')} onClose={close}><div className="space-y-5">{detailContent}</div></ContentDrawer>:<aside className="sensa-expression-graph-detail space-y-5 border-l border-border-subtle bg-surface-panel p-4" aria-label={t('content.worldPreview')}>{detailContent}</aside>)}

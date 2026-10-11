@@ -91,7 +91,8 @@
       "fit": "顯示全部",
       "canvas": "詞義關係圖，可拖動平移",
       "hint": "選擇節點檢視詳情，拖動空白處移動圖譜。",
-      "open": "檢視詳情"
+      "open": "檢視詳情",
+      "zoom": "縮放比例"
     },
     "title": "我的語意世界",
     "add": "新增內容",
@@ -162,7 +163,9 @@
     "worldSharedMeaning": "同一個個人意義",
     "worldSharedSense": "共同的已確認意義",
     "worldSource": "原始來源",
-    "worldBatchEmpty": "目前篩選中，沒有可加入 {{language}} 學習路線的表達。"
+    "worldBatchEmpty": "目前篩選中，沒有可加入 {{language}} 學習路線的表達。",
+    "worldHelp": "圖譜說明",
+    "filters": "篩選"
   },
   "composer": {
     "title": "記錄場景",

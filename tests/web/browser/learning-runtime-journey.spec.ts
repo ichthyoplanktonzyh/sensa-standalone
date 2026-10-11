@@ -1010,6 +1010,28 @@ const contentLedLearningSurface=(scenario:{locale:string;target:string})=>async(
    await expect(home.getByRole('heading',{name:expression,exact:true})).toBeVisible();
    await expect(home.getByRole('button',{name:flow.startReview,exact:true})).toBeEnabled();
    await shot('today-due',1280);
+   const finalSurfaceFacts=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+   await page.locator('[data-sensa-shell-navigation]').getByRole('button',{name:common.nav.learning,exact:true}).click();
+   await study.getByRole('button',{name:learning.statistics.title,exact:true}).click();
+   const stats=page.locator('#s-stats');await expect(stats.locator('.sensa-stat-counts dd').first()).toHaveText('1');
+   await shot('statistics',1280);await shot('statistics',320);await shot('statistics',390);
+   await stats.getByText(learning.statistics.readingGuide,{exact:true}).click();await expect(stats.getByText(learning.statistics.countBasis,{exact:true})).toBeVisible();
+   await shot('statistics-guide',390);
+   await page.setViewportSize({width:1280,height:900});await stats.locator('.sensa-stat-trend-scroll').scrollIntoViewIfNeeded();await shot('statistics-trend',1280);
+   await page.setViewportSize({width:320,height:844});await stats.locator('.sensa-stat-trend-scroll').scrollIntoViewIfNeeded();await shot('statistics-trend',320);
+   await stats.locator('summary').filter({hasText:learning.statistics.trendValues}).click();await expect(stats.getByRole('table',{name:learning.statistics.trendValues,exact:true})).toBeVisible();await shot('statistics-trend-table',390);
+   await page.setViewportSize({width:1280,height:900});await stats.getByRole('region',{name:learning.statistics.forecast,exact:true}).scrollIntoViewIfNeeded();await shot('statistics-forecast',1280);await page.setViewportSize({width:390,height:844});await stats.getByRole('region',{name:learning.statistics.forecast,exact:true}).scrollIntoViewIfNeeded();await shot('statistics-forecast',390);
+   await page.goto(`${fixture.origin}/profile`);await expect(page.locator('#settings-preferences')).toBeVisible();
+   await shot('settings',1280);await shot('settings',320);await shot('settings',390);
+   await page.locator('#settings-preferences').click();await expect(page.locator('#account-languages')).toBeVisible();await shot('settings-preferences',320);
+   await page.goto(`${fixture.origin}/profile`);await page.locator('#settings-data').click();await expect(page.locator('.sensa-cloud-sync')).toHaveCount(0);await shot('settings-data-local',390);
+   await page.goto(`${fixture.origin}/profile`);await page.locator('#settings-support').click();await shot('settings-support',390);
+   await page.goto(`${fixture.origin}/academy`);const practice=page.locator('#s-academy');await expect(practice.locator('.sensa-practice-activities button')).toBeEnabled();
+   await expect(practice.locator('#practice-material-summary bdi')).toHaveText(expression);
+   await expect(practice.locator('#practice-material-summary bdi')).toHaveAttribute('lang',scenario.target);
+   if(scenario.target==='ar')expect(await practice.locator('#practice-material-summary bdi').evaluate(element=>getComputedStyle(element).direction)).toBe('rtl');
+   await shot('practice',1280);await shot('practice',320);await shot('practice',390);
+   expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(finalSurfaceFacts);
    await writeFile(testInfo.outputPath('surface-conditions.json'),JSON.stringify({scenario,screenshots,contrast,conditions:'Fresh isolated Chromium/OPFS; actual UI download, enrollment, initial learning and completion; due clock derived from saved nextReviewAt; locale preference changes only.',ready,complete},null,2));
   }finally{fixture.learningDelivery=previous;}
 };

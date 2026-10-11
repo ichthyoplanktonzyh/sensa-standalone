@@ -23,6 +23,8 @@
     "browser/learning-workspace-journey.spec.ts",
     "integration/personal-meaning-correction.test.mts",
     "unit/scene-editor-read.test.mts",
+    "unit/cloud-sync-panel-read.test.mts",
+    "browser/cloud-sync-panel-read.spec.ts",
     "integration/personal-meaning-lifecycle.test.mts",
     "integration/learner-library-projection.test.mts",
     "integration/learning-session-scope.test.mts",

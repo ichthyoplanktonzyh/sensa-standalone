@@ -34,7 +34,7 @@ export function AppearanceSettings() {
 
       <fieldset className="mt-6 border-0 p-0">
         <legend className="text-sm font-medium">{t("appearance.skin")}</legend>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2" role="radiogroup">
+        <div className="mt-3 grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label={t("appearance.skin")}>
           {skinCatalog.map((skin) => {
             const selected = preference.skin === skin.id;
             return (
@@ -63,7 +63,7 @@ export function AppearanceSettings() {
       <div className="mt-6 grid gap-5 sm:grid-cols-2">
         <fieldset className="border-0 p-0">
           <legend className="text-sm font-medium">{t("appearance.colorMode")}</legend>
-          <div className="mt-3 grid grid-cols-3 gap-2" role="radiogroup">
+          <div className="mt-3 grid grid-cols-3 gap-2" role="radiogroup" aria-label={t("appearance.colorMode")}>
             {colorModeCatalog.map((mode) => (
               <SensaChoice
                 key={mode}
@@ -80,7 +80,7 @@ export function AppearanceSettings() {
         </fieldset>
         <fieldset className="border-0 p-0">
           <legend className="text-sm font-medium">{t("appearance.textSize")}</legend>
-          <div className="mt-3 grid grid-cols-2 gap-2" role="radiogroup">
+          <div className="mt-3 grid grid-cols-2 gap-2" role="radiogroup" aria-label={t("appearance.textSize")}>
             {textSizeCatalog.map((size) => (
               <SensaChoice
                 key={size}

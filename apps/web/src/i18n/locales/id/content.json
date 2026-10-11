@@ -91,7 +91,8 @@
       "fit": "Tampilkan semua",
       "canvas": "Relasi makna. Seret untuk menggeser.",
       "hint": "Pilih simpul untuk memeriksanya. Seret latar untuk menggeser.",
-      "open": "Buka detail"
+      "open": "Buka detail",
+      "zoom": "Tingkat zoom"
     },
     "title": "Dunia Semantik Saya",
     "add": "Tambahkan konten",
@@ -162,7 +163,9 @@
     "worldSharedMeaning": "Makna pribadi yang sama",
     "worldSharedSense": "Makna terkonfirmasi yang sama",
     "worldSource": "Sumber asli",
-    "worldBatchEmpty": "Tidak ada ungkapan dalam filter ini yang dapat ditambahkan ke jalur {{language}} saat ini."
+    "worldBatchEmpty": "Tidak ada ungkapan dalam filter ini yang dapat ditambahkan ke jalur {{language}} saat ini.",
+    "worldHelp": "Tentang graf ini",
+    "filters": "Filter"
   },
   "composer": {
     "title": "Catat konteks",

@@ -1,7 +1,5 @@
 import '../../i18n/profileResources';
 import {CloudSyncPanel} from './CloudSyncPanel';
-import {providerSnapshot} from '../../data/library/providers';
-import {observeLibrary} from '../../data/library/store';
 import {LocalDataControlPanel} from './LocalDataControlPanel';
 import {LibraryBackupPanel} from './LibraryBackupPanel';
 import {LocalAgentPanel} from './LocalAgentPanel';
@@ -60,20 +58,6 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
     setPage(next);
     requestAnimationFrame(() => { document.getElementById('s-profile')?.scrollTo(0, 0); document.getElementById('settings-heading')?.focus(); });
   };
-  const [modelNames, setModelNames] = useState<string[]>([]);
-  useEffect(() => {
-    if (!props.localLibrary || !props.active) return;
-    let live = true;
-    const refresh = () => void providerSnapshot().then(({providers, settings}) => {
-      if (live) setModelNames([...new Set(['teacher','content','review','reference'].map(purpose => {
-        const id = settings.assignments[purpose as 'teacher'|'content'|'review'|'reference'];
-        const provider = providers.find(item => item.id === id);
-        return provider ? provider.name + ' · ' + provider.model : t('modelService.default');
-      }))]);
-    }).catch(() => { if (live) setModelNames([t('modelService.readFailed')]); });
-    refresh(); const stop = observeLibrary(refresh,['providers','settings']);
-    return () => {live = false; stop();};
-  }, [props.active, props.localLibrary, i18n.language]);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [languagesOpen, setLanguagesOpen] = useState(false);
   const [glossaryOpen, setGlossaryOpen] = useState(false);
@@ -114,8 +98,8 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
   }).format(bytes / (bytes >= 1024 * 1024 ? 1024 * 1024 : 1024));
   const button = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-control border border-border-strong bg-surface-panel px-4 py-2 text-sm font-medium text-action-primary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:opacity-50';
   const labels = {home:'account.title', security:'account.security', preferences:'account.preferences', models:'account.models', agent:'account.agent', data:'account.data', backup:'libraryBackup.title', storage:'account.storageActions', support:'account.support'};
-  const row = (destination: typeof page, label: string, note: string, icon: ReactNode) => <button id={'settings-'+destination} onClick={() => openPage(destination)} className="flex min-h-24 w-full items-center gap-4 rounded-card border border-border-subtle bg-surface-panel p-5 text-left shadow-raised transition-colors hover:border-border-strong hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
-    <span aria-hidden="true" className="grid size-11 shrink-0 place-items-center rounded-control bg-surface-subtle text-action-primary">{icon}</span><span className="min-w-0 flex-1"><span className="block text-base font-medium">{t(label)}</span><span className="mt-1 block break-words text-sm leading-6 text-fg-secondary">{note}</span></span><ArrowRight aria-hidden="true" size={18} className="shrink-0 text-action-primary"/>
+  const row = (destination: typeof page, label: string, note: string, icon: ReactNode) => <button id={'settings-'+destination} onClick={() => openPage(destination)} className="sensa-settings-row flex min-h-20 w-full items-center gap-3 border-b border-border-subtle py-4 text-left transition-colors hover:border-border-strong hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+    <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center text-fg-secondary">{icon}</span><span className="min-w-0 flex-1"><span className="block text-base font-medium">{t(label)}</span>{note&&<span className="mt-1 block break-words text-sm leading-6 text-fg-secondary">{note}</span>}</span><ArrowRight aria-hidden="true" size={18} className="shrink-0 text-action-primary"/>
   </button>;
   return <>
     <SensaWorkspacePageLayout
@@ -129,17 +113,16 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
         </>,
         primary: <>
       {page==='home'&&<>
-      <section aria-labelledby="account-identity" className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-4 rounded-overlay bg-surface-subtle p-6 sm:p-8">
-        <span aria-hidden="true" className="grid size-14 shrink-0 place-items-center rounded-card bg-surface-panel text-action-primary"><UserRound size={25}/></span>
-        <div className="min-w-0 flex-1"><h2 id="account-identity" className="text-lg font-medium">{props.account || serviceAccount.email ? t('account.localWeb.current') : t('account.identity')}</h2><p className="mt-2 max-w-xl break-all text-sm leading-6 text-fg-secondary">{props.account?.email ?? serviceAccount.email ?? t('account.identityNote')}</p></div>
-        <span className="col-start-2 w-fit rounded-pill border border-border-strong px-3 py-1.5 text-xs text-fg-secondary">{props.account||serviceAccount.onlineService ? t('account.localWeb.connected') : t('account.local')}</span>
-      </section>
-      <div className="mt-6 space-y-3">
-        {row('security','account.security',props.account?.email ?? serviceAccount.email ?? t('account.identity'),<UserRound size={20}/>)}
+      <div className="sensa-settings-directory">
         {row('preferences','account.preferences',t('account.preferencesSummary'),<SlidersHorizontal size={20}/>)}
-        {props.modelSettings&&row('models','account.models',modelNames.join(' / ') || t('account.modelsSummary'),<Cpu size={20}/>)}
-        {props.localLibrary&&row('agent','account.agent',t('account.agentSummary'),<Bot size={20}/>)}
+        <section aria-labelledby="account-identity" className="sensa-account-summary mt-6 flex flex-wrap items-center justify-between gap-2 text-sm">
+          <div className="min-w-0"><h2 id="account-identity" className="font-medium">{props.account || serviceAccount.email ? t('account.localWeb.current') : t('account.identity')}</h2>{(props.account?.email??serviceAccount.email)&&<p className="mt-1 break-all text-fg-secondary">{props.account?.email??serviceAccount.email}</p>}</div>
+          <span className="text-xs text-fg-secondary">{props.account||serviceAccount.onlineService ? t('account.localWeb.connected') : t('account.local')}</span>
+        </section>
+        {row('security','account.security','',<UserRound size={20}/>)}
         {row('data','account.data',t('account.dataSummary'),<Database size={20}/>)}
+        {props.modelSettings&&row('models','account.models',t('account.modelsSummary'),<Cpu size={20}/>)}
+        {props.localLibrary&&row('agent','account.agent',t('account.agentSummary'),<Bot size={20}/>)}
         {row('support','account.support',t('account.supportSummary'),<Info size={20}/>)}
       </div>
       </>}
@@ -154,8 +137,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
       {props.localLibrary&&(serviceAccount.email||pendingAccountDeletion()?.phase==='submitted')&&<div className="mt-12 border-t border-border-subtle pt-6"><button className={button+' border-feedback-danger text-feedback-danger'} onClick={serviceAccount.deleteAccount}>{t(pendingAccountDeletion()?.phase==='submitted'?'localFlow.deleteCheck':'localFlow.deleteTitle')}</button></div>}
       </div>
       <div hidden={page!=='preferences'}>
-        <section aria-labelledby="account-preferences">
-          <h2 id="account-preferences" className="mb-4 text-lg font-medium">{t('account.preferences')}</h2>
+        <section aria-label={t('account.preferences')}>
           <div className="space-y-5">
           <AppearanceSettings/>
           <div className="divide-y divide-border-subtle rounded-card border border-border-subtle bg-surface-panel px-5 sm:px-6">
@@ -178,8 +160,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
       </div>
       <div hidden={page!=='data'}>
       {props.account&&<div className="mb-5"><button className="min-h-11 rounded-control bg-surface-subtle px-5 text-sm text-action-primary" disabled={props.account.busy} onClick={props.account.onSync}>{t('account.localWeb.syncResults')}</button></div>}
-        <section aria-labelledby="account-data">
-          <h2 id="account-data" className="mb-4 text-lg font-medium">{t('account.data')}</h2>
+        <section aria-label={t('account.data')}>
           <div className="rounded-card border border-border-subtle bg-surface-panel px-5 sm:px-6">
             <dl className="divide-y divide-border-subtle text-sm">
               <div className="flex flex-wrap justify-between gap-3 py-5"><dt>{t('account.network')}</dt><dd aria-live="polite" className="text-fg-secondary">{t(online ? 'account.online' : 'account.offline')}</dd></div>
@@ -200,8 +181,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
       <section hidden={page!=='models'} aria-label={t('modelService.title')}>{props.modelSettings}</section>
       {props.localLibrary&&page==='agent'&&<LocalAgentPanel/>}
       <div hidden={page!=='support'}>
-      <section aria-labelledby="account-support" className="mt-10">
-        <h2 id="account-support" className="mb-4 text-lg font-medium">{t('account.support')}</h2>
+      <section aria-label={t('account.support')}>
         <div className="divide-y divide-border-subtle border-y border-border-subtle">
           {(['about', 'privacy', 'providers', 'retention', 'feedback'] as const).map(key => <details key={key} className="group py-1">
             <summary className="cursor-pointer py-5 text-sm font-medium marker:text-fg-tertiary">{t('support.' + key,{ns:'profile'})}</summary>
@@ -210,8 +190,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
             {key === 'feedback' && !supportUrl && <p role="status" className="pb-5 text-sm text-feedback-danger">{t('support.unavailable',{ns:'profile'})}</p>}
           </details>)}
         </div>
-        <div className="mt-6 rounded-card border border-border-subtle bg-surface-panel p-5">
-          <h3 className="text-sm font-medium">{t('support.diagnostics',{ns:'profile'})}</h3>
+        <div className="mt-6 border-t border-border-subtle pt-3"><details><summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">{t('support.diagnostics',{ns:'profile'})}</summary>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-fg-secondary">{t('support.diagnosticsText',{ns:'profile'})}</p>
           <button className={button+' mt-4'} disabled={diagnostics==='working'} onClick={()=>{
             setDiagnostics('working');
@@ -219,7 +198,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
           }}><FileDown size={17}/>{t(diagnostics==='working'?'support.diagnosticsWorking':'support.diagnosticsDownload',{ns:'profile'})}</button>
           {diagnostics==='ready'&&<p role="status" className="mt-3 text-sm text-fg-secondary">{t('support.diagnosticsReady',{ns:'profile'})}</p>}
           {diagnostics==='failed'&&<p role="status" className="mt-3 text-sm text-feedback-danger">{t('support.diagnosticsFailed',{ns:'profile'})}</p>}
-        </div>
+        </details></div>
       </section>
       </div>
         </>,

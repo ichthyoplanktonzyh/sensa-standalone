@@ -91,7 +91,8 @@
       "fit": "Tümünü sığdır",
       "canvas": "Anlam ilişkileri. Kaydırmak için sürükleyin.",
       "hint": "İncelemek için bir düğüm seçin. Kaydırmak için arka planı sürükleyin.",
-      "open": "Ayrıntıları aç"
+      "open": "Ayrıntıları aç",
+      "zoom": "Yakınlaştırma düzeyi"
     },
     "title": "Anlamsal Dünyam",
     "add": "İçerik ekle",
@@ -162,7 +163,9 @@
     "worldSharedMeaning": "Ortak kişisel anlam",
     "worldSharedSense": "Ortak onaylanmış anlam",
     "worldSource": "Özgün kaynak",
-    "worldBatchEmpty": "Bu filtrelerde geçerli {{language}} öğrenme rotasına eklenebilecek ifade yok."
+    "worldBatchEmpty": "Bu filtrelerde geçerli {{language}} öğrenme rotasına eklenebilecek ifade yok.",
+    "worldHelp": "Grafik hakkında",
+    "filters": "Filtreler"
   },
   "composer": {
     "title": "Bir bağlam kaydet",

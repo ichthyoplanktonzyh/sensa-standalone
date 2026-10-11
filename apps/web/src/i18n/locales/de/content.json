@@ -91,7 +91,8 @@
       "fit": "Alles einpassen",
       "canvas": "Bedeutungsbeziehungen. Ziehen Sie zum Verschieben.",
       "hint": "Wählen Sie einen Knoten aus, um ihn zu untersuchen. Ziehen Sie den Hintergrund, um die Ansicht zu verschieben.",
-      "open": "Details öffnen"
+      "open": "Details öffnen",
+      "zoom": "Zoomstufe"
     },
     "title": "Meine Bedeutungswelt",
     "add": "Inhalt hinzufügen",
@@ -162,7 +163,9 @@
     "worldSharedMeaning": "Gemeinsame persönliche Bedeutung",
     "worldSharedSense": "Gemeinsame bestätigte Bedeutung",
     "worldSource": "Originalquelle",
-    "worldBatchEmpty": "Mit diesen Filtern gibt es keine Ausdrücke für den aktuellen Lernpfad {{language}}."
+    "worldBatchEmpty": "Mit diesen Filtern gibt es keine Ausdrücke für den aktuellen Lernpfad {{language}}.",
+    "worldHelp": "Über diese Ansicht",
+    "filters": "Filter"
   },
   "composer": {
     "title": "Kontext festhalten",

@@ -91,7 +91,8 @@
       "fit": "显示全部",
       "canvas": "词义关系图，可拖动平移",
       "hint": "选择节点查看详情，拖动空白处移动图谱。",
-      "open": "查看详情"
+      "open": "查看详情",
+      "zoom": "缩放比例"
     },
     "title": "我的语义世界",
     "add": "添加内容",
@@ -162,7 +163,9 @@
     "worldSharedMeaning": "同一个个人意义",
     "worldSharedSense": "共同的已确认意义",
     "worldSource": "原始来源",
-    "worldBatchEmpty": "当前筛选中，没有可加入 {{language}} 学习路线的表达。"
+    "worldBatchEmpty": "当前筛选中，没有可加入 {{language}} 学习路线的表达。",
+    "worldHelp": "图谱说明",
+    "filters": "筛选"
   },
   "composer": {
     "title": "记录场景",

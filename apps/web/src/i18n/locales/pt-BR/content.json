@@ -91,7 +91,8 @@
       "fit": "Ajustar à tela",
       "canvas": "Relações entre sentidos. Arraste para mover.",
       "hint": "Selecione um nó para examiná-lo. Arraste o fundo para mover o grafo.",
-      "open": "Abrir detalhes"
+      "open": "Abrir detalhes",
+      "zoom": "Nível de zoom"
     },
     "title": "Meu Mundo Semântico",
     "add": "Adicionar conteúdo",
@@ -162,7 +163,9 @@
     "worldSharedMeaning": "Significado pessoal compartilhado",
     "worldSharedSense": "Significado confirmado compartilhado",
     "worldSource": "Fonte original",
-    "worldBatchEmpty": "Nenhuma expressão nestes filtros pode ser adicionada à rota atual de {{language}}."
+    "worldBatchEmpty": "Nenhuma expressão nestes filtros pode ser adicionada à rota atual de {{language}}.",
+    "worldHelp": "Sobre o gráfico",
+    "filters": "Filtros"
   },
   "composer": {
     "title": "Registrar um contexto",

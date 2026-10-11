@@ -83,3 +83,6 @@ html[data-sensa-skin="quiet"] .sensa-language-settings article {
     flex-wrap: wrap;
   }
 }
+html[data-sensa-skin="quiet"] #s-profile button[id^="settings-"] { min-height: 4.5rem; padding-block: 1rem; }
+html[data-sensa-skin="quiet"] #s-profile .sensa-account-summary { padding-block: .5rem; }
+html[data-sensa-skin="quiet"] #s-profile [data-sensa-page-region="primary"] > div:not([hidden]) { margin-top: 0; }

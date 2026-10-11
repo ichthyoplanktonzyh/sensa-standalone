@@ -40,7 +40,7 @@ test('an empty practice scope offers content selection and return without loadin
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.intakeInboxCount())).toBe(0);
 });
 
-test('delivered listening preserves learner facts and provider layout after another tab changes Route',async({page,context})=>{
+test('delivered listening preserves learner facts and provider layout after another tab changes Route',async({page,context},testInfo)=>{
  fixture.setRegistry([fixture.referenceDelivery.descriptor]);await page.route('**/sensa/model/turn',route=>route.fulfill({status:503,json:{code:'fixture_model_unavailable'}}));
  await page.route('https://youglish.com/public/emb/widget.js',route=>route.fulfill({contentType:'text/javascript',body:`
  window.__listeningFixture={requests:[],closed:0};
@@ -78,6 +78,10 @@ test('delivered listening preserves learner facts and provider layout after anot
  await routes.getByRole('radio').filter({hasText:'English'}).click();await expect(routes.getByRole('radio').filter({hasText:'English'})).toHaveAttribute('aria-checked','true');
  await expect.poll(()=>page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(checkpoint);
  await start.click();await expect(listening.getByRole('button',{name:'重播',exact:true})).toHaveCount(1);await page.setViewportSize({width:390,height:844});await expect(listening.getByRole('button',{name:'重播',exact:true})).toHaveCount(1);
+ await listening.getByRole('group',{name:'播放',exact:true}).scrollIntoViewIfNeeded();await page.screenshot({path:testInfo.outputPath('listening-controls-390.png'),animations:'disabled'});await listening.evaluate(element=>element.scrollTo(0,0));await page.screenshot({path:testInfo.outputPath('listening-ready-390.png'),animations:'disabled'});
+ await page.setViewportSize({width:320,height:844});expect(await listening.evaluate(element=>element.scrollWidth<=element.clientWidth+1)).toBe(true);await page.screenshot({path:testInfo.outputPath('listening-ready-320.png'),animations:'disabled'});
+ await listening.getByRole('group',{name:'播放',exact:true}).scrollIntoViewIfNeeded();await page.screenshot({path:testInfo.outputPath('listening-controls-320.png'),animations:'disabled'});
+ await page.setViewportSize({width:1280,height:900});await listening.evaluate(element=>element.scrollTo(0,0));await page.screenshot({path:testInfo.outputPath('listening-ready-1280.png'),animations:'disabled'});await listening.getByRole('group',{name:'播放',exact:true}).scrollIntoViewIfNeeded();await page.screenshot({path:testInfo.outputPath('listening-controls-1280.png'),animations:'disabled'});await page.setViewportSize({width:390,height:844});
  const location=page.url(),skip=listening.getByRole('link',{name:'跳到播放控制',exact:true});await skip.focus();await skip.press('Enter');await expect(listening.getByRole('group',{name:'播放',exact:true})).toBeFocused();expect(page.url()).toBe(location);
  await page.keyboard.press('Tab');await expect(listening.getByRole('button',{name:'上一段',exact:true})).toBeFocused();
  await listening.locator('header').getByRole('button').click();await expect(practice).toBeVisible();

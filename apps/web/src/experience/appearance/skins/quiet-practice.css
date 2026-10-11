@@ -75,3 +75,6 @@ html[data-sensa-skin="quiet"] #s-reference-example article > section {
     flex-wrap: wrap;
   }
 }
+html[data-sensa-skin="quiet"] .sensa-practice-activities > button { min-height: 10rem; padding-block: 1rem; }
+html[data-sensa-skin="quiet"] #s-academy main { padding-block: 1.75rem; }
+html[data-sensa-skin="quiet"] #s-academy main > button { padding-block: 1rem; }

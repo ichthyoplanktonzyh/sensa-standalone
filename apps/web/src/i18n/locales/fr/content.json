@@ -91,7 +91,8 @@
       "fit": "Tout afficher",
       "canvas": "Relations entre les sens. Faites glisser pour déplacer la vue.",
       "hint": "Sélectionnez un nœud pour l’examiner. Faites glisser l’arrière-plan pour déplacer la vue.",
-      "open": "Ouvrir les détails"
+      "open": "Ouvrir les détails",
+      "zoom": "Niveau de zoom"
     },
     "title": "Mon monde sémantique",
     "add": "Ajouter du contenu",
@@ -162,7 +163,9 @@
     "worldSharedMeaning": "Sens personnel partagé",
     "worldSharedSense": "Sens confirmé partagé",
     "worldSource": "Source d’origine",
-    "worldBatchEmpty": "Aucune expression dans ces filtres ne peut être ajoutée au parcours {{language}} actuel."
+    "worldBatchEmpty": "Aucune expression dans ces filtres ne peut être ajoutée au parcours {{language}} actuel.",
+    "worldHelp": "À propos du graphe",
+    "filters": "Filtres"
   },
   "composer": {
     "title": "Capturer un contexte",
