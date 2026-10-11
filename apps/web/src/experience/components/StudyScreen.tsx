@@ -1,6 +1,6 @@
 import { StudyCalendar } from './StudyCalendar';
 import { useEffect,type ReactNode } from 'react';
-import { ArrowRight, BookOpen, Plus, SlidersHorizontal } from 'lucide-react';
+import { ArrowRight, Plus, SlidersHorizontal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {localFlowText} from '../../i18n/localFlowText';
 import type { LearningRecordKind } from '../learningJourney/learningHistory';
@@ -13,6 +13,7 @@ import './learning/LearningJourney.css';
 
 interface StudyScreenProps {
   joinedContent?:LearningManagementProjection['content'];
+  expressionList?:ReactNode;
   focusHistory?:boolean;
   onHistoryFocused?:()=>void;
   fixedPolicy?: boolean;
@@ -73,12 +74,12 @@ export const StudyScreen = (props: StudyScreenProps) => {
       regions={{
         header: <div className="flex flex-wrap items-center justify-between gap-4">
         <div><h1 className="text-3xl font-medium tracking-tight lg:text-4xl">{t('study.title')}</h1><p className="mt-2 text-sm text-fg-secondary">{t('study.currentLanguage',{language:props.languageLabel})}</p></div>
-        <button id="study-preferences-button" disabled={!!props.availability&&props.availability!=='ready'} className={`${studyButton} border border-border-subtle bg-surface-panel hover:bg-surface-selected`} onClick={()=>props.onOpenPreferences ? props.onOpenPreferences() : props.onTabChange('b')}><SlidersHorizontal size={17}/>{t('study.preferences')}</button>
+        <div className="flex flex-wrap gap-2"><button id="study-preferences-button" disabled={!!props.availability&&props.availability!=='ready'} aria-label={t('study.preferences')} title={t('study.preferences')} className={`${studyButton} px-3 text-fg-secondary hover:bg-surface-selected`} onClick={()=>props.onOpenPreferences ? props.onOpenPreferences() : props.onTabChange('b')}><SlidersHorizontal size={17}/></button><button className={`${studyButton} bg-action-primary text-action-on-primary hover:bg-action-primary-hover`} onClick={props.onAddLearning}><Plus size={16}/>{t('study.add')}</button></div>
         </div>,
         primary: <>
       {props.status}
       {(!props.availability||props.availability==='ready')&&<>
-      <section className="sensa-study-content">
+      {props.expressionList??<section className="sensa-study-content">
           <div className="flex flex-wrap items-center justify-between gap-3">
            <h2 className="text-section-title font-medium">{props.learningTargetCount?t('study.scope'):t('study.empty')}</h2>
            <div className="flex flex-wrap gap-2">
@@ -86,12 +87,11 @@ export const StudyScreen = (props: StudyScreenProps) => {
             <button className={`${studyButton} border border-border-strong hover:bg-surface-panel`} onClick={props.onAddLearning}><Plus size={16}/>{t('study.add')}</button>
            </div>
           </div>
-          {!!props.joinedContent?.length&&<ul className="mt-5 divide-y divide-border-subtle border-y border-border-subtle">{props.joinedContent.map(item=><li key={item.id} className="flex items-center gap-3 py-4"><BookOpen size={18} aria-hidden="true" className="shrink-0 text-fg-secondary"/><strong className="min-w-0 flex-1 break-words font-medium"><bdi>{item.title}</bdi></strong><span className="text-sm text-fg-secondary">{t('bookPlan.'+item.state)}</span></li>)}</ul>}
           {props.learningTargetCount>0&&<dl className="sensa-study-counts">
             <div><dt>{t('study.status')}</dt><dd>{t('study.count',{count:props.learningTargetCount,formattedCount:new Intl.NumberFormat(i18n.language).format(props.learningTargetCount)})}</dd></div>
             {([['ready',props.readyInitialCount,'new'],['review',props.reviewCount,'due']] as const).map(([key,value,filter])=><div key={key}><dt>{t('study.'+key)}</dt><dd><button aria-label={t(filter==='new'?'home.newCount':'home.dueCount',{formattedCount:new Intl.NumberFormat(i18n.language).format(value)})} className="rounded-control focus-visible:outline-2 focus-visible:outline-focus" onClick={()=>props.onOpenFilteredTargets?.(filter)}>{new Intl.NumberFormat(i18n.language).format(value)}</button></dd></div>)}
           </dl>}
-      </section>
+      </section>}
       {props.bookPlans&&<details open={managementOpen} onToggle={event=>setManagementOpen(event.currentTarget.open)} className="sensa-study-disclosure mt-6">
         <summary className="text-sm font-medium">{t('study.manageContent')}</summary>
         {managementOpen&&props.bookPlans}

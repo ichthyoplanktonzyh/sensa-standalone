@@ -12,7 +12,7 @@ import {SupplementalPlanPanel} from './SupplementalPlanPanel';
 import {usePersonalLearning} from './usePersonalLearning';
 import {contentSenseForId,type ContentSectionId} from '../../learnerSemanticProjection/system';
 import type {PracticeSenseItem} from '../practiceData';
-import {JourneyAlignmentLearningControls,PersonalPreparationTarget,pendingPersonalTargetView} from './PersonalLearningControls';
+import {JourneyAlignmentLearningControls,PersonalPreparationTarget} from './PersonalLearningControls';
 import {LearningSetupFrame,setupButton} from '../components/learning/LearningSetupFrame';
 import {PackageTarget} from './PackageLearningViews';
 import {ScreenHost} from '../ui/ScreenHost';
@@ -54,16 +54,16 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
  const managementOnly=['s-study','s-stats','s-profile'].includes(currentScreen);
  const packageLearning=usePackageLearning(packageCenterOpen,currentScreen==='s-profile'||currentScreen==='s-stats'?'preferences':currentScreen==='s-learning-target'?'target':executing?'runtime':managementOnly?'management':'workspace',currentScreen==='s-learning-target'?params.targetId:undefined);
  const personalOpen=active&&['s-study','s-learning-library','s-learning-target','s-content','s-semantic-world','s-personal-meaning','s-confirmed-sense'].includes(currentScreen);
- const personalLearning=usePersonalLearning(currentScreen==='s-learning-library'?{kind:'library'}:currentScreen==='s-learning-target'&&params.targetId?{kind:'target',targetId:params.targetId}:null,personalOpen,managementOnly);
+ const personalLearning=usePersonalLearning(currentScreen==='s-study'?{kind:'library',excludeTargetIds:packageLearning.management?.targetIds}:currentScreen==='s-learning-library'?{kind:'library'}:currentScreen==='s-learning-target'&&params.targetId?{kind:'target',targetId:params.targetId}:null,personalOpen&&(currentScreen!=='s-study'||packageLearning.loadStatus==='ready'),managementOnly);
  const activeRoute={id:packageLearning.languageContext.languageRouteId,targetLanguageTag:packageLearning.languageContext.targetLanguageTag};
  const toast=useOverlayStore(state=>state.toast);
  const coveredIds=new Set(packageLearning.management?.targetIds??packageLearning.targets.map(target=>target.targetId));
  const pendingPersonal=personalLearning.tasks.filter(task=>!coveredIds.has(task.targetId));
- const activePendingPersonal=pendingPersonal.filter(task=>task.languageContext.languageRouteId===activeRoute.id);
- const pendingDirect=packageLearning.enrollments.flatMap(enrollment=>{
+ const activePendingPersonal=pendingPersonal.filter(task=>task.curriculumActive!==false&&task.languageContext.languageRouteId===activeRoute.id&&task.languageContext.targetLanguageTag===packageLearning.languageContext.targetLanguageTag&&task.languageContext.supportLanguageTag===packageLearning.languageContext.supportLanguageTag);
+ const pendingDirect=packageLearning.management?.pendingDirect??packageLearning.enrollments.flatMap(enrollment=>{
   const source=enrollment.source;
   return source.kind==='stable_sense'&&enrollment.languageRouteId===activeRoute.id&&!packageLearning.activeTargets.some(target=>target.identity.senseVersionId===source.senseVersionId&&target.identity.bindingVersionId===source.bindingVersionId)
-   ?[{enrollmentId:enrollment.enrollmentId,expression:source.expression,meaning:source.meaning}]:[];
+   ?[{enrollmentId:enrollment.enrollmentId,expression:source.expression,meaning:source.meaning,active:true}]:[];
  });
  const openDirect=(enrollmentId?:string)=>goMain('s-direct-learning',{enrollmentId});
  const selectedPersonalTask=activePendingPersonal.find(task=>task.targetId===params.targetId);
@@ -71,11 +71,11 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
  const openLocalTarget=(id:string)=>goMain('s-learning-target',{targetId:id});
  const openTargetLibrary=(filter='all')=>goMain('s-learning-library',{learningFilter:filter,learningQuery:undefined,learningSort:undefined,learningPage:undefined});
  const initialIds=new Set(packageLearning.initialReady.map(target=>target.targetId)),dueIds=new Set(packageLearning.due.map(target=>target.targetId));
- const libraryItems:LearningLibraryItem[]=[...packageLearning.activeTargets.map(target=>learningLibraryTarget(target,initialIds,dueIds)),
+ const libraryItems:LearningLibraryItem[]=[...(packageLearning.management?.items?.map(item=>({...item,id:item.targetId,enrollmentId:null,sourceLabel:item.sourceTitle??(item.sourceKind==='stable_sense'?t('study.sources.direct'):item.sourceKind==='personal_meaning_alignment'?localFlowText('semanticWorld'):localFlowText('downloadedPackages'))}))??packageLearning.activeTargets.map(target=>learningLibraryTarget(target,initialIds,dueIds))),
   ...activePendingPersonal.map(task=>{
-   const view=pendingPersonalTargetView(task,personalLearning.sourceForTask(task),personalLearning.taskSourcesLoading);
-   return {id:task.targetId,targetId:task.targetId,enrollmentId:null,expression:view.expression,meaning:view.meaning,targetLanguageTag:view.targetLanguageTag,supportLanguageTag:view.supportLanguageTag,sourceLabel:localFlowText('semanticWorld'),state:task.status==='failed'||task.status==='rejected'?'blocked':'preparing',group:'other' as const,nextReviewAt:null};
-  }),...pendingDirect.map(entry=>({id:`enrollment:${entry.enrollmentId}`,targetId:null,enrollmentId:entry.enrollmentId,expression:entry.expression,meaning:entry.meaning,targetLanguageTag:packageLearning.languageContext.targetLanguageTag,supportLanguageTag:packageLearning.languageContext.supportLanguageTag,sourceLabel:t('study.sources.direct'),state:'awaiting_content',group:'other' as const,nextReviewAt:null}))];
+   const view=personalLearning.presentationForTask(task);
+   return {id:task.targetId,targetId:task.targetId,enrollmentId:null,expression:view?.expression??localFlowText('expression'),meaning:view?.meaning??localFlowText('semanticWorld'),targetLanguageTag:task.languageContext.targetLanguageTag,supportLanguageTag:task.languageContext.supportLanguageTag,sourceLabel:localFlowText('semanticWorld'),state:task.status==='failed'||task.status==='rejected'||task.status==='stopped'?'blocked':task.status==='waiting'?'awaiting_content':'preparing',group:'other' as const,nextReviewAt:null};
+  }),...pendingDirect.filter(entry=>entry.active).map(entry=>({id:`enrollment:${entry.enrollmentId}`,targetId:null,enrollmentId:entry.enrollmentId,expression:entry.expression,meaning:entry.meaning,targetLanguageTag:packageLearning.languageContext.targetLanguageTag,supportLanguageTag:packageLearning.languageContext.supportLanguageTag,sourceLabel:t('study.sources.direct'),state:entry.active?'awaiting_content':'not_planned',group:'other' as const,nextReviewAt:null}))];
  const openContentSection=useCallback((section:ContentSectionId)=>goMain('s-content-library',{section}),[goMain]);
  const openContentSense=useCallback((item:PracticeSenseItem)=>goMain('s-content-sense',{senseId:item.senseId}),[goMain]);
  const openSemanticWorldSense=useCallback((senseId:string)=>{const item=contentSenseForId(senseId);if(item)openContentSense(item);},[openContentSense]);
@@ -153,7 +153,7 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
     availability={packageLearning.loadStatus} status={managementStatus}
     preferencesBusy={preferencesBusy} preferencesStatus={preferencesStatus}
     active={screenActive} tab={studyTab} onTabChange={setStudyTab} onAddLearning={()=>goMain('s-learning-entry')}
-    joinedContent={packageLearning.management?.content}
+    expressionList={<LearningTargetLibraryScreen embedded active={screenActive} items={libraryItems} availability={packageLearning.loadStatus} params={params} onParamsChange={next=>setMainStack(mainStack,next,true)} routeKey={`${activeRoute.id}:study`} routeLabel="" onBack={backMain} onAddLearning={()=>goMain('s-learning-entry')} onOpenTarget={openLocalTarget} onOpenPending={openDirect} notice={personalLearning.taskSourcesUnavailable?<div role="alert"><p>{localFlowText('preparationReadFailed')}</p><button className={setupButton} onClick={personalLearning.retryTaskSources}>{localFlowText('retryPreparation')}</button></div>:personalLearning.taskSourcesLoading?<p role="status" aria-busy="true">{localFlowText('loadingSensa')}</p>:null}/>}
     onOpenTargetLibrary={()=>openTargetLibrary()} onOpenFilteredTargets={openTargetLibrary} onOpenTarget={openLocalTarget}
     onPolicyChange={()=>{}} defaultPolicy="lightweight" policyOptions={packageLearning.policyOptions} fixedPolicy
     learningTargetCount={(packageLearning.management?.targetIds.length??packageLearning.activeTargets.length)+activePendingPersonal.length+(packageLearning.management?.pendingDirectCount??pendingDirect.length)}

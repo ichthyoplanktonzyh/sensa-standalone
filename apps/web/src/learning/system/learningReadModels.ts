@@ -145,7 +145,13 @@ export interface LearningHomeProjection {
   readonly policyOptions: readonly LearningPolicyOption[];
 }
 
+export interface LearningManagementListItem{
+ readonly targetId:string;readonly expression:string;readonly meaning:string;readonly targetLanguageTag:string;readonly supportLanguageTag:string;
+ readonly sourceKind:string;readonly sourceTitle:string|null;readonly started:boolean;readonly state:string;readonly group:'new'|'due'|'paused'|'active'|'complete'|'other';readonly nextReviewAt:string|null;
+}
 export interface LearningManagementProjection{
+ readonly items?:readonly LearningManagementListItem[];
+ readonly pendingDirect?:readonly Readonly<{enrollmentId:string;expression:string;meaning:string;active:boolean}>[];
  readonly content?:readonly Readonly<{id:string;title:string;state:'active'|'maintenance'|'paused';kind:'book'|'direct'|'personal_semantic_world'}>[];
  readonly targetIds:readonly string[];readonly pendingDirectCount:number;readonly policies:readonly LearningPolicy[];readonly dailyLimit:number|null;
  readonly readyInitialCount:number;readonly reviewDueCount:number;

@@ -31,3 +31,9 @@
  .sensa-study-page > [data-sensa-page-region="header"] { padding-top: 1rem; }
 }
 .sensa-completion-counts dt { min-height: 2.5rem; display: flex; align-items: center; justify-content: center; }
+
+.sensa-learning-options-compact { min-width:2.75rem; }
+.sensa-learning-options-compact > summary { display:grid; place-items:center; list-style:none; border-radius:var(--sensa-radius-control); }
+.sensa-learning-options-compact > summary::-webkit-details-marker { display:none; }
+.sensa-learning-options-compact[open] { flex-basis:100%; }
+.sensa-learning-options-compact[open] > summary { width:2.75rem; }

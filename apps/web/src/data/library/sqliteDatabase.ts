@@ -575,7 +575,12 @@ export class SqliteRecordDatabase {
   learningHistoryProjection():StoredLearningRecord[]{return this.learningHistory.records();}
   learningSchedulePage(query:LearningScheduleQuery):LearningSchedulePage{return this.runtimeCandidates.schedule(query);}
   learningHistoryPage(query:LearningHistoryRequest):StoredLearningHistoryPage{return this.learningHistory.page(query);}
-  learningManagementSummary(query:LearningManagementSummaryQuery):LearningManagementStorageSummary{return this.runtimeCandidates.management(query);}
+  learningManagementSummary(query:LearningManagementSummaryQuery):LearningManagementStorageSummary{
+    const summary=this.runtimeCandidates.management(query);
+    if(!query.includeLibraryItems)return summary;
+    const enrollments=new Map(this.entries('curriculumEnrollments').map(row=>{const enrollment=this.decode<import('./curriculumEnrollments').LocalCurriculumEnrollment>(row.encodedValue);return [enrollment.id,{title:enrollment.source.kind==='published_book'?enrollment.source.title??null:null,paused:enrollment.bookPlan?.mode==='paused'}] as const;}));
+    return {...summary,items:this.semanticMemoryProjection.list(query,this.runtimeCandidates.sourceEligibility(query.languageContext.languageRouteId),enrollments)};
+  }
   runtimeLearningCandidates(query:RuntimeLearningCandidateQuery):RuntimeLearningCandidates{return this.runtimeCandidates.read(query);}
 
   learningRunIdsForTarget(targetId: string, openOnly: boolean): string[] {

@@ -9,7 +9,7 @@ import type {LibraryTransaction} from './store';
 
 /** Resolve one accepted Alignment inside the writer snapshot. A caller's IDs
  * do not authorize replacement meaning, expression or private Context bytes. */
-export async function readPersonalProvisioningSource(tx:Pick<LibraryTransaction,'get'>,reference:PersonalMeaningLearningReference,contextPin?:readonly string[],historical=false):Promise<PersonalMeaningLearningSource>{
+async function resolvePersonalProvisioningSource(tx:Pick<LibraryTransaction,'get'>,reference:PersonalMeaningLearningReference,contextPin?:readonly string[],historical=false){
  const current=await tx.get<MeaningJourneyRecord>('semanticMeanings',reference.personalMeaningId);
  if(!current||current.personalMeaning.personalMeaningId!==reference.personalMeaningId)throw new Error('localFlow.meaningChanged');
  const record=historical?personalMeaningPinnedRecord(current,reference,contextPin):current;
@@ -17,6 +17,17 @@ export async function readPersonalProvisioningSource(tx:Pick<LibraryTransaction,
  const {registry}=await readMeaningRegistry(tx,record);
  const pinned=historical?resolvePinnedPersonalMeaningLearningSource(record,indexRegistry(registry),reference,contextPin):null;
  const sources=historical?(pinned?[pinned]:[]):buildPersonalMeaningLearningSources(record,indexRegistry(registry),reference.personalMeaningAlignmentId,contextPin);
+ const accepted=sources.find(candidate=>canonicalConsumerJson(candidate.reference)===canonicalConsumerJson(reference));
+ if(!accepted)throw new Error('localFlow.meaningChanged');
+ return {record,sources,accepted};
+}
+/** A library row needs the accepted expression and meaning, without private media. */
+export async function readPersonalProvisioningPresentation(tx:Pick<LibraryTransaction,'get'>,reference:PersonalMeaningLearningReference,contextPin?:readonly string[]){
+ const {accepted}=await resolvePersonalProvisioningSource(tx,reference,contextPin,true);
+ return {expression:accepted.expression.surfaceForm,meaning:accepted.semanticSpec.coreMeaningFocus};
+}
+export async function readPersonalProvisioningSource(tx:Pick<LibraryTransaction,'get'>,reference:PersonalMeaningLearningReference,contextPin?:readonly string[],historical=false):Promise<PersonalMeaningLearningSource>{
+ const {record,sources}=await resolvePersonalProvisioningSource(tx,reference,contextPin,historical);
  const candidates=await hydratePersonalLearningImages(record,sources,async mediaId=>{
   const media=parseStoredMedia(await tx.get('media',mediaId));if(media.mediaId!==mediaId)throw new Error('localFlow.meaningChanged');
   return {id:mediaId,name:'personal-context-image',dataUrl:media.dataUrl};

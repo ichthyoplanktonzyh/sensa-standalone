@@ -224,7 +224,12 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
       .map((row) => decode<LocalLearningTarget>(row.encodedValue)!);
     const availablePackageKeys = (await this.entries('packageCache')).map((row) => row.key);
     const activeId = decode<string>(this.records.get('meta\u0000learning-active'));
-    return createHomeLearningStorageProjection({
+    const enrollments=(await this.entries('curriculumEnrollments')).map(row=>decode<import('./curriculumEnrollments').LocalCurriculumEnrollment>(row.encodedValue)!);
+    const enrollmentMap=new Map(enrollments.map(item=>[item.id,item]));
+    const removed=new Set((await this.entries('supplementalMembershipStates')).filter(row=>decode<{status:string}>(row.encodedValue)?.status==='removed').map(row=>row.key));
+    const {curriculumSourceEligibility}=await import('../../learning/runtime/curriculumEligibility');
+    const sourceEligibility=Object.fromEntries(targets.flatMap(target=>target.curriculumMemberships.map((member,index)=>[member.id??`${target.id}:${index}`,removed.has(member.id??'')?{introduce:false,ongoing:false}:curriculumSourceEligibility(member,enrollmentMap.get(String(member.provenance.curriculumEnrollmentId)),!!target.startedAt)])));
+    return {...createHomeLearningStorageProjection({
       clock,
       targets,
       availablePackageKeys,
@@ -232,9 +237,9 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
         ? decode<LocalLearningRun>(this.records.get(`learningRuns\u0000${activeId}`)) ?? null
         : null,
       studyPlans: decode(this.records.get('settings\u0000language-route-study-plans')) ?? {},
-      enrollments:(await this.entries('curriculumEnrollments')).map(row=>decode<import('./curriculumEnrollments').LocalCurriculumEnrollment>(row.encodedValue)!),
+      enrollments,
       languageRouteId,
-    });
+    }),sourceEligibility};
   }
   async studyScopeMember(scopeRevisionId:string,targetId:string):Promise<import('./studyScopes').LocalStudyScopeMember|null>{
     const encoded=await this.get('studyScopes',scopeRevisionId);
@@ -254,7 +259,23 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
     return runtimeLearningCandidatesFromRecords({...stored,targets,availablePackageKeys:(await this.entries('packageCache')).map(row=>row.key)},query,scope);
   }
   async learningSchedulePage(query:LearningScheduleQuery):Promise<LearningSchedulePage>{return learningScheduleFromRecords(await this.homeLearningProjection(query.languageContext.languageRouteId,query.clock),query);}
-  async learningManagementSummary(query:LearningManagementSummaryQuery):Promise<LearningManagementStorageSummary>{return {...learningManagementSummaryFromRecords(await this.homeLearningProjection(query.languageContext.languageRouteId,query.clock),query),libraryTargetCount:query.includeInventory===false?null:(await this.entries('learningTargets')).length};}
+  async learningManagementSummary(query:LearningManagementSummaryQuery):Promise<LearningManagementStorageSummary>{
+    const summary={...learningManagementSummaryFromRecords(await this.homeLearningProjection(query.languageContext.languageRouteId,query.clock),query),libraryTargetCount:query.includeInventory===false?null:(await this.entries('learningTargets')).length};
+    if(!query.includeLibraryItems)return summary;
+    const {learningManagementListRecord,learningManagementListItem}=await import('./learningManagementList');
+    const {curriculumSourceEligibility}=await import('../../learning/runtime/curriculumEligibility');
+    const enrollments=new Map((await this.entries('curriculumEnrollments')).map(row=>{const item=decodeBackupValue(JSON.parse(row.encodedValue)) as import('./curriculumEnrollments').LocalCurriculumEnrollment;return [item.id,item] as const;}));
+    const titles=new Map([...enrollments].map(([id,item])=>[id,{title:item.source.kind==='published_book'?item.source.title??null:null,paused:item.bookPlan?.mode==='paused'}] as const));
+    const removed=new Set((await this.entries('supplementalMembershipStates')).filter(row=>(decodeBackupValue(JSON.parse(row.encodedValue)) as {status:string}).status==='removed').map(row=>row.key));
+    const available=new Set((await this.entries('packageCache')).map(row=>row.key));
+    const items=(await this.entries('learningTargets')).flatMap(row=>{
+      const target=decodeBackupValue(JSON.parse(row.encodedValue)) as LocalLearningTarget;
+      const eligibility=Object.fromEntries(target.curriculumMemberships.map((member,index)=>[member.id??`${target.id}:${index}`,removed.has(member.id??'')?{introduce:false,ongoing:false}:curriculumSourceEligibility(member,enrollments.get(String(member.provenance.curriculumEnrollmentId)),!!target.startedAt)]));
+      const item=learningManagementListItem(learningManagementListRecord(target),query.languageContext,query.clock,eligibility,titles,available,query.supportedPolicies);
+      return item?[item]:[];
+    });
+    return {...summary,items};
+  }
   async learningHistoryPage(query:LearningHistoryRequest):Promise<StoredLearningHistoryPage>{return learningHistoryPageFromRecords(await this.learningHistoryProjection(),query);}
 
   async learningRunIdsForTarget(targetId: string, openOnly: boolean): Promise<string[]> {

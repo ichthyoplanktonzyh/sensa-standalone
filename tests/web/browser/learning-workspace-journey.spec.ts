@@ -208,7 +208,7 @@ test('a personal meaning created from a learning scene reuses its Book target wi
  // a preparation screen or its unrelated retry action.
  await runtime.getByRole('button',{name:'暂停',exact:true}).click();
  await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的学习',exact:true}).click();
- await page.locator('#s-study').getByRole('button',{name:'查看内容',exact:true}).click();
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.navigate('/study/learning-library'));
  await page.locator('#s-learning-library').getByRole('button',{name:/borrow/}).click();
  const target=page.locator('#s-learning-target');await expect(target.getByRole('heading',{name:'borrow',level:2,exact:true})).toBeVisible();
  await page.evaluate(async()=>{await window.__sensaBrowserSmoke!.failLearningTargetReadsForTest(true);window.dispatchEvent(new Event('sensa-library-changed'));});
@@ -333,6 +333,7 @@ test('a failed Statistics code module recovers after reconnect without losing sa
   await page.unroute(blockedModule);
   await recovery.getByRole('button',{name:'重新加载',exact:true}).click();
   const stats=page.locator('#s-stats');
+  await stats.locator('summary').filter({hasText:'筛选与全部记录'}).click();
   await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button',{name:/borrow/})).toHaveCount(1,{timeout:15_000});
   expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(saved);
  }finally{await context.close();}

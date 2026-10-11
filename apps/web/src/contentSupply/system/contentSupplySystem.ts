@@ -109,6 +109,7 @@ export type ContentSupplyQuery =
   | Readonly<{ kind: 'provisioning_control' }>
   | Readonly<{ kind:'provisioning_task';taskId:string }>
   | Readonly<{kind:'personal_provisioning_source';taskId:string}>
+  | Readonly<{kind:'personal_provisioning_presentation';taskId:string}>
   | Readonly<{ kind: 'provisioning_tasks' }>;
 export type ContentSupplyQueryResult<Query extends ContentSupplyQuery> =
   Query['kind'] extends 'book_preview'?SensaPortableBookPreview
@@ -122,6 +123,7 @@ export type ContentSupplyQueryResult<Query extends ContentSupplyQuery> =
     : Query['kind'] extends 'provisioning_control' ? ContentProvisioningControl
       :Query['kind'] extends 'provisioning_task'?ContentProvisioningTask|null
       :Query['kind'] extends 'personal_provisioning_source'?PersonalMeaningLearningSource|null
+      :Query['kind'] extends 'personal_provisioning_presentation'?Readonly<{expression:string;meaning:string}>|null
       : readonly ContentProvisioningTask[];
 
 /**

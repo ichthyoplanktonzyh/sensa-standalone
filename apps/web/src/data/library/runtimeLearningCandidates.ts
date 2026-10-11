@@ -33,8 +33,8 @@ export interface RuntimeLearningCandidates {
  readonly initialReady:readonly RuntimeLearningCandidate[];
  readonly nextChangeAt:number|null;
 }
-export type LearningManagementSummaryQuery=Pick<RuntimeLearningCandidateQuery,'languageContext'|'clock'|'dailyLimit'|'supportedPolicies'>&{readonly includeTargetIds?:boolean;readonly includeInventory?:boolean;readonly currentTargetIds?:readonly string[]};
-export interface LearningManagementStorageSummary{readonly targetIds:readonly string[];readonly policies:readonly string[];readonly readyInitialCount:number;readonly reviewDueCount:number;readonly currentCandidateCount:number;readonly routeTargetCount:number|null;readonly libraryTargetCount:number|null;readonly nextReviewAt:number|null;}
+export type LearningManagementSummaryQuery=Pick<RuntimeLearningCandidateQuery,'languageContext'|'clock'|'dailyLimit'|'supportedPolicies'>&{readonly includeLibraryItems?:boolean;readonly includeTargetIds?:boolean;readonly includeInventory?:boolean;readonly currentTargetIds?:readonly string[]};
+export interface LearningManagementStorageSummary{readonly items?:readonly import('../../learning/system/learningReadModels').LearningManagementListItem[];readonly targetIds:readonly string[];readonly policies:readonly string[];readonly readyInitialCount:number;readonly reviewDueCount:number;readonly currentCandidateCount:number;readonly routeTargetCount:number|null;readonly libraryTargetCount:number|null;readonly nextReviewAt:number|null;}
 const bounds=(query:RuntimeLearningCandidateQuery)=>{
  if(!Number.isFinite(query.clock))throw new Error('localFlow.clockChanged');
  const start=new Date(query.clock);start.setHours(0,0,0,0);

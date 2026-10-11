@@ -44,7 +44,7 @@ test('Today separates empty, resumed and future-review states and its counts ope
  await first.focus();await first.press('Enter');await expect(detail).toBeVisible();
  await detail.getByRole('button',{name:'返回',exact:true}).click();
  await expect(list.locator(`[data-learning-target="${id}"]`)).toBeFocused();
- await list.getByRole('searchbox',{name:'搜索单词或意思',exact:true}).fill(expression!);
+ await list.getByRole('searchbox',{name:'搜索表达或意思',exact:true}).fill(expression!);
  await list.locator('.sensa-learning-options > summary').click();
  await list.getByRole('combobox',{name:'排序',exact:true}).selectOption('expression');
  await page.reload();await expect(list.getByRole('searchbox')).toHaveValue(expression!);
@@ -85,6 +85,9 @@ test('Today separates empty, resumed and future-review states and its counts ope
  expect(facts.records).toHaveLength(2);expect(new Set(facts.records.map(record=>record.recordId)).size).toBe(2);
  await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的学习',exact:true}).click();await page.locator('#s-study').getByRole('button',{name:'学习统计',exact:true}).click();
  const stats=page.locator('#s-stats'),forecast=stats.getByRole('region',{name:'未来到期安排',exact:true});
+ await expect(stats.locator('.sensa-activity-summary p')).toBeVisible();await page.screenshot({path:testInfo.outputPath('statistics-default-desktop.png')});
+ await forecast.locator('summary').filter({hasText:'查看到期表达'}).click();
+ await stats.locator('summary').filter({hasText:'筛选与全部记录'}).click();
  await forecast.getByRole('button',{name:'未来 30 天',exact:true}).click();await expect(forecast.getByRole('status')).toHaveText('当前计划有 2 个目标到期');await expect(forecast.locator('ol button')).toHaveCount(2);
  const forecastTarget=forecast.locator('ol button').first();await forecastTarget.click();await expect(detail).toBeVisible();await detail.getByRole('button',{name:'返回',exact:true}).click();await expect(forecast.locator('ol button')).toHaveCount(2);
  await forecast.locator('tbody button').first().click();await expect(forecast.getByRole('button',{name:'查看整个预测',exact:true})).toBeVisible();await expect(forecast.locator('ol button')).toHaveCount(2);
@@ -211,6 +214,7 @@ test('custom statistics rejects reversed, future and empty dates and recovers wi
  const facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
  await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的学习',exact:true}).click();
  await page.locator('#s-study').getByRole('button',{name:'学习统计',exact:true}).click();const stats=page.locator('#s-stats');
+ await stats.locator('summary').filter({hasText:'筛选与全部记录'}).click();
  await stats.getByRole('button',{name:'自选日期',exact:true}).click();
  await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(1);
  const start=stats.getByLabel('开始日期',{exact:true}),end=stats.getByLabel('结束日期',{exact:true});
@@ -254,33 +258,36 @@ test.describe('history calendar in the actual SQLite Worker',()=>{
   await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的学习',exact:true}).click();
   const study=page.locator('#s-study');await study.locator('summary').filter({hasText:'最近记录'}).click();await expect(study.locator('ol').getByRole('button')).toHaveCount(1);
   await study.getByRole('button',{name:'学习统计',exact:true}).click();const stats=page.locator('#s-stats');
-  await stats.getByRole('button',{name:'今天',exact:true}).click();await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(1);
-  await expect(stats.getByRole('status').filter({hasText:'1 条'})).toBeVisible();
-  const localDay=await page.evaluate(()=>new Intl.DateTimeFormat('zh-CN',{dateStyle:'medium'}).format(new Date(2026,9,31)));
-  await expect(stats.getByRole('rowheader',{name:localDay,exact:true})).toBeVisible();
-  await stats.getByRole('button',{name:'年度',exact:true}).click();
-  const annual=stats.locator('.sensa-stat-year');await expect(annual.locator('button')).toHaveCount(365);
-  const actualDay=annual.locator('button[data-day="2026-10-31"]');await expect(actualDay).toHaveAttribute('data-level','one');await expect(annual.locator('button[data-day="2026-11-01"]')).toBeDisabled();
-  await actualDay.focus();await page.keyboard.press('ArrowLeft');await expect(annual.locator('button[data-day="2026-10-24"]')).toBeFocused();await page.keyboard.press('Enter');
-  await expect(stats.getByText('这个范围内没有可用记录',{exact:true})).toBeVisible();await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(0);
-  await stats.getByRole('button',{name:'年度',exact:true}).click();await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(1);
-  await stats.screenshot({path:test.info().outputPath('statistics-year-desktop.png')});
-  await page.setViewportSize({width:320,height:740});const selector=stats.getByRole('combobox',{name:'日历月份',exact:true}),month=stats.locator('.sensa-stat-month');
-  await selector.selectOption('8');await expect(month.locator('button:not(:disabled)')).toHaveCount(30);await expect(month.locator('button[tabindex="0"]')).toHaveCount(1);
-  await selector.focus();await page.keyboard.press('Tab');await expect(month.locator('button[data-day="2026-09-30"]')).toBeFocused();
-  await page.keyboard.press('ArrowLeft');await expect(month.locator('button[data-day="2026-09-29"]')).toBeFocused();
+  const annual=stats.locator('.sensa-activity-year');await expect(annual.locator('[data-date]')).toHaveCount(365);
+  const actualDay=annual.locator('[data-date="2026-10-31"]');await expect(actualDay).toHaveAttribute('data-level','1');await expect(annual.locator('[data-date="2026-11-01"]')).toHaveAttribute('aria-disabled','true');
+  await actualDay.focus();await expect(page.getByRole('tooltip')).toContainText('1 条');
+  await page.keyboard.press('ArrowLeft');await expect(annual.locator('[data-date="2026-10-24"]')).toBeFocused();await page.keyboard.press('Enter');
+  const dayRecords=stats.getByRole('region',{name:'当天记录',exact:true});
+  await expect(dayRecords.getByText('这个范围内没有可用记录',{exact:true})).toBeVisible();await expect(dayRecords.getByRole('list').getByRole('button')).toHaveCount(0);
+  await expect(actualDay).toHaveAttribute('data-level','1'); // Date inspection does not collapse the annual query.
+  await actualDay.click();await expect(dayRecords.getByRole('list').getByRole('button')).toHaveCount(1);
+  await expect(annual.locator('[data-date]')).toHaveCount(365);await stats.screenshot({path:test.info().outputPath('statistics-year-desktop.png')});
+  await dayRecords.getByRole('button',{name:'收起记录',exact:true}).click();await expect(actualDay).toBeFocused();
+  await page.setViewportSize({width:320,height:740});const month=stats.locator('.sensa-activity-month');
+  await month.getByRole('button',{name:'上一页',exact:true}).click();
+  await expect(month.locator('button[data-day="2026-09-30"]')).toBeVisible();
+  await month.locator('button[data-day="2026-09-30"]').focus();await page.keyboard.press('ArrowLeft');await expect(month.locator('button[data-day="2026-09-29"]')).toBeFocused();
   await page.keyboard.press('ArrowUp');await expect(month.locator('button[data-day="2026-09-22"]')).toBeFocused();
   await page.keyboard.press('ArrowRight');await page.keyboard.press('ArrowDown');await expect(month.locator('button[data-day="2026-09-30"]')).toBeFocused();
   await month.screenshot({path:test.info().outputPath('statistics-september-keyboard-focus.png')});
-  await page.keyboard.press('ArrowRight');await expect(selector).toHaveValue('9');await expect(month.locator('button[data-day="2026-10-01"]')).toBeFocused();
-  await page.keyboard.press('ArrowLeft');await expect(selector).toHaveValue('8');await expect(month.locator('button[data-day="2026-09-30"]')).toBeFocused();
-  await selector.selectOption('10');await expect(month.locator('button:not(:disabled)')).toHaveCount(0);await expect(month.locator('button[tabindex="0"]')).toHaveCount(0);
-  await selector.selectOption('9');await selector.focus();await page.keyboard.press('Tab');await expect(month.locator('button[data-day="2026-10-31"]')).toBeFocused();
+  await month.locator('button[data-day="2026-09-30"]').click();await expect(dayRecords.getByText('这个范围内没有可用记录',{exact:true})).toBeVisible();await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await expect(month.locator('button[data-day="2026-09-30"]')).toBeVisible();await dayRecords.getByRole('button',{name:'收起记录',exact:true}).click();await expect(month.locator('button[data-day="2026-09-30"]')).toBeFocused();
+  await page.keyboard.press('ArrowRight');await expect(month.locator('button[data-day="2026-10-01"]')).toBeFocused();
+  await page.keyboard.press('ArrowLeft');await expect(month.locator('button[data-day="2026-09-30"]')).toBeFocused();
+  await month.getByRole('button',{name:'下一页',exact:true}).click();await month.getByRole('button',{name:'下一页',exact:true}).click();
+  await expect(month.locator('.rdp-day_button:not(:disabled)')).toHaveCount(0);await expect(month.locator('.rdp-day_button[tabindex="0"]')).toHaveCount(0);
+  await month.getByRole('button',{name:'上一页',exact:true}).click();await month.locator('button[data-day="2026-10-31"]').focus();
   await page.keyboard.press('ArrowRight');await expect(month.locator('button[data-day="2026-10-31"]')).toBeFocused();
-  await stats.getByRole('region',{name:'学习日历',exact:true}).screenshot({path:test.info().outputPath('statistics-month-320px.png')});
-  await month.locator('button[data-day="2026-10-31"]').click();
-  await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(1);expect(await stats.evaluate(element=>element.scrollWidth<=element.clientWidth+1)).toBe(true);
-  await page.reload();await expect(stats.getByRole('rowheader',{name:localDay,exact:true})).toBeVisible();
+  await stats.getByRole('region',{name:'学习日历',exact:true}).first().screenshot({path:test.info().outputPath('statistics-month-320px.png')});
+  await month.locator('button[data-day="2026-10-31"]').click();await expect(dayRecords.getByRole('list').getByRole('button')).toHaveCount(1);
+  expect(await stats.evaluate(element=>element.scrollWidth<=element.clientWidth+1)).toBe(true);
+  const record=dayRecords.getByRole('list').getByRole('button').first();await record.click();await page.locator('#s-learning-target').getByRole('button',{name:'返回',exact:true}).click();
+  await expect(dayRecords.getByRole('list').getByRole('button')).toHaveCount(1);await expect(month.locator('.rdp-selected [data-day="2026-10-31"]')).toBeVisible();
+
  });
 });
 
@@ -345,11 +352,12 @@ test('review-only Again survives a lost receipt and reload as a separate Relearn
  await runtime.getByRole('button',{name:/完成并回到首页/}).click();await expect(home.getByRole('button',{name:'继续学习',exact:true})).toHaveCount(0);await expect(home.getByRole('button',{name:'开始学习',exact:true})).toBeEnabled();
  const beforeStatistics=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
  await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的学习',exact:true}).click();await page.locator('#s-study').getByRole('button',{name:'学习统计',exact:true}).click();
- const stats=page.locator('#s-stats');await stats.getByRole('button',{name:'全部可用记录',exact:true}).click();await expect(stats.locator('dl dd')).toHaveText(['1','1','1']);await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(3);
- const trend=stats.getByRole('img',{name:'首学、复习与巩固趋势',exact:true});for(const label of ['首次学习记录 1','复习记录 1','巩固记录 1'])await expect(trend.locator('desc')).toContainText(label);
- await trend.focus();await expect(trend).toBeFocused();await stats.locator('details > summary').filter({hasText:'查看趋势数值'}).click();await expect(stats.getByRole('table',{name:'查看趋势数值',exact:true})).toBeVisible();
- await trend.scrollIntoViewIfNeeded();await page.screenshot({path:test.info().outputPath('statistics-real-three-kind-trend.png')});
- await stats.getByRole('combobox',{name:'记录类型',exact:true}).selectOption('retention_review');await expect(stats.locator('dl dd')).toHaveText(['0','1','0']);await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(1);
+ const stats=page.locator('#s-stats');await stats.locator('summary').filter({hasText:'筛选与全部记录'}).click();await stats.getByRole('button',{name:'全部可用记录',exact:true}).click();
+ await expect(stats.getByRole('list',{name:'所选范围的记录',exact:true}).getByRole('button')).toHaveCount(3);
+ const records=stats.getByRole('list',{name:'所选范围的记录',exact:true});for(const label of ['首次学习','复习','巩固'])await expect(records.getByText(label,{exact:true})).toHaveCount(1);
+ await page.screenshot({path:test.info().outputPath('statistics-real-three-kind-activity.png')});
+ await stats.getByRole('combobox',{name:'记录类型',exact:true}).selectOption('retention_review');await expect(records.getByRole('button')).toHaveCount(1);
+
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(beforeStatistics);
 });
 
@@ -539,7 +547,7 @@ test('finishing a pinned Run after switching to an empty Route clears its resume
 test('Study separates learning content, management and check-in without manufacturing learning records',async({page},testInfo)=>{
  await page.goto(`${fixture.origin}/study`);
  const study=page.locator('#s-study');
- await expect(study.getByRole('heading',{name:'还没有学习内容',exact:true})).toBeVisible();
+ await expect(study.getByText('还没有学习内容',{exact:true})).toBeVisible();
  await expect(study.getByRole('button',{name:'添加内容',exact:true})).toBeEnabled();
  await expect(study.getByRole('region',{name:'后续学习计划',exact:true})).toHaveCount(0);
  await expect(study.getByRole('button',{name:'签到今天',exact:true})).toHaveCount(0);
@@ -557,7 +565,7 @@ test('Study separates learning content, management and check-in without manufact
  await expect(study.getByRole('button',{name:'今天已签到',exact:true})).toBeDisabled();
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(original);
  await page.reload();
- await expect(study.getByRole('heading',{name:'还没有学习内容',exact:true})).toBeVisible();
+ await expect(study.getByText('还没有学习内容',{exact:true})).toBeVisible();
  await expect(study.getByRole('button',{name:'今天已签到',exact:true})).toHaveCount(0);
  await calendar.locator('summary').click();
  await expect(study.getByRole('button',{name:'今天已签到',exact:true})).toBeDisabled();
@@ -605,14 +613,13 @@ test('Book mode and ordinal Range recover from failed writes, preserve the curre
  await expect(dialog.getByRole('alert')).toContainText('已重新读取计划');
  await dialog.getByRole('button',{name:'取消',exact:true}).click();
  await expect(plans).toContainText('暂停');await expect(plans).toContainText('第 1–1 项');
- await study.getByRole('button',{name:'查看内容',exact:true}).click();
- const pausedList=page.locator('#s-learning-library');
+ const pausedList=study;
  await pausedList.getByRole('combobox',{name:'学习状态',exact:true}).selectOption('paused');
  await expect(pausedList.locator('[data-learning-target]')).toHaveCount(2);
  await expect(pausedList.getByText('已暂停',{exact:true})).toHaveCount(2);
  await pausedList.getByRole('combobox',{name:'学习状态',exact:true}).selectOption('new');
  await expect(pausedList.locator('[data-learning-target]')).toHaveCount(0);
- await pausedList.getByRole('button',{name:'返回',exact:true}).click();
+
  await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'今日',exact:true}).click();
  await expect(page.locator('#s-home').getByRole('button',{name:'待新学 0',exact:true})).toBeVisible();
  await page.locator('#s-home').getByRole('button',{name:'继续学习',exact:true}).click();
@@ -921,7 +928,7 @@ const contentLedLearningSurface=(scenario:{locale:string;target:string})=>async(
   const common=JSON.parse(await readFile(`apps/web/src/i18n/locales/${scenario.locale}/common.json`,'utf8'));
   const learning=JSON.parse(await readFile(`apps/web/src/i18n/locales/${scenario.locale}/learning.json`,'utf8'));
   const flow=JSON.parse(await readFile(`apps/web/src/i18n/locales/${scenario.locale}/localFlow.json`,'utf8')).localFlow;
-  const home=page.locator('#s-home'),study=page.locator('#s-study'),list=page.locator('#s-learning-library'),runtime=page.locator('#s-lightweight-runtime');
+  const home=page.locator('#s-home'),study=page.locator('#s-study'),list=study,runtime=page.locator('#s-lightweight-runtime');
   const screenshots:string[]=[];
   const shot=async(name:string,width:number)=>{
    await page.setViewportSize({width,height:width<768?844:900});
@@ -976,7 +983,6 @@ const contentLedLearningSurface=(scenario:{locale:string;target:string})=>async(
    await page.locator('[data-sensa-shell-navigation]').getByRole('button',{name:common.nav.learning,exact:true}).click();
    await expect(study.getByText(title,{exact:true})).toBeVisible();
    await shot('my-learning',1280);await shot('my-learning',390);
-   await study.getByRole('button',{name:learning.study.browse,exact:true}).click();
    await expect(list.locator('[data-learning-target] strong')).toHaveText(expression);
    await expect(list.locator('[data-learning-target] strong')).toHaveAttribute('lang',scenario.target);
    await shot('learning-list',1280);await shot('learning-list',320);
@@ -1000,6 +1006,7 @@ const contentLedLearningSurface=(scenario:{locale:string;target:string})=>async(
    });expect(contrast.ratio).toBeGreaterThanOrEqual(4.5);
    await runtime.locator('[data-sensa-page-region="controls"] .sensa-runtime-rating button').last().click();
    await expect(runtime.getByRole('heading',{name:learning.runtime.done,exact:true})).toBeVisible();
+   const completedDay=await page.evaluate(()=>{const date=new Date();return String(date.getFullYear())+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0');});
    const complete=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
    expect(complete.records).toHaveLength(1);expect(complete.records[0]!.kind).toBe('initial_learning');expect(complete.completedTargets[0]!.nextReviewAt).not.toBeNull();
    await expect(runtime.getByRole('progressbar')).toHaveAttribute('aria-valuenow','100');
@@ -1013,13 +1020,15 @@ const contentLedLearningSurface=(scenario:{locale:string;target:string})=>async(
    const finalSurfaceFacts=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
    await page.locator('[data-sensa-shell-navigation]').getByRole('button',{name:common.nav.learning,exact:true}).click();
    await study.getByRole('button',{name:learning.statistics.title,exact:true}).click();
-   const stats=page.locator('#s-stats');await expect(stats.locator('.sensa-stat-counts dd').first()).toHaveText('1');
-   await shot('statistics',1280);await shot('statistics',320);await shot('statistics',390);
-   await stats.getByText(learning.statistics.readingGuide,{exact:true}).click();await expect(stats.getByText(learning.statistics.countBasis,{exact:true})).toBeVisible();
+   const stats=page.locator('#s-stats');await expect(stats.locator('.sensa-activity-summary p')).toContainText('1');
+   await page.mouse.move(5,5);await shot('statistics',1280);await shot('statistics',320);await shot('statistics',390);
+   await page.setViewportSize({width:1280,height:900});await stats.locator(`[data-date="${completedDay}"]`).click();
+   const dayRecords=stats.getByRole('region',{name:learning.statistics.dailyDetails,exact:true});await expect(dayRecords.getByRole('list').getByRole('button')).toHaveCount(1);
+   await shot('statistics-day',1280);await shot('statistics-day',320);
+   await dayRecords.getByRole('button',{name:learning.statistics.closeDay,exact:true}).click();
+   await stats.locator('summary').filter({hasText:learning.statistics.options}).click();await stats.getByText(learning.statistics.readingGuide,{exact:true}).click();await expect(stats.getByText(learning.statistics.countBasis,{exact:true})).toBeVisible();
    await shot('statistics-guide',390);
-   await page.setViewportSize({width:1280,height:900});await stats.locator('.sensa-stat-trend-scroll').scrollIntoViewIfNeeded();await shot('statistics-trend',1280);
-   await page.setViewportSize({width:320,height:844});await stats.locator('.sensa-stat-trend-scroll').scrollIntoViewIfNeeded();await shot('statistics-trend',320);
-   await stats.locator('summary').filter({hasText:learning.statistics.trendValues}).click();await expect(stats.getByRole('table',{name:learning.statistics.trendValues,exact:true})).toBeVisible();await shot('statistics-trend-table',390);
+   await stats.locator('summary').filter({hasText:learning.statistics.options}).click();
    await page.setViewportSize({width:1280,height:900});await stats.getByRole('region',{name:learning.statistics.forecast,exact:true}).scrollIntoViewIfNeeded();await shot('statistics-forecast',1280);await page.setViewportSize({width:390,height:844});await stats.getByRole('region',{name:learning.statistics.forecast,exact:true}).scrollIntoViewIfNeeded();await shot('statistics-forecast',390);
    await page.goto(`${fixture.origin}/profile`);await expect(page.locator('#settings-preferences')).toBeVisible();
    await shot('settings',1280);await shot('settings',320);await shot('settings',390);
@@ -1039,3 +1048,41 @@ test('content-led learning surfaces preserve real task facts in zh-CN UI with en
 test('content-led learning surfaces preserve real task facts in en UI with en source',contentLedLearningSurface({locale:'en',target:'en'}));
 test('content-led learning surfaces preserve real task facts in de UI with en source',contentLedLearningSurface({locale:'de',target:'en'}));
 test('content-led learning surfaces preserve real task facts in zh-CN UI with ar source',contentLedLearningSurface({locale:'zh-CN',target:'ar'}));
+
+
+test('My Learning manages an actually enrolled 100-expression Book with stable pagination, search, keyboard return and read failure',async({page},testInfo)=>{
+ fixture.setRegistry([fixture.scaleDelivery.descriptor]);
+ await page.goto(fixture.origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ await page.goto(`${fixture.origin}/catalog`);await page.locator('#s-catalog').getByRole('button',{name:/English route essentials/}).click();
+ const book=page.locator('#s-catalog-book');await book.getByRole('button',{name:'下载学习包',exact:true}).click();await expect(book.getByRole('button',{name:'加入学习',exact:true})).toBeEnabled({timeout:15000});await book.getByRole('button',{name:'加入学习',exact:true}).click();await expect(book.getByText('已加入学习',{exact:true})).toBeVisible();
+ const nav=page.getByRole('navigation',{name:'主要导航',exact:true});
+ // Ordinary Range and quantity commands prepare four more candidate windows.
+ // Restore the full Book afterwards; no Target, progress or schedule is seeded.
+ await nav.getByRole('button',{name:'我的学习',exact:true}).click();
+ const preparationStudy=page.locator('#s-study');await fixture.openLearningManagement(page);
+ const plans=preparationStudy.getByRole('region',{name:'后续学习计划',exact:true});
+ for(let first=21;first<=81;first+=20){
+  await plans.getByRole('button',{name:'编辑《English route essentials》',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'English route essentials',exact:true});
+  await dialog.getByRole('combobox',{name:'学习范围',exact:true}).selectOption('ordinals');
+  await dialog.getByRole('spinbutton',{name:'起始序号',exact:true}).fill(String(first));await dialog.getByRole('spinbutton',{name:'结束序号',exact:true}).fill(String(first+19));
+  await dialog.getByRole('button',{name:'保存计划',exact:true}).click();await expect(dialog).toHaveCount(0);
+  await preparationStudy.getByRole('button',{name:'学习偏好',exact:true}).click();
+  const preferences=page.getByRole('dialog',{name:'学习偏好',exact:true}),quantity=preferences.getByRole('combobox',{name:'每日新学数量',exact:true});
+  await quantity.selectOption(first===21||first===61?'30':'20');await expect(quantity).toBeEnabled();
+  await preferences.getByRole('button',{name:'关闭学习偏好',exact:true}).click();
+ }
+ await plans.getByRole('button',{name:'编辑《English route essentials》',exact:true}).click();const restore=page.getByRole('dialog',{name:'English route essentials',exact:true});await restore.getByRole('combobox',{name:'学习范围',exact:true}).selectOption('all');await restore.getByRole('button',{name:'保存计划',exact:true}).click();await expect(restore).toHaveCount(0);
+ const admitted=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());expect(admitted.targetIds).toHaveLength(100);expect(admitted.records).toHaveLength(0);expect(admitted.runtime).toBeNull();
+ await preparationStudy.locator('summary').filter({hasText:'管理学习内容'}).click();
+ const study=page.locator('#s-study');await expect(study.locator('[data-learning-target]')).toHaveCount(40);await expect(study.getByRole('status').filter({hasText:'共 100 项'})).toBeVisible();
+ await study.getByRole('heading',{name:'我的学习',exact:true}).scrollIntoViewIfNeeded();await page.mouse.move(5,5);await page.screenshot({path:testInfo.outputPath('my-learning-100-desktop.png')});
+ const first=study.locator('[data-learning-target]').first(),id=await first.getAttribute('data-learning-target');await first.focus();await first.press('Enter');await page.locator('#s-learning-target').getByRole('button',{name:'返回',exact:true}).click();await expect(study.locator(`[data-learning-target="${id}"]`)).toBeFocused();
+ await study.getByRole('navigation',{name:'目录分页',exact:true}).getByRole('button',{name:'下一页',exact:true}).click();await expect(study.getByRole('status').filter({hasText:'第 41–80 项'})).toBeVisible();await page.screenshot({path:testInfo.outputPath('my-learning-100-page-2-footer.png')});
+ await page.reload();await expect(study.getByRole('status').filter({hasText:'第 41–80 项'})).toBeVisible();await study.getByRole('navigation',{name:'目录分页',exact:true}).getByRole('button',{name:'下一页',exact:true}).click();await expect(study.locator('[data-learning-target]')).toHaveCount(20);
+ await study.getByRole('searchbox',{name:'搜索表达或意思',exact:true}).fill('fixture-100');await expect(study.locator('[data-learning-target]')).toHaveCount(1);
+ await study.getByRole('searchbox').fill('');await expect(study.locator('[data-learning-target]')).toHaveCount(40);
+ for(const width of [320,390]){await page.setViewportSize({width,height:844});await study.getByRole('heading',{name:'我的学习',exact:true}).scrollIntoViewIfNeeded();await page.mouse.move(5,5);expect(await study.evaluate(element=>element.scrollWidth<=element.clientWidth+1)).toBe(true);await page.screenshot({path:testInfo.outputPath(`my-learning-100-${width}.png`)});}
+ const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());await page.evaluate(async()=>{await window.__sensaBrowserSmoke!.failLearningManagementReadsForTest(true);window.dispatchEvent(new CustomEvent('sensa-library-changed',{detail:{tables:['learningTargets']}}));});await expect(study.getByRole('alert')).toBeVisible();await expect(study.locator('[data-learning-target]')).toHaveCount(0);await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningManagementReadsForTest(false));await study.getByRole('button',{name:'重试',exact:true}).click();await expect(study.locator('[data-learning-target]')).toHaveCount(40);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(before);
+ await writeFile(testInfo.outputPath('100-expression-conditions.json'),JSON.stringify({members:100,actualTargets:admitted.targetIds.length,records:admitted.records.length,preparation:'Real UI download/enrollment, four ordinal Range changes and ordinary quantity saves; restored full Book. No seeded Target, learning outcome or schedule.',conditions:'Isolated Chromium/OPFS, 1280/320/390, functional and pixel acceptance only; no timing or performance verdict.'},null,2));
+});

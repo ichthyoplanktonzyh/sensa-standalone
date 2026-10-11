@@ -240,6 +240,11 @@ export const readContentSupplyQuery = async (query: ContentSupplyQuery): Promise
       const {isPersonalProvisioningTask}=await import('../provisioning/contracts');
       return readLibrary(async tx=>{const task=await tx.get<import('../provisioning/contracts').ContentProvisioningTask>('personalLearning',query.taskId);return task&&isPersonalProvisioningTask(task)?readPersonalProvisioningSource(tx,task.source,task.contextPin,true):null;});
     }
+    case 'personal_provisioning_presentation':{
+      const {readPersonalProvisioningPresentation}=await import('../../data/library/personalProvisioningSource');
+      const {isPersonalProvisioningTask}=await import('../provisioning/contracts');
+      return readLibrary(async tx=>{const task=await tx.get<import('../provisioning/contracts').ContentProvisioningTask>('personalLearning',query.taskId);return task&&isPersonalProvisioningTask(task)?readPersonalProvisioningPresentation(tx,task.source,task.contextPin):null;});
+    }
     case 'provisioning_control': {
       const { personalLearningControlSnapshot } = await import('../../data/library/personalLearning');
       const snapshot = await personalLearningControlSnapshot();

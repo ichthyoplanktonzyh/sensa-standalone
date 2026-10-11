@@ -12,7 +12,7 @@ import type {LibraryTransaction} from '../../data/library/store';
 import type {RuntimeLearningCandidateQuery} from '../../data/library/runtimeLearningCandidates';
 import {sameLearningSessionDirection} from '../../data/library/learningCommandReceipt';
 import {planningMembershipForContext,curriculumSourceEligibility} from '../runtime/curriculumEligibility';
-import {currentPlanningMembership} from '../../data/library/supplementalMemberships';
+import {currentPlanningMembership,supplementalSourceDescriptor,type SupplementalMembershipState} from '../../data/library/supplementalMemberships';
 import {runBaselineMaterial} from '../runtime/runMaterialPins';
 import { localFlowText } from '../../i18n/localFlowText';
 import '../../i18n/learningResources';
@@ -606,13 +606,23 @@ export async function readLearningManagementProjection(input:{languageContext:Se
  // Library lock as the enrollment read so a writer cannot split this snapshot.
  const {summary,dailyLimit,pending}=await readLibrary(async tx=>{
   const dailyLimit=(await readStudyPlans(tx))[input.languageContext.languageRouteId]?.dailyNewSenseLimit;
-  const [summary,identity,enrollments]=await Promise.all([readLearningManagementSummary({languageContext:input.languageContext,clock:input.clock,dailyLimit,supportedPolicies:policyOptions.map(option=>option.id)}),tx.get<import('../../data/library/store').LibraryIdentity>('meta','identity'),tx.all<LocalCurriculumEnrollment>('curriculumEnrollments')]);
+  const [summary,identity,enrollments]=await Promise.all([readLearningManagementSummary({languageContext:input.languageContext,clock:input.clock,dailyLimit,supportedPolicies:policyOptions.map(option=>option.id),includeLibraryItems:true}),tx.get<import('../../data/library/store').LibraryIdentity>('meta','identity'),tx.all<LocalCurriculumEnrollment>('curriculumEnrollments')]);
   if(!identity)throw new Error('localFlow.resourceInvalid');
-  return {summary,dailyLimit,pending:{identity,enrollments}};
+  const states=await tx.all<SupplementalMembershipState>('supplementalMembershipStates');
+  return {summary,dailyLimit,pending:{identity,enrollments,states}};
  });
  const ids=new Set(summary.targetIds);
  const content=pending.enrollments.filter(enrollment=>enrollment.status==='active'&&sameLearningSessionDirection(enrollment.languageContext,input.languageContext)).slice(0,3).map(enrollment=>({id:enrollment.id,title:enrollment.source.kind==='published_book'?enrollment.source.title??localFlowText('downloadedPackages'):enrollment.source.kind==='stable_sense'?enrollment.source.selection.expression.surfaceForm:localFlowText('downloadedPackages'),state:enrollment.bookPlan?.mode??'active' as const,kind:enrollment.source.kind==='published_book'?'book' as const:enrollment.source.kind==='stable_sense'?'direct' as const:'book' as const}));
- return {...summary,content,policies:summary.policies as LearningPolicy[],pendingDirectCount:pending.enrollments.filter(enrollment=>enrollment.status==='active'&&enrollment.source.kind==='stable_sense'&&enrollment.languageContext.languageRouteId===input.languageContext.languageRouteId&&enrollment.languageContext.targetLanguageTag===input.languageContext.targetLanguageTag&&enrollment.languageContext.supportLanguageTag===input.languageContext.supportLanguageTag&&!ids.has(stableUuid(`sensa-learning-target:${pending.identity.learnerId}:${enrollment.source.selection.reference.senseVersionId}:${enrollment.source.selection.reference.bindingVersionId}`))).length,dailyLimit:dailyLimit??null,policyOptions};
+ const pendingDirect=pending.enrollments.flatMap(enrollment=>{
+  if(enrollment.status!=='active'||enrollment.source.kind!=='stable_sense'||!sameLearningSessionDirection(enrollment.languageContext,input.languageContext)||enrollment.languageContext.supportLanguageTag!==input.languageContext.supportLanguageTag)return [];
+  const descriptor=supplementalSourceDescriptor({kind:'stable_sense',id:enrollment.id},enrollment,pending.identity.learnerId);
+  if(ids.has(descriptor.targetId))return [];
+  return [{enrollmentId:enrollment.id,expression:enrollment.source.selection.expression.surfaceForm,meaning:enrollment.source.selection.semanticSpec.coreMeaningFocus,active:!pending.states.some(state=>state.id===descriptor.id&&state.status==='removed')}];
+ });
+ const fresh=(summary.items??[]).filter(item=>item.group==='new').sort((a,b)=>Number(b.started)-Number(a.started)||a.targetId.localeCompare(b.targetId));
+ const readyIds=new Set(fresh.slice(0,summary.readyInitialCount).map(item=>item.targetId));
+ const items=summary.items?.map(item=>item.group==='new'&&!readyIds.has(item.targetId)?{...item,group:item.started?'active' as const:'other' as const}:item);
+ return {...summary,items,content,pendingDirect,policies:summary.policies as LearningPolicy[],pendingDirectCount:pendingDirect.filter(entry=>entry.active).length,dailyLimit:dailyLimit??null,policyOptions};
 }
 export async function readLearningBookPlans(context:SensaFormalPinnedLanguageContext):Promise<import('./learningReadModels').LearningBookPlanProjection[]>{
  const enrollments=await readLibrary(async tx=>(await tx.all<LocalCurriculumEnrollment>('curriculumEnrollments')).filter(enrollment=>enrollment.status==='active'&&enrollment.source.kind==='published_book'&&sameLearningSessionDirection(enrollment.languageContext,context)));

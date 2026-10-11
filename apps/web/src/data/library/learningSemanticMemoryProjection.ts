@@ -4,6 +4,8 @@ import type {LearningSemanticMemoryProjection} from '../../learning/system/learn
 import type {LocalLearningTarget} from '../../learning/runtime/localProtocol';
 import {hasDeclaredMasteryOverride} from '../../learning/runtime/targetPlanningOverrides';
 import {decodeBackupValue,encodeBackupValue} from './backupCodec';
+import {learningManagementListRecord,learningManagementListItem} from './learningManagementList';
+import type {LearningManagementSummaryQuery} from './runtimeLearningCandidates';
 
 type Item=LearningSemanticMemoryProjection['targets'][number];
 class InvalidLearningSummary extends Error{}
@@ -35,7 +37,10 @@ export class SqliteLearningSemanticMemoryProjection{
   this.database.exec(`CREATE TABLE IF NOT EXISTS sensa_learning_semantic_memory(target_key TEXT PRIMARY KEY NOT NULL,sense_id TEXT,summary_json TEXT NOT NULL CHECK(json_valid(summary_json)),valid INTEGER NOT NULL) WITHOUT ROWID;
    CREATE INDEX IF NOT EXISTS sensa_learning_semantic_memory_sense ON sensa_learning_semantic_memory(sense_id,target_key);`);
   const actual=Number(this.database.selectValue("SELECT count(*) FROM sensa_records WHERE table_name='learningTargets'"));
-  if(exists&&Number(this.database.selectValue('SELECT count(*) FROM sensa_learning_semantic_memory'))===actual)return;
+  const columns=this.database.exec({sql:'PRAGMA table_info(sensa_learning_semantic_memory)',rowMode:'object',returnValue:'resultRows'}) as {name:string}[];
+  const hasList=columns.some(column=>column.name==='list_json');
+  if(!hasList)this.database.exec('ALTER TABLE sensa_learning_semantic_memory ADD COLUMN list_json TEXT');
+  if(exists&&hasList&&Number(this.database.selectValue('SELECT count(*) FROM sensa_learning_semantic_memory'))===actual)return;
   this.clear();let after='';
   for(;;){
    const rows=this.database.exec({sql:"SELECT record_key,value_json FROM sensa_records WHERE table_name='learningTargets' AND record_key>? ORDER BY record_key LIMIT 64",bind:[after],rowMode:'object',returnValue:'resultRows'}) as {record_key:string;value_json:string}[];
@@ -48,7 +53,14 @@ export class SqliteLearningSemanticMemoryProjection{
  upsert(id:string,target:LocalLearningTarget){
   let item:Item|null=null;
   try{item=learningSemanticMemoryTarget(target);if(item.targetId!==id)throw new InvalidLearningSummary();}catch(error){if(!(error instanceof InvalidLearningSummary))throw error;item=null;}
-  this.database.exec({sql:'INSERT INTO sensa_learning_semantic_memory VALUES(?,?,?,?) ON CONFLICT(target_key) DO UPDATE SET sense_id=excluded.sense_id,summary_json=excluded.summary_json,valid=excluded.valid',bind:[id,item?.senseId??null,JSON.stringify(encodeBackupValue(item)),item?1:0]});
+  const list=item?learningManagementListRecord(target):null;
+  this.database.exec({sql:'INSERT INTO sensa_learning_semantic_memory(target_key,sense_id,summary_json,valid,list_json) VALUES(?,?,?,?,?) ON CONFLICT(target_key) DO UPDATE SET sense_id=excluded.sense_id,summary_json=excluded.summary_json,valid=excluded.valid,list_json=excluded.list_json',bind:[id,item?.senseId??null,JSON.stringify(encodeBackupValue(item)),item?1:0,JSON.stringify(list)]});
+ }
+ list(query:LearningManagementSummaryQuery,eligibility:Readonly<Record<string,{introduce:boolean;ongoing:boolean}>>,enrollments:ReadonlyMap<string,{title:string|null;paused:boolean}>){
+  const rows=this.database.exec({sql:'SELECT list_json,valid FROM sensa_learning_semantic_memory ORDER BY target_key',rowMode:'object',returnValue:'resultRows'}) as {list_json:string|null;valid:number}[];
+  if(rows.some(row=>!row.valid||!row.list_json)||rows.length!==Number(this.database.selectValue("SELECT count(*) FROM sensa_records WHERE table_name='learningTargets'")))throw Error('localFlow.progressReadFailed');
+  const available=new Set(this.database.exec({sql:"SELECT record_key FROM sensa_records WHERE table_name='packageCache'",rowMode:0,returnValue:'resultRows'}) as string[]);
+  return rows.flatMap(row=>{const item=learningManagementListItem(JSON.parse(row.list_json!),query.languageContext,query.clock,eligibility,enrollments,available,query.supportedPolicies);return item?[item]:[];});
  }
  read(targetId?:string):LearningSemanticMemoryProjection{
   if(targetId!==undefined&&(typeof targetId!=='string'||!targetId||targetId.length>2000))throw Error('localFlow.invalidTarget');

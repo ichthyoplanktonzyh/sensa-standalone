@@ -17,11 +17,12 @@ import {settleOperation} from './operationSettlement';
 import {createRefreshCoordinator} from './refreshCoordinator';
 import {PersonalLearningBatch} from './personalLearningBatch';
 import type {WorldLearningChoice} from '../personalMeaningJourney/worldRead';
-export function usePersonalLearning(sourceView:{kind:'library'}|{kind:'target';targetId:string}|null=null,enabled=true,compactControl=false){
+export function usePersonalLearning(sourceView:{kind:'library';excludeTargetIds?:readonly string[]}|{kind:'target';targetId:string}|null=null,enabled=true,compactControl=false){
  useTranslation();
  const [tasks,setTasks]=useState<ContentProvisioningTask[]>([]),[preparationAvailable,setPreparationAvailable]=useState(false),[notice,setNotice]=useState(''),[operationBusy,setBusy]=useState(false),[clock,setClock]=useState(Date.now());
  const [targets,setTargets]=useState<readonly LearningTargetProjection[]>([]);
  const [taskSources,setTaskSources]=useState<ReadonlyMap<string,PersonalMeaningLearningSource>>(new Map());
+ const [taskPresentations,setTaskPresentations]=useState<ReadonlyMap<string,{expression:string;meaning:string}>>(new Map());
  const batchRunner=useMemo(()=>new PersonalLearningBatch({
   resolve:choice=>worldReadRepository.resolveLearningChoice(choice),
   enroll:async(source,languageContext,useContext)=>(await learningSystem.execute({kind:'enroll_personal',operationId:crypto.randomUUID(),source,languageContext,useContext})).provisioningTaskId,
@@ -49,11 +50,15 @@ export function usePersonalLearning(sourceView:{kind:'library'}|{kind:'target';t
    :learningSystem.read({kind:'workspace',languageContext,clock:Date.now()})]);
   const personalTasks=supply.tasks.filter(isPersonalProvisioningTask);
   const pendingTasks=personalTasks.filter(task=>sourceView&&task.languageContext.languageRouteId===languageContext.languageRouteId
+    &&task.languageContext.targetLanguageTag===languageContext.targetLanguageTag&&task.languageContext.supportLanguageTag===languageContext.supportLanguageTag
+    &&(sourceView.kind!=='library'||task.curriculumActive!==false)
     &&(sourceView.kind==='library'||task.targetId===sourceView.targetId)
-    &&!learning.targets.some(target=>target.targetId===task.targetId));
-  const sources=await Promise.all(pendingTasks.map(task=>contentSupplySystem.read({kind:'personal_provisioning_source',taskId:task.id})));
+    &&!learning.targets.some(target=>target.targetId===task.targetId)&&!(sourceView?.kind==='library'&&sourceView.excludeTargetIds?.includes(task.targetId)));
+  const sources=sourceView?.kind==='library'?[]:await Promise.all(pendingTasks.map(task=>contentSupplySystem.read({kind:'personal_provisioning_source',taskId:task.id})));
+  const presentations=sourceView?.kind==='library'?await Promise.all(pendingTasks.map(async task=>({taskId:task.id,value:await contentSupplySystem.read({kind:'personal_provisioning_presentation',taskId:task.id})}))):[];
   if(batchRunner.read().busy||currentRoute.current!==routeKey||generation!==readGeneration.current)return;
   setTaskSources(new Map(sources.flatMap(source=>source?[[personalLearningSourceKey(source.reference),source] as const]:[])));
+  setTaskPresentations(new Map(presentations.flatMap(row=>row.value?[[row.taskId,row.value] as const]:[])));
   setSourceReadKey(routeKey);
   setSourceFailureKey(null);
   setTargets(learning.targets);setTasks(personalTasks);setPreparationAvailable(supply.preparationAvailable);setClock(Date.now());
@@ -63,7 +68,7 @@ export function usePersonalLearning(sourceView:{kind:'library'}|{kind:'target';t
    throw error;
   }
  };
- const failedSourceRead=()=>{if(currentRoute.current===routeKey){setSourceFailureKey(routeKey);setSourceReadKey(routeKey);setTaskSources(new Map());}};
+ const failedSourceRead=()=>{if(currentRoute.current===routeKey){setSourceFailureKey(routeKey);setSourceReadKey(routeKey);setTaskSources(new Map());setTaskPresentations(new Map());}};
  latestRefresh.current=()=>refresh().catch(()=>{});
  useEffect(()=>{if(!enabled)return;const coordinator=createRefreshCoordinator(refresh);const read=()=>void coordinator.request().catch(()=>{});read();const stopSupply=contentSupplySystem.subscribe({kind:'provisioning_control'},read);const stopLearning=learningSystem.subscribe({kind:'workspace',languageContext},read);const stopJourney=worldReadRepository.subscribe(read);const focus=()=>setClock(Date.now());window.addEventListener('focus',focus);return()=>{stopSupply();stopLearning();stopJourney();readGeneration.current++;window.removeEventListener('focus',focus);};},[languageContext.languageRouteId,languageContext.languageRouteRevision,sourceViewKey]);
  const nextLeaseExpiry=nextPersonalLearningLeaseExpiry(tasks,clock);
@@ -74,6 +79,7 @@ export function usePersonalLearning(sourceView:{kind:'library'}|{kind:'target';t
  },[nextLeaseExpiry]);
  const perform=async<T,>(work:()=>Promise<T>)=>{if(batchRunner.read().busy)return null;setBusy(true);setNotice('');try{const outcome=await settleOperation(work,refresh);if(outcome.kind==='rejected'){const error=outcome.error;setNotice(error instanceof Error&&error.message.startsWith('localFlow.')?error.message:localFlowText('preparationPreserved'));return null;}return outcome.value;}finally{setBusy(false);}};
  const sourceForTask=(task:ContentProvisioningTask)=>taskSources.get(personalLearningSourceKey(task.source))??null;
+ const presentationForTask=(task:ContentProvisioningTask)=>taskPresentations.get(task.id)??null;
  const prepare=async(id:string,source?:PersonalMeaningLearningSource)=>{if(!preparationAvailable)throw new Error('localFlow.checkModels');const current=source??await contentSupplySystem.read({kind:'personal_provisioning_source',taskId:id});if(!current)throw new Error('localFlow.meaningChanged');await backgroundPreparation.run(id,signal=>contentSupplySystem.execute({kind:'prepare_materialization',taskId:id,source:current,signal}));};
  const enrollBatch=async(choices:readonly WorldLearningChoice[],useContext:boolean)=>{
   if(busy||batchRunner.read().busy)return;setNotice('');
@@ -90,7 +96,7 @@ export function usePersonalLearning(sourceView:{kind:'library'}|{kind:'target';t
  // Read failures belong to the guarded projection, not the durable operation
  // notice. Recovery clears only its own error and cannot erase a newer command.
  const visibleNotice=[localFlowNotice(notice),projectionStatus==='unavailable'?localFlowText('preparationReadFailed'):''].filter(Boolean).join('\n');
- return {batch,batchRowAt:batchRunner.rowAt,batchIndexForKey:batchRunner.indexForKey,retryBatch,enrollBatch,sourceForTask,projectionStatus,taskSourcesLoading:!!sourceView&&projectionStatus==='loading',taskSourcesUnavailable:!!sourceView&&projectionStatus==='unavailable',retryTaskSources:()=>{setSourceReadKey(null);setSourceFailureKey(null);void refresh().catch(()=>{});},stopBatch:()=>void batchRunner.stop(),tasks,targets,preparationAvailable,notice:visibleNotice,busy,clock,languageContext,
+ return {batch,batchRowAt:batchRunner.rowAt,batchIndexForKey:batchRunner.indexForKey,retryBatch,enrollBatch,sourceForTask,presentationForTask,projectionStatus,taskSourcesLoading:!!sourceView&&projectionStatus==='loading',taskSourcesUnavailable:!!sourceView&&projectionStatus==='unavailable',retryTaskSources:()=>{setSourceReadKey(null);setSourceFailureKey(null);void refresh().catch(()=>{});},stopBatch:()=>void batchRunner.stop(),tasks,targets,preparationAvailable,notice:visibleNotice,busy,clock,languageContext,
   enroll:(source:PersonalMeaningLearningSource,useContext:boolean)=>perform(async()=>{const enrollment=await learningSystem.execute({kind:'enroll_personal',operationId:crypto.randomUUID(),source,languageContext,useContext});if(enrollment.provisioningStatus!=='ready')await prepare(enrollment.provisioningTaskId,source);}),
   update:(taskId:string,source:PersonalMeaningLearningSource,useContext:boolean)=>perform(async()=>{const revised=await contentSupplySystem.execute({kind:'revise_provisioning',operationId:crypto.randomUUID(),taskId,source,languageContext,useContext});if(revised.status!=='covered')await prepare(taskId,source);}),
   prepare:(id:string)=>perform(()=>prepare(id)),

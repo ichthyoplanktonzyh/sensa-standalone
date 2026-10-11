@@ -1,46 +1,69 @@
-import {useRef,useState} from 'react';
+import {cloneElement,useEffect,useMemo,useRef,useState,type KeyboardEvent} from 'react';
+import {ActivityCalendar,type BlockElement,type DayIndex} from 'react-activity-calendar';
+import {DayPicker,DayButton,type DayButtonProps} from '@daypicker/react';
+import {zhCN,zhTW,enUS,ja,ko,es,fr,de,ptBR,it,ru,id,vi,pl,tr} from '@daypicker/react/locale';
+import {FloatingPortal,autoUpdate,offset,shift,useFloating,useFocus,useHover,useInteractions,useRole,useDismiss} from '@floating-ui/react';
 import {useTranslation} from 'react-i18next';
 import type {LearningHistorySummary} from '../../learning/system/learningHistoryModel';
-import {statisticsCalendar,statisticsKinds,statisticsTrend} from '../learningJourney/statisticsCalendar';
+import {statisticsCalendar,statisticsCount} from '../learningJourney/statisticsCalendar';
+import {resolveInterfaceLocale} from '../../i18n/localeRegistry';
+import {useScreenState} from '../ui/ScreenHost';
+import '@daypicker/react/style.css';
+import './StatisticsCalendar.css';
 
-export function StatisticsCalendar({summary,year,onDay}:{summary:LearningHistorySummary;year:number;onDay:(day:string)=>void}){
- const {t,i18n}=useTranslation(),days=statisticsCalendar(summary,year),today=new Date(summary.clock);
- const [month,setMonth]=useState(today.getFullYear()===year?today.getMonth():0),[focused,setFocused]=useState(''),[monthFocused,setMonthFocused]=useState('');
- const monthGrid=useRef<HTMLDivElement>(null);
- const number=(value:number)=>new Intl.NumberFormat(i18n.language).format(value);
- const format=(day:string)=>new Intl.DateTimeFormat(i18n.language,{dateStyle:'medium'}).format(new Date(day+'T12:00:00'));
- const describe=(day:typeof days[number])=>`${format(day.day)} · ${day.future?t('statistics.future'):!day.inRange?t('statistics.outsideRange'):statisticsKinds.map(kind=>`${t('statistics.'+kind)} ${number(day.counts[kind])}`).join(' · ')}`;
- const focusDay=days.find(day=>day.day===focused&&day.inRange&&!day.future)??days.filter(day=>day.inRange&&!day.future).at(-1)??days[0]!;
- const monthDays=days.filter(day=>day.month===month),monthFocusDay=monthDays.find(day=>day.day===monthFocused&&day.inRange&&!day.future)??monthDays.filter(day=>day.inRange&&!day.future).at(-1)??monthDays[0]!;
- const chooseMonth=(value:number)=>{setMonth(value);setMonthFocused(days.filter(day=>day.month===value&&day.inRange&&!day.future).at(-1)?.day??'');};
- const dayButton=(day:typeof days[number],compact:boolean)=><button key={day.day} type="button" data-day={day.day} data-level={!day.inRange||day.future?'unavailable':day.total===0?'zero':day.total<2?'one':day.total<5?'few':'many'} disabled={day.future||!day.inRange} tabIndex={!day.future&&day.inRange&&day.day===(compact?focusDay:monthFocusDay).day?0:-1} aria-label={describe(day)} title={describe(day)} onFocus={()=>compact?setFocused(day.day):setMonthFocused(day.day)} onMouseEnter={()=>compact?setFocused(day.day):setMonthFocused(day.day)} onClick={()=>onDay(day.day)} onKeyDown={event=>{
-  const move={ArrowRight:compact?7:1,ArrowLeft:compact?-7:-1,ArrowDown:compact?1:7,ArrowUp:compact?-1:-7}[event.key];if(move===undefined)return;event.preventDefault();const next=days[days.indexOf(day)+move];if(!next||next.future||!next.inRange)return;
-  if(!compact&&next.month!==month){setMonth(next.month);setMonthFocused(next.day);requestAnimationFrame(()=>(monthGrid.current?.querySelector(`button[data-day="${next.day}"]`) as HTMLButtonElement|null)?.focus());}
-  else (event.currentTarget.closest(compact?'.sensa-stat-year':'.sensa-stat-month-grid')?.querySelector(`button[data-day="${next.day}"]`) as HTMLButtonElement|null)?.focus();
- }} className={compact?'sensa-stat-day sensa-stat-day-compact':'sensa-stat-day sensa-stat-day-month'}>{compact?<span className="sr-only">{number(day.total)}</span>:<><span>{number(day.date)}</span><small>{day.future?'—':day.inRange?number(day.total):'·'}</small></>}</button>;
- const trend=statisticsTrend(summary),rows=trend.rows;
- const oneYear=!trend.daily&&rows.every(row=>!row.key.includes('…')&&row.key.slice(0,4)===rows[0]?.key.slice(0,4));
- const period=(key:string,short=false)=>key.split('…').map(value=>new Intl.DateTimeFormat(i18n.language,trend.daily?{month:'short',day:'numeric'}:short&&oneYear?{month:'short'}:{year:short?'2-digit':'numeric',month:'short'}).format(new Date(value+(trend.daily?'T12:00:00':'-01T12:00:00')))).join(' – ');
- const plotWidth=Math.max(500,rows.length*(trend.daily||oneYear?50:rows.some(row=>row.key.includes('…'))?160:90));
- const max=Math.max(1,...rows.flatMap(row=>statisticsKinds.map(kind=>row.counts[kind])));
- return <>
-  <section className="sensa-stat-calendar mt-5 border-t border-border-subtle pt-5" aria-label={t('statistics.calendar')}>
-   <h3 className="text-lg font-medium">{new Intl.NumberFormat(i18n.language,{useGrouping:false}).format(year)} · {t('statistics.calendar')}</h3>
-   <div className="sensa-stat-year-months mt-4" aria-hidden="true" style={{gridTemplateColumns:`repeat(${Math.ceil((days.length+days[0]!.weekday)/7)},minmax(0,1fr))`}}>{Array.from({length:12},(_,month)=><span key={month} style={{gridColumnStart:1+Math.floor((days.findIndex(day=>day.month===month)+days[0]!.weekday)/7)}}>{new Intl.DateTimeFormat(i18n.language,{month:'short'}).format(new Date(year,month,1))}</span>)}</div>
-   <div className="sensa-stat-year mt-2" aria-label={t('statistics.calendar')}><span style={{gridRow:`span ${days[0]!.weekday||1}`,display:days[0]!.weekday?'block':'none'}}/>{days.map(day=>dayButton(day,true))}</div>
-   <div className="sensa-stat-month mt-4">
-    <label className="text-sm">{t('statistics.calendar')} <select aria-label={t('statistics.calendarMonth')} value={month} onChange={event=>chooseMonth(Number(event.target.value))} className="ml-2 min-h-11 rounded-control border border-border-subtle bg-surface-panel px-3">{Array.from({length:12},(_,value)=><option key={value} value={value}>{new Intl.DateTimeFormat(i18n.language,{month:'long'}).format(new Date(year,value,1))}</option>)}</select></label>
-    <div ref={monthGrid} className="sensa-stat-month-grid mt-4">{Array.from({length:7},(_,day)=><span className="text-center text-xs text-fg-secondary" key={'week'+day}>{new Intl.DateTimeFormat(i18n.language,{weekday:'narrow'}).format(new Date(2026,9,5+day))}</span>)}{monthDays.map((day,index)=><span key={day.day} style={index===0?{gridColumnStart:day.weekday+1}:undefined}>{dayButton(day,false)}</span>)}</div>
-   </div>
-   <p className="sensa-stat-year-status mt-4 text-sm" role="status">{describe(focusDay)}</p>
-   <p className="sensa-stat-month-status mt-4 text-sm" role="status">{describe(monthFocusDay)}</p>
-   <p className="mt-3 flex flex-wrap gap-3 text-xs text-fg-secondary">{[['zero',number(0)],['one',number(1)],['few',number(2)+'–'+number(4)],['many',number(5)+'+'],['unavailable','—']].map(([level,label])=><span key={level} className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="sensa-stat-key" data-level={level}/>{label==='—'?t('statistics.futureOrOutside'):label+' '+t('statistics.recordsUnit')}</span>)}</p>
-  </section>
-  <section className="mt-8" aria-label={t('statistics.trend')}>
-   <h3 className="text-lg font-medium">{t('statistics.trend')}</h3>
-   {rows.length?<div className="sensa-stat-trend-scroll mt-4 overflow-x-auto" tabIndex={0} role="region" aria-label={t('statistics.trend')}><svg viewBox={`0 0 ${plotWidth} 180`} className="w-full" style={{minWidth:plotWidth}} tabIndex={0} role="img" aria-label={t('statistics.trend')}><title>{t('statistics.trend')}</title><desc>{rows.map(row=>`${period(row.key)}: ${statisticsKinds.map(kind=>t('statistics.'+kind)+' '+number(row.counts[kind])).join(', ')}`).join('; ')}</desc>{statisticsKinds.map((kind,index)=><g key={kind} className={`sensa-stat-series sensa-stat-series-${index}`}><polyline fill="none" stroke="currentColor" strokeWidth="2.5" strokeDasharray={index===1?'8 4':index===2?'2 4':undefined} points={rows.map((row,x)=>`${24+x*(plotWidth-48)/Math.max(1,rows.length-1)},${145-row.counts[kind]/max*120}`).join(' ')}/>{rows.map((row,x)=><g key={row.key}><circle cx={24+x*(plotWidth-48)/Math.max(1,rows.length-1)} cy={145-row.counts[kind]/max*120} r={index+2}/>{index===0&&<text x={24+x*(plotWidth-48)/Math.max(1,rows.length-1)} y="173" textAnchor={x===0?'start':x===rows.length-1?'end':'middle'} fontSize="10" fill="currentColor">{period(row.key,true)}</text>}</g>)}</g>)}</svg></div>:<p className="mt-4 text-sm">{t('statistics.empty')}</p>}
-   <details className="mt-4 text-sm"><summary className="min-h-11 cursor-pointer py-3">{t('statistics.trendValues')}</summary><div className="overflow-x-auto"><table className="w-full text-left"><caption className="sr-only">{t('statistics.trendValues')}</caption><thead><tr><th scope="col">{t('statistics.date')}</th>{statisticsKinds.map(kind=><th scope="col" key={kind}>{t('statistics.'+kind)}</th>)}</tr></thead><tbody>{rows.map(row=><tr key={row.key}><th scope="row" className="py-2 font-normal">{period(row.key)}</th>{statisticsKinds.map(kind=><td key={kind}>{number(row.counts[kind])}</td>)}</tr>)}</tbody></table></div></details>
-   <div className="mt-3 flex flex-wrap gap-4 text-xs">{statisticsKinds.map((kind,index)=><span key={kind} className={`sensa-stat-series sensa-stat-series-${index}`}>{index===0?'━':index===1?'┄':'┈'} {t('statistics.'+kind)}</span>)}</div>
-  </section>
- </>;
+const activityColors=['var(--sensa-surface-subtle)',...([40,60,80,100] as const).map(amount=>`color-mix(in srgb, var(--sensa-action-primary) ${amount}%, var(--sensa-surface-panel))`)];
+const locales={'zh-CN':zhCN,'zh-TW':zhTW,en:enUS,ja,ko,es,fr,de,'pt-BR':ptBR,it,ru,id,vi,pl,tr};
+type Day=ReturnType<typeof statisticsCalendar>[number];
+const date=(key:string)=>new Date(key+'T12:00:00');
+function ActivityBlock({block,day,label,tabIndex,selected,onFocus,onDay,onKeyDown}:{block:BlockElement;day:Day;label:string;tabIndex:number;selected:boolean;onFocus:()=>void;onDay:()=>void;onKeyDown:(event:KeyboardEvent<SVGRectElement>)=>void}){
+ const [open,setOpen]=useState(false);
+ const {refs,floatingStyles,context}=useFloating({open,onOpenChange:setOpen,placement:'top',middleware:[offset(8),shift({padding:12})],whileElementsMounted:autoUpdate});
+ const {getReferenceProps,getFloatingProps}=useInteractions([useHover(context),useFocus(context,{visibleOnly:false}),useRole(context,{role:'tooltip'}),useDismiss(context)]);
+ const disabled=day.future||!day.inRange;
+ const props=getReferenceProps({role:'button',tabIndex, 'aria-label':label,'aria-disabled':disabled,'aria-pressed':selected,
+  onFocus,onClick:()=>{if(!disabled)onDay();},onKeyDown,
+  className:'sensa-activity-block',style:{...block.props.style,...(disabled?{fill:'var(--sensa-surface-subtle)',stroke:'var(--sensa-border-subtle)',strokeDasharray:'2 1'}:{})}});
+ return <g>{cloneElement(block,{...props,ref:refs.setReference} as typeof block.props)}{open&&<FloatingPortal><div ref={refs.setFloating} style={floatingStyles} {...getFloatingProps()} className="sensa-activity-tooltip">{label}</div></FloatingPortal>}</g>;
+}
+export function StatisticsCalendar({summary,year,onDay,selectedDay=null}:{summary:LearningHistorySummary;year:number;onDay:(day:string)=>void;selectedDay?:string|null}){
+ const {t,i18n}=useTranslation(),locale=resolveInterfaceLocale(i18n.resolvedLanguage??i18n.language),days=statisticsCalendar(summary,year);
+ const byDay=new Map(days.map(day=>[day.day,day])),number=(value:number)=>new Intl.NumberFormat(locale).format(value);
+ const selectable=days.filter(day=>!day.future&&day.inRange),fallback=selectable.at(-1)?.day??null;
+ const [focused,setFocused]=useState<string|null>(null),root=useRef<HTMLDivElement>(null);
+ const [month,setMonth]=useScreenState('stats:calendar-month',()=>year===new Date(summary.clock).getFullYear()?new Date(summary.clock).getMonth():0);
+ const [calendarYear,setCalendarYear]=useScreenState('stats:calendar-year',year);
+ useEffect(()=>{if(calendarYear!==year){setFocused(null);setMonth(year===new Date(summary.clock).getFullYear()?new Date(summary.clock).getMonth():0);setCalendarYear(year);}},[year,calendarYear]);
+ const focusedItem=byDay.get(focused??'');
+ const focusDay=focusedItem&&!focusedItem.future&&focusedItem.inRange?focused:fallback;
+ const describe=(day:Day)=>new Intl.DateTimeFormat(locale,{dateStyle:'full'}).format(date(day.day))+' · '+(day.future?t('statistics.future'):!day.inRange?t('statistics.outside'):t('statistics.count',{count:day.total,formattedCount:number(day.total)}));
+ const weekStart=(locales[locale].options?.weekStartsOn??1) as DayIndex;
+ const keyboard=(event:KeyboardEvent<SVGRectElement>,day:Day)=>{
+  if(event.key==='Enter'||event.key===' '){event.preventDefault();if(!day.future&&day.inRange)onDay(day.day);return;}
+  const move={ArrowRight:7,ArrowLeft:-7,ArrowDown:1,ArrowUp:-1}[event.key];
+  if(move===undefined)return;event.preventDefault();const next=days[days.indexOf(day)+move];
+  if(next&&!next.future&&next.inRange)root.current?.querySelector<SVGRectElement>(`[data-date="${next.day}"]`)?.focus();
+ };
+ const MonthDayButton=useMemo(()=>function MonthDayButton(props:DayButtonProps){
+  const key=String(props.day.date.getFullYear()).padStart(4,'0')+'-'+String(props.day.date.getMonth()+1).padStart(2,'0')+'-'+String(props.day.date.getDate()).padStart(2,'0');
+  const day=byDay.get(key);
+  return <DayButton {...props} data-day={key} data-level={!day||day.future||!day.inRange?'unavailable':day.total===0?'zero':day.total<2?'one':day.total<5?'few':'many'}>
+   <span>{number(props.day.date.getDate())}</span><small aria-hidden="true">{!day||day.future?'—':!day.inRange?'·':number(day.total)}</small>
+  </DayButton>;
+ },[summary,year,locale]);
+ const total=days.reduce((sum,day)=>sum+(!day.future&&day.inRange?statisticsCount(day.counts):0),0),activeDays=days.filter(day=>day.inRange&&!day.future&&day.total>0).length;
+ return <section className="sensa-stat-calendar" aria-label={t('statistics.calendar')}>
+  <div className="sensa-activity-summary"><h2 className="text-lg font-medium">{t('statistics.activity')}</h2><p>{t('statistics.count',{count:total,formattedCount:number(total)})}<span aria-hidden="true"> · </span>{t('statistics.days',{count:activeDays,formattedCount:number(activeDays)})}</p></div>
+  <div ref={root} className="sensa-activity-year">
+   <ActivityCalendar data={days.map(day=>({date:day.day,count:day.future||!day.inRange?0:day.total,level:day.total===0?0:day.total<2?1:day.total<5?2:day.total<10?3:4}))}
+    blockSize={12} blockMargin={4} blockRadius={3} fontSize={11} weekStart={weekStart} showTotalCount={false} showColorLegend={false} showWeekdayLabels={['mon','wed','fri']}
+    labels={{months:Array.from({length:12},(_,month)=>new Intl.DateTimeFormat(locale,{month:'short'}).format(new Date(year,month,1))),weekdays:Array.from({length:7},(_,index)=>new Intl.DateTimeFormat(locale,{weekday:'short'}).format(new Date(2026,9,4+index)))}}
+    theme={{light:activityColors,dark:activityColors}}
+    renderBlock={(block,activity)=>{const day=byDay.get(activity.date)!;return <ActivityBlock block={block} day={day} label={describe(day)} tabIndex={activity.date===focusDay?0:-1} selected={selectedDay===activity.date} onFocus={()=>setFocused(activity.date)} onDay={()=>onDay(activity.date)} onKeyDown={event=>keyboard(event,day)}/>;}}/>
+  </div>
+  <div className="sensa-activity-month"><DayPicker mode="single" month={new Date(year,month,1)} onMonthChange={value=>setMonth(value.getMonth())} startMonth={new Date(year,0,1)} endMonth={new Date(year,11,1)}
+   selected={selectedDay?date(selectedDay):undefined} onSelect={value=>{if(value)onDay(String(value.getFullYear()).padStart(4,'0')+'-'+String(value.getMonth()+1).padStart(2,'0')+'-'+String(value.getDate()).padStart(2,'0'));}}
+   locale={locales[locale]} weekStartsOn={weekStart} disabled={value=>{const day=days.find(day=>date(day.day).toDateString()===value.toDateString());return !day||day.future||!day.inRange;}}
+   components={{DayButton:MonthDayButton}} labels={{labelDayButton:value=>{const day=days.find(day=>date(day.day).toDateString()===value.toDateString());return day?describe(day):new Intl.DateTimeFormat(locale,{dateStyle:'full'}).format(value);},labelNext:()=>t('directLearning.next',{ns:'learning'}),labelPrevious:()=>t('directLearning.previous',{ns:'learning'})}}/></div>
+  <div className="sensa-activity-legend" aria-label={t('statistics.calendar')}><span>{t('statistics.less')}</span>{[0,1,2,3,4].map(level=><i key={level} data-level={level} aria-hidden="true"/>)}<span>{t('statistics.moreActivity')}</span></div>
+ </section>;
 }

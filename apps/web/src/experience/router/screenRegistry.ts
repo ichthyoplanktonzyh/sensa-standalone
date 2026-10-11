@@ -73,7 +73,7 @@ export const SHELL_SCREEN_DEFINITIONS = [
   { id: 's-real-world-listening', host: 'practice' },
   { id: 's-semantic-world', host: 'learning', params: ['worldAction','worldQuery','worldFilter','worldView','worldLanguages','worldReferences','worldExpression'] },
   { id: 's-stats', host: 'learning' },
-  { id: 's-study', host: 'learning',params:['studySection'] },
+  { id: 's-study', host: 'learning',params:['studySection','learningFilter','learningQuery','learningSort','learningPage'] },
 ] as const satisfies readonly ShellScreenDefinition[];
 
 type RegisteredScreen = (typeof SHELL_SCREEN_DEFINITIONS)[number];

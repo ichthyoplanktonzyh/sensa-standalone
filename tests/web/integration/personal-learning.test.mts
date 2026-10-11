@@ -30,6 +30,7 @@ const compiled=await build({stdin:{contents:[
   ...['store','providers','personalLearning','learning','language','speech/defaultProvider','backupValidation'].map(name=>`export * from './apps/web/src/data/library/${name}';`),
   `export * from './apps/web/src/experience/personalMeaningJourney/gateway';`,
   `export {worldReadRepository} from './apps/web/src/experience/personalMeaningJourney/worldRepository';`,
+  `export {readPersonalProvisioningPresentation} from './apps/web/src/data/library/personalProvisioningSource';`,
   `export {sqliteRecordAdapter} from './apps/web/src/data/library/sqliteAdapter';`,
   `export {learningSystem} from './apps/web/src/learning/system/learningSystem';`,
   `export {startLearning,actLearning} from './tests/web/support/learningRunFixture';`,
@@ -323,6 +324,9 @@ try{
   assert.equal(richSource.context.images[0].dataUrl,imageData,'stored Context images are resolved from their exact media rows');
   const beforeRichUpdate=structuredClone(await api.readLearning()),beforeRichCalls=calls.length;
   await api.requestPersonalResourceUpdate(id(),task.id,richSource,languageContext,true);
+  const presentation=await api.readLibrary((tx:any)=>api.readPersonalProvisioningPresentation({get:(table:string,key:string)=>{assert.notEqual(table,'media','library row must not hydrate personal Context media');return tx.get(table,key);}},richSource.reference,richSource.context.personalSemanticAnchorRevisionIds));
+  assert.deepEqual(presentation,{expression:richSource.expression.surfaceForm,meaning:richSource.semanticSpec.coreMeaningFocus});
+  assert(!JSON.stringify(presentation).includes(imageData),'library presentation never transfers image payloads');
   await api.preparePersonal(task.id,richSource,provider,await api.selectedReviewProvider(),new AbortController().signal,()=>{});
   const richTask=(await api.personalLearningSnapshot()).find((candidate:any)=>candidate.id===task.id);
   const richAttempt=await api.readLibrary((tx:any)=>tx.get('contentAttempts',richTask.attemptId));
