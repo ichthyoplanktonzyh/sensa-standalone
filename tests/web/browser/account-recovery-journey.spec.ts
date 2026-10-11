@@ -50,7 +50,7 @@ test('checking an admitted service after same-page email login preserves the pag
  const before=checks;hold=true;await check.click();await expect.poll(()=>checks).toBe(before+1);await expect(check).toBeDisabled();
  await check.dispatchEvent('click');expect(checks).toBe(before+1);
  await page.locator('#s-profile').getByRole('button',{name:'账号与设置',exact:true}).click();await page.locator('#settings-data').click();release();hold=false;
- await expect(page.getByText('已同步到账号',{exact:true})).toBeVisible();await expect(page.getByText(/连接账号后自动开始同步/)).toBeVisible();
+ await expect(page.getByText('已同步到账号',{exact:true})).toBeVisible();await page.locator('.sensa-cloud-sync summary').click();await expect(page.getByText(/连接账号后自动开始同步/)).toBeVisible();
  const screenshot=testInfo.outputPath('automatic-sync-after-service-check.png');await page.screenshot({path:screenshot});await testInfo.attach('automatic-sync-after-service-check',{path:screenshot,contentType:'image/png'});
  await page.locator('#s-profile').getByRole('button',{name:'账号与设置',exact:true}).click();await page.locator('#settings-security').click();fail=true;await check.click();
  await expect(page.getByRole('status').filter({hasText:'在线服务暂时不可用，请稍后重试。'})).toBeVisible();
