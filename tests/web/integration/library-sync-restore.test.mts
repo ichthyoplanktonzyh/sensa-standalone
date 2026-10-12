@@ -218,6 +218,27 @@ for(const pageLimit of [librarySyncBlockFetchBytes,2048])test(`fresh restoration
  expect((await readCloudSync())?.status).toBe('synced');
 });
 
+test('byte-deferred shared bodies preserve future prefetch hashes until their final reference',async()=>{
+ const shared='data:audio/wav;base64,'+randomBytes(4096).toString('base64');
+ const drafts=Array.from({length:40},()=>({...first,id:crypto.randomUUID(),text:shared}));
+ const rows=[{table:'meta',key:'identity',value:remoteIdentity},...drafts.map(value=>({table:'drafts',key:value.id,value}))].map(row=>{
+  const text=JSON.stringify(encodeBackupValue(row.value)),at=text.indexOf(shared);
+  const parts=at<0?[text]:[text.slice(0,at),shared,text.slice(at+shared.length)];
+  return {table:row.table,key:row.key,blocks:parts.flatMap(part=>splitLibrarySyncText(part).map(block))};
+ });
+ manifest=splitLibrarySyncText(JSON.stringify({version:8,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows})).map(block);revision++;
+ const delivered=new Map<string,number>();let deferredPages=0;
+ await synchronizeLibrary(async(path,body)=>{
+  if(path!=='/blocks/fetch')return request(path,body);
+  const {hashes}=librarySyncBlockFetch.parse(body),selected:Array<{hash:string;data:string}>=[],deferred:string[]=[];let bytes=0;
+  for(const hash of hashes){const data=blocks.get(hash)!,size=Buffer.byteLength(data);if(selected.length&&bytes+size>2048){deferred.push(hash);continue;}selected.push({hash,data});bytes+=size;delivered.set(hash,(delivered.get(hash)??0)+1);}
+  if(deferred.length)deferredPages++;
+  return {blocks:selected,missing:[],deferred};
+ });
+ expect(deferredPages).toBeGreaterThan(0);expect([...delivered.values()].every(count=>count===1)).toBe(true);
+ expect((await facts()).drafts.map(row=>row.value)).toEqual(expect.arrayContaining(drafts));expect((await readCloudSync())?.status).toBe('synced');
+});
+
 test('an oversized prefetch response is rejected without adopting any remote identity or facts',async()=>{
  const drafts=Array.from({length:400},()=>({...first,id:crypto.randomUUID(),text:randomBytes(13500).toString('base64')}));publish(drafts);
  const before=await facts();

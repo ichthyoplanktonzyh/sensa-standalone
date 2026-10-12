@@ -17,6 +17,7 @@ import {semanticRecords} from '../support/semanticWorldRecordFixture.mts';
 import {candidateExpected,candidateBlocksFor} from '../support/replicaCandidateFixture.mts';
 import {verifyReplicaCandidateManifest} from '../../../apps/web/src/data/library/replicaCandidateProof';
 import type {LibraryRecordReader} from '../../../apps/web/src/data/library/libraryRecordReader';
+import {sealedRecordReader} from '../../../apps/web/src/data/library/sealedRecordReader';
 
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined,location:new URL('http://candidate-storage.fixture.invalid/')});
 const database=await useNodeLearningCapacityStorage();afterAll(()=>database.close());
@@ -190,6 +191,58 @@ test('candidate paging selects a UTF-8 bounded key prefix before loading wide bo
   // Repeatable iteration cannot skip or duplicate rows at byte/count edges.
   expect([...reader.entries('settings')].map(row=>row.value)).toEqual(values.map(text=>JSON.parse(text)[1]));
  }finally{handler.close();fixture.database.close(false);}
+});
+
+test('sealed text caching bounds retained bytes, clones values and still checks cancellation',()=>{
+ const texts=new Map(Array.from({length:3},(_,index)=>[String(index),JSON.stringify(encodeBackupValue({nested:{count:index}}))]));
+ const calls=new Map<string,number>(),controller=new AbortController();
+ const source={
+  alive(){if(controller.signal.aborted)throw controller.signal.reason;},beforePage(){},
+  get(_table:unknown,key:string){calls.set(key,(calls.get(key)??0)+1);return texts.get(key);},
+  has(_table:unknown,key:string){return texts.has(key);},keys(){return [];},rows(){return [];},
+  plain(_table:unknown,text:string){return text;},missing():never{throw Error('fixture missing');},
+ };
+ const bytes=new TextEncoder().encode(texts.get('0')!).length,reader=sealedRecordReader(source,bytes*2);
+ const first=reader.get('settings','0');first.nested.count=99;
+ expect(reader.get('settings','0')).toEqual({nested:{count:0}});expect(calls.get('0')).toBe(1);
+ reader.get('settings','1');reader.get('settings','2');reader.get('settings','0');expect(calls.get('0')).toBe(2);
+ texts.set('large',JSON.stringify(encodeBackupValue('界'.repeat(bytes))));
+ expect(texts.get('large')!.length).toBeLessThan(bytes*2);
+ expect(new TextEncoder().encode(texts.get('large')!).length).toBeGreaterThan(bytes*2);
+ reader.get('settings','large');reader.get('settings','large');expect(calls.get('large')).toBe(2);
+ controller.abort(Error('fixture cancelled'));
+ expect(()=>reader.get('settings','0')).toThrow('fixture cancelled');expect(()=>reader.has('settings','0')).toThrow('fixture cancelled');
+});
+
+test('interleaved point reads during sealed iteration do not double-count a cached row',()=>{
+ const texts=new Map(['0','1'].map(key=>[key,JSON.stringify(encodeBackupValue({nested:{count:Number(key)}}))]));
+ const calls=new Map<string,number>(),plains=new Map<string,number>(),controller=new AbortController();
+ const reader=sealedRecordReader({
+  alive(){if(controller.signal.aborted)throw controller.signal.reason;},beforePage(){},
+  get(_table,key){calls.set(key,(calls.get(key)??0)+1);return texts.get(key);},has(_table,key){return texts.has(key);},
+  keys(_table,after){return after===null?[...texts].map(([record_key,value])=>({record_key,stored_value_bytes:new TextEncoder().encode(value).length})):[];},
+  rows(_table,keys){return keys.map(record_key=>({record_key,value_json:texts.get(record_key)!}));},
+  plain(_table,text){plains.set(text,(plains.get(text)??0)+1);return text;},missing():never{throw Error('fixture missing');},
+ },new TextEncoder().encode(texts.get('0')!).length*2);
+ const iterator=reader.entries('settings')[Symbol.iterator]();
+ const first=iterator.next().value;expect(first?.key).toBe('0');first!.value.nested.count=99;expect(reader.get('settings','0')).toEqual({nested:{count:0}});expect(reader.get('settings','1')).toEqual({nested:{count:1}});
+ expect(iterator.next().value?.key).toBe('1');expect(reader.get('settings','1')).toEqual({nested:{count:1}});
+ expect(calls.get('1')).toBe(1);expect(plains.get(texts.get('1')!)).toBe(1);
+ expect(iterator.next().done).toBe(true);
+ const cached=reader.entries('settings')[Symbol.iterator]();expect(cached.next().value?.key).toBe('0');
+ controller.abort(Error('fixture cancelled'));expect(()=>cached.next()).toThrow('fixture cancelled');
+});
+
+test('sealed text cache bounds small-row count independently from retained bytes',()=>{
+ const texts=new Map(Array.from({length:257},(_,index)=>[String(index),JSON.stringify(encodeBackupValue(index))]));
+ const calls=new Map<string,number>();
+ const reader=sealedRecordReader({
+  alive(){},beforePage(){},get(_table,key){calls.set(key,(calls.get(key)??0)+1);return texts.get(key);},
+  has(_table,key){return texts.has(key);},keys(){return [];},rows(){return [];},plain(_table,text){return text;},missing():never{throw Error('fixture missing');},
+ });
+ for(const key of texts.keys())expect(reader.get('settings',key)).toBe(Number(key));
+ expect(reader.get('settings','0')).toBe(0);expect(calls.get('0')).toBe(2);
+ expect(reader.get('settings','256')).toBe(256);expect(calls.get('256')).toBe(1);
 });
 
 for(const interrupted of [false,true])test(`cold candidate handler replaces only abandoned clustered bodies atomically (${interrupted})`,async()=>{

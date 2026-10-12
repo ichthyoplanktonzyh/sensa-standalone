@@ -366,7 +366,7 @@ begin／append 在写事务内重验 owner fence，避免预检与暂存写入�
 留待健康重开清除。换代以事务移除旧私有副本，连接重开清除遗留候选，正式事实不变。
 批次精确重试不重复计数，不同正文的同 key 拒绝；部分候选不能封存，完整候选
 先封存再通过同一完整 authority 校验。校验期间本机 revision／身份／owner 或 incarnation 改变即拒绝；
-候选正文和基线一直不可见，取消只移除对应私有副本。owner／identity／incarnation／signed-out 变化及清库
+封存校验期间按 16 MiB UTF-8 文本／256 条 LRU 复用不可变正文；每次读仍独立 JSON 解析和 wire 解码，缓存命中也重查取消与连接健康，分页保留原 fence。此预算不等于 JS heap；大行不缓存。候选正文和基线一直不可见，取消只移除对应私有副本。owner／identity／incarnation／signed-out 变化及清库
 在同一源事务清除私有副本，成功后停止在途校验；事务失败不清正式资料或已存副本。Worker 关闭先取消并等待
 校验结束再关闭 native handles，fatal quarantine 同时停止在途读；失效连接不能继续写失败或已校验状态。
 完整协调器保留 reader 的原始失败，不把取消、并发 fence 变化或存储故障误报成领域资料损坏。
@@ -380,7 +380,7 @@ Worker 按 ES module 分块构建，完整 validator 延迟加载；离线 shell
 仅有 identity 时准入；同库 identity 分叉及不改变内容的 identity-only head 保留原 merge／确认路径。
 正文分批由正常 HTTP block fetch 进入私有候选，每次预取最多请求 512 个不同 hash，但只接收一页、最多
 4 MiB 的块正文；超额响应拒绝，deferred 留待后续消费，不先追完全部 hash 或加载任意大小的一批行。
-当前大行前释放无关预取块，最后一次引用后释放，换 head 重试也清缓存。多行 append 限制 512 条／4 MiB，
+预取块保留到最后一次引用；96 MiB 传输工作集遇到压力时只驱逐当前行保护集之外的块，换 head 重试清缓存。多行 append 限制 512 条／4 MiB，
 同时累计最多 4096 次 block 引用（包括重复引用）；引用密集的合法资料分批，不去重或截断原有有序 refs。
 生产者与 Worker 共用批次计数合同，在解析正文或写入前核对。较大有界事务摊薄提交开销，仍保留 FULL，
 参见 [SQLite 事务批量写入说明](https://sqlite.org/faq.html#q19)；它不是容量或恢复时长已达标的证明。

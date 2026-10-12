@@ -9,6 +9,7 @@ import {validatedCheckpoint} from './cloudSyncCheckpoint';
 import type {CloudSyncState} from './cloudSync';
 import type {SqliteMutation,SqliteLibraryTable} from './sqliteProtocol';
 import type {LibraryRecordReader} from './libraryRecordReader';
+import {sealedRecordReader,type SealedRecordKey} from './sealedRecordReader';
 import {isFatalSqliteConnectionFailure,sqliteRollbackFailure} from './sqliteConnectionFailure';
 import {replicaCandidateSchema,replicaCandidateAppendRecordLimit,replicaCandidateAppendReferenceLimit,type ReplicaCandidateFence,type ReplicaCandidateExpected,type ReplicaCandidateRecord,type ReplicaCandidateValidation,type ReplicaCandidateBlock,type ReplicaCandidateUpdate} from './replicaCandidateProtocol';
 import {replicaCandidateProofBatchBytes,verifyReplicaCandidateBlock,verifyReplicaCandidateManifest} from './replicaCandidateProof';
@@ -17,7 +18,7 @@ const uuid=z.string().uuid(),integer=z.number().int().nonnegative().max(Number.M
 const identitySchema=z.object({id:uuid,learnerId:uuid,deviceId:uuid,createdAt:z.string().datetime({offset:true}),schemaVersion:z.literal(2)}).strict();
 const fenceSchema=z.object({owner:z.object({subject:uuid,accountId:uuid}).strict(),incarnation:z.string().min(1).max(128),localRevision:integer,identity:identitySchema}).strict();
 const expectedSchema=z.object({libraryId:uuid,learnerId:uuid,records:z.number().int().min(1).max(200000),head:librarySyncHead.refine(head=>head.manifest!==null)}).strict();
-const maximumRecordBytes=90*1024*1024,maximumLogicalBytes=512*1024*1024,maximumStoredBytes=256*1024*1024,appendBytes=4*1024*1024,pageBytes=1024*1024;
+const maximumRecordBytes=90*1024*1024,maximumLogicalBytes=512*1024*1024,maximumStoredBytes=256*1024*1024,appendBytes=4*1024*1024;
 const utf8=(text:string)=>new TextEncoder().encode(text).length;
 type Header={id:string;fence_json:string;expected_json:string;state:string;records:number;logical_bytes:number;stored_bytes:number;identity_json:string|null};
 type StoredRow={record_key:string;value_json:string};
@@ -168,37 +169,17 @@ export class SqliteReplicaCandidates{
  }
  private reader(id:string,signal:AbortSignal):LibraryRecordReader{
   const alive=()=>{this.assertHealthy();if(signal.aborted)throw signal.reason;};
-  return {
-   get:(table,key)=>{alive();const row=this.rows<StoredRow>('SELECT value_json FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,table,key])[0];return row?decodeBackupValue(JSON.parse(unpackStoredRecord(row.value_json))):undefined;},
-   has:(table,key)=>{alive();return this.rows('SELECT 1 FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,table,key]).length>0;},
-   entries:table=>{
-    const self=this;
-    return {[Symbol.iterator]:function*(){
-     let after:string|null=null;
-     for(;;){
-      alive();self.check(self.header(id));
-      // Select the bounded key prefix from a covering index before touching
-      // wide bodies. The stored UTF-8 size is generated from the exact packed
-      // value, so append/reuse cannot diverge from the paging budget.
-      const keys=self.rows<{record_key:string;stored_value_bytes:number}>(`SELECT record_key,stored_value_bytes
-       FROM sensa_replica_candidate_records_v1 INDEXED BY sensa_replica_candidate_page_v1
-       WHERE candidate_id=? AND table_name=? ${after===null?'':'AND record_key>?'} ORDER BY record_key LIMIT 64`,after===null?[id,table]:[id,table,after]);
-      const selected:string[]=[];let bytes=0;
-      for(const row of keys){
-       bytes+=row.stored_value_bytes;
-       if(selected.length&&bytes>pageBytes)break;
-       selected.push(row.record_key);
-      }
-      if(!selected.length)return;
-      const page:StoredRow[]=self.rows<StoredRow>(`SELECT record_key,value_json FROM sensa_replica_candidate_records_v1
-       WHERE candidate_id=? AND table_name=? AND record_key IN(SELECT value FROM json_each(?)) ORDER BY record_key`,[id,table,JSON.stringify(selected)]);
-      if(!page.length)return;
-      for(const row of page){alive();yield {key:row.record_key,value:decodeBackupValue(JSON.parse(unpackStoredRecord(row.value_json)))};}
-      after=page.at(-1)!.record_key;
-     }
-    }};
-   },
-  };
+  return sealedRecordReader({
+   alive,beforePage:()=>this.check(this.header(id)),
+   get:(table,key)=>this.rows<StoredRow>('SELECT value_json FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,table,key])[0]?.value_json,
+   has:(table,key)=>this.rows('SELECT 1 FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,table,key]).length>0,
+   keys:(table,after)=>this.rows<SealedRecordKey>(`SELECT record_key,stored_value_bytes
+    FROM sensa_replica_candidate_records_v1 INDEXED BY sensa_replica_candidate_page_v1
+    WHERE candidate_id=? AND table_name=? ${after===null?'':'AND record_key>?'} ORDER BY record_key LIMIT 64`,after===null?[id,table]:[id,table,after]),
+   rows:(table,selected)=>this.rows<StoredRow>(`SELECT record_key,value_json FROM sensa_replica_candidate_records_v1
+    WHERE candidate_id=? AND table_name=? AND record_key IN(SELECT value FROM json_each(?)) ORDER BY record_key`,[id,table,JSON.stringify(selected)]),
+   plain:(_table,stored)=>unpackStoredRecord(stored),missing:()=>this.fail(),
+  });
  }
  validate(id:string):Promise<ReplicaCandidateValidation>{
   const running=this.validations.get(id);if(running)return running.result;

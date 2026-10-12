@@ -197,13 +197,21 @@ class Blocks{
  cache=new Map<string,string>();
  private held=0;
  constructor(private request:SyncRequest){}
- private remember(id:string,data:string){if(this.cache.has(id))return;this.held+=new TextEncoder().encode(data).length;if(this.held>TRANSFER_CAP)throw new Error('library_sync_capacity');this.cache.set(id,data);}
+ private remember(id:string,data:string,protectedIds?:ReadonlySet<string>){
+  if(this.cache.has(id))return;const size=new TextEncoder().encode(data).length;
+  if(protectedIds)for(const hash of this.cache.keys()){
+   if(this.held+size<=TRANSFER_CAP)break;
+   if(!protectedIds.has(hash))this.forget(hash);
+  }
+  if(this.held+size>TRANSFER_CAP)throw new Error('library_sync_capacity');
+  this.held+=size;this.cache.set(id,data);
+ }
  private forget(id:string){const data=this.cache.get(id);if(data!==undefined){this.held-=new TextEncoder().encode(data).length;this.cache.delete(id);}}
  private async packSegment(segment:string,refs:string[]){const {splitLibrarySyncText,encodeLibrarySyncBlock}=await blockCodec();for(const part of splitLibrarySyncText(segment)){const data=encodeLibrarySyncBlock(part),id=await hash(data);this.remember(id,data);refs.push(id);}}
  async pack(text:string){const refs:string[]=[];let at=0;const media=/data:(?:image|audio)\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+/giu;for(const match of text.matchAll(media)){const start=match.index??0;await this.packSegment(text.slice(at,start),refs);await this.packSegment(match[0],refs);at=start+match[0].length;}await this.packSegment(text.slice(at),refs);return refs;}
  /** One request per byte-budgeted page: the cost of a restore follows library size,
   *  not how many blocks an older client happened to split it into. */
- async fetch(ids:string[],onePage=false){
+ async fetch(ids:string[],onePage=false,protectedIds?:ReadonlySet<string>){
   const pending=[...new Set(ids)].filter(id=>!this.cache.has(id));
   let rounds=0,pageSize=librarySyncBlockFetchHashes;
   for(let at=0;at<pending.length;){
@@ -222,7 +230,7 @@ class Blocks{
    if(reply.blocks.some(block=>!requested.has(block.hash))||reply.missing.some(id=>!requested.has(id))||reply.deferred.some(id=>!requested.has(id)))throw new Error('library_sync_format');
    if(reply.missing.length)throw new Error('library_sync_missing_block');
    if(onePage&&reply.blocks.reduce((bytes,block)=>bytes+new TextEncoder().encode(block.data).length,0)>librarySyncBlockFetchBytes)throw new Error('library_sync_format');
-   for(const block of reply.blocks){if(await hash(block.data)!==block.hash)throw new Error('library_sync_hash');this.remember(block.hash,block.data);}
+   for(const block of reply.blocks){if(await hash(block.data)!==block.hash)throw new Error('library_sync_hash');this.remember(block.hash,block.data,protectedIds);}
    if(!reply.blocks.length&&reply.deferred.length)throw new Error('library_sync_format');
    // Prefetch only one byte-bounded response, not every deferred hash. The
    // current row falls back to complete fetch below if it spans several pages.
@@ -288,12 +296,12 @@ class Blocks{
     if(row.blocks.some(hash=>!this.cache.has(hash))){
      // Ask for the existing API's hash window but retain only one byte page.
      // Small records share a roundtrip; large records cannot inflate prefetch.
-     // Before fetching a large current row, release unrelated prefetched bytes.
-     for(const hash of [...this.cache.keys()])if(!refs.has(hash))this.forget(hash);
+     // Retain still-reachable prefetched bodies. Only budget pressure evicts
+     // unrelated hashes; the complete current row stays protected.
      const wanted=new Set<string>();
      for(let index=at;index<pendingRows.length&&wanted.size<librarySyncBlockFetchHashes;index++)for(const hash of pendingRows[index].blocks){wanted.add(hash);if(wanted.size===librarySyncBlockFetchHashes)break;}
-     await this.fetch([...wanted],true);
-     if(row.blocks.some(hash=>!this.cache.has(hash))){for(const hash of [...this.cache.keys()])if(!refs.has(hash))this.forget(hash);await this.fetch(row.blocks);}
+     await this.fetch([...wanted],true,refs);
+     if(row.blocks.some(hash=>!this.cache.has(hash)))await this.fetch(row.blocks,false,refs);
     }
     const valueJson=await this.text(row.blocks),size=new TextEncoder().encode(valueJson).length;
     if(size>90*1024*1024)throw Error('library_sync_capacity');
