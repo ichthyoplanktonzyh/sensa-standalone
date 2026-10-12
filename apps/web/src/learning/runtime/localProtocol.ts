@@ -527,7 +527,7 @@ const sameOutcomePermissions=(left:LocalProtocolOutcomePermissions,right:LocalPr
  &&left.relearningProgress===right.relearningProgress
  &&left.relearningCompletion===right.relearningCompletion;
 
-const isJsonValue=(value:unknown):boolean=>{
+export const isJsonValue=(value:unknown):boolean=>{
  if(value===null||typeof value==='string'||typeof value==='boolean')return true;
  if(typeof value==='number')return Number.isFinite(value);
  if(Array.isArray(value))return value.every(isJsonValue);

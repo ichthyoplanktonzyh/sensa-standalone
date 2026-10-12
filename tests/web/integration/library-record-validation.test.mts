@@ -196,3 +196,13 @@ for(const mutation of ['run-identity','protocol-version','checkpoint-set'] as co
  });
  expect(()=>validateRestoreBackupRows(rows)).toThrow('libraryBackup.errors.inconsistent');
 });
+
+test('ordinary restoration never calls the historical protocol reducer or settlement scheduler; audit still does',async()=>{
+ const protocol=await import('../../../apps/web/src/learning/runtime/localProtocol'),settlement=await import('../../../apps/web/src/data/library/learningSettlement');
+ const reducer=vi.spyOn(protocol,'reduceLocalProtocolAction');
+ const scheduler=vi.spyOn(settlement,'applyLocalProtocolTransition');
+ try{
+  expect(validateRestoreBackupRows(structuredClone(source))).toEqual(identity);expect(reducer).not.toHaveBeenCalled();expect(scheduler).not.toHaveBeenCalled();
+  expect(validateBackupRows(structuredClone(source))).toEqual(identity);expect(reducer).toHaveBeenCalled();expect(scheduler).toHaveBeenCalled();
+ }finally{reducer.mockRestore();scheduler.mockRestore();}
+});
