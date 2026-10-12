@@ -25,7 +25,7 @@ type Entry=CloudSyncEntry;
 type Owner={subject:string;accountId:string};
 export type CloudSyncConflictChoice='local'|'remote';
 export type CloudSyncConflict={detectedAt:string;localRevision:number;remoteRevision:number;remoteManifest:LibrarySyncHead['manifest'];records:{id:string;base:Entry|null;local:Entry|null;remote:Entry|null}[];affectedRecordIds:string[];comparison?:CloudSyncComparison};
-export type CloudSyncState={owner:Owner;incarnation:string;revision:number;checkpointVersion?:7;restoreValidationVersion?:typeof libraryRestoreValidationVersion;storage?:LibrarySyncHead['storage'];syncedLocalRevision?:number;pending?:LibrarySyncCommit;status:'pending'|'syncing'|'synced'|'offline'|'conflict'|'failed';conflicts?:string[];conflict?:CloudSyncConflict;resolution?:{choice:CloudSyncConflictChoice;expectedRemoteRevision:number;expectedLocalRevision:number;decision:{id:string;createdAt:string}};lastSyncedAt?:string;lastCheckedAt?:string;syncStartedAt?:string;error?:string;failureKind?:CloudSyncFailureKind;retryCount?:number;retryAt?:string};
+export type CloudSyncState={receive?:import('./learningDeltaAdmission').DeltaReceiveEvidence;owner:Owner;incarnation:string;revision:number;checkpointVersion?:7;restoreValidationVersion?:typeof libraryRestoreValidationVersion;storage?:LibrarySyncHead['storage'];syncedLocalRevision?:number;pending?:LibrarySyncCommit;status:'pending'|'syncing'|'synced'|'offline'|'conflict'|'failed';conflicts?:string[];conflict?:CloudSyncConflict;resolution?:{choice:CloudSyncConflictChoice;expectedRemoteRevision:number;expectedLocalRevision:number;decision:{id:string;createdAt:string}};lastSyncedAt?:string;lastCheckedAt?:string;syncStartedAt?:string;error?:string;failureKind?:CloudSyncFailureKind;retryCount?:number;retryAt?:string};
 type State=CloudSyncState&{/** Durable proof for an uncertain staged-restore COMMIT ACK. */restoreOperationId?:string};
 export type PendingCloudSyncRecord={table:typeof librarySyncTables[number];key:string};
 export type PendingCloudSyncSnapshot={
@@ -414,6 +414,7 @@ async function verifyPublication(head:LibrarySyncHead,pending:LibrarySyncCommit)
 
 /** Injected transport permits offline/idempotency/restore tests without real accounts. */
 export async function synchronizeLibrary(request:SyncRequest,options:LibrarySyncOptions={}){
+ let receiveEvidence:import('./learningDeltaAdmission').DeltaReceiveEvidence|undefined;
  const header=await readLibrary(captureHeader),expected={owner:header.owner,incarnation:header.incarnation};
  // Apply to both staged restoration and the ordinary empty-library fallback.
  // No request/status is manufactured while the learner keeps the cleared world.
@@ -484,7 +485,7 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
    let candidate:ReplicaCandidateValidation|undefined;
    try{
     const staged=await stageStableCandidate(blocks,request,observedHead,{owner:header.owner,incarnation:header.incarnation,identity:header.identity,localRevision:header.localRevision},prior!.revision);
-    observedHead=staged.head;candidate=staged.candidate;
+    observedHead=staged.head;candidate=staged.candidate;receiveEvidence=candidate?.receive;
     const prepared=candidate?await requestReplicaCandidate({kind:'prepareUpdate',id:candidate.id,baseRevision:prior!.revision}):{kind:'updatePrepared' as const,update:null};
     if(prepared.kind!=='updatePrepared')throw Error('library_sync_candidate_invalid');
     if(prepared.update&&candidate){
@@ -494,7 +495,7 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
       if(!sameOwner(current.owner,header.owner)||current.incarnation!==header.incarnation)throw Error('account_changed');
       if(current.localRevision!==header.localRevision||!equal(current.identity,header.identity)||!validatedCheckpoint(current.state)||current.state!.revision!==prior!.revision)throw Error('library_sync_local_changed');
       const completedAt=new Date().toISOString();tx.updateReplicaCandidate(update);
-      tx.put('meta',STATE,{...current.state!,restoreOperationId:selected.id,checkpointVersion:7,restoreValidationVersion:libraryRestoreValidationVersion,revision:selected.head.revision,storage:selected.head.storage,status:'synced',syncedLocalRevision:header.localRevision+(update.contentChanged?1:0),pending:undefined,conflicts:undefined,conflict:undefined,resolution:undefined,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
+      tx.put('meta',STATE,{...current.state!,receive:update.receive,restoreOperationId:selected.id,checkpointVersion:7,restoreValidationVersion:libraryRestoreValidationVersion,revision:selected.head.revision,storage:selected.head.storage,status:'synced',syncedLocalRevision:header.localRevision+(update.contentChanged?1:0),pending:undefined,conflicts:undefined,conflict:undefined,resolution:undefined,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
      });
      return;
     }
@@ -508,7 +509,7 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
     let candidate:ReplicaCandidateValidation|undefined;
     try{
      const staged=await stageStableCandidate(blocks,request,observedHead,{owner:header.owner,incarnation:header.incarnation,identity:header.identity,localRevision:header.localRevision});
-     observedHead=staged.head;candidate=staged.candidate;
+     observedHead=staged.head;candidate=staged.candidate;receiveEvidence=candidate?.receive;
      // A same-library identity fork still follows ordinary explicit conflict
      // handling; only a genuinely empty fresh Library may adopt another ID.
      const normalizedIdentity=normalizeLibraryReplicaEntry({table:'meta',key:'identity',value:header.identity},header.identity).value;
@@ -520,7 +521,7 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
        if(current.localRevision!==header.localRevision||!equal(current.identity,header.identity))throw Error('library_sync_local_changed');
        const completedAt=new Date().toISOString();tx.restoreReplicaCandidate(selected);
        if(consumeReconnect)tx.delete('meta','local-reset');
-       tx.put('meta',STATE,{...current.state!,restoreOperationId:selected.id,checkpointVersion:7,restoreValidationVersion:libraryRestoreValidationVersion,revision:selected.head.revision,storage:selected.head.storage,status:'synced',syncedLocalRevision:header.localRevision+1,pending:undefined,conflicts:undefined,conflict:undefined,resolution:undefined,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
+       tx.put('meta',STATE,{...current.state!,receive:selected.receive,restoreOperationId:selected.id,checkpointVersion:7,restoreValidationVersion:libraryRestoreValidationVersion,revision:selected.head.revision,storage:selected.head.storage,status:'synced',syncedLocalRevision:header.localRevision+1,pending:undefined,conflicts:undefined,conflict:undefined,resolution:undefined,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
       });
       return;
      }
@@ -605,7 +606,7 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
    // The applied candidate and baseline were validated before commit. Only
    // metadata is needed to prove that no later local transaction changed it.
    const converged=current.localRevision===appliedLocalRevision&&entriesEqual(localEntries,confirmedBase),completedAt=new Date().toISOString();
-   tx.put('meta',STATE,{...current.state!,checkpointVersion:7,restoreValidationVersion:libraryRestoreValidationVersion,status:activeConflicts.length?'conflict':converged?'synced':'pending',conflicts:activeConflicts.length?activeConflicts:undefined,conflict:activeConflicts.length?conflict:undefined,resolution:undefined,syncedLocalRevision:converged?current.localRevision:current.state!.syncedLocalRevision,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
+   tx.put('meta',STATE,{...current.state!,receive:receiveEvidence??{mode:'complete',fallbackReason:'local_changes_or_unvalidated_checkpoint',changedRecords:remote.length,baselineBuildRecords:initial.base.length,baselineRecordsRead:initial.base.length,candidateRecordsRead:remote.length,targets:0,runs:0,events:0,decisions:0,scopes:0,sessions:0,scopeRuns:0},checkpointVersion:7,restoreValidationVersion:libraryRestoreValidationVersion,status:activeConflicts.length?'conflict':converged?'synced':'pending',conflicts:activeConflicts.length?activeConflicts:undefined,conflict:activeConflicts.length?conflict:undefined,resolution:undefined,syncedLocalRevision:converged?current.localRevision:current.state!.syncedLocalRevision,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
   });
  }catch(error){const message=error instanceof Error?error.message:'library_sync_failed';
   await saveState(expected,old=>{const state=old??defaults;

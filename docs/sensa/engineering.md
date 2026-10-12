@@ -323,7 +323,7 @@ Personal Anchor media 与 Practice Artifact 仍按各自 learner-owned 表进入
 不会为编码升级自动覆盖旧 head。当前初次 capture／prepare 的 64 MiB 展开保护仍保留；索引协议不代表首发大库已解决。服务端每累计 128 次提交或 4 MiB tail 建立冻结索引快照，旧 snapshot／log owners 和幂等回执继续保留；历史剪枝仅提供隔离验证入口，尚未启用在线删除，旧版本仍占账号容量。
 已由当前 replica validation version 完整校验并确认的 v6 基线，在相同远端 revision 下复用本机 owner 事务准入：
 无变化只读取轻量身份、同步游标并核对 head；本机增量只读取变化事实和对应基线正文，保留其余 block refs，
-确认带原 operation ID／请求 digest 的 CAS 回执后，在同一 SQLite 事务中 patch 受影响基线与同步状态。远端 tail 从已验证 baseline 建立 Worker overlay，完整验证后在一次本地事务提交事实、baseline 和 cursor；冲突的混合 baseline 仍走完整三方收敛。后续本机写入保留 pending，不能把游标
+确认带原 operation ID／请求 digest 的 CAS 回执后，在同一 SQLite 事务中 patch 受影响基线与同步状态。远端 tail 从已验证 baseline 建立 Worker overlay，完整或认证分量准入后在一次本地事务提交事实、baseline 和 cursor；冲突的混合 baseline 仍走完整三方收敛。后续本机写入保留 pending，不能把游标
 推进到未上传版本；丢失或无法确认 ACK 仍用原 operation 重试。服务端明确在提交前拒绝的历史／身份错误
 才清除该 pending receipt，保留本机事实与原基线，避免反复重放必败请求。普通物理删除继续交由领域 Replica
 的许可规则裁决。
@@ -417,15 +417,25 @@ incarnation fence，清除后的旧点击不能变成新授权。普通尝试失
 新设备候选应用只额外允许删除这一确切的现存 marker，不开放其他 metadata 或删除操作；当前协调协议为 60。
 同事务 restoreOperationId 回执确认协调器丢失 ACK／候选重放后的实际提交，确认后才发送资料变化通知；
 无法读取该回执时不能冒充成功。候选、live、baseline 和 WAL 可同时占磁盘；256 MiB 暂存估计不是峰值磁盘证明。
-已有当前版本验证的 checkpoint 且本机 revision 未变化时，远端新 head 也进入同一私有候选。每批最多 512 key
-在 Worker 内比对当前 baseline 与 manifest 的完整 refs，逐条复用已确认正文，避免未变内容重新下载或跨 RPC。
-共享正文引用在本地还原；候选完整校验后，Worker 仍以 baseline／baseline／remote 执行领域三方合并，不能
-只凭本机未修改而略过不可变历史、删除和冲突规则。仅无冲突且合并结果等于 remote 时生成私有增量应用计划；
-否则保留原完整合并／裁决路径。准备合并让出时普通请求仍可执行，每次惰性读取与最终提交都受原 source fence 保护。
-应用在同一源事务内复核当前验证 stamp、基线版本、内容 revision 与私有计划，按需读取变化正文，原子更新
-facts、baseline patch、派生索引与状态。仅 transport refs 改变时不制造内容 revision；丢 ACK 仍检查同事务回执。
-HTTP head 期间更换并退休旧块时，新设备与增量接收共用最多三次重读／重试。该路径避免整库正文跨页面消息，
-但仍复制未变基线到私有候选并执行全域检查，工作量并非完全只随变化量增长，亦不证明全进程峰值内存或性能达标。
+已有当前版本验证的 checkpoint 且本机 revision 未变化时，远端新 head 进入同一私有候选。
+完整准入从实际候选正文建立 baseline-only 的关系／全局 protocolRunId 所有权索引，证书绑定账号、库、
+incarnation、cursor、local revision、validator、公共材料代次及 baseline generation／索引 epoch。
+所有 baseline 与关系写入同事务递增代次并使旧证书失效；缺失、损坏、版本或 schema 漂移不能作为负见证。
+普通复习的 Target retention 字段、Run/Event、Scope/Session 与两个 active pointers 只暂存变化行，
+以已认证 baseline 的惰性点读组成稀疏 overlay，不复制全库引用或正文。重新验证完整受影响 Run–Target
+历史分量（含旧 reconciliation 的原 audit）、反向 continuation 与 Session 消费者；Scope/source 支持读取
+不自动扩展来源的所有历史。全局 protocol ID、packageCacheComplete 与 Session switch 配对由认证索引补足，
+仍使用原 restore 规则，不能借今日 reducer 改变恢复合同。既有 Run 的来源、participants 与 baseline pins
+结构变化，以及身份／route／source／PSW／Book／删除／新 reconciliation、本机 pending 或未认证 checkpoint
+走原完整路径；变化正文与历史闭包超预算也完整回退，记录实际原因。候选点读和比较每次重验 fence，
+并发本机写入或 same-cursor baseline 换代使旧候选失败，不能靠完整回退提交过时结果。
+仅无冲突且分量合并结果等于 remote 时生成私有变化计划，实际冲突或领域派生 publication 保留完整合并／裁决。
+应用在同一源事务内复核证书和私有计划，原子更新 facts、baseline patch、派生索引、cursor 与新证书。
+认证 metadata 限 16 MiB／200k 行；稀疏核心和 Scope/Session 支持各限 4096，旧／变化展开正文分别限 32 MiB。
+当前行的 packed body、两份 refs 与每次 proof 出现按既有逻辑存储口径计入 256 MiB 预算，替换和删除扣回旧行；
+展开总量仍限 512 MiB。它们是暂存／读取预算，不是全进程 heap 或磁盘峰值证明。
+仅 transport refs 改变时不制造内容 revision；丢 ACK 仍检查同事务回执。HTTP head 更换／块退休共用最多三次
+重读／重试。首次／升级／源结构变化的完整准入以及受影响 Target 历史仍随相关资料增长；这不是常数成本承诺。
 异步存储 RPC 不能冒充同步 get；受控 5k Draft HTTP／OPFS 恢复也不能代替 10k Meaning、账号 UI、
 全进程峰值内存或完整账号容量验收。
 `node --import tsx scripts/benchmarkSemanticReplicaValidation.mts` 在 Node 的 SQLite/Wasm 候选库上度量完整 PSW

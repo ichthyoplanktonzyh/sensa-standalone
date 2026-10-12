@@ -59,6 +59,7 @@ const foundationTests = [
   {id:'test-shards',file:'tests/web/quality/test-shards.test.mts',kind:'quality',risks:['local-correctness'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'api-runtime-imports',file:'tests/web/contracts/api-runtime-imports.test.mts',kind:'contract',risks:['local-correctness'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'library-cursor',file:'tests/web/database/library-cursor.spec.ts',kind:'integration',risks:['durability','convergence','scale'],environment:'browser-postgres',suite:'database',runner:'playwright'},
+  {id:'library-delta-receive',file:'tests/web/database/library-delta-receive.spec.ts',kind:'integration',risks:['local-correctness','durability','convergence','scale'],environment:'browser-postgres',suite:'database',runner:'playwright'},
   {id:'library-sync-runtime',file:'tests/web/integration/library-sync-runtime.test.mts',kind:'integration',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'local-portable-snapshot',file:'tests/web/integration/local-portable-snapshot.test.mts',kind:'integration',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
   {id:'local-portable-snapshot-browser',file:'tests/web/browser/local-portable-snapshot.spec.ts',kind:'integration',risks:['local-correctness','durability'],environment:'chromium',suite:'browser',runner:'playwright'},

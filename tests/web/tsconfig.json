@@ -130,6 +130,12 @@
     "live/businessHarness.ts",
     "live/business-language-matrix.spec.ts",
     "live/personal-language-matrix.spec.ts",
-    "live/extension-language-matrix.spec.ts"
+    "live/extension-language-matrix.spec.ts",
+    "database/library-delta-receive.spec.ts",
+    "../../scripts/support/deltaReceiveTestWorker.ts",
+    "../../scripts/support/deltaReceiveTestBrowserEntry.ts",
+    "../../scripts/assessment/deltaReceiveStageWorker.ts",
+    "../../scripts/assessment/deltaReceiveStageBrowserEntry.ts",
+    "../../scripts/assessment/measureDeltaReceive.mts"
   ]
 }

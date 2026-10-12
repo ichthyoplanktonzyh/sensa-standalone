@@ -490,3 +490,27 @@ test('ordered multi-fragment compressed Unicode rows bind every slice and retain
   await append(id,records);expect((await validate(id)).kind).toBe('validated');
  }finally{await discard(id);}
 });
+
+// The certificate is disposable admission metadata, never a Library authority.
+// These mechanics use controlled descriptors, not a remote domain-admission claim.
+const {SqliteSyncDependencies,syncAdmission}=await import('../../../apps/web/src/data/library/sqliteSyncDependencies');
+const {libraryRestoreValidationVersion}=await import('../../../apps/web/src/data/library/replication/libraryReplicaValidation');
+const checkpoint={owner,incarnation:'initial',revision:3,checkpointVersion:7 as const,restoreValidationVersion:libraryRestoreValidationVersion,syncedLocalRevision:0,status:'synced' as const};
+test('current dependency stored budgets replace old rows and subtract deletions over repeated certification',()=>{
+ const fixture=isolatedDatabase(),deps=new SqliteSyncDependencies(fixture.raw);try{
+  const make=(key:string,text:string,size:number)=>{const admission=syncAdmission();deps.observe(admission,'settings',key,JSON.stringify(encodeBackupValue(text)),text,undefined,size);return admission;};
+  deps.certify(make('a','initial',200),checkpoint,identity,0);expect(deps.certificate()?.storedBytes).toBe(200);
+  for(let i=0;i<100;i++){const previous=deps.certificate()!;deps.certify(make('a','replacement '+i,150+i),checkpoint,identity,0,previous);expect(deps.certificate()?.storedBytes).toBe(150+i);expect(deps.certificate()?.records).toBe(1);}
+  deps.certify(make('b','independent',90),checkpoint,identity,0,deps.certificate());expect(deps.certificate()?.storedBytes).toBe(339);
+  const deletion=syncAdmission();deletion.deletes=[{table:'settings',key:'a'}];deps.certify(deletion,checkpoint,identity,0,deps.certificate());expect(deps.certificate()?.storedBytes).toBe(90);expect(deps.certificate()?.records).toBe(1);
+ }finally{fixture.database.close();}
+});
+for(const damage of ['bad-json','missing-trigger','edge-write'] as const)test(`dependency certificate rejects ${damage} and never treats coverage alone as proof`,()=>{
+ const fixture=isolatedDatabase(),deps=new SqliteSyncDependencies(fixture.raw);try{
+  const admission=syncAdmission();deps.observe(admission,'learningRuns','controlled','["null"]',{targetIds:['target'],participants:{}});deps.certify(admission,checkpoint,identity,0);const prior=deps.certificate()!;expect(prior).toBeDefined();
+  if(damage==='bad-json')fixture.raw.exec("UPDATE sensa_sync_dependency_state_v1 SET certificate_json='{' WHERE id=1");
+  else if(damage==='missing-trigger')fixture.raw.exec('DROP TRIGGER sensa_sync_base_generation_update_v1');
+  else fixture.raw.exec('DELETE FROM sensa_sync_dependency_edges_v1');
+  expect(deps.certificate()).toBeUndefined();expect(()=>deps.assert(prior)).toThrow('library_sync_local_changed');
+ }finally{fixture.database.close();}
+});

@@ -12,10 +12,10 @@ export type ReplicaCandidateFence={owner:{subject:string;accountId:string};incar
 export type ReplicaCandidateBlock={hash:string;data:string};
 export type ReplicaCandidateExpected={head:LibrarySyncHead;manifestRefs:string[];manifestBlocks:ReplicaCandidateBlock[]};
 export type ReplicaCandidateRecord={table:SqliteLibraryTable;key:string;valueJson:string;blockRefs:string[]};
-export type ReplicaCandidateValidation={id:string;identity:LibraryIdentity;head:LibrarySyncHead;tables:SqliteLibraryTable[];records:number;logicalBytes:number;storedBytes:number};
+export type ReplicaCandidateValidation={id:string;identity:LibraryIdentity;head:LibrarySyncHead;tables:SqliteLibraryTable[];records:number;logicalBytes:number;storedBytes:number;receive?:import('./learningDeltaAdmission').DeltaReceiveEvidence};
 /** Prepared against one unchanged, validated local checkpoint. No fact bodies
  * cross the Worker seam; the Worker owns and rechecks the actual mutation. */
-export type ReplicaCandidateUpdate={id:string;baseRevision:number;localRevision:number;contentChanged:boolean;tables:SqliteLibraryTable[];records:Array<{table:SqliteLibraryTable;key:string}>};
+export type ReplicaCandidateUpdate={id:string;baseRevision:number;localRevision:number;contentChanged:boolean;tables:SqliteLibraryTable[];records:Array<{table:SqliteLibraryTable;key:string}>;receive?:import('./learningDeltaAdmission').DeltaReceiveEvidence};
 export type ReplicaCandidateRequest=
  |{kind:'begin';fence:ReplicaCandidateFence;expected:ReplicaCandidateExpected}
  |{kind:'beginIndex';fence:ReplicaCandidateFence;head:LibrarySyncHead;baseRevision?:number}

@@ -13,6 +13,7 @@ type SealedRecordSource<Row extends SealedStoredRecord>={
  rows(table:SqliteLibraryTable,keys:readonly string[]):Row[];
  plain(table:SqliteLibraryTable,stored:Row):string;
  missing():never;
+ observed?:(table:SqliteLibraryTable,key:string,text:string,value:any)=>void;
 };
 const pageBytes=1024*1024,cacheBytes=16*1024*1024,cacheRows=256;
 
@@ -41,11 +42,11 @@ export function sealedRecordReader<Row extends SealedStoredRecord>(source:Sealed
   }
   return text;
  };
- const decode=(text:string)=>decodeBackupValue(JSON.parse(text));
+ const decode=(table:SqliteLibraryTable,key:string,text:string)=>{const value=decodeBackupValue(JSON.parse(text));source.observed?.(table,key,text,value);return value;};
  return {
   get(table,key){
-   source.alive();const hit=cached(table,key);if(hit!==undefined)return decode(hit);
-   const stored=source.get(table,key);return stored===undefined?undefined:decode(plain(table,key,stored));
+   source.alive();const hit=cached(table,key);if(hit!==undefined)return decode(table,key,hit);
+   const stored=source.get(table,key);return stored===undefined?undefined:decode(table,key,plain(table,key,stored));
   },
   has(table,key){source.alive();return source.has(table,key);},
   entries(table){return {[Symbol.iterator]:function*(){
@@ -61,7 +62,7 @@ export function sealedRecordReader<Row extends SealedStoredRecord>(source:Sealed
     for(const key of selected){
      source.alive();const hit=texts.get(key)??cached(table,key),body=stored.get(key);
      if(hit===undefined&&body===undefined)source.missing();
-     yield {key,value:decode(hit??plain(table,key,body!))};
+     yield {key,value:decode(table,key,hit??plain(table,key,body!))};
     }
     after=selected.at(-1)!;
    }

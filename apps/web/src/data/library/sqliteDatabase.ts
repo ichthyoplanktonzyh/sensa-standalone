@@ -5,6 +5,9 @@ import type { Database, Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 import {meaningMediaReferences} from '../../experience/personalMeaningJourney/meaningHistoryRead';
 import {isFatalSqliteConnectionFailure,sqliteRollbackFailure} from './sqliteConnectionFailure';
 import type {LibraryRecordReader} from './libraryRecordReader';
+import {SqliteSyncDependencies,syncAdmission,type SyncDependencyCertificate} from './sqliteSyncDependencies';
+import {assertDeltaReceiveShape,DeltaReceiveFallback} from './learningDeltaAdmission';
+import type {CloudSyncState} from './cloudSync';
 
 import {decodeBackupValue,encodeBackupValue,backupEqual} from './backupCodec';
 import type {ReplicaCandidateRequest,ReplicaCandidateResponse,ReplicaCandidateFence} from './replicaCandidateProtocol';
@@ -112,6 +115,7 @@ export class SqliteRecordDatabase {
   private activationTargetLanguages:Map<string,string>|undefined;
   private activationTargetLanguageBytes=0;
   private snapshotReader:LibraryRecordReader|undefined;
+  private readonly syncDependencies:SqliteSyncDependencies;
 
   /** The Worker must stop queued requests even if the durable COMMIT succeeded. */
   get connectionFailed():boolean{return this.integrityFailed||this.fatalStorageFailure!==undefined;}
@@ -127,6 +131,7 @@ export class SqliteRecordDatabase {
     private readonly persistence: SqliteStorageDiagnostics["persistence"],
     private readonly portableBuild?: (table:SqliteLibraryTable,key:string)=>boolean,
   ) {
+    this.syncDependencies=new SqliteSyncDependencies(database);
     const field=registryFieldReader();
     this.database.createFunction({name:'sensa_expression_form',arity:2,deterministic:true,innocuous:true,xFunc:(_context,text,language)=>learningExpressionForm(text,language)});
     this.database.createFunction({name:'sensa_registry_field',arity:2,deterministic:true,innocuous:true,xFunc:(_context,encoded,key)=>field(encoded,key)});
@@ -201,6 +206,7 @@ export class SqliteRecordDatabase {
       compare?.('before');
       const tables=this.database.exec({sql:"SELECT name,sql FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'",rowMode:'object',returnValue:'resultRows'}) as {name:string;sql:string}[];
       const derived=tables.filter(row=>!sqliteSourceDataTables.has(row.name));
+      this.syncDependencies.resetSchema();
       // Removing a virtual root removes its own shadow tables too.
       for(const row of [...derived.filter(row=>row.sql.startsWith('CREATE VIRTUAL TABLE')), ...derived.filter(row=>!row.sql.startsWith('CREATE VIRTUAL TABLE'))]){
         if(!/^\w+$/u.test(row.name))throw Error('sqlite_snapshot_projection_schema');
@@ -290,6 +296,7 @@ export class SqliteRecordDatabase {
     this.database.exec('BEGIN IMMEDIATE');
     try{
       ({lookupReady,worldReady}=this.initializeProjectionCaches());
+      this.syncDependencies.ensure();
       this.database.exec('COMMIT');
     }catch(error){try{this.database.exec('ROLLBACK');}catch{/* Preserve initialization failure. */}throw error;}
     const schemaReady=performance.now();
@@ -779,6 +786,8 @@ export class SqliteRecordDatabase {
       this.database.exec("PRAGMA optimize");
       this.nextOptimizeAt = Date.now() + sqliteOptimizeIntervalMs;
     }
+    const previousCertificate=this.syncDependencies.certificate();
+    const patchAdmission=mutation.syncBasePatch&&!mutation.replicaCandidateRestore&&previousCertificate?this.prepareDependencyPatch(mutation,previousCertificate):undefined;
     const changesBefore=this.database.changes(true);
     let encodedWriteSize=0;
     let bulkMaintenance=false;
@@ -790,6 +799,7 @@ export class SqliteRecordDatabase {
       ||mutation.puts.some(item=>item.table==='meta'&&ownerKeys.has(item.key)&&this.get('meta',item.key)!==item.encodedValue);
     this.database.exec("BEGIN IMMEDIATE");
     try {
+      if(previousCertificate&&patchAdmission)this.syncDependencies.assert(previousCertificate);
       if(mutation.replicaCandidateRestore&&!mutation.replicaCandidateRestore.update){this.activationMemo=new StoredRecordMemo();this.activationTargetLanguages=new Map();}
       const contentRevision = mutation.contentRevision;
       if (contentRevision !== undefined && (!Number.isSafeInteger(contentRevision) || contentRevision <= 0)) {
@@ -828,6 +838,7 @@ export class SqliteRecordDatabase {
         mutation={...mutation,puts:[...mutation.puts,{table:'meta',key:'local-artifact-revision',encodedValue:JSON.stringify(encodeBackupValue(priorGeneration+1))}]};
       }
       if (mutation.syncBaseReplacement) {
+        this.syncDependencies.clear();
         for(const row of this.database.exec({sql:"SELECT DISTINCT digest FROM sensa_shared_record_content_owners WHERE owner_kind='sync'",rowMode:0,returnValue:'resultRows'}) as string[])removedContent.add(row);
         this.database.exec("DELETE FROM sensa_shared_record_content_owners WHERE owner_kind='sync'");
         this.database.exec('DELETE FROM sensa_sync_base');
@@ -1035,6 +1046,12 @@ export class SqliteRecordDatabase {
       // maintenance even when they occupy only a handful of logical rows.
       bulkMaintenance=this.database.changes(true)-changesBefore>256||encodedWriteSize>1024*1024||mutation.clears.length>0;
       if(bulkMaintenance)this.database.exec('PRAGMA optimize');
+      const syncState=this.decoded<CloudSyncState>('meta','cloud-sync'),syncIdentity=this.decoded<import('./store').LibraryIdentity>('meta','identity');
+      if(syncState&&syncIdentity){
+        const artifactRevision=this.decoded<number>('meta','local-artifact-revision')??0;
+        if(mutation.replicaCandidateRestore)this.replicaCandidateStore?.certifyCheckpoint(mutation.replicaCandidateRestore.id,syncState,syncIdentity,artifactRevision);
+        else if(patchAdmission&&previousCertificate)this.syncDependencies.certify(patchAdmission,syncState,syncIdentity,artifactRevision,previousCertificate);
+      }
       if(discardCandidates)this.purgeReplicaCandidates();
       this.database.exec("COMMIT");
       if(discardCandidates)this.replicaCandidateStore?.abortAll(Error('account_changed'));
@@ -1051,6 +1068,22 @@ export class SqliteRecordDatabase {
     // A completed large transaction can leave a large reusable WAL. Bound its
     // cold-reopen cost after COMMIT; failure here cannot undo/deny that commit.
     if(this.persistence==='opfs'&&bulkMaintenance)this.maintainWal();
+  }
+
+  /** Producer ACKs extend the already admitted baseline with facts accepted
+   * by local domain commands. Source/global changes invalidate this cache. */
+  private prepareDependencyPatch(mutation:SqliteMutation,certificate:SyncDependencyCertificate){
+    const state=this.decoded<CloudSyncState>('meta','cloud-sync'),identity=this.decoded<import('./store').LibraryIdentity>('meta','identity');
+    if(!state||!identity||state.revision!==certificate.revision||state.incarnation!==certificate.incarnation||!backupEqual(state.owner,certificate.owner)||identity.id!==certificate.libraryId||identity.learnerId!==certificate.learnerId||(this.decoded<number>('meta','local-artifact-revision')??0)!==certificate.artifactRevision)return;
+    const patch=mutation.syncBasePatch!,admission=syncAdmission(),after=new Map(patch.puts.map(row=>[JSON.stringify([row.table,row.key]),row.valueJson]));
+    const base:LibraryRecordReader={get:(table,key)=>{const row=this.syncBaseEntries([{table,key}])[0];if(!row)return undefined;this.syncDependencies.verify(table,key,row.valueJson);return decodeBackupValue(JSON.parse(row.valueJson));},has:(table,key)=>this.syncBaseEntries([{table,key}]).length>0,entries:()=>{throw Error('library_sync_delta_enumeration');}};
+    const deleted=new Set(patch.deletes.map(row=>JSON.stringify([row.table,row.key])));
+    const remote:LibraryRecordReader={...base,get:(table,key)=>{if(deleted.has(JSON.stringify([table,key])))return undefined;const text=after.get(JSON.stringify([table,key]));return text===undefined?base.get(table,key):decodeBackupValue(JSON.parse(text));}};
+    try{assertDeltaReceiveShape([...patch.puts,...patch.deletes.map(row=>({...row,deleted:true}))],base,remote);}
+    catch(cause){if(cause instanceof DeltaReceiveFallback)return;throw cause;}
+    for(const row of patch.puts){const text=after.get(JSON.stringify([row.table,row.key]))!;const size=new TextEncoder().encode(packStoredRecord(text)).length+2*new TextEncoder().encode(JSON.stringify(row.blockRefs)).length+new TextEncoder().encode(row.table+row.key).length+72*row.blockRefs.length;this.syncDependencies.observe(admission,row.table,row.key,text,decodeBackupValue(JSON.parse(text)),undefined,size);}
+    admission.deletes=patch.deletes;
+    return admission;
   }
 
   private maintainWal():void{
