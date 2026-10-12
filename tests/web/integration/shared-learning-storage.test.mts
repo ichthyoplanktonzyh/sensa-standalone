@@ -89,10 +89,15 @@ test('fresh activation reuses exact shared baseline bytes once, with genuine his
  const fixture=await stageLearningReplica({noncanonical:true});
  try{
   await fixture.validate();const encode=Reflect.get(fixture.receiver,'storedEncoded').bind(fixture.receiver),calls:{kind:string;table:string;key:string}[]=[];
-  const exec=fixture.storage.exec.bind(fixture.storage);let repeatedDetach=0;
+  const exec=fixture.storage.exec.bind(fixture.storage);let repeatedDetach=0,fullTargetReads=0,runCandidateReads=0;
+  const get=fixture.receiver.get.bind(fixture.receiver);Reflect.set(fixture.receiver,'get',(table:string,key:string)=>{if(table==='learningTargets')fullTargetReads++;return get(table as any,key);});
+  const handler=Reflect.get(fixture.receiver,'replicaCandidateStore'),read=Reflect.get(handler,'rows').bind(handler);
+  Reflect.set(handler,'rows',(sql:string,bind:any[]=[])=>{if(sql.startsWith('SELECT record_key,value_json,representation FROM sensa_replica_candidate_records_v1')&&bind[1]==='learningRuns'&&typeof bind[2]==='string')runCandidateReads++;return read(sql,bind);});
   fixture.storage.exec=((input:any)=>{const sql=typeof input==='string'?input:input.sql;if(sql.includes('sensa_shared_record_content_owners')&&sql.includes('WHERE owner_kind=? AND table_name=? AND record_key=?')&&input.bind?.[0]==='sync')repeatedDetach++;return exec(input);}) as typeof fixture.storage.exec;
   Reflect.set(fixture.receiver,'storedEncoded',(kind:string,table:string,key:string,...args:any[])=>{calls.push({kind,table,key});return encode(kind,table,key,...args);});
-  fixture.receiver.commit(fixture.mutation);fixture.storage.exec=exec;fixture.assertFacts();expect(repeatedDetach).toBe(0);expect(Reflect.get(fixture.receiver,'activationMemo')).toBeUndefined();
+  fixture.receiver.commit(fixture.mutation);fixture.storage.exec=exec;Reflect.set(fixture.receiver,'get',get);
+  expect(fullTargetReads).toBe(0);expect(runCandidateReads).toBe(fixture.records.filter(row=>row.table==='learningRuns').length*2);
+  fixture.assertFacts();expect(fixture.receiver.learningHistoryProjection()).toEqual(database.learningHistoryProjection());expect(repeatedDetach).toBe(0);expect(Reflect.get(fixture.receiver,'activationMemo')).toBeUndefined();expect(Reflect.get(fixture.receiver,'activationTargetLanguages')).toBeUndefined();
   for(const table of ['learningTargets','learningRuns','learningEvents','studyScopes']){
    expect(calls.filter(row=>row.kind==='record'&&row.table===table)).toEqual([]);
    expect(calls.filter(row=>row.kind==='sync'&&row.table===table)).toHaveLength(fixture.records.filter(row=>row.table===table).length);
@@ -104,7 +109,7 @@ test('fresh activation reuses exact shared baseline bytes once, with genuine his
   const tables=['sensa_shared_record_content','sensa_records','sensa_sync_base','sensa_shared_record_content_owners'],physical=tables.map(table=>fixture.storage.exec({sql:`SELECT * FROM ${table}`,rowMode:'array',returnValue:'resultRows'}) as (string|number)[][]),raw=new fixture.sqlite.oo1.DB(':memory:','c'),cold=new SqliteRecordDatabase(fixture.sqlite,raw,'memory');
   try{
    raw.exec(sqliteLibrarySchema);for(let at=0;at<tables.length;at++)for(const row of physical[at]!)raw.exec({sql:`INSERT INTO ${tables[at]} VALUES(${row.map(()=>'?').join(',')})`,bind:row});
-   cold.initialize();fixture.assertFacts(cold);expect(cold.learningHistoryProjection()).toHaveLength(2);expect(cold.diagnostics({verifyIntegrity:true}).integrityCheck?.status).toBe('ok');
+   cold.initialize();fixture.assertFacts(cold);expect(cold.learningHistoryProjection()).toEqual(database.learningHistoryProjection());expect(cold.diagnostics({verifyIntegrity:true}).integrityCheck?.status).toBe('ok');
    const restored=Object.fromEntries(libraryTables.map(table=>[table,cold.entries(table).map(row=>({key:row.key,value:decodeBackupValue(JSON.parse(row.encodedValue))}))])) as BackupRows;validateBackupRows(restored);
    expect(tables.map(table=>raw.exec({sql:`SELECT * FROM ${table}`,rowMode:'array',returnValue:'resultRows'}))).toEqual(physical);
   }finally{cold.close(false);}
@@ -122,7 +127,7 @@ for(const fault of ['baseline-body-insert','baseline-owner-insert','source-owner
    if(!injected&&(fault==='baseline-body-insert'&&sql.startsWith('INSERT INTO sensa_shared_record_content SELECT')||fault==='baseline-owner-insert'&&sql.startsWith('INSERT INTO sensa_shared_record_content_owners')&&sql.includes('SELECT ?,?,?,value')||fault==='source-owners'&&sql.startsWith('INSERT INTO sensa_shared_record_content_owners')&&sql.includes("SELECT 'record'")||fault==='source-copy'&&sql.startsWith('INSERT INTO sensa_records')&&sql.includes('sensa_sync_base AS base')||fault==='projection'&&sql.startsWith('INSERT INTO sensa_learning_targets')||fault==='purge'&&sql==='DELETE FROM sensa_replica_candidates_v1')){injected=true;throw Error('fixture baseline reuse interrupted');}return exec(input);
   }) as typeof fixture.storage.exec;
   try{expect(()=>fixture.receiver.commit(fixture.mutation)).toThrow('fixture baseline reuse interrupted');}finally{fixture.storage.exec=exec;}
-  expect(injected).toBe(true);expect(Reflect.get(fixture.receiver,'activationMemo')).toBeUndefined();expect(fixture.stored()).toEqual(before);fixture.receiver.commit(fixture.mutation);fixture.assertFacts();expect(Reflect.get(fixture.receiver,'activationMemo')).toBeUndefined();
+  expect(injected).toBe(true);expect(Reflect.get(fixture.receiver,'activationMemo')).toBeUndefined();expect(Reflect.get(fixture.receiver,'activationTargetLanguages')).toBeUndefined();expect(fixture.stored()).toEqual(before);fixture.receiver.commit(fixture.mutation);fixture.assertFacts();expect(Reflect.get(fixture.receiver,'activationMemo')).toBeUndefined();expect(Reflect.get(fixture.receiver,'activationTargetLanguages')).toBeUndefined();
  }finally{fixture.receiver.close(false);}
 });
 
@@ -134,6 +139,16 @@ test('batched shared baseline refuses an existing different body at the same dig
   await fixture.validate();const before=fixture.stored();
   expect(()=>fixture.receiver.commit(fixture.mutation)).toThrow('sqlite_shared_content_invalid');
   expect(fixture.stored()).toEqual(before);expect(Reflect.get(fixture.receiver,'activationMemo')).toBeUndefined();
+ }finally{fixture.receiver.close(false);}
+});
+
+test('fresh history language-cache pressure falls back to exact source reads without changing historical rows',async()=>{
+ const fixture=await stageLearningReplica();
+ try{
+  await fixture.validate();const project=Reflect.get(fixture.receiver,'upsertLearningTargetProjection').bind(fixture.receiver),get=fixture.receiver.get.bind(fixture.receiver);let reads=0;
+  Reflect.set(fixture.receiver,'upsertLearningTargetProjection',(...args:any[])=>{Reflect.set(fixture.receiver,'activationTargetLanguageBytes',8*1024*1024);return project(...args);});
+  Reflect.set(fixture.receiver,'get',(table:string,key:string)=>{if(table==='learningTargets')reads++;return get(table as any,key);});
+  fixture.receiver.commit(fixture.mutation);Reflect.set(fixture.receiver,'get',get);expect(reads).toBeGreaterThan(0);fixture.assertFacts();expect(fixture.receiver.learningHistoryProjection()).toEqual(database.learningHistoryProjection());expect(Reflect.get(fixture.receiver,'activationTargetLanguages')).toBeUndefined();
  }finally{fixture.receiver.close(false);}
 });
 

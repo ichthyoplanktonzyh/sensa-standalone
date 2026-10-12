@@ -395,7 +395,14 @@ Worker 按 ES module 分块构建，完整 validator 延迟加载；离线 shell
 新设备应用在 source SQLite commit 内重验 owner、identity、revision、空 facts 和空 baseline，惰性读取单行
 正文并复用既有 restore／索引／媒体引用管线。没有 owner restore transform、也不涉及共享正文的表，
 可在同一事务以 INSERT SELECT 直接复制候选已校验的存储字节到 facts 与对应 baseline，不再逐行解压／对象化／
-重编码。一个表内任一 key 需要转换则整表保留原值路径；身份和共享学习正文仍复用既有 owner／共享存储处理。
+重编码。一个表内任一 key 需要转换则整表保留原值路径。共享学习表先通过既有编码器生成基线、逐字节核对
+正文碰撞，再在同一源事务复制该基线的准确编码与完整 owner 集合；身份继续执行 owner restore。
+全量基线已统一解除 sync owners，不逐行重复解除；共享正文 lookup、缺失正文与 owner 插入使用最多 128 项
+的既有批次，仍受原单记录保护约束。新设备激活仅在该同步事务内保留不可变文本 memo，输入＋结果 UTF-8
+合计最多 16 MiB／256 项，所有 miss 保留原摘要及精确正文检查，成功与回滚均清除。
+已完整校验并复制的 Run 索引只读生成存储帧的 completedAt／targetIds，后续历史投影仍完整解码准确 Run
+材料。Target 完整投影读取后暂存语言字段，标识＋语言 UTF-8 合计最多 8 MiB；未命中时保留完整源读取。
+这些文本预算不是 JS heap／峰值内存或恢复时长证明，其他写入与冷重建仍保留原读取路径。
 派生索引与媒体引用继续从已应用的精确事实更新，与同步状态、deviceId、本机建库回执和候选清理同事务。
 未确认基线的本机 deletion witness 命中 incoming key 时，暂存应用与常规收敛均拒绝自动复活，保留原资料与
 墓碑并报告 history conflict；重试不能绕过。明确全库 reset 在同一事务清除旧 baseline／共享 owner 和墓碑，
@@ -407,7 +414,7 @@ incarnation fence，清除后的旧点击不能变成新授权。普通尝试失
 清除通知使已暂停的空库成为本机 authoritative，不请求云端或继续阻挡资料页；准入失败后的手动重连
 只重试准入，真正成功后才允许同步。
 暂存应用、完整回退应用或空账号确认在同一源事务内解除暂停；失败不消费，新的本机资料仍须走身份冲突。
-新设备候选应用只额外允许删除这一确切的现存 marker，不开放其他 metadata 或删除操作；协调协议为 58。
+新设备候选应用只额外允许删除这一确切的现存 marker，不开放其他 metadata 或删除操作；当前协调协议为 60。
 同事务 restoreOperationId 回执确认协调器丢失 ACK／候选重放后的实际提交，确认后才发送资料变化通知；
 无法读取该回执时不能冒充成功。候选、live、baseline 和 WAL 可同时占磁盘；256 MiB 暂存估计不是峰值磁盘证明。
 已有当前版本验证的 checkpoint 且本机 revision 未变化时，远端新 head 也进入同一私有候选。每批最多 512 key

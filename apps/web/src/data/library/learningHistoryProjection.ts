@@ -34,7 +34,7 @@ export function learningHistoryPageFromRecords(records:readonly StoredLearningRe
 
 /** Rebuildable local presentation index, not learning authority or new facts. */
 export class SqliteLearningHistoryProjection{
- constructor(private readonly database:Database,private readonly target:(id:string)=>LocalLearningTarget|undefined,private readonly decodeRun:(encoded:string)=>LocalLearningRun=encoded=>decodeBackupValue(JSON.parse(encoded)) as LocalLearningRun){
+ constructor(private readonly database:Database,private readonly target:(id:string)=>Pick<LocalLearningTarget,'targetLanguageTag'>|undefined,private readonly decodeRun:(encoded:string)=>LocalLearningRun=encoded=>decodeBackupValue(JSON.parse(encoded)) as LocalLearningRun){
   database.createFunction({name:'sensa_learning_history_day',arity:1,innocuous:true,xFunc:(_context,at)=>localLearningHistoryDay(new Date(Number(at)))});
  }
  initialize(){

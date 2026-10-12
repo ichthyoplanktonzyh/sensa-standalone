@@ -107,6 +107,8 @@ export class SqliteRecordDatabase {
   private replicaCandidateStore:import('./sqliteReplicaCandidates').SqliteReplicaCandidates|undefined;
   private replicaCandidatesClosing=false;
   private activationMemo:StoredRecordMemo|undefined;
+  private activationTargetLanguages:Map<string,string>|undefined;
+  private activationTargetLanguageBytes=0;
 
   /** The Worker must stop queued requests even if the durable COMMIT succeeded. */
   get connectionFailed():boolean{return this.integrityFailed||this.fatalStorageFailure!==undefined;}
@@ -130,7 +132,7 @@ export class SqliteRecordDatabase {
     this.practiceExpressionProjection=new SqlitePracticeExpressionProjection(database,(table,key)=>this.decoded(table,key));
     this.journeyIdentities=new SqliteJourneyIdentityProjection(database);
     this.semanticMemoryProjection=new SqliteLearningSemanticMemoryProjection(database,encoded=>this.decode<LocalLearningTarget>(this.logicalEncoded('learningTargets',encoded)),id=>{const encoded=this.get('learningTargets',id);return encoded===null?null:this.decode<LocalLearningTarget>(encoded);});
-    this.learningHistory=new SqliteLearningHistoryProjection(database,id=>this.decoded<LocalLearningTarget>('learningTargets',id),encoded=>this.decode<LocalLearningRun>(this.logicalEncoded('learningRuns',encoded)));
+    this.learningHistory=new SqliteLearningHistoryProjection(database,id=>{const language=this.activationTargetLanguages?.get(id);return language===undefined?this.decoded<LocalLearningTarget>('learningTargets',id):{targetLanguageTag:language};},encoded=>this.decode<LocalLearningRun>(this.logicalEncoded('learningRuns',encoded)));
     this.runtimeCandidates=new SqliteRuntimeLearningCandidates(database,encoded=>this.decode<LocalLearningTarget>(this.logicalEncoded('learningTargets',encoded)),encoded=>this.decode<import('./curriculumEnrollments').LocalCurriculumEnrollment>(this.logicalEncoded('curriculumEnrollments',encoded)),(id,target)=>this.writeLearningTargetProjection(id,target),encoded=>this.decode<import('./studyScopes').LocalStudyScope>(this.logicalEncoded('studyScopes',encoded)));
   }
 
@@ -224,10 +226,15 @@ export class SqliteRecordDatabase {
   }
 
   get(table: SqliteLibraryTable, key: string): string | null {
+    const value=this.storedRecord(table,key);
+    return value===null?null:this.logicalEncoded(table,value);
+  }
+
+  private storedRecord(table:SqliteLibraryTable,key:string):string|null{
     const statement=this.recordGet??=this.database.prepare('SELECT value_json FROM sensa_records WHERE table_name=? AND record_key=?');
     statement.reset(true);statement.bind([table,key]);
     let value:string|null;try{value=statement.step()?String(statement.get(0)):null;}finally{statement.reset(true);}
-    return value===null?null:this.logicalEncoded(table,value);
+    return value;
   }
 
   entries(table: SqliteLibraryTable): StoredEntry[] {
@@ -685,7 +692,7 @@ export class SqliteRecordDatabase {
       ||mutation.puts.some(item=>item.table==='meta'&&ownerKeys.has(item.key)&&this.get('meta',item.key)!==item.encodedValue);
     this.database.exec("BEGIN IMMEDIATE");
     try {
-      if(mutation.replicaCandidateRestore&&!mutation.replicaCandidateRestore.update)this.activationMemo=new StoredRecordMemo();
+      if(mutation.replicaCandidateRestore&&!mutation.replicaCandidateRestore.update){this.activationMemo=new StoredRecordMemo();this.activationTargetLanguages=new Map();}
       const contentRevision = mutation.contentRevision;
       if (contentRevision !== undefined && (!Number.isSafeInteger(contentRevision) || contentRevision <= 0)) {
         throw new Error('sqlite_content_revision_invalid');
@@ -857,7 +864,7 @@ export class SqliteRecordDatabase {
         const copied=staged!==undefined&&(staged.copiedTables.has(item.table)||staged.sharedCopiedTables.has(item.table));
         // Copied validated rows already live in this transaction. Read their
         // body only for a derived projection that actually consumes it.
-        const needsBody=!copied||['packageCache','curriculumEnrollments','supplementalMembershipStates','studyScopes','learningTargets','learningRuns','contentAttempts','semanticMeanings','semanticContexts','semanticInbox'].includes(item.table);
+        const needsBody=!copied||['packageCache','curriculumEnrollments','supplementalMembershipStates','studyScopes','learningTargets','contentAttempts','semanticMeanings','semanticContexts','semanticInbox'].includes(item.table);
         const encodedValue=needsBody?item.encodedValue:undefined;
         if(!copied){
         encodedWriteSize+=encodedValue!.length;
@@ -890,7 +897,8 @@ export class SqliteRecordDatabase {
           this.upsertLearningTargetProjection(item.key, encodedValue!);
         }
         if (item.table === 'learningRuns') {
-          this.upsertLearningRunProjection(item.key, encodedValue!);
+          if(copied){const stored=this.storedRecord('learningRuns',item.key);if(stored===null)throw Error('library_sync_candidate_invalid');this.upsertLearningRunProjection(item.key,stored,true);}
+          else this.upsertLearningRunProjection(item.key, encodedValue!);
         }
         if (item.table === 'contentAttempts') {
           this.upsertContentAttemptProjection(item.key, encodedValue!);
@@ -941,7 +949,7 @@ export class SqliteRecordDatabase {
       }
       if(isFatalSqliteConnectionFailure(error))this.quarantineConnection(error as Error);
       throw error;
-    }finally{this.activationMemo?.clear();this.activationMemo=undefined;}
+    }finally{this.activationMemo?.clear();this.activationMemo=undefined;this.activationTargetLanguages?.clear();this.activationTargetLanguages=undefined;this.activationTargetLanguageBytes=0;}
     // A completed large transaction can leave a large reusable WAL. Bound its
     // cold-reopen cost after COMMIT; failure here cannot undo/deny that commit.
     if(this.persistence==='opfs'&&bulkMaintenance)this.maintainWal();
@@ -1105,6 +1113,16 @@ export class SqliteRecordDatabase {
 
   private upsertLearningTargetProjection(key: string, encodedValue: string): void {
     const target = this.decode<LocalLearningTarget>(encodedValue);
+    // This row has already passed complete candidate/domain validation and is
+    // being applied in this source transaction. History needs only its language,
+    // not another expansion of every pinned material for each completed Run.
+    // Bound scalar UTF-8 text; a miss retains the existing exact source read.
+    if(this.activationTargetLanguages&&typeof target.targetLanguageTag==='string'){
+      const before=this.activationTargetLanguages.get(key);
+      if(before!==undefined){this.activationTargetLanguageBytes-=new TextEncoder().encode(key+before).length;this.activationTargetLanguages.delete(key);}
+      const bytes=new TextEncoder().encode(key+target.targetLanguageTag).length;
+      if(this.activationTargetLanguageBytes+bytes<=8*1024*1024){this.activationTargetLanguages.set(key,target.targetLanguageTag);this.activationTargetLanguageBytes+=bytes;}
+    }
     this.runtimeCandidates.upsert(key,target);
     this.writeLearningTargetProjection(key,target);
   }
@@ -1156,8 +1174,20 @@ export class SqliteRecordDatabase {
     }
   }
 
-  private upsertLearningRunProjection(key: string, encodedValue: string): void {
-    const run = this.decode<LocalLearningRun>(encodedValue);
+  private upsertLearningRunProjection(key: string, encodedValue: string,validatedStored=false): void {
+    let run:Pick<LocalLearningRun,'completedAt'|'targetIds'>;
+    if(validatedStored){
+      // Fresh copy admission and shared-body writes already validated the full
+      // Run. Its index uses two unshared fields of the generated storage frame;
+      // the subsequent history pass still decodes all exact pinned Run content.
+      const wire=JSON.parse(unpackStoredRecord(encodedValue,this.activationMemo));
+      if(wire[0]!=='object'||!Array.isArray(wire[1]))throw Error('learning_run_projection_invalid');
+      const fields=new Map<string,unknown>();
+      for(const pair of wire[1]){if(!Array.isArray(pair)||pair.length!==2||typeof pair[0]!=='string'||fields.has(pair[0]))throw Error('learning_run_projection_invalid');fields.set(pair[0],pair[1]);}
+      const completedAt=decodeBackupValue(fields.get('completedAt')),targetIds=decodeBackupValue(fields.get('targetIds'));
+      if(completedAt!==null&&typeof completedAt!=='string'||!Array.isArray(targetIds)||targetIds.some(id=>typeof id!=='string'))throw Error('learning_run_projection_invalid');
+      run={completedAt,targetIds};
+    }else run=this.decode<LocalLearningRun>(encodedValue);
     this.database.exec({
       sql: `INSERT INTO sensa_learning_runs(record_key,completed_at) VALUES(?,?)
             ON CONFLICT(record_key) DO UPDATE SET completed_at=excluded.completed_at`,
