@@ -273,7 +273,7 @@ worker.addEventListener('message',(event:MessageEvent<SqliteWorkerRequest>)=>{
   });
   // Private candidate validation/merge may yield while normal requests run.
   // Merge also rechecks its live baseline fence; never hold the owner queue.
-  if(event.data.kind!=='replicaCandidate'||!['validate','prepareUpdate'].includes(event.data.request.kind))requestQueue=response.then(()=>undefined,()=>undefined);
+  if(event.data.kind!=='replicaCandidate'||!['validate','prepareUpdate','validatePublication'].includes(event.data.request.kind))requestQueue=response.then(()=>undefined,()=>undefined);
   void response.then(
     value=>worker.postMessage({id:event.data.id,ok:true,value} satisfies SqliteWorkerResult),
     cause=>worker.postMessage({

@@ -12,6 +12,8 @@
     "types": ["node", "vite/client", "chrome"]
   },
   "files": [
+    "integration/library-initial-publication-storage.test.mts",
+    "database/library-initial-publication.spec.ts",
     "integration/library-sync-coordination.spec.ts",
     "quality/fixture-preparation.test.mts",
     "../../scripts/prepareRetentionCapacity.mts",

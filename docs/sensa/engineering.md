@@ -318,9 +318,10 @@ Personal Anchor media 与 Practice Artifact 仍按各自 learner-owned 表进入
 `librarySyncBlocks.ts` 提供 Web 与 API 共用的无损块编码：相同材料、步骤定义与协议内容按精确文本边界
 复用块，块可确定性 gzip 压缩；拼接解码后仍是原始 tagged wire。API 在接收时验证压缩块，Event／裁决
 不可改写保护比较解码后的完整文本，不比较压缩表示。客户端限制同时保留的传输块为 96 MiB，并分窗口
-消费、在最后引用后释放；解码行上限 90 MiB、累计新增解码事实上限保持 64 MiB 是不同保护，不是 JS heap
+消费、在最后引用后释放；解码行上限 90 MiB、日常增量 prepare 累计新增解码事实上限保持 64 MiB 是不同保护，不是 JS heap
 承诺或已通过的大规模云端性能结论。账号存储边界仍为 256 MiB。不兼容 checkpoint 停止同步并保留原副本，
-不会为编码升级自动覆盖旧 head。当前初次 capture／prepare 的 64 MiB 展开保护仍保留；索引协议不代表首发大库已解决。服务端每累计 128 次提交或 4 MiB tail 建立冻结索引快照，旧 snapshot／log owners 和幂等回执继续保留；历史剪枝仅提供隔离验证入口，尚未启用在线删除，旧版本仍占账号容量。
+不会为编码升级自动覆盖旧 head。首次发布使用私有固定 revision staging：逐表 keyset 捕获至本机不可变 scratch，64 行／4 MiB 展开工作页（保留既有 90 MiB 单行例外），共享正文按 digest 复用，逐页暂存远端 refs；全部捕获及完整领域准入后，一次锁头 CAS 同事务安装已有 current rows、snapshot、membership 与 durable receipt。未完成 staging 不进入 head，接收端只恢复已发布 authority。捕获期间 revision 改变立即拒绝；封存后允许后续编辑，最终 baseline 只确认捕获版并保留后续 pending，网络期间不持本机 writer lock。owner、identity、incarnation 与签出状态在捕获、发送和本机确认处继续检查。丢最终 ACK 由原 operation receipt 恢复；本机 pending 写入 ACK 不确定时保留 scratch。分页 digest、页序与全 workspace key 唯一性拒绝不同 payload／跨页重复 key。失败可安全从新 scratch 重启原 operation 的相同页，过期 workspace 可重新开始。
+首发累计逻辑展开量上限采用既有候选 512 MiB 合同，本机 scratch retained text payload 上限 256 MiB；后者不等于 SQLite 文件、WAL、索引或 heap。唯一块 plain／encoded bytes 由页事务实际插入增量计数，重复页不重复计数，失败回滚 rows 与计数。`maximumPageBytes` 是页展开量加唯一编码正文的工作 payload 口径，不是 JS heap 峰值。source physical window 1 MiB、共享正文预取 4 MiB、metadata 512 行／4096 refs／4 MiB；单条独立上限仍为 90 MiB。store 128 块同时保留 3 MiB 字符及实际 JSON UTF-8 上限、route 4 MiB；块解压与账号 256 MiB quota 继续执行。服务器最多 4 个 private workspace，累计 staging metadata 64 MiB，沿用 upload lease；清理仅删除过期 private staging／pins，不删除已发布历史或 receipt。服务端每累计 128 次提交或 4 MiB tail 建立冻结索引快照，旧 snapshot／log owners 和幂等回执继续保留；历史剪枝仅提供隔离验证入口，尚未启用在线删除，旧版本仍占账号容量。
 已由当前 replica validation version 完整校验并确认的 v6 基线，在相同远端 revision 下复用本机 owner 事务准入：
 无变化只读取轻量身份、同步游标并核对 head；本机增量只读取变化事实和对应基线正文，保留其余 block refs，
 确认带原 operation ID／请求 digest 的 CAS 回执后，在同一 SQLite 事务中 patch 受影响基线与同步状态。远端 tail 从已验证 baseline 建立 Worker overlay，完整或认证分量准入后在一次本地事务提交事实、baseline 和 cursor；冲突的混合 baseline 仍走完整三方收敛。后续本机写入保留 pending，不能把游标

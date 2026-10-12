@@ -12,7 +12,7 @@ export const librarySyncBlockFetchHashes=512;
 /** UTF-8 payload bytes one fetch response may carry, so paging follows bytes instead of block count. */
 export const librarySyncBlockFetchBytes=4*1024*1024;
 /** Blocks per store request. Bounds one request body below the route limit. */
-export const librarySyncBlockStoreBatch=16;
+export const librarySyncBlockStoreBatch=128;
 /** Total block characters accepted in one store request. */
 export const librarySyncBlockStoreChars=3*1024*1024;
 /** UTF-8 JSON framing included; characters alone cannot bound an HTTP body. */
@@ -38,7 +38,10 @@ export const librarySyncHead=z.object({revision:cursor,manifest:librarySyncSnaps
 const operation={operationId:z.string().uuid(),baseRevision:cursor};
 /** Full manifest is only the first publication input. Subsequent publications
  * carry content-addressed changes, so retry bodies remain compact and exact. */
-export const librarySyncCommit=z.union([z.object({...operation,manifest:librarySyncRefs}).strict(),z.object({...operation,patch:librarySyncRefs}).strict()]);
+export const librarySyncCommit=z.union([z.object({...operation,manifest:librarySyncRefs}).strict(),z.object({...operation,patch:librarySyncRefs}).strict(),z.object({...operation,staging:z.object({pages:z.number().int().min(1).max(200000),records:z.number().int().min(1).max(200000),digest:librarySyncHash}).strict()}).strict()]);
+/** Private initial-upload workspace. Its source fence is never a writer trust stamp. */
+export const librarySyncStageBegin=z.object({...operation,libraryId:z.string().uuid(),learnerId:z.string().uuid(),incarnation:z.string().min(1).max(128),localRevision:z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)}).strict();
+export const librarySyncStagePage=z.object({operationId:z.string().uuid(),page:z.number().int().nonnegative().max(199999),rows:z.array(librarySyncRow).min(1).max(512)}).strict().superRefine(refineManifest);
 export const librarySyncChange=z.object({table:z.enum(librarySyncTables),key:z.string().min(1).max(2000),blocks:librarySyncRefs.nullable()}).strict();
 export const librarySyncPatch=z.object({version:z.literal(1),libraryId:z.string().uuid(),learnerId:z.string().uuid(),changes:z.array(librarySyncChange).min(1).max(4096)}).strict().superRefine((v,c)=>refineManifest({rows:v.changes},c));
 export const librarySyncMetadataPageBytes=4*1024*1024;

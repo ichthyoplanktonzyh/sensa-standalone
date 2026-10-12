@@ -2,10 +2,11 @@ import {createHash} from 'node:crypto';
 import {Buffer} from 'node:buffer';
 import type {Hono} from 'hono';
 import type {DatabaseExecutor} from '../../database/core.js';
-import {librarySyncHash,librarySyncPatch,librarySyncPull,librarySyncSnapshotPage,librarySyncMetadataPageRows,librarySyncMetadataPageRefs,librarySyncMetadataPageBytes,librarySyncCommit,librarySyncManifest,librarySyncBlockFetch,librarySyncBlockFetchBytes,librarySyncBlockMissing,librarySyncBlockStore,librarySyncBlockStoreChars,librarySyncBlockStoreBytes,type LibrarySyncManifest} from '@sensa/contracts/sensa';
+import {librarySyncHash,librarySyncStageBegin,librarySyncPatch,librarySyncPull,librarySyncSnapshotPage,librarySyncMetadataPageRows,librarySyncMetadataPageRefs,librarySyncMetadataPageBytes,librarySyncCommit,librarySyncManifest,librarySyncBlockFetch,librarySyncBlockFetchBytes,librarySyncBlockMissing,librarySyncBlockStore,librarySyncBlockStoreChars,librarySyncBlockStoreBytes,type LibrarySyncManifest} from '@sensa/contracts/sensa';
 import {decodeLibrarySyncBlock} from '@sensa/contracts/sensa/library-sync-blocks';
 import {ConsumerError} from '../access/auth.js';
 import {libraryCloudCapacityBytes,libraryCloudReadLeaseMs,libraryCloudUploadLeaseMs,purgeExpiredLibraryCloudBlocks} from './retention.js';
+import {beginInitialPublication,appendInitialPublication,commitInitialPublication,discardInitialPublication} from './initialPublication.js';
 type Access=<T>(request:Request,work:(db:DatabaseExecutor,a:{accountId:string;installationId?:string;now?:Date})=>Promise<T>)=>Promise<T>;
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
 const conflict=(code='library_sync_conflict')=>new ConsumerError(409,code);
@@ -14,6 +15,10 @@ export function registerLibrarySync(app:Hono,access:Access){
  const use:Access=(request,work)=>access(request,(db,a)=>{if(a.installationId)throw new ConsumerError(403,'web_authorization_required');return work(db,a);});
  const current=async(db:DatabaseExecutor,id:string)=>{await db.query('INSERT INTO sensa_consumer.library_cloud(account_id) VALUES($1) ON CONFLICT DO NOTHING',[id]);return (await db.query('SELECT * FROM sensa_consumer.library_cloud WHERE account_id=$1 FOR UPDATE',[id])).rows[0]!;};
  const storage=async(db:DatabaseExecutor,id:string)=>{const usage=(await db.query('SELECT COALESCE(sum(octet_length(data)),0)::bigint n FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1',[id])).rows[0];return {usedBytes:Number(usage.n),capacityBytes:libraryCloudCapacityBytes};};
+ app.post('/sensa/library-sync/staging/begin',async c=>{const input=await c.req.json();return c.json(await use(c.req.raw,async(db,a)=>beginInitialPublication(db,a.accountId,await current(db,a.accountId),input,a.now??new Date())));});
+ app.post('/sensa/library-sync/staging/page',async c=>{const input=await c.req.json();return c.json(await use(c.req.raw,async(db,a)=>appendInitialPublication(db,a.accountId,await current(db,a.accountId),input,a.now??new Date())));});
+ app.post('/sensa/library-sync/staging/discard',async c=>{const input=librarySyncStageBegin.pick({operationId:true}).parse(await c.req.json());return c.json(await use(c.req.raw,async(db,a)=>{const currentHead=await current(db,a.accountId);const receipt=(await db.query('SELECT result FROM sensa_consumer.library_cloud_commits WHERE account_id=$1 AND operation_id=$2',[a.accountId,input.operationId])).rows[0];if(receipt)return {head:receipt.result,currentRevision:currentHead.revision};await discardInitialPublication(db,a.accountId,input.operationId);return {head:null,currentRevision:currentHead.revision};}));});
+ app.get('/sensa/library-sync/receipt/:id',async c=>c.json(await use(c.req.raw,async(db,a)=>{const id=librarySyncStageBegin.shape.operationId.parse(c.req.param('id'));const currentHead=await current(db,a.accountId);return {currentRevision:currentHead.revision,head:(await db.query('SELECT result FROM sensa_consumer.library_cloud_commits WHERE account_id=$1 AND operation_id=$2',[a.accountId,id])).rows[0]?.result??null};})));
  async function metadataText(db:DatabaseExecutor,id:string,refs:string[],limit:number):Promise<string>{
   const parts:string[]=[];let bytes=0;
   for(let at=0;at<refs.length;at+=16){const page=refs.slice(at,at+16),rows=(await db.query('SELECT hash,data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[id,page])).rows,byHash=new Map(rows.map(row=>[row.hash,row.data]));
@@ -130,6 +135,13 @@ export function registerLibrarySync(app:Hono,access:Access){
   const prior=(await db.query('SELECT request_digest,result FROM sensa_consumer.library_cloud_commits WHERE account_id=$1 AND operation_id=$2',[a.accountId,input.operationId])).rows[0];
   if(prior){if(prior.request_digest!==digest)throw conflict('operation_conflict');if(!prior.result)throw conflict('library_sync_incompatible_checkpoint');return prior.result;}
   descriptor(head);if(head.revision!==input.baseRevision)throw conflict();if(head.revision>=2147483646)throw conflict('library_sync_capacity');
+  if('staging' in input){
+   const next=await commitInitialPublication(db,a.accountId,head,input,a.now??new Date());
+   await snapshot(db,a.accountId,next.revision);
+   const result={receipt:{operationId:input.operationId,requestDigest:digest},...descriptor({...head,revision:next.revision,library_id:next.libraryId,learner_id:next.learnerId,record_count:next.records,snapshot_revision:next.revision,retention_floor:next.revision}),storage:await storage(db,a.accountId)};
+   await db.query('INSERT INTO sensa_consumer.library_cloud_commits(account_id,operation_id,request_digest,revision,result) VALUES($1,$2,$3,$4,$5::jsonb)',[a.accountId,input.operationId,digest,next.revision,JSON.stringify(result)]);
+   await discardInitialPublication(db,a.accountId,input.operationId);return result;
+  }
   let libraryId:string,learnerId:string,changes:Array<{table:string;key:string;blocks:string[]|null}>;
   if('manifest' in input){
    if(head.library_id)throw conflict('library_sync_bootstrap_only');const next=await manifest(db,a.accountId,input.manifest);

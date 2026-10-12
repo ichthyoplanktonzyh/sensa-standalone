@@ -42,3 +42,11 @@ test('corrupt and forged compressed blocks fail before any row can be parsed',()
  new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength).setUint32(bytes.length-4,librarySyncBlockChars*3+1,true);
  assert.throws(()=>decodeLibrarySyncBlock(JSON.stringify([packed[0],packed[1],btoa(String.fromCharCode(...bytes))])),/library_sync_format/u);
 });
+
+test('private shared representation emits the exact logical wire without exposing storage references',async()=>{
+ const {externalizeSharedRecordContent}=await import('../../../apps/web/src/data/library/sharedRecordContent');
+ const value=encodeBackupValue({id:'source',content:{text:'Exact retained material '.repeat(100)},protocolBinding:{id:'immutable',rules:'pinned rule '.repeat(100)}}),shared=externalizeSharedRecordContent(value);
+ const segments=librarySyncRecordSegments(shared.value,digest=>{const body=shared.bodies.get(digest);assert.ok(body);return body;});
+ assert.equal(segments.join(''),JSON.stringify(value));assert.ok(!segments.join('').includes('sensa-shared-content-v1'));
+ assert.throws(()=>librarySyncRecordSegments(shared.value),/library_sync_format/u);
+});

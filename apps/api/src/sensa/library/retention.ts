@@ -31,6 +31,11 @@ export async function purgeExpiredLibraryCloudBlocks(
   accountId?:string,
 ):Promise<number>{
  if(!Number.isSafeInteger(batchSize)||batchSize<1||batchSize>10_000)throw new Error('invalid_library_retention_batch');
+ const stages=(await db.query('SELECT account_id,operation_id FROM sensa_consumer.library_cloud_staging WHERE expires_at<=$1 AND ($2::text IS NULL OR account_id=$2) LIMIT $3 FOR UPDATE SKIP LOCKED',[now,accountId??null,Math.min(batchSize,1000)])).rows;
+ for(const stage of stages){
+  await db.query("DELETE FROM sensa_consumer.library_cloud_membership WHERE account_id=$1 AND owner_kind='staging' AND owner_id=$2",[stage.account_id,stage.operation_id]);
+  await db.query('DELETE FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND operation_id=$2',[stage.account_id,stage.operation_id]);
+ }
  await db.query("DELETE FROM sensa_consumer.library_cloud_block_refs WHERE reference_kind='retired' AND expires_at<=$1 AND ($2::text IS NULL OR account_id=$2)",[now,accountId??null]);
  await db.query('DELETE FROM sensa_consumer.library_cloud_reads WHERE expires_at<=$1 AND ($2::text IS NULL OR account_id=$2)',[now,accountId??null]);
  await db.query('DELETE FROM sensa_consumer.library_cloud_snapshot_leases WHERE expires_at<=$1 AND ($2::text IS NULL OR account_id=$2)',[now,accountId??null]);

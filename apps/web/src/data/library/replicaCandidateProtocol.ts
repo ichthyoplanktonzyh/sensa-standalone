@@ -9,6 +9,8 @@ export const replicaCandidateAppendRecordLimit=512;
 export const replicaCandidateAppendReferenceLimit=4096;
 
 export type ReplicaCandidateFence={owner:{subject:string;accountId:string};incarnation:string;localRevision:number;identity:LibraryIdentity};
+export type InitialPublicationStats={records:number;logicalBytes:number;uniqueBlockPlainBytes:number;uniqueBlockStoredBytes:number;storedPayloadBytes:number;blocks:number;maximumPageBytes:number};
+export type InitialPublicationPage={kind:'publicationPage';rows:import('@sensa/contracts/sensa').LibrarySyncManifest['rows'];blocks:ReplicaCandidateBlock[];next:{table:SqliteLibraryTable;key:string}|null;done:boolean;stats:InitialPublicationStats};
 export type ReplicaCandidateBlock={hash:string;data:string};
 export type ReplicaCandidateExpected={head:LibrarySyncHead;manifestRefs:string[];manifestBlocks:ReplicaCandidateBlock[]};
 export type ReplicaCandidateRecord={table:SqliteLibraryTable;key:string;valueJson:string;blockRefs:string[]};
@@ -17,6 +19,11 @@ export type ReplicaCandidateValidation={id:string;identity:LibraryIdentity;head:
  * cross the Worker seam; the Worker owns and rechecks the actual mutation. */
 export type ReplicaCandidateUpdate={id:string;baseRevision:number;localRevision:number;contentChanged:boolean;tables:SqliteLibraryTable[];records:Array<{table:SqliteLibraryTable;key:string}>;receive?:import('./learningDeltaAdmission').DeltaReceiveEvidence};
 export type ReplicaCandidateRequest=
+ |{kind:'beginPublication';fence:ReplicaCandidateFence}
+ |{kind:'publicationPage';id:string;after:{table:SqliteLibraryTable;key:string}|null}
+ |{kind:'publicationBlocks';id:string;hashes:string[]}
+ |{kind:'validatePublication';id:string;confirmed?:boolean}
+ |{kind:'discardPublication';id:string}
  |{kind:'begin';fence:ReplicaCandidateFence;expected:ReplicaCandidateExpected}
  |{kind:'beginIndex';fence:ReplicaCandidateFence;head:LibrarySyncHead;baseRevision?:number}
  |{kind:'indexPage';id:string;page:LibrarySyncPullResult|LibrarySyncSnapshotPageResult}
@@ -26,7 +33,7 @@ export type ReplicaCandidateRequest=
  |{kind:'validate';id:string}
  |{kind:'prepareUpdate';id:string;baseRevision:number}
  |{kind:'discard';id:string};
-export type ReplicaCandidateResponse={kind:'begun';id:string}|{kind:'indexed';needed:Array<Pick<ReplicaCandidateRecord,'table'|'key'>>}|{kind:'appended'|'proved'}|{kind:'reused';keys:Array<Pick<ReplicaCandidateRecord,'table'|'key'>>}|{kind:'validated';candidate:ReplicaCandidateValidation}|{kind:'updatePrepared';update:ReplicaCandidateUpdate|null}|{kind:'discarded'};
+export type ReplicaCandidateResponse={kind:'begun';id:string}|InitialPublicationPage|{kind:'publicationBlocks';blocks:ReplicaCandidateBlock[];deferred:string[]}|{kind:'publicationValidated';stats:InitialPublicationStats}|{kind:'indexed';needed:Array<Pick<ReplicaCandidateRecord,'table'|'key'>>}|{kind:'appended'|'proved'}|{kind:'reused';keys:Array<Pick<ReplicaCandidateRecord,'table'|'key'>>}|{kind:'validated';candidate:ReplicaCandidateValidation}|{kind:'updatePrepared';update:ReplicaCandidateUpdate|null}|{kind:'discarded'};
 
 /** Large private bodies use ordinary rowid storage, with the same unique key
  * and parent ownership. The cache is disposable across physical connections. */

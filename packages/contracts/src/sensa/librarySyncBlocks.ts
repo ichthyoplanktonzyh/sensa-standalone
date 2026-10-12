@@ -28,11 +28,15 @@ export function splitLibrarySyncText(text:string):string[]{
 /** Isolate identical immutable bodies without changing the logical row wire.
  * The concatenation is still exactly JSON.stringify(value), including key order.
  * This is a transport representation, not a second authority or a body fallback. */
-export function librarySyncRecordSegments(value:unknown):string[]{
+export function librarySyncRecordSegments(value:unknown,readShared?:(digest:string)=>string):string[]{
  const segments:string[]=[];let framing='';
  const flush=()=>{if(framing){segments.push(framing);framing='';}};
  const visit=(node:any,field='',depth=0):void=>{
   if(depth>80||!Array.isArray(node))invalid();
+  if(node[0]==='sensa-shared-content-v1'){
+   if(!readShared||node.length!==2||typeof node[1]!=='string'||!/^[a-f0-9]{64}$/u.test(node[1]))invalid();
+   flush();segments.push(readShared!(node[1]));return;
+  }
   if(bodyFields.has(field)&&(node[0]==='object'||node[0]==='array')){
    const body=JSON.stringify(node);if(body.length>=512){flush();segments.push(body);return;}
   }

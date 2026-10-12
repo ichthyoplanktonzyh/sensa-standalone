@@ -97,6 +97,13 @@ export class LibraryTransaction {
   private syncBaseReplacement: Array<{ table: Table; key: string; valueJson: string; blockRefs: string[] }> | undefined;
   private syncBasePatch:SqliteMutation['syncBasePatch'];
   private replicaCandidateRestore:SqliteMutation['replicaCandidateRestore'];
+  private initialPublication:string|undefined;
+
+  confirmInitialPublication(id:string):void{
+    this.assertWritable();
+    if(this.replicaCandidateRestore||this.syncBaseReplacement!==undefined||this.syncBasePatch)throw Error('library_sync_base_mutation_conflict');
+    this.initialPublication=id;this.wrote=true;
+  }
 
   constructor(
     private readonly mode: "readonly" | "readwrite",
@@ -569,6 +576,7 @@ export class LibraryTransaction {
       deletes: [...this.deletes].flatMap(([table, keys]) =>
         [...keys].map((key) => ({ table, key }))),
       puts,
+      ...(this.initialPublication?{initialPublication:this.initialPublication}:{}),
       ...(portablePackages.length?{portablePackages}:{}),
       ...(this.syncBaseReplacement === undefined
         ? {}
@@ -672,11 +680,11 @@ async function transaction<T>(
         // committed, then replay a now-consumed candidate ID. Only its durable
         // transaction receipt permits treating that uncertain outcome as success.
         let confirmed=false;
-        if(mutation.replicaCandidateRestore){
+        if(mutation.replicaCandidateRestore||mutation.initialPublication){
           try{
             const encoded=await storageCall(()=>adapter.get('meta','cloud-sync'));
-            const state=encoded===null?undefined:decode(encoded) as {restoreOperationId?:string;syncedLocalRevision?:number};
-            confirmed=state?.restoreOperationId===mutation.replicaCandidateRestore.id&&state.syncedLocalRevision===(mutation.contentRevision??mutation.replicaCandidateRestore.update?.localRevision);
+            const state=encoded===null?undefined:decode(encoded) as {restoreOperationId?:string;publicationOperationId?:string;syncedLocalRevision?:number};
+            confirmed=mutation.initialPublication?state?.publicationOperationId===mutation.initialPublication:state?.restoreOperationId===mutation.replicaCandidateRestore!.id&&state.syncedLocalRevision===(mutation.contentRevision??mutation.replicaCandidateRestore!.update?.localRevision);
           }catch{/* Keep the original failure when the outcome cannot be read. */}
         }
         if(!confirmed)throw cause;

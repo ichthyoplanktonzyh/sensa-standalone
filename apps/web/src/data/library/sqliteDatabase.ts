@@ -110,6 +110,7 @@ export class SqliteRecordDatabase {
   private recordGet:ReturnType<Database['prepare']>|undefined;
   private replicaCandidates:Promise<import('./sqliteReplicaCandidates').SqliteReplicaCandidates>|undefined;
   private replicaCandidateStore:import('./sqliteReplicaCandidates').SqliteReplicaCandidates|undefined;
+  private initialPublication:import('./sqliteInitialPublication').SqliteInitialPublication|undefined;
   private replicaCandidatesClosing=false;
   private activationMemo:StoredRecordMemo|undefined;
   private activationTargetLanguages:Map<string,string>|undefined;
@@ -716,6 +717,17 @@ export class SqliteRecordDatabase {
 
   async replicaCandidate(request:ReplicaCandidateRequest):Promise<ReplicaCandidateResponse>{
     this.assertReplicaCandidateHealthy();
+    if(['beginPublication','publicationPage','publicationBlocks','validatePublication','discardPublication'].includes(request.kind)){
+      if(request.kind!=='discardPublication'&&this.decoded('meta','signed-out'))throw Error('account_changed');
+      if(!this.initialPublication){const {SqliteInitialPublication}=await import('./sqliteInitialPublication');this.initialPublication=new SqliteInitialPublication(this.database,f=>this.assertReplicaCandidateFence(f),(table,key)=>this.get(table,key),f=>this.assertReplicaCandidateFence({...f,localRevision:this.decoded<number>('meta','local-content-revision')??0}));}
+      switch(request.kind){
+        case 'beginPublication':return {kind:'begun',id:this.initialPublication.begin(request.fence)};
+        case 'publicationPage':return this.initialPublication.page(request.id,request.after);
+        case 'publicationBlocks':return this.initialPublication.blocks(request.id,request.hashes);
+        case 'validatePublication':return {kind:'publicationValidated',stats:await this.initialPublication.validate(request.id,request.confirmed)};
+        case 'discardPublication':this.initialPublication.discard(request.id);return {kind:'discarded'};
+      }
+    }
     this.replicaCandidates??=import('./sqliteReplicaCandidates').then(({SqliteReplicaCandidates})=>{
       this.assertReplicaCandidateHealthy();
       return this.replicaCandidateStore=new SqliteReplicaCandidates(this.database,fence=>this.assertReplicaCandidateFence(fence),()=>this.assertReplicaCandidateHealthy());
@@ -734,6 +746,7 @@ export class SqliteRecordDatabase {
         case 'reuse':return {kind:'reused',keys:candidates.reuse(request.id,request.baseRevision,request.keys,readBase)};
         case 'prepareUpdate':return {kind:'updatePrepared',update:await candidates.prepareUpdate(request.id,request.baseRevision,readBase)};
         case 'discard':candidates.discard(request.id);return {kind:'discarded'};
+        default:throw Error('library_sync_candidate_invalid');
       }
     }catch(cause){if(isFatalSqliteConnectionFailure(cause))this.quarantineConnection(cause as Error);throw cause;}
   }
@@ -782,6 +795,7 @@ export class SqliteRecordDatabase {
       && mutation.syncBaseReplacement === undefined
       && mutation.syncBasePatch === undefined
       && mutation.replicaCandidateRestore === undefined
+      && mutation.initialPublication === undefined
     ) return;
     if (Date.now() >= this.nextOptimizeAt) {
       this.database.exec("PRAGMA optimize");
@@ -853,6 +867,14 @@ export class SqliteRecordDatabase {
             bind: [entry.table, entry.key, this.storedEncoded('sync',entry.table,entry.key,valueJson,removedContent,false), blockRefsJson],
           });
         }
+      }
+      if(mutation.initialPublication){
+        if(!this.initialPublication)throw Error('library_sync_candidate_invalid');
+        this.syncDependencies.clear();
+        for(const row of this.database.exec({sql:"SELECT DISTINCT digest FROM sensa_shared_record_content_owners WHERE owner_kind='sync'",rowMode:0,returnValue:'resultRows'}) as string[])removedContent.add(row);
+        this.database.exec("DELETE FROM sensa_shared_record_content_owners WHERE owner_kind='sync'");this.database.exec('DELETE FROM sensa_sync_base');
+        this.initialPublication.confirm(mutation.initialPublication,mutation);
+        this.initialPublication.discard(mutation.initialPublication);
       }
       if(staged)staged.copySharedBaseline(removedContent);
       if(mutation.syncBasePatch){
@@ -1050,10 +1072,17 @@ export class SqliteRecordDatabase {
       const syncState=this.decoded<CloudSyncState>('meta','cloud-sync'),syncIdentity=this.decoded<import('./store').LibraryIdentity>('meta','identity');
       if(syncState&&syncIdentity){
         const artifactRevision=this.decoded<number>('meta','local-artifact-revision')??0;
-        if(mutation.replicaCandidateRestore)this.replicaCandidateStore?.certifyCheckpoint(mutation.replicaCandidateRestore.id,syncState,syncIdentity,artifactRevision);
+        if(mutation.initialPublication)this.initialPublication?.certify(syncState,syncIdentity,artifactRevision);
+        else if(mutation.replicaCandidateRestore)this.replicaCandidateStore?.certifyCheckpoint(mutation.replicaCandidateRestore.id,syncState,syncIdentity,artifactRevision);
         else if(patchAdmission&&previousCertificate)this.syncDependencies.certify(patchAdmission,syncState,syncIdentity,artifactRevision,previousCertificate);
       }
-      if(discardCandidates)this.purgeReplicaCandidates();
+      if(discardCandidates){this.purgeReplicaCandidates();
+        // An uncertain committed upload is a bounded, owner-fenced recovery
+        // witness. Signout/account changes cannot expose it or erase its ACK
+        // recovery; an explicit whole-library reset retires that witness.
+        const hasInitial=Boolean(this.database.exec({sql:"SELECT 1 FROM sqlite_schema WHERE name='sensa_initial_publication'",rowMode:0,returnValue:'resultRows'}).length);
+        if(hasInitial){const pending=this.decoded<any>('meta','cloud-sync');if(wholeReset||!pending?.pending?.staging)this.database.exec('DELETE FROM sensa_initial_publication;DELETE FROM sensa_initial_publication_rows;DELETE FROM sensa_initial_publication_blocks;DELETE FROM sensa_initial_publication_content;DELETE FROM sensa_initial_publication_owners');}
+      }
       this.database.exec("COMMIT");
       if(discardCandidates)this.replicaCandidateStore?.abortAll(Error('account_changed'));
       this.integrityCheck=undefined;
@@ -1149,7 +1178,7 @@ export class SqliteRecordDatabase {
       try{this.purgeReplicaCandidates();}
       catch(cause){if(isFatalSqliteConnectionFailure(cause))this.quarantineConnection(cause as Error);optimizeFailed=true;optimizeFailure??=cause;}
     }
-    this.replicaCandidateStore?.close();this.meaningLookup.close();this.worldBrowseProjection.close();this.journeyIdentities.close();this.recordGet?.finalize();this.recordGet=undefined;
+    this.initialPublication?.close();this.replicaCandidateStore?.close();this.meaningLookup.close();this.worldBrowseProjection.close();this.journeyIdentities.close();this.recordGet?.finalize();this.recordGet=undefined;
     this.database.close();
     this.closed=true;
     if(optimizeFailed)throw optimizeFailure;
