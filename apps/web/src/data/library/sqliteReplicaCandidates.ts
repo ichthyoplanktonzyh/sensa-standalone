@@ -10,7 +10,7 @@ import type {CloudSyncState} from './cloudSync';
 import type {SqliteMutation,SqliteLibraryTable} from './sqliteProtocol';
 import type {LibraryRecordReader} from './libraryRecordReader';
 import {isFatalSqliteConnectionFailure,sqliteRollbackFailure} from './sqliteConnectionFailure';
-import {replicaCandidateSchema,replicaCandidateRecordSchema,replicaCandidateAppendRecordLimit,replicaCandidateAppendReferenceLimit,type ReplicaCandidateFence,type ReplicaCandidateExpected,type ReplicaCandidateRecord,type ReplicaCandidateValidation,type ReplicaCandidateBlock,type ReplicaCandidateUpdate} from './replicaCandidateProtocol';
+import {replicaCandidateSchema,replicaCandidateAppendRecordLimit,replicaCandidateAppendReferenceLimit,type ReplicaCandidateFence,type ReplicaCandidateExpected,type ReplicaCandidateRecord,type ReplicaCandidateValidation,type ReplicaCandidateBlock,type ReplicaCandidateUpdate} from './replicaCandidateProtocol';
 import {replicaCandidateProofBatchBytes,verifyReplicaCandidateBlock,verifyReplicaCandidateManifest} from './replicaCandidateProof';
 
 const uuid=z.string().uuid(),integer=z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -41,10 +41,9 @@ export class SqliteReplicaCandidates{
    // source fact. No caller from a previous connection can still own its ID.
    this.database.exec('BEGIN IMMEDIATE');
    try{
+    this.database.exec('DROP TABLE IF EXISTS sensa_replica_candidate_records_v1');
     this.database.exec(replicaCandidateSchema);
     this.database.exec('DELETE FROM sensa_replica_candidates_v1');
-    this.database.exec('DROP TABLE sensa_replica_candidate_records_v1');
-    this.database.exec(replicaCandidateRecordSchema);
     this.database.exec('COMMIT');
    }catch(cause){try{this.database.exec('ROLLBACK');}catch(rollbackCause){throw sqliteRollbackFailure(cause,rollbackCause);}throw cause;}
    this.ready=true;
@@ -178,13 +177,21 @@ export class SqliteReplicaCandidates{
      let after:string|null=null;
      for(;;){
       alive();self.check(self.header(id));
-      const page:StoredRow[]=self.rows<StoredRow>(`WITH page AS (
-       SELECT record_key,value_json FROM sensa_replica_candidate_records_v1
-       WHERE candidate_id=? AND table_name=? ${after===null?'':'AND record_key>?'} ORDER BY record_key LIMIT 64
-      ),sized AS (
-       SELECT record_key,value_json,ROW_NUMBER() OVER(ORDER BY record_key) AS ordinal,
-        SUM(length(CAST(value_json AS BLOB))) OVER(ORDER BY record_key) AS bytes FROM page
-      ) SELECT record_key,value_json FROM sized WHERE ordinal=1 OR bytes<=? ORDER BY record_key`,after===null?[id,table,pageBytes]:[id,table,after,pageBytes]);
+      // Select the bounded key prefix from a covering index before touching
+      // wide bodies. The stored UTF-8 size is generated from the exact packed
+      // value, so append/reuse cannot diverge from the paging budget.
+      const keys=self.rows<{record_key:string;stored_value_bytes:number}>(`SELECT record_key,stored_value_bytes
+       FROM sensa_replica_candidate_records_v1 INDEXED BY sensa_replica_candidate_page_v1
+       WHERE candidate_id=? AND table_name=? ${after===null?'':'AND record_key>?'} ORDER BY record_key LIMIT 64`,after===null?[id,table]:[id,table,after]);
+      const selected:string[]=[];let bytes=0;
+      for(const row of keys){
+       bytes+=row.stored_value_bytes;
+       if(selected.length&&bytes>pageBytes)break;
+       selected.push(row.record_key);
+      }
+      if(!selected.length)return;
+      const page:StoredRow[]=self.rows<StoredRow>(`SELECT record_key,value_json FROM sensa_replica_candidate_records_v1
+       WHERE candidate_id=? AND table_name=? AND record_key IN(SELECT value FROM json_each(?)) ORDER BY record_key`,[id,table,JSON.stringify(selected)]);
       if(!page.length)return;
       for(const row of page){alive();yield {key:row.record_key,value:decodeBackupValue(JSON.parse(unpackStoredRecord(row.value_json)))};}
       after=page.at(-1)!.record_key;

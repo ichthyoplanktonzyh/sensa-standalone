@@ -35,9 +35,12 @@ CREATE TABLE IF NOT EXISTS sensa_replica_candidate_records_v1(
  record_key TEXT NOT NULL CHECK(length(record_key) BETWEEN 1 AND 2000),
  value_json TEXT NOT NULL CHECK(json_valid(value_json)),
  refs_json TEXT NOT NULL CHECK(json_valid(refs_json)),
+ stored_value_bytes INTEGER GENERATED ALWAYS AS(length(CAST(value_json AS BLOB))) STORED,
  PRIMARY KEY(candidate_id,table_name,record_key),
  FOREIGN KEY(candidate_id) REFERENCES sensa_replica_candidates_v1(id) ON DELETE CASCADE
-);`;
+);
+CREATE INDEX IF NOT EXISTS sensa_replica_candidate_page_v1
+ ON sensa_replica_candidate_records_v1(candidate_id,table_name,record_key,stored_value_bytes);`;
 
 /** Private versioned cache, never a logical Library table or checkpoint fact.
  * Creating it does not change or migrate the learner's record representation. */

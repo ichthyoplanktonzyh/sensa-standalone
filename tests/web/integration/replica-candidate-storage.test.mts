@@ -16,6 +16,7 @@ import {semanticLookupPayload,syntheticSemanticWorld} from '../support/semanticL
 import {semanticRecords} from '../support/semanticWorldRecordFixture.mts';
 import {candidateExpected,candidateBlocksFor} from '../support/replicaCandidateFixture.mts';
 import {verifyReplicaCandidateManifest} from '../../../apps/web/src/data/library/replicaCandidateProof';
+import type {LibraryRecordReader} from '../../../apps/web/src/data/library/libraryRecordReader';
 
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined,location:new URL('http://candidate-storage.fixture.invalid/')});
 const database=await useNodeLearningCapacityStorage();afterAll(()=>database.close());
@@ -44,6 +45,7 @@ test('filling and validated generations stay outside ordinary facts and the conf
   const raw=Reflect.get(database,'database');
   expect(raw.exec({sql:'PRAGMA main.synchronous',rowMode:0,returnValue:'resultRows'})).toEqual([2]);
   await append(id,records);expect(await original()).toEqual(before);
+  expect(raw.exec({sql:'SELECT count(*) FROM sensa_replica_candidate_records_v1 WHERE stored_value_bytes<>length(CAST(value_json AS BLOB))',rowMode:0,returnValue:'resultRows'})).toEqual([0]);
   const result=await validate(id);expect(result.kind).toBe('validated');
   if(result.kind!=='validated')throw Error('Expected validation');expect(result.candidate.records).toBe(records.length);expect(result.candidate.identity).toEqual(identity);
   expect(await validate(id)).toEqual(result);expect(await original()).toEqual(before);
@@ -156,10 +158,44 @@ function isolatedDatabase(){
  return {raw,database,request,stage,storedCount};
 }
 
+test('candidate paging selects a UTF-8 bounded key prefix before loading wide bodies',async()=>{
+ const fixture=isolatedDatabase(),handler=new SqliteReplicaCandidates(fixture.raw,()=>{},()=>{});
+ try{
+  const records=rows(),id=handler.begin({owner,identity,localRevision:0,incarnation:'initial'},candidateExpected(records,identity));
+  // Exact packed storage values, including multibyte JSON and an oversized
+  // legal first row. Raw fixture writes isolate paging from compression.
+  const values=Array.from({length:137},(_,index)=>JSON.stringify(encodeBackupValue(
+   index===0?'界'.repeat(400000):index===1?'é'.repeat(230000):index===2?'字'.repeat(200000):index===3?'a'.repeat(1024*1024-JSON.stringify(encodeBackupValue('')).length):`row-${index}`)));
+  const expected=values.map((text,index)=>({key:String(index).padStart(3,'0'),text,bytes:new TextEncoder().encode(text).length}));
+  for(const row of expected)fixture.raw.exec({sql:'INSERT INTO sensa_replica_candidate_records_v1 VALUES(?,?,?,?,?)',bind:[id,'settings',row.key,row.text,'[]']});
+  const sizes=fixture.raw.exec({sql:"SELECT record_key,stored_value_bytes FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name='settings' ORDER BY record_key",bind:[id],rowMode:'object',returnValue:'resultRows'});
+  expect(sizes).toEqual(expected.map(row=>({record_key:row.key,stored_value_bytes:row.bytes})));
+  const plan=fixture.raw.exec({sql:"EXPLAIN QUERY PLAN SELECT record_key,stored_value_bytes FROM sensa_replica_candidate_records_v1 INDEXED BY sensa_replica_candidate_page_v1 WHERE candidate_id=? AND table_name=? ORDER BY record_key LIMIT 64",bind:[id,'settings'],rowMode:'object',returnValue:'resultRows'});
+  expect(JSON.stringify(plan)).toContain('USING INDEX sensa_replica_candidate_page_v1');
+  // SQLite does not label generated-column indexes COVERING, even when its
+  // bytecode reads both columns from the index and never seeks the body table.
+  const root=(fixture.raw.exec({sql:"SELECT rootpage FROM sqlite_schema WHERE name='sensa_replica_candidate_records_v1'",rowMode:0,returnValue:'resultRows'}) as number[])[0];
+  const program=fixture.raw.exec({sql:"EXPLAIN SELECT record_key,stored_value_bytes FROM sensa_replica_candidate_records_v1 INDEXED BY sensa_replica_candidate_page_v1 WHERE candidate_id=? AND table_name=? ORDER BY record_key LIMIT 64",bind:[id,'settings'],rowMode:'object',returnValue:'resultRows'}) as Array<{opcode:string;p1:number;p2:number}>;
+  const tableCursor=program.find(row=>row.opcode==='OpenRead'&&row.p2===root)!.p1;
+  expect(program.filter(row=>row.opcode==='Column').every(row=>row.p1!==tableCursor)).toBe(true);
+  const bodyPages:Array<Array<{record_key:string;value_json:string}>>=[],query=Reflect.get(handler,'rows').bind(handler);
+  Reflect.set(handler,'rows',(sql:string,bind:unknown[])=>{const result=query(sql,bind);if(sql.startsWith('SELECT record_key,value_json'))bodyPages.push(result);return result;});
+  const reader=Reflect.get(handler,'reader').call(handler,id,new AbortController().signal) as LibraryRecordReader;
+  expect([...reader.entries('settings')].map(row=>row.key)).toEqual(expected.map(row=>row.key));
+  expect(bodyPages[0]!.map(row=>row.record_key)).toEqual(['000']);
+  expect(bodyPages[1]!.map(row=>row.record_key)).toEqual(['001']);
+  expect(bodyPages[3]!.map(row=>row.record_key)).toEqual(['003']);
+  expect(new TextEncoder().encode(bodyPages[3]![0]!.value_json).length).toBe(1024*1024);
+  for(const page of bodyPages){expect(page.length).toBeLessThanOrEqual(64);if(page.length>1)expect(page.reduce((sum,row)=>sum+new TextEncoder().encode(row.value_json).length,0)).toBeLessThanOrEqual(1024*1024);}
+  // Repeatable iteration cannot skip or duplicate rows at byte/count edges.
+  expect([...reader.entries('settings')].map(row=>row.value)).toEqual(values.map(text=>JSON.parse(text)[1]));
+ }finally{handler.close();fixture.database.close(false);}
+});
+
 for(const interrupted of [false,true])test(`cold candidate handler replaces only abandoned clustered bodies atomically (${interrupted})`,async()=>{
  const fixture=isolatedDatabase();let handler:SqliteReplicaCandidates|undefined;
  try{
-  const raw=fixture.raw,oldRecord=replicaCandidateRecordSchema.replace(/\);$/u,') WITHOUT ROWID;'),oldId=crypto.randomUUID();
+  const raw=fixture.raw,oldRecord=replicaCandidateRecordSchema.slice(0,replicaCandidateRecordSchema.indexOf('CREATE INDEX')).replace(' stored_value_bytes INTEGER GENERATED ALWAYS AS(length(CAST(value_json AS BLOB))) STORED,\n','').replace('\n);','\n) WITHOUT ROWID;'),oldId=crypto.randomUUID();
   raw.exec(replicaCandidateSchema.replace(replicaCandidateRecordSchema,oldRecord));
   raw.exec({sql:"INSERT INTO sensa_replica_candidates_v1(id,fence_json,expected_json,state) VALUES(?,'{}','{}','filling')",bind:[oldId]});
   raw.exec({sql:'INSERT INTO sensa_replica_candidate_records_v1 VALUES(?,?,?,?,?)',bind:[oldId,'settings','abandoned','["string","abandoned private download"]','[]']});
@@ -168,7 +204,7 @@ for(const interrupted of [false,true])test(`cold candidate handler replaces only
   const snapshot=()=>['sensa_replica_candidates_v1','sensa_replica_candidate_records_v1','sensa_replica_candidate_manifest_v1','sensa_replica_candidate_proofs_v1'].map(table=>raw.exec({sql:`SELECT * FROM ${table} ORDER BY 1`,rowMode:'array',returnValue:'resultRows'})),before=snapshot();
   handler=new SqliteReplicaCandidates(raw,()=>{},()=>{});
   const records=rows(),expected=candidateExpected(records,identity),fence={owner,identity,localRevision:0,incarnation:'initial'};
-  if(interrupted){const exec=raw.exec.bind(raw);raw.exec=((input:any)=>{if(input==='DROP TABLE sensa_replica_candidate_records_v1')throw Error('fixture cache layout interrupted');return exec(input);}) as typeof raw.exec;
+  if(interrupted){const exec=raw.exec.bind(raw);raw.exec=((input:any)=>{if(input===replicaCandidateSchema)throw Error('fixture cache layout interrupted');return exec(input);}) as typeof raw.exec;
    try{expect(()=>handler!.begin(fence,expected)).toThrow('fixture cache layout interrupted');}finally{raw.exec=exec;}
    expect(snapshot()).toEqual(before);expect(String((raw.exec({sql:"SELECT sql FROM sqlite_schema WHERE name='sensa_replica_candidate_records_v1'",rowMode:0,returnValue:'resultRows'}) as string[])[0])).toMatch(/WITHOUT ROWID/);
   }
