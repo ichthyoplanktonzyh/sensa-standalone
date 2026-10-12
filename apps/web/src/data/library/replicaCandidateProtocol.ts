@@ -1,6 +1,6 @@
 import type {LibraryIdentity} from './store';
 import type {SqliteLibraryTable} from './sqliteProtocol';
-import type {LibrarySyncHead} from '@sensa/contracts/sensa';
+import type {LibrarySyncHead,LibrarySyncPullResult,LibrarySyncSnapshotPageResult} from '@sensa/contracts/sensa';
 
 /** Count, body/proof bytes and reference work bound the same private batch.
  * Count every reference occurrence, not only distinct hashes. Two maximum-
@@ -10,7 +10,7 @@ export const replicaCandidateAppendReferenceLimit=4096;
 
 export type ReplicaCandidateFence={owner:{subject:string;accountId:string};incarnation:string;localRevision:number;identity:LibraryIdentity};
 export type ReplicaCandidateBlock={hash:string;data:string};
-export type ReplicaCandidateExpected={head:LibrarySyncHead;manifestBlocks:ReplicaCandidateBlock[]};
+export type ReplicaCandidateExpected={head:LibrarySyncHead;manifestRefs:string[];manifestBlocks:ReplicaCandidateBlock[]};
 export type ReplicaCandidateRecord={table:SqliteLibraryTable;key:string;valueJson:string;blockRefs:string[]};
 export type ReplicaCandidateValidation={id:string;identity:LibraryIdentity;head:LibrarySyncHead;tables:SqliteLibraryTable[];records:number;logicalBytes:number;storedBytes:number};
 /** Prepared against one unchanged, validated local checkpoint. No fact bodies
@@ -18,13 +18,15 @@ export type ReplicaCandidateValidation={id:string;identity:LibraryIdentity;head:
 export type ReplicaCandidateUpdate={id:string;baseRevision:number;localRevision:number;contentChanged:boolean;tables:SqliteLibraryTable[];records:Array<{table:SqliteLibraryTable;key:string}>};
 export type ReplicaCandidateRequest=
  |{kind:'begin';fence:ReplicaCandidateFence;expected:ReplicaCandidateExpected}
+ |{kind:'beginIndex';fence:ReplicaCandidateFence;head:LibrarySyncHead;baseRevision?:number}
+ |{kind:'indexPage';id:string;page:LibrarySyncPullResult|LibrarySyncSnapshotPageResult}
  |{kind:'append';id:string;records:ReplicaCandidateRecord[];blocks:ReplicaCandidateBlock[]}
  |{kind:'prove';id:string;record:Pick<ReplicaCandidateRecord,'table'|'key'>;blocks:ReplicaCandidateBlock[]}
  |{kind:'reuse';id:string;baseRevision:number;keys:Array<Pick<ReplicaCandidateRecord,'table'|'key'>>}
  |{kind:'validate';id:string}
  |{kind:'prepareUpdate';id:string;baseRevision:number}
  |{kind:'discard';id:string};
-export type ReplicaCandidateResponse={kind:'begun';id:string}|{kind:'appended'|'proved'}|{kind:'reused';keys:Array<Pick<ReplicaCandidateRecord,'table'|'key'>>}|{kind:'validated';candidate:ReplicaCandidateValidation}|{kind:'updatePrepared';update:ReplicaCandidateUpdate|null}|{kind:'discarded'};
+export type ReplicaCandidateResponse={kind:'begun';id:string}|{kind:'indexed';needed:Array<Pick<ReplicaCandidateRecord,'table'|'key'>>}|{kind:'appended'|'proved'}|{kind:'reused';keys:Array<Pick<ReplicaCandidateRecord,'table'|'key'>>}|{kind:'validated';candidate:ReplicaCandidateValidation}|{kind:'updatePrepared';update:ReplicaCandidateUpdate|null}|{kind:'discarded'};
 
 /** Large private bodies use ordinary rowid storage, with the same unique key
  * and parent ownership. The cache is disposable across physical connections. */

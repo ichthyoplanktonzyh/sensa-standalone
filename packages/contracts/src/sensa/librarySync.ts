@@ -15,6 +15,8 @@ export const librarySyncBlockFetchBytes=4*1024*1024;
 export const librarySyncBlockStoreBatch=16;
 /** Total block characters accepted in one store request. */
 export const librarySyncBlockStoreChars=3*1024*1024;
+/** UTF-8 JSON framing included; characters alone cannot bound an HTTP body. */
+export const librarySyncBlockStoreBytes=3*1024*1024;
 export const librarySyncBlock=z.object({hash:librarySyncHash,data:z.string().max(librarySyncBlockChars)}).strict();
 export const librarySyncBlockFetch=z.object({hashes:z.array(librarySyncHash).min(1).max(librarySyncBlockFetchHashes)}).strict();
 export const librarySyncBlockFetchResult=z.object({blocks:z.array(librarySyncBlock).max(librarySyncBlockFetchHashes),missing:z.array(librarySyncHash).max(librarySyncBlockFetchHashes),deferred:z.array(librarySyncHash).max(librarySyncBlockFetchHashes).default([])}).strict();
@@ -28,7 +30,28 @@ const refineManifest=(v:{rows:readonly {table:string;key:string}[]},c:z.Refineme
 };
 export const librarySyncManifest=z.object({version:z.literal(8),libraryId:z.string().uuid(),learnerId:z.string().uuid(),rows:z.array(librarySyncRow).max(200000)}).strict().superRefine(refineManifest);
 export const librarySyncStorage=z.object({usedBytes:z.number().int().nonnegative(),capacityBytes:z.number().int().positive()}).strict();
-export const librarySyncHead=z.object({revision:z.number().int().nonnegative(),manifest:librarySyncRefs.nullable(),storage:librarySyncStorage.optional()}).strict();
-export const librarySyncCommit=z.object({operationId:z.string().uuid(),baseRevision:z.number().int().nonnegative(),manifest:librarySyncRefs}).strict();
+const cursor=z.number().int().nonnegative().max(2147483646);
+/** One account-scoped publication cursor. The descriptor names the immutable
+ * index snapshot, never a competing complete-manifest head. */
+export const librarySyncSnapshot=z.object({libraryId:z.string().uuid(),learnerId:z.string().uuid(),snapshotRevision:cursor,floor:cursor,records:z.number().int().min(1).max(200000)}).strict();
+export const librarySyncHead=z.object({revision:cursor,manifest:librarySyncSnapshot.nullable(),readLease:z.string().uuid().optional(),receipt:z.object({operationId:z.string().uuid(),requestDigest:librarySyncHash}).strict().optional(),storage:librarySyncStorage.optional()}).strict().refine(head=>!head.manifest||head.manifest.floor<=head.manifest.snapshotRevision&&head.manifest.snapshotRevision<=head.revision,{message:'invalid snapshot cursor'});
+const operation={operationId:z.string().uuid(),baseRevision:cursor};
+/** Full manifest is only the first publication input. Subsequent publications
+ * carry content-addressed changes, so retry bodies remain compact and exact. */
+export const librarySyncCommit=z.union([z.object({...operation,manifest:librarySyncRefs}).strict(),z.object({...operation,patch:librarySyncRefs}).strict()]);
+export const librarySyncChange=z.object({table:z.enum(librarySyncTables),key:z.string().min(1).max(2000),blocks:librarySyncRefs.nullable()}).strict();
+export const librarySyncPatch=z.object({version:z.literal(1),libraryId:z.string().uuid(),learnerId:z.string().uuid(),changes:z.array(librarySyncChange).min(1).max(4096)}).strict().superRefine((v,c)=>refineManifest({rows:v.changes},c));
+export const librarySyncMetadataPageBytes=4*1024*1024;
+export const librarySyncMetadataPageRows=512;
+export const librarySyncMetadataPageRefs=4096;
+export const librarySyncPosition=z.object({revision:cursor,offset:z.number().int().nonnegative().max(200000)}).strict();
+export const librarySyncPull=z.object({after:librarySyncPosition,toRevision:cursor,readLease:z.string().uuid().optional()}).strict();
+export const librarySyncPullResult=z.object({from:librarySyncPosition,next:librarySyncPosition,toRevision:cursor,changes:z.array(librarySyncChange).max(librarySyncMetadataPageRows),done:z.boolean()}).strict();
+export const librarySyncSnapshotPage=z.object({snapshotRevision:cursor,after:z.object({table:z.enum(librarySyncTables),key:z.string().min(1).max(2000)}).strict().nullable(),readLease:z.string().uuid().optional()}).strict();
+export const librarySyncSnapshotPageResult=z.object({snapshotRevision:cursor,after:z.object({table:z.enum(librarySyncTables),key:z.string().min(1).max(2000)}).strict().nullable(),next:z.object({table:z.enum(librarySyncTables),key:z.string().min(1).max(2000)}).strict().nullable(),rows:z.array(librarySyncRow).max(librarySyncMetadataPageRows),done:z.boolean()}).strict();
+export type LibrarySyncCommit=z.infer<typeof librarySyncCommit>;
+export type LibrarySyncChange=z.infer<typeof librarySyncChange>;
+export type LibrarySyncPullResult=z.infer<typeof librarySyncPullResult>;
+export type LibrarySyncSnapshotPageResult=z.infer<typeof librarySyncSnapshotPageResult>;
 export type LibrarySyncManifest=z.infer<typeof librarySyncManifest>;
 export type LibrarySyncHead=z.infer<typeof librarySyncHead>;

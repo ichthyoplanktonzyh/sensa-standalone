@@ -1,3 +1,4 @@
+import {IndexedSyncFixture} from '../support/indexedSyncFixture.mts';
 import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
 import {createServer,type Server} from 'node:http';
@@ -82,6 +83,7 @@ const catalogAuthorizationHeaders:(string|string[]|undefined)[]=[];
 const catalogValidators:(string|string[]|undefined)[]=[];
 
 const cloudBlocks=new Map<string,string>();
+const cloudIndex=new IndexedSyncFixture(cloudBlocks);
 
 let cloudRevision=0;
 
@@ -156,7 +158,7 @@ test.beforeAll(async()=>{
       }
       if(url.pathname==='/sensa/web/access/session'){json({authorized:true,accountId:account,capabilities:{publishLearningContent:publisherAccess}});return;}
       if(url.pathname==='/sensa/library-sync/head'){
-        json({revision:cloudRevision,manifest:cloudManifest});return;
+        json(cloudIndex.head(cloudRevision,cloudManifest));return;
       }
       if(url.pathname==='/sensa/library-sync/blocks/missing'){
         const input=await body() as {hashes:string[]};
@@ -179,11 +181,11 @@ test.beforeAll(async()=>{
         if(!cloudBlocks.has(hash)){json({code:'missing'},404);return;}
         json({hash,data:cloudBlocks.get(hash)});return;
       }
+      if(url.pathname==='/sensa/library-sync/snapshot'||url.pathname==='/sensa/library-sync/pull'){
+        json(cloudIndex.page(url.pathname.replace('/sensa/library-sync',''),await body(),cloudRevision,cloudManifest));return;
+      }
       if(url.pathname==='/sensa/library-sync/commit'){
-        const input=await body() as {baseRevision:number;manifest:string[]};
-        if(input.baseRevision!==cloudRevision){json({code:'library_sync_conflict'},409);return;}
-        cloudRevision+=1;cloudManifest=input.manifest;
-        json({revision:cloudRevision,manifest:cloudManifest});return;
+        try{const result=cloudIndex.commit(await body(),cloudRevision,cloudManifest);cloudRevision=result.revision;cloudManifest=result.manifest;json(result.head);}catch(error){json({code:error instanceof Error?error.message:'library_sync_format'},409);}return;
       }
       if(url.pathname==='/sensa/intake/channel'){
         json({registered:true,libraryId:'package-center-fixture-library'});return;
@@ -432,7 +434,7 @@ get catalogLatencyMs(){return catalogLatencyMs}, set catalogLatencyMs(value:type
 get catalogValidators(){return catalogValidators},
 get cloudBlocks(){return cloudBlocks},
 get cloudManifest(){return cloudManifest}, set cloudManifest(value:typeof cloudManifest){cloudManifest=value},
-get cloudRevision(){return cloudRevision}, set cloudRevision(value:typeof cloudRevision){cloudRevision=value},
+get cloudRevision(){return cloudRevision}, set cloudRevision(value:typeof cloudRevision){cloudRevision=value;if(value===0)cloudIndex.clear()},
 get delivered(){return delivered},
 get delivery(){return delivery}, set delivery(value:typeof delivery){delivery=value},
 get emptySignedInPreflightRetry(){return emptySignedInPreflightRetry},

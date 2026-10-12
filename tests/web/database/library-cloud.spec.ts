@@ -4,7 +4,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {libraryCloudPackageFixture} from '../../../scripts/support/libraryCloudPackageFixture.mts';
 import {portableBookDeliveryFixture} from '../../../scripts/support/portablePackageFixture.mts';
 import {expect,test,type Browser,type TestInfo} from '@playwright/test';
-import {purgeExpiredLibraryCloudBlocks} from '../../../apps/api/src/sensa/library/retention.ts';
+import {pruneLibraryCloudHistory,purgeExpiredLibraryCloudBlocks} from '../../../apps/api/src/sensa/library/retention.ts';
 import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec.ts';
 import {librarySyncBlockChars,librarySyncBlockStoreBatch} from '../../../packages/contracts/src/sensa/librarySync.ts';
 import {decodeLibrarySyncBlock,encodeLibrarySyncBlock} from '../../../packages/contracts/src/sensa/librarySyncBlocks.ts';
@@ -773,8 +773,8 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
   await sender.evaluate(()=>(window as any).sync());
   assert.equal((await pool.query('SELECT revision FROM sensa_consumer.library_cloud WHERE account_id=$1',[agentAccount.accountId])).rows[0].revision,0,'ordinary empty boot stays read-only');
   await sender.evaluate(()=>(window as any).core.synchronizeLibrary((window as any).request,{publishEmptyIdentity:true}));
-  const initialized=(await pool.query('SELECT revision,manifest FROM sensa_consumer.library_cloud WHERE account_id=$1',[agentAccount.accountId])).rows[0];
-  assert.equal(initialized.revision,1);assert(initialized.manifest);
+  const initialized=(await pool.query('SELECT revision,library_id FROM sensa_consumer.library_cloud WHERE account_id=$1',[agentAccount.accountId])).rows[0];
+  assert.equal(initialized.revision,1);assert(initialized.library_id);
   assert.deepEqual(await sender.evaluate(()=>(window as any).core.listDrafts()),[],'identity initialization cannot invent learner material');
   const receiver=await fixture.createClient(agentAccount);await receiver.evaluate(()=>(window as any).sync());
   const restoredIdentity=await receiver.evaluate(()=>(window as any).core.openLibrary());
@@ -802,7 +802,7 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  assert.deepEqual(fixture.requests().map(call=>call.path),['/sensa/library-sync/head'],'legacy failure migration only confirms the empty remote head');
  const hash=(await pool.query('SELECT hash FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 LIMIT 1',[accountId])).rows[0].hash;
  assert.equal((await fetch(origin+'/sensa/library-sync/blocks/'+hash,{headers:{authorization:'Bearer second'}})).status,404,'blocks are account isolated');
- // A legacy Checkpoint is terminal: fetch only its small manifest, preserve the
+ // A legacy Checkpoint is terminal: reject its old head format, preserve the
  // local library, and leave retry scheduling to explicit recovery.
  const legacyRow=JSON.stringify({kind:'legacy-operation',payload:'x'.repeat(32_768)}),legacyRowHash=createHash('sha256').update(legacyRow).digest('hex');
  const legacyManifest=JSON.stringify({version:5,libraryId:crypto.randomUUID(),learnerId:crypto.randomUUID(),rows:[{table:'drafts',key:crypto.randomUUID(),blocks:[legacyRowHash]}]}),legacyManifestHash=createHash('sha256').update(legacyManifest).digest('hex');
@@ -812,7 +812,7 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  await assert.rejects(legacy.evaluate(()=>(window as any).sync()),/library_sync_incompatible_checkpoint/);
  const legacyState=await legacy.evaluate(()=>(window as any).core.readCloudSync());
  assert.equal(legacyState.status,'failed');assert.equal(legacyState.error,'library_sync_incompatible_checkpoint');assert.equal(legacyState.failureKind,'terminal');assert.equal(legacyState.retryAt,undefined);
- assert.equal(fixture.requests().filter(c=>c.path.endsWith('/blocks/fetch')).length,1,'legacy row blocks must not be downloaded');
+ assert.equal(fixture.requests().filter(c=>c.path.endsWith('/blocks/fetch')).length,0,'legacy blocks must not be downloaded');
  assert.deepEqual(await legacy.evaluate(()=>(window as any).core.openLibrary()),localIdentity,'legacy cloud data must not modify the local library');
  await legacy.context().close();
  // A local write arriving after the sync snapshot is captured is fenced, then retried safely.
@@ -996,38 +996,47 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  const corruptReply=await post('library-sync/blocks/store',{blocks:[{hash:corruptHash,data:corruptData}]});
  assert.equal(corruptReply.status,400);assert.equal((await corruptReply.json() as any).code,'library_sync_format');
  assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=$2',[accountId,corruptHash])).rows[0].n,0,'a correctly addressed but corrupt compressed block is not stored');
- const readHead=async()=>{const row=(await pool.query('SELECT revision,manifest FROM sensa_consumer.library_cloud WHERE account_id=$1',[accountId])).rows[0];const refs=row.manifest as string[];const blocks=new Map((await pool.query('SELECT hash,data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[accountId,refs])).rows.map(r=>[r.hash,r.data]));if(refs.some(h=>!blocks.has(h)))throw Error('head manifest references a missing block');return {revision:Number(row.revision),manifest:JSON.parse(refs.map(h=>decodeLibrarySyncBlock(blocks.get(h)!)).join(''))};};
+ const readHead=async()=>{const row=(await pool.query('SELECT revision,library_id,learner_id FROM sensa_consumer.library_cloud WHERE account_id=$1',[accountId])).rows[0];const rows=(await pool.query('SELECT table_name AS table,record_key AS key,refs AS blocks FROM sensa_consumer.library_cloud_rows WHERE account_id=$1 ORDER BY table_name,record_key',[accountId])).rows;return {revision:Number(row.revision),manifest:{version:8,libraryId:row.library_id,learnerId:row.learner_id,rows}};};
  const publish=async(manifest:any,baseRevision:number,chunk:number)=>{
   const rewritten=new Map<string,string>();
   for(const row of manifest.rows){const text=row.blocks.map((h:string)=>decodeLibrarySyncBlock(stored.get(h)!)).join(''),refs:string[]=[];
    for(let at=0;at<text.length;at+=chunk){const data=text.slice(at,at+chunk),hash=createHash('sha256').update(data).digest('hex');rewritten.set(hash,data);refs.push(hash);}
-   if(!refs.length){const hash=createHash('sha256').update('').digest('hex');rewritten.set(hash,'');refs.push(hash);}
-   row.blocks=refs;}
-  const text=JSON.stringify(manifest),refs:string[]=[];
+   if(!refs.length){const hash=createHash('sha256').update('').digest('hex');rewritten.set(hash,'');refs.push(hash);}row.blocks=refs;
+  }
+  const prior=(await readHead()).manifest.rows,byId=(row:any)=>JSON.stringify([row.table,row.key]),old=new Map(prior.map(row=>[byId(row),row])),next=new Map(manifest.rows.map((row:any)=>[byId(row),row]));
+  const changes=[...manifest.rows.filter((row:any)=>JSON.stringify(old.get(byId(row))?.blocks)!==JSON.stringify(row.blocks)),...prior.filter(row=>!next.has(byId(row))).map(row=>({...row,blocks:null}))];
+  const text=JSON.stringify({version:1,libraryId:manifest.libraryId,learnerId:manifest.learnerId,changes}),refs:string[]=[];
   for(let at=0;at<text.length;at+=chunk){const data=text.slice(at,at+chunk),hash=createHash('sha256').update(data).digest('hex');rewritten.set(hash,data);refs.push(hash);}
-  const blocks=[...rewritten].map(([hash,data])=>({hash,data}));
-  for(let at=0;at<blocks.length;at+=librarySyncBlockStoreBatch)assert.equal((await post('library-sync/blocks/store',{blocks:blocks.slice(at,at+librarySyncBlockStoreBatch)})).status,200);
-  return post('library-sync/commit',{operationId:crypto.randomUUID(),baseRevision,manifest:refs});};
+  const blocks=[...rewritten].map(([hash,data])=>({hash,data}));for(let at=0;at<blocks.length;at+=librarySyncBlockStoreBatch)assert.equal((await post('library-sync/blocks/store',{blocks:blocks.slice(at,at+librarySyncBlockStoreBatch)})).status,200);
+  return post('library-sync/commit',{operationId:crypto.randomUUID(),baseRevision,patch:refs});
+ };
  // A client that observes a missing old-head block rereads head and completes
  // from the advanced revision instead of persisting a terminal failure.
  let head=await readHead();
- const oldHeadRow=(await pool.query('SELECT manifest FROM sensa_consumer.library_cloud WHERE account_id=$1',[accountId])).rows[0],oldManifestRefs=oldHeadRow.manifest as string[];
  const racedDraftId=crypto.randomUUID(),racedAt=new Date().toISOString(),racedRowText=JSON.stringify(encodeBackupValue({id:racedDraftId,revision:1,text:'Committed between head and block fetch',createdAt:racedAt,updatedAt:racedAt})),racedRowRefs:string[]=[],replacementBlocks:{hash:string;data:string}[]=[];
  for(let at=0;at<racedRowText.length;at+=librarySyncBlockChars){const data=racedRowText.slice(at,at+librarySyncBlockChars),hash=createHash('sha256').update(data).digest('hex');replacementBlocks.push({hash,data});racedRowRefs.push(hash);}
  const replacementManifest=JSON.parse(JSON.stringify(head.manifest));replacementManifest.rows.push({table:'drafts',key:racedDraftId,blocks:racedRowRefs});replacementManifest.rows.sort((a:any,b:any)=>JSON.stringify([a.table,a.key]).localeCompare(JSON.stringify([b.table,b.key])));
- const replacementText=JSON.stringify(replacementManifest),replacementManifestRefs:string[]=[];
+ const replacementText=JSON.stringify({version:1,libraryId:head.manifest.libraryId,learnerId:head.manifest.learnerId,changes:[{table:'drafts',key:racedDraftId,blocks:racedRowRefs}]}),replacementManifestRefs:string[]=[];
  for(let at=0;at<replacementText.length;at+=librarySyncBlockChars){const data=replacementText.slice(at,at+librarySyncBlockChars),hash=createHash('sha256').update(data).digest('hex');replacementBlocks.push({hash,data});replacementManifestRefs.push(hash);}
  for(let at=0;at<replacementBlocks.length;at+=librarySyncBlockStoreBatch)assert.equal((await post('library-sync/blocks/store',{blocks:replacementBlocks.slice(at,at+librarySyncBlockStoreBatch)})).status,200);
- const racing=await fixture.createClient(primary);await racing.evaluate(({baseRevision,manifest})=>{const w=window as any,original=w.request;w.headReads=0;let raced=false;w.request=async(path:string,body?:any)=>{if(path==='/head')w.headReads++;if(path==='/blocks/fetch'&&!raced){raced=true;await original('/commit',{operationId:crypto.randomUUID(),baseRevision,manifest});return {blocks:[],missing:body.hashes,deferred:[]};}return original(path,body);};},{baseRevision:head.revision,manifest:replacementManifestRefs});
+ const racing=await fixture.createClient(primary);await racing.evaluate(({baseRevision,manifest})=>{const w=window as any,original=w.request;w.headReads=0;let raced=false;w.request=async(path:string,body?:any)=>{if(path==='/head')w.headReads++;if(path==='/blocks/fetch'&&!raced){raced=true;await original('/commit',{operationId:crypto.randomUUID(),baseRevision,patch:manifest});return {blocks:[],missing:body.hashes,deferred:[]};}return original(path,body);};},{baseRevision:head.revision,manifest:replacementManifestRefs});
  await racing.evaluate(()=>(window as any).sync());assert.equal(await racing.evaluate(()=>(window as any).headReads),2,'a changed head is reread once after the old block disappears');const racingState=await racing.evaluate(()=>(window as any).core.readCloudSync());assert.equal(racingState.status,'synced');assert.equal(racingState.storage.capacityBytes,256*1024*1024);assert(racingState.storage.usedBytes>0,'the account UI receives byte-based cloud capacity usage');await racing.context().close();
- const racedHeadRow=(await pool.query('SELECT revision,manifest FROM sensa_consumer.library_cloud WHERE account_id=$1',[accountId])).rows[0],currentManifestRefs=racedHeadRow.manifest as string[];
- await pool.query("UPDATE sensa_consumer.library_cloud_blocks SET upload_lease_expires_at=now()-interval '1 minute' WHERE account_id=$1 AND hash=ANY($2::text[])",[accountId,oldManifestRefs]);
- await purgeExpiredLibraryCloudBlocks(pool,new Date(),100,accountId);
- assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[accountId,oldManifestRefs])).rows[0].n,oldManifestRefs.length,'a valid old-head read lease protects retired blocks');
- await pool.query("UPDATE sensa_consumer.library_cloud_block_refs SET expires_at=now()-interval '1 minute' WHERE account_id=$1 AND reference_kind='retired'",[accountId]);
- await pool.query("UPDATE sensa_consumer.library_cloud_snapshot_leases SET expires_at=now()-interval '1 minute' WHERE account_id=$1",[accountId]);
- await purgeExpiredLibraryCloudBlocks(pool,new Date(),100,accountId);
- assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[accountId,oldManifestRefs])).rows[0].n,0,'expired retired snapshot blocks are reclaimed');
+ const leaseId=crypto.randomUUID(),leaseAt=new Date().toISOString();
+ const leaseRow=(text:string)=>JSON.stringify(encodeBackupValue({id:leaseId,revision:1,text,createdAt:leaseAt,updatedAt:leaseAt}));
+ const upload=(text:string)=>{const data=encodeLibrarySyncBlock(text),hash=createHash('sha256').update(data).digest('hex');return {data,hash};};
+ const oldLeaseBlock=upload(leaseRow('Old leased exact body')),newLeaseBlock=upload(leaseRow('Current exact body'));
+ for(const block of [oldLeaseBlock,newLeaseBlock])assert.equal((await post('library-sync/blocks/store',{blocks:[block]})).status,200);
+ const publishLease=async(block:any)=>{const current=await readHead(),patch=upload(JSON.stringify({version:1,libraryId:current.manifest.libraryId,learnerId:current.manifest.learnerId,changes:[{table:'drafts',key:leaseId,blocks:[block.hash]}]}));assert.equal((await post('library-sync/blocks/store',{blocks:[patch]})).status,200);assert.equal((await post('library-sync/commit',{operationId:crypto.randomUUID(),baseRevision:current.revision,patch:[patch.hash]})).status,200);};
+ await publishLease(oldLeaseBlock);
+ await fetch(origin+'/sensa/library-sync/head',{headers:{authorization:'Bearer first'}});
+ await publishLease(newLeaseBlock);head=await readHead();assert.equal((await post('library-sync/compact',{baseRevision:head.revision})).status,200);
+ await pool.query("UPDATE sensa_consumer.library_cloud_blocks SET upload_lease_expires_at=now()-interval '1 minute' WHERE account_id=$1 AND hash=$2",[accountId,oldLeaseBlock.hash]);
+ assert.equal(await pruneLibraryCloudHistory(pool,accountId,new Date()),false);await purgeExpiredLibraryCloudBlocks(pool,new Date(),100,accountId);
+ assert.equal((await pool.query('SELECT 1 FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=$2',[accountId,oldLeaseBlock.hash])).rowCount,1,'a valid fixed-head reader protects old tail bytes');
+ await pool.query("UPDATE sensa_consumer.library_cloud_reads SET expires_at=now()-interval '1 minute' WHERE account_id=$1",[accountId]);
+ assert.equal(await pruneLibraryCloudHistory(pool,accountId,new Date()),true);await purgeExpiredLibraryCloudBlocks(pool,new Date(),10000,accountId);
+ assert.equal((await pool.query('SELECT 1 FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=$2',[accountId,oldLeaseBlock.hash])).rowCount,0,'retired unowned body is reclaimed after the read lease');
+ const currentManifestRefs=[newLeaseBlock.hash];
  const orphanData='interrupted upload '+crypto.randomUUID(),orphanHash=createHash('sha256').update(orphanData).digest('hex');assert.equal((await post('library-sync/blocks/store',{blocks:[{hash:orphanHash,data:orphanData}]})).status,200);
  await pool.query("UPDATE sensa_consumer.library_cloud_blocks SET upload_lease_expires_at=now()-interval '1 minute' WHERE account_id=$1 AND hash=$2",[accountId,orphanHash]);await purgeExpiredLibraryCloudBlocks(pool,new Date(),100,accountId);assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=$2',[accountId,orphanHash])).rows[0].n,0,'an expired interrupted upload is reclaimed');
  await pool.query("UPDATE sensa_consumer.library_cloud_blocks SET upload_lease_expires_at=now()-interval '1 minute' WHERE account_id=$1 AND hash=ANY($2::text[])",[accountId,currentManifestRefs]);await purgeExpiredLibraryCloudBlocks(pool,new Date(),100,accountId);assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[accountId,currentManifestRefs])).rows[0].n,currentManifestRefs.length,'current head blocks remain protected after their upload lease expires');
@@ -1059,7 +1068,7 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  }
  assert.equal((await pool.query('SELECT revision FROM sensa_consumer.library_cloud WHERE account_id=$1',[accountId])).rows[0].revision,head.revision);
  const deletion=await post('account/deletion',{operationId:crypto.randomUUID(),confirmation:'delete-account'});assert.equal(deletion.status,200);
- for(const table of ['library_cloud','library_cloud_blocks','library_cloud_commits','library_cloud_snapshot_leases','library_cloud_block_refs'])assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.'+table+' WHERE account_id=$1',[accountId])).rows[0].n,0);
+ for(const table of ['library_cloud','library_cloud_blocks','library_cloud_commits','library_cloud_snapshot_leases','library_cloud_block_refs','library_cloud_rows','library_cloud_log','library_cloud_snapshots','library_cloud_membership','library_cloud_reads'])assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.'+table+' WHERE account_id=$1',[accountId])).rows[0].n,0);
  assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud WHERE account_id=$1',[otherId])).rows[0].n,1);
  });
  }finally{await fixture.close();}

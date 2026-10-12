@@ -1,6 +1,6 @@
 import type {Database,PreparedStatement} from '@sqlite.org/sqlite-wasm';
 import {z} from 'zod';
-import {librarySyncHead,librarySyncBlockChars,canonicalConsumerJson} from '@sensa/contracts/sensa';
+import {librarySyncHead,librarySyncPullResult,librarySyncSnapshotPageResult,librarySyncMetadataPageBytes,librarySyncMetadataPageRefs,librarySyncBlockChars,canonicalConsumerJson} from '@sensa/contracts/sensa';
 import {sha256} from '@sensa/learning-kernel';
 import {backupEqual,decodeBackupValue,encodeBackupValue} from './backupCodec';
 import {packStoredRecord,unpackStoredRecord,sharedRecordTables,type StoredRecordMemo} from './sharedRecordContent';
@@ -17,7 +17,7 @@ import {replicaCandidateProofBatchBytes,verifyReplicaCandidateBlock,verifyReplic
 const uuid=z.string().uuid(),integer=z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const identitySchema=z.object({id:uuid,learnerId:uuid,deviceId:uuid,createdAt:z.string().datetime({offset:true}),schemaVersion:z.literal(2)}).strict();
 const fenceSchema=z.object({owner:z.object({subject:uuid,accountId:uuid}).strict(),incarnation:z.string().min(1).max(128),localRevision:integer,identity:identitySchema}).strict();
-const expectedSchema=z.object({libraryId:uuid,learnerId:uuid,records:z.number().int().min(1).max(200000),head:librarySyncHead.refine(head=>head.manifest!==null)}).strict();
+const expectedSchema=z.object({libraryId:uuid,learnerId:uuid,records:z.number().int().min(1).max(200000),stream:z.object({phase:z.enum(['snapshot','tail','complete']),position:z.object({revision:integer,offset:integer}),after:z.object({table:z.string(),key:z.string()}).nullable()}).optional(),head:librarySyncHead.refine(head=>head.manifest!==null)}).strict();
 const maximumRecordBytes=90*1024*1024,maximumLogicalBytes=512*1024*1024,maximumStoredBytes=256*1024*1024,appendBytes=4*1024*1024;
 const utf8=(text:string)=>new TextEncoder().encode(text).length;
 type Header={id:string;fence_json:string;expected_json:string;state:string;records:number;logical_bytes:number;stored_bytes:number;identity_json:string|null};
@@ -90,6 +90,79 @@ export class SqliteReplicaCandidates{
    this.database.exec('COMMIT');
   }catch(cause){try{this.database.exec('ROLLBACK');}catch(rollbackCause){throw sqliteRollbackFailure(cause,rollbackCause);}throw cause;}
   return id;
+ }
+ /** Index pages are an authenticated reference inventory. Body hashes and the
+  * complete existing domain admission still run before this private generation
+  * can replace facts, baseline and cursor in one local transaction. */
+ beginIndex(fence:ReplicaCandidateFence,head:import('@sensa/contracts/sensa').LibrarySyncHead,baseRevision:number|undefined,readBase:(table:SqliteLibraryTable,key:string)=>string):string{
+  fence=fenceSchema.parse(fence);head=librarySyncHead.parse(head);this.assertFence(fence);if(!head.manifest)this.fail();
+  this.ensure();if(this.validations.size||this.updates.size)throw Error('library_sync_candidate_busy');this.updatePlan=undefined;
+  const id=crypto.randomUUID(),seed=baseRevision!==undefined;
+  const expected=expectedSchema.parse({libraryId:head.manifest.libraryId,learnerId:head.manifest.learnerId,records:200000,head,stream:{phase:seed?'tail':'snapshot',position:{revision:seed?baseRevision:head.manifest.snapshotRevision,offset:0},after:null}});
+  this.database.exec('BEGIN IMMEDIATE');
+  try{
+   this.database.exec('DELETE FROM sensa_replica_candidates_v1');
+   this.database.exec({sql:"INSERT INTO sensa_replica_candidates_v1(id,fence_json,expected_json,state) VALUES(?,?,?,'filling')",bind:[id,JSON.stringify(fence),JSON.stringify(expected)]});
+   if(seed){
+    this.assertUpdateBase(this.header(id),baseRevision!);
+    this.database.exec({sql:'INSERT INTO sensa_replica_candidate_manifest_v1 SELECT ?,table_name,record_key,block_refs_json FROM sensa_sync_base',bind:[id]});
+    const metadata=this.rows<{bytes:number}>('SELECT COALESCE(sum(length(CAST(refs_json AS BLOB))+length(CAST(table_name AS BLOB))+length(CAST(record_key AS BLOB))),0) AS bytes FROM sensa_replica_candidate_manifest_v1 WHERE candidate_id=?',[id])[0].bytes;if(metadata>maximumStoredBytes)throw Error('library_sync_capacity');
+    this.database.exec({sql:'UPDATE sensa_replica_candidates_v1 SET stored_bytes=? WHERE id=?',bind:[metadata,id]});
+   }
+   this.database.exec('COMMIT');
+  }catch(cause){try{this.database.exec('ROLLBACK');}catch(rollbackCause){throw sqliteRollbackFailure(cause,rollbackCause);}throw cause;}
+  if(seed){
+   let afterTable='',afterKey='';
+   for(;;){
+    const keys=this.rows<{table:SqliteLibraryTable;key:string}>('SELECT table_name AS "table",record_key AS "key" FROM sensa_sync_base WHERE (table_name,record_key)>(?,?) ORDER BY table_name,record_key LIMIT 512',[afterTable,afterKey]);
+    if(!keys.length)break;this.reuse(id,baseRevision!,keys,readBase);const last=keys.at(-1)!;afterTable=last.table;afterKey=last.key;
+   }
+  }
+  return id;
+ }
+ indexPage(id:string,input:import('@sensa/contracts/sensa').LibrarySyncPullResult|import('@sensa/contracts/sensa').LibrarySyncSnapshotPageResult):RecordKey[]{
+  const header=this.header(id);this.check(header);if(header.state!=='filling')this.fail();
+  const expected=expectedSchema.parse(JSON.parse(header.expected_json)),stream=expected.stream;if(!stream||stream.phase==='complete')this.fail();
+  const snapshot=stream.phase==='snapshot',page=snapshot?librarySyncSnapshotPageResult.parse(input):librarySyncPullResult.parse(input);
+  let changes:import('@sensa/contracts/sensa').LibrarySyncChange[];
+  if('rows' in page){
+   if(page.snapshotRevision!==expected.head.manifest!.snapshotRevision||!backupEqual(page.after,stream.after)||!page.rows.length&&!page.done)this.fail();
+   changes=page.rows;
+   const last=page.rows.at(-1),next=last?{table:last.table,key:last.key}:stream.after;
+   if(!backupEqual(page.next,next))this.fail();
+   let previous=stream.after;
+   const compare=(a:string,b:string)=>{const x=new TextEncoder().encode(a),y=new TextEncoder().encode(b);for(let i=0;i<Math.min(x.length,y.length);i++)if(x[i]!==y[i])return x[i]-y[i];return x.length-y.length;};
+   for(const row of page.rows){if(previous&&(compare(row.table,previous.table)<0||row.table===previous.table&&compare(row.key,previous.key)<=0))this.fail();previous={table:row.table,key:row.key};}
+   stream.after=next;if(page.done)stream.phase=stream.position.revision===expected.head.revision?'complete':'tail';
+  }else{
+   if(page.toRevision!==expected.head.revision||!backupEqual(page.from,stream.position)||!page.changes.length)this.fail();
+   const next=page.next,old=stream.position;
+   if(!(next.revision===old.revision&&next.offset===old.offset+page.changes.length||next.revision===old.revision+1&&next.offset===0)||next.revision>expected.head.revision||page.done!==(next.revision===expected.head.revision))this.fail();
+   changes=page.changes;stream.position=next;if(page.done)stream.phase='complete';
+  }
+  if(utf8(JSON.stringify(changes))>librarySyncMetadataPageBytes||changes.reduce((n,row)=>n+(row.blocks?.length??0),0)>librarySyncMetadataPageRefs)throw Error('library_sync_capacity');
+  const needed:RecordKey[]=[];
+  this.database.exec('BEGIN IMMEDIATE');
+  try{
+   let removed=0,removedLogical=0,removedStored=0,metadataDelta=0;
+   for(const row of changes){
+    if(!isReplicatedLibraryEntry(row.table,row.key))this.fail();
+    const refs=row.blocks?JSON.stringify(row.blocks):null,prior=this.rows<StoredRow&{refs_json:string;stored_value_bytes:number}>('SELECT value_json,representation,refs_json,stored_value_bytes FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,row.table,row.key])[0];
+    if(prior&&prior.refs_json===refs)continue;
+    if(prior){removedLogical+=utf8(this.plainStored(prior));removedStored+=prior.stored_value_bytes+utf8(prior.refs_json);this.database.exec({sql:'DELETE FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',bind:[id,row.table,row.key]});removed++;}
+    const priorManifest=this.rows<{refs_json:string}>('SELECT refs_json FROM sensa_replica_candidate_manifest_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,row.table,row.key])[0];
+    if(priorManifest)metadataDelta-=utf8(priorManifest.refs_json)+utf8(row.table)+utf8(row.key);
+    if(refs){
+     metadataDelta+=utf8(refs)+utf8(row.table)+utf8(row.key);
+     this.database.exec({sql:'INSERT INTO sensa_replica_candidate_manifest_v1 VALUES(?,?,?,?) ON CONFLICT(candidate_id,table_name,record_key) DO UPDATE SET refs_json=excluded.refs_json',bind:[id,row.table,row.key,refs]});
+     this.database.exec({sql:'INSERT INTO sensa_replica_candidate_proofs_v1(candidate_id,digest) SELECT ?,value FROM json_each(?) WHERE true ON CONFLICT DO NOTHING',bind:[id,refs]});needed.push({table:row.table,key:row.key});
+    }else this.database.exec({sql:'DELETE FROM sensa_replica_candidate_manifest_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',bind:[id,row.table,row.key]});
+   }
+   if(header.stored_bytes-removedStored+metadataDelta>maximumStoredBytes)throw Error('library_sync_capacity');
+   if(stream.phase==='complete')expected.records=expected.head.manifest!.records;
+   this.database.exec({sql:'UPDATE sensa_replica_candidates_v1 SET records=records-?,logical_bytes=logical_bytes-?,stored_bytes=stored_bytes-?+?,expected_json=? WHERE id=?',bind:[removed,removedLogical,removedStored,metadataDelta,JSON.stringify(expected),id]});this.database.exec('COMMIT');
+  }catch(cause){try{this.database.exec('ROLLBACK');}catch(rollbackCause){throw sqliteRollbackFailure(cause,rollbackCause);}throw cause;}
+  return needed;
  }
  append(id:string,records:readonly ReplicaCandidateRecord[],blocks:readonly ReplicaCandidateBlock[]):void{
   const header=this.header(id);this.check(header);if(header.state!=='filling')this.fail();
@@ -189,7 +262,7 @@ export class SqliteReplicaCandidates{
   const running=this.validations.get(id);if(running)return running.result;
   const header=this.header(id);this.check(header);
   if(header.state==='validated')return Promise.resolve(this.receipt(header));
-  if(header.state!=='filling'||header.records!==expectedSchema.parse(JSON.parse(header.expected_json)).records)this.fail();
+  const expected=expectedSchema.parse(JSON.parse(header.expected_json));if(header.state!=='filling'||header.records!==expected.records||expected.stream&&expected.stream.phase!=='complete')this.fail();
   this.database.exec({sql:"UPDATE sensa_replica_candidates_v1 SET state='sealed' WHERE id=?",bind:[id]});
   const controller=new AbortController();
   const result=(async()=>{

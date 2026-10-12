@@ -1,3 +1,4 @@
+import {IndexedSyncFixture} from '../support/indexedSyncFixture.mts';
 /** Real Chromium/OPFS capacity baselines for structurally large, low-media Books. */
 import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
@@ -48,6 +49,7 @@ let registry:unknown;
 let cloudRevision=0;
 let cloudManifest:string[]|null=null;
 const cloudBlocks=new Map<string,string>();
+const cloudIndex=new IndexedSyncFixture(cloudBlocks);
 let deliveredBytes=0;
 let deliveryRequests=0;
 
@@ -114,7 +116,7 @@ test.beforeAll(async()=>{
       if(url.pathname==='/sensa/intake/channel'){json({registered:true,libraryId:'capacity-fixture-library'});return;}
       if(url.pathname==='/sensa/intake/deliveries/pull'){json({deliveries:[]});return;}
       if(url.pathname==='/sensa/library-sync/head'){
-        json({revision:cloudRevision,manifest:cloudManifest});return;
+        json(cloudIndex.head(cloudRevision,cloudManifest));return;
       }
       if(url.pathname==='/sensa/library-sync/blocks/missing'){
         const input=await body() as {hashes?:string[]};
@@ -134,11 +136,11 @@ test.beforeAll(async()=>{
           missing:hashes.filter(hash=>!cloudBlocks.has(hash)),
         });return;
       }
+      if(url.pathname==='/sensa/library-sync/snapshot'||url.pathname==='/sensa/library-sync/pull'){
+        json(cloudIndex.page(url.pathname.replace('/sensa/library-sync',''),await body(),cloudRevision,cloudManifest));return;
+      }
       if(url.pathname==='/sensa/library-sync/commit'){
-        const input=await body() as {baseRevision?:number;manifest?:string[]};
-        if(input.baseRevision!==cloudRevision){json({code:'library_sync_conflict'},409);return;}
-        cloudRevision+=1;cloudManifest=input.manifest??[];
-        json({revision:cloudRevision,manifest:cloudManifest});return;
+        try{const result=cloudIndex.commit(await body(),cloudRevision,cloudManifest);cloudRevision=result.revision;cloudManifest=result.manifest;json(result.head);}catch(error){json({code:error instanceof Error?error.message:'library_sync_format'},409);}return;
       }
 
       const deliveryUrl=new URL(url.pathname,origin).href;
@@ -214,7 +216,7 @@ test.beforeEach(()=>{
   activeDelivery=null;
   deliveredBytes=0;
   deliveryRequests=0;
-  cloudRevision=0;
+  cloudRevision=0;cloudIndex.clear();
   cloudManifest=null;
   cloudBlocks.clear();
 });

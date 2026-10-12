@@ -188,7 +188,7 @@ Package key；运行恢复、策略锁定和生成频控通过领域索引查询
 普通命令或诊断修复失败后的回滚错误保留在 cause 链中，不能因原错误不致命而掩盖回滚的 I/O／损坏错误。包装器构造成功前也持有原生数据库引用，构造失败须先关闭原生句柄，再暂停池、验证并释放租约；未确认清理成功时保留引用和锁供重试，不创建新库。
 普通重开复用已有结构与统计，不重放 DDL、重写版本或制造缺失的空源表。Book 版本替换和媒体引用完整性检查同样通过事务内
 关系投影完成。承载大 JSON 的逻辑 record 与 Target 投影使用普通 rowid 表，紧凑关系投影使用
-`WITHOUT ROWID`；内容事务维护记录级 revision 与删除 tombstone，供账号同步只读取上次收敛后变化的记录。云端确认的逐记录基线和 block refs 保存在内部 `sensa_sync_base` 表；未变化记录不再重新编码、分块或下载。`packageInstallations` 保存可跨设备复制的精确 `.sensa` identity、语言方向、长度、digest 与来源 Book archive digest；完整 Portable artifact 与编译后的设备 Runtime content 只进入本地 `packageCache`，缓存写入不增加个人内容 revision。恢复后由 Content Supply 使用 Registry 中的 `.sensa-book` 位置一次重新取得，验证外层摘要及全部成员，再只恢复已有安装事实对应的缓存；解析或下载失败时 Learning Target 保留但 readiness 为 blocked。状态只保存小型幂等 commit receipt，不重复保存整库或待发布记录。`npm run benchmark:cloud-sync` 使用受控传输在真实 Chromium/OPFS 上执行 1k/10k 合成 Draft 的同步，检查单记录变化只上传记录块与受影响的 manifest 分片；它不是成熟学习历史、真实 API/网络或账号容量验收。
+`WITHOUT ROWID`；内容事务维护记录级 revision 与删除 tombstone，供账号同步只读取上次收敛后变化的记录。云端确认的逐记录基线和 block refs 保存在内部 `sensa_sync_base` 表；未变化记录不再重新编码、分块或下载。`packageInstallations` 保存可跨设备复制的精确 `.sensa` identity、语言方向、长度、digest 与来源 Book archive digest；完整 Portable artifact 与编译后的设备 Runtime content 只进入本地 `packageCache`，缓存写入不增加个人内容 revision。恢复后由 Content Supply 使用 Registry 中的 `.sensa-book` 位置一次重新取得，验证外层摘要及全部成员，再只恢复已有安装事实对应的缓存；解析或下载失败时 Learning Target 保留但 readiness 为 blocked。状态只保存小型幂等 commit receipt，不重复保存整库或待发布记录。`npm run benchmark:cloud-sync` 使用受控传输在真实 Chromium/OPFS 上执行 1k/10k 合成 Draft 的同步，检查单记录变化只上传记录块与引用 patch；它不是成熟学习历史、真实 API/网络或账号容量验收。
 内容摘要、key/digest 和语言方向数量使用同事务维护的设备侧投影；它们不进入备份或账号同步，可以从真实缓存重建。
 整库三方合并共用一个可分步执行的领域合并实现：普通同步调用与云同步协作调度不维护两套规则。
 个人意义分支校验按 Meaning 解码相关操作回执，分组只保留记录引用；可重复的按需正文读取若失败，
@@ -306,8 +306,8 @@ Target/Memory/Schedule 投影重放。API 对 Learning Event 与裁决记录都�
 学习运行时只在 Web 本机执行：目标选择、Protocol/Policy、步骤、评价、Completion、Memory Outcome 与
 FSRS 都由本地领域事务结算。Hono/Edge 不创建或推进学习 Run，也不重新计算从云同步取回的学习事实。
 
-普通账号云同步以本机已提交的 Personal Library Facts 为输入。云端保存版本化清单和按内容寻址的数据块；
-下载按响应字节预算分页，客户端消费服务端返回的 deferred 列表。`operations` 是 Device Operation Ledger，
+普通账号云同步以本机已提交的 Personal Library Facts 为输入。云端以账号锁下的 revision 作为唯一提交 cursor，保存当前 `(table,key) → ordered refs` 索引、不可变引用差分日志、固定 cursor 的索引快照和按内容寻址的数据块。首次发布的 v8 完整 manifest 只用于建立索引；日常 commit 提交变化行的引用 patch，不再重建或传输全目录。索引页同时限制 512 行、4096 次引用与 4 MiB UTF-8，pull 绑定 head 的 read lease 和固定上界，连续分页只进入私有候选。越过 floor 或租约过期明确要求完整快照恢复；完整领域准入、历史保护和首次跨设备信任合同继续保留。
+正文下载按响应字节预算分页，客户端消费服务端返回的 deferred 列表。`operations` 是 Device Operation Ledger，
 只用于同一设备上的命令幂等，不进入同步清单；Learning Event 直接以自身 Action、Materialization、
 Evaluation 与 Transition 数据完成不可改写验证和重放。Remote Intake 重投可从 Draft 保存的 canonical
 Intake 重建本地结果，不需要同步完整命令输入或返回值。同一份 base64 媒体按内容边界切块，使重复引用
@@ -320,10 +320,10 @@ Personal Anchor media 与 Practice Artifact 仍按各自 learner-owned 表进入
 不可改写保护比较解码后的完整文本，不比较压缩表示。客户端限制同时保留的传输块为 96 MiB，并分窗口
 消费、在最后引用后释放；解码行上限 90 MiB、累计新增解码事实上限保持 64 MiB 是不同保护，不是 JS heap
 承诺或已通过的大规模云端性能结论。账号存储边界仍为 256 MiB。不兼容 checkpoint 停止同步并保留原副本，
-不会为编码升级自动覆盖旧 head。
+不会为编码升级自动覆盖旧 head。当前初次 capture／prepare 的 64 MiB 展开保护仍保留；索引协议不代表首发大库已解决。服务端每累计 128 次提交或 4 MiB tail 建立冻结索引快照，旧 snapshot／log owners 和幂等回执继续保留；历史剪枝仅提供隔离验证入口，尚未启用在线删除，旧版本仍占账号容量。
 已由当前 replica validation version 完整校验并确认的 v6 基线，在相同远端 revision 下复用本机 owner 事务准入：
 无变化只读取轻量身份、同步游标并核对 head；本机增量只读取变化事实和对应基线正文，保留其余 block refs，
-确认 CAS commit 后在同一 SQLite 事务中 patch 受影响基线与同步状态。后续本机写入保留 pending，不能把游标
+确认带原 operation ID／请求 digest 的 CAS 回执后，在同一 SQLite 事务中 patch 受影响基线与同步状态。远端 tail 从已验证 baseline 建立 Worker overlay，完整验证后在一次本地事务提交事实、baseline 和 cursor；冲突的混合 baseline 仍走完整三方收敛。后续本机写入保留 pending，不能把游标
 推进到未上传版本；丢失或无法确认 ACK 仍用原 operation 重试。服务端明确在提交前拒绝的历史／身份错误
 才清除该 pending receipt，保留本机事实与原基线，避免反复重放必败请求。普通物理删除继续交由领域 Replica
 的许可规则裁决。

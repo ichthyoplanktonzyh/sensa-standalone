@@ -1,4 +1,4 @@
-import {librarySyncHead,librarySyncBlock,librarySyncBlockChars,librarySyncManifest,type LibrarySyncManifest} from '@sensa/contracts/sensa';
+import {librarySyncHead,librarySyncBlock,librarySyncBlockChars,librarySyncManifest,librarySyncRefs,type LibrarySyncManifest} from '@sensa/contracts/sensa';
 import {decodeLibrarySyncBlock} from '@sensa/contracts/sensa/library-sync-blocks';
 import {sha256} from '@sensa/learning-kernel';
 import type {ReplicaCandidateBlock,ReplicaCandidateExpected} from './replicaCandidateProtocol';
@@ -24,18 +24,19 @@ export function verifyReplicaCandidateManifest(input:ReplicaCandidateExpected):{
   if(typeof block?.data!=='string'||block.data.length>librarySyncBlockChars)throw Error('library_sync_candidate_invalid');
   storedBytes+=utf8(block.data);if(storedBytes>maximumManifestBytes)throw Error('library_sync_capacity');
  }
- const requested=new Set(head.manifest),parts=new Map<string,string>();let decodedBytes=0;
+ librarySyncRefs.parse(input.manifestRefs);
+ const requested=new Set(input.manifestRefs),parts=new Map<string,string>();let decodedBytes=0;
  for(const block of input.manifestBlocks){
   if(!requested.has(block.hash)||parts.has(block.hash))throw Error('library_sync_candidate_invalid');
   const verified=verifyReplicaCandidateBlock(block);decodedBytes+=verified.plainBytes;
   if(decodedBytes>maximumManifestBytes)throw Error('library_sync_capacity');
   parts.set(verified.hash,verified.text);
  }
- let bytes=0;const text=head.manifest.map(hash=>{
+ let bytes=0;const text=input.manifestRefs.map(hash=>{
   const part=parts.get(hash);if(part===undefined)throw Error('library_sync_missing_block');
   bytes+=utf8(part);if(bytes>maximumManifestBytes)throw Error('library_sync_capacity');return part;
  }).join('');
  const manifest=librarySyncManifest.parse(JSON.parse(text));
- if(!manifest.rows.length)throw Error('library_sync_candidate_invalid');
+ if(!manifest.rows.length||manifest.libraryId!==head.manifest.libraryId||manifest.learnerId!==head.manifest.learnerId||manifest.rows.length!==head.manifest.records)throw Error('library_sync_candidate_invalid');
  return {head,manifest};
 }

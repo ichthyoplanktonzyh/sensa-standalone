@@ -1,3 +1,4 @@
+import {IndexedSyncFixture} from '../support/indexedSyncFixture.mts';
 /** Shipped sync over SQLite/Wasm, with SQL faults and controlled transport.
  * This proves restore atomicity, not OPFS durability or large-account capacity. */
 import {createHash,randomBytes} from 'node:crypto';
@@ -21,12 +22,12 @@ beforeEach(async()=>{
  database=await useNodeLearningCapacityStorage();sql=Reflect.get(database,'database');
  localIdentity=await openLibrary();remoteIdentity={...localIdentity,id:crypto.randomUUID(),learnerId:crypto.randomUUID()};remoteIdentity.deviceId=remoteIdentity.id;
  await writeLibraryState(async tx=>tx.put('meta','service-owner',{subject:crypto.randomUUID(),accountId:crypto.randomUUID()}));
- blocks.clear();revision=0;manifest=[];onFetch=undefined;
+ blocks.clear();index.clear();revision=0;manifest=[];onFetch=undefined;
 });
 afterEach(()=>database.close());
 const first={id:crypto.randomUUID(),revision:1,text:'A complete cloud draft.',createdAt:'2026-10-08T00:00:00.000Z',updatedAt:'2026-10-08T00:00:00.000Z'};
 const second={...first,id:crypto.randomUUID(),text:'Another remote draft.'};
-const blocks=new Map<string,string>();let revision=0,manifest:string[]=[];
+const blocks=new Map<string,string>(),index=new IndexedSyncFixture(blocks);let revision=0,manifest:string[]=[];
 function block(text:string){const data=encodeLibrarySyncBlock(text),id=createHash('sha256').update(data).digest('hex');blocks.set(id,data);return id;}
 function publish(drafts:typeof first[]){
  const entries=[{table:'meta',key:'identity',value:remoteIdentity},...drafts.map(value=>({table:'drafts',key:value.id,value}))];
@@ -34,11 +35,11 @@ function publish(drafts:typeof first[]){
 }
 function publishEntries(entries:Array<{table:string;key:string;value:unknown}>){
  const rows=entries.map(row=>({table:row.table,key:row.key,blocks:[block(JSON.stringify(encodeBackupValue(row.value)))]}));
- manifest=splitLibrarySyncText(JSON.stringify({version:8,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows})).map(block);revision++;
+ manifest=splitLibrarySyncText(JSON.stringify({version:8,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows})).map(block);revision++;index.observe(revision,manifest);
 }
 let onFetch:(()=>Promise<void>)|undefined;
 const request:SyncRequest=async(path,body)=>{
- if(path==='/head')return {revision,manifest};
+ const page=index.page(path,body,revision,manifest);if(page!==undefined)return page;
  if(path==='/blocks/fetch'){
   await onFetch?.();
   const input=librarySyncBlockFetch.parse(body);
@@ -89,7 +90,7 @@ test('repacked remote facts patch references without a content revision and reco
  publish([first]);await synchronizeLibrary(request);const before=await facts();
  const entries=[{table:'meta',key:'identity',value:remoteIdentity},{table:'drafts',key:first.id,value:first}];
  const rows=entries.map(row=>({table:row.table,key:row.key,blocks:[block(' '+JSON.stringify(encodeBackupValue(row.value))+' ')]}));
- manifest=splitLibrarySyncText(JSON.stringify({version:8,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows})).map(block);revision++;
+ manifest=splitLibrarySyncText(JSON.stringify({version:8,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows})).map(block);revision++;index.observe(revision,manifest);
  sql.exec(`CREATE TEMP TRIGGER repack_no_source_write BEFORE INSERT ON sensa_records WHEN NEW.table_name='drafts' BEGIN SELECT RAISE(ABORT,'repack rewrote source'); END`);
  const adapter=await sqliteRecordAdapter(),commit=adapter.commit.bind(adapter);let lost=false;
  adapter.commit=async mutation=>{await commit(mutation);if(mutation.replicaCandidateRestore?.update){expect(mutation.contentRevision).toBeUndefined();lost=true;throw Error('sqlite_coordination_timeout');}};
@@ -180,7 +181,7 @@ test('publishing unrelated facts persists the comparison head before final statu
  const transport:SyncRequest=async(path,body)=>{
   if(path==='/blocks/missing')return {missing:librarySyncBlockMissing.parse(body).hashes.filter(hash=>!blocks.has(hash))};
   if(path==='/blocks/store'){for(const row of librarySyncBlockStore.parse(body).blocks)blocks.set(row.hash,row.data);return {stored:true};}
-  if(path==='/commit'){const input=librarySyncCommit.parse(body);expect(input.baseRevision).toBe(revision);manifest=input.manifest;return {revision:++revision,manifest};}
+  if(path==='/commit'){const result=index.commit(body,revision,manifest);manifest=result.manifest!;revision=result.revision;return result.head;}
   return request(path,body);
  };
  const adapter=await sqliteRecordAdapter(),commit=adapter.commit.bind(adapter);let failed=false;
@@ -192,7 +193,7 @@ test('publishing unrelated facts persists the comparison head before final statu
  });
  try{await expect(synchronizeLibrary(transport)).rejects.toThrow('localFlow.storageWrite');}finally{spy.mockRestore();}
  expect(failed).toBe(true);const state=(await readCloudSync())!;
- expect(state.revision).toBe(revision);expect(state.conflict?.remoteRevision).toBe(revision);expect(state.conflict?.remoteManifest).toEqual(manifest);
+ expect(state.revision).toBe(revision);expect(state.conflict?.remoteRevision).toBe(revision);expect(state.conflict?.remoteManifest).toEqual(index.head(revision,manifest).manifest);
  expect((await facts()).drafts.map(row=>(row.value as any).text)).toEqual(expect.arrayContaining(['Local conflicting edit.','Independent new context.']));
  await synchronizeLibrary(transport);expect((await readCloudSync())?.status).toBe('conflict');
 });
@@ -211,7 +212,7 @@ for(const pageLimit of [librarySyncBlockFetchBytes,2048])test(`fresh restoration
  };
  await synchronizeLibrary(transport);
  expect(Math.max(...requested)).toBe(librarySyncBlockFetchHashes);
- if(pageLimit===librarySyncBlockFetchBytes){expect(requested).toHaveLength(4);expect(deferredReplies).toBe(0);}
+ if(pageLimit===librarySyncBlockFetchBytes){expect(requested).toHaveLength(3);expect(deferredReplies).toBe(0);}
  else expect(deferredReplies).toBeGreaterThan(0);
  expect([...delivered.values()].every(count=>count===1)).toBe(true);
  expect(await readLibrary(tx=>tx.count('drafts'))).toBe(drafts.length);expect(await readLibrary(tx=>tx.get('drafts',drafts.at(-1)!.id))).toEqual(drafts.at(-1));
@@ -226,7 +227,7 @@ test('byte-deferred shared bodies preserve future prefetch hashes until their fi
   const parts=at<0?[text]:[text.slice(0,at),shared,text.slice(at+shared.length)];
   return {table:row.table,key:row.key,blocks:parts.flatMap(part=>splitLibrarySyncText(part).map(block))};
  });
- manifest=splitLibrarySyncText(JSON.stringify({version:8,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows})).map(block);revision++;
+ manifest=splitLibrarySyncText(JSON.stringify({version:8,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows})).map(block);revision++;index.observe(revision,manifest);
  const delivered=new Map<string,number>();let deferredPages=0;
  await synchronizeLibrary(async(path,body)=>{
   if(path!=='/blocks/fetch')return request(path,body);
@@ -393,7 +394,7 @@ test('a same-library identity fork still requires explicit conflict handling',as
 for(const existing of [false,true])test(`a missing body after head replacement discards the old generation (existing checkpoint: ${existing})`,async()=>{
  if(existing){publish([first]);await synchronizeLibrary(request);}
  publish(existing?[first,second]:[first]);let fetches=0;const latest={...second,text:'New head after retiring the old body.'};
- onFetch=async()=>{if(++fetches===2){blocks.clear();publish([latest]);}};
+ onFetch=async()=>{if(++fetches===1){blocks.clear();index.compact(revision+1);publish([latest]);}};
  try{await synchronizeLibrary(request);}finally{onFetch=undefined;}
  const after=await facts();expect(after.drafts.map(row=>row.value)).toEqual([latest]);expect((await readCloudSync())?.revision).toBe(existing?3:2);expect((await readCloudSync())?.status).toBe('synced');
 });
@@ -414,7 +415,7 @@ test('a legal row with over 512 unique fragments proves in batches before its bo
  for(let at=0;at<wire.length;at+=16)refs.push(block(wire.slice(at,at+16)));
  expect(new Set(refs).size).toBeGreaterThan(512);expect(refs.length).toBeLessThanOrEqual(2048);
  const rows=[{table:'meta',key:'identity',blocks:[block(JSON.stringify(encodeBackupValue(remoteIdentity)))]},{table:'settings',key:'fragmented-opaque',blocks:refs}];
- manifest=splitLibrarySyncText(JSON.stringify({version:8,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows})).map(block);revision++;
+ manifest=splitLibrarySyncText(JSON.stringify({version:8,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows})).map(block);revision++;index.observe(revision,manifest);
  const adapter=await sqliteRecordAdapter(),original=adapter.replicaCandidate.bind(adapter);let proofs=0;
  adapter.replicaCandidate=async message=>{if(message.kind==='prove')proofs++;return original(message);};
  try{await synchronizeLibrary(request);}finally{adapter.replicaCandidate=original;}
@@ -427,7 +428,7 @@ test('dense repeated fragments split by total reference work without changing th
  const rows=[{table:'meta',key:'identity',blocks:[block(JSON.stringify(encodeBackupValue(remoteIdentity)))]},...settings.map(setting=>{
   const wire=JSON.stringify(encodeBackupValue(setting.value)),refs=[block('['),...Array.from({length:2046},()=>block(' ')),block(wire.slice(1))];refsByKey.set(setting.key,refs);return {table:'settings',key:setting.key,blocks:refs};
  })];
- manifest=splitLibrarySyncText(JSON.stringify({version:8,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows})).map(block);revision++;
+ manifest=splitLibrarySyncText(JSON.stringify({version:8,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows})).map(block);revision++;index.observe(revision,manifest);
  const adapter=await sqliteRecordAdapter(),original=adapter.replicaCandidate.bind(adapter);let appends=0,maximumReferences=0;
  adapter.replicaCandidate=async message=>{if(message.kind==='append'){appends++;maximumReferences=Math.max(maximumReferences,message.records.reduce((sum,row)=>sum+row.blockRefs.length,0));}return original(message);};
  try{await synchronizeLibrary(request);}finally{adapter.replicaCandidate=original;}
@@ -446,7 +447,7 @@ for(const kind of ['compressed','high-entropy'] as const)test(`large ${kind} sin
  }
  const refs=splitLibrarySyncText(JSON.stringify(encodeBackupValue(setting))).map(block);
  const rows=[{table:'meta',key:'identity',blocks:[block(JSON.stringify(encodeBackupValue(remoteIdentity)))]},{table:'settings',key:'large-opaque',blocks:refs}];
- manifest=splitLibrarySyncText(JSON.stringify({version:8,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows})).map(block);revision++;
+ manifest=splitLibrarySyncText(JSON.stringify({version:8,libraryId:remoteIdentity.id,learnerId:remoteIdentity.learnerId,rows})).map(block);revision++;index.observe(revision,manifest);
  const adapter=await sqliteRecordAdapter(),original=adapter.replicaCandidate.bind(adapter);let proofs=0;
  adapter.replicaCandidate=async message=>{
   if(message.kind==='prove'){
@@ -502,4 +503,27 @@ test('copied accepted Meanings retain every fact and Registry lookup through com
   expect(raw.exec({sql:'SELECT * FROM sensa_records ORDER BY table_name,record_key',rowMode:'object',returnValue:'resultRows'})).toEqual(stored);
   expect(cold.syncBaseEntries().find(row=>row.table==='semanticMeanings'&&row.key===firstMeaning.personalMeaning.personalMeaningId)?.valueJson).toBe(wire);
  }finally{cold.close(false);}
+});
+
+for(const fault of ['duplicate-page','skipped-position','wrong-upper-bound','partial-final'] as const)test(`cursor overlay rejects ${fault} without advancing facts or baseline`,async()=>{
+ remoteIdentity={...localIdentity,deviceId:localIdentity.id};publish([first]);await synchronizeLibrary(request);const before=await facts(),checkpoint=await readCloudSync();
+ publish([first,second]);publish([first,second,{...second,id:crypto.randomUUID(),text:'Third committed tail fact.'}]);
+ let previous:any;
+ const transport:SyncRequest=async(path,body)=>{const page=await request(path,body);if(path!=='/pull')return page;
+  if(fault==='duplicate-page'){if(previous)return previous;previous=page;return page;}
+  if(fault==='skipped-position')return {...page,from:{revision:page.from.revision+1,offset:0}};
+  if(fault==='wrong-upper-bound')return {...page,toRevision:page.toRevision+1};
+  return {...page,done:!page.done};
+ };
+ await expect(synchronizeLibrary(transport)).rejects.toThrow('library_sync_format');expect(await facts()).toEqual(before);expect((await readCloudSync())?.revision).toBe(checkpoint?.revision);
+ await synchronizeLibrary(request);expect((await facts()).drafts).toHaveLength(3);expect((await readCloudSync())?.revision).toBe(revision);
+});
+
+test('tail replacements count the final candidate body once instead of exhausting a cumulative copy budget',async()=>{
+ remoteIdentity={...localIdentity,deviceId:localIdentity.id};publish([first]);await synchronizeLibrary(request);
+ publish([{...first,text:'An intermediate committed body.'}]);const final={...first,text:'The final committed body, retained once.'};publish([final]);
+ const adapter=await sqliteRecordAdapter(),replica=adapter.replicaCandidate.bind(adapter);let logicalBytes:number|undefined;
+ const spy=vi.spyOn(adapter,'replicaCandidate').mockImplementation(async input=>{const response=await replica(input);if(response.kind==='validated')logicalBytes=response.candidate.logicalBytes;return response;});
+ try{await synchronizeLibrary(request);}finally{spy.mockRestore();}
+ expect(logicalBytes).toBe(Buffer.byteLength(JSON.stringify(encodeBackupValue(remoteIdentity)))+Buffer.byteLength(JSON.stringify(encodeBackupValue(final))));expect((await facts()).drafts.map(row=>row.value)).toEqual([final]);
 });

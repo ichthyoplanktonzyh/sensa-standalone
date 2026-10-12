@@ -1,3 +1,4 @@
+import {IndexedSyncFixture} from '../support/indexedSyncFixture.mts';
 /** Actual Library/SQLite/Wasm and owner commands; controlled sync transport.
  * Read/write assertions cover real baseline work, not just uploaded bytes. */
 import {test,expect,afterAll,vi} from 'vitest';
@@ -15,19 +16,16 @@ Object.defineProperty(globalThis,'navigator',{value:{onLine:true},configurable:t
 const database=await useNodeLearningCapacityStorage();afterAll(()=>database.close());
 const {synchronizeLibrary,readCloudSync,inspectPendingCloudSync}=await import('../../../apps/web/src/data/library/cloudSync');
 const {libraryRestoreValidationVersion}=await import('../../../apps/web/src/data/library/replication/libraryReplicaValidation');
-const blocks=new Map<string,string>(),receipts=new Map<string,{revision:number;manifest:string[]}>(),calls:string[]=[];
+const blocks=new Map<string,string>(),calls:string[]=[];
 let revision=0,manifest:string[]|null=null,hook:((path:string,body:any)=>Promise<void>)|undefined;
+const index=new IndexedSyncFixture(blocks);
 const request:SyncRequest=async(path,body)=>{
  calls.push(path);await hook?.(path,body);
- if(path==='/head')return {revision,manifest};
+ const page=index.page(path,body,revision,manifest);if(page!==undefined)return page;
  if(path==='/blocks/missing'){const input=librarySyncBlockMissing.parse(body);return {missing:input.hashes.filter(hash=>!blocks.has(hash))};}
  if(path==='/blocks/store'){for(const row of librarySyncBlockStore.parse(body).blocks)blocks.set(row.hash,row.data);return {stored:true};}
  if(path==='/blocks/fetch'){const input=librarySyncBlockFetch.parse(body);return {blocks:input.hashes.filter(hash=>blocks.has(hash)).map(hash=>({hash,data:blocks.get(hash)})),missing:input.hashes.filter(hash=>!blocks.has(hash)),deferred:[]};}
- if(path==='/commit'){
-  const input=librarySyncCommit.parse(body),previous=receipts.get(input.operationId);if(previous)return previous;
-  if(input.baseRevision!==revision)throw new Error('library_sync_conflict');
-  revision++;manifest=[...input.manifest];const receipt={revision,manifest:[...input.manifest]};receipts.set(input.operationId,receipt);return receipt;
- }
+ if(path==='/commit'){const committed=index.commit(body,revision,manifest);revision=committed.revision;manifest=committed.manifest;return committed.head;}
  throw new Error('Unexpected fixture transport request');
 };
 const published=()=>{
@@ -56,6 +54,7 @@ test('a validated checkpoint checks only metadata when unchanged and publishes o
  }finally{allBodies.mockRestore();pointBodies.mockRestore();pages.mockRestore();}
  await synchronizeLibrary(request);expect((await readCloudSync())?.restoreValidationVersion).toBe(libraryRestoreValidationVersion);
  const adapter=await sqliteRecordAdapter(),base=adapter.syncBaseEntries.bind(adapter),commit=adapter.commit.bind(adapter);
+ const metadata=vi.spyOn(adapter,'syncBaseReferences').mockImplementation(async()=>{throw Error('incremental sync read the entire reference directory');});
  const read=vi.spyOn(adapter,'entries').mockImplementation(async()=>{throw new Error('incremental sync read a whole source table');});
  const baseline=vi.spyOn(adapter,'syncBaseEntries').mockImplementation(async keys=>{if(keys===undefined)throw new Error('incremental sync read all baseline bodies');return base(keys);});
  const mutations:Parameters<typeof adapter.commit>[0][]=[],writes=vi.spyOn(adapter,'commit').mockImplementation(async mutation=>{if(mutation.syncBaseReplacement!==undefined)throw new Error('incremental sync replaced the whole baseline');mutations.push(mutation);await commit(mutation);});
@@ -72,7 +71,7 @@ test('a validated checkpoint checks only metadata when unchanged and publishes o
   expect(remote.find(row=>row.key===changed.id)?.value).toEqual(changed);
   expect(remote.find(row=>row.key===drafts[1]!.id)?.value).toEqual(drafts[1]);
   read.mockRestore();expect(await listDrafts()).toHaveLength(256);expect((await readCloudSync())?.status).toBe('synced');
- }finally{read.mockRestore();baseline.mockRestore();writes.mockRestore();}
+ }finally{read.mockRestore();baseline.mockRestore();writes.mockRestore();metadata.mockRestore();}
 });
 
 test('a local write during an unchanged-head check stays pending rather than becoming falsely synced',async()=>{
@@ -117,12 +116,12 @@ test('a definite pre-commit history rejection releases its failed receipt withou
  await expect(synchronizeLibrary(rejected)).rejects.toThrow('library_sync_history');
  expect(revision).toBe(before);expect((await readCloudSync())?.pending).toBeUndefined();expect((await readCloudSync())?.status).toBe('conflict');
  expect(await readLibrary(tx=>tx.syncBaseEntries())).toEqual(base);expect((await listDrafts()).find(row=>row.id===first.id)).toEqual(changed);
- await synchronizeLibrary(request);expect(revision).toBe(before+1);expect(receipts.has(rejectedIds[0]!)).toBe(false);expect((await readCloudSync())?.status).toBe('synced');
+ await synchronizeLibrary(request);expect(revision).toBe(before+1);expect(index.receipts.has(rejectedIds[0]!)).toBe(false);expect((await readCloudSync())?.status).toBe('synced');
 });
 
 test('a malformed acknowledgement retains its operation for an idempotent confirmation retry',async()=>{
  const first=(await listDrafts())[0]!;await saveDraft(crypto.randomUUID(),{id:first.id,expectedRevision:first.revision,text:'A committed but untrusted acknowledgement.'});
- const malformed:SyncRequest=async(path,body)=>{const result=await request(path,body);return path==='/commit'?{...result,manifest:['f'.repeat(64)]}:result;};
+ const malformed:SyncRequest=async(path,body)=>{const result=await request(path,body);return path==='/commit'?{...result,receipt:{operationId:(body as any).operationId,requestDigest:'f'.repeat(64)}}:result;};
  await expect(synchronizeLibrary(malformed)).rejects.toThrow('library_sync_format');const committed=revision,pending=(await readCloudSync())?.pending;
  expect(pending).toBeTruthy();calls.length=0;await synchronizeLibrary(request);expect(calls[0]).toBe('/commit');expect(revision).toBe(committed);expect((await readCloudSync())?.pending).toBeUndefined();
 });
@@ -132,7 +131,7 @@ test('conflict markers and an unknown validation version cannot use an unchanged
   const state=await readCloudSync();await writeLibraryState(async tx=>tx.put('meta','cloud-sync',{...state,...patch}));
   calls.length=0;const adapter=await sqliteRecordAdapter(),reads=vi.spyOn(adapter,'syncBaseEntries');
   try{await synchronizeLibrary(request);expect(reads.mock.calls.some(([keys])=>keys===undefined)).toBe(true);}finally{reads.mockRestore();}
-  if('status'in patch||'conflict'in patch||'resolution'in patch)expect(calls).toContain('/blocks/fetch');
+  if('status'in patch||'conflict'in patch||'resolution'in patch)expect(calls).toContain('/snapshot');
  }
 });
 

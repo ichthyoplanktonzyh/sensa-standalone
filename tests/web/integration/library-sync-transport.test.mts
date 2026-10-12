@@ -15,11 +15,12 @@ test('an unrequested missing hash is a malformed reply, not permission to retry 
  const identity=await readLibrary(tx=>tx.get('meta','identity')),calls:string[]=[];
  await expect(synchronizeLibrary(async path=>{
   calls.push(path);
-  if(path==='/head')return {revision:1,manifest:['a'.repeat(64)]};
+  if(path==='/head')return {revision:1,manifest:{libraryId:(identity as any).id,learnerId:(identity as any).learnerId,snapshotRevision:1,floor:1,records:1}};
+  if(path==='/snapshot')return {snapshotRevision:1,after:null,next:{table:'meta',key:'identity'},rows:[{table:'meta',key:'identity',blocks:['a'.repeat(64)]}],done:true};
   if(path==='/blocks/fetch')return {blocks:[],missing:['b'.repeat(64)],deferred:[]};
   throw Error('Unexpected request');
  })).rejects.toThrow('library_sync_format');
- expect(calls).toEqual(['/head','/blocks/fetch']);
+ expect(calls).toEqual(['/head','/snapshot','/blocks/fetch']);
  expect(await readLibrary(tx=>tx.get('meta','identity'))).toEqual(identity);
  expect(await readLibrary(tx=>tx.count('learningEvents'))).toBe(0);
  expect((await readCloudSync())?.error).toBe('library_sync_format');
@@ -40,7 +41,7 @@ test('an old confirmed baseline cannot bypass the current checkpoint format gate
   if(path==='/blocks/fetch')return {blocks:[{hash,data:text}],missing:[],deferred:[]};
   throw Error('Unexpected request');
  })).rejects.toThrow('library_sync_incompatible_checkpoint');
- expect(calls).toEqual(['/head','/blocks/fetch']);
+ expect(calls).toEqual(['/head']);
  expect(await readLibrary(tx=>tx.get('meta','identity'))).toEqual(identity);
  expect((await readCloudSync())?.failureKind).toBe('terminal');
 });

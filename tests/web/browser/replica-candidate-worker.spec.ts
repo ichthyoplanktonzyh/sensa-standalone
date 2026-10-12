@@ -1,3 +1,4 @@
+import {IndexedSyncFixture} from '../support/indexedSyncFixture.mts';
 /** Production Worker/OPFS lifecycle and controlled-HTTP fresh restoration.
  * Optional instrumented diagnostics are labelled separately. No account UI
  * or mature-product capacity/latency-equivalence claim. */
@@ -144,10 +145,15 @@ for(const scenario of ['restore','write-during-validation','meaning-scale','mean
  // Use Vite's canonical /src URLs so the synchronizer and the instrumented
  // adapter share one module instance rather than /@fs aliases of that file.
  const storeUrl='/src/data/library/store.ts',syncUrl='/src/data/library/cloudSync.ts',adapterUrl='/src/data/library/sqliteAdapter.ts',draftUrl='/src/data/library/drafts.ts';
+ const indexFixture=new IndexedSyncFixture(fixture.wire);indexFixture.observe(fixture.expected.head.revision,fixture.expected.manifestRefs);
  const transportStats={fetchRequests:0,maxRequestedHashes:0,maxResponseDataBytes:0,deferredResponses:0};
   vite=await createViteServer({configFile:resolve('apps/web/vite.config.ts'),root:resolve('apps/web'),logLevel:'error',server:{middlewareMode:true,hmr:false,fs:{allow:[process.cwd()]}}});
   http=createServer(async(request,response)=>{
    if(request.url==='/candidate/head'){response.setHeader('content-type','application/json');response.end(JSON.stringify(fixture.expected.head));return;}
+   if(request.url==='/candidate/snapshot'||request.url==='/candidate/pull'){
+    const chunks:Buffer[]=[];for await(const chunk of request)chunks.push(Buffer.from(chunk));const body=JSON.parse(Buffer.concat(chunks).toString());
+    response.setHeader('content-type','application/json');response.end(JSON.stringify(indexFixture.page(request.url.replace('/candidate',''),body,fixture.expected.head.revision,fixture.expected.manifestRefs)));return;
+   }
    if(request.url==='/candidate/blocks/fetch'){
     try{
      const chunks:Buffer[]=[];for await(const chunk of request)chunks.push(Buffer.from(chunk));
