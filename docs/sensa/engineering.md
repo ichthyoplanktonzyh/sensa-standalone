@@ -354,6 +354,8 @@ schema version 或既有事实。只保留一个候选代，同 fence／预期 h
 用共用 codec、传输 SHA 和严格 Manifest schema 验证后固定完整的 key／有序 refs 集合，不接受自报记录数。
 append 的 raw block 经相同校验后只保留解码文本 SHA／字符数，逐片验证 row JSON 与有序 refs 的完整覆盖，
 不长期保留另一份已解码媒体；缺片、错序、正文／摘要／key 不符均拒绝。proof 元数据与事实批次同事务回滚。
+候选行显式标记本机 packed 表示与不透明外部 wire；未知 wire 原文不解包存储压缩 envelope，
+不能借 `sensa-record-gzip-v1` 或共享引用保留 tag 绕过逐行完整解码。
 Manifest 原始及解码 UTF-8 均受 64 MiB 上限保护；单块先检查字符长度，批级累计解压在保留文本前检查。
 append 只接收本批 rows 引用的 proof，原始 proof 批次受 4 MiB 保护，累计解压不能超过已预检的 row 字节量。
 单行的正文、proof 数量或传输量超出 append 批次时，prove 只接受该 Manifest row 的 refs，分批限制原始与累计

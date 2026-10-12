@@ -17,6 +17,7 @@ import {semanticRecords} from '../support/semanticWorldRecordFixture.mts';
 import {candidateExpected,candidateBlocksFor} from '../support/replicaCandidateFixture.mts';
 import {verifyReplicaCandidateManifest} from '../../../apps/web/src/data/library/replicaCandidateProof';
 import type {LibraryRecordReader} from '../../../apps/web/src/data/library/libraryRecordReader';
+import {packStoredRecord} from '../../../apps/web/src/data/library/sharedRecordContent';
 import {sealedRecordReader} from '../../../apps/web/src/data/library/sealedRecordReader';
 
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined,location:new URL('http://candidate-storage.fixture.invalid/')});
@@ -69,6 +70,13 @@ for(const fault of ['missing-root','opaque-codec'] as const)test(`complete gener
  const records=fault==='missing-root'?rows().filter(row=>row.table!=='semanticState'):[...rows(),{table:'settings' as const,key:'opaque-preference',valueJson:'["unsupported-tag", "not a value"]',blockRefs:['a'.repeat(64)]}];
  const id=await begin(records),before=await original();
  try{await append(id,records);await expect(validate(id)).rejects.toThrow();expect(await original()).toEqual(before);await expect(append(id,[records[0]!])).rejects.toThrow('library_sync_candidate_invalid');}
+ finally{await discard(id);}
+});
+
+for(const tag of ['compressed','shared'] as const)test(`opaque transport cannot impersonate a trusted ${tag} storage envelope`,async()=>{
+ const raw=tag==='compressed'?packStoredRecord(JSON.stringify(encodeBackupValue('a'.repeat(4096)))):JSON.stringify(['sensa-shared-content-v1','a'.repeat(64)]);
+ const records=[...rows(),{table:'settings' as const,key:'opaque-storage-envelope',valueJson:raw,blockRefs:['a'.repeat(64)]}],id=await begin(records),before=await original();
+ try{await append(id,records);await expect(validate(id)).rejects.toThrow('libraryBackup.errors.format');expect(await original()).toEqual(before);}
  finally{await discard(id);}
 });
 
@@ -168,7 +176,7 @@ test('candidate paging selects a UTF-8 bounded key prefix before loading wide bo
   const values=Array.from({length:137},(_,index)=>JSON.stringify(encodeBackupValue(
    index===0?'界'.repeat(400000):index===1?'é'.repeat(230000):index===2?'字'.repeat(200000):index===3?'a'.repeat(1024*1024-JSON.stringify(encodeBackupValue('')).length):`row-${index}`)));
   const expected=values.map((text,index)=>({key:String(index).padStart(3,'0'),text,bytes:new TextEncoder().encode(text).length}));
-  for(const row of expected)fixture.raw.exec({sql:'INSERT INTO sensa_replica_candidate_records_v1 VALUES(?,?,?,?,?)',bind:[id,'settings',row.key,row.text,'[]']});
+  for(const row of expected)fixture.raw.exec({sql:'INSERT INTO sensa_replica_candidate_records_v1(candidate_id,table_name,record_key,value_json,refs_json) VALUES(?,?,?,?,?)',bind:[id,'settings',row.key,row.text,'[]']});
   const sizes=fixture.raw.exec({sql:"SELECT record_key,stored_value_bytes FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name='settings' ORDER BY record_key",bind:[id],rowMode:'object',returnValue:'resultRows'});
   expect(sizes).toEqual(expected.map(row=>({record_key:row.key,stored_value_bytes:row.bytes})));
   const plan=fixture.raw.exec({sql:"EXPLAIN QUERY PLAN SELECT record_key,stored_value_bytes FROM sensa_replica_candidate_records_v1 INDEXED BY sensa_replica_candidate_page_v1 WHERE candidate_id=? AND table_name=? ORDER BY record_key LIMIT 64",bind:[id,'settings'],rowMode:'object',returnValue:'resultRows'});
@@ -198,9 +206,9 @@ test('sealed text caching bounds retained bytes, clones values and still checks 
  const calls=new Map<string,number>(),controller=new AbortController();
  const source={
   alive(){if(controller.signal.aborted)throw controller.signal.reason;},beforePage(){},
-  get(_table:unknown,key:string){calls.set(key,(calls.get(key)??0)+1);return texts.get(key);},
+  get(_table:unknown,key:string){calls.set(key,(calls.get(key)??0)+1);return texts.has(key)?{record_key:key,value_json:texts.get(key)!}:undefined;},
   has(_table:unknown,key:string){return texts.has(key);},keys(){return [];},rows(){return [];},
-  plain(_table:unknown,text:string){return text;},missing():never{throw Error('fixture missing');},
+  plain(_table:unknown,row:{value_json:string}){return row.value_json;},missing():never{throw Error('fixture missing');},
  };
  const bytes=new TextEncoder().encode(texts.get('0')!).length,reader=sealedRecordReader(source,bytes*2);
  const first=reader.get('settings','0');first.nested.count=99;
@@ -219,10 +227,10 @@ test('interleaved point reads during sealed iteration do not double-count a cach
  const calls=new Map<string,number>(),plains=new Map<string,number>(),controller=new AbortController();
  const reader=sealedRecordReader({
   alive(){if(controller.signal.aborted)throw controller.signal.reason;},beforePage(){},
-  get(_table,key){calls.set(key,(calls.get(key)??0)+1);return texts.get(key);},has(_table,key){return texts.has(key);},
+  get(_table,key){calls.set(key,(calls.get(key)??0)+1);return texts.has(key)?{record_key:key,value_json:texts.get(key)!}:undefined;},has(_table,key){return texts.has(key);},
   keys(_table,after){return after===null?[...texts].map(([record_key,value])=>({record_key,stored_value_bytes:new TextEncoder().encode(value).length})):[];},
   rows(_table,keys){return keys.map(record_key=>({record_key,value_json:texts.get(record_key)!}));},
-  plain(_table,text){plains.set(text,(plains.get(text)??0)+1);return text;},missing():never{throw Error('fixture missing');},
+  plain(_table,row){const text=row.value_json;plains.set(text,(plains.get(text)??0)+1);return text;},missing():never{throw Error('fixture missing');},
  },new TextEncoder().encode(texts.get('0')!).length*2);
  const iterator=reader.entries('settings')[Symbol.iterator]();
  const first=iterator.next().value;expect(first?.key).toBe('0');first!.value.nested.count=99;expect(reader.get('settings','0')).toEqual({nested:{count:0}});expect(reader.get('settings','1')).toEqual({nested:{count:1}});
@@ -237,8 +245,8 @@ test('sealed text cache bounds small-row count independently from retained bytes
  const texts=new Map(Array.from({length:257},(_,index)=>[String(index),JSON.stringify(encodeBackupValue(index))]));
  const calls=new Map<string,number>();
  const reader=sealedRecordReader({
-  alive(){},beforePage(){},get(_table,key){calls.set(key,(calls.get(key)??0)+1);return texts.get(key);},
-  has(_table,key){return texts.has(key);},keys(){return [];},rows(){return [];},plain(_table,text){return text;},missing():never{throw Error('fixture missing');},
+  alive(){},beforePage(){},get(_table,key){calls.set(key,(calls.get(key)??0)+1);return texts.has(key)?{record_key:key,value_json:texts.get(key)!}:undefined;},
+  has(_table,key){return texts.has(key);},keys(){return [];},rows(){return [];},plain(_table,row){return row.value_json;},missing():never{throw Error('fixture missing');},
  });
  for(const key of texts.keys())expect(reader.get('settings',key)).toBe(Number(key));
  expect(reader.get('settings','0')).toBe(0);expect(calls.get('0')).toBe(2);
@@ -248,7 +256,7 @@ test('sealed text cache bounds small-row count independently from retained bytes
 for(const interrupted of [false,true])test(`cold candidate handler replaces only abandoned clustered bodies atomically (${interrupted})`,async()=>{
  const fixture=isolatedDatabase();let handler:SqliteReplicaCandidates|undefined;
  try{
-  const raw=fixture.raw,oldRecord=replicaCandidateRecordSchema.slice(0,replicaCandidateRecordSchema.indexOf('CREATE INDEX')).replace(' stored_value_bytes INTEGER GENERATED ALWAYS AS(length(CAST(value_json AS BLOB))) STORED,\n','').replace('\n);','\n) WITHOUT ROWID;'),oldId=crypto.randomUUID();
+  const raw=fixture.raw,oldRecord=replicaCandidateRecordSchema.slice(0,replicaCandidateRecordSchema.indexOf('CREATE INDEX')).replace(" representation TEXT NOT NULL DEFAULT 'packed' CHECK(representation IN ('packed','opaque')),\n",'').replace(' stored_value_bytes INTEGER GENERATED ALWAYS AS(length(CAST(value_json AS BLOB))) STORED,\n','').replace('\n);','\n) WITHOUT ROWID;'),oldId=crypto.randomUUID();
   raw.exec(replicaCandidateSchema.replace(replicaCandidateRecordSchema,oldRecord));
   raw.exec({sql:"INSERT INTO sensa_replica_candidates_v1(id,fence_json,expected_json,state) VALUES(?,'{}','{}','filling')",bind:[oldId]});
   raw.exec({sql:'INSERT INTO sensa_replica_candidate_records_v1 VALUES(?,?,?,?,?)',bind:[oldId,'settings','abandoned','["string","abandoned private download"]','[]']});

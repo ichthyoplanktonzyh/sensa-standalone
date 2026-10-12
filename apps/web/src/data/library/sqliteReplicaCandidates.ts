@@ -21,7 +21,7 @@ const expectedSchema=z.object({libraryId:uuid,learnerId:uuid,records:z.number().
 const maximumRecordBytes=90*1024*1024,maximumLogicalBytes=512*1024*1024,maximumStoredBytes=256*1024*1024,appendBytes=4*1024*1024;
 const utf8=(text:string)=>new TextEncoder().encode(text).length;
 type Header={id:string;fence_json:string;expected_json:string;state:string;records:number;logical_bytes:number;stored_bytes:number;identity_json:string|null};
-type StoredRow={record_key:string;value_json:string};
+type StoredRow={record_key:string;value_json:string;representation:'packed'|'opaque'};
 type RecordKey={table:LibraryReplicaEntry['table'];key:string};
 type UpdatePlan={receipt:ReplicaCandidateUpdate;puts:RecordKey[];deletes:RecordKey[];basePuts:Array<RecordKey&{blockRefs:string[]}>};
 
@@ -125,8 +125,8 @@ export class SqliteReplicaCandidates{
    for(const row of inputs){
     const admitted=this.rows<{refs_json:string}>('SELECT refs_json FROM sensa_replica_candidate_manifest_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,row.table,row.key])[0];
     if(!admitted||admitted.refs_json!==row.refsJson)this.fail();
-    const prior=this.rows<{value_json:string;refs_json:string}>('SELECT value_json,refs_json FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,row.table,row.key])[0];
-    if(prior){if(unpackStoredRecord(prior.value_json)!==row.valueJson||prior.refs_json!==row.refsJson)this.fail();continue;}
+    const prior=this.rows<StoredRow&{refs_json:string}>('SELECT record_key,value_json,representation,refs_json FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,row.table,row.key])[0];
+    if(prior){if(this.plainStored(prior)!==row.valueJson||prior.refs_json!==row.refsJson)this.fail();continue;}
     let offset=0;
     for(const digest of row.blockRefs){
      const proof=this.rows<{plain_digest:string|null;plain_chars:number|null}>('SELECT plain_digest,plain_chars FROM sensa_replica_candidate_proofs_v1 WHERE candidate_id=? AND digest=?',[id,digest])[0];
@@ -136,9 +136,13 @@ export class SqliteReplicaCandidates{
     if(offset!==row.valueJson.length)throw Error('library_sync_hash');
     added++;logical+=row.size;
     if(header.logical_bytes+logical>maximumLogicalBytes)throw Error('library_sync_capacity');
-    JSON.parse(row.valueJson);const text=packStoredRecord(row.valueJson);stored+=utf8(text)+utf8(row.refsJson);
+    const parsed=JSON.parse(row.valueJson);let representation:StoredRow['representation']='packed';
+    try{decodeBackupValue(parsed);}catch(cause){if(!(cause instanceof Error)||!cause.message.startsWith('libraryBackup.errors.'))throw cause;representation='opaque';}
+    // External transport must never impersonate a generated storage envelope.
+    // Keep unknown wire intact for complete validation, without unpacking it.
+    const text=representation==='opaque'?row.valueJson:packStoredRecord(row.valueJson);stored+=utf8(text)+utf8(row.refsJson);
     if(header.stored_bytes+stored>maximumStoredBytes)throw Error('library_sync_capacity');
-    this.database.exec({sql:'INSERT INTO sensa_replica_candidate_records_v1 VALUES(?,?,?,?,?)',bind:[id,row.table,row.key,text,row.refsJson]});
+    this.database.exec({sql:'INSERT INTO sensa_replica_candidate_records_v1(candidate_id,table_name,record_key,value_json,refs_json,representation) VALUES(?,?,?,?,?,?)',bind:[id,row.table,row.key,text,row.refsJson,representation]});
    }
    if(header.records+added>expectedSchema.parse(JSON.parse(header.expected_json)).records)this.fail();
    this.database.exec({sql:'UPDATE sensa_replica_candidates_v1 SET records=records+?,logical_bytes=logical_bytes+?,stored_bytes=stored_bytes+? WHERE id=?',bind:[added,logical,stored,id]});
@@ -171,14 +175,14 @@ export class SqliteReplicaCandidates{
   const alive=()=>{this.assertHealthy();if(signal.aborted)throw signal.reason;};
   return sealedRecordReader({
    alive,beforePage:()=>this.check(this.header(id)),
-   get:(table,key)=>this.rows<StoredRow>('SELECT value_json FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,table,key])[0]?.value_json,
+   get:(table,key)=>this.rows<StoredRow>('SELECT record_key,value_json,representation FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,table,key])[0],
    has:(table,key)=>this.rows('SELECT 1 FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,table,key]).length>0,
    keys:(table,after)=>this.rows<SealedRecordKey>(`SELECT record_key,stored_value_bytes
     FROM sensa_replica_candidate_records_v1 INDEXED BY sensa_replica_candidate_page_v1
     WHERE candidate_id=? AND table_name=? ${after===null?'':'AND record_key>?'} ORDER BY record_key LIMIT 64`,after===null?[id,table]:[id,table,after]),
-   rows:(table,selected)=>this.rows<StoredRow>(`SELECT record_key,value_json FROM sensa_replica_candidate_records_v1
+   rows:(table,selected)=>this.rows<StoredRow>(`SELECT record_key,value_json,representation FROM sensa_replica_candidate_records_v1
     WHERE candidate_id=? AND table_name=? AND record_key IN(SELECT value FROM json_each(?)) ORDER BY record_key`,[id,table,JSON.stringify(selected)]),
-   plain:(_table,stored)=>unpackStoredRecord(stored),missing:()=>this.fail(),
+   plain:(_table,stored)=>this.plainStored(stored),missing:()=>this.fail(),
   });
  }
  validate(id:string):Promise<ReplicaCandidateValidation>{
@@ -247,7 +251,7 @@ export class SqliteReplicaCandidates{
      if(bytes>maximumRecordBytes)this.fail();
      logical+=bytes;stored+=utf8(body)+utf8(admitted.refs_json);records++;
      if(header.logical_bytes+logical>maximumLogicalBytes||header.stored_bytes+stored>maximumStoredBytes)throw Error('library_sync_capacity');
-     this.database.exec({sql:'INSERT INTO sensa_replica_candidate_records_v1 VALUES(?,?,?,?,?)',bind:[id,key.table,key.key,body,admitted.refs_json]});
+     this.database.exec({sql:'INSERT INTO sensa_replica_candidate_records_v1(candidate_id,table_name,record_key,value_json,refs_json) VALUES(?,?,?,?,?)',bind:[id,key.table,key.key,body,admitted.refs_json]});
     }
     reused.push({table:key.table as RecordKey['table'],key:key.key});
    }
@@ -297,9 +301,10 @@ export class SqliteReplicaCandidates{
   this.updates.set(id,{controller,result});return result;
  }
 
+ private plainStored(row:StoredRow):string{return row.representation==='opaque'?row.value_json:unpackStoredRecord(row.value_json);}
  private candidateBody(id:string,table:string,key:string):string{
-  const row=this.rows<{value_json:string}>('SELECT value_json FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,table,key])[0];
-  if(!row)this.fail();return unpackStoredRecord(row.value_json);
+  const row=this.rows<StoredRow>('SELECT record_key,value_json,representation FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,table,key])[0];
+  if(!row)this.fail();return this.plainStored(row);
  }
 
  /** Expand only the prepared metadata into lazy writes, inside the existing
@@ -360,7 +365,7 @@ export class SqliteReplicaCandidates{
   // transformed row keeps that entire table on its existing owner value path.
   const copiedTables=new Set(rows.map(row=>row.table_name).filter(table=>!excluded.has(table)));
   const read=(table:string,key:string)=>{
-   const row=this.rows<{value_json:string}>('SELECT value_json FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,table,key])[0];if(!row)this.fail();return unpackStoredRecord(row.value_json);
+   const row=this.rows<StoredRow>('SELECT record_key,value_json,representation FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,table,key])[0];if(!row)this.fail();return this.plainStored(row);
   };
   const puts:SqliteMutation['puts']=rows.map(row=>({table:row.table_name,key:row.record_key,get encodedValue(){
    if(copiedTables.has(row.table_name))return read(row.table_name,row.record_key);
