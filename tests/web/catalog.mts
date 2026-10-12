@@ -328,6 +328,7 @@ const browserTests = [
   'browser/practice-source-loading',
   'browser/extension-selection',
   'browser/semantic-lookup-opfs',
+  // Includes the registered @capacity graph journey; default 1k semantic nodes.
   'browser/personal-meaning-journey',
   'browser/portable-package-journey',
   'browser/skin-surface', 'browser/reference-presentation',

@@ -8,7 +8,7 @@ import {
   type Page,
 } from '@playwright/test';
 import pg from 'pg';
-import { build as viteBuild } from 'vite';
+import { build as viteBuild, type Plugin } from 'vite';
 
 import { createConsumerRoutes } from '../../../apps/api/src/sensa/access/consumer.ts';
 import type { ConsumerPrincipal } from '../../../apps/api/src/sensa/access/auth.ts';
@@ -47,7 +47,7 @@ const disposableDatabaseUrl = (): string => {
 };
 
 /** Real Chromium, Hono and PostgreSQL fixture shared by database-bound Web tests. */
-export async function createLibraryCloudBrowserFixture(providedBrowser?: Browser): Promise<LibraryCloudBrowserFixture> {
+export async function createLibraryCloudBrowserFixture(providedBrowser?: Browser, browserEntry=resolve('scripts/support/libraryCloudBrowserEntry.ts'), browserPlugins:Plugin[]=[]): Promise<LibraryCloudBrowserFixture> {
   const previousRegistrationPolicy = process.env.SENSA_REGISTRATION_POLICY;
   process.env.SENSA_REGISTRATION_POLICY = 'registered';
 
@@ -104,7 +104,7 @@ export async function createLibraryCloudBrowserFixture(providedBrowser?: Browser
     define: {
       'import.meta.env.VITE_SENSA_API_URL': JSON.stringify('https://service.fixture.invalid'),
     },
-    plugins: [{
+    plugins: [...browserPlugins,{
       name: 'fixture-auth',
       enforce: 'pre',
       load(id) {
@@ -119,7 +119,7 @@ export async function createLibraryCloudBrowserFixture(providedBrowser?: Browser
       rollupOptions: {
         preserveEntrySignatures: 'strict',
         input: {
-          core: resolve('scripts/support/libraryCloudBrowserEntry.ts'),
+          core: browserEntry,
           'local-clear': resolve('scripts/support/localClearBrowserEntry.tsx'),
         },
         output: {

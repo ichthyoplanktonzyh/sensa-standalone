@@ -1091,6 +1091,39 @@ test('explicit batch confirmation saves all intentions and failed preparation re
  expect(requests).toEqual([]);
 });
 
+const graphCapacitySize=Number(process.env.SENSA_GRAPH_CAPACITY_SIZE??1000);
+if(!Number.isSafeInteger(graphCapacitySize)||graphCapacitySize<1||graphCapacitySize>10000)throw Error('Graph capacity size must be 1..10000');
+test.describe('isolated graph capacity',{tag:'@capacity'},()=>{
+ test.use({meaningSetup:{size:graphCapacitySize,world:true}});
+ test('capacity graph exploration reports actual open, selection, zoom and return without learning writes',async({preparedMeaningPage:{page}},testInfo)=>{
+  test.setTimeout(90_000);
+  await page.evaluate(()=>{(window as any).__graphLongTasks=[];new PerformanceObserver(list=>(window as any).__graphLongTasks.push(...list.getEntries().map(e=>({startTime:e.startTime,duration:e.duration})))).observe({type:'longtask',buffered:true});});
+  await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
+  const world=page.locator('.sensa-world.active').last();await expect(world.locator('.sensa-world-row').first()).toBeVisible();
+  const learningBefore=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+  const actualMeanings=await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest());expect(actualMeanings).toBe(graphCapacitySize);
+  const started=await page.evaluate(()=>performance.now());
+  await world.locator('[data-world-view]').nth(1).click();
+  const graph=world.getByRole('region',{name:'词义图谱',exact:true}),points=graph.locator('[data-expression-id]');
+  await expect(points).toHaveCount(graphCapacitySize,{timeout:30_000});await expect(graph.locator('[data-graph-camera]')).toBeVisible();
+  const openMs=await page.evaluate(start=>performance.now()-start,started);
+  const selected=await page.evaluate(()=>performance.now());await points.first().focus();await points.first().press('Enter');
+  await expect(graph.getByRole('complementary',{name:'表达预览',exact:true})).toBeVisible();
+  const selectionMs=await page.evaluate(start=>performance.now()-start,selected);
+  const canvas=graph.locator('[data-graph-camera]'),camera=await canvas.getAttribute('data-graph-camera');
+  const zoomStarted=await page.evaluate(()=>performance.now());await graph.getByRole('button',{name:'放大',exact:true}).click();await expect(canvas).not.toHaveAttribute('data-graph-camera',camera!);
+  const zoomMs=await page.evaluate(start=>performance.now()-start,zoomStarted);
+  const returnStarted=await page.evaluate(()=>performance.now());await world.getByRole('button',{name:'列表',exact:true}).click();await expect(world.locator('.sensa-world-row').first()).toBeVisible();
+  const returnMs=await page.evaluate(start=>performance.now()-start,returnStarted);expect(await world.locator('.sensa-world-row').count()).toBeLessThan(80);
+  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records).toHaveLength(0);
+  const learningAfter=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());expect(learningAfter).toEqual(learningBefore);expect(learningAfter.targetIds).toHaveLength(0);
+  const measurement={meanings:actualMeanings,constructedContextHeads:scaleFixture!.contexts.anchors.length,constructedSenseIdentities:scaleFixture!.registry.senses.length,graphExpressionNodes:graphCapacitySize,learningTargets:learningAfter.targetIds.length,completeLearningCheckpointUnchanged:true,edgeShape:'distinct isolated accepted Sense/Expression nodes, no shared memberships; 85-Meaning polysemy/linked graph functional case remains separate',openMs,selectionMs,zoomMs,returnMs,provisionalGoals:{openMs:2000,selectionMs:500,zoomMs:200,returnMs:500},longTasks:await page.evaluate(start=>(window as any).__graphLongTasks.filter((task:any)=>task.startTime>=start),started),scope:'production UI+Chromium+OPFS, 1x CPU, loopback, cold graph after warm list; driver-to-DOM/camera observation, not paint; synthetic semantic nodes, not human use, dense graph, formal Targets or cold OS cache'};
+  console.log('GRAPH_CAPACITY',JSON.stringify(measurement));
+  await testInfo.attach('graph-capacity.json',{body:JSON.stringify(measurement,null,2),contentType:'application/json'});
+  if(openMs>2000||selectionMs>500||zoomMs>200||returnMs>500)console.warn('PERFORMANCE_WARNING: provisional graph experience target exceeded; functional assertions do not establish performance pass');
+ });
+});
+
 test.describe('prepared 10k World',{tag:'@capacity'},()=>{
 test.use({meaningSetup:{size:10_000,world:true}});
 test('10k personal meanings keep the shipped World bounded and searchable, with real detail and refresh recovery',async({preparedMeaningPage:{page}})=>{

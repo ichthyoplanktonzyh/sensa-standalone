@@ -95,8 +95,10 @@ test('mature retained Targets and formal Review history keep actual reveal, rati
  expect(restored).toEqual({targets:manifest.targets,runs:manifest.runs,events:manifest.events});
  const fixtureCopyMs=performance.now()-setupStarted;
  console.info(JSON.stringify({stage:'capacity_fixture_copied',...restored,fixtureCopyMs}));
+ const persistedReloadStarted=performance.now();
  await page.reload();await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
  const home=page.locator('#s-home');await expect(home.getByRole('button',{name:'继续学习',exact:true})).toBeEnabled({timeout:30_000});
+ timings.persistedLibraryReloadToHome=performance.now()-persistedReloadStarted;
  // The fixture producer uses a larger quota only to build genuine history.
  // Set the ordinary Web preference through the UI, without rewriting facts.
  const navigation=page.getByRole('navigation',{name:'主要导航',exact:true});
