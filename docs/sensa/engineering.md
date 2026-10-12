@@ -605,7 +605,7 @@ Learning System 使用相同的单一准入模式：逻辑事务在 SQLite commi
 交给 Learning authority；authority 只读取改变的 Target、Run、Event、active Run / Study Plan 及直接依赖，
 重放新 Event 并核对 Target、Run、Evidence、Completion 与 Memory/Schedule 投影。Run/Event history 的
 物理删除、旧 Event 改写、无 Event 的派生进度以及本地伪造 Reconciliation 都在提交前拒绝。Cloud Sync
-与手动备份继续通过同一个 authority 的完整状态入口 replay 普通 lightweight 全部历史，包括 history-only 分支；缓存缺失的 Structured Run 保留受限材料准入，待精确资源恢复后完成 runtime 校验，不自动收敛这类未经完整重放的分叉。日常学习动作不扫描所有 Run 或
+与手动备份的恢复准入以已保存 Target / Memory State 为运行权威，校验格式、字段值域、身份、材料精确 pins、引用和修订闭合、Session 与合法冲突分支，保留哈希、fence、CAS、ACK 和原子提交；普通恢复不重新执行全部历史 Protocol/reducer/scheduler。完整历史重算保留为显式审计入口，用于修复、算法升级或专项审计，不证明每次恢复时历史与当前算法一致；该类矛盾可能延后发现。现有冲突分支连续性证明仍依赖完整 Memory 输出，因此仅对冲突涉及 Target 及其 cohort 闭合谱系保留重算。缓存缺失的 Structured Run 保留受限材料准入，待精确资源恢复后完成 runtime 校验，不自动收敛这类未经完整重放的分叉。设备收据 `restoreValidationVersion` 只证明恢复保真准入，不证明历史算法审计通过；旧收据不得复用。日常学习动作不扫描所有 Run 或
 Event。具体规则见 [ADR 0005](../adr/0005-concurrent-learning-history-reconciliation.md)。
 新 Checkpoint 成功提交后，服务端只回收旧清单曾引用且新清单不再引用的块；另一设备尚未提交的上传
 不在这次回收范围内。
@@ -998,8 +998,8 @@ Stats 的年度日历和趋势只消费整范围标量汇总；年度渲染至�
 不能仅 reset 路由后再次展示已被模块加载器缓存的同一失败；该恢复不改动本机学习事实。
 
 Run 的材料目录保存不可变 body、Step 引用和 participant 首次绑定顺序。Action 明确保存其 before Run
-revision 及后继 presentation（完成则为显式 null）；lifecycle fact 引用同一修订流。恢复从计划基线和初始 Step
-重放，严格合并连续、唯一的每 Run revision，再比较材料目录、映射、顺序与最终 Run；不能把最终映射直接当作
+revision 及后继 presentation（完成则为显式 null）；lifecycle fact 引用同一修订流。恢复从计划基线及保存的展示／刷新见证
+核对连续、唯一的每 Run revision、材料目录、映射与顺序；完整 Protocol 行为与最终 Run 的算法重算另属历史审计。不能把最终映射直接当作
 历史输入。当前格式不猜测或补写旧 Run 缺失的顺序与因果字段；旧来源事实不迁移、不清除，格式验收使用隔离新库。
 
 Content Supply 保存独立的来源准入时点 `provenance.sourceReadyAt`；个人准备的 `ContentAttempt.readyAt`

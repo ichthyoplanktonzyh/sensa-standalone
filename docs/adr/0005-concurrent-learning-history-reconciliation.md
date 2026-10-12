@@ -25,17 +25,16 @@ Action 的材料与个人场景版本引用，以及 Protocol、Evaluation、Com
 
 新 Decision 明确取代同 Target 的现有裁决前沿，旧 Decision 原样保留；第三个客户端基于旧业务基线的已完成分支按同一规则重新收敛。所有裁决（包括已取代的裁决）的采用 Run 都必须形成完整、连续的原始分支；并行 cohort Run 当前停止自动 reconciliation，不按逐 Target 裁决分割一个共同 Run；这不阻止无分叉的 cohort 历史保存与恢复。
 
-每个 Run participant 固定精确的起始 retentionBaseline（Memory、revision、初学起止与 Relearning 状态）。全量准入按“完整基线与 Policy commitment”依赖重放所有可达分支，不按墙上时钟猜测因果；同 revision 的 Relearning 变化也必须匹配原始完整基线。只有前沿裁决允许的分支进入当前连续投影，缺少裁决的并行分支不得覆盖排程。
+每个 Run participant 固定精确的起始 retentionBaseline（Memory、revision、初学起止与 Relearning 状态）。冲突准入与显式历史审计按“完整基线与 Policy commitment”依赖重放受影响的可达分支，不按墙上时钟猜测因果；同 revision 的 Relearning 变化也必须匹配原始完整基线。只有前沿裁决允许的分支进入当前连续投影，缺少裁决的并行分支不得覆盖排程。
 
 该规则只决定已有事实如何贡献当前投影，不通过合并执行新的 Protocol、重新评分或生成新的 Outcome，
 也不把同步本身制造成学习事实。服务端只保护 Learning Event 与 Learning Reconciliation Decision 的
-追加性；验证和投影重放仍由本机领域层完成。
+追加性；验证仍由本机领域层完成，普通恢复不重算所有历史投影。
 
 本地命令、Cloud Checkpoint 和手动备份不得各自实现一套学习完整性规则。它们共用 Learning System
 authority：本地提交只读取当前事务改变的 Target、Run、Event、active Run / Study Plan 以及直接依赖，
-独立重放新 Event 并核对 Run 与 Memory/Schedule 投影后才允许写入 SQLite；同步和备份则对完整历史执行
-全量 replay。Run/Event/Reconciliation 不允许用物理缺行表达删除，Event 只能追加，普通本地命令也不能
+独立重放新 Event 并核对 Run 与 Memory/Schedule 投影后才允许写入 SQLite；同步和备份的普通恢复保留保存态字段、身份、材料 pins、引用、修订与生命周期校验，以已保存 Memory State 为运行权威。完整 replay 保留为显式历史审计；冲突所涉及 Target 谱系仍重算以证明分支连续性。历史算法与保存态的矛盾可延后由审计发现。Run/Event/Reconciliation 不允许用物理缺行表达删除，Event 只能追加，普通本地命令也不能
 直接制造 progress、Completion、Memory 或 due 投影。并发 Reconciliation Decision 只允许由 replica merge
 产生，不能伪装成本地学习命令。
 
-当前统一 Checkpoint 格式为 7，完整 replica 准入版本为 7；不维护旧格式转换。缓存缺失的 Structured Run 仍保留明确受限的冻结材料准入，不宣称已完整执行其外部 runtime replay；这类分支若需 reconciliation 则停止，待精确资源恢复后核验。
+设备 `restoreValidationVersion` 收据只证明恢复保真准入，不证明完整历史算法审计通过；不维护旧收据读取或转换。缓存缺失的 Structured Run 仍保留明确受限的冻结材料准入，不宣称已完整执行其外部 runtime replay；这类分支若需 reconciliation 则停止，待精确资源恢复后核验。

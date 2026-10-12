@@ -3,7 +3,7 @@ import {libraryTables,readLibrary,restoreLibraryTransaction,assertCurrentLibrary
 import {learningOwner} from './libraryOwnership';
 import {cachedAuthSubject} from '../account/authSessionHint';
 import {markLocalLibraryPresent} from './localLibraryHint';
-import {validateBackupRows,backupOwnerSchema,type BackupRows} from './backupValidation';
+import {validateRestoreBackupRows,backupOwnerSchema,type BackupRows} from './backupValidation';
 import {clearAllCredentials} from './providers';
 import {libraryBackupTables} from './backupPolicy';
 import {isReplicatedLibraryEntry,normalizeLibraryReplicaEntry,restoreLibraryReplicaValue,type LibraryReplicaEntry} from './replication/libraryReplica';
@@ -26,12 +26,12 @@ async function decode(file:Uint8Array,password:string){
  let payload:BackupArchiveHeader,rows:BackupRows;
  try{const envelope=envelopeSchema.parse(JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(file))),salt=unb64(envelope.salt),iv=unb64(envelope.iv),data=unb64(envelope.data);if(salt.length!==16||iv.length!==12||data.length>MAX_PLAIN+16)throw Error();const key=await keyFor(password,salt);const compressed=await crypto.subtle.decrypt({name:'AES-GCM',iv:iv as BufferSource,additionalData:AAD},key,data as BufferSource);const archive=await decodeBackupArchive(new Uint8Array(compressed));payload=archive.header;rows=archive.rows;}catch{throw new Error('libraryBackup.errors.invalidFile');}
  if(rows.meta.some(r=>localMeta.has(r.key))||rows.operations.some(r=>serviceOperation(r.value)))throw new Error('libraryBackup.errors.authorization');
- validateBackupRows(rows);return {payload,rows,summary:summary(payload,rows)};
+ validateRestoreBackupRows(rows);return {payload,rows,summary:summary(payload,rows)};
 }
 async function encodeCurrentLibrary(){
  const snapshot=await readLibrary(async tx=>{await learningOwner(tx);const storedOwner=await tx.get('meta','service-owner');const owner=storedOwner?localBackupOwnerSchema.parse(storedOwner):null;const rows=Object.fromEntries(libraryTables.map(table=>[table,[]])) as unknown as BackupRows;for(const table of libraryTables){rows[table]=(await tx.entries(table)).map(r=>{if(typeof r.key!=='string')throw new Error('libraryBackup.errors.recordKey');return {key:r.key,value:r.value};});}rows.meta=rows.meta.filter(r=>!localMeta.has(r.key));rows.operations=rows.operations.filter(r=>!serviceOperation(r.value));return {owner,rows};});
  if(libraryBackupTables.reduce((count,table)=>count+snapshot.rows[table].length,0)>200000)throw new Error('libraryBackup.errors.rowLimit');
- validateBackupRows(snapshot.rows);
+ validateRestoreBackupRows(snapshot.rows);
  const archive=await encodeBackupArchive(snapshot.rows,snapshot.owner),payload=archive.header,plaintext=archive.bytes;
  return {payload,rows:snapshot.rows,plaintext};
 }

@@ -1,11 +1,11 @@
 import {decodeBackupValue} from '../backupCodec';
-import {validateLibraryRecords,validateLibraryRecordsCooperatively,type BackupRows} from '../backupValidation';
+import {validateLibraryRestoreRecords,validateLibraryRestoreRecordsCooperatively,type BackupRows} from '../backupValidation';
 import {sqliteLibraryTables} from '../sqliteProtocol';
 import type {LibraryRecordReader} from '../libraryRecordReader';
 import type {LibraryIdentity,Table} from '../store';
 import {isReplicatedLibraryEntry,type LibraryReplicaEntry} from './libraryReplica';
-/** Advance when the complete replica integrity contract changes. Device-only. */
-export const libraryReplicaValidationVersion=8 as const;
+/** Saved-state restoration integrity receipt only; never evidence of historical algorithm audit. Device-only. */
+export const libraryRestoreValidationVersion=9 as const;
 
 export type ValidatedLibraryReplica={identity:LibraryIdentity;records:LibraryRecordReader};
 
@@ -31,8 +31,8 @@ function replicaRecords(entries:LibraryReplicaEntry[],packageCache:BackupRows['p
 }
 
 export function validateLibraryReplica(entries:LibraryReplicaEntry[],packageCache:BackupRows['packageCache']=[]):ValidatedLibraryReplica{
- const records=replicaRecords(entries,packageCache);return {identity:validateLibraryRecords(records),records};
+ const records=replicaRecords(entries,packageCache);return {identity:validateLibraryRestoreRecords(records),records};
 }
 export async function validateLibraryReplicaCooperatively(entries:LibraryReplicaEntry[],packageCache:BackupRows['packageCache']=[]):Promise<ValidatedLibraryReplica>{
- const records=replicaRecords(entries,packageCache);return {identity:await validateLibraryRecordsCooperatively(records),records};
+ const records=replicaRecords(entries,packageCache);return {identity:await validateLibraryRestoreRecordsCooperatively(records),records};
 }

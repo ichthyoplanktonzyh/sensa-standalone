@@ -194,8 +194,8 @@ export class SqliteReplicaCandidates{
   const controller=new AbortController();
   const result=(async()=>{
    try{
-    const {validateLibraryRecordsCooperatively}=await import('./backupValidation');
-    const identity=await validateLibraryRecordsCooperatively(this.reader(id,controller.signal)),expected=expectedSchema.parse(JSON.parse(header.expected_json));
+    const {validateLibraryRestoreRecordsCooperatively}=await import('./backupValidation');
+    const identity=await validateLibraryRestoreRecordsCooperatively(this.reader(id,controller.signal)),expected=expectedSchema.parse(JSON.parse(header.expected_json));
     if(identity.id!==expected.libraryId||identity.learnerId!==expected.learnerId)throw Error('library_sync_identity');
     this.assertHealthy();if(controller.signal.aborted)throw controller.signal.reason;
     this.check(this.header(id));

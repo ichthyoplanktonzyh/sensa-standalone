@@ -14,7 +14,7 @@ Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined,lo
 Object.defineProperty(globalThis,'navigator',{value:{onLine:true},configurable:true});
 const database=await useNodeLearningCapacityStorage();afterAll(()=>database.close());
 const {synchronizeLibrary,readCloudSync,inspectPendingCloudSync}=await import('../../../apps/web/src/data/library/cloudSync');
-const {libraryReplicaValidationVersion}=await import('../../../apps/web/src/data/library/replication/libraryReplicaValidation');
+const {libraryRestoreValidationVersion}=await import('../../../apps/web/src/data/library/replication/libraryReplicaValidation');
 const blocks=new Map<string,string>(),receipts=new Map<string,{revision:number;manifest:string[]}>(),calls:string[]=[];
 let revision=0,manifest:string[]|null=null,hook:((path:string,body:any)=>Promise<void>)|undefined;
 const request:SyncRequest=async(path,body)=>{
@@ -54,7 +54,7 @@ test('a validated checkpoint checks only metadata when unchanged and publishes o
   try{const offline=await readLibrary(inspectPendingCloudSync);expect(offline.canSync).toBe(false);expect(offline.records).toEqual(pending.records);}
   finally{await writeLibraryState(async tx=>tx.delete('meta','signed-out'));}
  }finally{allBodies.mockRestore();pointBodies.mockRestore();pages.mockRestore();}
- await synchronizeLibrary(request);expect((await readCloudSync())?.validationVersion).toBe(libraryReplicaValidationVersion);
+ await synchronizeLibrary(request);expect((await readCloudSync())?.restoreValidationVersion).toBe(libraryRestoreValidationVersion);
  const adapter=await sqliteRecordAdapter(),base=adapter.syncBaseEntries.bind(adapter),commit=adapter.commit.bind(adapter);
  const read=vi.spyOn(adapter,'entries').mockImplementation(async()=>{throw new Error('incremental sync read a whole source table');});
  const baseline=vi.spyOn(adapter,'syncBaseEntries').mockImplementation(async keys=>{if(keys===undefined)throw new Error('incremental sync read all baseline bodies');return base(keys);});
@@ -128,7 +128,7 @@ test('a malformed acknowledgement retains its operation for an idempotent confir
 });
 
 test('conflict markers and an unknown validation version cannot use an unchanged-head shortcut',async()=>{
- for(const patch of [{status:'conflict' as const},{conflict:{detectedAt:new Date().toISOString(),remoteRevision:revision,remoteManifest:manifest,records:[],affectedRecordIds:[]}},{resolution:{choice:'local' as const,expectedRemoteRevision:revision}},{validationVersion:undefined},{validationVersion:libraryReplicaValidationVersion-1}]){
+ for(const patch of [{status:'conflict' as const},{conflict:{detectedAt:new Date().toISOString(),remoteRevision:revision,remoteManifest:manifest,records:[],affectedRecordIds:[]}},{resolution:{choice:'local' as const,expectedRemoteRevision:revision}},{restoreValidationVersion:undefined},{restoreValidationVersion:libraryRestoreValidationVersion-1}]){
   const state=await readCloudSync();await writeLibraryState(async tx=>tx.put('meta','cloud-sync',{...state,...patch}));
   calls.length=0;const adapter=await sqliteRecordAdapter(),reads=vi.spyOn(adapter,'syncBaseEntries');
   try{await synchronizeLibrary(request);expect(reads.mock.calls.some(([keys])=>keys===undefined)).toBe(true);}finally{reads.mockRestore();}
@@ -138,14 +138,14 @@ test('conflict markers and an unknown validation version cannot use an unchanged
 
 test('an old validation marker must pass the complete authority before publication or confirmation',async()=>{
  const validation=await import('../../../apps/web/src/data/library/replication/libraryReplicaValidation');
- for(const validationVersion of [undefined,libraryReplicaValidationVersion-1]){
-  const state=(await readCloudSync())!;await writeLibraryState(async tx=>tx.put('meta','cloud-sync',{...state,validationVersion}));
+ for(const restoreValidationVersion of [undefined,libraryRestoreValidationVersion-1]){
+  const state=(await readCloudSync())!;await writeLibraryState(async tx=>tx.put('meta','cloud-sync',{...state,restoreValidationVersion}));
   calls.length=0;const beforeRevision=revision;
   const reject=vi.spyOn(validation,'validateLibraryReplicaCooperatively').mockRejectedValue(new Error('libraryBackup.errors.inconsistent'));
   try{await expect(synchronizeLibrary(request)).rejects.toThrow('libraryBackup.errors.inconsistent');expect(reject).toHaveBeenCalled();}finally{reject.mockRestore();}
   expect(calls).not.toContain('/commit');expect(revision).toBe(beforeRevision);
-  const rejected=(await readCloudSync())!;expect(rejected.status).not.toBe('synced');expect(rejected.validationVersion).not.toBe(libraryReplicaValidationVersion);
-  await synchronizeLibrary(request);expect((await readCloudSync())?.validationVersion).toBe(libraryReplicaValidationVersion);
+  const rejected=(await readCloudSync())!;expect(rejected.status).not.toBe('synced');expect(rejected.restoreValidationVersion).not.toBe(libraryRestoreValidationVersion);
+  await synchronizeLibrary(request);expect((await readCloudSync())?.restoreValidationVersion).toBe(libraryRestoreValidationVersion);
  }
 });
 

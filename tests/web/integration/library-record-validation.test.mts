@@ -15,7 +15,7 @@ import type {BackupRows} from '../../../apps/web/src/data/library/backupValidati
 
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined,location:new URL('http://library-record-reader.fixture.invalid/')});
 const database=await useNodeLearningCapacityStorage();afterAll(()=>database.close());
-const {validateBackupRows,validateLibraryRecords,validateLibraryRecordsCooperatively,validateLibraryRecordSteps}=await import('../../../apps/web/src/data/library/backupValidation');
+const {validateBackupRows,validateLibraryRecords,validateLibraryRecordsCooperatively,validateLibraryRecordSteps,validateRestoreBackupRows,validateLibraryRestoreRecords,validateLibraryRestoreRecordsCooperatively}=await import('../../../apps/web/src/data/library/backupValidation');
 const {validateLibraryReplica,validateLibraryReplicaCooperatively}=await import('../../../apps/web/src/data/library/replication/libraryReplicaValidation');
 const context=sensaPinnedLanguageContext(defaultSensaLanguageRoute),id=()=>crypto.randomUUID();
 let source:BackupRows,identity:LibraryIdentity;
@@ -53,7 +53,7 @@ const cases=[
  {name:'a forged final memory revision',change:(rows:BackupRows)=>{rows.learningTargets[0]!.value.memoryRevision++;}},
  {name:'a missing Action from the first Run',change:(rows:BackupRows)=>{rows.learningEvents.shift();}},
  {name:'an orphan Action outside the replay inventory',change:(rows:BackupRows)=>{rows.learningEvents[0]!.value.runId=id();}},
- {name:'a changed historical evaluation result',change:(rows:BackupRows)=>{const event=rows.learningEvents.find(row=>row.value.detail.transition.retention)!;event.value.detail.transition.retention.nextDueAt='2099-01-01T00:00:00.000Z';}},
+ {name:'a changed historical evaluation result',change:(rows:BackupRows)=>{const event=rows.learningEvents.find(row=>row.value.detail.formalEvaluation)!;event.value.detail.formalEvaluation.evaluation.result={historicalAlgorithmDisagreement:true};}},
  {name:'a dangling Session scope',change:(rows:BackupRows)=>{rows.learningSessions[0]!.value.scopeRevisionId=id();}},
 ];
 for(const sample of cases)test(`complete row and indexed candidate rules agree: ${sample.name}`,async()=>{
@@ -154,4 +154,36 @@ test('a genuine long Run checks and replays individual Action bodies between coo
   expect(maxReads).toBeLessThanOrEqual(2);
   expect(await validateLibraryRecordsCooperatively(indexed)).toEqual(identity);
  }finally{vi.useRealTimers();}
+});
+
+for(const sample of cases)test(`saved-state restoration retains structural rejection: ${sample.name}`,async()=>{
+ const rows=sample.change?corrupt(sample.change):structuredClone(source);
+ const accepted=sample.change===null||sample.name==='a changed historical evaluation result';
+ const candidate=await sqliteLibraryCandidate(records(rows));
+ try{for(const reader of [libraryRowsReader(rows),candidate.reader]){
+  if(accepted)expect(validateLibraryRestoreRecords(reader)).toEqual(identity);
+  else expect(()=>validateLibraryRestoreRecords(reader)).toThrow();
+ }}finally{candidate.close();}
+});
+test('saved Memory is authoritative at restore; explicit history audit still detects algorithm disagreement',async()=>{
+ const rows=corrupt(rows=>{rows.learningTargets[0]!.value.memory.fsrsStability+=0.125;});
+ const original=structuredClone(rows);
+ expect(validateRestoreBackupRows(rows)).toEqual(identity);
+ expect(await validateLibraryRestoreRecordsCooperatively(libraryRowsReader(rows))).toEqual(identity);
+ expect(rows).toEqual(original);
+ expect(()=>validateBackupRows(rows)).toThrow('libraryBackup.errors.inconsistent');
+});
+for(const mutation of [
+ (rows:BackupRows)=>{rows.learningTargets[0]!.value.memory.fsrsCardState='invented';},
+ (rows:BackupRows)=>{rows.learningTargets[0]!.value.memory.dueAt=new Date(NaN);},
+ (rows:BackupRows)=>{rows.learningTargets[0]!.value.memory.fsrsStability=-1;},
+ (rows:BackupRows)=>{rows.learningRuns[0]!.value.protocolState.value.phase='invented';},
+ (rows:BackupRows)=>{rows.learningRuns[0]!.value.participants[rows.learningRuns[0]!.value.targetId].progress.progressEpoch=-1;},
+ (rows:BackupRows)=>{rows.learningEvents[0]!.value.detail.formalEvaluation.attempt.learnerUserId=id();},
+])test(`restore rejects invalid saved state shape ${mutation.toString()}`,()=>expect(()=>validateRestoreBackupRows(corrupt(mutation))).toThrow());
+
+test('a well-formed historical scheduling contradiction restores verbatim and remains detectable by audit',()=>{
+ const rows=corrupt(rows=>{const event=rows.learningEvents.find(row=>row.value.detail.transition.retention?.kind==='memory_outcome')!;event.value.detail.transition.retention.schedulingDecision.nextDueAt='2099-01-01T00:00:00.000Z';});
+ expect(validateRestoreBackupRows(rows)).toEqual(identity);
+ expect(()=>validateBackupRows(rows)).toThrow('libraryBackup.errors.inconsistent');
 });

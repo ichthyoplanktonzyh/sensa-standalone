@@ -59,9 +59,10 @@ test('actual Initial and due Review facts share one exact content body across Ta
  }finally{vi.useRealTimers();}
 });
 
-async function stageLearningReplica(options:{noncanonical?:boolean;injectSharedTag?:boolean}={}){
+async function stageLearningReplica(options:{noncanonical?:boolean;injectSharedTag?:boolean;savedMemoryDrift?:boolean}={}){
  const sqlite=await sqlite3InitModule(),storage=new sqlite.oo1.DB(':memory:','c'),receiver=new SqliteRecordDatabase(sqlite,storage,'memory');receiver.initialize();
  const privateReplicaRows=await snapshot();privateReplicaRows.packageCache=[];
+ if(options.savedMemoryDrift)privateReplicaRows.learningTargets[0]!.value.memory.fsrsStability+=0.125;
  const sourceIdentity=privateReplicaRows.meta.find(row=>row.key==='identity')!.value as LibraryIdentity;
  const localIdentity={...sourceIdentity,id:id(),learnerId:id(),deviceId:id()},owner={subject:id(),accountId:id()};
  receiver.commit({clears:[],deletes:[],puts:[{table:'meta',key:'identity',encodedValue:JSON.stringify(encodeBackupValue(localIdentity))},{table:'meta',key:'service-owner',encodedValue:JSON.stringify(encodeBackupValue(owner))}]});
@@ -324,4 +325,30 @@ for(const version of [10,12,13,14,15,16,17,18])test(`unsupported schema ${versio
   expect(()=>copy.commit({clears:[],deletes:[],puts:[]})).toThrow(`sqlite_schema_legacy:${version}`);
   expect(sqlite.capi.sqlite3_js_db_export(storage)).toEqual(bytes);
  }finally{copy.close(false);}
+});
+
+test('an activated saved Memory continues one genuine review while all restored history and pins remain exact',async()=>{
+ const fixture=await stageLearningReplica({savedMemoryDrift:true});
+ const {sqliteRecordAdapter}=await import('../../../apps/web/src/data/library/sqliteAdapter');
+ const adapter=await sqliteRecordAdapter(),originals=new Map<string,unknown>();
+ try{
+  await fixture.validate();fixture.receiver.commit(fixture.mutation);fixture.assertFacts();
+  const beforeRuns=fixture.receiver.entries('learningRuns'),beforeEvents=fixture.receiver.entries('learningEvents');
+  for(const name of Object.getOwnPropertyNames(SqliteRecordDatabase.prototype)){
+   if(name==='constructor'||typeof Reflect.get(adapter,name)!=='function')continue;
+   const method=Reflect.get(fixture.receiver,name);if(typeof method!=='function')continue;
+   originals.set(name,Reflect.get(adapter,name));Reflect.set(adapter,name,async(...args:unknown[])=>Reflect.apply(method,fixture.receiver,args));
+  }
+  vi.useFakeTimers({toFake:['Date']});
+  const target=await readLibrary(tx=>tx.get<any>('learningTargets',targetId));vi.setSystemTime(target.memory.dueAt);
+  await learningSystem.execute({kind:'start',operationId:id(),targetId,languageContext:context,dailyLimit:20,sessionIntent:'review_only'});
+  for(const action of [{kind:'reveal'},{kind:'rate',rating:'good'}] as const){
+   vi.setSystemTime(Date.now()+1000);const runtime=(await learningSystem.read({kind:'runtime',languageContext:context})).runtime!;
+   await learningSystem.execute({kind:'act',operationId:id(),runId:runtime.runId,expectedRevision:runtime.revision,action});
+  }
+  const after=await readLibrary(tx=>tx.get<any>('learningTargets',targetId));expect(after.memoryRevision).toBe(target.memoryRevision+1);
+  for(const row of beforeRuns)expect(fixture.receiver.get('learningRuns',row.key)).toBe(row.encodedValue);
+  for(const row of beforeEvents)expect(fixture.receiver.get('learningEvents',row.key)).toBe(row.encodedValue);
+  expect(fixture.receiver.diagnostics({verifyIntegrity:true}).integrityCheck?.status).toBe('ok');
+ }finally{vi.useRealTimers();for(const [name,method] of originals)Reflect.set(adapter,name,method);fixture.receiver.close(false);}
 });

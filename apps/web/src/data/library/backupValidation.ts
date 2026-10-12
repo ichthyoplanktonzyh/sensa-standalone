@@ -21,7 +21,7 @@ const fail=():never=>{throw new Error('libraryBackup.errors.inconsistent');};
 
 /**
  * Cross-domain integrity coordinator used by both Cloud Checkpoints and manual
- * backup. Each product domain validates its own facts and replay semantics.
+ * backup. Each product domain validates its own facts. Historical algorithm audit is explicit.
  */
 export function validateBackupRows(rows:BackupRows){
  return validateLibraryRecords(libraryRowsReader(rows));
@@ -34,7 +34,15 @@ export function validateLibraryRecords(reader:LibraryRecordReader){
 export function validateLibraryRecordsCooperatively(reader:LibraryRecordReader){
  return runCooperatively(validateLibraryRecordSteps(reader));
 }
-export function* validateLibraryRecordSteps(reader:LibraryRecordReader){
+/** Admission preserves saved state; it does not certify historical algorithm replay. */
+export function validateLibraryRestoreRecords(reader:LibraryRecordReader){
+ return runSynchronously(validateLibraryRecordSteps(reader,'restore'));
+}
+export function validateLibraryRestoreRecordsCooperatively(reader:LibraryRecordReader){
+ return runCooperatively(validateLibraryRecordSteps(reader,'restore'));
+}
+export const validateRestoreBackupRows=(rows:BackupRows)=>validateLibraryRestoreRecords(libraryRowsReader(rows));
+export function* validateLibraryRecordSteps(reader:LibraryRecordReader,learningValidation:'audit'|'restore'='audit'){
  let readFailed=false,readFailure:unknown;
  const read=<T>(work:()=>T):T=>{try{return work();}catch(cause){if(!readFailed){readFailed=true;readFailure=cause;}throw cause;}};
  const observed:LibraryRecordReader={
@@ -46,7 +54,7 @@ export function* validateLibraryRecordSteps(reader:LibraryRecordReader){
   },
  };
  try{
-  const identity=yield*validateLibraryRecordFacts(observed);
+  const identity=yield*validateLibraryRecordFacts(observed,learningValidation);
   if(readFailed)throw readFailure;
   return identity;
  }catch(cause){
@@ -56,7 +64,7 @@ export function* validateLibraryRecordSteps(reader:LibraryRecordReader){
   throw cause;
  }
 }
-function* validateLibraryRecordFacts(reader:LibraryRecordReader){
+function* validateLibraryRecordFacts(reader:LibraryRecordReader,learningValidation:'audit'|'restore'){
  const {rows,maps}=libraryRecordViews(reader);
  // A lazy reader must decode every stored wire value, including opaque
  // preferences that a domain validator may not otherwise need to inspect.
@@ -91,6 +99,6 @@ function* validateLibraryRecordFacts(reader:LibraryRecordReader){
 
  yield*validateContentSupplyReplicaSteps({rows,identity,requireRow,requirePersonalSource,validateLanguageContext,fail});
  yield*validatePersonalContentReplicaSteps({rows,requireRow,fail});
- yield*validateLearningReplicaSteps({rows,maps,identity,routes,requireRow,requirePersonalSource,validateLanguageContext,operationInput,fail});
+ yield*validateLearningReplicaSteps({rows,maps,identity,routes,requireRow,requirePersonalSource,validateLanguageContext,operationInput,fail},learningValidation);
  return identity;
 }

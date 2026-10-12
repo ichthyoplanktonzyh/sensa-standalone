@@ -149,6 +149,8 @@ Learner Sense Progress 是从同一 Sense 的全部 Retention Targets 与 Sense-
 
 界面可以保存乐观预览，但不能绕过本地 Learning Runtime 直接声明这些权威投影。
 
+恢复已保存学习库时，已存 Target 与 FSRS Memory State 是日常运行权威。恢复保留格式、字段值域、身份、精确材料 pins、版本和引用闭合、合法冲突分支与原子提交校验；普通恢复不以重新执行全部历史算法作为准入门槛。完整历史仍保留，可为修复、算法升级或专项审计显式重算。恢复保真与历史算法一致性是不同保证，后者的矛盾可能在后续审计才发现。
+
 ## 3. Learning Protocol Run
 
 每个正式学习过程固定一个 `protocolId + protocolVersion`、`purpose`、Learning Target、Effective

@@ -1,3 +1,4 @@
+import {assertSavedLearningEvent,assertSavedRunState,savedRetentionStateSchema} from './savedLearningState';
 import {stableLearningTargetId,materialSourcePin,sameLearningSourcePin} from '../../learning/runtime/learningIdentity';
 import {
   defaultSensaLanguageRouteCollection,
@@ -121,7 +122,7 @@ export type LearningSystemStateInput={
 };
 
 /** Learning owns history validation, deterministic replay, projection checks and reconciliation decisions. */
-export function* assertLearningSystemStateSteps(input:LearningSystemStateInput):Generator<void,void>{
+export function* assertLearningSystemStateSteps(input:LearningSystemStateInput,mode:'audit'|'restore'='audit'):Generator<void,void>{
  const {rows,maps,identity,routes,requireRow,requirePersonalSource,validateLanguageContext,operationInput,fail}=input;
  const uuid=z.string().uuid(),timestamp=z.string().datetime({offset:true});
  for(const {key,value} of rows.supplementalMembershipStates){
@@ -174,6 +175,7 @@ export function* assertLearningSystemStateSteps(input:LearningSystemStateInput):
  yield*assertOneActiveBookSteps({*[Symbol.iterator](){for(const row of rows.curriculumEnrollments)yield curriculumEnrollmentSchema.parse(row.value);}});
  for(const {value:target} of rows.learningTargets){
   yield;
+  try{savedRetentionStateSchema.parse(retentionBaseline(target));timestamp.parse(target.createdAt);}catch{fail();}
   learningPolicyProfileRegistry.get(localTargetPolicy(target));
   const assignment=target.policyAssignment;
   uuid.parse(assignment.assignmentId);z.number().int().positive().parse(assignment.revision);timestamp.parse(assignment.assignedAt);learningPolicyProfileRegistry.get(assignment.profileId);
@@ -219,6 +221,13 @@ export function* assertLearningSystemStateSteps(input:LearningSystemStateInput):
  const packageCacheComplete=everyLibraryRow(rows.learningTargets,({value:target})=>target.curriculumMemberships.every((membership:any)=>!membership.packageKey||maps.packageCache.has(membership.packageKey)));
  let historyOnlyRunIds=new Set<string>();
  try{({historyOnlyRunIds}=yield*validateLearningReconciliationRecordSteps({get:(table,key)=>maps[table].get(key),has:(table,key)=>maps[table].has(key),entries:table=>rows[table]}));}catch{fail();}
+ // Conflict continuity still needs the existing audit of the affected Target
+ // lineage: stored Scheduling Decisions do not carry complete output Memory.
+ const auditTargets=new Set<string>();
+ for(const {value:decision} of rows.learningReconciliations)auditTargets.add(decision.targetId);
+ let expanded=true;while(expanded){expanded=false;for(const {value:run} of rows.learningRuns)if(run.targetIds.some((id:string)=>auditTargets.has(id)))for(const id of run.targetIds)if(!auditTargets.has(id)){auditTargets.add(id);expanded=true;}}
+ const auditRun=(run:LocalLearningRun)=>mode==='audit'||run.targetIds.some(id=>auditTargets.has(id));
+ const restoredRevisions=new Map<string,number>();
  const replayFields=retentionReplayFields;
  type TargetReplay=Pick<LocalLearningTarget,typeof replayFields[number]>;
  const replayStates=new Map<string,TargetReplay>();
@@ -252,6 +261,7 @@ export function* assertLearningSystemStateSteps(input:LearningSystemStateInput):
   }
   for(const key of actionKeys){
    const event=requireRow('learningEvents',key) as LearningEvent;
+   try{assertSavedLearningEvent(event,saved,identity.learnerId,requireRow('learningTargets',event.targetId).retentionId,fail);}catch{fail();}
    const eventRun=saved,operation=operationInput(key),participant=eventRun.participants[event.targetId]??fail(),presented=runStepMaterial(participant,event.detail.stepId);if(event.detail.materializationId!==presented.snapshot.learningMaterializationId||operation&&(operation.kind!=='learning.act'||operation.input.runId!==event.runId||operation.input.revision!==event.detail.runRevision||operation.input.at!==event.at||!backupEqual(operation.input.action,event.detail.action)))fail();
    assertRunMaterialPresentedBy(presented,eventRun,event.at);
    // A non-contributing learning branch still records what the learner saw.
@@ -282,6 +292,7 @@ export function* assertLearningSystemStateSteps(input:LearningSystemStateInput):
   // A clock can order unrelated branches differently. Select by an exact,
   // already replayed causal input rather than interpreting wall time as ancestry.
   const index=pendingRuns.findIndex(header=>{const candidate=requireRow('learningRuns',header.key) as LocalLearningRun;
+   if(!auditRun(candidate))return true;
    // Structured cacheless restore retains its explicitly limited admission
    // contract until its exact runtime resource has been restored.
    if(!packageCacheComplete&&candidate.protocolBinding.runtimeAdapterId!=='lightweight')return true;
@@ -295,15 +306,19 @@ export function* assertLearningSystemStateSteps(input:LearningSystemStateInput):
   if(index<0)fail();const header=pendingRuns.splice(index,1)[0]!;
   yield;
   const saved=requireRow('learningRuns',header.key) as LocalLearningRun;
+  try{assertSavedRunState(saved,fail);}catch{fail();}
+  const audit=auditRun(saved);
   const deferredStructured=!packageCacheComplete&&saved.protocolBinding.runtimeAdapterId!=='lightweight';
   if(deferredStructured&&historyOnlyRunIds.has(saved.id))fail();
-  if(!historyOnlyRunIds.has(saved.id)&&!deferredStructured)for(const [id,participant] of Object.entries(saved.participants)){
+  if(audit&&!historyOnlyRunIds.has(saved.id)&&!deferredStructured)for(const [id,participant] of Object.entries(saved.participants)){
    if(!backupEqual(participant.retentionBaseline,replayStates.get(id)))fail();
    const prior=effectiveCommitments.get(id);
    if(prior?!backupEqual(prior,participant.policyCommitment):participant.policyCommitment.committedByProtocolRunId!==participant.protocolRunId)fail();
   }
   try{for(const participant of Object.values(saved.participants)){validateRunMaterialPins(participant);yield;}}catch{fail();}
   const eventHeaders=yield*assertStoredRunFacts(saved,eventKeysByRun.get(saved.id)??[]);
+  const storedRevisions=[...eventHeaders.map(event=>event.revision),...saved.lifecycleEvents.map(event=>event.runRevision)];
+  if(new Set(storedRevisions).size!==storedRevisions.length||saved.revision!==1+storedRevisions.length||saved.ordinal!==1+eventHeaders.length||storedRevisions.some(revision=>!Number.isSafeInteger(revision)||revision<1||revision>=saved.revision))fail();
   // Only this Run's participant bodies and Action facts remain decoded during
   // replay. The cross-Run state consists of the small retention projection.
   const targets=new Map<string,LocalLearningTarget>();
@@ -443,6 +458,48 @@ export function* assertLearningSystemStateSteps(input:LearningSystemStateInput):
    const executable=localExecutableTargetForParticipant(target,trigger),pack=executable.packageKey?maps.packageCache.get(executable.packageKey):undefined;
    validateLocalProtocolResources(execution,executable,pack);
   }
+  if(!audit){
+   // Stored revisions/presentation witnesses certify causal/reference closure,
+   // not that today's algorithm produces the recorded outcomes or Memory.
+   const revisions=new Map<number,{actionKey:string}|{lifecycle:LocalLearningRun['lifecycleEvents'][number]}>();
+   for(const event of eventHeaders){if(revisions.has(event.revision))fail();revisions.set(event.revision,{actionKey:event.key});yield;}
+   for(const event of saved.lifecycleEvents){if(revisions.has(event.runRevision))fail();revisions.set(event.runRevision,{lifecycle:event});yield;}
+   if(saved.revision!==1+revisions.size||saved.ordinal!==1+eventHeaders.length)fail();
+   const presentations=new Map(ids.map(id=>[id,{map:{} as Record<string,string>,order:[] as string[],acted:new Set<string>(),evidence:[] as string[],completion:null as null|{at:string;kind:string}}]));
+   const bind=(id:string,step:string,material:string,refresh=false)=>{const state=presentations.get(id)??fail();if(state.acted.has(step)||!refresh&&state.map[step]&&state.map[step]!==material)fail();if(!state.map[step])state.order.push(step);state.map[step]=material;};
+   // Each participant's first binding is its retained planning baseline.
+   for(const id of ids){const p=saved.participants[id]!,first=p.presentationOrder[0];if(first)bind(id,first,p.material);const revision=restoredRevisions.get(id)??0;if(p.memoryRevision!==revision)fail();restoredRevisions.set(id,revision);}
+   let previousAt=Date.parse(saved.startedAt),paused=false;
+   for(let revision=1;revision<saved.revision;revision++){
+    const item=revisions.get(revision)??fail();
+    if('lifecycle' in item){const event=item.lifecycle;if(Date.parse(event.at)<previousAt||saved.completedAt&&Date.parse(event.at)>Date.parse(saved.completedAt))fail();previousAt=Date.parse(event.at);
+     if(event.kind==='current_step_material_refreshed'){const p=saved.participants[event.targetId]??fail(),material=runMaterialById(p,event.materializationId);bind(event.targetId,event.stepId,Object.entries(p.materializations).find(([,body])=>body===material)?.[0]??fail(),true);}
+     if(event.kind.startsWith('paused_')||event.kind==='interrupted_by_planning_override')paused=true;
+     if(event.kind.startsWith('resumed_'))paused=false;
+    }else{
+     const event=requireRow('learningEvents',item.actionKey) as LearningEvent,state=presentations.get(event.targetId)??fail();
+     if(paused||Date.parse(event.at)<previousAt||!state.map[event.detail.stepId]||runMaterial(saved.participants[event.targetId]!,state.map[event.detail.stepId]!).snapshot.learningMaterializationId!==event.detail.materializationId)fail();previousAt=Date.parse(event.at);state.acted.add(event.detail.stepId);
+     const retention=event.detail.transition.retention,current=restoredRevisions.get(event.targetId)!;
+     state.evidence=[...new Set([...state.evidence,...event.detail.formalEvaluation?.evidence.map(fact=>fact.learningEvidenceId)??[]])];
+     if(state.completion)fail();
+     if(retention?.kind==='initial_learning_completion'){if(!backupEqual(retention.handoff.evidenceIds,state.evidence))fail();state.completion={at:event.at,kind:retention.completion.completionKind};}
+     if(retention?.kind==='relearning_completion'){if(!backupEqual(retention.completion.evidenceIds,state.evidence))fail();state.completion={at:event.at,kind:'relearning_completion'};}
+     if(retention?.kind==='memory_outcome'&&saved.purpose==='retention_review')state.completion={at:event.at,kind:'review_completed'};
+     if(retention?.kind==='initial_learning_completion'){if(current!==0)fail();restoredRevisions.set(event.targetId,1);}
+     if(retention?.kind==='memory_outcome'){if(retention.schedulingDecision.priorMemoryRevision!==current)fail();restoredRevisions.set(event.targetId,retention.schedulingDecision.resultingMemoryRevision);}
+     const next=event.detail.nextPresentation;if(next)bind(next.targetId,next.stepId,next.material);
+    }
+    yield;
+   }
+   for(const id of ids){const p=saved.participants[id]!,state=presentations.get(id)!;if(!backupEqual(state.map,p.presentedMaterials)||!backupEqual(state.order,p.presentationOrder)||!backupEqual(state.evidence,p.evidenceIds)||!backupEqual(state.completion,saved.targetCompletions[id]??null))fail();}
+   if(saved.completedAt){
+    const last=revisions.get(saved.revision-1)??fail();const terminal=requireRow('learningEvents','actionKey' in last?last.actionKey:fail()) as LearningEvent;
+    if(terminal.at!==saved.completedAt||terminal.detail.nextPresentation!==null)fail();
+    if(saved.completionKind==='wait_relearning'){if(saved.purpose!=='relearning'||ids.length!==1||terminal.detail.transition.retention?.kind!=='relearning_progress')fail();}
+    else if(ids.some(id=>!saved.participants[id]!.progress.completed||!saved.targetCompletions[id]||saved.targetCompletions[id]!.kind!==saved.completionKind))fail();
+   }else ids.forEach(id=>unfinished.add(id));
+   continue;
+  }
   const primary=targets.get(saved.targetId)??fail(),primaryExecutable=localExecutableTargetForParticipant(primary,saved.participants[saved.targetId]??fail());
   let run=replayLocalProtocolRun({execution,target:primaryExecutable,resource:primaryExecutable.packageKey?maps.packageCache.get(primaryExecutable.packageKey):undefined,saved});
   if(!Object.hasOwn(saved,'completionKind'))delete run.completionKind;
@@ -490,8 +547,8 @@ export function* assertLearningSystemStateSteps(input:LearningSystemStateInput):
   if(roots.size!==1)fail();let cursor=[...roots][0]!;const remaining=[...transitions];
   while(remaining.length){let index=remaining.findIndex(row=>row.before===cursor&&row.after===cursor);if(index<0)index=remaining.findIndex(row=>row.before===cursor);if(index<0)fail();cursor=remaining.splice(index,1)[0]!.after;yield;}
  }
- for(const {value:target} of rows.learningTargets){if(!unreplayedTargets.has(target.id)&&!backupEqual(target.committedPolicy,effectiveCommitments.get(target.id))||target.committedPolicy&&!knownProtocolRunIds.has(target.committedPolicy.committedByProtocolRunId))fail();yield;}
- for(const {value:target} of rows.learningTargets){if(!unreplayedTargets.has(target.id))for(const key of replayFields)if(!backupEqual(replayStates.get(target.id)![key],target[key]))fail();yield;}
+ for(const {value:target} of rows.learningTargets){if((mode==='audit'||auditTargets.has(target.id))&&!unreplayedTargets.has(target.id)&&!backupEqual(target.committedPolicy,effectiveCommitments.get(target.id))||target.committedPolicy&&!knownProtocolRunIds.has(target.committedPolicy.committedByProtocolRunId))fail();yield;}
+ for(const {value:target} of rows.learningTargets){if(mode==='restore'&&!auditTargets.has(target.id)&&!unreplayedTargets.has(target.id)&&target.memoryRevision!==(restoredRevisions.get(target.id)??0))fail();if((mode==='audit'||auditTargets.has(target.id))&&!unreplayedTargets.has(target.id))for(const key of replayFields)if(!backupEqual(replayStates.get(target.id)![key],target[key]))fail();yield;}
  if(active){const run=requireRow('learningRuns',active);if(localRunOpenPlanningInterruption(run)||localRunOpenSessionPause(run)||localRunTargetIds(run).some(id=>hasDeclaredMasteryOverride(requireRow('learningTargets',id))))fail();}
  for(const {key,value:operation} of rows.operations){
   if(operation.result?.format==='sensa-learning-run-receipt-v1'){

@@ -326,7 +326,7 @@ test('an unchanged fallback checkpoint does not reread baseline bodies while app
  // Force the complete validation fallback. Integrity checks remain;
  // redundant captures and manufactured content changes do not.
  publish([first]);await synchronizeLibrary(request);
- const state=(await readCloudSync())!;await writeLibraryState(async tx=>tx.put('meta','cloud-sync',{...state,validationVersion:undefined}));
+ const state=(await readCloudSync())!;await writeLibraryState(async tx=>tx.put('meta','cloud-sync',{...state,restoreValidationVersion:undefined}));
  const adapter=await sqliteRecordAdapter(),original=adapter.syncBaseEntries.bind(adapter);let fullReads=0;
  adapter.syncBaseEntries=async keys=>{if(keys===undefined)fullReads++;return original(keys);};
  const before=await readLibrary(readLocalLibraryRevision);
