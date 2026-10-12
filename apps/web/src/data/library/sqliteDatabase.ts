@@ -157,26 +157,62 @@ export class SqliteRecordDatabase {
 
   /** Reuse the shipped projection writers in this isolated generation only.
    * Facts/bodies remain unchanged. The caller compares before/after cache data. */
-  rebuildPortableProjections(reader:LibraryRecordReader):void{
+  rebuildPortableProjections(reader:LibraryRecordReader,compare?:(stage:'before'|'after')=>void):void{
     if(this.closed||this.connectionFailed)throw Error('sqlite_snapshot_connection_failed');
+    if(!this.sqlite3.capi.sqlite3_get_autocommit(this.database.pointer!))throw Error('sqlite_snapshot_projection_transaction');
+    this.database.exec(sqliteRuntimePragmas);
+    if(this.persistence==='opfs'&&(this.scalarText('PRAGMA locking_mode')!=='exclusive'||this.scalarText('PRAGMA journal_mode')!=='wal'||this.scalarNumber('PRAGMA synchronous')!==2))throw Error('sqlite_snapshot_runtime');
+    this.meaningLookup.close();this.worldBrowseProjection.close();this.journeyIdentities.close();
+    this.database.exec('PRAGMA foreign_keys=OFF');
+    this.initialized=false;
     this.snapshotReader=reader;
+    let transaction=false;
     try{
+      this.database.exec('BEGIN IMMEDIATE');transaction=true;
+      compare?.('before');
       const tables=this.database.exec({sql:"SELECT name,sql FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'",rowMode:'object',returnValue:'resultRows'}) as {name:string;sql:string}[];
       const derived=tables.filter(row=>!sqliteSourceDataTables.has(row.name));
-      this.database.exec('PRAGMA foreign_keys=OFF');
       // Removing a virtual root removes its own shadow tables too.
       for(const row of [...derived.filter(row=>row.sql.startsWith('CREATE VIRTUAL TABLE')), ...derived.filter(row=>!row.sql.startsWith('CREATE VIRTUAL TABLE'))]){
         if(!/^\w+$/u.test(row.name))throw Error('sqlite_snapshot_projection_schema');
         this.database.exec(`DROP TABLE IF EXISTS ${row.name}`);
       }
-      this.database.exec(sqliteLibrarySchema);
+      // Connection pragmas were configured before BEGIN. Keep all trusted
+      // schema/cache changes, including user_version, in this one transaction.
+      this.database.exec(sqliteLibrarySchema.slice(sqliteLibrarySchema.indexOf('CREATE TABLE')));
       for(const {key,value}of reader.entries('learningTargets'))this.writeLearningTargetProjection(key,value,false);
       for(const {key,value}of reader.entries('learningRuns'))this.writeLearningRunProjection(key,value);
       for(const {key,value}of reader.entries('contentAttempts'))this.writeContentAttemptProjection(key,value);
       for(const table of ['semanticContexts','semanticInbox'] as const)for(const {key,value}of reader.entries(table))this.writeMediaReferences(table,key,value);
-      this.initialized=false;
-      this.initialize();
+      this.initializeProjectionCaches();
+      this.database.exec('PRAGMA optimize=0x10002');
+      this.verifyIntegrity();
+      if(this.database.exec({sql:'PRAGMA foreign_key_check',returnValue:'resultRows'}).length)throw Error('sqlite_snapshot_projection_references');
+      compare?.('after');
+      this.database.exec('COMMIT');transaction=false;
+      this.initialized=true;this.nextOptimizeAt=Date.now()+sqliteOptimizeIntervalMs;
+    }catch(cause){
+      let failure=cause;
+      if(transaction)try{this.database.exec('ROLLBACK');}catch(rollbackCause){failure=sqliteRollbackFailure(cause,rollbackCause);}
+      // A builder's committed facts may differ from its rolled-back old
+      // caches. Never let their version stamps make this wrapper ready again.
+      this.quarantineConnection(failure instanceof Error?failure:new Error('sqlite_snapshot_projection_failed',{cause:failure}));
+      this.meaningLookup.close();this.worldBrowseProjection.close();this.journeyIdentities.close();
+      throw failure;
     }finally{this.snapshotReader=undefined;this.database.exec('PRAGMA foreign_keys=ON');}
+    // Durable commit and checkpoint remain inside the caller's projection time.
+    if(this.persistence==='opfs')this.maintainWal();
+  }
+
+  /** Caller owns the transaction, for both ordinary initialization and a
+   * complete portable-generation cache rebuild. */
+  private initializeProjectionCaches():{lookupReady:number;worldReady:number}{
+    this.meaningLookup.initialize();const lookupReady=performance.now();
+    this.worldBrowseProjection.initialize();this.practiceExpressionProjection.initialize();const worldReady=performance.now();
+    this.journeyIdentities.initialize();this.learningHistory.initialize();this.semanticMemoryProjection.initialize();this.runtimeCandidates.initialize();
+    const retired=this.database.exec({sql:"SELECT 1 FROM sqlite_schema WHERE type='table' AND name='sensa_study_scope_target_snapshots'",rowMode:0,returnValue:'resultRows'}) as unknown[];
+    if(retired.length)this.database.exec('DROP TABLE sensa_study_scope_target_snapshots');
+    this.purgeReplicaCandidates();return {lookupReady,worldReady};
   }
 
   initialize(): SqliteStorageDiagnostics {
@@ -223,22 +259,7 @@ export class SqliteRecordDatabase {
     sourceSchemaReady=performance.now();
     this.database.exec('BEGIN IMMEDIATE');
     try{
-      this.meaningLookup.initialize();
-      lookupReady=performance.now();
-      this.worldBrowseProjection.initialize();
-      this.practiceExpressionProjection.initialize();
-      worldReady=performance.now();
-      this.journeyIdentities.initialize();
-      this.learningHistory.initialize();
-      this.semanticMemoryProjection.initialize();
-      this.runtimeCandidates.initialize();
-      // Retire only the obsolete device-local full-inventory admission cache.
-      // Source facts, shared bodies and their ownership are untouched.
-      const retired=this.database.exec({sql:"SELECT 1 FROM sqlite_schema WHERE type='table' AND name='sensa_study_scope_target_snapshots'",rowMode:0,returnValue:'resultRows'}) as unknown[];
-      if(retired.length)this.database.exec('DROP TABLE sensa_study_scope_target_snapshots');
-      // No private download generation survives its owning connection. This
-      // also covers an abrupt Worker loss without loading its validator code.
-      this.purgeReplicaCandidates();
+      ({lookupReady,worldReady}=this.initializeProjectionCaches());
       this.database.exec('COMMIT');
     }catch(error){try{this.database.exec('ROLLBACK');}catch{/* Preserve initialization failure. */}throw error;}
     const schemaReady=performance.now();

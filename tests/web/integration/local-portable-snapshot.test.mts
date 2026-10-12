@@ -2,7 +2,7 @@
  * admission checks do not establish OPFS, generation activation or capacity. */
 import {afterAll,expect,test,vi} from 'vitest';
 import init from '@sqlite.org/sqlite-wasm';
-import type {SAHPoolUtil} from '@sqlite.org/sqlite-wasm';
+import type {Database,SAHPoolUtil} from '@sqlite.org/sqlite-wasm';
 import {SqliteRecordDatabase} from '../../../apps/web/src/data/library/sqliteDatabase';
 import {decodeBackupValue,encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec';
 import {decodeSharedArchiveWire,unpackStoredRecord} from '../../../apps/web/src/data/library/sharedRecordContent';
@@ -20,6 +20,9 @@ import {LibraryJourneyRepository} from '../../../apps/web/src/experience/persona
 import {createJourneyModules} from '../../../apps/web/src/experience/personalMeaningJourney/gateway';
 import {createSeededClock} from '../../../apps/web/src/experience/personalMeaningJourney/ports';
 import {manualMeaningPayload,newManualMeaningDraft} from '../../../apps/web/src/experience/intake/manualMeaning';
+import {libraryRowsReader} from '../../../apps/web/src/data/library/libraryRecordReader';
+import {sqliteLibraryTables} from '../../../apps/web/src/data/library/sqliteProtocol';
+import type {BackupRows} from '../../../apps/web/src/data/library/backupValidation';
 
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined,location:new URL('http://snapshot.fixture.invalid/')});
 const sqlite=await init(),raw=new sqlite.oo1.DB('/snapshot-focused-source.sqlite3','c');
@@ -32,15 +35,16 @@ for(const [table,key]of [['meta','service-owner'],['settings','providers'],['pro
 /** Adapter for the installed SQLite memory VFS, not a fake SQL engine or an
  * assertion of actual SAHPool/OPFS support. */
 function memoryFilePool(){
- const files=new Set<string>();
+ const files=new Set<string>(),handles=new Map<string,Database>();
  return {
-  OpfsSAHPoolDb:class extends sqlite.oo1.DB{constructor(file:string){super(file,'c');files.add(file);}},
+  handles,
+  OpfsSAHPoolDb:class extends sqlite.oo1.DB{constructor(file:string){super(file,'c');files.add(file);handles.set(file,this);}},
   getFileCount:()=>files.size,
   reserveMinimumCapacity:async()=>0,
   unlink:(file:string)=>files.delete(file),
   exportFile:(file:string)=>{const db=new sqlite.oo1.DB(file,'r');try{return sqlite.capi.sqlite3_js_db_export(db.pointer);}finally{db.close();}},
   importDb:async(file:string,read:()=>Uint8Array|undefined)=>{const chunks:Uint8Array[]=[];let length=0;for(;;){const chunk=await read();if(chunk===undefined)break;chunks.push(chunk);length+=chunk.length;}const bytes=new Uint8Array(length);let at=0;for(const chunk of chunks){bytes.set(chunk,at);at+=chunk.length;}sqlite.capi.sqlite3_js_posix_create_file(file,bytes);files.add(file);return length;},
- } as unknown as SAHPoolUtil;
+ } as unknown as SAHPoolUtil&{handles:Map<string,Database>};
 }
 const snapshot=await createLocalPortableSnapshot(sqlite,memoryFilePool(),source,0);
 test('trusted producer excludes device rows and pages without mutating its source',()=>{
@@ -99,6 +103,22 @@ test('real Learning and Meaning commands roundtrip with shared content and query
    expect(imported.library.lookupMeanings('borrow')).toEqual(learning.lookupMeanings('borrow'));
    expect(imported.library.worldBrowse({query:'',filter:'all',offset:0,limit:20})).toEqual(learning.worldBrowse({query:'',filter:'all',offset:0,limit:20}));
   }finally{imported.library.close();}
+  const failedFile='/focused-atomic-'+crypto.randomUUID(),failedPool=memoryFilePool();
+  const failed=await importLocalPortableSnapshot(sqlite,failedPool,failedFile,exported),failedRaw=failedPool.handles.get(failedFile)!;
+  const beforeBytes=sha256(sqlite.capi.sqlite3_js_db_export(failedRaw.pointer)),sourceBefore=JSON.stringify(sqliteLibraryTables.map(table=>learning.entries(table)));
+  const admittedRows=Object.fromEntries(sqliteLibraryTables.map(table=>[table,failed.library.entries(table).map(row=>({key:row.key,value:decodeBackupValue(JSON.parse(row.encodedValue))}))])) as BackupRows;
+  const reader=libraryRowsReader(admittedRows);let faultInsideTransaction=false;
+  try{
+   expect(()=>failed.library.rebuildPortableProjections({...reader,entries:function*(table){
+    if(table==='learningRuns'){faultInsideTransaction=sqlite.capi.sqlite3_get_autocommit(failedRaw.pointer!)===0;throw Error('synthetic_projection_mid_transaction');}
+    yield*reader.entries(table);
+   }})).toThrow('synthetic_projection_mid_transaction');
+   expect(faultInsideTransaction).toBe(true);expect(sqlite.capi.sqlite3_get_autocommit(failedRaw.pointer!)).toBe(1);
+   expect(sha256(sqlite.capi.sqlite3_js_db_export(failedRaw.pointer))).toBe(beforeBytes);
+   expect(failed.library.connectionFailed).toBe(true);expect(()=>failed.library.initialize()).toThrow('synthetic_projection_mid_transaction');
+   expect(JSON.stringify(sqliteLibraryTables.map(table=>learning.entries(table)))).toBe(sourceBefore);
+   expect(learning.lookupMeanings('borrow').meanings).toHaveLength(1);
+  }finally{failed.library.close(false);}
   for(const mutation of ['missing-json-reference','wrong-source-pin'] as const){
    const file='/focused-invalid-learning-source-'+crypto.randomUUID();sqlite.capi.sqlite3_js_posix_create_file(file,exported.bytes);
    const badRaw=new sqlite.oo1.DB(file,'c'),bad=new SqliteRecordDatabase(sqlite,badRaw,'memory');

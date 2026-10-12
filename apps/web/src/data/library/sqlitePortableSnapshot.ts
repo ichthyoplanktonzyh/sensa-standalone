@@ -138,11 +138,12 @@ export async function importLocalPortableSnapshot(sqlite:Sqlite3Static,pool:SAHP
   library=new SqliteRecordDatabase(sqlite,raw,'opfs');
   if(scalar(raw,'PRAGMA integrity_check')!=='ok'||raw.exec({sql:'PRAGMA foreign_key_check',returnValue:'resultRows'}).length)invalid('integrity');
   const facts=await decodedFacts(raw);
-  const admitted=performance.now(),before=projectionValues(raw);
-  library.rebuildPortableProjections(facts.reader);
-  const after=projectionValues(raw);
-  if(before.size!==after.size||[...before].some(([table,digest])=>after.get(table)!==digest))invalid('projection_values');
-  if(raw.exec({sql:'PRAGMA foreign_key_check',returnValue:'resultRows'}).length)invalid('projection_references');
+  const admitted=performance.now();let before:ReturnType<typeof projectionValues>;
+  library.rebuildPortableProjections(facts.reader,stage=>{
+   if(stage==='before'){before=projectionValues(raw!);return;}
+   const after=projectionValues(raw!);
+   if(before.size!==after.size||[...before].some(([table,digest])=>after.get(table)!==digest))invalid('projection_values');
+  });
   const projected=performance.now();
   const identity={...facts.identity,deviceId:crypto.randomUUID()};
   library.commit({clears:[],deletes:[],puts:[{table:'meta',key:'identity',encodedValue:JSON.stringify(encodeBackupValue(identity))},{table:'meta',key:'local-incarnation',encodedValue:JSON.stringify(encodeBackupValue(crypto.randomUUID()))},{table:'meta',key:'local-content-revision',encodedValue:JSON.stringify(encodeBackupValue(1))}]});

@@ -47,6 +47,11 @@ export async function importSnapshot(){
  if(!snapshot)throw Error('snapshot_missing');const started=performance.now();imported=await openIsolatedLocalSnapshot(snapshot);
  return {elapsedMs:performance.now()-started,namespace:imported.namespace,report:imported.report,diagnostics:imported.diagnostics};
 }
+export function snapshotData(){if(!snapshot)throw Error('snapshot_missing');return {...snapshot,bytes:[...snapshot.bytes]};}
+export async function refuseSnapshotData(data:Omit<LocalPortableSnapshot,'bytes'>&{bytes:number[]}){
+ try{const accepted=await openIsolatedLocalSnapshot({...data,bytes:new Uint8Array(data.bytes)});await accepted.adapter.close();return {accepted:true};}
+ catch(error){return {accepted:false,error:String(error)};}
+}
 export async function rejectTruncatedSnapshot(){
  if(!snapshot)throw Error('snapshot_missing');const bytes=snapshot.bytes.slice(0,1024);
  try{const accepted=await openIsolatedLocalSnapshot({...snapshot,bytes,sha256:sha256(bytes)});await accepted.adapter.close();return {accepted:true};}
