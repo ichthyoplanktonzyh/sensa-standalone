@@ -3,6 +3,7 @@
 import {afterAll,expect,test,vi} from 'vitest';
 import init from '@sqlite.org/sqlite-wasm';
 import type {Database,SAHPoolUtil} from '@sqlite.org/sqlite-wasm';
+import {SqliteSyncDependencies} from '../../../apps/web/src/data/library/sqliteSyncDependencies';
 import {SqliteRecordDatabase} from '../../../apps/web/src/data/library/sqliteDatabase';
 import {decodeBackupValue,encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec';
 import {decodeSharedArchiveWire,unpackStoredRecord} from '../../../apps/web/src/data/library/sharedRecordContent';
@@ -88,7 +89,7 @@ test('source identity is fenced across asynchronous capacity acquisition',async(
 });
 test('real-schema import admits consistent projections and regenerates device identity',async()=>{
  const imported=await importLocalPortableSnapshot(sqlite,memoryFilePool(),'/focused-import-'+crypto.randomUUID(),snapshot);
- try{expect(imported.stats.decodedRecords).toBe(1);expect(imported.stats.decodedBodies).toBe(0);expect(imported.identity.id).toBe(identity.id);expect(imported.identity.deviceId).not.toBe(identity.deviceId);expect(imported.library.count('providers')).toBe(0);}finally{imported.library.close();}
+ try{expect(imported.stats.decodedRecords).toBe(1);expect(imported.stats.decodedBodies).toBe(0);expect(imported.identity.id).toBe(identity.id);expect(imported.identity.deviceId).not.toBe(identity.deviceId);expect(imported.library.count('providers')).toBe(0);const dependencies=new SqliteSyncDependencies(Reflect.get(imported.library,'database'));expect(dependencies.certificate()).toBeUndefined();expect(dependencies.count()).toBe(0);}finally{imported.library.close();}
 });
 test('fabricated semantic-memory cache cannot become a query result',async()=>{
  const file='/focused-projection-source-'+crypto.randomUUID();sqlite.capi.sqlite3_js_posix_create_file(file,snapshot.bytes);

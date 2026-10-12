@@ -220,6 +220,7 @@ export class SqliteRecordDatabase {
       for(const {key,value}of reader.entries('contentAttempts'))this.writeContentAttemptProjection(key,value);
       for(const table of ['semanticContexts','semanticInbox'] as const)for(const {key,value}of reader.entries(table))this.writeMediaReferences(table,key,value);
       this.initializeProjectionCaches();
+      this.syncDependencies.ensure();
       this.database.exec('PRAGMA optimize=0x10002');
       this.verifyIntegrity();
       if(this.database.exec({sql:'PRAGMA foreign_key_check',returnValue:'resultRows'}).length)throw Error('sqlite_snapshot_projection_references');
