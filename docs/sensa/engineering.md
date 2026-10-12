@@ -368,13 +368,11 @@ begin／append 在写事务内重验 owner fence，避免预检与暂存写入�
 留待健康重开清除。换代以事务移除旧私有副本，连接重开清除遗留候选，正式事实不变。
 批次精确重试不重复计数，不同正文的同 key 拒绝；部分候选不能封存，完整候选
 先封存再通过同一完整 authority 校验。
-首次空库激活仅对该表所有记录的 Replica Module 均无 restore 转换时 SQL 复制已验证的 compact 行、
-有序 refs、精确正文及 record／sync owners；已有同摘要正文必须解包全文相等。identity 等转换仍走原值路径，
-派生投影仍消费完整等价值，事实／基线／依赖／索引／tombstone／候选清理同一事务回滚。校验期间本机 revision／身份／owner 或 incarnation 改变即拒绝；
-封存校验期间按 16 MiB UTF-8 文本／256 条 LRU 复用不可变正文；每次读仍独立 JSON 解析和 wire 解码，缓存命中也重查取消与连接健康，分页保留原 fence。此预算不等于 JS heap；大行不缓存。候选共享表将合法 tagged wire 的不可变材料外化到同代私有正文／owner 表；原始 wire SHA 保留非规范化 JSON 的精确重试，
-未知 wire 不外化。reader 对每行核对正文 SHA 与使用的 owner 集合，缺失／多余依赖均拒绝；累计 logical 仍计原始展开行，
-stored 计唯一正文、compact 行、原始摘要与依赖元数据，512／256 MiB 及单行 90 MiB 上限不变。
-候选正文和基线一直不可见，取消只移除对应私有副本。owner／identity／incarnation／signed-out 变化及清库
+候选保留完整 packed 行供校验读取，不在每次重放时逐摘要查询另一套私有正文。首次空库激活中，
+共享基线按既有 writer 外化并检查一次；仅对全表 Replica Module 无 restore 转换的共享记录，
+再在同一事务将该基线的 compact bytes 和 sync owners 复制到 source／record owners，避免再次外化。
+identity 等转换和派生投影仍走完整值路径；事实／基线／owner／索引／候选清理一并回滚。校验期间本机 revision／身份／owner 或 incarnation 改变即拒绝；
+封存校验期间按 16 MiB UTF-8 文本／256 条 LRU 复用不可变正文；每次读仍独立 JSON 解析和 wire 解码，缓存命中也重查取消与连接健康，分页保留原 fence。此预算不等于 JS heap；大行不缓存。候选正文和基线一直不可见，取消只移除对应私有副本。owner／identity／incarnation／signed-out 变化及清库
 在同一源事务清除私有副本，成功后停止在途校验；事务失败不清正式资料或已存副本。Worker 关闭先取消并等待
 校验结束再关闭 native handles，fatal quarantine 同时停止在途读；失效连接不能继续写失败或已校验状态。
 完整协调器保留 reader 的原始失败，不把取消、并发 fence 变化或存储故障误报成领域资料损坏。
