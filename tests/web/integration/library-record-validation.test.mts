@@ -12,13 +12,22 @@ import {libraryRowsReader,libraryRecordViews} from '../../../apps/web/src/data/l
 import {isReplicatedLibraryEntry,normalizeLibraryReplicaEntry,type LibraryReplicaEntry} from '../../../apps/web/src/data/library/replication/libraryReplica';
 import {sqliteLibraryCandidate,type LibraryCandidateRecord} from '../support/semanticWorldRecordFixture.mts';
 import type {BackupRows} from '../../../apps/web/src/data/library/backupValidation';
+import sqlite3InitModule from '@sqlite.org/sqlite-wasm';
+import {SqliteRecordDatabase} from '../../../apps/web/src/data/library/sqliteDatabase';
+import {SqliteSyncDependencies,syncAdmission} from '../../../apps/web/src/data/library/sqliteSyncDependencies';
+import {admitLearningDelta,DeltaReceiveFallback} from '../../../apps/web/src/data/library/learningDeltaAdmission';
+import {backupEqual} from '../../../apps/web/src/data/library/backupCodec';
+import {libraryRestoreValidationVersion} from '../../../apps/web/src/data/library/replication/libraryReplicaValidation';
+import type {LibraryRecordReader} from '../../../apps/web/src/data/library/libraryRecordReader';
 
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined,location:new URL('http://library-record-reader.fixture.invalid/')});
 const database=await useNodeLearningCapacityStorage();afterAll(()=>database.close());
 const {validateBackupRows,validateLibraryRecords,validateLibraryRecordsCooperatively,validateLibraryRecordSteps,validateRestoreBackupRows,validateLibraryRestoreRecords,validateLibraryRestoreRecordsCooperatively}=await import('../../../apps/web/src/data/library/backupValidation');
 const {validateLibraryReplica,validateLibraryReplicaCooperatively}=await import('../../../apps/web/src/data/library/replication/libraryReplicaValidation');
 const context=sensaPinnedLanguageContext(defaultSensaLanguageRoute),id=()=>crypto.randomUUID();
-let source:BackupRows,identity:LibraryIdentity;
+let source:BackupRows,baseline:BackupRows,identity:LibraryIdentity;
+const snapshot=()=>readLibrary(async tx=>Object.fromEntries(await Promise.all(libraryTables.map(async table=>[table,await tx.entries(table)]))) as BackupRows);
+const replicated=(rows:BackupRows):BackupRows=>Object.fromEntries(libraryTables.map(table=>[table,rows[table].filter(row=>isReplicatedLibraryEntry(table,row.key)).map(row=>({key:row.key,value:normalizeLibraryReplicaEntry({...structuredClone(row),table:table as LibraryReplicaEntry['table']},identity).value}))])) as BackupRows;
 const action=async(kind:'reveal'|'rate')=>{
  const runtime=(await learningSystem.read({kind:'runtime',languageContext:context,clock:Date.now()})).runtime!;
  if(runtime.kind!=='lightweight')throw Error('Expected lightweight learning');
@@ -39,12 +48,72 @@ beforeAll(async()=>{
    await learningSystem.execute({kind:'start',operationId:id(),targetId,languageContext:context,dailyLimit:20});
    await action('reveal');const runId=await action('rate');await learningSystem.execute({kind:'finish',operationId:id(),runId});vi.setSystemTime(Date.now()+1000);
   }
+  baseline=replicated(await snapshot());
   const target=await readLibrary(tx=>tx.get<any>('learningTargets',targets[0]!));vi.setSystemTime(target.memory.dueAt);
   await learningSystem.execute({kind:'start',operationId:id(),targetId:targets[0]!,languageContext:context,dailyLimit:20,sessionIntent:'review_only'});
   await action('reveal');const runId=await action('rate');await learningSystem.execute({kind:'finish',operationId:id(),runId});
   source=await readLibrary(async tx=>Object.fromEntries(await Promise.all(libraryTables.map(async table=>[table,await tx.entries(table)]))) as BackupRows);
   source.packageCache=[];source.operations=[];
  }finally{vi.useRealTimers();}
+});
+const deltaChanges=(before:BackupRows,after:BackupRows)=>libraryTables.flatMap(table=>{
+ const old=new Map(before[table].map(row=>[row.key,row.value])),current=new Map(after[table].map(row=>[row.key,row.value]));
+ return [...new Set([...old.keys(),...current.keys()])].filter(key=>!backupEqual(old.get(key),current.get(key))).map(key=>({table:table as LibraryReplicaEntry['table'],key,...(!current.has(key)?{deleted:true}:{})}));
+});
+async function deltaFixture(after=replicated(source)){
+ const sqlite=await sqlite3InitModule(),raw=new sqlite.oo1.DB(':memory:','c'),storage=new SqliteRecordDatabase(sqlite,raw,'memory');storage.initialize();
+ const dependencies=new SqliteSyncDependencies(raw),admission=syncAdmission();
+ for(const row of records(baseline))dependencies.observe(admission,row.table,row.key,JSON.stringify(encodeBackupValue(row.value)),row.value);
+ const owner={subject:id(),accountId:id()},state={owner,incarnation:'delta-fixture',revision:1,checkpointVersion:7 as const,restoreValidationVersion:libraryRestoreValidationVersion,syncedLocalRevision:0,status:'synced' as const};
+ dependencies.certify(admission,state,identity,0);const certificate=dependencies.certificate()!;expect(certificate).toBeDefined();
+ const alive=()=>dependencies.assert(certificate),beforeReader=libraryRowsReader(baseline),afterReader=libraryRowsReader(after);
+ const controlled=(reader:LibraryRecordReader):LibraryRecordReader=>({...reader,get:(table,key)=>{alive();return reader.get(table,key);},has:(table,key)=>{alive();return reader.has(table,key);}});
+ return {raw,dependencies,certificate,alive,base:controlled(beforeReader),remote:controlled(afterReader),changes:deltaChanges(baseline,after),close:()=>storage.close()};
+}
+test('changed Event closure reads each side once rather than scanning the overlay for every related Run',async()=>{
+ const after=replicated(source),fixture=await deltaFixture(after);let phase='',beforeEvents=0,afterEvents=0;
+ const count=(reader:LibraryRecordReader,side:'before'|'after'):LibraryRecordReader=>({...reader,get(table,key){if(phase==='eligibility'&&table==='learningEvents'){if(side==='before')beforeEvents++;else afterEvents++;}return reader.get(table,key);}});
+ try{
+  expect(validateLibraryRestoreRecords(libraryRowsReader(after))).toMatchObject({id:identity.id,learnerId:identity.learnerId});
+  const result=await admitLearningDelta({...fixture,base:count(fixture.base,'before'),remote:count(fixture.remote,'after'),phase:name=>{phase=name;}});
+  const changedEvents=fixture.changes.filter(row=>row.table==='learningEvents').length;
+  expect(changedEvents).toBe(2);expect(result.evidence.runs).toBe(2);expect(result.evidence.events).toBe(4);
+  expect(beforeEvents).toBe(changedEvents);expect(afterEvents).toBe(changedEvents);
+  expect(result.evidence.changedEventClosure).toEqual({baselineLookups:2,candidateLookups:2,runLookups:2,indexedRelations:2,edgeVisits:2});
+  expect(await result.prepare()).toEqual(fixture.changes.map(({table,key})=>({table,key})));
+ }finally{fixture.close();}
+});
+test('redundant immutable Event puts preserve both baseline and overlay reachability without duplicate edges',async()=>{
+ const fixture=await deltaFixture();try{
+  const targetId=source.learningEvents.find(row=>!baseline.learningEvents.some(prior=>prior.key===row.key))!.value.targetId;
+  const old=baseline.learningEvents.find(row=>row.value.targetId===targetId)!;
+  const result=await admitLearningDelta({...fixture,changes:[...fixture.changes,{table:'learningEvents',key:old.key}]});
+  expect(result.evidence.runs).toBe(2);expect(result.evidence.events).toBe(4);
+  expect(result.evidence.changedEventClosure).toEqual({baselineLookups:3,candidateLookups:3,runLookups:2,indexedRelations:3,edgeVisits:3});
+  expect((await result.prepare()).some(row=>row.key===old.key)).toBe(false);
+ }finally{fixture.close();}
+});
+for(const fault of ['delete-old-event','rebind-old-run','retarget-old-event','missing-changed-event','missing-event-run','cross-target-event'] as const)test(`Event adjacency retains fail-closed admission for ${fault}`,async()=>{
+ const after=replicated(source),old=baseline.learningEvents[0]!,fresh=after.learningEvents.find(row=>!baseline.learningEvents.some(prior=>prior.key===row.key))!;
+ if(fault==='delete-old-event')after.learningEvents=after.learningEvents.filter(row=>row.key!==old.key);
+ else if(fault==='rebind-old-run')after.learningEvents.find(row=>row.key===old.key)!.value.runId=fresh.value.runId;
+ else if(fault==='retarget-old-event')after.learningEvents.find(row=>row.key===old.key)!.value.targetId=after.learningTargets.find(row=>row.key!==old.value.targetId)!.key;
+ else if(fault==='missing-changed-event')after.learningEvents=after.learningEvents.filter(row=>row.key!==fresh.key);
+ else if(fault==='missing-event-run')fresh.value.runId=id();
+ else fresh.value.targetId=after.learningTargets.find(row=>row.key!==fresh.value.targetId)!.key;
+ const fixture=await deltaFixture(after);try{
+  const work=admitLearningDelta({...fixture,changes:fault==='missing-changed-event'?[...fixture.changes,{table:'learningEvents',key:fresh.key}]:fixture.changes});
+  if(fault==='delete-old-event')await expect(work).rejects.toMatchObject({reason:'deleted_record'} satisfies Partial<DeltaReceiveFallback>);
+  else if(fault==='rebind-old-run'||fault==='retarget-old-event')await expect(work).rejects.toMatchObject({reason:'immutable_record_change'} satisfies Partial<DeltaReceiveFallback>);
+  else await expect(work).rejects.toThrow('libraryBackup.errors.inconsistent');
+  expect(()=>validateLibraryRestoreRecords(libraryRowsReader(after))).toThrow();
+ }finally{fixture.close();}
+});
+test('Event adjacency construction and consumption keep checking the certified baseline generation',async()=>{
+ for(const at of ['eligibility','eventRun','dependencyClosure']){const fixture=await deltaFixture();try{
+  if(at==='eventRun'){const query=fixture.dependencies.keys.bind(fixture.dependencies);fixture.dependencies.keys=(kind,target)=>{const result=query(kind,target);if(kind==='eventRun')fixture.raw.exec('DELETE FROM sensa_sync_dependency_edges_v1');return result;};}
+  await expect(admitLearningDelta({...fixture,phase(name){if(name===at)fixture.raw.exec('DELETE FROM sensa_sync_dependency_edges_v1');}})).rejects.toThrow('library_sync_local_changed');
+ }finally{fixture.close();}}
 });
 function* records(rows:BackupRows):Generator<LibraryCandidateRecord>{for(const table of libraryTables)for(const row of rows[table])yield {table,...row};}
 const corrupt=(change:(rows:BackupRows)=>void)=>{const rows=structuredClone(source);change(rows);return rows;};

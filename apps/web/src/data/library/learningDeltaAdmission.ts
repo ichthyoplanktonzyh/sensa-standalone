@@ -6,7 +6,7 @@ import {mergeLibraryReplicasCooperatively,replicaEntryEqual,replicaEntryId,type 
 import type {SqliteSyncDependencies,SyncDependencyCertificate} from './sqliteSyncDependencies';
 
 export class DeltaReceiveFallback extends Error{constructor(readonly reason:string){super('library_sync_delta_fallback:'+reason);}}
-export type DeltaReceiveEvidence={mode:'incremental'|'complete';fallbackReason?:string;changedRecords:number;baselineBuildRecords:number;baselineRecordsRead:number;candidateRecordsRead:number;targets:number;runs:number;events:number;decisions:number;scopes:number;sessions:number;scopeRuns:number;modifiedRecords?:number;accessByPhase?:Record<string,{baselineRecordsRead:number;candidateRecordsRead:number}>};
+export type DeltaReceiveEvidence={mode:'incremental'|'complete';fallbackReason?:string;changedRecords:number;baselineBuildRecords:number;baselineRecordsRead:number;candidateRecordsRead:number;targets:number;runs:number;events:number;decisions:number;scopes:number;sessions:number;scopeRuns:number;modifiedRecords?:number;changedEventClosure?:{baselineLookups:number;candidateLookups:number;runLookups:number;indexedRelations:number;edgeVisits:number};accessByPhase?:Record<string,{baselineRecordsRead:number;candidateRecordsRead:number}>};
 const fallback=(reason:string):never=>{throw new DeltaReceiveFallback(reason);};
 const fail=():never=>{throw Error('libraryBackup.errors.inconsistent');};
 const allow=new Set<SqliteLibraryTable>(['learningTargets','learningRuns','learningEvents','studyScopes','learningSessions','meta','settings']);
@@ -47,7 +47,8 @@ export async function admitLearningDelta(input:{
  const addTarget=(key:string)=>{if(!targets.has(key)){targets.add(key);targetQueue.push(key);}};
  const addRun=(key:string)=>{if(!runs.has(key)){runs.add(key);runQueue.push(key);}};
  const needed=(table:SqliteLibraryTable,key:string)=>remote.get(table,key)??fail();
- const changedRuns=changes.filter(row=>row.table==='learningRuns').map(row=>row.key),changedEvents=changes.filter(row=>row.table==='learningEvents').map(row=>row.key),changedSessions=changes.filter(row=>row.table==='learningSessions').map(row=>row.key);
+ const changedRuns=changes.filter(row=>row.table==='learningRuns').map(row=>row.key),changedSessions=changes.filter(row=>row.table==='learningSessions').map(row=>row.key);
+ const changedEventsByRun=new Map<string,Set<string>>(),changedEventClosure={baselineLookups:0,candidateLookups:0,runLookups:0,indexedRelations:0,edgeVisits:0};
  const changedRunHeaders=new Map<string,{sessionId:string;scopeId:string;protocols:Array<[string,string]>}>(),changedRunsByTarget=new Map<string,Set<string>>();
  for(const runId of changedRuns){
   for(const reader of [base,remote])for(const targetId of reader.get('learningRuns',runId)?.targetIds??[]){const keys=changedRunsByTarget.get(targetId)??new Set();keys.add(runId);changedRunsByTarget.set(targetId,keys);}
@@ -56,7 +57,17 @@ export async function admitLearningDelta(input:{
  for(const row of changes){
   if(row.table==='learningTargets')addTarget(row.key);
   if(row.table==='learningRuns')addRun(row.key);
-  if(row.table==='learningEvents'){for(const reader of [base,remote]){const event=reader.get(row.table,row.key);if(event){addRun(event.runId);addTarget(event.targetId);}}}
+  if(row.table==='learningEvents'){for(const reader of [base,remote]){
+   if(reader===base)changedEventClosure.baselineLookups++;else changedEventClosure.candidateLookups++;
+   const event=reader.get(row.table,row.key);if(event){
+    addRun(event.runId);addTarget(event.targetId);
+    // Candidate-local headers only. Preserve both sides' reachability, even
+    // for redundant puts, without retaining decoded Event bodies.
+    const keys=changedEventsByRun.get(event.runId)??new Set<string>();
+    if(!keys.has(row.key)){keys.add(row.key);changedEventClosure.indexedRelations++;}
+    changedEventsByRun.set(event.runId,keys);
+   }
+  }}
   if(row.table==='studyScopes')scopes.add(row.key);
   if(row.table==='learningSessions')sessions.add(row.key);
  }
@@ -90,7 +101,9 @@ export async function admitLearningDelta(input:{
    for(const reader of [base,remote]){const run=reader.get('learningRuns',runId);if(!run)continue;for(const targetId of run.targetIds)addTarget(targetId);if(run.continuedFromRunId)addRun(run.continuedFromRunId);for(const event of run.lifecycleEvents??[])if(event.continuedFromRunId)addRun(event.continuedFromRunId);}
    needed('learningRuns',runId);
    for(const row of dependencies.keys('eventRun',runId))events.add(row.key);
-   for(const key of changedEvents)if(needed('learningEvents',key).runId===runId)events.add(key);
+   // Reverse-query results and cached adjacency still require a live fence.
+   alive();changedEventClosure.runLookups++;
+   for(const key of changedEventsByRun.get(runId)??[]){alive();changedEventClosure.edgeVisits++;events.add(key);}
    continue;
   }
   break;
@@ -129,7 +142,7 @@ export async function admitLearningDelta(input:{
   },
  });
  alive();input.phase?.('restoreAdmission');
- const evidence:DeltaReceiveEvidence={mode:'incremental',changedRecords:changes.length,baselineBuildRecords:0,baselineRecordsRead:0,candidateRecordsRead:0,targets:targets.size,runs:runs.size,events:events.size,decisions:decisions.size,scopes:scopes.size,sessions:sessions.size,scopeRuns:scopeRuns.size};
+ const evidence:DeltaReceiveEvidence={mode:'incremental',changedRecords:changes.length,baselineBuildRecords:0,baselineRecordsRead:0,candidateRecordsRead:0,targets:targets.size,runs:runs.size,events:events.size,decisions:decisions.size,scopes:scopes.size,sessions:sessions.size,scopeRuns:scopeRuns.size,changedEventClosure};
  return {identity,evidence,prepare:async()=>{
  // Retain the existing Learning merger over this complete affected component.
  // Only an exact remote result can use the sparse clean apply; actual conflicts

@@ -39,6 +39,7 @@ test('a complete nine-key retention review receives through a certified sparse o
   fixture.clearRequests();await b.evaluate(()=>(window as any).sync());
   const state=await b.evaluate(()=>(window as any).core.readCloudSync());
   expect(state.receive.mode).toBe('incremental');expect(state.receive.changedRecords).toBe(9);expect(state.receive.baselineBuildRecords).toBe(0);expect(state.receive.targets).toBe(2);expect(state.receive.runs).toBe(3);expect(state.receive.scopes).toBe(1);expect(state.receive.sessions).toBe(2);
+  expect(state.receive.changedEventClosure).toEqual({baselineLookups:2,candidateLookups:2,runLookups:3,indexedRelations:2,edgeVisits:2});
   expect(fixture.requests().some(row=>row.path.includes('/snapshot'))).toBe(false);expect(await facts(b)).toEqual(await facts(a));
   await b.evaluate(async()=>{const c=(window as any).core,rows=await c.readLibrary(async(tx:any)=>Object.fromEntries(await Promise.all(c.libraryTables.map(async(table:string)=>[table,await tx.entries(table)]))));rows.operations=rows.operations.filter((row:any)=>!JSON.parse(row.value.input).kind.startsWith('service.'));c.validateBackupRows(rows);});
   await b.reload();const reopened=await b.evaluate(async()=>{const path='/core.js',c=await import(/* @vite-ignore */path);await c.openLibrary();return c.readCloudSync();});expect(reopened.receive.mode).toBe('incremental');expect(reopened.restoreOperationId).toBe(state.restoreOperationId);
