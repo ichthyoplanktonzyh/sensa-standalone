@@ -1,3 +1,4 @@
+import {LIGHTWEIGHT_STUDY_PROTOCOL_ID,LIGHTWEIGHT_STUDY_PROTOCOL_VERSION} from '../../learning/runtime/lightweightInitialProtocol';
 import {z} from 'zod';
 import {sensaInitialLearningCompletionSchema,sensaSchedulingHandoffSchema,sensaMemoryOutcomeSnapshotSchema,sensaSchedulingDecisionSchema,sensaRelearningCompletionSchema,sensaProtocolCheckpointCreditSchema,sensaProtocolTransitionEffectSchema} from '@sensa/contracts/sensa';
 import type {LocalLearningRun} from '../../learning/runtime/localProtocol';
@@ -63,7 +64,7 @@ export function assertSavedRunState(run:LocalLearningRun,fail:()=>never){
  if(run.protocolState.adapterId==='lightweight'){
   const state=z.object({phase:z.enum(['recall','reveal']),initial:z.object({protocolRunId:uuid,retentionTargetId:uuid,learningMaterializationId:uuid,materialBindings:z.array(z.object({materialRoleKey:text,learningMaterializationId:uuid,resourceKey:text}).strict()),currentStepDefinitionId:z.enum(['lightweight-study.experience-recall','lightweight-study.expression-reveal']).nullable(),currentStepOrdinal:integer.min(1),eventOrdinal:integer,retryCount:integer,completionRating:z.enum(['again','hard','good']).nullable(),progress:progressSchema,completedSteps:z.array(z.json())}).strict().nullable()}).strict().parse(run.protocolState.value);
   if((run.purpose==='initial_learning')!==(state.initial!==null))fail();
-  if(state.initial){const p=run.participants[run.targetId]!;if(state.initial.protocolRunId!==p.protocolRunId||state.initial.retentionTargetId!==p.resolvedPlan.retentionTargetId||!Object.values(p.materializations).some(material=>material.snapshot.learningMaterializationId===state.initial!.learningMaterializationId))fail();}
+  if(state.initial){const p=run.participants[run.targetId]!;if(state.initial.progress.protocolRunId!==state.initial.protocolRunId||state.initial.progress.protocolId!==LIGHTWEIGHT_STUDY_PROTOCOL_ID||state.initial.progress.protocolVersion!==LIGHTWEIGHT_STUDY_PROTOCOL_VERSION||Object.keys(state.initial.progress.checkpointCredits).length||state.initial.protocolRunId!==p.protocolRunId||state.initial.retentionTargetId!==p.resolvedPlan.retentionTargetId||!Object.values(p.materializations).some(material=>material.snapshot.learningMaterializationId===state.initial!.learningMaterializationId))fail();}
  }
  for(const [id,participant] of Object.entries(run.participants)){
   savedRetentionStateSchema.parse(participant.retentionBaseline);integer.parse(participant.memoryRevision);timestamp.nullable().parse(participant.dueAt);

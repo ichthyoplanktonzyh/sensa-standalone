@@ -187,3 +187,12 @@ test('a well-formed historical scheduling contradiction restores verbatim and re
  expect(validateRestoreBackupRows(rows)).toEqual(identity);
  expect(()=>validateBackupRows(rows)).toThrow('libraryBackup.errors.inconsistent');
 });
+
+for(const mutation of ['run-identity','protocol-version','checkpoint-set'] as const)test(`restore rejects a mismatched inner lightweight progress ${mutation}`,()=>{
+ const rows=corrupt(rows=>{const run=rows.learningRuns.find(row=>row.value.purpose==='initial_learning')!.value,progress=run.protocolState.value.initial.progress;
+  if(mutation==='run-identity')progress.protocolRunId=id();
+  if(mutation==='protocol-version')progress.protocolVersion='unavailable';
+  if(mutation==='checkpoint-set')progress.checkpointCredits.extra={status:'unresolved',creditedInEpoch:null,lastObservationId:null};
+ });
+ expect(()=>validateRestoreBackupRows(rows)).toThrow('libraryBackup.errors.inconsistent');
+});
