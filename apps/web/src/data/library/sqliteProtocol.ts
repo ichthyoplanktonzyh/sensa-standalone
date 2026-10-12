@@ -16,7 +16,7 @@ export type {PracticeExpressionQuery,PracticeExpressionPage} from './practiceExp
 import type {PracticeExpressionQuery} from './practiceExpressionProjection';
 import type {RegistrySelectionQuery,RegistrySelection} from './semanticRegistrySelection';
 import type {MeaningLookupResult} from '../../experience/personalMeaningJourney/meaningLookup';
-import type {WorldBrowseQuery,WorldBrowsePage,WorldLearningChoiceQuery,WorldLearningChoicePage} from '../../experience/personalMeaningJourney/worldRead';
+import type {WorldGraphQuery,WorldGraphRead,WorldBrowseQuery,WorldBrowsePage,WorldLearningChoiceQuery,WorldLearningChoicePage} from '../../experience/personalMeaningJourney/worldRead';
 import type {
   PortableMediaBlob,
   PortableMediaStorageDiagnostics,
@@ -31,7 +31,7 @@ export const sqliteLibrarySchemaVersion = 19;
 /** Durable physical data; every other application table is a derived cache. */
 export const sqliteSourceDataTables=new Set(['sensa_records','sensa_record_tombstones','sensa_sync_base','sensa_shared_record_content','sensa_shared_record_content_owners','sensa_portable_media','sensa_portable_package_media']);
 /** Cross-tab RPC changes must bump this before adding or changing messages. */
-export const sqliteCoordinatorProtocolVersion = 62;
+export const sqliteCoordinatorProtocolVersion = 63;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -113,6 +113,7 @@ export type SqliteWorkerRequest =
   | { id:number;kind:'packageCacheProjection';query:PackageCacheProjectionQuery }
   | {id:number;kind:'meaningLookup';query:string}
   | {id:number;kind:'contextBrowse';query:ContextBrowseQuery}
+  | {id:number;kind:'worldGraph';query:WorldGraphQuery}
   | {id:number;kind:'worldBrowse';query:WorldBrowseQuery}
   | {id:number;kind:'worldSceneMeaning';sceneId:string}
   | {id:number;kind:'registrySelection';query:RegistrySelectionQuery}
@@ -157,7 +158,7 @@ export type SqliteWorkerResult =
 
 export type {HomeLearningStorageProjection};
 export type {MeaningLookupResult};
-export type {WorldBrowseQuery,WorldBrowsePage,WorldLearningChoiceQuery,WorldLearningChoicePage};
+export type {WorldGraphQuery,WorldGraphRead,WorldBrowseQuery,WorldBrowsePage,WorldLearningChoiceQuery,WorldLearningChoicePage};
 
 export type SqliteStorageDiagnostics = {
   integrityCheck?:Readonly<{status:'ok';checkedAt:string;durationMs:number}>;

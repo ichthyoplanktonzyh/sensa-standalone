@@ -347,6 +347,7 @@ export class SqliteRecordDatabase {
   learningSemanticMemory(targetId?:string):import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection{return this.semanticMemoryProjection.read(targetId);}
   lookupMeanings(query:string):MeaningLookupResult{return this.meaningLookup.query(query);}
   contextBrowse(query:ContextBrowseQuery):ContextBrowsePage{return this.worldBrowseProjection.contexts(query);}
+  worldGraph(query:import('./sqliteProtocol').WorldGraphQuery):import('./sqliteProtocol').WorldGraphRead{return this.worldBrowseProjection.graph(query);}
   worldBrowse(query:WorldBrowseQuery):WorldBrowsePage{return this.worldBrowseProjection.query(query);}
   worldSceneMeaning(sceneId:string):string|null{return this.worldBrowseProjection.sceneMeaning(sceneId);}
   registrySelection(query:RegistrySelectionQuery):RegistrySelection{

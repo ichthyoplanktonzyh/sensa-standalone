@@ -9,7 +9,7 @@ import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec'
 import {MemoryJourneyRepository} from '../../../apps/web/src/experience/personalMeaningJourney/repository';
 import {createJourneyModules} from '../../../apps/web/src/experience/personalMeaningJourney/gateway';
 import {createSeededClock} from '../../../apps/web/src/experience/personalMeaningJourney/ports';
-import {summarizeWorldItem,worldLearningChoice} from '../../../apps/web/src/experience/personalMeaningJourney/worldRead';
+import {summarizeWorldItem,worldLearningChoice,worldItemFromRegistry,projectWorldGraphItem,worldSearchText,matchesWorldFilter,matchesWorldLanguages} from '../../../apps/web/src/experience/personalMeaningJourney/worldRead';
 import type {JourneyState} from '../../../apps/web/src/experience/personalMeaningJourney/store';
 import type {SqliteMutation} from '../../../apps/web/src/data/library/sqliteProtocol';
 import {semanticLookupPayload,semanticLookupSpec,syntheticSemanticWorld,advanceSemanticHeads,deleteFirstMeaning} from '../support/semanticLookupFixtures';
@@ -238,6 +238,31 @@ test('a SQLite read failure during World maintenance is not converted into commi
  }finally{database.close();}
 });
 
+test('compact graph snapshots preserve every interpretation and filter without source reads, and rebuild from unchanged facts',async()=>{
+ const {expressionWorldFixture}=await import('../support/expressionWorldFixture');
+ const {buildMeaningGraph,relatedMeaningExpressions}=await import('../../../apps/web/src/experience/ui/meaningGraph');
+ const state=await expressionWorldFixture(),raw=new sqlite.oo1.DB(':memory:'),database=new SqliteRecordDatabase(sqlite,raw,'memory'),memory=new MemoryRecordAdapter();database.initialize();
+ try{
+  const mutation={clears:[],deletes:[],puts:rows(state),contentRevision:1} as SqliteMutation;database.commit(mutation);await memory.commit(mutation);
+  const senseId=state.registry.senses[0]!.senseId,annotations=[{id:`saved_sense:${encodeURIComponent(senseId)}`,kind:'saved_sense',senseId},{id:`sense_note:${encodeURIComponent(senseId)}`,kind:'sense_note',senseId,body:'private note'}];
+  const saved={clears:[],deletes:[],puts:annotations.map(value=>({table:'annotations' as const,key:value.id,encodedValue:encode(value)})),contentRevision:2};database.commit(saved);await memory.commit(saved);
+  const full=state.meanings.map(record=>worldItemFromRegistry(record,state.registry)).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt)||a.personalMeaningId.localeCompare(b.personalMeaningId));
+  const before=database.entries('semanticMeanings'),get=database.get.bind(database);let sourceReads=0;database.get=(table,key)=>{if(['semanticMeanings','semanticRegistry','semanticContexts','media'].includes(table))sourceReads++;return get(table,key);};
+  for(const filter of ['all','continue','binding','complete'] as const)for(const text of ['', '原文来源','borrow','借用编号'] as const)for(const languages of [[],['fr'],['en','fr'],['ja']])for(const referenceFilter of ['all','saved','notes'] as const){
+   const input={query:text,filter,expressionLanguages:languages,referenceFilter},actual=database.worldGraph(input),expected=full.filter(item=>matchesWorldFilter(item,filter)&&matchesWorldLanguages(summarizeWorldItem(item),languages)&&worldSearchText(item).includes(text)&&(referenceFilter==='all'||summarizeWorldItem(item).senseIds?.includes(senseId))).map(projectWorldGraphItem);
+   expect(actual.items).toEqual(expected);expect(await memory.worldGraph(input)).toEqual(actual);
+   const narrowGraph=buildMeaningGraph(actual.items,languages),fullGraph=buildMeaningGraph(full.filter(item=>expected.some(row=>row.personalMeaningId===item.personalMeaningId)),languages);
+   expect(narrowGraph.edges).toEqual(fullGraph.edges);expect(narrowGraph.nodes.map(node=>node.id)).toEqual(fullGraph.nodes.map(node=>node.id));
+   for(const node of fullGraph.nodes)expect(relatedMeaningExpressions(narrowGraph,node.id)).toEqual(relatedMeaningExpressions(fullGraph,node.id));
+   expect(actual.expressionCount).toBe(narrowGraph.nodes.length);
+  }
+  expect(sourceReads).toBe(0);database.get=get;
+  const graphBefore=database.worldGraph({query:'',filter:'all'});raw.exec('UPDATE sensa_world_browse_meta SET version=20;');database.initialize();
+  expect(database.worldGraph({query:'',filter:'all'})).toEqual(graphBefore);expect(database.entries('semanticMeanings')).toEqual(before);
+  raw.exec("UPDATE sensa_world_browse SET valid=0 WHERE id=(SELECT min(id) FROM sensa_world_browse)");expect(()=>database.worldGraph({query:'',filter:'all'})).toThrow('world_source_invalid');
+ }finally{database.close();}
+});
+
 describe('private World reads over a prepared synthetic 10k library',()=>{
  let raw:InstanceType<typeof sqlite.oo1.DB>,database:SqliteRecordDatabase;
  beforeAll(async()=>{
@@ -255,6 +280,7 @@ describe('private World reads over a prepared synthetic 10k library',()=>{
   const started=performance.now();
   const originalGet=database.get.bind(database);let sourceReads=0;
   database.get=(table,key)=>{if(table==='semanticMeanings'||table==='semanticRegistry')sourceReads++;return originalGet(table,key);};
+  const graph=database.worldGraph({query:'',filter:'all'});expect(graph.items).toHaveLength(10_000);expect(graph.expressionCount).toBe(10_000);expect(JSON.stringify(graph)).not.toMatch(/bodyText|capturedSources|semanticSpec|dataUrl/);
   const page=database.worldBrowse({...query,limit:40}),last=database.worldBrowse({...query,offset:9960,limit:40});
   const choices=database.worldLearningChoices({...query,targetLanguageTag:'en',limit:64});
   expect(choices.total).toBe(10_000);expect(choices.items).toHaveLength(64);

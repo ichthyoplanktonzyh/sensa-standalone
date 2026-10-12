@@ -18,12 +18,13 @@ import {localLastPresentedMaterial} from '../../learning/runtime/localCurriculum
 import {learningSupportMeaning} from '@sensa/contracts/sensa';
 import {emptyJourneyState,type MeaningJourneyRecord,type SenseRegistryState} from '../../experience/personalMeaningJourney/store';
 import {createMeaningLookup,type MeaningLookupResult} from '../../experience/personalMeaningJourney/meaningLookup';
-import {worldRegistryClosure,worldItemFromRecord,summarizeWorldItem,worldSearchText,isWorldRecordVisible,matchesWorldFilter,matchesWorldLanguages,worldReferenceSenseIds,validateWorldQuery,type WorldBrowseQuery,type WorldBrowsePage,type WorldRecordRead} from '../../experience/personalMeaningJourney/worldRead';
+import {projectWorldGraphItem,type WorldGraphQuery,type WorldGraphRead,worldRegistryClosure,worldItemFromRecord,summarizeWorldItem,worldSearchText,isWorldRecordVisible,matchesWorldFilter,matchesWorldLanguages,worldReferenceSenseIds,validateWorldQuery,type WorldBrowseQuery,type WorldBrowsePage,type WorldRecordRead} from '../../experience/personalMeaningJourney/worldRead';
 import {validateWorldLearningChoiceQuery,worldLearningChoice,type WorldLearningChoiceQuery,type WorldLearningChoicePage} from '../../experience/personalMeaningJourney/worldRead';
 import {buildPersonalMeaningLearningSources} from '../../experience/personalMeaningJourney/learningSource';
 import {indexRegistry} from '../../experience/personalMeaningJourney/registryRead';
 import {practiceExpressionsFromPersonal,practiceExpressionsFromPackage,validatePracticeExpressionQuery,practiceExpressionForm,type PracticeExpressionQuery,type PracticeExpressionPage} from './practiceExpressionProjection';
 import {journeyIdentityTables,journeyReservedIdentities} from '../../experience/personalMeaningJourney/reservedIdentities';
+import {confirmedLookupConnections} from '../../experience/personalMeaningJourney/meaningLookupFacts';
 import {isUuid} from '../../experience/personalMeaningJourney/ids';
 import {memoryRegistrySelection,type RegistrySelectionQuery,type RegistrySelection} from './semanticRegistrySelection';
 
@@ -74,6 +75,17 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
         ?buildPersonalMeaningLearningSources(record,indexRegistry(registry)).filter(source=>source.targetLanguageTag===query.targetLanguageTag&&(!query.expressionLanguages?.length||query.expressionLanguages.includes(source.targetLanguageTag))).map(source=>({choice:worldLearningChoice(source),updatedAt:item.updatedAt})):[];
     }).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt)||(a.choice.reference.personalMeaningId<b.choice.reference.personalMeaningId?-1:a.choice.reference.personalMeaningId>b.choice.reference.personalMeaningId?1:a.choice.key<b.choice.key?-1:1));
     return {items:choices.slice(query.offset,query.offset+query.limit).map(row=>row.choice),total:choices.length};
+  }
+  async worldGraph(raw:WorldGraphQuery):Promise<WorldGraphRead>{
+    const query=validateWorldQuery({...raw,offset:0,limit:256});
+    const references=query.referenceFilter&&query.referenceFilter!=='all'?worldReferenceSenseIds((await this.entries('annotations')).map(row=>decodeBackupValue(JSON.parse(row.encodedValue))),query.referenceFilter):null;
+    const read:WorldRecordRead=(table,key)=>{const encoded=this.records.get(`${table}\u0000${key}`);return encoded===undefined?undefined:decodeBackupValue(JSON.parse(encoded));};
+    const rows=(await this.entries('semanticMeanings')).map(row=>{
+      const record=hydrateMeaningContexts(decodeBackupValue(JSON.parse(row.encodedValue)),key=>read('semanticContexts',key)),registry=worldRegistryClosure(record,read),item=worldItemFromRecord(record,read);
+      return {item,summary:summarizeWorldItem(item),visible:isWorldRecordVisible(record,registry),confirmed:confirmedLookupConnections(record,indexRegistry(registry)).length>0};
+    }).sort((a,b)=>b.item.updatedAt.localeCompare(a.item.updatedAt)||a.item.personalMeaningId.localeCompare(b.item.personalMeaningId));
+    const selected=rows.filter(row=>row.visible&&row.confirmed&&matchesWorldFilter(row.summary,query.filter)&&matchesWorldLanguages(row.summary,query.expressionLanguages)&&(references===null||row.summary.senseIds?.some(id=>references.includes(id)))&&worldSearchText(row.item).includes(query.query));
+    return {items:selected.map(row=>projectWorldGraphItem(row.item)),expressionLanguages:[...new Set(rows.filter(row=>row.visible).flatMap(row=>row.summary.expressions?.map(expression=>expression.languageTag)??[]))].sort(),expressionCount:new Set(selected.flatMap(row=>row.summary.expressions?.filter(expression=>!query.expressionLanguages?.length||query.expressionLanguages.includes(expression.languageTag)).map(expression=>expression.expressionId)??[])).size};
   }
   async worldBrowse(raw:WorldBrowseQuery):Promise<WorldBrowsePage>{
     const query=validateWorldQuery(raw);

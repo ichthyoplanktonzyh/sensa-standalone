@@ -3,7 +3,7 @@ import type {LearningScheduleQuery,LearningSchedulePage} from '../../learning/sy
 import type {
   HomeLearningStorageProjection,
   MeaningLookupResult,
-  WorldBrowseQuery,WorldBrowsePage,WorldLearningChoiceQuery,WorldLearningChoicePage,
+  WorldGraphQuery,WorldGraphRead,WorldBrowseQuery,WorldBrowsePage,WorldLearningChoiceQuery,WorldLearningChoicePage,
   PortableMediaBlob,
   PortableMediaStorageDiagnostics,
   SqliteLibraryTable,
@@ -37,6 +37,7 @@ export interface SqliteRecordAdapter {
   packageCacheProjection<Query extends PackageCacheProjectionQuery>(query:Query):Promise<PackageCacheProjectionResult<Query>>;
   lookupMeanings(query:string):Promise<MeaningLookupResult>;
   contextBrowse(query:ContextBrowseQuery):Promise<ContextBrowsePage>;
+  worldGraph(query:WorldGraphQuery):Promise<WorldGraphRead>;
   worldBrowse(query:WorldBrowseQuery):Promise<WorldBrowsePage>;
   worldSceneMeaning(sceneId:string):Promise<string|null>;
   registrySelection(query:import('./sqliteProtocol').RegistrySelectionQuery):Promise<import('./sqliteProtocol').RegistrySelection>;
@@ -138,6 +139,7 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
   }
   lookupMeanings(query:string):Promise<MeaningLookupResult>{return this.send({kind:'meaningLookup',query}) as Promise<MeaningLookupResult>;}
   contextBrowse(query:ContextBrowseQuery):Promise<ContextBrowsePage>{return this.send({kind:'contextBrowse',query}) as Promise<ContextBrowsePage>;}
+  worldGraph(query:WorldGraphQuery):Promise<WorldGraphRead>{return this.send({kind:'worldGraph',query}) as Promise<WorldGraphRead>;}
   worldBrowse(query:WorldBrowseQuery):Promise<WorldBrowsePage>{return this.send({kind:'worldBrowse',query}) as Promise<WorldBrowsePage>;}
   worldSceneMeaning(sceneId:string):Promise<string|null>{return this.send({kind:'worldSceneMeaning',sceneId}) as Promise<string|null>;}
   registrySelection(query:import('./sqliteProtocol').RegistrySelectionQuery):Promise<import('./sqliteProtocol').RegistrySelection>{return this.send({kind:'registrySelection',query}) as Promise<import('./sqliteProtocol').RegistrySelection>;}

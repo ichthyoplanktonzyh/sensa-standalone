@@ -1,8 +1,8 @@
-import type {JourneyAlignmentView,JourneyWorldItemView} from '../personalMeaningJourney/types';
+import type {WorldGraphAlignment,WorldGraphItem} from '../personalMeaningJourney/worldRead';
 
 export interface ExpressionAssociation {
-  item: JourneyWorldItemView;
-  alignment: JourneyAlignmentView;
+  item: WorldGraphItem;
+  alignment: WorldGraphAlignment;
   focusId: string;
   bindingVersionId: string;
 }
@@ -23,8 +23,10 @@ export interface MeaningGraphEdge {
 /** Visible stars are sparse. Details retain every proven shared membership,
  * including members joined through the same hub rather than a direct stroke. */
 export function relatedMeaningExpressions(graph:ReturnType<typeof buildMeaningGraph>,expressionId:string):MeaningGraphEdge[]{
- const selected=graph.nodes.find(node=>node.id===expressionId);if(!selected)return [];
- return graph.nodes.filter(node=>node.id!==expressionId).flatMap(node=>{
+ const selected=graph.byId.get(expressionId);if(!selected)return [];
+ const candidates=new Set<string>();
+ for(const association of selected.associations)for(const key of [`sense:${association.alignment.senseId}`,`meaning:${association.item.personalMeaningId}`])for(const id of graph.groups.get(key)?.members??[])if(id!==expressionId)candidates.add(id);
+ return [...candidates].map(id=>graph.byId.get(id)!).sort((a,b)=>graph.order.get(a.id)!-graph.order.get(b.id)!).flatMap(node=>{
   const facts=new Map<string,{kind:'sense'|'meaning';id:string}>();
   for(const a of selected.associations)for(const b of node.associations){
    if(a.alignment.senseId===b.alignment.senseId)facts.set(`sense:${a.alignment.senseId}`,{kind:'sense',id:a.alignment.senseId});
@@ -37,8 +39,9 @@ export function relatedMeaningExpressions(graph:ReturnType<typeof buildMeaningGr
 /** One point per stable Expression identity, with its accepted interpretations.
  * Sparse stars represent actual shared Sense/Personal Meaning memberships.
  * Coordinates are a deterministic reading layout, never semantic distance. */
-export function buildMeaningGraph(items:readonly JourneyWorldItemView[],languages:readonly string[]=[]){
+export function buildMeaningGraph(items:readonly WorldGraphItem[],languages:readonly string[]=[]){
   const byId=new Map<string,MeaningGraphNode>();
+  const associationKeys=new Map<string,Set<string>>();
   const groups=new Map<string,{kind:'sense'|'meaning';id:string;members:Set<string>}>();
   for(const item of items){
     const branches=[...item.detail.focuses.flatMap(focus=>focus.alignment?[{alignment:focus.alignment,focusId:focus.meaningFocusId}]:[]),...item.detail.directAlignments.map(alignment=>({alignment,focusId:alignment.personalMeaningAlignmentId}))];
@@ -46,7 +49,9 @@ export function buildMeaningGraph(items:readonly JourneyWorldItemView[],language
       if(languages.length&&!languages.includes(binding.languageTag))continue;
       let node=byId.get(binding.expressionId);
       if(!node){node={id:binding.expressionId,label:binding.surfaceForm,languageTag:binding.languageTag,associations:[],x:0,y:0};byId.set(node.id,node);}
-      if(!node.associations.some(association=>association.item.personalMeaningId===item.personalMeaningId&&association.alignment.personalMeaningAlignmentId===alignment.personalMeaningAlignmentId&&association.bindingVersionId===binding.bindingVersionId))node.associations.push({item,alignment,focusId,bindingVersionId:binding.bindingVersionId});
+      const key=`${item.personalMeaningId}:${alignment.personalMeaningAlignmentId}:${binding.bindingVersionId}`;
+      let keys=associationKeys.get(node.id);if(!keys){keys=new Set();associationKeys.set(node.id,keys);}
+      if(!keys.has(key)){keys.add(key);node.associations.push({item,alignment,focusId,bindingVersionId:binding.bindingVersionId});}
       for(const [kind,id] of [['sense',alignment.senseId],['meaning',item.personalMeaningId]] as const){
         const key=`${kind}:${id}`;
         if(!groups.has(key))groups.set(key,{kind,id,members:new Set()});
@@ -65,5 +70,5 @@ export function buildMeaningGraph(items:readonly JourneyWorldItemView[],language
       edges.get(key)!.facts.push({kind,id});
     }
   }
-  return {nodes,edges:[...edges.values()],width,height:Math.max(320,rows*100+80)};
+  return {nodes,edges:[...edges.values()],byId,groups,order:new Map(nodes.map((node,index)=>[node.id,index])),width,height:Math.max(320,rows*100+80)};
 }

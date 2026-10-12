@@ -5,7 +5,7 @@ import {buildWorldItemView} from './projection';
 import {indexRegistry} from './registryRead';
 import {meaningHistoryRecords} from './meaningHistoryRead';
 import {confirmedLookupConnections,normalizeMeaningQuery} from './meaningLookupFacts';
-import type {JourneyWorldItemView,JourneySenseFormationView,JourneyExpressionBindingView} from './types';
+import type {JourneyWorldItemView,JourneySenseFormationView,JourneyExpressionBindingView,JourneyAlignmentView,JourneyConfirmedBindingView} from './types';
 import type {PersonalMeaningLearningSource,PersonalMeaningLearningReference} from '../../contentSupply/provisioning/contracts';
 import {personalLearningSourceKey} from '../../contentSupply/provisioning/contracts';
 
@@ -21,6 +21,19 @@ export interface WorldBrowseItem{
  senseFormation:JourneySenseFormationView;expressionBinding:JourneyExpressionBindingView;
 }
 export interface WorldBrowsePage{items:WorldBrowseItem[];total:number;pending:number;next:WorldBrowseItem|null;expressionLanguages?:string[];expressionCount?:number}
+export type WorldGraphQuery=Pick<WorldBrowseQuery,'query'|'filter'|'expressionLanguages'|'referenceFilter'>;
+export type WorldGraphAlignment=Pick<JourneyAlignmentView,'personalMeaningAlignmentId'|'senseId'|'coreMeaningFocus'>&{confirmedBindings:Pick<JourneyConfirmedBindingView,'expressionId'|'bindingVersionId'|'surfaceForm'|'languageTag'>[]};
+/** Complete graph identities and interpretation witnesses, without Context,
+ * media, proposal/history bodies or formal learning-source eligibility. */
+export interface WorldGraphItem{
+ personalMeaningId:string;shortId:string;
+ detail:{focuses:{meaningFocusId:string;alignment:WorldGraphAlignment|null}[];directAlignments:WorldGraphAlignment[]};
+}
+export interface WorldGraphRead{items:WorldGraphItem[];expressionLanguages:string[];expressionCount:number}
+export function projectWorldGraphItem(item:JourneyWorldItemView):WorldGraphItem{
+ const alignment=(row:JourneyAlignmentView):WorldGraphAlignment=>({personalMeaningAlignmentId:row.personalMeaningAlignmentId,senseId:row.senseId,coreMeaningFocus:row.coreMeaningFocus,confirmedBindings:row.confirmedBindings.map(({expressionId,bindingVersionId,surfaceForm,languageTag})=>({expressionId,bindingVersionId,surfaceForm,languageTag}))});
+ return {personalMeaningId:item.personalMeaningId,shortId:item.shortId,detail:{focuses:item.detail.focuses.map(focus=>({meaningFocusId:focus.meaningFocusId,alignment:focus.alignment?alignment(focus.alignment):null})),directAlignments:item.detail.directAlignments.map(alignment)}};
+}
 /** Exact accepted interpretation, without Context, media or learning state. */
 export interface WorldMeaningReference{
  personalMeaningAlignmentId:string;senseId:string;word:string;meaning:string;historical:boolean;

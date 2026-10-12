@@ -6,10 +6,11 @@ import {decodeBackupValue} from './backupCodec';
 import {ensureSqliteSchemaIndexes} from './sqliteSchemaIndexes';
 import type {SqliteMutation} from './sqliteProtocol';
 import type {LibraryRecordReader} from './libraryRecordReader';
-import {isWorldRecordVisible,summarizeWorldItem,validateWorldQuery,worldItemFromRegistry,worldRegistryClosure,worldSearchText,WorldSourceInvalidError,validateWorldLearningChoiceQuery,worldLearningChoice,worldReferenceSenseIds,type WorldLearningChoiceQuery,type WorldLearningChoicePage,type WorldLearningChoice,type WorldBrowseItem,type WorldBrowsePage,type WorldBrowseQuery,type WorldRecordRead} from '../../experience/personalMeaningJourney/worldRead';
+import {isWorldRecordVisible,summarizeWorldItem,validateWorldQuery,worldItemFromRegistry,worldRegistryClosure,worldSearchText,WorldSourceInvalidError,validateWorldLearningChoiceQuery,worldLearningChoice,worldReferenceSenseIds,projectWorldGraphItem,type WorldGraphQuery,type WorldGraphRead,type WorldGraphItem,type WorldLearningChoiceQuery,type WorldLearningChoicePage,type WorldLearningChoice,type WorldBrowseItem,type WorldBrowsePage,type WorldBrowseQuery,type WorldRecordRead} from '../../experience/personalMeaningJourney/worldRead';
 import type {MeaningJourneyRecord} from '../../experience/personalMeaningJourney/store';
 import {buildPersonalMeaningLearningSources} from '../../experience/personalMeaningJourney/learningSource';
 import {indexRegistry} from '../../experience/personalMeaningJourney/registryRead';
+import {confirmedLookupConnections} from '../../experience/personalMeaningJourney/meaningLookupFacts';
 import {isUuid} from '../../experience/personalMeaningJourney/ids';
 import {meaningHistoryRecords} from '../../experience/personalMeaningJourney/meaningHistoryRead';
 import {contextBrowseFacts,validateContextQuery,type ContextBrowseQuery,type ContextBrowsePage} from '../../experience/personalMeaningJourney/contextRead';
@@ -19,7 +20,7 @@ const schema=`
 CREATE TABLE IF NOT EXISTS sensa_world_browse(
  id INTEGER PRIMARY KEY,meaning_id TEXT NOT NULL UNIQUE,updated_at TEXT NOT NULL,
  formation TEXT NOT NULL,binding TEXT NOT NULL,valid INTEGER NOT NULL,visible INTEGER NOT NULL,status TEXT NOT NULL CHECK(status IN ('active','deleted')),
- summary_json TEXT NOT NULL CHECK(json_valid(summary_json)),search_text TEXT NOT NULL
+ summary_json TEXT NOT NULL CHECK(json_valid(summary_json)),graph_json TEXT NOT NULL CHECK(graph_json='' OR json_valid(graph_json)),search_text TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS sensa_world_browse_order ON sensa_world_browse(visible,updated_at DESC,meaning_id);
 CREATE INDEX IF NOT EXISTS sensa_world_browse_status ON sensa_world_browse(status,updated_at DESC,meaning_id);
@@ -40,7 +41,7 @@ CREATE TABLE IF NOT EXISTS sensa_context_meanings(context_id TEXT NOT NULL,meani
 CREATE INDEX IF NOT EXISTS sensa_context_meaning_owner ON sensa_context_meanings(meaning_id);
 CREATE VIRTUAL TABLE IF NOT EXISTS sensa_context_search USING fts5(text,tokenize='trigram');
 `;
-const version=20,tables=[...['search','dependencies','meta',''].map(name=>`sensa_world_browse${name?'_'+name:''}`),'sensa_world_learning_choices','sensa_world_scene_meanings','sensa_context_browse','sensa_context_meanings','sensa_context_search'];
+const version=21,tables=[...['search','dependencies','meta',''].map(name=>`sensa_world_browse${name?'_'+name:''}`),'sensa_world_learning_choices','sensa_world_scene_meanings','sensa_context_browse','sensa_context_meanings','sensa_context_search'];
 type Row=Record<string,any>;
 export class SqliteWorldBrowseProjection{
  private statements=new Map<string,PreparedStatement>();
@@ -74,11 +75,11 @@ export class SqliteWorldBrowseProjection{
    const record=hydrateMeaningContexts(raw,key=>this.read('semanticContexts',key));
    if(record.personalMeaning.status==='active')for(const anchor of record.personalSemanticAnchors)if(anchor.status==='active')this.write('INSERT INTO sensa_context_meanings VALUES(?,?)',[anchor.personalSemanticAnchorId,id]);
    const dependencies=new Set<string>(meaningContextKeys(raw as MeaningJourneyRecord).map(key=>`context:${key}`));
-   let derived:{summary:WorldBrowseItem;text:string;visible:boolean;choices:WorldLearningChoice[]}|undefined;
+   let derived:{summary:WorldBrowseItem;text:string;visible:boolean;choices:WorldLearningChoice[];graph:WorldGraphItem|null}|undefined;
    try{
     if(record.personalMeaning?.personalMeaningId!==id)throw new WorldSourceInvalidError('world_record_identity_invalid');
     const registry=worldRegistryClosure(record,this.read,key=>dependencies.add(key)),item=worldItemFromRegistry(record,registry);
-    derived={summary:summarizeWorldItem(item),text:worldSearchText(item),visible:isWorldRecordVisible(record,registry),choices:buildPersonalMeaningLearningSources(record,indexRegistry(registry)).map(worldLearningChoice)};
+    derived={summary:summarizeWorldItem(item),text:worldSearchText(item),visible:isWorldRecordVisible(record,registry),choices:buildPersonalMeaningLearningSources(record,indexRegistry(registry)).map(worldLearningChoice),graph:confirmedLookupConnections(record,indexRegistry(registry)).length?projectWorldGraphItem(item):null};
    }catch(cause){
     // Invalid domain sources are a read failure. Do NOT catch SQLite failures:
     // a failed derived write must roll back its authoritative transaction.
@@ -87,15 +88,15 @@ export class SqliteWorldBrowseProjection{
    if(derived){
     const sceneIds=new Set(meaningHistoryRecords(record).flatMap(branch=>branch.personalSemanticAnchorRevisions).map(revision=>(revision.structuredPayload.learningScene as {sceneId?:unknown}|undefined)?.sceneId).filter(isUuid));
     for(const sceneId of sceneIds)this.write('INSERT INTO sensa_world_scene_meanings VALUES(?,?)',[sceneId,id]);
-    const {summary,text,visible,choices}=derived;
-    const row=this.rows('INSERT INTO sensa_world_browse(meaning_id,updated_at,formation,binding,valid,visible,status,summary_json,search_text) VALUES(?,?,?,?,1,?,?,?,?) RETURNING id',
-     [id,summary.updatedAt,summary.senseFormation.phase,summary.expressionBinding.phase,visible?1:0,summary.status,JSON.stringify(summary),text])[0]!;
+    const {summary,text,visible,choices,graph}=derived;
+    const row=this.rows('INSERT INTO sensa_world_browse(meaning_id,updated_at,formation,binding,valid,visible,status,summary_json,graph_json,search_text) VALUES(?,?,?,?,1,?,?,?,?,?) RETURNING id',
+     [id,summary.updatedAt,summary.senseFormation.phase,summary.expressionBinding.phase,visible?1:0,summary.status,JSON.stringify(summary),graph?JSON.stringify(graph):'',text])[0]!;
     this.write('INSERT INTO sensa_world_browse_search(rowid,text) VALUES(?,?)',[row.id,text]);
     if(visible)for(const choice of choices)this.write('INSERT INTO sensa_world_learning_choices VALUES(?,?,?,?,?)',[choice.key,id,choice.targetLanguageTag,summary.updatedAt,JSON.stringify(choice)]);
    }else{
     // Record corruption is a visible read failure, never a fabricated empty
     // World. Missing references are tracked so an actual repair can recover.
-    this.write("INSERT INTO sensa_world_browse(meaning_id,updated_at,formation,binding,valid,visible,status,summary_json,search_text) VALUES(?,'','','',0,0,'active','{}','')",[id]);
+    this.write("INSERT INTO sensa_world_browse(meaning_id,updated_at,formation,binding,valid,visible,status,summary_json,graph_json,search_text) VALUES(?,'','','',0,0,'active','{}','','')",[id]);
    }
    for(const key of dependencies)this.write('INSERT INTO sensa_world_browse_dependencies VALUES(?,?)',[id,key]);
   }
@@ -185,6 +186,14 @@ export class SqliteWorldBrowseProjection{
   const total=Number(this.rows(`SELECT COUNT(*) AS count ${from}`,bind)[0]!.count);
   const items=this.rows(`SELECT choice.choice_json ${from} ORDER BY world.updated_at DESC,world.meaning_id,choice.choice_key LIMIT ? OFFSET ?`,[...bind,query.limit,query.offset]).map(decode);
   return {items,total};
+ }
+ graph(raw:WorldGraphQuery):WorldGraphRead{
+  const query=validateWorldQuery({...raw,offset:0,limit:256}),{join,clauses,bind}=this.selection(query);
+  clauses.push("world.graph_json<>''");
+  const items:WorldGraphItem[]=this.rows(`SELECT world.graph_json FROM sensa_world_browse AS world ${join} WHERE ${clauses.join(' AND ')} ORDER BY world.updated_at DESC,world.meaning_id`,bind).map(row=>JSON.parse(row.graph_json));
+  const expressionLanguages=this.rows("SELECT DISTINCT json_extract(expression.value,'$.languageTag') AS tag FROM sensa_world_browse AS world, json_each(world.summary_json,'$.expressions') AS expression WHERE world.visible=1 ORDER BY tag").map(row=>row.tag);
+  const expressionIds=new Set(items.flatMap(item=>[...item.detail.focuses.flatMap(focus=>focus.alignment?[focus.alignment]:[]),...item.detail.directAlignments].flatMap(alignment=>alignment.confirmedBindings.filter(binding=>!query.expressionLanguages?.length||query.expressionLanguages.includes(binding.languageTag)).map(binding=>binding.expressionId))));
+  return {items,expressionLanguages,expressionCount:expressionIds.size};
  }
  query(raw:WorldBrowseQuery):WorldBrowsePage{
   const query=validateWorldQuery(raw),{join,clauses,bind}=this.selection(query);

@@ -113,6 +113,7 @@ type BrowserSmokeBridge = {
     records:{recordId:string;targetId:string;kind:string}[];
     completedTargets:{targetId:string;nextReviewAt:string|null}[];
   }>;
+  rawLearningFactsForTest():Promise<Record<string,{count:number;sha256:string}>>;
 };
 
 declare global {
@@ -397,11 +398,14 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
       if(!active){restoreAnnotationReads?.();restoreAnnotationReads=undefined;return;}
       if(restoreAnnotationReads)throw Error('Annotation read fault already active');
       const [{sqliteRecordAdapter},{personalContentSystem}]=await Promise.all([import('./data/library/sqliteAdapter'),import('./personalContent/system')]);
-      const adapter=await sqliteRecordAdapter(),entries=adapter.entries.bind(adapter);
+      const adapter=await sqliteRecordAdapter(),entries=adapter.entries.bind(adapter),graph=adapter.worldGraph.bind(adapter),browse=adapter.worldBrowse.bind(adapter);
+      adapter.worldGraph=async query=>{if(query.referenceFilter&&query.referenceFilter!=='all')throw Error('fixture annotation read failed');return graph(query);};
+      adapter.worldBrowse=async query=>{if(query.referenceFilter&&query.referenceFilter!=='all')throw Error('fixture annotation read failed');return browse(query);};
       adapter.entries=async table=>{if(table==='annotations')throw Error('fixture annotation read failed');return entries(table);};
-      restoreAnnotationReads=()=>{adapter.entries=entries;};
+      restoreAnnotationReads=()=>{adapter.entries=entries;adapter.worldGraph=graph;adapter.worldBrowse=browse;};
       await personalContentSystem.refresh().catch(()=>undefined);
       if(personalContentSystem.read({kind:'snapshot'}).status!=='error')throw Error('Annotation read fault was not exercised');
+      window.dispatchEvent(new CustomEvent('sensa-library-changed',{detail:{tables:['annotations']}}));
     },
     async failNextSenseNoteCommitForTest(){
       const {sqliteRecordAdapter}=await import('./data/library/sqliteAdapter');
@@ -579,6 +583,18 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
         records:snapshot.records.map(record=>({recordId:record.recordId,targetId:record.targetId,kind:record.kind})),
         completedTargets:snapshot.targets.filter(target=>target.completed).map(target=>({targetId:target.targetId,nextReviewAt:target.nextReviewAt})),
       };
+    },
+    async rawLearningFactsForTest(){
+      const {encodeBackupValue}=await import('./data/library/backupCodec');
+      return readLibrary(async tx=>{
+        const result:Record<string,{count:number;sha256:string}>={};
+        for(const table of ['curriculumEnrollments','supplementalMembershipStates','studyScopes','learningSessions','learningTargets','learningRuns','learningEvents','learningReconciliations','personalLearning','contentAttempts'] as const){
+          const rows=(await tx.entries(table)).map(row=>({key:String(row.key),value:encodeBackupValue(row.value)})).sort((a,b)=>a.key.localeCompare(b.key));
+          const bytes=new TextEncoder().encode(JSON.stringify(rows)),digest=await crypto.subtle.digest('SHA-256',bytes);
+          result[table]={count:rows.length,sha256:Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('')};
+        }
+        return result;
+      });
     },
     async seedDrafts(drafts, images) {
       await openLibrary();

@@ -3,7 +3,7 @@
 .sensa-cy-container, .sensa-cy-surface { position: absolute; inset: 0; }
 .sensa-cy-surface { touch-action: none; }
 .sensa-graph-keyboard-nodes { position: absolute; inset: 0; pointer-events: none; }
-.sensa-graph-keyboard-nodes > button { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.sensa-graph-keyboard-nodes button { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .sensa-graph-tools { position: absolute; inset-block-start: .5rem; inset-inline-end: .5rem; z-index: 2; display: flex; align-items: center; border-radius: var(--sensa-radius-control); background: var(--sensa-surface-panel); box-shadow: var(--sensa-shadow-soft); }
 .sensa-graph-tools summary { list-style: none; cursor: pointer; }
 .sensa-graph-tools summary::-webkit-details-marker { display: none; }

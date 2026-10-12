@@ -1,7 +1,7 @@
 import {useMemo,useSyncExternalStore} from 'react';
 import {worldReadRepository} from './worldRepository';
 import {WorldWindowReader,WorldDetailReader,WorldSnapshotReader,type WorldDetailRead} from './worldReaders';
-import type {WorldBrowseQuery,WorldLearningChoiceQuery,WorldLearningChoice} from './worldRead';
+import type {WorldGraphQuery,WorldBrowseQuery,WorldLearningChoiceQuery,WorldLearningChoice} from './worldRead';
 import {normalizeMeaningQuery} from './meaningLookupFacts';
 
 const noSubscription=()=>()=>{};
@@ -38,4 +38,16 @@ export function useWorldDetail(id:string|null){
  },[id]);
  const snapshot=useSyncExternalStore(reader?.subscribe??noSubscription,reader?.read??readEmpty);
  return {...snapshot,reload:reader?.reload??(()=>{})};
+}
+
+export function useWorldGraph(query:WorldGraphQuery,enabled:boolean){
+ const normalized=normalizeMeaningQuery(query.query),languages=JSON.stringify(query.expressionLanguages??[]);
+ const reader=useMemo(()=>new WorldSnapshotReader({subscribe:worldReadRepository.subscribe,read:(signal:AbortSignal)=>worldReadRepository.graph({...query,query:normalized},signal)}),[normalized,query.filter,languages,query.referenceFilter,enabled]);
+ const snapshot=useSyncExternalStore(enabled?reader.subscribe:noSubscription,reader.read);
+ return {...snapshot,reload:reader.reload};
+}
+export function useWorldGraphDetail(id:string|null){
+ const reader=useMemo(()=>new WorldSnapshotReader({subscribe:worldReadRepository.subscribe,read:()=>worldReadRepository.graphDetail(id!)}),[id]);
+ const snapshot=useSyncExternalStore(id?reader.subscribe:noSubscription,reader.read);
+ return {...snapshot,reload:reader.reload};
 }

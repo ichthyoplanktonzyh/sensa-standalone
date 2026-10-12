@@ -253,6 +253,7 @@ const fastBeforeMemory = [
   'unit/direct-learning-choices',
   'unit/personal-learning-batch',
   'unit/world-readers',
+  // Includes compact graph/filter parity, derived-cache rebuild and 10k source-read guards.
   'integration/world-browse-storage',
   'unit/canonical-digest',
   'unit/book-center-projection',
@@ -330,7 +331,7 @@ const browserTests = [
   'browser/practice-source-loading',
   'browser/extension-selection',
   'browser/semantic-lookup-opfs',
-  // Includes the registered @capacity graph journey; default 1k semantic nodes.
+  // Includes @capacity graph renderer frame, pointer/keyboard and raw facts; default 1k nodes.
   'browser/personal-meaning-journey',
   'browser/portable-package-journey',
   'browser/skin-surface', 'browser/reference-presentation',

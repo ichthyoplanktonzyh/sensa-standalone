@@ -22,8 +22,6 @@ import type { ContentSectionId, LearnerSemanticProjectionSnapshot } from "../../
 import {learnerSemanticProjectionSystem} from '../../learnerSemanticProjection/system';
 import { useLearnerSemanticProjection } from "../../learnerSemanticProjection/useLearnerSemanticProjection";
 import {
-  useJourneyGateway,
-  useJourneyWorld,
   type JourneyWorldItemView,
 } from "../personalMeaningJourney";
 import { PersonalMeaningComposer } from "./PersonalMeaningComposer";
@@ -35,7 +33,7 @@ import { useScreenState } from "../ui/ScreenHost";
 import {SensaVirtualList,SensaPagedVirtualList} from '../ui/SensaVirtualList';
 import {localFlowText} from '../../i18n/localFlowText';
 import {normalizeMeaningQuery} from '../personalMeaningJourney/meaningLookupFacts';
-import {useWorldWindow,useWorldInbox} from '../personalMeaningJourney/useWorldRead';
+import {useWorldWindow,useWorldInbox,useWorldGraph} from '../personalMeaningJourney/useWorldRead';
 import {summarizeWorldItem,matchesWorldLanguages,type WorldBrowseItem,type WorldBrowseQuery} from '../personalMeaningJourney/worldRead';
 import type {ShellParams} from '../router/shellLocation';
 import {interfaceLanguageDisplayName} from '../../i18n/languageDisplayName';
@@ -158,15 +156,15 @@ function ContentScreenView({
   const [manualIntake,setManualIntake]=useState<import('@sensa/contracts/sensa').SensaIntakeItem|null>(null);
   const [inboxOpen, setInboxOpen] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
-  const page=useWorldWindow({query,filter,expressionLanguages:languages,referenceFilter},!providedSource&&active);
-  const fullRead=!providedSource&&active&&category==='personal'&&view==='world'&&filter!=='deleted';
+  const page=useWorldWindow({query,filter,expressionLanguages:languages,referenceFilter},!providedSource&&active&&category==='personal'&&(view==='list'||filter==='deleted'));
+  const graphReadEnabled=!providedSource&&active&&category==='personal'&&view==='world'&&filter!=='deleted';
   const [references,setReferencesSnapshot]=useState(()=>personalContentSystem.read({kind:'snapshot'}));
-  const readingReferences=fullRead&&referenceFilter!=='all';
+  const readingReferences=!!providedSource&&active&&category==='personal'&&view==='world'&&referenceFilter!=='all';
   useEffect(()=>{if(!readingReferences)return;const read=()=>setReferencesSnapshot(personalContentSystem.read({kind:'snapshot'}));const stop=personalContentSystem.subscribe({kind:'snapshot'},read);read();return stop;},[readingReferences]);
-  const world=useJourneyWorld(fullRead),gateway=useJourneyGateway();
+  const graphRead=useWorldGraph({query,filter,expressionLanguages:languages,referenceFilter},graphReadEnabled);
   const inboxRead=useWorldInbox(!providedSource&&active&&inboxOpen);
   const projectionRead=useLearnerSemanticProjection(!providedSource&&active&&category!=='personal');
-  const source=providedSource??{items:world.items,status:fullRead?world.status:page.status,inbox:inboxRead.value?.items??[],projection:projectionRead,reload:()=>{page.reload();if(fullRead)void gateway.reload();}};
+  const source=providedSource??{items:[],status:graphReadEnabled?graphRead.status:page.status,inbox:inboxRead.value?.items??[],projection:projectionRead,reload:()=>{page.reload();if(graphReadEnabled)graphRead.reload();}};
   const {items,inbox,projection}=source;
   const status=readingReferences&&references.status!=='ready'?{ok:references.status!=='error',loading:references.status==='loading',error:null,errorKind:null}:source.status;
   const showExamples=projection.annotationStatus!=='ready'||projection.savedExampleCount>0;
@@ -204,8 +202,8 @@ function ContentScreenView({
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
     [items, searchable,normalizedQuery],
   ).filter(matchesFilter).filter(item=>matchesWorldLanguages(summarizeWorldItem(item),languages)).filter(item=>referenceFilter==='all'||summarizeWorldItem(item).senseIds?.some(id=>referenceFilter==='saved'?references.savedSenseIds.has(id):!!references.senseNotes[id]));
-  const availableLanguages=[...new Set([...(page.expressionLanguages??[]),...items.flatMap(item=>summarizeWorldItem(item).expressions?.map(expression=>expression.languageTag)??[]),...languages])].sort();
-  const expressionCount=paged?page.expressionCount:new Set(visible.flatMap(item=>summarizeWorldItem(item).expressions?.filter(expression=>!languages.length||languages.includes(expression.languageTag)).map(expression=>expression.expressionId)??[])).size;
+  const availableLanguages=[...new Set([...(graphRead.value?.expressionLanguages??page.expressionLanguages??[]),...items.flatMap(item=>summarizeWorldItem(item).expressions?.map(expression=>expression.languageTag)??[]),...languages])].sort();
+  const expressionCount=graphReadEnabled?graphRead.value?.expressionCount:paged?page.expressionCount:new Set(visible.flatMap(item=>summarizeWorldItem(item).expressions?.filter(expression=>!languages.length||languages.includes(expression.languageTag)).map(expression=>expression.expressionId)??[])).size;
   const learning = projection.semanticSenses.filter((item) =>
     `${item.expression.formL2} ${item.ground.labelL1} ${item.ground.experienceL1}`
       .toLocaleLowerCase()
@@ -289,7 +287,8 @@ function ContentScreenView({
   };
   const personalList=paged?<SensaPagedVirtualList count={page.total} itemAt={index=>page.items.get(index)} indexForKey={key=>{for(const [index,item] of page.items)if(item.personalMeaningId===key)return index;return -1;}} itemKey={item=>item.personalMeaningId} label={t('content.personal')} renderItem={row} request={page.request}/>
    :<SensaVirtualList items={visible} itemKey={item=>item.personalMeaningId} label={t('content.personal')} renderItem={row}/>;
-  const personalCollection=status.loading&&(readingReferences|| (paged?!page.total:!items.length))?<div role="status" aria-busy="true" className="py-20 text-center text-sm text-fg-secondary">{localFlowText('loadingSensa')}</div>:!status.ok?<div role="alert" className="rounded-card border border-feedback-danger p-6 text-feedback-danger"><p>{t('content.loadError')}</p><button className={button} onClick={()=>{source.reload();if(readingReferences)void personalContentSystem.refresh().catch(()=>undefined);}}>{t('content.retry')}</button></div>:!(paged?page.total:visible.length)?empty:view==='list'?personalList:<MeaningGraphView items={visible} languages={languages} screenId={screenId} selectedExpressionId={selectedExpression} onSelectExpression={setExpression} onOpenMeaning={open} learningState={graphLearningState} searching={!!normalizedQuery}/>;
+  const graphItems=graphReadEnabled?graphRead.value?.items??[]:visible;
+  const personalCollection=status.loading&&(graphReadEnabled||readingReferences|| (paged?!page.total:!items.length))?<div role="status" aria-busy="true" className="py-20 text-center text-sm text-fg-secondary">{localFlowText('loadingSensa')}</div>:!status.ok?<div role="alert" className="rounded-card border border-feedback-danger p-6 text-feedback-danger"><p>{t('content.loadError')}</p><button className={button} onClick={()=>{source.reload();if(readingReferences)void personalContentSystem.refresh().catch(()=>undefined);}}>{t('content.retry')}</button></div>:!(graphReadEnabled?graphItems.length:paged?page.total:visible.length)?empty:view==='list'?personalList:<MeaningGraphView items={graphItems} graphStamp={graphReadEnabled?graphRead.value??undefined:undefined} languages={languages} screenId={screenId} selectedExpressionId={selectedExpression} onSelectExpression={setExpression} onOpenMeaning={open} learningState={graphLearningState} searching={!!normalizedQuery}/>;
   return (
     <>
       <SensaCollectionBrowserLayout
@@ -384,7 +383,7 @@ function ContentScreenView({
           </select></label>
         </div>}
         </div></details>}
-        {category==='personal'&&!status.loading&&status.ok&&expressionCount!==undefined&&<p role="status" className="mt-3 text-xs text-fg-secondary" data-world-counts>{t('content.worldCounts',{expressions:fmt(expressionCount),meanings:fmt(paged?page.total:visible.length)})}</p>}
+        {category==='personal'&&!status.loading&&status.ok&&expressionCount!==undefined&&<p role="status" className="mt-3 text-xs text-fg-secondary" data-world-counts>{t('content.worldCounts',{expressions:fmt(expressionCount),meanings:fmt(graphReadEnabled?graphItems.length:paged?page.total:visible.length)})}</p>}
           </>,
           collection: <>
         {category === 'personal' && (view==='list'&&bulkLearning&&filter!=='deleted'?bulkLearning(visible,personalCollection,paged?{query,filter,expressionLanguages:languages,referenceFilter}:undefined):personalCollection)}

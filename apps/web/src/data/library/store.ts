@@ -179,6 +179,7 @@ export class LibraryTransaction {
     return storageCall(()=>this.adapter.lookupMeanings(query));
   }
   async contextBrowse(query:import('../../experience/personalMeaningJourney/contextRead').ContextBrowseQuery):Promise<import('../../experience/personalMeaningJourney/contextRead').ContextBrowsePage>{if(this.wrote)throw new Error('library_projection_requires_snapshot');return storageCall(()=>this.adapter.contextBrowse(query));}
+  async worldGraph(query:import('./sqliteProtocol').WorldGraphQuery):Promise<import('./sqliteProtocol').WorldGraphRead>{if(this.wrote)throw new Error('library_projection_requires_snapshot');return storageCall(()=>this.adapter.worldGraph(query));}
   async worldBrowse(query:import('./sqliteProtocol').WorldBrowseQuery):Promise<import('./sqliteProtocol').WorldBrowsePage>{
     if(this.wrote)throw new Error('library_projection_requires_snapshot');
     return storageCall(()=>this.adapter.worldBrowse(query));

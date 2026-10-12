@@ -119,7 +119,18 @@ test('expression points preserve IDs, polysemy, real relation witnesses and isol
  const polysemous=graph.nodes.find(node=>new Set(node.associations.map(row=>row.alignment.senseId)).size===2)!;
  expect(polysemous.label).toBe('borrow');expect(polysemous.associations).toHaveLength(2);
  expect(graph.edges.length).toBeGreaterThan(0);
- for(const node of graph.nodes){const expected=graph.nodes.filter(other=>other.id!==node.id&&other.associations.some(right=>node.associations.some(left=>left.alignment.senseId===right.alignment.senseId||left.item.personalMeaningId===right.item.personalMeaningId))).map(other=>other.id).sort();expect(relatedMeaningExpressions(graph,node.id).map(edge=>edge.to).sort()).toEqual(expected);}
+ for(const node of graph.nodes){
+  // Deliberately use the original pairwise oracle, independent of membership indexes.
+  const expected=graph.nodes.filter(other=>other.id!==node.id).flatMap(other=>{
+   const facts=new Map<string,{kind:'sense'|'meaning';id:string}>();
+   for(const left of node.associations)for(const right of other.associations){
+    if(left.alignment.senseId===right.alignment.senseId)facts.set(`sense:${left.alignment.senseId}`,{kind:'sense',id:left.alignment.senseId});
+    if(left.item.personalMeaningId===right.item.personalMeaningId)facts.set(`meaning:${left.item.personalMeaningId}`,{kind:'meaning',id:left.item.personalMeaningId});
+   }
+   return facts.size?[{from:node.id,to:other.id,facts:[...facts.values()]}]:[];
+  });
+  expect(relatedMeaningExpressions(graph,node.id)).toEqual(expected);
+ }
  const byId=new Map(graph.nodes.map(node=>[node.id,node]));
  for(const edge of graph.edges)for(const fact of edge.facts){
   const memberships=(id:string)=>byId.get(id)!.associations.map(row=>fact.kind==='sense'?row.alignment.senseId:row.item.personalMeaningId);

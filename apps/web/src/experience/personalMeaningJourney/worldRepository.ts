@@ -3,7 +3,7 @@ import {contextMaterialBlocks,type ContextBrowseQuery,type ContextDetail} from '
 /** Purpose-specific learner reads. Browsing never hydrates the command gateway. */
 import {assertCurrentLibrary,readLibrary,observeLibrary,readLocalLibraryRevision,type LibraryTransaction} from '../../data/library/store';
 import {JOURNEY_STORE_VERSION,StoreCorruptedError,type MeaningJourneyRecord} from './store';
-import {worldFactRegistryReferences,worldRegistryClosure,worldItemFromRegistry,type WorldBrowseQuery,type WorldBrowsePage,type WorldLearningChoiceQuery,type WorldLearningChoicePage,type WorldLearningChoice} from './worldRead';
+import {type WorldGraphQuery,type WorldGraphRead,worldFactRegistryReferences,worldRegistryClosure,worldItemFromRegistry,type WorldBrowseQuery,type WorldBrowsePage,type WorldLearningChoiceQuery,type WorldLearningChoicePage,type WorldLearningChoice} from './worldRead';
 import {isUuid} from './ids';
 import type {JourneyDetailView,ClarificationDraftView} from './types';
 import {sensaIntakeItemSchema} from '@sensa/contracts/sensa';
@@ -25,6 +25,8 @@ export interface PersonalMeaningCorrectionSeed extends WorldReadStamp{
 
 export interface WorldReadStamp{incarnation:string;revision:number}
 export type WorldInboxSnapshot=WorldReadStamp&{items:JourneyState['inboxItems'];drafts:Array<{personalMeaningId:string;label:string}>};
+export type WorldGraphSnapshot=WorldGraphRead&WorldReadStamp;
+export type WorldGraphDetailSnapshot=WorldReadStamp&{detail:JourneyDetailView|null};
 export type WorldPageSnapshot=WorldBrowsePage&WorldReadStamp&{inboxCount:number};
 export type WorldLearningChoiceSnapshot=WorldLearningChoicePage&WorldReadStamp;
 export type WorldDetailSnapshot=WorldReadStamp&{detail:JourneyDetailView|null;draft:ClarificationDraftView|null;sources:PersonalMeaningLearningSource[];source:ClarificationSourceWitness|null};
@@ -94,6 +96,14 @@ export const worldReadRepository={
   }
   return {...stamp,items,drafts};
  });},
+ graph(query:WorldGraphQuery,signal?:AbortSignal):Promise<WorldGraphSnapshot>{
+  const started=performance.now();
+  return readLibrary(async tx=>{signal?.throwIfAborted();const stamp=await readWorldFrame(tx),graph=await tx.worldGraph(query);signal?.throwIfAborted();if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.graph.read',{start:started,end:performance.now()});return {...stamp,...graph};});
+ },
+ graphDetail(id:string):Promise<WorldGraphDetailSnapshot>{
+  if(!isUuid(id))return Promise.reject(new Error('world_meaning_id_invalid'));
+  return readLibrary(async tx=>{const stamp=await readWorldFrame(tx),record=await readMeaningContexts(tx,id);if(!record)throw new StoreCorruptedError('图谱节点的个人意义缺失。');if(record.personalMeaning.personalMeaningId!==id)throw new StoreCorruptedError('个人意义身份与存储记录不一致。');const {registry}=await readMeaningRegistry(tx,record);return {...stamp,detail:worldItemFromRegistry(record,registry).detail};});
+ },
  page(query:WorldBrowseQuery):Promise<WorldPageSnapshot>{return readLibrary(async tx=>({...await readWorldFrame(tx),...await tx.worldBrowse(query),inboxCount:await tx.count('semanticInbox')}));},
  references(senseIds:readonly string[]):Promise<WorldBrowsePage['items']>{return readLibrary(async tx=>{
   await readWorldFrame(tx);
