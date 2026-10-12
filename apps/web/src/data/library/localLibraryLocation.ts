@@ -37,6 +37,18 @@ export function localLibraryScopedName(name:string,namespace:LocalLibraryNamespa
 export function localLibraryPoolDirectory(namespace:LocalLibraryNamespace):string{
  return namespace===null?sqlitePoolDirectory:`${sqlitePoolDirectory}-${validateLocalLibraryNamespace(namespace)}`;
 }
+const isolatedSnapshotPrefix='sensa:isolated-snapshot-generation:v1:';
+/** Local snapshot tooling must never reopen an active or retained owner pool. */
+export function assertIsolatedSnapshotNamespace(namespace:string,requireAdmitted=true):void{
+ if(validateLocalLibraryNamespace(namespace)===null)throw Error('sqlite_snapshot_requires_fresh_namespace');
+ const selection=selected();
+ if(selection?.namespace===namespace||selection?.preservedNamespaces.includes(namespace))throw Error('sqlite_snapshot_owner_namespace');
+ if(requireAdmitted&&localStorage.getItem(isolatedSnapshotPrefix+namespace)!=='admitted')throw Error('sqlite_snapshot_generation_unregistered');
+}
+export function registerIsolatedSnapshotNamespace(namespace:string):void{
+ assertIsolatedSnapshotNamespace(namespace,false);
+ localStorage.setItem(isolatedSnapshotPrefix+namespace,'admitted');
+}
 export function assertLocalLibrarySelected(namespace:LocalLibraryNamespace=localLibraryNamespace()):void{
  if((selected()?.namespace??null)===namespace)return;
  if(typeof document!=='undefined')document.documentElement.dataset.librarySelection='changed';

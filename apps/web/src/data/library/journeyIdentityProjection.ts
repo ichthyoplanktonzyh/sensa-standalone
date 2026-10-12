@@ -5,6 +5,7 @@ import {unpackStoredRecord} from './sharedRecordContent';
 import {ensureSqliteSchemaIndexes} from './sqliteSchemaIndexes';
 import {sqliteRollbackFailure} from './sqliteConnectionFailure';
 import type {SqliteMutation} from './sqliteProtocol';
+import type {LibraryRecordReader} from './libraryRecordReader';
 import {journeyIdentityTables,journeyReservedIdentities,type JourneyIdentityTable} from '../../experience/personalMeaningJourney/reservedIdentities';
 import {isUuid} from '../../experience/personalMeaningJourney/ids';
 
@@ -23,7 +24,10 @@ const uuidString=(bytes:Uint8Array)=>{const hex=Array.from(bytes,byte=>byte.toSt
 export class SqliteJourneyIdentityProjection{
  private invalid=false;
  private statements=new Map<string,PreparedStatement>();
- constructor(private database:Database){}
+ constructor(private database:Database,private decodedReader?:()=>LibraryRecordReader|undefined){}
+ private sourceValue(table:JourneyIdentityTable,key:string,encoded:string):unknown{
+  const reader=this.decodedReader?.();return reader?reader.get(table,key):decodeBackupValue(JSON.parse(unpackStoredRecord(encoded)));
+ }
  private rows(sql:string,bind:unknown[]=[]):Record<string,any>[]{
   let statement=this.statements.get(sql);if(!statement){statement=this.database.prepare(sql);this.statements.set(sql,statement);}
   statement.reset(true);if(bind.length)statement.bind(bind as SqlValue[]);
@@ -53,7 +57,7 @@ export class SqliteJourneyIdentityProjection{
   const started=performance.now();let recordsChecked=0,stale=this.rows('SELECT version FROM sensa_journey_identity_meta WHERE id=1')[0]?.version!==version;
   this.sourceRows((table,row)=>{
    recordsChecked++;
-   const expected=journeyReservedIdentities(table,decodeBackupValue(JSON.parse(unpackStoredRecord(row.value_json)))).sort();
+   const expected=journeyReservedIdentities(table,this.sourceValue(table,row.record_key,row.value_json)).sort();
    const actual=this.rows('SELECT identity.identity_id FROM sensa_journey_identities AS identity JOIN sensa_journey_identity_records AS owner ON owner.id=identity.record_id WHERE owner.table_name=? AND owner.record_key=? ORDER BY identity.identity_id',[tableCode(table),row.record_key]).map(row=>uuidString(row.identity_id));
    if(expected.length!==actual.length||expected.some((id,index)=>id!==actual[index]))stale=true;
   });
@@ -83,7 +87,7 @@ export class SqliteJourneyIdentityProjection{
  private replace(table:JourneyIdentityTable,key:string,encoded:string){
   const recordId=this.rows('INSERT INTO sensa_journey_identity_records(table_name,record_key) VALUES(?,?) ON CONFLICT(table_name,record_key) DO UPDATE SET record_key=excluded.record_key RETURNING id',[tableCode(table),key])[0]!.id;
   this.rows('DELETE FROM sensa_journey_identities WHERE record_id=?',[recordId]);
-  const ids=journeyReservedIdentities(table,decodeBackupValue(JSON.parse(unpackStoredRecord(encoded))));
+  const ids=journeyReservedIdentities(table,this.sourceValue(table,key,encoded));
   if(ids.length)this.rows('INSERT INTO sensa_journey_identities SELECT ?,unhex(value) FROM json_each(?)',[recordId,JSON.stringify(ids.map(id=>id.replaceAll('-','')))]);
  }
  update(mutation:SqliteMutation){

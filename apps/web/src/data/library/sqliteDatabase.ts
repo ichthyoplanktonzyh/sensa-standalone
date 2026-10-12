@@ -4,6 +4,7 @@ import type {LearningScheduleQuery,LearningSchedulePage} from '../../learning/sy
 import type { Database, Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 import {meaningMediaReferences} from '../../experience/personalMeaningJourney/meaningHistoryRead';
 import {isFatalSqliteConnectionFailure,sqliteRollbackFailure} from './sqliteConnectionFailure';
+import type {LibraryRecordReader} from './libraryRecordReader';
 
 import {decodeBackupValue,encodeBackupValue,backupEqual} from './backupCodec';
 import type {ReplicaCandidateRequest,ReplicaCandidateResponse,ReplicaCandidateFence} from './replicaCandidateProtocol';
@@ -33,6 +34,7 @@ import {
   sqliteLibraryBaselineVersion,
   sqliteLibrarySchemaVersion,
   sqliteLibraryTables,
+  sqliteSourceDataTables,
   type SqliteLibraryTable,
   type SqliteMutation,
   type PortableMediaBlob,
@@ -109,14 +111,21 @@ export class SqliteRecordDatabase {
   private activationMemo:StoredRecordMemo|undefined;
   private activationTargetLanguages:Map<string,string>|undefined;
   private activationTargetLanguageBytes=0;
+  private snapshotReader:LibraryRecordReader|undefined;
 
   /** The Worker must stop queued requests even if the durable COMMIT succeeded. */
   get connectionFailed():boolean{return this.integrityFailed||this.fatalStorageFailure!==undefined;}
+
+  async exportLocalSnapshot(pool:import('@sqlite.org/sqlite-wasm').SAHPoolUtil,expectedRevision:number){
+    const {createLocalPortableSnapshot}=await import('./sqlitePortableSnapshot');
+    return createLocalPortableSnapshot(this.sqlite3,pool,this,expectedRevision);
+  }
 
   constructor(
     private readonly sqlite3: Sqlite3Static,
     private readonly database: Database,
     private readonly persistence: SqliteStorageDiagnostics["persistence"],
+    private readonly portableBuild=false,
   ) {
     const field=registryFieldReader();
     this.database.createFunction({name:'sensa_expression_form',arity:2,deterministic:true,innocuous:true,xFunc:(_context,text,language)=>learningExpressionForm(text,language)});
@@ -127,13 +136,47 @@ export class SqliteRecordDatabase {
       if(previousEvent!==encoded){const wire=JSON.parse(unpackStoredRecord(encoded));if(wire[0]!=='object'||!Array.isArray(wire[1]))throw Error('learning_event_clock_invalid');eventFields=new Map(wire[1]);previousEvent=encoded;}
       const value=decodeBackupValue(eventFields!.get(key));if(typeof value!=='string'||key==='at'&&!Number.isFinite(Date.parse(value)))throw Error('learning_event_clock_invalid');return value;
     }});
-    this.meaningLookup=new SqliteMeaningLookupProjection(database,(table,key)=>this.get(table,key));
-    this.worldBrowseProjection=new SqliteWorldBrowseProjection(database,(table,key)=>this.get(table,key));
+    this.meaningLookup=new SqliteMeaningLookupProjection(database,(table,key)=>this.get(table,key),()=>this.snapshotReader);
+    this.worldBrowseProjection=new SqliteWorldBrowseProjection(database,(table,key)=>this.get(table,key),()=>this.snapshotReader);
     this.practiceExpressionProjection=new SqlitePracticeExpressionProjection(database,(table,key)=>this.decoded(table,key));
-    this.journeyIdentities=new SqliteJourneyIdentityProjection(database);
-    this.semanticMemoryProjection=new SqliteLearningSemanticMemoryProjection(database,encoded=>this.decode<LocalLearningTarget>(this.logicalEncoded('learningTargets',encoded)),id=>{const encoded=this.get('learningTargets',id);return encoded===null?null:this.decode<LocalLearningTarget>(encoded);});
-    this.learningHistory=new SqliteLearningHistoryProjection(database,id=>{const language=this.activationTargetLanguages?.get(id);return language===undefined?this.decoded<LocalLearningTarget>('learningTargets',id):{targetLanguageTag:language};},encoded=>this.decode<LocalLearningRun>(this.logicalEncoded('learningRuns',encoded)));
-    this.runtimeCandidates=new SqliteRuntimeLearningCandidates(database,encoded=>this.decode<LocalLearningTarget>(this.logicalEncoded('learningTargets',encoded)),encoded=>this.decode<import('./curriculumEnrollments').LocalCurriculumEnrollment>(this.logicalEncoded('curriculumEnrollments',encoded)),(id,target)=>this.writeLearningTargetProjection(id,target),encoded=>this.decode<import('./studyScopes').LocalStudyScope>(this.logicalEncoded('studyScopes',encoded)));
+    this.journeyIdentities=new SqliteJourneyIdentityProjection(database,()=>this.snapshotReader);
+    this.semanticMemoryProjection=new SqliteLearningSemanticMemoryProjection(database,encoded=>this.decodedStored<LocalLearningTarget>('learningTargets',encoded),id=>this.decoded<LocalLearningTarget>('learningTargets',id)??null);
+    this.learningHistory=new SqliteLearningHistoryProjection(database,id=>{const language=this.activationTargetLanguages?.get(id);return language===undefined?this.decoded<LocalLearningTarget>('learningTargets',id):{targetLanguageTag:language};},encoded=>this.decodedStored<LocalLearningRun>('learningRuns',encoded));
+    this.runtimeCandidates=new SqliteRuntimeLearningCandidates(database,encoded=>this.decodedStored<LocalLearningTarget>('learningTargets',encoded),encoded=>this.decodedStored<import('./curriculumEnrollments').LocalCurriculumEnrollment>('curriculumEnrollments',encoded),(id,target)=>this.writeLearningTargetProjection(id,target),encoded=>this.decodedStored<import('./studyScopes').LocalStudyScope>('studyScopes',encoded));
+  }
+
+  /** Only a newly constructed portable build may append source facts before
+   * dependent caches. The caller owns the single build transaction. */
+  appendPortableSnapshotFacts(puts:SqliteMutation['puts']):void{
+    if(!this.portableBuild||this.closed||this.connectionFailed||this.sqlite3.capi.sqlite3_get_autocommit(this.database.pointer!))throw Error('sqlite_snapshot_build_boundary');
+    for(const item of puts){
+      const stored=this.storedEncoded('record',item.table,item.key,item.encodedValue,new Set(),false);
+      this.database.exec({sql:'INSERT INTO sensa_records(table_name,record_key,value_json) VALUES(?,?,?)',bind:[item.table,item.key,stored]});
+    }
+  }
+
+  /** Reuse the shipped projection writers in this isolated generation only.
+   * Facts/bodies remain unchanged. The caller compares before/after cache data. */
+  rebuildPortableProjections(reader:LibraryRecordReader):void{
+    if(this.closed||this.connectionFailed)throw Error('sqlite_snapshot_connection_failed');
+    this.snapshotReader=reader;
+    try{
+      const tables=this.database.exec({sql:"SELECT name,sql FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'",rowMode:'object',returnValue:'resultRows'}) as {name:string;sql:string}[];
+      const derived=tables.filter(row=>!sqliteSourceDataTables.has(row.name));
+      this.database.exec('PRAGMA foreign_keys=OFF');
+      // Removing a virtual root removes its own shadow tables too.
+      for(const row of [...derived.filter(row=>row.sql.startsWith('CREATE VIRTUAL TABLE')), ...derived.filter(row=>!row.sql.startsWith('CREATE VIRTUAL TABLE'))]){
+        if(!/^\w+$/u.test(row.name))throw Error('sqlite_snapshot_projection_schema');
+        this.database.exec(`DROP TABLE IF EXISTS ${row.name}`);
+      }
+      this.database.exec(sqliteLibrarySchema);
+      for(const {key,value}of reader.entries('learningTargets'))this.writeLearningTargetProjection(key,value,false);
+      for(const {key,value}of reader.entries('learningRuns'))this.writeLearningRunProjection(key,value);
+      for(const {key,value}of reader.entries('contentAttempts'))this.writeContentAttemptProjection(key,value);
+      for(const table of ['semanticContexts','semanticInbox'] as const)for(const {key,value}of reader.entries(table))this.writeMediaReferences(table,key,value);
+      this.initialized=false;
+      this.initialize();
+    }finally{this.snapshotReader=undefined;this.database.exec('PRAGMA foreign_keys=ON');}
   }
 
   initialize(): SqliteStorageDiagnostics {
@@ -226,6 +269,7 @@ export class SqliteRecordDatabase {
   }
 
   get(table: SqliteLibraryTable, key: string): string | null {
+    if(this.snapshotReader){const value=this.snapshotReader.get(table,key);return value===undefined?null:JSON.stringify(encodeBackupValue(value));}
     const value=this.storedRecord(table,key);
     return value===null?null:this.logicalEncoded(table,value);
   }
@@ -1083,12 +1127,23 @@ export class SqliteRecordDatabase {
   }
 
   private decoded<T>(table: SqliteLibraryTable, key: string): T | undefined {
+    if(this.snapshotReader)return this.snapshotReader.get(table,key) as T|undefined;
     const encoded = this.get(table, key);
     return encoded === null ? undefined : this.decode<T>(encoded);
   }
 
   private decode<T>(encoded: string): T {
     return decodeBackupValue(JSON.parse(encoded)) as T;
+  }
+
+  private decodedStored<T>(table:SqliteLibraryTable,stored:string):T{
+    if(this.snapshotReader){
+      const wire=JSON.parse(unpackStoredRecord(stored));
+      const key=decodeBackupValue(wire[1]?.find((pair:unknown[])=>pair[0]==='id')?.[1]);
+      if(typeof key!=='string'||!this.snapshotReader.has(table,key))throw Error('sqlite_snapshot_projection_source');
+      return this.snapshotReader.get(table,key) as T;
+    }
+    return this.decode<T>(this.logicalEncoded(table,stored));
   }
 
   private upsertPackageCacheProjection(key:string,encodedValue:string):void{
@@ -1127,8 +1182,8 @@ export class SqliteRecordDatabase {
     this.writeLearningTargetProjection(key,target);
   }
 
-  private writeLearningTargetProjection(key:string,target:LocalLearningTarget):void{
-    this.semanticMemoryProjection.upsert(key,target);
+  private writeLearningTargetProjection(key:string,target:LocalLearningTarget,semantic=true):void{
+    if(semantic)this.semanticMemoryProjection.upsert(key,target);
     const projection = createHomeLearningTargetRecord(target);
     this.database.exec({
       sql: `INSERT INTO sensa_learning_targets(
@@ -1188,6 +1243,10 @@ export class SqliteRecordDatabase {
       if(completedAt!==null&&typeof completedAt!=='string'||!Array.isArray(targetIds)||targetIds.some(id=>typeof id!=='string'))throw Error('learning_run_projection_invalid');
       run={completedAt,targetIds};
     }else run=this.decode<LocalLearningRun>(encodedValue);
+    this.writeLearningRunProjection(key,run);
+  }
+
+  private writeLearningRunProjection(key:string,run:Pick<LocalLearningRun,'completedAt'|'targetIds'>):void{
     this.database.exec({
       sql: `INSERT INTO sensa_learning_runs(record_key,completed_at) VALUES(?,?)
             ON CONFLICT(record_key) DO UPDATE SET completed_at=excluded.completed_at`,
@@ -1208,6 +1267,10 @@ export class SqliteRecordDatabase {
 
   private upsertContentAttemptProjection(key: string, encodedValue: string): void {
     const attempt = this.decode<ContentAttemptProjectionSource>(encodedValue);
+    this.writeContentAttemptProjection(key,attempt);
+  }
+
+  private writeContentAttemptProjection(key:string,attempt:ContentAttemptProjectionSource):void{
     this.database.exec({
       sql: `INSERT INTO sensa_content_attempts(record_key,task_id,created_at)
             VALUES(?,?,?)
@@ -1223,9 +1286,13 @@ export class SqliteRecordDatabase {
     key: string,
     encodedValue: string,
   ): void {
+    this.writeMediaReferences(table,key,this.decode(encodedValue));
+  }
+
+  private writeMediaReferences(table:'semanticContexts'|'semanticInbox',key:string,value:any):void{
     const mediaIds = table === 'semanticContexts'
-      ? contextMediaReferences(this.decode(encodedValue))
-      : (this.decode<SemanticInboxMediaSource>(encodedValue).payload?.context?.mediaReferenceIds ?? []);
+      ? contextMediaReferences(value)
+      : ((value as SemanticInboxMediaSource).payload?.context?.mediaReferenceIds ?? []);
     this.database.exec({
       sql: 'DELETE FROM sensa_media_references WHERE owner_table=? AND owner_key=?',
       bind: [table, key],

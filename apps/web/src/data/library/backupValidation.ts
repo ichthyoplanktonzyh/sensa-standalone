@@ -42,7 +42,7 @@ export function validateLibraryRestoreRecordsCooperatively(reader:LibraryRecordR
  return runCooperatively(validateLibraryRecordSteps(reader,'restore'));
 }
 export const validateRestoreBackupRows=(rows:BackupRows)=>validateLibraryRestoreRecords(libraryRowsReader(rows));
-export function* validateLibraryRecordSteps(reader:LibraryRecordReader,learningValidation:'audit'|'restore'='audit'){
+export function* validateLibraryRecordSteps(reader:LibraryRecordReader,learningValidation:'audit'|'restore'='audit',validateMaterial?:import('./learningAuthority').LearningSystemStateInput['validateMaterial']){
  let readFailed=false,readFailure:unknown;
  const read=<T>(work:()=>T):T=>{try{return work();}catch(cause){if(!readFailed){readFailed=true;readFailure=cause;}throw cause;}};
  const observed:LibraryRecordReader={
@@ -54,7 +54,7 @@ export function* validateLibraryRecordSteps(reader:LibraryRecordReader,learningV
   },
  };
  try{
-  const identity=yield*validateLibraryRecordFacts(observed,learningValidation);
+  const identity=yield*validateLibraryRecordFacts(observed,learningValidation,validateMaterial);
   if(readFailed)throw readFailure;
   return identity;
  }catch(cause){
@@ -64,7 +64,7 @@ export function* validateLibraryRecordSteps(reader:LibraryRecordReader,learningV
   throw cause;
  }
 }
-function* validateLibraryRecordFacts(reader:LibraryRecordReader,learningValidation:'audit'|'restore'){
+function* validateLibraryRecordFacts(reader:LibraryRecordReader,learningValidation:'audit'|'restore',validateMaterial?:import('./learningAuthority').LearningSystemStateInput['validateMaterial']){
  const {rows,maps}=libraryRecordViews(reader);
  // A lazy reader must decode every stored wire value, including opaque
  // preferences that a domain validator may not otherwise need to inspect.
@@ -99,6 +99,6 @@ function* validateLibraryRecordFacts(reader:LibraryRecordReader,learningValidati
 
  yield*validateContentSupplyReplicaSteps({rows,identity,requireRow,requirePersonalSource,validateLanguageContext,fail});
  yield*validatePersonalContentReplicaSteps({rows,requireRow,fail});
- yield*validateLearningReplicaSteps({rows,maps,identity,routes,requireRow,requirePersonalSource,validateLanguageContext,operationInput,fail},learningValidation);
+ yield*validateLearningReplicaSteps({rows,maps,identity,routes,requireRow,requirePersonalSource,validateLanguageContext,operationInput,fail,validateMaterial},learningValidation);
  return identity;
 }

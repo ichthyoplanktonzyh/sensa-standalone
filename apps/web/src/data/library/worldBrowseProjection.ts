@@ -5,6 +5,7 @@ import type {Database,PreparedStatement,SqlValue} from '@sqlite.org/sqlite-wasm'
 import {decodeBackupValue} from './backupCodec';
 import {ensureSqliteSchemaIndexes} from './sqliteSchemaIndexes';
 import type {SqliteMutation} from './sqliteProtocol';
+import type {LibraryRecordReader} from './libraryRecordReader';
 import {isWorldRecordVisible,summarizeWorldItem,validateWorldQuery,worldItemFromRegistry,worldRegistryClosure,worldSearchText,WorldSourceInvalidError,validateWorldLearningChoiceQuery,worldLearningChoice,worldReferenceSenseIds,type WorldLearningChoiceQuery,type WorldLearningChoicePage,type WorldLearningChoice,type WorldBrowseItem,type WorldBrowsePage,type WorldBrowseQuery,type WorldRecordRead} from '../../experience/personalMeaningJourney/worldRead';
 import type {MeaningJourneyRecord} from '../../experience/personalMeaningJourney/store';
 import {buildPersonalMeaningLearningSources} from '../../experience/personalMeaningJourney/learningSource';
@@ -44,8 +45,8 @@ type Row=Record<string,any>;
 export class SqliteWorldBrowseProjection{
  private statements=new Map<string,PreparedStatement>();
  private read:WorldRecordRead;
- constructor(private database:Database,private get:(table:'semanticRegistry'|'semanticMeanings'|'semanticContexts',key:string)=>string|null){
-  this.read=(table,key)=>{const encoded=this.get(table,key);return encoded===null?undefined:decodeBackupValue(JSON.parse(encoded));};
+ constructor(private database:Database,private get:(table:'semanticRegistry'|'semanticMeanings'|'semanticContexts',key:string)=>string|null,private decodedReader?:()=>LibraryRecordReader|undefined){
+  this.read=(table,key)=>{const reader=this.decodedReader?.();if(reader)return reader.get(table,key);const encoded=this.get(table,key);return encoded===null?undefined:decodeBackupValue(JSON.parse(encoded));};
  }
  private statement(sql:string,bind:unknown[]):PreparedStatement{
   let statement=this.statements.get(sql);if(!statement){statement=this.database.prepare(sql);this.statements.set(sql,statement);}
@@ -137,7 +138,8 @@ export class SqliteWorldBrowseProjection{
   let join='';
   if(query.referenceFilter&&query.referenceFilter!=='all'){
    const prefix=query.referenceFilter==='saved'?'saved_sense:':'sense_note:';
-   const annotations=this.rows("SELECT value_json FROM sensa_records WHERE table_name='annotations' AND record_key>=? AND record_key<?",[prefix,`${prefix}\uffff`]).map(row=>decodeBackupValue(JSON.parse(row.value_json)));
+   const reader=this.decodedReader?.();
+   const annotations=this.rows("SELECT record_key,value_json FROM sensa_records WHERE table_name='annotations' AND record_key>=? AND record_key<?",[prefix,`${prefix}\uffff`]).map(row=>reader?reader.get('annotations',row.record_key):decodeBackupValue(JSON.parse(row.value_json)));
    clauses.push("EXISTS (SELECT 1 FROM json_each(world.summary_json,'$.senseIds') AS sense WHERE sense.value IN (SELECT value FROM json_each(?)))");bind.push(JSON.stringify(worldReferenceSenseIds(annotations,query.referenceFilter)));
   }
   if(query.expressionLanguages?.length){

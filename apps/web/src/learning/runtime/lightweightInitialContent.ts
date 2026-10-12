@@ -838,6 +838,27 @@ export const validateLightweightInitialMaterialization = (
   }
 };
 
+/** One immutable snapshot admission. Contextual target/source/time checks still
+ * run at every use; only identical decoded content is checked once. */
+export function immutableLightweightMaterializationValidator():typeof validateLightweightInitialMaterialization{
+ const digests=new WeakMap<object,string>(),materials=new WeakSet<object>();
+ const digest=(value:object)=>{let result=digests.get(value);if(result===undefined){result=canonicalJsonDigest(value);digests.set(value,result);}return result;};
+ return material=>{
+  if(materials.has(material))return;
+  const snapshot=sensaLearningMaterializationSnapshotSchema.parse(material.snapshot);
+  let contentDigest=digests.get(material.content);
+  if(contentDigest===undefined){
+   const content=sensaLightweightInitialMaterializationContentSchema.parse(material.content);
+   contentDigest=canonicalJsonDigest(content);
+   for(const resource of content.resources)if(resource.contentDigest!==canonicalJsonDigest(resource.contentPayload))throw Error('Learning Materialization content does not match its immutable snapshot.');
+   digests.set(material.content,contentDigest);
+  }
+  if(snapshot.validationStatus!=='validated'||snapshot.contentSchemaVersion!==LIGHTWEIGHT_INITIAL_MATERIALIZATION_SCHEMA_VERSION)throw Error('Learning Materialization is not validated for Lightweight Initial v1.');
+  if(snapshot.contentDigest!==contentDigest||digest(material.snapshot.contentPayload)!==contentDigest)throw Error('Learning Materialization content does not match its immutable snapshot.');
+  materials.add(material);
+ };
+}
+
 export const lightweightMaterializedResourcesForRole = (
   materialization: LightweightInitialLearningMaterialization,
   role: SensaLightweightInitialMaterialRole,

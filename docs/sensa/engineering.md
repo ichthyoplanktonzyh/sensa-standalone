@@ -685,6 +685,18 @@ Point manifest、摘要、大小、library/learner/schema identity 与 `account_
 账号、空目标库与 incarnation 恢复检查。压缩明文上限仍为 64 MiB，文件上限仍为 90 MiB，record 上限仍为
 200k；解压总量和单帧另有 512 MiB／96 MiB 的防护边界，不能把这些字节上限当作实际 JS heap 承诺。
 本机压缩表示与手动恢复格式不自动改变 Cloud Checkpoint 的分块协议或证明其容量通过。
+`sqlitePortableSnapshot.ts` 提供本机 DB snapshot 生产与隔离准入原语：在固定 source revision 和身份边界下，
+从现有 replica allowlist 写入全新可信 schema，排除设备凭据、providers、operations、pending、公共缓存和同步基线，
+通过 `VACUUM INTO` 生成包含查询投影的独立一致文件。接收端用官方 SAHPool chunk import 写入未打开的新 namespace，
+先禁用不可信 schema、triggers 和 views 并比对完整 schema allowlist，再执行 integrity、FK、共享正文摘要／所有权和领域引用／pins 校验。
+接收准入把每条事实及共享正文完整解码一次，并让学习投影复用已解码对象；投影在同一 generation 内用正式写入器重建并比对原投影值，不再建事实候选库或复制一遍事实。
+文件上限 90 MiB、实际展开总量 512 MiB、单压缩正文 96 MiB、事实与共享正文各 200k；gzip 按实际输出累计限额，不能信任 ISIZE。
+`openIsolatedLocalSnapshot` 与 `openIsolatedLocalGeneration` 只操作已准入的独立 generation，持续拒绝 active／preserved owner namespace；
+重开缺失文件时拒绝而不创建空库。它们不切换 active pointer，不写 cloud cursor／checkpoint，不改变媒体协议，也不进入当前账号恢复 UI。
+`local-portable-snapshot` 与 `local-portable-snapshot-browser` 分别验证真实 schema 准入和 Chromium Worker／OPFS 往返；
+`node --import tsx scripts/assessment/measureLocalSnapshot.mts --fixture=.tmp/retention-capacity-facts-<冻结目录> --label=<新名称>`
+专门测量当前合同有效的 1000 Targets／2001 Runs／4000 Events 基线，准备、生产、导入、准入、投影与原值核对单列。
+上述测量不证明远端传输、owner 切换崩溃顺序或峰值内存，首次空设备的云快照接口与 cursor 绑定仍须另行实现和验证。
 备份目的地占用检查与事务内恢复共用同一规则：结果严格为空数组的无事实 `learning.materialize` 回执不算资料，其他非启动操作与领域记录仍受保护。
 没有可准备课程时首页不提交空准备回执。备份页检查文件时先读取目的地状态，非空库可看摘要但不提供确认；实际恢复再次原子核对。
 恢复后的新 incarnation 保持旧页面写入保护；零学习包不加载资源重取模块，需要公共资源的恢复可在重新打开后继续取得，已提交事实不随重取失败回滚。

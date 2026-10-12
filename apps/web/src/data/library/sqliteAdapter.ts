@@ -23,9 +23,10 @@ import type {LearningHistoryRequest} from '../../learning/system/learningHistory
 import type {StoredLearningHistoryPage} from './learningHistoryProjection';
 import type {ReplicaCandidateRequest,ReplicaCandidateResponse} from './replicaCandidateProtocol';
 import {CoordinatedSqliteAdapter,type CoordinatedSqliteBackend} from './sqliteCoordinator';
-import {localLibraryNamespace,assertLocalLibrarySelected,observeLocalLibrarySelection,type LocalLibraryNamespace} from './localLibraryLocation';
+import {localLibraryNamespace,assertLocalLibrarySelected,observeLocalLibrarySelection,assertIsolatedSnapshotNamespace,registerIsolatedSnapshotNamespace,type LocalLibraryNamespace} from './localLibraryLocation';
 
 export interface SqliteRecordAdapter {
+  exportLocalSnapshot?(expectedRevision:number):Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;
   replicaCandidate(request:ReplicaCandidateRequest):Promise<ReplicaCandidateResponse>;
   learningSemanticMemory(targetId?:string):Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>;
   get(table: SqliteLibraryTable, key: string): Promise<string | null>;
@@ -79,8 +80,9 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
   private nextId = 1;
   private terminated=false;
   private workerError:Error|undefined;
+  private isolatedAdmitted=false;
 
-  constructor(private readonly namespace:LocalLibraryNamespace) {
+  constructor(private readonly namespace:LocalLibraryNamespace,private readonly isolatedExisting=false) {
     this.worker.addEventListener("message", (event: MessageEvent<SqliteWorkerResult>) => {
       const waiting = this.pending.get(event.data.id);
       if (!waiting) return;
@@ -97,8 +99,15 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
   }
 
   initialize(): Promise<SqliteStorageDiagnostics> {
-    return this.send({ kind: "initialize",namespace:this.namespace }) as Promise<SqliteStorageDiagnostics>;
+    return this.send({ kind: "initialize",namespace:this.namespace,...(this.isolatedExisting?{requireExisting:true}:{}) }) as Promise<SqliteStorageDiagnostics>;
   }
+
+  exportLocalSnapshot(expectedRevision:number){return this.send({kind:'exportLocalSnapshot',expectedRevision}) as Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;}
+  initializeSnapshot(snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot){
+    if(this.namespace===null)throw Error('sqlite_snapshot_requires_fresh_namespace');
+    return this.send({kind:'initializeSnapshot',namespace:this.namespace,snapshot}) as Promise<{report:Omit<Awaited<ReturnType<typeof import('./sqlitePortableSnapshot').importLocalPortableSnapshot>>,'library'>;diagnostics:SqliteStorageDiagnostics}>;
+  }
+  markIsolatedAdmitted():void{this.isolatedAdmitted=true;}
 
   replicaCandidate(request:ReplicaCandidateRequest):Promise<ReplicaCandidateResponse>{return this.send({kind:'replicaCandidate',request}) as Promise<ReplicaCandidateResponse>;}
 
@@ -235,6 +244,9 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
 
   private send(input: SqliteWorkerInput|{kind:'close'}): Promise<unknown> {
     if(this.terminated)return Promise.reject(new Error('sqlite_worker_terminated'));
+    if((this.isolatedExisting||this.isolatedAdmitted)&&input.kind!=='close'){
+      try{assertIsolatedSnapshotNamespace(this.namespace!);}catch(error){return Promise.reject(error);}
+    }
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
@@ -261,6 +273,17 @@ function assertBrowserSqliteAvailable(): void {
 
 let adapter: Promise<SqliteRecordAdapter> | undefined;
 let activeBrowserAdapter:CoordinatedSqliteAdapter|undefined;
+/** Explicit isolated local generation; never changes the active pointer. */
+export async function openIsolatedLocalSnapshot(snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot){
+ const namespace=crypto.randomUUID(),isolated=new WorkerSqliteAdapter(namespace);
+ try{assertIsolatedSnapshotNamespace(namespace,false);const result=await isolated.initializeSnapshot(snapshot);registerIsolatedSnapshotNamespace(namespace);isolated.markIsolatedAdmitted();return {...result,namespace,adapter:isolated};}
+ catch(error){await isolated.close().catch(()=>{});throw error;}
+}
+/** Reopen an already imported isolated generation without selecting it. */
+export async function openIsolatedLocalGeneration(namespace:string){
+ assertIsolatedSnapshotNamespace(namespace);
+ const isolated=new WorkerSqliteAdapter(namespace,true);try{await isolated.initialize();return isolated;}catch(error){await isolated.close().catch(()=>{});throw error;}
+}
 export async function closeLocalLibraryStorage():Promise<void>{await activeBrowserAdapter?.close();}
 
 async function browserAdapter(): Promise<SqliteRecordAdapter> {

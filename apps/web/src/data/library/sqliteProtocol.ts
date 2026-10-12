@@ -28,8 +28,10 @@ export const sqlitePoolDirectory = "/sensa-local-library-v12";
 /** First supported production-user baseline; prototype formats stay unsupported. */
 export const sqliteLibraryBaselineVersion = 19;
 export const sqliteLibrarySchemaVersion = 19;
+/** Durable physical data; every other application table is a derived cache. */
+export const sqliteSourceDataTables=new Set(['sensa_records','sensa_record_tombstones','sensa_sync_base','sensa_shared_record_content','sensa_shared_record_content_owners','sensa_portable_media','sensa_portable_package_media']);
 /** Cross-tab RPC changes must bump this before adding or changing messages. */
-export const sqliteCoordinatorProtocolVersion = 60;
+export const sqliteCoordinatorProtocolVersion = 61;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -99,7 +101,9 @@ export type SqliteSyncBaseEntry = {
 export type SqliteSyncBaseReference=Pick<SqliteSyncBaseEntry,'table'|'key'|'blockRefs'>;
 
 export type SqliteWorkerRequest =
-  | { id: number; kind: "initialize"; namespace?:string|null }
+  | { id: number; kind: "initialize"; namespace?:string|null;requireExisting?:boolean }
+  | {id:number;kind:'initializeSnapshot';namespace:string;snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot}
+  | {id:number;kind:'exportLocalSnapshot';expectedRevision:number}
   | { id: number; kind: "close" }
   | { id: number; kind: "get"; table: SqliteLibraryTable; key: string }
   | { id: number; kind: "entries"; table: SqliteLibraryTable }

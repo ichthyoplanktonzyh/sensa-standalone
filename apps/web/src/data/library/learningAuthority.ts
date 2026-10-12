@@ -119,11 +119,14 @@ export type LearningSystemStateInput={
  validateLanguageContext:(value:unknown)=>any;
  operationInput:(id:string)=>any;
  fail:()=>never;
+ /** Only immutable, decoded-once admission inputs may reuse content validation. */
+ validateMaterial?:typeof validateLightweightInitialMaterialization;
 };
 
 /** Learning owns history validation, deterministic replay, projection checks and reconciliation decisions. */
 export function* assertLearningSystemStateSteps(input:LearningSystemStateInput,mode:'audit'|'restore'='audit'):Generator<void,void>{
  const {rows,maps,identity,routes,requireRow,requirePersonalSource,validateLanguageContext,operationInput,fail}=input;
+ const validateMaterial=input.validateMaterial??validateLightweightInitialMaterialization;
  const uuid=z.string().uuid(),timestamp=z.string().datetime({offset:true});
  for(const {key,value} of rows.supplementalMembershipStates){
   yield;
@@ -189,7 +192,7 @@ export function* assertLearningSystemStateSteps(input:LearningSystemStateInput,m
   for(const membership of target.curriculumMemberships){
    uuid.parse(membership.id);z.number().int().positive().parse(membership.revision);if(membership.status!==undefined&&!['active','superseded'].includes(membership.status))fail();uuid.parse(membership.createdByOperationId);timestamp.parse(membership.createdAt);timestamp.parse(membership.updatedAt);if(Date.parse(membership.updatedAt)<Date.parse(membership.createdAt))fail();
    const context=validateLanguageContext(membership.languageContext);if(context.targetLanguageTag!==target.targetLanguageTag)fail();
-   sensaLearningMaterializationSnapshotSchema.parse(membership.material.snapshot);validateLightweightInitialMaterialization(membership.material);
+   sensaLearningMaterializationSnapshotSchema.parse(membership.material.snapshot);validateMaterial(membership.material);
    assertMaterialAdmissionTime(membership.material,membership,membership.packageKey?undefined:requireRow('contentAttempts',membership.material.snapshot.provenance.attemptId));
    learningSupportMeaning(membership.material.content.resources,context.supportLanguageTag);
    const provenance=membership.material.snapshot.provenance;
@@ -255,7 +258,7 @@ export function* assertLearningSystemStateSteps(input:LearningSystemStateInput,m
   const headers:ActionHeader[]=[];
   const context=validateLanguageContext(saved.languageContext);requireRow('learningTargets',saved.targetId);
   for(const [id,participant] of Object.entries(saved.participants)){
-   const target=requireRow('learningTargets',id),baseline=runBaselineMaterial(participant);validateLightweightInitialMaterialization(baseline);
+   const target=requireRow('learningTargets',id),baseline=runBaselineMaterial(participant);validateMaterial(baseline);
    if(baseline.snapshot.learningTargetId!==id||baseline.snapshot.learnerUserId!==identity.learnerId||!backupEqual(participant.languageContext,context)||!target.curriculumMemberships.some((membership:any)=>membership.id===participant.curriculumMembershipId&&membership.languageContext.languageRouteId===context.languageRouteId&&membership.languageContext.targetLanguageTag===context.targetLanguageTag&&membership.languageContext.supportLanguageTag===context.supportLanguageTag))fail();
    yield;
   }
@@ -396,7 +399,7 @@ export function* assertLearningSystemStateSteps(input:LearningSystemStateInput,m
     if(!backupEqual(participant.languageContext,runLanguageContext)||membership.languageContext.languageRouteId!==runLanguageContext.languageRouteId)fail();
     if(!baselineBindsSelectedMembership(saved,target,participant))fail();
     for(const material of validateRunMaterialPins(participant)){
-     validateLightweightInitialMaterialization(material);assertLocalTargetMaterialIdentity(target,material);
+     validateMaterial(material);assertLocalTargetMaterialIdentity(target,material);
      if(material.snapshot.protocolPurpose!==saved.purpose)fail();
      const provenance=material.snapshot.provenance,packageKey=provenance.packageKey?z.string().min(1).parse(provenance.packageKey):null;
      const attempt=packageKey?undefined:requireRow('contentAttempts',z.string().uuid().parse(provenance.attemptId)),task=attempt?requireRow('personalLearning',attempt.taskId):undefined;
@@ -420,7 +423,7 @@ export function* assertLearningSystemStateSteps(input:LearningSystemStateInput,m
    if(!baselineBindsSelectedMembership(saved,target,participant))fail();
    uuid.parse(participant.protocolRunId);if(knownProtocolRunIds.has(participant.protocolRunId))fail();knownProtocolRunIds.add(participant.protocolRunId);
    const validateRunMaterial=(material:ReturnType<typeof runBaselineMaterial>)=>{
-    validateLightweightInitialMaterialization(material);const materialProvenance=material.snapshot.provenance as any;
+    validateMaterial(material);const materialProvenance=material.snapshot.provenance as any;
     assertLocalTargetMaterialIdentity(target,material);if(material.snapshot.protocolPurpose!==saved.purpose)fail();
     if(materialProvenance.packageKey){
      const materialPackageKey=z.string().min(1).parse(materialProvenance.packageKey),pack=maps.packageCache.get(materialPackageKey),installation=packageInstallationSchema.parse(requireRow('packageInstallations',materialPackageKey));

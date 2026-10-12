@@ -1,5 +1,5 @@
 import {sha256} from '@sensa/learning-kernel';
-import {gzipSync,gunzipSync,strToU8,strFromU8} from 'fflate';
+import {gzipSync,Gunzip,strToU8,strFromU8} from 'fflate';
 import {decodeBackupValue,type WireValue} from './backupCodec';
 
 const referenceTag='sensa-shared-content-v1';
@@ -100,18 +100,27 @@ export function packStoredRecord(text:string):string{
  const packed=JSON.stringify([compressedTag,sha256(bytes),base64(gzipSync(bytes,{level:6}))]);
  return packed.length<text.length?packed:text;
 }
-export function unpackStoredRecord(text:string,memo?:StoredRecordMemo):string{
+export function unpackStoredRecord(text:string,memo?:StoredRecordMemo,outputLimit=maximumRecordBytes):string{
  // Writers use this exact envelope. Ordinary tagged facts need not be parsed
  // merely to discover that they are not compressed records.
  if(!text.startsWith(`["${compressedTag}",`))return text;
- if(memo)return memo.transform('unpack',text,()=>unpackStoredRecord(text));
+ if(memo)return memo.transform('unpack',text,()=>unpackStoredRecord(text,undefined,outputLimit));
  const value=JSON.parse(text);
  if(!Array.isArray(value)||value[0]!==compressedTag)return text;
  if(value.length!==3||typeof value[1]!=='string'||!hashPattern.test(value[1])||typeof value[2]!=='string')fail();
  const bytes=unbase64(value[2]);if(bytes.length<18)fail();
  const size=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength).getUint32(bytes.length-4,true);
- if(size>maximumRecordBytes)fail();
- const plain=gunzipSync(bytes);if(plain.byteLength!==size||sha256(plain)!==value[1])fail();
+ if(!Number.isSafeInteger(outputLimit)||outputLimit<0||size>Math.min(outputLimit,maximumRecordBytes))fail();
+ // ISIZE alone is not an output bound. A fixed gunzipSync buffer can silently
+ // truncate a forged longer stream to an otherwise valid tagged JSON prefix.
+ const plain=new Uint8Array(size);let at=0,finished=false;
+ const stream=new Gunzip((chunk,final)=>{
+  if(at+chunk.length>size||at+chunk.length>outputLimit)fail();
+  plain.set(chunk,at);at+=chunk.length;finished=final;
+ });
+ stream.onmember=fail; // Stored writers emit exactly one gzip member.
+ for(let offset=0;offset<bytes.length;offset+=8192)stream.push(bytes.subarray(offset,offset+8192),offset+8192>=bytes.length);
+ if(!finished||at!==size||sha256(plain)!==value[1])fail();
  return strFromU8(plain);
 }
 
@@ -156,13 +165,5 @@ export function expandArchiveWire(value:any,depth=0):WireValue{
 /** Archive decoding can share immutable bodies across rows, rather than
  * expanding the same content into several temporary tagged object graphs. */
 export function decodeSharedArchiveWire(value:any,bodies:ReadonlyMap<string,unknown>,used:Set<string>,depth=0):any{
- if(depth>80||!Array.isArray(value))fail();
- if(value[0]===referenceTag){const digest=value[1];if(value.length!==2||typeof digest!=='string'||!bodies.has(digest))fail();used.add(digest);return bodies.get(digest);}
- if(value[0]==='array')return value[1].map((item:unknown)=>decodeSharedArchiveWire(item,bodies,used,depth+1));
- if(value[0]==='object'){
-  const object:Record<string,unknown>={},seen=new Set<string>();
-  for(const [key,item] of value[1]){if(typeof key!=='string'||seen.has(key))fail();seen.add(key);Object.defineProperty(object,key,{value:decodeSharedArchiveWire(item,bodies,used,depth+1),enumerable:true,writable:true,configurable:true});}
-  return object;
- }
- return decodeBackupValue(value);
+ return decodeBackupValue(value,depth,digest=>{if(!bodies.has(digest))fail();used.add(digest);return bodies.get(digest);});
 }

@@ -28,6 +28,7 @@ type WorkerStore={
   database:SqliteRecordDatabase;
   initialized:boolean;
   startupTimingsMs:Record<string,number>;
+  snapshotReport?:unknown;
 };
 
 let store:Promise<WorkerStore>|undefined;
@@ -43,6 +44,8 @@ let failedConnection=false;
 let requestQueue:Promise<void>=Promise.resolve();
 let namespace:LocalLibraryNamespace=null;
 let namespaceBound=false;
+let snapshotInitialization:import('./sqlitePortableSnapshot').LocalPortableSnapshot|undefined;
+let requireExisting=false;
 
 const verifyPoolHandles=()=>assertSahPoolAccessHandlesFree(navigator.storage,localLibraryPoolDirectory(namespace));
 const releaseLease=async()=>{
@@ -79,10 +82,18 @@ async function database():Promise<WorkerStore>{
         });
         const poolReady=performance.now();
         activePool=pool;
-        const database=activeRawDatabase=new pool.OpfsSAHPoolDb(sqliteLibraryFile);
-        activeDatabase=new SqliteRecordDatabase(sqlite3,database,'opfs');
+        let snapshotReport:unknown;
+        if(snapshotInitialization){
+          const {importLocalPortableSnapshot}=await import('./sqlitePortableSnapshot');
+          const {library,...report}=await importLocalPortableSnapshot(sqlite3,pool,sqliteLibraryFile,snapshotInitialization);
+          activeDatabase=library;snapshotReport=report;snapshotInitialization=undefined;
+        }else{
+          if(requireExisting&&!pool.getFileNames().includes(sqliteLibraryFile))throw Error('sqlite_snapshot_generation_missing');
+          const database=activeRawDatabase=new pool.OpfsSAHPoolDb(sqliteLibraryFile);
+          activeDatabase=new SqliteRecordDatabase(sqlite3,database,'opfs');
+        }
         activeRawDatabase=undefined; // The wrapper now owns the native handle.
-        return {pool,database:activeDatabase,initialized:false,startupTimingsMs:{lease:Math.round(leased-started),nativeProbe:Math.round(probed-leased),wasm:Math.round(wasmReady-probed),pool:Math.round(poolReady-wasmReady),databaseOpen:Math.round(performance.now()-poolReady),total:Math.round(performance.now()-started)}};
+        return {pool,database:activeDatabase,initialized:!!snapshotReport,snapshotReport,startupTimingsMs:{lease:Math.round(leased-started),nativeProbe:Math.round(probed-leased),wasm:Math.round(wasmReady-probed),pool:Math.round(poolReady-wasmReady),databaseOpen:Math.round(performance.now()-poolReady),total:Math.round(performance.now()-started)}};
       }catch(cause){
         try{
           if(!installerStarted&&!(cause instanceof SahPoolProbeCloseError)){
@@ -162,10 +173,18 @@ async function closeStorage():Promise<void>{
 }
 
 const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
-  if(request.kind==='initialize'){
+  if(request.kind==='initialize'||request.kind==='initializeSnapshot'){
     const next=validateLocalLibraryNamespace(request.namespace??null);
     if((namespaceBound||store)&&next!==namespace)throw new Error('localFlow.libraryReplaced');
     namespace=next;namespaceBound=true;
+    if(request.kind==='initialize'){
+      if(request.requireExisting&&next===null)throw Error('sqlite_snapshot_requires_fresh_namespace');
+      requireExisting=!!request.requireExisting;
+    }
+    if(request.kind==='initializeSnapshot'){
+      if(next===null||store)throw Error('sqlite_snapshot_requires_fresh_namespace');
+      snapshotInitialization=request.snapshot;
+    }
   }
   if(request.kind==='close'){
     await closeStorage();
@@ -175,6 +194,8 @@ const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
   if(failedConnection)throw new Error('sqlite_storage_connection_failed');
   const current=await database();
   switch(request.kind){
+    case 'exportLocalSnapshot':return current.database.exportLocalSnapshot(current.pool,request.expectedRevision);
+    case 'initializeSnapshot':return {report:current.snapshotReport,diagnostics:current.database.diagnostics()};
     case 'initialize':{
       try{
         const diagnostics=current.database.initialize();
