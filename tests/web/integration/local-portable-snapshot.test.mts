@@ -119,6 +119,18 @@ test('real Learning and Meaning commands roundtrip with shared content and query
    expect(JSON.stringify(sqliteLibraryTables.map(table=>learning.entries(table)))).toBe(sourceBefore);
    expect(learning.lookupMeanings('borrow').meanings).toHaveLength(1);
   }finally{failed.library.close(false);}
+  const checkpointFile='/focused-checkpoint-'+crypto.randomUUID(),checkpointPool=memoryFilePool();
+  const checkpoint=await importLocalPortableSnapshot(sqlite,checkpointPool,checkpointFile,exported),checkpointRaw=checkpointPool.handles.get(checkpointFile)!;
+  const execute=checkpointRaw.exec.bind(checkpointRaw),fault=Object.assign(new Error('synthetic_checkpoint_io_failure'),{resultCode:10});
+  const spy=vi.spyOn(checkpointRaw,'exec').mockImplementation((...args)=>{
+   const input=args[0];if((typeof input==='string'?input:input.sql)==='PRAGMA wal_checkpoint(TRUNCATE)')throw fault;
+   return execute(...args);
+  });
+  try{
+   expect(()=>checkpoint.library.rebuildPortableProjections(reader)).toThrow('synthetic_checkpoint_io_failure');
+   expect(checkpoint.library.connectionFailed).toBe(true);
+   expect(JSON.stringify(sqliteLibraryTables.map(table=>learning.entries(table)))).toBe(sourceBefore);
+  }finally{spy.mockRestore();checkpoint.library.close(false);}
   for(const mutation of ['missing-json-reference','wrong-source-pin'] as const){
    const file='/focused-invalid-learning-source-'+crypto.randomUUID();sqlite.capi.sqlite3_js_posix_create_file(file,exported.bytes);
    const badRaw=new sqlite.oo1.DB(file,'c'),bad=new SqliteRecordDatabase(sqlite,badRaw,'memory');

@@ -202,6 +202,7 @@ export class SqliteRecordDatabase {
     }finally{this.snapshotReader=undefined;this.database.exec('PRAGMA foreign_keys=ON');}
     // Durable commit and checkpoint remain inside the caller's projection time.
     if(this.persistence==='opfs')this.maintainWal();
+    if(this.fatalStorageFailure)throw this.fatalStorageFailure;
   }
 
   /** Caller owns the transaction, for both ordinary initialization and a
