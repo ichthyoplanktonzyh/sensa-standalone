@@ -4,7 +4,7 @@ import {librarySyncTables} from '@sensa/contracts/sensa';
 import {SqliteRecordDatabase} from './sqliteDatabase';
 import {decodeBackupValue,encodeBackupValue} from './backupCodec';
 import {decodeSharedArchiveWire,unpackStoredRecord} from './sharedRecordContent';
-import {isReplicatedLibraryEntry,normalizeLibraryReplicaEntry} from './replication/libraryReplica';
+import {isReplicatedLibraryEntry,normalizeLibraryReplicaEntry,canCopyNormalizedLibraryReplicaValue} from './replication/libraryReplica';
 import {sqliteLibraryTables,sqliteLibrarySchemaVersion,sqliteSourceDataTables} from './sqliteProtocol';
 import {libraryRowsReader} from './libraryRecordReader';
 import type {BackupRows} from './backupValidation';
@@ -13,7 +13,7 @@ import {runCooperatively} from '../../experience/personalMeaningJourney/cooperat
 import {immutableLightweightMaterializationValidator} from '../../learning/runtime/lightweightInitialContent';
 
 const fileLimit=90*1024*1024,expandedLimit=512*1024*1024,rowLimit=200000;
-export type LocalPortableSnapshot={format:'sensa-local-db-snapshot-v1';schemaVersion:typeof sqliteLibrarySchemaVersion;sourceRevision:number;sha256:string;bytes:Uint8Array;timingsMs:{build:number;projection:number;export:number}};
+export type LocalPortableSnapshot={format:'sensa-local-db-snapshot-v1';schemaVersion:typeof sqliteLibrarySchemaVersion;sourceRevision:number;sha256:string;bytes:Uint8Array;timingsMs:{build:number;storageCopy:number;admission:number;projection:number;export:number}};
 type SchemaRow={type:string;name:string;tbl_name:string;sql:string|null};
 const invalid=(reason:string):never=>{throw Error(`sqlite_snapshot_${reason}`);};
 const statisticsSql=new Set(['CREATE TABLE sqlite_stat1(tbl,idx,stat)','CREATE TABLE sqlite_stat4(tbl,idx,neq,nlt,ndlt,sample)']);
@@ -39,7 +39,8 @@ function restrict(sqlite:Sqlite3Static,raw:Database){
 }
 function trusted(sqlite:Sqlite3Static,pool?:SAHPoolUtil,file?:string,portableBuild=false){
  const raw=pool?new pool.OpfsSAHPoolDb(file!):new sqlite.oo1.DB(':memory:','c');
- const library=new SqliteRecordDatabase(sqlite,raw,pool?'opfs':'memory',portableBuild);library.initialize();return {raw,library};
+ const copyPolicy:ConstructorParameters<typeof SqliteRecordDatabase>[3]=portableBuild?(table,key)=>isReplicatedLibraryEntry(table,key)&&canCopyNormalizedLibraryReplicaValue({table:table as typeof librarySyncTables[number],key}):undefined;
+ const library=new SqliteRecordDatabase(sqlite,raw,pool?'opfs':'memory',copyPolicy);library.initialize();return {raw,library};
 }
 function freeze(value:any,seen:WeakSet<object>){
  if(value===null||typeof value!=='object'||seen.has(value))return;seen.add(value);
@@ -101,12 +102,14 @@ export async function createLocalPortableSnapshot(sqlite:Sqlite3Static,pool:SAHP
   for(const table of librarySyncTables){
    let after:string|null=null;
    for(;;){
-    const page=source.recordKeysPage(table,after,64),puts=[];
+    const page=source.recordKeysPage(table,after,64),puts=[],copy=[];
     for(const key of page)if(isReplicatedLibraryEntry(table,key)){
+     if(canCopyNormalizedLibraryReplicaValue({table,key})){copy.push(key);continue;}
      const encoded=source.get(table,key);if(encoded===null)invalid('source_changed');
      const value=decodeBackupValue(JSON.parse(encoded!)),normalized=normalizeLibraryReplicaEntry({table,key,value},identity);
      puts.push({table,key,encodedValue:JSON.stringify(encodeBackupValue(normalized.value))});
     }
+    if(copy.length)target.library.copyStoredPortableFacts(source,table,copy);
     if(puts.length)target.library.appendPortableSnapshotFacts(puts);
     if(page.length<64)break;after=page.at(-1)!;
    }
@@ -114,12 +117,13 @@ export async function createLocalPortableSnapshot(sqlite:Sqlite3Static,pool:SAHP
   target.raw.exec('COMMIT');
   }catch(error){target.raw.exec('ROLLBACK');throw error;}
   assertSource();
+  const copied=performance.now();
   const facts=await decodedFacts(target.raw);
   assertSource();
   const built=performance.now();target.library.rebuildPortableProjections(facts.reader);
   const projected=performance.now();target.raw.exec({sql:'VACUUM INTO ?',bind:[output]});
   const bytes=pool.exportFile(output) as unknown as Uint8Array;if(bytes.byteLength>fileLimit)invalid('file_limit');
-  return {format:'sensa-local-db-snapshot-v1',schemaVersion:sqliteLibrarySchemaVersion,sourceRevision:expectedRevision,sha256:sha256(bytes),bytes,timingsMs:{build:built-started,projection:projected-built,export:performance.now()-projected}};
+  return {format:'sensa-local-db-snapshot-v1',schemaVersion:sqliteLibrarySchemaVersion,sourceRevision:expectedRevision,sha256:sha256(bytes),bytes,timingsMs:{build:built-started,storageCopy:copied-started,admission:built-copied,projection:projected-built,export:performance.now()-projected}};
  }finally{target.library.close();pool.unlink(file);pool.unlink(output);}
 }
 

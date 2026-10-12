@@ -23,6 +23,7 @@ import {manualMeaningPayload,newManualMeaningDraft} from '../../../apps/web/src/
 import {libraryRowsReader} from '../../../apps/web/src/data/library/libraryRecordReader';
 import {sqliteLibraryTables} from '../../../apps/web/src/data/library/sqliteProtocol';
 import type {BackupRows} from '../../../apps/web/src/data/library/backupValidation';
+import {canCopyNormalizedLibraryReplicaValue,normalizeLibraryReplicaEntry,isReplicatedLibraryEntry} from '../../../apps/web/src/data/library/replication/libraryReplica';
 
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined,location:new URL('http://snapshot.fixture.invalid/')});
 const sqlite=await init(),raw=new sqlite.oo1.DB('/snapshot-focused-source.sqlite3','c');
@@ -31,6 +32,9 @@ const identity={id:crypto.randomUUID(),learnerId:crypto.randomUUID(),deviceId:cr
 source.commit({clears:[],deletes:[],puts:[{table:'meta',key:'identity',encodedValue:JSON.stringify(encodeBackupValue(identity))}]});
 const canary='SYNTHETIC-DEVICE-PRIVATE-CANARY';
 for(const [table,key]of [['meta','service-owner'],['settings','providers'],['providers',crypto.randomUUID()],['operations',crypto.randomUUID()],['packageCache','synthetic-cache']] as const)raw.exec({sql:'INSERT INTO sensa_records(table_name,record_key,value_json) VALUES(?,?,?)',bind:[table,key,JSON.stringify(encodeBackupValue({canary}))]});
+const privateBody=JSON.stringify(encodeBackupValue({canary})),privateDigest=sha256(privateBody);
+raw.exec({sql:'INSERT INTO sensa_shared_record_content VALUES(?,?)',bind:[privateDigest,privateBody]});
+raw.exec({sql:"INSERT INTO sensa_shared_record_content_owners VALUES('record','packageCache','synthetic-cache',?),('sync','meta','identity',?)",bind:[privateDigest,privateDigest]});
 
 /** Adapter for the installed SQLite memory VFS, not a fake SQL engine or an
  * assertion of actual SAHPool/OPFS support. */
@@ -53,6 +57,24 @@ test('trusted producer excludes device rows and pages without mutating its sourc
  expect(source.count('providers')).toBe(1);expect(source.count('operations')).toBe(1);
  expect(source.get('meta','identity')).toBe(JSON.stringify(encodeBackupValue(identity)));
 });
+test('storage copying follows producer normalization rather than restore transforms',()=>{
+ for(const table of ['learningTargets','learningRuns','learningEvents','semanticMeanings','packageInstallations','settings'] as const)expect(canCopyNormalizedLibraryReplicaValue({table,key:'synthetic'})).toBe(true);
+ for(const table of ['sessions','personalLearning','contentAttempts'] as const)expect(canCopyNormalizedLibraryReplicaValue({table,key:'synthetic'})).toBe(false);
+ expect(canCopyNormalizedLibraryReplicaValue({table:'meta',key:'identity'})).toBe(false);
+ expect(()=>canCopyNormalizedLibraryReplicaValue({table:'settings',key:'providers'})).toThrow('library_sync_format');
+ expect(normalizeLibraryReplicaEntry({table:'meta',key:'identity',value:identity},identity).value).toEqual({...identity,deviceId:identity.id});
+ expect(normalizeLibraryReplicaEntry({table:'sessions',key:'synthetic',value:{status:'inflight',lease:{owner:'synthetic'},revision:3}},identity).value).toEqual({status:'stopped',lease:null,revision:4});
+ expect(normalizeLibraryReplicaEntry({table:'personalLearning',key:'synthetic',value:{status:'generating',leaseUntil:123}},identity).value).toEqual({status:'failed',leaseUntil:0,notice:'localFlow.restoredPreparation'});
+ expect(normalizeLibraryReplicaEntry({table:'contentAttempts',key:'synthetic',value:{status:'reviewing'}},identity).value).toEqual({status:'failed'});
+});
+test('storage copy rejects private or transform-required selections before reading the owner',()=>{
+ const buildRaw=new sqlite.oo1.DB(':memory:','c'),build=new SqliteRecordDatabase(sqlite,buildRaw,'memory',(table,key)=>isReplicatedLibraryEntry(table,key)&&canCopyNormalizedLibraryReplicaValue({table:table as Parameters<typeof canCopyNormalizedLibraryReplicaValue>[0]['table'],key}));build.initialize();buildRaw.exec('BEGIN IMMEDIATE');
+ const read=vi.spyOn(raw,'exec');
+ try{
+  for(const [table,key]of [['providers','synthetic'],['settings','providers'],['meta','service-owner'],['meta','identity'],['sessions','synthetic'],['packageCache','synthetic-cache']] as const)expect(()=>build.copyStoredPortableFacts(source,table,[key])).toThrow('sqlite_snapshot_copy_boundary');
+  expect(read).not.toHaveBeenCalled();expect(build.count('providers')).toBe(0);expect(build.count('packageCache')).toBe(0);
+ }finally{read.mockRestore();buildRaw.exec('ROLLBACK');build.close();}
+});
 test('excluded private cache bodies are not read or decoded by production export',async()=>{
  raw.exec({sql:"UPDATE sensa_records SET value_json=? WHERE table_name='packageCache'",bind:['["sensa-record-gzip-v1","'+ 'a'.repeat(64)+'","invalid-gzip"]']});
  const exported=await createLocalPortableSnapshot(sqlite,memoryFilePool(),source,0);
@@ -66,7 +88,7 @@ test('source identity is fenced across asynchronous capacity acquisition',async(
 });
 test('real-schema import admits consistent projections and regenerates device identity',async()=>{
  const imported=await importLocalPortableSnapshot(sqlite,memoryFilePool(),'/focused-import-'+crypto.randomUUID(),snapshot);
- try{expect(imported.stats.decodedRecords).toBe(1);expect(imported.identity.id).toBe(identity.id);expect(imported.identity.deviceId).not.toBe(identity.deviceId);expect(imported.library.count('providers')).toBe(0);}finally{imported.library.close();}
+ try{expect(imported.stats.decodedRecords).toBe(1);expect(imported.stats.decodedBodies).toBe(0);expect(imported.identity.id).toBe(identity.id);expect(imported.identity.deviceId).not.toBe(identity.deviceId);expect(imported.library.count('providers')).toBe(0);}finally{imported.library.close();}
 });
 test('fabricated semantic-memory cache cannot become a query result',async()=>{
  const file='/focused-projection-source-'+crypto.randomUUID();sqlite.capi.sqlite3_js_posix_create_file(file,snapshot.bytes);
@@ -84,6 +106,12 @@ test('real Learning and Meaning commands roundtrip with shared content and query
   const [targetId]=await enrollPackage(crypto.randomUUID(),pack.key,context);
   await confirmLearningQuantity(crypto.randomUUID(),context,20);
   let run=await startLearning(crypto.randomUUID(),targetId!,context,20,at);
+  // One genuine Run crosses the producer's 64-key Event page boundary, while
+  // sharing its immutable material and protocol bodies with other records.
+  for(let attempt=0;attempt<32;attempt++){
+   run=await actLearning(crypto.randomUUID(),run.id,run.revision,{kind:'reveal'},at);
+   run=await actLearning(crypto.randomUUID(),run.id,run.revision,{kind:'rate',rating:'again'},at);
+  }
   run=await actLearning(crypto.randomUUID(),run.id,run.revision,{kind:'reveal'},at);
   run=await actLearning(crypto.randomUUID(),run.id,run.revision,{kind:'rate',rating:'good'},at);
   await finishLearning(crypto.randomUUID(),run.id);
@@ -91,11 +119,13 @@ test('real Learning and Meaning commands roundtrip with shared content and query
   const accepted=await modules.semanticIntake.submit(manualMeaningPayload({...newManualMeaningDraft(),context:'May asked to borrow an umbrella.',occurrence:'borrow',canonicalForm:'borrow',languageTag:'en',meaning:'暂时借用物品，之后归还。',usage:'借用朋友的雨伞，之后归还。'}));
   expect(accepted.route).toBe('fast_track');
   const expected=await readLibrary(tx=>tx.get('learningTargets',targetId!)),revision=await readLibrary(readLocalLibraryRevision);
+  const get=vi.spyOn(learning,'get');
   const exported=await createLocalPortableSnapshot(sqlite,memoryFilePool(),learning,revision);
+  expect(get.mock.calls.some(([table])=>['learningTargets','learningRuns','learningEvents','studyScopes','semanticMeanings','semanticContexts'].includes(table))).toBe(false);get.mockRestore();
   const imported=await importLocalPortableSnapshot(sqlite,memoryFilePool(),'/focused-learning-'+crypto.randomUUID(),exported);
   try{
    expect(imported.stats.decodedBodies).toBeGreaterThan(0);
-   expect(imported.library.count('learningTargets')).toBe(1);expect(imported.library.count('learningRuns')).toBe(1);expect(imported.library.count('learningEvents')).toBe(2);
+   expect(imported.library.count('learningTargets')).toBe(1);expect(imported.library.count('learningRuns')).toBe(1);expect(imported.library.count('learningEvents')).toBe(66);
    expect(imported.library.count('packageCache')).toBe(0);expect(imported.library.count('operations')).toBe(0);
    expect(imported.library.get('learningTargets',targetId!)).toBe(JSON.stringify(encodeBackupValue(expected)));
    expect(imported.library.learningSemanticMemory(targetId!).targets[0]?.targetId).toBe(targetId);
@@ -103,6 +133,26 @@ test('real Learning and Meaning commands roundtrip with shared content and query
    expect(imported.library.lookupMeanings('borrow')).toEqual(learning.lookupMeanings('borrow'));
    expect(imported.library.worldBrowse({query:'',filter:'all',offset:0,limit:20})).toEqual(learning.worldBrowse({query:'',filter:'all',offset:0,limit:20}));
   }finally{imported.library.close();}
+  const storedTables=['sensa_records','sensa_shared_record_content','sensa_shared_record_content_owners'];
+  const firstFile='/focused-stored-source-'+crypto.randomUUID();sqlite.capi.sqlite3_js_posix_create_file(firstFile,exported.bytes);
+  const firstRaw=new sqlite.oo1.DB(firstFile,'c'),first=new SqliteRecordDatabase(sqlite,firstRaw,'memory');first.initialize();
+  try{
+   const next=await createLocalPortableSnapshot(sqlite,memoryFilePool(),first,0),nextFile='/focused-stored-copy-'+crypto.randomUUID();sqlite.capi.sqlite3_js_posix_create_file(nextFile,next.bytes);
+   const nextRaw=new sqlite.oo1.DB(nextFile,'r');
+   try{for(const table of storedTables)expect(nextRaw.exec({sql:`SELECT * FROM ${table} ORDER BY 1,2`,rowMode:'array',returnValue:'resultRows'})).toEqual(firstRaw.exec({sql:`SELECT * FROM ${table} ORDER BY 1,2`,rowMode:'array',returnValue:'resultRows'}));}finally{nextRaw.close();}
+   expect(()=>first.copyStoredPortableFacts(first,'providers',[])).toThrow('sqlite_snapshot_build_boundary');
+  }finally{first.close();}
+  for(const corruption of ['digest','missing-body','missing-owner','extra-owner'] as const){
+   const file='/focused-corrupt-stored-'+crypto.randomUUID();sqlite.capi.sqlite3_js_posix_create_file(file,exported.bytes);
+   const corruptRaw=new sqlite.oo1.DB(file,'c'),corruptSource=new SqliteRecordDatabase(sqlite,corruptRaw,'memory');corruptSource.initialize();
+   const owner=corruptRaw.exec({sql:"SELECT table_name,record_key,digest FROM sensa_shared_record_content_owners WHERE owner_kind='record' LIMIT 1",rowMode:'object',returnValue:'resultRows'})[0] as {table_name:string;record_key:string;digest:string};
+   if(corruption==='digest')corruptRaw.exec({sql:'UPDATE sensa_shared_record_content SET value_json=? WHERE digest=?',bind:[JSON.stringify(encodeBackupValue({corrupt:true})),owner.digest]});
+   else if(corruption==='missing-body'){corruptRaw.exec('PRAGMA foreign_keys=OFF');corruptRaw.exec({sql:'DELETE FROM sensa_shared_record_content WHERE digest=?',bind:[owner.digest]});}
+   else if(corruption==='missing-owner')corruptRaw.exec({sql:"DELETE FROM sensa_shared_record_content_owners WHERE owner_kind='record' AND table_name=? AND record_key=? AND digest=?",bind:[owner.table_name,owner.record_key,owner.digest]});
+   else corruptRaw.exec({sql:"INSERT INTO sensa_shared_record_content_owners SELECT 'record','semanticMeanings',record_key,? FROM sensa_records WHERE table_name='semanticMeanings' LIMIT 1",bind:[owner.digest]});
+   const before=sha256(sqlite.capi.sqlite3_js_db_export(corruptRaw.pointer)),pool=memoryFilePool();
+   try{const outcome=await createLocalPortableSnapshot(sqlite,pool,corruptSource,0).then(()=>'accepted',error=>'rejected: '+String(error));expect(outcome,corruption).toMatch(/^rejected:/u);expect(pool.getFileCount()).toBe(0);expect(sha256(sqlite.capi.sqlite3_js_db_export(corruptRaw.pointer))).toBe(before);}finally{corruptSource.close();}
+  }
   const failedFile='/focused-atomic-'+crypto.randomUUID(),failedPool=memoryFilePool();
   const failed=await importLocalPortableSnapshot(sqlite,failedPool,failedFile,exported),failedRaw=failedPool.handles.get(failedFile)!;
   const beforeBytes=sha256(sqlite.capi.sqlite3_js_db_export(failedRaw.pointer)),sourceBefore=JSON.stringify(sqliteLibraryTables.map(table=>learning.entries(table)));

@@ -125,7 +125,7 @@ export class SqliteRecordDatabase {
     private readonly sqlite3: Sqlite3Static,
     private readonly database: Database,
     private readonly persistence: SqliteStorageDiagnostics["persistence"],
-    private readonly portableBuild=false,
+    private readonly portableBuild?: (table:SqliteLibraryTable,key:string)=>boolean,
   ) {
     const field=registryFieldReader();
     this.database.createFunction({name:'sensa_expression_form',arity:2,deterministic:true,innocuous:true,xFunc:(_context,text,language)=>learningExpressionForm(text,language)});
@@ -153,6 +153,35 @@ export class SqliteRecordDatabase {
       const stored=this.storedEncoded('record',item.table,item.key,item.encodedValue,new Set(),false);
       this.database.exec({sql:'INSERT INTO sensa_records(table_name,record_key,value_json) VALUES(?,?,?)',bind:[item.table,item.key,stored]});
     }
+  }
+
+  /** Copy only selected portable facts and their direct shared-body closure.
+   * No owner file pages, sync owners or unreachable cache bodies enter the new
+   * build. Full snapshot admission still verifies digests and exact owners. */
+  copyStoredPortableFacts(source:SqliteRecordDatabase,table:SqliteLibraryTable,keys:readonly string[]):void{
+    if(!this.portableBuild||this.closed||this.connectionFailed||this.sqlite3.capi.sqlite3_get_autocommit(this.database.pointer!)||source===this||source.closed||source.connectionFailed)throw Error('sqlite_snapshot_build_boundary');
+    if(keys.length>64||new Set(keys).size!==keys.length||keys.some(key=>!this.portableBuild!(table,key)))throw Error('sqlite_snapshot_copy_boundary');
+    if(!keys.length)return;
+    const selected=JSON.stringify(keys);
+    const records=source.database.exec({sql:'SELECT record_key,value_json FROM sensa_records WHERE table_name=? AND record_key IN (SELECT value FROM json_each(?)) ORDER BY record_key',bind:[table,selected],rowMode:'object',returnValue:'resultRows'}) as {record_key:string;value_json:string}[];
+    if(records.length!==keys.length)throw Error('sqlite_snapshot_source_changed');
+    const owners=source.database.exec({sql:"SELECT record_key,digest FROM sensa_shared_record_content_owners WHERE owner_kind='record' AND table_name=? AND record_key IN (SELECT value FROM json_each(?)) ORDER BY record_key,digest",bind:[table,selected],rowMode:'object',returnValue:'resultRows'}) as {record_key:string;digest:string}[];
+    const digests=[...new Set(owners.map(row=>row.digest))];
+    if(digests.length){
+      const selection=JSON.stringify(digests);
+      const bodies=source.database.exec({sql:'SELECT digest,value_json FROM sensa_shared_record_content WHERE digest IN (SELECT value FROM json_each(?))',bind:[selection],rowMode:'object',returnValue:'resultRows'}) as {digest:string;value_json:string}[];
+      if(bodies.length!==digests.length)throw Error('sqlite_snapshot_shared_body');
+      const current=new Map((this.database.exec({sql:'SELECT digest,value_json FROM sensa_shared_record_content WHERE digest IN (SELECT value FROM json_each(?))',bind:[selection],rowMode:'object',returnValue:'resultRows'}) as {digest:string;value_json:string}[]).map(row=>[row.digest,row.value_json]));
+      const missing:[string,string][]=[];
+      for(const row of bodies){
+        const previous=current.get(row.digest);
+        if(previous===undefined)missing.push([row.digest,row.value_json]);
+        else if(previous!==row.value_json&&unpackStoredRecord(previous)!==unpackStoredRecord(row.value_json))throw Error('sqlite_snapshot_shared_body');
+      }
+      if(missing.length)this.database.exec({sql:"INSERT INTO sensa_shared_record_content SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]') FROM json_each(?)",bind:[JSON.stringify(missing)]});
+    }
+    this.database.exec({sql:"INSERT INTO sensa_records(table_name,record_key,value_json) SELECT ?,json_extract(value,'$.record_key'),json_extract(value,'$.value_json') FROM json_each(?)",bind:[table,JSON.stringify(records)]});
+    if(owners.length)this.database.exec({sql:"INSERT INTO sensa_shared_record_content_owners(owner_kind,table_name,record_key,digest) SELECT 'record',?,json_extract(value,'$.record_key'),json_extract(value,'$.digest') FROM json_each(?)",bind:[table,JSON.stringify(owners)]});
   }
 
   /** Reuse the shipped projection writers in this isolated generation only.

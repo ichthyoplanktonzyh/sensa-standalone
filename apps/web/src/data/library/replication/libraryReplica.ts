@@ -54,6 +54,13 @@ export function canCopyLibraryReplicaValue(entry:Pick<ReplicaEntry,'table'|'key'
  const module=moduleFor(entry.table,entry.key);if(!module)throw Error('library_sync_format');return module.restore===undefined;
 }
 
+/** Producer normalization and receiver restoration are different contracts.
+ * New normalization defaults to the value path unless its domain opts in. */
+export function canCopyNormalizedLibraryReplicaValue(entry:Pick<ReplicaEntry,'table'|'key'>):boolean{
+ const module=moduleFor(entry.table,entry.key);if(!module)throw Error('library_sync_format');
+ return module.normalize===undefined||module.canCopyNormalizedValue?.(entry)===true;
+}
+
 function* ordinaryMerge(input:ReplicaMergeInput):ReplicaMergeSteps{
  const index=function*(rows:ReplicaEntry[]){const result=new Map<string,ReplicaEntry>();for(const row of rows){result.set(replicaEntryId(row),row);yield;}return result;};
  const base=yield* index(input.base),local=yield* index(input.local),remote=yield* index(input.remote);

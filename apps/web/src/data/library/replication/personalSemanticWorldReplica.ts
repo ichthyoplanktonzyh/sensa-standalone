@@ -69,6 +69,7 @@ function dependencyBody(entry:ReplicaEntry){
 export const personalSemanticWorldReplica:DomainReplicaModule={
  namespace:'personal-semantic-world',
  owns:(table)=>tables.has(table),
+ canCopyNormalizedValue:entry=>entry.table!=='sessions',
  normalize(entry){
   if(entry.table!=='sessions')return entry;
   const value=structuredClone(entry.value) as {status?:string;lease?:unknown;revision?:number};
