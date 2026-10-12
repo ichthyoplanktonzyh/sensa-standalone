@@ -90,7 +90,7 @@ test('fresh activation reuses exact shared baseline bytes once, with genuine his
  try{
   await fixture.validate();const encode=Reflect.get(fixture.receiver,'storedEncoded').bind(fixture.receiver),calls:{kind:string;table:string;key:string}[]=[];
   Reflect.set(fixture.receiver,'storedEncoded',(kind:string,table:string,key:string,...args:any[])=>{calls.push({kind,table,key});return encode(kind,table,key,...args);});
-  fixture.receiver.commit(fixture.mutation);fixture.assertFacts();
+  fixture.receiver.commit(fixture.mutation);fixture.assertFacts();expect(Reflect.get(fixture.receiver,'activationMemo')).toBeUndefined();
   for(const table of ['learningTargets','learningRuns','learningEvents','studyScopes']){
    expect(calls.filter(row=>row.kind==='record'&&row.table===table)).toEqual([]);
    expect(calls.filter(row=>row.kind==='sync'&&row.table===table)).toHaveLength(fixture.records.filter(row=>row.table===table).length);
@@ -120,7 +120,7 @@ for(const fault of ['source-owners','source-copy','projection','purge'] as const
    if(!injected&&(fault==='source-owners'&&sql.startsWith('INSERT INTO sensa_shared_record_content_owners')&&sql.includes("SELECT 'record'")||fault==='source-copy'&&sql.startsWith('INSERT INTO sensa_records')&&sql.includes('sensa_sync_base AS base')||fault==='projection'&&sql.startsWith('INSERT INTO sensa_learning_targets')||fault==='purge'&&sql==='DELETE FROM sensa_replica_candidates_v1')){injected=true;throw Error('fixture baseline reuse interrupted');}return exec(input);
   }) as typeof fixture.storage.exec;
   try{expect(()=>fixture.receiver.commit(fixture.mutation)).toThrow('fixture baseline reuse interrupted');}finally{fixture.storage.exec=exec;}
-  expect(injected).toBe(true);expect(fixture.stored()).toEqual(before);fixture.receiver.commit(fixture.mutation);fixture.assertFacts();
+  expect(injected).toBe(true);expect(Reflect.get(fixture.receiver,'activationMemo')).toBeUndefined();expect(fixture.stored()).toEqual(before);fixture.receiver.commit(fixture.mutation);fixture.assertFacts();expect(Reflect.get(fixture.receiver,'activationMemo')).toBeUndefined();
  }finally{fixture.receiver.close(false);}
 });
 

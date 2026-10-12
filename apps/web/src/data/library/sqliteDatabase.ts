@@ -7,7 +7,7 @@ import {isFatalSqliteConnectionFailure,sqliteRollbackFailure} from './sqliteConn
 
 import {decodeBackupValue,encodeBackupValue,backupEqual} from './backupCodec';
 import type {ReplicaCandidateRequest,ReplicaCandidateResponse,ReplicaCandidateFence} from './replicaCandidateProtocol';
-import {externalizeSharedRecordContent,expandSharedRecordContent,packStoredRecord,unpackStoredRecord,sharedRecordTables} from './sharedRecordContent';
+import {externalizeSharedRecordContent,expandSharedRecordContent,packStoredRecord,unpackStoredRecord,sharedRecordTables,StoredRecordMemo} from './sharedRecordContent';
 import {learningExpressionForm,learningPackageChoicesSql,validateLearningPackageQuery} from './packageCacheProjection';
 import {SqliteMeaningLookupProjection} from './meaningLookupProjection';
 import {SqliteWorldBrowseProjection} from './worldBrowseProjection';
@@ -106,6 +106,7 @@ export class SqliteRecordDatabase {
   private replicaCandidates:Promise<import('./sqliteReplicaCandidates').SqliteReplicaCandidates>|undefined;
   private replicaCandidateStore:import('./sqliteReplicaCandidates').SqliteReplicaCandidates|undefined;
   private replicaCandidatesClosing=false;
+  private activationMemo:StoredRecordMemo|undefined;
 
   /** The Worker must stop queued requests even if the durable COMMIT succeeded. */
   get connectionFailed():boolean{return this.integrityFailed||this.fatalStorageFailure!==undefined;}
@@ -684,6 +685,7 @@ export class SqliteRecordDatabase {
       ||mutation.puts.some(item=>item.table==='meta'&&ownerKeys.has(item.key)&&this.get('meta',item.key)!==item.encodedValue);
     this.database.exec("BEGIN IMMEDIATE");
     try {
+      if(mutation.replicaCandidateRestore&&!mutation.replicaCandidateRestore.update)this.activationMemo=new StoredRecordMemo();
       const contentRevision = mutation.contentRevision;
       if (contentRevision !== undefined && (!Number.isSafeInteger(contentRevision) || contentRevision <= 0)) {
         throw new Error('sqlite_content_revision_invalid');
@@ -706,7 +708,7 @@ export class SqliteRecordDatabase {
           const update=this.replicaCandidateStore.prepareCheckpointUpdate(mutation.replicaCandidateRestore.id,mutation);
           mutation={...mutation,puts:[...update.puts,...mutation.puts],deletes:[...update.deletes,...mutation.deletes],syncBasePatch:update.syncBasePatch};
         }else{
-          staged=this.replicaCandidateStore.prepareFreshRestore(mutation.replicaCandidateRestore.id,mutation);
+          staged=this.replicaCandidateStore.prepareFreshRestore(mutation.replicaCandidateRestore.id,mutation,this.activationMemo);
           mutation={...mutation,puts:[...staged.puts,...mutation.puts],syncBaseReplacement:staged.syncBaseReplacement};
         }
         discardCandidates=true;
@@ -939,7 +941,7 @@ export class SqliteRecordDatabase {
       }
       if(isFatalSqliteConnectionFailure(error))this.quarantineConnection(error as Error);
       throw error;
-    }
+    }finally{this.activationMemo?.clear();this.activationMemo=undefined;}
     // A completed large transaction can leave a large reusable WAL. Bound its
     // cold-reopen cost after COMMIT; failure here cannot undo/deny that commit.
     if(this.persistence==='opfs'&&bulkMaintenance)this.maintainWal();
@@ -1032,13 +1034,13 @@ export class SqliteRecordDatabase {
   }
 
   private logicalEncoded(table:SqliteLibraryTable,encoded:string):string{
-    const plain=unpackStoredRecord(encoded);
+    const plain=unpackStoredRecord(encoded,this.activationMemo);
     if(!sharedRecordTables.has(table))return plain;
     if(!plain.includes('sensa-shared-content-v1'))return plain;
     return JSON.stringify(expandSharedRecordContent(JSON.parse(plain),digest=>{
       const rows=this.database.exec({sql:'SELECT value_json FROM sensa_shared_record_content WHERE digest=?',bind:[digest],rowMode:0,returnValue:'resultRows'}) as string[];
-      return rows.length?unpackStoredRecord(String(rows[0])):undefined;
-    }));
+      return rows.length?unpackStoredRecord(String(rows[0]),this.activationMemo):undefined;
+    },this.activationMemo));
   }
 
   private detachSharedContent(kind:'record'|'sync',table:SqliteLibraryTable,key:string|undefined,removed:Set<string>):void{
@@ -1051,7 +1053,7 @@ export class SqliteRecordDatabase {
   private storedEncoded(kind:'record'|'sync',table:SqliteLibraryTable,key:string,encoded:string,removed:Set<string>):string{
     if(!sharedRecordTables.has(table))return packStoredRecord(encoded);
     this.detachSharedContent(kind,table,key,removed);
-    const shared=externalizeSharedRecordContent(JSON.parse(encoded));
+    const shared=externalizeSharedRecordContent(JSON.parse(encoded),this.activationMemo);
     if(shared.bodies.size>32){
       const entries=[...shared.bodies];
       for(let offset=0;offset<entries.length;offset+=128){
@@ -1060,7 +1062,7 @@ export class SqliteRecordDatabase {
         const missing:[string,string][]=[];
         for(const [digest,body] of batch){
           const stored=current.get(digest);
-          if(stored!==undefined){if(unpackStoredRecord(stored)!==body)throw new Error('sqlite_shared_content_invalid');}
+          if(stored!==undefined){if(unpackStoredRecord(stored,this.activationMemo)!==body)throw new Error('sqlite_shared_content_invalid');}
           else missing.push([digest,packStoredRecord(body)]);
         }
         if(missing.length)this.database.exec({sql:"INSERT INTO sensa_shared_record_content SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]') FROM json_each(?)",bind:[JSON.stringify(missing)]});
@@ -1070,7 +1072,7 @@ export class SqliteRecordDatabase {
     }
     for(const [digest,body] of shared.bodies){
       const current=this.database.exec({sql:'SELECT value_json FROM sensa_shared_record_content WHERE digest=?',bind:[digest],rowMode:0,returnValue:'resultRows'}) as string[];
-      if(current.length){if(unpackStoredRecord(String(current[0]))!==body)throw new Error('sqlite_shared_content_invalid');}
+      if(current.length){if(unpackStoredRecord(String(current[0]),this.activationMemo)!==body)throw new Error('sqlite_shared_content_invalid');}
       else this.database.exec({sql:'INSERT INTO sensa_shared_record_content(digest,value_json) VALUES(?,?)',bind:[digest,packStoredRecord(body)]});
       this.database.exec({sql:'INSERT INTO sensa_shared_record_content_owners(owner_kind,table_name,record_key,digest) VALUES(?,?,?,?)',bind:[kind,table,key,digest]});
     }

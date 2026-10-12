@@ -3,7 +3,7 @@ import {z} from 'zod';
 import {librarySyncHead,librarySyncBlockChars,canonicalConsumerJson} from '@sensa/contracts/sensa';
 import {sha256} from '@sensa/learning-kernel';
 import {backupEqual,decodeBackupValue,encodeBackupValue} from './backupCodec';
-import {packStoredRecord,unpackStoredRecord,sharedRecordTables} from './sharedRecordContent';
+import {packStoredRecord,unpackStoredRecord,sharedRecordTables,type StoredRecordMemo} from './sharedRecordContent';
 import {isReplicatedLibraryEntry,restoreLibraryReplicaValue,normalizeLibraryReplicaEntry,canCopyLibraryReplicaValue,mergeLibraryReplicasCooperatively,replicaEntryEqual,replicaEntryId,planLibraryReplicaApply,type LibraryReplicaEntry} from './replication/libraryReplica';
 import {validatedCheckpoint} from './cloudSyncCheckpoint';
 import type {CloudSyncState} from './cloudSync';
@@ -301,7 +301,7 @@ export class SqliteReplicaCandidates{
   this.updates.set(id,{controller,result});return result;
  }
 
- private plainStored(row:StoredRow):string{return row.representation==='opaque'?row.value_json:unpackStoredRecord(row.value_json);}
+ private plainStored(row:StoredRow,memo?:StoredRecordMemo):string{return row.representation==='opaque'?row.value_json:unpackStoredRecord(row.value_json,memo);}
  private candidateBody(id:string,table:string,key:string):string{
   const row=this.rows<StoredRow>('SELECT record_key,value_json,representation FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,table,key])[0];
   if(!row)this.fail();return this.plainStored(row);
@@ -340,7 +340,7 @@ export class SqliteReplicaCandidates{
  /** Called only inside the source transaction. Bodies remain in the private
   * SQLite generation; existing commit/projection code reads one on demand.
   * This is not a shortcut for merging an existing or previously synced world. */
- prepareFreshRestore(id:string,mutation:SqliteMutation):Pick<SqliteMutation,'puts'|'syncBaseReplacement'>&{copiedTables:ReadonlySet<SqliteLibraryTable>;sharedCopiedTables:ReadonlySet<SqliteLibraryTable>;copyOrdinary:()=>void;copySharedBaseline:(removed:Set<string>)=>void;logicalBytes:number}{
+ prepareFreshRestore(id:string,mutation:SqliteMutation,memo?:StoredRecordMemo):Pick<SqliteMutation,'puts'|'syncBaseReplacement'>&{copiedTables:ReadonlySet<SqliteLibraryTable>;sharedCopiedTables:ReadonlySet<SqliteLibraryTable>;copyOrdinary:()=>void;copySharedBaseline:(removed:Set<string>)=>void;logicalBytes:number}{
   if(mutation.clears.length||mutation.deletes.length>1||mutation.deletes.some(row=>row.table!=='meta'||row.key!=='local-reset')||mutation.portablePackages?.length||mutation.syncBaseReplacement!==undefined||mutation.syncBasePatch!==undefined||mutation.puts.some(row=>row.table!=='meta'||!['cloud-sync','local-content-revision'].includes(row.key)))this.fail();
   const header=this.header(id);this.check(header);const receipt=this.receipt(header),fence=fenceSchema.parse(JSON.parse(header.fence_json));
   const reset=this.rows<{value_json:string}>("SELECT value_json FROM sensa_records WHERE table_name='meta' AND record_key='local-reset'")[0];
@@ -367,7 +367,7 @@ export class SqliteReplicaCandidates{
   // transformed row keeps that entire table on its existing owner value path.
   const copiedTables=new Set(rows.map(row=>row.table_name).filter(table=>!excluded.has(table)));
   const read=(table:string,key:string)=>{
-   const row=this.rows<StoredRow>('SELECT record_key,value_json,representation FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,table,key])[0];if(!row)this.fail();return this.plainStored(row);
+   const row=this.rows<StoredRow>('SELECT record_key,value_json,representation FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,table,key])[0];if(!row)this.fail();return this.plainStored(row,memo);
   };
   const puts:SqliteMutation['puts']=rows.map(row=>({table:row.table_name,key:row.record_key,get encodedValue(){
    if(copiedTables.has(row.table_name)||sharedCopiedTables.has(row.table_name))return read(row.table_name,row.record_key);
