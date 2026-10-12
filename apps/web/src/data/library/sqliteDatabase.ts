@@ -733,7 +733,7 @@ export class SqliteRecordDatabase {
           encodedWriteSize+=valueJson.length+blockRefsJson.length;
           this.database.exec({
             sql: 'INSERT INTO sensa_sync_base(table_name,record_key,value_json,block_refs_json) VALUES(?,?,?,?)',
-            bind: [entry.table, entry.key, this.storedEncoded('sync',entry.table,entry.key,valueJson,removedContent), blockRefsJson],
+            bind: [entry.table, entry.key, this.storedEncoded('sync',entry.table,entry.key,valueJson,removedContent,false), blockRefsJson],
           });
         }
       }
@@ -1050,11 +1050,13 @@ export class SqliteRecordDatabase {
     this.database.exec({sql:`DELETE FROM sensa_shared_record_content_owners WHERE ${where}`,bind});
   }
 
-  private storedEncoded(kind:'record'|'sync',table:SqliteLibraryTable,key:string,encoded:string,removed:Set<string>):string{
+  private storedEncoded(kind:'record'|'sync',table:SqliteLibraryTable,key:string,encoded:string,removed:Set<string>,detach=true):string{
     if(!sharedRecordTables.has(table))return packStoredRecord(encoded);
-    this.detachSharedContent(kind,table,key,removed);
+    // Full baseline replacement has already detached every sync owner once.
+    // Record writes and incremental patches must still detach their exact row.
+    if(detach)this.detachSharedContent(kind,table,key,removed);
     const shared=externalizeSharedRecordContent(JSON.parse(encoded),this.activationMemo);
-    if(shared.bodies.size>32){
+    if(shared.bodies.size){
       const entries=[...shared.bodies];
       for(let offset=0;offset<entries.length;offset+=128){
         const batch=entries.slice(offset,offset+128),digests=batch.map(([digest])=>digest);
@@ -1068,13 +1070,6 @@ export class SqliteRecordDatabase {
         if(missing.length)this.database.exec({sql:"INSERT INTO sensa_shared_record_content SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]') FROM json_each(?)",bind:[JSON.stringify(missing)]});
         this.database.exec({sql:'INSERT INTO sensa_shared_record_content_owners(owner_kind,table_name,record_key,digest) SELECT ?,?,?,value FROM json_each(?)',bind:[kind,table,key,JSON.stringify(digests)]});
       }
-      return packStoredRecord(JSON.stringify(shared.value));
-    }
-    for(const [digest,body] of shared.bodies){
-      const current=this.database.exec({sql:'SELECT value_json FROM sensa_shared_record_content WHERE digest=?',bind:[digest],rowMode:0,returnValue:'resultRows'}) as string[];
-      if(current.length){if(unpackStoredRecord(String(current[0]),this.activationMemo)!==body)throw new Error('sqlite_shared_content_invalid');}
-      else this.database.exec({sql:'INSERT INTO sensa_shared_record_content(digest,value_json) VALUES(?,?)',bind:[digest,packStoredRecord(body)]});
-      this.database.exec({sql:'INSERT INTO sensa_shared_record_content_owners(owner_kind,table_name,record_key,digest) VALUES(?,?,?,?)',bind:[kind,table,key,digest]});
     }
     return packStoredRecord(JSON.stringify(shared.value));
   }

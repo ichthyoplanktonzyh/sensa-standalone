@@ -10,7 +10,7 @@ import {contentSupplySystem} from '../../../apps/web/src/contentSupply/system';
 import {learningSystem} from '../../../apps/web/src/learning/system';
 import {openLibrary,readLibrary,libraryTables,restoreLibraryTransaction} from '../../../apps/web/src/data/library/store';
 import {encodeBackupValue,decodeBackupValue} from '../../../apps/web/src/data/library/backupCodec';
-import {externalizeSharedRecordContent,expandSharedRecordContent,compactArchiveWire,expandArchiveWire} from '../../../apps/web/src/data/library/sharedRecordContent';
+import {externalizeSharedRecordContent,expandSharedRecordContent,compactArchiveWire,expandArchiveWire,packStoredRecord} from '../../../apps/web/src/data/library/sharedRecordContent';
 import {encodeBackupArchive,decodeBackupArchive} from '../../../apps/web/src/data/library/backupArchive';
 import {candidateExpected,candidateBlocksFor} from '../support/replicaCandidateFixture.mts';
 import {isReplicatedLibraryEntry,normalizeLibraryReplicaEntry,restoreLibraryReplicaValue,type LibraryReplicaEntry} from '../../../apps/web/src/data/library/replication/libraryReplica';
@@ -89,8 +89,10 @@ test('fresh activation reuses exact shared baseline bytes once, with genuine his
  const fixture=await stageLearningReplica({noncanonical:true});
  try{
   await fixture.validate();const encode=Reflect.get(fixture.receiver,'storedEncoded').bind(fixture.receiver),calls:{kind:string;table:string;key:string}[]=[];
+  const exec=fixture.storage.exec.bind(fixture.storage);let repeatedDetach=0;
+  fixture.storage.exec=((input:any)=>{const sql=typeof input==='string'?input:input.sql;if(sql.includes('sensa_shared_record_content_owners')&&sql.includes('WHERE owner_kind=? AND table_name=? AND record_key=?')&&input.bind?.[0]==='sync')repeatedDetach++;return exec(input);}) as typeof fixture.storage.exec;
   Reflect.set(fixture.receiver,'storedEncoded',(kind:string,table:string,key:string,...args:any[])=>{calls.push({kind,table,key});return encode(kind,table,key,...args);});
-  fixture.receiver.commit(fixture.mutation);fixture.assertFacts();expect(Reflect.get(fixture.receiver,'activationMemo')).toBeUndefined();
+  fixture.receiver.commit(fixture.mutation);fixture.storage.exec=exec;fixture.assertFacts();expect(repeatedDetach).toBe(0);expect(Reflect.get(fixture.receiver,'activationMemo')).toBeUndefined();
   for(const table of ['learningTargets','learningRuns','learningEvents','studyScopes']){
    expect(calls.filter(row=>row.kind==='record'&&row.table===table)).toEqual([]);
    expect(calls.filter(row=>row.kind==='sync'&&row.table===table)).toHaveLength(fixture.records.filter(row=>row.table===table).length);
@@ -112,15 +114,26 @@ test('fresh activation reuses exact shared baseline bytes once, with genuine his
  }finally{fixture.receiver.close(false);}
 });
 
-for(const fault of ['source-owners','source-copy','projection','purge'] as const)test(`fresh baseline reuse ${fault} failure rolls every fact, owner and index back before retry`,async()=>{
+for(const fault of ['baseline-body-insert','baseline-owner-insert','source-owners','source-copy','projection','purge'] as const)test(`fresh baseline reuse ${fault} failure rolls every fact, owner and index back before retry`,async()=>{
  const fixture=await stageLearningReplica();
  try{
   await fixture.validate();const before=fixture.stored(),exec=fixture.storage.exec.bind(fixture.storage);let injected=false;
   fixture.storage.exec=((input:any)=>{const sql=typeof input==='string'?input:input.sql;
-   if(!injected&&(fault==='source-owners'&&sql.startsWith('INSERT INTO sensa_shared_record_content_owners')&&sql.includes("SELECT 'record'")||fault==='source-copy'&&sql.startsWith('INSERT INTO sensa_records')&&sql.includes('sensa_sync_base AS base')||fault==='projection'&&sql.startsWith('INSERT INTO sensa_learning_targets')||fault==='purge'&&sql==='DELETE FROM sensa_replica_candidates_v1')){injected=true;throw Error('fixture baseline reuse interrupted');}return exec(input);
+   if(!injected&&(fault==='baseline-body-insert'&&sql.startsWith('INSERT INTO sensa_shared_record_content SELECT')||fault==='baseline-owner-insert'&&sql.startsWith('INSERT INTO sensa_shared_record_content_owners')&&sql.includes('SELECT ?,?,?,value')||fault==='source-owners'&&sql.startsWith('INSERT INTO sensa_shared_record_content_owners')&&sql.includes("SELECT 'record'")||fault==='source-copy'&&sql.startsWith('INSERT INTO sensa_records')&&sql.includes('sensa_sync_base AS base')||fault==='projection'&&sql.startsWith('INSERT INTO sensa_learning_targets')||fault==='purge'&&sql==='DELETE FROM sensa_replica_candidates_v1')){injected=true;throw Error('fixture baseline reuse interrupted');}return exec(input);
   }) as typeof fixture.storage.exec;
   try{expect(()=>fixture.receiver.commit(fixture.mutation)).toThrow('fixture baseline reuse interrupted');}finally{fixture.storage.exec=exec;}
   expect(injected).toBe(true);expect(Reflect.get(fixture.receiver,'activationMemo')).toBeUndefined();expect(fixture.stored()).toEqual(before);fixture.receiver.commit(fixture.mutation);fixture.assertFacts();expect(Reflect.get(fixture.receiver,'activationMemo')).toBeUndefined();
+ }finally{fixture.receiver.close(false);}
+});
+
+test('batched shared baseline refuses an existing different body at the same digest and preserves all bytes',async()=>{
+ const fixture=await stageLearningReplica();
+ try{
+  const altered=packStoredRecord(JSON.stringify(encodeBackupValue({text:'altered retained body'.repeat(1024)})));
+  fixture.storage.exec({sql:'INSERT INTO sensa_shared_record_content VALUES(?,?)',bind:[contentDigest,altered]});
+  await fixture.validate();const before=fixture.stored();
+  expect(()=>fixture.receiver.commit(fixture.mutation)).toThrow('sqlite_shared_content_invalid');
+  expect(fixture.stored()).toEqual(before);expect(Reflect.get(fixture.receiver,'activationMemo')).toBeUndefined();
  }finally{fixture.receiver.close(false);}
 });
 
