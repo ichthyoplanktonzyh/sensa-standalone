@@ -305,7 +305,7 @@ export class SqliteReplicaCandidates{
   * digest keeps retries tied to proved transport even for noncanonical JSON. */
  private prepareStored(id:string,table:string,key:string,raw:string){
   const wire=JSON.parse(raw);let valid=true;
-  try{decodeBackupValue(wire);}catch(cause){if(!(cause instanceof Error)||!cause.message.startsWith('libraryBackup.errors.'))throw cause;valid=false;}
+  try{decodeBackupValue(wire);}catch(cause){if(!(cause instanceof Error)||!['libraryBackup.errors.format','libraryBackup.errors.fields'].includes(cause.message))throw cause;valid=false;}
   if(!valid)return {text:raw,representation:'opaque' as const,digests:[] as string[],bytes:utf8(raw)+96};
   if(!sharedRecordTables.has(table)){const text=packStoredRecord(raw);return {text,representation:'packed' as const,digests:[] as string[],bytes:utf8(text)+96};}
   const shared=externalizeSharedRecordContent(wire),digests=[...shared.bodies.keys()];let bytes=0;
