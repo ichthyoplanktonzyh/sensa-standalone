@@ -12,6 +12,10 @@ import {openLibrary,readLibrary,libraryTables,restoreLibraryTransaction} from '.
 import {encodeBackupValue,decodeBackupValue} from '../../../apps/web/src/data/library/backupCodec';
 import {externalizeSharedRecordContent,expandSharedRecordContent,compactArchiveWire,expandArchiveWire} from '../../../apps/web/src/data/library/sharedRecordContent';
 import {encodeBackupArchive,decodeBackupArchive} from '../../../apps/web/src/data/library/backupArchive';
+import {candidateExpected,candidateBlocksFor} from '../support/replicaCandidateFixture.mts';
+import {isReplicatedLibraryEntry,normalizeLibraryReplicaEntry,restoreLibraryReplicaValue,type LibraryReplicaEntry} from '../../../apps/web/src/data/library/replication/libraryReplica';
+import type {ReplicaCandidateRecord} from '../../../apps/web/src/data/library/replicaCandidateProtocol';
+import type {LibraryIdentity} from '../../../apps/web/src/data/library/store';
 import {SqliteRecordDatabase} from '../../../apps/web/src/data/library/sqliteDatabase';
 import {sqliteLibrarySchema,sqliteLibrarySchemaVersion,sqliteSyncBaseSchema} from '../../../apps/web/src/data/library/sqliteProtocol';
 import type {BackupRows} from '../../../apps/web/src/data/library/backupValidation';
@@ -23,6 +27,7 @@ const {validateBackupRows}=await import('../../../apps/web/src/data/library/back
 const context=sensaPinnedLanguageContext(defaultSensaLanguageRoute),id=()=>crypto.randomUUID(),packageId=id();
 const snapshot=()=>readLibrary(async tx=>Object.fromEntries(await Promise.all(libraryTables.map(async table=>[table,await tx.entries(table)])))) as Promise<BackupRows>;
 const count=(sql:string,bind:(string|number)[]=[])=>Number((raw.exec({sql,bind,rowMode:0,returnValue:'resultRows'}) as unknown[])[0]);
+let privateReplicaRows:BackupRows;
 let targetId:string,contentDigest:string,archive:Awaited<ReturnType<typeof encodeBackupArchive>>;
 
 test('actual Initial and due Review facts share one exact content body across Target and Runs, retain their own snapshots and roundtrip cachelessly',async()=>{
@@ -47,12 +52,145 @@ test('actual Initial and due Review facts share one exact content body across Ta
   expect(database.changesSince(0,['learningRuns']).map(row=>decodeBackupValue(JSON.parse(row.encodedValue!))).sort((a,b)=>a.id.localeCompare(b.id))).toEqual(rows.learningRuns.map(row=>row.value).sort((a,b)=>a.id.localeCompare(b.id)));
   const logical=rows.learningTargets.concat(rows.learningRuns,rows.learningEvents).reduce((sum,row)=>sum+strToU8(JSON.stringify(encodeBackupValue(row.value))).length,0);
   expect(database.estimateRecordBytes(['learningTargets','learningRuns','learningEvents'])).toBeLessThan(logical);
-  rows.packageCache=[];archive=await encodeBackupArchive(rows,null);const decoded=await decodeBackupArchive(archive.bytes);validateBackupRows(decoded.rows);
+  rows.packageCache=[];privateReplicaRows=rows;archive=await encodeBackupArchive(rows,null);const decoded=await decodeBackupArchive(archive.bytes);validateBackupRows(decoded.rows);
   expect(decoded.rows).toEqual(rows);expect(decoded.header.sharedBodies).toBeGreaterThan(0);
   const restoredMaterial=decoded.rows.learningTargets[0]!.value.curriculumMemberships[0].material;
   expect(restoredMaterial.content).toBe(restoredMaterial.snapshot.contentPayload);
   expect(decoded.rows.learningRuns[0]!.value.participants[targetId].materializations[decoded.rows.learningRuns[0]!.value.participants[targetId].material].content).toBe(restoredMaterial.content);
  }finally{vi.useRealTimers();}
+});
+
+async function stageLearningReplica(options:{noncanonical?:boolean;injectSharedTag?:boolean}={}){
+ const sqlite=await sqlite3InitModule(),storage=new sqlite.oo1.DB(':memory:','c'),receiver=new SqliteRecordDatabase(sqlite,storage,'memory');receiver.initialize();
+ const sourceIdentity=privateReplicaRows.meta.find(row=>row.key==='identity')!.value as LibraryIdentity;
+ const localIdentity={...sourceIdentity,id:id(),learnerId:id(),deviceId:id()},owner={subject:id(),accountId:id()};
+ receiver.commit({clears:[],deletes:[],puts:[{table:'meta',key:'identity',encodedValue:JSON.stringify(encodeBackupValue(localIdentity))},{table:'meta',key:'service-owner',encodedValue:JSON.stringify(encodeBackupValue(owner))}]});
+ const records:ReplicaCandidateRecord[]=libraryTables.flatMap(table=>privateReplicaRows[table].filter(row=>isReplicatedLibraryEntry(table,row.key)).map(row=>({table,key:row.key,valueJson:JSON.stringify(encodeBackupValue(normalizeLibraryReplicaEntry({table:table as LibraryReplicaEntry['table'],key:row.key,value:row.value},sourceIdentity).value)),blockRefs:[]})));
+ const target=records.find(row=>row.table==='learningTargets')!;
+ if(options.noncanonical)target.valueJson=JSON.stringify(JSON.parse(target.valueJson),null,2);
+ if(options.injectSharedTag){
+  const wire=JSON.parse(target.valueJson);let replaced=false;
+  const visit=(node:any)=>{if(!Array.isArray(node)||replaced)return;if(node[0]==='object')for(const pair of node[1]){if(pair[0]==='content'){pair[1]=['sensa-shared-content-v1',contentDigest];replaced=true;break;}visit(pair[1]);}else if(node[0]==='array')node[1].forEach(visit);};visit(wire);expect(replaced).toBe(true);target.valueJson=JSON.stringify(wire);
+ }
+ const expected=candidateExpected(records,sourceIdentity),begun=await receiver.replicaCandidate({kind:'begin',fence:{owner,identity:localIdentity,incarnation:'initial',localRevision:0},expected});
+ if(begun.kind!=='begun')throw Error('Expected generation');
+ for(let at=0;at<records.length;at+=128){const page=records.slice(at,at+128);await receiver.replicaCandidate({kind:'append',id:begun.id,records:page,blocks:candidateBlocksFor(page)});}
+ const mutation={clears:[],deletes:[],contentRevision:1,replicaCandidateRestore:{id:begun.id,tables:[...new Set(records.map(row=>row.table))]},puts:[
+  {table:'meta' as const,key:'cloud-sync',encodedValue:JSON.stringify(encodeBackupValue({restoreOperationId:begun.id,owner,incarnation:'initial',revision:expected.head.revision,syncedLocalRevision:1,status:'synced'}))},
+  {table:'meta' as const,key:'local-content-revision',encodedValue:JSON.stringify(encodeBackupValue(1))},
+ ]};
+ const validate=()=>receiver.replicaCandidate({kind:'validate',id:begun.id});
+ const assertFacts=(copy=receiver)=>{for(const row of records)expect(decodeBackupValue(JSON.parse(copy.get(row.table,row.key)!))).toEqual(restoreLibraryReplicaValue({...row,table:row.table as LibraryReplicaEntry['table'],value:undefined},decodeBackupValue(JSON.parse(row.valueJson)),localIdentity));expect(decodeBackupValue(JSON.parse(copy.get('operations','00000000-0000-4000-8000-000000000001')!)).result).toEqual({...sourceIdentity,deviceId:localIdentity.deviceId});};
+ const stored=()=>({tables:(storage.exec({sql:"SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",rowMode:0,returnValue:'resultRows'}) as string[]).map(table=>({table,rows:(storage.exec({sql:`SELECT * FROM ${table}`,rowMode:'object',returnValue:'resultRows'}) as object[]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)))}))});
+ return {sqlite,storage,receiver,records,mutation,validate,assertFacts,stored,generation:begun.id};
+}
+
+test('shared candidate activation retains exact genuine Initial and Review pins, receipts and baseline owners',async()=>{
+ const fixture=await stageLearningReplica();
+ try{
+  const {storage,receiver,generation}=fixture;
+  expect(storage.exec({sql:'SELECT count(*) FROM sensa_replica_candidate_bodies_v1 WHERE candidate_id=? AND digest=?',bind:[generation,contentDigest],rowMode:0,returnValue:'resultRows'})).toEqual([1]);
+  expect(Number((storage.exec({sql:'SELECT count(*) FROM sensa_replica_candidate_owners_v1 WHERE candidate_id=? AND digest=?',bind:[generation,contentDigest],rowMode:0,returnValue:'resultRows'}) as number[])[0])).toBeGreaterThanOrEqual(3);
+  const compact=storage.exec({sql:"SELECT table_name,record_key,value_json,refs_json FROM sensa_replica_candidate_records_v1 WHERE representation='shared' ORDER BY table_name,record_key",rowMode:'object',returnValue:'resultRows'}) as Array<{table_name:string;record_key:string;value_json:string;refs_json:string}>;
+  const bodyBytes=storage.exec({sql:'SELECT digest,value_json FROM sensa_replica_candidate_bodies_v1 ORDER BY digest',rowMode:'object',returnValue:'resultRows'}) as Array<{digest:string;value_json:string}>;
+  await fixture.validate();receiver.commit(fixture.mutation);fixture.assertFacts();
+  expect(compact.length).toBeGreaterThan(0);
+  for(const row of compact){
+   expect(storage.exec({sql:'SELECT value_json FROM sensa_records WHERE table_name=? AND record_key=?',bind:[row.table_name,row.record_key],rowMode:0,returnValue:'resultRows'})).toEqual([row.value_json]);
+   expect(storage.exec({sql:'SELECT value_json,block_refs_json FROM sensa_sync_base WHERE table_name=? AND record_key=?',bind:[row.table_name,row.record_key],rowMode:'array',returnValue:'resultRows'})).toEqual([[row.value_json,row.refs_json]]);
+  }
+  for(const row of bodyBytes)expect(storage.exec({sql:'SELECT value_json FROM sensa_shared_record_content WHERE digest=?',bind:[row.digest],rowMode:0,returnValue:'resultRows'})).toEqual([row.value_json]);
+  expect(storage.exec({sql:'SELECT count(*) FROM sensa_replica_candidate_bodies_v1',rowMode:0,returnValue:'resultRows'})).toEqual([0]);
+  const rows=Object.fromEntries(libraryTables.map(table=>[table,receiver.entries(table).map(row=>({key:row.key,value:decodeBackupValue(JSON.parse(row.encodedValue))}))])) as BackupRows;
+  validateBackupRows(rows);expect(receiver.learningHistoryProjection()).toHaveLength(2);
+  const body=String((storage.exec({sql:'SELECT value_json FROM sensa_shared_record_content WHERE digest=?',bind:[contentDigest],rowMode:0,returnValue:'resultRows'}) as string[])[0]);
+  const owners=storage.exec({sql:'SELECT owner_kind,count(*) AS count FROM sensa_shared_record_content_owners WHERE digest=? GROUP BY owner_kind ORDER BY owner_kind',bind:[contentDigest],rowMode:'object',returnValue:'resultRows'});
+  expect(owners).toEqual([{owner_kind:'record',count:3},{owner_kind:'sync',count:3}]);
+  const coldStorage=new fixture.sqlite.oo1.DB(':memory:','c'),cold=new SqliteRecordDatabase(fixture.sqlite,coldStorage,'memory');
+  try{
+   coldStorage.exec(sqliteLibrarySchema);
+   const tables=['sensa_shared_record_content','sensa_records','sensa_sync_base','sensa_shared_record_content_owners'];
+   const physical=tables.map(table=>storage.exec({sql:`SELECT * FROM ${table}`,rowMode:'array',returnValue:'resultRows'}) as (string|number)[][]);
+   for(let at=0;at<tables.length;at++)for(const row of physical[at]!)coldStorage.exec({sql:`INSERT INTO ${tables[at]} VALUES(${row.map(()=>'?').join(',')})`,bind:row});
+   cold.initialize();fixture.assertFacts(cold);expect(cold.learningHistoryProjection()).toHaveLength(2);expect(cold.diagnostics({verifyIntegrity:true}).integrityCheck?.status).toBe('ok');
+   expect(tables.map(table=>coldStorage.exec({sql:`SELECT * FROM ${table}`,rowMode:'array',returnValue:'resultRows'}))).toEqual(physical);
+  }finally{cold.close(false);}
+  receiver.commit({clears:['learningTargets','learningRuns','studyScopes'],deletes:[],puts:[]});
+  expect(storage.exec({sql:'SELECT value_json FROM sensa_shared_record_content WHERE digest=?',bind:[contentDigest],rowMode:0,returnValue:'resultRows'})).toEqual([body]);
+  expect(receiver.syncBaseEntries().filter(row=>row.table==='learningRuns')).toHaveLength(2);
+  receiver.commit({clears:[],deletes:[],puts:[],syncBaseReplacement:[]});
+  expect(storage.exec({sql:'SELECT count(*) FROM sensa_shared_record_content WHERE digest=?',bind:[contentDigest],rowMode:0,returnValue:'resultRows'})).toEqual([0]);
+ }finally{fixture.receiver.close(false);}
+});
+
+test('shared candidate exact retry preserves raw noncanonical wire without extra owners or byte accounting',async()=>{
+ const fixture=await stageLearningReplica({noncanonical:true});
+ try{
+  const row=fixture.records.find(row=>row.table==='learningTargets')!,before=fixture.stored();
+  await fixture.receiver.replicaCandidate({kind:'append',id:fixture.generation,records:[row],blocks:candidateBlocksFor([row])});expect(fixture.stored()).toEqual(before);
+  const changed={...row,valueJson:JSON.stringify(JSON.parse(row.valueJson))};
+  await expect(fixture.receiver.replicaCandidate({kind:'append',id:fixture.generation,records:[changed],blocks:[]})).rejects.toThrow('library_sync_candidate_invalid');expect(fixture.stored()).toEqual(before);
+  await fixture.validate();fixture.receiver.commit(fixture.mutation);fixture.assertFacts();
+ }finally{fixture.receiver.close(false);}
+});
+
+test('opaque shared wire cannot borrow another genuine Run content body during complete validation',async()=>{
+ const fixture=await stageLearningReplica({injectSharedTag:true});
+ try{
+  expect(fixture.storage.exec({sql:'SELECT count(*) FROM sensa_replica_candidate_bodies_v1 WHERE candidate_id=? AND digest=?',bind:[fixture.generation,contentDigest],rowMode:0,returnValue:'resultRows'})).toEqual([1]);
+  expect(fixture.storage.exec({sql:"SELECT representation FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name='learningTargets'",bind:[fixture.generation],rowMode:0,returnValue:'resultRows'})).toEqual(['opaque']);
+  await expect(fixture.validate()).rejects.toThrow('libraryBackup.errors.format');expect(fixture.receiver.count('learningTargets')).toBe(0);expect(fixture.receiver.syncBaseEntries()).toEqual([]);
+ }finally{fixture.receiver.close(false);}
+});
+
+for(const fault of ['body','missing-body','owner'] as const)test(`shared activation rechecks sealed ${fault} before committing exact dependencies`,async()=>{
+ const fixture=await stageLearningReplica();
+ try{
+  await fixture.validate();
+  if(fault==='body')fixture.storage.exec({sql:'UPDATE sensa_replica_candidate_bodies_v1 SET value_json=? WHERE candidate_id=? AND digest=?',bind:['["string","changed after validation"]',fixture.generation,contentDigest]});
+  else if(fault==='missing-body')fixture.storage.exec({sql:'DELETE FROM sensa_replica_candidate_bodies_v1 WHERE candidate_id=? AND digest=?',bind:[fixture.generation,contentDigest]});
+  else fixture.storage.exec({sql:"DELETE FROM sensa_replica_candidate_owners_v1 WHERE candidate_id=? AND table_name='learningTargets' AND digest=?",bind:[fixture.generation,contentDigest]});
+  const before=fixture.stored();expect(()=>fixture.receiver.commit(fixture.mutation)).toThrow();expect(fixture.stored()).toEqual(before);
+ }finally{fixture.receiver.close(false);}
+});
+
+for(const fault of ['owners','projection','purge'] as const)test(`shared activation ${fault} failure rolls facts, baseline, bodies and candidate back before retry`,async()=>{
+ const fixture=await stageLearningReplica();
+ try{
+  await fixture.validate();const before=fixture.stored(),exec=fixture.storage.exec.bind(fixture.storage);let injected=false,ownerWrites=0;
+  fixture.storage.exec=((input:any)=>{const sql=typeof input==='string'?input:input.sql;
+   if(!injected&&(fault==='owners'&&sql.startsWith('INSERT INTO sensa_shared_record_content_owners')&&++ownerWrites===2||fault==='projection'&&sql.startsWith('INSERT INTO sensa_learning_targets')||fault==='purge'&&sql==='DELETE FROM sensa_replica_candidates_v1')){injected=true;throw Error('fixture shared activation interrupted');}return exec(input);
+  }) as typeof fixture.storage.exec;
+  try{expect(()=>fixture.receiver.commit(fixture.mutation)).toThrow('fixture shared activation interrupted');}finally{fixture.storage.exec=exec;}
+  expect(injected).toBe(true);expect(fixture.stored()).toEqual(before);fixture.receiver.commit(fixture.mutation);fixture.assertFacts();
+ }finally{fixture.receiver.close(false);}
+});
+
+for(const fault of ['body','missing-body','missing-owner','extra-owner'] as const)test(`complete shared candidate validation rejects ${fault} without touching source`,async()=>{
+ const fixture=await stageLearningReplica();
+ try{
+  const before=fixture.receiver.entries('meta');
+  if(fault==='body')fixture.storage.exec({sql:'UPDATE sensa_replica_candidate_bodies_v1 SET value_json=? WHERE candidate_id=? AND digest=?',bind:['["string","corrupt body"]',fixture.generation,contentDigest]});
+  if(fault==='missing-body')fixture.storage.exec({sql:'DELETE FROM sensa_replica_candidate_bodies_v1 WHERE candidate_id=? AND digest=?',bind:[fixture.generation,contentDigest]});
+  if(fault==='missing-owner')fixture.storage.exec({sql:"DELETE FROM sensa_replica_candidate_owners_v1 WHERE candidate_id=? AND table_name='learningTargets' AND digest=?",bind:[fixture.generation,contentDigest]});
+  if(fault==='extra-owner'){
+   const digest=sha256('["string","extra body"]');fixture.storage.exec({sql:'INSERT INTO sensa_replica_candidate_bodies_v1 VALUES(?,?,?)',bind:[fixture.generation,digest,'["string","extra body"]']});
+   fixture.storage.exec({sql:"INSERT INTO sensa_replica_candidate_owners_v1 SELECT candidate_id,table_name,record_key,? FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name='learningTargets' LIMIT 1",bind:[digest,fixture.generation]});
+  }
+  await expect(fixture.validate()).rejects.toThrow();expect(fixture.receiver.entries('meta')).toEqual(before);expect(fixture.receiver.count('learningTargets')).toBe(0);expect(fixture.receiver.syncBaseEntries()).toEqual([]);
+ }finally{fixture.receiver.close(false);}
+});
+
+for(const corrupt of [false,true])test(`shared activation verifies an already stored body before reuse (${corrupt?'corrupt':'exact'})`,async()=>{
+ const fixture=await stageLearningReplica();
+ try{
+  await fixture.validate();
+  const body=String((fixture.storage.exec({sql:'SELECT value_json FROM sensa_replica_candidate_bodies_v1 WHERE candidate_id=? AND digest=?',bind:[fixture.generation,contentDigest],rowMode:0,returnValue:'resultRows'}) as string[])[0]);
+  fixture.storage.exec({sql:'INSERT INTO sensa_shared_record_content VALUES(?,?)',bind:[contentDigest,corrupt?'["string","different old body"]':body]});
+  const before=fixture.stored();
+  if(corrupt){expect(()=>fixture.receiver.commit(fixture.mutation)).toThrow('library_sync_candidate_invalid');expect(fixture.stored()).toEqual(before);}
+  else{fixture.receiver.commit(fixture.mutation);fixture.assertFacts();expect(fixture.storage.exec({sql:'SELECT value_json FROM sensa_shared_record_content WHERE digest=?',bind:[contentDigest],rowMode:0,returnValue:'resultRows'})).toEqual([body]);}
+ }finally{fixture.receiver.close(false);}
 });
 
 test('retiring the full-inventory admission cache preserves exact source rows and shared-body ownership',async()=>{

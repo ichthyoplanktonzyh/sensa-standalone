@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS sensa_replica_candidate_records_v1(
  record_key TEXT NOT NULL CHECK(length(record_key) BETWEEN 1 AND 2000),
  value_json TEXT NOT NULL CHECK(json_valid(value_json)),
  refs_json TEXT NOT NULL CHECK(json_valid(refs_json)),
- representation TEXT NOT NULL DEFAULT 'packed' CHECK(representation IN ('packed','opaque')),
+ representation TEXT NOT NULL DEFAULT 'packed' CHECK(representation IN ('packed','opaque','shared')),
+ wire_digest TEXT CHECK(wire_digest IS NULL OR length(wire_digest)=64),
  stored_value_bytes INTEGER GENERATED ALWAYS AS(length(CAST(value_json AS BLOB))) STORED,
  PRIMARY KEY(candidate_id,table_name,record_key),
  FOREIGN KEY(candidate_id) REFERENCES sensa_replica_candidates_v1(id) ON DELETE CASCADE
@@ -57,6 +58,17 @@ CREATE TABLE IF NOT EXISTS sensa_replica_candidates_v1(
  identity_json TEXT CHECK(identity_json IS NULL OR json_valid(identity_json))
 ) WITHOUT ROWID;
 ${replicaCandidateRecordSchema}
+CREATE TABLE IF NOT EXISTS sensa_replica_candidate_bodies_v1(
+ candidate_id TEXT NOT NULL,digest TEXT NOT NULL CHECK(length(digest)=64),value_json TEXT NOT NULL,
+ PRIMARY KEY(candidate_id,digest),
+ FOREIGN KEY(candidate_id) REFERENCES sensa_replica_candidates_v1(id) ON DELETE CASCADE
+) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS sensa_replica_candidate_owners_v1(
+ candidate_id TEXT NOT NULL,table_name TEXT NOT NULL,record_key TEXT NOT NULL,digest TEXT NOT NULL,
+ PRIMARY KEY(candidate_id,table_name,record_key,digest),
+ FOREIGN KEY(candidate_id,table_name,record_key) REFERENCES sensa_replica_candidate_records_v1(candidate_id,table_name,record_key) ON DELETE CASCADE,
+ FOREIGN KEY(candidate_id,digest) REFERENCES sensa_replica_candidate_bodies_v1(candidate_id,digest) ON DELETE CASCADE
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS sensa_replica_candidate_manifest_v1(
  candidate_id TEXT NOT NULL,
  table_name TEXT NOT NULL,

@@ -256,7 +256,7 @@ test('sealed text cache bounds small-row count independently from retained bytes
 for(const interrupted of [false,true])test(`cold candidate handler replaces only abandoned clustered bodies atomically (${interrupted})`,async()=>{
  const fixture=isolatedDatabase();let handler:SqliteReplicaCandidates|undefined;
  try{
-  const raw=fixture.raw,oldRecord=replicaCandidateRecordSchema.slice(0,replicaCandidateRecordSchema.indexOf('CREATE INDEX')).replace(" representation TEXT NOT NULL DEFAULT 'packed' CHECK(representation IN ('packed','opaque')),\n",'').replace(' stored_value_bytes INTEGER GENERATED ALWAYS AS(length(CAST(value_json AS BLOB))) STORED,\n','').replace('\n);','\n) WITHOUT ROWID;'),oldId=crypto.randomUUID();
+  const raw=fixture.raw,oldRecord=replicaCandidateRecordSchema.slice(0,replicaCandidateRecordSchema.indexOf('CREATE INDEX')).replace(" representation TEXT NOT NULL DEFAULT 'packed' CHECK(representation IN ('packed','opaque','shared')),\n",'').replace(' wire_digest TEXT CHECK(wire_digest IS NULL OR length(wire_digest)=64),\n','').replace(' stored_value_bytes INTEGER GENERATED ALWAYS AS(length(CAST(value_json AS BLOB))) STORED,\n','').replace('\n);','\n) WITHOUT ROWID;'),oldId=crypto.randomUUID();
   raw.exec(replicaCandidateSchema.replace(replicaCandidateRecordSchema,oldRecord));
   raw.exec({sql:"INSERT INTO sensa_replica_candidates_v1(id,fence_json,expected_json,state) VALUES(?,'{}','{}','filling')",bind:[oldId]});
   raw.exec({sql:'INSERT INTO sensa_replica_candidate_records_v1 VALUES(?,?,?,?,?)',bind:[oldId,'settings','abandoned','["string","abandoned private download"]','[]']});

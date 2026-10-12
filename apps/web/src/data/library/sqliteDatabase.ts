@@ -724,7 +724,7 @@ export class SqliteRecordDatabase {
         for(const row of this.database.exec({sql:"SELECT DISTINCT digest FROM sensa_shared_record_content_owners WHERE owner_kind='sync'",rowMode:0,returnValue:'resultRows'}) as string[])removedContent.add(row);
         this.database.exec("DELETE FROM sensa_shared_record_content_owners WHERE owner_kind='sync'");
         this.database.exec('DELETE FROM sensa_sync_base');
-        if(staged){staged.copyOrdinary();encodedWriteSize+=staged.logicalBytes;}
+        if(staged){staged.copyStored();encodedWriteSize+=staged.logicalBytes;}
         for (const entry of mutation.syncBaseReplacement) {
           if(staged?.copiedTables.has(entry.table))continue;
           const blockRefsJson=JSON.stringify(entry.blockRefs),valueJson=entry.valueJson;
@@ -852,7 +852,7 @@ export class SqliteRecordDatabase {
       }
       for (const item of mutation.puts) {
         const copied=staged?.copiedTables.has(item.table)??false;
-        // Copied ordinary rows already live in this transaction. Read their
+        // Copied validated rows already live in this transaction. Read their
         // body only for a derived projection that actually consumes it.
         const needsBody=!copied||['packageCache','curriculumEnrollments','supplementalMembershipStates','studyScopes','learningTargets','learningRuns','contentAttempts','semanticMeanings','semanticContexts','semanticInbox'].includes(item.table);
         const encodedValue=needsBody?item.encodedValue:undefined;
