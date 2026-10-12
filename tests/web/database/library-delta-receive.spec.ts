@@ -89,3 +89,10 @@ for(const fault of ['cross-target-event','broken-session-switch','old-run-pin','
   await expect(restoreOracle(b,wire)).rejects.toThrow();await publishWirePatch(account,a,wire,extraKeys);await expect(b.evaluate(()=>(window as any).sync())).rejects.toThrow();expect(await facts(b)).toEqual(before);const after=await testRpc(b,'snapshot');expect(after).toEqual(stored);expect((await b.evaluate(()=>(window as any).core.readCloudSync())).revision).toBe(state.revision);
  }finally{await a.context().close();await b.context().close();}
 });
+
+test('ordinary quantity confirmation accompanying a review stays incremental and invalid quantity is rejected',async()=>{
+ const {account,a,b,targetId}=await setup();try{
+  await a.evaluate(async()=>{const c=(window as any).core;await c.confirmLearningQuantity(crypto.randomUUID(),(await c.languageRoutesSnapshot()).context,20);});await settle(a,targetId);await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());const state=await b.evaluate(()=>(window as any).core.readCloudSync());expect(state.receive.mode).toBe('incremental');expect(state.receive.changedRecords).toBe(10);expect(state.receive.baselineBuildRecords).toBe(0);expect(await facts(b)).toEqual(await facts(a));await restoreOracle(b,await facts(b));
+  const before=await facts(b),stored=await testRpc(b,'snapshot');await a.evaluate(async()=>{const c=(window as any).core;await c.confirmLearningQuantity(crypto.randomUUID(),(await c.languageRoutesSnapshot()).context,20);});const wire=await facts(a) as WireRow[],row=wire.find(row=>row[0]==='settings'&&row[1]==='language-route-study-plans')!,plans:any=decodeBackupValue(row[2]);Object.values(plans).forEach((plan:any)=>plan.dailyNewSenseLimit=101);row[2]=encodeBackupValue(plans);await expect(restoreOracle(b,wire)).rejects.toThrow();await publishWirePatch(account,a,wire);await expect(b.evaluate(()=>(window as any).sync())).rejects.toThrow();expect(await facts(b)).toEqual(before);expect(await testRpc(b,'snapshot')).toEqual(stored);
+ }finally{await a.context().close();await b.context().close();}
+});

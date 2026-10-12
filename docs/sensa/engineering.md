@@ -421,11 +421,12 @@ incarnation fence，清除后的旧点击不能变成新授权。普通尝试失
 完整准入从实际候选正文建立 baseline-only 的关系／全局 protocolRunId 所有权索引，证书绑定账号、库、
 incarnation、cursor、local revision、validator、公共材料代次及 baseline generation／索引 epoch。
 所有 baseline 与关系写入同事务递增代次并使旧证书失效；缺失、损坏、版本或 schema 漂移不能作为负见证。
-普通复习的 Target retention 字段、Run/Event、Scope/Session 与两个 active pointers 只暂存变化行，
+普通复习的 Target retention 字段、Run/Event、Scope/Session、两个 active pointers 与确切的每日数量设置只暂存变化行，
 以已认证 baseline 的惰性点读组成稀疏 overlay，不复制全库引用或正文。重新验证完整受影响 Run–Target
 历史分量（含旧 reconciliation 的原 audit）、反向 continuation 与 Session 消费者；Scope/source 支持读取
 不自动扩展来源的所有历史。全局 protocol ID、packageCacheComplete 与 Session switch 配对由认证索引补足，
-仍使用原 restore 规则，不能借今日 reducer 改变恢复合同。既有 Run 的来源、participants 与 baseline pins
+仍使用原 restore 规则，不能借今日 reducer 改变恢复合同。每日数量设置完整核对所有 route／revision／数量／时间；
+历史 Scope/Run 使用自身保存的选择见证，不反向依赖当前偏好。既有 Run 的来源、participants 与 baseline pins
 结构变化，以及身份／route／source／PSW／Book／删除／新 reconciliation、本机 pending 或未认证 checkpoint
 走原完整路径；变化正文与历史闭包超预算也完整回退，记录实际原因。候选点读和比较每次重验 fence，
 并发本机写入或 same-cursor baseline 换代使旧候选失败，不能靠完整回退提交过时结果。

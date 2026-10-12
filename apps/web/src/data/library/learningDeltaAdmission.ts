@@ -9,7 +9,7 @@ export class DeltaReceiveFallback extends Error{constructor(readonly reason:stri
 export type DeltaReceiveEvidence={mode:'incremental'|'complete';fallbackReason?:string;changedRecords:number;baselineBuildRecords:number;baselineRecordsRead:number;candidateRecordsRead:number;targets:number;runs:number;events:number;decisions:number;scopes:number;sessions:number;scopeRuns:number;modifiedRecords?:number;accessByPhase?:Record<string,{baselineRecordsRead:number;candidateRecordsRead:number}>};
 const fallback=(reason:string):never=>{throw new DeltaReceiveFallback(reason);};
 const fail=():never=>{throw Error('libraryBackup.errors.inconsistent');};
-const allow=new Set<SqliteLibraryTable>(['learningTargets','learningRuns','learningEvents','studyScopes','learningSessions','meta']);
+const allow=new Set<SqliteLibraryTable>(['learningTargets','learningRuns','learningEvents','studyScopes','learningSessions','meta','settings']);
 const targetFields=['memory','memoryRevision','completedAt','relearnAt','relearningState'];
 const targetStructure=(value:any)=>Object.fromEntries(Object.entries(value).filter(([key])=>!targetFields.includes(key)));
 
@@ -17,7 +17,9 @@ const targetStructure=(value:any)=>Object.fromEntries(Object.entries(value).filt
  * malformed supported facts still fail the same shared restore predicates. */
 export function assertDeltaReceiveShape(changes:readonly {table:SqliteLibraryTable;key:string;deleted?:boolean}[],base:LibraryRecordReader,remote:LibraryRecordReader):void{
  for(const row of changes){
-  if(!allow.has(row.table)||row.table==='meta'&&!['learning-active','learning-session-active'].includes(row.key))fallback('structural_or_source_change');
+  if(!allow.has(row.table)||row.table==='meta'&&!['learning-active','learning-session-active'].includes(row.key)||row.table==='settings'&&row.key!=='language-route-study-plans')fallback('structural_or_source_change');
+  // Current quantity preferences have no historical Scope/Run consumers; the
+  // shared restore validator checks the entire map against unchanged routes.
   if(row.deleted){if(row.table==='meta')continue;fallback('deleted_record');}
   const after=remote.get(row.table,row.key),before=base.get(row.table,row.key);if(after===undefined)fail();
   if(row.table==='learningTargets'&&(!before?.startedAt||!backupEqual(targetStructure(before),targetStructure(after))))fallback('target_structure_change');
@@ -134,6 +136,7 @@ export async function admitLearningDelta(input:{
  // and derived publication fall back to the complete reconciliation path.
  const mergeKeys=new Map<string,{table:SqliteLibraryTable;key:string}>();
  for(const [table,keys]of selection)if(table!=='personalLearning')for(const key of keys)mergeKeys.set(JSON.stringify([table,key]),{table,key});
+ for(const row of changes)mergeKeys.set(JSON.stringify([row.table,row.key]),{table:row.table,key:row.key});
  for(const key of ['learning-active','learning-session-active'])mergeKeys.set(JSON.stringify(['meta',key]),{table:'meta',key});
  const entries=(reader:LibraryRecordReader):LibraryReplicaEntry[]=>[...mergeKeys.values()].flatMap(row=>{const value=reader.get(row.table,row.key);return value===undefined?[]:[{...row,table:row.table as LibraryReplicaEntry['table'],value:encodeBackupValue(value)}];});
  const before=entries(base),after=entries(remote),merged=await mergeLibraryReplicasCooperatively({base:before,local:before,remote:after});alive();
