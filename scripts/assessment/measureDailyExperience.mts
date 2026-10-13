@@ -173,6 +173,15 @@ try{
  await context.close();context=await chromium.launchPersistentContext(profile,{headless:!process.argv.includes('--headed'),viewport:{width:1280,height:900},locale:'zh-CN',executablePath:process.env.SENSA_CHROMIUM_PATH});page=context.pages()[0]!;await init();
  const coldStart=performance.now();await page.goto(origin);const enter=page.getByRole('button',{name:'进入 Sensa',exact:true}).first();if(await enter.isVisible())await enter.click();await expect(home().getByRole('button',{name:'继续学习',exact:true})).toBeEnabled({timeout:60000});await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));report.phases.push({name:'browser-cold-local-home',elapsedMs:performance.now()-coldStart,navigationStart:true,sampleCount:1});await save();
  report.nativeTimingProbe=await page.evaluate(async()=>{performance.mark('daily-native-start');await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));performance.mark('daily-native-end');performance.measure('daily-native-probe','daily-native-start','daily-native-end');const entry=performance.getEntriesByName('daily-native-probe').at(-1);let renderer:string|null=null;const gl=document.createElement('canvas').getContext('webgl');if(gl){const extension=gl.getExtension('WEBGL_debug_renderer_info');if(extension)renderer=gl.getParameter(extension.UNMASKED_RENDERER_WEBGL);gl.getExtension('WEBGL_lose_context')?.loseContext();}return {entryCount:performance.getEntriesByName('daily-native-probe').length,durationMs:entry?.duration,renderer,clock:new Date().toISOString()};});expect(report.nativeTimingProbe.entryCount).toBeGreaterThan(0);
+ if(process.argv.includes('--activate-update')){
+  report.appUpdates=[];
+  for(let attempt=0;attempt<3;attempt++){
+   const pending=await page.evaluate(async()=>{const registration=await navigator.serviceWorker.getRegistration();if(!registration)return false;await registration.update();const worker=registration.installing;if(worker&&worker.state!=='installed'&&worker.state!=='activated'&&worker.state!=='redundant')await new Promise<void>((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Update installation timeout')),15000);worker.addEventListener('statechange',()=>{if(['installed','activated','redundant'].includes(worker.state)){clearTimeout(timer);resolve();}});});return !!registration.waiting;});
+   if(!pending)break;
+   const guard=page.locator('[data-sensa-version-guard="update"]');await expect(guard).toBeVisible();await Promise.all([page.waitForEvent('load'),guard.getByRole('button',{name:'立即更新',exact:true}).click()]);await expect(home().getByRole('button',{name:'继续学习',exact:true})).toBeEnabled();report.appUpdates.push({attempt,normalActivation:true});
+  }
+  await expect(page.locator('[data-sensa-version-guard]')).toHaveCount(0);await save();
+ }
  report.status='measuring';report.learningFactsBeforeWorld=await page.evaluate(()=>(window as any).__sensaBrowserSmoke.rawLearningFactsForTest());
  if(process.argv.includes('--verify-save-diagnostic')){
   const expected='Private source: May asked to borrow an umbrella. Measurement edit ui-10k-cpu-diagnostic 0.';
