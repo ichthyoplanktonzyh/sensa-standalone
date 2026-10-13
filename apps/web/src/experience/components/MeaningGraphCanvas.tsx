@@ -2,8 +2,8 @@ import {useEffect,useImperativeHandle,useLayoutEffect,useMemo,useRef,useState,ty
 import cytoscape,{type Core,type NodeSingular,type StylesheetJson} from 'cytoscape';
 import {useScreenState} from '../ui/ScreenHost';
 import {type buildMeaningGraph} from '../ui/meaningGraph';
-import {applyMeaningGraphEmphasis,type MeaningGraphEmphasis} from '../ui/meaningGraphEmphasis';
-import {partitionMeaningGraph,meaningGraphKeyboardPositions} from '../ui/meaningGraphCanvasModel';
+import {applyMeaningGraphEmphasis,meaningGraphEmphasisStyles,type MeaningGraphEmphasis} from '../ui/meaningGraphEmphasis';
+import {partitionMeaningGraph,meaningGraphKeyboardPositions,meaningGraphPresetLayout} from '../ui/meaningGraphCanvasModel';
 
 type Graph=ReturnType<typeof buildMeaningGraph>;
 type Camera={x:number;y:number;zoom:number};
@@ -38,12 +38,9 @@ export function MeaningGraphCanvas(props:Props){
   const colors=roles.map(role=>getComputedStyle(container.current!.querySelector(`[data-palette="${role}"]`)! as Element).color);
   return [
    {selector:'node',style:{width:18,height:18,'background-color':colors[1],label:'data(label)','font-family':getComputedStyle(container.current!).fontFamily,'font-size':14,'text-valign':'bottom','text-margin-y':9,'text-max-width':'132px','text-wrap':'ellipsis','min-zoomed-font-size':10,color:colors[0],'text-background-color':colors[2],'text-background-opacity':.9,'text-background-padding':'3px','border-color':colors[2],'border-width':2}},
-   {selector:'edge',style:{width:2,'line-color':colors[5],'curve-style':'bezier',opacity:.75}},
+   {selector:'edge',style:{width:2,'line-color':colors[5],'curve-style':'bezier'}},
    {selector:'node.linked',style:{'background-color':colors[3]}},
-   {selector:'node.active',style:{width:24,height:24,'background-color':colors[3],'border-color':colors[4],'border-width':3,'font-weight':'bold','z-index':10,'min-zoomed-font-size':0}},
-   {selector:'node.adjacent',style:{width:22,height:22,'background-color':colors[3],'min-zoomed-font-size':0}},
-   {selector:'edge.active',style:{width:3,'line-color':colors[3],opacity:1,'z-index':5}},
-   {selector:'node.quiet',style:{opacity:.3,'text-opacity':.3}},
+   ...meaningGraphEmphasisStyles(colors[3]!,colors[4]!),
    {selector:'node.label-hidden',style:{'text-opacity':0}},
    {selector:'node.labels-all',style:{'min-zoomed-font-size':0}},
   ];
@@ -58,7 +55,7 @@ export function MeaningGraphCanvas(props:Props){
   const started=performance.now(),linkedIds=new Set(props.graph.edges.flatMap(edge=>[edge.from,edge.to]));
   const cy=cytoscape({container:root.querySelector('[data-cy-surface]') as HTMLElement,elements:[
    ...props.graph.nodes.map(node=>({data:{id:node.id,label:node.label},position:{x:node.x,y:node.y},classes:linkedIds.has(node.id)?'linked':''})),
-   ...props.graph.edges.map((edge,index)=>({data:{id:`relation-${index}`,source:edge.from,target:edge.to}}))],style:style(),layout:{name:'preset'},minZoom:.12,maxZoom:2.5,wheelSensitivity:.18,autoungrabify:true,boxSelectionEnabled:false,selectionType:'single'});
+   ...props.graph.edges.map((edge,index)=>({data:{id:`relation-${index}`,source:edge.from,target:edge.to}}))],style:style(),layout:meaningGraphPresetLayout,minZoom:.12,maxZoom:2.5,wheelSensitivity:.18,autoungrabify:true,boxSelectionEnabled:false,selectionType:'single'});
   engine.current=cy;
   root.dataset.graphNodeCount=String(cy.nodes().length);root.dataset.graphEdgeCount=String(cy.edges().length);
   let painted=false,paintFrame=0;

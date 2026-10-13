@@ -1,10 +1,20 @@
-import type {Core,CollectionReturnValue} from 'cytoscape';
+import type {Core,CollectionReturnValue,StylesheetJson} from 'cytoscape';
 import {relatedMeaningExpressions,type buildMeaningGraph} from './meaningGraph';
 
 export type MeaningGraphEmphasis={cy:Core;node:CollectionReturnValue;visible:CollectionReturnValue;edges:CollectionReturnValue;all:boolean;hidden:boolean};
 
-/** Pointer changes update neighborhoods; only entering/leaving emphasis or a
- * label mode change requires a collection-wide style update. */
+export function meaningGraphEmphasisStyles(action:string,focus:string):StylesheetJson{
+ return [
+  {selector:'node',style:{'z-index':1}},
+  {selector:'edge',style:{'z-index':0,opacity:.75}},
+  {selector:'node.active',style:{width:24,height:24,'background-color':action,'border-color':focus,'border-width':3,'font-weight':'bold','min-zoomed-font-size':0}},
+  {selector:'node.adjacent',style:{width:22,height:22,'background-color':action,'min-zoomed-font-size':0}},
+  {selector:'edge.active',style:{width:3,'line-color':action,opacity:1}},
+ ];
+}
+
+/** Hover and selection update only proven neighbourhoods. Label-mode changes
+ * explicitly update the complete label set; pointer changes never dim it. */
 export function applyMeaningGraphEmphasis(cy:Core,graph:ReturnType<typeof buildMeaningGraph>,view:{id:string|null;labels:'auto'|'all'|'selected';searching:boolean},prior:MeaningGraphEmphasis|null):MeaningGraphEmphasis{
  const previous=prior?.cy===cy?prior:null;
  const node=view.id?cy.getElementById(view.id):cy.collection(),visible=cy.collection().merge(node);
@@ -16,8 +26,6 @@ export function applyMeaningGraphEmphasis(cy:Core,graph:ReturnType<typeof buildM
   priorNode.not(node).removeClass('active');node.not(priorNode).addClass('active');
   priorVisible.not(priorNode).not(visible.not(node)).removeClass('adjacent');visible.not(node).not(priorVisible.not(priorNode)).addClass('adjacent');
   priorEdges.not(edges).removeClass('active');edges.not(priorEdges).addClass('active');
-  if(!!priorNode.length!==!!node.length){if(node.length)cy.nodes().not(visible).addClass('quiet');else cy.nodes().removeClass('quiet');}
-  else if(node.length){priorVisible.not(visible).addClass('quiet');visible.not(priorVisible).removeClass('quiet');}
   if(all!==!!previous?.all){if(all)cy.nodes().addClass('labels-all');else cy.nodes().removeClass('labels-all');}
   if(hidden!==!!previous?.hidden){if(hidden)cy.nodes().not(visible).addClass('label-hidden');else cy.nodes().removeClass('label-hidden');}
   else if(hidden){priorVisible.not(visible).addClass('label-hidden');visible.not(priorVisible).removeClass('label-hidden');}

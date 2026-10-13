@@ -1,5 +1,9 @@
 import type {Core,NodeSingular,EdgeSingular,CollectionReturnValue} from 'cytoscape';
 
+// The Canvas's explicit initial/restored camera owns the viewport. Fitting
+// these temporary positions would scan the full graph before its real layout.
+export const meaningGraphPresetLayout={name:'preset',fit:false} as const;
+
 /** Preserve the engine's component and BFS order for the existing layouts. */
 export function partitionMeaningGraph(cy:Core){
  const nodes=cy.nodes(),adjacency=new Map<string,{node:NodeSingular;edges:{edge:EdgeSingular;other:string}[]}>();

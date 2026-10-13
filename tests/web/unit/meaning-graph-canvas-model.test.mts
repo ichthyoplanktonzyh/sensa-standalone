@@ -1,6 +1,6 @@
 import {test,expect,vi} from 'vitest';
 import cytoscape from 'cytoscape';
-import {partitionMeaningGraph,meaningGraphKeyboardPositions} from '../../../apps/web/src/experience/ui/meaningGraphCanvasModel';
+import {partitionMeaningGraph,meaningGraphKeyboardPositions,meaningGraphPresetLayout} from '../../../apps/web/src/experience/ui/meaningGraphCanvasModel';
 
 test('full graph partition preserves Cytoscape BFS, edge and stable root order, including loops and parallel relations',()=>{
  for(let seed=0;seed<24;seed++){
@@ -19,6 +19,24 @@ test('full graph partition preserves Cytoscape BFS, edge and stable root order, 
    expect(members.length).toBe(cy.elements().length);
   }finally{cy.destroy();}
  }
+});
+
+test('preset never fits implicitly; explicit fit and restored viewport retain every model coordinate',()=>{
+ const probe=cytoscape({headless:true}),proto=Object.getPrototypeOf(probe),fit=vi.spyOn(proto,'getFitViewport');
+ const elements=Array.from({length:12},(_,i)=>({data:{id:`n${i}`},position:{x:i*80,y:i*40}}));
+ let cy:ReturnType<typeof cytoscape>|undefined,replacement:typeof cy;
+ try{
+  cy=cytoscape({headless:true,styleEnabled:true,elements,layout:meaningGraphPresetLayout,minZoom:.12,maxZoom:2.5});
+  expect(fit.mock.calls.length).toBe(0);
+  cy.viewport({zoom:1,pan:{x:15,y:10}});
+  expect(cy.pan()).toEqual({x:15,y:10});expect(cy.zoom()).toBe(1);
+  const positions=cy.nodes().map(n=>({id:n.id(),...n.position()}));
+  cy.fit(undefined,45);expect(fit.mock.calls.length).toBe(1);
+  const camera={zoom:cy.zoom(),pan:{...cy.pan()}};
+  replacement=cytoscape({headless:true,styleEnabled:true,elements,layout:meaningGraphPresetLayout,minZoom:.12,maxZoom:2.5});replacement.viewport(camera);
+  expect(fit.mock.calls.length).toBe(1);expect(replacement.pan()).toEqual(camera.pan);expect(replacement.zoom()).toBe(camera.zoom);
+  expect(replacement.nodes().map(n=>({id:n.id(),...n.position()}))).toEqual(positions);
+ }finally{fit.mockRestore();cy?.destroy();replacement?.destroy();probe.destroy();}
 });
 
 test('many disconnected linked pairs do not repeatedly group the whole collection',()=>{
