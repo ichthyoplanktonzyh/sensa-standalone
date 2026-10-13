@@ -30,6 +30,7 @@ export interface SqliteRecordAdapter {
   exportOwnCloudSnapshot?(fence:import('./replicaCandidateProtocol').ReplicaCandidateFence):Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;
   replicaCandidate(request:ReplicaCandidateRequest):Promise<ReplicaCandidateResponse>;
   learningSemanticMemory(targetId?:string):Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>;
+  personalEnrollmentIndex():Promise<import('../../learning/system/learningReadModels').LearningPersonalEnrollmentIndex>;
   get(table: SqliteLibraryTable, key: string): Promise<string | null>;
   entries(table: SqliteLibraryTable): Promise<Array<{ key: string; encodedValue: string }>>;
   entriesPage(table:SqliteLibraryTable,afterKey:string|null,limit:number):Promise<Array<{key:string;encodedValue:string}>>;
@@ -173,6 +174,7 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
   }
 
   learningSemanticMemory(targetId?:string):Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>{return this.send({kind:'learningSemanticMemory',targetId}) as Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>;}
+  personalEnrollmentIndex():Promise<import('../../learning/system/learningReadModels').LearningPersonalEnrollmentIndex>{return this.send({kind:'personalEnrollmentIndex'}) as Promise<import('../../learning/system/learningReadModels').LearningPersonalEnrollmentIndex>;}
 
   estimateRecordBytes(tables: readonly SqliteLibraryTable[]): Promise<number> {
     return this.send({kind:'estimateRecordBytes',tables:[...tables]}) as Promise<number>;

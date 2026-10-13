@@ -49,6 +49,10 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
     const sorted=[...items.values()].sort((a,b)=>{const af=practiceExpressionForm(a.text,a.languageTag),bf=practiceExpressionForm(b.text,b.languageTag);return af<bf?-1:af>bf?1:a.id<b.id?-1:a.id>b.id?1:0;}),page=sorted.slice(query.offset,query.offset+query.limit);
     return {total:sorted.length,revision:this.practiceRevision,ids:page.map(item=>item.id),items:query.idsOnly?[]:page};
   }
+  async personalEnrollmentIndex():Promise<import('../../learning/system/learningReadModels').LearningPersonalEnrollmentIndex>{
+    const {personalEnrollmentTarget}=await import('./learningSemanticMemoryProjection');
+    return {targets:(await this.entries('learningTargets')).map(row=>personalEnrollmentTarget(decodeBackupValue(JSON.parse(row.encodedValue!))))};
+  }
   async learningSemanticMemory(targetId?:string):Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>{
     const {learningSemanticMemoryTarget}=await import('./learningSemanticMemoryProjection');
     const rows=targetId===undefined?await this.entries('learningTargets'):[{key:targetId,encodedValue:await this.get('learningTargets',targetId)}];

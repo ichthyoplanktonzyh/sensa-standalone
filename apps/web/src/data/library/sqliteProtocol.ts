@@ -31,7 +31,7 @@ export const sqliteLibrarySchemaVersion = 19;
 /** Durable physical data; every other application table is a derived cache. */
 export const sqliteSourceDataTables=new Set(['sensa_records','sensa_record_tombstones','sensa_sync_base','sensa_shared_record_content','sensa_shared_record_content_owners','sensa_portable_media','sensa_portable_package_media']);
 /** Cross-tab RPC changes must bump this before adding or changing messages. */
-export const sqliteCoordinatorProtocolVersion = 66;
+export const sqliteCoordinatorProtocolVersion = 67;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -121,6 +121,7 @@ export type SqliteWorkerRequest =
   | {id:number;kind:'worldBrowse';query:WorldBrowseQuery}
   | {id:number;kind:'worldSceneMeaning';sceneId:string}
   | {id:number;kind:'registrySelection';query:RegistrySelectionQuery}
+  | {id:number;kind:'personalEnrollmentIndex'}
   | {id:number;kind:'learningSemanticMemory';targetId?:string}
   | {id:number;kind:'worldLearningChoices';query:WorldLearningChoiceQuery}
   | {id:number;kind:'practiceExpressions';query:PracticeExpressionQuery}

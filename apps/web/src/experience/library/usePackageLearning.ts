@@ -41,7 +41,7 @@ const measuredWorkspaceRead=async<T,>(name:string,work:()=>Promise<T>):Promise<T
  }
 };
 
-export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|'management'|'preferences'|'target'='workspace',targetId?:string){
+export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|'management'|'preferences'|'target'|'inactive'='workspace',targetId?:string){
  const runtimeOnly=mode==='runtime',managementOnly=mode==='management'||mode==='preferences';
  useTranslation();
  const languageContext=useActiveLanguageContext();
@@ -84,6 +84,7 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
 
  const refreshLearning=async()=>{
   if(currentRoute.current!==routeKey)return false;
+  if(viewEpoch.current.mode==='inactive'){setWorkspace(emptyWorkspace);setLoadStatus('ready');return true;}
   const current=lifecycle.current,version=viewEpoch.current.version,readingRuntime=runtimeMode.current,readingManagement=managementMode.current;
   if(viewEpoch.current.mode==='target'){
    const selection=targetSelection.current;
@@ -136,7 +137,7 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
  };
  const refresh=async()=>{
   const current=lifecycle.current,version=viewEpoch.current.version;
-  const [learningApplied]=await Promise.all([refreshLearning(),runtimeMode.current||managementMode.current||viewEpoch.current.mode==='target'?Promise.resolve():refreshSupply()]);
+  const [learningApplied]=await Promise.all([refreshLearning(),runtimeMode.current||managementMode.current||viewEpoch.current.mode==='target'||viewEpoch.current.mode==='inactive'?Promise.resolve():refreshSupply()]);
   if(current!==lifecycle.current||version!==viewEpoch.current.version||!learningApplied)return;
   setLoaded(true);
   setLoadStatus('ready');
@@ -167,6 +168,7 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
  };
 
  useEffect(()=>{
+  if(mode==='inactive'){setWorkspace(emptyWorkspace);setLoadStatus('ready');return;}
   setLoaded(false);setManagement(null);setBusy(false);setProgress(null);setInstallation(null);setDownloadFailed(false);setNotice('');
   const learningCoordinator=createRefreshCoordinator(async()=>{await refreshLearning();});
   const supplyCoordinator=createRefreshCoordinator(refreshSupply);
@@ -180,7 +182,7 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
    await learningCoordinator.request();
   };
   void retryInitialLoad();
-  const stopLearning=learningSystem.subscribe({kind:'workspace',languageContext},reloadLearning);
+  const stopLearning=learningSystem.subscribe(mode==='target'&&targetId?{kind:'target',targetId,languageContext}:{kind:mode==='runtime'?'runtime':mode==='preferences'?'preferences':mode==='management'?'management':'workspace',languageContext},reloadLearning);
   const stopSupply=contentSupplySystem.subscribe({kind:'workspace'},reloadSupply);
   const focus=()=>void prepare().catch(()=>setNotice(localFlowText('progressReadFailed')));
   window.addEventListener('focus',focus);
@@ -194,22 +196,11 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
    catalogRequest.current?.abort();
    window.removeEventListener('focus',focus);
   };
- },[languageContext.languageRouteId,languageContext.languageRouteRevision]);
+ },[languageContext.languageRouteId,languageContext.languageRouteRevision,mode,targetId]);
 
- const lastRuntimeMode=useRef(runtimeOnly);
- const selectionKey=JSON.stringify([mode,targetId??null]);
- const lastViewMode=useRef(selectionKey);
- useEffect(()=>{
-  if(lastRuntimeMode.current===runtimeOnly&&lastViewMode.current===selectionKey)return;
-  lastRuntimeMode.current=runtimeOnly;lastViewMode.current=selectionKey;setLoadStatus('loading');
-  // Every screen/Target selection gets its own projection epoch. Hidden
-  // inventory/history stays untouched; an old read cannot cross this view.
-  const version=viewEpoch.current.version;
-  void refresh().catch(()=>{if(version===viewEpoch.current.version){setLoadStatus('unavailable');setNotice(localFlowText('progressReadFailed'));}});
- },[selectionKey]);
 
  useEffect(()=>{
-  if(managementOnly||mode==='target')return;
+  if(managementOnly||mode==='target'||mode==='inactive')return;
   if(workspace.queue.nextChangeAt===null)return;
   const timer=window.setTimeout(
    ()=>void (runtimeOnly?Promise.resolve():learningSystem.execute({kind:'prepare_queue',languageContext,at:new Date().toISOString()}))

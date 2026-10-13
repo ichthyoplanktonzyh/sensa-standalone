@@ -26,6 +26,9 @@ CREATE INDEX IF NOT EXISTS sensa_world_browse_order ON sensa_world_browse(visibl
 CREATE INDEX IF NOT EXISTS sensa_world_browse_status ON sensa_world_browse(status,updated_at DESC,meaning_id);
 CREATE INDEX IF NOT EXISTS sensa_world_browse_valid ON sensa_world_browse(valid);
 CREATE INDEX IF NOT EXISTS sensa_world_browse_pending ON sensa_world_browse(updated_at DESC,meaning_id) WHERE visible=1 AND (formation<>'sense_confirmed' OR binding<>'bound');
+CREATE TABLE IF NOT EXISTS sensa_world_expression_members(meaning_id TEXT NOT NULL,expression_id TEXT NOT NULL,language_tag TEXT NOT NULL,visible INTEGER NOT NULL,PRIMARY KEY(meaning_id,expression_id)) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS sensa_world_expression_language ON sensa_world_expression_members(language_tag,meaning_id,expression_id);
+CREATE INDEX IF NOT EXISTS sensa_world_expression_visible_language ON sensa_world_expression_members(visible,language_tag);
 CREATE TABLE IF NOT EXISTS sensa_world_learning_choices(choice_key TEXT PRIMARY KEY,meaning_id TEXT NOT NULL,language_tag TEXT NOT NULL,updated_at TEXT NOT NULL,choice_json TEXT NOT NULL CHECK(json_valid(choice_json))) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS sensa_world_learning_choice_language ON sensa_world_learning_choices(language_tag,updated_at DESC,meaning_id,choice_key);
 CREATE INDEX IF NOT EXISTS sensa_world_learning_choice_meaning ON sensa_world_learning_choices(meaning_id);
@@ -41,11 +44,13 @@ CREATE TABLE IF NOT EXISTS sensa_context_meanings(context_id TEXT NOT NULL,meani
 CREATE INDEX IF NOT EXISTS sensa_context_meaning_owner ON sensa_context_meanings(meaning_id);
 CREATE VIRTUAL TABLE IF NOT EXISTS sensa_context_search USING fts5(text,tokenize='trigram');
 `;
-const version=21,tables=[...['search','dependencies','meta',''].map(name=>`sensa_world_browse${name?'_'+name:''}`),'sensa_world_learning_choices','sensa_world_scene_meanings','sensa_context_browse','sensa_context_meanings','sensa_context_search'];
+const version=22,tables=[...['search','dependencies','meta',''].map(name=>`sensa_world_browse${name?'_'+name:''}`),'sensa_world_learning_choices','sensa_world_expression_members','sensa_world_scene_meanings','sensa_context_browse','sensa_context_meanings','sensa_context_search'];
 type Row=Record<string,any>;
 export class SqliteWorldBrowseProjection{
  private statements=new Map<string,PreparedStatement>();
  private read:WorldRecordRead;
+ private languageMenu:string[]|null=null;
+ private languages():string[]{return [...(this.languageMenu??=this.rows("SELECT DISTINCT language_tag AS tag FROM sensa_world_expression_members WHERE visible=1 ORDER BY language_tag").map(row=>row.tag))];}
  constructor(private database:Database,private get:(table:'semanticRegistry'|'semanticMeanings'|'semanticContexts',key:string)=>string|null,private decodedReader?:()=>LibraryRecordReader|undefined){
   this.read=(table,key)=>{const reader=this.decodedReader?.();if(reader)return reader.get(table,key);const encoded=this.get(table,key);return encoded===null?undefined:decodeBackupValue(JSON.parse(encoded));};
  }
@@ -66,12 +71,14 @@ export class SqliteWorldBrowseProjection{
  private replace(ids:readonly string[]){
   for(const id of ids){
    const old=this.rows('SELECT id FROM sensa_world_browse WHERE meaning_id=?',[id])[0];
+   const oldMembers=this.rows('SELECT expression_id,language_tag,visible FROM sensa_world_expression_members WHERE meaning_id=? ORDER BY expression_id',[id]);
+   this.write('DELETE FROM sensa_world_expression_members WHERE meaning_id=?',[id]);
    if(old)this.write('DELETE FROM sensa_world_browse_search WHERE rowid=?',[old.id]);
    this.write('DELETE FROM sensa_world_browse WHERE meaning_id=?',[id]);this.write('DELETE FROM sensa_world_browse_dependencies WHERE meaning_id=?',[id]);
    this.write('DELETE FROM sensa_world_learning_choices WHERE meaning_id=?',[id]);
    this.write('DELETE FROM sensa_world_scene_meanings WHERE meaning_id=?',[id]);
    this.write('DELETE FROM sensa_context_meanings WHERE meaning_id=?',[id]);
-   const raw=this.read('semanticMeanings',id);if(!raw)continue;
+   const raw=this.read('semanticMeanings',id);if(!raw){if(oldMembers.length)this.languageMenu=null;continue;}
    const record=hydrateMeaningContexts(raw,key=>this.read('semanticContexts',key));
    if(record.personalMeaning.status==='active')for(const anchor of record.personalSemanticAnchors)if(anchor.status==='active')this.write('INSERT INTO sensa_context_meanings VALUES(?,?)',[anchor.personalSemanticAnchorId,id]);
    const dependencies=new Set<string>(meaningContextKeys(raw as MeaningJourneyRecord).map(key=>`context:${key}`));
@@ -89,11 +96,15 @@ export class SqliteWorldBrowseProjection{
     const sceneIds=new Set(meaningHistoryRecords(record).flatMap(branch=>branch.personalSemanticAnchorRevisions).map(revision=>(revision.structuredPayload.learningScene as {sceneId?:unknown}|undefined)?.sceneId).filter(isUuid));
     for(const sceneId of sceneIds)this.write('INSERT INTO sensa_world_scene_meanings VALUES(?,?)',[sceneId,id]);
     const {summary,text,visible,choices,graph}=derived;
+    const members=(summary.expressions??[]).map(expression=>({expression_id:expression.expressionId,language_tag:expression.languageTag,visible:visible?1:0})).sort((a,b)=>a.expression_id.localeCompare(b.expression_id));
+    if(JSON.stringify(members)!==JSON.stringify(oldMembers))this.languageMenu=null;
+    for(const member of members)this.write('INSERT INTO sensa_world_expression_members VALUES(?,?,?,?)',[id,member.expression_id,member.language_tag,member.visible]);
     const row=this.rows('INSERT INTO sensa_world_browse(meaning_id,updated_at,formation,binding,valid,visible,status,summary_json,graph_json,search_text) VALUES(?,?,?,?,1,?,?,?,?,?) RETURNING id',
      [id,summary.updatedAt,summary.senseFormation.phase,summary.expressionBinding.phase,visible?1:0,summary.status,JSON.stringify(summary),graph?JSON.stringify(graph):'',text])[0]!;
     this.write('INSERT INTO sensa_world_browse_search(rowid,text) VALUES(?,?)',[row.id,text]);
     if(visible)for(const choice of choices)this.write('INSERT INTO sensa_world_learning_choices VALUES(?,?,?,?,?)',[choice.key,id,choice.targetLanguageTag,summary.updatedAt,JSON.stringify(choice)]);
    }else{
+    if(oldMembers.length)this.languageMenu=null;
     // Record corruption is a visible read failure, never a fabricated empty
     // World. Missing references are tracked so an actual repair can recover.
     this.write("INSERT INTO sensa_world_browse(meaning_id,updated_at,formation,binding,valid,visible,status,summary_json,graph_json,search_text) VALUES(?,'','','',0,0,'active','{}','','')",[id]);
@@ -102,6 +113,7 @@ export class SqliteWorldBrowseProjection{
   }
  }
  rebuild(){
+  this.languageMenu=null;
   for(const table of tables.filter(table=>!table.endsWith('_meta')))this.write(`DELETE FROM ${table}`);
   const ids=this.rows("SELECT record_key FROM sensa_records WHERE table_name='semanticMeanings' ORDER BY record_key").map(row=>row.record_key);this.replace(ids);
   this.replaceContexts(this.rows("SELECT record_key FROM sensa_records WHERE table_name='semanticContexts' AND record_key>='anchors:' AND record_key<'anchors;'").map(row=>row.record_key.slice('anchors:'.length)));
@@ -144,7 +156,7 @@ export class SqliteWorldBrowseProjection{
    clauses.push("EXISTS (SELECT 1 FROM json_each(world.summary_json,'$.senseIds') AS sense WHERE sense.value IN (SELECT value FROM json_each(?)))");bind.push(JSON.stringify(worldReferenceSenseIds(annotations,query.referenceFilter)));
   }
   if(query.expressionLanguages?.length){
-   clauses.push("EXISTS (SELECT 1 FROM json_each(world.summary_json,'$.expressions') AS expression WHERE json_extract(expression.value,'$.languageTag') IN (SELECT value FROM json_each(?)))");
+   clauses.push("world.meaning_id IN (SELECT meaning_id FROM sensa_world_expression_members WHERE language_tag IN (SELECT value FROM json_each(?)))");
    bind.push(JSON.stringify(query.expressionLanguages));
   }
   if(query.senseIds!==undefined){
@@ -191,7 +203,7 @@ export class SqliteWorldBrowseProjection{
   const query=validateWorldQuery({...raw,offset:0,limit:256}),{join,clauses,bind}=this.selection(query);
   clauses.push("world.graph_json<>''");
   const items:WorldGraphItem[]=this.rows(`SELECT world.graph_json FROM sensa_world_browse AS world ${join} WHERE ${clauses.join(' AND ')} ORDER BY world.updated_at DESC,world.meaning_id`,bind).map(row=>JSON.parse(row.graph_json));
-  const expressionLanguages=this.rows("SELECT DISTINCT json_extract(expression.value,'$.languageTag') AS tag FROM sensa_world_browse AS world, json_each(world.summary_json,'$.expressions') AS expression WHERE world.visible=1 ORDER BY tag").map(row=>row.tag);
+  const expressionLanguages=this.languages();
   const expressionIds=new Set(items.flatMap(item=>[...item.detail.focuses.flatMap(focus=>focus.alignment?[focus.alignment]:[]),...item.detail.directAlignments].flatMap(alignment=>alignment.confirmedBindings.filter(binding=>!query.expressionLanguages?.length||query.expressionLanguages.includes(binding.languageTag)).map(binding=>binding.expressionId))));
   return {items,expressionLanguages,expressionCount:expressionIds.size};
  }
@@ -202,9 +214,9 @@ export class SqliteWorldBrowseProjection{
   const items=this.rows(`SELECT world.summary_json ${from} ORDER BY world.updated_at DESC,world.meaning_id LIMIT ? OFFSET ?`,[...bind,query.limit,query.offset]).map(row=>JSON.parse(row.summary_json));
   const next=this.rows("SELECT summary_json FROM sensa_world_browse INDEXED BY sensa_world_browse_pending WHERE visible=1 AND (formation<>'sense_confirmed' OR binding<>'bound') ORDER BY updated_at DESC,meaning_id LIMIT 1")[0];
   const pending=Number(this.rows("SELECT COUNT(*) AS count FROM sensa_world_browse INDEXED BY sensa_world_browse_pending WHERE visible=1 AND (formation<>'sense_confirmed' OR binding<>'bound')")[0]!.count);
-  const expressionLanguages=this.rows("SELECT DISTINCT json_extract(expression.value,'$.languageTag') AS tag FROM sensa_world_browse AS world, json_each(world.summary_json,'$.expressions') AS expression WHERE world.visible=1 ORDER BY tag").map(row=>row.tag);
-  const languageClause=query.expressionLanguages?.length?" AND json_extract(expression.value,'$.languageTag') IN (SELECT value FROM json_each(?))":'';
-  const expressionCount=Number(this.rows(`SELECT COUNT(DISTINCT json_extract(expression.value,'$.expressionId')) AS count FROM sensa_world_browse AS world ${join}, json_each(world.summary_json,'$.expressions') AS expression WHERE ${clauses.join(' AND ')}${languageClause}`,[...bind,...(languageClause?[JSON.stringify(query.expressionLanguages)]:[])])[0]!.count);
+  const expressionLanguages=this.languages();
+  const languageClause=query.expressionLanguages?.length?" AND expression.language_tag IN (SELECT value FROM json_each(?))":'';
+  const expressionCount=Number(this.rows(`SELECT COUNT(DISTINCT expression.expression_id) AS count FROM sensa_world_browse AS world ${join} JOIN sensa_world_expression_members AS expression ON expression.meaning_id=world.meaning_id WHERE ${clauses.join(' AND ')}${languageClause}`,[...bind,...(languageClause?[JSON.stringify(query.expressionLanguages)]:[])])[0]!.count);
   return {items,total,pending,next:next?JSON.parse(next.summary_json):null,expressionLanguages,expressionCount};
  }
 }

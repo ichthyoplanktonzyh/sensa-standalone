@@ -3,7 +3,7 @@ import type { SensaFormalPinnedLanguageContext } from '@sensa/contracts/sensa';
 import {learningSupportMeaning,lightweightStepRequirements} from '@sensa/contracts/sensa';
 
 import { contentSupplySystem, type ContentSupplyRuntimePackage } from '../../contentSupply/system';
-import { readHomeLearningRecords,readLibrary,readLearningHistoryPage,readLearningSchedulePage,readRuntimeLearningCandidates,readLearningManagementSummary,readLocalLibraryRevision,readLearningSemanticMemoryRecords } from '../../data/library/store';
+import { readHomeLearningRecords,readLibrary,readLearningHistoryPage,readLearningSchedulePage,readRuntimeLearningCandidates,readLearningManagementSummary,readLocalLibraryRevision,readLearningSemanticMemoryRecords,readPersonalEnrollmentIndex } from '../../data/library/store';
 import {stableUuid} from '@sensa/learning-kernel';
 import type {LocalCurriculumEnrollment} from '../../data/library/curriculumEnrollments';
 import { readLearningOverview } from '../../data/library/learningOverview';
@@ -680,14 +680,13 @@ export async function readLearningHomeProjection(input: Readonly<{
   });
 }
 
-export async function readLearningPersonalEnrollmentIndex(): Promise<LearningPersonalEnrollmentIndex> {
-  const snapshot = await readLearningOverview();
-  return {
-    targets: snapshot.targets.map((target) => ({
-      targetId: target.id,
-      curriculumMembershipIds: target.curriculumMemberships.map((membership) => membership.id),
-    })),
-  };
+export async function readLearningPersonalEnrollmentIndex(languageContext?:SensaFormalPinnedLanguageContext): Promise<LearningPersonalEnrollmentIndex> {
+  const index=await readPersonalEnrollmentIndex();
+  if(!languageContext)return index;
+  return {targets:index.targets.flatMap(target=>{
+    const memberships=target.memberships.filter(member=>member.status==='active'&&member.languageContext.languageRouteId===languageContext.languageRouteId&&member.languageContext.targetLanguageTag===languageContext.targetLanguageTag&&member.languageContext.supportLanguageTag===languageContext.supportLanguageTag);
+    return memberships.length?[{...target,memberships}]:[];
+  })};
 }
 
 export async function readLearningSemanticMemoryProjection(targetId?:string): Promise<LearningSemanticMemoryProjection> {

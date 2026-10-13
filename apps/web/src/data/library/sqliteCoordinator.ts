@@ -30,7 +30,7 @@ const retryableOwnerReads=new Set<SqliteWorkerInput['kind']>([
   'initialize','get','entries','entriesPage','recordKeysPage','changesSince','diagnostics',
   'meaningLookup','registrySelection','contextBrowse','worldGraph','worldBrowse','worldSceneMeaning','worldLearningChoices','practiceExpressions',
   'existingRecordKeys','existingJourneyIdentities','packageCacheProjection',
-  'learningSemanticMemory','hasChangesSince','syncBaseEntries','syncBaseReferences','count','estimateRecordBytes',
+  'learningSemanticMemory','personalEnrollmentIndex','hasChangesSince','syncBaseEntries','syncBaseReferences','count','estimateRecordBytes',
   'homeLearningProjection','learningSchedulePage','learningHistoryPage','learningManagementSummary','runtimeLearningCandidates',
   'studyScopeMember','latestLearningActionAt','countIntroducedLearningTargets','learningRunIdsForTarget',
   'openLearningRunTargets','countContentAttemptsSince','learningTargetIdsForBookUpgrade',
@@ -42,6 +42,7 @@ export interface CoordinatedSqliteBackend {
   exportOwnCloudSnapshot?(fence:import('./replicaCandidateProtocol').ReplicaCandidateFence):Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;
   replicaCandidate?(request:import('./replicaCandidateProtocol').ReplicaCandidateRequest):Promise<import('./replicaCandidateProtocol').ReplicaCandidateResponse>;
   learningSemanticMemory(targetId?:string):Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>;
+  personalEnrollmentIndex():Promise<import('../../learning/system/learningReadModels').LearningPersonalEnrollmentIndex>;
   existingRecordKeys(table:SqliteLibraryTable,keys:readonly string[]):Promise<string[]>;
   packageCacheProjection<Query extends PackageCacheProjectionQuery>(query:Query):Promise<PackageCacheProjectionResult<Query>>;
   initialize(): Promise<SqliteStorageDiagnostics>;
@@ -164,6 +165,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
   }
   lookupMeanings(query:string):Promise<import('./sqliteProtocol').MeaningLookupResult>{return this.call({kind:'meaningLookup',query}) as Promise<import('./sqliteProtocol').MeaningLookupResult>;}
   learningSemanticMemory(targetId?:string):Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>{return this.call({kind:'learningSemanticMemory',targetId}) as Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>;}
+  personalEnrollmentIndex():Promise<import('../../learning/system/learningReadModels').LearningPersonalEnrollmentIndex>{return this.call({kind:'personalEnrollmentIndex'}) as Promise<import('../../learning/system/learningReadModels').LearningPersonalEnrollmentIndex>;}
   contextBrowse(query:ContextBrowseQuery):Promise<ContextBrowsePage>{return this.call({kind:'contextBrowse',query}) as Promise<ContextBrowsePage>;}
   worldGraph(query:import('./sqliteProtocol').WorldGraphQuery):Promise<import('./sqliteProtocol').WorldGraphRead>{return this.call({kind:'worldGraph',query}) as Promise<import('./sqliteProtocol').WorldGraphRead>;}
   worldBrowse(query:import('./sqliteProtocol').WorldBrowseQuery):Promise<import('./sqliteProtocol').WorldBrowsePage>{return this.call({kind:'worldBrowse',query}) as Promise<import('./sqliteProtocol').WorldBrowsePage>;}
@@ -620,6 +622,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       case 'worldBrowse':return backend.worldBrowse(input.query);
       case 'worldSceneMeaning':return backend.worldSceneMeaning(input.sceneId);
       case 'registrySelection':return backend.registrySelection(input.query);
+      case 'personalEnrollmentIndex':return backend.personalEnrollmentIndex();
       case 'learningSemanticMemory':return backend.learningSemanticMemory(input.targetId);
       case 'worldLearningChoices':return backend.worldLearningChoices(input.query);
       case 'practiceExpressions':return backend.practiceExpressions(input.query);

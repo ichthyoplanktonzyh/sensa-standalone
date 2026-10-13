@@ -224,6 +224,7 @@ const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
     case 'worldBrowse':return current.database.worldBrowse(request.query);
     case 'worldSceneMeaning':return current.database.worldSceneMeaning(request.sceneId);
     case 'registrySelection':return current.database.registrySelection(request.query);
+    case 'personalEnrollmentIndex':return current.database.personalEnrollmentIndex();
     case 'learningSemanticMemory':return current.database.learningSemanticMemory(request.targetId);
     case 'worldLearningChoices':return current.database.worldLearningChoices(request.query);
     case 'practiceExpressions':return current.database.practiceExpressions(request.query);

@@ -1,7 +1,8 @@
 import {useEffect,useImperativeHandle,useLayoutEffect,useMemo,useRef,useState,type Ref} from 'react';
 import cytoscape,{type Core,type NodeSingular,type StylesheetJson} from 'cytoscape';
 import {useScreenState} from '../ui/ScreenHost';
-import {relatedMeaningExpressions,type buildMeaningGraph} from '../ui/meaningGraph';
+import {type buildMeaningGraph} from '../ui/meaningGraph';
+import {applyMeaningGraphEmphasis,type MeaningGraphEmphasis} from '../ui/meaningGraphEmphasis';
 
 type Graph=ReturnType<typeof buildMeaningGraph>;
 type Camera={x:number;y:number;zoom:number};
@@ -15,9 +16,9 @@ const roles=['--sensa-fg-primary','--sensa-fg-secondary','--sensa-surface-canvas
  * provide the keyboard/reader equivalent; neither layer writes learning facts. */
 export function MeaningGraphCanvas(props:Props){
  const container=useRef<HTMLDivElement>(null),engine=useRef<Core|null>(null),current=useRef(props);current.current=props;
- const signature=props.graph.nodes.map(node=>node.id).join('|')+'#'+props.graph.edges.map(edge=>`${edge.from}:${edge.to}`).join('|');
+ const signature=useMemo(()=>props.graph.nodes.map(node=>node.id).join('|')+'#'+props.graph.edges.map(edge=>`${edge.from}:${edge.to}`).join('|'),[props.graph]);
  const [camera,setCamera]=useScreenState<Camera|null>(`${props.screenId}:cy-camera`,null);
- const [layout,setLayout]=useScreenState<{signature:string;positions:Position[]}|null>(`${props.screenId}:cy-layout`,null);
+ const [layout,setLayout]=useScreenState<{signature:string;positions:Position[];width:number;height:number}|null>(`${props.screenId}:cy-layout`,null);
  const [positions,setPositions]=useState<Position[]>([]),[focused,setFocused]=useState<string|null>(null);
  const positionsById=useMemo(()=>new Map(positions.map(position=>[position.id,position])),[positions]);
  const focusedId=focused&&props.graph.byId.has(focused)?focused:props.selected&&props.graph.byId.has(props.selected)?props.selected:props.graph.nodes[0]?.id;
@@ -67,24 +68,26 @@ export function MeaningGraphCanvas(props:Props){
   const layoutStarted=performance.now();
   // Isolates use grid below. components() runs BFS for each singleton, and
   // each BFS groups the whole input. Keep the original linked-node order.
-  const components=cy.nodes('.linked').union(cy.edges()).components();
+  let components:ReturnType<ReturnType<Core['nodes']>['components']>|null=null;
+  const linkedComponents=()=>components??=cy.nodes('.linked').union(cy.edges()).components();
+  const cached=layout?.signature===signature;
+  let width=root.clientWidth,height=root.clientHeight;
   if(layout?.signature===signature){const saved=new Map(layout.positions.map(position=>[position.id,position]));cy.nodes().positions(node=>saved.get(node.id())??node.position());}
   else {
+   cy.batch(()=>{
    let offset=0;
-   for(const component of components){
+   for(const component of linkedComponents()){
     component.layout({name:'breadthfirst',animate:false,fit:false,directed:false,roots:[component.nodes().sort((a,b)=>b.degree()-a.degree()).first().id()],nodeDimensionsIncludeLabels:true,spacingFactor:1.15,boundingBox:{x1:20,y1:offset+20,w:Math.max(300,Math.min(root.clientWidth-40,620)),h:220}}).run();
     const bounds=component.boundingBox({includeLabels:false}),scale=component.nodes().length<=3?Math.min(1,Math.max(160,root.clientWidth-160)/bounds.w):1;
     component.nodes().positions(node=>({x:80+(node.position('x')-bounds.x1)*scale,y:60+offset+node.position('y')-bounds.y1}));offset+=bounds.h+75;
    }
-   const isolated=cy.nodes().filter(node=>node.degree()===0),cols=Math.min(6,Math.max(1,isolated.length));
-   if(isolated.length)isolated.layout({name:'grid',fit:false,avoidOverlap:true,cols,boundingBox:{x1:20,y1:offset+25,w:cols*155,h:Math.ceil(isolated.length/cols)*105},sort:(a,b)=>a.data('label').localeCompare(b.data('label'))||a.id().localeCompare(b.id())}).run();
-   setLayout({signature,positions:cy.nodes().map(node=>({id:node.id(),...node.position()}))});
+   });
   }
   if(layout?.signature===signature&&cameraRef.current)cy.viewport({zoom:cameraRef.current.zoom,pan:{x:cameraRef.current.x,y:cameraRef.current.y}});
   else {cy.zoom(1);cy.pan({x:15,y:10});}
   const arrangeForViewport=()=>{
    cy.batch(()=>{
-    for(const component of components.filter(group=>group.nodes().length<=3)){
+    for(const component of linkedComponents().filter(group=>group.nodes().length<=3)){
      const xs=component.nodes().map(node=>node.position('x')),min=Math.min(...xs),span=Math.max(...xs)-min;
      if(span>0){const width=Math.min(300,Math.max(120,root.clientWidth-160));component.nodes().positions(node=>({x:80+(node.position('x')-min)*width/span,y:node.position('y')}));}
     }
@@ -94,28 +97,29 @@ export function MeaningGraphCanvas(props:Props){
     if(isolated.length)isolated.layout({name:'grid',fit:false,avoidOverlap:true,cols,boundingBox:{x1:x,y1:y,w:cols*155,h:Math.ceil(isolated.length/cols)*105},sort:(a,b)=>a.data('label').localeCompare(b.data('label'))||a.id().localeCompare(b.id())}).run();
    });
   };
-  arrangeForViewport();
+  const saveLayout=()=>setLayout({signature,positions:cy.nodes().map(node=>({id:node.id(),...node.position()})),width:root.clientWidth,height:root.clientHeight});
+  if(!cached||layout.width!==width||layout.height!==height){arrangeForViewport();saveLayout();}
   if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.graph.layout',{start:layoutStarted,end:performance.now()});
   cy.on('tap','node',event=>current.current.onSelect(event.target.id()));
   cy.on('mouseover','node',event=>current.current.onHover(event.target.id()));
   cy.on('mouseout','node',()=>current.current.onHover(null));
   cy.on('pan zoom',publish);
-  const observer=new ResizeObserver(()=>{cy.resize();arrangeForViewport();publish();});observer.observe(root);
+  const observer=new ResizeObserver(()=>{const nextWidth=root.clientWidth,nextHeight=root.clientHeight;if(nextWidth===width&&nextHeight===height)return;width=nextWidth;height=nextHeight;cy.resize();arrangeForViewport();saveLayout();publish();});observer.observe(root);
   const theme=new MutationObserver(()=>{cy.style(style());});theme.observe(document.documentElement,{attributes:true});
   publish();
   return()=>{cancelAnimationFrame(paintFrame);delete root.dataset.graphReady;observer.disconnect();theme.disconnect();cy.destroy();engine.current=null;};
  },[signature]);
+ // Model text changes independently of transient pointer/selection state.
  useEffect(()=>{
-  const cy=engine.current;if(!cy)return;cy.batch(()=>{cy.nodes().forEach(node=>{node.data('label',props.graph.byId.get(node.id())?.label??'');});
-  cy.elements().removeClass('active adjacent quiet label-hidden labels-all');
-  if(props.labels==='all')cy.nodes().addClass('labels-all');
-  const id=props.highlight??props.selected,node=id?cy.getElementById(id):cy.collection();
-  const related=id?relatedMeaningExpressions(props.graph,id).map(edge=>cy.getElementById(edge.to)):[];
-  const visible=cy.collection().merge(node);for(const item of related)visible.merge(item);
-  if(node.length){node.addClass('active');visible.not(node).addClass('adjacent');visible.connectedEdges().filter(edge=>visible.contains(edge.source())&&visible.contains(edge.target())).addClass('active');cy.nodes().not(visible).addClass('quiet');}
-  if(props.labels==='selected'&&!props.searching)cy.nodes().not(visible).addClass('label-hidden');
-  });
+  const cy=engine.current;if(!cy)return;
+  cy.batch(()=>{for(const node of props.graph.nodes){const element=cy.getElementById(node.id);if(element.data('label')!==node.label)element.data('label',node.label);}});
+ },[props.graph,signature]);
+ const emphasis=useRef<MeaningGraphEmphasis|null>(null);
+ useEffect(()=>{
+  const cy=engine.current;if(!cy)return;
+  emphasis.current=applyMeaningGraphEmphasis(cy,props.graph,{id:props.highlight??props.selected,labels:props.labels,searching:props.searching},emphasis.current);
  },[props.selected,props.highlight,props.labels,props.searching,signature,props.graph]);
+
  const focusNode=(id:string)=>{
   const cy=engine.current,node=cy?.getElementById(id);if(!cy||!node?.length)return;
   const point=node.renderedPosition();if(point.x<35||point.x>cy.width()-35||point.y<35||point.y>cy.height()-60){if(cy.zoom()<.65)cy.zoom(1);cy.center(node);publish();}

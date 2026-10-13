@@ -105,6 +105,7 @@ test('memory and SQLite World reads agree on a deleted unbound Meaning and keep 
   expect(trash.pending).toBe(1);expect(trash.next?.personalMeaningId).toBe(meaningId);
   for(const filter of ['all','pending','deleted','binding','complete'] as const)for(const term of ['', 'borrow', 'no such context']){
    const selection={...query,filter,query:term};expect(await memory.worldBrowse(selection)).toEqual(database.worldBrowse(selection));
+   for(const offset of [0,1,2])expect(await memory.worldBrowse({...selection,offset,limit:1})).toEqual(database.worldBrowse({...selection,offset,limit:1}));
   }
  }finally{database.close();}
 });
@@ -155,7 +156,11 @@ test('a failed World-index write rolls back source facts and existing pages; mis
   raw.exec("CREATE TEMP TRIGGER reject_choice_delete BEFORE DELETE ON sensa_world_learning_choices BEGIN SELECT RAISE(ABORT,'fixture-choice-index-failure'); END;");
   expect(()=>database.commit({clears:[],deletes:[],puts:rows(deleteFirstMeaning(state)).filter(row=>row.table==='semanticMeanings'),contentRevision:2})).toThrow('fixture-choice-index-failure');
   expect(database.entries('semanticMeanings')).toEqual(source);expect(database.worldLearningChoices({...query,targetLanguageTag:'en'})).toEqual(choices);
-  raw.exec('DROP TRIGGER reject_choice_delete;DROP TABLE sensa_world_browse_search;');
+  raw.exec('DROP TRIGGER reject_choice_delete;');
+  raw.exec("CREATE TEMP TRIGGER reject_expression_member BEFORE INSERT ON sensa_world_expression_members BEGIN SELECT RAISE(ABORT,'fixture-expression-member-failure'); END;");
+  expect(()=>database.commit({clears:[],deletes:[],puts:rows(advanceSemanticHeads(state)).filter(row=>row.table==='semanticMeanings'||row.table==='semanticContexts'),contentRevision:2})).toThrow('fixture-expression-member-failure');
+  expect(database.entries('semanticMeanings')).toEqual(source);expect(database.worldBrowse(query)).toEqual(before);
+  raw.exec('DROP TRIGGER reject_expression_member;DROP TABLE sensa_world_expression_members;');
   // Initialization only replaces derived tables and their own metadata.
   new SqliteRecordDatabase(sqlite,raw,'memory').initialize();
   expect(database.worldBrowse(query)).toEqual(before);expect(database.entries('semanticMeanings')).toEqual(source);
@@ -184,6 +189,8 @@ test('one Meaning with multiple accepted bindings exposes every exact pin and se
    const selection={...query,expressionLanguages};
    expect(await memory.worldBrowse(selection)).toEqual(database.worldBrowse(selection));
   }
+  const languagePlan=raw.exec({sql:'EXPLAIN QUERY PLAN SELECT meaning_id FROM sensa_world_expression_members WHERE language_tag=?',bind:['fr'],rowMode:'object',returnValue:'resultRows'}) as {detail:string}[];
+  expect(languagePlan.some(row=>row.detail.includes('sensa_world_expression_language'))).toBe(true);
   expect(database.worldBrowse({...query,expressionLanguages:['fr']})).toMatchObject({total:1,expressionCount:1,expressionLanguages:['en','fr']});
   expect(database.worldBrowse({...query,expressionLanguages:['en','fr']})).toMatchObject({total:1,expressionCount:3});
   expect(database.worldBrowse({...query,expressionLanguages:['ja']})).toMatchObject({total:0,expressionCount:0});

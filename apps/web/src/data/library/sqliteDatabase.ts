@@ -401,6 +401,7 @@ export class SqliteRecordDatabase {
       encodedValue: this.logicalEncoded(table,String(row.value_json)),
     }));
   }
+  personalEnrollmentIndex():import('../../learning/system/learningReadModels').LearningPersonalEnrollmentIndex{return this.semanticMemoryProjection.enrollmentIndex();}
   learningSemanticMemory(targetId?:string):import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection{return this.semanticMemoryProjection.read(targetId);}
   lookupMeanings(query:string):MeaningLookupResult{return this.meaningLookup.query(query);}
   contextBrowse(query:ContextBrowseQuery):ContextBrowsePage{return this.worldBrowseProjection.contexts(query);}

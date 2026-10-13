@@ -12,6 +12,7 @@ import {sqliteRecordAdapter} from '../../../apps/web/src/data/library/sqliteAdap
 import {SqliteRecordDatabase} from '../../../apps/web/src/data/library/sqliteDatabase';
 import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec';
 import {PRACTICE_SENSES} from '../../../apps/web/src/experience/practiceData';
+import {materialSourcePin} from '../../../apps/web/src/learning/runtime/learningIdentity';
 import type {LocalLearningTarget} from '../../../apps/web/src/learning/runtime/localProtocol';
 
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined});
@@ -74,7 +75,17 @@ test('real nonbundled learning references and notes are findable before rating w
   adapter.entries=async(table)=>{if(['learningTargets','learningRuns','learningEvents','packageCache','media'].includes(table))throw Error('header reader scanned collection/history');return entries(table);};
   adapter.entriesPage=async(table,after,limit)=>{if(['learningTargets','learningRuns','learningEvents','packageCache','media'].includes(table))throw Error('header reader paged source material');return page(table,after,limit);};
   expect((await learningSystem.read({kind:'semantic_memory'})).targets).toHaveLength(1);
+  expect((await learningSystem.read({kind:'personal_enrollment_index'})).targets).toEqual([{targetId,identity:{senseId:seed.identity.senseId,expressionId:seed.identity.expressionId},memberships:seed.curriculumMemberships.map(member=>({id:member.id,status:member.status??'active',bindingVersionId:materialSourcePin(member.material).bindingVersionId,languageContext:member.languageContext}))}]);
   expect((await learningSystem.read({kind:'semantic_memory',targetId})).targets[0]?.targetId).toBe(targetId);
+  const exact=(await learningSystem.read({kind:'personal_enrollment_index',languageContext:context})).targets;expect(exact).toHaveLength(1);
+  expect((await learningSystem.read({kind:'personal_enrollment_index',languageContext:{...context,languageRouteId:id()}})).targets).toEqual([]);
+  expect((await learningSystem.read({kind:'personal_enrollment_index',languageContext:{...context,supportLanguageTag:'fr'}})).targets).toEqual([]);
+  const readIndex=adapter.personalEnrollmentIndex.bind(adapter),base=exact[0]!;
+  try{
+   adapter.personalEnrollmentIndex=async()=>({targets:[{...base,memberships:[...base.memberships,{...base.memberships[0]!,id:'other-route',languageContext:{...context,languageRouteId:id()}},{...base.memberships[0]!,id:'other-support',languageContext:{...context,supportLanguageTag:'fr'}},{...base.memberships[0]!,id:'superseded',status:'superseded'}]}]});
+   expect((await learningSystem.read({kind:'personal_enrollment_index',languageContext:context})).targets).toEqual(exact);
+  }finally{adapter.personalEnrollmentIndex=readIndex;}
+
  }finally{adapter.get=get;adapter.entries=entries;adapter.entriesPage=page;}
  seed=(await readLibrary(tx=>tx.get<LocalLearningTarget>('learningTargets',targetId)))!;
 });
@@ -104,10 +115,10 @@ test('synthetic 10k read-projection stress keeps list payload bounded, opens one
   const puts=targets.map(target=>({table:'learningTargets' as const,key:target.id,encodedValue:JSON.stringify(encodeBackupValue(target))}));
   db.commit({clears:[],deletes:[],puts,contentRevision:1});
   const sourceFacts=()=>raw.exec({sql:"SELECT record_key,value_json FROM sensa_records WHERE table_name='learningTargets' ORDER BY record_key",rowMode:'object',returnValue:'resultRows'});
-  const facts=sourceFacts(),read=db.get.bind(db);let reads=0;
+  const facts=sourceFacts(),enrolled=db.personalEnrollmentIndex(),read=db.get.bind(db);let reads=0;
   db.get=(table,key)=>{if(table==='learningTargets')reads++;return read(table,key);};
   const started=performance.now(),headers=db.learningSemanticMemory(),elapsedMs=performance.now()-started;
-  expect(headers.targets).toHaveLength(10_000);expect(reads).toBe(0);
+  expect(headers.targets).toHaveLength(10_000);expect(db.personalEnrollmentIndex()).toEqual(enrolled);expect(enrolled.targets).toHaveLength(10_000);expect(JSON.stringify(enrolled)).not.toMatch(/resources|materialization|protocolState/);expect(reads).toBe(0);
   expect(headers.targets.every(item=>item.presentation.scene.length<=241&&item.presentation.meaning.length<=241)).toBe(true);
   const bytes=Buffer.byteLength(JSON.stringify(headers));expect(bytes).toBeLessThan(12*1024*1024);
   expect(JSON.stringify(headers)).not.toMatch(/data:audio|data:image|materialization|protocolState/);
@@ -120,9 +131,9 @@ test('synthetic 10k read-projection stress keeps list payload bounded, opens one
   expect(()=>db.learningSemanticMemory(targets[0]!.id)).toThrow('localFlow.progressReadFailed');
   raw.exec('DROP TABLE sensa_learning_semantic_memory');
   new SqliteRecordDatabase(sqlite,raw,'memory').initialize();
-  expect(sourceFacts()).toEqual(facts);expect(db.learningSemanticMemory()).toEqual(headers);
+  expect(sourceFacts()).toEqual(facts);expect(db.learningSemanticMemory()).toEqual(headers);expect(db.personalEnrollmentIndex()).toEqual(enrolled);
   raw.exec("CREATE TEMP TRIGGER reject_semantic_header BEFORE UPDATE ON sensa_learning_semantic_memory BEGIN SELECT RAISE(ABORT,'controlled-semantic-header-failure'); END;");
   expect(()=>db.commit({clears:[],deletes:[],puts:[{...puts[0]!,encodedValue:JSON.stringify(encodeBackupValue({...targets[0]!,expression:'must roll back'}))}],contentRevision:2})).toThrow('controlled-semantic-header-failure');
-  expect(sourceFacts()).toEqual(facts);expect(db.learningSemanticMemory()).toEqual(headers);
+  expect(sourceFacts()).toEqual(facts);expect(db.learningSemanticMemory()).toEqual(headers);expect(db.personalEnrollmentIndex()).toEqual(enrolled);
  }finally{db.close();}
 },60_000);

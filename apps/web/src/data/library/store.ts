@@ -768,6 +768,7 @@ export const readHomeLearningRecords = async (
   return storageCall(() => adapter.homeLearningProjection(languageRouteId,clock));
 };
 export const readLearningHistoryPage=async(query:import('../../learning/system/learningHistoryModel').LearningHistoryRequest)=>{const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');return storageCall(()=>adapter.learningHistoryPage(query));};
+export const readPersonalEnrollmentIndex=async()=>{const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');return storageCall(()=>adapter.personalEnrollmentIndex());};
 export const readLearningSemanticMemoryRecords=async(targetId?:string)=>{const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');return storageCall(()=>adapter.learningSemanticMemory(targetId));};
 export const readLearningManagementSummary=async(query:import('./runtimeLearningCandidates').LearningManagementSummaryQuery)=>{const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');return storageCall(()=>adapter.learningManagementSummary(query));};
 export const readRuntimeLearningCandidates=async(query:import('./runtimeLearningCandidates').RuntimeLearningCandidateQuery)=>{const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');return storageCall(()=>adapter.runtimeLearningCandidates(query));};

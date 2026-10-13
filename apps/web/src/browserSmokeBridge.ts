@@ -300,7 +300,7 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
       const {learningSystem}=await import('./learning/system');
       if(!active){restoreLearningReads?.();restoreLearningReads=undefined;return;}
       if(restoreLearningReads)throw new Error('Learning read fault already active');const original=learningSystem.read;
-      learningSystem.read=(async query=>{if(query.kind==='workspace')throw new Error('fixture-workspace-read-failure');return original(query);}) as typeof original;
+      learningSystem.read=(async query=>{if(query.kind==='workspace'||query.kind==='personal_enrollment_index')throw new Error('fixture-workspace-read-failure');return original(query);}) as typeof original;
       restoreLearningReads=()=>{learningSystem.read=original;};
       window.dispatchEvent(new CustomEvent('sensa-library-changed',{detail:{tables:['curriculumEnrollments']}}));
     },
@@ -308,7 +308,7 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
       if(releaseWorkspaceReads)throw new Error('Learning workspace read already held');
       const {learningSystem}=await import('./learning/system');const read=learningSystem.read;
       let release!:()=>void;const held=new Promise<void>(resolve=>{release=resolve;});
-      learningSystem.read=(async query=>{if(query.kind==='workspace')await held;return read(query);}) as typeof read;
+      learningSystem.read=(async query=>{if(query.kind==='workspace'||query.kind==='personal_enrollment_index')await held;return read(query);}) as typeof read;
       releaseWorkspaceReads=()=>{learningSystem.read=read;release();releaseWorkspaceReads=undefined;};
     },
     releaseLearningWorkspaceReadsForTest(){releaseWorkspaceReads?.();},

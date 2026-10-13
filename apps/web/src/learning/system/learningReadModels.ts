@@ -169,7 +169,8 @@ export interface LearningHistoryProjection extends LearningHistorySummary{readon
 export interface LearningPersonalEnrollmentIndex {
   readonly targets: readonly Readonly<{
     targetId: string;
-    curriculumMembershipIds: readonly string[];
+    identity: Readonly<{senseId:string;expressionId:string}>;
+    memberships: readonly Readonly<{id:string;status:'active'|'superseded';bindingVersionId:string;languageContext:SensaFormalPinnedLanguageContext}>[];
   }>[];
 }
 

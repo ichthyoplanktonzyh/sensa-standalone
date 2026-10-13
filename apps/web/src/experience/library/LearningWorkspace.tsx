@@ -52,9 +52,10 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
  ].includes(screen));
  const executing=currentScreen==='s-lightweight-runtime';
  const managementOnly=['s-study','s-stats','s-profile'].includes(currentScreen);
- const packageLearning=usePackageLearning(packageCenterOpen,currentScreen==='s-profile'||currentScreen==='s-stats'?'preferences':currentScreen==='s-learning-target'?'target':executing?'runtime':managementOnly?'management':'workspace',currentScreen==='s-learning-target'?params.targetId:undefined);
+ const worldOnly=['s-content','s-semantic-world','s-personal-meaning','s-confirmed-sense'].includes(currentScreen);
+ const packageLearning=usePackageLearning(packageCenterOpen,worldOnly?'inactive':currentScreen==='s-profile'||currentScreen==='s-stats'?'preferences':currentScreen==='s-learning-target'?'target':executing?'runtime':managementOnly?'management':'workspace',currentScreen==='s-learning-target'?params.targetId:undefined);
  const personalOpen=active&&['s-study','s-learning-library','s-learning-target','s-content','s-semantic-world','s-personal-meaning','s-confirmed-sense'].includes(currentScreen);
- const personalLearning=usePersonalLearning(currentScreen==='s-study'?{kind:'library',excludeTargetIds:packageLearning.management?.targetIds}:currentScreen==='s-learning-library'?{kind:'library'}:currentScreen==='s-learning-target'&&params.targetId?{kind:'target',targetId:params.targetId}:null,personalOpen&&(currentScreen!=='s-study'||packageLearning.loadStatus==='ready'),managementOnly);
+ const personalLearning=usePersonalLearning(currentScreen==='s-study'?{kind:'library',excludeTargetIds:packageLearning.management?.targetIds}:currentScreen==='s-learning-library'?{kind:'library'}:currentScreen==='s-learning-target'&&params.targetId?{kind:'target',targetId:params.targetId}:['s-personal-meaning','s-confirmed-sense'].includes(currentScreen)&&params.meaningId?{kind:'meaning',meaningId:params.meaningId}:null,personalOpen&&(currentScreen!=='s-study'||packageLearning.loadStatus==='ready'),managementOnly);
  const activeRoute={id:packageLearning.languageContext.languageRouteId,targetLanguageTag:packageLearning.languageContext.targetLanguageTag};
  const toast=useOverlayStore(state=>state.toast);
  const coveredIds=new Set(packageLearning.management?.targetIds??packageLearning.targets.map(target=>target.targetId));
@@ -103,7 +104,7 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
     browse={{params,change:patch=>setMainStack(mainStack,patch,true)}}
     graphLearningState={bindingVersionId=>{
      const task=personalLearning.tasks.find(task=>task.source.bindingVersionId===bindingVersionId&&task.languageContext.languageRouteId===personalLearning.languageContext.languageRouteId);
-     const target=personalLearning.targets.find(target=>target.identity.bindingVersionId===bindingVersionId);
+     const target=personalLearning.enrollmentTargets.find(target=>target.memberships.some(member=>member.bindingVersionId===bindingVersionId));
      const unavailable=personalLearning.projectionStatus==='unavailable';
      const key=personalLearning.projectionStatus==='loading'?'loadingSensa':unavailable?'preparationReadFailed':target?'learningReady':task?.curriculumActive===false?'worldRemoved':task?.status==='ready'||task?.status==='covered'?'batchReady':task?'learningPreparation':'worldNotAdded';
      return <><h3 className="text-xs text-fg-secondary">{t('content.worldCurrentRoute')} · {personalLearning.languageContext.targetLanguageTag}</h3><div className="mt-2 text-sm" role={unavailable?'alert':personalLearning.projectionStatus==='loading'?'status':undefined}><p>{key==='worldRemoved'||key==='worldNotAdded'?t(`content.${key}`):localFlowText(key)}</p>{unavailable&&<button type="button" className={setupButton+' mt-2'} onClick={personalLearning.retryTaskSources}>{t('reliability.retry')}</button>}</div></>;

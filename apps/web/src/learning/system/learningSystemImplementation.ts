@@ -262,7 +262,7 @@ export const readLearningQuery = async (query: LearningQuery): Promise<unknown> 
       });
     }
     case 'personal_enrollment_index': {
-      return readLearningPersonalEnrollmentIndex();
+      return readLearningPersonalEnrollmentIndex(query.languageContext);
     }
     case 'semantic_memory': {
       return readLearningSemanticMemoryProjection(query.targetId);

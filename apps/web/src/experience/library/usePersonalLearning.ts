@@ -2,7 +2,7 @@ import {backgroundPreparation} from '../../data/library/backgroundPreparation';
 import {useTranslation} from 'react-i18next';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import {useEffect,useMemo,useRef,useState,useSyncExternalStore} from 'react';
-import {learningSystem,type LearningTargetProjection} from '../../learning/system';
+import {learningSystem,type LearningTargetProjection,type LearningPersonalEnrollmentIndex} from '../../learning/system';
 import {
  contentSupplySystem,
  personalLearningSourceKey,
@@ -17,10 +17,11 @@ import {settleOperation} from './operationSettlement';
 import {createRefreshCoordinator} from './refreshCoordinator';
 import {PersonalLearningBatch} from './personalLearningBatch';
 import type {WorldLearningChoice} from '../personalMeaningJourney/worldRead';
-export function usePersonalLearning(sourceView:{kind:'library';excludeTargetIds?:readonly string[]}|{kind:'target';targetId:string}|null=null,enabled=true,compactControl=false){
+export function usePersonalLearning(sourceView:{kind:'library';excludeTargetIds?:readonly string[]}|{kind:'target';targetId:string}|{kind:'meaning';meaningId:string}|null=null,enabled=true,compactControl=false){
  useTranslation();
  const [tasks,setTasks]=useState<ContentProvisioningTask[]>([]),[preparationAvailable,setPreparationAvailable]=useState(false),[notice,setNotice]=useState(''),[operationBusy,setBusy]=useState(false),[clock,setClock]=useState(Date.now());
  const [targets,setTargets]=useState<readonly LearningTargetProjection[]>([]);
+ const [enrollmentTargets,setEnrollmentTargets]=useState<LearningPersonalEnrollmentIndex['targets']>([]);
  const [taskSources,setTaskSources]=useState<ReadonlyMap<string,PersonalMeaningLearningSource>>(new Map());
  const [taskPresentations,setTaskPresentations]=useState<ReadonlyMap<string,{expression:string;meaning:string}>>(new Map());
  const batchRunner=useMemo(()=>new PersonalLearningBatch({
@@ -45,15 +46,23 @@ export function usePersonalLearning(sourceView:{kind:'library';excludeTargetIds?
   if(!enabled||batchRunner.read().busy)return;
   const generation=++readGeneration.current;
   try{
-  const [supply,learning]=await Promise.all([contentSupplySystem.read({kind:'provisioning_control'}),compactControl?Promise.resolve({targets:[] as readonly LearningTargetProjection[]}):sourceView?.kind==='target'
+  const scoped=sourceView===null||sourceView.kind==='meaning';
+  const [supply,learning,index]=await Promise.all([contentSupplySystem.read({kind:'provisioning_control'}),compactControl||scoped?Promise.resolve({targets:[] as readonly LearningTargetProjection[]}):sourceView?.kind==='target'
    ?learningSystem.read({kind:'target',targetId:sourceView.targetId,languageContext,clock:Date.now()}).then(detail=>({targets:detail.target?[detail.target]:[]}))
-   :learningSystem.read({kind:'workspace',languageContext,clock:Date.now()})]);
+   :learningSystem.read({kind:'workspace',languageContext,clock:Date.now()}),scoped?learningSystem.read({kind:'personal_enrollment_index',languageContext}):Promise.resolve({targets:[]})]);
+  const enrolled=index.targets;
+  let detailTargets=learning.targets;
+  if(sourceView?.kind==='meaning'){
+   const ids=[...new Set(supply.tasks.filter(isPersonalProvisioningTask).filter(task=>task.source.personalMeaningId===sourceView.meaningId&&enrolled.some(target=>target.targetId===task.targetId)).map(task=>task.targetId))];
+   const details=await Promise.all(ids.map(targetId=>learningSystem.read({kind:'target',targetId,languageContext,clock:Date.now()})));
+   detailTargets=details.flatMap(detail=>detail.target?[detail.target]:[]);
+  }
   const personalTasks=supply.tasks.filter(isPersonalProvisioningTask);
   const pendingTasks=personalTasks.filter(task=>sourceView&&task.languageContext.languageRouteId===languageContext.languageRouteId
     &&task.languageContext.targetLanguageTag===languageContext.targetLanguageTag&&task.languageContext.supportLanguageTag===languageContext.supportLanguageTag
     &&(sourceView.kind!=='library'||task.curriculumActive!==false)
-    &&(sourceView.kind==='library'||task.targetId===sourceView.targetId)
-    &&!learning.targets.some(target=>target.targetId===task.targetId)&&!(sourceView?.kind==='library'&&sourceView.excludeTargetIds?.includes(task.targetId)));
+    &&(sourceView.kind==='library'||sourceView.kind==='target'&&task.targetId===sourceView.targetId||sourceView.kind==='meaning'&&task.source.personalMeaningId===sourceView.meaningId)
+    &&!detailTargets.some(target=>target.targetId===task.targetId)&&!(sourceView?.kind==='library'&&sourceView.excludeTargetIds?.includes(task.targetId)));
   const sources=sourceView?.kind==='library'?[]:await Promise.all(pendingTasks.map(task=>contentSupplySystem.read({kind:'personal_provisioning_source',taskId:task.id})));
   const presentations=sourceView?.kind==='library'?await Promise.all(pendingTasks.map(async task=>({taskId:task.id,value:await contentSupplySystem.read({kind:'personal_provisioning_presentation',taskId:task.id})}))):[];
   if(batchRunner.read().busy||currentRoute.current!==routeKey||generation!==readGeneration.current)return;
@@ -61,7 +70,7 @@ export function usePersonalLearning(sourceView:{kind:'library';excludeTargetIds?
   setTaskPresentations(new Map(presentations.flatMap(row=>row.value?[[row.taskId,row.value] as const]:[])));
   setSourceReadKey(routeKey);
   setSourceFailureKey(null);
-  setTargets(learning.targets);setTasks(personalTasks);setPreparationAvailable(supply.preparationAvailable);setClock(Date.now());
+  setEnrollmentTargets(enrolled);setTargets(detailTargets);setTasks(personalTasks);setPreparationAvailable(supply.preparationAvailable);setClock(Date.now());
   for(const task of personalTasks)if(task.curriculumActive===false)backgroundPreparation.cancel(task.id);
   }catch(error){
    if(currentRoute.current===routeKey&&generation===readGeneration.current)failedSourceRead();
@@ -70,7 +79,7 @@ export function usePersonalLearning(sourceView:{kind:'library';excludeTargetIds?
  };
  const failedSourceRead=()=>{if(currentRoute.current===routeKey){setSourceFailureKey(routeKey);setSourceReadKey(routeKey);setTaskSources(new Map());setTaskPresentations(new Map());}};
  latestRefresh.current=()=>refresh().catch(()=>{});
- useEffect(()=>{if(!enabled)return;const coordinator=createRefreshCoordinator(refresh);const read=()=>void coordinator.request().catch(()=>{});read();const stopSupply=contentSupplySystem.subscribe({kind:'provisioning_control'},read);const stopLearning=learningSystem.subscribe({kind:'workspace',languageContext},read);const stopJourney=worldReadRepository.subscribe(read);const focus=()=>setClock(Date.now());window.addEventListener('focus',focus);return()=>{stopSupply();stopLearning();stopJourney();readGeneration.current++;window.removeEventListener('focus',focus);};},[languageContext.languageRouteId,languageContext.languageRouteRevision,sourceViewKey]);
+ useEffect(()=>{if(!enabled)return;const coordinator=createRefreshCoordinator(refresh);const read=()=>void coordinator.request().catch(()=>{});read();const stopSupply=contentSupplySystem.subscribe({kind:'provisioning_control'},read);const stopLearning=learningSystem.subscribe(sourceView===null||sourceView.kind==='meaning'?{kind:'personal_enrollment_index',languageContext}:sourceView.kind==='target'?{kind:'target',targetId:sourceView.targetId,languageContext}:{kind:'workspace',languageContext},read);const stopJourney=sourceView?worldReadRepository.subscribe(read):()=>{};const focus=()=>setClock(Date.now());window.addEventListener('focus',focus);return()=>{stopSupply();stopLearning();stopJourney();readGeneration.current++;window.removeEventListener('focus',focus);};},[languageContext.languageRouteId,languageContext.languageRouteRevision,sourceViewKey]);
  const nextLeaseExpiry=nextPersonalLearningLeaseExpiry(tasks,clock);
  useEffect(()=>{
   if(nextLeaseExpiry===null)return;
@@ -96,7 +105,7 @@ export function usePersonalLearning(sourceView:{kind:'library';excludeTargetIds?
  // Read failures belong to the guarded projection, not the durable operation
  // notice. Recovery clears only its own error and cannot erase a newer command.
  const visibleNotice=[localFlowNotice(notice),projectionStatus==='unavailable'?localFlowText('preparationReadFailed'):''].filter(Boolean).join('\n');
- return {batch,batchRowAt:batchRunner.rowAt,batchIndexForKey:batchRunner.indexForKey,retryBatch,enrollBatch,sourceForTask,presentationForTask,projectionStatus,taskSourcesLoading:!!sourceView&&projectionStatus==='loading',taskSourcesUnavailable:!!sourceView&&projectionStatus==='unavailable',retryTaskSources:()=>{setSourceReadKey(null);setSourceFailureKey(null);void refresh().catch(()=>{});},stopBatch:()=>void batchRunner.stop(),tasks,targets,preparationAvailable,notice:visibleNotice,busy,clock,languageContext,
+ return {batch,batchRowAt:batchRunner.rowAt,batchIndexForKey:batchRunner.indexForKey,retryBatch,enrollBatch,sourceForTask,presentationForTask,projectionStatus,taskSourcesLoading:!!sourceView&&projectionStatus==='loading',taskSourcesUnavailable:!!sourceView&&projectionStatus==='unavailable',retryTaskSources:()=>{setSourceReadKey(null);setSourceFailureKey(null);void refresh().catch(()=>{});},stopBatch:()=>void batchRunner.stop(),tasks,targets,enrollmentTargets,preparationAvailable,notice:visibleNotice,busy,clock,languageContext,
   enroll:(source:PersonalMeaningLearningSource,useContext:boolean)=>perform(async()=>{const enrollment=await learningSystem.execute({kind:'enroll_personal',operationId:crypto.randomUUID(),source,languageContext,useContext});if(enrollment.provisioningStatus!=='ready')await prepare(enrollment.provisioningTaskId,source);}),
   update:(taskId:string,source:PersonalMeaningLearningSource,useContext:boolean)=>perform(async()=>{const revised=await contentSupplySystem.execute({kind:'revise_provisioning',operationId:crypto.randomUUID(),taskId,source,languageContext,useContext});if(revised.status!=='covered')await prepare(taskId,source);}),
   prepare:(id:string)=>perform(()=>prepare(id)),
