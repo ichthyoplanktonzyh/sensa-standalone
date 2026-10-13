@@ -3,7 +3,7 @@ import {test} from 'vitest';
 import {gzipSync} from 'fflate';
 import {sha256} from '@sensa/learning-kernel';
 import {librarySyncBlockChars} from '../../../packages/contracts/src/sensa/librarySync.ts';
-import {decodeLibrarySyncBlock,encodeLibrarySyncBlock,librarySyncRecordSegments,splitLibrarySyncText} from '../../../packages/contracts/src/sensa/librarySyncBlocks.ts';
+import {decodeLibrarySyncBlock,encodeLibrarySyncBlock,librarySyncRecordSegments,splitLibrarySyncText,encodeLibrarySyncBinaryChunk,decodeLibrarySyncBinaryChunk,librarySyncBinaryChunkBytes} from '../../../packages/contracts/src/sensa/librarySyncBlocks.ts';
 import {encodeBackupValue,decodeBackupValue} from '../../../apps/web/src/data/library/backupCodec.ts';
 
 test('transport body sharing preserves each exact row and never merges facts or user keys',()=>{
@@ -49,4 +49,13 @@ test('private shared representation emits the exact logical wire without exposin
  const segments=librarySyncRecordSegments(shared.value,digest=>{const body=shared.bodies.get(digest);assert.ok(body);return body;});
  assert.equal(segments.join(''),JSON.stringify(value));assert.ok(!segments.join('').includes('sensa-shared-content-v1'));
  assert.throws(()=>librarySyncRecordSegments(shared.value),/library_sync_format/u);
+});
+test('binary chunks are exact, bounded and reject corrupt digest/CRC, extra members and forged inflation',async()=>{
+ const bytes=Uint8Array.from({length:librarySyncBinaryChunkBytes},(_,i)=>(i*137+i*i)%256),encoded=await encodeLibrarySyncBinaryChunk(bytes);assert.ok(encoded.length<=librarySyncBlockChars);assert.deepEqual(decodeLibrarySyncBinaryChunk(encoded),bytes);assert.equal(await encodeLibrarySyncBinaryChunk(bytes),encoded);
+ await assert.rejects(encodeLibrarySyncBinaryChunk(new Uint8Array(librarySyncBinaryChunkBytes+1)),/library_sync_format/u);
+ const value=JSON.parse(encoded);assert.throws(()=>decodeLibrarySyncBinaryChunk(JSON.stringify([...value.slice(0,2),'f'.repeat(64),value[3]])),/library_sync_format/u);assert.throws(()=>decodeLibrarySyncBinaryChunk(JSON.stringify([value[0],librarySyncBinaryChunkBytes+1,value[2],value[3]])),/library_sync_format/u);
+ const pack=(chunk:Uint8Array)=>{let text='';for(let at=0;at<chunk.length;at+=16384)text+=String.fromCharCode(...chunk.subarray(at,at+16384));return btoa(text);};
+ const packed=Uint8Array.from(atob(value[3]),c=>c.charCodeAt(0)),crc=packed.slice();crc[crc.length-8]^=1;assert.throws(()=>decodeLibrarySyncBinaryChunk(JSON.stringify([value[0],value[1],value[2],pack(crc)])),/library_sync_format/u);
+ const extra=gzipSync(new Uint8Array(1),{mtime:0}),members=new Uint8Array(packed.length+extra.length);members.set(packed);members.set(extra,packed.length);assert.throws(()=>decodeLibrarySyncBinaryChunk(JSON.stringify([value[0],value[1],value[2],pack(members)])),/library_sync_format/u);
+ const forged=packed.slice();new DataView(forged.buffer).setUint32(forged.length-4,2,true);assert.throws(()=>decodeLibrarySyncBinaryChunk(JSON.stringify([value[0],2,sha256(bytes.subarray(0,2)),pack(forged)])),/library_sync_format/u);
 });

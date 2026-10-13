@@ -765,12 +765,13 @@ export class SqliteRecordDatabase {
 
   async replicaCandidate(request:ReplicaCandidateRequest):Promise<ReplicaCandidateResponse>{
     this.assertReplicaCandidateHealthy();
-    if(['beginPublication','publicationPage','publicationBlocks','validatePublication','admitOwnPublication','discardPublication'].includes(request.kind)){
+    if(['beginPublication','publicationPage','publicationIndexPage','publicationBlocks','validatePublication','admitOwnPublication','discardPublication'].includes(request.kind)){
       if(request.kind!=='discardPublication'&&this.decoded('meta','signed-out'))throw Error('account_changed');
       if(!this.initialPublication){const {SqliteInitialPublication}=await import('./sqliteInitialPublication');this.initialPublication=new SqliteInitialPublication(this.database,f=>this.assertReplicaCandidateFence(f),(table,key)=>this.get(table,key),f=>this.assertReplicaCandidateFence({...f,localRevision:this.decoded<number>('meta','local-content-revision')??0}));}
       switch(request.kind){
         case 'beginPublication':return {kind:'begun',id:this.initialPublication.begin(request.fence)};
         case 'publicationPage':return this.initialPublication.page(request.id,request.after);
+        case 'publicationIndexPage':return this.initialPublication.indexPage(request.id,request.after);
         case 'publicationBlocks':return this.initialPublication.blocks(request.id,request.hashes);
         case 'validatePublication':return {kind:'publicationValidated',stats:await this.initialPublication.validate(request.id,request.confirmed)};
         case 'admitOwnPublication':return {kind:'publicationValidated',stats:await this.initialPublication.validate(request.id,request.confirmed,true)};

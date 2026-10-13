@@ -3,7 +3,7 @@ import {Buffer} from 'node:buffer';
 import type {Hono} from 'hono';
 import type {DatabaseExecutor} from '../../database/core.js';
 import {librarySyncHash,librarySyncStageBegin,librarySyncPatch,librarySyncPull,librarySyncSnapshotPage,librarySyncMetadataPageRows,librarySyncMetadataPageRefs,librarySyncMetadataPageBytes,librarySyncCommit,librarySyncManifest,librarySyncBlockFetch,librarySyncBlockFetchBytes,librarySyncBlockMissing,librarySyncBlockStore,librarySyncBlockStoreChars,librarySyncBlockStoreBytes,type LibrarySyncManifest} from '@sensa/contracts/sensa';
-import {decodeLibrarySyncBlock} from '@sensa/contracts/sensa/library-sync-blocks';
+import {decodeLibrarySyncBlock,decodeLibrarySyncBinaryChunk} from '@sensa/contracts/sensa/library-sync-blocks';
 import {ConsumerError} from '../access/auth.js';
 import {libraryCloudCapacityBytes,libraryCloudReadLeaseMs,libraryCloudUploadLeaseMs,purgeExpiredLibraryCloudBlocks} from './retention.js';
 import {beginInitialPublication,appendInitialPublication,commitInitialPublication,discardInitialPublication} from './initialPublication.js';
@@ -145,7 +145,7 @@ export function registerLibrarySync(app:Hono,access:Access){
     // these bytes; an artifact is pinned only by this same final CAS transaction.
     for(let at=0;at<artifact.blocks.length;at+=16){
      const refs=artifact.blocks.slice(at,at+16),found=(await db.query('SELECT hash,data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[a.accountId,refs])).rows,blocks=new Map(found.map(row=>[row.hash,row.data]));
-     for(const ref of refs){const data=blocks.get(ref);if(data===undefined)throw conflict('library_sync_missing_block');const text=decodeLibrarySyncBlock(data);if(text.length>262144||!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(text))throw new ConsumerError(400,'library_sync_format');const chunk=Buffer.from(text,'base64');bytes+=chunk.length;if(bytes>artifact.byteLength||chunk.length>192*1024)throw new ConsumerError(413,'library_sync_capacity');fileHash.update(chunk);}
+     for(const ref of refs){const data=blocks.get(ref);if(data===undefined)throw conflict('library_sync_missing_block');let chunk:Uint8Array;try{chunk=decodeLibrarySyncBinaryChunk(data);}catch{throw new ConsumerError(400,'library_sync_format');}bytes+=chunk.length;if(bytes>artifact.byteLength)throw new ConsumerError(413,'library_sync_capacity');fileHash.update(chunk);}
     }
     if(bytes!==artifact.byteLength||fileHash.digest('hex')!==artifact.sha256)throw new ConsumerError(400,'library_sync_hash');
     binarySnapshot={...artifact,accountId:a.accountId,libraryId:next.libraryId,learnerId:next.learnerId,revision:next.revision,records:next.records};

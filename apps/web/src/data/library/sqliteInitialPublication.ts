@@ -30,7 +30,8 @@ export class SqliteInitialPublication{
  private ready=false;
  private statements=new Map<string,PreparedStatement>();
  private admission:SyncAdmission|undefined;
- private admissionPolicy:'external'|'own-cloud'|undefined;
+ private admissionPolicy:'external'|'own-cloud'|'captured-own'|undefined;
+ private indexedRecords=0;
  private dependencies:SqliteSyncDependencies;
  constructor(private db:Database,private assertFence:(f:ReplicaCandidateFence)=>void,private get:(table:SqliteLibraryTable,key:string)=>string|null,private assertOwner:(f:ReplicaCandidateFence)=>void){this.dependencies=new SqliteSyncDependencies(db);}
  private rows<T>(sql:string,bind:(string|number|null)[]=[]):T[]{
@@ -48,7 +49,7 @@ export class SqliteInitialPublication{
  `);this.ready=true;}
  private header(id:string,confirmed=false){this.ensure();const h=this.rows<Header>('SELECT * FROM sensa_initial_publication WHERE id=?',[id])[0];if(!h)throw Error('library_sync_candidate_invalid');if(confirmed||h.state!=='filling')this.assertOwner(JSON.parse(h.fence));else this.assertFence(JSON.parse(h.fence));return h;}
  begin(fence:ReplicaCandidateFence):string{
-  this.admission=undefined;this.admissionPolicy=undefined;this.assertFence(fence);this.ensure();const id=crypto.randomUUID(),fenceJson=JSON.stringify(fence);
+  this.admission=syncAdmission();this.admissionPolicy='captured-own';this.indexedRecords=0;this.assertFence(fence);this.ensure();const id=crypto.randomUUID(),fenceJson=JSON.stringify(fence);
   this.db.exec('BEGIN IMMEDIATE');try{
    this.db.exec('DELETE FROM sensa_initial_publication;DELETE FROM sensa_initial_publication_rows;DELETE FROM sensa_initial_publication_blocks;DELETE FROM sensa_initial_publication_content;DELETE FROM sensa_initial_publication_owners');
    this.rows("INSERT INTO sensa_initial_publication(id,fence,after_key,state,stored_bytes) VALUES(?,?,'null','filling',?)",[id,fenceJson,utf8(id)+utf8(fenceJson)+4+7]);this.db.exec('COMMIT');
@@ -56,7 +57,7 @@ export class SqliteInitialPublication{
  }
  /** One table/range seek per bounded source window. A page commits sets once;
   * no row write, quota or statistics query visits previous page prefixes. */
- page(id:string,after:Position):InitialPublicationPage{
+ async page(id:string,after:Position):Promise<InitialPublicationPage>{
   const h=this.header(id),fence=JSON.parse(h.fence) as ReplicaCandidateFence;
   const prior=h.last_page_json?JSON.parse(h.last_page_json):undefined;
   if(prior&&JSON.stringify(prior.after)===JSON.stringify(after))return {kind:'publicationPage',blocks:[],rows:prior.rows,next:prior.next,done:prior.done,stats:this.stats(id)};
@@ -66,6 +67,7 @@ export class SqliteInitialPublication{
   if(h.state!=='filling')throw Error('library_sync_candidate_invalid');
   const output:LibrarySyncManifest['rows']=[],prepared:Array<{table:string;key:string;valueJson:string;refsJson:string;shared:number}>=[],owners:Array<{table:string;key:string;digest:string}>=[];
   const newBodies=new Map<string,StoredBody>(),pageBlocks=new Map<string,Block>(),usedHashes=new Set<string>();
+  const pageAdmission=syncAdmission();
   let plain=0,wire=0,references=0,position=after,done=false,keysRead=0;
   let tableAt=after?orderedTables.indexOf(after.table as typeof librarySyncTables[number]):0,stop=false;
   if(tableAt<0)throw Error('library_sync_candidate_invalid');
@@ -125,6 +127,12 @@ export class SqliteInitialPublication{
      for(const [hash,block]of encoded)pageBlocks.set(hash,block);for(const hash of rowHashes)usedHashes.add(hash);
      for(const digest of row.digests){const body=newBodies.get(digest)??bodies.get(digest)!;const blockRefs=contentRefs.get(digest);if(!priorMetadata.has(digest))newBodies.set(digest,{...body,refs_json:blockRefs?JSON.stringify(blockRefs):body.refs_json});owners.push({table,key:row.record_key,digest});}
      const valueJson=row.copy?row.value_json:packStoredRecord(JSON.stringify(row.value)),refsJson=JSON.stringify(refs);
+     if(this.admission&&!this.admission.disabled){
+      // The exact wire already exists in this bounded capture window. Index
+      // metadata now; do not later decode every retained material again.
+      const text=segments.join(''),digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text))),value=>value.toString(16).padStart(2,'0')).join('');
+      this.dependencies.observe(pageAdmission,table,row.record_key,text,decodeBackupValue(JSON.parse(text)),()=>false,utf8(valueJson)+2*utf8(refsJson)+72*refs.length,digest);
+     }
      prepared.push({table,key:row.record_key,valueJson,refsJson,shared:row.shared?1:0});output.push({table,key:row.record_key,blocks:refs});plain+=size;wire+=extra;references+=refs.length;position={table,key:row.record_key};
     }
     if(keysRead>=512||output.length===64)stop=true;
@@ -145,8 +153,21 @@ export class SqliteInitialPublication{
    this.rows(`INSERT INTO sensa_initial_publication_owners SELECT ?,json_extract(value,'$.table'),json_extract(value,'$.key'),json_extract(value,'$.digest') FROM json_each(?)`,[id,JSON.stringify(owners)]);
    this.assertFence(fence);
    this.rows('UPDATE sensa_initial_publication SET after_key=?,state=?,last_page_json=?,records=records+?,logical_bytes=logical_bytes+?,stored_bytes=stored_bytes+?,maximum_page_bytes=max(maximum_page_bytes,?),unique_plain_bytes=unique_plain_bytes+?,unique_stored_bytes=unique_stored_bytes+?,block_count=block_count+? WHERE id=?',[nextJson,state,lastPage,output.length,plain,stored,plain+wire,inserted.reduce((n,b)=>n+b.plain_bytes,0),inserted.reduce((n,b)=>n+b.stored_bytes,0),inserted.length,id]);this.db.exec('COMMIT');
+   if(this.admissionPolicy==='captured-own'&&this.admission){
+    const target=this.admission;this.indexedRecords+=prepared.length;target.metadataBytes+=pageAdmission.metadataBytes;target.logicalBytes+=pageAdmission.logicalBytes;target.storedBytes+=pageAdmission.storedBytes;target.packageCacheComplete&&=pageAdmission.packageCacheComplete;
+    if(pageAdmission.disabled||target.metadataBytes>16*1024*1024){target.disabled='dependency_metadata_capacity';target.rows.clear();}else if(!target.disabled)for(const [key,row]of pageAdmission.rows)target.rows.set(key,row);
+   }
    return {kind:'publicationPage',blocks:[],rows:output,next:position,done,stats:this.stats(id)};
   }catch(cause){this.db.exec('ROLLBACK');throw cause;}
+ }
+ /** Stream only bounded refs after local capture is sealed; no body inventory. */
+ indexPage(id:string,after:Position){
+  const h=this.header(id);if(!['sealed','validated'].includes(h.state))throw Error('library_sync_candidate_invalid');
+  const measured=this.rows<{table_name:SqliteLibraryTable;record_key:string;bytes:number;refs:number}>('SELECT table_name,record_key,length(CAST(refs_json AS BLOB)) AS bytes,json_array_length(refs_json) AS refs FROM sensa_initial_publication_rows WHERE id=? AND (? IS NULL OR (table_name,record_key)>(?,?)) ORDER BY table_name,record_key LIMIT 64',[id,after?.table??null,after?.table??null,after?.key??null]);
+  const keys:Array<[string,string]>=[];let bytes=0,refs=0;for(const row of measured){if(keys.length&&(refs+row.refs>librarySyncMetadataPageRefs||bytes+row.bytes+utf8(row.record_key)>pageBytes))break;keys.push([row.table_name,row.record_key]);refs+=row.refs;bytes+=row.bytes+utf8(row.record_key);}
+  const selected=keys.length?this.rows<{table_name:typeof librarySyncTables[number];record_key:string;refs_json:string}>('SELECT table_name,record_key,refs_json FROM sensa_initial_publication_rows WHERE id=? AND (table_name,record_key) IN(SELECT json_extract(value,\'$[0]\'),json_extract(value,\'$[1]\') FROM json_each(?)) ORDER BY table_name,record_key',[id,JSON.stringify(keys)]):[];
+  const last=selected.at(-1),next=last?{table:last.table_name,key:last.record_key}:after,done=!last||!this.rows('SELECT 1 FROM sensa_initial_publication_rows WHERE id=? AND (table_name,record_key)>(?,?) LIMIT 1',[id,last.table_name,last.record_key]).length;
+  return {kind:'publicationIndexPage' as const,rows:selected.map(row=>({table:row.table_name,key:row.record_key,blocks:JSON.parse(row.refs_json) as string[]})),next,done,stats:this.stats(id)};
  }
  blocks(id:string,hashes:string[]){
   this.header(id);if(!hashes.length||hashes.length>512)throw Error('library_sync_candidate_invalid');
@@ -161,6 +182,9 @@ export class SqliteInitialPublication{
  stats(id:string,confirmed=false):InitialPublicationStats{this.ensure();const h=confirmed?this.rows<Header>('SELECT * FROM sensa_initial_publication WHERE id=?',[id])[0]:this.header(id);if(!h)throw Error('library_sync_candidate_invalid');if(confirmed)this.assertOwner(JSON.parse(h.fence));return {records:h.records,logicalBytes:h.logical_bytes,uniqueBlockPlainBytes:h.unique_plain_bytes,uniqueBlockStoredBytes:h.unique_stored_bytes,storedPayloadBytes:h.stored_bytes,blocks:h.block_count,maximumPageBytes:h.maximum_page_bytes};}
  async validate(id:string,confirmed=false,ownCloud=false):Promise<InitialPublicationStats>{
   const policy=ownCloud?'own-cloud':'external',h=this.header(id,confirmed);if(h.state==='validated'&&this.admission&&this.admissionPolicy===policy)return this.stats(id,confirmed);if(h.state!=='sealed'&&h.state!=='validated')throw Error('library_sync_candidate_invalid');
+  if(ownCloud&&this.admissionPolicy==='captured-own'&&this.admission&&this.indexedRecords===h.records){
+   this.rows("UPDATE sensa_initial_publication SET state='validated',stored_bytes=stored_bytes+? WHERE id=?",[utf8('validated')-utf8(h.state),id]);this.admissionPolicy='own-cloud';return this.stats(id,confirmed);
+  }
   const alive=()=>{this.header(id,confirmed);};
   const admission=syncAdmission();this.dependencies.ensure();
   const reader=sealedRecordReader({alive,beforePage:alive,

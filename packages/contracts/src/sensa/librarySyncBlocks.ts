@@ -1,5 +1,5 @@
 import {sha256} from '@sensa/learning-kernel';
-import {gzipSync,gunzipSync} from 'fflate';
+import {gzipSync,gunzipSync,Gunzip} from 'fflate';
 import {librarySyncBlockChars} from './librarySync.js';
 
 const tag='sensa-library-sync-gzip-v1';
@@ -77,5 +77,30 @@ export function decodeLibrarySyncBlock(data:string):string{
   const plain=gunzipSync(bytes,{out:new Uint8Array(expected+1)});
   if(plain.length!==expected||crc32(plain)!==trailer.getUint32(bytes.length-8,true)||sha256(plain)!==value[1])invalid();
   const text=decoder.decode(plain);if(text.length>librarySyncBlockChars)invalid();return text;
+ }catch{return invalid();}
+}
+
+/** Binary snapshot chunks share the existing block store and request quota.
+ * Compress binary bytes once, rather than compressing their expanded base64 text. */
+export const librarySyncBinaryChunkBytes=176*1024;
+const binaryTag='sensa-library-db-chunk-v1';
+export async function encodeLibrarySyncBinaryChunk(input:Uint8Array):Promise<string>{
+ if(input.byteLength<1||input.byteLength>librarySyncBinaryChunkBytes)invalid();
+ const bytes=input.slice();
+ const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),value=>value.toString(16).padStart(2,'0')).join('');
+ const compressed=typeof CompressionStream==='function'?new Uint8Array(await new Response(new Response(bytes).body!.pipeThrough(new CompressionStream('gzip'))).arrayBuffer()):gzipSync(bytes,{level:6,mtime:0});
+ const data=JSON.stringify([binaryTag,bytes.length,digest,base64(compressed)]);if(data.length>librarySyncBlockChars)invalid();return data;
+}
+/** Inflation has a fixed per-chunk output allocation before any bytes escape. */
+export function decodeLibrarySyncBinaryChunk(data:string):Uint8Array{
+ try{
+  if(data.length>librarySyncBlockChars)invalid();const value=JSON.parse(data);
+  if(!Array.isArray(value)||value.length!==4||value[0]!==binaryTag||!Number.isSafeInteger(value[1])||value[1]<1||value[1]>librarySyncBinaryChunkBytes||typeof value[2]!=='string'||!/^[a-f0-9]{64}$/u.test(value[2])||typeof value[3]!=='string'||!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(value[3]))invalid();
+  const packed=Uint8Array.from(atob(value[3]),c=>c.charCodeAt(0));if(packed.length<18||packed[0]!==31||packed[1]!==139||packed[2]!==8||packed[3]!==0)invalid();
+  const trailer=new DataView(packed.buffer);if(trailer.getUint32(packed.length-4,true)!==value[1])invalid();
+  const plain=new Uint8Array(value[1]);let at=0,done=false;
+  const stream=new Gunzip((chunk,final)=>{if(at+chunk.length>plain.length)invalid();plain.set(chunk,at);at+=chunk.length;done=final;});stream.onmember=invalid;
+  for(let offset=0;offset<packed.length;offset+=8192)stream.push(packed.subarray(offset,offset+8192),offset+8192>=packed.length);
+  if(!done||at!==plain.length||crc32(plain)!==trailer.getUint32(packed.length-8,true)||sha256(plain)!==value[2])invalid();return plain;
  }catch{return invalid();}
 }

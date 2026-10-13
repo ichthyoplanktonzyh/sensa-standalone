@@ -63,7 +63,7 @@ export class SqliteSyncDependencies{
  count(){return Number(this.rows<{n:number}>('SELECT count(*) AS n FROM sensa_sync_dependency_rows_v1')[0].n);}
  clear():void{this.ensure();this.database.exec('DELETE FROM sensa_sync_protocol_owners_v1');this.database.exec('DELETE FROM sensa_sync_dependency_rows_v1');this.database.exec('UPDATE sensa_sync_dependency_state_v1 SET certificate_json=NULL WHERE id=1');}
  rowBudget(table:SqliteLibraryTable,key:string){return this.rows<{logical_bytes:number;stored_bytes:number}>('SELECT logical_bytes,stored_bytes FROM sensa_sync_dependency_rows_v1 WHERE table_name=? AND record_key=?',[table,key])[0]??{logical_bytes:0,stored_bytes:0};}
- observe(admission:SyncAdmission,table:SqliteLibraryTable,key:string,text:string,value:any,hasPackage:(key:string)=>boolean=()=>false,storedBytes?:number):void{
+ observe(admission:SyncAdmission,table:SqliteLibraryTable,key:string,text:string,value:any,hasPackage:(key:string)=>boolean=()=>false,storedBytes?:number,computedDigest?:string):void{
   if(admission.disabled||admission.rows.has(id(table,key)))return;
   if(admission.rows.size>=200000){admission.disabled='dependency_capacity';admission.rows.clear();return;}
   const bytes=new TextEncoder().encode(text).length,edges:Array<[string,string]>=[],protocols:Array<[string,string]>=[];
@@ -81,7 +81,8 @@ export class SqliteSyncDependencies{
    edge('sessionStart',JSON.stringify([value.startedByOperationId,value.startedAt]));
   }else if(table==='studyScopes')for(const member of value.members??[])edge('scopeTarget',member.targetId);
   if(table==='learningTargets'&&(value.curriculumMemberships??[]).some((membership:any)=>!!membership.packageKey&&!hasPackage(membership.packageKey)))admission.packageCacheComplete=false;
-  const row={table,key,digest:sha256(text),bytes,storedBytes:storedBytes??bytes,edges:[...new Map(edges.map(edge=>[JSON.stringify(edge),edge])).values()],protocols};
+  if(computedDigest!==undefined&&!/^[a-f0-9]{64}$/u.test(computedDigest))throw Error('library_sync_dependency_corrupt');
+  const row={table,key,digest:computedDigest??sha256(text),bytes,storedBytes:storedBytes??bytes,edges:[...new Map(edges.map(edge=>[JSON.stringify(edge),edge])).values()],protocols};
   admission.metadataBytes+=new TextEncoder().encode(JSON.stringify(row)).length;
   if(admission.metadataBytes>16*1024*1024){admission.disabled='dependency_metadata_capacity';admission.rows.clear();return;}
   admission.logicalBytes+=bytes;admission.storedBytes+=row.storedBytes;admission.rows.set(id(table,key),row);

@@ -76,7 +76,7 @@ test('private initial pages reject gaps/replays/cross-account payloads and final
 });
 
 test('source edits and logout fence initial publish; failed pages restart; lost final ACK confirms only captured baseline',async({browser})=>{
- const f=await createLibraryCloudBrowserFixture(browser);
+ const f=await createLibraryCloudBrowserFixture(browser,resolve('scripts/assessment/capacityBrowserEntry.ts'));
  try{
   const account=await f.createAccount(),a=await f.createClient(account),b=await f.createClient(account);
   const seed=async(page:any)=>page.evaluate(async()=>{const c=(window as any).core;for(let i=0;i<150;i++)await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Initial draft '+i});});
@@ -93,7 +93,7 @@ test('source edits and logout fence initial publish; failed pages restart; lost 
   await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());
   expect(await b.evaluate(async()=>(await (window as any).core.listDrafts()).length)).toBe(151);
   const source=await f.createAccount(),edited=await f.createClient(source);await seed(edited);
-  await edited.evaluate(()=>{const w=window as any,send=w.request;let once=false;w.request=async(path:string,body:any)=>{const r=await send(path,body);if(path==='/staging/page'&&!once){once=true;await w.core.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Concurrent source edit'});}return r;};});
+  await edited.evaluate(async()=>{const w=window as any,adapter=await w.core.sqliteRecordAdapter(),send=adapter.replicaCandidate.bind(adapter);let once=false;adapter.replicaCandidate=async(input:any)=>{const r=await send(input);if(input.kind==='publicationPage'&&!r.done&&!once){once=true;await w.core.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Concurrent source edit'});}return r;};});
   await expect(edited.evaluate(()=>(window as any).sync())).rejects.toThrow('library_sync_local_changed');
   expect((await f.pool.query('SELECT revision FROM sensa_consumer.library_cloud WHERE account_id=$1',[source.accountId])).rows[0].revision).toBe(0);
   const signed=await f.createAccount(),out=await f.createClient(signed);await seed(out);

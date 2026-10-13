@@ -21,6 +21,7 @@ export type ReplicaCandidateUpdate={id:string;baseRevision:number;localRevision:
 export type ReplicaCandidateRequest=
  |{kind:'beginPublication';fence:ReplicaCandidateFence}
  |{kind:'publicationPage';id:string;after:{table:SqliteLibraryTable;key:string}|null}
+ |{kind:'publicationIndexPage';id:string;after:{table:SqliteLibraryTable;key:string}|null}
  |{kind:'publicationBlocks';id:string;hashes:string[]}
  |{kind:'validatePublication';id:string;confirmed?:boolean}
  |{kind:'admitOwnPublication';id:string;confirmed?:boolean}
@@ -34,7 +35,7 @@ export type ReplicaCandidateRequest=
  |{kind:'validate';id:string}
  |{kind:'prepareUpdate';id:string;baseRevision:number}
  |{kind:'discard';id:string};
-export type ReplicaCandidateResponse={kind:'begun';id:string}|InitialPublicationPage|{kind:'publicationBlocks';blocks:ReplicaCandidateBlock[];deferred:string[]}|{kind:'publicationValidated';stats:InitialPublicationStats}|{kind:'indexed';needed:Array<Pick<ReplicaCandidateRecord,'table'|'key'>>}|{kind:'appended'|'proved'}|{kind:'reused';keys:Array<Pick<ReplicaCandidateRecord,'table'|'key'>>}|{kind:'validated';candidate:ReplicaCandidateValidation}|{kind:'updatePrepared';update:ReplicaCandidateUpdate|null}|{kind:'discarded'};
+export type ReplicaCandidateResponse={kind:'begun';id:string}|InitialPublicationPage|{kind:'publicationIndexPage';rows:InitialPublicationPage['rows'];next:InitialPublicationPage['next'];done:boolean;stats:InitialPublicationStats}|{kind:'publicationBlocks';blocks:ReplicaCandidateBlock[];deferred:string[]}|{kind:'publicationValidated';stats:InitialPublicationStats}|{kind:'indexed';needed:Array<Pick<ReplicaCandidateRecord,'table'|'key'>>}|{kind:'appended'|'proved'}|{kind:'reused';keys:Array<Pick<ReplicaCandidateRecord,'table'|'key'>>}|{kind:'validated';candidate:ReplicaCandidateValidation}|{kind:'updatePrepared';update:ReplicaCandidateUpdate|null}|{kind:'discarded'};
 
 /** Large private bodies use ordinary rowid storage, with the same unique key
  * and parent ownership. The cache is disposable across physical connections. */
