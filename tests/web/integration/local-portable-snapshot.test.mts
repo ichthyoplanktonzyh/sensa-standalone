@@ -105,6 +105,7 @@ test('own-cloud admission is distinct from external import and keeps checkpoint,
   const accepted=await importOwnCloudPortableSnapshot(sqlite,memoryFilePool(),'/controlled-'+crypto.randomUUID(),altered,alteredBinding,owner.accountId);accepted.library.close();await expect(importLocalPortableSnapshot(sqlite,memoryFilePool(),'/external-'+crypto.randomUUID(),altered)).rejects.toThrow();
   const unsafe=new sqlite.oo1.DB(file,'c');unsafe.exec('CREATE TRIGGER arbitrary_trigger AFTER INSERT ON sensa_records BEGIN DELETE FROM sensa_records; END');const danger=sqlite.capi.sqlite3_js_db_export(unsafe.pointer);unsafe.close();const dangerous={...exported,bytes:danger,sha256:sha256(danger)};
   await expect(importOwnCloudPortableSnapshot(sqlite,memoryFilePool(),'/unsafe-'+crypto.randomUUID(),dangerous,{...binding,records:2,byteLength:danger.length,sha256:dangerous.sha256},owner.accountId)).rejects.toThrow('sqlite_snapshot_schema_allowlist');
+  const staleFile='/own-stale-projection-'+crypto.randomUUID();sqlite.capi.sqlite3_js_posix_create_file(staleFile,exported.bytes);const staleDb=new sqlite.oo1.DB(staleFile,'c');staleDb.exec('UPDATE sensa_world_browse_meta SET version=0');const staleBytes=sqlite.capi.sqlite3_js_db_export(staleDb.pointer);staleDb.close();const stale={...exported,bytes:staleBytes,sha256:sha256(staleBytes)};await expect(importOwnCloudPortableSnapshot(sqlite,memoryFilePool(),'/stale-'+crypto.randomUUID(),stale,{...binding,byteLength:staleBytes.length,sha256:stale.sha256},owner.accountId)).rejects.toThrow('sqlite_snapshot_projection_version');
   await expect(createOwnCloudPortableSnapshot(sqlite,memoryFilePool(),own,{owner:{...owner,accountId:crypto.randomUUID()},incarnation,identity:identity as any,localRevision:0})).rejects.toThrow('sqlite_snapshot_owner');
  }finally{own.close();}
 });
@@ -113,6 +114,12 @@ test('fabricated semantic-memory cache cannot become a query result',async()=>{
  const bad=new sqlite.oo1.DB(file,'c');bad.exec("INSERT INTO sensa_learning_semantic_memory VALUES('fabricated',NULL,'{}',1,'{}')");
  const bytes=sqlite.capi.sqlite3_js_db_export(bad.pointer);bad.close();
  await expect(importLocalPortableSnapshot(sqlite,memoryFilePool(),'/focused-projection-import-'+crypto.randomUUID(),{...snapshot,bytes,sha256:sha256(bytes)})).rejects.toThrow('sqlite_snapshot_projection_values');
+});
+test('asynchronous import consumes a private hash-checked buffer',async()=>{
+ const mutable={...snapshot,bytes:snapshot.bytes.slice()},pool=memoryFilePool(),consume=pool.importDb.bind(pool);
+ pool.importDb=async(file,read)=>{mutable.bytes.fill(0);return consume(file,read);};
+ const imported=await importLocalPortableSnapshot(sqlite,pool,'/private-copy-'+crypto.randomUUID(),mutable);
+ try{expect(sha256(mutable.bytes)).not.toBe(snapshot.sha256);expect(imported.identity.id).toBe(identity.id);}finally{imported.library.close();}
 });
 test('real Learning and Meaning commands roundtrip with shared content and query projections',async()=>{
  const learning=await useNodeLearningCapacityStorage(),context=sensaPinnedLanguageContext(defaultSensaLanguageRoute),at='2026-10-12T08:00:00.000Z';

@@ -2,7 +2,7 @@ import type {Database,PreparedStatement} from '@sqlite.org/sqlite-wasm';
 import {librarySyncTables,librarySyncMetadataPageRefs,type LibrarySyncManifest} from '@sensa/contracts/sensa';
 import {encodeLibrarySyncBlock,librarySyncRecordSegments,splitLibrarySyncText} from '@sensa/contracts/sensa/library-sync-blocks';
 import {sha256} from '@sensa/learning-kernel';
-import {encodeBackupValue,decodeBackupValue} from './backupCodec';
+import {encodeBackupValue,decodeBackupValue,backupEqual} from './backupCodec';
 import {isReplicatedLibraryEntry,normalizeLibraryReplicaEntry,canCopyNormalizedLibraryReplicaValue} from './replication/libraryReplica';
 import {packStoredRecord,unpackStoredRecord,expandSharedRecordContent,sharedRecordTables} from './sharedRecordContent';
 import {sealedRecordReader} from './sealedRecordReader';
@@ -30,6 +30,7 @@ export class SqliteInitialPublication{
  private ready=false;
  private statements=new Map<string,PreparedStatement>();
  private admission:SyncAdmission|undefined;
+ private admissionPolicy:'external'|'own-cloud'|undefined;
  private dependencies:SqliteSyncDependencies;
  constructor(private db:Database,private assertFence:(f:ReplicaCandidateFence)=>void,private get:(table:SqliteLibraryTable,key:string)=>string|null,private assertOwner:(f:ReplicaCandidateFence)=>void){this.dependencies=new SqliteSyncDependencies(db);}
  private rows<T>(sql:string,bind:(string|number|null)[]=[]):T[]{
@@ -47,7 +48,7 @@ export class SqliteInitialPublication{
  `);this.ready=true;}
  private header(id:string,confirmed=false){this.ensure();const h=this.rows<Header>('SELECT * FROM sensa_initial_publication WHERE id=?',[id])[0];if(!h)throw Error('library_sync_candidate_invalid');if(confirmed||h.state!=='filling')this.assertOwner(JSON.parse(h.fence));else this.assertFence(JSON.parse(h.fence));return h;}
  begin(fence:ReplicaCandidateFence):string{
-  this.admission=undefined;this.assertFence(fence);this.ensure();const id=crypto.randomUUID(),fenceJson=JSON.stringify(fence);
+  this.admission=undefined;this.admissionPolicy=undefined;this.assertFence(fence);this.ensure();const id=crypto.randomUUID(),fenceJson=JSON.stringify(fence);
   this.db.exec('BEGIN IMMEDIATE');try{
    this.db.exec('DELETE FROM sensa_initial_publication;DELETE FROM sensa_initial_publication_rows;DELETE FROM sensa_initial_publication_blocks;DELETE FROM sensa_initial_publication_content;DELETE FROM sensa_initial_publication_owners');
    this.rows("INSERT INTO sensa_initial_publication(id,fence,after_key,state,stored_bytes) VALUES(?,?,'null','filling',?)",[id,fenceJson,utf8(id)+utf8(fenceJson)+4+7]);this.db.exec('COMMIT');
@@ -158,8 +159,8 @@ export class SqliteInitialPublication{
  }
  private plain(id:string,row:{value_json:string;shared:number}){const text=unpackStoredRecord(row.value_json,undefined,recordBytes);if(!row.shared)return text;return JSON.stringify(expandSharedRecordContent(JSON.parse(text),digest=>{const body=this.rows<{value_json:string}>('SELECT value_json FROM sensa_initial_publication_content WHERE id=? AND digest=?',[id,digest])[0];return body?unpackStoredRecord(body.value_json,undefined,recordBytes):undefined;}));}
  stats(id:string,confirmed=false):InitialPublicationStats{this.ensure();const h=confirmed?this.rows<Header>('SELECT * FROM sensa_initial_publication WHERE id=?',[id])[0]:this.header(id);if(!h)throw Error('library_sync_candidate_invalid');if(confirmed)this.assertOwner(JSON.parse(h.fence));return {records:h.records,logicalBytes:h.logical_bytes,uniqueBlockPlainBytes:h.unique_plain_bytes,uniqueBlockStoredBytes:h.unique_stored_bytes,storedPayloadBytes:h.stored_bytes,blocks:h.block_count,maximumPageBytes:h.maximum_page_bytes};}
- async validate(id:string,confirmed=false):Promise<InitialPublicationStats>{
-  const h=this.header(id,confirmed);if(h.state==='validated'&&this.admission)return this.stats(id,confirmed);if(h.state!=='sealed'&&h.state!=='validated')throw Error('library_sync_candidate_invalid');
+ async validate(id:string,confirmed=false,ownCloud=false):Promise<InitialPublicationStats>{
+  const policy=ownCloud?'own-cloud':'external',h=this.header(id,confirmed);if(h.state==='validated'&&this.admission&&this.admissionPolicy===policy)return this.stats(id,confirmed);if(h.state!=='sealed'&&h.state!=='validated')throw Error('library_sync_candidate_invalid');
   const alive=()=>{this.header(id,confirmed);};
   const admission=syncAdmission();this.dependencies.ensure();
   const reader=sealedRecordReader({alive,beforePage:alive,
@@ -170,9 +171,17 @@ export class SqliteInitialPublication{
    observed:(table,key,text,value)=>{if(!admission.rows.has(JSON.stringify([table,key])))this.dependencies.observe(admission,table,key,text,value,()=>false,this.rows<{n:number}>('SELECT length(CAST(value_json AS BLOB))+2*length(CAST(refs_json AS BLOB))+72*json_array_length(refs_json) AS n FROM sensa_initial_publication_rows WHERE id=? AND table_name=? AND record_key=?',[id,table,key])[0].n);},
    plain:(_table,row)=>this.plain(id,row),missing:()=>{throw Error('library_sync_candidate_invalid');},
   });
-  const {validateLibraryRestoreRecordsCooperatively}=await import('./backupValidation');await validateLibraryRestoreRecordsCooperatively(reader);alive();
+  if(ownCloud){
+   // Normal controlled-client publication keeps the bounded stored graph and
+   // reverse relations; arbitrary external import retains complete domain audit.
+   const identity=(JSON.parse(h.fence) as ReplicaCandidateFence).identity;let count=0;
+   for(const table of librarySyncTables)for(const row of reader.entries(table)){
+    if(table==='meta'&&row.key==='identity'&&!backupEqual(row.value,normalizeLibraryReplicaEntry({table,key:row.key,value:identity},identity).value))throw Error('library_sync_identity');
+    if(++count%64===0){alive();await new Promise<void>(resolve=>setTimeout(resolve,0));}
+   }
+  }else{const {validateLibraryRestoreRecordsCooperatively}=await import('./backupValidation');await validateLibraryRestoreRecordsCooperatively(reader);}alive();
   const stateDelta=utf8('validated')-utf8(h.state);if(h.stored_bytes+stateDelta>storedBytes)throw Error('library_sync_capacity');
-  this.rows("UPDATE sensa_initial_publication SET state='validated',stored_bytes=stored_bytes+? WHERE id=?",[stateDelta,id]);this.admission=admission;return this.stats(id,confirmed);
+  this.rows("UPDATE sensa_initial_publication SET state='validated',stored_bytes=stored_bytes+? WHERE id=?",[stateDelta,id]);this.admission=admission;this.admissionPolicy=policy;return this.stats(id,confirmed);
  }
  /** Inside the sole baseline/state transaction; no live fact is rewritten. */
  confirm(id:string,mutation:SqliteMutation){

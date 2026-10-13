@@ -57,7 +57,7 @@ export function syncAccountLibrary(options:AccountLibrarySyncOptions={}):Promise
    else await assertAccountSessionBoundary(boundary);
   }
   const passSignal=AbortSignal.timeout(90000);
-  if(!fresh)await synchronizeLibrary(async(path,body)=>{
+  const result=!fresh?await synchronizeLibrary(async(path,body)=>{
    const current=await readLibrary(async tx=>({owner:await tx.get<{subject:string;accountId:string}>('meta','service-owner'),signedOut:await tx.get('meta','signed-out')}));
    const session=(await auth?.getSession())?.data.session;
    if(!session||session.user.id!==owner.subject||current.signedOut||current.owner?.accountId!==owner.accountId||current.owner.subject!==owner.subject)throw new Error('authentication_required');
@@ -69,12 +69,12 @@ export function syncAccountLibrary(options:AccountLibrarySyncOptions={}):Promise
    if(response.status===429)throw new Error('library_sync_rate_limited');if(response.status>=500)throw new Error('library_sync_server_error');
    let value:any;try{value=await response.json();}catch{throw new Error('library_sync_format');}
    if(!response.ok)throw new Error(value.code??'library_sync_unavailable');return value;
-  },{...options,backgroundVerification:options.automatic===true});
+  },{...options,backgroundVerification:options.automatic===true}):undefined;
   // Checkpoint convergence is independent from public artifact delivery. Try
   // the device catalog after sync, but leave unavailable artifacts honestly
   // blocked instead of turning a healthy learner-data sync into a failure.
   const after=await readLibrary(async tx=>({owner:await tx.get<{subject:string;accountId:string}>('meta','service-owner'),incarnation:await assertCurrentLibrary(tx),localRevision:await readLocalLibraryRevision(tx),artifactRevision:await readLocalArtifactRevision(tx),reconnect:await tx.get('meta','local-reset')==='local-clear'}));
-  if(after.owner?.subject!==owner.subject||after.owner.accountId!==owner.accountId||after.incarnation!==before.incarnation)throw Error('account_changed');
+  if(after.owner?.subject!==owner.subject||after.owner.accountId!==owner.accountId||after.incarnation!==before.incarnation&&!(result?.activated.fromIncarnation===before.incarnation&&result.activated.incarnation===after.incarnation))throw Error('account_changed');
   await assertAccountSessionBoundary(boundary);
   if(after.reconnect)return;
   const warm=options.automatic&&after.localRevision===before.localRevision&&recoveredArtifacts?.subject===owner.subject&&recoveredArtifacts.accountId===owner.accountId&&recoveredArtifacts.incarnation===after.incarnation&&recoveredArtifacts.generation===after.artifactRevision;

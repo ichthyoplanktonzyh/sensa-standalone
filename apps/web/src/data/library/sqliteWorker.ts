@@ -45,6 +45,8 @@ let requestQueue:Promise<void>=Promise.resolve();
 let namespace:LocalLibraryNamespace=null;
 let namespaceBound=false;
 let snapshotInitialization:import('./sqlitePortableSnapshot').LocalPortableSnapshot|undefined;
+let ownSnapshotBinding:import('./sqlitePortableSnapshot').OwnCloudSnapshotBinding|undefined;
+let ownSnapshotOwner:import('./replicaCandidateProtocol').ReplicaCandidateFence['owner']|undefined;
 let requireExisting=false;
 
 const verifyPoolHandles=()=>assertSahPoolAccessHandlesFree(navigator.storage,localLibraryPoolDirectory(namespace));
@@ -84,8 +86,9 @@ async function database():Promise<WorkerStore>{
         activePool=pool;
         let snapshotReport:unknown;
         if(snapshotInitialization){
-          const {importLocalPortableSnapshot}=await import('./sqlitePortableSnapshot');
-          const {library,...report}=await importLocalPortableSnapshot(sqlite3,pool,sqliteLibraryFile,snapshotInitialization);
+          const {importLocalPortableSnapshot,importOwnCloudPortableSnapshot}=await import('./sqlitePortableSnapshot');
+          const {library,...report}=await (ownSnapshotBinding&&ownSnapshotOwner?importOwnCloudPortableSnapshot(sqlite3,pool,sqliteLibraryFile,snapshotInitialization,ownSnapshotBinding,ownSnapshotOwner.accountId):importLocalPortableSnapshot(sqlite3,pool,sqliteLibraryFile,snapshotInitialization));
+          if(ownSnapshotBinding&&ownSnapshotOwner)library.bindOwnCloudSnapshot(ownSnapshotBinding,ownSnapshotOwner);
           activeDatabase=library;snapshotReport=report;snapshotInitialization=undefined;
         }else{
           if(requireExisting&&!pool.getFileNames().includes(sqliteLibraryFile))throw Error('sqlite_snapshot_generation_missing');
@@ -173,7 +176,7 @@ async function closeStorage():Promise<void>{
 }
 
 const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
-  if(request.kind==='initialize'||request.kind==='initializeSnapshot'){
+  if(request.kind==='initialize'||request.kind==='initializeSnapshot'||request.kind==='initializeOwnCloudSnapshot'){
     const next=validateLocalLibraryNamespace(request.namespace??null);
     if((namespaceBound||store)&&next!==namespace)throw new Error('localFlow.libraryReplaced');
     namespace=next;namespaceBound=true;
@@ -181,9 +184,10 @@ const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
       if(request.requireExisting&&next===null)throw Error('sqlite_snapshot_requires_fresh_namespace');
       requireExisting=!!request.requireExisting;
     }
-    if(request.kind==='initializeSnapshot'){
+    if(request.kind==='initializeSnapshot'||request.kind==='initializeOwnCloudSnapshot'){
       if(next===null||store)throw Error('sqlite_snapshot_requires_fresh_namespace');
       snapshotInitialization=request.snapshot;
+      if(request.kind==='initializeOwnCloudSnapshot'){ownSnapshotBinding=request.binding;ownSnapshotOwner=request.owner;}
     }
   }
   if(request.kind==='close'){
@@ -195,7 +199,9 @@ const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
   const current=await database();
   switch(request.kind){
     case 'exportLocalSnapshot':return current.database.exportLocalSnapshot(current.pool,request.expectedRevision);
-    case 'initializeSnapshot':return {report:current.snapshotReport,diagnostics:current.database.diagnostics()};
+    case 'exportOwnCloudSnapshot':return current.database.exportOwnCloudSnapshot(current.pool,request.fence);
+    case 'ownCloudBaselinePage':return current.database.ownCloudBaselinePage(request.page);
+    case 'initializeSnapshot':case 'initializeOwnCloudSnapshot':return {report:current.snapshotReport,diagnostics:current.database.diagnostics()};
     case 'initialize':{
       try{
         const diagnostics=current.database.initialize();
@@ -273,7 +279,7 @@ worker.addEventListener('message',(event:MessageEvent<SqliteWorkerRequest>)=>{
   });
   // Private candidate validation/merge may yield while normal requests run.
   // Merge also rechecks its live baseline fence; never hold the owner queue.
-  if(event.data.kind!=='replicaCandidate'||!['validate','prepareUpdate','validatePublication'].includes(event.data.request.kind))requestQueue=response.then(()=>undefined,()=>undefined);
+  if(event.data.kind!=='replicaCandidate'||!['validate','prepareUpdate','validatePublication','admitOwnPublication'].includes(event.data.request.kind))requestQueue=response.then(()=>undefined,()=>undefined);
   void response.then(
     value=>worker.postMessage({id:event.data.id,ok:true,value} satisfies SqliteWorkerResult),
     cause=>worker.postMessage({

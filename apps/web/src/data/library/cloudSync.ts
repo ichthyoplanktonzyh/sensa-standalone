@@ -53,7 +53,7 @@ async function captureHeader(tx:LibraryTransaction){
  // Account display metadata (such as email) is not replica authority and must
  // not leak into the strict Worker fence. Leave the stored account untouched.
  const owner:Owner={subject:storedOwner.subject,accountId:storedOwner.accountId};
- return {owner,incarnation,identity,state:await tx.get<State>('meta',STATE),localRevision:await readLocalLibraryRevision(tx),reconnectRequired:await cloudReconnectRequired(tx)};
+ return {owner,incarnation,identity,state:await tx.get<State>('meta',STATE),localRevision:await readLocalLibraryRevision(tx),reconnectRequired:await cloudReconnectRequired(tx),signoutEpoch:await tx.get('meta','service-signout-epoch')};
 }
 /** A validated remote baseline plus owner-admitted local transactions needs
  * only the changed bodies and their reference patch. */
@@ -414,10 +414,10 @@ async function verifyPublication(head:LibrarySyncHead,pending:LibrarySyncCommit)
 }
 
 async function confirmInitialPublication(header:Awaited<ReturnType<typeof captureHeader>>,id:string,published:LibrarySyncHead,sourceRevision:number,currentRemoteRevision=published.revision){
- await requestReplicaCandidate({kind:'validatePublication',id,confirmed:true});
+ await requestReplicaCandidate({kind:'admitOwnPublication',id,confirmed:true});
  await writeLibraryState(async tx=>{
   const current=await captureHeader(tx);
-  if(!sameOwner(current.owner,header.owner)||current.incarnation!==header.incarnation||!equal(current.identity,header.identity))throw Error('account_changed');
+  if(!sameOwner(current.owner,header.owner)||current.incarnation!==header.incarnation||!equal(current.identity,header.identity)||!equal(current.signoutEpoch,header.signoutEpoch))throw Error('account_changed');
   const completedAt=new Date().toISOString();tx.confirmInitialPublication(id);
   tx.put('meta',STATE,{...current.state!,publicationOperationId:id,initialUpload:undefined,checkpointVersion:7,restoreValidationVersion:libraryRestoreValidationVersion,revision:published.revision,storage:published.storage,status:current.localRevision===sourceRevision&&currentRemoteRevision===published.revision?'synced':'pending',syncedLocalRevision:sourceRevision,pending:undefined,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
  });
@@ -426,6 +426,10 @@ async function confirmInitialPublication(header:Awaited<ReturnType<typeof captur
 /** The source stays private and revision fenced while bounded rows/blocks cross
  * the page. Only a durable server receipt authorizes the baseline transaction. */
 async function publishInitialLibrary(header:Awaited<ReturnType<typeof captureHeader>>,head:LibrarySyncHead,request:SyncRequest,options:LibrarySyncOptions):Promise<boolean>{
+ const {sqliteRecordAdapter}=await import('./sqliteAdapter'),adapter=await sqliteRecordAdapter();
+ const fence={owner:header.owner,incarnation:header.incarnation,identity:header.identity,localRevision:header.localRevision};
+ let snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot|undefined;
+ if(adapter.exportOwnCloudSnapshot)try{snapshot=await adapter.exportOwnCloudSnapshot(fence);}catch(error){if(!(error instanceof Error)||error.message!=='sqlite_snapshot_file_limit')throw error;}
  const begun=await requestReplicaCandidate({kind:'beginPublication',fence:{owner:header.owner,incarnation:header.incarnation,identity:header.identity,localRevision:header.localRevision}});
  if(begun.kind!=='begun')throw Error('library_sync_candidate_invalid');
  const id=begun.id,operationId=header.state?.initialUpload?.localRevision===header.localRevision?header.state.initialUpload.operationId:crypto.randomUUID();
@@ -454,8 +458,10 @@ async function publishInitialLibrary(header:Awaited<ReturnType<typeof captureHea
    after=page.next;
    if(page.done)break;
   }
-  const checked=await requestReplicaCandidate({kind:'validatePublication',id});if(checked.kind!=='publicationValidated')throw Error('library_sync_candidate_invalid');
-  const pending:LibrarySyncCommit={operationId,baseRevision:head.revision,staging:{pages:pageNumber,records:checked.stats.records,digest}};
+  const checked=await requestReplicaCandidate({kind:'admitOwnPublication',id});if(checked.kind!=='publicationValidated')throw Error('library_sync_candidate_invalid');
+  let binary:Awaited<ReturnType<typeof uploadOwnCloudSnapshot>>|undefined;
+  if(snapshot)try{binary=await uploadOwnCloudSnapshot(snapshot,request);}catch(error){if(!(error instanceof Error)||error.message!=='library_sync_capacity')throw error;}
+  const pending:LibrarySyncCommit={operationId,baseRevision:head.revision,staging:{pages:pageNumber,records:checked.stats.records,digest,...(binary?{binary}:{})}};
   // From here the sealed generation may be the recovery source for a durable
   // pending write whose Worker ACK is lost. Keep it even on an uncertain ACK.
   pendingSaved=true;
@@ -466,6 +472,59 @@ async function publishInitialLibrary(header:Awaited<ReturnType<typeof captureHea
   await verifyPublication(published,pending);
   await confirmInitialPublication(header,id,published,header.localRevision);return true;
  }finally{if(!pendingSaved)await requestReplicaCandidate({kind:'discardPublication',id}).catch(()=>{});}
+}
+
+async function uploadOwnCloudSnapshot(snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot,request:SyncRequest){
+ const {encodeLibrarySyncBlock}=await blockCodec(),refs:string[]=[],sent=new Set<string>();let batch:Array<{hash:string;data:string}>=[],bytes=13;
+ const flush=async()=>{if(batch.length)await request('/blocks/store',{blocks:batch});batch=[];bytes=13;};
+ for(let at=0;at<snapshot.bytes.length;at+=192*1024){
+  const chunk=snapshot.bytes.subarray(at,at+192*1024);let text='';for(let i=0;i<chunk.length;i+=16384)text+=String.fromCharCode(...chunk.subarray(i,i+16384));
+  const data=encodeLibrarySyncBlock(btoa(text)),block={hash:await hash(data),data},cost=new TextEncoder().encode(JSON.stringify(block)).length+1;
+  refs.push(block.hash);if(sent.has(block.hash))continue;sent.add(block.hash);if(batch.length&&(batch.length===librarySyncBlockStoreBatch||bytes+cost>librarySyncBlockStoreBytes))await flush();batch.push(block);bytes+=cost;
+ }
+ await flush();return {sourceRevision:snapshot.sourceRevision,schemaVersion:snapshot.schemaVersion,sha256:snapshot.sha256,byteLength:snapshot.bytes.length,blocks:refs};
+}
+
+async function restoreOwnCloudLibrary(header:Awaited<ReturnType<typeof captureHeader>>,head:LibrarySyncHead,request:SyncRequest,blocks:Blocks){
+ const binding=head.binarySnapshot!;
+ if(binding.accountId!==header.owner.accountId||!head.manifest||binding.revision!==head.manifest.snapshotRevision||binding.revision<head.manifest.floor)throw Error('sqlite_snapshot_checkpoint_binding');
+ const {sqliteLibrarySchemaVersion}=await import('./sqliteProtocol');if(binding.schemaVersion!==sqliteLibrarySchemaVersion)throw Error('sqlite_snapshot_envelope');
+ const bytes=new Uint8Array(binding.byteLength),{decodeLibrarySyncBlock}=await blockCodec();let offset=0;
+ for(let at=0;at<binding.blocks.length;at+=16){
+  let pending=binding.blocks.slice(at,at+16);const loaded=new Map<string,string>();
+  while(pending.length){const reply=librarySyncBlockFetchResult.parse(await request('/blocks/fetch',{hashes:pending}));if(reply.missing.length||!reply.blocks.length||reply.blocks.some(block=>!pending.includes(block.hash))||reply.deferred.some(ref=>!pending.includes(ref))||new Set([...reply.blocks.map(block=>block.hash),...reply.deferred]).size!==new Set(pending).size)throw Error('library_sync_missing_block');for(const block of reply.blocks){if(await hash(block.data)!==block.hash)throw Error('library_sync_hash');loaded.set(block.hash,block.data);}pending=reply.deferred;}
+  for(const ref of binding.blocks.slice(at,at+16)){const text=decodeLibrarySyncBlock(loaded.get(ref)!);if(text.length>262144||!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(text))throw Error('library_sync_format');const chunk=Uint8Array.from(atob(text),c=>c.charCodeAt(0));if(chunk.length>192*1024||offset+chunk.length>bytes.length)throw Error('library_sync_capacity');bytes.set(chunk,offset);offset+=chunk.length;}
+ }
+ if(offset!==bytes.length)throw Error('library_sync_hash');
+ const {openIsolatedOwnCloudSnapshot}=await import('./sqliteAdapter');
+ const generation=await openIsolatedOwnCloudSnapshot({format:'sensa-local-db-snapshot-v1',schemaVersion:sqliteLibrarySchemaVersion,sourceRevision:binding.sourceRevision,sha256:binding.sha256,bytes,timingsMs:{build:0,storageCopy:0,admission:0,projection:0,export:0}},binding,header.owner);
+ try{
+  for await(const page of blocks.indexPages({...head,revision:binding.revision})){
+   if(!('rows' in page))throw Error('sqlite_snapshot_checkpoint_binding');const result=await generation.adapter.ownCloudBaselinePage(page);if(result.done!==page.done)throw Error('sqlite_snapshot_checkpoint_binding');
+  }
+  let current=head;
+  for(let attempt=0;attempt<3;attempt++){
+   const identity=decodeBackupValue(JSON.parse((await generation.adapter.get('meta','identity'))!)),incarnation=decodeBackupValue(JSON.parse((await generation.adapter.get('meta','local-incarnation'))!)),state=decodeBackupValue(JSON.parse((await generation.adapter.get('meta',STATE))!)) as State,localRevision=state.syncedLocalRevision!;
+   if(current.revision!==state.revision){
+    if(!current.manifest||state.revision<current.manifest.floor)throw Error('library_sync_snapshot_required');
+    const send=(request:ReplicaCandidateRequest)=>generation.adapter.replicaCandidate(request),candidate=await blocks.stage(current,{owner:header.owner,incarnation,identity,localRevision},send,state.revision);
+    try{
+     const prepared=await send({kind:'prepareUpdate',id:candidate.id,baseRevision:state.revision});if(prepared.kind!=='updatePrepared'||!prepared.update)throw Error('library_sync_candidate_invalid');const update=prepared.update,nextRevision=localRevision+(update.contentChanged?1:0),at=new Date().toISOString();
+     const next={...state,restoreOperationId:candidate.id,revision:candidate.head.revision,syncedLocalRevision:nextRevision,storage:candidate.head.storage,status:'synced' as const,lastSyncedAt:at,lastCheckedAt:at,receive:update.receive};
+     await generation.adapter.commit({clears:[],deletes:[],puts:[{table:'meta',key:STATE,encodedValue:JSON.stringify(encodeBackupValue(next))},...(update.contentChanged?[{table:'meta' as const,key:'local-content-revision',encodedValue:JSON.stringify(encodeBackupValue(nextRevision))}]:[])],contentRevision:update.contentChanged?nextRevision:undefined,replicaCandidateRestore:{id:candidate.id,tables:update.tables,update}});
+    }finally{await send({kind:'discard',id:candidate.id}).catch(()=>{});}
+   }
+   const latest=parseSyncHead(await request('/head')),complete=decodeBackupValue(JSON.parse((await generation.adapter.get('meta',STATE))!)) as State;
+   if(latest.revision===complete.revision&&latest.manifest?.libraryId===binding.libraryId){
+    generation.seal();
+    const {activateOwnCloudLibrary}=await import('./store');
+    const activated=await activateOwnCloudLibrary({...header,identity:header.identity},generation.namespace,incarnation,async(devicePuts)=>{await generation.adapter.commit({clears:[],deletes:[],puts:devicePuts});await generation.adapter.close();});
+    return {activated};
+   }
+   current=latest;
+  }
+  throw Error('library_sync_head_changed');
+ }finally{await generation.discard();}
 }
 
 /** Injected transport permits offline/idempotency/restore tests without real accounts. */
@@ -482,7 +541,7 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
  const defaults:State={...expected,revision:0,status:'pending'};
  const transport=request;
  request=async(path,body)=>{
-  await readLibrary(async tx=>{const owner=await tx.get<Owner>('meta','service-owner');if(!owner||!sameOwner(owner,expected.owner)||await tx.get('meta','signed-out')||(await assertCurrentLibrary(tx))!==expected.incarnation)throw new Error('account_changed');});
+  await readLibrary(async tx=>{const owner=await tx.get<Owner>('meta','service-owner');if(!owner||!sameOwner(owner,expected.owner)||await tx.get('meta','signed-out')||(await assertCurrentLibrary(tx))!==expected.incarnation||!equal(await tx.get('meta','service-signout-epoch'),header.signoutEpoch))throw new Error('account_changed');});
   return transport(path,body);
  };
  const blocks=new Blocks(request);
@@ -580,6 +639,7 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
   if(!prior?.pending&&!initiallyConflicted&&await readLibrary(canRestoreFreshLibrary)){
    observedHead??=parseSyncHead(await request('/head'));
    if(observedHead.manifest){
+    if(observedHead.binarySnapshot&&typeof Worker!=='undefined')return await restoreOwnCloudLibrary(header,observedHead,request,blocks);
     const send=requestReplicaCandidate;
     let candidate:ReplicaCandidateValidation|undefined;
     try{

@@ -3,11 +3,11 @@ import {contextMediaReferences} from '../../experience/personalMeaningJourney/co
 import {canonicalConsumerJson} from '@sensa/contracts/sensa/canonical-json';
 import {meaningMediaReferences} from '../../experience/personalMeaningJourney/meaningHistoryRead';
 import {hasLocalLibraryHint,markLocalLibraryPresent} from './localLibraryHint';
-import {assertLocalLibrarySelected,localLibraryScopedName} from './localLibraryLocation';
+import {assertLocalLibrarySelected,localLibraryScopedName,localLibraryNamespace,activateOwnCloudNamespace} from './localLibraryLocation';
 
-import { decodeBackupValue, encodeBackupValue } from "./backupCodec";
+import { decodeBackupValue, encodeBackupValue,backupEqual } from "./backupCodec";
 import { sqliteRecordAdapter } from "./sqliteAdapter";
-import type {ReplicaCandidateRequest,ReplicaCandidateResponse,ReplicaCandidateValidation,ReplicaCandidateUpdate} from './replicaCandidateProtocol';
+import type {ReplicaCandidateRequest,ReplicaCandidateResponse,ReplicaCandidateValidation,ReplicaCandidateUpdate,ReplicaCandidateFence} from './replicaCandidateProtocol';
 import type {PackageCacheProjectionQuery,PackageCacheProjectionResult} from './packageCacheProjection';
 import type {InstalledPackageSummary} from './packageRecords';
 import type {
@@ -657,8 +657,9 @@ async function transaction<T>(
   work: (tx: LibraryTransaction) => Promise<T>,
   kind: "content" | "state" | "cache" = "content",
 ): Promise<T> {
+  const namespace=localLibraryNamespace();
   const execute = async () => {
-    assertLocalLibrarySelected();
+    assertLocalLibrarySelected(namespace);
     const adapter = await storageCall(sqliteRecordAdapter, 'localFlow.storageOpen');
     const library = new LibraryTransaction(mode, adapter);
     const value = await work(library);
@@ -672,7 +673,7 @@ async function transaction<T>(
       const mutation = await library.mutation();
       mutation.contentRevision = contentRevision;
       library.beginCommit();
-      assertLocalLibrarySelected();
+      assertLocalLibrarySelected(namespace);
       const storageStarted=performance.now();
       try{await storageCall(() => adapter.commit(mutation));}
       catch(cause){
@@ -716,7 +717,7 @@ async function transaction<T>(
         }
       }
     }
-    assertLocalLibrarySelected();
+    assertLocalLibrarySelected(namespace);
     return value;
   };
   // Web Locks already coordinate this entire logical transaction within and
@@ -734,8 +735,8 @@ export const restoreLibraryTransaction = <T>(work: (tx: LibraryTransaction) => P
 /** A sealed private candidate is coherent without holding the live Library's
  * Web Lock. Its Worker fence aborts if concurrent user/owner writes occur. */
 export async function requestReplicaCandidate(request:ReplicaCandidateRequest):Promise<ReplicaCandidateResponse>{
-  assertLocalLibrarySelected();const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');
-  const result=await adapter.replicaCandidate(request);assertLocalLibrarySelected();return result;
+  const namespace=localLibraryNamespace();assertLocalLibrarySelected(namespace);const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');
+  const result=await adapter.replicaCandidate(request);assertLocalLibrarySelected(namespace);return result;
 }
 /** Sync progress and baselines do not announce learner-content changes. */
 export const writeLibraryState = <T>(work: (tx: LibraryTransaction) => Promise<T>) =>
@@ -787,6 +788,32 @@ export async function assertCurrentLibrary(tx: LibraryTransaction): Promise<stri
   sessionIncarnation ??= current;
   if (sessionIncarnation !== current) throw new Error("localFlow.libraryReplaced");
   return current;
+}
+/** The coordinator changes the physical selection only under the old exclusive
+ * lock. Existing pages and command captures retain their earlier incarnation. */
+export function adoptOwnCloudIncarnation(incarnation:string):void{sessionIncarnation=incarnation;}
+/** Only a genuinely empty source can adopt its authenticated cloud generation.
+ * Old owner files remain retained; the pointer is the final durable mutation. */
+export async function activateOwnCloudLibrary(expected:ReplicaCandidateFence&{signoutEpoch:unknown},namespace:string,incarnation:string,seal:(devicePuts:SqliteMutation['puts'])=>Promise<void>){
+ const source=localLibraryNamespace();
+ return navigator.locks.request('sensa-library-selection-v1',{mode:'exclusive',signal:AbortSignal.timeout(15000)},()=>runAcrossPages('readwrite',async()=>{
+  assertLocalLibrarySelected(source);const adapter=await sqliteRecordAdapter(),tx=new LibraryTransaction('readonly',adapter);
+  const owner=await tx.get<{subject:string;accountId:string}>('meta','service-owner');
+  if(!owner||owner.subject!==expected.owner.subject||owner.accountId!==expected.owner.accountId||await tx.get('meta','signed-out')||await assertCurrentLibrary(tx)!==expected.incarnation||!backupEqual(await tx.get('meta','identity'),expected.identity)||!backupEqual(await tx.get('meta','service-signout-epoch'),expected.signoutEpoch))throw Error('account_changed');
+  if(await readLocalLibraryRevision(tx)!==expected.localRevision||(await tx.syncBaseReferences()).length)throw Error('library_sync_local_changed');
+  const {librarySyncTables}=await import('@sensa/contracts/sensa'),{isReplicatedLibraryEntry}=await import('./replication/libraryReplica');
+  for(const table of librarySyncTables)for await(const keys of tx.recordKeyBatches(table))for(const key of keys)if(isReplicatedLibraryEntry(table,key)&&!(table==='meta'&&key==='identity'))throw Error('library_sync_local_changed');
+  const puts:SqliteMutation['puts']=[{table:'meta',key:'service-owner',encodedValue:encode(owner)}];
+  for(const key of ['service-signout-epoch','service-installation']){const value=await tx.get('meta',key);if(value!==undefined)puts.push({table:'meta',key,encodedValue:encode(value)});}
+  for(const row of await tx.entries('providers'))if(typeof row.key==='string')puts.push({table:'providers',key:row.key,encodedValue:encode(row.value)});
+  const providerSettings=await tx.get('settings','providers');if(providerSettings!==undefined)puts.push({table:'settings',key:'providers',encodedValue:encode(providerSettings)});
+  await seal(puts);
+  const {prepareOwnCloudActivation}=await import('./sqliteAdapter');await prepareOwnCloudActivation();
+  activateOwnCloudNamespace(namespace,source);adoptOwnCloudIncarnation(incarnation);markLocalLibraryPresent();
+  window.dispatchEvent(new Event('sensa-own-cloud-generation-activated'));window.dispatchEvent(new Event('sensa-sync-state-changed'));
+  window.dispatchEvent(new CustomEvent('sensa-library-changed',{detail:{tables:libraryTables,clears:libraryTables,records:[]}}));
+  return {fromIncarnation:expected.incarnation,incarnation,namespace};
+ }));
 }
 
 export type Operation = { id: string; kind: string; input: unknown };
@@ -900,17 +927,16 @@ export function observeLibrary(listener: () => void, tables?: readonly Table[], 
     if (relevant((event as CustomEvent).detail)) listener();
   };
   window.addEventListener("sensa-library-changed", local);
-  const channel = typeof BroadcastChannel === "undefined"
-    ? null
-    : new BroadcastChannel(localLibraryScopedName('sensa-local-library'));
-  if (channel) channel.onmessage = (event) => {
+  let channel:BroadcastChannel|null=null;
+  const bind=()=>{channel?.close();channel=typeof BroadcastChannel==='undefined'?null:new BroadcastChannel(localLibraryScopedName('sensa-local-library'));if(channel)channel.onmessage=(event)=>{
     if(event.data?.sender===libraryNotificationSender)return;
     if(event.data?.kind==='state')return;
     if (relevant(event.data)) listener();
-  };
+  };};bind();window.addEventListener('sensa-own-cloud-generation-activated',bind);
   return () => {
     window.removeEventListener("sensa-library-changed", local);
     channel?.close();
+    window.removeEventListener('sensa-own-cloud-generation-activated',bind);
   };
 }
 
@@ -925,9 +951,8 @@ export function observeCloudSync(listener: () => void): () => void {
 
 export function observeCloudSyncState(listener: () => void): () => void {
   window.addEventListener("sensa-sync-state-changed", listener);
-  const channel=typeof BroadcastChannel==='undefined'?null:new BroadcastChannel(localLibraryScopedName('sensa-local-library'));
-  if(channel)channel.onmessage=event=>{if(event.data?.sender!==libraryNotificationSender&&event.data?.kind==='state')listener();};
-  return () => {window.removeEventListener("sensa-sync-state-changed", listener);channel?.close();};
+  let channel:BroadcastChannel|null=null;const bind=()=>{channel?.close();channel=typeof BroadcastChannel==='undefined'?null:new BroadcastChannel(localLibraryScopedName('sensa-local-library'));if(channel)channel.onmessage=event=>{if(event.data?.sender!==libraryNotificationSender&&event.data?.kind==='state')listener();};};bind();window.addEventListener('sensa-own-cloud-generation-activated',bind);
+  return () => {window.removeEventListener("sensa-sync-state-changed", listener);window.removeEventListener('sensa-own-cloud-generation-activated',bind);channel?.close();};
 }
 
 export async function readLibraryStorageDiagnostics(options?:Readonly<{verifyIntegrity?:boolean}>): Promise<SqliteStorageDiagnostics> {

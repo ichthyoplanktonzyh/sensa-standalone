@@ -23,10 +23,11 @@ import type {LearningHistoryRequest} from '../../learning/system/learningHistory
 import type {StoredLearningHistoryPage} from './learningHistoryProjection';
 import type {ReplicaCandidateRequest,ReplicaCandidateResponse} from './replicaCandidateProtocol';
 import {CoordinatedSqliteAdapter,type CoordinatedSqliteBackend} from './sqliteCoordinator';
-import {localLibraryNamespace,assertLocalLibrarySelected,observeLocalLibrarySelection,assertIsolatedSnapshotNamespace,registerIsolatedSnapshotNamespace,type LocalLibraryNamespace} from './localLibraryLocation';
+import {localLibraryNamespace,localLibraryPoolDirectory,assertLocalLibrarySelected,observeLocalLibrarySelection,assertIsolatedSnapshotNamespace,registerIsolatedSnapshotNamespace,unregisterIsolatedSnapshotNamespace,type LocalLibraryNamespace} from './localLibraryLocation';
 
 export interface SqliteRecordAdapter {
   exportLocalSnapshot?(expectedRevision:number):Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;
+  exportOwnCloudSnapshot?(fence:import('./replicaCandidateProtocol').ReplicaCandidateFence):Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;
   replicaCandidate(request:ReplicaCandidateRequest):Promise<ReplicaCandidateResponse>;
   learningSemanticMemory(targetId?:string):Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>;
   get(table: SqliteLibraryTable, key: string): Promise<string | null>;
@@ -104,6 +105,12 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
   }
 
   exportLocalSnapshot(expectedRevision:number){return this.send({kind:'exportLocalSnapshot',expectedRevision}) as Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;}
+  exportOwnCloudSnapshot(fence:import('./replicaCandidateProtocol').ReplicaCandidateFence){return this.send({kind:'exportOwnCloudSnapshot',fence}) as Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;}
+  initializeOwnCloudSnapshot(snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot,binding:import('./sqlitePortableSnapshot').OwnCloudSnapshotBinding,owner:import('./replicaCandidateProtocol').ReplicaCandidateFence['owner']){
+    if(this.namespace===null)throw Error('sqlite_snapshot_requires_fresh_namespace');
+    return this.send({kind:'initializeOwnCloudSnapshot',namespace:this.namespace,snapshot,binding,owner}) as ReturnType<WorkerSqliteAdapter['initializeSnapshot']>;
+  }
+  ownCloudBaselinePage(page:import('@sensa/contracts/sensa').LibrarySyncSnapshotPageResult){return this.send({kind:'ownCloudBaselinePage',page}) as Promise<{done:boolean;records:number}>;}
   initializeSnapshot(snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot){
     if(this.namespace===null)throw Error('sqlite_snapshot_requires_fresh_namespace');
     return this.send({kind:'initializeSnapshot',namespace:this.namespace,snapshot}) as Promise<{report:Omit<Awaited<ReturnType<typeof import('./sqlitePortableSnapshot').importLocalPortableSnapshot>>,'library'>;diagnostics:SqliteStorageDiagnostics}>;
@@ -275,11 +282,27 @@ function assertBrowserSqliteAvailable(): void {
 
 let adapter: Promise<SqliteRecordAdapter> | undefined;
 let activeBrowserAdapter:CoordinatedSqliteAdapter|undefined;
+let stopBrowserSelection:undefined|(()=>void);
 /** Explicit isolated local generation; never changes the active pointer. */
 export async function openIsolatedLocalSnapshot(snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot){
  const namespace=crypto.randomUUID(),isolated=new WorkerSqliteAdapter(namespace);
  try{assertIsolatedSnapshotNamespace(namespace,false);const result=await isolated.initializeSnapshot(snapshot);registerIsolatedSnapshotNamespace(namespace);isolated.markIsolatedAdmitted();return {...result,namespace,adapter:isolated};}
  catch(error){await isolated.close().catch(()=>{});throw error;}
+}
+/** Authenticated same-account replication has its own admission entry. */
+export async function openIsolatedOwnCloudSnapshot(snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot,binding:import('./sqlitePortableSnapshot').OwnCloudSnapshotBinding,owner:import('./replicaCandidateProtocol').ReplicaCandidateFence['owner']){
+ const namespace=crypto.randomUUID(),isolated=new WorkerSqliteAdapter(namespace);
+ // This closure owns only this attempt's fresh namespace. Never discover or
+ // delete another generation, an active pointer or retained recovery file.
+ const discard=async()=>{
+  await isolated.close();
+  await navigator.locks.request('sensa-library-selection-v1',{mode:'exclusive',signal:AbortSignal.timeout(15000)},async()=>{
+   try{assertIsolatedSnapshotNamespace(namespace,false);}catch{return;}
+   const root=await navigator.storage.getDirectory();try{await root.removeEntry(localLibraryPoolDirectory(namespace).replace(/^\//u,''),{recursive:true});}catch(error){if(!(error instanceof DOMException)||error.name!=='NotFoundError')throw error;}unregisterIsolatedSnapshotNamespace(namespace);
+  });
+ };
+ try{assertIsolatedSnapshotNamespace(namespace,false);const result=await isolated.initializeOwnCloudSnapshot(snapshot,binding,owner);return {...result,namespace,adapter:isolated,seal:()=>{registerIsolatedSnapshotNamespace(namespace);isolated.markIsolatedAdmitted();},discard};}
+ catch(error){try{await discard();}catch(cleanupError){throw new AggregateError([error,cleanupError],'sqlite_snapshot_cleanup_unconfirmed');}throw error;}
 }
 /** Reopen an already imported isolated generation without selecting it. */
 export async function openIsolatedLocalGeneration(namespace:string){
@@ -287,12 +310,14 @@ export async function openIsolatedLocalGeneration(namespace:string){
  const isolated=new WorkerSqliteAdapter(namespace,true);try{await isolated.initialize();return isolated;}catch(error){await isolated.close().catch(()=>{});throw error;}
 }
 export async function closeLocalLibraryStorage():Promise<void>{await activeBrowserAdapter?.close();}
+/** Pointer activation closes old handles before opening the newly selected pool. */
+export async function prepareOwnCloudActivation():Promise<void>{await activeBrowserAdapter?.close();stopBrowserSelection?.();stopBrowserSelection=undefined;adapter=undefined;activeBrowserAdapter=undefined;}
 
 async function browserAdapter(): Promise<SqliteRecordAdapter> {
   assertBrowserSqliteAvailable();
   const namespace=localLibraryNamespace();
   const coordinated = activeBrowserAdapter = new CoordinatedSqliteAdapter(()=>new WorkerSqliteAdapter(namespace),namespace,()=>assertLocalLibrarySelected(namespace));
-  observeLocalLibrarySelection(namespace,()=>{void coordinated.close().catch(()=>{});});
+  stopBrowserSelection=observeLocalLibrarySelection(namespace,()=>{void coordinated.close().catch(()=>{});});
   try {
     await coordinated.initialize();
     // Capability checks alone cannot prove that this origin can durably write.

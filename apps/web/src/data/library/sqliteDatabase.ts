@@ -8,6 +8,9 @@ import type {LibraryRecordReader} from './libraryRecordReader';
 import {SqliteSyncDependencies,syncAdmission,type SyncDependencyCertificate} from './sqliteSyncDependencies';
 import {assertDeltaReceiveShape,DeltaReceiveFallback} from './learningDeltaAdmission';
 import type {CloudSyncState} from './cloudSync';
+import {librarySyncTables,librarySyncSnapshotPageResult,librarySyncMetadataPageBytes,librarySyncMetadataPageRefs} from '@sensa/contracts/sensa';
+import {isReplicatedLibraryEntry} from './replication/libraryReplica';
+import {libraryRestoreValidationVersion} from './replication/libraryReplicaValidation';
 
 import {decodeBackupValue,encodeBackupValue,backupEqual} from './backupCodec';
 import type {ReplicaCandidateRequest,ReplicaCandidateResponse,ReplicaCandidateFence} from './replicaCandidateProtocol';
@@ -124,6 +127,51 @@ export class SqliteRecordDatabase {
   async exportLocalSnapshot(pool:import('@sqlite.org/sqlite-wasm').SAHPoolUtil,expectedRevision:number){
     const {createLocalPortableSnapshot}=await import('./sqlitePortableSnapshot');
     return createLocalPortableSnapshot(this.sqlite3,pool,this,expectedRevision);
+  }
+  async exportOwnCloudSnapshot(pool:import('@sqlite.org/sqlite-wasm').SAHPoolUtil,fence:ReplicaCandidateFence){
+    this.assertReplicaCandidateFence(fence);
+    const {createOwnCloudPortableSnapshot}=await import('./sqlitePortableSnapshot');
+    return createOwnCloudPortableSnapshot(this.sqlite3,pool,this,fence);
+  }
+  private ownSnapshot:{binding:import('./sqlitePortableSnapshot').OwnCloudSnapshotBinding;owner:ReplicaCandidateFence['owner'];after:{table:string;key:string}|null;records:number;sealed:boolean}|undefined;
+  /** Called only after the distinct authenticated own-cloud import succeeded. */
+  bindOwnCloudSnapshot(binding:import('./sqlitePortableSnapshot').OwnCloudSnapshotBinding,owner:ReplicaCandidateFence['owner']){
+    if(this.ownSnapshot||binding.accountId!==owner.accountId)throw Error('sqlite_snapshot_checkpoint_binding');
+    this.ownSnapshot={binding,owner,after:null,records:0,sealed:false};
+    this.commit({clears:[],deletes:[],puts:[{table:'meta',key:'service-owner',encodedValue:JSON.stringify(encodeBackupValue(owner))}]});
+  }
+  ownCloudBaselinePage(raw:import('@sensa/contracts/sensa').LibrarySyncSnapshotPageResult){
+    const input=librarySyncSnapshotPageResult.parse(raw),context=this.ownSnapshot;
+    if(!context||context.sealed||input.snapshotRevision!==context.binding.revision||!backupEqual(input.after,context.after)||!input.rows.length&&!input.done||new TextEncoder().encode(JSON.stringify(input)).length>librarySyncMetadataPageBytes||input.rows.reduce((n,row)=>n+row.blocks.length,0)>librarySyncMetadataPageRefs)throw Error('sqlite_snapshot_checkpoint_binding');
+    const last=input.rows.at(-1),next=last?{table:last.table,key:last.key}:context.after;
+    if(!backupEqual(next,input.next)||context.records+input.rows.length>context.binding.records)throw Error('sqlite_snapshot_checkpoint_binding');
+    this.database.exec('BEGIN IMMEDIATE');
+    try{
+      let previous=context.after;
+      for(const row of input.rows){
+        if(!isReplicatedLibraryEntry(row.table,row.key))throw Error('sqlite_snapshot_checkpoint_binding');
+        if(previous&&(row.table<previous.table||row.table===previous.table&&row.key<=previous.key))throw Error('sqlite_snapshot_checkpoint_binding');previous={table:row.table,key:row.key};
+        const encoded=this.storedRecord(row.table,row.key);if(encoded===null)throw Error('sqlite_snapshot_checkpoint_binding');
+        const value=row.table==='meta'&&row.key==='identity'?JSON.stringify(encodeBackupValue({...this.decoded<import('./store').LibraryIdentity>('meta','identity')!,deviceId:context.binding.libraryId})):encoded;
+        this.database.exec({sql:'INSERT INTO sensa_sync_base VALUES(?,?,?,?)',bind:[row.table,row.key,value,JSON.stringify(row.blocks)]});
+        this.database.exec({sql:"INSERT INTO sensa_shared_record_content_owners SELECT 'sync',table_name,record_key,digest FROM sensa_shared_record_content_owners WHERE owner_kind='record' AND table_name=? AND record_key=?",bind:[row.table,row.key]});
+      }
+      if(input.done&&context.records+input.rows.length!==context.binding.records)throw Error('sqlite_snapshot_checkpoint_binding');
+      this.database.exec('COMMIT');
+    }catch(error){this.database.exec('ROLLBACK');throw error;}
+    context.after=next;context.records+=input.rows.length;
+    if(input.done){
+      const identity=this.decoded<import('./store').LibraryIdentity>('meta','identity')!,incarnation=this.decoded<string>('meta','local-incarnation')!,at=new Date().toISOString();
+      const state:CloudSyncState={owner:context.owner,incarnation,revision:context.binding.revision,checkpointVersion:7,restoreValidationVersion:libraryRestoreValidationVersion,syncedLocalRevision:1,status:'synced',lastSyncedAt:at,lastCheckedAt:at};
+      this.commit({clears:[],deletes:[],puts:[{table:'meta',key:'cloud-sync',encodedValue:JSON.stringify(encodeBackupValue(state))}]});
+      // Build baseline reverse relations once, in bounded decoded windows.
+      // This is source indexing under the approved controlled-writer boundary.
+      const admission=syncAdmission();
+      for(const table of librarySyncTables){let after:string|null=null;for(;;){const page=this.recordKeysPage(table,after,64);for(const key of page){const row=this.syncBaseEntries([{table,key}])[0];if(row){const text=row.valueJson;this.syncDependencies.observe(admission,table,key,text,decodeBackupValue(JSON.parse(text)),()=>false,new TextEncoder().encode(text).length);}}if(page.length<64)break;after=page.at(-1)!;}}
+      this.database.exec('BEGIN IMMEDIATE');try{this.syncDependencies.certify(admission,state,identity,this.decoded<number>('meta','local-artifact-revision')??0);this.database.exec('COMMIT');}catch(error){this.database.exec('ROLLBACK');throw error;}
+      context.sealed=true;
+    }
+    return {done:context.sealed,records:context.records};
   }
 
   constructor(
@@ -717,7 +765,7 @@ export class SqliteRecordDatabase {
 
   async replicaCandidate(request:ReplicaCandidateRequest):Promise<ReplicaCandidateResponse>{
     this.assertReplicaCandidateHealthy();
-    if(['beginPublication','publicationPage','publicationBlocks','validatePublication','discardPublication'].includes(request.kind)){
+    if(['beginPublication','publicationPage','publicationBlocks','validatePublication','admitOwnPublication','discardPublication'].includes(request.kind)){
       if(request.kind!=='discardPublication'&&this.decoded('meta','signed-out'))throw Error('account_changed');
       if(!this.initialPublication){const {SqliteInitialPublication}=await import('./sqliteInitialPublication');this.initialPublication=new SqliteInitialPublication(this.database,f=>this.assertReplicaCandidateFence(f),(table,key)=>this.get(table,key),f=>this.assertReplicaCandidateFence({...f,localRevision:this.decoded<number>('meta','local-content-revision')??0}));}
       switch(request.kind){
@@ -725,6 +773,7 @@ export class SqliteRecordDatabase {
         case 'publicationPage':return this.initialPublication.page(request.id,request.after);
         case 'publicationBlocks':return this.initialPublication.blocks(request.id,request.hashes);
         case 'validatePublication':return {kind:'publicationValidated',stats:await this.initialPublication.validate(request.id,request.confirmed)};
+        case 'admitOwnPublication':return {kind:'publicationValidated',stats:await this.initialPublication.validate(request.id,request.confirmed,true)};
         case 'discardPublication':this.initialPublication.discard(request.id);return {kind:'discarded'};
       }
     }

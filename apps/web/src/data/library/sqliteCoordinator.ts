@@ -39,6 +39,7 @@ const retryableOwnerReads=new Set<SqliteWorkerInput['kind']>([
 
 export interface CoordinatedSqliteBackend {
   exportLocalSnapshot?(expectedRevision:number):Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;
+  exportOwnCloudSnapshot?(fence:import('./replicaCandidateProtocol').ReplicaCandidateFence):Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;
   replicaCandidate?(request:import('./replicaCandidateProtocol').ReplicaCandidateRequest):Promise<import('./replicaCandidateProtocol').ReplicaCandidateResponse>;
   learningSemanticMemory(targetId?:string):Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>;
   existingRecordKeys(table:SqliteLibraryTable,keys:readonly string[]):Promise<string[]>;
@@ -148,6 +149,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
 
   replicaCandidate(request:import('./replicaCandidateProtocol').ReplicaCandidateRequest):Promise<import('./replicaCandidateProtocol').ReplicaCandidateResponse>{return this.call({kind:'replicaCandidate',request}) as Promise<import('./replicaCandidateProtocol').ReplicaCandidateResponse>;}
   exportLocalSnapshot(expectedRevision:number){return this.call({kind:'exportLocalSnapshot',expectedRevision}) as Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;}
+  exportOwnCloudSnapshot(fence:import('./replicaCandidateProtocol').ReplicaCandidateFence){return this.call({kind:'exportOwnCloudSnapshot',fence}) as Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;}
 
   entries(table: SqliteLibraryTable): Promise<Array<{ key: string; encodedValue: string }>> {
     return this.call({ kind: 'entries', table }) as Promise<Array<{ key: string; encodedValue: string }>>;
@@ -603,7 +605,9 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
     switch (input.kind) {
       case 'initialize': return backend.initialize();
       case 'initializeSnapshot':throw Error('sqlite_snapshot_requires_isolated_worker');
+      case 'initializeOwnCloudSnapshot':case 'ownCloudBaselinePage':throw Error('sqlite_snapshot_requires_isolated_worker');
       case 'exportLocalSnapshot':return backend.exportLocalSnapshot?.(input.expectedRevision)??Promise.reject(Error('sqlite_snapshot_unavailable'));
+      case 'exportOwnCloudSnapshot':return backend.exportOwnCloudSnapshot?.(input.fence)??Promise.reject(Error('sqlite_snapshot_unavailable'));
       case 'get': return backend.get(input.table, input.key);
       case 'entries': return backend.entries(input.table);
       case 'entriesPage':return backend.entriesPage(input.table,input.afterKey,input.limit);

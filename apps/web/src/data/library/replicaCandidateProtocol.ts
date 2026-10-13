@@ -23,6 +23,7 @@ export type ReplicaCandidateRequest=
  |{kind:'publicationPage';id:string;after:{table:SqliteLibraryTable;key:string}|null}
  |{kind:'publicationBlocks';id:string;hashes:string[]}
  |{kind:'validatePublication';id:string;confirmed?:boolean}
+ |{kind:'admitOwnPublication';id:string;confirmed?:boolean}
  |{kind:'discardPublication';id:string}
  |{kind:'begin';fence:ReplicaCandidateFence;expected:ReplicaCandidateExpected}
  |{kind:'beginIndex';fence:ReplicaCandidateFence;head:LibrarySyncHead;baseRevision?:number}

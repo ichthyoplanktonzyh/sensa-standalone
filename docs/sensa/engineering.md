@@ -320,7 +320,9 @@ Personal Anchor media 与 Practice Artifact 仍按各自 learner-owned 表进入
 不可改写保护比较解码后的完整文本，不比较压缩表示。客户端限制同时保留的传输块为 96 MiB，并分窗口
 消费、在最后引用后释放；解码行上限 90 MiB、日常增量 prepare 累计新增解码事实上限保持 64 MiB 是不同保护，不是 JS heap
 承诺或已通过的大规模云端性能结论。账号存储边界仍为 256 MiB。不兼容 checkpoint 停止同步并保留原副本，
-不会为编码升级自动覆盖旧 head。首次发布使用私有固定 revision staging：逐表 keyset 捕获至本机不可变 scratch，64 行／4 MiB 展开工作页（保留既有 90 MiB 单行例外），共享正文按 digest 复用，逐页暂存远端 refs；全部捕获及完整领域准入后，一次锁头 CAS 同事务安装已有 current rows、snapshot、membership 与 durable receipt。未完成 staging 不进入 head，接收端只恢复已发布 authority。捕获期间 revision 改变立即拒绝；封存后允许后续编辑，最终 baseline 只确认捕获版并保留后续 pending，网络期间不持本机 writer lock。owner、identity、incarnation 与签出状态在捕获、发送和本机确认处继续检查。丢最终 ACK 由原 operation receipt 恢复；本机 pending 写入 ACK 不确定时保留 scratch。分页 digest、页序与全 workspace key 唯一性拒绝不同 payload／跨页重复 key。失败可安全从新 scratch 重启原 operation 的相同页，过期 workspace 可重新开始。
+不会为编码升级自动覆盖旧 head。首次发布使用私有固定 revision staging：逐表 keyset 捕获至本机不可变 scratch，64 行／4 MiB 展开工作页（保留既有 90 MiB 单行例外），共享正文按 digest 复用，逐页暂存远端 refs；全部捕获及自库结构准入后，一次锁头 CAS 同事务安装已有 current rows、snapshot、membership 与 durable receipt。未完成 staging 不进入 head，接收端只恢复已发布 authority。捕获期间 revision 改变立即拒绝；封存后允许后续编辑，最终 baseline 只确认捕获版并保留后续 pending，网络期间不持本机 writer lock。owner、identity、incarnation 与签出状态在捕获、发送和本机确认处继续检查。丢最终 ACK 由原 operation receipt 恢复；本机 pending 写入 ACK 不确定时保留 scratch。分页 digest、页序与全 workspace key 唯一性拒绝不同 payload／跨页重复 key。失败可安全从新 scratch 重启原 operation 的相同页，过期 workspace 可重新开始。
+正常认证账号的自己库复制采用受控 Sensa writer 信任边界：写入时各 owner 维护领域关系，首发／二进制接收无需再做全库领域审计；摘要只证明字节完整，不证明语义正确，writer 缺陷仍可能由独立健康审计发现。任意备份、文件和跨作者 Package 导入继续完整领域准入及 projection 重建比较，保留完整审计／诊断入口；并发分支仍执行原有冲突与受影响依赖闭包规则。自库 producer 从同一固定 revision 构造白名单 clean DB、构建当前投影，保留全部历史 Run 材料；receiver 执行版本、精确 schema 白名单、SQLite integrity/FK、body/hash/owners、严格 tagged wire、账号/library/learner/H 绑定。事实和正文按 64-key／1 MiB 已存页读取，decoded body LRU 16 MiB／256 项，单条解压 96 MiB、clean 文件 90 MiB、唯一展开累计 512 MiB；serialized 预算不等于 JS heap。接收端投影版本或 Target 缓存计数不匹配时拒绝，不默默重建。
+二进制工件随同一个 staging CAS 原子绑定已有 cursor snapshot H，使用既有 block store、账号配额及 snapshot membership／read lease；`library_cloud.binary_snapshot` 只描述该 H 的 bytes，不建立另一 head。原始 SQLite 段最多 192 KiB，沿用 block hash/codec、3 MiB store 和 4 MiB fetch 边界。新设备仅在 replicated facts／baseline 真正为空且无 pending／冲突时创建独立 namespace，先载入 H、分页建立现有 sync baseline／reverse relations，再应用连续 tail 至已核验 head。完整封存、账号/signout epoch/revision/incarnation 与原空库再验通过后，持 selection 和旧 transaction exclusive locks 作一次 durable selection 写入；旧 namespace 保留，其他页面及旧 namespace 的排队工作受 fence 拒绝。本页面采用新 incarnation 并重绑定通知；重新打开同一 selection 可恢复 pointer ACK 丢失。下载、tail、门控或 pointer 写失败不激活半成品。retention floor 超过工件 H 时不再提供它，不能越过 floor。
 首发累计逻辑展开量上限采用既有候选 512 MiB 合同，本机 scratch retained text payload 上限 256 MiB；后者不等于 SQLite 文件、WAL、索引或 heap。唯一块 plain／encoded bytes 由页事务实际插入增量计数，重复页不重复计数，失败回滚 rows 与计数。`maximumPageBytes` 是页展开量加唯一编码正文的工作 payload 口径，不是 JS heap 峰值。source physical window 1 MiB、共享正文预取 4 MiB、metadata 512 行／4096 refs／4 MiB；单条独立上限仍为 90 MiB。store 128 块同时保留 3 MiB 字符及实际 JSON UTF-8 上限、route 4 MiB；块解压与账号 256 MiB quota 继续执行。服务器最多 4 个 private workspace，累计 staging metadata 64 MiB，沿用 upload lease；清理仅删除过期 private staging／pins，不删除已发布历史或 receipt。服务端每累计 128 次提交或 4 MiB tail 建立冻结索引快照，旧 snapshot／log owners 和幂等回执继续保留；历史剪枝仅提供隔离验证入口，尚未启用在线删除，旧版本仍占账号容量。
 已由当前 replica validation version 完整校验并确认的 v6 基线，在相同远端 revision 下复用本机 owner 事务准入：
 无变化只读取轻量身份、同步游标并核对 head；本机增量只读取变化事实和对应基线正文，保留其余 block refs，
@@ -328,8 +330,8 @@ Personal Anchor media 与 Practice Artifact 仍按各自 learner-owned 表进入
 推进到未上传版本；丢失或无法确认 ACK 仍用原 operation 重试。服务端明确在提交前拒绝的历史／身份错误
 才清除该 pending receipt，保留本机事实与原基线，避免反复重放必败请求。普通物理删除继续交由领域 Replica
 的许可规则裁决。
-`validationVersion` 是设备内完整性合同版本，不是 wire version；该版本缺失/过期、首次发布、双方变化、
-pending commit 恢复或冲突均保留完整 capture／merge／领域验证。验证合同变更时须更新其版本；泛型 store 写口
+`validationVersion` 是设备内完整性合同版本，不是 wire version；该版本缺失/过期、双方变化、
+非自库 pending commit 恢复或冲突均保留完整 capture／merge／领域验证。正常受控 writer 的首次自库发布使用上述专用入口。验证合同变更时须更新其版本；泛型 store 写口
 是内部接口，生产事实仍必须经各 owner 准入或已完整校验的恢复入口，不把同步当作语义/学习事实创建者。
 PSW 完整副本验证复用 `SemanticWorldRecordReader` 的逐行规则与精确键查询，不再为校验重建完整 JourneyState；
 Registry head/parent、Meaning 内部历史、全局 scene owner，以及 lifecycle/correction 的正反向凭据检查均保留。

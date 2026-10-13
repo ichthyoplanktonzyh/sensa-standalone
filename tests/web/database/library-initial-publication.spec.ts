@@ -3,14 +3,50 @@ import {createHash} from 'node:crypto';
 import {resolve} from 'node:path';
 import {createLibraryCloudBrowserFixture} from '../support/libraryCloudBrowserFixture.mts';
 import {encodeLibrarySyncBlock} from '@sensa/contracts/sensa/library-sync-blocks';
+import {portablePackageFixture} from '../../../scripts/support/portablePackageFixture.mts';
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
+
+test('own binary checkpoint restores into a retained generation after tail and continues genuine learning',async({browser})=>{
+ const f=await createLibraryCloudBrowserFixture(browser,resolve('scripts/assessment/capacityBrowserEntry.ts'));
+ try{
+  const account=await f.createAccount(),a=await f.createClient(account),b=await f.createClient(account),pack=portablePackageFixture({packageId:crypto.randomUUID()});
+  const source=await a.evaluate(async(bytes)=>{const c=(window as any).core,languageContext=(await c.languageRoutesSnapshot()).context,id=()=>crypto.randomUUID(),payload=new Uint8Array(bytes),preview=await c.contentSupplySystem.execute({kind:'preview_portable_package',bytes:payload}),pack=await c.contentSupplySystem.execute({kind:'install_portable_package',bytes:payload,expectedArchiveDigest:preview.archiveDigest}),[targetId]=await c.enrollPackage(id(),pack.key,languageContext);await c.confirmLearningQuantity(id(),languageContext,20);let run=await c.startLearning(id(),targetId,languageContext,20,new Date().toISOString());run=await c.actLearning(id(),run.id,run.revision,{kind:'reveal'},new Date().toISOString());run=await c.actLearning(id(),run.id,run.revision,{kind:'rate',rating:'again'},new Date().toISOString());return {targetId,runId:run.id,learning:await c.readLearning()};},Array.from(pack.bytes));
+  await a.evaluate(()=>(window as any).sync());
+  const head=await a.evaluate(()=>(window as any).request('/head'));expect(head.binarySnapshot.revision).toBe(1);expect(head.binarySnapshot.accountId).toBe(account.accountId);
+  await a.evaluate(async()=>{const c=(window as any).core;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Tail after snapshot H'});await (window as any).sync();});
+  expect((await a.evaluate(()=>(window as any).request('/head'))).revision).toBe(2);
+  const oldTab=await b.context().newPage();await oldTab.goto(f.origin);await oldTab.evaluate(async()=>{const w=window as any,path='/core.js';w.core=await import(path);await w.core.openLibrary();});
+  await b.evaluate(async()=>{const w=window as any,c=w.core;w.installation=crypto.randomUUID();await c.writeLibraryState((tx:any)=>tx.put('meta','service-installation',w.installation));const send=w.request;w.request=async(path:string,body:any)=>{if(path==='/pull'&&localStorage.getItem('sensa:local-library-selection:v1')!==null)throw Error('generation_activated_before_tail');return send(path,body);};const store=Storage.prototype.setItem;Storage.prototype.setItem=function(key,value){if(key==='sensa:local-library-selection:v1')w.staleQueued=c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Stale queued draft'}).then(()=>'accepted',(error:any)=>error.message);return store.call(this,key,value);};});
+  const result=await b.evaluate(()=>(window as any).sync());expect(result.activated.namespace).toBeTruthy();
+  const recovered=await b.evaluate(async()=>{const c=(window as any).core;return {learning:await c.readLearning(),drafts:await c.listDrafts(),state:await c.readCloudSync(),selection:JSON.parse(localStorage.getItem('sensa:local-library-selection:v1')!)};});
+  expect(recovered.learning).toEqual(source.learning);expect(recovered.drafts).toHaveLength(1);expect(recovered.state.revision).toBe(2);expect(recovered.state.status).toBe('synced');expect(recovered.selection.preservedNamespaces).toContain(null);expect(recovered.selection.namespace).toBe(result.activated.namespace);
+  expect(await b.evaluate(()=>(window as any).staleQueued)).toBe('localFlow.libraryReplaced');expect(await b.evaluate(async()=>await (window as any).core.readLibrary((tx:any)=>tx.get('meta','service-installation'))===(window as any).installation)).toBe(true);expect(await b.evaluate(()=>document.documentElement.dataset.librarySelection)).toBeUndefined();await expect(oldTab.evaluate(()=>(window as any).core.listDrafts())).rejects.toThrow('localFlow.libraryReplaced');
+  await b.evaluate(async({runId})=>{const c=(window as any).core;let run=(await c.readLearning()).runs.find((run:any)=>run.id===runId);run=await c.actLearning(crypto.randomUUID(),run.id,run.revision,{kind:'reveal'},new Date().toISOString());run=await c.actLearning(crypto.randomUUID(),run.id,run.revision,{kind:'rate',rating:'good'},new Date().toISOString());await c.finishLearning(crypto.randomUUID(),run.id);},{runId:source.runId});
+  const learned=await b.evaluate(()=>(window as any).core.readLearning());expect(learned.targets[0].memoryRevision).toBeGreaterThan(source.learning.targets[0].memoryRevision);expect(learned.events.length).toBeGreaterThan(source.learning.events.length);
+  await b.evaluate(()=>(window as any).sync());await a.evaluate(()=>(window as any).sync());expect(await a.evaluate(()=>(window as any).core.readLearning())).toEqual(learned);
+ }finally{await f.close();}
+});
+
+test('own snapshot transport refuses account/digest/version and failed tail leaves the old generation active',async({browser})=>{
+ const f=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await f.createAccount(),source=await f.createClient(account);await source.evaluate(async()=>{const w=window as any,c=w.core;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'H draft'});await w.sync();await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Tail draft'});await w.sync();});
+  for(const mode of ['account','digest','version','tail'] as const){
+   const receiver=await f.createClient(account),before=await receiver.evaluate(()=>(window as any).core.readLibrary((tx:any)=>tx.get('meta','identity')));
+   await receiver.evaluate(mode=>{const w=window as any,send=w.request;w.request=async(path:string,body:any)=>{if(mode==='tail'&&path==='/pull')throw Error('injected_tail_loss');const r=await send(path,body);if(path==='/head'){if(mode==='account')r.binarySnapshot.accountId=crypto.randomUUID();if(mode==='digest')r.binarySnapshot.sha256='f'.repeat(64);if(mode==='version')r.binarySnapshot.schemaVersion=20;}return r;};},mode);
+   await expect(receiver.evaluate(()=>(window as any).sync())).rejects.toThrow(mode==='account'?'checkpoint_binding':mode==='digest'?'sqlite_snapshot_envelope':mode==='version'?'sqlite_snapshot_envelope':'injected_tail_loss');
+   expect(await receiver.evaluate(()=>localStorage.getItem('sensa:local-library-selection:v1'))).toBeNull();expect(await receiver.evaluate(()=>(window as any).core.readLibrary((tx:any)=>tx.get('meta','identity')))).toEqual(before);expect(await receiver.evaluate(()=>(window as any).core.listDrafts())).toHaveLength(0);expect(await receiver.evaluate(()=>Object.keys(localStorage).filter(key=>key.startsWith('sensa:isolated-snapshot-generation:v1:')))).toHaveLength(0);
+   if(mode==='tail'){await receiver.reload();await receiver.evaluate(async(account)=>{const w=window as any,path='/core.js';w.core=await import(path);w.request=async(path:string,body:any)=>{const r=await fetch('/sensa/library-sync'+path,{method:body===undefined?'GET':'POST',headers:{authorization:'Bearer '+account.token,'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const value=await r.json();if(!r.ok)throw Error(value.code);return value;};await w.core.synchronizeLibrary(w.request);},account);expect(await receiver.evaluate(()=>(window as any).core.listDrafts())).toHaveLength(2);expect(await receiver.evaluate(()=>JSON.parse(localStorage.getItem('sensa:local-library-selection:v1')!).preservedNamespaces)).toContain(null);}
+  }
+ }finally{await f.close();}
+});
 
 test('private initial pages reject gaps/replays/cross-account payloads and final CAS/receipt is atomic',async({browser})=>{
  const f=await createLibraryCloudBrowserFixture(browser);
  try{
   const a=await f.createAccount(),b=await f.createAccount();
   const call=async(path:string,body?:unknown,token=a.token)=>{const r=await fetch(f.origin+'/sensa/library-sync'+path,{method:body===undefined?'GET':'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});return {status:r.status,value:await r.json()};};
-  const data=encodeLibrarySyncBlock(JSON.stringify(['object',[]])),block={hash:hash(data),data};expect((await call('/blocks/store',{blocks:[block]})).status).toBe(200);
+  const data=encodeLibrarySyncBlock(JSON.stringify(['object',[]])),block={hash:hash(data),data};expect((await call('/blocks/store',{blocks:[block,block]})).status).toBe(200);expect(Number((await f.pool.query('SELECT count(*) AS n FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1',[a.accountId])).rows[0].n)).toBe(1);
   const begin={operationId:crypto.randomUUID(),baseRevision:0,libraryId:crypto.randomUUID(),learnerId:crypto.randomUUID(),incarnation:crypto.randomUUID(),localRevision:12};
   expect((await call('/staging/begin',begin)).status).toBe(200);expect((await call('/staging/begin',begin)).status).toBe(200);
   expect((await call('/staging/begin',{...begin,localRevision:13})).value.code).toBe('operation_conflict');
@@ -103,7 +139,7 @@ test('edits after validation stay pending and a lost local pending ACK retains i
   const account=await f.createAccount(),a=await f.createClient(account),b=await f.createClient(account);
   await a.evaluate(async()=>{const w=window as any,c=w.core;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Captured before validation'});
    const adapter=await c.sqliteRecordAdapter(),candidate=adapter.replicaCandidate.bind(adapter),commit=adapter.commit.bind(adapter);let edited=false,lost=false;
-   adapter.replicaCandidate=async(input:any)=>{const result=await candidate(input);if(input.kind==='validatePublication'&&!input.confirmed&&!edited){edited=true;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'After sealed validation before pending'});}return result;};
+   adapter.replicaCandidate=async(input:any)=>{const result=await candidate(input);if(input.kind==='admitOwnPublication'&&!input.confirmed&&!edited){edited=true;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'After sealed validation before pending'});}return result;};
    adapter.commit=async(mutation:any)=>{await commit(mutation);if(!lost&&mutation.puts.some((row:any)=>row.table==='meta'&&row.key==='cloud-sync'&&c.decodeBackupValue(JSON.parse(row.encodedValue)).pending?.staging)){lost=true;w.lostPendingAck=true;throw Error('lost_local_pending_ack');}};
   });
   await expect(a.evaluate(()=>(window as any).sync())).rejects.toThrow('localFlow.storageWrite');expect(await a.evaluate(()=>(window as any).lostPendingAck)).toBe(true);

@@ -12,6 +12,9 @@
     "types": ["node", "vite/client", "chrome"]
   },
   "files": [
+    "../../scripts/assessment/initialPublicationStageWorker.ts",
+    "../../scripts/assessment/initialPublicationStageBrowserEntry.ts",
+    "../../scripts/assessment/measureInitialPublication.mts",
     "integration/library-initial-publication-storage.test.mts",
     "database/library-initial-publication.spec.ts",
     "integration/library-sync-coordination.spec.ts",
