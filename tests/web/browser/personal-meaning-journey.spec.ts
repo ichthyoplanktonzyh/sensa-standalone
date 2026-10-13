@@ -810,6 +810,9 @@ test('personal preparation pins explicit Context updates, preserves the active R
  test.setTimeout(150_000);
  page.setDefaultTimeout(15_000);
  await enterAndConfigureTeacher(page,true);
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的学习',exact:true}).click();
+ await page.locator('#s-study').getByRole('button',{name:'学习偏好',exact:true}).click();const preferences=page.getByRole('dialog',{name:'学习偏好',exact:true});await preferences.getByRole('combobox',{name:'每日新学数量',exact:true}).selectOption('5');await preferences.getByRole('button',{name:'完成',exact:true}).click();
+
  await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
  await page.getByRole('button',{name:'添加内容',exact:true}).click();await page.getByRole('button',{name:'手动创建',exact:true}).click();
  const form=page.locator('.sensa-manual-meaning'),oldContext='Private-A: Every morning I water the plants.',nextContext='Private-B: At dusk I water the flowers on the balcony.';
@@ -837,6 +840,8 @@ test('personal preparation pins explicit Context updates, preserves the active R
  const initial=await facts(page);expect(initial.provisioning[0]).toMatchObject({status:'ready',useContext:true});expect(initial.learning.targetIds).toHaveLength(1);
  await preparation.getByRole('button',{name:'开始 / 继续学习',exact:true}).click();
  await expect(page.getByRole('dialog',{name:'学习偏好',exact:true})).toHaveCount(0);
+ await expect(page.locator('#s-lightweight-runtime').getByRole('button',{name:/查看表达/})).toBeEnabled();
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningArrangementCheckpointForTest())).session?.dailyNewSenseLimit).toBe(5);
  await page.locator('#s-lightweight-runtime').getByRole('button',{name:/查看表达/}).click();
  const active=(await facts(page)).learning;expect(active.runtime).not.toBeNull();
  await page.locator('#s-lightweight-runtime').getByRole('button',{name:'暂停',exact:true}).click();

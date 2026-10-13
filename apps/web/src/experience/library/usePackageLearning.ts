@@ -333,7 +333,15 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
   selectPolicy:(targetId:string,profileId:LearningPolicy)=>perform(()=>learningSystem.execute({kind:'select_policy',operationId:crypto.randomUUID(),targetId,languageContext,profileId})),
   enroll:(packageKey:string,publicationArchiveSha256?:string)=>perform(()=>learningSystem.execute({kind:'enroll_package',operationId:crypto.randomUUID(),packageKey,languageContext,publicationArchiveSha256})),
   enrollBook:(publicationArchiveSha256:string)=>perform(()=>learningSystem.execute({kind:'enroll_book',operationId:crypto.randomUUID(),languageContext,publicationArchiveSha256})),
-  start:(targetId:string,dailyLimit:number,sessionIntent:'mixed'|'review_only'='mixed')=>perform(()=>learningSystem.execute({kind:'start',operationId:crypto.randomUUID(),targetId,languageContext,dailyLimit,sessionIntent})),
+  start:(targetId:string,dailyLimit:number,sessionIntent:'mixed'|'review_only'='mixed')=>perform(async()=>{
+   if(viewEpoch.current.mode==='inactive'){
+    const version=viewEpoch.current.version;
+    const preferences=await learningSystem.read({kind:'preferences',languageContext});
+    if(currentRoute.current!==routeKey||version!==viewEpoch.current.version)return false;
+    dailyLimit=preferences.dailyLimit??dailyLimit;
+   }
+   return learningSystem.execute({kind:'start',operationId:crypto.randomUUID(),targetId,languageContext,dailyLimit,sessionIntent});
+  }),
   retryRelearning:async()=>{
    if(runtime?.kind!=='lightweight'||!runtime.needsRelearning||!runtime.completed||dailyLimit===null||actInFlight.current||loadStatus!=='ready')return null;
    actInFlight.current=true;

@@ -14,6 +14,29 @@ vi.mock('../../../apps/web/src/experience/library/useActiveLanguageContext',asyn
  return {useActiveLanguageContext:()=>sensaPinnedLanguageContext(defaultSensaLanguageRoute)};
 });
 
+test('World controller stays idle until an explicit start reads the saved quantity through preferences',async()=>{
+ Object.assign(globalThis,{IS_REACT_ACT_ENVIRONMENT:true});
+ const reads:string[]=[];
+ vi.mocked(learningSystem.read).mockImplementation((async query=>{
+  reads.push(query.kind);if(query.kind!=='preferences')throw Error('World requested a collection projection');
+  return {dailyLimit:5,policyOptions:[]};
+ }) as LearningSystem['read']);
+ vi.mocked(learningSystem.execute).mockResolvedValue(true);
+ let controller:ReturnType<typeof usePackageLearning>|null=null;
+ const Harness=()=>{controller=usePackageLearning(false,'inactive');return null;};
+ const root=createRoot(document.createElement('div'));
+ try{
+  await act(async()=>root.render(createElement(Harness)));
+  expect(reads).toEqual([]);expect(learningSystem.execute).not.toHaveBeenCalled();expect(contentSupplySystem.read).not.toHaveBeenCalled();expect(contentSupplySystem.execute).not.toHaveBeenCalled();
+  await act(async()=>{expect(await controller!.start('personal-target',20)).toBe(true);});
+  expect(reads).toEqual(['preferences']);
+  expect(learningSystem.execute).toHaveBeenCalledWith(expect.objectContaining({kind:'start',targetId:'personal-target',dailyLimit:5}));
+  vi.mocked(learningSystem.read).mockRejectedValueOnce(Error('localFlow.progressReadFailed'));
+  await act(async()=>{expect(await controller!.start('personal-target',20)).toBeNull();});
+  expect(learningSystem.execute).toHaveBeenCalledTimes(1);
+ }finally{await act(async()=>root.unmount());vi.clearAllMocks();}
+});
+
 test('Learning list keeps distinct targets with the same expression, separates paused from due, and sorts actual due instants',()=>{
  const item=(id:string,group:LearningLibraryItem['group'],nextReviewAt:string|null):LearningLibraryItem=>({id,targetId:id,enrollmentId:null,expression:'same expression',meaning:`meaning ${id}`,sourceLabel:'verified Book',state:group,group,nextReviewAt});
  const items=[item('B','due','2026-10-11T01:00:00+09:00'),item('A','due','2026-10-10T19:00:00Z'),item('C','paused','2026-10-01T00:00:00Z'),item('D','new',null)];
