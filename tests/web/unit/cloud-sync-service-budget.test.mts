@@ -21,7 +21,7 @@ const setup=()=>{vi.stubGlobal('window',new EventTarget());vi.stubGlobal('naviga
 
 test('artifact recovery receives a fresh deadline after a long successful Library restore',async()=>{
  const controllers=setup();
- fixture.sync.mockImplementation(async()=>{controllers[0]!.abort(new DOMException('Transfer deadline expired during local validation','TimeoutError'));});
+ fixture.sync.mockImplementation(async()=>{AbortSignal.timeout(90_000);controllers[0]!.abort(new DOMException('Transfer deadline expired during local validation','TimeoutError'));});
  fixture.rehydrate.mockImplementation(async(input:{kind:string;signal:AbortSignal})=>{expect(input.kind).toBe('rehydrate');expect(input.signal.aborted).toBe(false);});
  await syncAccountLibrary();
  expect(controllers).toHaveLength(2);expect(fixture.rehydrate).toHaveBeenCalledOnce();
