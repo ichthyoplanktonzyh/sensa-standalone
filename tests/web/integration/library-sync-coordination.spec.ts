@@ -54,10 +54,13 @@ test('dirty edits coalesce across tabs and a session boundary clears every old d
  }finally{await fixture.close();}
 });
 
-test('quiet visible tabs discover remote facts once, hidden tabs wait for foreground recovery',async({browser})=>{
+test('confirmed libraries discover remote facts once, hidden tabs wait for foreground recovery',async({browser})=>{
  const fixture=await createLibraryCloudBrowserFixture(browser);
  try{
-  const account=await fixture.createAccount(),pages=await tabs(fixture,account);await Promise.all(pages.map(mount));for(const page of pages)await synced(page);await drain(pages);
+  const account=await fixture.createAccount(),pages=await tabs(fixture,account);
+  // This is a daily pull journey. A first empty-device restore selects a new
+  // generation and deliberately retires old tabs, covered by initial-publication.
+  await saveDraft(pages[0]!, 'Existing Library baseline');await Promise.all(pages.map(mount));for(const page of pages)await synced(page);await drain(pages);
   const remote=await fixture.createClient(account);await remote.evaluate(()=>(window as any).sync());
   const remoteId=await saveDraft(remote,'Real remote change');await remote.evaluate(()=>(window as any).sync());fixture.clearRequests();
   await advance(pages,cloudCheckpointSchedule.pullStaleMs+1);
