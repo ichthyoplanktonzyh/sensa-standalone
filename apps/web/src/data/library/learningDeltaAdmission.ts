@@ -1,3 +1,4 @@
+import {runCooperatively,runSynchronously} from '../../experience/personalMeaningJourney/cooperative';
 import {backupEqual,encodeBackupValue} from './backupCodec';
 import {validateLearningRestoreComponentCooperatively} from './backupValidation';
 import type {LibraryRecordReader,LibraryRecordRows} from './libraryRecordReader';
@@ -15,8 +16,9 @@ const targetStructure=(value:any)=>Object.fromEntries(Object.entries(value).filt
 
 /** Eligibility is field-specific. All other shapes use complete admission;
  * malformed supported facts still fail the same shared restore predicates. */
-export function assertDeltaReceiveShape(changes:readonly {table:SqliteLibraryTable;key:string;deleted?:boolean}[],base:LibraryRecordReader,remote:LibraryRecordReader):void{
+function* deltaReceiveShapeSteps(changes:readonly {table:SqliteLibraryTable;key:string;deleted?:boolean}[],base:LibraryRecordReader,remote:LibraryRecordReader):Generator<unknown,void>{
  for(const row of changes){
+  yield;
   if(!allow.has(row.table)||row.table==='meta'&&!['learning-active','learning-session-active'].includes(row.key)||row.table==='settings'&&row.key!=='language-route-study-plans')fallback('structural_or_source_change');
   // Current quantity preferences have no historical Scope/Run consumers; the
   // shared restore validator checks the entire map against unchanged routes.
@@ -31,6 +33,8 @@ export function assertDeltaReceiveShape(changes:readonly {table:SqliteLibraryTab
  }
 }
 
+export function assertDeltaReceiveShape(changes:readonly {table:SqliteLibraryTable;key:string;deleted?:boolean}[],base:LibraryRecordReader,remote:LibraryRecordReader):void{runSynchronously(deltaReceiveShapeSteps(changes,base,remote));}
+
 /** Select changed predicates and complete connected histories independently
  * from support point reads. Reading an unchanged source does not dirty all of
  * its consumers. Reverse queries come only from a certified baseline. */
@@ -41,7 +45,6 @@ export async function admitLearningDelta(input:{
  alive:()=>void;phase?:(name:string)=>void;
 }):Promise<{identity:any;prepare:()=>Promise<Array<{table:LibraryReplicaEntry['table'];key:string}>>;evidence:DeltaReceiveEvidence}>{
  const {changes,base,remote,dependencies,certificate,alive}=input;
- assertDeltaReceiveShape(changes,base,remote);alive();input.phase?.('eligibility');
  const targets=new Set<string>(),runs=new Set<string>(),events=new Set<string>(),decisions=new Set<string>(),scopes=new Set<string>(),sessions=new Set<string>(),scopeRuns=new Set<string>(),tasks=new Set<string>();
  const targetQueue:string[]=[],runQueue:string[]=[];
  const addTarget=(key:string)=>{if(!targets.has(key)){targets.add(key);targetQueue.push(key);}};
@@ -50,11 +53,18 @@ export async function admitLearningDelta(input:{
  const changedRuns=changes.filter(row=>row.table==='learningRuns').map(row=>row.key),changedSessions=changes.filter(row=>row.table==='learningSessions').map(row=>row.key);
  const changedEventsByRun=new Map<string,Set<string>>(),changedEventClosure={baselineLookups:0,candidateLookups:0,runLookups:0,indexedRelations:0,edgeVisits:0};
  const changedRunHeaders=new Map<string,{sessionId:string;scopeId:string;protocols:Array<[string,string]>}>(),changedRunsByTarget=new Map<string,Set<string>>();
+ let selection!:Map<SqliteLibraryTable,Set<string>>;
+ const overlayOwners=new Map<string,{runId:string;targetId:string}>();
+ await runCooperatively((function*(){
+  for(const step of deltaReceiveShapeSteps(changes,base,remote)){alive();yield step;}
+  alive();input.phase?.('eligibility');
  for(const runId of changedRuns){
+  alive();yield;
   for(const reader of [base,remote])for(const targetId of reader.get('learningRuns',runId)?.targetIds??[]){const keys=changedRunsByTarget.get(targetId)??new Set();keys.add(runId);changedRunsByTarget.set(targetId,keys);}
   const run=needed('learningRuns',runId);changedRunHeaders.set(runId,{sessionId:run.learningSessionId,scopeId:run.studyScopeRevisionId,protocols:Object.entries(run.participants).map(([target,participant])=>[(participant as any).protocolRunId,target])});
  }
  for(const row of changes){
+  alive();yield;
   if(row.table==='learningTargets')addTarget(row.key);
   if(row.table==='learningRuns')addRun(row.key);
   if(row.table==='learningEvents'){for(const reader of [base,remote]){
@@ -72,12 +82,13 @@ export async function admitLearningDelta(input:{
   if(row.table==='learningSessions')sessions.add(row.key);
  }
  for(const sessionId of changedSessions){
+  alive();yield;
   for(const reader of [base,remote])for(const runId of reader.get('learningSessions',sessionId)?.runIds??[])addRun(runId);
   for(const row of dependencies.keys('runSession',sessionId))addRun(row.key);
  }
  // A Run may remain in earlier Sessions' historical lists after resuming.
- for(const runId of changedRuns)for(const row of dependencies.keys('sessionRun',runId))sessions.add(row.key);
- for(const runId of changedRuns)for(const row of dependencies.keys('runPredecessor',runId))addRun(row.key);
+ for(const runId of changedRuns){alive();yield;for(const row of dependencies.keys('sessionRun',runId))sessions.add(row.key);}
+ for(const runId of changedRuns){alive();yield;for(const row of dependencies.keys('runPredecessor',runId))addRun(row.key);}
  // Pointer changes can invalidate the previously active Run, too.
  for(const reader of [base,remote]){
   const runId=reader.get('meta','learning-active'),sessionId=reader.get('meta','learning-session-active');
@@ -85,7 +96,7 @@ export async function admitLearningDelta(input:{
   if(reader===remote&&typeof sessionId==='string')sessions.add(sessionId);
  }
  for(;;){
-  alive();if(targets.size+runs.size+events.size+decisions.size>4096)fallback('history_component_capacity');
+  alive();yield;if(targets.size+runs.size+events.size+decisions.size>4096)fallback('history_component_capacity');
   if(targetQueue.length){
    const targetId=targetQueue.shift()!;needed('learningTargets',targetId);
    for(const row of dependencies.keys('runTarget',targetId))addRun(row.key);
@@ -108,24 +119,26 @@ export async function admitLearningDelta(input:{
   }
   break;
  }
- for(const key of targets){const target=needed('learningTargets',key);for(const membership of target.curriculumMemberships){const attemptId=membership.material.snapshot.provenance.attemptId;if(attemptId)tasks.add(needed('contentAttempts',attemptId).taskId);}}
+ for(const key of targets){alive();yield;const target=needed('learningTargets',key);for(const membership of target.curriculumMemberships){const attemptId=membership.material.snapshot.provenance.attemptId;if(attemptId)tasks.add(needed('contentAttempts',attemptId).taskId);}}
  // The Session validator consumes both declared and reverse Run membership.
  for(const sessionId of sessions){
+  alive();yield;
   const session=needed('learningSessions',sessionId);
   for(const runId of session.runIds)scopeRuns.add(runId);
   for(const row of dependencies.keys('runSession',sessionId))scopeRuns.add(row.key);
   for(const [runId,header]of changedRunHeaders)if(header.sessionId===sessionId)scopeRuns.add(runId);
  }
- for(const scopeId of scopes){for(const row of dependencies.keys('runScope',scopeId))scopeRuns.add(row.key);for(const [runId,header]of changedRunHeaders)if(header.scopeId===scopeId)scopeRuns.add(runId);}
+ for(const scopeId of scopes){alive();yield;for(const row of dependencies.keys('runScope',scopeId))scopeRuns.add(row.key);for(const [runId,header]of changedRunHeaders)if(header.scopeId===scopeId)scopeRuns.add(runId);}
  for(const runId of changedRuns)scopeRuns.add(runId);
  for(const reader of [base,remote]){const active=reader.get('meta','learning-active');if(typeof active==='string')scopeRuns.add(active);}
  if(scopeRuns.size+sessions.size+scopes.size>4096)fallback('session_component_capacity');
- const selection=new Map<SqliteLibraryTable,Set<string>>([['learningTargets',targets],['learningRuns',runs],['learningEvents',events],['learningReconciliations',decisions],['studyScopes',scopes],['learningSessions',sessions],['personalLearning',tasks]]);
+ selection=new Map<SqliteLibraryTable,Set<string>>([['learningTargets',targets],['learningRuns',runs],['learningEvents',events],['learningReconciliations',decisions],['studyScopes',scopes],['learningSessions',sessions],['personalLearning',tasks]]);
+ input.phase?.('dependencyClosure');
+ for(const [runId,header]of changedRunHeaders){alive();yield;for(const [protocolId,targetId]of header.protocols){if(overlayOwners.has(protocolId))fail();overlayOwners.set(protocolId,{runId,targetId});}}
+ })());
+ alive();
  const scoped:LibraryRecordReader={get:(table,key)=>{alive();return remote.get(table,key);},has:(table,key)=>{alive();return remote.has(table,key);},entries(table){return {[Symbol.iterator]:function*(){for(const key of [...selection.get(table)??[]].sort()){alive();yield {key,value:needed(table,key)};}}};}};
  const rows=(keys:Set<string>,table:SqliteLibraryTable):LibraryRecordRows['learningRuns']=>({[Symbol.iterator]:function*(){for(const key of keys){alive();yield {key,value:needed(table,key)};}}});
- input.phase?.('dependencyClosure');
- const overlayOwners=new Map<string,{runId:string;targetId:string}>();
- for(const [runId,header]of changedRunHeaders)for(const [protocolId,targetId]of header.protocols){if(overlayOwners.has(protocolId))fail();overlayOwners.set(protocolId,{runId,targetId});}
  const identity=await validateLearningRestoreComponentCooperatively(scoped,{
   packageCacheComplete:certificate.packageCacheComplete,scopeRuns:rows(scopeRuns,'learningRuns'),
   hasProtocolRunId(protocolId){alive();return overlayOwners.has(protocolId)||!!dependencies.protocolOwner(protocolId);},
@@ -148,14 +161,23 @@ export async function admitLearningDelta(input:{
  // Only an exact remote result can use the sparse clean apply; actual conflicts
  // and derived publication fall back to the complete reconciliation path.
  const mergeKeys=new Map<string,{table:SqliteLibraryTable;key:string}>();
- for(const [table,keys]of selection)if(table!=='personalLearning')for(const key of keys)mergeKeys.set(JSON.stringify([table,key]),{table,key});
- for(const row of changes)mergeKeys.set(JSON.stringify([row.table,row.key]),{table:row.table,key:row.key});
- for(const key of ['learning-active','learning-session-active'])mergeKeys.set(JSON.stringify(['meta',key]),{table:'meta',key});
- const entries=(reader:LibraryRecordReader):LibraryReplicaEntry[]=>[...mergeKeys.values()].flatMap(row=>{const value=reader.get(row.table,row.key);return value===undefined?[]:[{...row,table:row.table as LibraryReplicaEntry['table'],value:encodeBackupValue(value)}];});
- const before=entries(base),after=entries(remote),merged=await mergeLibraryReplicasCooperatively({base:before,local:before,remote:after});alive();
- const expected=new Map(after.map(row=>[replicaEntryId(row),row]));
- if(merged.conflicts.length||merged.entries.length!==after.length||merged.entries.some(row=>!replicaEntryEqual(row,expected.get(replicaEntryId(row)))))fallback('domain_conflict_or_derived_publication');
- const records=changes.filter(row=>!backupEqual(base.get(row.table,row.key),remote.get(row.table,row.key))).map(({table,key})=>({table,key}));
+ const before:LibraryReplicaEntry[]=[],after:LibraryReplicaEntry[]=[];
+ await runCooperatively((function*(){
+  for(const [table,keys]of selection)if(table!=='personalLearning')for(const key of keys){alive();yield;mergeKeys.set(JSON.stringify([table,key]),{table,key});}
+  for(const row of changes){alive();yield;mergeKeys.set(JSON.stringify([row.table,row.key]),{table:row.table,key:row.key});}
+  for(const key of ['learning-active','learning-session-active'])mergeKeys.set(JSON.stringify(['meta',key]),{table:'meta',key});
+  for(const [reader,entries]of [[base,before],[remote,after]] as const)for(const row of mergeKeys.values()){
+   alive();yield;const value=reader.get(row.table,row.key);if(value!==undefined)entries.push({...row,table:row.table as LibraryReplicaEntry['table'],value:encodeBackupValue(value)});
+  }
+ })());
+ const merged=await mergeLibraryReplicasCooperatively({base:before,local:before,remote:after});alive();
+ const records:Array<{table:LibraryReplicaEntry['table'];key:string}>=[];
+ await runCooperatively((function*(){
+  const expected=new Map(after.map(row=>[replicaEntryId(row),row]));
+  if(merged.conflicts.length||merged.entries.length!==after.length)fallback('domain_conflict_or_derived_publication');
+  for(const row of merged.entries){alive();yield;if(!replicaEntryEqual(row,expected.get(replicaEntryId(row))))fallback('domain_conflict_or_derived_publication');}
+  for(const row of changes){alive();yield;if(!backupEqual(base.get(row.table,row.key),remote.get(row.table,row.key)))records.push({table:row.table,key:row.key});}
+ })());alive();
 
  evidence.modifiedRecords=records.length;input.phase?.('domainComparison');
  return records;

@@ -85,4 +85,33 @@ CREATE TABLE IF NOT EXISTS sensa_replica_candidate_proofs_v1(
  PRIMARY KEY(candidate_id,digest),
  FOREIGN KEY(candidate_id) REFERENCES sensa_replica_candidates_v1(id) ON DELETE CASCADE
 ) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS sensa_replica_candidate_epochs_v1(
+ candidate_id TEXT PRIMARY KEY NOT NULL,
+ epoch INTEGER NOT NULL DEFAULT 0,
+ FOREIGN KEY(candidate_id) REFERENCES sensa_replica_candidates_v1(id) ON DELETE CASCADE
+) WITHOUT ROWID;
+CREATE TRIGGER IF NOT EXISTS sensa_replica_candidate_epoch_begin_v1 AFTER INSERT ON sensa_replica_candidates_v1
+ BEGIN INSERT INTO sensa_replica_candidate_epochs_v1(candidate_id) VALUES(NEW.id); END;
+${['records','manifest','proofs'].flatMap(table=>['INSERT','UPDATE','DELETE'].map(action=>`
+CREATE TRIGGER IF NOT EXISTS sensa_replica_candidate_epoch_${table}_${action.toLowerCase()}_v1
+ AFTER ${action} ON sensa_replica_candidate_${table}_v1
+ WHEN (SELECT state FROM sensa_replica_candidates_v1 WHERE id=${action==='DELETE'?'OLD':'NEW'}.candidate_id)<>'filling'
+ BEGIN UPDATE sensa_replica_candidate_epochs_v1 SET epoch=epoch+1 WHERE candidate_id=${action==='DELETE'?'OLD':'NEW'}.candidate_id; END;`)).join('')}
+CREATE TABLE IF NOT EXISTS sensa_replica_candidate_encoded_v1(
+ candidate_id TEXT NOT NULL,owner_kind TEXT NOT NULL CHECK(owner_kind IN ('record','sync')),
+ table_name TEXT NOT NULL,record_key TEXT NOT NULL,
+ encoded_json TEXT NOT NULL,value_json TEXT NOT NULL,digests_json TEXT NOT NULL,
+ PRIMARY KEY(candidate_id,owner_kind,table_name,record_key),
+ FOREIGN KEY(candidate_id) REFERENCES sensa_replica_candidates_v1(id) ON DELETE CASCADE
+) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS sensa_replica_candidate_encoded_bodies_v1(
+ candidate_id TEXT NOT NULL,digest TEXT NOT NULL,stored_json TEXT NOT NULL,existing_json TEXT,
+ PRIMARY KEY(candidate_id,digest),
+ FOREIGN KEY(candidate_id) REFERENCES sensa_replica_candidates_v1(id) ON DELETE CASCADE
+) WITHOUT ROWID;
+${['encoded','encoded_bodies'].flatMap(table=>['INSERT','UPDATE','DELETE'].map(action=>`
+CREATE TRIGGER IF NOT EXISTS sensa_replica_candidate_epoch_${table}_${action.toLowerCase()}_v1
+ AFTER ${action} ON sensa_replica_candidate_${table}_v1
+ WHEN (SELECT state FROM sensa_replica_candidates_v1 WHERE id=${action==='DELETE'?'OLD':'NEW'}.candidate_id)<>'filling'
+ BEGIN UPDATE sensa_replica_candidate_epochs_v1 SET epoch=epoch+1 WHERE candidate_id=${action==='DELETE'?'OLD':'NEW'}.candidate_id; END;`)).join('')}
 `;

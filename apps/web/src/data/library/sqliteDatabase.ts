@@ -14,7 +14,7 @@ import {libraryRestoreValidationVersion} from './replication/libraryReplicaValid
 
 import {decodeBackupValue,encodeBackupValue,backupEqual} from './backupCodec';
 import type {ReplicaCandidateRequest,ReplicaCandidateResponse,ReplicaCandidateFence} from './replicaCandidateProtocol';
-import {externalizeSharedRecordContent,expandSharedRecordContent,packStoredRecord,unpackStoredRecord,sharedRecordTables,StoredRecordMemo} from './sharedRecordContent';
+import {externalizeSharedRecordContent,expandSharedRecordContent,packStoredRecord,unpackStoredRecord,sharedRecordTables,StoredRecordMemo,type PreparedStoredRecord} from './sharedRecordContent';
 import {learningExpressionForm,learningPackageChoicesSql,validateLearningPackageQuery} from './packageCacheProjection';
 import {SqliteMeaningLookupProjection} from './meaningLookupProjection';
 import {SqliteWorldBrowseProjection} from './worldBrowseProjection';
@@ -860,6 +860,7 @@ export class SqliteRecordDatabase {
     let bulkMaintenance=false;
     const removedContent=new Set<string>();
     let staged:ReturnType<import('./sqliteReplicaCandidates').SqliteReplicaCandidates['prepareFreshRestore']>|undefined;
+    let preparedUpdate:ReturnType<import('./sqliteReplicaCandidates').SqliteReplicaCandidates['prepareCheckpointUpdate']>|undefined;
     const ownerKeys=new Set(['identity','service-owner','local-incarnation','signed-out']);
     let discardCandidates=mutation.clears.includes('meta')
       ||mutation.deletes.some(item=>item.table==='meta'&&ownerKeys.has(item.key))
@@ -867,7 +868,7 @@ export class SqliteRecordDatabase {
     this.database.exec("BEGIN IMMEDIATE");
     try {
       if(previousCertificate&&patchAdmission)this.syncDependencies.assert(previousCertificate);
-      if(mutation.replicaCandidateRestore&&!mutation.replicaCandidateRestore.update){this.activationMemo=new StoredRecordMemo();this.activationTargetLanguages=new Map();}
+      if(mutation.replicaCandidateRestore){this.activationMemo=new StoredRecordMemo();if(!mutation.replicaCandidateRestore.update)this.activationTargetLanguages=new Map();}
       const contentRevision = mutation.contentRevision;
       if (contentRevision !== undefined && (!Number.isSafeInteger(contentRevision) || contentRevision <= 0)) {
         throw new Error('sqlite_content_revision_invalid');
@@ -887,7 +888,7 @@ export class SqliteRecordDatabase {
       if(mutation.replicaCandidateRestore){
         if(!this.replicaCandidateStore)throw Error('library_sync_candidate_invalid');
         if(mutation.replicaCandidateRestore.update){
-          const update=this.replicaCandidateStore.prepareCheckpointUpdate(mutation.replicaCandidateRestore.id,mutation);
+          const update=preparedUpdate=this.replicaCandidateStore.prepareCheckpointUpdate(mutation.replicaCandidateRestore.id,mutation,this.activationMemo);
           mutation={...mutation,puts:[...update.puts,...mutation.puts],deletes:[...update.deletes,...mutation.deletes],syncBasePatch:update.syncBasePatch};
         }else{
           staged=this.replicaCandidateStore.prepareFreshRestore(mutation.replicaCandidateRestore.id,mutation,this.activationMemo);
@@ -937,7 +938,7 @@ export class SqliteRecordDatabase {
         }
         for(const entry of mutation.syncBasePatch.puts){
           const refs=JSON.stringify(entry.blockRefs);encodedWriteSize+=entry.valueJson.length+refs.length;
-          this.database.exec({sql:'INSERT INTO sensa_sync_base(table_name,record_key,value_json,block_refs_json) VALUES(?,?,?,?) ON CONFLICT(table_name,record_key) DO UPDATE SET value_json=excluded.value_json,block_refs_json=excluded.block_refs_json',bind:[entry.table,entry.key,this.storedEncoded('sync',entry.table,entry.key,entry.valueJson,removedContent),refs]});
+          this.database.exec({sql:'INSERT INTO sensa_sync_base(table_name,record_key,value_json,block_refs_json) VALUES(?,?,?,?) ON CONFLICT(table_name,record_key) DO UPDATE SET value_json=excluded.value_json,block_refs_json=excluded.block_refs_json',bind:[entry.table,entry.key,this.storedEncoded('sync',entry.table,entry.key,entry.valueJson,removedContent,true,preparedUpdate?.stored('sync',entry.table,entry.key)),refs]});
         }
       }
       for (const table of mutation.clears) {
@@ -1052,7 +1053,7 @@ export class SqliteRecordDatabase {
         const encodedValue=needsBody?item.encodedValue:undefined;
         if(!copied){
         encodedWriteSize+=encodedValue!.length;
-        const stored=this.storedEncoded('record',item.table,item.key,encodedValue!,removedContent);
+        const stored=this.storedEncoded('record',item.table,item.key,encodedValue!,removedContent,true,preparedUpdate?.stored('record',item.table,item.key));
         if (contentRevision === undefined) {
           this.database.exec({
             sql: `INSERT INTO sensa_records(table_name,record_key,value_json,content_revision) VALUES(?,?,?,0)
@@ -1271,7 +1272,19 @@ export class SqliteRecordDatabase {
     this.database.exec({sql:`DELETE FROM sensa_shared_record_content_owners WHERE ${where}`,bind});
   }
 
-  private storedEncoded(kind:'record'|'sync',table:SqliteLibraryTable,key:string,encoded:string,removed:Set<string>,detach=true):string{
+  private storedEncoded(kind:'record'|'sync',table:SqliteLibraryTable,key:string,encoded:string,removed:Set<string>,detach=true,prepared?:PreparedStoredRecord):string{
+    if(prepared){
+      if(detach)this.detachSharedContent(kind,table,key,removed);
+      for(let offset=0;offset<prepared.bodies.length;offset+=128){
+        const batch=prepared.bodies.slice(offset,offset+128),digests=batch.map(body=>body.digest);
+        const current=new Map((this.database.exec({sql:'SELECT digest,value_json FROM sensa_shared_record_content WHERE digest IN (SELECT value FROM json_each(?))',bind:[JSON.stringify(digests)],rowMode:'object',returnValue:'resultRows'}) as {digest:string;value_json:string}[]).map(row=>[row.digest,row.value_json]));
+        const missing:[string,string][]=[];
+        for(const body of batch){const stored=current.get(body.digest)??null;if(stored!==body.existing&&!(body.existing===null&&stored===body.stored))throw Error('sqlite_shared_content_invalid');if(stored===null)missing.push([body.digest,body.stored]);}
+        if(missing.length)this.database.exec({sql:"INSERT INTO sensa_shared_record_content SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]') FROM json_each(?)",bind:[JSON.stringify(missing)]});
+        this.database.exec({sql:'INSERT INTO sensa_shared_record_content_owners(owner_kind,table_name,record_key,digest) SELECT ?,?,?,value FROM json_each(?)',bind:[kind,table,key,JSON.stringify(digests)]});
+      }
+      return prepared.valueJson;
+    }
     if(!sharedRecordTables.has(table))return packStoredRecord(encoded);
     // Full baseline replacement has already detached every sync owner once.
     // Record writes and incremental patches must still detach their exact row.

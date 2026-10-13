@@ -9,10 +9,12 @@ const hashPattern=/^[a-f0-9]{64}$/u;
 const maximumRecordBytes=96*1024*1024;
 const fail=():never=>{throw new Error('sqlite_shared_content_invalid');};
 export interface SharedRecordContent{readonly value:WireValue;readonly bodies:ReadonlyMap<string,string>;}
+/** Worker-owned preparation; exact existing storage is rechecked at activation. */
+export interface PreparedStoredRecord{readonly valueJson:string;readonly bodies:readonly {digest:string;stored:string;existing:string|null}[];}
 
-/** A single synchronous activation only. Exact text keys retain immutable
- * results; count input and output UTF-8 bytes together. Never retain decoded
- * facts, cross a transaction boundary, or admit a large row by caching it. */
+/** One activation or fenced private preparation. Exact text keys retain only
+ * immutable transformations; count input and output UTF-8 bytes together.
+ * Never retain decoded facts or use cache presence as an admission witness. */
 export class StoredRecordMemo{
  private readonly indexes={hash:new Map<string,Entry>(),unpack:new Map<string,Entry>()};
  private readonly recent=new Map<Entry,undefined>();

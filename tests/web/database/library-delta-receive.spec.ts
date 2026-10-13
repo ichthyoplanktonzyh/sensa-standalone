@@ -121,3 +121,13 @@ test('ordinary quantity confirmation accompanying a review stays incremental and
   const before=await facts(b),stored=await testRpc(b,'snapshot');await a.evaluate(async()=>{const c=(window as any).core;await c.confirmLearningQuantity(crypto.randomUUID(),(await c.languageRoutesSnapshot()).context,20);});const wire=await facts(a) as WireRow[],row=wire.find(row=>row[0]==='settings'&&row[1]==='language-route-study-plans')!,plans:any=decodeBackupValue(row[2]);Object.values(plans).forEach((plan:any)=>plan.dailyNewSenseLimit=101);row[2]=encodeBackupValue(plans);await expect(restoreOracle(b,wire)).rejects.toThrow();await publishWirePatch(account,a,wire);await expect(b.evaluate(()=>(window as any).sync())).rejects.toThrow();expect(await facts(b)).toEqual(before);expect(await testRpc(b,'snapshot')).toEqual(stored);
  }finally{await a.context().close();await b.context().close();}
 });
+
+test('actual Worker serves a nonempty history projection while cooperative encoding prepares the next atomic state',async()=>{
+ const {a,b,targetId}=await setup();try{
+  const read=()=>b.evaluate(async()=>{const w=window as any,c=w.core,value=await c.learningSystem.read({kind:'history',languageContext:(await c.languageRoutesSnapshot()).context,filter:{surface:'study',range:'all',start:'',end:'',kind:'all',languageChoice:null},limit:20});return {total:value.total,rows:value.records.length,preparing:!w.deltaPreparationDone};});
+  const before=await read();expect(before.rows).toBeGreaterThan(0);await settle(a,targetId);await a.evaluate(()=>(window as any).sync());await testRpc(b,'cooperative-preparation');
+  const pending=b.evaluate(()=>(window as any).sync());await b.waitForFunction(()=>(window as any).deltaCooperative?.outsideTransaction);
+  const during=await read();expect(during.preparing).toBe(true);expect(during.total).toBe(before.total);expect(during.rows).toBe(before.rows);
+  await pending;const after=await read();expect(after.preparing).toBe(false);expect(after.total).toBe(before.total+1);expect(await facts(b)).toEqual(await facts(a));
+ }finally{await a.context().close();await b.context().close();}
+});

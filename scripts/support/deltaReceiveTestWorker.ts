@@ -5,12 +5,23 @@ import {SqliteRecordDatabase} from '../../apps/web/src/data/library/sqliteDataba
 import {decodeBackupValue} from '../../apps/web/src/data/library/backupCodec';
 import {SqliteReplicaCandidates} from '../../apps/web/src/data/library/sqliteReplicaCandidates';
 let database:SqliteRecordDatabase|undefined,drift=false,failCommit=false,loseAck=false,pause=false,release:(()=>void)|undefined;
+let cooperativePreparation=false;
 const initialize=SqliteRecordDatabase.prototype.initialize;
 SqliteRecordDatabase.prototype.initialize=function(){database=this;return initialize.call(this);};
 const begin=SqliteReplicaCandidates.prototype.beginIndex;
 SqliteReplicaCandidates.prototype.beginIndex=function(...args){const id=begin.apply(this,args);if(drift){drift=false;Reflect.get(database!,'database').exec('UPDATE sensa_sync_base SET value_json=value_json WHERE table_name=\'meta\' AND record_key=\'identity\'');}return id;};
 const request=SqliteRecordDatabase.prototype.replicaCandidate;
 SqliteRecordDatabase.prototype.replicaCandidate=async function(message){if(message.kind==='validate'&&pause){pause=false;self.postMessage({deltaBarrier:true});await new Promise<void>(resolve=>{release=resolve;});}return request.call(this,message);};
+const prepare=SqliteReplicaCandidates.prototype.prepareUpdate;
+SqliteReplicaCandidates.prototype.prepareUpdate=async function(...args){
+ if(!cooperativePreparation)return prepare.apply(this,args);cooperativePreparation=false;
+ const raw=Reflect.get(database!,'database'),exec=raw.exec,nativeNow=performance.now.bind(performance);let clock=0,transaction=false,announced=false;
+ // Deterministic time-budget exhaustion; the production macrotask yields and
+ // RPC queue still run normally. No extra pause or transaction yield is added.
+ performance.now=()=>nativeNow()+(clock+=10);
+ raw.exec=function(...input:any[]){const sql=typeof input[0]==='string'?input[0]:input[0]?.sql;if(sql==='BEGIN IMMEDIATE')transaction=true;const result=exec.apply(this,input);if(sql==='COMMIT'||sql==='ROLLBACK')transaction=false;if(!announced&&sql==='INSERT INTO sensa_replica_candidate_encoded_v1 VALUES(?,?,?,?,?,?,?)'){announced=true;setTimeout(()=>{if(transaction)throw Error('delta_fixture_yield_inside_transaction');raw.exec('BEGIN IMMEDIATE');raw.exec('COMMIT');self.postMessage({deltaCooperative:{outsideTransaction:true}});},0);}return result;};
+ try{return await prepare.apply(this,args);}finally{raw.exec=exec;performance.now=nativeNow;self.postMessage({deltaPreparationDone:true});}
+};
 const commit=SqliteRecordDatabase.prototype.commit;
 SqliteRecordDatabase.prototype.commit=function(mutation){
  if(!mutation.replicaCandidateRestore?.update)return commit.call(this,mutation);
@@ -26,6 +37,7 @@ self.addEventListener('message',event=>{
   else if(command==='fail-commit')failCommit=true;
   else if(command==='lose-ack')loseAck=true;
   else if(command==='pause-validation')pause=true;
+  else if(command==='cooperative-preparation')cooperativePreparation=true;
   else if(command==='release'){release?.();release=undefined;}
   else if(command==='bad-certificate')raw.exec("UPDATE sensa_sync_dependency_state_v1 SET certificate_json='{' WHERE id=1");
   else if(command==='missing-certificate')raw.exec('UPDATE sensa_sync_dependency_state_v1 SET certificate_json=NULL WHERE id=1');

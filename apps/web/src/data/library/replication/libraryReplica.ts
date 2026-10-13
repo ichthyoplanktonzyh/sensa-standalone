@@ -161,11 +161,15 @@ export function assertLibraryReplicaDelete(entry:ReplicaEntry){
 }
 
 /** Produce the atomic local mutation set; delete semantics stay domain-owned. */
-export function planLibraryReplicaApply(current:ReplicaEntry[],desired:ReplicaEntry[]){
- const next=new Map(desired.map(entry=>[replicaEntryId(entry),entry]));
- const before=new Map(current.map(entry=>[replicaEntryId(entry),entry]));
- const deletes=current.filter(entry=>!next.has(replicaEntryId(entry)));
- for(const entry of deletes)assertLibraryReplicaDelete(entry);
- const puts=desired.filter(entry=>!replicaEntryEqual(before.get(replicaEntryId(entry)),entry));
+function* planLibraryReplicaApplySteps(current:ReplicaEntry[],desired:ReplicaEntry[],alive:()=>void=()=>{}){
+ const next=new Map<string,ReplicaEntry>(),before=new Map<string,ReplicaEntry>();
+ for(const entry of desired){alive();yield;next.set(replicaEntryId(entry),entry);}
+ for(const entry of current){alive();yield;before.set(replicaEntryId(entry),entry);}
+ const deletes:ReplicaEntry[]=[],puts:ReplicaEntry[]=[];
+ for(const entry of current){alive();yield;if(!next.has(replicaEntryId(entry))){assertLibraryReplicaDelete(entry);deletes.push(entry);}}
+ for(const entry of desired){alive();yield;if(!replicaEntryEqual(before.get(replicaEntryId(entry)),entry))puts.push(entry);}
+ alive();
  return {deletes,puts};
 }
+export const planLibraryReplicaApply=(current:ReplicaEntry[],desired:ReplicaEntry[])=>runSynchronously(planLibraryReplicaApplySteps(current,desired));
+export const planLibraryReplicaApplyCooperatively=(current:ReplicaEntry[],desired:ReplicaEntry[],alive:()=>void)=>runCooperatively(planLibraryReplicaApplySteps(current,desired,alive));

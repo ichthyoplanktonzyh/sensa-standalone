@@ -527,3 +527,56 @@ test('tail replacements count the final candidate body once instead of exhaustin
  try{await synchronizeLibrary(request);}finally{spy.mockRestore();}
  expect(logicalBytes).toBe(Buffer.byteLength(JSON.stringify(encodeBackupValue(remoteIdentity)))+Buffer.byteLength(JSON.stringify(encodeBackupValue(final))));expect((await facts()).drafts.map(row=>row.value)).toEqual([final]);
 });
+
+// Force the existing time budget to yield at each preparation step. The
+// timer runs only after a real macrotask boundary, without an open source or
+// scratch transaction. These are small correctness fixtures, not load tests.
+for(const interrupt of ['read','edit','discard','owner','signout','incarnation','source-tamper','encoding-tamper'] as const)test(`cooperative candidate encoding fences ${interrupt} outside write transactions`,async()=>{
+ const drafts=Array.from({length:8},(_,i)=>({...first,id:crypto.randomUUID(),text:`Small preparation ${i}: `+'x'.repeat(1400)}));
+ publish(drafts);await synchronizeLibrary(request);const before=await facts();publish(drafts.map(row=>({...row,revision:2,text:row.text+' received'})));
+ const raw=Reflect.get(database,'database'),exec=raw.exec.bind(raw);let scheduled=false,ran=false,inTransaction=false,ticks=0;
+ let action:Promise<void>|undefined;
+ const clock=vi.spyOn(performance,'now').mockImplementation(()=>++ticks*10);
+ const spy=vi.spyOn(raw,'exec').mockImplementation((...args:any[])=>{
+  const statement=typeof args[0]==='string'?args[0]:args[0]?.sql;
+  if(statement==='BEGIN IMMEDIATE')inTransaction=true;
+  const result=exec(...args);
+  if(statement==='COMMIT'||statement==='ROLLBACK')inTransaction=false;
+  if(!scheduled&&statement==='INSERT INTO sensa_replica_candidate_encoded_v1 VALUES(?,?,?,?,?,?,?)'){
+   scheduled=true;const id=args[0].bind[0];
+   action=new Promise<void>((resolve,reject)=>setTimeout(()=>{void(async()=>{
+    expect(inTransaction).toBe(false);exec('BEGIN IMMEDIATE');exec('COMMIT');ran=true;
+    expect((await facts()).drafts).toEqual(before.drafts);
+    if(interrupt==='edit')await saveDraft(crypto.randomUUID(),{id:first.id,expectedRevision:0,text:'Preserved concurrent edit.'});
+    else if(interrupt==='discard')await database.replicaCandidate({kind:'discard',id});
+    else if(interrupt==='source-tamper')exec({sql:'UPDATE sensa_replica_candidate_records_v1 SET value_json=value_json WHERE candidate_id=?',bind:[id]});
+    else if(interrupt==='encoding-tamper')exec({sql:'UPDATE sensa_replica_candidate_encoded_v1 SET value_json=\'["null"]\' WHERE candidate_id=?',bind:[id]});
+    else if(interrupt!=='read')await writeLibraryState(async tx=>{tx.put('meta',interrupt==='owner'?'service-owner':interrupt==='signout'?'signed-out':'local-incarnation',interrupt==='owner'?{subject:crypto.randomUUID(),accountId:crypto.randomUUID()}:interrupt==='signout'?true:crypto.randomUUID());});
+   })().then(resolve,reject);},0));
+  }
+  return result;
+ });
+ try{
+  const syncing=synchronizeLibrary(request);
+  if(interrupt==='read')await syncing;else await expect(syncing).rejects.toThrow();
+  await action;expect(scheduled&&ran).toBe(true);
+ }finally{spy.mockRestore();clock.mockRestore();}
+ const after=await facts();
+ if(interrupt==='read'){expect(after.drafts.map(row=>row.value)).toEqual(drafts.map(row=>({...row,revision:2,text:row.text+' received'})).sort((a,b)=>a.id.localeCompare(b.id)));expect((await readCloudSync())?.status).toBe('synced');}
+ else{expect(after.base).toEqual(before.base);expect(after.drafts).toEqual(interrupt==='edit'?expect.arrayContaining(before.drafts):before.drafts);}
+});
+
+for(const damage of ['receipt','expired','source','encoding','encoding-replace'] as const)test(`final atomic activation rejects ${damage} prepared candidate`,async()=>{
+ publish([first]);await synchronizeLibrary(request);const before=await facts();publish([{...first,revision:2,text:'Prepared replacement.'}]);
+ const adapter=await sqliteRecordAdapter(),candidate=adapter.replicaCandidate.bind(adapter),raw=Reflect.get(database,'database');let damaged=false;
+ adapter.replicaCandidate=async message=>{
+  const result=await candidate(message);if(result.kind!=='updatePrepared'||!result.update)return result;damaged=true;
+  if(damage==='receipt'){const copy=structuredClone(result);copy.update!.localRevision++;return copy;}
+  if(damage==='expired')await candidate({kind:'discard',id:result.update.id});
+  else if(damage==='encoding-replace')raw.exec({sql:`INSERT OR REPLACE INTO sensa_replica_candidate_encoded_v1 SELECT candidate_id,owner_kind,table_name,record_key,encoded_json,'["null"]',digests_json FROM sensa_replica_candidate_encoded_v1 WHERE candidate_id=?`,bind:[result.update.id]});
+  else raw.exec({sql:`UPDATE sensa_replica_candidate_${damage==='source'?'records':'encoded'}_v1 SET value_json='["null"]' WHERE candidate_id=?`,bind:[result.update.id]});
+  return result;
+ };
+ try{await expect(synchronizeLibrary(request)).rejects.toThrow();}finally{adapter.replicaCandidate=candidate;}
+ expect(damaged).toBe(true);expect(await facts()).toEqual(before);
+});

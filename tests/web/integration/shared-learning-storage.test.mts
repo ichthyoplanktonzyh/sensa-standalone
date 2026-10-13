@@ -352,3 +352,17 @@ test('an activated saved Memory continues one genuine review while all restored 
   expect(fixture.receiver.diagnostics({verifyIntegrity:true}).integrityCheck?.status).toBe('ok');
  }finally{vi.useRealTimers();for(const [name,method] of originals)Reflect.set(adapter,name,method);fixture.receiver.close(false);}
 });
+
+test('preencoding rejects a forged shared-body INSERT before its digest is reused',async()=>{
+ const fixture=await stageLearningReplica();try{
+  await fixture.validate();const handler=Reflect.get(fixture.receiver,'replicaCandidateStore'),target=fixture.records.find(row=>row.table==='learningTargets')!;
+  const [digest]=externalizeSharedRecordContent(JSON.parse(target.valueJson)).bodies.keys();expect(digest).toBeTruthy();
+  // This models a damaged private scratch row at an outside-transaction
+  // boundary, before a later source row first prepares the same digest.
+  fixture.storage.exec({sql:'INSERT INTO sensa_replica_candidate_encoded_bodies_v1 VALUES(?,?,?,?)',bind:[fixture.generation,digest!,packStoredRecord('["string","forged body"]'),null]});
+  const fence=JSON.parse((fixture.storage.exec({sql:'SELECT fence_json FROM sensa_replica_candidates_v1 WHERE id=?',bind:[fixture.generation],rowMode:0,returnValue:'resultRows'}) as string[])[0]!);
+  const plan={receipt:{id:fixture.generation},puts:fixture.records.map(({table,key})=>({table,key})),basePuts:[],deletes:[]};
+  await expect(Reflect.get(handler,'prepareEncoding').call(handler,plan,fence,()=>Reflect.get(handler,'check').call(handler,Reflect.get(handler,'header').call(handler,fixture.generation)))).rejects.toThrow(/sqlite_shared_content_invalid|library_sync_candidate_invalid/);
+  expect(fixture.receiver.count('learningTargets')).toBe(0);expect(fixture.receiver.syncBaseReferences()).toEqual([]);
+ }finally{fixture.receiver.close(false);}
+});
