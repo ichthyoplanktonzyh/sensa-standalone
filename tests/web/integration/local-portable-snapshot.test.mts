@@ -111,7 +111,7 @@ test('own-cloud admission is distinct from external import and keeps checkpoint,
 });
 test('fabricated semantic-memory cache cannot become a query result',async()=>{
  const file='/focused-projection-source-'+crypto.randomUUID();sqlite.capi.sqlite3_js_posix_create_file(file,snapshot.bytes);
- const bad=new sqlite.oo1.DB(file,'c');bad.exec("INSERT INTO sensa_learning_semantic_memory VALUES('fabricated',NULL,'{}',1,'{}')");
+ const bad=new sqlite.oo1.DB(file,'c');bad.exec("INSERT INTO sensa_learning_semantic_memory(target_key,sense_id,summary_json,valid,list_json) VALUES('fabricated',NULL,'{}',1,'{}')");
  const bytes=sqlite.capi.sqlite3_js_db_export(bad.pointer);bad.close();
  await expect(importLocalPortableSnapshot(sqlite,memoryFilePool(),'/focused-projection-import-'+crypto.randomUUID(),{...snapshot,bytes,sha256:sha256(bytes)})).rejects.toThrow('sqlite_snapshot_projection_values');
 });
