@@ -6,6 +6,24 @@ import {encodeLibrarySyncBlock} from '@sensa/contracts/sensa/library-sync-blocks
 import {portablePackageFixture} from '../../../scripts/support/portablePackageFixture.mts';
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
 
+test('cancelled first transfers never confirm a late CAS or activate a closed private generation; retry uses receipt',async({browser})=>{
+ const f=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await f.createAccount(),a=await f.createClient(account),b=await f.createClient(account);
+  await a.evaluate(async()=>{const c=(window as any).core;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Cancelled transfer'});});
+  for(const cancelAt of ['/staging/page','mutation']){
+   await expect(a.evaluate(async cancelAt=>{const w=window as any,controller=new AbortController();if(cancelAt==='mutation'){const prototype=w.core.LibraryTransaction.prototype,original=prototype.mutation;prototype.mutation=async function(){const result=await original.call(this);if(result.initialPublication){prototype.mutation=original;controller.abort();}return result;};}await w.core.synchronizeLibrary(async(path:string,body:any,signal:AbortSignal)=>{const result=await w.request(path,body,signal);if(path===cancelAt)controller.abort();return result;},{signal:controller.signal});},cancelAt)).rejects.toThrow('library_sync_cancelled');
+   expect(await a.evaluate(()=>(window as any).core.readLibrary((tx:any)=>tx.syncBaseReferences()))).toHaveLength(0);expect((await a.evaluate(()=>(window as any).core.readCloudSync())).failureKind).toBeUndefined();
+   expect(Number((await f.pool.query('SELECT revision FROM sensa_consumer.library_cloud WHERE account_id=$1',[account.accountId])).rows[0].revision)).toBe(cancelAt==='mutation'?1:0);
+  }
+  f.clearRequests();await a.evaluate(()=>(window as any).sync());expect(f.requests().some(r=>r.path.includes('/receipt/'))).toBe(true);expect(f.requests().some(r=>r.path.endsWith('/commit'))).toBe(false);expect((await a.evaluate(()=>(window as any).core.readCloudSync())).status).toBe('synced');
+  const before=await b.evaluate(()=>(window as any).core.readLibrary((tx:any)=>tx.get('meta','identity')));
+  await expect(b.evaluate(async()=>{const w=window as any,controller=new AbortController(),NativeWorker=window.Worker;window.Worker=class extends NativeWorker{constructor(url:string|URL,options?:WorkerOptions){super(url,options);}postMessage(message:any,options?:any){if(message.kind==='close'){const stop=(event:MessageEvent)=>{if(event.data?.id===message.id){this.removeEventListener('message',stop);controller.abort();}};this.addEventListener('message',stop);}super.postMessage(message,options);}};await w.core.synchronizeLibrary(w.request,{signal:controller.signal});})).rejects.toThrow('library_sync_cancelled');
+  expect(await b.evaluate(()=>localStorage.getItem('sensa:local-library-selection:v1'))).toBeNull();expect(await b.evaluate(()=>(window as any).core.readLibrary((tx:any)=>tx.get('meta','identity')))).toEqual(before);expect(await b.evaluate(()=>(window as any).core.listDrafts())).toHaveLength(0);
+  await b.reload();await b.evaluate(async account=>{const w=window as any,path='/core.js';w.core=await import(path);await w.core.openLibrary();await w.core.synchronizeLibrary(async(path:string,body:any)=>{const r=await fetch('/sensa/library-sync'+path,{method:body===undefined?'GET':'POST',headers:{authorization:'Bearer '+account.token,'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const value=await r.json();if(!r.ok)throw Error(value.code);return value;});},account);expect(await b.evaluate(()=>(window as any).core.listDrafts())).toHaveLength(1);
+ }finally{await f.close();}
+});
+
 test('own binary checkpoint restores into a retained generation after tail and continues genuine learning',async({browser})=>{
  const f=await createLibraryCloudBrowserFixture(browser,resolve('scripts/assessment/capacityBrowserEntry.ts'));
  try{

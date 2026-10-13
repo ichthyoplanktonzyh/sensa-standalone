@@ -5,6 +5,7 @@ export const cloudCheckpointSchedule={idleMs:30_000,maxDirtyMs:60_000,pullStaleM
 
 const transientErrors=new Set([
  'library_sync_network',
+ 'library_sync_stalled',
  'library_sync_rate_limited',
  'library_sync_server_error',
  'library_sync_head_changed',

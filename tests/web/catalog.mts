@@ -88,6 +88,7 @@ const foundationTests = [
   {id:'book-curriculum-sources',file:'tests/web/integration/book-curriculum-sources.test.mts',kind:'integration',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
   {id:'book-publication-provenance',file:'tests/web/integration/book-publication-provenance.test.mts',kind:'integration',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
   {id:'relearning-loop',file:'tests/web/integration/relearning-loop.test.mts',kind:'integration',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
+  {id:'library-sync-deadline',file:'tests/web/integration/library-sync-deadline.test.mts',kind:'integration',risks:['durability','convergence','scale'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'library-sync-transport',file:'tests/web/integration/library-sync-transport.test.mts',kind:'integration',risks:['local-correctness','durability','convergence'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
   {id:'personal-meaning-conflict-decision',file:'tests/web/integration/personal-meaning-conflict-decision.test.mts',kind:'integration',risks:['local-correctness','durability','convergence'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'cloud-sync-comparison',file:'tests/web/unit/cloud-sync-comparison.test.mts',kind:'unit',risks:['local-correctness','convergence'],environment:'node',suite:'fast',runner:'vitest'},

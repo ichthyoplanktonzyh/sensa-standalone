@@ -41,6 +41,7 @@
     "integration/book-publication-provenance.test.mts",
     "integration/relearning-loop.test.mts",
     "integration/library-sync-transport.test.mts",
+    "integration/library-sync-deadline.test.mts",
     "unit/library-sync-blocks.test.mts",
     "unit/cloud-sync-comparison.test.mts",
     "integration/personal-meaning-conflict-decision.test.mts",

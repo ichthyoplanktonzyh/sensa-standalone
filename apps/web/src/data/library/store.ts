@@ -794,7 +794,7 @@ export async function assertCurrentLibrary(tx: LibraryTransaction): Promise<stri
 export function adoptOwnCloudIncarnation(incarnation:string):void{sessionIncarnation=incarnation;}
 /** Only a genuinely empty source can adopt its authenticated cloud generation.
  * Old owner files remain retained; the pointer is the final durable mutation. */
-export async function activateOwnCloudLibrary(expected:ReplicaCandidateFence&{signoutEpoch:unknown},namespace:string,incarnation:string,seal:(devicePuts:SqliteMutation['puts'])=>Promise<void>){
+export async function activateOwnCloudLibrary(expected:ReplicaCandidateFence&{signoutEpoch:unknown},namespace:string,incarnation:string,seal:(devicePuts:SqliteMutation['puts'])=>Promise<void>,signal?:AbortSignal,onCommitStart?:()=>void){
  const source=localLibraryNamespace();
  return navigator.locks.request('sensa-library-selection-v1',{mode:'exclusive',signal:AbortSignal.timeout(15000)},()=>runAcrossPages('readwrite',async()=>{
   assertLocalLibrarySelected(source);const adapter=await sqliteRecordAdapter(),tx=new LibraryTransaction('readonly',adapter);
@@ -809,7 +809,7 @@ export async function activateOwnCloudLibrary(expected:ReplicaCandidateFence&{si
   const providerSettings=await tx.get('settings','providers');if(providerSettings!==undefined)puts.push({table:'settings',key:'providers',encodedValue:encode(providerSettings)});
   await seal(puts);
   const {prepareOwnCloudActivation}=await import('./sqliteAdapter');await prepareOwnCloudActivation();
-  activateOwnCloudNamespace(namespace,source);adoptOwnCloudIncarnation(incarnation);markLocalLibraryPresent();
+  signal?.throwIfAborted();onCommitStart?.();activateOwnCloudNamespace(namespace,source);adoptOwnCloudIncarnation(incarnation);markLocalLibraryPresent();
   window.dispatchEvent(new Event('sensa-own-cloud-generation-activated'));window.dispatchEvent(new Event('sensa-sync-state-changed'));
   window.dispatchEvent(new CustomEvent('sensa-library-changed',{detail:{tables:libraryTables,clears:libraryTables,records:[]}}));
   return {fromIncarnation:expected.incarnation,incarnation,namespace};
