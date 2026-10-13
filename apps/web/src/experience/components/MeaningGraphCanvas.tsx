@@ -3,6 +3,7 @@ import cytoscape,{type Core,type NodeSingular,type StylesheetJson} from 'cytosca
 import {useScreenState} from '../ui/ScreenHost';
 import {type buildMeaningGraph} from '../ui/meaningGraph';
 import {applyMeaningGraphEmphasis,type MeaningGraphEmphasis} from '../ui/meaningGraphEmphasis';
+import {partitionMeaningGraph,meaningGraphKeyboardPositions} from '../ui/meaningGraphCanvasModel';
 
 type Graph=ReturnType<typeof buildMeaningGraph>;
 type Camera={x:number;y:number;zoom:number};
@@ -19,8 +20,7 @@ export function MeaningGraphCanvas(props:Props){
  const signature=useMemo(()=>props.graph.nodes.map(node=>node.id).join('|')+'#'+props.graph.edges.map(edge=>`${edge.from}:${edge.to}`).join('|'),[props.graph]);
  const [camera,setCamera]=useScreenState<Camera|null>(`${props.screenId}:cy-camera`,null);
  const [layout,setLayout]=useScreenState<{signature:string;positions:Position[];width:number;height:number}|null>(`${props.screenId}:cy-layout`,null);
- const [positions,setPositions]=useState<Position[]>([]),[focused,setFocused]=useState<string|null>(null);
- const positionsById=useMemo(()=>new Map(positions.map(position=>[position.id,position])),[positions]);
+ const [focused,setFocused]=useState<string|null>(null);
  const focusedId=focused&&props.graph.byId.has(focused)?focused:props.selected&&props.graph.byId.has(props.selected)?props.selected:props.graph.nodes[0]?.id;
  const focusedIndex=props.graph.order.get(focusedId??'')??0;
  const keyboardNodes=useMemo(()=>{
@@ -29,6 +29,7 @@ export function MeaningGraphCanvas(props:Props){
   if(selected&&!nodes.some(node=>node.id===selected.id))nodes.push(selected);
   return nodes.sort((a,b)=>props.graph.order.get(a.id)!-props.graph.order.get(b.id)!);
  },[props.graph,props.selected,focusedIndex]);
+ const positionsById=meaningGraphKeyboardPositions(engine.current,keyboardNodes);
  const pendingFocus=useRef<string|null>(null);
  useLayoutEffect(()=>{const id=pendingFocus.current;if(id){pendingFocus.current=null;container.current?.querySelector<HTMLButtonElement>(`[data-expression-id="${id}"]`)?.focus();}},[focused]);
  const requestFocus=(id:string)=>{const button=container.current?.querySelector<HTMLButtonElement>(`[data-expression-id="${id}"]`);if(button)button.focus();else{pendingFocus.current=id;setFocused(id);}};
@@ -49,8 +50,7 @@ export function MeaningGraphCanvas(props:Props){
  };
  const publish=()=>{
   const cy=engine.current;if(!cy)return;const pan=cy.pan(),next={x:pan.x,y:pan.y,zoom:cy.zoom()};
-  setCamera(old=>old&&old.x===next.x&&old.y===next.y&&old.zoom===next.zoom?old:next);
-  setPositions(cy.nodes().map(node=>({id:node.id(),...node.renderedPosition()})));
+  cameraRef.current=next;setCamera(next);
  };
  useEffect(()=>{
   const root=container.current;if(!root)return;
@@ -66,35 +66,42 @@ export function MeaningGraphCanvas(props:Props){
 
   if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.graph.engine',{start:started,end:performance.now()});
   const layoutStarted=performance.now();
-  // Isolates use grid below. components() runs BFS for each singleton, and
-  // each BFS groups the whole input. Keep the original linked-node order.
-  let components:ReturnType<ReturnType<Core['nodes']>['components']>|null=null;
-  const linkedComponents=()=>components??=cy.nodes('.linked').union(cy.edges()).components();
+  let partition:ReturnType<typeof partitionMeaningGraph>|null=null;
+  const components=()=>{
+   if(!partition){const start=performance.now();partition=partitionMeaningGraph(cy);if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.graph.components',{start,end:performance.now()});}
+   return partition;
+  };
   const cached=layout?.signature===signature;
   let width=root.clientWidth,height=root.clientHeight;
   if(layout?.signature===signature){const saved=new Map(layout.positions.map(position=>[position.id,position]));cy.nodes().positions(node=>saved.get(node.id())??node.position());}
   else {
    cy.batch(()=>{
    let offset=0;
-   for(const component of linkedComponents()){
+   const linked=components().linked,linkedStarted=performance.now();
+   for(const component of linked){
     component.layout({name:'breadthfirst',animate:false,fit:false,directed:false,roots:[component.nodes().sort((a,b)=>b.degree()-a.degree()).first().id()],nodeDimensionsIncludeLabels:true,spacingFactor:1.15,boundingBox:{x1:20,y1:offset+20,w:Math.max(300,Math.min(root.clientWidth-40,620)),h:220}}).run();
     const bounds=component.boundingBox({includeLabels:false}),scale=component.nodes().length<=3?Math.min(1,Math.max(160,root.clientWidth-160)/bounds.w):1;
     component.nodes().positions(node=>({x:80+(node.position('x')-bounds.x1)*scale,y:60+offset+node.position('y')-bounds.y1}));offset+=bounds.h+75;
    }
+   if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.graph.linked-layout',{start:linkedStarted,end:performance.now()});
    });
   }
   if(layout?.signature===signature&&cameraRef.current)cy.viewport({zoom:cameraRef.current.zoom,pan:{x:cameraRef.current.x,y:cameraRef.current.y}});
   else {cy.zoom(1);cy.pan({x:15,y:10});}
   const arrangeForViewport=()=>{
    cy.batch(()=>{
-    for(const component of linkedComponents().filter(group=>group.nodes().length<=3)){
+    const arrangeStarted=performance.now();
+    for(const component of components().linked.filter(group=>group.nodes().length<=3)){
      const xs=component.nodes().map(node=>node.position('x')),min=Math.min(...xs),span=Math.max(...xs)-min;
      if(span>0){const width=Math.min(300,Math.max(120,root.clientWidth-160));component.nodes().positions(node=>({x:80+(node.position('x')-min)*width/span,y:node.position('y')}));}
     }
-    const isolated=cy.nodes().filter(node=>node.degree()===0),linked=cy.edges().length>0,right=linked&&window.matchMedia('(min-width: 48rem)').matches;
+    if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.graph.component-viewport',{start:arrangeStarted,end:performance.now()});
+    const isolated=components().isolated,linked=cy.edges().length>0,right=linked&&window.matchMedia('(min-width: 48rem)').matches;
     const x=right?440:10,y=right?60:linked?offsetForIsolates(cy)+75:25;
     const cols=Math.max(1,Math.min(isolated.length,right?Math.max(2,Math.floor((root.clientWidth-440)/155)):Math.max(1,Math.floor((root.clientWidth-20)/155))));
+    const gridStarted=performance.now();
     if(isolated.length)isolated.layout({name:'grid',fit:false,avoidOverlap:true,cols,boundingBox:{x1:x,y1:y,w:cols*155,h:Math.ceil(isolated.length/cols)*105},sort:(a,b)=>a.data('label').localeCompare(b.data('label'))||a.id().localeCompare(b.id())}).run();
+    if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.graph.isolate-grid',{start:gridStarted,end:performance.now()});
    });
   };
   const saveLayout=()=>setLayout({signature,positions:cy.nodes().map(node=>({id:node.id(),...node.position()})),width:root.clientWidth,height:root.clientHeight});

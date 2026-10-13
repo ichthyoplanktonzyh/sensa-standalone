@@ -47,6 +47,7 @@ export type WebTestCatalogEntry = Readonly<{
  */
 const foundationTests = [
   {id:'meaning-graph-emphasis',file:'tests/web/unit/meaning-graph-emphasis.test.mts',kind:'unit',risks:['local-correctness','scale'],environment:'node',suite:'fast',runner:'vitest'},
+  {id:'meaning-graph-canvas-model',file:'tests/web/unit/meaning-graph-canvas-model.test.mts',kind:'unit',risks:['local-correctness','scale'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'context-draft-journey',file:'tests/web/integration/context-draft-journey.test.mts',kind:'integration',risks:['local-correctness','durability','convergence'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
   {id:'fixture-preparation',file:'tests/web/quality/fixture-preparation.test.mts',kind:'quality',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'release-archive',file:'tests/web/release/release-archive.test.mjs',kind:'contract',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
