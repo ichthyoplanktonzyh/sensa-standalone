@@ -47,7 +47,16 @@ test('a complete nine-key retention review receives through a certified sparse o
 });
 
 const testRpc=(page:Page,command:string)=>page.evaluate(command=>(window as any).deltaTest(command),command);
-for(const fault of ['bad-certificate','lost-edge'] as const)test(`untrusted dependency cache ${fault} falls back to complete admission`,async()=>{
+test('private account accounting and a no-change ACK do not invalidate the certified baseline',async()=>{
+ const {a,b}=await setup();try{
+  const before=await testRpc(b,'snapshot');
+  await b.evaluate(async()=>{const c=(window as any).core;await c.command({id:crypto.randomUUID(),kind:'service.installation',input:{}},(tx:any)=>{tx.put('meta','service-installation',crypto.randomUUID());return null;});await c.command({id:crypto.randomUUID(),kind:'service.local-access',input:{}},(tx:any)=>{tx.put('meta','signed-out',false);return null;});});
+  await b.evaluate(()=>(window as any).sync());const ack=await testRpc(b,'snapshot');expect(ack.revision).toBe(before.revision+2);expect(ack.base).toEqual(before.base);expect(ack.certificate).toEqual(before.certificate);
+  await a.evaluate(async()=>{const c=(window as any).core;await c.confirmLearningQuantity(crypto.randomUUID(),(await c.languageRoutesSnapshot()).context,30);});await a.evaluate(()=>(window as any).sync());fixture.clearRequests();await b.evaluate(()=>(window as any).sync());
+  const state=await b.evaluate(()=>(window as any).core.readCloudSync());expect(state.receive.mode).toBe('incremental');expect(state.receive.changedRecords).toBe(1);expect(state.receive.baselineBuildRecords).toBe(0);expect(fixture.requests().some(row=>row.path.includes('/snapshot'))).toBe(false);expect(await facts(b)).toEqual(await facts(a));
+ }finally{await a.context().close();await b.context().close();}
+});
+for(const fault of ['bad-certificate','missing-certificate','lost-edge'] as const)test(`untrusted dependency cache ${fault} falls back to complete admission`,async()=>{
  const {a,b,targetId}=await setup();try{await settle(a,targetId);await a.evaluate(()=>(window as any).sync());await testRpc(b,fault);await b.evaluate(()=>(window as any).sync());const state=await b.evaluate(()=>(window as any).core.readCloudSync());expect(state.receive.mode).toBe('complete');expect(state.receive.fallbackReason).toBe('uncertified_baseline');expect(await facts(b)).toEqual(await facts(a));}finally{await a.context().close();await b.context().close();}
 });
 for(const fault of ['drift-after-begin','fail-commit'] as const)test(`certified receive ${fault} preserves facts, baseline and cursor then retries`,async()=>{
@@ -58,6 +67,21 @@ test('a lost local commit acknowledgement and duplicate pull retain one atomic i
 });
 test('a real local edit during certified validation retires the candidate and preserves the edit',async()=>{
  const {a,b,targetId}=await setup();try{await settle(a,targetId);await a.evaluate(()=>(window as any).sync());const before=await testRpc(b,'snapshot');await testRpc(b,'pause-validation');const pending=b.evaluate(()=>(window as any).sync());const rejected=expect(pending).rejects.toThrow('library_sync_local_changed');await b.waitForFunction(()=>(window as any).deltaBarrier===true);const draft=await b.evaluate(()=>(window as any).core.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Preserved during delta validation.'}));await testRpc(b,'release');await rejected;const after=await testRpc(b,'snapshot');expect(after.base).toEqual(before.base);expect(after.revision).toBe(before.revision+1);expect(await b.evaluate(id=>(window as any).core.readLibrary((tx:any)=>tx.get('drafts',id)),draft.id)).toEqual(draft);}finally{await a.context().close();await b.context().close();}
+});
+test('a damaged baseline cannot enter source facts through complete fallback',async()=>{
+ const {a,b,targetId}=await setup();try{
+  await settle(a,targetId);await a.evaluate(()=>(window as any).sync());await testRpc(b,'corrupt-baseline');const before=await facts(b),stored=await testRpc(b,'snapshot');
+  await expect(b.evaluate(()=>(window as any).sync())).rejects.toThrow();expect(await facts(b)).toEqual(before);expect(await testRpc(b,'snapshot')).toEqual(stored);
+ }finally{await a.context().close();await b.context().close();}
+});
+for(const change of ['owner','signout','epoch','cancel'] as const)test(`a ${change} during remote-only validation prevents atomic promotion`,async()=>{
+ const {a,b,targetId}=await setup();try{
+  await settle(a,targetId);await a.evaluate(()=>(window as any).sync());const before=await facts(b),stored=await testRpc(b,'snapshot');await testRpc(b,'pause-validation');
+  const pending=b.evaluate(async()=>{const w=window as any;w.deltaAbort=new AbortController();return w.core.synchronizeLibrary(w.request,{signal:w.deltaAbort.signal});});const rejected=expect(pending).rejects.toThrow();
+  await b.waitForFunction(()=>(window as any).deltaBarrier===true);
+  await b.evaluate(async change=>{const w=window as any,c=w.core;if(change==='cancel'){w.deltaAbort.abort();return;}await c.writeLibraryState(async(tx:any)=>{if(change==='owner')tx.put('meta','service-owner',{...await tx.get('meta','service-owner'),subject:crypto.randomUUID()});else if(change==='epoch')tx.put('meta','service-signout-epoch',crypto.randomUUID());else tx.put('meta','signed-out',true);});},change);
+  await testRpc(b,'release');await rejected;expect(await facts(b)).toEqual(before);const after=await testRpc(b,'snapshot');expect(after.base).toEqual(stored.base);expect(after.revision).toBe(stored.revision);
+ }finally{await a.context().close();await b.context().close();}
 });
 
 type WireRow=[string,string,any];

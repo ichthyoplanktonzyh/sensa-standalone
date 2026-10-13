@@ -421,13 +421,18 @@ incarnation fence，清除后的旧点击不能变成新授权。普通尝试失
 清除通知使已暂停的空库成为本机 authoritative，不请求云端或继续阻挡资料页；准入失败后的手动重连
 只重试准入，真正成功后才允许同步。
 暂存应用、完整回退应用或空账号确认在同一源事务内解除暂停；失败不消费，新的本机资料仍须走身份冲突。
-新设备候选应用只额外允许删除这一确切的现存 marker，不开放其他 metadata 或删除操作；当前协调协议为 60。
+新设备候选应用只额外允许删除这一确切的现存 marker，不开放其他 metadata 或删除操作；当前协调协议为 68。
 同事务 restoreOperationId 回执确认协调器丢失 ACK／候选重放后的实际提交，确认后才发送资料变化通知；
 无法读取该回执时不能冒充成功。候选、live、baseline 和 WAL 可同时占磁盘；256 MiB 暂存估计不是峰值磁盘证明。
 已有当前版本验证的 checkpoint 且本机 revision 未变化时，远端新 head 进入同一私有候选。
 完整准入从实际候选正文建立 baseline-only 的关系／全局 protocolRunId 所有权索引，证书绑定账号、库、
-incarnation、cursor、local revision、validator、公共材料代次及 baseline generation／索引 epoch。
+incarnation、cursor、validator、公共材料代次及 baseline generation／索引 epoch；证书中的 local revision
+是准入时的来源见证。活跃内容 revision 与已确认 syncedLocalRevision 的相等条件独立保护 clean checkpoint，
+私有记账及已证实无复制变化的 ACK 不改变 baseline 身份，不续写或放宽旧证明。
 所有 baseline 与关系写入同事务递增代次并使旧证书失效；缺失、损坏、版本或 schema 漂移不能作为负见证。
+未认证 baseline 的准备先返回私有候选 ID，再通过有界 seed RPC 逐行复制引用与正文；每次最多 16 行，
+行间按 8ms 工作预算返回，不在事务内 yield。受影响分量回退完整准入时复用同一分块逻辑，批间交还 Worker。
+每块重验本机内容、baseline／索引和材料代次，取消可按已知 ID 丢弃；全部候选仍须完整准入及原子提交。
 普通复习的 Target retention 字段、Run/Event、Scope/Session、两个 active pointers 与确切的每日数量设置只暂存变化行，
 以已认证 baseline 的惰性点读组成稀疏 overlay，不复制全库引用或正文。重新验证完整受影响 Run–Target
 历史分量（含旧 reconciliation 的原 audit）、反向 continuation 与 Session 消费者；Scope/source 支持读取

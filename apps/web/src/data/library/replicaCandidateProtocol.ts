@@ -28,6 +28,7 @@ export type ReplicaCandidateRequest=
  |{kind:'discardPublication';id:string}
  |{kind:'begin';fence:ReplicaCandidateFence;expected:ReplicaCandidateExpected}
  |{kind:'beginIndex';fence:ReplicaCandidateFence;head:LibrarySyncHead;baseRevision?:number}
+ |{kind:'seed';id:string}
  |{kind:'indexPage';id:string;page:LibrarySyncPullResult|LibrarySyncSnapshotPageResult}
  |{kind:'append';id:string;records:ReplicaCandidateRecord[];blocks:ReplicaCandidateBlock[]}
  |{kind:'prove';id:string;record:Pick<ReplicaCandidateRecord,'table'|'key'>;blocks:ReplicaCandidateBlock[]}
@@ -35,7 +36,7 @@ export type ReplicaCandidateRequest=
  |{kind:'validate';id:string}
  |{kind:'prepareUpdate';id:string;baseRevision:number}
  |{kind:'discard';id:string};
-export type ReplicaCandidateResponse={kind:'begun';id:string}|InitialPublicationPage|{kind:'publicationIndexPage';rows:InitialPublicationPage['rows'];next:InitialPublicationPage['next'];done:boolean;stats:InitialPublicationStats}|{kind:'publicationBlocks';blocks:ReplicaCandidateBlock[];deferred:string[]}|{kind:'publicationValidated';stats:InitialPublicationStats}|{kind:'indexed';needed:Array<Pick<ReplicaCandidateRecord,'table'|'key'>>}|{kind:'appended'|'proved'}|{kind:'reused';keys:Array<Pick<ReplicaCandidateRecord,'table'|'key'>>}|{kind:'validated';candidate:ReplicaCandidateValidation}|{kind:'updatePrepared';update:ReplicaCandidateUpdate|null}|{kind:'discarded'};
+export type ReplicaCandidateResponse={kind:'begun';id:string;needsSeed?:boolean}|{kind:'seeded';done:boolean}|InitialPublicationPage|{kind:'publicationIndexPage';rows:InitialPublicationPage['rows'];next:InitialPublicationPage['next'];done:boolean;stats:InitialPublicationStats}|{kind:'publicationBlocks';blocks:ReplicaCandidateBlock[];deferred:string[]}|{kind:'publicationValidated';stats:InitialPublicationStats}|{kind:'indexed';needed:Array<Pick<ReplicaCandidateRecord,'table'|'key'>>}|{kind:'appended'|'proved'}|{kind:'reused';keys:Array<Pick<ReplicaCandidateRecord,'table'|'key'>>}|{kind:'validated';candidate:ReplicaCandidateValidation}|{kind:'updatePrepared';update:ReplicaCandidateUpdate|null}|{kind:'discarded'};
 
 /** Large private bodies use ordinary rowid storage, with the same unique key
  * and parent ownership. The cache is disposable across physical connections. */

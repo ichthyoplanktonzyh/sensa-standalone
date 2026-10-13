@@ -53,7 +53,11 @@ export class SqliteSyncDependencies{
  clock(){this.ensure();return this.rows<{generation:number;epoch:number;certificate_json:string|null}>('SELECT * FROM sensa_sync_dependency_state_v1 WHERE id=1')[0];}
  certificate():SyncDependencyCertificate|undefined{const row=this.clock();if(!this.healthySchema||!row.certificate_json)return;let raw:unknown;try{raw=JSON.parse(row.certificate_json);}catch{return;}const parsed=certificateSchema.safeParse(raw);if(!parsed.success)return;const certificate=parsed.data;if(certificate.generation!==row.generation||certificate.epoch!==row.epoch)return;return certificate;}
  match(state:CloudSyncState|undefined,fence:ReplicaCandidateFence,artifactRevision:number){
-  const certificate=this.certificate();if(!certificate||!validatedCheckpoint(state)||state!.syncedLocalRevision!==fence.localRevision||certificate.localRevision!==fence.localRevision||certificate.revision!==state!.revision||certificate.artifactRevision!==artifactRevision||certificate.incarnation!==fence.incarnation||!backupEqual(certificate.owner,fence.owner)||certificate.libraryId!==fence.identity.id||certificate.learnerId!==fence.identity.learnerId)return;
+  // The live revision fences source edits. The certificate's localRevision
+  // records admission provenance, not baseline identity: private commands and
+  // a checked empty-delta ACK can advance the clean checkpoint independently.
+  if(!validatedCheckpoint(state)||state!.syncedLocalRevision!==fence.localRevision||!backupEqual(state!.owner,fence.owner)||state!.incarnation!==fence.incarnation)return;
+  const certificate=this.certificate();if(!certificate||certificate.revision!==state!.revision||certificate.artifactRevision!==artifactRevision||certificate.incarnation!==fence.incarnation||!backupEqual(certificate.owner,fence.owner)||certificate.libraryId!==fence.identity.id||certificate.learnerId!==fence.identity.learnerId)return;
   return certificate;
  }
  assert(certificate:SyncDependencyCertificate):void{const current=this.certificate();if(!current||!backupEqual(current,certificate))throw Error('library_sync_local_changed');}

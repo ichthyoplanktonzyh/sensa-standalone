@@ -284,6 +284,7 @@ class Blocks{
   const begun=await send({kind:'beginIndex',fence,head,baseRevision});if(begun.kind!=='begun')throw Error('library_sync_candidate_invalid');
   const id=begun.id;
   try{
+   if(begun.needsSeed)for(;;){const seeded=await send({kind:'seed',id});if(seeded.kind!=='seeded')throw Error('library_sync_candidate_invalid');if(seeded.done)break;}
    for await(const page of this.indexPages(head,baseRevision)){
     const indexed=await send({kind:'indexPage',id,page});if(indexed.kind!=='indexed')throw Error('library_sync_candidate_invalid');
     const needed=new Set(indexed.needed.map(row=>JSON.stringify([row.table,row.key]))),rows='rows' in page?page.rows:page.changes;
@@ -417,6 +418,9 @@ async function verifyPublication(head:LibrarySyncHead,pending:LibrarySyncCommit)
 }
 
 async function boundedCandidate(input:ReplicaCandidateRequest,deadline:CloudSyncDeadline){
+ // Cleanup must still reach the owner after cancellation. Other work cannot
+ // start after the pass has expired, even if a previous RPC finishes late.
+ if(input.kind!=='discard'&&input.kind!=='discardPublication')deadline.check();
  const pending=requestReplicaCandidate(input);
  if(input.kind==='beginPublication'||input.kind==='beginIndex')void pending.then(result=>{
   if(deadline.signal.aborted&&result.kind==='begun')return deadline.cleanup(()=>requestReplicaCandidate({kind:input.kind==='beginPublication'?'discardPublication':'discard',id:result.id}));
@@ -635,24 +639,26 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
   // against the confirmed baseline, then prepares only actual record changes.
   if(validatedCheckpoint(prior)&&prior!.syncedLocalRevision===header.localRevision&&observedHead?.manifest&&observedHead.revision!==prior!.revision){
    let candidate:ReplicaCandidateValidation|undefined;
+   const send=(input:ReplicaCandidateRequest)=>boundedCandidate(input,deadline);
    try{
-    const staged=await stageStableCandidate(blocks,request,observedHead,{owner:header.owner,incarnation:header.incarnation,identity:header.identity,localRevision:header.localRevision},prior!.revision);
+    const staged=await deadline.run(()=>stageStableCandidate(blocks,request,observedHead!,{owner:header.owner,incarnation:header.incarnation,identity:header.identity,localRevision:header.localRevision},prior!.revision,send));
     observedHead=staged.head;candidate=staged.candidate;receiveEvidence=candidate?.receive;
-    const prepared=candidate?await requestReplicaCandidate({kind:'prepareUpdate',id:candidate.id,baseRevision:prior!.revision}):{kind:'updatePrepared' as const,update:null};
+    const prepared=candidate?await send({kind:'prepareUpdate',id:candidate.id,baseRevision:prior!.revision}):{kind:'updatePrepared' as const,update:null};
     if(prepared.kind!=='updatePrepared')throw Error('library_sync_candidate_invalid');
     if(prepared.update&&candidate){
      const selected=candidate,update=prepared.update;
-     await (update.contentChanged?restoreLibraryTransaction:writeLibraryState)(async tx=>{
+     await deadline.run(beginCommit=>(update.contentChanged?restoreLibraryTransaction:writeLibraryState)(async tx=>{
+      tx.requireCommitSignal(deadline.signal,'library_sync_cancelled',beginCommit);
       const current=await captureHeader(tx);
-      if(!sameOwner(current.owner,header.owner)||current.incarnation!==header.incarnation)throw Error('account_changed');
+      if(!sameOwner(current.owner,header.owner)||current.incarnation!==header.incarnation||!equal(current.signoutEpoch,header.signoutEpoch))throw Error('account_changed');
       if(current.localRevision!==header.localRevision||!equal(current.identity,header.identity)||!validatedCheckpoint(current.state)||current.state!.revision!==prior!.revision)throw Error('library_sync_local_changed');
       const completedAt=new Date().toISOString();tx.updateReplicaCandidate(update);
       tx.put('meta',STATE,{...current.state!,receive:update.receive,restoreOperationId:selected.id,checkpointVersion:7,restoreValidationVersion:libraryRestoreValidationVersion,revision:selected.head.revision,storage:selected.head.storage,status:'synced',syncedLocalRevision:header.localRevision+(update.contentChanged?1:0),pending:undefined,conflicts:undefined,conflict:undefined,resolution:undefined,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
-     });
+     }));
      return;
     }
    }catch(cause){if(!(cause instanceof Error)||cause.message!=='sqlite_replica_candidate_unavailable')throw cause;}
-   finally{if(candidate)await requestReplicaCandidate({kind:'discard',id:candidate.id}).catch(()=>{});}
+   finally{if(candidate)await deadline.cleanup(()=>requestReplicaCandidate({kind:'discard',id:candidate!.id}));}
   }
   if(!prior?.pending&&!initiallyConflicted&&await readLibrary(canRestoreFreshLibrary)){
    observedHead??=parseSyncHead(await request('/head'));

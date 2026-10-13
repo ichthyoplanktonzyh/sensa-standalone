@@ -16,6 +16,32 @@ import {candidateExpected,candidateBlocksFor,candidateFixture} from '../support/
 import {storeMeaningContexts} from '../../../apps/web/src/experience/personalMeaningJourney/contextRecords';
 import {librarySyncBlockFetch,librarySyncBlockFetchBytes} from '@sensa/contracts/sensa';
 
+test('uncertified baseline preparation serves foreground Worker reads and fences a concurrent edit',async({browser},testInfo)=>{
+ const context=await browser.newContext(),page=await context.newPage();let vite:ViteDevServer|undefined,http:Server|undefined;
+ const entryUrl=`/@fs/${resolve('scripts/support/sqliteRuntimeFailureBrowserEntry.ts')}`,text=(value:unknown)=>JSON.stringify(encodeBackupValue(value));
+ const identity={id:crypto.randomUUID(),learnerId:crypto.randomUUID(),deviceId:crypto.randomUUID(),createdAt:'2026-10-03T00:00:00.000Z',schemaVersion:2 as const},owner={subject:crypto.randomUUID(),accountId:crypto.randomUUID()};
+ const records:ReplicaCandidateRecord[]=[{table:'meta',key:'identity',valueJson:text(identity),blockRefs:['a'.repeat(64)]},...Array.from({length:64},(_,i)=>({table:'settings' as const,key:'seed-'+i,valueJson:text('x'.repeat(20000)),blockRefs:['a'.repeat(64)]}))];
+ const {libraryRestoreValidationVersion}=await import('../../../apps/web/src/data/library/replication/libraryReplicaValidation');
+ try{
+  vite=await createViteServer({configFile:resolve('apps/web/vite.config.ts'),root:resolve('apps/web'),logLevel:'error',server:{middlewareMode:true,hmr:false,fs:{allow:[process.cwd()]}}});http=createServer(vite.middlewares);http.listen(0,'127.0.0.1');await once(http,'listening');const origin=`http://127.0.0.1:${(http.address() as any).port}`;
+  await page.route('**/*',async route=>{if(new URL(route.request().url()).origin!==origin)return route.abort();if(route.request().resourceType()==='document')return route.fulfill({contentType:'text/html',body:'<!doctype html><title>Isolated seed regression</title>'});await route.continue();});await page.goto(origin);
+  const state={owner,incarnation:'initial',revision:3,checkpointVersion:7,restoreValidationVersion:libraryRestoreValidationVersion,syncedLocalRevision:0,status:'synced'};
+  const puts=[{table:'meta' as const,key:'identity',encodedValue:text(identity)},{table:'meta' as const,key:'service-owner',encodedValue:text(owner)},{table:'meta' as const,key:'sentinel',encodedValue:text('Original owner data')},{table:'meta' as const,key:'cloud-sync',encodedValue:text(state)}];
+  const result=await page.evaluate(async({entryUrl,identity,owner,records,head,puts,edit})=>{
+   const api=await import(/* @vite-ignore */entryUrl);
+   const value=(reply:any)=>{if(!reply.ok)throw Error(reply.error);return reply.value;};await api.open({unmodified:true});value(await api.request({kind:'initialize'}));
+   value(await api.request({kind:'commit',mutation:{clears:[],deletes:[],puts,syncBaseReplacement:records.map(row=>({table:row.table,key:row.key,valueJson:row.valueJson,blockRefs:row.blockRefs}))}}));
+   const begun=value(await api.request({kind:'replicaCandidate',request:{kind:'beginIndex',fence:{owner,identity,incarnation:'initial',localRevision:0},head,baseRevision:3}}));if(!begun.needsSeed)throw Error('Expected seed');
+   let completed=false;const start=performance.now(),pending=(async()=>{for(;;){const reply=await api.request({kind:'replicaCandidate',request:{kind:'seed',id:begun.id}});if(!reply.ok||reply.value.done)return reply;}})().then((reply:any)=>{completed=true;return reply;});
+   const readStart=performance.now(),probe=await api.request({kind:'get',table:'meta',key:'sentinel'}),readMs=performance.now()-readStart,during=!completed;
+   value(await api.request({kind:'commit',mutation:{clears:[],deletes:[],puts:[{table:'meta',key:'local-content-revision',encodedValue:edit}],contentRevision:1}}));
+   const rejected=await pending,base=value(await api.request({kind:'syncBaseReferences'})),count=value(await api.request({kind:'count',table:'settings'}));value(await api.request({kind:'close'}));return {probe,during,readMs,rejected,base,count,elapsedMs:performance.now()-start};
+  },{entryUrl,identity,owner,records,head:candidateExpected(records,identity,4).head,puts,edit:text(1)});
+  expect(result.during).toBe(true);expect(result.probe).toMatchObject({ok:true,value:text('Original owner data')});expect(result.rejected).toMatchObject({ok:false,error:'library_sync_local_changed'});expect(result.count).toBe(0);expect(result.base).toHaveLength(records.length);expect(result.readMs).toBeLessThan(1000);
+  await testInfo.attach('cooperative-seed-evidence',{contentType:'application/json',body:JSON.stringify(result)});
+ }finally{await context.close();if(http)await new Promise<void>(done=>http!.close(()=>done()));await vite?.close();}
+});
+
 for(const scenario of ['reads','close','native-failure','crash'] as const)test(`private OPFS candidate lifecycle: ${scenario}`,async({browser},testInfo)=>{
  test.setTimeout(180_000);
  let vite:ViteDevServer|undefined,http:Server|undefined;

@@ -28,6 +28,8 @@ self.addEventListener('message',event=>{
   else if(command==='pause-validation')pause=true;
   else if(command==='release'){release?.();release=undefined;}
   else if(command==='bad-certificate')raw.exec("UPDATE sensa_sync_dependency_state_v1 SET certificate_json='{' WHERE id=1");
+  else if(command==='missing-certificate')raw.exec('UPDATE sensa_sync_dependency_state_v1 SET certificate_json=NULL WHERE id=1');
+  else if(command==='corrupt-baseline')raw.exec("UPDATE sensa_sync_base SET value_json='[\"null\"]' WHERE table_name='meta' AND record_key='identity'");
   else if(command==='lost-edge')raw.exec('DELETE FROM sensa_sync_dependency_edges_v1 WHERE (table_name,record_key,kind,target)=(SELECT table_name,record_key,kind,target FROM sensa_sync_dependency_edges_v1 LIMIT 1)');
   else if(command==='snapshot')result={base:raw.exec({sql:'SELECT table_name,record_key,block_refs_json FROM sensa_sync_base ORDER BY 1,2',rowMode:'array',returnValue:'resultRows'}),certificate:raw.exec({sql:'SELECT * FROM sensa_sync_dependency_state_v1',rowMode:'object',returnValue:'resultRows'}),revision:decodeBackupValue(JSON.parse(database!.get('meta','local-content-revision')!))};
   else throw Error('delta_fixture_unknown_command');

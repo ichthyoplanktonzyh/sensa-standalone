@@ -788,7 +788,8 @@ export class SqliteRecordDatabase {
     const readBase=(table:SqliteLibraryTable,key:string)=>{const row=this.syncBaseEntries([{table,key}])[0];if(!row)throw Error('library_sync_local_changed');return row.valueJson;};
     try{
       switch(request.kind){
-        case 'beginIndex':return {kind:'begun',id:candidates.beginIndex(request.fence,request.head,request.baseRevision,readBase)};
+        case 'beginIndex':{const id=candidates.beginIndex(request.fence,request.head,request.baseRevision,readBase);return {kind:'begun',id,needsSeed:candidates.needsSeed(id)};}
+        case 'seed':return {kind:'seeded',done:candidates.seed(request.id,readBase)};
         case 'indexPage':return {kind:'indexed',needed:candidates.indexPage(request.id,request.page)};
         case 'begin':return {kind:'begun',id:candidates.begin(request.fence,request.expected)};
         case 'append':candidates.append(request.id,request.records,request.blocks);return {kind:'appended'};

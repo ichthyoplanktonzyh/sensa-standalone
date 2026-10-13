@@ -496,6 +496,63 @@ test('ordered multi-fragment compressed Unicode rows bind every slice and retain
 const {SqliteSyncDependencies,syncAdmission}=await import('../../../apps/web/src/data/library/sqliteSyncDependencies');
 const {libraryRestoreValidationVersion}=await import('../../../apps/web/src/data/library/replication/libraryReplicaValidation');
 const checkpoint={owner,incarnation:'initial',revision:3,checkpointVersion:7 as const,restoreValidationVersion:libraryRestoreValidationVersion,syncedLocalRevision:0,status:'synced' as const};
+test('a no-change checkpoint after private accounting retains the same baseline proof',()=>{
+ const fixture=isolatedDatabase(),deps=new SqliteSyncDependencies(fixture.raw);try{
+  const admission=syncAdmission();deps.observe(admission,'settings','preference','["number",30]',30);deps.certify(admission,checkpoint,identity,0);
+  const certificate=deps.certificate()!,clean={...checkpoint,syncedLocalRevision:2},fence={owner,identity,incarnation:'initial',localRevision:2};
+  // Private commands advance live revision; an empty captured replica delta
+  // ACK advances the checkpoint without modifying baseline or its relations.
+  expect(certificate.localRevision).toBe(0);expect(deps.match(clean,fence,0)).toEqual(certificate);expect(deps.certificate()).toEqual(certificate);
+  expect(deps.match(checkpoint,fence,0)).toBeUndefined();
+ }finally{fixture.database.close();}
+});
+for(const fault of ['head','owner','state-owner','library','learner','incarnation','state-incarnation','artifact','live-edit','baseline','shared-body','protocol','missing'] as const)test(`baseline proof cannot authorize ${fault}`,()=>{
+ const fixture=isolatedDatabase(),deps=new SqliteSyncDependencies(fixture.raw);try{
+  const admission=syncAdmission();deps.observe(admission,'settings','preference','["number",30]',30);deps.certify(admission,checkpoint,identity,0);
+  let state={...checkpoint,syncedLocalRevision:2},fence={owner,identity,incarnation:'initial',localRevision:2},artifact=0;
+  if(fault==='head')state.revision++;
+  else if(fault==='owner')fence={...fence,owner:{...owner,accountId:crypto.randomUUID()}};
+  else if(fault==='state-owner')state={...state,owner:{...owner,subject:crypto.randomUUID()}};
+  else if(fault==='library')fence={...fence,identity:{...identity,id:crypto.randomUUID()}};
+  else if(fault==='learner')fence={...fence,identity:{...identity,learnerId:crypto.randomUUID()}};
+  else if(fault==='incarnation')fence.incarnation='changed';
+  else if(fault==='state-incarnation')state.incarnation='changed';
+  else if(fault==='artifact')artifact++;
+  else if(fault==='live-edit')fence.localRevision++;
+  else if(fault==='baseline')fixture.raw.exec({sql:'INSERT INTO sensa_sync_base VALUES(?,?,?,?)',bind:['settings','preference','["number",31]','[]']});
+  else if(fault==='shared-body'){fixture.raw.exec({sql:'INSERT INTO sensa_shared_record_content VALUES(?,?)',bind:['a'.repeat(64),'["number",30]']});fixture.raw.exec('UPDATE sensa_shared_record_content SET value_json=value_json');}
+  else if(fault==='protocol')fixture.raw.exec("INSERT INTO sensa_sync_protocol_owners_v1 VALUES('protocol','run','target')");
+  else fixture.raw.exec('UPDATE sensa_sync_dependency_state_v1 SET certificate_json=NULL');
+  expect(deps.match(state,fence,artifact)).toBeUndefined();
+ }finally{fixture.database.close();}
+});
+
+for(const interrupt of ['read','edit','baseline','artifact','owner','discard','close'] as const)test(`uncertified baseline seeding cooperates with ${interrupt} outside its transactions`,async()=>{
+ const fixture=isolatedDatabase(),records=[rows()[0]!,...Array.from({length:64},(_,i)=>({table:'settings' as const,key:'seed-'+String(i).padStart(3,'0'),valueJson:JSON.stringify(encodeBackupValue('x'.repeat(2048))),blockRefs:['a'.repeat(64)]}))];
+ const text=(value:unknown)=>JSON.stringify(encodeBackupValue(value));
+ fixture.database.commit({clears:[],deletes:[],puts:[{table:'meta',key:'cloud-sync',encodedValue:text(checkpoint)}],syncBaseReplacement:records.map(row=>({table:row.table,key:row.key,valueJson:row.valueJson,blockRefs:row.blockRefs}))});
+ const before=fixture.database.syncBaseReferences();
+ try{
+  const begun=await fixture.request({kind:'beginIndex',fence:{owner,identity,incarnation:'initial',localRevision:0},baseRevision:3,head:candidateExpected(records,identity,4).head});if(begun.kind!=='begun')throw Error('Expected begin');expect(begun.needsSeed).toBe(true);
+  expect(await fixture.request({kind:'seed',id:begun.id})).toEqual({kind:'seeded',done:false});
+  await expect(fixture.request({kind:'beginIndex',fence:{owner,identity,incarnation:'initial',localRevision:0},baseRevision:3,head:candidateExpected(records,identity,4).head})).rejects.toThrow('library_sync_candidate_busy');
+  await expect(fixture.request({kind:'indexPage',id:begun.id,page:{from:{revision:3,offset:0},toRevision:4,changes:[{table:'meta',key:'identity',blocks:records[0]!.blockRefs}],next:{revision:4,offset:0},done:true}})).rejects.toThrow('library_sync_candidate_invalid');
+  // SQLite accepts a separate transaction at the cooperative boundary. A
+  // yield while the seed transaction is open would fail BEGIN IMMEDIATE.
+  fixture.raw.exec('BEGIN IMMEDIATE');fixture.raw.exec('COMMIT');expect(fixture.database.get('meta','sentinel')).toBe(text('Existing owner data'));
+  if(interrupt==='read'){for(;;){const result=await fixture.request({kind:'seed',id:begun.id});if(result.kind!=='seeded')throw Error('Expected seed');if(result.done)break;}}
+  else{
+   if(interrupt==='edit')fixture.database.commit({clears:[],deletes:[],puts:[{table:'meta',key:'local-content-revision',encodedValue:text(1)}],contentRevision:1});
+   else if(interrupt==='baseline')fixture.raw.exec('UPDATE sensa_sync_base SET value_json=value_json');
+   else if(interrupt==='artifact')fixture.database.commit({clears:[],deletes:[],puts:[{table:'meta',key:'local-artifact-revision',encodedValue:text(1)}]});
+   else if(interrupt==='owner')fixture.database.commit({clears:[],deletes:[],puts:[{table:'meta',key:'service-owner',encodedValue:text({...owner,subject:crypto.randomUUID()})}]});
+   else if(interrupt==='discard'){const id=(fixture.raw.exec({sql:'SELECT id FROM sensa_replica_candidates_v1',rowMode:0,returnValue:'resultRows'}) as string[])[0]!;await fixture.request({kind:'discard',id});}
+   else await fixture.database.settleReplicaCandidates();
+   await expect(fixture.request({kind:'seed',id:begun.id})).rejects.toThrow(interrupt==='edit'||interrupt==='baseline'||interrupt==='artifact'?'library_sync_local_changed':interrupt==='close'?'sqlite_database_closed':undefined);
+  }
+  expect(fixture.database.syncBaseReferences()).toEqual(before);expect(fixture.database.count('settings')).toBe(0);
+ }finally{fixture.database.close();}
+});
 test('current dependency stored budgets replace old rows and subtract deletions over repeated certification',()=>{
  const fixture=isolatedDatabase(),deps=new SqliteSyncDependencies(fixture.raw);try{
   const make=(key:string,text:string,size:number)=>{const admission=syncAdmission();deps.observe(admission,'settings',key,JSON.stringify(encodeBackupValue(text)),text,undefined,size);return admission;};
