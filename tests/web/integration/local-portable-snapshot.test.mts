@@ -8,7 +8,7 @@ import {SqliteRecordDatabase} from '../../../apps/web/src/data/library/sqliteDat
 import {decodeBackupValue,encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec';
 import {decodeSharedArchiveWire,unpackStoredRecord} from '../../../apps/web/src/data/library/sharedRecordContent';
 import {gzipSync,strToU8} from 'fflate';
-import {createLocalPortableSnapshot,importLocalPortableSnapshot} from '../../../apps/web/src/data/library/sqlitePortableSnapshot';
+import {createLocalPortableSnapshot,importLocalPortableSnapshot,createOwnCloudPortableSnapshot,importOwnCloudPortableSnapshot} from '../../../apps/web/src/data/library/sqlitePortableSnapshot';
 import {sha256} from '@sensa/learning-kernel';
 import {useNodeLearningCapacityStorage} from '../../../scripts/support/nodeLearningCapacity.mts';
 import {portablePackageFixture} from '../../../scripts/support/portablePackageFixture.mts';
@@ -90,6 +90,23 @@ test('source identity is fenced across asynchronous capacity acquisition',async(
 test('real-schema import admits consistent projections and regenerates device identity',async()=>{
  const imported=await importLocalPortableSnapshot(sqlite,memoryFilePool(),'/focused-import-'+crypto.randomUUID(),snapshot);
  try{expect(imported.stats.decodedRecords).toBe(1);expect(imported.stats.decodedBodies).toBe(0);expect(imported.identity.id).toBe(identity.id);expect(imported.identity.deviceId).not.toBe(identity.deviceId);expect(imported.library.count('providers')).toBe(0);const dependencies=new SqliteSyncDependencies(Reflect.get(imported.library,'database'));expect(dependencies.certificate()).toBeUndefined();expect(dependencies.count()).toBe(0);}finally{imported.library.close();}
+});
+test('own-cloud admission is distinct from external import and keeps checkpoint, schema and byte gates',async()=>{
+ const db=new sqlite.oo1.DB(':memory:','c'),own=new SqliteRecordDatabase(sqlite,db,'memory');own.initialize();const owner={subject:crypto.randomUUID(),accountId:crypto.randomUUID()},incarnation=crypto.randomUUID();
+ own.commit({clears:[],deletes:[],puts:[{table:'meta',key:'identity',encodedValue:JSON.stringify(encodeBackupValue(identity))},{table:'meta',key:'service-owner',encodedValue:JSON.stringify(encodeBackupValue(owner))},{table:'meta',key:'local-incarnation',encodedValue:JSON.stringify(encodeBackupValue(incarnation))}]});
+ try{
+  const exported=await createOwnCloudPortableSnapshot(sqlite,memoryFilePool(),own,{owner,incarnation,identity:identity as any,localRevision:0}),binding={accountId:owner.accountId,libraryId:identity.id,learnerId:identity.learnerId,revision:1,sourceRevision:0,records:1,sha256:exported.sha256,byteLength:exported.bytes.length,schemaVersion:exported.schemaVersion};
+  const imported=await importOwnCloudPortableSnapshot(sqlite,memoryFilePool(),'/own-'+crypto.randomUUID(),exported,binding,owner.accountId);expect(imported.library.count('meta')).toBe(3);expect(imported.library.initialize().schemaVersion).toBe(exported.schemaVersion);imported.library.close();
+  for(const changed of [{...binding,accountId:crypto.randomUUID()},{...binding,libraryId:crypto.randomUUID()},{...binding,schemaVersion:20},{...binding,byteLength:binding.byteLength+1},{...binding,revision:0}])await expect(importOwnCloudPortableSnapshot(sqlite,memoryFilePool(),'/refuse-'+crypto.randomUUID(),exported,changed,owner.accountId)).rejects.toThrow('sqlite_snapshot_');
+  const file='/own-corrupt-'+crypto.randomUUID();sqlite.capi.sqlite3_js_posix_create_file(file,exported.bytes);const changed=new sqlite.oo1.DB(file,'c'),changedLibrary=new SqliteRecordDatabase(sqlite,changed,'memory');
+  // Same structural bytes can contain a controlled writer's semantic bug.
+  // Only the normal account route accepts that tradeoff; external import does not.
+  changed.exec({sql:"INSERT INTO sensa_records(table_name,record_key,value_json) VALUES('settings','language-learning-routes',?)",bind:[JSON.stringify(encodeBackupValue(false))]});const bytes=sqlite.capi.sqlite3_js_db_export(changed.pointer);changedLibrary.close();const altered={...exported,bytes,sha256:sha256(bytes)},alteredBinding={...binding,sha256:altered.sha256,byteLength:bytes.length,records:2};
+  const accepted=await importOwnCloudPortableSnapshot(sqlite,memoryFilePool(),'/controlled-'+crypto.randomUUID(),altered,alteredBinding,owner.accountId);accepted.library.close();await expect(importLocalPortableSnapshot(sqlite,memoryFilePool(),'/external-'+crypto.randomUUID(),altered)).rejects.toThrow();
+  const unsafe=new sqlite.oo1.DB(file,'c');unsafe.exec('CREATE TRIGGER arbitrary_trigger AFTER INSERT ON sensa_records BEGIN DELETE FROM sensa_records; END');const danger=sqlite.capi.sqlite3_js_db_export(unsafe.pointer);unsafe.close();const dangerous={...exported,bytes:danger,sha256:sha256(danger)};
+  await expect(importOwnCloudPortableSnapshot(sqlite,memoryFilePool(),'/unsafe-'+crypto.randomUUID(),dangerous,{...binding,records:2,byteLength:danger.length,sha256:dangerous.sha256},owner.accountId)).rejects.toThrow('sqlite_snapshot_schema_allowlist');
+  await expect(createOwnCloudPortableSnapshot(sqlite,memoryFilePool(),own,{owner:{...owner,accountId:crypto.randomUUID()},incarnation,identity:identity as any,localRevision:0})).rejects.toThrow('sqlite_snapshot_owner');
+ }finally{own.close();}
 });
 test('fabricated semantic-memory cache cannot become a query result',async()=>{
  const file='/focused-projection-source-'+crypto.randomUUID();sqlite.capi.sqlite3_js_posix_create_file(file,snapshot.bytes);

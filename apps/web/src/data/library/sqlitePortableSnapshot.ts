@@ -2,7 +2,7 @@ import type {Database,Sqlite3Static,SAHPoolUtil} from '@sqlite.org/sqlite-wasm';
 import {sha256} from '@sensa/learning-kernel';
 import {librarySyncTables} from '@sensa/contracts/sensa';
 import {SqliteRecordDatabase} from './sqliteDatabase';
-import {decodeBackupValue,encodeBackupValue} from './backupCodec';
+import {decodeBackupValue,encodeBackupValue,backupEqual} from './backupCodec';
 import {decodeSharedArchiveWire,unpackStoredRecord} from './sharedRecordContent';
 import {isReplicatedLibraryEntry,normalizeLibraryReplicaEntry,canCopyNormalizedLibraryReplicaValue} from './replication/libraryReplica';
 import {sqliteLibraryTables,sqliteLibrarySchemaVersion,sqliteSourceDataTables} from './sqliteProtocol';
@@ -11,9 +11,12 @@ import type {BackupRows} from './backupValidation';
 import {validateLibraryRecordSteps} from './backupValidation';
 import {runCooperatively} from '../../experience/personalMeaningJourney/cooperative';
 import {immutableLightweightMaterializationValidator} from '../../learning/runtime/lightweightInitialContent';
+import type {ReplicaCandidateFence} from './replicaCandidateProtocol';
 
 const fileLimit=90*1024*1024,expandedLimit=512*1024*1024,rowLimit=200000;
 export type LocalPortableSnapshot={format:'sensa-local-db-snapshot-v1';schemaVersion:typeof sqliteLibrarySchemaVersion;sourceRevision:number;sha256:string;bytes:Uint8Array;timingsMs:{build:number;storageCopy:number;admission:number;projection:number;export:number}};
+/** Supplied by the authenticated cursor coordinator, never by an import file. */
+export type OwnCloudSnapshotBinding={accountId:string;libraryId:string;learnerId:string;revision:number;sourceRevision:number;records:number;sha256:string;byteLength:number;schemaVersion:number};
 type SchemaRow={type:string;name:string;tbl_name:string;sql:string|null};
 const invalid=(reason:string):never=>{throw Error(`sqlite_snapshot_${reason}`);};
 const statisticsSql=new Set(['CREATE TABLE sqlite_stat1(tbl,idx,stat)','CREATE TABLE sqlite_stat4(tbl,idx,neq,nlt,ndlt,sample)']);
@@ -48,7 +51,7 @@ function freeze(value:any,seen:WeakSet<object>){
 }
 /** Decode each real stored record once. Shared bodies are digest-checked and
  * decoded once globally, then referenced by immutable decoded facts. */
-async function decodedFacts(raw:Database){
+async function decodedFacts(raw:Database,policy:'external'|'own-cloud'='external'){
  const rows=emptyRows(),bodies=new Map<string,unknown>(),used=new Set<string>(),frozen=new WeakSet<object>();
  let bytes=0,count=0,bodyCount=0;
  const addBytes=(text:string)=>{bytes+=new TextEncoder().encode(text).length;if(bytes>expandedLimit)invalid('expanded_limit');};
@@ -78,13 +81,25 @@ async function decodedFacts(raw:Database){
  if(Number(scalar(raw,"SELECT count(*) FROM sensa_shared_record_content_owners WHERE owner_kind!='record'")))invalid('shared_owners');
  if(Number(scalar(raw,"SELECT count(*) FROM sensa_shared_record_content_owners AS owner WHERE NOT EXISTS(SELECT 1 FROM sensa_records AS record WHERE record.table_name=owner.table_name AND record.record_key=owner.record_key)")))invalid('shared_owners');
  const reader=libraryRowsReader(rows);
- const identity=await runCooperatively(validateLibraryRecordSteps(reader,'restore',immutableLightweightMaterializationValidator()));
+ const identity=policy==='external'?await runCooperatively(validateLibraryRecordSteps(reader,'restore',immutableLightweightMaterializationValidator())):reader.get('meta','identity');
+ if(!identity||identity.schemaVersion!==2||!['id','learnerId','deviceId'].every(key=>typeof identity[key]==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(identity[key])))invalid('identity');
  return {rows,reader,identity,stats:{decodedRecords:count,decodedBodies:bodyCount,expandedBytes:bytes}};
 }
 
 /** Local frozen-revision producer. It creates a trusted clean library using
  * portable facts only; it never copies owner file pages or clears the source. */
 export async function createLocalPortableSnapshot(sqlite:Sqlite3Static,pool:SAHPoolUtil,source:SqliteRecordDatabase,expectedRevision:number):Promise<LocalPortableSnapshot>{
+ return buildPortableSnapshot(sqlite,pool,source,expectedRevision,'external');
+}
+/** Normal account replication: controlled writes maintain domain relations.
+ * Arbitrary backup/file/package imports keep the external admission entry. */
+export async function createOwnCloudPortableSnapshot(sqlite:Sqlite3Static,pool:SAHPoolUtil,source:SqliteRecordDatabase,fence:ReplicaCandidateFence):Promise<LocalPortableSnapshot>{
+ const owner=source.get('meta','service-owner'),identity=source.get('meta','identity'),incarnation=source.get('meta','local-incarnation');
+ const current=owner===null?undefined:decodeBackupValue(JSON.parse(owner));
+ if(current?.subject!==fence.owner.subject||current?.accountId!==fence.owner.accountId||identity===null||!backupEqual(decodeBackupValue(JSON.parse(identity)),fence.identity)||incarnation===null||decodeBackupValue(JSON.parse(incarnation))!==fence.incarnation||source.get('meta','signed-out')!==null&&decodeBackupValue(JSON.parse(source.get('meta','signed-out')!)))invalid('owner');
+ return buildPortableSnapshot(sqlite,pool,source,fence.localRevision,'own-cloud');
+}
+async function buildPortableSnapshot(sqlite:Sqlite3Static,pool:SAHPoolUtil,source:SqliteRecordDatabase,expectedRevision:number,policy:'external'|'own-cloud'):Promise<LocalPortableSnapshot>{
  if(!Number.isSafeInteger(expectedRevision)||expectedRevision<0)invalid('source_revision');
  const revision=()=>{const encoded=source.get('meta','local-content-revision');return encoded===null?0:decodeBackupValue(JSON.parse(encoded));};
  if(revision()!==expectedRevision)invalid('source_changed');
@@ -118,7 +133,7 @@ export async function createLocalPortableSnapshot(sqlite:Sqlite3Static,pool:SAHP
   }catch(error){target.raw.exec('ROLLBACK');throw error;}
   assertSource();
   const copied=performance.now();
-  const facts=await decodedFacts(target.raw);
+  const facts=await decodedFacts(target.raw,policy);
   assertSource();
   const built=performance.now();target.library.rebuildPortableProjections(facts.reader);
   const projected=performance.now();target.raw.exec({sql:'VACUUM INTO ?',bind:[output]});
@@ -130,6 +145,15 @@ export async function createLocalPortableSnapshot(sqlite:Sqlite3Static,pool:SAHP
 /** The destination is a fresh independent namespace. This stage does not
  * select it as the user's active library or manufacture a cloud checkpoint. */
 export async function importLocalPortableSnapshot(sqlite:Sqlite3Static,pool:SAHPoolUtil,file:string,snapshot:LocalPortableSnapshot){
+ return importPortableSnapshot(sqlite,pool,file,snapshot,'external');
+}
+/** Only the authenticated own-library coordinator calls this distinct entry.
+ * Binding is independently obtained from its account's exact committed H. */
+export async function importOwnCloudPortableSnapshot(sqlite:Sqlite3Static,pool:SAHPoolUtil,file:string,snapshot:LocalPortableSnapshot,binding:OwnCloudSnapshotBinding,expectedAccountId:string){
+ if(binding.accountId!==expectedAccountId||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(binding.accountId)||!Number.isSafeInteger(binding.revision)||binding.revision<1||binding.sourceRevision!==snapshot.sourceRevision||binding.schemaVersion!==snapshot.schemaVersion||binding.byteLength!==snapshot.bytes.byteLength||binding.sha256!==snapshot.sha256||!Number.isSafeInteger(binding.records)||binding.records<1||binding.records>rowLimit)invalid('checkpoint_binding');
+ return importPortableSnapshot(sqlite,pool,file,snapshot,'own-cloud',binding);
+}
+async function importPortableSnapshot(sqlite:Sqlite3Static,pool:SAHPoolUtil,file:string,snapshot:LocalPortableSnapshot,policy:'external'|'own-cloud',binding?:OwnCloudSnapshotBinding){
  if(pool.getFileCount()!==0)invalid('destination_not_empty');
  if(snapshot.format!=='sensa-local-db-snapshot-v1'||snapshot.schemaVersion!==sqliteLibrarySchemaVersion||!Number.isSafeInteger(snapshot.sourceRevision)||snapshot.sourceRevision<0||snapshot.bytes.byteLength>fileLimit||snapshot.bytes.byteLength<512||sha256(snapshot.bytes)!==snapshot.sha256)invalid('envelope');
  const expected=trusted(sqlite);const schema=definitions(expected.raw);expected.library.close();
@@ -141,13 +165,15 @@ export async function importLocalPortableSnapshot(sqlite:Sqlite3Static,pool:SAHP
   // Register only application-owned innocuous functions after the schema gate.
   library=new SqliteRecordDatabase(sqlite,raw,'opfs');
   if(scalar(raw,'PRAGMA integrity_check')!=='ok'||raw.exec({sql:'PRAGMA foreign_key_check',returnValue:'resultRows'}).length)invalid('integrity');
-  const facts=await decodedFacts(raw);
+  const facts=await decodedFacts(raw,policy);
+  if(binding&&(facts.identity.id!==binding.libraryId||facts.identity.learnerId!==binding.learnerId||facts.stats.decodedRecords!==binding.records))invalid('checkpoint_binding');
   const admitted=performance.now();let before:ReturnType<typeof projectionValues>;
-  library.rebuildPortableProjections(facts.reader,stage=>{
+  if(policy==='external')library.rebuildPortableProjections(facts.reader,stage=>{
    if(stage==='before'){before=projectionValues(raw!);return;}
    const after=projectionValues(raw!);
    if(before.size!==after.size||[...before].some(([table,digest])=>after.get(table)!==digest))invalid('projection_values');
   });
+  else library.initialize();
   const projected=performance.now();
   const identity={...facts.identity,deviceId:crypto.randomUUID()};
   library.commit({clears:[],deletes:[],puts:[{table:'meta',key:'identity',encodedValue:JSON.stringify(encodeBackupValue(identity))},{table:'meta',key:'local-incarnation',encodedValue:JSON.stringify(encodeBackupValue(crypto.randomUUID()))},{table:'meta',key:'local-content-revision',encodedValue:JSON.stringify(encodeBackupValue(1))}]});
