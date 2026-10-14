@@ -227,23 +227,34 @@ export class SqliteInitialPublication{
  }
  private plain(id:string,row:{value_json:string;shared:number}){const text=unpackStoredRecord(row.value_json,undefined,recordBytes);if(!row.shared)return text;return JSON.stringify(expandSharedRecordContent(JSON.parse(text),digest=>{const body=this.rows<{value_json:string}>('SELECT value_json FROM sensa_initial_publication_content WHERE id=? AND digest=?',[id,digest])[0];return body?unpackStoredRecord(body.value_json,undefined,recordBytes):undefined;}));}
  stats(id:string,confirmed=false):InitialPublicationStats{this.ensure();const h=confirmed?this.rows<Header>('SELECT * FROM sensa_initial_publication WHERE id=?',[id])[0]:this.header(id);if(!h)throw Error('library_sync_candidate_invalid');if(confirmed)this.assertOwner(JSON.parse(h.fence));return {records:h.records,logicalBytes:h.logical_bytes,uniqueBlockPlainBytes:h.unique_plain_bytes,uniqueBlockStoredBytes:h.unique_stored_bytes,storedPayloadBytes:h.stored_bytes,blocks:h.block_count,maximumPageBytes:h.maximum_page_bytes};}
- async validate(id:string,confirmed=false,ownCloud=false):Promise<InitialPublicationStats>{
+ async validate(id:string,confirmed=false,ownCloud=false,onProgress?:import('./replicaCandidateProtocol').ReplicaCandidateProgressObserver):Promise<InitialPublicationStats>{
   const policy=ownCloud?'own-cloud':'external',h=this.header(id,confirmed);if(h.state==='validated'&&this.admission&&this.admissionPolicy===policy)return this.stats(id,confirmed);if(h.state!=='sealed'&&h.state!=='validated')throw Error('library_sync_candidate_invalid');
   if(ownCloud&&this.admissionPolicy==='captured-own'&&this.admission&&this.indexedRecords===h.records){
    if(h.stored_bytes+utf8('validated')-utf8(h.state)>storedBytes)throw Error('library_sync_capacity');
    this.rows("UPDATE sensa_initial_publication SET state='validated',stored_bytes=stored_bytes+? WHERE id=?",[utf8('validated')-utf8(h.state),id]);this.admissionPolicy='own-cloud';return this.stats(id,confirmed);
   }
-  const alive=()=>{this.header(id,confirmed);};
+  // No other Worker task can mutate facts until the existing 64-row yield.
+  // Protect that synchronous read chunk once, then renew after every yield.
+  let protectedChunk=false;const alive=()=>{if(!ownCloud||!protectedChunk){this.header(id,confirmed);protectedChunk=true;}};
   // A cold recovery can add missing observer rows. Unknown old baselines use
   // the conservative whole-DB page bound; rejected sources remain retained.
   await this.checkSpace();alive();this.assertAllocatedCapacity(h);
   const admission=ownCloud?this.dependencies.spoolAdmission('publication:'+id,false,bytes=>{const current=this.header(id,confirmed);if(current.stored_bytes+bytes>storedBytes)throw Error('library_sync_capacity');this.rows('UPDATE sensa_initial_publication SET stored_bytes=stored_bytes+? WHERE id=?',[bytes,id]);this.assertAllocatedCapacity(current);}):syncAdmission();this.dependencies.ensure();
+  const pageObservations=new Map<string,{admitted:number;stored_bytes:number}>();
   const reader=sealedRecordReader({alive,beforePage:alive,
    get:(table,key)=>this.rows<{record_key:string;value_json:string;shared:number}>('SELECT record_key,value_json,shared FROM sensa_initial_publication_rows WHERE id=? AND table_name=? AND record_key=?',[id,table,key])[0],
    has:(table,key)=>this.rows('SELECT 1 FROM sensa_initial_publication_rows WHERE id=? AND table_name=? AND record_key=?',[id,table,key]).length>0,
    keys:(table,after)=>this.rows<{record_key:string;stored_value_bytes:number}>(`SELECT record_key,length(CAST(value_json AS BLOB)) AS stored_value_bytes FROM sensa_initial_publication_rows WHERE id=? AND table_name=? ${after===null?'':'AND record_key>?'} ORDER BY record_key LIMIT 64`,after===null?[id,table]:[id,table,after]),
-   rows:(table,keys)=>this.rows<{record_key:string;value_json:string;shared:number}>('SELECT record_key,value_json,shared FROM sensa_initial_publication_rows WHERE id=? AND table_name=? AND record_key IN(SELECT value FROM json_each(?)) ORDER BY record_key',[id,table,JSON.stringify(keys)]),
-   observed:(table,key,text,value)=>{if(!admission.rows.has(JSON.stringify([table,key])))this.dependencies.observe(admission,table,key,text,value,()=>false,this.rows<{n:number}>('SELECT length(CAST(value_json AS BLOB))+2*length(CAST(refs_json AS BLOB))+72*json_array_length(refs_json) AS n FROM sensa_initial_publication_rows WHERE id=? AND table_name=? AND record_key=?',[id,table,key])[0].n);},
+   rows:(table,keys)=>{
+    if(!ownCloud)return this.rows<{record_key:string;value_json:string;shared:number}>('SELECT record_key,value_json,shared FROM sensa_initial_publication_rows WHERE id=? AND table_name=? AND record_key IN(SELECT value FROM json_each(?)) ORDER BY record_key',[id,table,JSON.stringify(keys)]);
+    const rows=this.rows<{record_key:string;value_json:string;shared:number;admitted:number;stored_bytes:number}>(`SELECT row.record_key,row.value_json,row.shared,
+     CASE WHEN observation.record_key IS NULL THEN 0 ELSE 1 END AS admitted,
+     CASE WHEN observation.record_key IS NULL THEN length(CAST(row.value_json AS BLOB))+2*length(CAST(row.refs_json AS BLOB))+72*json_array_length(row.refs_json) ELSE 0 END AS stored_bytes
+     FROM sensa_initial_publication_rows row LEFT JOIN sensa_sync_admission_rows_v1 observation ON observation.scope=? AND observation.table_name=row.table_name AND observation.record_key=row.record_key
+     WHERE row.id=? AND row.table_name=? AND row.record_key IN(SELECT value FROM json_each(?)) ORDER BY row.record_key`,['publication:'+id,id,table,JSON.stringify(keys)]);
+    pageObservations.clear();for(const row of rows)pageObservations.set(JSON.stringify([table,row.record_key]),row);return rows;
+   },
+   observed:(table,key,text,value)=>{const page=pageObservations.get(JSON.stringify([table,key]));if(page?.admitted||!page&&admission.rows.has(JSON.stringify([table,key])))return;this.dependencies.observe(admission,table,key,text,value,()=>false,page?.stored_bytes??this.rows<{n:number}>('SELECT length(CAST(value_json AS BLOB))+2*length(CAST(refs_json AS BLOB))+72*json_array_length(refs_json) AS n FROM sensa_initial_publication_rows WHERE id=? AND table_name=? AND record_key=?',[id,table,key])[0].n);},
    plain:(_table,row)=>this.plain(id,row),missing:()=>{throw Error('library_sync_candidate_invalid');},
   });
   if(ownCloud){
@@ -252,9 +263,10 @@ export class SqliteInitialPublication{
    const identity=(JSON.parse(h.fence) as ReplicaCandidateFence).identity;let count=0;
    for(const table of librarySyncTables)for(const row of reader.entries(table)){
     if(table==='meta'&&row.key==='identity'&&!backupEqual(row.value,normalizeLibraryReplicaEntry({table,key:row.key,value:identity},identity).value))throw Error('library_sync_identity');
-    if(++count%64===0){alive();await new Promise<void>(resolve=>setTimeout(resolve,0));}
+    count++;if(count%64===0){alive();onProgress?.({phase:'publication-validation',completed:count});await new Promise<void>(resolve=>setTimeout(resolve,0));protectedChunk=false;alive();}
    }
-  }else{const {validateLibraryRestoreRecordsCooperatively}=await import('./backupValidation');await validateLibraryRestoreRecordsCooperatively(reader);}alive();admission.flush?.();
+   if(count%64)onProgress?.({phase:'publication-validation',completed:count});
+  }else{const {validateLibraryRestoreRecordsCooperatively}=await import('./backupValidation');await validateLibraryRestoreRecordsCooperatively(reader);}protectedChunk=false;alive();admission.flush?.();
   const stateDelta=utf8('validated')-utf8(h.state);if(this.header(id,confirmed).stored_bytes+stateDelta>storedBytes)throw Error('library_sync_capacity');
   this.rows("UPDATE sensa_initial_publication SET state='validated',stored_bytes=stored_bytes+? WHERE id=?",[stateDelta,id]);this.admission=admission;this.admissionPolicy=policy;return this.stats(id,confirmed);
  }

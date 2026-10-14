@@ -20,6 +20,7 @@ import {
   sqliteLibraryFile,
   type SqliteWorkerRequest,
   type SqliteWorkerResult,
+  type SqliteWorkerProgress,
 } from "./sqliteProtocol";
 
 const worker = self as unknown as DedicatedWorkerGlobalScope;
@@ -261,7 +262,7 @@ const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
     case 'portableMedia': return current.database.portableMedia(request.sha256);
     case 'portableMediaDiagnostics': return current.database.portableMediaDiagnostics();
     case 'commit': current.database.commit(request.mutation); return null;
-    case 'replicaCandidate':return current.database.replicaCandidate(request.request);
+    case 'replicaCandidate':return current.database.replicaCandidate(request.request,request.reportProgress?progress=>worker.postMessage({id:request.id,kind:'replicaCandidateProgress',progress} satisfies SqliteWorkerProgress):undefined);
     case 'diagnostics': return {...current.database.diagnostics({verifyIntegrity:request.verifyIntegrity}),workerStartupTimingsMs:current.startupTimingsMs};
   }
 };

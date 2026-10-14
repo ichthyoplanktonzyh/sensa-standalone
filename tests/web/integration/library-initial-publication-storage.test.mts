@@ -145,3 +145,19 @@ test('retained legacy encoded data remains readable and verifies its original pl
 test('cold legacy admission checks space before adding observations and preserves its retained source on refusal',async()=>{
  const f=fixture();let cold:SqliteInitialPublication|undefined;try{const id=f.publication.begin(f.fence);let after:any=null;for(;;){const page=await f.publication.page(id,after);after=page.next;if(page.done)break;}f.db.exec('UPDATE sensa_initial_publication SET allocated_baseline=NULL');const before=f.publication.stats(id),rows=f.rows('SELECT * FROM sensa_initial_publication_rows');cold=new SqliteInitialPublication(f.db,()=>{},()=>{throw Error('mutable source read');},()=>{},async()=>{throw Error('library_sync_capacity');});await expect(cold.validate(id,true,true)).rejects.toThrow('library_sync_capacity');expect(f.publication.stats(id)).toEqual(before);expect(f.rows('SELECT * FROM sensa_initial_publication_rows')).toEqual(rows);}finally{cold?.close();f.close();}
 });
+
+
+test('cold own publication reports completed batches, reads each frozen fact once and rechecks the fence after yielding',async()=>{
+ const f=fixture();let cold:SqliteInitialPublication|undefined;try{
+  const id=f.publication.begin(f.fence);let after:any=null;for(;;){const page=await f.publication.page(id,after);after=page.next;if(page.done)break;}
+  const retained=f.rows('SELECT * FROM sensa_initial_publication_rows'),observations=f.rows('SELECT * FROM sensa_sync_admission_rows_v1'),counts:number[]=[];let fenceChecks=0;
+  cold=new SqliteInitialPublication(f.db,()=>{},()=>{throw Error('mutable source read');},()=>{fenceChecks++;});
+  const {observeReplicaWork}=await import('../../../apps/web/src/data/library/replicaWork');const work:Record<string,number>={};observeReplicaWork((kind,count)=>work[kind]=(work[kind]??0)+count);
+  try{await cold.validate(id,true,true,p=>{expect(p.phase).toBe('publication-validation');counts.push(p.completed);});}finally{observeReplicaWork(undefined);}
+  expect(counts).toEqual([64,128]);expect(work['reader.bodyLoad']).toBe(128);expect(work['reader.wireDecode']).toBe(128);expect(fenceChecks).toBeLessThan(12);
+  expect(f.rows('SELECT * FROM sensa_initial_publication_rows')).toEqual(retained);expect(f.rows('SELECT * FROM sensa_sync_admission_rows_v1')).toEqual(observations);
+  counts.length=0;await cold.validate(id,true,true,p=>counts.push(p.completed));expect(counts).toEqual([]);
+  cold.close();let denied=false;const failed:number[]=[];cold=new SqliteInitialPublication(f.db,()=>{},()=>{throw Error('mutable source read');},()=>{if(denied)throw Error('account_changed');});
+  await expect(cold.validate(id,true,true,p=>{failed.push(p.completed);setTimeout(()=>denied=true,0);})).rejects.toThrow('account_changed');expect(failed).toEqual([64]);expect(f.rows('SELECT * FROM sensa_initial_publication_rows')).toEqual(retained);
+ }finally{cold?.close();f.close();}
+});

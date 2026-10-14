@@ -1,6 +1,6 @@
 import {test,expect,vi} from 'vitest';
 import sqlite3InitModule from '@sqlite.org/sqlite-wasm';
-import {librarySyncSnapshot,librarySyncCommit,librarySyncBinaryArtifact,librarySyncRecordLimit,librarySyncLogicalByteLimit,librarySyncStageMetadataByteLimit} from '@sensa/contracts/sensa';
+import {librarySyncSnapshot,librarySyncCommit,librarySyncBinaryArtifact,librarySyncRecordLimit,librarySyncLogicalByteLimit,librarySyncStageMetadataByteLimit,librarySyncStoredByteLimit} from '@sensa/contracts/sensa';
 import {SqliteRecordDatabase} from '../../../apps/web/src/data/library/sqliteDatabase';
 import {SqliteSyncDependencies,dependencyRowId} from '../../../apps/web/src/data/library/sqliteSyncDependencies';
 import {SqliteRecordValidation,RecordValidationStorageError} from '../../../apps/web/src/data/library/sqliteRecordValidation';
@@ -44,6 +44,7 @@ test('staged cursors accept exactly the finite cloud tier while artifact and pag
  expect(librarySyncCommit.safeParse(input).success).toBe(true);expect(librarySyncCommit.safeParse({...input,staging:{...input.staging,records:600001}}).success).toBe(false);
  expect(librarySyncBinaryArtifact.shape.byteLength.safeParse(90*1024*1024+1).success).toBe(false);
  expect(librarySyncLogicalByteLimit).toBe(1024*1024*1024);expect(librarySyncStageMetadataByteLimit).toBe(128*1024*1024);
+ expect(librarySyncStoredByteLimit).toBe(1024*1024*1024);
 });
 
 test('private SQL observations reject altered same-ID retries, roll back charging failures, and release only their scope',()=>{

@@ -768,7 +768,7 @@ export class SqliteRecordDatabase {
     };
   }
 
-  async replicaCandidate(request:ReplicaCandidateRequest):Promise<ReplicaCandidateResponse>{
+  async replicaCandidate(request:ReplicaCandidateRequest,onProgress?:import('./replicaCandidateProtocol').ReplicaCandidateProgressObserver):Promise<ReplicaCandidateResponse>{
     this.assertReplicaCandidateHealthy();
     // Read available origin space before any replacement transaction. The
     // estimate is advisory; private SQL accounting and physical IO still apply.
@@ -782,7 +782,7 @@ export class SqliteRecordDatabase {
         case 'publicationIndexPage':return this.initialPublication.indexPage(request.id,request.after);
         case 'publicationBlocks':return this.initialPublication.blocks(request.id,request.hashes);
         case 'validatePublication':return {kind:'publicationValidated',stats:await this.initialPublication.validate(request.id,request.confirmed)};
-        case 'admitOwnPublication':return {kind:'publicationValidated',stats:await this.initialPublication.validate(request.id,request.confirmed,true)};
+        case 'admitOwnPublication':return {kind:'publicationValidated',stats:await this.initialPublication.validate(request.id,request.confirmed,true,onProgress)};
         case 'discardPublication':this.initialPublication.discard(request.id);return {kind:'discarded'};
       }
     }
@@ -802,7 +802,7 @@ export class SqliteRecordDatabase {
         case 'begin':return {kind:'begun',id:candidates.begin(request.fence,request.expected)};
         case 'append':candidates.append(request.id,request.records,request.blocks);return {kind:'appended'};
         case 'prove':candidates.prove(request.id,request.record,request.blocks);return {kind:'proved'};
-        case 'validate':return {kind:'validated',candidate:await candidates.validate(request.id)};
+        case 'validate':return {kind:'validated',candidate:await candidates.validate(request.id,onProgress)};
         case 'reuse':return {kind:'reused',keys:candidates.reuse(request.id,request.baseRevision,request.keys,readBase)};
         case 'prepareUpdate':return {kind:'updatePrepared',update:await candidates.prepareUpdate(request.id,request.baseRevision,readBase)};
         case 'discard':candidates.discard(request.id);return {kind:'discarded'};

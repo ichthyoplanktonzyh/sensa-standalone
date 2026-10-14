@@ -734,9 +734,9 @@ export const restoreLibraryTransaction = <T>(work: (tx: LibraryTransaction) => P
   transaction("readwrite", work);
 /** A sealed private candidate is coherent without holding the live Library's
  * Web Lock. Its Worker fence aborts if concurrent user/owner writes occur. */
-export async function requestReplicaCandidate(request:ReplicaCandidateRequest):Promise<ReplicaCandidateResponse>{
+export async function requestReplicaCandidate(request:ReplicaCandidateRequest,onProgress?:import('./replicaCandidateProtocol').ReplicaCandidateProgressObserver):Promise<ReplicaCandidateResponse>{
   const namespace=localLibraryNamespace();assertLocalLibrarySelected(namespace);const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');
-  const result=await adapter.replicaCandidate(request);assertLocalLibrarySelected(namespace);return result;
+  const result=await adapter.replicaCandidate(request,onProgress?progress=>{assertLocalLibrarySelected(namespace);onProgress(progress);}:undefined);assertLocalLibrarySelected(namespace);return result;
 }
 /** Sync progress and baselines do not announce learner-content changes. */
 export const writeLibraryState = <T>(work: (tx: LibraryTransaction) => Promise<T>) =>

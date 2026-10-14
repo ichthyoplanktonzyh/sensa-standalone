@@ -8,6 +8,15 @@ import type {LibrarySyncHead,LibrarySyncPullResult,LibrarySyncSnapshotPageResult
 export const replicaCandidateAppendRecordLimit=512;
 export const replicaCandidateAppendReferenceLimit=4096;
 
+/** Completed read work only; never a validation or publication receipt. */
+export type ReplicaCandidateProgress={phase:'publication-validation'|'candidate-validation';completed:number};
+export const replicaCandidateProgressPhase=(kind:ReplicaCandidateRequest['kind'])=>kind==='admitOwnPublication'?'publication-validation' as const:kind==='validate'?'candidate-validation' as const:undefined;
+export type ReplicaCandidateProgressObserver=(progress:ReplicaCandidateProgress)=>void;
+export const isReplicaCandidateProgress=(value:unknown):value is ReplicaCandidateProgress=>{
+ const p=value as ReplicaCandidateProgress|undefined;
+ return !!p&&['publication-validation','candidate-validation'].includes(p.phase)&&Number.isSafeInteger(p.completed)&&p.completed>0;
+};
+
 export type ReplicaCandidateFence={owner:{subject:string;accountId:string};incarnation:string;localRevision:number;identity:LibraryIdentity};
 export type InitialPublicationStats={records:number;logicalBytes:number;uniqueBlockPlainBytes:number;uniqueBlockStoredBytes:number;storedPayloadBytes:number;blocks:number;maximumPageBytes:number};
 export type InitialPublicationPage={kind:'publicationPage';rows:import('@sensa/contracts/sensa').LibrarySyncManifest['rows'];blocks:ReplicaCandidateBlock[];next:{table:SqliteLibraryTable;key:string}|null;done:boolean;stats:InitialPublicationStats};

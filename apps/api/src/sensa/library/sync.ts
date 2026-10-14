@@ -68,7 +68,10 @@ export function registerLibrarySync(app:Hono,access:Access){
   if(added>0){
    // Bounded storage guard, not a product subscription quota. Includes unattached retry blocks.
    const usage=(await db.query('SELECT COALESCE(sum(octet_length(data)),0)::bigint n FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1',[a.accountId])).rows[0];if(Number(usage.n)+added>libraryCloudCapacityBytes)throw new ConsumerError(413,'library_sync_capacity');
-   for(const block of blocks)if(!stored.has(block.hash))await db.query('INSERT INTO sensa_consumer.library_cloud_blocks(account_id,hash,data,created_at,upload_lease_expires_at,logical_bytes) VALUES($1,$2,$3,$4,$5,$6)',[a.accountId,block.hash,block.data,now,leaseUntil,logical.get(block.hash)!]);
+   // The route already admits one bounded, deduplicated batch. Store it in a
+   // single statement under the same account lock and outer transaction.
+   await db.query(`INSERT INTO sensa_consumer.library_cloud_blocks(account_id,hash,data,created_at,upload_lease_expires_at,logical_bytes)
+    SELECT $1,b.hash,b.data,$3,$4,b.logical_bytes FROM jsonb_to_recordset($2::jsonb) AS b(hash text,data text,logical_bytes bigint)`,[a.accountId,JSON.stringify(blocks.filter(block=>!stored.has(block.hash)).map(block=>({...block,logical_bytes:logical.get(block.hash)!}))),now,leaseUntil]);
   }
   return {stored:true};}));});
  app.get('/sensa/library-sync/blocks/:hash',async c=>c.json(await use(c.req.raw,async(db,a)=>{const key=librarySyncHash.parse(c.req.param('hash'));const row=(await db.query('SELECT data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=$2',[a.accountId,key])).rows[0];if(!row)throw new ConsumerError(404,'library_sync_missing_block');return {hash:key,data:row.data};})));

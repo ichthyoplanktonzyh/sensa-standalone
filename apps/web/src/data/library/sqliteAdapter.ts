@@ -14,7 +14,7 @@ import type {
   SqliteStorageDiagnostics,
   SqliteWorkerInput,
   SqliteWorkerRequest,
-  SqliteWorkerResult,
+  SqliteWorkerResponse,
 } from "./sqliteProtocol";
 import type {PackageCacheProjectionQuery,PackageCacheProjectionResult} from './packageCacheProjection';
 import type {PracticeExpressionQuery,PracticeExpressionPage} from './practiceExpressionProjection';
@@ -22,14 +22,14 @@ import type {RuntimeLearningCandidateQuery,RuntimeLearningCandidates} from './ru
 import type {LearningManagementSummaryQuery,LearningManagementStorageSummary} from './runtimeLearningCandidates';
 import type {LearningHistoryRequest} from '../../learning/system/learningHistoryModel';
 import type {StoredLearningHistoryPage} from './learningHistoryProjection';
-import type {ReplicaCandidateRequest,ReplicaCandidateResponse} from './replicaCandidateProtocol';
+import {isReplicaCandidateProgress,replicaCandidateProgressPhase,type ReplicaCandidateProgressObserver,type ReplicaCandidateRequest,type ReplicaCandidateResponse} from './replicaCandidateProtocol';
 import {CoordinatedSqliteAdapter,type CoordinatedSqliteBackend} from './sqliteCoordinator';
 import {localLibraryNamespace,localLibraryPoolDirectory,assertLocalLibrarySelected,observeLocalLibrarySelection,assertIsolatedSnapshotNamespace,registerIsolatedSnapshotNamespace,unregisterIsolatedSnapshotNamespace,type LocalLibraryNamespace} from './localLibraryLocation';
 
 export interface SqliteRecordAdapter {
   exportLocalSnapshot?(expectedRevision:number):Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;
   exportOwnCloudSnapshot?(fence:import('./replicaCandidateProtocol').ReplicaCandidateFence):Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;
-  replicaCandidate(request:ReplicaCandidateRequest):Promise<ReplicaCandidateResponse>;
+  replicaCandidate(request:ReplicaCandidateRequest,onProgress?:ReplicaCandidateProgressObserver):Promise<ReplicaCandidateResponse>;
   learningSemanticMemory(targetId?:string):Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>;
   personalEnrollmentIndex():Promise<import('../../learning/system/learningReadModels').LearningPersonalEnrollmentIndex>;
   get(table: SqliteLibraryTable, key: string): Promise<string | null>;
@@ -80,16 +80,23 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
   private readonly pending = new Map<number, {
     resolve: (value: unknown) => void;
     reject: (error: Error) => void;
+    onProgress?:ReplicaCandidateProgressObserver;
+    completed:Map<string,number>;
+    progressPhase?:import('./replicaCandidateProtocol').ReplicaCandidateProgress['phase'];
   }>();
   private nextId = 1;
   private terminated=false;
   private workerError:Error|undefined;
   private isolatedAdmitted=false;
 
-  constructor(private readonly namespace:LocalLibraryNamespace,private readonly isolatedExisting=false) {
-    this.worker.addEventListener("message", (event: MessageEvent<SqliteWorkerResult>) => {
+  constructor(private readonly namespace:LocalLibraryNamespace,private readonly isolatedExisting=false,private readonly isolatedGeneration=false) {
+    this.worker.addEventListener("message", (event: MessageEvent<SqliteWorkerResponse>) => {
       const waiting = this.pending.get(event.data.id);
       if (!waiting) return;
+      if('kind' in event.data){
+        const progress=event.data.progress;if(!waiting.onProgress||!isReplicaCandidateProgress(progress)||progress.phase!==waiting.progressPhase||progress.completed<=(waiting.completed.get(progress.phase)??0))return;
+        try{if(this.isolatedExisting||this.isolatedAdmitted||this.isolatedGeneration)assertIsolatedSnapshotNamespace(this.namespace!,this.isolatedExisting||this.isolatedAdmitted);else assertLocalLibrarySelected(this.namespace);waiting.onProgress(progress);waiting.completed.set(progress.phase,progress.completed);}catch(cause){this.pending.delete(event.data.id);waiting.reject(cause instanceof Error?cause:new Error('sqlite_progress_failed'));}return;
+      }
       this.pending.delete(event.data.id);
       if (event.data.ok) waiting.resolve(event.data.value);
       else waiting.reject(new Error(event.data.error));
@@ -119,7 +126,7 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
   }
   markIsolatedAdmitted():void{this.isolatedAdmitted=true;}
 
-  replicaCandidate(request:ReplicaCandidateRequest):Promise<ReplicaCandidateResponse>{return this.send({kind:'replicaCandidate',request}) as Promise<ReplicaCandidateResponse>;}
+  replicaCandidate(request:ReplicaCandidateRequest,onProgress?:ReplicaCandidateProgressObserver):Promise<ReplicaCandidateResponse>{onProgress=replicaCandidateProgressPhase(request.kind)?onProgress:undefined;return this.send({kind:'replicaCandidate',request,...(onProgress?{reportProgress:true}:{})},onProgress) as Promise<ReplicaCandidateResponse>;}
 
   get(table: SqliteLibraryTable, key: string): Promise<string | null> {
     return this.send({ kind: "get", table, key }) as Promise<string | null>;
@@ -254,14 +261,14 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
     this.terminated=true;
   }
 
-  private send(input: SqliteWorkerInput|{kind:'close'}): Promise<unknown> {
+  private send(input: SqliteWorkerInput|{kind:'close'},onProgress?:ReplicaCandidateProgressObserver): Promise<unknown> {
     if(this.terminated)return Promise.reject(new Error('sqlite_worker_terminated'));
     if((this.isolatedExisting||this.isolatedAdmitted)&&input.kind!=='close'){
       try{assertIsolatedSnapshotNamespace(this.namespace!);}catch(error){return Promise.reject(error);}
     }
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+      this.pending.set(id, { resolve, reject,onProgress,completed:new Map(),progressPhase:input.kind==='replicaCandidate'?replicaCandidateProgressPhase(input.request.kind):undefined });
       this.worker.postMessage({ id, ...input } as SqliteWorkerRequest);
     });
   }
@@ -288,13 +295,13 @@ let activeBrowserAdapter:CoordinatedSqliteAdapter|undefined;
 let stopBrowserSelection:undefined|(()=>void);
 /** Explicit isolated local generation; never changes the active pointer. */
 export async function openIsolatedLocalSnapshot(snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot){
- const namespace=crypto.randomUUID(),isolated=new WorkerSqliteAdapter(namespace);
+ const namespace=crypto.randomUUID(),isolated=new WorkerSqliteAdapter(namespace,false,true);
  try{assertIsolatedSnapshotNamespace(namespace,false);const result=await isolated.initializeSnapshot(snapshot);registerIsolatedSnapshotNamespace(namespace);isolated.markIsolatedAdmitted();return {...result,namespace,adapter:isolated};}
  catch(error){await isolated.close().catch(()=>{});throw error;}
 }
 /** Authenticated same-account replication has its own admission entry. */
 export async function openIsolatedOwnCloudSnapshot(snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot,binding:import('./sqlitePortableSnapshot').OwnCloudSnapshotBinding,owner:import('./replicaCandidateProtocol').ReplicaCandidateFence['owner']){
- const namespace=crypto.randomUUID(),isolated=new WorkerSqliteAdapter(namespace);
+ const namespace=crypto.randomUUID(),isolated=new WorkerSqliteAdapter(namespace,false,true);
  // This closure owns only this attempt's fresh namespace. Never discover or
  // delete another generation, an active pointer or retained recovery file.
  const discard=async()=>{
@@ -309,7 +316,7 @@ export async function openIsolatedOwnCloudSnapshot(snapshot:import('./sqlitePort
 }
 /** Empty private generation for refs restoration; never selects or imports facts. */
 export async function createOwnCloudRestoreGeneration(fence:import('./replicaCandidateProtocol').ReplicaCandidateFence){
- const namespace=crypto.randomUUID(),isolated=new WorkerSqliteAdapter(namespace);
+ const namespace=crypto.randomUUID(),isolated=new WorkerSqliteAdapter(namespace,false,true);
  const discard=async()=>{await isolated.close();await navigator.locks.request('sensa-library-selection-v1',{mode:'exclusive',signal:AbortSignal.timeout(15000)},async()=>{
   try{assertIsolatedSnapshotNamespace(namespace,false);}catch{return;}
   const root=await navigator.storage.getDirectory();try{await root.removeEntry(localLibraryPoolDirectory(namespace).replace(/^\//u,''),{recursive:true});}catch(error){if(!(error instanceof DOMException)||error.name!=='NotFoundError')throw error;}unregisterIsolatedSnapshotNamespace(namespace);

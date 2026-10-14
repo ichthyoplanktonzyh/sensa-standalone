@@ -60,6 +60,30 @@ test('own snapshot transport refuses account/digest/version and failed tail leav
  }finally{await f.close();}
 });
 
+test('bounded block batches deduplicate, serialize concurrent retries and roll back partial inserts with leases',async({browser})=>{
+ const f=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await f.createAccount(),other=await f.createAccount(),values=['已有🙂','new one','new two','fail this batch'].map(data=>({hash:hash(data),data}));
+  const call=async(blocks:typeof values,token=account.token)=>fetch(f.origin+'/sensa/library-sync/blocks/store',{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({blocks})});
+  expect((await call([values[0]!])).status).toBe(200);
+  const batch=[values[0]!,values[1]!,values[2]!,values[1]!];
+  expect((await Promise.all([call(batch),call(batch)])).map(r=>r.status)).toEqual([200,200]);
+  const stored=async()=> (await f.pool.query('SELECT hash,data,logical_bytes,upload_lease_expires_at FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 ORDER BY hash',[account.accountId])).rows;
+  const rows=await stored();expect(rows).toHaveLength(3);for(const row of rows)expect(Number(row.logical_bytes)).toBe(Buffer.byteLength(row.data));
+  expect((await call([values[1]!],other.token)).status).toBe(200);expect((await f.pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1',[other.accountId])).rows[0].n).toBe(1);
+  await f.pool.query('UPDATE sensa_consumer.library_cloud_blocks SET upload_lease_expires_at=$3 WHERE account_id=$1 AND hash=$2',[account.accountId,values[0]!.hash,new Date(Date.now()+60000)]);
+  const before=await stored();
+  // A real PostgreSQL failure after earlier rows in the one statement must
+  // roll back both its rows and the preceding existing-block lease renewal.
+  await f.pool.query(`CREATE OR REPLACE FUNCTION sensa_consumer.batch_store_test_fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.data='fail this batch' THEN RAISE EXCEPTION 'isolated batch fault'; END IF; RETURN NEW; END $$`);
+  await f.pool.query('CREATE TRIGGER batch_store_test_fault BEFORE INSERT ON sensa_consumer.library_cloud_blocks FOR EACH ROW EXECUTE FUNCTION sensa_consumer.batch_store_test_fault()');
+  try{expect((await call([values[0]!,{hash:hash('insert before failure'),data:'insert before failure'},values[3]!])).status).toBe(503);}finally{await f.pool.query('DROP TRIGGER batch_store_test_fault ON sensa_consumer.library_cloud_blocks');}
+  expect(await stored()).toEqual(before);
+  await f.pool.query('UPDATE sensa_consumer.library_cloud_blocks SET data=$3 WHERE account_id=$1 AND hash=$2',[account.accountId,values[0]!.hash,'controlled same-ID corruption']);
+  expect((await call([values[0]!,values[3]!])).status).toBe(409);expect((await stored()).some(row=>row.hash===values[3]!.hash)).toBe(false);
+ }finally{await f.close();}
+});
+
 test('private initial pages reject gaps/replays/cross-account payloads and final CAS/receipt is atomic',async({browser})=>{
  const f=await createLibraryCloudBrowserFixture(browser);
  try{

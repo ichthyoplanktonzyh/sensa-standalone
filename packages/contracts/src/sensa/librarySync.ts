@@ -2,7 +2,7 @@ import {z} from 'zod';
 /** Finite cloud tier for the retained 50k World, not a universal content quota. */
 export const librarySyncRecordLimit=600000;
 export const librarySyncLogicalByteLimit=1024*1024*1024;
-export const librarySyncStoredByteLimit=256*1024*1024;
+export const librarySyncStoredByteLimit=1024*1024*1024;
 export const librarySyncStageMetadataByteLimit=128*1024*1024;
 /** Legacy whole-manifest and external import remain separately bounded. */
 export const librarySyncLegacyManifestRecordLimit=200000;

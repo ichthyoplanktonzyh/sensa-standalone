@@ -421,11 +421,16 @@ async function verifyPublication(head:LibrarySyncHead,pending:LibrarySyncCommit)
  if(head.revision!==pending.baseRevision+1||head.receipt?.operationId!==pending.operationId||head.receipt.requestDigest!==await hash(JSON.stringify(parsed)))throw Error('library_sync_format');
 }
 
+function initialCandidateProgress(input:ReplicaCandidateRequest,deadline?:CloudSyncDeadline):import('./replicaCandidateProtocol').ReplicaCandidateProgressObserver|undefined{
+ if(!deadline?.isInitial||input.kind!=='validate'&&input.kind!=='admitOwnPublication')return;
+ const scope=crypto.randomUUID();return progress=>{deadline.check();deadline.progress(progress.phase+'-'+scope,progress.completed);};
+}
+
 async function boundedCandidate(input:ReplicaCandidateRequest,deadline:CloudSyncDeadline){
  // Cleanup must still reach the owner after cancellation. Other work cannot
  // start after the pass has expired, even if a previous RPC finishes late.
  if(input.kind!=='discard'&&input.kind!=='discardPublication')deadline.check();
- const pending=requestReplicaCandidate(input);
+ const pending=requestReplicaCandidate(input,initialCandidateProgress(input,deadline));
  if(input.kind==='beginPublication'||input.kind==='beginIndex')void pending.then(result=>{
   if(deadline.signal.aborted&&result.kind==='begun')return deadline.cleanup(()=>requestReplicaCandidate({kind:input.kind==='beginPublication'?'discardPublication':'discard',id:result.id}));
  },()=>{});
@@ -433,7 +438,7 @@ async function boundedCandidate(input:ReplicaCandidateRequest,deadline:CloudSync
 }
 
 async function confirmInitialPublication(header:Awaited<ReturnType<typeof captureHeader>>,id:string,published:LibrarySyncHead,sourceRevision:number,currentRemoteRevision=published.revision,deadline?:CloudSyncDeadline){
- const admit=()=>requestReplicaCandidate({kind:'admitOwnPublication',id,confirmed:true});if(deadline)await deadline.run(admit);else await admit();
+ const input:ReplicaCandidateRequest={kind:'admitOwnPublication',id,confirmed:true};const admit=()=>requestReplicaCandidate(input,initialCandidateProgress(input,deadline));if(deadline)await deadline.run(admit);else await admit();
  const commit=(beginCommit?:()=>void)=>writeLibraryState(async tx=>{
   if(deadline)tx.requireCommitSignal(deadline.signal,'library_sync_cancelled',beginCommit);
   const current=await captureHeader(tx);
@@ -564,7 +569,7 @@ async function restoreOwnCloudRefs(header:Awaited<ReturnType<typeof captureHeade
  void creating.then(generation=>{if(deadline.signal.aborted)return deadline.cleanup(()=>generation.discard());},()=>{});
  const generation=await deadline.run(()=>creating);
  try{
-  const send=(input:ReplicaCandidateRequest)=>deadline.run(()=>generation.adapter.replicaCandidate(input));
+  const send=(input:ReplicaCandidateRequest)=>deadline.run(()=>generation.adapter.replicaCandidate(input,initialCandidateProgress(input,deadline)));
   const staged=await stageStableCandidate(blocks,request,head,fence,undefined,send),candidate=staged.candidate;
   if(!candidate)throw Error('library_sync_candidate_invalid');
   const revision=header.localRevision+1,at=new Date().toISOString();

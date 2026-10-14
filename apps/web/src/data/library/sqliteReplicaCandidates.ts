@@ -39,7 +39,7 @@ type UpdatePlan={receipt:ReplicaCandidateUpdate;puts:RecordKey[];deletes:RecordK
 export class SqliteReplicaCandidates{
  private ready=false;
  private readonly statements=new Map<string,PreparedStatement>();
- private readonly validations=new Map<string,{controller:AbortController;result:Promise<ReplicaCandidateValidation>}>();
+ private readonly validations=new Map<string,{controller:AbortController;result:Promise<ReplicaCandidateValidation>;observers:Set<import('./replicaCandidateProtocol').ReplicaCandidateProgressObserver>}>();
  private readonly updates=new Map<string,{controller:AbortController;result:Promise<ReplicaCandidateUpdate|null>}>();
  private readonly seeds=new Map<string,{baseRevision:number;after:RecordKey|null}>();
  private readonly baselines=new Map<string,{generation:number;epoch:number;artifactRevision:number}>();
@@ -352,8 +352,8 @@ export class SqliteReplicaCandidates{
   try{this.dependencies.discardAdmission('candidate:'+id);this.rows('UPDATE sensa_replica_candidates_v1 SET stored_bytes=stored_bytes-? WHERE id=?',[bytes,id]);this.assertAllocatedCapacity(id);this.database.exec('COMMIT');}catch(cause){this.database.exec('ROLLBACK');throw cause;}
  }
  private candidateAdmission(id:string){return this.dependencies.spoolAdmission('candidate:'+id,false,bytes=>{const header=this.header(id);if(header.stored_bytes+bytes>maximumStoredBytes)throw Error('library_sync_capacity');this.rows('UPDATE sensa_replica_candidates_v1 SET stored_bytes=stored_bytes+? WHERE id=?',[bytes,id]);this.assertAllocatedCapacity(id);});}
- private reader(id:string,signal:AbortSignal,admission?:SyncAdmission,cloneDecoded=false,validationIndex?:RecordValidationIndex){
-  const alive=()=>{this.assertHealthy();if(signal.aborted)throw signal.reason;};
+ private reader(id:string,signal:AbortSignal,admission?:SyncAdmission,cloneDecoded=false,validationIndex?:RecordValidationIndex,onProgress?:import('./replicaCandidateProtocol').ReplicaCandidateProgressObserver){
+  const alive=()=>{this.assertHealthy();if(signal.aborted)throw signal.reason;};let completed=0;
   const reader=sealedRecordReader({
    alive,cloneDecoded,beforePage:()=>this.check(this.header(id)),
    get:(table,key)=>this.rows<StoredRow>('SELECT record_key,value_json,representation FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,table,key])[0],
@@ -363,13 +363,15 @@ export class SqliteReplicaCandidates{
     WHERE candidate_id=? AND table_name=? ${after===null?'':'AND record_key>?'} ORDER BY record_key LIMIT 64`,after===null?[id,table]:[id,table,after]),
    rows:(table,selected)=>this.rows<StoredRow>(`SELECT record_key,value_json,representation FROM sensa_replica_candidate_records_v1
     WHERE candidate_id=? AND table_name=? AND record_key IN(SELECT value FROM json_each(?)) ORDER BY record_key`,[id,table,JSON.stringify(selected)]),
-   plain:(_table,stored)=>this.plainStored(stored),missing:()=>this.fail(),observed:admission?(table,key,text,value)=>{
-    if(admission.rows.has(dependencyRowId(table,key))||admission.disabled)return;
+   plain:(_table,stored)=>this.plainStored(stored),missing:()=>this.fail(),observed:admission||onProgress?(table,key,text,value)=>{
+    if(admission&&!admission.rows.has(dependencyRowId(table,key))&&!admission.disabled){
     // Account a current row's packed body, duplicated reference metadata and
     // every proof occurrence under the existing logical accounting budget.
     // It is replaced, never accumulated; it is not a physical SQLite file bound.
     const size=this.rows<{n:number}>(`SELECT ${dependencyRowStoredBudget} AS n FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?`,[id,table,key])[0].n;
     this.dependencies.observe(admission,table,key,text,value,packageKey=>this.rows('SELECT 1 FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,'packageCache',packageKey]).length>0,size);
+    }
+    if(onProgress&&++completed%64===0){alive();onProgress({phase:'candidate-validation',completed});}
    }:undefined,
   });
   return {...reader,storageKeysUnique:true as const,validationIndex};
@@ -407,8 +409,8 @@ export class SqliteReplicaCandidates{
   signal.throwIfAborted();this.assertUpdateBase(this.header(id),sparse.baseRevision);
   sparse.dense=true;this.database.exec({sql:"UPDATE sensa_replica_candidates_v1 SET state='sealed' WHERE id=?",bind:[id]});
  }
- validate(id:string):Promise<ReplicaCandidateValidation>{
-  const running=this.validations.get(id);if(running)return running.result;
+ validate(id:string,onProgress?:import('./replicaCandidateProtocol').ReplicaCandidateProgressObserver):Promise<ReplicaCandidateValidation>{
+  const running=this.validations.get(id);if(running){if(onProgress)running.observers.add(onProgress);return running.result;}
   const header=this.header(id);this.check(header);
   if(header.state==='validated')return Promise.resolve(this.receipt(header));
   const expected=expectedSchema.parse(JSON.parse(header.expected_json)),sparse=this.sparse.get(id);
@@ -417,6 +419,7 @@ export class SqliteReplicaCandidates{
   this.database.exec({sql:"UPDATE sensa_replica_candidates_v1 SET state='sealed' WHERE id=?",bind:[id]});
   this.sealedEpochs.set(id,this.candidateEpoch(id));
   const controller=new AbortController();
+  const observers=new Set<import('./replicaCandidateProtocol').ReplicaCandidateProgressObserver>(onProgress?[onProgress]:[]);
   const result=(async()=>{
    let validationIndex:SqliteRecordValidation|undefined,fatal=false;
    try{
@@ -452,7 +455,7 @@ export class SqliteReplicaCandidates{
      }
     }
     this.admissions.set(id,admission);
-    const reader=this.reader(id,controller.signal,admission,false,validationIndex);
+    const reader=this.reader(id,controller.signal,admission,false,validationIndex,progress=>{for(const observe of observers)observe(progress);});
     if(identity){if(!admission.disabled&&admission.rows.size!==header.records)this.fail();}
     else identity=await validateLibrarySyncRecordsCooperatively(reader);
     if(sparse&&!sparse.dense)admission.deletes=[...sparse.deleted].map(key=>{const [table,keyValue]=JSON.parse(key);return {table,key:keyValue};});
@@ -477,7 +480,7 @@ export class SqliteReplicaCandidates{
     throw cause;
    }finally{validationIndex?.close(!fatal);this.validations.delete(id);}
   })();
-  this.validations.set(id,{controller,result});return result;
+  this.validations.set(id,{controller,result,observers});return result;
  }
  private receipt(header:Header):ReplicaCandidateValidation{
   if(header.state!=='validated'||header.identity_json===null)this.fail();

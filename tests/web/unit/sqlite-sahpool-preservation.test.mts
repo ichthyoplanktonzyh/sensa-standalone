@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import {dirname,join} from 'node:path';
-import {test} from 'vitest';
+import {test,vi} from 'vitest';
+import {assertLocalLibrarySelected,localLibrarySelectionKey} from '../../../apps/web/src/data/library/localLibraryLocation';
 import {CoordinatedSqliteAdapter,type CoordinatedSqliteBackend} from '../../../apps/web/src/data/library/sqliteCoordinator.ts';
 import type {SqliteStorageDiagnostics} from '../../../apps/web/src/data/library/sqliteProtocol.ts';
 import {sqliteCoordinatorProtocolVersion,sqliteLibrarySchemaVersion} from '../../../apps/web/src/data/library/sqliteProtocol.ts';
@@ -517,4 +518,24 @@ test('pagehide cancels startup waiters and a later lifecycle reconnects without 
     restore('window',previousWindow);
     restore('BroadcastChannel',previousBroadcastChannel);
   }
+});
+
+
+test('candidate progress renews only an active matching owner RPC and never settles its acknowledgement',async()=>{
+ const names=['navigator','window','BroadcastChannel','localStorage'],previous=Object.fromEntries(names.map(name=>[name,Object.getOwnPropertyDescriptor(globalThis,name)]));let channel!:TestChannel,last:any;
+ class TestChannel extends EventTarget{constructor(){super();channel=this;}receive(payload:any){this.dispatchEvent(new MessageEvent('message',{data:{protocol:sqliteCoordinatorProtocolVersion,schemaVersion:sqliteLibrarySchemaVersion,...payload}}));}postMessage(m:any){if(m.kind==='probe')queueMicrotask(()=>this.receive({kind:'leader',sender:'owner'}));if(m.kind==='request')last=m;}}
+ Object.defineProperty(globalThis,'navigator',{configurable:true,value:{locks:{request:async(_n:any,_o:any,cb:any)=>cb(null)}}});Object.defineProperty(globalThis,'window',{configurable:true,value:new EventTarget()});Object.defineProperty(globalThis,'BroadcastChannel',{configurable:true,value:TestChannel});
+ let selection:string|null=null;Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{getItem:(key:string)=>key===localLibrarySelectionKey?selection:null}});const adapter=new CoordinatedSqliteAdapter(()=>{throw Error('occupied owner');},null,()=>assertLocalLibrarySelected(null)),seen:number[]=[];vi.useFakeTimers({toFake:['setTimeout','clearTimeout']});
+ const sent=async()=>{for(let i=0;i<30&&!last;i++)await Promise.resolve();assert(last);};
+ try{
+  let settled=false;const waiting=adapter.replicaCandidate({kind:'admitOwnPublication',id:'candidate'},p=>seen.push(p.completed)).then(r=>{settled=true;return r;});await sent();
+  const event=(completed:any,patch:any={})=>channel.receive({kind:'progress',sender:'owner',recipient:last.sender,requestId:last.requestId,progress:{phase:'publication-validation',completed},...patch});
+  await vi.advanceTimersByTimeAsync(14000);event(64);assert.deepEqual(seen,[64]);assert.equal(settled,false);
+  await vi.advanceTimersByTimeAsync(14000);event(64);event(63);event(0);event(NaN);event(128,{sender:'stranger'});event(128,{recipient:'other'});event(128,{requestId:'other'});event(128,{progress:{phase:'candidate-validation',completed:128}});assert.deepEqual(seen,[64]);
+  const timedOut=assert.rejects(waiting,/sqlite_coordination_timeout/);await vi.advanceTimersByTimeAsync(1001);await vi.advanceTimersByTimeAsync(15001);await timedOut;event(128);assert.deepEqual(seen,[64]);
+  last=undefined;let active=true;const cancelled=adapter.replicaCandidate({kind:'admitOwnPublication',id:'candidate'},p=>{if(!active)throw Error('library_sync_cancelled');seen.push(p.completed);});await sent();const rejected=assert.rejects(cancelled,/library_sync_cancelled/);active=false;event(64);await rejected;event(128);assert.deepEqual(seen,[64]);
+  last=undefined;const ack=adapter.replicaCandidate({kind:'admitOwnPublication',id:'candidate'},p=>seen.push(p.completed));await sent();event(64);channel.receive({kind:'response',recipient:last.sender,requestId:last.requestId,ok:true,value:{kind:'publicationValidated'}});await ack;event(128);assert.deepEqual(seen,[64,64]);
+  last=undefined;const switched=adapter.replicaCandidate({kind:'admitOwnPublication',id:'candidate'},p=>seen.push(p.completed));await sent();const switchRejected=assert.rejects(switched,/localFlow.libraryReplaced/);selection=JSON.stringify({namespace:crypto.randomUUID(),preservedNamespaces:[null]});event(64);await switchRejected;selection=null;assert.deepEqual(seen,[64,64]);
+  last=undefined;const replaced=adapter.replicaCandidate({kind:'admitOwnPublication',id:'candidate'},p=>seen.push(p.completed));await sent();const ownerRejected=assert.rejects(replaced,/sqlite_owner_changed/);channel.receive({kind:'leader',sender:'replacement'});await ownerRejected;event(128);assert.deepEqual(seen,[64,64]);
+ }finally{await adapter.close();vi.useRealTimers();for(const name of names){const descriptor=previous[name];if(descriptor)Object.defineProperty(globalThis,name,descriptor);else Reflect.deleteProperty(globalThis,name);}}
 });

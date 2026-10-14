@@ -25,7 +25,7 @@ function fixture(usedBytes=0,existing?:string){
   else if(sql.startsWith('UPDATE sensa_consumer.library_cloud_blocks SET upload_lease_expires_at'))leases.push(params[1] as string[]);
   else if(sql.startsWith('SELECT COALESCE(sum(octet_length(data))'))rows=[{n:String(usedBytes)}];
   else if(sql.startsWith('INSERT INTO sensa_consumer.library_cloud_blocks(')){
-   const hash=params[1] as string,data=params[2] as string;inserted.push(hash);blocks.set(hash,data);
+   for(const {hash,data}of JSON.parse(params[1] as string)){inserted.push(hash);blocks.set(hash,data);}
   }else throw Error('Unhandled controlled SQL');
   return {rows:rows as Row[],rowCount:rows.length,command:'',oid:0,fields:[]};
  }};
@@ -58,6 +58,12 @@ test('the UTF-8 capacity guard rejects multibyte bytes rather than counting stri
 test('an identical retry renews its lease without charging its bytes again at capacity',async()=>{
  const f=fixture(libraryCloudCapacityBytes,text);const response=await f.app.fetch(f.request);
  expect(response.status).toBe(200);expect(await response.json()).toEqual({stored:true});expect(f.inserted).toEqual([]);expect(f.leases).toEqual([[digest(text)]]);
+});
+
+test('the shared finite 1 GiB encoded guard admits the exact boundary and rejects one more UTF-8 byte',async()=>{
+ expect(libraryCloudCapacityBytes).toBe(1024*1024*1024);const bytes=new TextEncoder().encode(text).length;
+ const exact=fixture(libraryCloudCapacityBytes-bytes),ok=await exact.app.fetch(exact.request);expect(ok.status).toBe(200);expect(exact.inserted).toHaveLength(1);
+ const over=fixture(libraryCloudCapacityBytes-bytes+1),rejected=await over.app.fetch(over.request);expect(rejected.status).toBe(413);expect(over.inserted).toEqual([]);
 });
 
 test('store rejects escaped UTF-8 JSON framing even when block character counts fit',async()=>{

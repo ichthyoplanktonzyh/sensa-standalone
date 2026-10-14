@@ -20,6 +20,8 @@ import type {LearningManagementSummaryQuery,LearningManagementStorageSummary} fr
 import type {LearningHistoryRequest} from '../../learning/system/learningHistoryModel';
 import type {StoredLearningHistoryPage} from './learningHistoryProjection';
 
+import {isReplicaCandidateProgress,replicaCandidateProgressPhase,type ReplicaCandidateProgressObserver,type ReplicaCandidateProgress} from './replicaCandidateProtocol';
+
 // Keep the original ownership name so a page from the previous release cannot
 // open a second OPFS connection while a newly deployed page is active.
 const ownerLock = 'sensa-sqlite-owner-v1';
@@ -40,7 +42,7 @@ const retryableOwnerReads=new Set<SqliteWorkerInput['kind']>([
 export interface CoordinatedSqliteBackend {
   exportLocalSnapshot?(expectedRevision:number):Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;
   exportOwnCloudSnapshot?(fence:import('./replicaCandidateProtocol').ReplicaCandidateFence):Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;
-  replicaCandidate?(request:import('./replicaCandidateProtocol').ReplicaCandidateRequest):Promise<import('./replicaCandidateProtocol').ReplicaCandidateResponse>;
+  replicaCandidate?(request:import('./replicaCandidateProtocol').ReplicaCandidateRequest,onProgress?:ReplicaCandidateProgressObserver):Promise<import('./replicaCandidateProtocol').ReplicaCandidateResponse>;
   learningSemanticMemory(targetId?:string):Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>;
   personalEnrollmentIndex():Promise<import('../../learning/system/learningReadModels').LearningPersonalEnrollmentIndex>;
   existingRecordKeys(table:SqliteLibraryTable,keys:readonly string[]):Promise<string[]>;
@@ -90,6 +92,7 @@ type CoordinatorPayload =
   | { kind: 'leader'; sender: string }
   | { kind: 'probe'; sender: string }
   | { kind: 'request'; sender: string; requestId: string; input: SqliteWorkerInput }
+  | { kind:'progress';sender:string;recipient:string;requestId:string;progress:ReplicaCandidateProgress }
   | { kind: 'response'; recipient: string; requestId: string; ok: true; value: unknown }
   | { kind: 'response'; recipient: string; requestId: string; ok: false; error: string };
 type CoordinatorMessage = CoordinatorEnvelope & CoordinatorPayload;
@@ -112,6 +115,10 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
     resolve: (value: unknown) => void;
     reject: (error: Error) => void;
     timer: ReturnType<typeof setTimeout>;
+    onProgress?:ReplicaCandidateProgressObserver;
+    completed:Map<string,number>;
+    progressPhase?:ReplicaCandidateProgress['phase'];
+    owner:string|null;
   }>();
   private readonly leaderWaiters = new Set<{
     resolve: () => void;
@@ -148,7 +155,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
     return this.call({ kind: 'get', table, key }) as Promise<string | null>;
   }
 
-  replicaCandidate(request:import('./replicaCandidateProtocol').ReplicaCandidateRequest):Promise<import('./replicaCandidateProtocol').ReplicaCandidateResponse>{return this.call({kind:'replicaCandidate',request}) as Promise<import('./replicaCandidateProtocol').ReplicaCandidateResponse>;}
+  replicaCandidate(request:import('./replicaCandidateProtocol').ReplicaCandidateRequest,onProgress?:ReplicaCandidateProgressObserver):Promise<import('./replicaCandidateProtocol').ReplicaCandidateResponse>{onProgress=replicaCandidateProgressPhase(request.kind)?onProgress:undefined;return this.call({kind:'replicaCandidate',request,...(onProgress?{reportProgress:true}:{})},onProgress) as Promise<import('./replicaCandidateProtocol').ReplicaCandidateResponse>;}
   exportLocalSnapshot(expectedRevision:number){return this.call({kind:'exportLocalSnapshot',expectedRevision}) as Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;}
   exportOwnCloudSnapshot(fence:import('./replicaCandidateProtocol').ReplicaCandidateFence){return this.call({kind:'exportOwnCloudSnapshot',fence}) as Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;}
 
@@ -308,14 +315,14 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
     return this.closeInFlight;
   }
 
-  private async call(input: SqliteWorkerInput): Promise<unknown> {
+  private async call(input: SqliteWorkerInput,onProgress?:ReplicaCandidateProgressObserver): Promise<unknown> {
     this.assertSelected();
-    const value=await this.callSelected(input);
+    const value=await this.callSelected(input,onProgress);
     this.assertSelected();
     return value;
   }
 
-  private async callSelected(input: SqliteWorkerInput): Promise<unknown> {
+  private async callSelected(input: SqliteWorkerInput,onProgress?:ReplicaCandidateProgressObserver): Promise<unknown> {
     if (this.incompatible) throw new Error('sqlite_owner_incompatible');
     if(this.closing||this.closeInFlight)throw new Error('sqlite_owner_closing');
     if(this.cleanupUnconfirmed)await this.close();
@@ -324,17 +331,17 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
     await this.connect(generation);
     this.assertLifecycleGeneration(generation);
     if (this.incompatible) throw new Error('sqlite_owner_incompatible');
-    if (this.backend) return this.dispatch(this.backend, input);
+    if (this.backend) return this.dispatch(this.backend, input,onProgress);
 
     // A stale announcement is harmless: the lock decides whether this tab may
     // replace the old owner before the request is sent.
     if (await this.tryBecomeLeader()) {
       this.assertLifecycleGeneration(generation);
-      return this.dispatch(this.backend!, input);
+      return this.dispatch(this.backend!, input,onProgress);
     }
     this.assertLifecycleGeneration(generation);
     try {
-      return await this.remote(input);
+      return await this.remote(input,onProgress);
     } catch (cause) {
       const message=errorMessage(cause);
       if(!['sqlite_coordination_timeout','sqlite_owner_changed','sqlite_owner_closing'].includes(message))throw cause;
@@ -345,11 +352,11 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       this.lastLeaderAt = 0;
       if (await this.tryBecomeLeader()){
         this.assertLifecycleGeneration(generation);
-        return this.dispatch(this.backend!, input);
+        return this.dispatch(this.backend!, input,onProgress);
       }
       await this.waitForLeader(generation);
       this.assertLifecycleGeneration(generation);
-      return this.remote(input);
+      return this.remote(input,onProgress);
     }
   }
 
@@ -497,14 +504,14 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
     }
   }
 
-  private remote(input: SqliteWorkerInput): Promise<unknown> {
+  private remote(input: SqliteWorkerInput,onProgress?:ReplicaCandidateProgressObserver): Promise<unknown> {
     const requestId = crypto.randomUUID();
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(requestId);
         reject(new Error('sqlite_coordination_timeout'));
       }, remoteTimeoutMs);
-      this.pending.set(requestId, { resolve, reject, timer });
+      this.pending.set(requestId, { resolve, reject, timer,onProgress,completed:new Map(),owner:this.leaderId,progressPhase:input.kind==='replicaCandidate'?replicaCandidateProgressPhase(input.request.kind):undefined });
       this.post({ kind: 'request', sender: this.id, requestId, input });
     });
   }
@@ -529,6 +536,13 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       if (this.backend&&!this.closing) this.markLeader();
       return;
     }
+    if(message.kind==='progress'){
+      if(message.recipient!==this.id)return;const waiting=this.pending.get(message.requestId),progress=message.progress;
+      if(!waiting?.onProgress||message.sender!==waiting.owner||message.sender!==this.leaderId||!isReplicaCandidateProgress(progress)||progress.phase!==waiting.progressPhase||progress.completed<=(waiting.completed.get(progress.phase)??0))return;
+      try{this.assertSelected();waiting.onProgress(progress);waiting.completed.set(progress.phase,progress.completed);clearTimeout(waiting.timer);
+       waiting.timer=setTimeout(()=>{this.pending.delete(message.requestId);waiting.reject(Error('sqlite_coordination_timeout'));},remoteTimeoutMs);
+      }catch(cause){clearTimeout(waiting.timer);this.pending.delete(message.requestId);waiting.reject(cause instanceof Error?cause:Error('sqlite_progress_failed'));}return;
+    }
     if (message.kind === 'response') {
       if (message.recipient !== this.id) return;
       const waiting = this.pending.get(message.requestId);
@@ -544,7 +558,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       this.post({kind:'response',recipient:message.sender,requestId:message.requestId,ok:false,error:'sqlite_owner_closing'});
       return;
     }
-    const request=this.dispatch(this.backend,message.input).then(
+    const request=this.dispatch(this.backend,message.input,message.input.kind==='replicaCandidate'&&message.input.reportProgress?progress=>this.post({kind:'progress',sender:this.id,recipient:message.sender,requestId:message.requestId,progress}):undefined).then(
       (value) => this.post({ kind: 'response', recipient: message.sender, requestId: message.requestId, ok: true, value }),
       (cause) => this.post({
         kind: 'response',
@@ -602,7 +616,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
     } satisfies CoordinatorMessage);
   }
 
-  private dispatch(backend: CoordinatedSqliteBackend, input: SqliteWorkerInput): Promise<unknown> {
+  private dispatch(backend: CoordinatedSqliteBackend, input: SqliteWorkerInput,onProgress?:ReplicaCandidateProgressObserver): Promise<unknown> {
     try{this.assertSelected();}catch(cause){return Promise.reject(cause);}
     switch (input.kind) {
       case 'initialize': return backend.initialize();
@@ -659,7 +673,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       case 'portableMedia': return backend.portableMedia(input.sha256);
       case 'portableMediaDiagnostics': return backend.portableMediaDiagnostics();
       case 'commit': return backend.commit(input.mutation);
-      case 'replicaCandidate':return backend.replicaCandidate?.(input.request)??Promise.reject(Error('sqlite_replica_candidate_unavailable'));
+      case 'replicaCandidate':return backend.replicaCandidate?.(input.request,onProgress)??Promise.reject(Error('sqlite_replica_candidate_unavailable'));
       case 'diagnostics': return backend.diagnostics({verifyIntegrity:input.verifyIntegrity});
     }
   }

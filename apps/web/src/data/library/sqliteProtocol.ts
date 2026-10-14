@@ -31,7 +31,7 @@ export const sqliteLibrarySchemaVersion = 19;
 /** Durable physical data; every other application table is a derived cache. */
 export const sqliteSourceDataTables=new Set(['sensa_records','sensa_record_tombstones','sensa_sync_base','sensa_shared_record_content','sensa_shared_record_content_owners','sensa_portable_media','sensa_portable_package_media']);
 /** Cross-tab RPC changes must bump this before adding or changing messages. */
-export const sqliteCoordinatorProtocolVersion = 69;
+export const sqliteCoordinatorProtocolVersion = 70;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -148,7 +148,7 @@ export type SqliteWorkerRequest =
   | { id: number; kind: "portableMedia"; sha256: string }
   | { id: number; kind: "portableMediaDiagnostics" }
   | { id: number; kind: "commit"; mutation: SqliteMutation }
-  | {id:number;kind:'replicaCandidate';request:ReplicaCandidateRequest}
+  | {id:number;kind:'replicaCandidate';request:ReplicaCandidateRequest;reportProgress?:boolean}
   | { id: number; kind: "diagnostics";verifyIntegrity?:boolean };
 
 export type SqliteWorkerInput = Exclude<SqliteWorkerRequest,{id:number;kind:'close'}> extends infer Request
@@ -160,6 +160,9 @@ export type SqliteWorkerInput = Exclude<SqliteWorkerRequest,{id:number;kind:'clo
 export type SqliteWorkerResult =
   | { id: number; ok: true; value: unknown }
   | { id: number; ok: false; error: string };
+
+export type SqliteWorkerProgress={id:number;kind:'replicaCandidateProgress';progress:import('./replicaCandidateProtocol').ReplicaCandidateProgress};
+export type SqliteWorkerResponse=SqliteWorkerResult|SqliteWorkerProgress;
 
 export type {HomeLearningStorageProjection};
 export type {MeaningLookupResult};
