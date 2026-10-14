@@ -5,18 +5,19 @@ import {backupEqual,decodeBackupValue,encodeBackupValue} from './backupCodec';
 import type {LibraryRecordReader} from './libraryRecordReader';
 import {runSynchronously} from '../../experience/personalMeaningJourney/cooperative';
 
-export const learningReconciliationAlgorithm = 'latest-completed-learning-branch-v2' as const;
+export const learningReconciliationAlgorithm = 'latest-completed-learning-branch-v3' as const
+const legacyAlgorithm='latest-completed-learning-branch-v2' as const;
 
 type SyncEntry={table:string;key:string;value:unknown;blocks?:string[]};
 type LearningEventLike={id:string;runId:string;targetId:string;at:string};
-type LearningRunLike={id:string;targetIds:string[];completedAt:string|null};
+type LearningRunLike={id:string;targetIds:string[];completedAt:string|null;participants?:Record<string,{memoryRevision:number}>};
 type LearningTargetLike={id:string;retentionId:string;[key:string]:unknown};
 
 export type LearningReconciliationDecision={
  id:string;
  targetId:string;
  retentionId:string;
- algorithm:typeof learningReconciliationAlgorithm;
+ algorithm:typeof learningReconciliationAlgorithm|typeof legacyAlgorithm;
  supersededDecisionIds:string[];
  candidateEventIds:string[];
  appliedEventIds:string[];
@@ -30,7 +31,7 @@ export type LearningReconciliationDecision={
 
 const uuid=z.string().uuid(),timestamp=z.string().datetime({offset:true});
 const decisionSchema=z.object({
- id:uuid,targetId:uuid,retentionId:uuid,algorithm:z.literal(learningReconciliationAlgorithm),
+ id:uuid,targetId:uuid,retentionId:uuid,algorithm:z.enum([legacyAlgorithm,learningReconciliationAlgorithm]),
  supersededDecisionIds:z.array(uuid),
  candidateEventIds:z.array(uuid).min(2),appliedEventIds:z.array(uuid).min(1),
  appliedRunIds:z.array(uuid).min(1),
@@ -41,9 +42,10 @@ const decisionSchema=z.object({
 const entryId=(table:string,key:string)=>JSON.stringify([table,key]);
 const decoded=<T>(entry:SyncEntry|undefined):T|undefined=>entry?decodeBackupValue(entry.value) as T:undefined;
 const mapFor=(entries:readonly SyncEntry[])=>new Map(entries.map(entry=>[entryId(entry.table,entry.key),entry]));
-const later=(left:LearningEventLike,right:LearningEventLike)=>Date.parse(left.at)-Date.parse(right.at)||left.id.localeCompare(right.id);
-type CompletedRunHeader=Pick<LearningRunLike,'id'|'completedAt'>;
-const laterRun=(left:CompletedRunHeader,right:CompletedRunHeader)=>Date.parse(left.completedAt??'')-Date.parse(right.completedAt??'')||left.id.localeCompare(right.id);
+const idOrder=(left:string,right:string)=>left<right?-1:left>right?1:0;
+const later=(left:LearningEventLike,right:LearningEventLike)=>Date.parse(left.at)-Date.parse(right.at)||idOrder(left.id,right.id);
+type CompletedRunHeader=Pick<LearningRunLike,'id'|'completedAt'> & {memoryRevision?:number};
+const laterRun=(left:CompletedRunHeader,right:CompletedRunHeader)=>Date.parse(left.completedAt??'')-Date.parse(right.completedAt??'')||idOrder(left.id,right.id);
 const sortedUnique=(values:readonly string[])=>[...new Set(values)].sort();
 
 /** Learning state is a projection. Ignore only fields written by starting or
@@ -76,10 +78,11 @@ function sourceUnion(base:LearningTargetLike|undefined,left:LearningTargetLike,r
  const ordered=retained.map(row=>rows.get(row.id)),known=new Set(retained.map(row=>row.id));
  return [...ordered,...[...rows.values()].filter(row=>!known.has(row.id)).sort((a,b)=>String(a.createdAt).localeCompare(String(b.createdAt))||a.id.localeCompare(b.id))];
 }
+const savedState=(target:LearningTargetLike)=>Object.fromEntries(['memory','memoryRevision','startedAt','completedAt','relearnAt','relearningState'].map(key=>[key,target[key]]));
 const withoutSources=(target:LearningTargetLike)=>{const value=structuredClone(target);delete value.curriculumMemberships;return value;};
 
-function decisionId(targetId:string,retentionId:string,candidateEventIds:readonly string[],parents:readonly string[]){
- return stableUuid(canonicalJsonDigest({algorithm:learningReconciliationAlgorithm,targetId,retentionId,candidateEventIds:sortedUnique(candidateEventIds),supersededDecisionIds:sortedUnique(parents)}));
+function decisionId(targetId:string,retentionId:string,candidateEventIds:readonly string[],parents:readonly string[],algorithm:LearningReconciliationDecision['algorithm']=learningReconciliationAlgorithm){
+ return stableUuid(canonicalJsonDigest({algorithm,targetId,retentionId,candidateEventIds:sortedUnique(candidateEventIds),supersededDecisionIds:sortedUnique(parents)}));
 }
 
 /** Old decisions remain immutable evidence. Only the causal frontier determines
@@ -132,12 +135,23 @@ export function reconcileConcurrentLearningEntries(input:{
   const withSources=(entry:SyncEntry,target:LearningTargetLike):SyncEntry=>({...entry,value:encodeBackupValue({...target,...(target.curriculumMemberships===undefined?{}:{curriculumMemberships:memberships})})});
   // A source-only branch can join a causal progress branch without deciding
   // between learning histories or manufacturing a reconciliation receipt.
-  const learningFork=localOnly.some(entry=>decoded<LearningEventLike>(entry)?.targetId===targetId)&&remoteOnly.some(entry=>decoded<LearningEventLike>(entry)?.targetId===targetId);
+  const learningFork=(!ancestor||!backupEqual(withoutSources(ours),withoutSources(ancestor))&&!backupEqual(withoutSources(theirs),withoutSources(ancestor)))&&localOnly.some(entry=>decoded<LearningEventLike>(entry)?.targetId===targetId)&&remoteOnly.some(entry=>decoded<LearningEventLike>(entry)?.targetId===targetId);
+  if(learningFork||(byTarget.get(targetId)?.length??0)>1)remaining.add(conflictId);
   if(!learningFork&&(byTarget.get(targetId)?.length??0)<2&&(backupEqual(withoutSources(ours),withoutSources(theirs))||ancestor&&(
     backupEqual(withoutSources(ours),withoutSources(ancestor))||backupEqual(withoutSources(theirs),withoutSources(ancestor))))){
    const selected=ancestor&&backupEqual(withoutSources(theirs),withoutSources(ancestor))?localEntry!:remoteEntry!;
    merged.set(conflictId,withSources(selected,decoded<LearningTargetLike>(selected)!));remaining.delete(conflictId);continue;
   }
+  // Shared facts need not yet be in this device's confirmed base. A new Run
+  // can directly pin the other side's exact saved input, including same-revision
+  // Relearning state. That establishes a causal successor without old replay.
+  const follows=(events:SyncEntry[],side:Map<string,SyncEntry>,prior:LearningTargetLike)=>events.some(entry=>{
+   const event=decoded<LearningEventLike>(entry);if(event?.targetId!==targetId)return false;
+   const run=decoded<LearningRunLike & {participants:Record<string,{retentionBaseline:unknown;policyCommitment:unknown}>}>(side.get(entryId('learningRuns',event.runId)));
+   return !!run?.completedAt&&run.targetIds.every(id=>{const p=run.participants?.[id],other=decoded<LearningTargetLike>((side===local?remote:local).get(entryId('learningTargets',id)));return !!p&&!!other&&backupEqual(p.retentionBaseline,savedState(other))&&backupEqual(p.policyCommitment,other.committedPolicy);});
+  });
+  const localFollows=!remoteOnly.some(entry=>decoded<LearningEventLike>(entry)?.targetId===targetId)&&follows(localOnly,local,theirs),remoteFollows=!localOnly.some(entry=>decoded<LearningEventLike>(entry)?.targetId===targetId)&&follows(remoteOnly,remote,ours);
+  if(localFollows!==remoteFollows&&backupEqual(structuralTarget(ours),structuralTarget(theirs))){const selected=localFollows?localEntry!:remoteEntry!;merged.set(conflictId,withSources(selected,localFollows?ours:theirs));remaining.delete(conflictId);continue;}
   if(!backupEqual(structuralTarget(ours),structuralTarget(theirs)))continue;
   const eventHeader=(entry:SyncEntry)=>{const event=decoded<LearningEventLike>(entry);return event?{id:event.id,runId:event.runId,targetId:event.targetId,at:event.at}:undefined;};
   const localNew=localOnly.map(eventHeader).filter((event):event is LearningEventLike=>event?.targetId===targetId),remoteNew=remoteOnly.map(eventHeader).filter((event):event is LearningEventLike=>event?.targetId===targetId);
@@ -152,18 +166,22 @@ export function reconcileConcurrentLearningEntries(input:{
   const localRunIds=new Set(localEvents.map(item=>item.event.runId)),remoteRunIds=new Set(remoteEvents.map(item=>item.event.runId));
   const completed=(side:Map<string,SyncEntry>,ids:Set<string>):Array<CompletedRunHeader|null>=>[...ids].map(id=>{
    const run=decoded<LearningRunLike>(side.get(entryId('learningRuns',id)));
-   return run?.id===id&&run.completedAt!==null&&run.targetIds.includes(targetId)?{id:run.id,completedAt:run.completedAt}:null;
+   if(run?.completedAt!==null&&run?.completedAt!==undefined&&!timestamp.safeParse(run.completedAt).success)throw Error('libraryBackup.errors.inconsistent');
+   return run?.id===id&&run.completedAt!==null&&run.targetIds.length===1&&run.targetIds[0]===targetId?{id:run.id,completedAt:run.completedAt,memoryRevision:run.participants?.[targetId]?.memoryRevision}:null;
   });
   const localRuns=completed(local,localRunIds),remoteRuns=completed(remote,remoteRunIds);
   if(localRuns.some(run=>run===null)||remoteRuns.some(run=>run===null))continue;
   const validLocalRuns=localRuns.filter((run):run is CompletedRunHeader=>run!==null);
   const validRemoteRuns=remoteRuns.filter((run):run is CompletedRunHeader=>run!==null);
   if(facts.some(({event})=>event.id.length===0||!Number.isFinite(Date.parse(event.at))))continue;
-  const selectedRun=[...validLocalRuns,...validRemoteRuns].sort(laterRun).at(-1)!;
+  // Each side is one saved causal branch. The pinned input revision identifies
+  // its successor without scanning older history or treating wall time as ancestry.
+  const head=(runs:CompletedRunHeader[],side:Map<string,SyncEntry>)=>{const predecessors=new Set(runs.map(run=>decoded<LearningRunLike & {continuedFromRunId?:string}>(side.get(entryId('learningRuns',run.id)))?.continuedFromRunId));return runs.filter(run=>!predecessors.has(run.id)).sort((a,b)=>a.memoryRevision!==undefined&&b.memoryRevision!==undefined?a.memoryRevision-b.memoryRevision||laterRun(a,b):laterRun(a,b)).at(-1)!;};
+  const selectedRun=[head(validLocalRuns,local),head(validRemoteRuns,remote)].sort(laterRun).at(-1)!;
   const localWins=localRunIds.has(selectedRun.id)&&(!remoteRunIds.has(selectedRun.id)||canonicalJsonDigest({runs:sortedUnique([...localRunIds]),target:ours})<=canonicalJsonDigest({runs:sortedUnique([...remoteRunIds]),target:theirs}));
   const applied=localWins?localEvents:remoteEvents,appliedIds=new Set(applied.map(item=>item.event.id)),history=facts.filter(item=>!appliedIds.has(item.event.id));
   if(!history.length)continue;
-  const selected=applied.map(item=>item.event).sort(later).at(-1)!;
+  const selected=applied.map(item=>item.event).filter(event=>event.runId===selectedRun.id).sort(later).at(-1)!;
   const candidateEventIds=sortedUnique(facts.map(item=>item.event.id)),supersededDecisionIds=sortedUnique(parents.map(row=>row.id));
   const decision:LearningReconciliationDecision={
    id:decisionId(targetId,ours.retentionId,candidateEventIds,supersededDecisionIds),targetId,retentionId:ours.retentionId,
@@ -204,7 +222,7 @@ export function* validateLearningReconciliationRecordSteps(reader:LibraryRecordR
  for(const row of reader.entries('learningReconciliations')){
   yield;
   const decision=decisionSchema.parse(row.value) as LearningReconciliationDecision;
-  if(row.key!==decision.id||decision.id!==decisionId(decision.targetId,decision.retentionId,decision.candidateEventIds,decision.supersededDecisionIds))throw new Error('libraryBackup.errors.inconsistent');
+  if(row.key!==decision.id||decision.id!==decisionId(decision.targetId,decision.retentionId,decision.candidateEventIds,decision.supersededDecisionIds,decision.algorithm))throw new Error('libraryBackup.errors.inconsistent');
   const candidateSet=new Set(decision.candidateEventIds),applied=new Set(decision.appliedEventIds),history=new Set(decision.historyOnlyEventIds);
   if(candidateSet.size!==decision.candidateEventIds.length||applied.size!==decision.appliedEventIds.length||history.size!==decision.historyOnlyEventIds.length)throw new Error('libraryBackup.errors.inconsistent');
   if([...applied].some(id=>history.has(id))||new Set([...applied,...history]).size!==candidateSet.size||[...candidateSet].some(id=>!applied.has(id)&&!history.has(id)))throw new Error('libraryBackup.errors.inconsistent');
@@ -219,9 +237,10 @@ export function* validateLearningReconciliationRecordSteps(reader:LibraryRecordR
   const expectedHistoryRuns=sortedUnique([...history].map(id=>events.get(id)!.runId));
   if(!backupEqual(expectedHistoryRuns,decision.historyOnlyRunIds))throw new Error('libraryBackup.errors.inconsistent');
   const candidateRuns:CompletedRunHeader[]=[];
-  for(const runId of [...appliedRunIds,...historyRunIds]){const run=runs.get(runId);if(!run||run.completedAt===null||run.targetIds.length!==1||run.targetIds[0]!==decision.targetId)throw new Error('libraryBackup.errors.inconsistent');candidateRuns.push({id:run.id,completedAt:run.completedAt});const runEvents=sortedUnique(eventIdsByRunTarget.get(groupKey(runId,decision.targetId))??[]);const recorded=sortedUnique(recordedByRun.get(runId)??[]);if(!backupEqual(runEvents,recorded))throw new Error('libraryBackup.errors.inconsistent');yield;}
-  const selectedRun=candidateRuns.sort(laterRun).at(-1)!;
-  const selectedAppliedEvent=(candidateEvents as LearningEventLike[]).filter(event=>applied.has(event.id)).sort(later).at(-1)!;
+  for(const runId of [...appliedRunIds,...historyRunIds]){const run=runs.get(runId);if(!run||run.completedAt===null||run.targetIds.length!==1||run.targetIds[0]!==decision.targetId)throw new Error('libraryBackup.errors.inconsistent');candidateRuns.push({id:run.id,completedAt:run.completedAt,memoryRevision:run.participants?.[decision.targetId]?.memoryRevision});const runEvents=sortedUnique(eventIdsByRunTarget.get(groupKey(runId,decision.targetId))??[]);const recorded=sortedUnique(recordedByRun.get(runId)??[]);if(!backupEqual(runEvents,recorded))throw new Error('libraryBackup.errors.inconsistent');yield;}
+  const effective=decision.algorithm===legacyAlgorithm?candidateRuns:candidateRuns.filter(run=>appliedRunIds.has(run.id));
+  const selectedRun=effective.sort((a,b)=>decision.algorithm!==legacyAlgorithm&&a.memoryRevision!==undefined&&b.memoryRevision!==undefined?a.memoryRevision-b.memoryRevision||laterRun(a,b):laterRun(a,b)).at(-1)!;
+  const selectedAppliedEvent=(candidateEvents as LearningEventLike[]).filter(event=>applied.has(event.id)&&(decision.algorithm===legacyAlgorithm||event.runId===selectedRun.id)).sort(later).at(-1)!;
   if(selectedRun.id!==decision.selectedRunId||selectedRun.completedAt!==decision.decidedAt||!appliedRunIds.has(selectedRun.id)||selectedAppliedEvent.id!==decision.selectedEventId)throw new Error('libraryBackup.errors.inconsistent');
   if(frontier.has(decision.id)){
    for(const runId of decision.appliedRunIds)appliedRunIdsAcrossDecisions.add(runId);
@@ -237,3 +256,23 @@ export function* validateLearningReconciliationRecordSteps(reader:LibraryRecordR
 }
 
 export function validateLearningReconciliationRecords(reader:LibraryRecordReader){return runSynchronously(validateLearningReconciliationRecordSteps(reader));}
+
+/** Ordinary sync checks this immutable choice and its direct refs. It does not
+ * replay the old decision DAG or infer scheduling outcomes from old Events. */
+export function* validateSavedLearningReconciliationSteps(reader:LibraryRecordReader){
+ for(const row of reader.entries('learningReconciliations')){
+  yield;const decision=decisionSchema.parse(row.value) as LearningReconciliationDecision;
+  if(row.key!==decision.id||decision.id!==decisionId(decision.targetId,decision.retentionId,decision.candidateEventIds,decision.supersededDecisionIds,decision.algorithm))throw Error('libraryBackup.errors.inconsistent');
+  const fail=():never=>{throw Error('libraryBackup.errors.inconsistent');};
+  const target=reader.get('learningTargets',decision.targetId);if(!target||target.retentionId!==decision.retentionId)fail();
+  for(const ids of [decision.supersededDecisionIds,decision.candidateEventIds,decision.appliedEventIds,decision.appliedRunIds,decision.historyOnlyEventIds,decision.historyOnlyRunIds])if(!backupEqual(ids,sortedUnique(ids)))fail();
+  const applied=new Set(decision.appliedEventIds),history=new Set(decision.historyOnlyEventIds);
+  if(applied.has(decision.selectedEventId)===false||!decision.appliedRunIds.includes(decision.selectedRunId)||[...applied].some(id=>history.has(id))||!backupEqual(sortedUnique([...applied,...history]),decision.candidateEventIds)||decision.appliedRunIds.some(id=>decision.historyOnlyRunIds.includes(id)))fail();
+  const appliedRuns=new Set<string>(),historyRuns=new Set<string>();
+  for(const id of decision.candidateEventIds){yield;const event=reader.get('learningEvents',id);if(!event||event.id!==id||event.targetId!==decision.targetId||!timestamp.safeParse(event.at).success)fail();(applied.has(id)?appliedRuns:historyRuns).add(event.runId);}
+  if(!backupEqual(sortedUnique([...appliedRuns]),decision.appliedRunIds)||!backupEqual(sortedUnique([...historyRuns]),decision.historyOnlyRunIds))fail();
+  for(const id of [...appliedRuns,...historyRuns]){yield;const run=reader.get('learningRuns',id);if(!run||run.id!==id||run.targetIds.length!==1||run.targetIds[0]!==decision.targetId||!timestamp.safeParse(run.completedAt).success||id===decision.selectedRunId&&run.completedAt!==decision.decidedAt)fail();}
+  const selected=reader.get('learningEvents',decision.selectedEventId);if(decision.algorithm===legacyAlgorithm?!decision.appliedRunIds.includes(selected?.runId):selected?.runId!==decision.selectedRunId)fail();
+  for(const id of decision.supersededDecisionIds){yield;const parent=reader.get('learningReconciliations',id);if(!parent||parent.id!==id||parent.targetId!==decision.targetId||parent.retentionId!==decision.retentionId||parent.candidateEventIds.some((id:string)=>!decision.candidateEventIds.includes(id)))fail();}
+ }
+}

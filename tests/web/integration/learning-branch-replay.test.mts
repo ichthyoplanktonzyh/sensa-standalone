@@ -29,6 +29,11 @@ const entries=(rows:FixtureRows):LibraryReplicaEntry[]=>s.libraryTables.flatMap(
 const merged=mergeLibraryReplicas({base:entries(base),local:entries(a),remote:entries(b)});
 const rows=Object.fromEntries(s.libraryTables.map(table=>[table,merged.entries.filter(row=>row.table===table).map(row=>({key:row.key,value:decodeBackupValue(row.value)}))])) as FixtureRows;rows.meta.push(...base.meta.filter(row=>!isReplicatedLibraryEntry('meta',row.key)));
 validateBackupRows(rows as BackupRows);validateRestoreBackupRows(rows as BackupRows);const d=rows.learningReconciliations[0]!.value,loser=d.historyOnlyRunIds[0];
+const wrong=structuredClone(rows),choice=wrong.learningReconciliations[0]!.value;
+[choice.appliedRunIds,choice.historyOnlyRunIds]=[choice.historyOnlyRunIds,choice.appliedRunIds];[choice.appliedEventIds,choice.historyOnlyEventIds]=[choice.historyOnlyEventIds,choice.appliedEventIds];
+choice.selectedRunId=choice.appliedRunIds[0];choice.selectedEventId=choice.appliedEventIds.map((id:string)=>wrong.learningEvents.find(row=>row.key===id)!.value).sort((a:any,b:any)=>Date.parse(a.at)-Date.parse(b.at)||a.id.localeCompare(b.id)).at(-1).id;
+choice.decidedAt=wrong.learningRuns.find(row=>row.key===choice.selectedRunId)!.value.completedAt;wrong.learningTargets[0]!.value=structuredClone(a.learningTargets[0]!.value);
+expect(()=>validateBackupRows(wrong as BackupRows)).toThrow('libraryBackup.errors.inconsistent');
 expect(merged.conflicts).toEqual([]);expect(d.historyOnlyRunIds).toHaveLength(1);expect(rows.learningRuns).toHaveLength(3);
 
 for(const mutation of ['run-revision','run-completion-kind','event-kind','event-transition','event-time']){const changed=structuredClone(rows),r=changed.learningRuns.find(row=>row.key===loser)!.value,e=changed.learningEvents.find(row=>row.value.runId===loser)!.value;

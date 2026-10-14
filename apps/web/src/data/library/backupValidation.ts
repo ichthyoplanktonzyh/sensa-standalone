@@ -43,12 +43,11 @@ export function validateLibraryRestoreRecordsCooperatively(reader:LibraryRecordR
  return runCooperatively(validateLibraryRecordSteps(reader,'restore'));
 }
 export const validateRestoreBackupRows=(rows:BackupRows)=>validateLibraryRestoreRecords(libraryRowsReader(rows));
-/** Sources outside this reader's selected predicates are unchanged facts of a
- * certified baseline. Global Learning predicates are supplied explicitly. */
-export function validateLearningRestoreComponentCooperatively(reader:LibraryRecordReader,scope:NonNullable<LearningSystemStateInput['restoreScope']>){
- return runCooperatively(validateLibraryRecordSteps(reader,'restore',undefined,scope));
-}
-export function* validateLibraryRecordSteps(reader:LibraryRecordReader,learningValidation:'audit'|'restore'='audit',validateMaterial?:import('./learningAuthority').LearningSystemStateInput['validateMaterial'],restoreScope?:LearningSystemStateInput['restoreScope']){
+/** Own-account sync admits saved state and direct integrity, not old business outcomes. */
+export function validateLibrarySyncRecords(reader:LibraryRecordReader){return runSynchronously(validateLibraryRecordSteps(reader,'sync'));}
+export function validateLibrarySyncRecordsCooperatively(reader:LibraryRecordReader){return runCooperatively(validateLibraryRecordSteps(reader,'sync'));}
+export function validateLearningSyncRecordsCooperatively(reader:LibraryRecordReader,scope:NonNullable<LearningSystemStateInput['syncScope']>){return runCooperatively(validateLibraryRecordSteps(reader,'sync',undefined,scope));}
+export function* validateLibraryRecordSteps(reader:LibraryRecordReader,learningValidation:'audit'|'restore'|'sync'='audit',validateMaterial?:import('./learningAuthority').LearningSystemStateInput['validateMaterial'],syncScope?:LearningSystemStateInput['syncScope']){
  let readFailed=false,readFailure:unknown;
  const read=<T>(work:()=>T):T=>{try{return work();}catch(cause){if(!readFailed){readFailed=true;readFailure=cause;}throw cause;}};
  const observed:LibraryRecordReader={
@@ -60,7 +59,7 @@ export function* validateLibraryRecordSteps(reader:LibraryRecordReader,learningV
   },
  };
  try{
-  const identity=yield*validateLibraryRecordFacts(observed,learningValidation,validateMaterial,restoreScope);
+  const identity=yield*validateLibraryRecordFacts(observed,learningValidation,validateMaterial,syncScope);
   if(readFailed)throw readFailure;
   return identity;
  }catch(cause){
@@ -70,7 +69,7 @@ export function* validateLibraryRecordSteps(reader:LibraryRecordReader,learningV
   throw cause;
  }
 }
-function* validateLibraryRecordFacts(reader:LibraryRecordReader,learningValidation:'audit'|'restore',validateMaterial?:import('./learningAuthority').LearningSystemStateInput['validateMaterial'],restoreScope?:LearningSystemStateInput['restoreScope']){
+function* validateLibraryRecordFacts(reader:LibraryRecordReader,learningValidation:'audit'|'restore'|'sync',validateMaterial?:import('./learningAuthority').LearningSystemStateInput['validateMaterial'],syncScope?:LearningSystemStateInput['syncScope']){
  const {rows,maps}=libraryRecordViews(reader);
  // A lazy reader must decode every stored wire value, including opaque
  // preferences that a domain validator may not otherwise need to inspect.
@@ -84,7 +83,7 @@ function* validateLibraryRecordFacts(reader:LibraryRecordReader,learningValidati
  const validateLanguageContext=(value:unknown)=>{const context=sensaFormalPinnedLanguageContextSchema.parse(value);const route=routes.get(context.languageRouteId);if(!route||route.targetLanguageTag!==context.targetLanguageTag||context.languageRouteRevision>route.revision)fail();return context;};
  const glossary=maps.settings.get('reading-glossary');if(glossary!==undefined)sensaReadingGlossarySchema.parse(glossary);
  const identity=identitySchema.parse(requireRow('meta','identity'));
- const requirePersonalSource=restoreScope?personalSourceResolver(maps,fail):(yield*validatePersonalSemanticWorldReplicaSteps({rows,maps,requireRow,fail})).requirePersonalSource;
+ const requirePersonalSource=syncScope?personalSourceResolver(maps,fail):(yield*validatePersonalSemanticWorldReplicaSteps({rows,maps,requireRow,fail})).requirePersonalSource;
 
  for(const table of ['drafts','sessions','meanings','curriculumEnrollments','studyScopes','learningSessions','learningTargets','learningRuns','learningEvents','learningReconciliations','personalLearning','contentAttempts','providers'] as Table[]){
   for(const {key,value} of rows[table]){if(!value||key!==value.id)fail();uuid.parse(key);yield;}
@@ -103,10 +102,10 @@ function* validateLibraryRecordFacts(reader:LibraryRecordReader,learningValidati
   if(!creation||operationInput('00000000-0000-4000-8000-000000000001').kind!=='library.create'||!backupEqual(creation.result,identity))fail();
  }
 
- if(!restoreScope){
+ if(!syncScope){
   yield*validateContentSupplyReplicaSteps({rows,identity,requireRow,requirePersonalSource,validateLanguageContext,fail});
   yield*validatePersonalContentReplicaSteps({rows,requireRow,fail});
  }
- yield*validateLearningReplicaSteps({rows,maps,identity,routes,requireRow,requirePersonalSource,validateLanguageContext,operationInput,fail,validateMaterial,restoreScope},learningValidation);
+ yield*validateLearningReplicaSteps({rows,maps,identity,routes,requireRow,requirePersonalSource,validateLanguageContext,operationInput,fail,validateMaterial,syncScope},learningValidation);
  return identity;
 }

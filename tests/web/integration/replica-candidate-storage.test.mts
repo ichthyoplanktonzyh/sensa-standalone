@@ -565,7 +565,7 @@ test('current dependency stored budgets replace old rows and subtract deletions 
 });
 for(const damage of ['bad-json','missing-trigger','edge-write'] as const)test(`dependency certificate rejects ${damage} and never treats coverage alone as proof`,()=>{
  const fixture=isolatedDatabase(),deps=new SqliteSyncDependencies(fixture.raw);try{
-  const admission=syncAdmission();deps.observe(admission,'learningRuns','controlled','["null"]',{targetIds:['target'],participants:{}});deps.certify(admission,checkpoint,identity,0);const prior=deps.certificate()!;expect(prior).toBeDefined();
+  const admission=syncAdmission();deps.observe(admission,'learningRuns','controlled','["null"]',{targetIds:['target'],participants:{}});deps.observe(admission,'learningSessions','controlled-session','["null"]',{startedByOperationId:'operation',startedAt:'time'});deps.certify(admission,checkpoint,identity,0);const prior=deps.certificate()!;expect(prior).toBeDefined();
   if(damage==='bad-json')fixture.raw.exec("UPDATE sensa_sync_dependency_state_v1 SET certificate_json='{' WHERE id=1");
   else if(damage==='missing-trigger')fixture.raw.exec('DROP TRIGGER sensa_sync_base_generation_update_v1');
   else fixture.raw.exec('DELETE FROM sensa_sync_dependency_edges_v1');

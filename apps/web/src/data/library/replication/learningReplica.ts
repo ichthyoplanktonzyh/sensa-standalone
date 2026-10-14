@@ -1,5 +1,6 @@
+import {assertSavedLearningRecordChange} from '../savedLearningState';
 import {reconcileConcurrentLearningEntries} from '../learningReconciliation';
-import {decodeBackupValue} from '../backupCodec';
+import {backupEqual,decodeBackupValue} from '../backupCodec';
 import type {DomainReplicaModule,ReplicaMergeResult,ReplicaRecordReference} from './domainReplica';
 
 const tables=new Set(['curriculumEnrollments','supplementalMembershipStates','studyScopes','learningSessions','learningTargets','learningRuns','learningEvents','learningReconciliations']);
@@ -44,6 +45,20 @@ const materialDependencies=(material:unknown)=>{
  ];
 };
 
+/** Reconciliation is for simultaneous changes, not the mere presence of old
+ * decisions. The ordinary merger already selects a one-sided causal update. */
+function needsLearningReconciliation(input:{base:ReplicaMergeResult['entries'];local:ReplicaMergeResult['entries'];remote:ReplicaMergeResult['entries']},conflicts:readonly string[]):boolean{
+ if(conflicts.some(id=>JSON.parse(id)[0]==='learningTargets'))return true;
+ const baseline=new Map(input.base.map(row=>[entryId(row),row]));
+ const changed=(entries:ReplicaMergeResult['entries'])=>{
+  const targets=new Set<string>();for(const row of entries){
+   if(row.table==='learningTargets'&&!backupEqual(row.value,baseline.get(entryId(row))?.value))targets.add(row.key);
+   if(row.table==='learningReconciliations'&&!baseline.has(entryId(row)))targets.add((decodeBackupValue(row.value) as {targetId:string}).targetId);
+  }return targets;
+ };
+ const ours=changed(input.local);return [...changed(input.remote)].some(id=>ours.has(id));
+}
+
 export const learningReplica:DomainReplicaModule={
  namespace:'learning-system',
  owns:(table,key)=>tables.has(table)||(table==='meta'&&['learning-active','learning-session-active'].includes(key)),
@@ -54,14 +69,17 @@ export const learningReplica:DomainReplicaModule={
   return [...selected.filter(row=>blocked.has(entryId(row))),...merged.filter(row=>!blocked.has(entryId(row)))];
  },
  *mergeSteps(input,ordinary){
-  const historical=input.base.filter(entry=>immutableHistory.has(entry.table));
+  const historical=input.base.filter(entry=>immutableHistory.has(entry.table)),baseline=new Map(input.base.map(row=>[entryId(row),row]));
   for(const side of [input.local,input.remote]){
    const retained=new Set(side.map(entryId));
    if(historical.some(entry=>!retained.has(entryId(entry))))throw new Error('library_sync_history');
+   const witnesses=new Set<string>(),decisions=new Set<string>();
+   for(const row of side)if(!baseline.has(entryId(row))){if(row.table==='learningEvents'){const event=decodeBackupValue(row.value) as any,next=event.detail?.nextPresentation;if(next)witnesses.add(JSON.stringify([event.runId,next.targetId,next.stepId,next.material]));}else if(row.table==='learningReconciliations')decisions.add((decodeBackupValue(row.value) as any).targetId);}
+   for(const row of side){yield;const before=baseline.get(entryId(row));if(before&&!backupEqual(before.value,row.value))assertSavedLearningRecordChange(row.table,decodeBackupValue(before.value),decodeBackupValue(row.value),()=>{throw Error('library_sync_history');},witnesses,decisions.has(row.key));}
   }
   const merged=yield* ordinary(input);
   yield;
-  const reconciled=reconcileConcurrentLearningEntries({...input,merged:merged.entries,conflicts:merged.conflicts}) as ReplicaMergeResult;
+  const reconciled=needsLearningReconciliation(input,merged.conflicts)?reconcileConcurrentLearningEntries({...input,merged:merged.entries,conflicts:merged.conflicts}) as ReplicaMergeResult:merged;
   yield;
   return {...reconciled,conflicts:[...new Set([...reconciled.conflicts,...activeRunPolicyConflicts(reconciled.entries),...activeBookConflicts(reconciled.entries)])].sort()};
  },

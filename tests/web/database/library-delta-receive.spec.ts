@@ -38,8 +38,8 @@ test('a complete nine-key retention review receives through a certified sparse o
   const review=await settle(a,targetId);expect(review.purpose).toBe('retention_review');await a.evaluate(()=>(window as any).sync());
   fixture.clearRequests();await b.evaluate(()=>(window as any).sync());
   const state=await b.evaluate(()=>(window as any).core.readCloudSync());
-  expect(state.receive.mode).toBe('incremental');expect(state.receive.changedRecords).toBe(9);expect(state.receive.baselineBuildRecords).toBe(0);expect(state.receive.targets).toBe(2);expect(state.receive.runs).toBe(3);expect(state.receive.scopes).toBe(1);expect(state.receive.sessions).toBe(2);
-  expect(state.receive.changedEventClosure).toEqual({baselineLookups:2,candidateLookups:2,runLookups:3,indexedRelations:2,edgeVisits:2});
+  expect(state.receive.mode).toBe('incremental');expect(state.receive.changedRecords).toBe(9);expect(state.receive.baselineBuildRecords).toBe(0);expect(state.receive.targets).toBe(1);expect(state.receive.runs).toBe(1);expect(state.receive.scopes).toBe(1);expect(state.receive.sessions).toBe(2);
+  expect(state.receive.events).toBe(2);
   expect(fixture.requests().some(row=>row.path.includes('/snapshot'))).toBe(false);expect(await facts(b)).toEqual(await facts(a));
   await b.evaluate(async()=>{const c=(window as any).core,rows=await c.readLibrary(async(tx:any)=>Object.fromEntries(await Promise.all(c.libraryTables.map(async(table:string)=>[table,await tx.entries(table)]))));rows.operations=rows.operations.filter((row:any)=>!JSON.parse(row.value.input).kind.startsWith('service.'));c.validateBackupRows(rows);});
   await b.reload();const reopened=await b.evaluate(async()=>{const path='/core.js',c=await import(/* @vite-ignore */path);await c.openLibrary();return c.readCloudSync();});expect(reopened.receive.mode).toBe('incremental');expect(reopened.restoreOperationId).toBe(state.restoreOperationId);
@@ -122,13 +122,13 @@ test('ordinary quantity confirmation accompanying a review stays incremental and
  }finally{await a.context().close();await b.context().close();}
 });
 
-test('actual Worker serves a nonempty history projection while a component prepares the next atomic state',async()=>{
+test('actual Worker serves a nonempty history projection while saved-state reception prepares the next atomic state',async()=>{
  const {a,b,targetId}=await setup();try{
   const read=()=>b.evaluate(async()=>{const w=window as any,c=w.core,value=await c.learningSystem.read({kind:'history',languageContext:(await c.languageRoutesSnapshot()).context,filter:{surface:'study',range:'all',start:'',end:'',kind:'all',languageChoice:null},limit:20});return {total:value.total,rows:value.records.length,preparing:!w.deltaPreparationDone};});
   const before=await read();expect(before.rows).toBeGreaterThan(0);await settle(a,targetId);await a.evaluate(()=>(window as any).sync());await testRpc(b,'cooperative-preparation');
   const pending=b.evaluate(()=>(window as any).sync());await b.waitForFunction(()=>(window as any).deltaCooperative?.outsideTransaction);
   const during=await read();expect(during.preparing).toBe(true);expect(during.total).toBe(before.total);expect(during.rows).toBe(before.rows);
-  await pending;const after=await read();expect(after.preparing).toBe(false);expect(after.total).toBe(before.total+1);expect(await facts(b)).toEqual(await facts(a));
+  await testRpc(b,'release');await pending;const after=await read();expect(after.preparing).toBe(false);expect(after.total).toBe(before.total+1);expect(await facts(b)).toEqual(await facts(a));
  }finally{await a.context().close();await b.context().close();}
 });
 
@@ -137,7 +137,7 @@ test('ordinary review start, next action and completion during preparation survi
  const {a,b,targetId}=await setup();try{
   await settle(a,targetId);await a.evaluate(()=>(window as any).sync());const before=await testRpc(b,'snapshot');await testRpc(b,'cooperative-preparation');
   const pending=b.evaluate(()=>(window as any).sync()),rejected=expect(pending).rejects.toThrow();await b.waitForFunction(()=>(window as any).deltaCooperative?.outsideTransaction);
-  const local=await settle(b,targetId);expect(local.purpose).toBe('retention_review');await rejected;
+  const local=await settle(b,targetId);expect(local.purpose).toBe('retention_review');await testRpc(b,'release');await rejected;
   const after=await testRpc(b,'snapshot');expect(after.base).toEqual(before.base);expect(after.revision).toBeGreaterThan(before.revision);
   const retained=await facts(b);expect(retained.filter((row:any)=>row[0]==='learningRuns'&&row[1]===local.id)).toHaveLength(1);
   expect(retained.filter((row:any)=>row[0]==='learningEvents'&&decodeBackupValue(row[2]).runId===local.id)).toHaveLength(2);

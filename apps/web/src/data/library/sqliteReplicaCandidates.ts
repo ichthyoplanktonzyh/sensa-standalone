@@ -386,7 +386,7 @@ export class SqliteReplicaCandidates{
   const controller=new AbortController();
   const result=(async()=>{
    try{
-    const {validateLibraryRestoreRecordsCooperatively}=await import('./backupValidation');
+    const {validateLibrarySyncRecordsCooperatively}=await import('./backupValidation');
     let identity:LibraryIdentity|undefined,admission=syncAdmission();
     if(sparse&&!sparse.dense){
      const changes=[...this.rows<RecordKey>('SELECT table_name AS "table",record_key AS "key" FROM sensa_replica_candidate_manifest_v1 WHERE candidate_id=? ORDER BY table_name,record_key',[id]),...[...sparse.deleted].map(identity=>{const [table,key]=JSON.parse(identity);return {table,key,deleted:true};})] as Array<RecordKey&{deleted?:boolean}>;
@@ -415,7 +415,7 @@ export class SqliteReplicaCandidates{
     this.admissions.set(id,admission);
     const reader=this.reader(id,controller.signal,admission);
     if(identity){if(!admission.disabled&&admission.rows.size!==header.records)this.fail();}
-    else identity=await validateLibraryRestoreRecordsCooperatively(reader);
+    else identity=await validateLibrarySyncRecordsCooperatively(reader);
     if(sparse&&!sparse.dense)admission.deletes=[...sparse.deleted].map(key=>{const [table,keyValue]=JSON.parse(key);return {table,key:keyValue};});
     const checked=expectedSchema.parse(JSON.parse(header.expected_json));
     if(identity.id!==checked.libraryId||identity.learnerId!==checked.learnerId)throw Error('library_sync_identity');
@@ -511,8 +511,8 @@ export class SqliteReplicaCandidates{
       if(!(cause instanceof DeltaReceiveFallback))throw cause;
       this.clearEncoding(id);sparse.prepare=undefined;sparse.basePuts=undefined;sparse.encoded=false;
       sparse.evidence={...sparse.evidence!,mode:'complete',fallbackReason:cause.reason,baselineBuildRecords:sparse.certificate.records};await this.materializeSparse(id,controller.signal);
-      const admission=syncAdmission(),reader=this.reader(id,controller.signal,admission),{validateLibraryRestoreRecordsCooperatively}=await import('./backupValidation');
-      const identity=await validateLibraryRestoreRecordsCooperatively(reader);alive();if(identity.id!==candidate.identity.id||identity.learnerId!==candidate.identity.learnerId)throw Error('library_sync_identity');
+      const admission=syncAdmission(),reader=this.reader(id,controller.signal,admission),{validateLibrarySyncRecordsCooperatively}=await import('./backupValidation');
+      const identity=await validateLibrarySyncRecordsCooperatively(reader);alive();if(identity.id!==candidate.identity.id||identity.learnerId!==candidate.identity.learnerId)throw Error('library_sync_identity');
       this.admissions.set(id,admission);this.database.exec({sql:"UPDATE sensa_replica_candidates_v1 SET state='validated',identity_json=? WHERE id=?",bind:[JSON.stringify(identity),id]});
      }
      if(records){
@@ -586,7 +586,7 @@ export class SqliteReplicaCandidates{
    for(const row of plan.puts)rows.set(dependencyRowId(row.table,row.key),{...row,record:true,sync:false});
    for(const row of plan.basePuts){const key=dependencyRowId(row.table,row.key),prior=rows.get(key);if(prior)prior.sync=true;else rows.set(key,{...row,record:false,sync:true});}
    for(const row of rows.values()){
-    alive();yield;replicaWork('encoding.source');
+    alive();replicaWork('encoding.source');
     const source=readSource?readSource(row.table,row.key)??this.fail():this.candidateBody(id,row.table,row.key);
     const copy=canCopyLibraryReplicaValue(row);
     let common:{wire:string;stored:string;refs:string}|undefined;
@@ -617,6 +617,9 @@ export class SqliteReplicaCandidates{
      charge(common.wire,common.stored,common.refs);
      stage('INSERT INTO sensa_replica_candidate_encoded_v1 VALUES(?,?,?,?,?,?,?)',[id,kind,row.table,row.key,common.wire,common.stored,common.refs]);
     }
+    // Check the cooperative budget after encoded work, including its last row.
+    // Scratch transactions have ended before this step can yield.
+    yield;
    }
   }).call(this));flush();alive();}finally{release();memo.clear();}
  }

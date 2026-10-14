@@ -16,7 +16,7 @@ import type {BackupRows} from '../../../apps/web/src/data/library/backupValidati
 import sqlite3InitModule from '@sqlite.org/sqlite-wasm';
 import {SqliteRecordDatabase} from '../../../apps/web/src/data/library/sqliteDatabase';
 import {SqliteSyncDependencies,syncAdmission} from '../../../apps/web/src/data/library/sqliteSyncDependencies';
-import {admitLearningDelta,DeltaReceiveFallback,deltaComponents} from '../../../apps/web/src/data/library/learningDeltaAdmission';
+import {admitLearningDelta} from '../../../apps/web/src/data/library/learningDeltaAdmission';
 import {sealedRecordReader} from '../../../apps/web/src/data/library/sealedRecordReader';
 import {observeReplicaWork} from '../../../apps/web/src/data/library/replicaWork';
 import {backupEqual} from '../../../apps/web/src/data/library/backupCodec';
@@ -25,7 +25,7 @@ import type {LibraryRecordReader} from '../../../apps/web/src/data/library/libra
 
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined,location:new URL('http://library-record-reader.fixture.invalid/')});
 const database=await useNodeLearningCapacityStorage();afterAll(()=>database.close());
-const {validateBackupRows,validateLibraryRecords,validateLibraryRecordsCooperatively,validateLibraryRecordSteps,validateRestoreBackupRows,validateLibraryRestoreRecords,validateLibraryRestoreRecordsCooperatively}=await import('../../../apps/web/src/data/library/backupValidation');
+const {validateBackupRows,validateLibraryRecords,validateLibraryRecordsCooperatively,validateLibraryRecordSteps,validateRestoreBackupRows,validateLibraryRestoreRecords,validateLibraryRestoreRecordsCooperatively,validateLibrarySyncRecords}=await import('../../../apps/web/src/data/library/backupValidation');
 const {validateLibraryReplica,validateLibraryReplicaCooperatively}=await import('../../../apps/web/src/data/library/replication/libraryReplicaValidation');
 const context=sensaPinnedLanguageContext(defaultSensaLanguageRoute),id=()=>crypto.randomUUID();
 let source:BackupRows,baseline:BackupRows,identity:LibraryIdentity;
@@ -73,7 +73,7 @@ async function deltaFixture(after=replicated(source),prior=baseline){
  const controlled=(reader:LibraryRecordReader):LibraryRecordReader=>({...reader,get:(table,key)=>{alive();return reader.get(table,key);},has:(table,key)=>{alive();return reader.has(table,key);}});
  return {raw,dependencies,certificate,alive,base:controlled(beforeReader),remote:controlled(afterReader),changes:deltaChanges(prior,after),close:()=>{dependencies.close();storage.close();}};
 }
-test('eight independent histories use bounded component windows and prepare metadata without rereading bodies',async()=>{
+test('eight independent deltas use one bounded saved-state window and prepare metadata without rereading bodies',async()=>{
  vi.useFakeTimers({toFake:['Date']});vi.setSystemTime('2026-10-20T00:00:00Z');
  const targets:string[]=[];
  const settle=async(targetId:string)=>{const target=await readLibrary(tx=>tx.get<any>('learningTargets',targetId));vi.setSystemTime(Math.max(Date.now()+1000,target.memory?.dueAt.getTime()??0));await learningSystem.execute({kind:'start',operationId:id(),targetId,languageContext:context,dailyLimit:20});await action('reveal');const runId=await action('rate');await learningSystem.execute({kind:'finish',operationId:id(),runId});};
@@ -84,13 +84,13 @@ test('eight independent histories use bounded component windows and prepare meta
  }finally{vi.useRealTimers();}
  expect(validateLibraryRestoreRecords(libraryRowsReader(after!))).toMatchObject({id:identity.id,learnerId:identity.learnerId});
  const fixture=await deltaFixture(after!,prior!);let held=0,peak=0,physical=0;const work:Record<string,number>={},componentLoads=new Map<string,number>();let inWindow=false;
- const reader=(rows:BackupRows,side:string)=>{const texts=new Map([...records(rows)].map(row=>[JSON.stringify([row.table,row.key]),JSON.stringify(encodeBackupValue(row.value))]));return sealedRecordReader({cloneDecoded:true,alive:fixture.alive,beforePage:fixture.alive,get(table,key){physical++;const identity=JSON.stringify([table,key]);if(inWindow){const k=side+identity;componentLoads.set(k,(componentLoads.get(k)??0)+1);}const text=texts.get(identity);return text===undefined?undefined:{record_key:key,value_json:text};},has:(table,key)=>texts.has(JSON.stringify([table,key])),keys(){return [];},rows(){return [];},plain(_table,row){return row.value_json;},missing():never{throw Error('missing fixture row');}});};
+ const reader=(rows:BackupRows,side:string)=>{const texts=new Map([...records(rows)].map(row=>[JSON.stringify([row.table,row.key]),JSON.stringify(encodeBackupValue(row.value))]));return sealedRecordReader({cloneDecoded:true,alive:fixture.alive,beforePage:fixture.alive,get(table,key){physical++;const identity=JSON.stringify([table,key]);const text=texts.get(identity);if(inWindow&&text!==undefined){const k=side+identity;componentLoads.set(k,(componentLoads.get(k)??0)+1);}return text===undefined?undefined:{record_key:key,value_json:text};},has:(table,key)=>texts.has(JSON.stringify([table,key])),keys(){return [];},rows(){return [];},plain(_table,row){return row.value_json;},missing():never{throw Error('missing fixture row');}});};
  const base=reader(prior!,'base'),remote=reader(after!,'remote');
  observeReplicaWork((kind,n)=>{work[kind]=(work[kind]??0)+n;if(kind==='window.heldBytes'){held+=n;peak=Math.max(peak,held);}});
  try{
   const prepared=await admitLearningDelta({...fixture,base,remote,window(){inWindow=true;const a=base.beginWindow(),b=remote.beginWindow();return ()=>{b();a();inWindow=false;};},canonical:(side,table,key)=>(side==='base'?base:remote).canonical(table,key),consume:async()=>{expect(held).toBeGreaterThan(0);}});
-  expect(work['component.open']).toBe(8);expect(work['component.release']).toBe(8);expect(held).toBe(0);expect(peak).toBeLessThanOrEqual(8*1024*1024);expect(work['window.bypass']??0).toBe(0);
-  const historyLoads=[...componentLoads].filter(([key])=>/learningTargets|learningRuns|learningEvents|studyScopes|learningSessions/.test(key));expect(historyLoads.length).toBeGreaterThan(80);expect(historyLoads.every(([,count])=>count===1)).toBe(true);
+  expect(work['admission.windowOpen']).toBe(1);expect(work['admission.windowRelease']).toBe(1);expect(held).toBe(0);expect(peak).toBeLessThanOrEqual(8*1024*1024);expect(work['window.bypass']??0).toBe(0);
+  const historyLoads=[...componentLoads].filter(([key])=>/learningTargets|learningRuns|learningEvents|studyScopes|learningSessions/.test(key));expect(historyLoads.length).toBeGreaterThan(40);expect(historyLoads.every(([,count])=>count===1)).toBe(true);
   const before=physical;expect(await prepared.prepare()).toEqual(fixture.changes.map(({table,key})=>({table,key})));const metadata=await prepared.prepare();metadata[0]!.key='caller mutation';expect((await prepared.prepare())[0]!.key).not.toBe('caller mutation');expect(physical).toBe(before);
   // A valid shared Scope joins all affected histories without adding support
   // rows to admission. Its predicate result still matches the full oracle.
@@ -101,42 +101,29 @@ test('eight independent histories use bounded component windows and prepare meta
   for(const row of newRuns)row.value.studyScopeRevisionId=scope.id;
   const oldSessions=new Set(prior!.learningSessions.map(row=>row.key));for(const row of shared.learningSessions)if(!oldSessions.has(row.key)&&replaced.has(row.value.scopeRevisionId))row.value.scopeRevisionId=scope.id;
   expect(validateLibraryRestoreRecords(libraryRowsReader(shared))).toMatchObject({id:identity.id});
-  const connected=await deltaFixture(shared,prior!);try{const start=work['component.open']!;const result=await admitLearningDelta(connected);expect(work['component.open']!-start).toBe(1);expect(await result.prepare()).toEqual(connected.changes.map(({table,key})=>({table,key})));}finally{connected.close();}
+  const connected=await deltaFixture(shared,prior!);try{const start=work['admission.windowOpen']!;const result=await admitLearningDelta(connected);expect(work['admission.windowOpen']!-start).toBe(1);expect(await result.prepare()).toEqual(connected.changes.map(({table,key})=>({table,key})));}finally{connected.close();}
+  // The same shared Scope can support one changed participant without loading
+  // the other members' Run/Event histories.
+  const single=structuredClone(prior!),selectedRun=newRuns[0]!.value,selectedTarget=selectedRun.targetId;
+  single.learningTargets.find(row=>row.key===selectedTarget)!.value=structuredClone(shared.learningTargets.find(row=>row.key===selectedTarget)!.value);
+  single.studyScopes.push({key:scope.id,value:scope});single.learningRuns.push({key:selectedRun.id,value:selectedRun});
+  single.learningEvents.push(...shared.learningEvents.filter(row=>row.value.runId===selectedRun.id));
+  single.learningSessions.push(...shared.learningSessions.filter(row=>row.value.runIds.includes(selectedRun.id)));
+  expect(validateLibraryRestoreRecords(libraryRowsReader(single))).toMatchObject({id:identity.id});
+  const only=await deltaFixture(single,prior!);try{const admitted=await admitLearningDelta(only);expect(admitted.evidence.runs).toBe(1);expect(admitted.evidence.events).toBe(2);expect(admitted.evidence.targets).toBe(1);expect(scope.members.length).toBe(8);}finally{only.close();}
 
  }finally{observeReplicaWork(undefined);fixture.close();}
 });
 
-// These fixtures verify execution inventory only. Domain acceptance remains
-// covered above by genuine histories and the unchanged full restore oracle.
-for(const relation of ['multi-target','predecessor','shared-session','shared-scope','active-pointers','reconciliation','edge-capacity'] as const)test(`component execution joins or keeps the whole frontier for ${relation}`,async()=>{
- const selection=new Map(libraryTables.map(table=>[table,new Set<string>()]));
- for(let i=0;i<2;i++){selection.get('learningTargets')!.add(`t${i}`);selection.get('learningRuns')!.add(`r${i}`);selection.get('learningSessions')!.add(`s${i}`);selection.get('studyScopes')!.add(`c${i}`);}
- const facts=new Map<string,any>(),key=(table:string,id:string)=>JSON.stringify([table,id]);
- for(let i=0;i<2;i++){facts.set(key('learningRuns',`r${i}`),{targetIds:[`t${i}`],learningSessionId:`s${i}`,studyScopeRevisionId:`c${i}`});facts.set(key('learningSessions',`s${i}`),{runIds:[`r${i}`],scopeRevisionId:`c${i}`});facts.set(key('studyScopes',`c${i}`),{members:[{targetId:`t${i}`} ]});}
- if(relation==='multi-target')facts.get(key('learningRuns','r0')).targetIds.push('t1');
- if(relation==='predecessor')facts.get(key('learningRuns','r1')).continuedFromRunId='r0';
- if(relation==='shared-session')facts.get(key('learningSessions','s0')).runIds.push('r1');
- if(relation==='shared-scope')facts.get(key('studyScopes','c0')).members.push({targetId:'t1'});
- if(relation==='reconciliation')selection.get('learningReconciliations')!.add('decision');
- if(relation==='edge-capacity')facts.get(key('learningSessions','s0')).runIds=Array(30000).fill('r0');
- const reader=(active:string|undefined):LibraryRecordReader=>({get:(table,id)=>table==='meta'&&id==='learning-active'?active:facts.get(key(table,id)),has:(table,id)=>facts.has(key(table,id)),entries:()=>[]});
- let held=0,edges=0,bypass=0,checks=0;observeReplicaWork((kind,n)=>{if(kind==='component.graphBytes')held+=n;if(kind==='component.graphEdges')edges+=n;if(kind==='component.graphBypass')bypass+=n;});
- try{const changes=[{table:'learningTargets' as const,key:'t0'},{table:'learningTargets' as const,key:'t1'}];const result=await deltaComponents(selection,changes,new Set(),new Map(),reader(relation==='active-pointers'?'r0':undefined),reader(relation==='active-pointers'?'r1':undefined),()=>{checks++;});
-  expect(result).toHaveLength(1);expect([...result[0]!.selection.get('learningTargets')!]).toEqual(['t0','t1']);expect(result[0]!.changes).toEqual(changes);expect([...result[0]!.selection.get('learningRuns')!]).toEqual(['r0','r1']);expect(held).toBeLessThanOrEqual(4*1024*1024);
-  if(relation==='edge-capacity'){expect(bypass).toBe(1);expect(checks).toBeLessThan(60000);}else if(relation!=='reconciliation')expect(edges).toBeGreaterThan(0);
- }finally{observeReplicaWork(undefined);}
-});
-
 test('changed Event closure reads each side once rather than scanning the overlay for every related Run',async()=>{
  const after=replicated(source),fixture=await deltaFixture(after);let phase='',beforeEvents=0,afterEvents=0;
- const count=(reader:LibraryRecordReader,side:'before'|'after'):LibraryRecordReader=>({...reader,get(table,key){if(phase==='eligibility'&&table==='learningEvents'){if(side==='before')beforeEvents++;else afterEvents++;}return reader.get(table,key);}});
+ const count=(reader:LibraryRecordReader,side:'before'|'after'):LibraryRecordReader=>({...reader,get(table,key){if(phase==='directReferences'&&table==='learningEvents'){if(side==='before')beforeEvents++;else afterEvents++;}return reader.get(table,key);}});
  try{
   expect(validateLibraryRestoreRecords(libraryRowsReader(after))).toMatchObject({id:identity.id,learnerId:identity.learnerId});
   const result=await admitLearningDelta({...fixture,base:count(fixture.base,'before'),remote:count(fixture.remote,'after'),phase:name=>{phase=name;}});
   const changedEvents=fixture.changes.filter(row=>row.table==='learningEvents').length;
-  expect(changedEvents).toBe(2);expect(result.evidence.runs).toBe(2);expect(result.evidence.events).toBe(4);
-  expect(beforeEvents).toBe(changedEvents);expect(afterEvents).toBe(changedEvents);
-  expect(result.evidence.changedEventClosure).toEqual({baselineLookups:2,candidateLookups:2,runLookups:2,indexedRelations:2,edgeVisits:2});
+  expect(changedEvents).toBe(2);expect(result.evidence.runs).toBe(1);expect(result.evidence.events).toBe(2);
+  expect(beforeEvents).toBe(0);expect(afterEvents).toBeGreaterThanOrEqual(changedEvents);
   expect(await result.prepare()).toEqual(fixture.changes.map(({table,key})=>({table,key})));
  }finally{fixture.close();}
 });
@@ -145,8 +132,7 @@ test('redundant immutable Event puts preserve both baseline and overlay reachabi
   const targetId=source.learningEvents.find(row=>!baseline.learningEvents.some(prior=>prior.key===row.key))!.value.targetId;
   const old=baseline.learningEvents.find(row=>row.value.targetId===targetId)!;
   const result=await admitLearningDelta({...fixture,changes:[...fixture.changes,{table:'learningEvents',key:old.key}]});
-  expect(result.evidence.runs).toBe(2);expect(result.evidence.events).toBe(4);
-  expect(result.evidence.changedEventClosure).toEqual({baselineLookups:3,candidateLookups:3,runLookups:2,indexedRelations:3,edgeVisits:3});
+  expect(result.evidence.runs).toBe(2);expect(result.evidence.events).toBe(3);
   expect((await result.prepare()).some(row=>row.key===old.key)).toBe(false);
  }finally{fixture.close();}
 });
@@ -160,15 +146,12 @@ for(const fault of ['delete-old-event','rebind-old-run','retarget-old-event','mi
  else fresh.value.targetId=after.learningTargets.find(row=>row.key!==fresh.value.targetId)!.key;
  const fixture=await deltaFixture(after);try{
   const work=admitLearningDelta({...fixture,changes:fault==='missing-changed-event'?[...fixture.changes,{table:'learningEvents',key:fresh.key}]:fixture.changes});
-  if(fault==='delete-old-event')await expect(work).rejects.toMatchObject({reason:'deleted_record'} satisfies Partial<DeltaReceiveFallback>);
-  else if(fault==='rebind-old-run'||fault==='retarget-old-event')await expect(work).rejects.toMatchObject({reason:'immutable_record_change'} satisfies Partial<DeltaReceiveFallback>);
-  else await expect(work).rejects.toThrow('libraryBackup.errors.inconsistent');
+  await expect(work).rejects.toThrow('libraryBackup.errors.inconsistent');
   expect(()=>validateLibraryRestoreRecords(libraryRowsReader(after))).toThrow();
  }finally{fixture.close();}
 });
 test('Event adjacency construction and consumption keep checking the certified baseline generation',async()=>{
- for(const at of ['eligibility','eventRun','dependencyClosure']){const fixture=await deltaFixture();try{
-  if(at==='eventRun'){const query=fixture.dependencies.keys.bind(fixture.dependencies);fixture.dependencies.keys=(kind,target)=>{const result=query(kind,target);if(kind==='eventRun')fixture.raw.exec('DELETE FROM sensa_sync_dependency_edges_v1');return result;};}
+ for(const at of ['eligibility','directReferences','savedAdmission']){const fixture=await deltaFixture();try{
   await expect(admitLearningDelta({...fixture,phase(name){if(name===at)fixture.raw.exec('DELETE FROM sensa_sync_dependency_edges_v1');}})).rejects.toThrow('library_sync_local_changed');
  }finally{fixture.close();}}
 });
@@ -331,4 +314,49 @@ test('ordinary restoration never calls the historical protocol reducer or settle
   expect(validateRestoreBackupRows(structuredClone(source))).toEqual(identity);expect(reducer).not.toHaveBeenCalled();expect(scheduler).not.toHaveBeenCalled();
   expect(validateBackupRows(structuredClone(source))).toEqual(identity);expect(reducer).toHaveBeenCalled();expect(scheduler).toHaveBeenCalled();
  }finally{reducer.mockRestore();scheduler.mockRestore();}
+});
+
+test('own-account saved-state sync accepts old business disagreement; strict import and audit retain their checks',()=>{
+ const rows=corrupt(rows=>{rows.learningTargets[0]!.value.memoryRevision++;rows.learningEvents.shift();});
+ const before=structuredClone(rows);expect(validateLibrarySyncRecords(libraryRowsReader(rows))).toEqual(identity);expect(rows).toEqual(before);
+ expect(()=>validateLibraryRestoreRecords(libraryRowsReader(rows))).toThrow();expect(()=>validateBackupRows(rows)).toThrow();
+});
+for(const location of ['target','participant'] as const)test(`saved sync rejects a missing ${location} commitment owner`,()=>{
+ const rows=corrupt(rows=>{if(location==='target')rows.learningTargets[0]!.value.committedPolicy.committedByProtocolRunId=id();else rows.learningRuns[0]!.value.participants[rows.learningRuns[0]!.value.targetId].policyCommitment.committedByProtocolRunId=id();});
+ expect(()=>validateLibrarySyncRecords(libraryRowsReader(rows))).toThrow('libraryBackup.errors.inconsistent');
+});
+
+test('one review reads the same direct inventory after two and twenty prior reviews',async()=>{
+ vi.useFakeTimers({toFake:['Date']});vi.setSystemTime('2026-10-20T00:00:00Z');
+ const work:Record<string,number>={},results:Array<{prior:number;base:string[];remote:string[];work:Record<string,number>;counts:any}>=[];
+ const fixture=portablePackageFixture({packageId:id(),expression:'bounded-saved-state-history'}),pack=await contentSupplySystem.execute({kind:'install_portable_package',bytes:fixture.bytes,expectedArchiveDigest:fixture.archiveDigest});
+ const [targetId]=await learningSystem.execute({kind:'enroll_package',operationId:id(),packageKey:pack.key,languageContext:context});
+ const settle=async()=>{const target=await readLibrary(tx=>tx.get<any>('learningTargets',targetId!));vi.setSystemTime(Math.max(Date.now()+1000,target.memory?.dueAt.getTime()??0));await learningSystem.execute({kind:'start',operationId:id(),targetId:targetId!,languageContext:context,dailyLimit:20});await action('reveal');const runId=await action('rate');await learningSystem.execute({kind:'finish',operationId:id(),runId});};
+ try{
+  for(let n=0;n<=20;n++){
+   const before=n===2||n===20?replicated(await snapshot()):undefined;await settle();if(!before)continue;
+   const candidate=await deltaFixture(replicated(await snapshot()),before),base=new Set<string>(),remote=new Set<string>();
+   const reader=(source:LibraryRecordReader,keys:Set<string>):LibraryRecordReader=>({...source,get(table,key){keys.add(JSON.stringify([table,key]));return source.get(table,key);},entries(){throw Error('whole snapshot enumeration');}});
+   for(const key of Object.keys(work))delete work[key];observeReplicaWork((kind,count)=>{work[kind]=(work[kind]??0)+count;});
+   try{const admitted=await admitLearningDelta({...candidate,base:reader(candidate.base,base),remote:reader(candidate.remote,remote)});expect(await admitted.prepare()).toEqual(candidate.changes.map(({table,key})=>({table,key})));results.push({prior:n,base:[...base],remote:[...remote],work:{...work},counts:admitted.evidence});}
+   finally{observeReplicaWork(undefined);candidate.close();}
+  }
+  expect(results).toHaveLength(2);expect(results.map(row=>row.counts.runs)).toEqual([1,1]);expect(results.map(row=>row.counts.events)).toEqual([2,2]);
+  expect(results[0]!.base.length).toBe(results[1]!.base.length);expect(results[0]!.remote.length).toBe(results[1]!.remote.length);
+  console.log(JSON.stringify({savedSyncDirectWork:results.map(row=>({priorReviews:row.prior,baselinePointKeys:row.base.length,candidatePointKeys:row.remote.length,work:row.work,counts:row.counts}))}));
+  for(const row of results){expect(row.work['admission.savedRun']).toBe(1);expect(row.work['admission.savedEvent']).toBe(2);expect(row.counts.baselineBuildRecords).toBe(0);}
+ }finally{observeReplicaWork(undefined);vi.useRealTimers();}
+});
+
+
+test('an updated Run admits witnessed successor pins and rejects an unwitnessed future presentation',async()=>{
+ vi.useFakeTimers({toFake:['Date']});vi.setSystemTime('2026-10-20T00:00:00Z');
+ try{
+  const pack=portablePackageFixture({packageId:id(),expression:'direct-successor-witness'}),installed=await contentSupplySystem.execute({kind:'install_portable_package',bytes:pack.bytes,expectedArchiveDigest:pack.archiveDigest});
+  const [targetId]=await learningSystem.execute({kind:'enroll_package',operationId:id(),packageKey:installed.key,languageContext:context});
+  await learningSystem.execute({kind:'start',operationId:id(),targetId:targetId!,languageContext:context,dailyLimit:20});const before=replicated(await snapshot());const runId=await action('reveal'),after=replicated(await snapshot());
+  const valid=await deltaFixture(after,before);try{expect(await (await admitLearningDelta(valid)).prepare()).toEqual(valid.changes.map(({table,key})=>({table,key})));}finally{valid.close();}
+  const broken=structuredClone(after),run=broken.learningRuns.find(row=>row.key===runId)!.value,p=run.participants[targetId!];p.presentedMaterials['future:unwitnessed']=p.material;p.presentationOrder.push('future:unwitnessed');run.revision++;
+  const invalid=await deltaFixture(broken,before);try{await expect(admitLearningDelta(invalid)).rejects.toThrow('libraryBackup.errors.inconsistent');}finally{invalid.close();}
+ }finally{vi.useRealTimers();}
 });

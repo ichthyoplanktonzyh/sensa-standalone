@@ -17,7 +17,7 @@ import {
  type LibraryReplicaEntry,
 } from './replication/libraryReplica';
 import {applyLibraryReplicaMutation} from './replication/libraryReplicaApplication';
-import {validateLibraryReplicaCooperatively,libraryRestoreValidationVersion,type ValidatedLibraryReplica} from './replication/libraryReplicaValidation';
+import {validateLibraryReplicaCooperatively,validateLearningConflictReplicaCooperatively,libraryRestoreValidationVersion,type ValidatedLibraryReplica} from './replication/libraryReplicaValidation';
 import {replicaCandidateAppendRecordLimit,replicaCandidateAppendReferenceLimit,type ReplicaCandidateFence,type ReplicaCandidateRequest,type ReplicaCandidateResponse,type ReplicaCandidateRecord,type ReplicaCandidateValidation} from './replicaCandidateProtocol';
 export type SyncRequest=(path:string,body?:unknown,signal?:AbortSignal)=>Promise<any>;
 export type LibrarySyncOptions={publishEmptyIdentity?:boolean;restoreAfterLocalClear?:boolean;backgroundVerification?:boolean;signal?:AbortSignal;onProgress?:(progress:CloudSyncProgress)=>void};
@@ -730,6 +730,9 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
   // device; admitted Runtime bytes were already checked at local write time.
   let localRows:ValidatedLibraryReplica;
   try{
+   const knownDecisions=new Set([...initial.entries,...remote].filter(row=>row.table==='learningReconciliations').map(row=>row.key));
+   const conflictTargets=new Set(localEntries.filter(row=>row.table==='learningReconciliations'&&!knownDecisions.has(row.key)).map(row=>decodeBackupValue(row.value).targetId as string));
+   await validateLearningConflictReplicaCooperatively(localEntries,conflictTargets);
    localRows=await validateLibraryReplicaCooperatively(localEntries);
    if(!entriesEqual(localEntries,uploadEntries))await validateLibraryReplicaCooperatively(uploadEntries);
   }catch(error){

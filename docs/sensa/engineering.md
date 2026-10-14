@@ -330,7 +330,7 @@ Personal Anchor media 与 Practice Artifact 仍按各自 learner-owned 表进入
 首发累计逻辑展开量上限采用既有候选 512 MiB 合同，本机 scratch retained text payload 上限 256 MiB；后者不等于 SQLite 文件、WAL、索引或 heap。唯一块 plain／encoded bytes 由页事务实际插入增量计数，重复页不重复计数，失败回滚 rows 与计数。`maximumPageBytes` 是页展开量加唯一编码正文的工作 payload 口径，不是 JS heap 峰值。source physical window 1 MiB、共享正文预取 4 MiB、metadata 512 行／4096 refs／4 MiB；单条独立上限仍为 90 MiB。store 128 块同时保留 3 MiB 字符及实际 JSON UTF-8 上限、route 4 MiB；块解压与账号 256 MiB quota 继续执行。服务器最多 4 个 private workspace，累计 staging metadata 64 MiB，沿用 upload lease；清理仅删除过期 private staging／pins，不删除已发布历史或 receipt。服务端每累计 128 次提交或 4 MiB tail 建立冻结索引快照，旧 snapshot／log owners 和幂等回执继续保留；历史剪枝仅提供隔离验证入口，尚未启用在线删除，旧版本仍占账号容量。
 已由当前 replica validation version 完整校验并确认的 v6 基线，在相同远端 revision 下复用本机 owner 事务准入：
 无变化只读取轻量身份、同步游标并核对 head；本机增量只读取变化事实和对应基线正文，保留其余 block refs，
-确认带原 operation ID／请求 digest 的 CAS 回执后，在同一 SQLite 事务中 patch 受影响基线与同步状态。远端 tail 从已验证 baseline 建立 Worker overlay，完整或认证分量准入后在一次本地事务提交事实、baseline 和 cursor；冲突的混合 baseline 仍走完整三方收敛。后续本机写入保留 pending，不能把游标
+确认带原 operation ID／请求 digest 的 CAS 回执后，在同一 SQLite 事务中 patch 受影响基线与同步状态。远端 tail 从已验证 baseline 建立 Worker overlay，完整或保存态增量准入后在一次本地事务提交事实、baseline 和 cursor；冲突的混合 baseline 仍走完整三方收敛。后续本机写入保留 pending，不能把游标
 推进到未上传版本；丢失或无法确认 ACK 仍用原 operation 重试。服务端明确在提交前拒绝的历史／身份错误
 才清除该 pending receipt，保留本机事实与原基线，避免反复重放必败请求。普通物理删除继续交由领域 Replica
 的许可规则裁决。
@@ -425,35 +425,35 @@ incarnation fence，清除后的旧点击不能变成新授权。普通尝试失
 同事务 restoreOperationId 回执确认协调器丢失 ACK／候选重放后的实际提交，确认后才发送资料变化通知；
 无法读取该回执时不能冒充成功。候选、live、baseline 和 WAL 可同时占磁盘；256 MiB 暂存估计不是峰值磁盘证明。
 已有当前版本验证的 checkpoint 且本机 revision 未变化时，远端新 head 进入同一私有候选。
-完整准入从实际候选正文建立 baseline-only 的关系／全局 protocolRunId 所有权索引，证书绑定账号、库、
-incarnation、cursor、validator、公共材料代次及 baseline generation／索引 epoch；证书中的 local revision
-是准入时的来源见证。活跃内容 revision 与已确认 syncedLocalRevision 的相等条件独立保护 clean checkpoint，
-私有记账及已证实无复制变化的 ACK 不改变 baseline 身份，不续写或放宽旧证明。
-所有 baseline 与关系写入同事务递增代次并使旧证书失效；缺失、损坏、版本或 schema 漂移不能作为负见证。
-未认证 baseline 的准备先返回私有候选 ID，再通过有界 seed RPC 逐行复制引用与正文；每次最多 16 行，
-行间按 8ms 工作预算返回，不在事务内 yield。受影响分量回退完整准入时复用同一分块逻辑，批间交还 Worker。
-每块重验本机内容、baseline／索引和材料代次，取消可按已知 ID 丢弃；全部候选仍须完整准入及原子提交。
-普通复习的 Target retention 字段、Run/Event、Scope/Session、两个 active pointers 与确切的每日数量设置只暂存变化行，
-以已认证 baseline 的惰性点读组成稀疏 overlay，不复制全库引用或正文。重新验证完整受影响 Run–Target
-历史分量（含旧 reconciliation 的原 audit）、反向 continuation 与 Session 消费者；Scope/source 支持读取
-不自动扩展来源的所有历史。全局 protocol ID、packageCacheComplete 与 Session switch 配对由认证索引补足，
-仍使用原 restore 规则，不能借今日 reducer 改变恢复合同。每日数量设置完整核对所有 route／revision／数量／时间；
-历史 Scope/Run 使用自身保存的选择见证，不反向依赖当前偏好。既有 Run 的来源、participants 与 baseline pins
-结构变化，以及身份／route／source／PSW／Book／删除／新 reconciliation、本机 pending 或未认证 checkpoint
-走原完整路径；变化正文与历史闭包超预算也完整回退，记录实际原因。候选点读和比较每次重验 fence，
-并发本机写入或 same-cursor baseline 换代使旧候选失败，不能靠完整回退提交过时结果。
-仅无冲突且分量合并结果等于 remote 时生成私有变化计划，实际冲突或领域派生 publication 保留完整合并／裁决。
-增量资格、依赖闭包、准入索引与合并输入／结果比较复用 8ms 协作预算，事务外交还 Worker。已准入的变化计划
-在同一私有候选内预先恢复、编码和压缩 facts／baseline；共享 body 按 digest 暂存并核对精确内容与原存储字节见证，
-不跨 RPC 传递事实正文。私有编码同样使用 lossless packed 格式，全部副本与原候选合计计入既有 256 MiB 暂存上限。只有候选自身的精确插入推进封存代次；其他插入、改写或删除使旧准备失效。取消、并发写入或 fence 变化丢弃准备结果。
-应用在同一源事务内复核证书和私有计划，原子更新 facts、baseline patch、派生索引、cursor 与新证书。
-最终事务重新核验全部身份／内容／baseline fence 及共享 body 的原存储见证，只激活已准备编码；不在事务中 yield
-或分批提交正式状态。私有预编码随候选生命周期回收，不能成为缺失证书或完整准入的替代权威。
-认证 metadata 限 16 MiB／200k 行；稀疏核心和 Scope/Session 支持各限 4096，旧／变化展开正文分别限 32 MiB。
-当前行的 packed body、两份 refs 与每次 proof 出现按既有逻辑存储口径计入 256 MiB 预算，替换和删除扣回旧行；
-展开总量仍限 512 MiB。它们是暂存／读取预算，不是全进程 heap 或磁盘峰值证明。
-仅 transport refs 改变时不制造内容 revision；丢 ACK 仍检查同事务回执。HTTP head 更换／块退休共用最多三次
-重读／重试。首次／升级／源结构变化的完整准入以及受影响 Target 历史仍随相关资料增长；这不是常数成本承诺。
+完整准入从实际候选正文建立行摘要、存储预算、全局 protocolRunId 归属与 Session-start 索引。
+该快照收据绑定 owner/library/learner/incarnation/H、本机与材料版本及 baseline generation；它只保护
+数据完整性，不证明历史结算正确。对应 SQL mutation 使收据失效，最终事务再次复核 fence。
+缺少可信快照收据时，有界 seed RPC 每块最多 16 行，使用 8ms 协作预算，事务外返回 Worker；不在
+最终源事务中 yield。普通自有账号的完整候选也只做保存态和直接引用准入，完整业务证明由外部导入、
+实际学习冲突和显式审计/修复入口承担。
+
+普通复习的 Target、Run/Event、Scope/Session、active pointers、每日数量设置及不可改写的新裁决只暂存
+变化行，以已确认 baseline 的惰性点读组成候选 overlay。准入枚举变化记录及直接引用的 Run/Target；
+不再从 Target 反向查询全部 Run/Event，不构建历史分量图，不因存在旧 reconciliation 重放旧决议谱系。
+Scope 的成员、Session 声明的 Run、Run 的实际参与者/前驱、材料来源及场景 pins 仍核对直接引用；共享
+Scope 不扩展其他成员的旧历史。全局 Protocol Run 归属与 Session-switch 配对使用索引，变化记录的
+保存态值域、精确不可改写字段、追加与版本保护保留。每日数量设置完整核对 route/revision/数量/时间。
+本机 pending 使用完整三方合并；同 Target 真正并发的已完成分支由专用裁决处理，新产生的裁决触发
+受影响 Target/cohort 谱系的历史业务核验。仅一端推进的因果保存态与晚到旧日志不触发该重算。
+
+准入与变化行精确比较复用 8ms 协作预算。候选点读每次检查活跃 fence，封存候选的只读窗口合计最多
+8 MiB serialized 输入，每条最多 256 KiB；每次消费克隆内部解码值，窗口退出释放原对象。超出窗口
+保留严格解码，不把 serialized 预算冒充 heap 峰值。正常路径不再复制、比较整个历史分量的 wire 输入。
+变化计划在私有候选内预先恢复、编码和压缩 facts/baseline，共享 body 按 digest 暂存并核对精确内容与
+原存储见证。私有编码使用 lossless packed 格式，副本与候选一起计入既有 256 MiB 暂存上限。只有
+候选自身的精确插入推进封存代次；其他写入、取消或 fence 变化使旧准备失效。编码/SQL 写入队列使用
+16 条/1 MiB 有界批次，批内编码按正文去重；正式事务复核完整身份、内容、baseline fence 和 body 见证，
+一次提交 facts、projection、baseline、cursor、receipt 和快照收据，不分批暴露正式状态。
+
+存储 metadata 限 16 MiB/200k 行，稀疏变化正文和直接 baseline 点读分别限 32 MiB，展开总量限 512 MiB。
+预算不确定或内容/PSW/source 结构变化回退完整保存态准入，记录实际原因；回退不能绕过失效 fence。
+首次恢复、结构变化和真正冲突的专门证明仍随资料增长，普通接收不承诺任意分布下常数耗时。
+仅 refs 改变不制造内容 revision；丢 ACK 检查同事务回执，HTTP head 更换/块退休最多三次重读/重试。
 异步存储 RPC 不能冒充同步 get；受控 5k Draft HTTP／OPFS 恢复也不能代替 10k Meaning、账号 UI、
 全进程峰值内存或完整账号容量验收。
 `node --import tsx scripts/benchmarkSemanticReplicaValidation.mts` 在 Node 的 SQLite/Wasm 候选库上度量完整 PSW
@@ -633,7 +633,7 @@ Learning System 使用相同的单一准入模式：逻辑事务在 SQLite commi
 交给 Learning authority；authority 只读取改变的 Target、Run、Event、active Run / Study Plan 及直接依赖，
 重放新 Event 并核对 Target、Run、Evidence、Completion 与 Memory/Schedule 投影。Run/Event history 的
 物理删除、旧 Event 改写、无 Event 的派生进度以及本地伪造 Reconciliation 都在提交前拒绝。Cloud Sync
-与手动备份的恢复准入以已保存 Target / Memory State 为运行权威，校验格式、字段值域、身份、材料精确 pins、引用和修订闭合、Session 与合法冲突分支，保留哈希、fence、CAS、ACK 和原子提交；普通恢复不重新执行全部历史 Protocol/reducer/scheduler。完整历史重算保留为显式审计入口，用于修复、算法升级或专项审计，不证明每次恢复时历史与当前算法一致；该类矛盾可能延后发现。现有冲突分支连续性证明仍依赖完整 Memory 输出，因此仅对冲突涉及 Target 及其 cohort 闭合谱系保留重算。缓存缺失的 Structured Run 保留受限材料准入，待精确资源恢复后完成 runtime 校验，不自动收敛这类未经完整重放的分叉。设备收据 `restoreValidationVersion` 只证明恢复保真准入，不证明历史算法审计通过；旧收据不得复用。日常学习动作不扫描所有 Run 或
+与手动备份的恢复准入以已保存 Target / Memory State 为运行权威，校验格式、字段值域、身份、材料精确 pins、直接引用、变化修订和 Session，保留哈希、fence、CAS、ACK 和原子提交；普通恢复不重新执行全部历史 Protocol/reducer/scheduler。完整历史重算保留为显式审计入口，用于修复、算法升级或专项审计，不证明每次恢复时历史与当前算法一致；该类矛盾可能延后发现。现有冲突分支连续性证明仍依赖完整 Memory 输出，因此仅对冲突涉及 Target 及其 cohort 闭合谱系保留重算。缓存缺失的 Structured Run 保留受限材料准入，待精确资源恢复后完成 runtime 校验，不自动收敛这类未经完整重放的分叉。设备收据 `restoreValidationVersion` 只证明恢复保真准入，不证明历史算法审计通过；收据不证明历史业务正确性；同版本且仍匹配所有身份/代次/fence 的较强既有收据可保护保存态接收，不跨版本猜测或转换。日常学习动作不扫描所有 Run 或
 Event。具体规则见 [ADR 0005](../adr/0005-concurrent-learning-history-reconciliation.md)。
 新 Checkpoint 成功提交后，服务端只回收旧清单曾引用且新清单不再引用的块；另一设备尚未提交的上传
 不在这次回收范围内。
@@ -651,7 +651,7 @@ checkpoint 链提前尝试一次，锁后产生的新失败不能被旧事件绕
 Remote Intake Delivery 在账号库身份稳定后独立拉取，不主动启动整库同步。服务用量和其他在线状态
 按需读取。
 
-下载内容在应用前验证摘要、引用和运行时可重放性，并在提交事务时重新检查账号、库和本机版本。冲突不得覆盖同步期间出现的新修改；无法自动合并时保留失败状态和明确重试入口。
+下载内容在应用前验证摘要、保存态字段与直接引用，并在提交事务时重新检查账号、库和本机版本。冲突不得覆盖同步期间出现的新修改；无法自动合并时保留失败状态和明确重试入口。
 
 协议和保护上限以以下源码为准：
 

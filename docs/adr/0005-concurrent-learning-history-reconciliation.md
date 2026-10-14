@@ -12,11 +12,13 @@ status: accepted
 同步执行以下确定性规则：
 
 分叉由双方新增的互不重叠学习事实识别；两端 Target 投影恰好相等也必须显式记录决定，不能把两个
-并行 Review 当作先后发生的学习。history-only 只排除调度贡献，完整备份和同步准入仍校验每个
-Action 的材料与个人场景版本引用，以及 Protocol、Evaluation、Completion 和排程转移；不能只保存落选正文而跳过其验证。个人 Scene 裁决保留原 timeline、revision identity、pin 与接受关系，无法解释原 pin 的内容选择仍拒绝，并保留两端原资料。
+并行 Review 当作先后发生的学习。history-only 只排除调度贡献，普通同步仍检查所接收 Action 的材料与个人场景版本引用、
+Protocol/Evaluation/Completion identity 和合法保存态字段。完整业务历史证明在实际分叉涉及的分支、
+外部导入和显式审计/修复中执行；普通后续同步不因存在旧裁决再次证明整个 Target 历史。个人 Scene 裁决保留原 timeline、revision identity、pin 与接受关系，无法解释原 pin 的内容选择仍拒绝，并保留两端原资料。
 
 - 两端原始 Run 与 Learning Event 全部保留，仍是不可改写的 Personal Library Fact；
-- 以最后完成 Run 的 `(completedAt, runId)` 全序选择负责当前 Target、Memory 与 Schedule 投影的分支；
+- 因果后继优先：已确认基线之后的一端更新直接采用该端保存态；未进入基线的共享前驱用新 Run participant 的精确 retentionBaseline 与对端保存态、Policy commitment 做直接核对，包含同 revision 的 Relearning 变化；
+- 真正并发的已完成分支以末端 Run 的 `(completedAt, runId)` 全序选择当前 Target、Memory 与 Schedule 保存态，同一时间按 Run ID 固定字节序；
 - 另一分支标记为 history-only，不再次参与当前投影重放，也不产生第二份 Scheduling contribution；
 - 合并结果写入不可改写的 Learning Reconciliation Decision，记录候选、采用和 history-only 的
   Event/Run identity、算法版本与决定时间，以及本次取代的既有 Decision identity；
@@ -29,12 +31,18 @@ Action 的材料与个人场景版本引用，以及 Protocol、Evaluation、Com
 
 该规则只决定已有事实如何贡献当前投影，不通过合并执行新的 Protocol、重新评分或生成新的 Outcome，
 也不把同步本身制造成学习事实。服务端只保护 Learning Event 与 Learning Reconciliation Decision 的
-追加性；验证仍由本机领域层完成，普通恢复不重算所有历史投影。
+追加性；验证仍由本机领域层完成，普通自有账号恢复不重算所有历史投影。早期日志晚到只补历史，不重新结算排程。
+设备完成时间策略不认证或校准时钟；真正并发时胜者可能不符合真实发生先后。非法时间仍拒绝，
+祖先的未来时间不会压过承接其保存态的因果后继。
 
 本地命令、Cloud Checkpoint 和手动备份不得各自实现一套学习完整性规则。它们共用 Learning System
 authority：本地提交只读取当前事务改变的 Target、Run、Event、active Run / Study Plan 以及直接依赖，
-独立重放新 Event 并核对 Run 与 Memory/Schedule 投影后才允许写入 SQLite；同步和备份的普通恢复保留保存态字段、身份、材料 pins、引用、修订与生命周期校验，以已保存 Memory State 为运行权威。完整 replay 保留为显式历史审计；冲突所涉及 Target 谱系仍重算以证明分支连续性。历史算法与保存态的矛盾可延后由审计发现。Run/Event/Reconciliation 不允许用物理缺行表达删除，Event 只能追加，普通本地命令也不能
+独立重放新 Event 并核对 Run 与 Memory/Schedule 投影后才允许写入 SQLite；普通自有账号同步保留保存态字段、身份、材料 pins、直接引用与变化记录的追加/不可改写检查，以已保存 Memory State 为运行权威。未知来源的备份/外部导入保留完整准入。完整 replay 保留为显式历史审计；冲突所涉及 Target 谱系仍重算以证明分支连续性。历史算法与保存态的矛盾可延后由审计发现。Run/Event/Reconciliation 不允许用物理缺行表达删除，Event 只能追加，普通本地命令也不能
 直接制造 progress、Completion、Memory 或 due 投影。并发 Reconciliation Decision 只允许由 replica merge
 产生，不能伪装成本地学习命令。
 
-设备 `restoreValidationVersion` 收据只证明恢复保真准入，不证明完整历史算法审计通过；不维护旧收据读取或转换。缓存缺失的 Structured Run 仍保留明确受限的冻结材料准入，不宣称已完整执行其外部 runtime replay；这类分支若需 reconciliation 则停止，待精确资源恢复后核验。
+设备 `restoreValidationVersion` 收据只证明恢复保真准入，不证明完整历史算法审计通过；准入收据继续保护同一账号、库、incarnation 与快照代次的摘要、配额和全局归属；不作为历史业务正确性证书，也不建设历史前缀认证系统。缓存缺失的 Structured Run 仍保留明确受限的冻结材料准入，不宣称已完整执行其外部 runtime replay；这类分支若需 reconciliation 则停止，待精确资源恢复后核验。
+
+接收不把每条 mutable 配置的 revision 高低当作因果证明。离线分支或已有明确的内容选择可以保留较早的
+未启动 Policy/数量配置；本机命令仍递增其 revision，复制以账号 head/CAS 和最终 fence 保护当前选择。
+Target identity、Assignment identity、历史 Membership identity/source pins 与已启动 Policy 的冻结边界保留。

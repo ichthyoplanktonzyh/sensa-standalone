@@ -31,7 +31,8 @@ const triggers=[...['INSERT','UPDATE','DELETE'].flatMap(action=>[
 ]),{name:'sensa_sync_shared_update_v1',sql:'CREATE TRIGGER IF NOT EXISTS sensa_sync_shared_update_v1 AFTER UPDATE ON sensa_shared_record_content BEGIN UPDATE sensa_sync_dependency_state_v1 SET epoch=epoch+1,certificate_json=NULL WHERE id=1; END;'}];
 const normalized=(sql:string)=>sql.replace(/\bIF NOT EXISTS\s*/gu,'').replace(/\s+/gu,' ').replace(/;$/u,'').trim();
 
-/** Baseline-only reverse relations. SQL mutation invalidates the certificate;
+/** Snapshot row digests, budgets, protocol ownership and Session-start lookup.
+ * SQL mutation invalidates this storage receipt;
  * only a complete admission or its checked sparse successor can renew it. */
 export class SqliteSyncDependencies{
  private ready=false;
@@ -80,17 +81,8 @@ export class SqliteSyncDependencies{
   const bytes=new TextEncoder().encode(text).length,edges:Array<[string,string]>=[],protocols:Array<[string,string]>=[];
   const edge=(kind:string,target:unknown)=>{if(typeof target==='string')edges.push([kind,target]);};
   if(table==='learningRuns'){
-   for(const target of value.targetIds??[])edge('runTarget',target);
-   edge('runSession',value.learningSessionId);edge('runScope',value.studyScopeRevisionId);
-   edge('runPredecessor',value.continuedFromRunId);
-   for(const event of value.lifecycleEvents??[]){edge('runSession',event.learningSessionId);edge('runPredecessor',event.continuedFromRunId);}
    for(const [target,participant]of Object.entries(value.participants??{}) as Array<[string,any]>)protocols.push([participant.protocolRunId,target]);
-  }else if(table==='learningEvents')edge('eventRun',value.runId);
-  else if(table==='learningReconciliations')edge('decisionTarget',value.targetId);
-  else if(table==='learningSessions'){
-   for(const run of value.runIds??[])edge('sessionRun',run);edge('sessionScope',value.scopeRevisionId);
-   edge('sessionStart',JSON.stringify([value.startedByOperationId,value.startedAt]));
-  }else if(table==='studyScopes')for(const member of value.members??[])edge('scopeTarget',member.targetId);
+  }else if(table==='learningSessions')edge('sessionStart',JSON.stringify([value.startedByOperationId,value.startedAt]));
   if(table==='learningTargets'&&(value.curriculumMemberships??[]).some((membership:any)=>!!membership.packageKey&&!hasPackage(membership.packageKey)))admission.packageCacheComplete=false;
   if(computedDigest!==undefined&&!/^[a-f0-9]{64}$/u.test(computedDigest))throw Error('library_sync_dependency_corrupt');
   const row={table,key,digest:computedDigest??sha256(text),bytes,storedBytes:storedBytes??bytes,edges:[...new Map(edges.map(edge=>[JSON.stringify(edge),edge])).values()],protocols};

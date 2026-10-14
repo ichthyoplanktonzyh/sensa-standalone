@@ -33,7 +33,9 @@ test('a shared Run cannot be applied for one Target and history-only for another
  const remote=[entry('learningTargets',a.id,{...a,memoryRevision:1}),entry('learningTargets',b.id,{...b,memoryRevision:1}),run(4,[a.id],'00'),run(5,[b.id],'10'),event(8,4,a.id,'00'),event(9,5,b.id,'10')];
  const merged=mergeLibraryReplicas({base,local,remote});
  const rows=Object.fromEntries(sqliteLibraryTables.map(table=>[table,merged.entries.filter(row=>row.table===table).map(row=>({key:row.key,value:decodeBackupValue(row.value)}))])) as unknown as LibraryRecordRows;
- assert.throws(()=>validateLearningReconciliationRecords(libraryRowsReader(rows)),/libraryBackup\.errors\.inconsistent/u,'global Run consistency must reject a partial cohort decision');
+ assert.deepEqual(merged.conflicts.sort(),[a.id,b.id].map(key=>replicaEntryId({table:'learningTargets',key})).sort(),'a shared Run stops the entire automatic branch choice');
+ assert.equal([...rows.learningReconciliations].length,0);
+ assert.doesNotThrow(()=>validateLearningReconciliationRecords(libraryRowsReader(rows)));
 });
 
 for(const identicalProjection of [true,false])for(const tied of [true,false])for(const reverse of [true,false]){
@@ -249,11 +251,36 @@ test('independent source additions join causal progress and completed forks reta
   assert.equal(target.memoryRevision,1);assert.deepEqual(target.curriculumMemberships.map(row=>row.id),[id(4),id(5),id(6)]);
  }
  const changed=structuredClone(theirs);changed.curriculumMemberships[0]!.sourcePin.expressionVersionId=id(99);
- assert(merge(ours,changed).conflicts.includes(replicaEntryId({table:'learningTargets',key:original.id})),'one membership cannot silently acquire another version');
+ assert.throws(()=>merge(ours,changed),/library_sync_history/u,'one membership cannot silently acquire another source version');
  const at='2026-10-11T10:00:00.000Z';
  const branch=(target:typeof theirs,run:number)=>[entry('learningTargets',original.id,target),entry('learningRuns',id(run),{id:id(run),targetIds:[original.id],completedAt:at}),entry('learningEvents',id(run+1),{id:id(run+1),runId:id(run),targetId:original.id,at})];
  const fork=mergeLibraryReplicas({base,local:branch({...ours,memoryRevision:1},70),remote:branch(theirs,80)});
  assert.equal(fork.conflicts.length,0);assert.equal(fork.entries.filter(row=>row.table==='learningReconciliations').length,1,'equal progress projections still need a real fork decision');
  const joined=decodeBackupValue(fork.entries.find(row=>row.table==='learningTargets')!.value) as typeof theirs;
  assert.deepEqual(joined.curriculumMemberships.map(row=>row.id),[id(4),id(5),id(6)]);
+});
+
+for(const sharedOutsideBase of [false,true])test(`causal successor beats a future-dated predecessor, shared outside base=${sharedOutsideBase}`,()=>{
+ const id=(n:number)=>`50000000-0000-4000-8000-${String(n).padStart(12,'0')}`,entry=(table:LibraryReplicaEntry['table'],key:string,value:unknown):LibraryReplicaEntry=>({table,key,value:encodeBackupValue(value)});
+ // Header-level ordering only, not an admitted historical scheduling result.
+ const state={memory:null,memoryRevision:7,startedAt:null,completedAt:null,relearnAt:'2026-10-02T00:00:00Z',relearningState:{step:1}},target={id:id(1),retentionId:id(2),committedPolicy:null,...state};
+ const successor={...target,relearnAt:'2026-10-03T00:00:00Z',relearningState:{step:2}};
+ const run=(n:number,at:string,baseline:typeof state)=>entry('learningRuns',id(n),{id:id(n),targetIds:[target.id],completedAt:at,participants:{[target.id]:{memoryRevision:7,retentionBaseline:baseline,policyCommitment:null}}});
+ const old=run(3,'2099-01-01T00:00:00Z',state),next=run(4,'2026-10-02T01:00:00Z',state);
+ const event=(n:number,r:number,at:string)=>entry('learningEvents',id(n),{id:id(n),runId:id(r),targetId:target.id,at});
+ const prior=[entry('learningTargets',target.id,target),old,event(5,3,'2099-01-01T00:00:00Z')],advanced=[entry('learningTargets',target.id,successor),old,prior[2]!,next,event(6,4,'2026-10-02T01:00:00Z')];
+ const base=sharedOutsideBase?[entry('learningTargets',target.id,{...target,relearnAt:'2026-10-01T00:00:00Z',relearningState:{step:0}})]:prior;
+ for(const reversed of [false,true]){const result=mergeLibraryReplicas({base,local:reversed?advanced:prior,remote:reversed?prior:advanced});assert.deepEqual(result.conflicts,[]);assert.deepEqual(decodeBackupValue(result.entries.find(row=>row.table==='learningTargets')!.value),successor);assert.equal(result.entries.filter(row=>row.table==='learningEvents').length,2);assert.equal(result.entries.filter(row=>row.table==='learningReconciliations').length,0);}
+});
+
+test('late logs append without changing the advanced saved state',()=>{
+ const id=(n:number)=>`60000000-0000-4000-8000-${String(n).padStart(12,'0')}`,entry=(table:LibraryReplicaEntry['table'],key:string,value:unknown):LibraryReplicaEntry=>({table,key,value:encodeBackupValue(value)});
+ const target={id:id(1),retentionId:id(2),memoryRevision:1},advanced={...target,memoryRevision:2},base=[entry('learningTargets',target.id,target)];
+ const local=[entry('learningTargets',target.id,advanced)],remote=[...base,entry('learningRuns',id(3),{id:id(3),targetIds:[target.id],completedAt:'2099-01-01T00:00:00Z'}),entry('learningEvents',id(4),{id:id(4),runId:id(3),targetId:target.id,at:'2099-01-01T00:00:00Z'})];
+ const result=mergeLibraryReplicas({base,local,remote});assert.deepEqual(result.conflicts,[]);assert.deepEqual(decodeBackupValue(result.entries.find(row=>row.table==='learningTargets')!.value),advanced);assert.equal(result.entries.filter(row=>row.table==='learningEvents').length,1);assert.equal(result.entries.filter(row=>row.table==='learningReconciliations').length,0);
+});
+for(const completedAt of ['invalid','2026-99-99T00:00:00Z'])test(`concurrent selection rejects invalid completion time ${completedAt}`,()=>{
+ const id=(n:number)=>`70000000-0000-4000-8000-${String(n).padStart(12,'0')}`,entry=(table:LibraryReplicaEntry['table'],key:string,value:unknown):LibraryReplicaEntry=>({table,key,value:encodeBackupValue(value)}),target={id:id(1),retentionId:id(2),memoryRevision:0};
+ const branch=(n:number,at:string)=>[entry('learningTargets',target.id,{...target,memoryRevision:1}),entry('learningRuns',id(n),{id:id(n),targetIds:[target.id],completedAt:at}),entry('learningEvents',id(n+10),{id:id(n+10),runId:id(n),targetId:target.id,at})];
+ assert.throws(()=>mergeLibraryReplicas({base:[entry('learningTargets',target.id,target)],local:branch(3,completedAt),remote:branch(4,'2026-10-02T00:00:00Z')}),/libraryBackup.errors.inconsistent/u);
 });

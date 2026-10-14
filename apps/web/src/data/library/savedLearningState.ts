@@ -1,9 +1,11 @@
 import {LIGHTWEIGHT_STUDY_PROTOCOL_ID,LIGHTWEIGHT_STUDY_PROTOCOL_VERSION} from '../../learning/runtime/lightweightInitialProtocol';
 import {z} from 'zod';
-import {isJsonValue} from '../../learning/runtime/localProtocol';
+import {localProtocolActiveTargetId,localProtocolStepId,isJsonValue} from '../../learning/runtime/localProtocol';
 import {sensaInitialLearningCompletionSchema,sensaSchedulingHandoffSchema,sensaMemoryOutcomeSnapshotSchema,sensaSchedulingDecisionSchema,sensaRelearningCompletionSchema,sensaProtocolCheckpointCreditSchema,sensaProtocolTransitionEffectSchema} from '@sensa/contracts/sensa';
 import type {LocalLearningRun} from '../../learning/runtime/localProtocol';
 import type {LearningEvent} from './learning';
+import {materialSourcePin,sameLearningSourcePin} from '../../learning/runtime/learningIdentity';
+import {localExecutionForRun} from '../../learning/runtime/runtimeCoordinator';
 import {backupEqual} from './backupCodec';
 
 const uuid=z.string().uuid(),timestamp=z.string().datetime({offset:true}),integer=z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),text=z.string().min(1);
@@ -34,7 +36,7 @@ export function assertSavedLearningEvent(event:LearningEvent,run:LocalLearningRu
  uuid.parse(event.id);uuid.parse(event.runId);uuid.parse(event.targetId);timestamp.parse(event.at);integer.min(1).parse(event.detail.runRevision);text.parse(event.detail.stepId);uuid.parse(event.detail.materializationId);
  const action=actionSchema.parse(event.detail.action),facts=factsSchema.nullable().parse(event.detail.formalEvaluation);
  z.object({protocolEffects:z.array(z.object({kind:text,payload:jsonValue}).strict()),retention:retentionSchema.nullable()}).strict().parse(event.detail.transition);
- if(event.kind!==action.kind||Date.parse(event.at)<Date.parse(run.startedAt)||run.completedAt&&Date.parse(event.at)>Date.parse(run.completedAt))fail();
+ if(event.runId!==run.id||!run.targetIds.includes(event.targetId)||!run.participants[event.targetId]||event.detail.runRevision>=run.revision||event.kind!==action.kind||Date.parse(event.at)<Date.parse(run.startedAt)||run.completedAt&&Date.parse(event.at)>Date.parse(run.completedAt))fail();
  if(facts){
   const protocolRunId=run.participants[event.targetId]!.protocolRunId;
   if(facts.step.stepKey!==event.detail.stepId||facts.step.purpose!==run.purpose||facts.action.kind!==event.kind||!backupEqual(facts.attempt.response,action)||facts.attempt.learningTargetId!==event.targetId||facts.attempt.learnerUserId!==learnerId||facts.observation.actionId!==facts.action.actionId||facts.transitionDecision.progressionPolicyId!==run.protocolBinding.progressionPolicyId)fail();
@@ -77,4 +79,45 @@ export function assertSavedRunState(run:LocalLearningRun,fail:()=>never){
   for(const completion of Object.values(run.targetCompletions)){timestamp.parse(completion.at);text.parse(completion.kind);}
   if(run.targetCompletions[id]&&!progress.completed)fail();
  }
+}
+
+/** Preserve committed identities and append-only witnesses across snapshots. */
+export function assertSavedLearningRecordChange(table:string,before:any,after:any,fail:()=>never,presentationWitnesses:ReadonlySet<string>=new Set(),branchChoice=false):void{
+ if(before===undefined)return;if(after===undefined)fail();
+ const prefix=(before:readonly unknown[],after:readonly unknown[])=>Array.isArray(after)&&before.length<=after.length&&before.every((value,index)=>backupEqual(value,after[index]));
+ const without=(value:any,fields:readonly string[])=>Object.fromEntries(Object.entries(value).filter(([key])=>!fields.includes(key)));
+ if(['learningEvents','learningReconciliations','studyScopes'].includes(table)&&!backupEqual(before,after))fail();
+ if(table==='learningTargets'){
+  for(const field of ['id','identity','retentionId','expression','targetLanguageTag','createdAt'])if(!backupEqual(before[field],after[field]))fail();
+  if(before.startedAt&&!branchChoice&&before.startedAt!==after.startedAt)fail();
+  if(before.policyAssignment&&!backupEqual(before.policyAssignment,after.policyAssignment)&&(before.startedAt||after.policyAssignment?.assignmentId!==before.policyAssignment.assignmentId))fail();
+  if(Array.isArray(before.curriculumMemberships)){
+   const next=new Map(after.curriculumMemberships.map((member:any)=>[member.id,member]));
+   for(const previous of before.curriculumMemberships){const current:any=next.get(previous.id);if(!current)fail();if(backupEqual(previous,current))continue;
+    if(!backupEqual(without(previous,['revision','status','material','updatedAt']),without(current,['revision','status','material','updatedAt']))||!sameLearningSourcePin(materialSourcePin(previous.material),materialSourcePin(current.material)))fail();
+   }
+  }
+ }
+
+  if(table==='learningRuns'){
+   if(!backupEqual(without(before,['participants','targetCompletions','protocolState','ordinal','revision','lifecycleEvents','completedAt','completionKind']),without(after,['participants','targetCompletions','protocolState','ordinal','revision','lifecycleEvents','completedAt','completionKind']))||after.revision<before.revision||after.revision===before.revision&&!backupEqual(before,after)||after.ordinal<before.ordinal||!prefix(before.lifecycleEvents,after.lifecycleEvents))fail();
+   for(const [id,value]of Object.entries(before.participants) as Array<[string,any]>){
+    const current=after.participants[id];if(!current||!backupEqual(without(value,['materializations','presentedMaterials','presentationOrder','progress','evidenceIds']),without(current,['materializations','presentedMaterials','presentationOrder','progress','evidenceIds']))||!prefix(value.evidenceIds,current.evidenceIds)||!prefix(value.presentationOrder,current.presentationOrder))fail();
+    for(const [key,material]of Object.entries(value.materializations))if(!backupEqual(material,current.materializations[key]))fail();
+    for(const [step,hash]of Object.entries(current.presentedMaterials))if(!Object.hasOwn(value.presentedMaterials,step)){
+     const material=current.materializations[hash as string];
+     const refreshed=material&&after.lifecycleEvents.slice(before.lifecycleEvents.length).some((event:any)=>event.kind==='current_step_material_refreshed'&&event.targetId===id&&event.stepId===step&&event.materializationId===material.snapshot.learningMaterializationId);
+     if(!presentationWitnesses.has(JSON.stringify([after.id,id,step,hash]))&&!refreshed)fail();
+    }
+    for(const [step,hash]of Object.entries(value.presentedMaterials))if(current.presentedMaterials[step]!==hash){
+     const execution=localExecutionForRun(before),material=current.materializations[current.presentedMaterials[step]];
+     if(localProtocolActiveTargetId(execution,before)!==id||localProtocolStepId(execution,before)!==step||!material||!after.lifecycleEvents.slice(before.lifecycleEvents.length).some((event:any)=>event.kind==='current_step_material_refreshed'&&event.targetId===id&&event.stepId===step&&event.materializationId===material.snapshot.learningMaterializationId))fail();
+    }
+   }
+   for(const [key,value]of Object.entries(before.targetCompletions))if(!backupEqual(value,after.targetCompletions[key]))fail();
+   if(before.completedAt&&!backupEqual(before,after))fail();
+  }
+  if(table==='learningSessions'){
+   if(!backupEqual(without(before,['revision','runIds','activeRunId','endedAt','endedByOperationId','endReason']),without(after,['revision','runIds','activeRunId','endedAt','endedByOperationId','endReason']))||after.revision<before.revision||after.revision===before.revision&&!backupEqual(before,after)||!prefix(before.runIds,after.runIds)||before.endedAt&&!backupEqual(before,after))fail();
+  }
 }
