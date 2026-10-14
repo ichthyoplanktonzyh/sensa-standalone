@@ -38,7 +38,7 @@ export class SqliteInitialPublication{
   let statement=this.statements.get(sql);if(!statement){statement=this.db.prepare(sql);this.statements.set(sql,statement);}statement.reset(true);if(bind.length)statement.bind(bind);
   const result:T[]=[];try{while(statement.step())result.push(statement.get({}) as T);return result;}finally{statement.reset(true);}
  }
- close(){for(const statement of this.statements.values())statement.finalize();this.statements.clear();}
+ close(){for(const statement of this.statements.values())statement.finalize();this.statements.clear();this.dependencies.close();}
  private ensure(){if(this.ready)return;this.db.exec(`
  CREATE TABLE IF NOT EXISTS sensa_initial_publication(id TEXT PRIMARY KEY,fence TEXT NOT NULL,after_key TEXT NOT NULL,state TEXT NOT NULL,records INTEGER NOT NULL DEFAULT 0,logical_bytes INTEGER NOT NULL DEFAULT 0,stored_bytes INTEGER NOT NULL DEFAULT 0,maximum_page_bytes INTEGER NOT NULL DEFAULT 0,unique_plain_bytes INTEGER NOT NULL DEFAULT 0,unique_stored_bytes INTEGER NOT NULL DEFAULT 0,block_count INTEGER NOT NULL DEFAULT 0,last_page_json TEXT);
  CREATE TABLE IF NOT EXISTS sensa_initial_publication_rows(id TEXT NOT NULL,table_name TEXT NOT NULL,record_key TEXT NOT NULL,value_json TEXT NOT NULL,refs_json TEXT NOT NULL,shared INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(id,table_name,record_key));

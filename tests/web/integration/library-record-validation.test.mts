@@ -1,6 +1,7 @@
 /** Complete integrity rules through decoded rows, lazy wire references and a
  * real SQLite/Wasm candidate. No OPFS, staged restore or capacity claim. */
 import {afterAll,beforeAll,expect,test,vi} from 'vitest';
+import {stableUuid,canonicalJsonDigest} from '@sensa/learning-kernel';
 import {defaultSensaLanguageRoute,sensaPinnedLanguageContext} from '@sensa/contracts/sensa';
 import {useNodeLearningCapacityStorage} from '../../../scripts/support/nodeLearningCapacity.mts';
 import {portablePackageFixture} from '../../../scripts/support/portablePackageFixture.mts';
@@ -15,7 +16,9 @@ import type {BackupRows} from '../../../apps/web/src/data/library/backupValidati
 import sqlite3InitModule from '@sqlite.org/sqlite-wasm';
 import {SqliteRecordDatabase} from '../../../apps/web/src/data/library/sqliteDatabase';
 import {SqliteSyncDependencies,syncAdmission} from '../../../apps/web/src/data/library/sqliteSyncDependencies';
-import {admitLearningDelta,DeltaReceiveFallback} from '../../../apps/web/src/data/library/learningDeltaAdmission';
+import {admitLearningDelta,DeltaReceiveFallback,deltaComponents} from '../../../apps/web/src/data/library/learningDeltaAdmission';
+import {sealedRecordReader} from '../../../apps/web/src/data/library/sealedRecordReader';
+import {observeReplicaWork} from '../../../apps/web/src/data/library/replicaWork';
 import {backupEqual} from '../../../apps/web/src/data/library/backupCodec';
 import {libraryRestoreValidationVersion} from '../../../apps/web/src/data/library/replication/libraryReplicaValidation';
 import type {LibraryRecordReader} from '../../../apps/web/src/data/library/libraryRecordReader';
@@ -60,16 +63,70 @@ const deltaChanges=(before:BackupRows,after:BackupRows)=>libraryTables.flatMap(t
  const old=new Map(before[table].map(row=>[row.key,row.value])),current=new Map(after[table].map(row=>[row.key,row.value]));
  return [...new Set([...old.keys(),...current.keys()])].filter(key=>!backupEqual(old.get(key),current.get(key))).map(key=>({table:table as LibraryReplicaEntry['table'],key,...(!current.has(key)?{deleted:true}:{})}));
 });
-async function deltaFixture(after=replicated(source)){
+async function deltaFixture(after=replicated(source),prior=baseline){
  const sqlite=await sqlite3InitModule(),raw=new sqlite.oo1.DB(':memory:','c'),storage=new SqliteRecordDatabase(sqlite,raw,'memory');storage.initialize();
  const dependencies=new SqliteSyncDependencies(raw),admission=syncAdmission();
- for(const row of records(baseline))dependencies.observe(admission,row.table,row.key,JSON.stringify(encodeBackupValue(row.value)),row.value);
+ for(const row of records(prior))dependencies.observe(admission,row.table,row.key,JSON.stringify(encodeBackupValue(row.value)),row.value);
  const owner={subject:id(),accountId:id()},state={owner,incarnation:'delta-fixture',revision:1,checkpointVersion:7 as const,restoreValidationVersion:libraryRestoreValidationVersion,syncedLocalRevision:0,status:'synced' as const};
  dependencies.certify(admission,state,identity,0);const certificate=dependencies.certificate()!;expect(certificate).toBeDefined();
- const alive=()=>dependencies.assert(certificate),beforeReader=libraryRowsReader(baseline),afterReader=libraryRowsReader(after);
+ const alive=()=>dependencies.assert(certificate),beforeReader=libraryRowsReader(prior),afterReader=libraryRowsReader(after);
  const controlled=(reader:LibraryRecordReader):LibraryRecordReader=>({...reader,get:(table,key)=>{alive();return reader.get(table,key);},has:(table,key)=>{alive();return reader.has(table,key);}});
- return {raw,dependencies,certificate,alive,base:controlled(beforeReader),remote:controlled(afterReader),changes:deltaChanges(baseline,after),close:()=>storage.close()};
+ return {raw,dependencies,certificate,alive,base:controlled(beforeReader),remote:controlled(afterReader),changes:deltaChanges(prior,after),close:()=>{dependencies.close();storage.close();}};
 }
+test('eight independent histories use bounded component windows and prepare metadata without rereading bodies',async()=>{
+ vi.useFakeTimers({toFake:['Date']});vi.setSystemTime('2026-10-20T00:00:00Z');
+ const targets:string[]=[];
+ const settle=async(targetId:string)=>{const target=await readLibrary(tx=>tx.get<any>('learningTargets',targetId));vi.setSystemTime(Math.max(Date.now()+1000,target.memory?.dueAt.getTime()??0));await learningSystem.execute({kind:'start',operationId:id(),targetId,languageContext:context,dailyLimit:20});await action('reveal');const runId=await action('rate');await learningSystem.execute({kind:'finish',operationId:id(),runId});};
+ let prior:BackupRows,after:BackupRows;
+ try{
+  for(let i=0;i<8;i++){const pack=portablePackageFixture({packageId:id(),expression:`window-${i}`}),installed=await contentSupplySystem.execute({kind:'install_portable_package',bytes:pack.bytes,expectedArchiveDigest:pack.archiveDigest});targets.push((await learningSystem.execute({kind:'enroll_package',operationId:id(),packageKey:installed.key,languageContext:context}))[0]!);await settle(targets.at(-1)!);}
+  prior=replicated(await snapshot());for(const target of targets)await settle(target);after=replicated(await snapshot());
+ }finally{vi.useRealTimers();}
+ expect(validateLibraryRestoreRecords(libraryRowsReader(after!))).toMatchObject({id:identity.id,learnerId:identity.learnerId});
+ const fixture=await deltaFixture(after!,prior!);let held=0,peak=0,physical=0;const work:Record<string,number>={},componentLoads=new Map<string,number>();let inWindow=false;
+ const reader=(rows:BackupRows,side:string)=>{const texts=new Map([...records(rows)].map(row=>[JSON.stringify([row.table,row.key]),JSON.stringify(encodeBackupValue(row.value))]));return sealedRecordReader({cloneDecoded:true,alive:fixture.alive,beforePage:fixture.alive,get(table,key){physical++;const identity=JSON.stringify([table,key]);if(inWindow){const k=side+identity;componentLoads.set(k,(componentLoads.get(k)??0)+1);}const text=texts.get(identity);return text===undefined?undefined:{record_key:key,value_json:text};},has:(table,key)=>texts.has(JSON.stringify([table,key])),keys(){return [];},rows(){return [];},plain(_table,row){return row.value_json;},missing():never{throw Error('missing fixture row');}});};
+ const base=reader(prior!,'base'),remote=reader(after!,'remote');
+ observeReplicaWork((kind,n)=>{work[kind]=(work[kind]??0)+n;if(kind==='window.heldBytes'){held+=n;peak=Math.max(peak,held);}});
+ try{
+  const prepared=await admitLearningDelta({...fixture,base,remote,window(){inWindow=true;const a=base.beginWindow(),b=remote.beginWindow();return ()=>{b();a();inWindow=false;};},canonical:(side,table,key)=>(side==='base'?base:remote).canonical(table,key),consume:async()=>{expect(held).toBeGreaterThan(0);}});
+  expect(work['component.open']).toBe(8);expect(work['component.release']).toBe(8);expect(held).toBe(0);expect(peak).toBeLessThanOrEqual(8*1024*1024);expect(work['window.bypass']??0).toBe(0);
+  const historyLoads=[...componentLoads].filter(([key])=>/learningTargets|learningRuns|learningEvents|studyScopes|learningSessions/.test(key));expect(historyLoads.length).toBeGreaterThan(80);expect(historyLoads.every(([,count])=>count===1)).toBe(true);
+  const before=physical;expect(await prepared.prepare()).toEqual(fixture.changes.map(({table,key})=>({table,key})));const metadata=await prepared.prepare();metadata[0]!.key='caller mutation';expect((await prepared.prepare())[0]!.key).not.toBe('caller mutation');expect(physical).toBe(before);
+  // A valid shared Scope joins all affected histories without adding support
+  // rows to admission. Its predicate result still matches the full oracle.
+  const shared=structuredClone(after!),oldRuns=new Set(prior!.learningRuns.map(row=>row.key)),newRuns=shared.learningRuns.filter(row=>!oldRuns.has(row.key)),replaced=new Set(newRuns.map(row=>row.value.studyScopeRevisionId));
+  const selectedScopes=shared.studyScopes.filter(row=>replaced.has(row.key));expect(selectedScopes).toHaveLength(8);
+  const scope=structuredClone(selectedScopes[0]!.value);scope.members=selectedScopes.flatMap(row=>row.value.members);scope.enrollments=[...new Map(selectedScopes.flatMap(row=>row.value.enrollments).map((row:any)=>[row.id,row])).values()];
+  const {id:discardId,createdAt,createdByOperationId,definitionDigest:discardDigest,...body}=scope;scope.definitionDigest=canonicalJsonDigest(body);scope.id=stableUuid(`local-study-scope:${createdByOperationId}:${scope.definitionDigest}`);shared.studyScopes.push({key:scope.id,value:scope});
+  for(const row of newRuns)row.value.studyScopeRevisionId=scope.id;
+  const oldSessions=new Set(prior!.learningSessions.map(row=>row.key));for(const row of shared.learningSessions)if(!oldSessions.has(row.key)&&replaced.has(row.value.scopeRevisionId))row.value.scopeRevisionId=scope.id;
+  expect(validateLibraryRestoreRecords(libraryRowsReader(shared))).toMatchObject({id:identity.id});
+  const connected=await deltaFixture(shared,prior!);try{const start=work['component.open']!;const result=await admitLearningDelta(connected);expect(work['component.open']!-start).toBe(1);expect(await result.prepare()).toEqual(connected.changes.map(({table,key})=>({table,key})));}finally{connected.close();}
+
+ }finally{observeReplicaWork(undefined);fixture.close();}
+});
+
+// These fixtures verify execution inventory only. Domain acceptance remains
+// covered above by genuine histories and the unchanged full restore oracle.
+for(const relation of ['multi-target','predecessor','shared-session','shared-scope','active-pointers','reconciliation','edge-capacity'] as const)test(`component execution joins or keeps the whole frontier for ${relation}`,async()=>{
+ const selection=new Map(libraryTables.map(table=>[table,new Set<string>()]));
+ for(let i=0;i<2;i++){selection.get('learningTargets')!.add(`t${i}`);selection.get('learningRuns')!.add(`r${i}`);selection.get('learningSessions')!.add(`s${i}`);selection.get('studyScopes')!.add(`c${i}`);}
+ const facts=new Map<string,any>(),key=(table:string,id:string)=>JSON.stringify([table,id]);
+ for(let i=0;i<2;i++){facts.set(key('learningRuns',`r${i}`),{targetIds:[`t${i}`],learningSessionId:`s${i}`,studyScopeRevisionId:`c${i}`});facts.set(key('learningSessions',`s${i}`),{runIds:[`r${i}`],scopeRevisionId:`c${i}`});facts.set(key('studyScopes',`c${i}`),{members:[{targetId:`t${i}`} ]});}
+ if(relation==='multi-target')facts.get(key('learningRuns','r0')).targetIds.push('t1');
+ if(relation==='predecessor')facts.get(key('learningRuns','r1')).continuedFromRunId='r0';
+ if(relation==='shared-session')facts.get(key('learningSessions','s0')).runIds.push('r1');
+ if(relation==='shared-scope')facts.get(key('studyScopes','c0')).members.push({targetId:'t1'});
+ if(relation==='reconciliation')selection.get('learningReconciliations')!.add('decision');
+ if(relation==='edge-capacity')facts.get(key('learningSessions','s0')).runIds=Array(30000).fill('r0');
+ const reader=(active:string|undefined):LibraryRecordReader=>({get:(table,id)=>table==='meta'&&id==='learning-active'?active:facts.get(key(table,id)),has:(table,id)=>facts.has(key(table,id)),entries:()=>[]});
+ let held=0,edges=0,bypass=0,checks=0;observeReplicaWork((kind,n)=>{if(kind==='component.graphBytes')held+=n;if(kind==='component.graphEdges')edges+=n;if(kind==='component.graphBypass')bypass+=n;});
+ try{const changes=[{table:'learningTargets' as const,key:'t0'},{table:'learningTargets' as const,key:'t1'}];const result=await deltaComponents(selection,changes,new Set(),new Map(),reader(relation==='active-pointers'?'r0':undefined),reader(relation==='active-pointers'?'r1':undefined),()=>{checks++;});
+  expect(result).toHaveLength(1);expect([...result[0]!.selection.get('learningTargets')!]).toEqual(['t0','t1']);expect(result[0]!.changes).toEqual(changes);expect([...result[0]!.selection.get('learningRuns')!]).toEqual(['r0','r1']);expect(held).toBeLessThanOrEqual(4*1024*1024);
+  if(relation==='edge-capacity'){expect(bypass).toBe(1);expect(checks).toBeLessThan(60000);}else if(relation!=='reconciliation')expect(edges).toBeGreaterThan(0);
+ }finally{observeReplicaWork(undefined);}
+});
+
 test('changed Event closure reads each side once rather than scanning the overlay for every related Run',async()=>{
  const after=replicated(source),fixture=await deltaFixture(after);let phase='',beforeEvents=0,afterEvents=0;
  const count=(reader:LibraryRecordReader,side:'before'|'after'):LibraryRecordReader=>({...reader,get(table,key){if(phase==='eligibility'&&table==='learningEvents'){if(side==='before')beforeEvents++;else afterEvents++;}return reader.get(table,key);}});

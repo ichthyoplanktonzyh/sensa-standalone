@@ -620,3 +620,33 @@ test('decoded limits bypass memo without bypassing strict decoding or changing o
   const ordinary=sealedRecordReader(source(JSON.stringify(encodeBackupValue({at:new Date('2026-10-14T00:00:00Z')})),false));ordinary.get('settings','a').at.setTime(0);expect(ordinary.get('settings','a').at.toISOString()).toBe('2026-10-14T00:00:00.000Z');expect(work['reader.wireDecode']).toBe(2);expect(work['reader.decodeHit']).toBeUndefined();
  }finally{observeReplicaWork(undefined);}
 });
+
+
+test('component windows retain each fitting row once across passes, clone every caller and release at the boundary',()=>{
+ let held=0,peak=0,reads=0;const work:Record<string,number>={};
+ observeReplicaWork((kind,n)=>{work[kind]=(work[kind]??0)+n;if(kind==='window.heldBytes'){held+=n;peak=Math.max(peak,held);}});
+ const controller=new AbortController(),value={when:new Date('2026-10-14T00:00:00Z'),nested:{items:[1,2]}},text=JSON.stringify(encodeBackupValue(value));
+ const reader=sealedRecordReader({cloneDecoded:true,alive(){controller.signal.throwIfAborted();},beforePage(){},get(_table,key){reads++;return {record_key:key,value_json:text};},has(){return true;},keys(){return [];},rows(){return [];},plain(_table,row){return row.value_json;},missing():never{throw Error('missing');}});
+ try{
+  const release=reader.beginWindow();expect(()=>reader.beginWindow()).toThrow('sqlite_record_window_busy');
+  for(let pass=0;pass<3;pass++)for(let i=0;i<900;i++){
+   const row=reader.get('settings',String(i));expect(row.when.toISOString()).toBe(value.when.toISOString());expect(row.nested.items).toEqual([1,2]);row.when.setTime(0);row.nested.items.push(3);
+   expect(reader.canonical('settings',String(i))).toBe(text);expect(reader.text('settings',String(i))).toBe(text);
+  }
+  expect(reads).toBe(900);expect(work['reader.wireDecode']).toBe(900);expect(peak).toBeLessThanOrEqual(4*1024*1024);
+  controller.abort(Error('cancelled window'));expect(()=>reader.get('settings','0')).toThrow('cancelled window');expect(()=>reader.canonical('settings','0')).toThrow('cancelled window');
+  release();release();expect(held).toBe(0);expect(work['window.release']).toBe(1);
+ }finally{observeReplicaWork(undefined);}
+});
+
+test('window row and aggregate byte limits keep strict fallback and dispose before a new component',()=>{
+ let held=0,peak=0,reads=0;const work:Record<string,number>={};
+ observeReplicaWork((kind,n)=>{work[kind]=(work[kind]??0)+n;if(kind==='window.heldBytes'){held+=n;peak=Math.max(peak,held);}});
+ const texts=new Map(Array.from({length:9},(_,i)=>[String(i),JSON.stringify(encodeBackupValue({text:'x'.repeat(i===8?270000:240000)}))]));
+ const reader=sealedRecordReader({cloneDecoded:true,alive(){},beforePage(){},get(_table,key){reads++;return {record_key:key,value_json:texts.get(key)!};},has(){return true;},keys(){return [];},rows(){return [];},plain(_table,row){return row.value_json;},missing():never{throw Error('missing');}});
+ try{
+  const release=reader.beginWindow();for(let pass=0;pass<2;pass++)for(let i=0;i<9;i++)expect(reader.get('settings',String(i)).text.length).toBe(i===8?270000:240000);
+  expect(peak).toBeLessThanOrEqual(4*1024*1024);expect(work['window.bypass']).toBeGreaterThan(0);expect(reads).toBeGreaterThan(9);
+  release();expect(held).toBe(0);const next=reader.beginWindow();const before=reads;reader.get('settings','0');expect(reads).toBe(before+1);next();expect(held).toBe(0);
+ }finally{observeReplicaWork(undefined);}
+});

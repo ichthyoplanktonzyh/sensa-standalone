@@ -1233,7 +1233,7 @@ export class SqliteRecordDatabase {
       catch(cause){if(isFatalSqliteConnectionFailure(cause))this.quarantineConnection(cause as Error);optimizeFailed=true;optimizeFailure??=cause;}
     }
     this.initialPublication?.close();this.replicaCandidateStore?.close();this.meaningLookup.close();this.worldBrowseProjection.close();this.journeyIdentities.close();this.recordGet?.finalize();this.recordGet=undefined;
-    this.database.close();
+    this.syncDependencies.close();this.database.close();
     this.closed=true;
     if(optimizeFailed)throw optimizeFailure;
   }

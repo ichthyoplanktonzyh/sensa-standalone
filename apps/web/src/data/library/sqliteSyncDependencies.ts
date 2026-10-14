@@ -1,6 +1,7 @@
-import type {Database} from '@sqlite.org/sqlite-wasm';
+import type {Database,PreparedStatement} from '@sqlite.org/sqlite-wasm';
 import {sha256} from '@sensa/learning-kernel';
 import {z} from 'zod';
+import {replicaWork} from './replicaWork';
 import {backupEqual} from './backupCodec';
 import {validatedCheckpoint} from './cloudSyncCheckpoint';
 import {libraryRestoreValidationVersion} from './replication/libraryReplicaValidation';
@@ -36,9 +37,15 @@ export class SqliteSyncDependencies{
  private ready=false;
  private healthySchema=true;
  private schemaCookie=-1;
+ private readonly statements=new Map<string,PreparedStatement>();
  constructor(private readonly database:Database){}
  resetSchema():void{this.ready=false;this.healthySchema=true;}
- private rows<T>(sql:string,bind:readonly (string|number)[]=[]):T[]{return this.database.exec({sql,bind:[...bind],rowMode:'object',returnValue:'resultRows'}) as T[];}
+ private rows<T>(sql:string,bind:readonly (string|number)[]=[]):T[]{
+  let statement=this.statements.get(sql);if(!statement){replicaWork('dependency.prepare');statement=this.database.prepare(sql);this.statements.set(sql,statement);}
+  statement.reset(true);if(bind.length)statement.bind([...bind]);
+  const rows:T[]=[];try{while(statement.step())rows.push(statement.get({}) as T);return rows;}finally{statement.reset(true);}
+ }
+ close():void{for(const statement of this.statements.values())statement.finalize();this.statements.clear();}
  ensure():void{
   const cookie=Number(this.rows<{v:number}>('SELECT schema_version AS v FROM pragma_schema_version')[0].v);
   if(this.ready&&cookie===this.schemaCookie)return;
@@ -46,7 +53,7 @@ export class SqliteSyncDependencies{
   this.database.exec(schema);for(const trigger of triggers)this.database.exec(trigger.sql);
   const definitions=[...triggers,...schema.split(';').filter(sql=>sql.trim().startsWith('CREATE')).map(sql=>({sql:sql.trim(),name:sql.match(/(?:TABLE|INDEX) IF NOT EXISTS (\w+)/u)![1]!}))];
   this.healthySchema=!prior.some(row=>definitions.some(definition=>definition.name===row.name&&normalized(definition.sql)!==normalized(row.sql)));
-  if(!this.healthySchema||prior.length&&definitions.some(definition=>!prior.some(row=>row.name===definition.name)))this.database.exec('UPDATE sensa_sync_dependency_state_v1 SET certificate_json=NULL WHERE id=1');
+  if(!this.healthySchema||prior.length&&definitions.some(definition=>!prior.some(row=>row.name===definition.name)))this.rows('UPDATE sensa_sync_dependency_state_v1 SET certificate_json=NULL WHERE id=1');
   this.ready=true;
   this.schemaCookie=Number(this.rows<{v:number}>('SELECT schema_version AS v FROM pragma_schema_version')[0].v);
  }
@@ -65,7 +72,7 @@ export class SqliteSyncDependencies{
  protocolOwner(protocolId:string){this.ensure();return this.rows<{run_key:string;target_key:string}>('SELECT run_key,target_key FROM sensa_sync_protocol_owners_v1 WHERE protocol_id=?',[protocolId])[0];}
  verify(table:SqliteLibraryTable,key:string,text:string):void{const row=this.rows<{digest:string}>('SELECT digest FROM sensa_sync_dependency_rows_v1 WHERE table_name=? AND record_key=?',[table,key])[0];if(!row||row.digest!==sha256(text))throw Error('library_sync_dependency_corrupt');}
  count(){return Number(this.rows<{n:number}>('SELECT count(*) AS n FROM sensa_sync_dependency_rows_v1')[0].n);}
- clear():void{this.ensure();this.database.exec('DELETE FROM sensa_sync_protocol_owners_v1');this.database.exec('DELETE FROM sensa_sync_dependency_rows_v1');this.database.exec('UPDATE sensa_sync_dependency_state_v1 SET certificate_json=NULL WHERE id=1');}
+ clear():void{this.ensure();this.rows('DELETE FROM sensa_sync_protocol_owners_v1');this.rows('DELETE FROM sensa_sync_dependency_rows_v1');this.rows('UPDATE sensa_sync_dependency_state_v1 SET certificate_json=NULL WHERE id=1');}
  rowBudget(table:SqliteLibraryTable,key:string){return this.rows<{logical_bytes:number;stored_bytes:number}>('SELECT logical_bytes,stored_bytes FROM sensa_sync_dependency_rows_v1 WHERE table_name=? AND record_key=?',[table,key])[0]??{logical_bytes:0,stored_bytes:0};}
  observe(admission:SyncAdmission,table:SqliteLibraryTable,key:string,text:string,value:any,hasPackage:(key:string)=>boolean=()=>false,storedBytes?:number,computedDigest?:string):void{
   if(admission.disabled||admission.rows.has(id(table,key)))return;
@@ -92,11 +99,11 @@ export class SqliteSyncDependencies{
   admission.logicalBytes+=bytes;admission.storedBytes+=row.storedBytes;admission.rows.set(id(table,key),row);
  }
  private put(row:SyncDependencyRow):void{
-  this.database.exec({sql:'DELETE FROM sensa_sync_dependency_rows_v1 WHERE table_name=? AND record_key=?',bind:[row.table,row.key]});
-  if(row.table==='learningRuns')this.database.exec({sql:'DELETE FROM sensa_sync_protocol_owners_v1 WHERE run_key=?',bind:[row.key]});
-  this.database.exec({sql:'INSERT INTO sensa_sync_dependency_rows_v1 VALUES(?,?,?,?,?)',bind:[row.table,row.key,row.digest,row.bytes,row.storedBytes]});
-  if(row.edges.length)this.database.exec({sql:'INSERT INTO sensa_sync_dependency_edges_v1 SELECT ?,?,json_extract(value,\'$[0]\'),json_extract(value,\'$[1]\') FROM json_each(?)',bind:[row.table,row.key,JSON.stringify(row.edges)]});
-  if(row.protocols.length)this.database.exec({sql:'INSERT INTO sensa_sync_protocol_owners_v1 SELECT json_extract(value,\'$[0]\'),?,json_extract(value,\'$[1]\') FROM json_each(?)',bind:[row.key,JSON.stringify(row.protocols)]});
+  this.rows('DELETE FROM sensa_sync_dependency_rows_v1 WHERE table_name=? AND record_key=?',[row.table,row.key]);
+  if(row.table==='learningRuns')this.rows('DELETE FROM sensa_sync_protocol_owners_v1 WHERE run_key=?',[row.key]);
+  this.rows('INSERT INTO sensa_sync_dependency_rows_v1 VALUES(?,?,?,?,?)',[row.table,row.key,row.digest,row.bytes,row.storedBytes]);
+  if(row.edges.length)this.rows('INSERT INTO sensa_sync_dependency_edges_v1 SELECT ?,?,json_extract(value,\'$[0]\'),json_extract(value,\'$[1]\') FROM json_each(?)',[row.table,row.key,JSON.stringify(row.edges)]);
+  if(row.protocols.length)this.rows('INSERT INTO sensa_sync_protocol_owners_v1 SELECT json_extract(value,\'$[0]\'),?,json_extract(value,\'$[1]\') FROM json_each(?)',[row.key,JSON.stringify(row.protocols)]);
  }
  /** Caller is inside the same source/base/cursor transaction. */
  certify(admission:SyncAdmission,state:CloudSyncState,identity:LibraryIdentity,artifactRevision:number,previous?:SyncDependencyCertificate):void{
@@ -105,15 +112,15 @@ export class SqliteSyncDependencies{
   if(previous){
    logicalBytes+=previous.logicalBytes;storedBytes+=previous.storedBytes;records=previous.records;
    for(const row of admission.rows.values()){const old=this.rows<{logical_bytes:number;stored_bytes:number}>('SELECT logical_bytes,stored_bytes FROM sensa_sync_dependency_rows_v1 WHERE table_name=? AND record_key=?',[row.table,row.key])[0];if(old){logicalBytes-=old.logical_bytes;storedBytes-=old.stored_bytes;}else records++;}
-   for(const row of admission.deletes??[]){const old=this.rows<{logical_bytes:number;stored_bytes:number}>('SELECT logical_bytes,stored_bytes FROM sensa_sync_dependency_rows_v1 WHERE table_name=? AND record_key=?',[row.table,row.key])[0];if(old){logicalBytes-=old.logical_bytes;storedBytes-=old.stored_bytes;records--;this.database.exec({sql:'DELETE FROM sensa_sync_dependency_rows_v1 WHERE table_name=? AND record_key=?',bind:[row.table,row.key]});}}
+   for(const row of admission.deletes??[]){const old=this.rows<{logical_bytes:number;stored_bytes:number}>('SELECT logical_bytes,stored_bytes FROM sensa_sync_dependency_rows_v1 WHERE table_name=? AND record_key=?',[row.table,row.key])[0];if(old){logicalBytes-=old.logical_bytes;storedBytes-=old.stored_bytes;records--;this.rows('DELETE FROM sensa_sync_dependency_rows_v1 WHERE table_name=? AND record_key=?',[row.table,row.key]);}}
    // Remove all changed owners before adding any successor, so moving an ID
    // within the complete checked overlay is independent of insertion order.
-   for(const row of admission.rows.values())if(row.table==='learningRuns')this.database.exec({sql:'DELETE FROM sensa_sync_protocol_owners_v1 WHERE run_key=?',bind:[row.key]});
-  }else{this.database.exec('DELETE FROM sensa_sync_protocol_owners_v1');this.database.exec('DELETE FROM sensa_sync_dependency_rows_v1');}
+   for(const row of admission.rows.values())if(row.table==='learningRuns')this.rows('DELETE FROM sensa_sync_protocol_owners_v1 WHERE run_key=?',[row.key]);
+  }else{this.rows('DELETE FROM sensa_sync_protocol_owners_v1');this.rows('DELETE FROM sensa_sync_dependency_rows_v1');}
   for(const row of admission.rows.values())this.put(row);
   if(logicalBytes>512*1024*1024||storedBytes>256*1024*1024)return;
   const clock=this.clock(),certificate:SyncDependencyCertificate={generation:clock.generation,epoch:clock.epoch,version:1,validationVersion:libraryRestoreValidationVersion,owner:state.owner,incarnation:state.incarnation,libraryId:identity.id,learnerId:identity.learnerId,revision:state.revision,localRevision:state.syncedLocalRevision!,artifactRevision,records,logicalBytes,storedBytes,packageCacheComplete:previous?.packageCacheComplete??admission.packageCacheComplete};
-  this.database.exec({sql:'UPDATE sensa_sync_dependency_state_v1 SET certificate_json=? WHERE id=1',bind:[JSON.stringify(certificate)]});
+  this.rows('UPDATE sensa_sync_dependency_state_v1 SET certificate_json=? WHERE id=1',[JSON.stringify(certificate)]);
  }
 }
 

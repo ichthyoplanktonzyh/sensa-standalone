@@ -12,15 +12,19 @@ const begin=SqliteReplicaCandidates.prototype.beginIndex;
 SqliteReplicaCandidates.prototype.beginIndex=function(...args){const id=begin.apply(this,args);if(drift){drift=false;Reflect.get(database!,'database').exec('UPDATE sensa_sync_base SET value_json=value_json WHERE table_name=\'meta\' AND record_key=\'identity\'');}return id;};
 const request=SqliteRecordDatabase.prototype.replicaCandidate;
 SqliteRecordDatabase.prototype.replicaCandidate=async function(message){if(message.kind==='validate'&&pause){pause=false;self.postMessage({deltaBarrier:true});await new Promise<void>(resolve=>{release=resolve;});}return request.call(this,message);};
-const prepare=SqliteReplicaCandidates.prototype.prepareUpdate;
-SqliteReplicaCandidates.prototype.prepareUpdate=async function(...args){
+const prepare=SqliteReplicaCandidates.prototype.validate;
+SqliteReplicaCandidates.prototype.validate=async function(...args){
  if(!cooperativePreparation)return prepare.apply(this,args);cooperativePreparation=false;
- const raw=Reflect.get(database!,'database'),exec=raw.exec,nativeNow=performance.now.bind(performance);let clock=0,transaction=false,announced=false;
- // Deterministic time-budget exhaustion; the production macrotask yields and
- // RPC queue still run normally. No extra pause or transaction yield is added.
+ const raw=Reflect.get(database!,'database'),exec=raw.exec,compile=raw.prepare,nativeNow=performance.now.bind(performance);let clock=0,transaction=false,announced=false;
+ const steps:Array<{statement:any;step:any}>=[];
+ // Exhaust the real cooperative budget. Component encoding now happens in
+ // validate; the test still observes an actual yield after a scratch batch.
  performance.now=()=>nativeNow()+(clock+=10);
- raw.exec=function(...input:any[]){const sql=typeof input[0]==='string'?input[0]:input[0]?.sql;if(sql==='BEGIN IMMEDIATE')transaction=true;const result=exec.apply(this,input);if(sql==='COMMIT'||sql==='ROLLBACK')transaction=false;if(!announced&&sql==='INSERT INTO sensa_replica_candidate_encoded_v1 VALUES(?,?,?,?,?,?,?)'){announced=true;setTimeout(()=>{if(transaction)throw Error('delta_fixture_yield_inside_transaction');raw.exec('BEGIN IMMEDIATE');raw.exec('COMMIT');self.postMessage({deltaCooperative:{outsideTransaction:true}});},0);}return result;};
- try{return await prepare.apply(this,args);}finally{raw.exec=exec;performance.now=nativeNow;self.postMessage({deltaPreparationDone:true});}
+ const wrap=(sql:string,statement:any)=>{if(sql!=='INSERT INTO sensa_replica_candidate_encoded_v1 VALUES(?,?,?,?,?,?,?)'||steps.some(row=>row.statement===statement))return statement;const step=statement.step;steps.push({statement,step});statement.step=function(...args:any[]){const result=step.apply(this,args);if(!announced){announced=true;setTimeout(()=>{if(transaction)throw Error('delta_fixture_yield_inside_transaction');raw.exec('BEGIN IMMEDIATE');raw.exec('COMMIT');self.postMessage({deltaCooperative:{outsideTransaction:true}});},0);}return result;};return statement;};
+ for(const [sql,statement]of Reflect.get(this,'statements'))wrap(sql,statement);
+ raw.prepare=function(sql:string){return wrap(sql,compile.call(this,sql));};
+ raw.exec=function(...input:any[]){const sql=typeof input[0]==='string'?input[0]:input[0]?.sql;if(sql==='BEGIN IMMEDIATE')transaction=true;const result=exec.apply(this,input);if(sql==='COMMIT'||sql==='ROLLBACK')transaction=false;return result;};
+ try{return await prepare.apply(this,args);}finally{raw.exec=exec;raw.prepare=compile;for(const row of steps)row.statement.step=row.step;performance.now=nativeNow;self.postMessage({deltaPreparationDone:true});}
 };
 const commit=SqliteRecordDatabase.prototype.commit;
 SqliteRecordDatabase.prototype.commit=function(mutation){

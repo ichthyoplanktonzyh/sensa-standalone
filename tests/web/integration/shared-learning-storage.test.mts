@@ -388,10 +388,10 @@ test('copyable admitted rows share one transform across two independently charge
 test('extra DML inside our encoded INSERT cannot be absorbed by the own-write fence',async()=>{
  const fixture=await stageLearningReplica();
  try{
-  await fixture.validate();const handler=Reflect.get(fixture.receiver,'replicaCandidateStore'),header=()=>Reflect.get(handler,'header').call(handler,fixture.generation),fence=JSON.parse(header().fence_json),exec=fixture.storage.exec.bind(fixture.storage);let injected=false;
-  fixture.storage.exec=((input:any)=>{const result=exec(input);if(!injected&&input.sql==='INSERT INTO sensa_replica_candidate_encoded_v1 VALUES(?,?,?,?,?,?,?)'){injected=true;exec({sql:'UPDATE sensa_replica_candidate_records_v1 SET value_json=value_json WHERE candidate_id=?',bind:[fixture.generation]});}return result;}) as typeof fixture.storage.exec;
+  await fixture.validate();const handler=Reflect.get(fixture.receiver,'replicaCandidateStore'),header=()=>Reflect.get(handler,'header').call(handler,fixture.generation),fence=JSON.parse(header().fence_json),exec=fixture.storage.exec.bind(fixture.storage),prepare=fixture.storage.prepare.bind(fixture.storage);let injected=false;
+  fixture.storage.prepare=((sql:any)=>{const statement=prepare(sql);if(sql==='INSERT INTO sensa_replica_candidate_encoded_v1 VALUES(?,?,?,?,?,?,?)'){const step=statement.step.bind(statement);statement.step=()=>{const result=step();if(!injected){injected=true;exec({sql:'UPDATE sensa_replica_candidate_records_v1 SET value_json=value_json WHERE candidate_id=?',bind:[fixture.generation]});}return result;};}return statement;}) as typeof fixture.storage.prepare;
   try{await expect(Reflect.get(handler,'prepareEncoding').call(handler,{receipt:{id:fixture.generation},puts:fixture.records.map(({table,key})=>({table,key})),basePuts:[],deletes:[]},fence,()=>Reflect.get(handler,'check').call(handler,header()))).rejects.toThrow('library_sync_candidate_invalid');}
-  finally{fixture.storage.exec=exec;}
+  finally{fixture.storage.prepare=prepare;}
   expect(injected).toBe(true);expect(fixture.receiver.count('learningRuns')).toBe(0);expect(fixture.receiver.syncBaseReferences()).toEqual([]);
  }finally{fixture.receiver.close(false);}
 });

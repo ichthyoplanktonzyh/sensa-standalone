@@ -122,7 +122,7 @@ test('ordinary quantity confirmation accompanying a review stays incremental and
  }finally{await a.context().close();await b.context().close();}
 });
 
-test('actual Worker serves a nonempty history projection while cooperative encoding prepares the next atomic state',async()=>{
+test('actual Worker serves a nonempty history projection while a component prepares the next atomic state',async()=>{
  const {a,b,targetId}=await setup();try{
   const read=()=>b.evaluate(async()=>{const w=window as any,c=w.core,value=await c.learningSystem.read({kind:'history',languageContext:(await c.languageRoutesSnapshot()).context,filter:{surface:'study',range:'all',start:'',end:'',kind:'all',languageChoice:null},limit:20});return {total:value.total,rows:value.records.length,preparing:!w.deltaPreparationDone};});
   const before=await read();expect(before.rows).toBeGreaterThan(0);await settle(a,targetId);await a.evaluate(()=>(window as any).sync());await testRpc(b,'cooperative-preparation');
