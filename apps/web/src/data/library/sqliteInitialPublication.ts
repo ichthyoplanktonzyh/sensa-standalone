@@ -1,5 +1,5 @@
 import type {Database,PreparedStatement} from '@sqlite.org/sqlite-wasm';
-import {librarySyncTables,librarySyncMetadataPageRefs,type LibrarySyncManifest} from '@sensa/contracts/sensa';
+import {librarySyncStoredByteLimit,librarySyncRecordLimit,librarySyncLogicalByteLimit,librarySyncTables,librarySyncMetadataPageRefs,type LibrarySyncManifest} from '@sensa/contracts/sensa';
 import {encodeLibrarySyncBlock,librarySyncRecordSegments,splitLibrarySyncText} from '@sensa/contracts/sensa/library-sync-blocks';
 import {sha256} from '@sensa/learning-kernel';
 import {encodeBackupValue,decodeBackupValue,backupEqual} from './backupCodec';
@@ -12,7 +12,7 @@ import type {CloudSyncState} from './cloudSync';
 import type {LibraryIdentity} from './store';
 import type {SqliteLibraryTable,SqliteMutation} from './sqliteProtocol';
 const utf8=(text:string)=>new TextEncoder().encode(text).length;
-const pageBytes=4*1024*1024,recordBytes=90*1024*1024,logicalBytes=512*1024*1024,storedBytes=256*1024*1024;
+const pageBytes=4*1024*1024,recordBytes=90*1024*1024,logicalBytes=librarySyncLogicalByteLimit,storedBytes=librarySyncStoredByteLimit;
 type Position={table:SqliteLibraryTable;key:string}|null;
 export const initialPublicationKeyPageSql='SELECT record_key,length(CAST(value_json AS BLOB)) AS bytes FROM sensa_records WHERE table_name=? AND record_key>? ORDER BY record_key LIMIT 64';
 const decodedStoredBytes=(text:string)=>{
@@ -49,10 +49,11 @@ export class SqliteInitialPublication{
  `);this.ready=true;}
  private header(id:string,confirmed=false){this.ensure();const h=this.rows<Header>('SELECT * FROM sensa_initial_publication WHERE id=?',[id])[0];if(!h)throw Error('library_sync_candidate_invalid');if(confirmed||h.state!=='filling')this.assertOwner(JSON.parse(h.fence));else this.assertFence(JSON.parse(h.fence));return h;}
  begin(fence:ReplicaCandidateFence):string{
-  this.admission=syncAdmission();this.admissionPolicy='captured-own';this.indexedRecords=0;this.assertFence(fence);this.ensure();const id=crypto.randomUUID(),fenceJson=JSON.stringify(fence);
+  this.admission=undefined;this.admissionPolicy='captured-own';this.indexedRecords=0;this.assertFence(fence);this.ensure();const id=crypto.randomUUID(),fenceJson=JSON.stringify(fence);
   this.db.exec('BEGIN IMMEDIATE');try{
    this.db.exec('DELETE FROM sensa_initial_publication;DELETE FROM sensa_initial_publication_rows;DELETE FROM sensa_initial_publication_blocks;DELETE FROM sensa_initial_publication_content;DELETE FROM sensa_initial_publication_owners');
-   this.rows("INSERT INTO sensa_initial_publication(id,fence,after_key,state,stored_bytes) VALUES(?,?,'null','filling',?)",[id,fenceJson,utf8(id)+utf8(fenceJson)+4+7]);this.db.exec('COMMIT');
+   this.dependencies.ensure();this.rows("DELETE FROM sensa_sync_admission_v1 WHERE scope LIKE 'publication:%'");
+   this.rows("INSERT INTO sensa_initial_publication(id,fence,after_key,state,stored_bytes) VALUES(?,?,'null','filling',?)",[id,fenceJson,utf8(id)+utf8(fenceJson)+4+7]);this.admission=this.dependencies.spoolAdmission('publication:'+id,true);this.db.exec('COMMIT');
   }catch(cause){this.db.exec('ROLLBACK');throw cause;}return id;
  }
  /** One table/range seek per bounded source window. A page commits sets once;
@@ -145,8 +146,11 @@ export class SqliteInitialPublication{
    const storedRows=prepared.reduce((n,row)=>n+utf8(id)+utf8(row.table)+utf8(row.key)+utf8(row.valueJson)+utf8(row.refsJson),0),storedBlocks=added.reduce((n,b)=>n+utf8(id)+utf8(b.hash)+b.storedBytes,0);
    const storedContent=[...newBodies.values()].reduce((n,b)=>n+utf8(id)+utf8(b.digest)+utf8(b.value_json)+utf8(b.refs_json??''),0),storedOwners=owners.reduce((n,o)=>n+utf8(id)+utf8(o.table)+utf8(o.key)+utf8(o.digest),0);
    const nextJson=JSON.stringify(position),state=done?'sealed':'filling',lastPage=JSON.stringify({after,next:position,done,rows:output}),headerDelta=utf8(nextJson)-utf8(h.after_key)+utf8(state)-utf8(h.state)+utf8(lastPage)-utf8(h.last_page_json??'');
-   const stored=storedRows+storedBlocks+storedContent+storedOwners+headerDelta;
-   if(h.records+output.length>200000||h.logical_bytes+plain>logicalBytes||h.stored_bytes+stored>storedBytes)throw Error('library_sync_capacity');
+   const priorObservationBytes=this.admission?.retainedMetadataBytes?.()??0;
+   if(this.admission?.scope){for(const [key,row]of pageAdmission.rows)this.admission.rows.set(key,row);this.admission.flush?.(true);}
+   const observationBytes=(this.admission?.retainedMetadataBytes?.()??0)-priorObservationBytes;
+   const stored=storedRows+storedBlocks+storedContent+storedOwners+headerDelta+observationBytes;
+   if(h.records+output.length>librarySyncRecordLimit||h.logical_bytes+plain>logicalBytes||h.stored_bytes+stored>storedBytes)throw Error('library_sync_capacity');
    this.rows(`INSERT INTO sensa_initial_publication_content SELECT ?,json_extract(value,'$.digest'),json_extract(value,'$.value_json'),json_extract(value,'$.refs_json') FROM json_each(?)`,[id,JSON.stringify([...newBodies.values()])]);
    const inserted=this.rows<{plain_bytes:number;stored_bytes:number}>(`INSERT INTO sensa_initial_publication_blocks SELECT ?,json_extract(value,'$.hash'),json_extract(value,'$.plainBytes'),json_extract(value,'$.storedBytes'),json_extract(value,'$.data') FROM json_each(?) WHERE true ON CONFLICT DO NOTHING RETURNING plain_bytes,stored_bytes`,[id,JSON.stringify([...pageBlocks.values()])]);
    this.rows(`INSERT INTO sensa_initial_publication_rows SELECT ?,json_extract(value,'$.table'),json_extract(value,'$.key'),json_extract(value,'$.valueJson'),json_extract(value,'$.refsJson'),json_extract(value,'$.shared') FROM json_each(?)`,[id,JSON.stringify(prepared)]);
@@ -154,8 +158,8 @@ export class SqliteInitialPublication{
    this.assertFence(fence);
    this.rows('UPDATE sensa_initial_publication SET after_key=?,state=?,last_page_json=?,records=records+?,logical_bytes=logical_bytes+?,stored_bytes=stored_bytes+?,maximum_page_bytes=max(maximum_page_bytes,?),unique_plain_bytes=unique_plain_bytes+?,unique_stored_bytes=unique_stored_bytes+?,block_count=block_count+? WHERE id=?',[nextJson,state,lastPage,output.length,plain,stored,plain+wire,inserted.reduce((n,b)=>n+b.plain_bytes,0),inserted.reduce((n,b)=>n+b.stored_bytes,0),inserted.length,id]);this.db.exec('COMMIT');
    if(this.admissionPolicy==='captured-own'&&this.admission){
-    const target=this.admission;this.indexedRecords+=prepared.length;target.metadataBytes+=pageAdmission.metadataBytes;target.logicalBytes+=pageAdmission.logicalBytes;target.storedBytes+=pageAdmission.storedBytes;target.packageCacheComplete&&=pageAdmission.packageCacheComplete;
-    if(pageAdmission.disabled||target.metadataBytes>16*1024*1024){target.disabled='dependency_metadata_capacity';target.rows.clear();}else if(!target.disabled)for(const [key,row]of pageAdmission.rows)target.rows.set(key,row);
+    const target=this.admission;this.indexedRecords+=prepared.length;target.metadataBytes=target.retainedMetadataBytes?.()??target.metadataBytes+pageAdmission.metadataBytes;target.logicalBytes+=pageAdmission.logicalBytes;target.storedBytes+=pageAdmission.storedBytes;target.packageCacheComplete&&=pageAdmission.packageCacheComplete;
+    if(pageAdmission.disabled||!target.scope&&target.metadataBytes>16*1024*1024){target.disabled='dependency_metadata_capacity';target.rows.clear();}else if(!target.disabled&&!target.scope)for(const [key,row]of pageAdmission.rows)target.rows.set(key,row);
    }
    return {kind:'publicationPage',blocks:[],rows:output,next:position,done,stats:this.stats(id)};
   }catch(cause){this.db.exec('ROLLBACK');throw cause;}
@@ -183,10 +187,11 @@ export class SqliteInitialPublication{
  async validate(id:string,confirmed=false,ownCloud=false):Promise<InitialPublicationStats>{
   const policy=ownCloud?'own-cloud':'external',h=this.header(id,confirmed);if(h.state==='validated'&&this.admission&&this.admissionPolicy===policy)return this.stats(id,confirmed);if(h.state!=='sealed'&&h.state!=='validated')throw Error('library_sync_candidate_invalid');
   if(ownCloud&&this.admissionPolicy==='captured-own'&&this.admission&&this.indexedRecords===h.records){
+   if(h.stored_bytes+utf8('validated')-utf8(h.state)>storedBytes)throw Error('library_sync_capacity');
    this.rows("UPDATE sensa_initial_publication SET state='validated',stored_bytes=stored_bytes+? WHERE id=?",[utf8('validated')-utf8(h.state),id]);this.admissionPolicy='own-cloud';return this.stats(id,confirmed);
   }
   const alive=()=>{this.header(id,confirmed);};
-  const admission=syncAdmission();this.dependencies.ensure();
+  const admission=ownCloud?this.dependencies.spoolAdmission('publication:'+id,false,bytes=>{const current=this.header(id,confirmed);if(current.stored_bytes+bytes>storedBytes)throw Error('library_sync_capacity');this.rows('UPDATE sensa_initial_publication SET stored_bytes=stored_bytes+? WHERE id=?',[bytes,id]);}):syncAdmission();this.dependencies.ensure();
   const reader=sealedRecordReader({alive,beforePage:alive,
    get:(table,key)=>this.rows<{record_key:string;value_json:string;shared:number}>('SELECT record_key,value_json,shared FROM sensa_initial_publication_rows WHERE id=? AND table_name=? AND record_key=?',[id,table,key])[0],
    has:(table,key)=>this.rows('SELECT 1 FROM sensa_initial_publication_rows WHERE id=? AND table_name=? AND record_key=?',[id,table,key]).length>0,
@@ -203,8 +208,8 @@ export class SqliteInitialPublication{
     if(table==='meta'&&row.key==='identity'&&!backupEqual(row.value,normalizeLibraryReplicaEntry({table,key:row.key,value:identity},identity).value))throw Error('library_sync_identity');
     if(++count%64===0){alive();await new Promise<void>(resolve=>setTimeout(resolve,0));}
    }
-  }else{const {validateLibraryRestoreRecordsCooperatively}=await import('./backupValidation');await validateLibraryRestoreRecordsCooperatively(reader);}alive();
-  const stateDelta=utf8('validated')-utf8(h.state);if(h.stored_bytes+stateDelta>storedBytes)throw Error('library_sync_capacity');
+  }else{const {validateLibraryRestoreRecordsCooperatively}=await import('./backupValidation');await validateLibraryRestoreRecordsCooperatively(reader);}alive();admission.flush?.();
+  const stateDelta=utf8('validated')-utf8(h.state);if(this.header(id,confirmed).stored_bytes+stateDelta>storedBytes)throw Error('library_sync_capacity');
   this.rows("UPDATE sensa_initial_publication SET state='validated',stored_bytes=stored_bytes+? WHERE id=?",[stateDelta,id]);this.admission=admission;this.admissionPolicy=policy;return this.stats(id,confirmed);
  }
  /** Inside the sole baseline/state transaction; no live fact is rewritten. */
@@ -219,5 +224,5 @@ export class SqliteInitialPublication{
   this.rows('INSERT INTO sensa_sync_base SELECT table_name,record_key,value_json,refs_json FROM sensa_initial_publication_rows WHERE id=? AND shared=0',[id]);
  }
  certify(state:CloudSyncState,identity:LibraryIdentity,artifactRevision:number){if(this.admission)this.dependencies.certify(this.admission,state,identity,artifactRevision);}
- discard(id:string){for(const table of ['sensa_initial_publication_owners','sensa_initial_publication_content','sensa_initial_publication_rows','sensa_initial_publication_blocks','sensa_initial_publication'])this.db.exec({sql:`DELETE FROM ${table} WHERE id=?`,bind:[id]});}
+ discard(id:string,keepAdmission=false){if(!keepAdmission)this.dependencies.discardAdmission('publication:'+id);for(const table of ['sensa_initial_publication_owners','sensa_initial_publication_content','sensa_initial_publication_rows','sensa_initial_publication_blocks','sensa_initial_publication'])this.db.exec({sql:`DELETE FROM ${table} WHERE id=?`,bind:[id]});}
 }

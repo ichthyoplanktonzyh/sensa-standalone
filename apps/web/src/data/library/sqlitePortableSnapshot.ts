@@ -1,6 +1,6 @@
 import type {Database,Sqlite3Static,SAHPoolUtil} from '@sqlite.org/sqlite-wasm';
 import {sha256} from '@sensa/learning-kernel';
-import {librarySyncTables} from '@sensa/contracts/sensa';
+import {librarySyncRecordLimit,librarySyncLogicalByteLimit,librarySyncTables} from '@sensa/contracts/sensa';
 import {SqliteRecordDatabase} from './sqliteDatabase';
 import {decodeBackupValue,encodeBackupValue,backupEqual} from './backupCodec';
 import {decodeSharedArchiveWire,unpackStoredRecord} from './sharedRecordContent';
@@ -107,9 +107,9 @@ async function boundedOwnCloudFacts(raw:Database){
   if(!keys.length)return [];
   return raw.exec({sql:`SELECT ${key} AS record_key,value_json FROM ${name} WHERE ${kind==='record'?'table_name=? AND ':''}${key} IN(SELECT value FROM json_each(?)) ORDER BY ${key}`,bind:kind==='body'?[JSON.stringify(keys)]:[table!,JSON.stringify(keys)],rowMode:'object',returnValue:'resultRows'}) as {record_key:string;value_json:string}[];
  };
- const add=(text:string)=>{bytes+=new TextEncoder().encode(text).length;if(bytes>expandedLimit)invalid('expanded_limit');};
+ const add=(text:string)=>{bytes+=new TextEncoder().encode(text).length;if(bytes>librarySyncLogicalByteLimit)invalid('expanded_limit');};
  for(;;){const rows=page('body',afterBody);if(!rows.length)break;
-  for(const body of rows){const text=unpackStoredRecord(body.value_json,undefined,96*1024*1024);if(++bodyCount>rowLimit||!/^[a-f0-9]{64}$/u.test(body.record_key)||sha256(text)!==body.record_key)invalid('shared_body');add(text);decodeBackupValue(JSON.parse(text));}
+  for(const body of rows){const text=unpackStoredRecord(body.value_json,undefined,96*1024*1024);if(++bodyCount>librarySyncRecordLimit||!/^[a-f0-9]{64}$/u.test(body.record_key)||sha256(text)!==body.record_key)invalid('shared_body');add(text);decodeBackupValue(JSON.parse(text));}
   afterBody=rows.at(-1)!.record_key;await new Promise<void>(resolve=>setTimeout(resolve,0));
  }
  const bodies={has:(digest:string)=>!!cache.has(digest)||!!raw.selectValue("SELECT 1 FROM sensa_shared_record_content WHERE digest=?",[digest]),get:(digest:string)=>{
@@ -124,7 +124,7 @@ async function boundedOwnCloudFacts(raw:Database){
   if(JSON.stringify([...refs].sort())!==JSON.stringify(owners))invalid('shared_owners');for(const ref of refs)used.add(ref);freeze(value,new WeakSet());return {text,value};
  };
  const reader:LibraryRecordReader={get:(table,key)=>{const stored=raw.selectValue('SELECT value_json FROM sensa_records WHERE table_name=? AND record_key=?',[table,key]);return typeof stored==='string'?decode(table,key,stored).value:undefined;},has:(table,key)=>!!raw.selectValue('SELECT 1 FROM sensa_records WHERE table_name=? AND record_key=?',[table,key]),entries:table=>({*[Symbol.iterator](){let after='';for(;;){const rows=page('record',after,table);if(!rows.length)return;for(const row of rows)yield {key:row.record_key,value:decode(table,row.record_key,row.value_json).value};after=rows.at(-1)!.record_key;}}})};
- for(const table of sqliteLibraryTables){let after='';for(;;){const rows=page('record',after,table);if(!rows.length)break;for(const row of rows){if(++count>rowLimit||!isReplicatedLibraryEntry(table,row.record_key))invalid('private_record');add(decode(table,row.record_key,row.value_json).text);}after=rows.at(-1)!.record_key;await new Promise<void>(resolve=>setTimeout(resolve,0));}}
+ for(const table of sqliteLibraryTables){let after='';for(;;){const rows=page('record',after,table);if(!rows.length)break;for(const row of rows){if(++count>librarySyncRecordLimit||!isReplicatedLibraryEntry(table,row.record_key))invalid('private_record');add(decode(table,row.record_key,row.value_json).text);}after=rows.at(-1)!.record_key;await new Promise<void>(resolve=>setTimeout(resolve,0));}}
  if(used.size!==bodyCount)invalid('orphan_body');
  if(Number(scalar(raw,'SELECT count(*) FROM sensa_sync_base'))||Number(scalar(raw,'SELECT count(*) FROM sensa_record_tombstones'))||Number(scalar(raw,'SELECT count(*) FROM sensa_portable_media'))||Number(scalar(raw,'SELECT count(*) FROM sensa_portable_package_media')))invalid('device_storage');
  if(Number(scalar(raw,"SELECT count(*) FROM sensa_shared_record_content_owners WHERE owner_kind!='record'"))||Number(scalar(raw,"SELECT count(*) FROM sensa_shared_record_content_owners AS owner WHERE NOT EXISTS(SELECT 1 FROM sensa_records AS record WHERE record.table_name=owner.table_name AND record.record_key=owner.record_key)")))invalid('shared_owners');
@@ -196,7 +196,7 @@ export async function importLocalPortableSnapshot(sqlite:Sqlite3Static,pool:SAHP
 /** Only the authenticated own-library coordinator calls this distinct entry.
  * Binding is independently obtained from its account's exact committed H. */
 export async function importOwnCloudPortableSnapshot(sqlite:Sqlite3Static,pool:SAHPoolUtil,file:string,snapshot:LocalPortableSnapshot,binding:OwnCloudSnapshotBinding,expectedAccountId:string){
- if(binding.accountId!==expectedAccountId||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(binding.accountId)||!Number.isSafeInteger(binding.revision)||binding.revision<1||binding.sourceRevision!==snapshot.sourceRevision||binding.schemaVersion!==snapshot.schemaVersion||binding.byteLength!==snapshot.bytes.byteLength||binding.sha256!==snapshot.sha256||!Number.isSafeInteger(binding.records)||binding.records<1||binding.records>rowLimit)invalid('checkpoint_binding');
+ if(binding.accountId!==expectedAccountId||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(binding.accountId)||!Number.isSafeInteger(binding.revision)||binding.revision<1||binding.sourceRevision!==snapshot.sourceRevision||binding.schemaVersion!==snapshot.schemaVersion||binding.byteLength!==snapshot.bytes.byteLength||binding.sha256!==snapshot.sha256||!Number.isSafeInteger(binding.records)||binding.records<1||binding.records>librarySyncRecordLimit)invalid('checkpoint_binding');
  return importPortableSnapshot(sqlite,pool,file,snapshot,'own-cloud',{...binding});
 }
 async function importPortableSnapshot(sqlite:Sqlite3Static,pool:SAHPoolUtil,file:string,input:LocalPortableSnapshot,policy:'external'|'own-cloud',binding?:OwnCloudSnapshotBinding){
@@ -218,6 +218,10 @@ async function importPortableSnapshot(sqlite:Sqlite3Static,pool:SAHPoolUtil,file
   if(scalar(raw,'PRAGMA integrity_check')!=='ok'||raw.exec({sql:'PRAGMA foreign_key_check',returnValue:'resultRows'}).length)invalid('integrity');
   const facts=await decodedFacts(raw,policy);
   if(binding&&(facts.identity.id!==binding.libraryId||facts.identity.learnerId!==binding.learnerId||facts.stats.decodedRecords!==binding.records))invalid('checkpoint_binding');
+  // The schema is now exactly the application-owned allowlist and facts have
+  // passed their distinct admission gate. Restore mutation invalidation before
+  // this connection becomes a Library; imported triggers stayed disabled until here.
+  if(sqlite.capi.sqlite3_db_config(raw.pointer!,sqlite.capi.SQLITE_DBCONFIG_ENABLE_TRIGGER,1)!==0)invalid('connection_restriction');
   const admitted=performance.now();let before:ReturnType<typeof projectionValues>;
   if(policy==='external')library.rebuildPortableProjections(facts.reader,stage=>{
    if(stage==='before'){before=projectionValues(raw!);return;}

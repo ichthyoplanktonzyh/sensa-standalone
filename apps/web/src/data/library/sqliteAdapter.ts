@@ -1,3 +1,4 @@
+import {encodeBackupValue} from './backupCodec';
 import type {ContextBrowseQuery,ContextBrowsePage} from '../../experience/personalMeaningJourney/contextRead';
 import type {LearningScheduleQuery,LearningSchedulePage} from '../../learning/system/learningScheduleModel';
 import type {
@@ -305,6 +306,20 @@ export async function openIsolatedOwnCloudSnapshot(snapshot:import('./sqlitePort
  };
  try{assertIsolatedSnapshotNamespace(namespace,false);const result=await isolated.initializeOwnCloudSnapshot(snapshot,binding,owner);return {...result,namespace,adapter:isolated,seal:()=>{registerIsolatedSnapshotNamespace(namespace);isolated.markIsolatedAdmitted();},discard};}
  catch(error){try{await discard();}catch(cleanupError){throw new AggregateError([error,cleanupError],'sqlite_snapshot_cleanup_unconfirmed');}throw error;}
+}
+/** Empty private generation for refs restoration; never selects or imports facts. */
+export async function createOwnCloudRestoreGeneration(fence:import('./replicaCandidateProtocol').ReplicaCandidateFence){
+ const namespace=crypto.randomUUID(),isolated=new WorkerSqliteAdapter(namespace);
+ const discard=async()=>{await isolated.close();await navigator.locks.request('sensa-library-selection-v1',{mode:'exclusive',signal:AbortSignal.timeout(15000)},async()=>{
+  try{assertIsolatedSnapshotNamespace(namespace,false);}catch{return;}
+  const root=await navigator.storage.getDirectory();try{await root.removeEntry(localLibraryPoolDirectory(namespace).replace(/^\//u,''),{recursive:true});}catch(error){if(!(error instanceof DOMException)||error.name!=='NotFoundError')throw error;}unregisterIsolatedSnapshotNamespace(namespace);
+ });};
+ try{
+  assertIsolatedSnapshotNamespace(namespace,false);await isolated.initialize();
+  const values={'identity':fence.identity,'service-owner':fence.owner,'local-incarnation':fence.incarnation,'local-content-revision':fence.localRevision};
+  await isolated.commit({clears:[],deletes:[],puts:Object.entries(values).map(([key,value])=>({table:'meta' as const,key,encodedValue:JSON.stringify(encodeBackupValue(value))}))});
+  return {namespace,adapter:isolated,seal:()=>{registerIsolatedSnapshotNamespace(namespace);isolated.markIsolatedAdmitted();},discard};
+ }catch(error){try{await discard();}catch(cleanupError){throw new AggregateError([error,cleanupError],'sqlite_snapshot_cleanup_unconfirmed');}throw error;}
 }
 /** Reopen an already imported isolated generation without selecting it. */
 export async function openIsolatedLocalGeneration(namespace:string){

@@ -1,4 +1,4 @@
-import {librarySyncManifest,librarySyncPatch,librarySyncCommit,librarySyncPullResult,librarySyncSnapshotPageResult,librarySyncHead,librarySyncTables,librarySyncBlockFetchHashes,librarySyncBlockFetchBytes,librarySyncBlockFetchResult,librarySyncBlockMissingResult,librarySyncBlockStore,librarySyncBlockStoreBatch,librarySyncBlockStoreChars,librarySyncBlockStoreBytes,type LibrarySyncManifest,type LibrarySyncHead,type LibrarySyncCommit} from '@sensa/contracts/sensa';
+import {librarySyncLegacyManifestRecordLimit,librarySyncManifest,librarySyncPatch,librarySyncCommit,librarySyncPullResult,librarySyncSnapshotPageResult,librarySyncHead,librarySyncTables,librarySyncBlockFetchHashes,librarySyncBlockFetchBytes,librarySyncBlockFetchResult,librarySyncBlockMissingResult,librarySyncBlockStore,librarySyncBlockStoreBatch,librarySyncBlockStoreChars,librarySyncBlockStoreBytes,type LibrarySyncManifest,type LibrarySyncHead,type LibrarySyncCommit} from '@sensa/contracts/sensa';
 import {readLibrary,readLocalLibraryRevision,restoreLibraryTransaction,writeLibraryState,assertCurrentLibrary,requestReplicaCandidate,type LibraryTransaction,type LibraryIdentity} from './store';
 import {backupEqual,encodeBackupValue,decodeBackupValue} from './backupCodec';
 import {cloudSyncFailurePolicy,type CloudSyncFailureKind} from './cloudSyncPolicy';
@@ -80,6 +80,9 @@ async function captureDelta(tx:LibraryTransaction,expected:Awaited<ReturnType<ty
 }
 async function capture(tx:LibraryTransaction){
  const {owner,incarnation,identity,state,localRevision,reconnectRequired}=await captureHeader(tx),entries:Entry[]=[];
+ // Legacy reconciliation materializes bodies. Keep it independently bounded;
+ // large normal publications/restores use the private SQLite paths above.
+ let records=0;for(const table of librarySyncTables){records+=await tx.count(table);if(records>librarySyncLegacyManifestRecordLimit)throw Error('library_sync_capacity');}
  const base:Entry[]=(await tx.syncBaseEntries<typeof librarySyncTables>()).map(row=>({table:row.table,key:row.key,value:row.value,blocks:row.blocks}));
  base.sort((a,b)=>entryId(a).localeCompare(entryId(b)));
  if(state?.syncedLocalRevision!==undefined&&state.syncedLocalRevision<=localRevision){
@@ -338,6 +341,7 @@ class Blocks{
  }
  async download(head:LibrarySyncHead,base:Entry[]=[],baseRevision?:number){
   if(!head.manifest)return [];
+  if(head.manifest.records>librarySyncLegacyManifestRecordLimit)throw Error('library_sync_capacity');
   if(baseRevision!==undefined&&baseRevision<head.manifest.floor)baseRevision=undefined;
   const inventory=new Map<string,LibrarySyncManifest['rows'][number]>(baseRevision===undefined?[]:base.map(row=>[entryId(row),{table:row.table,key:row.key,blocks:row.blocks!}]));
   for await(const page of this.indexPages(head,baseRevision))for(const row of 'rows' in page?page.rows:page.changes){if(row.blocks)inventory.set(entryId(row),{...row,blocks:row.blocks});else inventory.delete(entryId(row));}
@@ -447,7 +451,10 @@ async function publishInitialLibrary(header:Awaited<ReturnType<typeof captureHea
  const {sqliteRecordAdapter}=await import('./sqliteAdapter'),adapter=await sqliteRecordAdapter();
  const fence={owner:header.owner,incarnation:header.incarnation,identity:header.identity,localRevision:header.localRevision};
  let snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot|undefined;
- if(adapter.exportOwnCloudSnapshot)try{snapshot=await deadline.run(()=>adapter.exportOwnCloudSnapshot!(fence));deadline.progress('publication-snapshot',snapshot.bytes.length);}catch(error){if(!(error instanceof Error)||error.message!=='sqlite_snapshot_file_limit')throw error;}
+ let sourceRows=0;for(const table of librarySyncTables){sourceRows+=await deadline.run(()=>adapter.count(table));if(sourceRows>librarySyncLegacyManifestRecordLimit)break;}
+ // Keep the optional producer before capture so edits after the sealed source
+ // stay pending. The large refs tier never builds this duplicate file.
+ if(sourceRows<=librarySyncLegacyManifestRecordLimit&&adapter.exportOwnCloudSnapshot)try{snapshot=await deadline.run(()=>adapter.exportOwnCloudSnapshot!(fence));deadline.progress('publication-snapshot',snapshot.bytes.length);}catch(error){if(!(error instanceof Error)||error.message!=='sqlite_snapshot_file_limit')throw error;}
  const begun=await boundedCandidate({kind:'beginPublication',fence:{owner:header.owner,incarnation:header.incarnation,identity:header.identity,localRevision:header.localRevision}},deadline);
  if(begun.kind!=='begun')throw Error('library_sync_candidate_invalid');
  const id=begun.id,operationId=header.state?.initialUpload?.localRevision===header.localRevision?header.state.initialUpload.operationId:crypto.randomUUID();
@@ -546,6 +553,27 @@ async function restoreOwnCloudLibrary(header:Awaited<ReturnType<typeof captureHe
    current=latest;
   }
   throw Error('library_sync_head_changed');
+ }finally{await deadline.cleanup(()=>generation.discard());}
+}
+
+/** Refs use the same isolated-generation activation as binary restoration. */
+async function restoreOwnCloudRefs(header:Awaited<ReturnType<typeof captureHeader>>,head:LibrarySyncHead,request:SyncRequest,blocks:Blocks,deadline:CloudSyncDeadline){
+ const {createOwnCloudRestoreGeneration}=await import('./sqliteAdapter'),incarnation=crypto.randomUUID();
+ const fence={owner:header.owner,identity:header.identity,localRevision:header.localRevision,incarnation};
+ const creating=createOwnCloudRestoreGeneration(fence);
+ void creating.then(generation=>{if(deadline.signal.aborted)return deadline.cleanup(()=>generation.discard());},()=>{});
+ const generation=await deadline.run(()=>creating);
+ try{
+  const send=(input:ReplicaCandidateRequest)=>deadline.run(()=>generation.adapter.replicaCandidate(input));
+  const staged=await stageStableCandidate(blocks,request,head,fence,undefined,send),candidate=staged.candidate;
+  if(!candidate)throw Error('library_sync_candidate_invalid');
+  const revision=header.localRevision+1,at=new Date().toISOString();
+  const state:State={owner:header.owner,incarnation,status:'synced',checkpointVersion:7,restoreValidationVersion:libraryRestoreValidationVersion,restoreOperationId:candidate.id,revision:candidate.head.revision,syncedLocalRevision:revision,storage:candidate.head.storage,lastSyncedAt:at,lastCheckedAt:at,receive:candidate.receive};
+  await deadline.run(()=>generation.adapter.commit({clears:[],deletes:[],puts:[{table:'meta',key:STATE,encodedValue:JSON.stringify(encodeBackupValue(state))},{table:'meta',key:'local-content-revision',encodedValue:JSON.stringify(encodeBackupValue(revision))}],contentRevision:revision,replicaCandidateRestore:{id:candidate.id,tables:candidate.tables}}));
+  const latest=parseSyncHead(await request('/head'));if(latest.revision!==candidate.head.revision)throw Error('library_sync_head_changed');
+  generation.seal();const {activateOwnCloudLibrary}=await import('./store');
+  const activated=await deadline.run(beginCommit=>activateOwnCloudLibrary({...header,identity:header.identity},generation.namespace,incarnation,async(puts)=>{await generation.adapter.commit({clears:[],deletes:[],puts});await generation.adapter.close();},deadline.signal,beginCommit));
+  return {activated};
  }finally{await deadline.cleanup(()=>generation.discard());}
 }
 
@@ -664,7 +692,8 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
    observedHead??=parseSyncHead(await request('/head'));
    if(observedHead.manifest){
     deadline.beginInitial();
-    if(observedHead.binarySnapshot&&typeof Worker!=='undefined')return await restoreOwnCloudLibrary(header,observedHead,request,blocks,deadline);
+    if(observedHead.binarySnapshot&&observedHead.binarySnapshot.records<=librarySyncLegacyManifestRecordLimit&&typeof Worker!=='undefined')return await restoreOwnCloudLibrary(header,observedHead,request,blocks,deadline);
+    if(typeof Worker!=='undefined')return await restoreOwnCloudRefs(header,observedHead,request,blocks,deadline);
     const send=(input:ReplicaCandidateRequest)=>boundedCandidate(input,deadline);
     let candidate:ReplicaCandidateValidation|undefined;
     try{
@@ -701,6 +730,7 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
    initial=await readLibrary(capture);state=initial.state??defaults;
   }
   const confirmedRevision=!initiallyConflicted&&confirmedCheckpoint(initial.state)?initial.state!.revision:undefined;
+  if(observedHead?.manifest&&observedHead.manifest.records>librarySyncLegacyManifestRecordLimit)throw Error('library_sync_capacity');
   const stable=await downloadStableHead(blocks,request,initial.base,confirmedRevision,observedHead),head=stable.head,remote=stable.remote.filter(row=>isReplicatedLibraryEntry(row.table,row.key));
   // An identity-only browser and a null remote head are the authoritative empty
   // account. Confirm that state without publishing device bootstrap metadata.

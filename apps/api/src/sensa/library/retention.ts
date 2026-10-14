@@ -1,6 +1,7 @@
+import {librarySyncStoredByteLimit} from '@sensa/contracts/sensa';
 import type {DatabaseExecutor} from '../../database/index.js';
 
-export const libraryCloudCapacityBytes=256*1024*1024;
+export const libraryCloudCapacityBytes=librarySyncStoredByteLimit;
 export const libraryCloudUploadLeaseMs=24*60*60*1000;
 export const libraryCloudReadLeaseMs=10*60*1000;
 export const libraryCloudRetiredGraceMs=2*60*1000;

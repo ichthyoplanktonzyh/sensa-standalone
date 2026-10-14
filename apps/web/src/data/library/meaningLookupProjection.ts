@@ -160,8 +160,7 @@ export class SqliteMeaningLookupProjection{
  }
  rebuild():void{
   for(const table of ['connections','dependencies','versions','search','documents','expressions'])this.write(`DELETE FROM sensa_meaning_lookup_${table}`);
-  const ids=this.rows("SELECT record_key FROM sensa_records WHERE table_name='semanticMeanings' ORDER BY record_key").map(row=>row.record_key);
-  this.replace(ids);
+  let after='';for(;;){const ids=this.rows("SELECT record_key FROM sensa_records WHERE table_name='semanticMeanings' AND record_key>? ORDER BY record_key LIMIT 64",[after]).map(row=>row.record_key);if(!ids.length)break;this.replace(ids);after=ids.at(-1)!;}
   this.write('INSERT INTO sensa_meaning_lookup_meta VALUES(1,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version',[meaningLookupProjectionVersion]);
  }
  query(raw:string):MeaningLookupResult{

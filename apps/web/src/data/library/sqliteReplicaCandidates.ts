@@ -1,11 +1,12 @@
+import {SqliteRecordValidation,type RecordValidationIndex} from './sqliteRecordValidation';
 import type {Database,PreparedStatement} from '@sqlite.org/sqlite-wasm';
 import {z} from 'zod';
-import {librarySyncHead,librarySyncPullResult,librarySyncSnapshotPageResult,librarySyncMetadataPageBytes,librarySyncMetadataPageRefs,librarySyncBlockChars,canonicalConsumerJson} from '@sensa/contracts/sensa';
+import {librarySyncStoredByteLimit,librarySyncRecordLimit,librarySyncLogicalByteLimit,librarySyncHead,librarySyncPullResult,librarySyncSnapshotPageResult,librarySyncMetadataPageBytes,librarySyncMetadataPageRefs,librarySyncBlockChars,canonicalConsumerJson} from '@sensa/contracts/sensa';
 import {sha256} from '@sensa/learning-kernel';
 import {backupEqual,decodeBackupValue,encodeBackupValue} from './backupCodec';
 import {packStoredRecord,unpackStoredRecord,externalizeSharedRecordContent,sharedRecordTables,StoredRecordMemo,type PreparedStoredRecord} from './sharedRecordContent';
 import {runCooperatively} from '../../experience/personalMeaningJourney/cooperative';
-import {isReplicatedLibraryEntry,restoreLibraryReplicaValue,normalizeLibraryReplicaEntry,canCopyLibraryReplicaValue,mergeLibraryReplicasCooperatively,replicaEntryEqual,replicaEntryId,planLibraryReplicaApplyCooperatively,type LibraryReplicaEntry} from './replication/libraryReplica';
+import {isReplicatedLibraryEntry,libraryReplicaDependencies,restoreLibraryReplicaValue,normalizeLibraryReplicaEntry,canCopyLibraryReplicaValue,mergeLibraryReplicasCooperatively,replicaEntryEqual,replicaEntryId,planLibraryReplicaApplyCooperatively,type LibraryReplicaEntry} from './replication/libraryReplica';
 import {validatedCheckpoint} from './cloudSyncCheckpoint';
 import type {CloudSyncState} from './cloudSync';
 import type {SqliteMutation,SqliteLibraryTable} from './sqliteProtocol';
@@ -22,8 +23,8 @@ import {replicaWork} from './replicaWork';
 const uuid=z.string().uuid(),integer=z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const identitySchema=z.object({id:uuid,learnerId:uuid,deviceId:uuid,createdAt:z.string().datetime({offset:true}),schemaVersion:z.literal(2)}).strict();
 const fenceSchema=z.object({owner:z.object({subject:uuid,accountId:uuid}).strict(),incarnation:z.string().min(1).max(128),localRevision:integer,identity:identitySchema}).strict();
-const expectedSchema=z.object({libraryId:uuid,learnerId:uuid,records:z.number().int().min(1).max(200000),stream:z.object({phase:z.enum(['snapshot','tail','complete']),position:z.object({revision:integer,offset:integer}),after:z.object({table:z.string(),key:z.string()}).nullable()}).optional(),head:librarySyncHead.refine(head=>head.manifest!==null)}).strict();
-const maximumRecordBytes=90*1024*1024,maximumLogicalBytes=512*1024*1024,maximumStoredBytes=256*1024*1024,appendBytes=4*1024*1024;
+const expectedSchema=z.object({libraryId:uuid,learnerId:uuid,records:z.number().int().min(1).max(librarySyncRecordLimit),stream:z.object({phase:z.enum(['snapshot','tail','complete']),position:z.object({revision:integer,offset:integer}),after:z.object({table:z.string(),key:z.string()}).nullable()}).optional(),head:librarySyncHead.refine(head=>head.manifest!==null)}).strict();
+const maximumRecordBytes=90*1024*1024,maximumLogicalBytes=librarySyncLogicalByteLimit,maximumStoredBytes=librarySyncStoredByteLimit,appendBytes=4*1024*1024;
 const utf8=(text:string)=>new TextEncoder().encode(text).length;
 const dependencyRowStoredBudget='stored_value_bytes+2*length(CAST(refs_json AS BLOB))+length(CAST(table_name AS BLOB))+length(CAST(record_key AS BLOB))+72*json_array_length(refs_json)';
 type Header={id:string;fence_json:string;expected_json:string;state:string;records:number;logical_bytes:number;stored_bytes:number;identity_json:string|null};
@@ -154,7 +155,7 @@ export class SqliteReplicaCandidates{
   this.baselines.clear();if(seed){const clock=this.dependencies.clock();this.baselines.set(id,{generation:clock.generation,epoch:clock.epoch,artifactRevision});}
   this.sparse.clear();this.admissions.clear();this.receiveEvidence.clear();if(certificate)this.sparse.set(id,{certificate,baseRevision:baseRevision!,readBase,accessByPhase:{},deleted:new Set(),baseReads:new Set(),candidateReads:new Set()});
   if(!certificate)this.receiveEvidence.set(id,{mode:'complete',fallbackReason:seed?'uncertified_baseline':'fresh_restore',changedRecords:0,baselineBuildRecords:0,baselineRecordsRead:0,candidateRecordsRead:0,targets:0,runs:0,events:0,decisions:0,scopes:0,sessions:0,scopeRuns:0});
-  const expected=expectedSchema.parse({libraryId:head.manifest.libraryId,learnerId:head.manifest.learnerId,records:200000,head,stream:{phase:seed?'tail':'snapshot',position:{revision:seed?baseRevision:head.manifest.snapshotRevision,offset:0},after:null}});
+  const expected=expectedSchema.parse({libraryId:head.manifest.libraryId,learnerId:head.manifest.learnerId,records:librarySyncRecordLimit,head,stream:{phase:seed?'tail':'snapshot',position:{revision:seed?baseRevision:head.manifest.snapshotRevision,offset:0},after:null}});
   this.database.exec('BEGIN IMMEDIATE');
   try{
    this.database.exec('DELETE FROM sensa_replica_candidates_v1');
@@ -320,9 +321,14 @@ export class SqliteReplicaCandidates{
    this.database.exec({sql:'UPDATE sensa_replica_candidates_v1 SET stored_bytes=stored_bytes+? WHERE id=?',bind:[storedBytes,id]});this.database.exec('COMMIT');
   }catch(cause){try{this.database.exec('ROLLBACK');}catch(rollbackCause){throw sqliteRollbackFailure(cause,rollbackCause);}throw cause;}
  }
- private reader(id:string,signal:AbortSignal,admission?:SyncAdmission,cloneDecoded=false){
+ private resetAdmission(id:string,admission:SyncAdmission){
+  const bytes=admission.retainedMetadataBytes?.()??0;this.database.exec('BEGIN IMMEDIATE');
+  try{this.dependencies.discardAdmission('candidate:'+id);this.rows('UPDATE sensa_replica_candidates_v1 SET stored_bytes=stored_bytes-? WHERE id=?',[bytes,id]);this.database.exec('COMMIT');}catch(cause){this.database.exec('ROLLBACK');throw cause;}
+ }
+ private candidateAdmission(id:string){return this.dependencies.spoolAdmission('candidate:'+id,false,bytes=>{const header=this.header(id);if(header.stored_bytes+bytes>maximumStoredBytes)throw Error('library_sync_capacity');this.rows('UPDATE sensa_replica_candidates_v1 SET stored_bytes=stored_bytes+? WHERE id=?',[bytes,id]);});}
+ private reader(id:string,signal:AbortSignal,admission?:SyncAdmission,cloneDecoded=false,validationIndex?:RecordValidationIndex){
   const alive=()=>{this.assertHealthy();if(signal.aborted)throw signal.reason;};
-  return sealedRecordReader({
+  const reader=sealedRecordReader({
    alive,cloneDecoded,beforePage:()=>this.check(this.header(id)),
    get:(table,key)=>this.rows<StoredRow>('SELECT record_key,value_json,representation FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,table,key])[0],
    has:(table,key)=>this.rows('SELECT 1 FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,table,key]).length>0,
@@ -340,6 +346,7 @@ export class SqliteReplicaCandidates{
     this.dependencies.observe(admission,table,key,text,value,packageKey=>this.rows('SELECT 1 FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,'packageCache',packageKey]).length>0,size);
    }:undefined,
   });
+  return {...reader,storageKeysUnique:true as const,validationIndex};
  }
  private sparseReaders(id:string,signal:AbortSignal,admission:SyncAdmission){
   const sparse=this.sparse.get(id)!;
@@ -385,9 +392,15 @@ export class SqliteReplicaCandidates{
   this.sealedEpochs.set(id,this.candidateEpoch(id));
   const controller=new AbortController();
   const result=(async()=>{
+   let validationIndex:SqliteRecordValidation|undefined,fatal=false;
    try{
+    validationIndex=new SqliteRecordValidation(this.database,()=>{this.assertHealthy();controller.signal.throwIfAborted();this.check(this.header(id));});
     const {validateLibrarySyncRecordsCooperatively}=await import('./backupValidation');
-    let identity:LibraryIdentity|undefined,admission=syncAdmission();
+    let identity:LibraryIdentity|undefined,admission=this.candidateAdmission(id);
+    if(sparse&&!sparse.dense){
+     const changedCount=this.rows<{n:number}>('SELECT count(*) AS n FROM sensa_replica_candidate_manifest_v1 WHERE candidate_id=?',[id])[0].n+sparse.deleted.size;
+     if(changedCount>16384){await this.materializeSparse(id,controller.signal);sparse.evidence={mode:'complete',fallbackReason:'changed_body_capacity',changedRecords:changedCount,baselineBuildRecords:sparse.certificate.records,baselineRecordsRead:0,candidateRecordsRead:0,targets:0,runs:0,events:0,decisions:0,scopes:0,sessions:0,scopeRuns:0};}
+    }
     if(sparse&&!sparse.dense){
      const changes=[...this.rows<RecordKey>('SELECT table_name AS "table",record_key AS "key" FROM sensa_replica_candidate_manifest_v1 WHERE candidate_id=? ORDER BY table_name,record_key',[id]),...[...sparse.deleted].map(identity=>{const [table,key]=JSON.parse(identity);return {table,key,deleted:true};})] as Array<RecordKey&{deleted?:boolean}>;
      let records=sparse.certificate.records,logicalBytes=sparse.certificate.logicalBytes,storedBytes=sparse.certificate.storedBytes+this.rows<{n:number}>(`SELECT COALESCE(sum(${dependencyRowStoredBudget}),0) AS n FROM sensa_replica_candidate_records_v1 WHERE candidate_id=?`,[id])[0].n;
@@ -408,26 +421,27 @@ export class SqliteReplicaCandidates{
       identity=admitted.identity;sparse.prepare=admitted.prepare;sparse.evidence={...admitted.evidence,accessByPhase:sparse.accessByPhase};
      }catch(cause){
       if(!(cause instanceof DeltaReceiveFallback))throw cause;
-      this.clearEncoding(id);admission=syncAdmission();sparse.prepare=undefined;sparse.basePuts=undefined;sparse.encoded=false;
+      this.clearEncoding(id);this.resetAdmission(id,admission);admission=this.candidateAdmission(id);sparse.prepare=undefined;sparse.basePuts=undefined;sparse.encoded=false;
       sparse.evidence={mode:'complete',fallbackReason:cause.reason,changedRecords:changes.length,baselineBuildRecords:sparse.certificate.records,baselineRecordsRead:sparse.baseReads.size,candidateRecordsRead:sparse.candidateReads.size,targets:0,runs:0,events:0,decisions:0,scopes:0,sessions:0,scopeRuns:0};await this.materializeSparse(id,controller.signal);
      }
     }
     this.admissions.set(id,admission);
-    const reader=this.reader(id,controller.signal,admission);
+    const reader=this.reader(id,controller.signal,admission,false,validationIndex);
     if(identity){if(!admission.disabled&&admission.rows.size!==header.records)this.fail();}
     else identity=await validateLibrarySyncRecordsCooperatively(reader);
     if(sparse&&!sparse.dense)admission.deletes=[...sparse.deleted].map(key=>{const [table,keyValue]=JSON.parse(key);return {table,key:keyValue};});
     const checked=expectedSchema.parse(JSON.parse(header.expected_json));
     if(identity.id!==checked.libraryId||identity.learnerId!==checked.learnerId)throw Error('library_sync_identity');
-    this.assertHealthy();if(controller.signal.aborted)throw controller.signal.reason;
+    admission.flush?.();this.assertHealthy();if(controller.signal.aborted)throw controller.signal.reason;
     this.check(this.header(id));
     this.database.exec({sql:"UPDATE sensa_replica_candidates_v1 SET state='validated',identity_json=? WHERE id=? AND state='sealed'",bind:[JSON.stringify(identity),id]});
     return this.receipt(this.header(id));
    }catch(cause){
-    if(!controller.signal.aborted&&!isFatalSqliteConnectionFailure(cause)){
+    fatal=isFatalSqliteConnectionFailure(cause);
+    if(!controller.signal.aborted&&!fatal){
      try{
       this.assertHealthy();
-      this.database.exec({sql:"DELETE FROM sensa_replica_candidates_v1 WHERE id=? AND state='sealed'",bind:[id]});
+      this.database.exec({sql:"DELETE FROM sensa_replica_candidates_v1 WHERE id=? AND state='sealed'",bind:[id]});this.dependencies.discardAdmission('candidate:'+id);
      }catch(cleanupCause){
       // A failed cleanup must not masquerade as an erased scratch area. FULL
       // is retryable after freeing storage; physical faults still quarantine.
@@ -435,7 +449,7 @@ export class SqliteReplicaCandidates{
      }
     }
     throw cause;
-   }finally{this.validations.delete(id);}
+   }finally{validationIndex?.close(!fatal);this.validations.delete(id);}
   })();
   this.validations.set(id,{controller,result});return result;
  }
@@ -511,9 +525,10 @@ export class SqliteReplicaCandidates{
       if(!(cause instanceof DeltaReceiveFallback))throw cause;
       this.clearEncoding(id);sparse.prepare=undefined;sparse.basePuts=undefined;sparse.encoded=false;
       sparse.evidence={...sparse.evidence!,mode:'complete',fallbackReason:cause.reason,baselineBuildRecords:sparse.certificate.records};await this.materializeSparse(id,controller.signal);
-      const admission=syncAdmission(),reader=this.reader(id,controller.signal,admission),{validateLibrarySyncRecordsCooperatively}=await import('./backupValidation');
-      const identity=await validateLibrarySyncRecordsCooperatively(reader);alive();if(identity.id!==candidate.identity.id||identity.learnerId!==candidate.identity.learnerId)throw Error('library_sync_identity');
-      this.admissions.set(id,admission);this.database.exec({sql:"UPDATE sensa_replica_candidates_v1 SET state='validated',identity_json=? WHERE id=?",bind:[JSON.stringify(identity),id]});
+      const admission=this.admissions.get(id)??this.candidateAdmission(id),index=new SqliteRecordValidation(this.database,alive),{validateLibrarySyncRecordsCooperatively}=await import('./backupValidation');
+      try{const identity=await validateLibrarySyncRecordsCooperatively(this.reader(id,controller.signal,admission,false,index));admission.flush?.();alive();if(identity.id!==candidate.identity.id||identity.learnerId!==candidate.identity.learnerId)throw Error('library_sync_identity');
+       this.admissions.set(id,admission);this.database.exec({sql:"UPDATE sensa_replica_candidates_v1 SET state='validated',identity_json=? WHERE id=?",bind:[JSON.stringify(identity),id]});
+      }finally{index.close();}
      }
      if(records){
      const basePuts=sparse.basePuts!;
@@ -524,12 +539,28 @@ export class SqliteReplicaCandidates{
     }
     const normalized=normalizeLibraryReplicaEntry({table:'meta',key:'identity',value:fence.identity},fence.identity).value;
     if(!backupEqual(candidate.identity,normalized))return null;
-    const refs=this.rows<{table_name:LibraryReplicaEntry['table'];record_key:string;block_refs_json:string}>('SELECT table_name,record_key,block_refs_json FROM sensa_sync_base ORDER BY table_name,record_key');
-    if(!refs.some(row=>row.table_name==='meta'&&row.record_key==='identity'))return null;
-    const base:LibraryReplicaEntry[]=refs.map(row=>({table:row.table_name,key:row.record_key,blocks:JSON.parse(row.block_refs_json),get value(){alive();return JSON.parse(readBase(row.table_name,row.record_key));}}));
-    const rows=this.rows<{table_name:LibraryReplicaEntry['table'];record_key:string;refs_json:string}>('SELECT table_name,record_key,refs_json FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? ORDER BY table_name,record_key',[id]);
-    const read=(table:string,key:string)=>this.candidateBody(id,table,key);
-    const remote:LibraryReplicaEntry[]=rows.map(row=>({table:row.table_name,key:row.record_key,blocks:JSON.parse(row.refs_json),get value(){alive();return JSON.parse(read(row.table_name,row.record_key));}}));
+    if(!this.rows("SELECT 1 FROM sensa_sync_base WHERE table_name='meta' AND record_key='identity'").length)return null;
+    // SQL identifies exact changed refs. Only their existing owner dependency
+    // closure reaches the merger; the complete candidate was already admitted.
+    const changed=this.rows<{table:string;key:string}>(`SELECT table_name AS table_name,record_key AS record_key FROM(
+     SELECT remote.table_name,remote.record_key FROM sensa_replica_candidate_records_v1 remote LEFT JOIN sensa_sync_base base ON base.table_name=remote.table_name AND base.record_key=remote.record_key WHERE remote.candidate_id=? AND(base.record_key IS NULL OR base.block_refs_json!=remote.refs_json)
+     UNION ALL SELECT base.table_name,base.record_key FROM sensa_sync_base base LEFT JOIN sensa_replica_candidate_records_v1 remote ON remote.candidate_id=? AND remote.table_name=base.table_name AND remote.record_key=base.record_key WHERE remote.record_key IS NULL) LIMIT 16385`,[id,id]) as unknown as Array<{table_name:LibraryReplicaEntry['table'];record_key:string}>;
+    if(changed.length>16384)throw Error('library_sync_capacity');
+    const selected=new Set<string>(),queue=changed.map(row=>({table:row.table_name,key:row.record_key})),enqueued=new Set(queue.map(replicaEntryId)),base:LibraryReplicaEntry[]=[],remote:LibraryReplicaEntry[]=[];
+    let decodedBytes=0;const enqueue=(keys:readonly {table:SqliteLibraryTable;key:string}[])=>{for(const key of keys){const id=dependencyRowId(key.table,key.key);if(enqueued.has(id))continue;if(enqueued.size>=16384)throw Error('library_sync_capacity');enqueued.add(id);if(!isReplicatedLibraryEntry(key.table,key.key))this.fail();queue.push({...key,table:key.table as LibraryReplicaEntry['table']});}};
+    await runCooperatively((function*(this:SqliteReplicaCandidates){for(let at=0;at<queue.length;at++){
+     alive();yield;const key=queue[at],identity=replicaEntryId(key);if(selected.has(identity))continue;selected.add(identity);if(selected.size>16384)throw Error('library_sync_capacity');
+     for(const side of ['base','remote'] as const){
+      const row=side==='base'?this.rows<{value_json:string;refs:string}>('SELECT value_json,block_refs_json AS refs FROM sensa_sync_base WHERE table_name=? AND record_key=?',[key.table,key.key])[0]:this.rows<{value_json:string;representation:StoredRow['representation'];refs:string}>('SELECT value_json,representation,refs_json AS refs FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,key.table,key.key])[0];
+      if(!row)continue;
+      const logical=side==='base'?this.dependencies.rowBudget(key.table,key.key).logical_bytes:this.admissions.get(id)?.rows.get(dependencyRowId(key.table,key.key))?.bytes;
+      if(logical!==undefined&&decodedBytes+logical+utf8(row.refs)>64*1024*1024)throw Error('library_sync_capacity');
+      const text=side==='base'?readBase(key.table,key.key):this.candidateBody(id,key.table,key.key);decodedBytes+=utf8(text)+utf8(row.refs);if(decodedBytes>64*1024*1024)throw Error('library_sync_capacity');
+      const value=JSON.parse(text),entry={...key,blocks:JSON.parse(row.refs),get value(){alive();return value;}};(side==='base'?base:remote).push(entry);
+      enqueue(libraryReplicaDependencies(entry,decodeBackupValue(value)));
+      if(key.table==='semanticMeanings'){enqueue(this.dependencies.admissionMeaningReceipts('candidate:'+id,key.key));if(side==='base')enqueue(this.dependencies.keys('meaningReceipt',key.key));}
+     }
+    }}).call(this));
     const merged=await mergeLibraryReplicasCooperatively({base,local:base,remote});
     alive();
     // Conflicts or a domain-generated publication still use the full existing
@@ -542,7 +573,7 @@ export class SqliteReplicaCandidates{
     const basePuts=remote.filter(row=>!backupEqual(row.blocks,prior.get(replicaEntryId(row))?.blocks)).map(row=>({...key(row),blockRefs:row.blocks!}));
     const records=[...changes.puts,...changes.deletes].map(key),contentChanged=records.length>0;
     const receipt:ReplicaCandidateUpdate={id,baseRevision,localRevision:fence.localRevision,contentChanged,tables:[...new Set(records.map(row=>row.table))],records,receive:sparse?.evidence??this.receiveEvidence.get(id)};
-    if(receipt.receive){receipt.receive.modifiedRecords=records.length;receipt.receive.candidateRecordsRead=rows.length;receipt.receive.baselineRecordsRead=refs.length;}
+    if(receipt.receive){receipt.receive.modifiedRecords=records.length;receipt.receive.candidateRecordsRead=remote.length;receipt.receive.baselineRecordsRead=base.length;}
     const plan={receipt,puts:changes.puts.map(key),deletes:changes.deletes.map(key),basePuts};await this.prepareEncoding(plan,fence,alive);alive();this.updatePlan=plan;
     return receipt;
    }catch(cause){if(!isFatalSqliteConnectionFailure(cause)){this.discard(id);}throw cause;}finally{this.updates.delete(id);}
@@ -674,7 +705,7 @@ export class SqliteReplicaCandidates{
  /** Called only inside the source transaction. Bodies remain in the private
   * SQLite generation; existing commit/projection code reads one on demand.
   * This is not a shortcut for merging an existing or previously synced world. */
- prepareFreshRestore(id:string,mutation:SqliteMutation,memo?:StoredRecordMemo):Pick<SqliteMutation,'puts'|'syncBaseReplacement'>&{copiedTables:ReadonlySet<SqliteLibraryTable>;sharedCopiedTables:ReadonlySet<SqliteLibraryTable>;copyOrdinary:()=>void;copySharedBaseline:(removed:Set<string>)=>void;logicalBytes:number}{
+ prepareFreshRestore(id:string,mutation:SqliteMutation,memo?:StoredRecordMemo):Pick<SqliteMutation,'puts'|'syncBaseReplacement'>&{copiedTables:ReadonlySet<SqliteLibraryTable>;sharedCopiedTables:ReadonlySet<SqliteLibraryTable>;sourceRows:Iterable<SqliteMutation['puts'][number]>;syncBaseRows:Iterable<NonNullable<SqliteMutation['syncBaseReplacement']>[number]>;copyOrdinary:()=>void;copySharedBaseline:(removed:Set<string>)=>void;logicalBytes:number}{
   if(mutation.clears.length||mutation.deletes.length>1||mutation.deletes.some(row=>row.table!=='meta'||row.key!=='local-reset')||mutation.portablePackages?.length||mutation.syncBaseReplacement!==undefined||mutation.syncBasePatch!==undefined||mutation.puts.some(row=>row.table!=='meta'||!['cloud-sync','local-content-revision'].includes(row.key)))this.fail();
   const header=this.header(id);this.check(header);const receipt=this.receipt(header),fence=fenceSchema.parse(JSON.parse(header.fence_json));
   const reset=this.rows<{value_json:string}>("SELECT value_json FROM sensa_records WHERE table_name='meta' AND record_key='local-reset'")[0];
@@ -693,24 +724,22 @@ export class SqliteReplicaCandidates{
   if(mutation.puts.length!==2||!revisionRow||decodeBackupValue(JSON.parse(revisionRow.encodedValue))!==mutation.contentRevision)this.fail();
   const state=decodeBackupValue(JSON.parse(stateRow.encodedValue)) as {restoreOperationId?:string;owner?:{subject:string;accountId:string};incarnation?:string;revision?:number;syncedLocalRevision?:number;status?:string};
   if(state.restoreOperationId!==id||state.owner?.subject!==fence.owner.subject||state.owner.accountId!==fence.owner.accountId||state.incarnation!==fence.incarnation||state.revision!==receipt.head.revision||state.syncedLocalRevision!==mutation.contentRevision||state.status!=='synced')this.fail();
-  const rows=this.rows<{table_name:LibraryReplicaEntry['table'];record_key:string;refs_json:string}>('SELECT table_name,record_key,refs_json FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? ORDER BY table_name,record_key',[id]);
-  const transformed=new Set(rows.filter(row=>!canCopyLibraryReplicaValue({table:row.table_name,key:row.record_key})).map(row=>row.table_name));
-  const excluded=new Set(rows.filter(row=>sharedRecordTables.has(row.table_name)||transformed.has(row.table_name)).map(row=>row.table_name));
-  const sharedCopiedTables=new Set(rows.map(row=>row.table_name).filter(table=>sharedRecordTables.has(table)&&!transformed.has(table)));
-  // Whole-table admission is conservative when ownership differs by key: one
-  // transformed row keeps that entire table on its existing owner value path.
-  const copiedTables=new Set(rows.map(row=>row.table_name).filter(table=>!excluded.has(table)));
+  const allTables=this.tables(id) as LibraryReplicaEntry['table'][],transformed=new Set<SqliteLibraryTable>();
+  const metadata=function*(this:SqliteReplicaCandidates,tables:readonly SqliteLibraryTable[]=allTables){let table='',key='';for(;;){const page=this.rows<{table_name:LibraryReplicaEntry['table'];record_key:string;refs_json:string}>('SELECT table_name,record_key,refs_json FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name IN(SELECT value FROM json_each(?)) AND(table_name,record_key)>(?,?) ORDER BY table_name,record_key LIMIT 64',[id,JSON.stringify(tables),table,key]);if(!page.length)return;yield*page;table=page.at(-1)!.table_name;key=page.at(-1)!.record_key;}};
+  for(const table of allTables)for(const row of metadata.call(this,[table]))if(!canCopyLibraryReplicaValue({table,key:row.record_key})){transformed.add(table);break;}
+  const sharedCopiedTables=new Set(allTables.filter(table=>sharedRecordTables.has(table)&&!transformed.has(table)));
+  const copiedTables=new Set(allTables.filter(table=>!sharedRecordTables.has(table)&&!transformed.has(table)));
   const read=(table:string,key:string)=>{
    const row=this.rows<StoredRow>('SELECT record_key,value_json,representation FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,table,key])[0];if(!row)this.fail();return this.plainStored(row,memo);
   };
-  const puts:SqliteMutation['puts']=rows.map(row=>({table:row.table_name,key:row.record_key,get encodedValue(){
+  const sourceRows={*[Symbol.iterator](){for(const row of metadata.call(store)){yield {table:row.table_name,key:row.record_key,get encodedValue(){
    if(copiedTables.has(row.table_name)||sharedCopiedTables.has(row.table_name))return read(row.table_name,row.record_key);
-   const value=decodeBackupValue(JSON.parse(read(row.table_name,row.record_key)));
-   return JSON.stringify(encodeBackupValue(restoreLibraryReplicaValue({table:row.table_name,key:row.record_key,value:undefined},value,fence.identity)));
-  }}));
+   const value=decodeBackupValue(JSON.parse(read(row.table_name,row.record_key)));return JSON.stringify(encodeBackupValue(restoreLibraryReplicaValue({table:row.table_name,key:row.record_key,value:undefined},value,fence.identity)));
+  }};}}},store=this;
   const restoredIdentity=restoreLibraryReplicaValue({table:'meta',key:'identity',value:undefined},receipt.identity,fence.identity);
-  puts.push({table:'operations',key:'00000000-0000-4000-8000-000000000001',encodedValue:JSON.stringify(encodeBackupValue({input:canonicalConsumerJson({kind:'library.create',input:{}}),result:restoredIdentity,committedAt:receipt.identity.createdAt}))});
-  const syncBaseReplacement:NonNullable<SqliteMutation['syncBaseReplacement']>=rows.map(row=>({table:row.table_name,key:row.record_key,blockRefs:JSON.parse(row.refs_json),get valueJson(){return read(row.table_name,row.record_key);}}));
+  const puts:SqliteMutation['puts']=[{table:'operations',key:'00000000-0000-4000-8000-000000000001',encodedValue:JSON.stringify(encodeBackupValue({input:canonicalConsumerJson({kind:'library.create',input:{}}),result:restoredIdentity,committedAt:receipt.identity.createdAt}))}];
+  const syncBaseRows={*[Symbol.iterator](){for(const row of metadata.call(store,allTables.filter(table=>!copiedTables.has(table))))yield {table:row.table_name,key:row.record_key,blockRefs:JSON.parse(row.refs_json),get valueJson(){return read(row.table_name,row.record_key);}};}};
+  const syncBaseReplacement:NonNullable<SqliteMutation['syncBaseReplacement']>=[];
   const copyOrdinary=()=>{
    this.check(this.header(id));const tables=JSON.stringify([...copiedTables]);
    this.database.exec({sql:`INSERT INTO sensa_sync_base(table_name,record_key,value_json,block_refs_json)
@@ -742,9 +771,9 @@ export class SqliteReplicaCandidates{
     ON CONFLICT(table_name,record_key) DO UPDATE SET value_json=excluded.value_json,content_revision=excluded.content_revision`,bind:[mutation.contentRevision!,id,tables]});
    this.database.exec({sql:`DELETE FROM sensa_record_tombstones WHERE(table_name,record_key) IN(${selected})`,bind:[id,tables]});
   };
-  return {puts,syncBaseReplacement,copiedTables,sharedCopiedTables,copyOrdinary,copySharedBaseline,logicalBytes:receipt.logicalBytes};
+  return {puts,syncBaseReplacement,sourceRows,syncBaseRows,copiedTables,sharedCopiedTables,copyOrdinary,copySharedBaseline,logicalBytes:receipt.logicalBytes};
  }
- discard(id:string):void{uuid.parse(id);this.ensure();this.seeds.delete(id);this.validations.get(id)?.controller.abort(Error('library_sync_candidate_discarded'));this.updates.get(id)?.controller.abort(Error('library_sync_candidate_discarded'));if(this.updatePlan?.receipt.id===id)this.updatePlan=undefined;this.database.exec({sql:'DELETE FROM sensa_replica_candidates_v1 WHERE id=?',bind:[id]});this.admissions.delete(id);this.sparse.delete(id);this.baselines.delete(id);this.receiveEvidence.delete(id);this.sealedEpochs.delete(id);}
+ discard(id:string):void{uuid.parse(id);this.ensure();this.seeds.delete(id);this.validations.get(id)?.controller.abort(Error('library_sync_candidate_discarded'));this.updates.get(id)?.controller.abort(Error('library_sync_candidate_discarded'));if(this.updatePlan?.receipt.id===id)this.updatePlan=undefined;this.database.exec({sql:'DELETE FROM sensa_replica_candidates_v1 WHERE id=?',bind:[id]});this.dependencies.discardAdmission('candidate:'+id);this.admissions.delete(id);this.sparse.delete(id);this.baselines.delete(id);this.receiveEvidence.delete(id);this.sealedEpochs.delete(id);}
  abortAll(reason:Error):void{this.seeds.clear();for(const work of [...this.validations.values(),...this.updates.values()])work.controller.abort(reason);}
  async settle():Promise<void>{this.abortAll(Error('library_sync_candidate_discarded'));await Promise.allSettled([...this.validations.values(),...this.updates.values()].map(work=>work.result));}
 }

@@ -36,6 +36,12 @@ const moduleFor=(table:string,key:string)=>{
 
 export const isReplicatedLibraryEntry=(table:string,key:string)=>moduleFor(table,key)!==undefined;
 
+/** Existing owner dependencies used by a bounded remote-only change merge. */
+export function libraryReplicaDependencies(entry:ReplicaEntry,value:unknown){
+ const module=moduleFor(entry.table,entry.key);if(!module)throw Error('library_sync_format');
+ return module.conflictDependencies?.(entry,value)??[];
+}
+
 export function normalizeLibraryReplicaEntry(entry:ReplicaEntry,identity:LibraryIdentity):ReplicaEntry{
  const module=moduleFor(entry.table,entry.key);
  if(!module)throw new Error('library_sync_format');

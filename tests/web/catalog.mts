@@ -60,6 +60,7 @@ const foundationTests = [
   {id:'evidence-archive',file:'tests/web/quality/evidence-archive.test.mts',kind:'quality',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'test-shards',file:'tests/web/quality/test-shards.test.mts',kind:'quality',risks:['local-correctness'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'api-runtime-imports',file:'tests/web/contracts/api-runtime-imports.test.mts',kind:'contract',risks:['local-correctness'],environment:'node',suite:'fast',runner:'vitest'},
+  {id:'cloud-capacity-storage',file:'tests/web/integration/cloud-capacity-storage.test.mts',kind:'integration',risks:['local-correctness','durability','convergence','scale'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'library-initial-publication-storage',file:'tests/web/integration/library-initial-publication-storage.test.mts',kind:'integration',risks:['durability','convergence','scale'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'library-initial-publication',file:'tests/web/database/library-initial-publication.spec.ts',kind:'integration',risks:['local-correctness','durability','convergence','scale'],environment:'browser-postgres',suite:'database',runner:'playwright'},
   {id:'library-cursor',file:'tests/web/database/library-cursor.spec.ts',kind:'integration',risks:['durability','convergence','scale'],environment:'browser-postgres',suite:'database',runner:'playwright'},

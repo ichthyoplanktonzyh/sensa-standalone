@@ -1,4 +1,11 @@
 import {z} from 'zod';
+/** Finite cloud tier for the retained 50k World, not a universal content quota. */
+export const librarySyncRecordLimit=600000;
+export const librarySyncLogicalByteLimit=1024*1024*1024;
+export const librarySyncStoredByteLimit=256*1024*1024;
+export const librarySyncStageMetadataByteLimit=128*1024*1024;
+/** Legacy whole-manifest and external import remain separately bounded. */
+export const librarySyncLegacyManifestRecordLimit=200000;
 /** Durable Personal Library Facts carried by a Cloud Checkpoint. `operations` is
  * deliberately absent: it is a device-local command ledger, not learner data. */
 export const librarySyncTables=['meta','drafts','settings','sessions','meanings','identities','packageInstallations','curriculumEnrollments','supplementalMembershipStates','studyScopes','learningSessions','learningTargets','learningRuns','learningEvents','learningReconciliations','personalLearning','contentAttempts','annotations','semanticState','semanticMeanings','semanticContexts','semanticRegistry','semanticInbox','semanticDrafts','semanticReceipts','media'] as const;
@@ -28,20 +35,20 @@ export const librarySyncRow=z.object({table:z.enum(librarySyncTables),key:z.stri
 const refineManifest=(v:{rows:readonly {table:string;key:string}[]},c:z.RefinementCtx)=>{
  const ids=new Set<string>();for(const row of v.rows){const id=JSON.stringify([row.table,row.key]);if(ids.has(id))c.addIssue({code:'custom',message:'duplicate row'});ids.add(id);if(row.table==='meta'&&!['identity','learning-active','learning-session-active','package-catalog'].includes(row.key))c.addIssue({code:'custom',message:'private metadata'});}
 };
-export const librarySyncManifest=z.object({version:z.literal(8),libraryId:z.string().uuid(),learnerId:z.string().uuid(),rows:z.array(librarySyncRow).max(200000)}).strict().superRefine(refineManifest);
+export const librarySyncManifest=z.object({version:z.literal(8),libraryId:z.string().uuid(),learnerId:z.string().uuid(),rows:z.array(librarySyncRow).max(librarySyncLegacyManifestRecordLimit)}).strict().superRefine(refineManifest);
 export const librarySyncStorage=z.object({usedBytes:z.number().int().nonnegative(),capacityBytes:z.number().int().positive()}).strict();
 const cursor=z.number().int().nonnegative().max(2147483646);
 /** One account-scoped publication cursor. The descriptor names the immutable
  * index snapshot, never a competing complete-manifest head. */
-export const librarySyncSnapshot=z.object({libraryId:z.string().uuid(),learnerId:z.string().uuid(),snapshotRevision:cursor,floor:cursor,records:z.number().int().min(1).max(200000)}).strict();
+export const librarySyncSnapshot=z.object({libraryId:z.string().uuid(),learnerId:z.string().uuid(),snapshotRevision:cursor,floor:cursor,records:z.number().int().min(1).max(librarySyncRecordLimit)}).strict();
 /** Bytes are a transport artifact of the exact cursor snapshot, never a head. */
 export const librarySyncBinaryArtifact=z.object({sourceRevision:z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),schemaVersion:z.number().int().positive(),sha256:librarySyncHash,byteLength:z.number().int().min(512).max(90*1024*1024),blocks:z.array(librarySyncHash).min(1).max(1024)}).strict();
-export const librarySyncBinarySnapshot=librarySyncBinaryArtifact.extend({accountId:z.string().uuid(),libraryId:z.string().uuid(),learnerId:z.string().uuid(),revision:cursor,records:z.number().int().min(1).max(200000)}).strict();
+export const librarySyncBinarySnapshot=librarySyncBinaryArtifact.extend({accountId:z.string().uuid(),libraryId:z.string().uuid(),learnerId:z.string().uuid(),revision:cursor,records:z.number().int().min(1).max(librarySyncRecordLimit)}).strict();
 export const librarySyncHead=z.object({revision:cursor,manifest:librarySyncSnapshot.nullable(),binarySnapshot:librarySyncBinarySnapshot.optional(),readLease:z.string().uuid().optional(),receipt:z.object({operationId:z.string().uuid(),requestDigest:librarySyncHash}).strict().optional(),storage:librarySyncStorage.optional()}).strict().refine(head=>(!head.manifest||head.manifest.floor<=head.manifest.snapshotRevision&&head.manifest.snapshotRevision<=head.revision)&&(!head.binarySnapshot||!!head.manifest&&head.binarySnapshot.revision===head.manifest.snapshotRevision&&head.binarySnapshot.libraryId===head.manifest.libraryId&&head.binarySnapshot.learnerId===head.manifest.learnerId),{message:'invalid snapshot cursor'});
 const operation={operationId:z.string().uuid(),baseRevision:cursor};
 /** Full manifest is only the first publication input. Subsequent publications
  * carry content-addressed changes, so retry bodies remain compact and exact. */
-export const librarySyncCommit=z.union([z.object({...operation,manifest:librarySyncRefs}).strict(),z.object({...operation,patch:librarySyncRefs}).strict(),z.object({...operation,staging:z.object({pages:z.number().int().min(1).max(200000),records:z.number().int().min(1).max(200000),digest:librarySyncHash,binary:librarySyncBinaryArtifact.optional()}).strict()}).strict()]);
+export const librarySyncCommit=z.union([z.object({...operation,manifest:librarySyncRefs}).strict(),z.object({...operation,patch:librarySyncRefs}).strict(),z.object({...operation,staging:z.object({pages:z.number().int().min(1).max(200000),records:z.number().int().min(1).max(librarySyncRecordLimit),digest:librarySyncHash,binary:librarySyncBinaryArtifact.optional()}).strict()}).strict()]);
 /** Private initial-upload workspace. Its source fence is never a writer trust stamp. */
 export const librarySyncStageBegin=z.object({...operation,libraryId:z.string().uuid(),learnerId:z.string().uuid(),incarnation:z.string().min(1).max(128),localRevision:z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)}).strict();
 export const librarySyncStagePage=z.object({operationId:z.string().uuid(),page:z.number().int().nonnegative().max(199999),rows:z.array(librarySyncRow).min(1).max(512)}).strict().superRefine(refineManifest);

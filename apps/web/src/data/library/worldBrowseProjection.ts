@@ -115,8 +115,8 @@ export class SqliteWorldBrowseProjection{
  rebuild(){
   this.languageMenu=null;
   for(const table of tables.filter(table=>!table.endsWith('_meta')))this.write(`DELETE FROM ${table}`);
-  const ids=this.rows("SELECT record_key FROM sensa_records WHERE table_name='semanticMeanings' ORDER BY record_key").map(row=>row.record_key);this.replace(ids);
-  this.replaceContexts(this.rows("SELECT record_key FROM sensa_records WHERE table_name='semanticContexts' AND record_key>='anchors:' AND record_key<'anchors;'").map(row=>row.record_key.slice('anchors:'.length)));
+  let after='';for(;;){const ids=this.rows("SELECT record_key FROM sensa_records WHERE table_name='semanticMeanings' AND record_key>? ORDER BY record_key LIMIT 64",[after]).map(row=>row.record_key);if(!ids.length)break;this.replace(ids);after=ids.at(-1)!;}
+  after='anchors';for(;;){const keys=this.rows("SELECT record_key FROM sensa_records WHERE table_name='semanticContexts' AND record_key>= 'anchors:' AND record_key>? AND record_key<'anchors;' ORDER BY record_key LIMIT 64",[after]).map(row=>row.record_key);if(!keys.length)break;this.replaceContexts(keys.map(key=>key.slice('anchors:'.length)));after=keys.at(-1)!;}
   this.write('INSERT INTO sensa_world_browse_meta VALUES(1,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version',[version]);
  }
  update(mutation:SqliteMutation){

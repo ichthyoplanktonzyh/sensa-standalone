@@ -41,6 +41,12 @@ export class SqliteJourneyIdentityProjection{
   this.sourceRows((table,row)=>this.replace(table,row.record_key,row.value_json));
   this.rows('INSERT INTO sensa_journey_identity_meta VALUES(1,?)',[version]);this.invalid=false;
  }
+ /** Caller holds the facts/projection transaction. */
+ rebuild(){
+  if(this.invalid)throw new Error('journey_identity_cache_invalid');
+  this.rows('DELETE FROM sensa_journey_identities');this.rows('DELETE FROM sensa_journey_identity_records');
+  this.sourceRows((table,row)=>this.replace(table,row.record_key,row.value_json));
+ }
  private sourceRows(consume:(table:JourneyIdentityTable,row:Record<string,any>)=>void){
   for(const table of journeyIdentityTables){
    let after='';

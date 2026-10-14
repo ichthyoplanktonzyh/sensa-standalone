@@ -34,7 +34,8 @@ test('fixed-table paging uses both index bounds and counters count only new uniq
    (SELECT sum(length(CAST(id||table_name||record_key||value_json||refs_json AS BLOB))) FROM sensa_initial_publication_rows)+
    (SELECT sum(length(CAST(id||hash||data AS BLOB))) FROM sensa_initial_publication_blocks)+
    coalesce((SELECT sum(length(CAST(id||digest||value_json||coalesce(refs_json,'') AS BLOB))) FROM sensa_initial_publication_content),0)+
-   coalesce((SELECT sum(length(CAST(id||table_name||record_key||digest AS BLOB))) FROM sensa_initial_publication_owners),0) AS bytes`)[0].bytes;
+   coalesce((SELECT sum(length(CAST(id||table_name||record_key||digest AS BLOB))) FROM sensa_initial_publication_owners),0)+
+   coalesce((SELECT sum(metadata_bytes) FROM sensa_sync_admission_rows_v1),0) AS bytes`)[0].bytes;
   expect(second.stats.storedPayloadBytes).toBe(retained);
   expect(second.stats.blocks).toBeLessThan(first.stats.blocks*2);expect(await f.publication.page(id,first.next)).toEqual(second);expect(f.publication.stats(id)).toEqual(second.stats);
  }finally{f.close();}
@@ -57,5 +58,18 @@ for(const tail of ['exact-64','skip-only','empty'] as const)test(`terminal ${tai
   const id=f.publication.begin(f.fence);let after:any=null,terminal:any;
   for(let i=0;i<10;i++){const page=await f.publication.page(id,after);if(page.done){terminal=page;break;}after=page.next;}
   expect(terminal?.done).toBe(true);expect(await f.publication.page(id,after)).toEqual(terminal);expect(f.publication.stats(id)).toEqual(terminal.stats);
+ }finally{f.close();}
+});
+
+for(const budget of ['records','logical_bytes','stored_bytes'] as const)test(`publication rejects cumulative ${budget} overage atomically and exact replay remains free`,async()=>{
+ const measured=fixture();let firstCost:number;
+ try{const id=measured.publication.begin(measured.fence),before=Number(measured.rows('SELECT * FROM sensa_initial_publication')[0][budget]);await measured.publication.page(id,null);firstCost=Number(measured.rows('SELECT * FROM sensa_initial_publication')[0][budget])-before;}finally{measured.close();}
+ const f=fixture();try{
+  const id=f.publication.begin(f.fence),limit=budget==='records'?600000:budget==='logical_bytes'?1024*1024*1024:256*1024*1024;
+  f.db.exec({sql:`UPDATE sensa_initial_publication SET ${budget}=? WHERE id=?`,bind:[limit-firstCost,id]});
+  const first=await f.publication.page(id,null),prior=f.publication.stats(id),scoped=f.rows('SELECT * FROM sensa_sync_admission_v1');
+  expect(await f.publication.page(id,null)).toEqual(first);
+  await expect(f.publication.page(id,first.next)).rejects.toThrow('library_sync_capacity');expect(f.publication.stats(id)).toEqual(prior);expect(f.rows('SELECT * FROM sensa_sync_admission_v1')).toEqual(scoped);
+  f.publication.discard(id);expect(f.rows('SELECT count(*) AS n FROM sensa_sync_admission_v1')[0].n).toBe(0);expect(f.rows('SELECT count(*) AS n FROM sensa_sync_admission_rows_v1')[0].n).toBe(0);
  }finally{f.close();}
 });

@@ -1,3 +1,4 @@
+import type {RecordValidationIndex} from '../../data/library/sqliteRecordValidation';
 import {hydrateMeaningContexts,assertContextRecords,assertContextRecord,assertMeaningContextBodies,assertContextLifecycleReceipt,contextBodyLookup,contextRevisionDescends,contextRecordId,contextKey,type ContextRecord} from './contextRecords';
 import {
   canonicalConsumerJson,
@@ -63,7 +64,7 @@ function parse(schema:Schema,value:unknown,label:string){
 function unique<T>(items:readonly T[],id:(item:T)=>string,label:string,slot?:(item:T)=>string){
  const ids=new Set<string>(),slots=new Set<string>();
  for(const item of items){
-  const identity=id(item);requireInvariant(identity.length>0&&!ids.has(identity),`${label} identity 重复。`);ids.add(identity);
+  const identity=id(item);requireInvariant(identity.length>0&&!ids?.has(identity),`${label} identity 重复。`);ids?.add(identity);
   if(slot){const position=slot(item);requireInvariant(!slots.has(position),`${label} revision 槽重复。`);slots.add(position);}
  }
 }
@@ -379,14 +380,14 @@ function requireStateShape(state:JourneyState){
  requireInvariant(Array.isArray(state.meanings)&&Array.isArray(state.inboxItems)&&Array.isArray(state.clarificationDrafts)&&Array.isArray(state.commandReceipts),'Personal Semantic World store 结构无效。');
 }
 
-function assertSceneOwner(meaning:MeaningJourneyRecord,owners:Map<string,string>){
+function assertSceneOwner(meaning:MeaningJourneyRecord,owners:Map<string,string>,index?:RecordValidationIndex){
  const meaningId=meaning.personalMeaning.personalMeaningId;
  for(const revision of meaningHistoryRecords(meaning).flatMap(branch=>branch.personalSemanticAnchorRevisions)){
   const scene=record(revision.structuredPayload.learningScene);if(!scene)continue;
   const sceneId=scene.sceneId;
   requireInvariant(typeof sceneId==='string'&&sceneId.length>0,'Personal Learning Scene identity 缺失。');
-  requireInvariant(!owners.has(sceneId)||owners.get(sceneId)===meaningId,'同一 Personal Learning Scene 不允许属于两条 Personal Meaning。');
-  owners.set(sceneId,meaningId);
+  requireInvariant(index?index.sceneOwner(sceneId,meaningId):!owners.has(sceneId)||owners.get(sceneId)===meaningId,'同一 Personal Learning Scene 不允许属于两条 Personal Meaning。');
+  if(!index)owners.set(sceneId,meaningId);
  }
 }
 
@@ -398,14 +399,15 @@ export type SemanticWorldRecordTable=typeof semanticWorldRecordTables[number];
  * locally, not make one asynchronous RPC per reference. Current cloud callers
  * adapt immutable in-memory wire references. */
 export interface SemanticWorldRecordReader{
+ storageKeysUnique?:true;validationIndex?:RecordValidationIndex;
  get(table:SemanticWorldRecordTable,key:string):unknown|undefined;
  entries(table:SemanticWorldRecordTable):Iterable<{key:string;value:unknown}>;
 }
 
 function* checkedWorldRecords(reader:SemanticWorldRecordReader,table:SemanticWorldRecordTable){
- const keys=new Set<string>();
+ const keys=reader.storageKeysUnique?undefined:new Set<string>();
  for(const row of reader.entries(table)){
-  requireInvariant(typeof row.key==='string'&&row.key.length>0&&!keys.has(row.key),`${table} storage key 重复或缺失。`);keys.add(row.key);
+  requireInvariant(typeof row.key==='string'&&row.key.length>0&&!keys?.has(row.key),`${table} storage key 重复或缺失。`);keys?.add(row.key);
   yield row;
  }
 }
@@ -433,18 +435,18 @@ export function* assertPersonalSemanticWorldRecordSteps(reader:SemanticWorldReco
   const row=record(reader.get('semanticRegistry',key)),fact=row?.kind===kind?record(row.value):undefined;
   references.set(key,fact);return fact;
  }}])) as RegistryIndex;
- const ids=new Set<string>(),slots=new Set<string>(),senseKeys=new Set<string>();
+ const ids=reader.storageKeysUnique?undefined:new Set<string>(),slots=reader.validationIndex?undefined:new Set<string>(),senseKeys=reader.validationIndex?undefined:new Set<string>();
  for(const {key,value} of checkedWorldRecords(reader,'semanticRegistry')){
   references.clear();
   const row=record(value),spec=registrySpecs.find(([kind])=>kind===row?.kind);
   requireInvariant(row&&Object.keys(row).every(key=>['kind','ordinal','value'].includes(key))&&spec,'Semantic Registry row kind 无效。');
   const [kind,schema,idField]=spec,fact=record(row.value);parse(schema,fact,`Semantic Registry ${kind}`);
   const id=fact![idField],identity=`${kind}:${id}`;
-  requireInvariant(key===identity&&!ids.has(identity),'Semantic Registry identity 与 storage key 不一致。');ids.add(identity);
+  requireInvariant(key===identity&&!ids?.has(identity),'Semantic Registry identity 与 storage key 不一致。');ids?.add(identity);
   requireInvariant(Number.isSafeInteger(row.ordinal)&&row.ordinal>=0,'Semantic Registry ordinal 无效。');
-  if(kind==='senses'){requireInvariant(!senseKeys.has(fact!.senseKey),'Sense key 重复。');senseKeys.add(fact!.senseKey);}
+  if(kind==='senses'){requireInvariant(reader.validationIndex?reader.validationIndex.unique('sense-key',fact!.senseKey):!senseKeys!.has(fact!.senseKey),'Sense key 重复。');senseKeys?.add(fact!.senseKey);}
   const parent=kind==='senseVersions'?'senseId':kind==='expressionVersions'?'expressionId':kind==='bindingVersions'?'senseExpressionBindingId':null;
-  if(parent){const slot=registryVersionSlot(kind,fact!)!;requireInvariant(!slots.has(slot),'Semantic Registry version 槽重复。');slots.add(slot);}
+  if(parent){const slot=registryVersionSlot(kind,fact!)!;requireInvariant(reader.validationIndex?reader.validationIndex.unique('registry-slot',slot):!slots!.has(slot),'Semantic Registry version 槽重复。');slots?.add(slot);}
   validateRegistryReference(kind,fact!,registry);
   yield;
  }
@@ -459,7 +461,7 @@ export function* assertPersonalSemanticWorldRecordSteps(reader:SemanticWorldReco
  for(const {key,value} of checkedWorldRecords(reader,'semanticMeanings')){
   references.clear();
   const meaning=hydrateMeaningContexts(value,key=>reader.get('semanticContexts',key));validateMeaning(meaning,registry);
-  requireInvariant(key===meaning.personalMeaning.personalMeaningId,'Personal Meaning identity 与 storage key 不一致。');assertSceneOwner(meaning,owners);
+  requireInvariant(key===meaning.personalMeaning.personalMeaningId,'Personal Meaning identity 与 storage key 不一致。');assertSceneOwner(meaning,owners,reader.validationIndex);
   for(const branch of meaningHistoryRecords(meaning))for(const stamp of branch.personalMeaningRevisions)assertMeaningLifecycleReceipt(key,stamp,{get:readReceipt});
   assertMeaningCorrectionReceiptFacts(meaning,readReceipt);
   assertArchivedSceneReceipts(meaning,readReceipt);

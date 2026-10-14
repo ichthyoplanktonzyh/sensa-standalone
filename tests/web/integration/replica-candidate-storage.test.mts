@@ -322,6 +322,8 @@ for(const reset of [undefined,'account-deletion','local-clear'] as const)test(`f
   expect(fixture.database.count('semanticMeanings')).toBe(0);expect(fixture.database.syncBaseEntries()).toEqual([]);
   fixture.database.commit({...mutation,deletes:reset==='local-clear'?[deletion]:[]});
   expect(fixture.database.count('semanticMeanings')).toBe(1);expect(fixture.database.syncBaseEntries().length).toBeGreaterThan(0);
+  for(const table of ['sensa_meaning_lookup_documents','sensa_world_browse','sensa_practice_expressions','sensa_journey_identities'])expect(Number(fixture.raw.selectValue(`SELECT count(*) FROM ${table}`))).toBeGreaterThan(0);
+  expect(fixture.raw.selectValue('SELECT count(*) FROM sensa_sync_admission_v1')).toBe(0);
   expect(fixture.database.get('meta','local-reset')).toBe(reset==='account-deletion'?JSON.stringify(encodeBackupValue(reset)):null);
   expect(fixture.database.get('meta','sentinel')).toBe(JSON.stringify(encodeBackupValue('Existing owner data')));
  }finally{fixture.database.close(false);}

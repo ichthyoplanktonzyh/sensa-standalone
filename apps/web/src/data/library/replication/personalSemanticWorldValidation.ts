@@ -1,3 +1,5 @@
+import {RecordValidationStorageError} from '../sqliteRecordValidation';
+import type {RecordValidationIndex} from '../sqliteRecordValidation';
 import {hydrateMeaningContexts,contextMediaReferences} from '../../../experience/personalMeaningJourney/contextRecords';
 import {semanticProposalSchema} from '@sensa/contracts/sensa';
 import {z} from 'zod';
@@ -53,13 +55,14 @@ export function personalSourceResolver(maps:LibraryRecordLookups,fail:()=>never)
 
 /** Validate Personal Semantic World objects and return its cross-domain source resolver. */
 export function* validatePersonalSemanticWorldReplicaSteps(input:{
+ storageKeysUnique?:true;validationIndex?:RecordValidationIndex;
  rows:LibraryRecordRows;
  maps:LibraryRecordLookups;
  requireRow:RequireRow;
  fail:()=>never;
 }){
  const {rows,maps,requireRow,fail}=input,uuid=z.string().uuid(),timestamp=z.string().datetime({offset:true});
- try{yield*assertPersonalSemanticWorldRecordSteps({get:(table,key)=>maps[table].get(key),entries:table=>rows[table]});}catch{fail();}
+ try{yield*assertPersonalSemanticWorldRecordSteps({storageKeysUnique:input.storageKeysUnique,validationIndex:input.validationIndex,get:(table,key)=>maps[table].get(key),entries:table=>rows[table]});}catch(cause){if(cause instanceof RecordValidationStorageError)throw cause;fail();}
  for(const {key,value} of rows.media){const media=parseStoredMedia(value);if(media.mediaId!==key)fail();uuid.parse(key);yield;}
  for(const {value:context} of rows.semanticContexts){for(const mediaId of contextMediaReferences(context))if(!maps.media.has(mediaId))fail();yield;}
  for(const {value:item} of rows.semanticInbox){for(const mediaId of item.payload.context?.mediaReferenceIds??[])if(!maps.media.has(mediaId))fail();yield;}

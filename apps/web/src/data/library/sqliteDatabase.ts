@@ -349,6 +349,7 @@ export class SqliteRecordDatabase {
     try{
       ({lookupReady,worldReady}=this.initializeProjectionCaches());
       this.syncDependencies.ensure();
+      if(this.scalarNumber("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='sensa_record_validation_keys'"))this.database.exec('DELETE FROM sensa_record_validation_keys;DELETE FROM sensa_record_validation_scenes');
       this.database.exec('COMMIT');
     }catch(error){try{this.database.exec('ROLLBACK');}catch{/* Preserve initialization failure. */}throw error;}
     const schemaReady=performance.now();
@@ -827,6 +828,7 @@ export class SqliteRecordDatabase {
     // Privacy reset also clears abandoned copies from an earlier Worker, even
     // if this connection has never loaded the candidate implementation.
     if(this.scalarNumber("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='sensa_replica_candidates_v1'"))this.database.exec('DELETE FROM sensa_replica_candidates_v1');
+    if(this.scalarNumber("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='sensa_sync_admission_v1'"))this.database.exec("DELETE FROM sensa_sync_admission_v1 WHERE scope LIKE 'candidate:%'");
   }
 
   private assertReplicaCandidateFence(fence:ReplicaCandidateFence):void{
@@ -913,7 +915,7 @@ export class SqliteRecordDatabase {
         this.database.exec("DELETE FROM sensa_shared_record_content_owners WHERE owner_kind='sync'");
         this.database.exec('DELETE FROM sensa_sync_base');
         if(staged){staged.copyOrdinary();encodedWriteSize+=staged.logicalBytes;}
-        for (const entry of mutation.syncBaseReplacement) {
+        for (const entry of staged?.syncBaseRows??mutation.syncBaseReplacement) {
           if(staged?.copiedTables.has(entry.table))continue;
           const blockRefsJson=JSON.stringify(entry.blockRefs),valueJson=entry.valueJson;
           encodedWriteSize+=valueJson.length+blockRefsJson.length;
@@ -929,7 +931,7 @@ export class SqliteRecordDatabase {
         for(const row of this.database.exec({sql:"SELECT DISTINCT digest FROM sensa_shared_record_content_owners WHERE owner_kind='sync'",rowMode:0,returnValue:'resultRows'}) as string[])removedContent.add(row);
         this.database.exec("DELETE FROM sensa_shared_record_content_owners WHERE owner_kind='sync'");this.database.exec('DELETE FROM sensa_sync_base');
         this.initialPublication.confirm(mutation.initialPublication,mutation);
-        this.initialPublication.discard(mutation.initialPublication);
+        this.initialPublication.discard(mutation.initialPublication,true);
       }
       if(staged)staged.copySharedBaseline(removedContent);
       if(mutation.syncBasePatch){
@@ -1047,11 +1049,12 @@ export class SqliteRecordDatabase {
           });
         }
       }
-      for (const item of mutation.puts) {
+      const sourcePuts=function*(){if(staged)yield*staged.sourceRows;yield*mutation.puts;};
+      for (const item of sourcePuts()) {
         const copied=staged!==undefined&&(staged.copiedTables.has(item.table)||staged.sharedCopiedTables.has(item.table));
         // Copied validated rows already live in this transaction. Read their
         // body only for a derived projection that actually consumes it.
-        const needsBody=!copied||['packageCache','curriculumEnrollments','supplementalMembershipStates','studyScopes','learningTargets','contentAttempts','semanticMeanings','semanticContexts','semanticInbox'].includes(item.table);
+        const needsBody=!copied||['packageCache','curriculumEnrollments','supplementalMembershipStates','studyScopes','learningTargets','contentAttempts','semanticContexts','semanticInbox'].includes(item.table);
         const encodedValue=needsBody?item.encodedValue:undefined;
         if(!copied){
         encodedWriteSize+=encodedValue!.length;
@@ -1093,7 +1096,7 @@ export class SqliteRecordDatabase {
       // Replica mutations are ordered by record identity, not dependency:
       // fresh-device Runs can precede their Targets. Index completed history
       // only after every source row has been staged in this same transaction.
-      for(const item of mutation.puts)if(item.table==='learningRuns'){
+      for(const item of sourcePuts())if(item.table==='learningRuns'){
         replicaWork('activation.runDecode');const run=preparedUpdate?this.decoded<LocalLearningRun>('learningRuns',item.key)!:this.decode<LocalLearningRun>(item.encodedValue);
         this.writeLearningRunProjection(item.key,run);this.learningHistory.upsert(item.key,run);
       }
@@ -1106,10 +1109,11 @@ export class SqliteRecordDatabase {
                               SELECT 1 FROM sensa_portable_package_media AS reference
                               WHERE reference.sha256=sensa_portable_media.sha256
                             )`);
-      this.meaningLookup.update(mutation);
-      this.worldBrowseProjection.update(mutation);
-      this.practiceExpressionProjection.update(mutation);
-      this.journeyIdentities.update(mutation);
+      const projectionMutation=staged?{...mutation,clears:[...new Set([...mutation.clears,...staged.copiedTables,...staged.sharedCopiedTables])]}:mutation;
+      this.meaningLookup.update(projectionMutation);
+      this.worldBrowseProjection.update(projectionMutation);
+      if(staged){this.practiceExpressionProjection.rebuild();this.journeyIdentities.rebuild();}
+      else{this.practiceExpressionProjection.update(mutation);this.journeyIdentities.update(mutation);}
       // Only dependencies detached by this mutation can become orphaned. An
       // ordinary rating must not sweep all immutable bodies in the library.
       for(const digest of removedContent)this.database.exec({sql:'DELETE FROM sensa_shared_record_content WHERE digest=? AND NOT EXISTS(SELECT 1 FROM sensa_shared_record_content_owners WHERE digest=?)',bind:[digest,digest]});
@@ -1130,6 +1134,7 @@ export class SqliteRecordDatabase {
         else if(mutation.replicaCandidateRestore)this.replicaCandidateStore?.certifyCheckpoint(mutation.replicaCandidateRestore.id,syncState,syncIdentity,artifactRevision);
         else if(patchAdmission&&previousCertificate)this.syncDependencies.certify(patchAdmission,syncState,syncIdentity,artifactRevision,previousCertificate);
       }
+      if(mutation.initialPublication)this.syncDependencies.discardAdmission('publication:'+mutation.initialPublication);
       if(discardCandidates){this.purgeReplicaCandidates();
         // An uncertain committed upload is a bounded, owner-fenced recovery
         // witness. Signout/account changes cannot expose it or erase its ACK

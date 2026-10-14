@@ -1,3 +1,4 @@
+import {semanticLookupPayload} from '../support/semanticLookupFixtures';
 import {test,expect} from '@playwright/test';
 import {createHash} from 'node:crypto';
 import {resolve} from 'node:path';
@@ -166,5 +167,65 @@ test('edits after validation stay pending and a lost local pending ACK retains i
   await a.evaluate(()=>(window as any).sync());expect((await a.evaluate(()=>(window as any).core.readCloudSync())).status).toBe('pending');
   await b.evaluate(()=>(window as any).sync());expect((await b.evaluate(()=>(window as any).core.listDrafts())).length).toBe(1);
   await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());expect((await b.evaluate(()=>(window as any).core.listDrafts())).length).toBe(2);
+ }finally{await f.close();}
+});
+
+
+test('finite stage budgets measure decoded blocks, count all workspaces, and reject overage before atomic page writes',async({browser})=>{
+ const f=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await f.createAccount(),call=async(path:string,body:unknown)=>{const response=await fetch(f.origin+'/sensa/library-sync'+path,{method:'POST',headers:{authorization:'Bearer '+account.token,'content-type':'application/json'},body:JSON.stringify(body)});return {status:response.status,value:await response.json()};};
+  const data=encodeLibrarySyncBlock('x'.repeat(262144)),block={hash:hash(data),data};expect((await call('/blocks/store',{blocks:[block]})).status).toBe(200);
+  expect(Number((await f.pool.query('SELECT logical_bytes FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=$2',[account.accountId,block.hash])).rows[0].logical_bytes)).toBe(262144);
+  const begin=(operationId=crypto.randomUUID())=>({operationId,baseRevision:0,libraryId:crypto.randomUUID(),learnerId:crypto.randomUUID(),incarnation:crypto.randomUUID(),localRevision:1}),first=begin();expect((await call('/staging/begin',first)).status).toBe(200);
+  const row={table:'drafts',key:'compressed',blocks:Array.from({length:361},()=>block.hash)};
+  expect((await call('/staging/page',{operationId:first.operationId,page:0,rows:[row]})).value.code).toBe('library_sync_capacity');
+  expect((await f.pool.query('SELECT pages,records,logical_bytes FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND operation_id=$2',[account.accountId,first.operationId])).rows[0]).toMatchObject({pages:0,records:0,logical_bytes:'0'});
+  // Seed only budget counters to reach an exact edge without a large fixture.
+  await f.pool.query('UPDATE sensa_consumer.library_cloud_staging SET records=599999,logical_bytes=$3 WHERE account_id=$1 AND operation_id=$2',[account.accountId,first.operationId,1024*1024*1024-262144]);
+  const page={operationId:first.operationId,page:0,rows:[{...row,blocks:[block.hash]}]},accepted=await call('/staging/page',page);expect(accepted.status).toBe(200);expect(await call('/staging/page',page)).toEqual(accepted);
+  const prior=(await f.pool.query('SELECT pages,records,logical_bytes,metadata_bytes,digest FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND operation_id=$2',[account.accountId,first.operationId])).rows[0];
+  expect((await call('/staging/page',{operationId:first.operationId,page:1,rows:[{...page.rows[0],key:'over'}]})).value.code).toBe('library_sync_capacity');
+  expect((await f.pool.query('SELECT pages,records,logical_bytes,metadata_bytes,digest FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND operation_id=$2',[account.accountId,first.operationId])).rows[0]).toEqual(prior);
+  const second=begin();expect((await call('/staging/begin',second)).status).toBe(200);
+  await f.pool.query('UPDATE sensa_consumer.library_cloud_staging SET metadata_bytes=$3 WHERE account_id=$1 AND operation_id=$2',[account.accountId,first.operationId,128*1024*1024-1]);
+  expect((await call('/staging/page',{operationId:second.operationId,page:0,rows:[page.rows[0]]})).value.code).toBe('library_sync_capacity');
+  expect(Number((await f.pool.query('SELECT count(*) AS n FROM sensa_consumer.library_cloud_staging_rows WHERE account_id=$1 AND operation_id=$2',[account.accountId,second.operationId])).rows[0].n)).toBe(0);
+  expect((await f.pool.query('SELECT revision FROM sensa_consumer.library_cloud WHERE account_id=$1',[account.accountId])).rows[0].revision).toBe(0);expect((await f.pool.query('SELECT 1 FROM sensa_consumer.library_cloud_commits WHERE account_id=$1',[account.accountId])).rowCount).toBe(0);
+ }finally{await f.close();}
+});
+
+
+test('retained pre-counter staging resumes with measured old rows instead of trusting zero bytes',async({browser})=>{
+ const f=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await f.createAccount(),call=async(path:string,body:unknown)=>{const response=await fetch(f.origin+'/sensa/library-sync'+path,{method:'POST',headers:{authorization:'Bearer '+account.token,'content-type':'application/json'},body:JSON.stringify(body)});return {status:response.status,value:await response.json()};};
+  const data=encodeLibrarySyncBlock('["string","retained compressed input"]'),block={hash:hash(data),data};await call('/blocks/store',{blocks:[block]});
+  const begin={operationId:crypto.randomUUID(),baseRevision:0,libraryId:crypto.randomUUID(),learnerId:crypto.randomUUID(),incarnation:crypto.randomUUID(),localRevision:1};await call('/staging/begin',begin);
+  const page={operationId:begin.operationId,page:0,rows:[{table:'meta',key:'identity',blocks:[block.hash]}]},first=await call('/staging/page',page);expect(first.status).toBe(200);
+  await f.pool.query('UPDATE sensa_consumer.library_cloud_blocks SET logical_bytes=NULL WHERE account_id=$1',[account.accountId]);await f.pool.query('UPDATE sensa_consumer.library_cloud_staging_rows SET logical_bytes=NULL WHERE account_id=$1',[account.accountId]);await f.pool.query('UPDATE sensa_consumer.library_cloud_staging SET logical_bytes=NULL WHERE account_id=$1',[account.accountId]);
+  expect(await call('/staging/begin',begin)).toEqual({status:200,value:{staged:true}});expect(await call('/staging/page',page)).toEqual(first);
+  const committed=await call('/commit',{operationId:begin.operationId,baseRevision:0,staging:{pages:1,records:1,digest:first.value.digest}});expect(committed.status).toBe(200);
+  expect(Number((await f.pool.query('SELECT logical_bytes FROM sensa_consumer.library_cloud WHERE account_id=$1',[account.accountId])).rows[0].logical_bytes)).toBe(Buffer.byteLength('["string","retained compressed input"]'));
+  expect(Number((await f.pool.query('SELECT logical_bytes FROM sensa_consumer.library_cloud_rows WHERE account_id=$1',[account.accountId])).rows[0].logical_bytes)).toBe(Buffer.byteLength('["string","retained compressed input"]'));
+ }finally{await f.close();}
+});
+
+
+test('refs-only product restoration seals nonempty facts and projections, cleans late cancellation and preserves the old generation',async({browser})=>{
+ const f=await createLibraryCloudBrowserFixture(browser,resolve('scripts/assessment/capacityBrowserEntry.ts'));
+ try{
+  const account=await f.createAccount(),source=await f.createClient(account);await source.evaluate(async payload=>{const w=window as any;await w.core.createJourneyModules().semanticIntake.submit(payload);await w.sync();},semanticLookupPayload());
+  const inspect=(page:import('@playwright/test').Page)=>page.evaluate(async()=>{const c=(window as any).core;return c.readLibrary(async(tx:any)=>Object.fromEntries(await Promise.all(['semanticState','semanticMeanings','semanticContexts','semanticRegistry','semanticReceipts'].map(async table=>[table,(await tx.entries(table)).map((row:any)=>({key:row.key,value:c.encodeBackupValue(row.value)})).sort((a:any,b:any)=>a.key.localeCompare(b.key))]))));});
+  const expected=await inspect(source);expect(expected.semanticMeanings.length).toBeGreaterThan(0);
+  const receiver=await f.createClient(account),identity=await receiver.evaluate(()=>(window as any).core.readLibrary((tx:any)=>tx.get('meta','identity')));
+  await receiver.evaluate(()=>{const w=window as any,send=w.request;w.request=async(path:string,body:any)=>{const head=await send(path,body);if(path==='/head')delete head.binarySnapshot;return head;};});
+  await expect(receiver.evaluate(async()=>{const w=window as any,controller=new AbortController(),NativeWorker=window.Worker;window.Worker=class extends NativeWorker{postMessage(message:any,options?:any){if(message.kind==='initialize'){const stop=(event:MessageEvent)=>{if(event.data?.id===message.id){this.removeEventListener('message',stop);controller.abort();}};this.addEventListener('message',stop);}super.postMessage(message,options);}};try{await w.core.synchronizeLibrary(w.request,{signal:controller.signal});}finally{window.Worker=NativeWorker;}})).rejects.toThrow('library_sync_cancelled');
+  await expect.poll(async()=>receiver.evaluate(()=>Object.keys(localStorage).filter(key=>key.startsWith('sensa:isolated-snapshot-generation:v1:')).length)).toBe(0);
+  expect(await receiver.evaluate(()=>localStorage.getItem('sensa:local-library-selection:v1'))).toBeNull();expect(await receiver.evaluate(()=>(window as any).core.readLibrary((tx:any)=>tx.get('meta','identity')))).toEqual(identity);
+  const restored=await receiver.evaluate(()=>(window as any).sync());expect(restored.activated.namespace).toBeTruthy();expect(await inspect(receiver)).toEqual(expected);
+  const projections=await receiver.evaluate(async()=>{const c=(window as any).core,adapter=await c.sqliteRecordAdapter();return {lookup:await adapter.lookupMeanings('borrow'),practice:await adapter.practiceExpressions({source:'personal',languageTag:'en',query:'',offset:0,limit:20}),state:await c.readCloudSync(),selection:JSON.parse(localStorage.getItem('sensa:local-library-selection:v1')!)};});
+  expect(projections.lookup.meanings.length).toBeGreaterThan(0);expect(projections.practice.total).toBeGreaterThan(0);expect(projections.state.status).toBe('synced');expect(projections.selection.preservedNamespaces).toContain(null);
+  await receiver.reload();await receiver.evaluate(async account=>{const w=window as any,path='/core.js';w.core=await import(path);await w.core.openLibrary();w.token=account.token;},account);expect(await inspect(receiver)).toEqual(expected);
  }finally{await f.close();}
 });

@@ -50,7 +50,7 @@ export function validateLearningSyncRecordsCooperatively(reader:LibraryRecordRea
 export function* validateLibraryRecordSteps(reader:LibraryRecordReader,learningValidation:'audit'|'restore'|'sync'='audit',validateMaterial?:import('./learningAuthority').LearningSystemStateInput['validateMaterial'],syncScope?:LearningSystemStateInput['syncScope']){
  let readFailed=false,readFailure:unknown;
  const read=<T>(work:()=>T):T=>{try{return work();}catch(cause){if(!readFailed){readFailed=true;readFailure=cause;}throw cause;}};
- const observed:LibraryRecordReader={
+ const observed:LibraryRecordReader={storageKeysUnique:reader.storageKeysUnique,validationIndex:reader.validationIndex,
   get:(table,key)=>read(()=>reader.get(table,key)),has:(table,key)=>read(()=>reader.has(table,key)),
   *entries(table){
    const iterator=read(()=>reader.entries(table)[Symbol.iterator]());
@@ -74,8 +74,8 @@ function* validateLibraryRecordFacts(reader:LibraryRecordReader,learningValidati
  // A lazy reader must decode every stored wire value, including opaque
  // preferences that a domain validator may not otherwise need to inspect.
  for(const table of sqliteLibraryTables){
-  const keys=new Set<string>();
-  for(const {key} of rows[table]){if(typeof key!=='string'||key.length===0||key.length>2000||keys.has(key))fail();keys.add(key);yield;}
+  const keys=reader.storageKeysUnique?undefined:new Set<string>();
+  for(const {key} of rows[table]){if(typeof key!=='string'||key.length===0||key.length>2000||keys?.has(key))fail();keys?.add(key);yield;}
  }
  const requireRow=(table:Table,id:string)=>{const raw=maps[table].get(id)??fail();return table==='semanticMeanings'?hydrateMeaningContexts(raw,key=>maps.semanticContexts.get(key)):raw;};
  const routeCollection=sensaLanguageRouteCollectionSchema.parse(maps.settings.get('language-learning-routes')??defaultSensaLanguageRouteCollection);
@@ -83,7 +83,7 @@ function* validateLibraryRecordFacts(reader:LibraryRecordReader,learningValidati
  const validateLanguageContext=(value:unknown)=>{const context=sensaFormalPinnedLanguageContextSchema.parse(value);const route=routes.get(context.languageRouteId);if(!route||route.targetLanguageTag!==context.targetLanguageTag||context.languageRouteRevision>route.revision)fail();return context;};
  const glossary=maps.settings.get('reading-glossary');if(glossary!==undefined)sensaReadingGlossarySchema.parse(glossary);
  const identity=identitySchema.parse(requireRow('meta','identity'));
- const requirePersonalSource=syncScope?personalSourceResolver(maps,fail):(yield*validatePersonalSemanticWorldReplicaSteps({rows,maps,requireRow,fail})).requirePersonalSource;
+ const requirePersonalSource=syncScope?personalSourceResolver(maps,fail):(yield*validatePersonalSemanticWorldReplicaSteps({rows,maps,requireRow,fail,storageKeysUnique:reader.storageKeysUnique,validationIndex:reader.validationIndex})).requirePersonalSource;
 
  for(const table of ['drafts','sessions','meanings','curriculumEnrollments','studyScopes','learningSessions','learningTargets','learningRuns','learningEvents','learningReconciliations','personalLearning','contentAttempts','providers'] as Table[]){
   for(const {key,value} of rows[table]){if(!value||key!==value.id)fail();uuid.parse(key);yield;}
