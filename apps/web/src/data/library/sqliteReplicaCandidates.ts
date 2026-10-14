@@ -17,6 +17,7 @@ import {admitLearningDelta,DeltaReceiveFallback,type DeltaReceiveEvidence} from 
 import {isFatalSqliteConnectionFailure,sqliteRollbackFailure} from './sqliteConnectionFailure';
 import {replicaCandidateSchema,replicaCandidateAppendRecordLimit,replicaCandidateAppendReferenceLimit,type ReplicaCandidateFence,type ReplicaCandidateExpected,type ReplicaCandidateRecord,type ReplicaCandidateValidation,type ReplicaCandidateBlock,type ReplicaCandidateUpdate} from './replicaCandidateProtocol';
 import {replicaCandidateProofBatchBytes,verifyReplicaCandidateBlock,verifyReplicaCandidateManifest} from './replicaCandidateProof';
+import {replicaWork} from './replicaWork';
 
 const uuid=z.string().uuid(),integer=z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const identitySchema=z.object({id:uuid,learnerId:uuid,deviceId:uuid,createdAt:z.string().datetime({offset:true}),schemaVersion:z.literal(2)}).strict();
@@ -41,6 +42,7 @@ export class SqliteReplicaCandidates{
  private readonly seeds=new Map<string,{baseRevision:number;after:RecordKey|null}>();
  private readonly baselines=new Map<string,{generation:number;epoch:number;artifactRevision:number}>();
  private readonly sealedEpochs=new Map<string,number>();
+ private readSlice:{id:string;baseRevision:number;changes:number}|undefined;
  private updatePlan:UpdatePlan|undefined;
  private readonly dependencies:SqliteSyncDependencies;
  private readonly admissions=new Map<string,SyncAdmission>();
@@ -74,6 +76,29 @@ export class SqliteReplicaCandidates{
  private artifactRevision():number{const row=this.rows<{value_json:string}>("SELECT value_json FROM sensa_records WHERE table_name='meta' AND record_key='local-artifact-revision'")[0];return row?integer.parse(decodeBackupValue(JSON.parse(unpackStoredRecord(row.value_json)))):0;}
  private candidateEpoch(id:string):number{return this.rows<{epoch:number}>('SELECT epoch FROM sensa_replica_candidate_epochs_v1 WHERE candidate_id=?',[id])[0]?.epoch??this.fail();}
  private check(header:Header){this.assertFence(fenceSchema.parse(JSON.parse(header.fence_json)));const sealed=this.sealedEpochs.get(header.id);if(sealed!==undefined&&sealed!==this.candidateEpoch(header.id))this.fail();const sparse=this.sparse.get(header.id);if(sparse)this.dependencies.assert(sparse.certificate);const baseline=this.baselines.get(header.id);if(baseline){const clock=this.dependencies.clock();if(clock.generation!==baseline.generation||clock.epoch!==baseline.epoch||this.artifactRevision()!==baseline.artifactRevision)throw Error('library_sync_local_changed');}}
+
+ /** A single Worker connection cannot run another message during synchronous
+  * work. Any await expires this proof; same-connection DML also invalidates it,
+  * including rolled-back writes and direct test injections. Final activation
+  * uses assertUpdateBase itself, never this optimization. */
+ private protectedRead(id:string,baseRevision:number,signal:AbortSignal):void{
+  this.assertHealthy();signal.throwIfAborted();replicaWork('fence.access');
+  const changes=this.database.changes(true),prior=this.readSlice;
+  if(prior?.id===id&&prior.baseRevision===baseRevision&&prior.changes===changes){replicaWork('fence.hit');return;}
+  replicaWork('fence.check');this.assertUpdateBase(this.header(id),baseRevision);
+  const slice=this.readSlice={id,baseRevision,changes:this.database.changes(true)};
+  queueMicrotask(()=>{if(this.readSlice===slice)this.readSlice=undefined;});
+ }
+ private insertEncoding(id:string,sql:string,bind:(string|number|null)[]):void{
+  const before=this.database.changes(true),slice=this.readSlice;
+  this.database.exec({sql,bind});
+  // Exactly one encoded row plus its epoch trigger. An extra write must not
+  // be claimed as our own, even when injected inside this SQL call.
+  if(this.database.changes(true)!==before+2)this.fail();
+  this.sealedEpochs.set(id,this.sealedEpochs.get(id)!+1);
+  if(slice?.id===id&&slice.changes===before)slice.changes=before+2;
+  else this.readSlice=undefined;
+ }
 
  begin(fence:ReplicaCandidateFence,expected:ReplicaCandidateExpected):string{
   fence=fenceSchema.parse(fence);this.assertFence(fence);
@@ -286,10 +311,10 @@ export class SqliteReplicaCandidates{
    this.database.exec({sql:'UPDATE sensa_replica_candidates_v1 SET stored_bytes=stored_bytes+? WHERE id=?',bind:[storedBytes,id]});this.database.exec('COMMIT');
   }catch(cause){try{this.database.exec('ROLLBACK');}catch(rollbackCause){throw sqliteRollbackFailure(cause,rollbackCause);}throw cause;}
  }
- private reader(id:string,signal:AbortSignal,admission?:SyncAdmission):LibraryRecordReader{
+ private reader(id:string,signal:AbortSignal,admission?:SyncAdmission,cloneDecoded=false):LibraryRecordReader{
   const alive=()=>{this.assertHealthy();if(signal.aborted)throw signal.reason;};
   return sealedRecordReader({
-   alive,beforePage:()=>this.check(this.header(id)),
+   alive,cloneDecoded,beforePage:()=>this.check(this.header(id)),
    get:(table,key)=>this.rows<StoredRow>('SELECT record_key,value_json,representation FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,table,key])[0],
    has:(table,key)=>this.rows('SELECT 1 FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name=? AND record_key=?',[id,table,key]).length>0,
    keys:(table,after)=>this.rows<SealedRecordKey>(`SELECT record_key,stored_value_bytes
@@ -309,19 +334,22 @@ export class SqliteReplicaCandidates{
  }
  private sparseReaders(id:string,signal:AbortSignal){
   const sparse=this.sparse.get(id)!;
-  const alive=()=>{this.assertHealthy();if(signal.aborted)throw signal.reason;this.assertUpdateBase(this.header(id),sparse.baseRevision);};
+  const alive=()=>this.protectedRead(id,sparse.baseRevision,signal);
   let readBytes=0;
-  const source=sealedRecordReader({alive,beforePage:alive,
+  const source=sealedRecordReader({alive,beforePage:alive,cloneDecoded:true,
    get:(table,key)=>this.rows<{record_key:string;value_json:string}>('SELECT record_key,value_json FROM sensa_sync_base WHERE table_name=? AND record_key=?',[table,key])[0],
    has:(table,key)=>this.rows('SELECT 1 FROM sensa_sync_base WHERE table_name=? AND record_key=?',[table,key]).length>0,
    keys:()=>{throw Error('library_sync_delta_enumeration');},rows:()=>{throw Error('library_sync_delta_enumeration');},
    plain:(table,row)=>{const text=sparse.readBase(table,row.record_key);this.dependencies.verify(table,row.record_key,text);const key=dependencyRowId(table,row.record_key);if(!sparse.baseReads.has(key)){readBytes+=utf8(text);sparse.baseReads.add(key);if(readBytes>32*1024*1024)throw new DeltaReceiveFallback('history_body_capacity');}return text;},missing:()=>this.fail(),
   });
   const base:LibraryRecordReader={...source,entries:()=>{throw Error('library_sync_delta_enumeration');}};
-  const overlay=this.reader(id,signal);
+  const overlay=this.reader(id,signal,undefined,true);
+  // The sealed manifest is already the sparse change inventory. Existence
+  // cannot change without invalidating the candidate epoch at the next read.
+  const overlayKeys=new Set(this.rows<{table_name:string;record_key:string}>('SELECT table_name,record_key FROM sensa_replica_candidate_records_v1 WHERE candidate_id=?',[id]).map(row=>dependencyRowId(row.table_name,row.record_key)));
   const remote:LibraryRecordReader={
-   get:(table,key)=>{alive();if(sparse.deleted.has(dependencyRowId(table,key)))return undefined;if(overlay.has(table,key)){sparse.candidateReads.add(dependencyRowId(table,key));return overlay.get(table,key);}return base.get(table,key);},
-   has:(table,key)=>{alive();return !sparse.deleted.has(dependencyRowId(table,key))&&(overlay.has(table,key)||base.has(table,key));},
+   get:(table,key)=>{alive();const identity=dependencyRowId(table,key);if(sparse.deleted.has(identity))return undefined;if(overlayKeys.has(identity)){sparse.candidateReads.add(identity);return overlay.get(table,key);}return base.get(table,key);},
+   has:(table,key)=>{alive();const identity=dependencyRowId(table,key);return !sparse.deleted.has(identity)&&(overlayKeys.has(identity)||base.has(table,key));},
    entries:()=>{throw Error('library_sync_delta_enumeration');},
   };
   return {base,remote,alive};
@@ -351,7 +379,7 @@ export class SqliteReplicaCandidates{
     if(sparse&&!sparse.dense){
      const changes=[...this.rows<RecordKey>('SELECT table_name AS "table",record_key AS "key" FROM sensa_replica_candidate_manifest_v1 WHERE candidate_id=? ORDER BY table_name,record_key',[id]),...[...sparse.deleted].map(identity=>{const [table,key]=JSON.parse(identity);return {table,key,deleted:true};})] as Array<RecordKey&{deleted?:boolean}>;
      let records=sparse.certificate.records,logicalBytes=sparse.certificate.logicalBytes,storedBytes=sparse.certificate.storedBytes+this.rows<{n:number}>(`SELECT COALESCE(sum(${dependencyRowStoredBudget}),0) AS n FROM sensa_replica_candidate_records_v1 WHERE candidate_id=?`,[id])[0].n;
-     await runCooperatively((function*(this:SqliteReplicaCandidates){for(const row of changes){this.check(this.header(id));if(controller.signal.aborted)throw controller.signal.reason;yield;const exists=this.rows('SELECT 1 FROM sensa_sync_base WHERE table_name=? AND record_key=?',[row.table,row.key]).length>0;if(row.deleted){if(exists)records--;}else if(!exists)records++;const old=this.dependencies.rowBudget(row.table,row.key);logicalBytes-=old.logical_bytes;storedBytes-=old.stored_bytes;}}).call(this));
+     await runCooperatively((function*(this:SqliteReplicaCandidates){for(const row of changes){this.protectedRead(id,sparse.baseRevision,controller.signal);yield;const exists=this.rows('SELECT 1 FROM sensa_sync_base WHERE table_name=? AND record_key=?',[row.table,row.key]).length>0;if(row.deleted){if(exists)records--;}else if(!exists)records++;const old=this.dependencies.rowBudget(row.table,row.key);logicalBytes-=old.logical_bytes;storedBytes-=old.stored_bytes;}}).call(this));
      logicalBytes+=header.logical_bytes;if(records!==expected.records)this.fail();if(logicalBytes>maximumLogicalBytes)throw Error('library_sync_capacity');
      try{
       if(storedBytes>maximumStoredBytes)throw new DeltaReceiveFallback('stored_capacity_uncertain');
@@ -450,7 +478,7 @@ export class SqliteReplicaCandidates{
   const running=this.updates.get(id);if(running)return running.result;
   if(this.updatePlan?.receipt.id===id&&this.updatePlan.receipt.baseRevision===baseRevision)return Promise.resolve(this.updatePlan.receipt);
   const controller=new AbortController();
-  const alive=()=>{this.assertHealthy();if(controller.signal.aborted)throw controller.signal.reason;this.assertUpdateBase(header,baseRevision);};
+  const alive=()=>this.protectedRead(id,baseRevision,controller.signal);
   const result=(async()=>{
    try{
     await Promise.resolve();alive();
@@ -517,25 +545,40 @@ export class SqliteReplicaCandidates{
    COALESCE((SELECT sum(length(CAST(stored_json AS BLOB))+COALESCE(length(CAST(existing_json AS BLOB)),0)) FROM sensa_replica_candidate_encoded_bodies_v1 WHERE candidate_id=?),0) AS n`,[id,id])[0].n;
   const charge=(...texts:string[])=>{storedBytes+=texts.reduce((sum,text)=>sum+utf8(text),0);if(storedBytes>maximumStoredBytes)throw Error('library_sync_capacity');};charge();
   try{await runCooperatively((function*(this:SqliteReplicaCandidates){
-   for(const [kind,rows]of [['record',plan.puts],['sync',plan.basePuts]] as const)for(const row of rows){
-    alive();yield;
+   const rows=new Map<string,RecordKey&{record:boolean;sync:boolean}>();
+   for(const row of plan.puts)rows.set(dependencyRowId(row.table,row.key),{...row,record:true,sync:false});
+   for(const row of plan.basePuts){const key=dependencyRowId(row.table,row.key),prior=rows.get(key);if(prior)prior.sync=true;else rows.set(key,{...row,record:false,sync:true});}
+   for(const row of rows.values()){
+    alive();yield;replicaWork('encoding.source');
     const source=this.candidateBody(id,row.table,row.key);
-    const encoded=kind==='sync'?source:JSON.stringify(encodeBackupValue(restoreLibraryReplicaValue({...row,value:undefined},decodeBackupValue(JSON.parse(source)),fence.identity)));
-    const shared=sharedRecordTables.has(row.table)?externalizeSharedRecordContent(JSON.parse(encoded),memo):undefined;
-    const digests:string[]=[];
-    for(const [digest,body]of shared?.bodies??[]){
-     digests.push(digest);
-     const existing=this.rows<{value_json:string}>('SELECT value_json FROM sensa_shared_record_content WHERE digest=?',[digest])[0]?.value_json??null;
-     if(existing!==null&&unpackStoredRecord(existing,memo)!==body)throw Error('sqlite_shared_content_invalid');
-     const cached=this.rows<{stored_json:string;existing_json:string|null}>('SELECT stored_json,existing_json FROM sensa_replica_candidate_encoded_bodies_v1 WHERE candidate_id=? AND digest=?',[id,digest])[0];
-     if(cached){if(cached.existing_json!==existing||unpackStoredRecord(cached.stored_json,memo)!==body)throw Error('sqlite_shared_content_invalid');continue;}
-     const stored=existing??packStoredRecord(body);charge(stored,existing??'');
-     this.database.exec({sql:'INSERT INTO sensa_replica_candidate_encoded_bodies_v1 VALUES(?,?,?,?)',bind:[id,digest,stored,existing]});
-     this.sealedEpochs.set(id,this.sealedEpochs.get(id)!+1);
+    const copy=canCopyLibraryReplicaValue(row);
+    let common:{wire:string;stored:string;refs:string}|undefined;
+    for(const kind of ['record','sync'] as const){
+     if(!row[kind])continue;
+     if(!common||!copy){
+      replicaWork('encoding.transform');
+      const encoded=kind==='sync'||copy?source:JSON.stringify(encodeBackupValue(restoreLibraryReplicaValue({...row,value:undefined},decodeBackupValue(JSON.parse(source)),fence.identity)));
+      const shared=sharedRecordTables.has(row.table)?externalizeSharedRecordContent(JSON.parse(encoded),memo):undefined;
+      const digests:string[]=[];
+      for(const [digest,body]of shared?.bodies??[]){
+       digests.push(digest);
+       const cached=this.rows<{stored_json:string;existing_json:string|null}>('SELECT stored_json,existing_json FROM sensa_replica_candidate_encoded_bodies_v1 WHERE candidate_id=? AND digest=?',[id,digest])[0];
+       if(cached){if(unpackStoredRecord(cached.stored_json,memo)!==body)throw Error('sqlite_shared_content_invalid');replicaWork('encoding.bodyHit');continue;}
+       replicaWork('encoding.bodyWitness');
+       const existing=this.rows<{value_json:string}>('SELECT value_json FROM sensa_shared_record_content WHERE digest=?',[digest])[0]?.value_json??null;
+       if(existing!==null&&unpackStoredRecord(existing,memo)!==body)throw Error('sqlite_shared_content_invalid');
+       const stored=existing??packStoredRecord(body);charge(stored,existing??'');
+       this.insertEncoding(id,'INSERT INTO sensa_replica_candidate_encoded_bodies_v1 VALUES(?,?,?,?)',[id,digest,stored,existing]);
+      }
+      const wire=packStoredRecord(encoded),compact=shared?JSON.stringify(shared.value):encoded;
+      replicaWork('encoding.pack',compact===encoded?1:2);
+      common={wire,stored:compact===encoded?wire:packStoredRecord(compact),refs:JSON.stringify(digests)};
+     }else replicaWork('encoding.ownerReuse');
+     // Both owner rows remain charged and written, even when their immutable
+     // transformations are shared for this one admitted record.
+     charge(common.wire,common.stored,common.refs);
+     this.insertEncoding(id,'INSERT INTO sensa_replica_candidate_encoded_v1 VALUES(?,?,?,?,?,?,?)',[id,kind,row.table,row.key,common.wire,common.stored,common.refs]);
     }
-    const wire=packStoredRecord(encoded),stored=packStoredRecord(shared?JSON.stringify(shared.value):encoded),refs=JSON.stringify(digests);charge(wire,stored,refs);
-    this.database.exec({sql:'INSERT INTO sensa_replica_candidate_encoded_v1 VALUES(?,?,?,?,?,?,?)',bind:[id,kind,row.table,row.key,wire,stored,refs]});
-    this.sealedEpochs.set(id,this.sealedEpochs.get(id)!+1);
    }
   }).call(this));alive();}finally{memo.clear();}
  }
@@ -562,14 +605,24 @@ export class SqliteReplicaCandidates{
   for(const row of plan.puts)if(this.rows(`SELECT 1 FROM sensa_record_tombstones AS deleted
    LEFT JOIN sensa_sync_base AS prior ON prior.table_name=deleted.table_name AND prior.record_key=deleted.record_key
    WHERE deleted.table_name=? AND deleted.record_key=? AND prior.record_key IS NULL LIMIT 1`,[row.table,row.key]).length)throw Error('library_sync_history');
-  const read=(kind:'record'|'sync',row:RecordKey)=>this.rows<{encoded_json:string;value_json:string;digests_json:string}>('SELECT encoded_json,value_json,digests_json FROM sensa_replica_candidate_encoded_v1 WHERE candidate_id=? AND owner_kind=? AND table_name=? AND record_key=?',[id,kind,row.table,row.key])[0]??this.fail();
+  // Activation is synchronous. Only the current row remains resident; its
+  // encoded getter and stored-owner write share this one exact SQL read.
+  let current:{kind:string;table:string;key:string;row:{encoded_json:string;value_json:string;digests_json:string};plain?:string}|undefined;
+  const read=(kind:'record'|'sync',key:RecordKey)=>{
+   if(current?.kind!==kind||current.table!==key.table||current.key!==key.key){
+    replicaWork('activation.encodedRead');
+    current={kind,...key,row:this.rows<{encoded_json:string;value_json:string;digests_json:string}>('SELECT encoded_json,value_json,digests_json FROM sensa_replica_candidate_encoded_v1 WHERE candidate_id=? AND owner_kind=? AND table_name=? AND record_key=?',[id,kind,key.table,key.key])[0]??this.fail()};
+   }
+   return current;
+  };
+  const plain=(kind:'record'|'sync',key:RecordKey)=>{const value=read(kind,key);if(value.plain===undefined){replicaWork('activation.wireUnpack');value.plain=unpackStoredRecord(value.row.encoded_json,memo);}return value.plain;};
   return {
    deletes:plan.deletes,
-   puts:plan.puts.map(row=>({...row,get encodedValue(){return unpackStoredRecord(read('record',row).encoded_json,memo);}})),
-   syncBasePatch:{deletes:plan.deletes,puts:plan.basePuts.map(row=>({...row,get valueJson(){return unpackStoredRecord(read('sync',row).encoded_json,memo);}}))},
+   puts:plan.puts.map(row=>({...row,get encodedValue(){return plain('record',row);}})),
+   syncBasePatch:{deletes:plan.deletes,puts:plan.basePuts.map(row=>({...row,get valueJson(){return plain('sync',row);}}))},
    stored:(kind,table,key)=>{
     const keys=kind==='record'?plan.puts:plan.basePuts;if(!keys.some(row=>row.table===table&&row.key===key))return undefined;
-    const row=read(kind,{table:table as RecordKey['table'],key});
+    const row=read(kind,{table:table as RecordKey['table'],key}).row;
     const bodies=this.rows<{digest:string;stored_json:string;existing_json:string|null}>('SELECT digest,stored_json,existing_json FROM sensa_replica_candidate_encoded_bodies_v1 WHERE candidate_id=? AND digest IN (SELECT value FROM json_each(?))',[id,row.digests_json]);
     if(bodies.length!==JSON.parse(row.digests_json).length)this.fail();
     return {valueJson:row.value_json,bodies:bodies.map(body=>({digest:body.digest,stored:body.stored_json,existing:body.existing_json}))};

@@ -131,3 +131,16 @@ test('actual Worker serves a nonempty history projection while cooperative encod
   await pending;const after=await read();expect(after.preparing).toBe(false);expect(after.total).toBe(before.total+1);expect(await facts(b)).toEqual(await facts(a));
  }finally{await a.context().close();await b.context().close();}
 });
+
+
+test('ordinary review start, next action and completion during preparation survive rejection and reopen',async()=>{
+ const {a,b,targetId}=await setup();try{
+  await settle(a,targetId);await a.evaluate(()=>(window as any).sync());const before=await testRpc(b,'snapshot');await testRpc(b,'cooperative-preparation');
+  const pending=b.evaluate(()=>(window as any).sync()),rejected=expect(pending).rejects.toThrow();await b.waitForFunction(()=>(window as any).deltaCooperative?.outsideTransaction);
+  const local=await settle(b,targetId);expect(local.purpose).toBe('retention_review');await rejected;
+  const after=await testRpc(b,'snapshot');expect(after.base).toEqual(before.base);expect(after.revision).toBeGreaterThan(before.revision);
+  const retained=await facts(b);expect(retained.filter((row:any)=>row[0]==='learningRuns'&&row[1]===local.id)).toHaveLength(1);
+  expect(retained.filter((row:any)=>row[0]==='learningEvents'&&decodeBackupValue(row[2]).runId===local.id)).toHaveLength(2);
+  await b.reload();await b.evaluate(async()=>{const path='/core.js',c=await import(/* @vite-ignore */path);(window as any).core=c;await c.openLibrary();});expect(await facts(b)).toEqual(retained);
+ }finally{await a.context().close();await b.context().close();}
+});

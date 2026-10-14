@@ -1,3 +1,4 @@
+import {observeReplicaWork} from '../../../apps/web/src/data/library/replicaWork';
 import {test,expect,afterAll,vi} from 'vitest';
 import type {Database} from '@sqlite.org/sqlite-wasm';
 import sqlite3InitModule from '@sqlite.org/sqlite-wasm';
@@ -143,13 +144,13 @@ test('batched shared baseline refuses an existing different body at the same dig
  }finally{fixture.receiver.close(false);}
 });
 
-test('fresh history language-cache pressure falls back to exact source reads without changing historical rows',async()=>{
+test('history language-cache pressure uses exact narrow route rows without expanding Target material',async()=>{
  const fixture=await stageLearningReplica();
  try{
   await fixture.validate();const project=Reflect.get(fixture.receiver,'upsertLearningTargetProjection').bind(fixture.receiver),get=fixture.receiver.get.bind(fixture.receiver);let reads=0;
   Reflect.set(fixture.receiver,'upsertLearningTargetProjection',(...args:any[])=>{Reflect.set(fixture.receiver,'activationTargetLanguageBytes',8*1024*1024);return project(...args);});
   Reflect.set(fixture.receiver,'get',(table:string,key:string)=>{if(table==='learningTargets')reads++;return get(table as any,key);});
-  fixture.receiver.commit(fixture.mutation);Reflect.set(fixture.receiver,'get',get);expect(reads).toBeGreaterThan(0);fixture.assertFacts();expect(fixture.receiver.learningHistoryProjection()).toEqual(database.learningHistoryProjection());expect(Reflect.get(fixture.receiver,'activationTargetLanguages')).toBeUndefined();
+  fixture.receiver.commit(fixture.mutation);Reflect.set(fixture.receiver,'get',get);expect(reads).toBe(0);fixture.assertFacts();expect(fixture.receiver.learningHistoryProjection()).toEqual(database.learningHistoryProjection());expect(Reflect.get(fixture.receiver,'activationTargetLanguages')).toBeUndefined();
  }finally{fixture.receiver.close(false);}
 });
 
@@ -364,5 +365,33 @@ test('preencoding rejects a forged shared-body INSERT before its digest is reuse
   const plan={receipt:{id:fixture.generation},puts:fixture.records.map(({table,key})=>({table,key})),basePuts:[],deletes:[]};
   await expect(Reflect.get(handler,'prepareEncoding').call(handler,plan,fence,()=>Reflect.get(handler,'check').call(handler,Reflect.get(handler,'header').call(handler,fixture.generation)))).rejects.toThrow(/sqlite_shared_content_invalid|library_sync_candidate_invalid/);
   expect(fixture.receiver.count('learningTargets')).toBe(0);expect(fixture.receiver.syncBaseReferences()).toEqual([]);
+ }finally{fixture.receiver.close(false);}
+});
+
+
+test('copyable admitted rows share one transform across two independently charged owners',async()=>{
+ const fixture=await stageLearningReplica(),work:Record<string,number>={};
+ try{
+  await fixture.validate();const handler=Reflect.get(fixture.receiver,'replicaCandidateStore'),header=()=>Reflect.get(handler,'header').call(handler,fixture.generation),fence=JSON.parse(header().fence_json);
+  const plan={receipt:{id:fixture.generation},puts:fixture.records.map(({table,key})=>({table,key})),basePuts:fixture.records.map(({table,key})=>({table,key,blockRefs:[]})),deletes:[]};
+  observeReplicaWork((kind,n)=>{work[kind]=(work[kind]??0)+n;});
+  await Reflect.get(handler,'prepareEncoding').call(handler,plan,fence,()=>Reflect.get(handler,'check').call(handler,header()));
+  const {canCopyLibraryReplicaValue}=await import('../../../apps/web/src/data/library/replication/libraryReplica');
+  const reusable=fixture.records.filter(row=>canCopyLibraryReplicaValue({...row,table:row.table as LibraryReplicaEntry['table']})).length;
+  expect(work['encoding.source']).toBe(fixture.records.length);expect(work['encoding.ownerReuse']).toBe(reusable);expect(work['encoding.transform']).toBe(fixture.records.length*2-reusable);
+  const encoded=fixture.storage.exec({sql:'SELECT owner_kind,count(*) AS n FROM sensa_replica_candidate_encoded_v1 GROUP BY owner_kind ORDER BY owner_kind',rowMode:'object',returnValue:'resultRows'});
+  expect(encoded).toEqual([{owner_kind:'record',n:fixture.records.length},{owner_kind:'sync',n:fixture.records.length}]);
+  expect(fixture.receiver.count('learningRuns')).toBe(0);expect(fixture.receiver.syncBaseReferences()).toEqual([]);
+ }finally{observeReplicaWork(undefined);fixture.receiver.close(false);}
+});
+
+test('extra DML inside our encoded INSERT cannot be absorbed by the own-write fence',async()=>{
+ const fixture=await stageLearningReplica();
+ try{
+  await fixture.validate();const handler=Reflect.get(fixture.receiver,'replicaCandidateStore'),header=()=>Reflect.get(handler,'header').call(handler,fixture.generation),fence=JSON.parse(header().fence_json),exec=fixture.storage.exec.bind(fixture.storage);let injected=false;
+  fixture.storage.exec=((input:any)=>{const result=exec(input);if(!injected&&input.sql==='INSERT INTO sensa_replica_candidate_encoded_v1 VALUES(?,?,?,?,?,?,?)'){injected=true;exec({sql:'UPDATE sensa_replica_candidate_records_v1 SET value_json=value_json WHERE candidate_id=?',bind:[fixture.generation]});}return result;}) as typeof fixture.storage.exec;
+  try{await expect(Reflect.get(handler,'prepareEncoding').call(handler,{receipt:{id:fixture.generation},puts:fixture.records.map(({table,key})=>({table,key})),basePuts:[],deletes:[]},fence,()=>Reflect.get(handler,'check').call(handler,header()))).rejects.toThrow('library_sync_candidate_invalid');}
+  finally{fixture.storage.exec=exec;}
+  expect(injected).toBe(true);expect(fixture.receiver.count('learningRuns')).toBe(0);expect(fixture.receiver.syncBaseReferences()).toEqual([]);
  }finally{fixture.receiver.close(false);}
 });

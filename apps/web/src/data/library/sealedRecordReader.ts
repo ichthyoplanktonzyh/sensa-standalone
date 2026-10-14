@@ -1,6 +1,7 @@
 import {decodeBackupValue} from './backupCodec';
 import type {LibraryRecordReader} from './libraryRecordReader';
 import type {SqliteLibraryTable} from './sqliteProtocol';
+import {replicaWork} from './replicaWork';
 
 export type SealedRecordKey={record_key:string;stored_value_bytes:number};
 export type SealedStoredRecord={record_key:string;value_json:string};
@@ -14,41 +15,53 @@ type SealedRecordSource<Row extends SealedStoredRecord>={
  plain(table:SqliteLibraryTable,stored:Row):string;
  missing():never;
  observed?:(table:SqliteLibraryTable,key:string,text:string,value:any)=>void;
+ /** Learning's sealed snapshot only. The retained value is private: even
+  * Dates are cloned before use, so no consumer can change a later input. */
+ cloneDecoded?:boolean;
 };
 const pageBytes=1024*1024,cacheBytes=16*1024*1024,cacheRows=256;
 
-/** One sealed generation only. Cache immutable text, never decoded objects:
- * every consumer receives a fresh value and cannot mutate another read. The
- * UTF-8/count budget bounds retained source text, not JavaScript heap. */
+/** One sealed generation only. Ordinary reads decode immutable text afresh.
+ * Learning may retain private decoded originals and clone every consumer value.
+ * Its additional 4MiB/256KiB limits count serialized UTF-8, not JavaScript heap;
+ * eviction or either decoded limit retains the original strict decode path. */
 export function sealedRecordReader<Row extends SealedStoredRecord>(source:SealedRecordSource<Row>,budget=cacheBytes):LibraryRecordReader{
  if(!Number.isSafeInteger(budget)||budget<0||budget>cacheBytes)throw Error('sqlite_record_cache_budget');
- const cache=new Map<string,{text:string;bytes:number}>();let held=0;
+ const cache=new Map<string,{text:string;bytes:number;decoded?:{value:any}}>();let held=0,decodedHeld=0;
  const id=(table:string,key:string)=>JSON.stringify([table,key]);
  const cached=(table:string,key:string)=>{
   const identity=id(table,key),row=cache.get(identity);
-  if(row){cache.delete(identity);cache.set(identity,row);}return row?.text;
+  if(row){cache.delete(identity);cache.set(identity,row);replicaWork('reader.textHit');}return row?.text;
  };
  const plain=(table:SqliteLibraryTable,key:string,stored:Row)=>{
-  const text=source.plain(table,stored);
+  replicaWork('reader.bodyLoad');const text=source.plain(table,stored);
   if(text.length>budget)return text;
   const bytes=new TextEncoder().encode(text).length;
   if(bytes<=budget){
    const identity=id(table,key),prior=cache.get(identity);
-   if(prior){held-=prior.bytes;cache.delete(identity);}
+   if(prior){held-=prior.bytes;if(prior.decoded)decodedHeld-=prior.bytes;cache.delete(identity);}
    while(cache.size&&(held+bytes>budget||cache.size>=cacheRows)){
-    const oldest=cache.keys().next().value!;held-=cache.get(oldest)!.bytes;cache.delete(oldest);
+    const oldest=cache.keys().next().value!;const previous=cache.get(oldest)!;held-=previous.bytes;if(previous.decoded)decodedHeld-=previous.bytes;cache.delete(oldest);replicaWork('reader.eviction');
    }
    cache.set(identity,{text,bytes});held+=bytes;
   }
   return text;
  };
- const decode=(table:SqliteLibraryTable,key:string,text:string)=>{const value=decodeBackupValue(JSON.parse(text));source.observed?.(table,key,text,value);return value;};
+ const decode=(table:SqliteLibraryTable,key:string,text:string)=>{
+  const entry=source.cloneDecoded?cache.get(id(table,key)):undefined;
+  let value:any;
+  if(entry?.decoded){replicaWork('reader.decodeHit');value=entry.decoded.value;}
+  else{replicaWork('reader.wireDecode');value=decodeBackupValue(JSON.parse(text));if(entry&&entry.bytes<=256*1024&&decodedHeld+entry.bytes<=4*1024*1024){entry.decoded={value};decodedHeld+=entry.bytes;}else if(entry)replicaWork('reader.decodeBypass');}
+  // Observation and validators see their own value, never the memo's original.
+  if(entry?.decoded)value=structuredClone(value);
+  source.observed?.(table,key,text,value);return value;
+ };
  return {
   get(table,key){
-   source.alive();const hit=cached(table,key);if(hit!==undefined)return decode(table,key,hit);
+   replicaWork('reader.get');source.alive();const hit=cached(table,key);if(hit!==undefined)return decode(table,key,hit);
    const stored=source.get(table,key);return stored===undefined?undefined:decode(table,key,plain(table,key,stored));
   },
-  has(table,key){source.alive();return source.has(table,key);},
+  has(table,key){replicaWork('reader.has');source.alive();return source.has(table,key);},
   entries(table){return {[Symbol.iterator]:function*(){
    let after:string|null=null;
    for(;;){

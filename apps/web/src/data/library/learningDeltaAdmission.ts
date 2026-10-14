@@ -1,9 +1,10 @@
+import {replicaWork} from './replicaWork';
 import {runCooperatively,runSynchronously} from '../../experience/personalMeaningJourney/cooperative';
 import {backupEqual,encodeBackupValue} from './backupCodec';
 import {validateLearningRestoreComponentCooperatively} from './backupValidation';
 import type {LibraryRecordReader,LibraryRecordRows} from './libraryRecordReader';
 import type {SqliteLibraryTable} from './sqliteProtocol';
-import {mergeLibraryReplicasCooperatively,replicaEntryEqual,replicaEntryId,type LibraryReplicaEntry} from './replication/libraryReplica';
+import {mergeLibraryReplicasCooperatively,replicaEntryId,type LibraryReplicaEntry} from './replication/libraryReplica';
 import type {SqliteSyncDependencies,SyncDependencyCertificate} from './sqliteSyncDependencies';
 
 export class DeltaReceiveFallback extends Error{constructor(readonly reason:string){super('library_sync_delta_fallback:'+reason);}}
@@ -173,10 +174,10 @@ export async function admitLearningDelta(input:{
  const merged=await mergeLibraryReplicasCooperatively({base:before,local:before,remote:after});alive();
  const records:Array<{table:LibraryReplicaEntry['table'];key:string}>=[];
  await runCooperatively((function*(){
-  const expected=new Map(after.map(row=>[replicaEntryId(row),row]));
+  const expected=new Map(after.map(row=>[replicaEntryId(row),row])),previous=new Map(before.map(row=>[replicaEntryId(row),row]));
   if(merged.conflicts.length||merged.entries.length!==after.length)fallback('domain_conflict_or_derived_publication');
-  for(const row of merged.entries){alive();yield;if(!replicaEntryEqual(row,expected.get(replicaEntryId(row))))fallback('domain_conflict_or_derived_publication');}
-  for(const row of changes){alive();yield;if(!backupEqual(base.get(row.table,row.key),remote.get(row.table,row.key)))records.push({table:row.table,key:row.key});}
+  for(const row of merged.entries){alive();yield;replicaWork('admission.canonicalCompare');if(JSON.stringify(row.value)!==JSON.stringify(expected.get(replicaEntryId(row))?.value))fallback('domain_conflict_or_derived_publication');}
+  for(const row of changes){alive();yield;const id=replicaEntryId(row);replicaWork('admission.changedCompare');if(JSON.stringify(previous.get(id)?.value)!==JSON.stringify(expected.get(id)?.value))records.push({table:row.table,key:row.key});}
  })());alive();
 
  evidence.modifiedRecords=records.length;input.phase?.('domainComparison');

@@ -1,3 +1,4 @@
+import {replicaWork} from './replicaWork';
 import type {ContextBrowseQuery,ContextBrowsePage} from '../../experience/personalMeaningJourney/contextRead';
 import {contextMediaReferences} from '../../experience/personalMeaningJourney/contextRecords';
 import type {LearningScheduleQuery,LearningSchedulePage} from '../../learning/system/learningScheduleModel';
@@ -118,6 +119,7 @@ export class SqliteRecordDatabase {
   private activationMemo:StoredRecordMemo|undefined;
   private activationTargetLanguages:Map<string,string>|undefined;
   private activationTargetLanguageBytes=0;
+  private activationPreparedBodies:Set<string>|undefined;
   private snapshotReader:LibraryRecordReader|undefined;
   private readonly syncDependencies:SqliteSyncDependencies;
 
@@ -195,7 +197,7 @@ export class SqliteRecordDatabase {
     this.practiceExpressionProjection=new SqlitePracticeExpressionProjection(database,(table,key)=>this.decoded(table,key));
     this.journeyIdentities=new SqliteJourneyIdentityProjection(database,()=>this.snapshotReader);
     this.semanticMemoryProjection=new SqliteLearningSemanticMemoryProjection(database,encoded=>this.decodedStored<LocalLearningTarget>('learningTargets',encoded),id=>this.decoded<LocalLearningTarget>('learningTargets',id)??null);
-    this.learningHistory=new SqliteLearningHistoryProjection(database,id=>{const language=this.activationTargetLanguages?.get(id);return language===undefined?this.decoded<LocalLearningTarget>('learningTargets',id):{targetLanguageTag:language};},encoded=>this.decodedStored<LocalLearningRun>('learningRuns',encoded));
+    this.learningHistory=new SqliteLearningHistoryProjection(database,id=>this.historyTarget(id),encoded=>this.decodedStored<LocalLearningRun>('learningRuns',encoded));
     this.runtimeCandidates=new SqliteRuntimeLearningCandidates(database,encoded=>this.decodedStored<LocalLearningTarget>('learningTargets',encoded),encoded=>this.decodedStored<import('./curriculumEnrollments').LocalCurriculumEnrollment>('curriculumEnrollments',encoded),(id,target)=>this.writeLearningTargetProjection(id,target),encoded=>this.decodedStored<import('./studyScopes').LocalStudyScope>('studyScopes',encoded));
   }
 
@@ -232,7 +234,7 @@ export class SqliteRecordDatabase {
         if(previous===undefined)missing.push([row.digest,row.value_json]);
         else if(previous!==row.value_json&&unpackStoredRecord(previous)!==unpackStoredRecord(row.value_json))throw Error('sqlite_snapshot_shared_body');
       }
-      if(missing.length)this.database.exec({sql:"INSERT INTO sensa_shared_record_content SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]') FROM json_each(?)",bind:[JSON.stringify(missing)]});
+        if(missing.length)this.database.exec({sql:"INSERT INTO sensa_shared_record_content SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]') FROM json_each(?)",bind:[JSON.stringify(missing)]});
     }
     this.database.exec({sql:"INSERT INTO sensa_records(table_name,record_key,value_json) SELECT ?,json_extract(value,'$.record_key'),json_extract(value,'$.value_json') FROM json_each(?)",bind:[table,JSON.stringify(records)]});
     if(owners.length)this.database.exec({sql:"INSERT INTO sensa_shared_record_content_owners(owner_kind,table_name,record_key,digest) SELECT 'record',?,json_extract(value,'$.record_key'),json_extract(value,'$.digest') FROM json_each(?)",bind:[table,JSON.stringify(owners)]});
@@ -868,7 +870,7 @@ export class SqliteRecordDatabase {
     this.database.exec("BEGIN IMMEDIATE");
     try {
       if(previousCertificate&&patchAdmission)this.syncDependencies.assert(previousCertificate);
-      if(mutation.replicaCandidateRestore){this.activationMemo=new StoredRecordMemo();if(!mutation.replicaCandidateRestore.update)this.activationTargetLanguages=new Map();}
+      if(mutation.replicaCandidateRestore){this.activationMemo=new StoredRecordMemo();this.activationTargetLanguages=new Map();this.activationPreparedBodies=new Set();}
       const contentRevision = mutation.contentRevision;
       if (contentRevision !== undefined && (!Number.isSafeInteger(contentRevision) || contentRevision <= 0)) {
         throw new Error('sqlite_content_revision_invalid');
@@ -937,8 +939,8 @@ export class SqliteRecordDatabase {
           this.database.exec({sql:'DELETE FROM sensa_sync_base WHERE table_name=? AND record_key=?',bind:[entry.table,entry.key]});
         }
         for(const entry of mutation.syncBasePatch.puts){
-          const refs=JSON.stringify(entry.blockRefs);encodedWriteSize+=entry.valueJson.length+refs.length;
-          this.database.exec({sql:'INSERT INTO sensa_sync_base(table_name,record_key,value_json,block_refs_json) VALUES(?,?,?,?) ON CONFLICT(table_name,record_key) DO UPDATE SET value_json=excluded.value_json,block_refs_json=excluded.block_refs_json',bind:[entry.table,entry.key,this.storedEncoded('sync',entry.table,entry.key,entry.valueJson,removedContent,true,preparedUpdate?.stored('sync',entry.table,entry.key)),refs]});
+          const refs=JSON.stringify(entry.blockRefs),valueJson=entry.valueJson;encodedWriteSize+=valueJson.length+refs.length;
+          this.database.exec({sql:'INSERT INTO sensa_sync_base(table_name,record_key,value_json,block_refs_json) VALUES(?,?,?,?) ON CONFLICT(table_name,record_key) DO UPDATE SET value_json=excluded.value_json,block_refs_json=excluded.block_refs_json',bind:[entry.table,entry.key,this.storedEncoded('sync',entry.table,entry.key,valueJson,removedContent,true,preparedUpdate?.stored('sync',entry.table,entry.key)),refs]});
         }
       }
       for (const table of mutation.clears) {
@@ -1081,10 +1083,6 @@ export class SqliteRecordDatabase {
         if (item.table === 'learningTargets') {
           this.upsertLearningTargetProjection(item.key, encodedValue!);
         }
-        if (item.table === 'learningRuns') {
-          if(copied){const stored=this.storedRecord('learningRuns',item.key);if(stored===null)throw Error('library_sync_candidate_invalid');this.upsertLearningRunProjection(item.key,stored,true);}
-          else this.upsertLearningRunProjection(item.key, encodedValue!);
-        }
         if (item.table === 'contentAttempts') {
           this.upsertContentAttemptProjection(item.key, encodedValue!);
         }
@@ -1095,7 +1093,10 @@ export class SqliteRecordDatabase {
       // Replica mutations are ordered by record identity, not dependency:
       // fresh-device Runs can precede their Targets. Index completed history
       // only after every source row has been staged in this same transaction.
-      for(const item of mutation.puts)if(item.table==='learningRuns')this.learningHistory.upsert(item.key,this.decode<LocalLearningRun>(item.encodedValue));
+      for(const item of mutation.puts)if(item.table==='learningRuns'){
+        replicaWork('activation.runDecode');const run=preparedUpdate?this.decoded<LocalLearningRun>('learningRuns',item.key)!:this.decode<LocalLearningRun>(item.encodedValue);
+        this.writeLearningRunProjection(item.key,run);this.learningHistory.upsert(item.key,run);
+      }
       if(
         mutation.clears.includes('packageCache')
         ||mutation.deletes.some(item=>item.table==='packageCache')
@@ -1147,7 +1148,7 @@ export class SqliteRecordDatabase {
       }
       if(isFatalSqliteConnectionFailure(error))this.quarantineConnection(error as Error);
       throw error;
-    }finally{this.activationMemo?.clear();this.activationMemo=undefined;this.activationTargetLanguages?.clear();this.activationTargetLanguages=undefined;this.activationTargetLanguageBytes=0;}
+    }finally{this.activationMemo?.clear();this.activationMemo=undefined;this.activationTargetLanguages?.clear();this.activationTargetLanguages=undefined;this.activationTargetLanguageBytes=0;this.activationPreparedBodies=undefined;}
     // A completed large transaction can leave a large reusable WAL. Bound its
     // cold-reopen cost after COMMIT; failure here cannot undo/deny that commit.
     if(this.persistence==='opfs'&&bulkMaintenance)this.maintainWal();
@@ -1277,9 +1278,11 @@ export class SqliteRecordDatabase {
       if(detach)this.detachSharedContent(kind,table,key,removed);
       for(let offset=0;offset<prepared.bodies.length;offset+=128){
         const batch=prepared.bodies.slice(offset,offset+128),digests=batch.map(body=>body.digest);
-        const current=new Map((this.database.exec({sql:'SELECT digest,value_json FROM sensa_shared_record_content WHERE digest IN (SELECT value FROM json_each(?))',bind:[JSON.stringify(digests)],rowMode:'object',returnValue:'resultRows'}) as {digest:string;value_json:string}[]).map(row=>[row.digest,row.value_json]));
+        const unchecked=batch.filter(body=>!this.activationPreparedBodies?.has(body.digest));replicaWork('activation.bodyWitness',unchecked.length);
+        const current=new Map(((unchecked.length?this.database.exec({sql:'SELECT digest,value_json FROM sensa_shared_record_content WHERE digest IN (SELECT value FROM json_each(?))',bind:[JSON.stringify(unchecked.map(body=>body.digest))],rowMode:'object',returnValue:'resultRows'}) :[] ) as {digest:string;value_json:string}[]).map(row=>[row.digest,row.value_json]));
         const missing:[string,string][]=[];
-        for(const body of batch){const stored=current.get(body.digest)??null;if(stored!==body.existing&&!(body.existing===null&&stored===body.stored))throw Error('sqlite_shared_content_invalid');if(stored===null)missing.push([body.digest,body.stored]);}
+        for(const body of unchecked){const stored=current.get(body.digest)??null;if(stored!==body.existing&&!(body.existing===null&&stored===body.stored))throw Error('sqlite_shared_content_invalid');if(stored===null)missing.push([body.digest,body.stored]);}
+        for(const body of unchecked)this.activationPreparedBodies?.add(body.digest);
         if(missing.length)this.database.exec({sql:"INSERT INTO sensa_shared_record_content SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]') FROM json_each(?)",bind:[JSON.stringify(missing)]});
         this.database.exec({sql:'INSERT INTO sensa_shared_record_content_owners(owner_kind,table_name,record_key,digest) SELECT ?,?,?,value FROM json_each(?)',bind:[kind,table,key,JSON.stringify(digests)]});
       }
@@ -1346,6 +1349,18 @@ export class SqliteRecordDatabase {
   private rebuildPackageCacheProjection():void{
     if(!this.scalarNumber("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='sensa_records'"))return;
     for(const row of this.entries('packageCache'))this.upsertPackageCacheProjection(row.key,row.encodedValue);
+  }
+
+  private historyTarget(id:string):Pick<LocalLearningTarget,'targetLanguageTag'>|undefined{
+    const language=this.activationTargetLanguages?.get(id);if(language!==undefined)return {targetLanguageTag:language};
+    if(!this.activationTargetLanguages)return this.decoded<LocalLearningTarget>('learningTargets',id);
+    replicaWork('activation.targetLanguageRead');
+    const rows=this.database.exec({sql:'SELECT target_language_tag FROM sensa_learning_route_targets WHERE target_key=? LIMIT 1',bind:[id],rowMode:0,returnValue:'resultRows'}) as string[];
+    if(!rows.length)return this.decoded<LocalLearningTarget>('learningTargets',id);
+    const target={targetLanguageTag:rows[0]!};
+    const bytes=new TextEncoder().encode(id+target.targetLanguageTag).length;
+    if(this.activationTargetLanguageBytes+bytes<=8*1024*1024){this.activationTargetLanguages.set(id,target.targetLanguageTag);this.activationTargetLanguageBytes+=bytes;}
+    return target;
   }
 
   private upsertLearningTargetProjection(key: string, encodedValue: string): void {

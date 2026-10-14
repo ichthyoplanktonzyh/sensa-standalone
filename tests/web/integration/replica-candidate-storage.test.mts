@@ -18,6 +18,7 @@ import {candidateExpected,candidateBlocksFor} from '../support/replicaCandidateF
 import {verifyReplicaCandidateManifest} from '../../../apps/web/src/data/library/replicaCandidateProof';
 import type {LibraryRecordReader} from '../../../apps/web/src/data/library/libraryRecordReader';
 import {packStoredRecord} from '../../../apps/web/src/data/library/sharedRecordContent';
+import {observeReplicaWork} from '../../../apps/web/src/data/library/replicaWork';
 import {sealedRecordReader} from '../../../apps/web/src/data/library/sealedRecordReader';
 
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined,location:new URL('http://candidate-storage.fixture.invalid/')});
@@ -570,4 +571,52 @@ for(const damage of ['bad-json','missing-trigger','edge-write'] as const)test(`d
   else fixture.raw.exec('DELETE FROM sensa_sync_dependency_edges_v1');
   expect(deps.certificate()).toBeUndefined();expect(()=>deps.assert(prior)).toThrow('library_sync_local_changed');
  }finally{fixture.database.close();}
+});
+
+
+test('Learning snapshot memo strictly decodes once, gives independent Dates and obeys byte eviction',()=>{
+ const value={when:new Date('2026-10-14T00:00:00Z'),missing:undefined,nested:{items:[1,2]}},text=JSON.stringify(encodeBackupValue(value));
+ const work:Record<string,number>={};observeReplicaWork((kind,n)=>{work[kind]=(work[kind]??0)+n;});
+ try{
+  const reader=sealedRecordReader({cloneDecoded:true,alive(){},beforePage(){},get(_table,key){return {record_key:key,value_json:text};},has(){return true;},keys(){return [];},rows(){return [];},plain(_table,row){return row.value_json;},missing():never{throw Error('missing');}},new TextEncoder().encode(text).length);
+  const first=reader.get('settings','a');first.when.setUTCFullYear(2000);first.nested.items.push(3);delete first.missing;
+  expect(reader.get('settings','a')).toEqual(value);expect(work['reader.wireDecode']).toBe(1);expect(work['reader.decodeHit']).toBe(1);
+  reader.get('settings','b');expect(reader.get('settings','a')).toEqual(value);expect(work['reader.wireDecode']).toBe(3);expect(work['reader.eviction']).toBe(2);
+ }finally{observeReplicaWork(undefined);}
+});
+
+
+test('protected slice expires at microtasks and detects synchronous DML including rollback before reuse',async()=>{
+ const fixture=isolatedDatabase(),work:Record<string,number>={},controller=new AbortController();
+ try{
+  fixture.database.commit({clears:[],deletes:[],puts:[{table:'meta',key:'cloud-sync',encodedValue:JSON.stringify(encodeBackupValue(checkpoint))}]});
+  const id=await fixture.stage(1);await fixture.request({kind:'validate',id});
+  const handler=Reflect.get(fixture.database,'replicaCandidateStore'),read=()=>Reflect.get(handler,'protectedRead').call(handler,id,3,controller.signal);
+  observeReplicaWork((kind,n)=>{work[kind]=(work[kind]??0)+n;});
+  for(let i=0;i<20;i++)read();expect(work['fence.check']).toBe(1);expect(work['fence.hit']).toBe(19);
+  fixture.raw.exec('BEGIN');fixture.raw.exec("UPDATE sensa_records SET value_json=value_json WHERE table_name='meta' AND record_key='sentinel'");fixture.raw.exec('ROLLBACK');
+  read();expect(work['fence.check']).toBe(2);await Promise.resolve();read();expect(work['fence.check']).toBe(3);
+  // This microtask was queued before the expiration callback. Its direct
+  // mutation still cannot pass through a live synchronous-slice proof.
+  const stale=new Promise<void>(resolve=>queueMicrotask(()=>{
+   fixture.raw.exec({sql:"UPDATE sensa_records SET value_json=? WHERE table_name='meta' AND record_key='cloud-sync'",bind:[JSON.stringify(encodeBackupValue({...checkpoint,revision:4}))]});
+   expect(read).toThrow('library_sync_local_changed');resolve();
+  }));
+  read();await stale;controller.abort(Error('cancelled cached read'));expect(read).toThrow('cancelled cached read');
+ }finally{observeReplicaWork(undefined);fixture.database.close(false);}
+});
+
+
+test('decoded limits bypass memo without bypassing strict decoding or changing ordinary readers',()=>{
+ const work:Record<string,number>={};observeReplicaWork((kind,n)=>{work[kind]=(work[kind]??0)+n;});
+ const source=(text:string,cloneDecoded:boolean)=>({cloneDecoded,alive(){},beforePage(){},get(_table:unknown,key:string){return {record_key:key,value_json:text};},has(){return true;},keys(){return [];},rows(){return [];},plain(_table:unknown,row:{value_json:string}){return row.value_json;},missing():never{throw Error('missing');}});
+ try{
+  const large=sealedRecordReader(source(JSON.stringify(encodeBackupValue('界'.repeat(88000))),true));large.get('settings','a');large.get('settings','a');
+  expect(work['reader.wireDecode']).toBe(2);expect(work['reader.decodeBypass']).toBe(2);expect(work['reader.bodyLoad']).toBe(1);
+  for(const k of Object.keys(work))delete work[k];
+  const bounded=sealedRecordReader(source(JSON.stringify(encodeBackupValue('x'.repeat(256000))),true));for(let i=0;i<17;i++)bounded.get('settings',String(i));
+  bounded.get('settings','0');bounded.get('settings','16');expect(work['reader.wireDecode']).toBe(18);expect(work['reader.decodeHit']).toBe(1);expect(work['reader.decodeBypass']).toBe(2);
+  for(const k of Object.keys(work))delete work[k];
+  const ordinary=sealedRecordReader(source(JSON.stringify(encodeBackupValue({at:new Date('2026-10-14T00:00:00Z')})),false));ordinary.get('settings','a').at.setTime(0);expect(ordinary.get('settings','a').at.toISOString()).toBe('2026-10-14T00:00:00.000Z');expect(work['reader.wireDecode']).toBe(2);expect(work['reader.decodeHit']).toBeUndefined();
+ }finally{observeReplicaWork(undefined);}
 });
