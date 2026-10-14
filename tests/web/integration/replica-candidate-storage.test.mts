@@ -20,6 +20,7 @@ import type {LibraryRecordReader} from '../../../apps/web/src/data/library/libra
 import {packStoredRecord} from '../../../apps/web/src/data/library/sharedRecordContent';
 import {observeReplicaWork} from '../../../apps/web/src/data/library/replicaWork';
 import {sealedRecordReader} from '../../../apps/web/src/data/library/sealedRecordReader';
+import {cloudScratchAllocatedBytes} from '../../../apps/web/src/data/library/cloudScratchStorage';
 
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined,location:new URL('http://candidate-storage.fixture.invalid/')});
 const database=await useNodeLearningCapacityStorage();afterAll(()=>database.close());
@@ -41,6 +42,11 @@ const begin=async(records:ReplicaCandidateRecord[])=>{
 const append=(id:string,records:ReplicaCandidateRecord[])=>database.replicaCandidate({kind:'append',id,records,blocks:candidateBlocksFor(records)});
 const validate=(id:string)=>database.replicaCandidate({kind:'validate',id});
 const discard=(id:string)=>database.replicaCandidate({kind:'discard',id});
+
+test('candidate allocated-page overage rolls back proofs, rows and counters before acknowledgement',async()=>{
+ const records=rows(),id=await begin(records),raw=Reflect.get(database,'database'),before=await original();
+ try{const header=raw.exec({sql:'SELECT records,logical_bytes,stored_bytes FROM sensa_replica_candidates_v1 WHERE id=?',bind:[id],rowMode:'object',returnValue:'resultRows'});const allocated=(Number(raw.selectValue('PRAGMA page_count'))-Number(raw.selectValue('PRAGMA freelist_count')))*Number(raw.selectValue('PRAGMA page_size'));raw.exec({sql:'UPDATE sensa_replica_candidates_v1 SET allocated_baseline=? WHERE id=?',bind:[allocated-cloudScratchAllocatedBytes,id]});await expect(append(id,records)).rejects.toThrow('library_sync_capacity');expect(await original()).toEqual(before);expect(raw.exec({sql:'SELECT records,logical_bytes,stored_bytes FROM sensa_replica_candidates_v1 WHERE id=?',bind:[id],rowMode:'object',returnValue:'resultRows'})).toEqual(header);expect(raw.selectValue('SELECT count(*) FROM sensa_replica_candidate_records_v1')).toBe(0);expect(raw.selectValue('SELECT count(*) FROM sensa_replica_candidate_proofs_v1 WHERE plain_digest IS NOT NULL')).toBe(0);}finally{await discard(id);}
+});
 
 test('filling and validated generations stay outside ordinary facts and the confirmed baseline',async()=>{
  const records=rows(),id=await begin(records),before=await original();

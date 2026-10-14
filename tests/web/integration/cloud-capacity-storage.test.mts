@@ -1,12 +1,41 @@
-import {test,expect} from 'vitest';
+import {test,expect,vi} from 'vitest';
 import sqlite3InitModule from '@sqlite.org/sqlite-wasm';
 import {librarySyncSnapshot,librarySyncCommit,librarySyncBinaryArtifact,librarySyncRecordLimit,librarySyncLogicalByteLimit,librarySyncStageMetadataByteLimit} from '@sensa/contracts/sensa';
 import {SqliteRecordDatabase} from '../../../apps/web/src/data/library/sqliteDatabase';
 import {SqliteSyncDependencies,dependencyRowId} from '../../../apps/web/src/data/library/sqliteSyncDependencies';
 import {SqliteRecordValidation,RecordValidationStorageError} from '../../../apps/web/src/data/library/sqliteRecordValidation';
+import {cloudScratchPayloadBytes,cloudScratchDiskBytes,requireCloudScratchSpace} from '../../../apps/web/src/data/library/cloudScratchStorage';
+import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec';
 const sqlite=await sqlite3InitModule();
 
-function fixture(){const raw=new sqlite.oo1.DB(':memory:','c'),library=new SqliteRecordDatabase(sqlite,raw,'memory');library.initialize();const dependencies=new SqliteSyncDependencies(raw);dependencies.ensure();return {raw,dependencies,close:()=>{dependencies.close();library.close();}};}
+test('local scratch has a finite disk allowance and refuses unknown or insufficient space before writes',async()=>{
+ expect(cloudScratchPayloadBytes).toBe(1536*1024*1024);expect(cloudScratchDiskBytes).toBe(2048*1024*1024);
+ await expect(requireCloudScratchSpace(true,async()=>({usageBytes:123,quotaBytes:123+cloudScratchDiskBytes}))).resolves.toBeUndefined();
+ await expect(requireCloudScratchSpace(true,async()=>({usageBytes:123,quotaBytes:122+cloudScratchDiskBytes}))).rejects.toThrow('library_sync_capacity');
+ await expect(requireCloudScratchSpace(false,async()=>({usageBytes:123,quotaBytes:123+512*1024*1024}))).resolves.toBeUndefined();
+ await expect(requireCloudScratchSpace(false,async()=>null)).rejects.toThrow('library_sync_storage_unavailable');
+ await expect(requireCloudScratchSpace(false,async()=>({usageBytes:NaN,quotaBytes:2**40}))).rejects.toThrow('library_sync_storage_unavailable');
+});
+
+function fixture(){const raw=new sqlite.oo1.DB(':memory:','c'),library=new SqliteRecordDatabase(sqlite,raw,'memory');library.initialize();const dependencies=new SqliteSyncDependencies(raw);dependencies.ensure();return {raw,library,dependencies,close:()=>{dependencies.close();library.close();}};}
+
+test('the OPFS request gate refuses space before replacing a retained pending source and before writing another page',async()=>{
+ const f=fixture();try{
+  const identity={id:crypto.randomUUID(),learnerId:crypto.randomUUID(),deviceId:crypto.randomUUID(),createdAt:new Date().toISOString(),schemaVersion:2 as const},owner={subject:crypto.randomUUID(),accountId:crypto.randomUUID()},fence={identity,owner,incarnation:'initial',localRevision:0};
+  for(const [key,value] of [['identity',identity],['service-owner',owner]] as const)f.raw.exec({sql:"INSERT INTO sensa_records(table_name,record_key,value_json) VALUES('meta',?,?)",bind:[key,JSON.stringify(encodeBackupValue(value))]});
+  for(let i=0;i<128;i++)f.raw.exec({sql:"INSERT INTO sensa_records(table_name,record_key,value_json) VALUES('settings',?,?)",bind:['sentinel-'+i,'["number",1]']});
+  const begun=await f.library.replicaCandidate({kind:'beginPublication',fence});if(begun.kind!=='begun')throw Error('Expected begin');const first=await f.library.replicaCandidate({kind:'publicationPage',id:begun.id,after:null});if(first.kind!=='publicationPage')throw Error('Expected page');
+  const before=f.raw.exec({sql:'SELECT * FROM sensa_initial_publication',rowMode:'object',returnValue:'resultRows'}),rows=f.raw.selectValue('SELECT count(*) FROM sensa_initial_publication_rows');
+  // Exercise the shipped OPFS admission gate with a deterministic quota read;
+  // this in-memory SQL fixture is not an actual physical-disk capacity claim.
+  Reflect.set(f.library,'persistence','opfs');vi.stubGlobal('navigator',{storage:{estimate:async()=>({usage:1024,quota:1025})}});
+  await expect(f.library.replicaCandidate({kind:'beginPublication',fence})).rejects.toThrow('library_sync_capacity');
+  expect(await f.library.replicaCandidate({kind:'publicationPage',id:begun.id,after:null})).toEqual(first);
+  await expect(f.library.replicaCandidate({kind:'publicationPage',id:begun.id,after:first.next})).rejects.toThrow('library_sync_capacity');
+  expect(f.raw.exec({sql:'SELECT * FROM sensa_initial_publication',rowMode:'object',returnValue:'resultRows'})).toEqual(before);expect(f.raw.selectValue('SELECT count(*) FROM sensa_initial_publication_rows')).toBe(rows);
+  vi.stubGlobal('navigator',{storage:{estimate:async()=>{throw Error('quota unavailable');}}});await expect(f.library.replicaCandidate({kind:'beginPublication',fence})).rejects.toThrow('library_sync_storage_unavailable');expect(f.raw.selectValue('SELECT id FROM sensa_initial_publication')).toBe(begun.id);
+ }finally{vi.unstubAllGlobals();f.close();}
+});
 
 test('staged cursors accept exactly the finite cloud tier while artifact and page limits stay independent',()=>{
  const snapshot={libraryId:crypto.randomUUID(),learnerId:crypto.randomUUID(),snapshotRevision:1,floor:0,records:librarySyncRecordLimit};
@@ -39,6 +68,10 @@ test('SQL uniqueness retains Registry and scene ownership checks across batches 
   failed=true;expect(()=>index.unique('sense-key','late')).toThrow(RecordValidationStorageError);index.close();
   expect(f.raw.selectValue('SELECT count(*) FROM sensa_record_validation_keys')).toBe(0);expect(f.raw.selectValue('SELECT count(*) FROM sensa_record_validation_scenes')).toBe(0);
  }finally{f.close();}
+});
+
+test('a validation-witness disk rejection rolls back its entire batch before COMMIT',()=>{
+ const f=fixture();let index:SqliteRecordValidation|undefined;try{index=new SqliteRecordValidation(f.raw,()=>{},()=>{expect(f.raw.selectValue('SELECT count(*) FROM sensa_record_validation_keys')).toBe(64);throw Error('library_sync_capacity');});for(let i=0;i<63;i++)expect(index.unique('sense-key','key-'+i)).toBe(true);expect(()=>index!.unique('sense-key','key-63')).toThrow(RecordValidationStorageError);expect(f.raw.selectValue('SELECT count(*) FROM sensa_record_validation_keys')).toBe(0);expect(f.raw.selectValue('SELECT count(*) FROM sensa_records')).toBe(0);}finally{index?.close();f.close();}
 });
 
 

@@ -1,4 +1,5 @@
 import {replicaWork} from './replicaWork';
+import {requireCloudScratchSpace} from './cloudScratchStorage';
 import type {ContextBrowseQuery,ContextBrowsePage} from '../../experience/personalMeaningJourney/contextRead';
 import {contextMediaReferences} from '../../experience/personalMeaningJourney/contextRecords';
 import type {LearningScheduleQuery,LearningSchedulePage} from '../../learning/system/learningScheduleModel';
@@ -769,9 +770,12 @@ export class SqliteRecordDatabase {
 
   async replicaCandidate(request:ReplicaCandidateRequest):Promise<ReplicaCandidateResponse>{
     this.assertReplicaCandidateHealthy();
+    // Read available origin space before any replacement transaction. The
+    // estimate is advisory; private SQL accounting and physical IO still apply.
+    if(this.persistence==='opfs'&&request.kind==='beginPublication'){await requireCloudScratchSpace(true);this.assertReplicaCandidateHealthy();}
     if(['beginPublication','publicationPage','publicationIndexPage','publicationBlocks','validatePublication','admitOwnPublication','discardPublication'].includes(request.kind)){
       if(request.kind!=='discardPublication'&&this.decoded('meta','signed-out'))throw Error('account_changed');
-      if(!this.initialPublication){const {SqliteInitialPublication}=await import('./sqliteInitialPublication');this.initialPublication=new SqliteInitialPublication(this.database,f=>this.assertReplicaCandidateFence(f),(table,key)=>this.get(table,key),f=>this.assertReplicaCandidateFence({...f,localRevision:this.decoded<number>('meta','local-content-revision')??0}));}
+      if(!this.initialPublication){const {SqliteInitialPublication}=await import('./sqliteInitialPublication');this.initialPublication=new SqliteInitialPublication(this.database,f=>this.assertReplicaCandidateFence(f),(table,key)=>this.get(table,key),f=>this.assertReplicaCandidateFence({...f,localRevision:this.decoded<number>('meta','local-content-revision')??0}),async()=>{if(this.persistence==='opfs')await requireCloudScratchSpace(false);});}
       switch(request.kind){
         case 'beginPublication':return {kind:'begun',id:this.initialPublication.begin(request.fence)};
         case 'publicationPage':return this.initialPublication.page(request.id,request.after);
@@ -788,6 +792,7 @@ export class SqliteRecordDatabase {
     });
     const candidates=await this.replicaCandidates;
     this.assertReplicaCandidateHealthy();
+    if(this.persistence==='opfs'&&request.kind!=='discard'&&candidates.needsScratchSpace(request)){await requireCloudScratchSpace(request.kind==='begin'||request.kind==='beginIndex');this.assertReplicaCandidateHealthy();}
     const readBase=(table:SqliteLibraryTable,key:string)=>{const row=this.syncBaseEntries([{table,key}])[0];if(!row)throw Error('library_sync_local_changed');return row.valueJson;};
     try{
       switch(request.kind){

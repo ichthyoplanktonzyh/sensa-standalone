@@ -1,6 +1,7 @@
 import type {Database,PreparedStatement} from '@sqlite.org/sqlite-wasm';
-import {librarySyncStoredByteLimit,librarySyncRecordLimit,librarySyncLogicalByteLimit,librarySyncTables,librarySyncMetadataPageRefs,type LibrarySyncManifest} from '@sensa/contracts/sensa';
-import {encodeLibrarySyncBlock,librarySyncRecordSegments,splitLibrarySyncText} from '@sensa/contracts/sensa/library-sync-blocks';
+import {librarySyncRecordLimit,librarySyncLogicalByteLimit,librarySyncTables,librarySyncMetadataPageRefs,type LibrarySyncManifest} from '@sensa/contracts/sensa';
+import {cloudScratchPayloadBytes,cloudScratchAllocatedBytes} from './cloudScratchStorage';
+import {encodeLibrarySyncBlock,decodeLibrarySyncBlock,librarySyncRecordSegments,splitLibrarySyncText} from '@sensa/contracts/sensa/library-sync-blocks';
 import {sha256} from '@sensa/learning-kernel';
 import {encodeBackupValue,decodeBackupValue,backupEqual} from './backupCodec';
 import {isReplicatedLibraryEntry,normalizeLibraryReplicaEntry,canCopyNormalizedLibraryReplicaValue} from './replication/libraryReplica';
@@ -12,9 +13,10 @@ import type {CloudSyncState} from './cloudSync';
 import type {LibraryIdentity} from './store';
 import type {SqliteLibraryTable,SqliteMutation} from './sqliteProtocol';
 const utf8=(text:string)=>new TextEncoder().encode(text).length;
-const pageBytes=4*1024*1024,recordBytes=90*1024*1024,logicalBytes=librarySyncLogicalByteLimit,storedBytes=librarySyncStoredByteLimit;
+const pageBytes=4*1024*1024,recordBytes=90*1024*1024,logicalBytes=librarySyncLogicalByteLimit,storedBytes=cloudScratchPayloadBytes;
 type Position={table:SqliteLibraryTable;key:string}|null;
 export const initialPublicationKeyPageSql='SELECT record_key,length(CAST(value_json AS BLOB)) AS bytes FROM sensa_records WHERE table_name=? AND record_key>? ORDER BY record_key LIMIT 64';
+export const initialPublicationIndexAfterSql='SELECT table_name,record_key,length(CAST(refs_json AS BLOB)) AS bytes,json_array_length(refs_json) AS refs FROM sensa_initial_publication_rows WHERE id=? AND (table_name,record_key)>(?,?) ORDER BY table_name,record_key LIMIT 64';
 const decodedStoredBytes=(text:string)=>{
  if(!text.startsWith('["sensa-record-gzip-v1",'))return utf8(text);
  const value=JSON.parse(text);if(!Array.isArray(value)||value.length!==3||typeof value[2]!=='string')throw Error('sqlite_shared_content_invalid');
@@ -23,8 +25,10 @@ const decodedStoredBytes=(text:string)=>{
 };
 const orderedTables=[...librarySyncTables].sort();
 type StoredBody={digest:string;value_json:string;refs_json:string|null};
-type Block={hash:string;data:string;plainBytes:number;storedBytes:number};
-type Header={id:string;fence:string;after_key:string;state:string;records:number;logical_bytes:number;stored_bytes:number;maximum_page_bytes:number;unique_plain_bytes:number;unique_stored_bytes:number;block_count:number;last_page_json:string|null};
+type Block={hash:string;data:string;plainBytes:number;storedBytes:number;sourceJson:string};
+type FrozenFragment=({digest:string}|{table:SqliteLibraryTable;key:string;segment:number})&{start:number;length:number};
+type StoredBlock={hash:string;data:string;source_json:string|null;plain_bytes:number;stored_bytes:number};
+type Header={id:string;fence:string;after_key:string;state:string;records:number;logical_bytes:number;stored_bytes:number;maximum_page_bytes:number;unique_plain_bytes:number;unique_stored_bytes:number;block_count:number;last_page_json:string|null;allocated_baseline:number|null};
 /** Disposable fixed-revision source capture. Rows never become facts or a cloud head. */
 export class SqliteInitialPublication{
  private ready=false;
@@ -33,7 +37,7 @@ export class SqliteInitialPublication{
  private admissionPolicy:'external'|'own-cloud'|'captured-own'|undefined;
  private indexedRecords=0;
  private dependencies:SqliteSyncDependencies;
- constructor(private db:Database,private assertFence:(f:ReplicaCandidateFence)=>void,private get:(table:SqliteLibraryTable,key:string)=>string|null,private assertOwner:(f:ReplicaCandidateFence)=>void){this.dependencies=new SqliteSyncDependencies(db);}
+ constructor(private db:Database,private assertFence:(f:ReplicaCandidateFence)=>void,private get:(table:SqliteLibraryTable,key:string)=>string|null,private assertOwner:(f:ReplicaCandidateFence)=>void,private checkSpace:()=>Promise<void>=async()=>{}){this.dependencies=new SqliteSyncDependencies(db);}
  private rows<T>(sql:string,bind:(string|number|null)[]=[]):T[]{
   let statement=this.statements.get(sql);if(!statement){statement=this.db.prepare(sql);this.statements.set(sql,statement);}statement.reset(true);if(bind.length)statement.bind(bind);
   const result:T[]=[];try{while(statement.step())result.push(statement.get({}) as T);return result;}finally{statement.reset(true);}
@@ -46,26 +50,40 @@ export class SqliteInitialPublication{
 
  CREATE TABLE IF NOT EXISTS sensa_initial_publication_content(id TEXT NOT NULL,digest TEXT NOT NULL,value_json TEXT NOT NULL,refs_json TEXT,PRIMARY KEY(id,digest));
  CREATE TABLE IF NOT EXISTS sensa_initial_publication_owners(id TEXT NOT NULL,table_name TEXT NOT NULL,record_key TEXT NOT NULL,digest TEXT NOT NULL,PRIMARY KEY(id,table_name,record_key,digest));
- `);this.ready=true;}
+ `);
+ // Retained uncertain-ACK sources from older code keep their exact bytes. New
+ // blocks have an empty data column and only a locator into the frozen source.
+ if(!this.rows<{name:string}>('PRAGMA table_info(sensa_initial_publication_blocks)').some(row=>row.name==='source_json'))this.db.exec('ALTER TABLE sensa_initial_publication_blocks ADD COLUMN source_json TEXT');
+ if(!this.rows<{name:string}>('PRAGMA table_info(sensa_initial_publication)').some(row=>row.name==='allocated_baseline'))this.db.exec('ALTER TABLE sensa_initial_publication ADD COLUMN allocated_baseline INTEGER');
+ this.ready=true;}
+ private allocatedBytes(){return (Number(this.db.selectValue('PRAGMA page_count'))-Number(this.db.selectValue('PRAGMA freelist_count')))*Number(this.db.selectValue('PRAGMA page_size'));}
+ private assertAllocatedCapacity(h:Header){if(this.allocatedBytes()-(h.allocated_baseline??0)>cloudScratchAllocatedBytes)throw Error('library_sync_capacity');}
  private header(id:string,confirmed=false){this.ensure();const h=this.rows<Header>('SELECT * FROM sensa_initial_publication WHERE id=?',[id])[0];if(!h)throw Error('library_sync_candidate_invalid');if(confirmed||h.state!=='filling')this.assertOwner(JSON.parse(h.fence));else this.assertFence(JSON.parse(h.fence));return h;}
  begin(fence:ReplicaCandidateFence):string{
   this.admission=undefined;this.admissionPolicy='captured-own';this.indexedRecords=0;this.assertFence(fence);this.ensure();const id=crypto.randomUUID(),fenceJson=JSON.stringify(fence);
   this.db.exec('BEGIN IMMEDIATE');try{
    this.db.exec('DELETE FROM sensa_initial_publication;DELETE FROM sensa_initial_publication_rows;DELETE FROM sensa_initial_publication_blocks;DELETE FROM sensa_initial_publication_content;DELETE FROM sensa_initial_publication_owners');
    this.dependencies.ensure();this.rows("DELETE FROM sensa_sync_admission_v1 WHERE scope LIKE 'publication:%'");
-   this.rows("INSERT INTO sensa_initial_publication(id,fence,after_key,state,stored_bytes) VALUES(?,?,'null','filling',?)",[id,fenceJson,utf8(id)+utf8(fenceJson)+4+7]);this.admission=this.dependencies.spoolAdmission('publication:'+id,true);this.db.exec('COMMIT');
+   const baseline=this.allocatedBytes();
+   this.rows("INSERT INTO sensa_initial_publication(id,fence,after_key,state,stored_bytes,allocated_baseline) VALUES(?,?,'null','filling',?,?)",[id,fenceJson,utf8(id)+utf8(fenceJson)+4+7,baseline]);this.admission=this.dependencies.spoolAdmission('publication:'+id,true);this.db.exec('COMMIT');
   }catch(cause){this.db.exec('ROLLBACK');throw cause;}return id;
  }
  /** One table/range seek per bounded source window. A page commits sets once;
   * no row write, quota or statistics query visits previous page prefixes. */
  async page(id:string,after:Position):Promise<InitialPublicationPage>{
-  const h=this.header(id),fence=JSON.parse(h.fence) as ReplicaCandidateFence;
+  let h=this.header(id);const fence=JSON.parse(h.fence) as ReplicaCandidateFence;
   const prior=h.last_page_json?JSON.parse(h.last_page_json):undefined;
   if(prior&&JSON.stringify(prior.after)===JSON.stringify(after))return {kind:'publicationPage',blocks:[],rows:prior.rows,next:prior.next,done:prior.done,stats:this.stats(id)};
   if(JSON.stringify(after)!==h.after_key){
    throw Error('library_sync_candidate_invalid');
   }
   if(h.state!=='filling')throw Error('library_sync_candidate_invalid');
+  // ACK-loss replays above consume no new space. Recheck the source fence
+  // after this advisory asynchronous estimate and before opening a transaction.
+  await this.checkSpace();h=this.header(id);
+  const saved=h.last_page_json?JSON.parse(h.last_page_json):undefined;
+  if(saved&&JSON.stringify(saved.after)===JSON.stringify(after))return {kind:'publicationPage',blocks:[],rows:saved.rows,next:saved.next,done:saved.done,stats:this.stats(id)};
+  if(JSON.stringify(after)!==h.after_key||h.state!=='filling')throw Error('library_sync_candidate_invalid');
   const output:LibrarySyncManifest['rows']=[],prepared:Array<{table:string;key:string;valueJson:string;refsJson:string;shared:number}>=[],owners:Array<{table:string;key:string;digest:string}>=[];
   const newBodies=new Map<string,StoredBody>(),pageBlocks=new Map<string,Block>(),usedHashes=new Set<string>();
   const pageAdmission=syncAdmission();
@@ -112,11 +130,11 @@ export class SqliteInitialPublication{
      const segments=librarySyncRecordSegments(row.value,row.shared?read:undefined),size=segments.reduce((n,text)=>n+utf8(text),0);
      if(size>recordBytes)throw Error('library_sync_capacity');if(output.length&&(plain+size>pageBytes||output.length===64)){stop=true;break;}
      const encoded=new Map<string,Block>(),refs:string[]=[],contentRefs=new Map<string,string[]>();
-     for(const segment of segments){
+     for(const [segmentIndex,segment] of segments.entries()){
       const digest=texts.get(segment),body=digest?(newBodies.get(digest)??bodies.get(digest)):undefined;
       if(body?.refs_json){refs.push(...JSON.parse(body.refs_json));continue;}
-      const segmentRefs:string[]=[];const pack=(text:string)=>{for(const part of splitLibrarySyncText(text)){const data=encodeLibrarySyncBlock(part),hash=sha256(data);segmentRefs.push(hash);refs.push(hash);const old=encoded.get(hash)??pageBlocks.get(hash);if(old&&old.data!==data)throw Error('library_sync_hash');encoded.set(hash,{hash,data,plainBytes:utf8(part),storedBytes:utf8(data)});}};
-      let at=0;const media=/data:(?:image|audio)\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+/giu;for(const match of segment.matchAll(media)){const start=match.index??0;pack(segment.slice(at,start));pack(match[0]);at=start+match[0].length;}pack(segment.slice(at));if(digest)contentRefs.set(digest,segmentRefs);
+      const segmentRefs:string[]=[];const pack=(text:string,start:number)=>{let offset=start;for(const part of splitLibrarySyncText(text)){const data=encodeLibrarySyncBlock(part),hash=sha256(data);segmentRefs.push(hash);refs.push(hash);const old=encoded.get(hash)??pageBlocks.get(hash);if(old&&old.data!==data)throw Error('library_sync_hash');const source:FrozenFragment={...(digest?{digest}:{table,key:row.record_key,segment:segmentIndex}),start:offset,length:part.length};encoded.set(hash,{hash,data,plainBytes:utf8(part),storedBytes:utf8(data),sourceJson:JSON.stringify(source)});offset+=part.length;}};
+      let at=0;const media=/data:(?:image|audio)\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+/giu;for(const match of segment.matchAll(media)){const start=match.index??0;pack(segment.slice(at,start),at);pack(match[0],start);at=start+match[0].length;}pack(segment.slice(at),at);if(digest)contentRefs.set(digest,segmentRefs);
      }
      if(refs.length>2048)throw Error('library_sync_capacity');
      // Existing immutable body refs need only indexed size metadata; no payload inventory scan.
@@ -140,10 +158,10 @@ export class SqliteInitialPublication{
     if(!stop&&until===inputs.length&&decodedSource.length===source.length&&selected.length===keys.length&&keys.length<64)tableAt++;
    }
    done=tableAt===orderedTables.length;
-   const priorBlocks=pageBlocks.size?this.rows<{hash:string;data:string}>('SELECT hash,data FROM sensa_initial_publication_blocks WHERE id=? AND hash IN(SELECT value FROM json_each(?))',[id,JSON.stringify([...pageBlocks.keys()])]):[];
+   const priorBlocks=pageBlocks.size?this.rebuild(id,this.rows<StoredBlock>('SELECT hash,data,source_json,plain_bytes,stored_bytes FROM sensa_initial_publication_blocks WHERE id=? AND hash IN(SELECT value FROM json_each(?))',[id,JSON.stringify([...pageBlocks.keys()])])):[];
    for(const old of priorBlocks)if(pageBlocks.get(old.hash)!.data!==old.data)throw Error('library_sync_hash');
    const existing=new Set(priorBlocks.map(block=>block.hash)),added=[...pageBlocks.values()].filter(block=>!existing.has(block.hash));
-   const storedRows=prepared.reduce((n,row)=>n+utf8(id)+utf8(row.table)+utf8(row.key)+utf8(row.valueJson)+utf8(row.refsJson),0),storedBlocks=added.reduce((n,b)=>n+utf8(id)+utf8(b.hash)+b.storedBytes,0);
+   const storedRows=prepared.reduce((n,row)=>n+utf8(id)+utf8(row.table)+utf8(row.key)+utf8(row.valueJson)+utf8(row.refsJson),0),storedBlocks=added.reduce((n,b)=>n+utf8(id)+utf8(b.hash)+utf8(b.sourceJson),0);
    const storedContent=[...newBodies.values()].reduce((n,b)=>n+utf8(id)+utf8(b.digest)+utf8(b.value_json)+utf8(b.refs_json??''),0),storedOwners=owners.reduce((n,o)=>n+utf8(id)+utf8(o.table)+utf8(o.key)+utf8(o.digest),0);
    const nextJson=JSON.stringify(position),state=done?'sealed':'filling',lastPage=JSON.stringify({after,next:position,done,rows:output}),headerDelta=utf8(nextJson)-utf8(h.after_key)+utf8(state)-utf8(h.state)+utf8(lastPage)-utf8(h.last_page_json??'');
    const priorObservationBytes=this.admission?.retainedMetadataBytes?.()??0;
@@ -152,11 +170,11 @@ export class SqliteInitialPublication{
    const stored=storedRows+storedBlocks+storedContent+storedOwners+headerDelta+observationBytes;
    if(h.records+output.length>librarySyncRecordLimit||h.logical_bytes+plain>logicalBytes||h.stored_bytes+stored>storedBytes)throw Error('library_sync_capacity');
    this.rows(`INSERT INTO sensa_initial_publication_content SELECT ?,json_extract(value,'$.digest'),json_extract(value,'$.value_json'),json_extract(value,'$.refs_json') FROM json_each(?)`,[id,JSON.stringify([...newBodies.values()])]);
-   const inserted=this.rows<{plain_bytes:number;stored_bytes:number}>(`INSERT INTO sensa_initial_publication_blocks SELECT ?,json_extract(value,'$.hash'),json_extract(value,'$.plainBytes'),json_extract(value,'$.storedBytes'),json_extract(value,'$.data') FROM json_each(?) WHERE true ON CONFLICT DO NOTHING RETURNING plain_bytes,stored_bytes`,[id,JSON.stringify([...pageBlocks.values()])]);
+   const inserted=this.rows<{plain_bytes:number;stored_bytes:number}>(`INSERT INTO sensa_initial_publication_blocks(id,hash,plain_bytes,stored_bytes,data,source_json) SELECT ?,json_extract(value,'$.hash'),json_extract(value,'$.plainBytes'),json_extract(value,'$.storedBytes'),'',json_extract(value,'$.sourceJson') FROM json_each(?) WHERE true ON CONFLICT DO NOTHING RETURNING plain_bytes,stored_bytes`,[id,JSON.stringify([...pageBlocks.values()].map(({data,...block})=>block))]);
    this.rows(`INSERT INTO sensa_initial_publication_rows SELECT ?,json_extract(value,'$.table'),json_extract(value,'$.key'),json_extract(value,'$.valueJson'),json_extract(value,'$.refsJson'),json_extract(value,'$.shared') FROM json_each(?)`,[id,JSON.stringify(prepared)]);
    this.rows(`INSERT INTO sensa_initial_publication_owners SELECT ?,json_extract(value,'$.table'),json_extract(value,'$.key'),json_extract(value,'$.digest') FROM json_each(?)`,[id,JSON.stringify(owners)]);
    this.assertFence(fence);
-   this.rows('UPDATE sensa_initial_publication SET after_key=?,state=?,last_page_json=?,records=records+?,logical_bytes=logical_bytes+?,stored_bytes=stored_bytes+?,maximum_page_bytes=max(maximum_page_bytes,?),unique_plain_bytes=unique_plain_bytes+?,unique_stored_bytes=unique_stored_bytes+?,block_count=block_count+? WHERE id=?',[nextJson,state,lastPage,output.length,plain,stored,plain+wire,inserted.reduce((n,b)=>n+b.plain_bytes,0),inserted.reduce((n,b)=>n+b.stored_bytes,0),inserted.length,id]);this.db.exec('COMMIT');
+   this.rows('UPDATE sensa_initial_publication SET after_key=?,state=?,last_page_json=?,records=records+?,logical_bytes=logical_bytes+?,stored_bytes=stored_bytes+?,maximum_page_bytes=max(maximum_page_bytes,?),unique_plain_bytes=unique_plain_bytes+?,unique_stored_bytes=unique_stored_bytes+?,block_count=block_count+? WHERE id=?',[nextJson,state,lastPage,output.length,plain,stored,plain+wire,inserted.reduce((n,b)=>n+b.plain_bytes,0),inserted.reduce((n,b)=>n+b.stored_bytes,0),inserted.length,id]);this.assertAllocatedCapacity(h);this.db.exec('COMMIT');
    if(this.admissionPolicy==='captured-own'&&this.admission){
     const target=this.admission;this.indexedRecords+=prepared.length;target.metadataBytes=target.retainedMetadataBytes?.()??target.metadataBytes+pageAdmission.metadataBytes;target.logicalBytes+=pageAdmission.logicalBytes;target.storedBytes+=pageAdmission.storedBytes;target.packageCacheComplete&&=pageAdmission.packageCacheComplete;
     if(pageAdmission.disabled||!target.scope&&target.metadataBytes>16*1024*1024){target.disabled='dependency_metadata_capacity';target.rows.clear();}else if(!target.disabled&&!target.scope)for(const [key,row]of pageAdmission.rows)target.rows.set(key,row);
@@ -167,7 +185,9 @@ export class SqliteInitialPublication{
  /** Stream only bounded refs after local capture is sealed; no body inventory. */
  indexPage(id:string,after:Position){
   const h=this.header(id);if(!['sealed','validated'].includes(h.state))throw Error('library_sync_candidate_invalid');
-  const measured=this.rows<{table_name:SqliteLibraryTable;record_key:string;bytes:number;refs:number}>('SELECT table_name,record_key,length(CAST(refs_json AS BLOB)) AS bytes,json_array_length(refs_json) AS refs FROM sensa_initial_publication_rows WHERE id=? AND (? IS NULL OR (table_name,record_key)>(?,?)) ORDER BY table_name,record_key LIMIT 64',[id,after?.table??null,after?.table??null,after?.key??null]);
+  // Keep the cursor predicate outside an OR so SQLite seeks the tuple range
+  // instead of rescanning the already returned prefix on every page.
+  const measured=this.rows<{table_name:SqliteLibraryTable;record_key:string;bytes:number;refs:number}>(after?initialPublicationIndexAfterSql:'SELECT table_name,record_key,length(CAST(refs_json AS BLOB)) AS bytes,json_array_length(refs_json) AS refs FROM sensa_initial_publication_rows WHERE id=? ORDER BY table_name,record_key LIMIT 64',after?[id,after.table,after.key]:[id]);
   const keys:Array<[string,string]>=[];let bytes=0,refs=0;for(const row of measured){if(keys.length&&(refs+row.refs>librarySyncMetadataPageRefs||bytes+row.bytes+utf8(row.record_key)>pageBytes))break;keys.push([row.table_name,row.record_key]);refs+=row.refs;bytes+=row.bytes+utf8(row.record_key);}
   const selected=keys.length?this.rows<{table_name:typeof librarySyncTables[number];record_key:string;refs_json:string}>('SELECT table_name,record_key,refs_json FROM sensa_initial_publication_rows WHERE id=? AND (table_name,record_key) IN(SELECT json_extract(value,\'$[0]\'),json_extract(value,\'$[1]\') FROM json_each(?)) ORDER BY table_name,record_key',[id,JSON.stringify(keys)]):[];
   const last=selected.at(-1),next=last?{table:last.table_name,key:last.record_key}:after,done=!last||!this.rows('SELECT 1 FROM sensa_initial_publication_rows WHERE id=? AND (table_name,record_key)>(?,?) LIMIT 1',[id,last.table_name,last.record_key]).length;
@@ -178,9 +198,32 @@ export class SqliteInitialPublication{
   const measured=this.rows<{hash:string;stored_bytes:number}>('SELECT hash,stored_bytes FROM sensa_initial_publication_blocks WHERE id=? AND hash IN(SELECT value FROM json_each(?))',[id,JSON.stringify(hashes)]),sizes=new Map(measured.map(row=>[row.hash,row.stored_bytes]));
   const selected:string[]=[],deferred:string[]=[];let raw=0;
   for(const hash of hashes){const size=sizes.get(hash);if(size===undefined)throw Error('library_sync_missing_block');if(selected.length&&(selected.length===128||raw+size>3*1024*1024)){deferred.push(hash);continue;}selected.push(hash);raw+=size;}
-  const found=this.rows<{hash:string;data:string}>('SELECT hash,data FROM sensa_initial_publication_blocks WHERE id=? AND hash IN(SELECT value FROM json_each(?))',[id,JSON.stringify(selected)]),data=new Map(found.map(row=>[row.hash,row.data]));
+  const found=this.rows<StoredBlock>('SELECT hash,data,source_json,plain_bytes,stored_bytes FROM sensa_initial_publication_blocks WHERE id=? AND hash IN(SELECT value FROM json_each(?))',[id,JSON.stringify(selected)]),data=new Map(this.rebuild(id,found).map(row=>[row.hash,row.data]));
   const blocks:Array<{hash:string;data:string}>=[];let bytes=13;for(const hash of selected){const block={hash,data:data.get(hash)!},cost=utf8(JSON.stringify(block))+1;if(bytes+cost>3*1024*1024){deferred.push(hash);continue;}blocks.push(block);bytes+=cost;}
-  if(!blocks.length)throw Error('library_sync_capacity');return {kind:'publicationBlocks' as const,blocks,deferred};
+  if(!blocks.length)throw Error('library_sync_capacity');this.header(id);return {kind:'publicationBlocks' as const,blocks,deferred};
+ }
+ /** Rebuilds a bounded request from frozen rows/bodies, never mutable facts.
+  * Only the current source's segments remain in memory; a 90 MiB singleton
+  * keeps its existing exception. Encoded outputs retain the 3 MiB batch cap.
+  */
+ private rebuild(id:string,blocks:StoredBlock[]):Array<{hash:string;data:string}>{
+  let current='',segments:string[]=[];
+  return blocks.map(block=>{
+   let data=block.data;
+   if(block.source_json!==null){
+    const source=JSON.parse(block.source_json) as FrozenFragment;
+    if(!Number.isSafeInteger(source.start)||!Number.isSafeInteger(source.length)||source.start<0||source.length<1||source.length>262144)throw Error('library_sync_hash');
+    const key='digest' in source?'body:'+source.digest:JSON.stringify([source.table,source.key]);
+    if(key!==current){
+     if('digest' in source){const body=this.rows<{value_json:string}>('SELECT value_json FROM sensa_initial_publication_content WHERE id=? AND digest=?',[id,source.digest])[0];if(!body)throw Error('library_sync_missing_block');segments=[unpackStoredRecord(body.value_json,undefined,recordBytes)];}
+     else{if(!Number.isSafeInteger(source.segment)||source.segment<0)throw Error('library_sync_hash');const row=this.rows<{value_json:string}>('SELECT value_json FROM sensa_initial_publication_rows WHERE id=? AND table_name=? AND record_key=?',[id,source.table,source.key])[0];if(!row)throw Error('library_sync_missing_block');segments=librarySyncRecordSegments(JSON.parse(unpackStoredRecord(row.value_json,undefined,recordBytes)),()=> '');}
+     current=key;
+    }
+    const text=segments['digest' in source?0:source.segment];if(text===undefined||source.start+source.length>text.length)throw Error('library_sync_hash');const plain=text.slice(source.start,source.start+source.length);
+    if(utf8(plain)!==block.plain_bytes)throw Error('library_sync_hash');data=encodeLibrarySyncBlock(plain);
+   }
+   if(sha256(data)!==block.hash||utf8(data)!==block.stored_bytes||block.source_json===null&&utf8(decodeLibrarySyncBlock(data))!==block.plain_bytes)throw Error('library_sync_hash');return {hash:block.hash,data};
+  });
  }
  private plain(id:string,row:{value_json:string;shared:number}){const text=unpackStoredRecord(row.value_json,undefined,recordBytes);if(!row.shared)return text;return JSON.stringify(expandSharedRecordContent(JSON.parse(text),digest=>{const body=this.rows<{value_json:string}>('SELECT value_json FROM sensa_initial_publication_content WHERE id=? AND digest=?',[id,digest])[0];return body?unpackStoredRecord(body.value_json,undefined,recordBytes):undefined;}));}
  stats(id:string,confirmed=false):InitialPublicationStats{this.ensure();const h=confirmed?this.rows<Header>('SELECT * FROM sensa_initial_publication WHERE id=?',[id])[0]:this.header(id);if(!h)throw Error('library_sync_candidate_invalid');if(confirmed)this.assertOwner(JSON.parse(h.fence));return {records:h.records,logicalBytes:h.logical_bytes,uniqueBlockPlainBytes:h.unique_plain_bytes,uniqueBlockStoredBytes:h.unique_stored_bytes,storedPayloadBytes:h.stored_bytes,blocks:h.block_count,maximumPageBytes:h.maximum_page_bytes};}
@@ -191,7 +234,10 @@ export class SqliteInitialPublication{
    this.rows("UPDATE sensa_initial_publication SET state='validated',stored_bytes=stored_bytes+? WHERE id=?",[utf8('validated')-utf8(h.state),id]);this.admissionPolicy='own-cloud';return this.stats(id,confirmed);
   }
   const alive=()=>{this.header(id,confirmed);};
-  const admission=ownCloud?this.dependencies.spoolAdmission('publication:'+id,false,bytes=>{const current=this.header(id,confirmed);if(current.stored_bytes+bytes>storedBytes)throw Error('library_sync_capacity');this.rows('UPDATE sensa_initial_publication SET stored_bytes=stored_bytes+? WHERE id=?',[bytes,id]);}):syncAdmission();this.dependencies.ensure();
+  // A cold recovery can add missing observer rows. Unknown old baselines use
+  // the conservative whole-DB page bound; rejected sources remain retained.
+  await this.checkSpace();alive();this.assertAllocatedCapacity(h);
+  const admission=ownCloud?this.dependencies.spoolAdmission('publication:'+id,false,bytes=>{const current=this.header(id,confirmed);if(current.stored_bytes+bytes>storedBytes)throw Error('library_sync_capacity');this.rows('UPDATE sensa_initial_publication SET stored_bytes=stored_bytes+? WHERE id=?',[bytes,id]);this.assertAllocatedCapacity(current);}):syncAdmission();this.dependencies.ensure();
   const reader=sealedRecordReader({alive,beforePage:alive,
    get:(table,key)=>this.rows<{record_key:string;value_json:string;shared:number}>('SELECT record_key,value_json,shared FROM sensa_initial_publication_rows WHERE id=? AND table_name=? AND record_key=?',[id,table,key])[0],
    has:(table,key)=>this.rows('SELECT 1 FROM sensa_initial_publication_rows WHERE id=? AND table_name=? AND record_key=?',[id,table,key]).length>0,

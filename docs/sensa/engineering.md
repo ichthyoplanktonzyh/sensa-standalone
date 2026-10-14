@@ -327,7 +327,7 @@ Personal Anchor media 与 Practice Artifact 仍按各自 learner-owned 表进入
 正常认证账号的自己库复制采用受控 Sensa writer 信任边界：写入时各 owner 维护领域关系，首发／二进制接收无需再做全库领域审计；摘要只证明字节完整，不证明语义正确，writer 缺陷仍可能由独立健康审计发现。任意备份、文件和跨作者 Package 导入继续完整领域准入及 projection 重建比较，保留完整审计／诊断入口；并发分支仍执行原有冲突与受影响依赖闭包规则。自库 producer 从同一固定 revision 构造白名单 clean DB、构建当前投影，保留全部历史 Run 材料；receiver 执行版本、精确 schema 白名单、SQLite integrity/FK、body/hash/owners、严格 tagged wire、账号/library/learner/H 绑定。事实和正文按 64-key／1 MiB 已存页读取，decoded body LRU 16 MiB／256 项，单条解压 96 MiB、clean 文件 90 MiB、唯一展开累计 512 MiB；serialized 预算不等于 JS heap。接收端投影版本或 Target 缓存计数不匹配时拒绝，不默默重建。
 二进制工件随同一个 staging CAS 原子绑定已有 cursor snapshot H，使用既有 block store、账号配额及 snapshot membership／read lease；`library_cloud.binary_snapshot` 只描述该 H 的 bytes，不建立另一 head。原始 SQLite 段最多 176 KiB，直接使用 gzip 二进制编码，解压固定分配且拒绝 CRC／digest／ISIZE 损坏、额外成员和输出越界；保留 block hash、3 MiB store 和 4 MiB fetch 边界。本机捕获页同时建立 reverse index，只有成功页事务才合入计数与依赖，不再封存后重扫全部材料。封存后按 64 行／4096 refs／4 MiB 读取原 scratch 的 refs；在原配额能容纳 refs 及二进制保守上界时，refs 暂存与单批二进制编码／传输重叠，无完整 refs 常驻集合。工件越过 90 MiB 文件界限或剩余配额不足时，仍可发布原 refs 权威，head 不附加工件；不放宽任何配额。可选二进制工件独立限于 200k 行的生产分支；更大的库只捕获 refs。refs 新设备恢复也使用独立 namespace：SQL 唯一性见证替代整库 JS 集合，事实／基线按 keyset 流式应用，投影在同一最终事务分页重建。新设备仅在 replicated facts／baseline 真正为空且无 pending／冲突时创建独立 namespace，先载入 H、分页建立现有 sync baseline／reverse relations，再应用连续 tail 至已核验 head。完整封存、账号/signout epoch/revision/incarnation 与原空库再验通过后，持 selection 和旧 transaction exclusive locks 作一次 durable selection 写入；旧 namespace 保留，其他页面及旧 namespace 的排队工作受 fence 拒绝。本页面采用新 incarnation 并重绑定通知；重新打开同一 selection 可恢复 pointer ACK 丢失。下载、tail、门控或 pointer 写失败不激活半成品；仅清理本次新建且已确认关闭、未被选择或保留的 namespace。retention floor 超过工件 H 时不再提供它，不能越过 floor。
 日常增量继续使用 90 秒整体 pass；首次自库发布与空设备全量恢复改为 90 秒无实际进展终止，单次请求仍限 15 秒。完成快照阶段、推进已校验的页或实际已发送／接收字节才更新进度，重复计数不续期；本机准备不消耗固定整体网络 pass。显式取消、停滞或请求超时保留可重试的私有 staging／durable receipt，迟到 CAS 不确认本机 baseline，取消的私有 generation 不激活。资源上限独立执行，持续进展不代表整体耗时达标。
-首发与完整 own-account 候选采用有限的 600k 行／1 GiB 累计逻辑展开量合同，本机 scratch retained text payload 上限 256 MiB；后者不等于 SQLite 文件、WAL、索引或 heap。唯一块 plain／encoded bytes 由页事务实际插入增量计数，重复页不重复计数，失败回滚 rows 与计数。`maximumPageBytes` 是页展开量加唯一编码正文的工作 payload 口径，不是 JS heap 峰值。source physical window 1 MiB、共享正文预取 4 MiB、metadata 512 行／4096 refs／4 MiB；单条独立上限仍为 90 MiB。store 128 块同时保留 3 MiB 字符及实际 JSON UTF-8 上限、route 4 MiB；块解压与账号 256 MiB quota 继续执行。服务端从实际解码的不可变 block 测量 UTF-8 字节，按 refs 的顺序及重复次数计入单行 90 MiB 与整库 1 GiB；历史 head／stage 的未知计量用 NULL 区分并在下一次写入前分页补计，只写派生 witness，不重写事实或 refs。服务器最多 4 个 private workspace，账号下所有 workspace 累计 staging metadata 128 MiB，沿用 upload lease；清理仅删除过期 private staging／pins，不删除已发布历史或 receipt。服务端每累计 128 次提交或 4 MiB tail 建立冻结索引快照，旧 snapshot／log owners 和幂等回执继续保留；历史剪枝仅提供隔离验证入口，尚未启用在线删除，旧版本仍占账号容量。
+首发与完整 own-account 候选采用有限的 600k 行／1 GiB 累计逻辑展开量合同，本机自库 scratch retained text payload 上限为 1536 MiB（1 GiB 逻辑正文＋128 MiB 有序 refs 合同额度＋384 MiB 指针、owners、准入与恢复元数据），独立磁盘包络 2 GiB；其中 allocated SQLite 页增长限 1792 MiB，另留 256 MiB 日志余量。开始替换前要求浏览器 origin 剩余 quota 2 GiB，新增页／候选写入前保留至少 512 MiB；storage estimate 是含应用缓存的 advisory 值，物理写入仍由 SQLite／OPFS 拒绝。幂等重放和已封存读取不因新增空间预检被拒绝。新首发块只存冻结 row/shared body 的 UTF-16 片段指针、hash 与 plain/stored 长度，按请求窗口从不可变源重建并复核；不保留全量编码块、不从活跃源补读。旧不确定 ACK 所需的块正文仍保留可读。上述数字不是 SQLite 文件/WAL 全峰值或 heap 证明。唯一块 plain／encoded bytes 由页事务实际插入增量计数，重复页不重复计数，失败回滚 rows 与计数。`maximumPageBytes` 是页展开量加唯一编码正文的工作 payload 口径，不是 JS heap 峰值。source physical window 1 MiB、共享正文预取 4 MiB、metadata 512 行／4096 refs／4 MiB；单条独立上限仍为 90 MiB。store 128 块同时保留 3 MiB 字符及实际 JSON UTF-8 上限、route 4 MiB；块解压与账号 256 MiB quota 继续执行。服务端从实际解码的不可变 block 测量 UTF-8 字节，按 refs 的顺序及重复次数计入单行 90 MiB 与整库 1 GiB；历史 head／stage 的未知计量用 NULL 区分并在下一次写入前分页补计，只写派生 witness，不重写事实或 refs。服务器最多 4 个 private workspace，账号下所有 workspace 累计 staging metadata 128 MiB，沿用 upload lease；清理仅删除过期 private staging／pins，不删除已发布历史或 receipt。服务端每累计 128 次提交或 4 MiB tail 建立冻结索引快照，旧 snapshot／log owners 和幂等回执继续保留；历史剪枝仅提供隔离验证入口，尚未启用在线删除，旧版本仍占账号容量。
 已由当前 replica validation version 完整校验并确认的 v6 基线，在相同远端 revision 下复用本机 owner 事务准入：
 无变化只读取轻量身份、同步游标并核对 head；本机增量只读取变化事实和对应基线正文，保留其余 block refs，
 确认带原 operation ID／请求 digest 的 CAS 回执后，在同一 SQLite 事务中 patch 受影响基线与同步状态。远端 tail 从已验证 baseline 建立 Worker overlay，完整或保存态增量准入后在一次本地事务提交事实、baseline 和 cursor；冲突的混合 baseline 仍走完整三方收敛。后续本机写入保留 pending，不能把游标
@@ -386,7 +386,7 @@ identity 等转换和派生投影仍走完整值路径；事实／基线／owner
 Worker 的候选校验不占据普通请求队列，按记录让出，
 允许本机读取继续；校验仍绑定同一不可变候选。SQL keyset 页同时限制 64 行与 1 MiB 已存编码，允许单个
 超页记录单独处理；单记录原始正文保护仍为 90 MiB。多行批次在任何解析／压缩前预检原始 4 MiB 字节预算，
-随后逐行编码写入，不同时保留整批压缩／解码对象。完整 own-account 单代逻辑正文保护为 1 GiB、已存编码预算为 256 MiB；
+随后逐行编码写入，不同时保留整批压缩／解码对象。完整 own-account 单代逻辑正文保护为 1 GiB、本地候选正文／refs／proof／apply-plan 暂存预算为 1536 MiB；云端实际编码块账号配额仍为独立 256 MiB，外部文件导入边界不变。
 它们不是账号容量、实际 OPFS 占用或峰值内存证明，单个巨型事实仍需单独验证响应性。
 Worker 按 ES module 分块构建，完整 validator 延迟加载；离线 shell 预缓存所有构建的 JS／Wasm 代码块。
 正常 synchronizer 的新设备恢复已使用该内核：只在无 baseline、无 pending／冲突，且本机 replicated facts
@@ -423,7 +423,7 @@ incarnation fence，清除后的旧点击不能变成新授权。普通尝试失
 暂存应用、完整回退应用或空账号确认在同一源事务内解除暂停；失败不消费，新的本机资料仍须走身份冲突。
 新设备候选应用只额外允许删除这一确切的现存 marker，不开放其他 metadata 或删除操作；当前协调协议为 68。
 同事务 restoreOperationId 回执确认协调器丢失 ACK／候选重放后的实际提交，确认后才发送资料变化通知；
-无法读取该回执时不能冒充成功。候选、live、baseline 和 WAL 可同时占磁盘；256 MiB 暂存估计不是峰值磁盘证明。
+无法读取该回执时不能冒充成功。候选、live、baseline 和 WAL 可同时占磁盘；1536 MiB 暂存 payload 计量不是峰值磁盘证明，页增长与 origin 空间检查独立执行。
 已有当前版本验证的 checkpoint 且本机 revision 未变化时，远端新 head 进入同一私有候选。
 完整准入从实际候选正文建立行摘要、存储预算、全局 protocolRunId 归属与 Session-start 索引。
 该快照收据绑定 owner/library/learner/incarnation/H、本机与材料版本及 baseline generation；它只保护
@@ -445,12 +445,12 @@ Scope 不扩展其他成员的旧历史。全局 Protocol Run 归属与 Session-
 8 MiB serialized 输入，每条最多 256 KiB；每次消费克隆内部解码值，窗口退出释放原对象。超出窗口
 保留严格解码，不把 serialized 预算冒充 heap 峰值。正常路径不再复制、比较整个历史分量的 wire 输入。
 变化计划在私有候选内预先恢复、编码和压缩 facts/baseline，共享 body 按 digest 暂存并核对精确内容与
-原存储见证。私有编码使用 lossless packed 格式，副本与候选一起计入既有 256 MiB 暂存上限。只有
+原存储见证。私有编码使用 lossless packed 格式，副本与候选一起计入本机 1536 MiB 暂存上限，私有事务提交前同步复核 allocated 页增长。只有
 候选自身的精确插入推进封存代次；其他写入、取消或 fence 变化使旧准备失效。编码/SQL 写入队列使用
 16 条/1 MiB 有界批次，批内编码按正文去重；正式事务复核完整身份、内容、baseline fence 和 body 见证，
 一次提交 facts、projection、baseline、cursor、receipt 和快照收据，不分批暴露正式状态。
 
-依赖证书 v2 包含 Meaning→receipt 反向关系；旧证书不能授权稀疏复用，完整成功准入后重建，领域准入版本不变。小型命令观察仍限 16 MiB/200k 行；完整捕获／候选观察在 private SQLite scope 中按 64 行／1 MiB 批次持久化，随成功认证、取消或失败清理，不常驻整库摘要集合。观察文本计入本机 256 MiB 暂存预算。稀疏变化正文和直接 baseline 点读分别限 32 MiB，完整展开总量限 1 GiB。
+依赖证书 v2 包含 Meaning→receipt 反向关系；旧证书不能授权稀疏复用，完整成功准入后重建，领域准入版本不变。小型命令观察仍限 16 MiB/200k 行；完整捕获／候选观察在 private SQLite scope 中按 64 行／1 MiB 批次持久化，随成功认证、取消或失败清理，不常驻整库摘要集合。观察文本计入本机 1536 MiB 暂存预算。稀疏变化正文和直接 baseline 点读分别限 32 MiB，完整展开总量限 1 GiB。
 预算不确定或内容/PSW/source 结构变化回退完整保存态准入，记录实际原因；回退不能绕过失效 fence。
 首次恢复、结构变化和真正冲突的专门证明仍随资料增长，普通接收不承诺任意分布下常数耗时。
 仅 refs 改变不制造内容 revision；丢 ACK 检查同事务回执，HTTP head 更换/块退休最多三次重读/重试。
