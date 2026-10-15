@@ -1,6 +1,6 @@
 import type {Database,Sqlite3Static,SAHPoolUtil} from '@sqlite.org/sqlite-wasm';
 import {sha256} from '@sensa/learning-kernel';
-import {librarySyncRecordLimit,librarySyncLogicalByteLimit,librarySyncTables} from '@sensa/contracts/sensa';
+import {canonicalConsumerJson,librarySyncRecordLimit,librarySyncLogicalByteLimit,librarySyncTables} from '@sensa/contracts/sensa';
 import {SqliteRecordDatabase} from './sqliteDatabase';
 import {decodeBackupValue,encodeBackupValue,backupEqual} from './backupCodec';
 import {decodeSharedArchiveWire,unpackStoredRecord} from './sharedRecordContent';
@@ -232,7 +232,9 @@ async function importPortableSnapshot(sqlite:Sqlite3Static,pool:SAHPoolUtil,file
   else library.initialize();
   const projected=performance.now();
   const identity={...facts.identity,deviceId:crypto.randomUUID()};
-  library.commit({clears:[],deletes:[],puts:[{table:'meta',key:'identity',encodedValue:JSON.stringify(encodeBackupValue(identity))},{table:'meta',key:'local-incarnation',encodedValue:JSON.stringify(encodeBackupValue(crypto.randomUUID()))},{table:'meta',key:'local-content-revision',encodedValue:JSON.stringify(encodeBackupValue(1))}]});
+  // The snapshot excludes device receipts. Install the reserved receipt with
+  // the restored identity before this own-account generation can be selected.
+  library.commit({clears:[],deletes:[],puts:[{table:'meta',key:'identity',encodedValue:JSON.stringify(encodeBackupValue(identity))},{table:'meta',key:'local-incarnation',encodedValue:JSON.stringify(encodeBackupValue(crypto.randomUUID()))},{table:'meta',key:'local-content-revision',encodedValue:JSON.stringify(encodeBackupValue(1))},...(policy==='own-cloud'?[{table:'operations' as const,key:'00000000-0000-4000-8000-000000000001',encodedValue:JSON.stringify(encodeBackupValue({input:canonicalConsumerJson({kind:'library.create',input:{}}),result:identity,committedAt:identity.createdAt}))}]:[])]});
   return {library,identity,stats:facts.stats,timingsMs:{import:imported-started,admission:admitted-imported,projection:projected-admitted,deviceBootstrap:performance.now()-projected}};
  }catch(error){try{if(library)library.close(false);else raw?.close();}finally{pool.unlink(file);}throw error;}
 }

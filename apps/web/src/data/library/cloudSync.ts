@@ -783,7 +783,17 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
       deadline.progress('snapshot-fallback-refs',observedHead.revision);return await restoreOwnCloudRefs(header,latest,request,blocks,deadline,{revision:observedHead.revision,reason:String(error)});
      }
     }
-    if(observedHead.binarySnapshot&&observedHead.binarySnapshot.records<=librarySyncLegacyManifestRecordLimit&&typeof Worker!=='undefined')return await restoreOwnCloudLibrary(header,observedHead,request,blocks,deadline);
+    if(observedHead.binarySnapshot&&observedHead.binarySnapshot.records<=librarySyncLegacyManifestRecordLimit&&typeof Worker!=='undefined'){
+     try{return await restoreOwnCloudLibrary(header,observedHead,request,blocks,deadline);}
+     catch(cause){
+      deadline.check();if(!(cause instanceof Error)||cause.message!=='library_sync_missing_block')throw cause;
+      const latest=parseSyncHead(await request('/head'));
+      if(latest.revision===observedHead.revision&&equal(latest.manifest,observedHead.manifest))throw cause;
+      // No generation was selected. Reacquire the advanced account checkpoint
+      // through its protected refs/tail and retain the original source fence.
+      return await restoreOwnCloudRefs(header,latest,request,blocks,deadline);
+     }
+    }
     if(typeof Worker!=='undefined')return await restoreOwnCloudRefs(header,observedHead,request,blocks,deadline);
     const send=(input:ReplicaCandidateRequest)=>boundedCandidate(input,deadline);
     let candidate:ReplicaCandidateValidation|undefined;

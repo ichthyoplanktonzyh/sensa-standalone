@@ -1,6 +1,6 @@
 import type {Database,SAHPoolUtil,Sqlite3Static} from '@sqlite.org/sqlite-wasm';
 import {sha256} from '@noble/hashes/sha2.js';
-import {librarySyncNativeMetadata,librarySyncNativeSnapshot,librarySyncNativeDescriptorText,type LibrarySyncNativeSnapshot} from '@sensa/contracts/sensa';
+import {canonicalConsumerJson,librarySyncNativeMetadata,librarySyncNativeSnapshot,librarySyncNativeDescriptorText,type LibrarySyncNativeSnapshot} from '@sensa/contracts/sensa';
 import {sha256 as textHash} from '@sensa/learning-kernel';
 import {SqliteRecordDatabase} from './sqliteDatabase';
 import {SqliteSyncDependencies} from './sqliteSyncDependencies';
@@ -46,7 +46,7 @@ export async function importNativeCloudSnapshot(sqlite:Sqlite3Static,pool:SAHPoo
   library.initialize();
   const incarnation=crypto.randomUUID(),deviceIdentity={...identity,deviceId:crypto.randomUUID()},at=new Date().toISOString();
   const state:CloudSyncState={owner,incarnation,status:'synced',checkpointVersion:7,restoreValidationVersion:9,revision:binding.revision,syncedLocalRevision:1,lastSyncedAt:at,lastCheckedAt:at};
-  library.commit({clears:[],deletes:[],puts:Object.entries({identity:deviceIdentity,'local-incarnation':incarnation,'local-content-revision':1,'service-owner':owner,'cloud-sync':state}).map(([key,value])=>({table:'meta',key,encodedValue:JSON.stringify(encodeBackupValue(value))}))});
+  library.commit({clears:[],deletes:[],puts:[...Object.entries({identity:deviceIdentity,'local-incarnation':incarnation,'local-content-revision':1,'service-owner':owner,'cloud-sync':state}).map(([key,value])=>({table:'meta' as const,key,encodedValue:JSON.stringify(encodeBackupValue(value))})),{table:'operations',key:'00000000-0000-4000-8000-000000000001',encodedValue:JSON.stringify(encodeBackupValue({input:canonicalConsumerJson({kind:'library.create',input:{}}),result:deviceIdentity,committedAt:deviceIdentity.createdAt}))}]});
   const dependencies=new SqliteSyncDependencies(raw);try{raw.exec('BEGIN IMMEDIATE');dependencies.certifyAdmittedSnapshot(metadata,state,deviceIdentity);raw.exec('COMMIT');}catch(error){raw.exec('ROLLBACK');throw error;}finally{dependencies.close();}
   return {library,identity:deviceIdentity,incarnation,metadata,stats:{admissionReused:true,decodedRecords:0,records:metadata.records},timingsMs:{import:imported-started,nativeAdmission:checked-imported,deviceBootstrap:performance.now()-checked,total:performance.now()-started}};
  }catch(error){try{if(library)library.close(false);else raw?.close();}finally{pool.unlink(file);}throw error;}

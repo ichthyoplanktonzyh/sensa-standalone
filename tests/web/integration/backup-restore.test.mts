@@ -57,6 +57,21 @@ test('a backup without public packages needs no resource module and reports its 
  assert.equal((await library.readLibrary(tx=>tx.get<{id:string}>('meta','identity')))?.id,source.id);
 });
 
+test('a valid receipt-free backup replaces the empty destination creation receipt atomically',async()=>{
+ vi.resetModules();
+ const library=await import('../../../apps/web/src/data/library/store'),backup=await import('../../../apps/web/src/data/library/backup');
+ const source=await library.openLibrary();
+ await library.restoreLibraryTransaction(async tx=>tx.clear('operations'));
+ const exported=await backup.exportLibraryBackup('receipt-free-backup-password');
+ const destination={...source,id:crypto.randomUUID(),learnerId:crypto.randomUUID(),deviceId:crypto.randomUUID()};
+ await library.restoreLibraryTransaction(async tx=>{for(const table of library.libraryTables)tx.clear(table);tx.put('meta','identity',destination);tx.put('operations','00000000-0000-4000-8000-000000000001',{input:canonicalConsumerJson({kind:'library.create',input:{}}),result:destination,committedAt:destination.createdAt});});
+ await backup.restoreLibraryBackup(exported.file,'receipt-free-backup-password');
+ const restored=await library.readLibrary(tx=>tx.get('meta','identity')),revision=await library.readLibrary(library.readLocalLibraryRevision);
+ assert.deepEqual(restored,{...source,deviceId:destination.deviceId});
+ assert.deepEqual(await library.readLibrary(tx=>tx.get('operations','00000000-0000-4000-8000-000000000001')),{input:canonicalConsumerJson({kind:'library.create',input:{}}),result:restored,committedAt:source.createdAt});
+ await assert.rejects(library.openLibrary(),/localFlow.libraryReplaced/);assert.equal(await library.readLibrary(library.readLocalLibraryRevision),revision,'the old module must remain fenced without repairing or changing restored content');
+});
+
 // Authenticate each malformed archive so rejection exercises frame admission,
 // rather than stopping at an unrelated password/digest failure.
 const rejectArchiveFrame=async(mutate:(frames:any[])=>void)=>{

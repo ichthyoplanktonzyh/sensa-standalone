@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {canonicalConsumerJson} from '@sensa/contracts/sensa';
 import {libraryTables,readLibrary,restoreLibraryTransaction,assertCurrentLibrary,type LibraryTransaction,type LibraryIdentity} from './store';
 import {learningOwner} from './libraryOwnership';
 import {cachedAuthSubject} from '../account/authSessionHint';
@@ -106,6 +107,9 @@ export async function restoreLibraryBackup(file:Uint8Array,password:string){
   }}
   for(const row of rows.meta)tx.put('meta',row.key,row.key==='identity'?identity:row.value);
   for(const row of rows.operations){if(row.key==='00000000-0000-4000-8000-000000000001')row.value.result=identity;tx.put('operations',row.key,row.value);}
+  // A valid source may contain no device receipts. Its restored identity must
+  // still replace the empty destination's placeholder creation receipt.
+  tx.put('operations','00000000-0000-4000-8000-000000000001',{input:canonicalConsumerJson({kind:'library.create',input:{}}),result:identity,committedAt:identity.createdAt});
   tx.delete('meta','cloud-sync');
   tx.delete('meta','local-reset');
   tx.put('meta','local-incarnation',crypto.randomUUID());

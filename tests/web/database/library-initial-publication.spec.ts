@@ -25,6 +25,34 @@ test('cancelled first transfers never confirm a late CAS or activate a closed pr
  }finally{await f.close();}
 });
 
+for(const mode of ['advanced','unchanged','local-write'] as const)test(`a missing binary block reacquires an advanced checkpoint without losing source fences (${mode})`,async({browser})=>{
+ const f=await createLibraryCloudBrowserFixture(browser);
+ const save=(page:import('@playwright/test').Page,text:string)=>page.evaluate(text=>(window as any).core.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text}),text);
+ const inspect=(page:import('@playwright/test').Page)=>page.evaluate(async()=>{const c=(window as any).core;return c.readLibrary(async(tx:any)=>({identity:await tx.get('meta','identity'),drafts:await tx.entries('drafts'),base:await tx.syncBaseReferences()}));});
+ try{
+  const account=await f.createAccount(),source=await f.createClient(account),target=await f.createClient(account);
+  await save(source,'Original protected body');await source.evaluate(()=>(window as any).sync());const head=await source.evaluate(()=>(window as any).request('/head'));expect(head.binarySnapshot).toBeTruthy();
+  const before=await inspect(target);await target.evaluate(()=>{const w=window as any,send=w.request;w.headRevisions=[];w.request=async(path:string,body:any)=>{const reply=await send(path,body);if(path==='/head')w.headRevisions.push(reply.revision);return reply;};});
+  let injected=false;await target.route('**/sensa/library-sync/blocks/fetch',async route=>{
+   if(injected){await route.continue();return;}injected=true;
+   if(mode!=='unchanged'){await save(source,'Tail committed during snapshot fetch');await source.evaluate(()=>(window as any).sync());}
+   if(mode==='local-write')await save(target,'Unsent local edit must survive');
+   await route.fulfill({status:200,json:{blocks:[],missing:route.request().postDataJSON().hashes,deferred:[]}});
+  });
+  if(mode==='advanced'){
+   await target.evaluate(()=>(window as any).sync());expect(await target.evaluate(()=>(window as any).headRevisions)).toEqual([1,2,2]);
+   expect((await inspect(target)).drafts).toEqual((await inspect(source)).drafts);expect((await target.evaluate(()=>(window as any).core.readCloudSync())).status).toBe('synced');
+   expect((await source.evaluate(()=>(window as any).request('/head'))).revision,'recovery must not publish another commit').toBe(2);
+  }else{
+   await expect(target.evaluate(()=>(window as any).sync())).rejects.toThrow(mode==='unchanged'?'library_sync_missing_block':'library_sync_local_changed');
+   const after=await inspect(target);expect(after.identity).toEqual(before.identity);expect(after.base).toEqual(before.base);
+   expect(after.drafts.map((r:any)=>r.value.text)).toEqual(mode==='unchanged'?[]:['Unsent local edit must survive']);
+   expect(await target.evaluate(()=>localStorage.getItem('sensa:local-library-selection:v1'))).toBeNull();
+  }
+  expect(injected).toBe(true);
+ }finally{await f.close();}
+});
+
 test('own binary checkpoint restores into a retained generation after tail and continues genuine learning',async({browser})=>{
  const f=await createLibraryCloudBrowserFixture(browser,resolve('scripts/assessment/capacityBrowserEntry.ts'));
  try{
@@ -37,6 +65,7 @@ test('own binary checkpoint restores into a retained generation after tail and c
   const oldTab=await b.context().newPage();await oldTab.goto(f.origin);await oldTab.evaluate(async()=>{const w=window as any,path='/core.js';w.core=await import(path);await w.core.openLibrary();});
   await b.evaluate(async()=>{const w=window as any,c=w.core;w.installation=crypto.randomUUID();await c.writeLibraryState((tx:any)=>tx.put('meta','service-installation',w.installation));const send=w.request;w.request=async(path:string,body:any)=>{if(path==='/pull'&&localStorage.getItem('sensa:local-library-selection:v1')!==null)throw Error('generation_activated_before_tail');return send(path,body);};const store=Storage.prototype.setItem;Storage.prototype.setItem=function(key,value){if(key==='sensa:local-library-selection:v1')w.staleQueued=c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Stale queued draft'}).then(()=>'accepted',(error:any)=>error.message);return store.call(this,key,value);};});
   const result=await b.evaluate(()=>(window as any).sync());expect(result.activated.namespace).toBeTruthy();
+  const bootstrap=await b.evaluate(async()=>{const c=(window as any).core,read=()=>c.readLibrary(async(tx:any)=>({identity:await tx.get('meta','identity'),receipt:await tx.get('operations','00000000-0000-4000-8000-000000000001'),revision:await tx.get('meta','local-content-revision')})),before=await read();await c.openLibrary();return {before,after:await read()};});expect(bootstrap.before.receipt.result).toEqual(bootstrap.before.identity);expect(bootstrap.after).toEqual(bootstrap.before);
   const recovered=await b.evaluate(async()=>{const c=(window as any).core;return {learning:await c.readLearning(),drafts:await c.listDrafts(),state:await c.readCloudSync(),selection:JSON.parse(localStorage.getItem('sensa:local-library-selection:v1')!)};});
   expect(recovered.learning).toEqual(source.learning);expect(recovered.drafts).toHaveLength(1);expect(recovered.state.revision).toBe(2);expect(recovered.state.status).toBe('synced');expect(recovered.selection.preservedNamespaces).toContain(null);expect(recovered.selection.namespace).toBe(result.activated.namespace);
   expect(await b.evaluate(()=>(window as any).staleQueued)).toBe('localFlow.libraryReplaced');expect(await b.evaluate(async()=>await (window as any).core.readLibrary((tx:any)=>tx.get('meta','service-installation'))===(window as any).installation)).toBe(true);expect(await b.evaluate(()=>document.documentElement.dataset.librarySelection)).toBeUndefined();await expect(oldTab.evaluate(()=>(window as any).core.listDrafts())).rejects.toThrow('localFlow.libraryReplaced');
