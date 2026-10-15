@@ -189,6 +189,7 @@ test('local clear releases a live failed restoration gate without an automatic C
   await page.clock.install({time:new Date(Date.parse(checkedAt)+cloudCheckpointSchedule.pullStaleMs+1)});
   await page.evaluate(async account=>{(window as any).__fixtureAuthSession={access_token:account.token,user:{id:account.subject}};const path='/local-clear.js',ui=await import(/* @vite-ignore */ path);ui.mountCloudSyncControl({initialAvailability:'restoring'});},account);
   await expect(page.getByTestId('library-availability')).toHaveText('failed');await expect(page.locator('#restore-fixture')).toBeVisible();
+  expect(attempts).toBe(1);
   const beforeClear=attempts;
   await page.evaluate(async()=>{const c=(window as any).core;await c.clearLocalLibrary(await c.inspectLocalClear());});
   await expect(page.getByTestId('library-availability')).toHaveText('authoritative');await expect(page.locator('#restore-fixture')).toHaveCount(0);
