@@ -15,7 +15,7 @@ import type {CloudSyncState} from './cloudSync';
 
 /** This entry is only for an authenticated own-account descriptor at H.
  * External imports continue through importLocalPortableSnapshot's full gate. */
-export async function importNativeCloudSnapshot(sqlite:Sqlite3Static,pool:SAHPoolUtil,file:string,input:File,descriptor:LibrarySyncNativeSnapshot,owner:ReplicaCandidateFence['owner'],onImportedBytes?:(bytes:number)=>void){
+export async function importNativeCloudSnapshot(sqlite:Sqlite3Static,pool:SAHPoolUtil,file:string,input:File,descriptor:LibrarySyncNativeSnapshot,owner:ReplicaCandidateFence['owner'],onImportedBytes?:(bytes:number)=>void,reconnectDeviceId?:string){
  const started=performance.now(),binding=librarySyncNativeSnapshot.parse(descriptor);
  const invalid=(reason:string):never=>{throw Error('sqlite_snapshot_'+reason);};
  if(binding.accountId!==owner.accountId||binding.schemaVersion!==sqliteLibrarySchemaVersion||binding.byteLength!==input.size||textHash(librarySyncNativeDescriptorText(binding))!==binding.manifestHash||pool.getFileNames().length)invalid('checkpoint_binding');
@@ -44,7 +44,8 @@ export async function importNativeCloudSnapshot(sqlite:Sqlite3Static,pool:SAHPoo
   const checked=performance.now();raw.exec('DROP TABLE sensa_snapshot_admission_v2;DROP TABLE sensa_private_restore_pending_v1');
   if(sqlite.capi.sqlite3_db_config(raw.pointer!,sqlite.capi.SQLITE_DBCONFIG_ENABLE_TRIGGER,1)!==0)invalid('connection_restriction');
   library.initialize();
-  const incarnation=crypto.randomUUID(),deviceIdentity={...identity,deviceId:crypto.randomUUID()},at=new Date().toISOString();
+  if(reconnectDeviceId!==undefined&&(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(reconnectDeviceId)||[identity.id,identity.deviceId].includes(reconnectDeviceId)))invalid('identity');
+  const incarnation=crypto.randomUUID(),deviceIdentity={...identity,deviceId:reconnectDeviceId??crypto.randomUUID()},at=new Date().toISOString();
   const state:CloudSyncState={owner,incarnation,status:'synced',checkpointVersion:7,restoreValidationVersion:9,revision:binding.revision,syncedLocalRevision:1,lastSyncedAt:at,lastCheckedAt:at};
   library.commit({clears:[],deletes:[],puts:[...Object.entries({identity:deviceIdentity,'local-incarnation':incarnation,'local-content-revision':1,'service-owner':owner,'cloud-sync':state}).map(([key,value])=>({table:'meta' as const,key,encodedValue:JSON.stringify(encodeBackupValue(value))})),{table:'operations',key:'00000000-0000-4000-8000-000000000001',encodedValue:JSON.stringify(encodeBackupValue({input:canonicalConsumerJson({kind:'library.create',input:{}}),result:deviceIdentity,committedAt:deviceIdentity.createdAt}))}]});
   const dependencies=new SqliteSyncDependencies(raw);try{raw.exec('BEGIN IMMEDIATE');dependencies.certifyAdmittedSnapshot(metadata,state,deviceIdentity);raw.exec('COMMIT');}catch(error){raw.exec('ROLLBACK');throw error;}finally{dependencies.close();}

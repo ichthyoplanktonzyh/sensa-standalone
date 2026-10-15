@@ -117,13 +117,13 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
   snapshotSource(request:import('./sqliteSnapshotSource').SnapshotSourceRequest){return this.send({kind:'snapshotSource',request}) as Promise<import('./sqliteSnapshotSource').SnapshotSourceResult>;}
   exportLocalSnapshot(expectedRevision:number){return this.send({kind:'exportLocalSnapshot',expectedRevision}) as Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;}
   exportOwnCloudSnapshot(fence:import('./replicaCandidateProtocol').ReplicaCandidateFence){return this.send({kind:'exportOwnCloudSnapshot',fence}) as Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;}
-  initializeOwnCloudSnapshot(snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot,binding:import('./sqlitePortableSnapshot').OwnCloudSnapshotBinding,owner:import('./replicaCandidateProtocol').ReplicaCandidateFence['owner']){
+  initializeOwnCloudSnapshot(snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot,binding:import('./sqlitePortableSnapshot').OwnCloudSnapshotBinding,owner:import('./replicaCandidateProtocol').ReplicaCandidateFence['owner'],reconnectDeviceId?:string){
     if(this.namespace===null)throw Error('sqlite_snapshot_requires_fresh_namespace');
-    return this.send({kind:'initializeOwnCloudSnapshot',namespace:this.namespace,snapshot,binding,owner}) as ReturnType<WorkerSqliteAdapter['initializeSnapshot']>;
+    return this.send({kind:'initializeOwnCloudSnapshot',namespace:this.namespace,snapshot,binding,owner,reconnectDeviceId}) as ReturnType<WorkerSqliteAdapter['initializeSnapshot']>;
   }
-  initializeNativeCloudSnapshot(source:File,binding:import('@sensa/contracts/sensa').LibrarySyncNativeSnapshot,owner:import('./replicaCandidateProtocol').ReplicaCandidateFence['owner'],onProgress?:ReplicaCandidateProgressObserver){
+  initializeNativeCloudSnapshot(source:File,binding:import('@sensa/contracts/sensa').LibrarySyncNativeSnapshot,owner:import('./replicaCandidateProtocol').ReplicaCandidateFence['owner'],onProgress?:ReplicaCandidateProgressObserver,reconnectDeviceId?:string){
     if(this.namespace===null)throw Error('sqlite_snapshot_requires_fresh_namespace');
-    return this.send({kind:'initializeNativeCloudSnapshot',namespace:this.namespace,source,binding,owner},onProgress) as Promise<{report:Omit<Awaited<ReturnType<typeof import('./sqliteNativeSnapshotImport').importNativeCloudSnapshot>>,'library'>;diagnostics:SqliteStorageDiagnostics}>;
+    return this.send({kind:'initializeNativeCloudSnapshot',namespace:this.namespace,source,binding,owner,reconnectDeviceId},onProgress) as Promise<{report:Omit<Awaited<ReturnType<typeof import('./sqliteNativeSnapshotImport').importNativeCloudSnapshot>>,'library'>;diagnostics:SqliteStorageDiagnostics}>;
   }
   ownCloudBaselinePage(page:import('@sensa/contracts/sensa').LibrarySyncSnapshotPageResult){return this.send({kind:'ownCloudBaselinePage',page}) as Promise<{done:boolean;records:number}>;}
   initializeSnapshot(snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot){
@@ -312,7 +312,7 @@ export async function openIsolatedLocalSnapshot(snapshot:import('./sqlitePortabl
  catch(error){await isolated.close().catch(()=>{});throw error;}
 }
 /** Authenticated same-account replication has its own admission entry. */
-export async function openIsolatedOwnCloudSnapshot(snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot,binding:import('./sqlitePortableSnapshot').OwnCloudSnapshotBinding,owner:import('./replicaCandidateProtocol').ReplicaCandidateFence['owner']){
+export async function openIsolatedOwnCloudSnapshot(snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot,binding:import('./sqlitePortableSnapshot').OwnCloudSnapshotBinding,owner:import('./replicaCandidateProtocol').ReplicaCandidateFence['owner'],reconnectDeviceId?:string){
  const namespace=crypto.randomUUID(),isolated=new WorkerSqliteAdapter(namespace,false,true);
  // This closure owns only this attempt's fresh namespace. Never discover or
  // delete another generation, an active pointer or retained recovery file.
@@ -323,7 +323,7 @@ export async function openIsolatedOwnCloudSnapshot(snapshot:import('./sqlitePort
    const root=await navigator.storage.getDirectory();try{await root.removeEntry(localLibraryPoolDirectory(namespace).replace(/^\//u,''),{recursive:true});}catch(error){if(!(error instanceof DOMException)||error.name!=='NotFoundError')throw error;}unregisterIsolatedSnapshotNamespace(namespace);
   });
  };
- try{assertIsolatedSnapshotNamespace(namespace,false);const result=await isolated.initializeOwnCloudSnapshot(snapshot,binding,owner);return {...result,namespace,adapter:isolated,seal:()=>{registerIsolatedSnapshotNamespace(namespace);isolated.markIsolatedAdmitted();},discard};}
+ try{assertIsolatedSnapshotNamespace(namespace,false);const result=await isolated.initializeOwnCloudSnapshot(snapshot,binding,owner,reconnectDeviceId);return {...result,namespace,adapter:isolated,seal:()=>{registerIsolatedSnapshotNamespace(namespace);isolated.markIsolatedAdmitted();},discard};}
  catch(error){try{await discard();}catch(cleanupError){throw new AggregateError([error,cleanupError],'sqlite_snapshot_cleanup_unconfirmed');}throw error;}
 }
 /** Empty private generation for refs restoration; never selects or imports facts. */
@@ -342,14 +342,14 @@ export async function createOwnCloudRestoreGeneration(fence:import('./replicaCan
  }catch(error){try{await discard();}catch(cleanupError){throw new AggregateError([error,cleanupError],'sqlite_snapshot_cleanup_unconfirmed');}throw error;}
 }
 /** One journaled, unselected native-file attempt. The selected pool is never opened. */
-export async function openIsolatedNativeCloudSnapshot(source:File,binding:import('@sensa/contracts/sensa').LibrarySyncNativeSnapshot,owner:import('./replicaCandidateProtocol').ReplicaCandidateFence['owner'],onProgress?:ReplicaCandidateProgressObserver){
+export async function openIsolatedNativeCloudSnapshot(source:File,binding:import('@sensa/contracts/sensa').LibrarySyncNativeSnapshot,owner:import('./replicaCandidateProtocol').ReplicaCandidateFence['owner'],onProgress?:ReplicaCandidateProgressObserver,reconnectDeviceId?:string){
  const namespace=crypto.randomUUID(),{beginPrivateRestoreAttempt}=await import('./sqlitePrivateRestoreAttempt'),attempt=await beginPrivateRestoreAttempt(namespace),isolated=new WorkerSqliteAdapter(namespace,false,true);
  const discard=async()=>{try{await isolated.close();await navigator.locks.request('sensa-library-selection-v1',{mode:'exclusive',signal:AbortSignal.timeout(15000)},async()=>{
   try{assertIsolatedSnapshotNamespace(namespace,false);}catch{return;}
   const root=await navigator.storage.getDirectory();try{await root.removeEntry(localLibraryPoolDirectory(namespace).replace(/^\//u,''),{recursive:true});}catch(error){if(!(error instanceof DOMException)||error.name!=='NotFoundError')throw error;}
   unregisterIsolatedSnapshotNamespace(namespace);attempt.complete();
  });}finally{await attempt.release();}};
- try{const result=await isolated.initializeNativeCloudSnapshot(source,binding,owner,onProgress);return {...result,namespace,adapter:isolated,seal:()=>{registerIsolatedSnapshotNamespace(namespace);isolated.markIsolatedAdmitted();},activated:()=>attempt.complete(),discard};}
+ try{const result=await isolated.initializeNativeCloudSnapshot(source,binding,owner,onProgress,reconnectDeviceId);return {...result,namespace,adapter:isolated,seal:()=>{registerIsolatedSnapshotNamespace(namespace);isolated.markIsolatedAdmitted();},activated:()=>attempt.complete(),discard};}
  catch(error){try{await discard();}catch(cleanup){throw new AggregateError([error,cleanup],'sqlite_snapshot_cleanup_unconfirmed');}throw error;}
 }
 /** Reopen an already imported isolated generation without selecting it. */

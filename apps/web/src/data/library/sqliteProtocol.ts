@@ -107,8 +107,8 @@ export type SqliteWorkerRequest =
   | {id:number;kind:'initializeSnapshot';namespace:string;snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot}
   | {id:number;kind:'exportLocalSnapshot';expectedRevision:number}
   | {id:number;kind:'exportOwnCloudSnapshot';fence:import('./replicaCandidateProtocol').ReplicaCandidateFence}
-  | {id:number;kind:'initializeOwnCloudSnapshot';namespace:string;snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot;binding:import('./sqlitePortableSnapshot').OwnCloudSnapshotBinding;owner:import('./replicaCandidateProtocol').ReplicaCandidateFence['owner']}
-  | {id:number;kind:'initializeNativeCloudSnapshot';namespace:string;source:File;binding:import('@sensa/contracts/sensa').LibrarySyncNativeSnapshot;owner:import('./replicaCandidateProtocol').ReplicaCandidateFence['owner']}
+  | {id:number;kind:'initializeOwnCloudSnapshot';namespace:string;snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot;binding:import('./sqlitePortableSnapshot').OwnCloudSnapshotBinding;owner:import('./replicaCandidateProtocol').ReplicaCandidateFence['owner'];reconnectDeviceId?:string}
+  | {id:number;kind:'initializeNativeCloudSnapshot';namespace:string;source:File;binding:import('@sensa/contracts/sensa').LibrarySyncNativeSnapshot;owner:import('./replicaCandidateProtocol').ReplicaCandidateFence['owner'];reconnectDeviceId?:string}
   | {id:number;kind:'ownCloudBaselinePage';page:import('@sensa/contracts/sensa').LibrarySyncSnapshotPageResult}
   | {id:number;kind:'installPrivateRestore';mutation:SqliteMutation}
   | { id: number; kind: "close" }

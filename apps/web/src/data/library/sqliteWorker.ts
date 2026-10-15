@@ -47,9 +47,10 @@ let replicaWorkInFlight=0;
 let namespace:LocalLibraryNamespace=null;
 let namespaceBound=false;
 let snapshotInitialization:import('./sqlitePortableSnapshot').LocalPortableSnapshot|undefined;
-let nativeSnapshotInitialization:{source:File;binding:import('@sensa/contracts/sensa').LibrarySyncNativeSnapshot;owner:import('./replicaCandidateProtocol').ReplicaCandidateFence['owner'];onImportedBytes:(completed:number)=>void}|undefined;
+let nativeSnapshotInitialization:{source:File;binding:import('@sensa/contracts/sensa').LibrarySyncNativeSnapshot;owner:import('./replicaCandidateProtocol').ReplicaCandidateFence['owner'];reconnectDeviceId?:string;onImportedBytes:(completed:number)=>void}|undefined;
 let ownSnapshotBinding:import('./sqlitePortableSnapshot').OwnCloudSnapshotBinding|undefined;
 let ownSnapshotOwner:import('./replicaCandidateProtocol').ReplicaCandidateFence['owner']|undefined;
+let ownSnapshotReconnectDeviceId:string|undefined;
 let requireExisting=false;
 let privateFreshRestore=false;
 
@@ -91,11 +92,11 @@ async function database():Promise<WorkerStore>{
         let snapshotReport:unknown;
         if(nativeSnapshotInitialization){
           const input=nativeSnapshotInitialization,{importNativeCloudSnapshot}=await import('./sqliteNativeSnapshotImport');
-          const {library,...report}=await importNativeCloudSnapshot(sqlite3,pool,sqliteLibraryFile,input.source,input.binding,input.owner,input.onImportedBytes);
+          const {library,...report}=await importNativeCloudSnapshot(sqlite3,pool,sqliteLibraryFile,input.source,input.binding,input.owner,input.onImportedBytes,input.reconnectDeviceId);
           activeDatabase=library;snapshotReport=report;nativeSnapshotInitialization=undefined;
         }else if(snapshotInitialization){
           const {importLocalPortableSnapshot,importOwnCloudPortableSnapshot}=await import('./sqlitePortableSnapshot');
-          const {library,...report}=await (ownSnapshotBinding&&ownSnapshotOwner?importOwnCloudPortableSnapshot(sqlite3,pool,sqliteLibraryFile,snapshotInitialization,ownSnapshotBinding,ownSnapshotOwner.accountId):importLocalPortableSnapshot(sqlite3,pool,sqliteLibraryFile,snapshotInitialization));
+          const {library,...report}=await (ownSnapshotBinding&&ownSnapshotOwner?importOwnCloudPortableSnapshot(sqlite3,pool,sqliteLibraryFile,snapshotInitialization,ownSnapshotBinding,ownSnapshotOwner.accountId,ownSnapshotReconnectDeviceId):importLocalPortableSnapshot(sqlite3,pool,sqliteLibraryFile,snapshotInitialization));
           if(ownSnapshotBinding&&ownSnapshotOwner)library.bindOwnCloudSnapshot(ownSnapshotBinding,ownSnapshotOwner);
           activeDatabase=library;snapshotReport=report;snapshotInitialization=undefined;
         }else{
@@ -192,7 +193,7 @@ const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
     namespace=next;namespaceBound=true;
     if(request.kind==='initializeNativeCloudSnapshot'){
       if(next===null||store)throw Error('sqlite_snapshot_requires_fresh_namespace');
-      nativeSnapshotInitialization={source:request.source,binding:request.binding,owner:request.owner,onImportedBytes:completed=>worker.postMessage({id:request.id,kind:'replicaCandidateProgress',progress:{phase:'restore-installation',completed}} satisfies SqliteWorkerProgress)};
+      nativeSnapshotInitialization={source:request.source,binding:request.binding,owner:request.owner,reconnectDeviceId:request.reconnectDeviceId,onImportedBytes:completed=>worker.postMessage({id:request.id,kind:'replicaCandidateProgress',progress:{phase:'restore-installation',completed}} satisfies SqliteWorkerProgress)};
     }
     if(request.kind==='initialize'){
       if(request.requireExisting&&next===null)throw Error('sqlite_snapshot_requires_fresh_namespace');
@@ -202,7 +203,7 @@ const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
     if(request.kind==='initializeSnapshot'||request.kind==='initializeOwnCloudSnapshot'){
       if(next===null||store)throw Error('sqlite_snapshot_requires_fresh_namespace');
       snapshotInitialization=request.snapshot;
-      if(request.kind==='initializeOwnCloudSnapshot'){ownSnapshotBinding=request.binding;ownSnapshotOwner=request.owner;}
+      if(request.kind==='initializeOwnCloudSnapshot'){ownSnapshotBinding=request.binding;ownSnapshotOwner=request.owner;ownSnapshotReconnectDeviceId=request.reconnectDeviceId;}
     }
   }
   if(request.kind==='close'){

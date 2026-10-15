@@ -196,11 +196,11 @@ export async function importLocalPortableSnapshot(sqlite:Sqlite3Static,pool:SAHP
 }
 /** Only the authenticated own-library coordinator calls this distinct entry.
  * Binding is independently obtained from its account's exact committed H. */
-export async function importOwnCloudPortableSnapshot(sqlite:Sqlite3Static,pool:SAHPoolUtil,file:string,snapshot:LocalPortableSnapshot,binding:OwnCloudSnapshotBinding,expectedAccountId:string){
+export async function importOwnCloudPortableSnapshot(sqlite:Sqlite3Static,pool:SAHPoolUtil,file:string,snapshot:LocalPortableSnapshot,binding:OwnCloudSnapshotBinding,expectedAccountId:string,reconnectDeviceId?:string){
  if(binding.accountId!==expectedAccountId||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(binding.accountId)||!Number.isSafeInteger(binding.revision)||binding.revision<1||binding.sourceRevision!==snapshot.sourceRevision||binding.schemaVersion!==snapshot.schemaVersion||binding.byteLength!==snapshot.bytes.byteLength||binding.sha256!==snapshot.sha256||!Number.isSafeInteger(binding.records)||binding.records<1||binding.records>librarySyncRecordLimit)invalid('checkpoint_binding');
- return importPortableSnapshot(sqlite,pool,file,snapshot,'own-cloud',{...binding});
+ return importPortableSnapshot(sqlite,pool,file,snapshot,'own-cloud',{...binding},reconnectDeviceId);
 }
-async function importPortableSnapshot(sqlite:Sqlite3Static,pool:SAHPoolUtil,file:string,input:LocalPortableSnapshot,policy:'external'|'own-cloud',binding?:OwnCloudSnapshotBinding){
+async function importPortableSnapshot(sqlite:Sqlite3Static,pool:SAHPoolUtil,file:string,input:LocalPortableSnapshot,policy:'external'|'own-cloud',binding?:OwnCloudSnapshotBinding,reconnectDeviceId?:string){
  if(pool.getFileCount()!==0)invalid('destination_not_empty');
  if(input.bytes.byteLength>fileLimit)invalid('envelope');
  // Freeze the exact buffer consumed after asynchronous import starts. The
@@ -231,7 +231,10 @@ async function importPortableSnapshot(sqlite:Sqlite3Static,pool:SAHPoolUtil,file
   });
   else library.initialize();
   const projected=performance.now();
-  const identity={...facts.identity,deviceId:crypto.randomUUID()};
+  // Only explicit local-clear reconnect supplies the already-new local ID.
+  // Never adopt an identity from the snapshot as this device's identity.
+  if(reconnectDeviceId!==undefined&&(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(reconnectDeviceId)||[facts.identity.id,facts.identity.deviceId].includes(reconnectDeviceId)))invalid('identity');
+  const identity={...facts.identity,deviceId:reconnectDeviceId??crypto.randomUUID()};
   // The snapshot excludes device receipts. Install the reserved receipt with
   // the restored identity before this own-account generation can be selected.
   library.commit({clears:[],deletes:[],puts:[{table:'meta',key:'identity',encodedValue:JSON.stringify(encodeBackupValue(identity))},{table:'meta',key:'local-incarnation',encodedValue:JSON.stringify(encodeBackupValue(crypto.randomUUID()))},{table:'meta',key:'local-content-revision',encodedValue:JSON.stringify(encodeBackupValue(1))},...(policy==='own-cloud'?[{table:'operations' as const,key:'00000000-0000-4000-8000-000000000001',encodedValue:JSON.stringify(encodeBackupValue({input:canonicalConsumerJson({kind:'library.create',input:{}}),result:identity,committedAt:identity.createdAt}))}]:[])]});

@@ -559,7 +559,7 @@ async function restoreOwnCloudLibrary(header:Awaited<ReturnType<typeof captureHe
  }
  if(offset!==bytes.length)throw Error('library_sync_hash');
  const {openIsolatedOwnCloudSnapshot}=await import('./sqliteAdapter');
- const importing=openIsolatedOwnCloudSnapshot({format:'sensa-local-db-snapshot-v1',schemaVersion:sqliteLibrarySchemaVersion,sourceRevision:binding.sourceRevision,sha256:binding.sha256,bytes,timingsMs:{build:0,storageCopy:0,admission:0,projection:0,export:0}},binding,header.owner);
+ const importing=openIsolatedOwnCloudSnapshot({format:'sensa-local-db-snapshot-v1',schemaVersion:sqliteLibrarySchemaVersion,sourceRevision:binding.sourceRevision,sha256:binding.sha256,bytes,timingsMs:{build:0,storageCopy:0,admission:0,projection:0,export:0}},binding,header.owner,header.reconnectRequired?header.identity.deviceId:undefined);
  void importing.then(generation=>{if(deadline.signal.aborted)return deadline.cleanup(()=>generation.discard());},()=>{});
  const generation=await deadline.run(()=>importing);
  try{deadline.progress('restore-import',binding.byteLength);
@@ -622,7 +622,7 @@ async function restoreNativeCloudLibrary(header:Awaited<ReturnType<typeof captur
  if(binding.accountId!==header.owner.accountId||binding.revision!==head.revision||binding.revision!==head.manifest?.snapshotRevision)throw Error('sqlite_snapshot_checkpoint_binding');
  const {receiveNativeCloudSnapshot}=await import('./cloudNativeSnapshot'),received=await receiveNativeCloudSnapshot(binding,request,deadline),downloadedAt=performance.now();
  try{
-  const {openIsolatedNativeCloudSnapshot}=await import('./sqliteAdapter'),importing=openIsolatedNativeCloudSnapshot(received.file,binding,header.owner,progress=>deadline.progress('snapshot-import-file',progress.completed));
+  const {openIsolatedNativeCloudSnapshot}=await import('./sqliteAdapter'),importing=openIsolatedNativeCloudSnapshot(received.file,binding,header.owner,progress=>deadline.progress('snapshot-import-file',progress.completed),header.reconnectRequired?header.identity.deviceId:undefined);
   void importing.then(generation=>{if(deadline.signal.aborted)return deadline.cleanup(()=>generation.discard());},()=>{});
   const generation=await deadline.run(()=>importing);
   try{

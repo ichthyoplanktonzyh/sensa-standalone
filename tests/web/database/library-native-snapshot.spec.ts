@@ -7,6 +7,49 @@ const save=(page:Page,text:string)=>page.evaluate(async text=>(window as any).co
 const inspect=(page:Page)=>page.evaluate(async()=>{const c=(window as any).core;return {drafts:await c.listDrafts(),base:await c.readLibrary((tx:any)=>tx.syncBaseReferences()),state:await c.readCloudSync(),identity:await c.readLibrary((tx:any)=>tx.get('meta','identity'))};});
 async function seed(f:Awaited<ReturnType<typeof createLibraryCloudBrowserFixture>>){const account=await f.createAccount(),source=await f.createClient(account);await save(source,'retained native snapshot draft');await source.evaluate(()=>(window as any).sync());await source.evaluate(()=>(window as any).core.synchronizeLibrary((window as any).request,{publishSnapshot:true}));return {account,source};}
 
+for(const format of ['native','binary','refs'] as const)test(`explicit clear reconnect keeps the new local device and rejects late account or epoch responses (${format})`,async({browser},info)=>{
+ const f=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await f.createAccount(),other=await f.createAccount(),source=await f.createClient(account),target=await f.createClient(account);
+  const sourceEpoch=crypto.randomUUID(),preclearEpoch=crypto.randomUUID(),installation=crypto.randomUUID();
+  await source.evaluate(async epoch=>{const c=(window as any).core;await c.writeLibraryState((tx:any)=>{tx.put('meta','service-signout-epoch',epoch);tx.put('meta','service-installation','source-private-installation');});},sourceEpoch);
+  await save(source,'Exact remote body after explicit reconnect');await source.evaluate(()=>(window as any).sync());
+  if(format==='native')await source.evaluate(()=>(window as any).core.synchronizeLibrary((window as any).request,{publishSnapshot:true}));
+  const inspect=()=>target.evaluate(async()=>{const c=(window as any).core;return c.readLibrary(async(tx:any)=>({identity:await tx.get('meta','identity'),receipt:await tx.get('operations','00000000-0000-4000-8000-000000000001'),owner:await tx.get('meta','service-owner'),epoch:await tx.get('meta','service-signout-epoch'),signedOut:await tx.get('meta','signed-out'),installation:await tx.get('meta','service-installation'),drafts:await tx.entries('drafts'),base:await tx.syncBaseReferences(),selection:localStorage.getItem('sensa:local-library-selection:v1')}));});
+  const configure=()=>target.evaluate(async({account,format})=>{const w=window as any,path='/core.js';w.core=await import(/* @vite-ignore */ path);await w.core.openLibrary();w.request=async(path:string,body?:unknown)=>{const r=await fetch('/sensa/library-sync'+path,{method:body===undefined?'GET':'POST',headers:{authorization:'Bearer '+account.token,'content-type':'application/json','x-sensa-snapshot-format':'sensa-own-cloud-db-v2'},body:body===undefined?undefined:JSON.stringify(body)}),reply=await r.json();if(!r.ok)throw Error(reply.code);if(path==='/head'){if(format!=='native')delete reply.nativeSnapshot;if(format==='refs')delete reply.binarySnapshot;}return reply;};},{account,format});
+  const placeholder=(await inspect()).identity;await configure();
+  // The option alone cannot turn an ordinary restore into clear reconnect.
+  await target.evaluate(()=>(window as any).core.synchronizeLibrary((window as any).request,{restoreAfterLocalClear:true}));
+  const before=await inspect(),sourceIdentity=await source.evaluate(()=>(window as any).core.openLibrary());
+  expect(before.identity.deviceId).not.toBe(sourceIdentity.deviceId);
+  if(format==='refs')expect(before.identity.deviceId).toBe(placeholder.deviceId);else expect(before.identity.deviceId).not.toBe(placeholder.deviceId);
+  expect(before.epoch).toBeUndefined();expect(before.installation).toBeUndefined();
+  await target.evaluate(async({preclearEpoch,installation})=>{const c=(window as any).core;await c.writeLibraryState((tx:any)=>{tx.put('meta','service-signout-epoch',preclearEpoch);tx.put('meta','service-installation',installation);});await c.clearLocalLibrary(await c.inspectLocalClear());},{preclearEpoch,installation});
+  const cleared=await inspect();expect(cleared.drafts).toEqual([]);expect(cleared.base).toEqual([]);
+  for(const old of [placeholder.deviceId,before.identity.deviceId,sourceIdentity.deviceId,sourceIdentity.id])expect(cleared.identity.deviceId).not.toBe(old);
+  await expect(target.evaluate(()=>(window as any).core.openLibrary())).rejects.toThrow('localFlow.libraryReplaced');
+  await target.reload();await configure();f.clearRequests();await target.evaluate(()=>(window as any).core.synchronizeLibrary((window as any).request));expect(f.requests()).toEqual([]);
+  let reconnectEpoch=crypto.randomUUID();const retiredEpochs=[sourceEpoch,preclearEpoch];await target.evaluate(async epoch=>(window as any).core.writeLibraryState((tx:any)=>tx.put('meta','service-signout-epoch',epoch)),reconnectEpoch);
+  for(const boundary of ['account','logout'] as const){
+   let arrived!:()=>void,release!:()=>void;const seen=new Promise<void>(resolve=>{arrived=resolve;}),gate=new Promise<void>(resolve=>{release=resolve;});let intercepted=false;
+   await target.route('**/sensa/library-sync/blocks/fetch',async route=>{const response=await route.fetch();if(!intercepted){intercepted=true;arrived();await gate;}await route.fulfill({response});});
+   const restoring=target.evaluate(()=>(window as any).core.synchronizeLibrary((window as any).request,{restoreAfterLocalClear:true})).then(()=>({ok:true,error:''}),error=>({ok:false,error:String(error)}));
+   await seen;const nextEpoch=crypto.randomUUID();await target.evaluate(async({boundary,other,nextEpoch})=>{const c=(window as any).core;await c.writeLibraryState((tx:any)=>{tx.put('meta','service-signout-epoch',nextEpoch);if(boundary==='account')tx.put('meta','service-owner',{accountId:other.accountId,subject:other.subject});else tx.put('meta','signed-out',true);});},{boundary,other,nextEpoch});release();
+   const result=await restoring;expect(result.ok).toBe(false);expect(result.error).toContain('account_changed');await target.unroute('**/sensa/library-sync/blocks/fetch');
+   const held=await inspect();expect(held.identity).toEqual(cleared.identity);expect(held.selection).toBe(cleared.selection);expect(held.drafts).toEqual([]);expect(held.base).toEqual([]);expect(held.epoch).toBe(nextEpoch);
+   if(boundary==='account')expect(held.owner).toMatchObject({accountId:other.accountId,subject:other.subject});else expect(held.signedOut).toBe(true);
+   // Controlled fresh login for the next attempt; the late response cannot do this.
+   retiredEpochs.push(reconnectEpoch,nextEpoch);reconnectEpoch=crypto.randomUUID();
+   await target.evaluate(async({owner,epoch})=>(window as any).core.writeLibraryState((tx:any)=>{tx.put('meta','service-owner',owner);tx.put('meta','signed-out',false);tx.put('meta','service-signout-epoch',epoch);}),{owner:before.owner,epoch:reconnectEpoch});
+  }
+  await target.evaluate(()=>(window as any).core.synchronizeLibrary((window as any).request,{restoreAfterLocalClear:true}));
+  const restored=await inspect();expect(restored.identity).toEqual({...sourceIdentity,deviceId:cleared.identity.deviceId});expect(restored.receipt.result).toEqual(restored.identity);expect(restored.epoch).toBe(reconnectEpoch);for(const oldEpoch of retiredEpochs)expect(restored.epoch).not.toBe(oldEpoch);expect(restored.installation).toBe(installation);expect(restored.signedOut).not.toBe(true);expect(restored.owner).toEqual(before.owner);expect(restored.drafts).toEqual(before.drafts);
+  const state=await target.evaluate(()=>(window as any).core.readCloudSync());expect(state.status).toBe('synced');expect(state.restore?.path).toBe(format==='native'?'native-v2':format==='refs'?'refs':undefined);
+  await target.reload();await configure();expect(await inspect()).toEqual(restored);expect((await source.evaluate(()=>(window as any).request('/head'))).revision).toBe(1);
+  await info.attach('clear-reconnect-device.json',{contentType:'application/json',body:JSON.stringify({format,sourceDeviceId:sourceIdentity.deviceId,placeholderDeviceId:placeholder.deviceId,preclearDeviceId:before.identity.deviceId,clearedDeviceId:cleared.identity.deviceId,restoredDeviceId:restored.identity.deviceId,epoch:restored.epoch,lateAccountAndLogoutRejected:true,scope:'Real Chromium/OPFS/Hono/local PG, controlled authenticated sessions; no provider login or physical devices'})});
+ }finally{await f.close();}
+});
+
 test('the production preparation command waits for bounded source retirement while facts remain readable',async({browser},info)=>{
  const f=await createLibraryCloudBrowserFixture(browser);
  try{const account=await f.createAccount(),source=await f.createClient(account);await save(source,'retained preparation scheduling draft');
