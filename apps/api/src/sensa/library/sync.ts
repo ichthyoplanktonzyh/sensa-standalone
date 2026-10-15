@@ -6,7 +6,7 @@ import type {DatabaseExecutor} from '../../database/core.js';
 import {librarySyncLogicalByteLimit,librarySyncRecordLimit,librarySyncHash,librarySyncStageBegin,librarySyncPatch,librarySyncPull,librarySyncSnapshotPage,librarySyncMetadataPageRows,librarySyncMetadataPageRefs,librarySyncMetadataPageBytes,librarySyncCommit,librarySyncManifest,librarySyncBlockFetch,librarySyncBlockFetchBytes,librarySyncBlockMissing,librarySyncBlockStore,librarySyncBlockStoreChars,librarySyncBlockStoreBytes,type LibrarySyncManifest} from '@sensa/contracts/sensa';
 import {decodeLibrarySyncBlock,decodeLibrarySyncBinaryChunk} from '@sensa/contracts/sensa/library-sync-blocks';
 import {ConsumerError} from '../access/auth.js';
-import {libraryCloudCapacityBytes,libraryCloudReadLeaseMs,libraryCloudUploadLeaseMs,purgeExpiredLibraryCloudBlocks} from './retention.js';
+import {libraryCloudCapacityBytes,libraryCloudReadLeaseMs,libraryCloudUploadLeaseMs,pruneLibraryCloudHistory,purgeExpiredLibraryCloudBlocks} from './retention.js';
 import {beginInitialPublication,appendInitialPublication,commitInitialPublication,discardInitialPublication} from './initialPublication.js';
 import {libraryCloudRowOwner,libraryCloudSnapshotOwner} from './generation.js';
 import {librarySyncCompact,librarySyncNativeDescriptorText,librarySyncNativeFormat,librarySyncNativeSnapshot} from '@sensa/contracts/sensa';
@@ -36,9 +36,9 @@ export function registerLibrarySync(app:Hono,access:Access,storagePolicy:{capaci
  }
  app.get('/sensa/library-sync/head',async c=>c.json(await use(c.req.raw,async(db,a)=>{
   const now=a.now??new Date(),head=await current(db,a.accountId),leaseUntil=new Date(now.getTime()+libraryCloudReadLeaseMs);
+  await pruneLibraryCloudHistory(db,a.accountId,now);
   await db.query(`INSERT INTO sensa_consumer.library_cloud_snapshot_leases(account_id,revision,expires_at) VALUES($1,$2,$3)
    ON CONFLICT(account_id,revision) DO UPDATE SET expires_at=GREATEST(sensa_consumer.library_cloud_snapshot_leases.expires_at,EXCLUDED.expires_at)`,[a.accountId,head.revision,leaseUntil]);
-  await db.query('DELETE FROM sensa_consumer.library_cloud_reads WHERE account_id=$1 AND expires_at<=$2',[a.accountId,now]);
   const readLease=crypto.randomUUID();await db.query('INSERT INTO sensa_consumer.library_cloud_reads(account_id,id,from_revision,to_revision,snapshot_revision,expires_at,snapshot_generation) VALUES($1,$2,$3,$4,$5,$6,$7)',[a.accountId,readLease,head.retention_floor,head.revision,head.snapshot_revision,leaseUntil,head.snapshot_generation]);return {...descriptor(head,c.req.header('x-sensa-snapshot-format')===librarySyncNativeFormat),readLease,storage:await storage(db,a.accountId)};
  })));
  app.post('/sensa/library-sync/blocks/missing',async c=>{const input=librarySyncBlockMissing.parse(await c.req.json());return c.json(await use(c.req.raw,async(db,a)=>{await current(db,a.accountId);const now=a.now??new Date(),leaseUntil=new Date(now.getTime()+libraryCloudUploadLeaseMs);const found=(await db.query('SELECT hash FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[a.accountId,input.hashes])).rows;const have=new Set(found.map(r=>r.hash));if(found.length)await db.query('UPDATE sensa_consumer.library_cloud_blocks SET upload_lease_expires_at=GREATEST(upload_lease_expires_at,$3) WHERE account_id=$1 AND hash=ANY($2::text[])',[a.accountId,[...have],leaseUntil]);return {missing:input.hashes.filter(h=>!have.has(h))};}));});

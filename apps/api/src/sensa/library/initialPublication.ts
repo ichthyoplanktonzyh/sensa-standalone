@@ -30,10 +30,12 @@ export async function appendInitialPublication(db:DatabaseExecutor,id:string,hea
  const input=librarySyncStagePage.parse(raw),text=JSON.stringify(input),bytes=Buffer.byteLength(text),refs=input.rows.reduce((sum,row)=>sum+row.blocks.length,0);requirePrivateLibraryGeneration(input.operationId);
  if(bytes>librarySyncMetadataPageBytes||refs>librarySyncMetadataPageRefs)throw new ConsumerError(413,'library_sync_capacity');
  const stage=(await db.query('SELECT * FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND operation_id=$2 FOR UPDATE',[id,input.operationId])).rows[0];
- if(!stage||new Date(stage.expires_at)<=now)conflict('library_sync_staging_expired');requirePreparedStage(stage);
+ if(!stage)conflict('library_sync_staging_expired');
+ const committed=(await db.query('SELECT 1 FROM sensa_consumer.library_cloud_commits c JOIN sensa_consumer.library_cloud h ON h.account_id=c.account_id AND h.rows_generation=c.operation_id WHERE c.account_id=$1 AND c.operation_id=$2 AND c.result IS NOT NULL',[id,input.operationId])).rowCount;
+ if(!committed&&(new Date(stage.expires_at)<=now||stage.retiring))conflict('library_sync_staging_expired');requirePreparedStage(stage);
  const requestDigest=hash(text),prior=(await db.query('SELECT request_digest,digest FROM sensa_consumer.library_cloud_staging_pages WHERE account_id=$1 AND operation_id=$2 AND page=$3',[id,input.operationId,input.page])).rows[0];
  if(prior){if(prior.request_digest!==requestDigest)conflict('operation_conflict');return {digest:prior.digest};}
- if(head.library_id||head.revision!==stage.descriptor.baseRevision||input.page!==stage.pages)conflict();
+ if(committed||head.library_id||head.revision!==stage.descriptor.baseRevision||input.page!==stage.pages)conflict();
  const metadata=Number((await db.query('SELECT COALESCE(sum(metadata_bytes),0) AS n FROM sensa_consumer.library_cloud_staging WHERE account_id=$1',[id])).rows[0].n);
  if(stage.records+input.rows.length>librarySyncRecordLimit||metadata+bytes>librarySyncStageMetadataByteLimit)throw new ConsumerError(413,'library_sync_capacity');
  const hashes=[...new Set(input.rows.flatMap(row=>row.blocks))];
@@ -76,11 +78,12 @@ export async function commitInitialPublication(db:DatabaseExecutor,id:string,hea
 }
 export async function discardInitialPublication(db:DatabaseExecutor,id:string,operationId:string,committed=false){
  if(committed){
-  // The staged union is already FK-checked and is now the initial snapshot's
-  // pin. Its header/rows remain retained until that snapshot is retired by
-  // existing explicit history maintenance. Final CAS does not copy or erase it.
+  // The receipt makes duplicate staging rows eligible for bounded request
+  // maintenance. Keep header/pages/prepared witnesses and the initial snapshot
+  // union pin; final CAS never performs a library-sized cleanup.
   return true;
  }
+ if((await db.query('SELECT 1 FROM sensa_consumer.library_cloud_commits c JOIN sensa_consumer.library_cloud h ON h.account_id=c.account_id AND h.rows_generation=c.operation_id WHERE c.account_id=$1 AND c.operation_id=$2 AND c.result IS NOT NULL',[id,operationId])).rowCount)return true;
  if(!(await db.query('SELECT 1 FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND operation_id=$2 FOR UPDATE',[id,operationId])).rowCount)return true;
  const cleanup=await discardPreparedLibraryGeneration(db,id,operationId);if(cleanup.selected)conflict('operation_conflict');
  if(cleanup.complete)await db.query('DELETE FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND operation_id=$2',[id,operationId]);

@@ -205,8 +205,8 @@ test('finite stage budgets measure decoded blocks, count all workspaces, and rej
   const row={table:'drafts',key:'compressed',blocks:Array.from({length:361},()=>block.hash)};
   expect((await call('/staging/page',{operationId:first.operationId,page:0,rows:[row]})).value.code).toBe('library_sync_capacity');
   expect((await f.pool.query('SELECT pages,records,logical_bytes FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND operation_id=$2',[account.accountId,first.operationId])).rows[0]).toMatchObject({pages:0,records:0,logical_bytes:'0'});
-  // Seed only budget counters to reach an exact edge without a large fixture.
-  await f.pool.query('UPDATE sensa_consumer.library_cloud_staging SET records=599999,logical_bytes=$3 WHERE account_id=$1 AND operation_id=$2',[account.accountId,first.operationId,1024*1024*1024-262144]);
+  // Seed budget counters and their matching prepared witness to reach an exact edge without a large fixture.
+  await f.pool.query('UPDATE sensa_consumer.library_cloud_staging SET records=599999,prepared_records=599999,logical_bytes=$3 WHERE account_id=$1 AND operation_id=$2',[account.accountId,first.operationId,1024*1024*1024-262144]);
   const page={operationId:first.operationId,page:0,rows:[{...row,blocks:[block.hash]}]},accepted=await call('/staging/page',page);expect(accepted.status).toBe(200);expect(await call('/staging/page',page)).toEqual(accepted);
   const prior=(await f.pool.query('SELECT pages,records,logical_bytes,metadata_bytes,digest FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND operation_id=$2',[account.accountId,first.operationId])).rows[0];
   expect((await call('/staging/page',{operationId:first.operationId,page:1,rows:[{...page.rows[0],key:'over'}]})).value.code).toBe('library_sync_capacity');
