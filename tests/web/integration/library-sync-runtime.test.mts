@@ -19,6 +19,8 @@ function fixture(usedBytes=0,existing?:string){
   let rows:Record<string,unknown>[]=[];
   if(sql.startsWith('INSERT INTO sensa_consumer.library_cloud(')){}
   else if(sql.startsWith('SELECT * FROM sensa_consumer.library_cloud'))rows=[{revision:0,manifest:null}];
+  else if(sql.startsWith('SELECT library_id,rows_generation,snapshot_revision,retention_floor FROM sensa_consumer.library_cloud'))rows=[{library_id:null}];
+  else if(sql.startsWith('WITH page AS(SELECT account_id,')&&['library_cloud_block_refs','library_cloud_reads','library_cloud_snapshot_leases'].some(table=>sql.includes('FROM sensa_consumer.'+table+' WHERE'))){}
   else if(sql.startsWith('SELECT stage.account_id,stage.operation_id FROM sensa_consumer.library_cloud_staging stage')){}
   else if(sql.startsWith('DELETE FROM sensa_consumer.library_cloud_block_refs')||sql.startsWith('DELETE FROM sensa_consumer.library_cloud_snapshot_leases')||sql.startsWith('DELETE FROM sensa_consumer.library_cloud_reads')||sql.includes('WITH expired AS')){}
   else if(sql.startsWith('SELECT hash,data'))rows=[...blocks].filter(([hash])=>(params[1] as readonly string[]).includes(hash)).map(([hash,data])=>({hash,data}));
