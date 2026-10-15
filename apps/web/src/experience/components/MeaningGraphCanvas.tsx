@@ -9,18 +9,18 @@ type Graph=ReturnType<typeof buildMeaningGraph>;
 type Camera={x:number;y:number;zoom:number};
 type Position={id:string;x:number;y:number};
 export type GraphCanvasHandle={fit:()=>void;zoom:(factor:number)=>void;focus:(id:string)=>void};
-type Props={active?:boolean;graph:Graph;screenId:string;selected:string|null;highlight:string|null;labels:'auto'|'all'|'selected';searching:boolean;canvasLabel:string;nodeLabel:(id:string)=>string;onReady:(ready:boolean)=>void;onSelect:(id:string)=>void;onHover:(id:string|null)=>void;controller:Ref<GraphCanvasHandle>};
+export type GraphCanvasProps={active?:boolean;graph:Graph;screenId:string;selected:string|null;highlight:string|null;labels:'auto'|'all'|'selected';searching:boolean;canvasLabel:string;nodeLabel:(id:string)=>string;onReady:(ready:boolean)=>void;onSelect:(id:string)=>void;onHover:(id:string|null)=>void;controller:Ref<GraphCanvasHandle>};
 const offsetForIsolates=(cy:Core)=>Math.max(0,...cy.nodes().filter(node=>node.degree()>0).map(node=>(node as NodeSingular).position('y')));
 const roles=['--sensa-fg-primary','--sensa-fg-secondary','--sensa-surface-canvas','--sensa-action-primary','--sensa-focus','--sensa-border-strong'] as const;
 
 /** Cytoscape owns drawing, layouts, hit testing and touch gestures. DOM entries
  * provide the keyboard/reader equivalent; neither layer writes learning facts. */
-export function MeaningGraphCanvas(props:Props){
+export function MeaningGraphCanvas(props:GraphCanvasProps){
  const active=props.active??true,dispose=useRef<()=>void>(()=>{}),engineSignature=useRef<string|null>(null),engineEpoch=useRef(0),visibility=useRef<((active:boolean)=>void)|null>(null);
- const container=useRef<HTMLDivElement>(null),engine=useRef<Core|null>(null),current=useRef(props);current.current=props;
+ const container=useRef<HTMLDivElement>(null),engine=useRef<Core|null>(null),current=useRef(props);
  const signature=useMemo(()=>props.graph.nodes.map(node=>node.id).join('|')+'#'+props.graph.edges.map(edge=>`${edge.from}:${edge.to}`).join('|'),[props.graph]);
  const desiredSignature=useRef(signature);
- useLayoutEffect(()=>{desiredSignature.current=signature;},[signature]);
+ useLayoutEffect(()=>{current.current=props;desiredSignature.current=signature;});
  const [readyEpoch,setReadyEpoch]=useState(0),[layoutError,setLayoutError]=useState<Error|null>(null);
  const ready=readyEpoch>0&&readyEpoch===engineEpoch.current&&!!engine.current&&engineSignature.current===signature;
  useLayoutEffect(()=>{props.onReady(ready);},[ready,props.onReady]);
@@ -52,7 +52,7 @@ export function MeaningGraphCanvas(props:Props){
   ];
  };
  const publish=()=>{
-  const cy=engine.current;if(!cy||engineSignature.current!==desiredSignature.current)return;const pan=cy.pan(),next={x:pan.x,y:pan.y,zoom:cy.zoom()};
+  const cy=engine.current;if(!cy||current.current.active===false||engineSignature.current!==desiredSignature.current)return;const pan=cy.pan(),next={x:pan.x,y:pan.y,zoom:cy.zoom()};
   cameraRef.current=next;setCamera(next);
  };
  useEffect(()=>{

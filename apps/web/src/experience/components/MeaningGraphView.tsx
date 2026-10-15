@@ -13,12 +13,14 @@ import {interfaceLanguageDisplayName} from '../../i18n/languageDisplayName';
 import {resolveInterfaceLocale} from '../../i18n/localeRegistry';
 import {intakeSourceLabel,intakeSourceUrl} from '../personalMeaningJourney/sourcePresentation';
 
-import {MeaningGraphCanvas,type GraphCanvasHandle} from './MeaningGraphCanvas';
+import {type GraphCanvasHandle} from './MeaningGraphCanvas';
+import {MeaningGraphCanvases} from './MeaningGraphCanvases';
 import {SensaVirtualList} from '../ui/SensaVirtualList';
 
 const associationKey=(row:ExpressionAssociation)=>`${row.item.personalMeaningId}:${row.alignment.personalMeaningAlignmentId}:${row.bindingVersionId}`;
 
-export function MeaningGraphView({active=true,items,graphStamp,languages=[],screenId,selectedExpressionId,onSelectExpression,onOpenMeaning,learningState,searching=false}:{
+export function MeaningGraphView({active=true,verified=true,cacheBase='',items,graphStamp,languages=[],screenId,selectedExpressionId,onSelectExpression,onOpenMeaning,learningState,searching=false}:{
+ verified?:boolean;cacheBase?:string;
  active?:boolean;items:readonly WorldGraphItem[];graphStamp?:WorldReadStamp;languages?:readonly string[];screenId:string;
  selectedExpressionId:string|null;onSelectExpression:(id:string|null)=>void;
  onOpenMeaning:(id:string,focusId?:string)=>void;
@@ -64,7 +66,7 @@ export function MeaningGraphView({active=true,items,graphStamp,languages=[],scre
   {active&&!canvasReady&&<div role="status" aria-busy="true" className="absolute inset-0 z-10 grid place-items-center bg-surface-canvas text-sm text-fg-secondary">{localFlowText('loadingSensa')}</div>}
   <div className="sensa-expression-graph-workspace" inert={!active||!canvasReady}>
    <div className="sensa-expression-graph-surface relative min-w-0 bg-surface-canvas">
-    <MeaningGraphCanvas active={active} onReady={setCanvasReady} controller={canvas} graph={graph} screenId={screenId} selected={selected?.id??null} highlight={highlight?.id??null} labels={labels} searching={searching} canvasLabel={t('content.graph.canvas')} nodeLabel={id=>{const node=byId.get(id)!;return `${node.label} · ${node.languageTag} · ${associationFor(node)?.alignment.coreMeaningFocus??''}`;}} onSelect={onSelectExpression} onHover={setHover}/>
+    <MeaningGraphCanvases active={active} verified={verified} full={!languages.length} frameKey={graphStamp?JSON.stringify([screenId,graphStamp.incarnation,graphStamp.revision,cacheBase]):null} onReady={setCanvasReady} controller={canvas} graph={graph} screenId={screenId} selected={selected?.id??null} highlight={highlight?.id??null} labels={labels} searching={searching} canvasLabel={t('content.graph.canvas')} nodeLabel={node=>`${node.label} · ${node.languageTag} · ${associationFor(node)?.alignment.coreMeaningFocus??''}`} onSelect={onSelectExpression} onHover={setHover}/>
     <div className="sensa-graph-tools">
      <details className="sensa-graph-browse" onToggle={event=>setBrowseOpen(event.currentTarget.open)}><summary className={control} aria-label={t('content.graph.browse')} title={t('content.graph.browse')}><List size={18}/></summary><div ref={browseMenu} className="sensa-graph-menu" role="group" aria-label={t('content.graph.browse')}>{browseOpen&&<SensaVirtualList items={graph.nodes} itemKey={node=>node.id} label={t('content.graph.browse')} estimateSize={44} scrollElement={browseScroll} plain renderItem={node=><button key={node.id} type="button" className="min-h-11 w-full px-3 py-2 text-left text-sm" onClick={event=>{event.currentTarget.closest('details')?.removeAttribute('open');canvas.current?.focus(node.id);onSelectExpression(node.id);}}><bdi lang={node.languageTag} dir="auto">{node.label}</bdi><span className="ml-2 text-xs text-fg-secondary">{interfaceLanguageDisplayName(node.languageTag,locale)}</span></button>}/>}</div></details>
      <button type="button" className={control} onClick={()=>canvas.current?.zoom(.8)} aria-label={t('content.graph.zoomOut')}><Minus size={16}/></button>

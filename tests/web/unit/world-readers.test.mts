@@ -145,3 +145,23 @@ test('expression points preserve IDs, polysemy, real relation witnesses and isol
  const large=await expressionWorldFixture(120),largeGraph=buildMeaningGraph(large.meanings.map(record=>worldItemFromRegistry(record,large.registry)));
  expect(largeGraph.nodes).toHaveLength(126);expect(new Set(largeGraph.nodes.map(node=>`${node.x}:${node.y}`)).size).toBe(126);
 });
+
+test('parked graph equality rejects changed interpretation pins and relation witnesses despite identical topology',async()=>{
+ const {expressionWorldFixture}=await import('../support/expressionWorldFixture');
+ const {worldItemFromRegistry}=await import('../../../apps/web/src/experience/personalMeaningJourney/worldRead');
+ const {buildMeaningGraph,sameMeaningGraphModel}=await import('../../../apps/web/src/experience/ui/meaningGraph');
+ const state=await expressionWorldFixture(),items=state.meanings.map(record=>worldItemFromRegistry(record,state.registry));
+ const model=()=>buildMeaningGraph(structuredClone(items)),original=model();
+ expect(sameMeaningGraphModel(original,model())).toBe(true);
+ for(const change of [
+  (graph:ReturnType<typeof model>)=>{graph.nodes[0]!.label+=' changed';},
+  (graph:ReturnType<typeof model>)=>{graph.nodes[0]!.languageTag='ja';},
+  (graph:ReturnType<typeof model>)=>{graph.nodes[0]!.associations[0]!.bindingVersionId='foreign-version';},
+  (graph:ReturnType<typeof model>)=>{graph.nodes[0]!.associations[0]!.focusId='foreign-focus';},
+  (graph:ReturnType<typeof model>)=>{graph.nodes[0]!.associations[0]!.alignment.coreMeaningFocus='changed interpretation';},
+  (graph:ReturnType<typeof model>)=>{graph.nodes[0]!.associations[0]!.alignment.confirmedBindings[0]!.surfaceForm+=' changed pin';},
+  (graph:ReturnType<typeof model>)=>{graph.edges[0]!.facts[0]!.id='foreign-witness';},
+  (graph:ReturnType<typeof model>)=>{graph.edges[0]!.facts.reverse();},
+ ]){const changed=model();change(changed);expect(sameMeaningGraphModel(original,changed)).toBe(false);}
+ expect(sameMeaningGraphModel(original,buildMeaningGraph(items,['fr']))).toBe(false);
+});

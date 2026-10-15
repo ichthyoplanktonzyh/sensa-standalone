@@ -65,6 +65,8 @@ type BrowserSmokeBridge = {
   releaseLearningActionResponseForTest():void;
   holdWorldDetailReadsForTest():Promise<void>;
   releaseWorldDetailReadsForTest():void;
+  holdWorldGraphReadsForTest():Promise<void>;
+  releaseWorldGraphReadsForTest(fail?:boolean):void;
   holdWorldInboxReadsForTest():Promise<void>;
   releaseWorldInboxReadsForTest(fail?:boolean):void;
   notifyWorldReadForTest():Promise<void>;
@@ -138,6 +140,7 @@ const randomDataUrl = (size: number): string => {
 
 if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
   let releaseWorldReads:(()=>void)|undefined;
+  let releaseGraphReads:((fail?:boolean)=>void)|undefined;
   let releaseWorkspaceReads:(()=>void)|undefined;
   let releaseInboxReads:((fail?:boolean)=>void)|undefined;
   let hiddenInboxMedia:import('./data/library/media').StoredMedia|undefined;
@@ -468,6 +471,15 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
       releaseWorldReads=()=>{worldReadRepository.detail=original;resume();releaseWorldReads=undefined;};
     },
     releaseWorldDetailReadsForTest(){releaseWorldReads?.();},
+    async holdWorldGraphReadsForTest(){
+      if(releaseGraphReads)throw new Error('Graph read fixture is already held');
+      const {worldReadRepository}=await import('./experience/personalMeaningJourney/worldRepository');
+      const original=worldReadRepository.graph;let resume!:(fail:boolean)=>void;
+      const held=new Promise<boolean>(resolve=>{resume=resolve;});
+      worldReadRepository.graph=async(query,signal)=>{const snapshot=await original(query,signal);if(await held)throw new Error('fixture-graph-read-failure');return snapshot;};
+      releaseGraphReads=(fail=false)=>{worldReadRepository.graph=original;resume(fail);releaseGraphReads=undefined;};
+    },
+    releaseWorldGraphReadsForTest(fail){releaseGraphReads?.(fail);},
     async notifyWorldReadForTest(){
       // A coarse semantic invalidation hint, not an unrelated meta write.
       // It forces a coherent reread without manufacturing learner facts.

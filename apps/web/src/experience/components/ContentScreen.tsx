@@ -299,7 +299,7 @@ function ContentScreenView({
   const personalCollection=view==='world'&&graphReadEnabled?<div className="relative h-full">
     {collectionStatus&&<div className="absolute inset-0 z-10 bg-surface-canvas">{collectionStatus}</div>}
     {graphFrame&&graphFrame.items.length>0&&<div className="h-full" style={{visibility:graphVisible?'visible':'hidden'}} aria-hidden={!graphVisible} inert={!graphVisible}>
-      <MeaningGraphView key={graphFrame.scope} active={graphVisible} items={graphFrame.items} graphStamp={graphFrame} languages={languages} screenId={`${screenId}:${graphFrame.scope}`} selectedExpressionId={selectedExpression} onSelectExpression={setExpression} onOpenMeaning={open} learningState={graphLearningState} searching={!!normalizedQuery}/>
+      <MeaningGraphView key={graphFrame.scope} active={graphVisible} verified={graphVerified} cacheBase={JSON.stringify([normalizedQuery,filter,referenceFilter])} items={graphFrame.items} graphStamp={graphFrame} languages={languages} screenId={`${screenId}:${graphFrame.scope}`} selectedExpressionId={selectedExpression} onSelectExpression={setExpression} onOpenMeaning={open} learningState={graphLearningState} searching={!!normalizedQuery}/>
     </div>}
   </div>:collectionStatus??(view==='list'?personalList:<MeaningGraphView active={active} items={graphItems} languages={languages} screenId={screenId} selectedExpressionId={selectedExpression} onSelectExpression={setExpression} onOpenMeaning={open} learningState={graphLearningState} searching={!!normalizedQuery}/>);
   return (

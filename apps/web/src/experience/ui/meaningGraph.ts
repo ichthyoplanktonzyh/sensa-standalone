@@ -20,6 +20,32 @@ export interface MeaningGraphEdge {
   facts: Array<{kind:'sense'|'meaning';id:string}>;
 }
 
+/** Exact rendered identities and interpretation witnesses for a parked graph.
+ * Both models must already come from successful current Library reads. */
+export function sameMeaningGraphModel(a:ReturnType<typeof buildMeaningGraph>,b:ReturnType<typeof buildMeaningGraph>):boolean{
+ if(a===b)return true;
+ if(a.nodes.length!==b.nodes.length||a.edges.length!==b.edges.length)return false;
+ const checkedBindings=new Map<WorldGraphAlignment,WorldGraphAlignment>();
+ for(let i=0;i<a.nodes.length;i++){
+  const x=a.nodes[i]!,y=b.nodes[i]!;
+  if(x.id!==y.id||x.label!==y.label||x.languageTag!==y.languageTag||x.associations.length!==y.associations.length)return false;
+  for(let j=0;j<x.associations.length;j++){
+   const p=x.associations[j]!,q=y.associations[j]!;
+   if(p.item.personalMeaningId!==q.item.personalMeaningId||p.item.shortId!==q.item.shortId||p.focusId!==q.focusId||p.bindingVersionId!==q.bindingVersionId||p.alignment.personalMeaningAlignmentId!==q.alignment.personalMeaningAlignmentId||p.alignment.senseId!==q.alignment.senseId||p.alignment.coreMeaningFocus!==q.alignment.coreMeaningFocus)return false;
+   if(checkedBindings.get(p.alignment)!==q.alignment){
+    const left=p.alignment.confirmedBindings,right=q.alignment.confirmedBindings;
+    if(left.length!==right.length||left.some((pin,k)=>pin.expressionId!==right[k]!.expressionId||pin.bindingVersionId!==right[k]!.bindingVersionId||pin.surfaceForm!==right[k]!.surfaceForm||pin.languageTag!==right[k]!.languageTag))return false;
+    checkedBindings.set(p.alignment,q.alignment);
+   }
+  }
+ }
+ for(let i=0;i<a.edges.length;i++){
+  const x=a.edges[i]!,y=b.edges[i]!;
+  if(x.from!==y.from||x.to!==y.to||x.facts.length!==y.facts.length||x.facts.some((fact,j)=>fact.kind!==y.facts[j]!.kind||fact.id!==y.facts[j]!.id))return false;
+ }
+ return true;
+}
+
 /** Visible stars are sparse. Details retain every proven shared membership,
  * including members joined through the same hub rather than a direct stroke. */
 export function relatedMeaningExpressions(graph:ReturnType<typeof buildMeaningGraph>,expressionId:string):MeaningGraphEdge[]{
