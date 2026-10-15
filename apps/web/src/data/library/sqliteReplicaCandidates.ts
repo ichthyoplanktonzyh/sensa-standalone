@@ -15,6 +15,7 @@ import type {LibraryRecordReader} from './libraryRecordReader';
 import type {LibraryIdentity} from './store';
 import {sealedRecordReader,type SealedRecordKey} from './sealedRecordReader';
 import {SqliteSyncDependencies,syncAdmission,dependencyRowId,type SyncAdmission,type SyncDependencyCertificate} from './sqliteSyncDependencies';
+import {admitContextDelta} from './contextDeltaAdmission';
 import {admitLearningDelta,DeltaReceiveFallback,type DeltaReceiveEvidence} from './learningDeltaAdmission';
 import {isFatalSqliteConnectionFailure,sqliteRollbackFailure} from './sqliteConnectionFailure';
 import {replicaCandidateSchema,replicaCandidateAppendRecordLimit,replicaCandidateAppendReferenceLimit,type ReplicaCandidateRequest,type ReplicaCandidateFence,type ReplicaCandidateExpected,type ReplicaCandidateRecord,type ReplicaCandidateValidation,type ReplicaCandidateBlock,type ReplicaCandidateUpdate} from './replicaCandidateProtocol';
@@ -443,7 +444,8 @@ export class SqliteReplicaCandidates{
        FROM sensa_replica_candidate_manifest_v1 AS candidate LEFT JOIN sensa_sync_base AS prior ON prior.table_name=candidate.table_name AND prior.record_key=candidate.record_key
        WHERE candidate.candidate_id=? AND (prior.block_refs_json IS NULL OR prior.block_refs_json<>candidate.refs_json) ORDER BY candidate.table_name,candidate.record_key`,[id]).map(row=>({table:row.table,key:row.key,blockRefs:JSON.parse(row.refs_json)}));
       const refsByKey=new Map(basePuts.map(row=>[dependencyRowId(row.table,row.key),row])),budget:{bytes?:number}={};
-      const admitted=await admitLearningDelta({changes,...readers,dependencies:this.dependencies,certificate:sparse.certificate,
+      const admit=changes.some(row=>row.table==='semanticContexts')?admitContextDelta:admitLearningDelta;
+      const admitted=await admit({changes,receipts:meaningId=>this.dependencies.keys('meaningReceipt',meaningId,65),...readers,dependencies:this.dependencies,certificate:sparse.certificate,
        consume:async(records,componentChanges)=>{const refs=componentChanges.flatMap(row=>{const prior=refsByKey.get(dependencyRowId(row.table,row.key));return prior?[prior]:[];});await this.prepareEncoding({receipt:{id} as ReplicaCandidateUpdate,puts:records.filter(row=>!row.deleted),deletes:[],basePuts:refs},fence,readers.alive,readers.text,budget);},
        phase:name=>{sparse.accessByPhase[name]={baselineRecordsRead:sparse.baseReads.size,candidateRecordsRead:sparse.candidateReads.size};}});
       sparse.basePuts=basePuts;sparse.encoded=true;

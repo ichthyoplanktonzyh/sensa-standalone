@@ -74,7 +74,7 @@ export class SqliteSyncDependencies{
   return certificate;
  }
  assert(certificate:SyncDependencyCertificate):void{const current=this.certificate();if(!current||!backupEqual(current,certificate))throw Error('library_sync_local_changed');}
- keys(kind:string,target:string):Array<{table:SqliteLibraryTable;key:string}>{this.ensure();return this.rows<{table:SqliteLibraryTable;key:string}>('SELECT table_name AS "table",record_key AS "key" FROM sensa_sync_dependency_edges_v1 INDEXED BY sensa_sync_dependency_reverse_v1 WHERE kind=? AND target=? ORDER BY table_name,record_key',[kind,target]);}
+ keys(kind:string,target:string,limit?:number):Array<{table:SqliteLibraryTable;key:string}>{this.ensure();if(limit!==undefined&&(!Number.isSafeInteger(limit)||limit<1||limit>16385))throw Error('library_sync_dependency_capacity');return this.rows<{table:SqliteLibraryTable;key:string}>('SELECT table_name AS "table",record_key AS "key" FROM sensa_sync_dependency_edges_v1 INDEXED BY sensa_sync_dependency_reverse_v1 WHERE kind=? AND target=? ORDER BY table_name,record_key'+(limit===undefined?'':' LIMIT ?'),limit===undefined?[kind,target]:[kind,target,limit]);}
  protocolOwner(protocolId:string){this.ensure();return this.rows<{run_key:string;target_key:string}>('SELECT run_key,target_key FROM sensa_sync_protocol_owners_v1 WHERE protocol_id=?',[protocolId])[0];}
  verify(table:SqliteLibraryTable,key:string,text:string):void{const row=this.rows<{digest:string}>('SELECT digest FROM sensa_sync_dependency_rows_v1 WHERE table_name=? AND record_key=?',[table,key])[0];if(!row||row.digest!==sha256(text))throw Error('library_sync_dependency_corrupt');}
  count(){return Number(this.rows<{n:number}>('SELECT count(*) AS n FROM sensa_sync_dependency_rows_v1')[0].n);}

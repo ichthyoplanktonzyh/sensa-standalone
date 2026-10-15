@@ -119,6 +119,7 @@
     "integration/semantic-record-validation.test.mts",
     "integration/library-record-validation.test.mts",
     "integration/replica-candidate-storage.test.mts",
+    "integration/context-delta-admission.test.mts",
     "browser/replica-candidate-worker.spec.ts",
     "integration/learning-reconciliation.test.mts",
     "integration/learning-branch-replay.test.mts",

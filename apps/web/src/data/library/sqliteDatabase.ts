@@ -1,3 +1,4 @@
+import {validateContextDelta} from './contextDeltaAdmission';
 import {deferReplicaWork,replicaWork} from './replicaWork';
 import {requireCloudScratchSpace} from './cloudScratchStorage';
 import type {ContextBrowseQuery,ContextBrowsePage} from '../../experience/personalMeaningJourney/contextRead';
@@ -1277,7 +1278,7 @@ export class SqliteRecordDatabase {
     const base:LibraryRecordReader={get:(table,key)=>{const row=this.syncBaseEntries([{table,key}])[0];if(!row)return undefined;this.syncDependencies.verify(table,key,row.valueJson);return decodeBackupValue(JSON.parse(row.valueJson));},has:(table,key)=>this.syncBaseEntries([{table,key}]).length>0,entries:()=>{throw Error('library_sync_delta_enumeration');}};
     const deleted=new Set(patch.deletes.map(row=>JSON.stringify([row.table,row.key])));
     const remote:LibraryRecordReader={...base,get:(table,key)=>{if(deleted.has(JSON.stringify([table,key])))return undefined;const text=after.get(JSON.stringify([table,key]));return text===undefined?base.get(table,key):decodeBackupValue(JSON.parse(text));}};
-    try{assertDeltaReceiveShape([...patch.puts,...patch.deletes.map(row=>({...row,deleted:true}))],base,remote);}
+    try{const changes=[...patch.puts,...patch.deletes.map(row=>({...row,deleted:true}))];if(changes.some(row=>row.table==='semanticContexts'))validateContextDelta({changes,base,remote,alive:()=>this.syncDependencies.assert(certificate),receipts:meaningId=>this.syncDependencies.keys('meaningReceipt',meaningId,65)});else assertDeltaReceiveShape(changes,base,remote);}
     catch(cause){if(cause instanceof DeltaReceiveFallback)return;throw cause;}
     for(const row of patch.puts){const text=after.get(JSON.stringify([row.table,row.key]))!;const size=new TextEncoder().encode(packStoredRecord(text)).length+2*new TextEncoder().encode(JSON.stringify(row.blockRefs)).length+new TextEncoder().encode(row.table+row.key).length+72*row.blockRefs.length;this.syncDependencies.observe(admission,row.table,row.key,text,decodeBackupValue(JSON.parse(text)),undefined,size);}
     admission.deletes=patch.deletes;

@@ -1,5 +1,4 @@
 import {useEffect,useRef,useState} from 'react';
-import '../../i18n/accountResources';
 import {useTranslation} from 'react-i18next';
 import {HomeScreen} from '../components/HomeScreen';
 import type {LearningHomeProjection} from '../../learning/system';

@@ -658,3 +658,49 @@ test('window row and aggregate byte limits keep strict fallback and dispose befo
   release();expect(held).toBe(0);const next=reader.beginWindow();const before=reads;reader.get('settings','0');expect(reads).toBe(before+1);next();expect(held).toBe(0);
  }finally{observeReplicaWork(undefined);}
 });
+
+const {contextDeltaFixture}=await import('../support/contextDeltaFixture.mts');
+async function contextCandidateFixture(){
+ const fixture=isolatedDatabase(),world=await contextDeltaFixture(),text=(value:unknown)=>JSON.stringify(encodeBackupValue(value));
+ for(const side of [world.before,world.after])side.find(row=>row.table==='meta')!.value=identity as any;
+ const encode=(source:typeof world.before)=>source.map(row=>({table:row.table,key:row.key,valueJson:text(row.value),blockRefs:[] as string[]}));
+ const before=encode(world.before),after=encode(world.after);candidateExpected(before,identity,3);const expected=candidateExpected(after,identity,4);
+ fixture.database.commit({clears:[],deletes:[],puts:[...before.filter(row=>row.table!=='meta').map(row=>({table:row.table,key:row.key,encodedValue:row.valueJson})),{table:'meta',key:'cloud-sync',encodedValue:text(checkpoint)}],syncBaseReplacement:before});
+ const deps=new SqliteSyncDependencies(fixture.raw),admission=syncAdmission();for(const row of world.before)deps.observe(admission,row.table,row.key,text(row.value),row.value);deps.certify(admission,checkpoint,identity,0);
+ return {...fixture,world,before,after,expected,deps,text,changed:after.filter(row=>world.changes.some(key=>key.table===row.table&&key.key===row.key))};
+}
+for(const fault of ['none','final-rollback','local-edit'] as const)test(`four-row Context candidate ${fault} uses sparse facts/projection/baseline activation`,async()=>{
+ const f=await contextCandidateFixture();try{
+  const begun=await f.request({kind:'beginIndex',fence:{owner,identity,incarnation:'initial',localRevision:0},baseRevision:3,head:f.expected.head});if(begun.kind!=='begun')throw Error('Expected candidate');expect(begun.needsSeed).toBe(false);
+  await f.request({kind:'indexPage',id:begun.id,page:{from:{revision:3,offset:0},toRevision:4,changes:f.changed.map(row=>({table:row.table,key:row.key,blocks:row.blockRefs})),next:{revision:4,offset:0},done:true}});
+  await f.request({kind:'append',id:begun.id,records:f.changed,blocks:candidateBlocksFor(f.changed)});
+  const validated=await f.request({kind:'validate',id:begun.id});if(validated.kind!=='validated')throw Error('Expected validation');expect(validated.candidate.receive).toMatchObject({mode:'incremental',changedRecords:4,baselineBuildRecords:0});expect(f.storedCount()).toBe(4);
+  const prepared=await f.request({kind:'prepareUpdate',id:begun.id,baseRevision:3});if(prepared.kind!=='updatePrepared'||!prepared.update)throw Error('Expected prepared update');expect(prepared.update.records).toHaveLength(4);
+  const state={...checkpoint,revision:4,syncedLocalRevision:1,restoreOperationId:begun.id},mutation={clears:[],deletes:[],puts:[{table:'meta' as const,key:'cloud-sync',encodedValue:f.text(state)},{table:'meta' as const,key:'local-content-revision',encodedValue:f.text(1)}],contentRevision:1,replicaCandidateRestore:{id:begun.id,tables:validated.candidate.tables,update:prepared.update}};
+  const base=f.database.syncBaseEntries(),certificate=f.deps.certificate(),prior=f.database.entries('semanticMeanings');
+  const priorProjection=f.raw.selectValue('SELECT revision_id FROM sensa_context_browse');expect(priorProjection).toBeTruthy();expect(f.database.entries('semanticMeanings')).toEqual(f.before.filter(row=>row.table==='semanticMeanings').map(row=>({key:row.key,encodedValue:row.valueJson})));
+  if(fault==='local-edit'){
+   f.database.commit({clears:[],deletes:[],puts:[{table:'meta',key:'local-content-revision',encodedValue:f.text(1)},{table:'settings',key:'kept-local-edit',encodedValue:f.text('kept')}],contentRevision:1});expect(()=>f.database.commit(mutation)).toThrow('library_sync_local_changed');expect(f.database.get('settings','kept-local-edit')).toBe(f.text('kept'));expect(f.database.syncBaseEntries()).toEqual(base);return;
+  }
+  if(fault==='final-rollback'){
+   const exec=f.raw.exec;f.raw.exec=(function(this:typeof f.raw,...args:any[]){if(args[0]==='COMMIT')throw Error('context commit fault');return (exec as any).apply(this,args);}) as typeof exec;try{expect(()=>f.database.commit(mutation)).toThrow('context commit fault');}finally{f.raw.exec=exec;}
+   expect(f.database.entries('semanticMeanings')).toEqual(prior);expect(f.raw.selectValue('SELECT revision_id FROM sensa_context_browse')).toBe(priorProjection);expect(f.database.syncBaseEntries()).toEqual(base);expect(f.deps.certificate()).toEqual(certificate);expect(f.database.get('meta','cloud-sync')).toBe(f.text(checkpoint));
+  }
+  f.database.commit(mutation);expect(f.deps.certificate()).toMatchObject({revision:4,records:f.after.length});expect(f.database.get('meta','cloud-sync')).toBe(f.text(state));
+  for(const row of f.after)expect(f.database.syncBaseEntries([{table:row.table,key:row.key}])[0]!.valueJson).toBe(row.valueJson);
+  const head=f.world.after.find(row=>row.table==='semanticContexts'&&row.key.startsWith('anchors:'))!.value as any;
+  expect(f.raw.selectValue('SELECT revision_id FROM sensa_context_browse WHERE context_id='+"'"+head.value.personalSemanticAnchorId+"'")).toBe(head.value.currentRevisionId);
+ }finally{f.deps.close();f.database.close();}
+});
+for(const fault of ['none','ack-source-advanced','artifact-invalidated','changed-patch'] as const)test(`Context producer ACK ${fault} continues only an admitted baseline successor`,async()=>{
+ const f=await contextCandidateFixture();try{
+  f.database.commit({clears:[],deletes:[],puts:[...f.changed.map(row=>({table:row.table,key:row.key,encodedValue:row.valueJson})),{table:'meta',key:'local-content-revision',encodedValue:f.text(1)}],contentRevision:1});
+  if(fault==='ack-source-advanced')f.database.commit({clears:[],deletes:[],puts:[{table:'settings',key:'later-local-edit',encodedValue:f.text('kept')},{table:'meta',key:'local-content-revision',encodedValue:f.text(2)}],contentRevision:2});
+  if(fault==='artifact-invalidated')f.database.commit({clears:[],deletes:[],puts:[{table:'meta',key:'local-artifact-revision',encodedValue:f.text(1)}]});
+  const changed=structuredClone(f.changed);if(fault==='changed-patch')changed.find(row=>row.table==='semanticMeanings')!.valueJson='["null"]';
+  const state={...checkpoint,revision:4,syncedLocalRevision:1,status:fault==='ack-source-advanced'?'pending' as const:'synced' as const},ack=()=>f.database.commit({clears:[],deletes:[],puts:[{table:'meta',key:'cloud-sync',encodedValue:f.text(state)}],syncBasePatch:{puts:changed,deletes:[]}});
+  if(fault==='changed-patch'){ack();expect(f.deps.certificate()).toBeUndefined();for(const row of f.changed)expect(f.database.get(row.table,row.key)).toBe(row.valueJson);return;}
+  ack();const proof=f.deps.certificate();if(fault==='artifact-invalidated')expect(proof).toBeUndefined();else{expect(proof).toMatchObject({revision:4,records:f.after.length});expect(f.deps.match(state,{owner,identity,incarnation:'initial',localRevision:fault==='ack-source-advanced'?2:1},0)!==undefined).toBe(fault!=='ack-source-advanced');}
+  if(fault==='ack-source-advanced')expect(f.database.get('settings','later-local-edit')).toBe(f.text('kept'));
+ }finally{f.deps.close();f.database.close();}
+});
