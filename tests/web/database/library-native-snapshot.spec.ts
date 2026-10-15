@@ -7,6 +7,50 @@ const save=(page:Page,text:string)=>page.evaluate(async text=>(window as any).co
 const inspect=(page:Page)=>page.evaluate(async()=>{const c=(window as any).core;return {drafts:await c.listDrafts(),base:await c.readLibrary((tx:any)=>tx.syncBaseReferences()),state:await c.readCloudSync(),identity:await c.readLibrary((tx:any)=>tx.get('meta','identity'))};});
 async function seed(f:Awaited<ReturnType<typeof createLibraryCloudBrowserFixture>>){const account=await f.createAccount(),source=await f.createClient(account);await save(source,'retained native snapshot draft');await source.evaluate(()=>(window as any).sync());await source.evaluate(()=>(window as any).core.synchronizeLibrary((window as any).request,{publishSnapshot:true}));return {account,source};}
 
+test('the production preparation command waits for bounded source retirement while facts remain readable',async({browser},info)=>{
+ const f=await createLibraryCloudBrowserFixture(browser);
+ try{const account=await f.createAccount(),source=await f.createClient(account);await save(source,'retained preparation scheduling draft');
+  await source.route('https://service.fixture.invalid/**',async route=>{const target=new URL(route.request().url()),response=await route.fetch({url:f.origin+target.pathname+target.search});await route.fulfill({response});});
+  await source.evaluate(async account=>{const w=window as any,c=w.core,a=await c.sqliteRecordAdapter();w.__fixtureAuthSession={access_token:account.token,user:{id:account.subject}};w.sourceBegins=0;w.beganBeforeRetirement=false;w.retirementComplete=false;w.retirementHeld=false;w.preparationPhase=false;w.rpc=[];
+   const gate=new Promise<void>(resolve=>{w.releaseRetirement=resolve;}),candidate=a.replicaCandidate.bind(a),snapshot=a.snapshotSource.bind(a);
+   a.replicaCandidate=async(input:any,onProgress:any)=>{if(input.kind==='retirePublication'){w.retirementHeld=true;await gate;}const result=await candidate(input,onProgress);if(input.kind==='retirePublication'){w.rpc.push({kind:input.kind,done:result.done});if(result.done)w.retirementComplete=true;}return result;};
+   a.snapshotSource=async(input:any)=>{if(input.action==='begin'){w.sourceBegins++;w.beganBeforeRetirement||=!w.retirementComplete;}w.rpc.push({kind:'snapshotSource',action:input.action});return snapshot(input);};
+   window.addEventListener('sensa-account-library-sync-activity',()=>{if(c.readAccountLibrarySyncActivity()?.phase==='preparing')w.preparationPhase=true;});
+  },account);
+  const preparing=source.evaluate(()=>(window as any).core.syncAccountLibrary({prepareForAnotherDevice:true})).then(()=>({ok:true}),error=>({ok:false,error:String(error)}));
+  await source.waitForFunction(()=>(window as any).retirementHeld&&(window as any).preparationPhase);
+  expect((await source.evaluate(()=>(window as any).core.listDrafts())).map((row:any)=>row.text)).toEqual(['retained preparation scheduling draft']);
+  // Give the preparation task a real scheduling window while retirement is paused.
+  await source.waitForTimeout(100);expect(await source.evaluate(()=>(window as any).sourceBegins)).toBe(0);
+  await source.evaluate(()=>(window as any).releaseRetirement());expect(await preparing).toEqual({ok:true});
+  const evidence=await source.evaluate(()=>{const w=window as any;return {beganBeforeRetirement:w.beganBeforeRetirement,retirementComplete:w.retirementComplete,sourceBegins:w.sourceBegins,rpc:w.rpc,activity:w.core.readAccountLibrarySyncActivity()};});
+  expect(evidence).toMatchObject({beganBeforeRetirement:false,retirementComplete:true,sourceBegins:1,activity:{status:'ready',revision:1}});
+  const before=await inspect(source),head=await source.evaluate(()=>(window as any).core.readCloudSync());expect(before.drafts).toHaveLength(1);expect(before.base.length).toBeGreaterThan(1);expect(head.status).toBe('synced');
+  const remote=(await f.pool.query('SELECT native_snapshot FROM sensa_consumer.library_cloud WHERE account_id=$1',[account.accountId])).rows[0];expect(remote.native_snapshot.revision).toBe(1);
+  await source.reload();await source.evaluate(async()=>{const path='/core.js';(window as any).core=await import(path);await(window as any).core.openLibrary();});expect(await inspect(source)).toEqual(before);
+  await info.attach('source-retirement-order.json',{body:JSON.stringify({...evidence,records:before.base.length,reloadDurable:true}),contentType:'application/json'});
+ }finally{await f.close();}
+});
+
+for(const cancel of [false,true])test(`another page's retirement ${cancel?'can outlive cancelled preparation without publishing':'finishes before the production source opens'}`,async({browser},info)=>{
+ const f=await createLibraryCloudBrowserFixture(browser);
+ try{const account=await f.createAccount(),source=await f.createClient(account);await save(source,'retained cross-page scheduling draft');
+  await source.evaluate(async()=>{const w=window as any,a=await w.core.sqliteRecordAdapter(),candidate=a.replicaCandidate.bind(a),gate=new Promise<void>(resolve=>{w.releaseRetirement=resolve;});w.retirementHeld=false;w.retirementComplete=false;a.replicaCandidate=async(input:any,onProgress:any)=>{if(input.kind==='retirePublication'){w.retirementHeld=true;await gate;}const result=await candidate(input,onProgress);if(input.kind==='retirePublication'&&result.done)w.retirementComplete=true;return result;};});
+  expect(await source.evaluate(()=>(window as any).sync())).toMatchObject({initialPublicationConfirmed:true});await source.waitForFunction(()=>(window as any).retirementHeld);
+  const other=await source.context().newPage();await other.goto(f.origin);
+  await other.route('https://service.fixture.invalid/**',async route=>{const target=new URL(route.request().url()),response=await route.fetch({url:f.origin+target.pathname+target.search});await route.fulfill({response});});
+  await other.evaluate(async account=>{const w=window as any,path='/core.js',c=await import(path);w.core=c;w.__fixtureAuthSession={access_token:account.token,user:{id:account.subject}};await c.openLibrary();const a=await c.sqliteRecordAdapter(),snapshot=a.snapshotSource.bind(a);w.sourceBegins=0;w.preparationPhase=false;w.preparationAbort=new AbortController();a.snapshotSource=async(input:any)=>{if(input.action==='begin')w.sourceBegins++;return snapshot(input);};window.addEventListener('sensa-account-library-sync-activity',()=>{if(c.readAccountLibrarySyncActivity()?.phase==='preparing')w.preparationPhase=true;});},account);
+  const preparing=other.evaluate(()=>(window as any).core.syncAccountLibrary({prepareForAnotherDevice:true,signal:(window as any).preparationAbort.signal})).then(()=>({ok:true,error:''}),error=>({ok:false,error:String(error)}));
+  await other.waitForFunction(()=>(window as any).preparationPhase);expect((await other.evaluate(()=>(window as any).core.listDrafts()))).toHaveLength(1);await other.waitForTimeout(100);expect(await other.evaluate(()=>(window as any).sourceBegins)).toBe(0);
+  if(cancel){await other.evaluate(()=>(window as any).preparationAbort.abort());expect((await preparing).error).toContain('library_sync_cancelled');}
+  await source.evaluate(()=>(window as any).releaseRetirement());await source.waitForFunction(()=>(window as any).retirementComplete);
+  if(!cancel)expect(await preparing).toEqual({ok:true,error:''});
+  const before=await inspect(other),begins=await other.evaluate(()=>(window as any).sourceBegins),remote=(await f.pool.query('SELECT native_snapshot FROM sensa_consumer.library_cloud WHERE account_id=$1',[account.accountId])).rows[0];
+  expect(begins).toBe(cancel?0:1);expect(before.state.status).toBe('synced');expect(before.drafts.map((row:any)=>row.text)).toEqual(['retained cross-page scheduling draft']);expect(before.base.length).toBeGreaterThan(1);if(cancel)expect(remote.native_snapshot).toBeNull();else expect(remote.native_snapshot.revision).toBe(1);
+  await other.reload();await other.evaluate(async()=>{const path='/core.js';(window as any).core=await import(path);await(window as any).core.openLibrary();});expect(await inspect(other)).toEqual(before);await info.attach('cross-page-retirement.json',{body:JSON.stringify({cancel,begins,records:before.base.length,reloadDurable:true,nativeAttached:!!remote.native_snapshot}),contentType:'application/json'});
+ }finally{await f.close();}
+});
+
 test('own-cloud v2 uploads, coexists with v1, atomically activates and reopens admitted facts and ordered refs',async({browser},info)=>{
  const f=await createLibraryCloudBrowserFixture(browser);
  try{const {account,source}=await seed(f),target=await f.createClient(account),before=await inspect(source);

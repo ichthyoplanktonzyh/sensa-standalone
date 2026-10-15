@@ -78,6 +78,41 @@ test('a validated checkpoint checks only metadata when unchanged and publishes o
  }finally{read.mockRestore();baseline.mockRestore();writes.mockRestore();metadata.mockRestore();}
 });
 
+test('native preparation waits for the selected publication retirement before opening its source',async()=>{
+ const adapter=await sqliteRecordAdapter(),candidate=adapter.replicaCandidate.bind(adapter);let entered=false,retired=false,release!:()=>void;
+ const gate=new Promise<void>(resolve=>{release=resolve;});
+ const retirement=vi.spyOn(adapter,'replicaCandidate').mockImplementation(async(input,onProgress)=>{if(input.kind==='retirePublication'){entered=true;await gate;}const result=await candidate(input,onProgress);if(input.kind==='retirePublication'&&result.kind==='publicationRetired'&&result.done)retired=true;return result;});
+ const producer=vi.spyOn(await import('../../../apps/web/src/data/library/cloudNativeSnapshot'),'publishNativeCloudSnapshot').mockImplementation(async()=>{expect(retired).toBe(true);return {} as any;});
+ try{calls.length=0;const preparing=synchronizeLibrary(request,{publishSnapshot:true});await vi.waitFor(()=>expect(entered).toBe(true));expect(producer).not.toHaveBeenCalled();expect(calls).toEqual(['/head']);release();await preparing;expect(producer).toHaveBeenCalledOnce();expect((await readCloudSync())?.status).toBe('synced');}
+ finally{release();retirement.mockRestore();producer.mockRestore();}
+});
+
+test('automatic preparation skips a small publication without waiting for background retirement',async()=>{
+ const adapter=await sqliteRecordAdapter(),candidate=adapter.replicaCandidate.bind(adapter);let entered=false,retired=false,release!:()=>void;
+ const gate=new Promise<void>(resolve=>{release=resolve;}),before=await readCloudSync();
+ const retirement=vi.spyOn(adapter,'replicaCandidate').mockImplementation(async(input,onProgress)=>{if(input.kind==='retirePublication'){entered=true;await gate;}const result=await candidate(input,onProgress);if(input.kind==='retirePublication'&&result.kind==='publicationRetired'&&result.done)retired=true;return result;});
+ const producer=vi.spyOn(await import('../../../apps/web/src/data/library/cloudNativeSnapshot'),'publishNativeCloudSnapshot');
+ try{calls.length=0;await synchronizeLibrary(request,{publishSnapshot:'if-large'});await vi.waitFor(()=>expect(entered).toBe(true));expect(retired).toBe(false);expect(calls).toEqual(['/head']);expect(producer).not.toHaveBeenCalled();expect(await readCloudSync()).toEqual(before);}
+ finally{release();await vi.waitFor(()=>expect(retired).toBe(true));retirement.mockRestore();producer.mockRestore();}
+});
+
+test('cancellation while waiting for retirement leaves the confirmed facts checkpoint intact',async()=>{
+ const adapter=await sqliteRecordAdapter(),candidate=adapter.replicaCandidate.bind(adapter);let entered=false,retired=false,release!:()=>void;
+ const gate=new Promise<void>(resolve=>{release=resolve;}),controller=new AbortController(),before=await readCloudSync();
+ const retirement=vi.spyOn(adapter,'replicaCandidate').mockImplementation(async(input,onProgress)=>{if(input.kind==='retirePublication'){entered=true;await gate;}const result=await candidate(input,onProgress);if(input.kind==='retirePublication'&&result.kind==='publicationRetired'&&result.done)retired=true;return result;});
+ const producer=vi.spyOn(await import('../../../apps/web/src/data/library/cloudNativeSnapshot'),'publishNativeCloudSnapshot');
+ try{const preparing=synchronizeLibrary(request,{publishSnapshot:true,signal:controller.signal});await vi.waitFor(()=>expect(entered).toBe(true));controller.abort();await expect(preparing).rejects.toThrow('library_sync_cancelled');expect(producer).not.toHaveBeenCalled();expect(await readCloudSync()).toEqual(before);}
+ finally{release();await vi.waitFor(()=>expect(retired).toBe(true));retirement.mockRestore();producer.mockRestore();}
+});
+
+test('failed retirement cannot report a native artifact while facts remain durably synced',async()=>{
+ const adapter=await sqliteRecordAdapter(),candidate=adapter.replicaCandidate.bind(adapter),before=await readCloudSync();
+ const retirement=vi.spyOn(adapter,'replicaCandidate').mockImplementation(async(input,onProgress)=>{if(input.kind==='retirePublication')throw Error('injected_retirement_failure');return candidate(input,onProgress);});
+ const producer=vi.spyOn(await import('../../../apps/web/src/data/library/cloudNativeSnapshot'),'publishNativeCloudSnapshot');
+ try{await expect(synchronizeLibrary(request,{publishSnapshot:true})).rejects.toThrow('sqlite_snapshot_source_busy');expect(producer).not.toHaveBeenCalled();expect(await readCloudSync()).toEqual(before);}
+ finally{retirement.mockRestore();producer.mockRestore();}
+});
+
 test('a local write during an unchanged-head check stays pending rather than becoming falsely synced',async()=>{
  const first=(await listDrafts())[0]!,before=revision;let changed=false;
  hook=async path=>{if(path==='/head'&&!changed){changed=true;await saveDraft(crypto.randomUUID(),{id:first.id,expectedRevision:first.revision,text:'Written while checking the head.'});}};

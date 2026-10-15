@@ -442,20 +442,23 @@ async function boundedCandidate(input:ReplicaCandidateRequest,deadline:CloudSync
 // The durable receipt is independent of disposable source retirement. Each
 // RPC is one bounded native transaction; a close or selection change stops
 // this page's loop, and a later synchronization resumes the selected receipt.
-const publicationRetirements=new Map<string,Promise<void>>();
-function retirePublication(id:string){
+const publicationRetirements=new Map<string,Promise<boolean>>();
+const publicationSourceLock=(id:string,namespace=localLibraryNamespace())=>localLibraryScopedName('sensa-publication-source:'+id,namespace);
+function retirePublication(id:string):Promise<boolean>{
  try{
  const namespace=localLibraryNamespace(),key=localLibraryScopedName(id,namespace);
- if(publicationRetirements.has(key))return;
+ const existing=publicationRetirements.get(key);if(existing)return existing;
  assertLocalLibrarySelected(namespace);
  const opening=sqliteRecordAdapter();
- const promise=(async()=>{
+ const work=async()=>{
   const adapter=await opening;assertLocalLibrarySelected(namespace);
   await new Promise<void>(resolve=>setTimeout(resolve,0));
-  for(;;){assertLocalLibrarySelected(namespace);const result=await adapter.replicaCandidate({kind:'retirePublication',id});if(result.kind!=='publicationRetired'||result.done)return;await new Promise<void>(resolve=>setTimeout(resolve,0));}
- })().catch(()=>{/* A close, new publication or IO failure retains private rows for retry. */}).finally(()=>{if(publicationRetirements.get(key)===promise)publicationRetirements.delete(key);});
+  for(;;){assertLocalLibrarySelected(namespace);const result=await adapter.replicaCandidate({kind:'retirePublication',id});if(result.kind!=='publicationRetired')return false;if(result.done)return true;await new Promise<void>(resolve=>setTimeout(resolve,0));}
+ };
+ const promise=(navigator.locks?navigator.locks.request(publicationSourceLock(id,namespace),work):work()).catch(()=>false/* A close, new publication or IO failure retains private rows for retry. */).finally(()=>{if(publicationRetirements.get(key)===promise)publicationRetirements.delete(key);});
  publicationRetirements.set(key,promise);
- }catch{/* A changed selection or closed adapter cannot deny a durable receipt. */}
+ return promise;
+ }catch{/* A changed selection or closed adapter cannot deny a durable receipt. */return Promise.resolve(false);}
 }
 
 async function confirmInitialPublication(header:Awaited<ReturnType<typeof captureHeader>>,id:string,published:LibrarySyncHead,sourceRevision:number,currentRemoteRevision=published.revision,deadline?:CloudSyncDeadline){
@@ -645,7 +648,7 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
  if(header.reconnectRequired&&!options.restoreAfterLocalClear)return;
  const consumeReconnect=header.reconnectRequired&&options.restoreAfterLocalClear===true;
  const prior=header.state;
- if(prior?.publicationOperationId&&!prior.pending&&!prior.initialUpload)retirePublication(prior.publicationOperationId);
+ const retirement=prior?.publicationOperationId&&!prior.pending&&!prior.initialUpload?retirePublication(prior.publicationOperationId):undefined;
  const initiallyConflicted=prior?.status==='conflict'||!!prior?.conflicts?.length||!!prior?.conflict||!!prior?.resolution;
  if(prior&&(!sameOwner(prior.owner,header.owner)||prior.incarnation!==header.incarnation))throw new Error('account_changed');
  const defaults:State={...expected,revision:0,status:'pending'};
@@ -666,7 +669,14 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
    // Small initial publications already have the bounded legacy path. Do not
    // create a second whole-file artifact as part of their ordinary connection.
    if(options.publishSnapshot==='if-large'&&(head.manifest?.records??0)<=librarySyncLegacyManifestRecordLimit)return;
-   const {publishNativeCloudSnapshot}=await import('./cloudNativeSnapshot');const snapshotPublished=await publishNativeCloudSnapshot(await sqliteRecordAdapter(),header,head,request,deadline);
+   // The bounded background loop can submit another write between source RPCs.
+   // Only a new artifact waits; skipped or already published artifacts do not.
+   if(retirement){deadline.beginInitial();if(!await deadline.run(()=>retirement))throw Error('sqlite_snapshot_source_busy');}
+   const {publishNativeCloudSnapshot}=await import('./cloudNativeSnapshot');
+   const publish=async()=>publishNativeCloudSnapshot(await sqliteRecordAdapter(),header,head,request,deadline);
+   // Another page may still have a queued retirement loop for this publication.
+   // Its maintenance shares this lock; user writes retain their normal fences.
+   const snapshotPublished=prior.publicationOperationId&&navigator.locks?await deadline.run(()=>navigator.locks.request(publicationSourceLock(prior.publicationOperationId!),{signal:deadline.signal},publish)):await publish();
    if(snapshotPublished.storage)await saveState(expected,old=>{if(!old)throw Error('account_changed');return old.revision===head.revision?{...old,storage:snapshotPublished.storage}:old;});
    return {activated:undefined,snapshotPublished};
   }
