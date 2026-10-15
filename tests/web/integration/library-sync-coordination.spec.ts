@@ -26,6 +26,12 @@ async function advance(pages:Page[],ms:number){await drain(pages);const before=a
 const saveDraft=(page:Page,text:string,id?:string)=>page.evaluate(async({text,id})=>{const c=(window as any).core,old=id?(await c.listDrafts()).find((row:any)=>row.id===id):undefined;return (await c.saveDraft(crypto.randomUUID(),{id:id??crypto.randomUUID(),expectedRevision:old?.revision??0,text})).id;},{text,id});
 async function tabs(fixture:LibraryCloudBrowserFixture,account:LibraryCloudAccount,count=3){const first=await fixture.createClient(account),pages=[first];for(let i=1;i<count;i++)pages.push(await first.context().newPage());for(const page of pages)await initialize(page,fixture,account,false);return pages;}
 const heads=(fixture:LibraryCloudBrowserFixture)=>fixture.requests().filter(row=>row.path.endsWith('/head')).length;
+const singleInitialPublication=(fixture:LibraryCloudBrowserFixture)=>{
+ // The existing small-artifact post-step reads head, then skips preparation.
+ // Count it separately from the one source publication and ordinary patches.
+ expect(fixture.requests().filter(row=>row.path.endsWith('/staging/begin'))).toHaveLength(1);
+ expect(fixture.requests().filter(row=>row.path.endsWith('/compact'))).toHaveLength(0);
+};
 
 test('three tabs share confirmed freshness while manual checks and expiry still read the head',async({browser})=>{
  const fixture=await createLibraryCloudBrowserFixture(browser);
@@ -46,7 +52,7 @@ test('dirty edits coalesce across tabs and a session boundary clears every old d
   let id:string|undefined;for(let i=0;i<6;i++){id=await saveDraft(pages[0]!,`Saved edit ${i}`,id);await advance(pages,1000);}
   expect(fixture.requests()).toEqual([]);
   await pages[0]!.evaluate(()=>window.dispatchEvent(new Event('sensa-cloud-checkpoint-requested')));await synced(pages[0]!);await drain(pages);
-  expect(fixture.requests().filter(row=>row.path.endsWith('/commit'))).toHaveLength(1);expect(heads(fixture)).toBe(1);
+  expect(fixture.requests().filter(row=>row.path.endsWith('/commit'))).toHaveLength(1);expect(heads(fixture)).toBe(2);singleInitialPublication(fixture);
   fixture.clearRequests();await advance(pages,cloudCheckpointSchedule.idleMs+1);expect(fixture.requests()).toEqual([]);
   id=await saveDraft(pages[1]!, 'A later burst starts a new deadline',id);await advance(pages,cloudCheckpointSchedule.idleMs+1);await synced(pages[0]!);await drain(pages);
   expect(fixture.requests().filter(row=>row.path.endsWith('/commit'))).toHaveLength(1);expect(heads(fixture)).toBe(1);
@@ -95,7 +101,7 @@ test('an automatic waiter rereads dirty content after the cross-tab lock',async(
   await peer!.evaluate(()=>{(window as any).__queued=(window as any).core.syncAccountLibrary({automatic:true});});
   await expect.poll(()=>peer!.evaluate(async()=>(await navigator.locks.query()).pending?.filter(lock=>lock.name==='sensa-account-library-sync').length)).toBe(1);
   const id=await saveDraft(page!,'Written after automatic intent queued');fixture.clearRequests();await page!.evaluate(()=>(window as any).__release());await peer!.evaluate(()=>(window as any).__queued);await synced(peer!);
-  expect(heads(fixture)).toBe(1);expect(fixture.requests().filter(row=>row.path.endsWith('/commit'))).toHaveLength(1);
+  expect(heads(fixture)).toBe(2);expect(fixture.requests().filter(row=>row.path.endsWith('/commit'))).toHaveLength(1);singleInitialPublication(fixture);
   const remote=await fixture.createClient(account);await remote.evaluate(()=>(window as any).sync());expect(await remote.evaluate(async id=>(await (window as any).core.listDrafts()).some((row:any)=>row.id===id),id)).toBe(true);
  }finally{await fixture.close();}
 });
@@ -117,7 +123,7 @@ test('continuous edits respect one maximum-dirty deadline across three tabs',asy
   const account=await fixture.createAccount(),pages=await tabs(fixture,account);await Promise.all(pages.map(mount));for(const page of pages)await synced(page);await drain(pages);fixture.clearRequests();
   let id:string|undefined;for(let i=0;i<24;i++){id=await saveDraft(pages[0]!,`Continuous edit ${i}`,id);await advance(pages,5000);}
   const during=fixture.requests().filter(row=>row.path.endsWith('/commit')).length;expect(during).toBeLessThanOrEqual(2);expect(during).toBeGreaterThanOrEqual(1);
-  await advance(pages,cloudCheckpointSchedule.idleMs+1);await synced(pages[0]!);expect(fixture.requests().filter(row=>row.path.endsWith('/commit'))).toHaveLength(2);expect(heads(fixture)).toBe(2);
+  await advance(pages,cloudCheckpointSchedule.idleMs+1);await synced(pages[0]!);expect(fixture.requests().filter(row=>row.path.endsWith('/commit'))).toHaveLength(2);expect(heads(fixture)).toBe(3);singleInitialPublication(fixture);
  }finally{await fixture.close();}
 });
 
