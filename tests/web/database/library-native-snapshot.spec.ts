@@ -77,3 +77,13 @@ test('a native receiver keeps sparse single-change and unchanged synchronization
   f.clearRequests();await target.evaluate(()=>(window as any).core.synchronizeLibrary((window as any).request,{backgroundVerification:true}));expect(f.requests().map(row=>row.path)).toEqual(['/sensa/library-sync/head']);const unchanged=await inspect(target);expect(unchanged.drafts).toEqual(right.drafts);expect(unchanged.base).toEqual(right.base);expect(unchanged.state.status).toBe('synced');
  }finally{await f.close();}
 });
+
+test('source preparation can be skipped or cancelled without making confirmed facts dirty',async({browser})=>{
+ const f=await createLibraryCloudBrowserFixture(browser);
+ try{const account=await f.createAccount(),source=await f.createClient(account);await save(source,'facts remain synced when source preparation stops');expect(await source.evaluate(()=>(window as any).sync())).toMatchObject({initialPublicationConfirmed:true});const before=await inspect(source);
+  f.clearRequests();await source.evaluate(()=>(window as any).core.synchronizeLibrary((window as any).request,{publishSnapshot:'if-large'}));expect(f.requests().map(row=>row.path)).toEqual(['/sensa/library-sync/head']);
+  await expect(source.evaluate(async()=>{const controller=new AbortController();await(window as any).core.synchronizeLibrary((window as any).request,{publishSnapshot:true,signal:controller.signal,onProgress:(p:any)=>{if(p.phase==='snapshot-source-copy')controller.abort();}});})).rejects.toThrow('library_sync_cancelled');
+  expect(await inspect(source)).toEqual(before);expect((await source.evaluate(()=>(window as any).request('/head'))).nativeSnapshot).toBeUndefined();
+  await source.evaluate(()=>(window as any).core.synchronizeLibrary((window as any).request,{publishSnapshot:true}));const again=await source.evaluate(()=>(window as any).core.synchronizeLibrary((window as any).request,{publishSnapshot:true}));expect(again.snapshotAlreadyPublished.revision).toBe(1);expect((await inspect(source)).state.status).toBe('synced');
+ }finally{await f.close();}
+});

@@ -232,5 +232,18 @@
     "hint": "Une sauvegarde contient uniquement les données de cet appareil. Elle ne résout pas le problème de synchronisation et n’inclut pas les modifications du cloud qui n’ont pas encore été téléchargées.",
     "backup": "Sauvegarder cet appareil",
     "hideBackup": "Masquer la sauvegarde"
+  },
+  "cloudSyncPreparation": {
+    "prepareDevice": "Préparer les données pour un autre appareil",
+    "preparing": "Préparation des données du compte pour les autres appareils…",
+    "preparingUpload": "Envoi des données nécessaires au nouvel appareil…",
+    "receiving": "Réception des données du compte…",
+    "prepared": "Les données du compte sont prêtes pour un autre appareil.",
+    "preparationFailed": "La préparation a échoué. Réessayez plus tard. Les données synchronisées sont conservées.",
+    "preparationCancelled": "Préparation arrêtée. Les données synchronisées sont conservées.",
+    "stop": "Arrêter cette synchronisation",
+    "stopping": "Arrêt en cours…",
+    "cancelled": "Synchronisation arrêtée. Vous pouvez réessayer.",
+    "processed": "Données traitées : {{amount}} MiB"
   }
 }

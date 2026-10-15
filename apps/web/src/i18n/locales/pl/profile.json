@@ -50,5 +50,18 @@
     "hint": "Kopia zapasowa zapisuje tylko dane tego urządzenia. Nie rozwiązuje problemu synchronizacji i nie zawiera zmian z chmury, które nie zostały jeszcze pobrane.",
     "backup": "Utwórz kopię tego urządzenia",
     "hideBackup": "Ukryj kopię zapasową"
+  },
+  "cloudSyncPreparation": {
+    "prepareDevice": "Przygotuj dane dla nowego urządzenia",
+    "preparing": "Przygotowywanie danych konta dla innych urządzeń…",
+    "preparingUpload": "Wysyłanie danych potrzebnych nowemu urządzeniu…",
+    "receiving": "Odbieranie danych konta…",
+    "prepared": "Dane konta są gotowe dla nowego urządzenia.",
+    "preparationFailed": "Nie udało się ukończyć przygotowania. Spróbuj później. Zsynchronizowane dane zostały zachowane.",
+    "preparationCancelled": "Przygotowanie zatrzymane. Zsynchronizowane dane zostały zachowane.",
+    "stop": "Zatrzymaj tę synchronizację",
+    "stopping": "Zatrzymywanie…",
+    "cancelled": "Synchronizacja zatrzymana. Możesz spróbować ponownie.",
+    "processed": "Przetworzone dane: {{amount}} MiB"
   }
 }

@@ -243,5 +243,18 @@
     "hint": "Cadangan hanya menyimpan data perangkat ini. Cadangan tidak menyelesaikan masalah sinkronisasi atau menyertakan perubahan cloud yang belum diunduh.",
     "backup": "Cadangkan perangkat ini",
     "hideBackup": "Sembunyikan cadangan"
+  },
+  "cloudSyncPreparation": {
+    "prepareDevice": "Siapkan data untuk perangkat baru",
+    "preparing": "Menyiapkan data akun untuk perangkat lain…",
+    "preparingUpload": "Mengirim data yang diperlukan perangkat baru…",
+    "receiving": "Menerima data akun…",
+    "prepared": "Data akun siap untuk perangkat baru.",
+    "preparationFailed": "Persiapan belum selesai. Coba lagi nanti. Data yang tersinkron tetap tersimpan.",
+    "preparationCancelled": "Persiapan dihentikan. Data yang tersinkron tetap tersimpan.",
+    "stop": "Hentikan sinkronisasi ini",
+    "stopping": "Menghentikan…",
+    "cancelled": "Sinkronisasi dihentikan. Anda dapat mencoba lagi.",
+    "processed": "Data diproses: {{amount}} MiB"
   }
 }

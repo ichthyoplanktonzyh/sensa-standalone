@@ -2,25 +2,30 @@ import {auth} from '../account/auth';
 import {captureAccountSessionBoundary,assertAccountSessionBoundary,readAccountSignoutEpoch} from '../account/accountSessionBoundary';
 import {readLibrary,writeLibraryState,readLocalLibraryRevision,readLocalArtifactRevision,assertCurrentLibrary} from './store';
 import {synchronizeLibrary,type LibrarySyncOptions,type CloudSyncState} from './cloudSync';
-import {freshCheckpoint} from './cloudSyncCheckpoint';
+import * as control from './cloudSyncActivity';
+import {freshCheckpoint,validatedCheckpoint} from './cloudSyncCheckpoint';
 import {cloudCheckpointSchedule,blocksAutomaticCloudSync,automaticCloudSyncRetryAt} from './cloudSyncPolicy';
 let running:Promise<void>|undefined;
 let runningAutomatic=false;
 let recoveredArtifacts:{subject:string;accountId:string;incarnation:string;generation:number}|undefined;
 export const accountLibrarySyncFinishedEvent='sensa-account-library-sync-finished';
-export type AccountLibrarySyncOptions=LibrarySyncOptions&{automatic?:boolean;recovery?:boolean};
+import type {AccountLibrarySyncActivity} from './cloudSyncActivity';
+export type AccountLibrarySyncOptions=LibrarySyncOptions&{automatic?:boolean;recovery?:boolean;prepareForAnotherDevice?:boolean};
 export function syncAccountLibrary(options:AccountLibrarySyncOptions={}):Promise<void>{
  // An explicit connection must not be swallowed by a concurrent ordinary empty pull.
- const explicit=options.publishEmptyIdentity||options.restoreAfterLocalClear;
+ const explicit=options.publishEmptyIdentity||options.restoreAfterLocalClear||options.publishSnapshot||options.prepareForAnotherDevice;
  // A manual check cannot be absorbed by an automatic pass that may skip a
  // recently confirmed head. Automatic callers can join actual manual work.
  if(running&&!explicit&&(options.automatic||!runningAutomatic))return running;
  const previous=running;
+ let operation:ReturnType<typeof control.beginAccountLibrarySyncActivity>,signal:AbortSignal;
+ const update=(value:Partial<AccountLibrarySyncActivity>)=>control.updateAccountLibrarySyncActivity(operation.id,value);
+ const onProgress:NonNullable<LibrarySyncOptions['onProgress']>=progress=>{update({phase:progress.phase,completed:progress.completed});options.onProgress?.(progress);};
  // Capture before either queue, and verify inside the cross-tab lock. An old
  // click cannot authorize a world cleared while it was waiting for that lock.
  const scope=readLibrary(async tx=>({owner:await tx.get<{subject:string;accountId:string}>('meta','service-owner'),incarnation:await assertCurrentLibrary(tx),state:await tx.get<CloudSyncState>('meta','cloud-sync')}));
  let expected:Awaited<typeof scope>;
- const work=async()=>{
+ const perform=async()=>{
   const intent=expected;
   const before=await readLibrary(async tx=>({owner:await tx.get<{subject:string;accountId:string}>('meta','service-owner'),incarnation:await assertCurrentLibrary(tx),localRevision:await readLocalLibraryRevision(tx),artifactRevision:await readLocalArtifactRevision(tx),state:await tx.get<CloudSyncState>('meta','cloud-sync'),signedOut:!!await tx.get('meta','signed-out'),reconnect:await tx.get('meta','local-reset')==='local-clear'}));
   const owner=before.owner;
@@ -56,7 +61,7 @@ export function syncAccountLibrary(options:AccountLibrarySyncOptions={}):Promise
    if(!session||session.user.id!==owner.subject)fresh=false;
    else await assertAccountSessionBoundary(boundary);
   }
-  const result=!fresh?await synchronizeLibrary(async(path,body,signal)=>{
+  const request:Parameters<typeof synchronizeLibrary>[0]=async(path,body,signal)=>{
    const current=await readLibrary(async tx=>({owner:await tx.get<{subject:string;accountId:string}>('meta','service-owner'),signedOut:await tx.get('meta','signed-out')}));
    const session=(await auth?.getSession())?.data.session;
    if(!session||session.user.id!==owner.subject||current.signedOut||current.owner?.accountId!==owner.accountId||current.owner.subject!==owner.subject)throw new Error('authentication_required');
@@ -68,14 +73,35 @@ export function syncAccountLibrary(options:AccountLibrarySyncOptions={}):Promise
    if(response.status===429)throw new Error('library_sync_rate_limited');if(response.status>=500)throw new Error('library_sync_server_error');
    let value:any;try{value=await response.json();}catch{throw new Error('library_sync_format');}
    if(!response.ok)throw new Error(value.code??'library_sync_unavailable');return value;
-  },{...options,backgroundVerification:options.automatic===true}):undefined;
+  };
+  const result=!fresh?await synchronizeLibrary(request,{...options,signal,onProgress,backgroundVerification:options.automatic===true}):undefined;
   // Checkpoint convergence is independent from public artifact delivery. Try
   // the device catalog after sync, but leave unavailable artifacts honestly
   // blocked instead of turning a healthy learner-data sync into a failure.
-  const after=await readLibrary(async tx=>({owner:await tx.get<{subject:string;accountId:string}>('meta','service-owner'),incarnation:await assertCurrentLibrary(tx),localRevision:await readLocalLibraryRevision(tx),artifactRevision:await readLocalArtifactRevision(tx),reconnect:await tx.get('meta','local-reset')==='local-clear'}));
+  const after=await readLibrary(async tx=>({owner:await tx.get<{subject:string;accountId:string}>('meta','service-owner'),incarnation:await assertCurrentLibrary(tx),localRevision:await readLocalLibraryRevision(tx),artifactRevision:await readLocalArtifactRevision(tx),reconnect:await tx.get('meta','local-reset')==='local-clear',state:await tx.get<CloudSyncState>('meta','cloud-sync')}));
   if(after.owner?.subject!==owner.subject||after.owner.accountId!==owner.accountId||after.incarnation!==before.incarnation&&!(result?.activated?.fromIncarnation===before.incarnation&&result.activated.incarnation===after.incarnation))throw Error('account_changed');
   await assertAccountSessionBoundary(boundary);
+  update({incarnation:after.incarnation});
   if(after.reconnect)return;
+  const notePublished=(value:Awaited<ReturnType<typeof synchronizeLibrary>>)=>{
+   const snapshot=value&&('snapshotPublished'in value?value.snapshotPublished?.nativeSnapshot:'snapshotAlreadyPublished'in value?value.snapshotAlreadyPublished:undefined);
+   if(snapshot)update({preparing:true,status:'ready',phase:'prepared',revision:snapshot.revision});
+   return !!snapshot;
+  };
+  if(options.publishSnapshot)notePublished(result);
+  // Only the first source publication adds this bounded post-step. Daily
+  // edits/polls keep their existing facts-only path; later refreshes are explicit.
+  const initialPublication=!options.publishSnapshot&&result&&'initialPublicationConfirmed'in result&&result.initialPublicationConfirmed===true;
+  if(options.prepareForAnotherDevice||initialPublication){
+   const clean=validatedCheckpoint(after.state)&&after.state?.status==='synced'&&after.state.syncedLocalRevision===after.localRevision;
+   if(!clean){if(options.prepareForAnotherDevice)throw Error('library_sync_local_changed');}
+   else{
+    update({preparing:true,phase:'preparing'});
+    try{if(!notePublished(await synchronizeLibrary(request,{publishSnapshot:options.prepareForAnotherDevice?true:'if-large',signal,onProgress})))update({preparing:false,phase:'sync'});}
+    catch(error){update({preparing:true,status:signal.aborted?'cancelled':'failed',phase:'preparation-stopped'});if(options.prepareForAnotherDevice)throw error;}
+   }
+  }
+  if(options.publishSnapshot||options.prepareForAnotherDevice||signal.aborted)return;
   const warm=options.automatic&&after.localRevision===before.localRevision&&recoveredArtifacts?.subject===owner.subject&&recoveredArtifacts.accountId===owner.accountId&&recoveredArtifacts.incarnation===after.incarnation&&recoveredArtifacts.generation===after.artifactRevision;
   if(warm)return;
   const {contentSupplySystem}=await import('../../contentSupply/system/contentSupplySystem');
@@ -85,6 +111,13 @@ export function syncAccountLibrary(options:AccountLibrarySyncOptions={}):Promise
   const recoveredGeneration=await readLibrary(async tx=>({incarnation:await assertCurrentLibrary(tx),generation:await readLocalArtifactRevision(tx)}));
   if(recovery&&!recovery.blocked.length&&!recovery.failed.length&&recoveredGeneration.incarnation===after.incarnation&&recoveredGeneration.generation===after.artifactRevision)recoveredArtifacts={subject:owner.subject,accountId:owner.accountId,incarnation:after.incarnation,generation:after.artifactRevision};
   else recoveredArtifacts=undefined;
+ };
+ const work=async()=>{
+  if(!expected.owner)throw Error('authentication_required');
+  operation=control.beginAccountLibrarySyncActivity(expected.owner,expected.incarnation,!!options.publishSnapshot);signal=options.signal?AbortSignal.any([options.signal,operation.controller.signal]):operation.controller.signal;
+  try{await perform();}
+  catch(error){update({...(options.prepareForAnotherDevice?{preparing:true}:{}),status:signal.aborted?'cancelled':'failed',phase:'stopped'});throw error;}
+  finally{control.finishAccountLibrarySyncActivity(operation.id);}
  };
  const start=async()=>{
   expected=await scope;

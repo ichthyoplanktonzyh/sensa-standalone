@@ -243,5 +243,18 @@
     "hint": "备份只保存本机资料，不会解决同步问题，也不包含尚未下载的云端更改。",
     "backup": "备份本机资料",
     "hideBackup": "收起备份"
+  },
+  "cloudSyncPreparation": {
+    "prepareDevice": "为新设备准备资料",
+    "preparing": "正在为其他设备准备账号资料…",
+    "preparingUpload": "正在上传为其他设备准备的资料…",
+    "receiving": "正在接收账号资料…",
+    "prepared": "已为新设备准备好账号资料。",
+    "preparationFailed": "未完成新设备的资料准备。已同步的资料仍在，可稍后重试。",
+    "preparationCancelled": "已停止新设备的资料准备。已同步的资料仍在。",
+    "stop": "停止本次同步",
+    "stopping": "正在停止…",
+    "cancelled": "已停止本次同步。已保存的资料仍在，可手动重试。",
+    "processed": "已处理数据：{{amount}} MiB"
   }
 }

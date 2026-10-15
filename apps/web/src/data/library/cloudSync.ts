@@ -22,7 +22,7 @@ import {applyLibraryReplicaMutation} from './replication/libraryReplicaApplicati
 import {validateLibraryReplicaCooperatively,validateLearningConflictReplicaCooperatively,libraryRestoreValidationVersion,type ValidatedLibraryReplica} from './replication/libraryReplicaValidation';
 import {replicaCandidateAppendRecordLimit,replicaCandidateAppendReferenceLimit,type ReplicaCandidateFence,type ReplicaCandidateRequest,type ReplicaCandidateResponse,type ReplicaCandidateRecord,type ReplicaCandidateValidation} from './replicaCandidateProtocol';
 export type SyncRequest=(path:string,body?:unknown,signal?:AbortSignal)=>Promise<any>;
-export type LibrarySyncOptions={publishEmptyIdentity?:boolean;restoreAfterLocalClear?:boolean;backgroundVerification?:boolean;publishSnapshot?:boolean;signal?:AbortSignal;onProgress?:(progress:CloudSyncProgress)=>void};
+export type LibrarySyncOptions={publishEmptyIdentity?:boolean;restoreAfterLocalClear?:boolean;backgroundVerification?:boolean;publishSnapshot?:boolean|'if-large';signal?:AbortSignal;onProgress?:(progress:CloudSyncProgress)=>void};
 export type CloudSyncEntry=LibraryReplicaEntry;
 type Entry=CloudSyncEntry;
 type Owner={subject:string;accountId:string};
@@ -658,8 +658,17 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
  try{
   if(options.publishSnapshot){
    if(!validatedCheckpoint(prior)||prior?.status!=='synced'||prior.syncedLocalRevision!==header.localRevision)throw Error('sqlite_snapshot_source_not_admitted');
-   const head=parseSyncHead(await request('/head'));if(head.revision!==prior.revision)throw Error('library_sync_head_changed');if(head.nativeSnapshot?.revision===head.revision)return;
-   const {publishNativeCloudSnapshot}=await import('./cloudNativeSnapshot');const snapshotPublished=await publishNativeCloudSnapshot(await sqliteRecordAdapter(),header,head,request,deadline);return {activated:undefined,snapshotPublished};
+   const head=parseSyncHead(await request('/head'));if(head.revision!==prior.revision)throw Error('library_sync_head_changed');
+   if(head.nativeSnapshot?.revision===head.revision){
+    if(head.storage)await saveState(expected,old=>{if(!old)throw Error('account_changed');return old.revision===head.revision?{...old,storage:head.storage}:old;});
+    return {activated:undefined,snapshotAlreadyPublished:head.nativeSnapshot};
+   }
+   // Small initial publications already have the bounded legacy path. Do not
+   // create a second whole-file artifact as part of their ordinary connection.
+   if(options.publishSnapshot==='if-large'&&(head.manifest?.records??0)<=librarySyncLegacyManifestRecordLimit)return;
+   const {publishNativeCloudSnapshot}=await import('./cloudNativeSnapshot');const snapshotPublished=await publishNativeCloudSnapshot(await sqliteRecordAdapter(),header,head,request,deadline);
+   if(snapshotPublished.storage)await saveState(expected,old=>{if(!old)throw Error('account_changed');return old.revision===head.revision?{...old,storage:snapshotPublished.storage}:old;});
+   return {activated:undefined,snapshotPublished};
   }
   // A confirmed, clean verification keeps its durable checkpoint while the
   // head is in flight. Success updates it once; failure still saves a real
@@ -669,20 +678,20 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
   let observedHead:LibrarySyncHead|undefined;
   if(prior?.pending&&'staging' in prior.pending&&prior.initialUpload){
    deadline.beginInitial();const p=prior.pending,upload=prior.initialUpload,receipt=await request('/receipt/'+p.operationId);
-   if(receipt.head){const published=parseSyncHead(receipt.head);await verifyPublication(published,p);await confirmInitialPublication(header,upload.id,published,upload.localRevision,receipt.currentRevision,deadline);return;}
+   if(receipt.head){const published=parseSyncHead(receipt.head);await verifyPublication(published,p);await confirmInitialPublication(header,upload.id,published,upload.localRevision,receipt.currentRevision,deadline);return {activated:undefined,initialPublicationConfirmed:true};}
    {
-    try{const published=parseSyncHead(await request('/commit',p));await verifyPublication(published,p);await confirmInitialPublication(header,upload.id,published,upload.localRevision,published.revision,deadline);return;}
+    try{const published=parseSyncHead(await request('/commit',p));await verifyPublication(published,p);await confirmInitialPublication(header,upload.id,published,upload.localRevision,published.revision,deadline);return {activated:undefined,initialPublicationConfirmed:true};}
     catch(cause){if(!(cause instanceof Error)||!['library_sync_conflict','library_sync_staging_expired','library_sync_missing_block','library_sync_local_changed','library_sync_identity'].includes(cause.message))throw cause;}
    }
    const retired=await request('/staging/discard',{operationId:p.operationId});
-   if(retired.head){const published=parseSyncHead(retired.head);await verifyPublication(published,p);await confirmInitialPublication(header,upload.id,published,upload.localRevision,retired.currentRevision,deadline);return;}
+   if(retired.head){const published=parseSyncHead(retired.head);await verifyPublication(published,p);await confirmInitialPublication(header,upload.id,published,upload.localRevision,retired.currentRevision,deadline);return {activated:undefined,initialPublicationConfirmed:true};}
    await saveState(expected,old=>({...old!,pending:undefined,initialUpload:undefined}));
    header.state={...header.state!,pending:undefined,initialUpload:undefined};
   }
   if(!initiallyConflicted&&(!validatedCheckpoint(prior)||prior?.revision===0)&&(!prior?.pending||'staging' in prior.pending)){
    observedHead=parseSyncHead(await request('/head'));
    if(!observedHead.manifest){
-    try{if(await publishInitialLibrary(header,observedHead,request,options,deadline))return;}
+    try{if(await publishInitialLibrary(header,observedHead,request,options,deadline))return {activated:undefined,initialPublicationConfirmed:true};}
     catch(cause){if(!(cause instanceof Error)||cause.message!=='sqlite_replica_candidate_unavailable')throw cause;}
    }
   }
@@ -874,6 +883,9 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
    tx.put('meta',STATE,{...current.state!,receive:receiveEvidence??{mode:'complete',fallbackReason:'local_changes_or_unvalidated_checkpoint',changedRecords:remote.length,baselineBuildRecords:initial.base.length,baselineRecordsRead:initial.base.length,candidateRecordsRead:remote.length,targets:0,runs:0,events:0,decisions:0,scopes:0,sessions:0,scopeRuns:0},checkpointVersion:7,restoreValidationVersion:libraryRestoreValidationVersion,status:activeConflicts.length?'conflict':converged?'synced':'pending',conflicts:activeConflicts.length?activeConflicts:undefined,conflict:activeConflicts.length?conflict:undefined,resolution:undefined,syncedLocalRevision:converged?current.localRevision:current.state!.syncedLocalRevision,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
   });
  }catch(cause){const error=cause instanceof Error&&cause.message==='library_sync_cancelled'&&deadline.signal.aborted?deadline.signal.reason:cause,message=error instanceof Error?error.message:'library_sync_failed';
+  // Source artifacts supplement an already confirmed facts checkpoint. Their
+  // independent failure/cancellation must not mark those facts dirty or failed.
+  if(options.publishSnapshot)throw error;
   const markFailure=()=>saveState(expected,old=>{const state=old??defaults;
    if(['meaning_conflict_history_invalid','library_sync_conflict_unsupported'].includes(message))return {...state,status:'conflict',resolution:undefined,syncStartedAt:undefined,error:'library_sync_conflict_unsupported',failureKind:undefined,retryCount:undefined,retryAt:undefined};
    if(message==='library_sync_local_changed'||message==='library_sync_cancelled')return {...state,status:'pending',syncStartedAt:undefined,error:message,failureKind:undefined,retryCount:undefined,retryAt:undefined};

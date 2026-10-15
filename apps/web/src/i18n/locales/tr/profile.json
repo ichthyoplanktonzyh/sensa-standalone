@@ -54,5 +54,18 @@
     "hint": "Yedek yalnızca bu cihazın verilerini kaydeder. Senkronizasyon sorununu çözmez ve henüz indirilmemiş bulut değişikliklerini içermez.",
     "backup": "Bu cihazı yedekle",
     "hideBackup": "Yedeği gizle"
+  },
+  "cloudSyncPreparation": {
+    "prepareDevice": "Yeni cihaz için verileri hazırla",
+    "preparing": "Diğer cihazlar için hesap verileri hazırlanıyor…",
+    "preparingUpload": "Yeni cihazın ihtiyaç duyduğu veriler gönderiliyor…",
+    "receiving": "Hesap verileri alınıyor…",
+    "prepared": "Hesap verileri yeni cihaz için hazır.",
+    "preparationFailed": "Hazırlık tamamlanamadı. Daha sonra tekrar deneyin. Eşitlenen veriler korunur.",
+    "preparationCancelled": "Hazırlık durduruldu. Eşitlenen veriler korunur.",
+    "stop": "Bu eşitlemeyi durdur",
+    "stopping": "Durduruluyor…",
+    "cancelled": "Eşitleme durduruldu. Tekrar deneyebilirsiniz.",
+    "processed": "İşlenen veri: {{amount}} MiB"
   }
 }

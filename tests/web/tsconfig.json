@@ -152,6 +152,7 @@
     "browser/library-snapshot-source.spec.ts",
     "../../scripts/support/snapshotSourceBrowserEntry.ts",
     "../../scripts/support/snapshotSourceBrowserWorker.ts",
-    "database/library-native-snapshot.spec.ts"
+    "database/library-native-snapshot.spec.ts",
+    "database/library-sync-page.spec.ts"
   ]
 }

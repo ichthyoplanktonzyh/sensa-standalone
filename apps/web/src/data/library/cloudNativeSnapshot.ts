@@ -30,7 +30,7 @@ export async function publishNativeCloudSnapshot(adapter:SqliteRecordAdapter,fen
   if(!result.nativeSnapshot)throw Error('library_sync_incompatible_checkpoint');
   const attached=librarySyncNativeSnapshot.parse(result.nativeSnapshot);
   if(JSON.stringify(attached)!==JSON.stringify(nativeSnapshot))throw Error('library_sync_head_changed');
-  return {nativeSnapshot,timingsMs:{sourcePreparation:preparedAt-started,upload:uploadedAt-preparedAt,attach:performance.now()-uploadedAt,total:performance.now()-started},work:{rawBytes:prepared.byteLength,orderedBlocks:refs.length,uniqueBlocks:sent.size,storeRequests,storeJsonBytes:storedBytes,sourceTransfer:prepared.sourceTransfer,source:prepared.work}};
+  return {nativeSnapshot,storage:result.storage,timingsMs:{sourcePreparation:preparedAt-started,upload:uploadedAt-preparedAt,attach:performance.now()-uploadedAt,total:performance.now()-started},work:{rawBytes:prepared.byteLength,orderedBlocks:refs.length,uniqueBlocks:sent.size,storeRequests,storeJsonBytes:storedBytes,sourceTransfer:prepared.sourceTransfer,source:prepared.work}};
  }finally{await prepared.discard();}
 }
 

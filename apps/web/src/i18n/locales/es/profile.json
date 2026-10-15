@@ -245,5 +245,18 @@
     "hint": "La copia de seguridad solo guarda los datos de este dispositivo. No resuelve el problema de sincronización ni incluye cambios de la nube que aún no se han descargado.",
     "backup": "Respaldar este dispositivo",
     "hideBackup": "Ocultar copia de seguridad"
+  },
+  "cloudSyncPreparation": {
+    "prepareDevice": "Preparar datos para otro dispositivo",
+    "preparing": "Preparando datos de la cuenta para otros dispositivos…",
+    "preparingUpload": "Enviando los datos que necesita el nuevo dispositivo…",
+    "receiving": "Recibiendo datos de la cuenta…",
+    "prepared": "Los datos de la cuenta están preparados para otro dispositivo.",
+    "preparationFailed": "No se pudo completar la preparación. Reinténtalo más tarde. Los datos sincronizados se conservan.",
+    "preparationCancelled": "Preparación detenida. Los datos sincronizados se conservan.",
+    "stop": "Detener esta sincronización",
+    "stopping": "Deteniendo…",
+    "cancelled": "Sincronización detenida. Puedes reintentar.",
+    "processed": "Datos procesados: {{amount}} MiB"
   }
 }

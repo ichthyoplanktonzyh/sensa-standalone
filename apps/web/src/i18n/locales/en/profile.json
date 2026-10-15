@@ -244,5 +244,18 @@
     "hint": "A backup saves only this device’s data. It does not resolve the sync problem or include cloud changes that have not been downloaded.",
     "backup": "Back up this device",
     "hideBackup": "Hide backup"
+  },
+  "cloudSyncPreparation": {
+    "prepareDevice": "Prepare data for another device",
+    "preparing": "Preparing account data for another device…",
+    "preparingUpload": "Uploading data prepared for another device…",
+    "receiving": "Receiving account data…",
+    "prepared": "Account data is prepared for another device.",
+    "preparationFailed": "Preparation for another device did not finish. Synced data is still saved. You can retry later.",
+    "preparationCancelled": "Preparation for another device stopped. Synced data is still saved.",
+    "stop": "Stop this sync",
+    "stopping": "Stopping…",
+    "cancelled": "This sync stopped. Saved data is still available. Retry when ready.",
+    "processed": "Data processed: {{amount}} MiB"
   }
 }

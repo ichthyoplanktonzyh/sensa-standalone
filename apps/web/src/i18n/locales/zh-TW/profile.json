@@ -243,5 +243,18 @@
     "hint": "備份只儲存本機資料，不會解決同步問題，也不包含尚未下載的雲端變更。",
     "backup": "備份本機資料",
     "hideBackup": "收起備份"
+  },
+  "cloudSyncPreparation": {
+    "prepareDevice": "為新裝置準備資料",
+    "preparing": "正在為其他裝置準備帳號資料…",
+    "preparingUpload": "正在傳送新裝置所需的資料…",
+    "receiving": "正在接收帳號資料…",
+    "prepared": "已為新裝置準備好帳號資料。",
+    "preparationFailed": "新裝置的資料尚未準備完成，可稍後重試。已同步的資料仍在。",
+    "preparationCancelled": "已停止新裝置的資料準備。已同步的資料仍在。",
+    "stop": "停止本次同步",
+    "stopping": "正在停止…",
+    "cancelled": "本次同步已停止，可重試。",
+    "processed": "已處理資料：{{amount}} MiB"
   }
 }

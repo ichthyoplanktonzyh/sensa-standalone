@@ -126,5 +126,18 @@
     "hint": "Eine Sicherung enthält nur die Daten dieses Geräts. Sie löst das Synchronisierungsproblem nicht und enthält keine noch nicht heruntergeladenen Cloud-Änderungen.",
     "backup": "Dieses Gerät sichern",
     "hideBackup": "Sicherung ausblenden"
+  },
+  "cloudSyncPreparation": {
+    "prepareDevice": "Daten für ein neues Gerät vorbereiten",
+    "preparing": "Kontodaten für andere Geräte werden vorbereitet…",
+    "preparingUpload": "Benötigte Daten für das neue Gerät werden übertragen…",
+    "receiving": "Kontodaten werden empfangen…",
+    "prepared": "Die Kontodaten sind für ein neues Gerät bereit.",
+    "preparationFailed": "Die Vorbereitung ist fehlgeschlagen. Versuche es später erneut. Synchronisierte Daten bleiben erhalten.",
+    "preparationCancelled": "Vorbereitung angehalten. Synchronisierte Daten bleiben erhalten.",
+    "stop": "Diese Synchronisierung anhalten",
+    "stopping": "Wird angehalten…",
+    "cancelled": "Synchronisierung angehalten. Du kannst es erneut versuchen.",
+    "processed": "Verarbeitete Daten: {{amount}} MiB"
   }
 }

@@ -73,6 +73,8 @@ type BrowserSmokeBridge = {
   semanticMediaCheckpoint():Promise<{mediaId:string;dataUrl:string}[]>;
   draftCount(): Promise<number>;
   syncStatus(): Promise<string>;
+  cloudSyncStateForTest():ReturnType<typeof readCloudSync>;
+  cloudCheckpointForTest():Promise<{state:Awaited<ReturnType<typeof readCloudSync>>;refs:import('./data/library/sqliteProtocol').SqliteSyncBaseReference[]}>;
   semanticWorldContainsExpression(surfaceForm: string): Promise<boolean>;
   intakeInboxCount(): Promise<number>;
   provisioningCheckpoint():Promise<{taskId:string;targetId:string;status:string;useContext:boolean}[]>;
@@ -622,6 +624,8 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
     async syncStatus() {
       return (await readCloudSync())?.status ?? 'none';
     },
+    cloudSyncStateForTest:readCloudSync,
+    async cloudCheckpointForTest(){return {state:await readCloudSync(),refs:await readLibrary(tx=>tx.syncBaseReferences())};},
     async semanticWorldContainsExpression(surfaceForm) {
       const state=await loadJourneyStateFromLibrary();
       return state.meanings.some((meaning) =>

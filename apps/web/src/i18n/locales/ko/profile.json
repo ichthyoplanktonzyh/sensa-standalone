@@ -243,5 +243,18 @@
     "hint": "백업에는 이 기기의 데이터만 저장됩니다. 동기화 문제를 해결하거나 아직 다운로드하지 않은 클라우드 변경 사항을 포함하지 않습니다.",
     "backup": "이 기기 백업",
     "hideBackup": "백업 숨기기"
+  },
+  "cloudSyncPreparation": {
+    "prepareDevice": "새 기기용 자료 준비",
+    "preparing": "다른 기기를 위한 계정 자료를 준비하는 중…",
+    "preparingUpload": "새 기기에 필요한 자료를 전송하는 중…",
+    "receiving": "계정 자료를 받는 중…",
+    "prepared": "새 기기용 계정 자료가 준비되었습니다.",
+    "preparationFailed": "준비를 완료하지 못했습니다. 나중에 다시 시도하세요. 동기화된 자료는 유지됩니다.",
+    "preparationCancelled": "준비를 중지했습니다. 동기화된 자료는 유지됩니다.",
+    "stop": "이번 동기화 중지",
+    "stopping": "중지하는 중…",
+    "cancelled": "동기화를 중지했습니다. 다시 시도할 수 있습니다.",
+    "processed": "처리된 자료: {{amount}} MiB"
   }
 }

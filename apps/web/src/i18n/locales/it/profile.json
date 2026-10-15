@@ -245,5 +245,18 @@
     "hint": "Il backup salva solo i dati di questo dispositivo. Non risolve il problema di sincronizzazione e non include modifiche del cloud non ancora scaricate.",
     "backup": "Crea un backup del dispositivo",
     "hideBackup": "Nascondi backup"
+  },
+  "cloudSyncPreparation": {
+    "prepareDevice": "Prepara i dati per un altro dispositivo",
+    "preparing": "Preparazione dei dati dell’account per altri dispositivi…",
+    "preparingUpload": "Invio dei dati necessari al nuovo dispositivo…",
+    "receiving": "Ricezione dei dati dell’account…",
+    "prepared": "I dati dell’account sono pronti per un altro dispositivo.",
+    "preparationFailed": "Preparazione non completata. Riprova più tardi. I dati sincronizzati sono conservati.",
+    "preparationCancelled": "Preparazione interrotta. I dati sincronizzati sono conservati.",
+    "stop": "Interrompi questa sincronizzazione",
+    "stopping": "Interruzione…",
+    "cancelled": "Sincronizzazione interrotta. Puoi riprovare.",
+    "processed": "Dati elaborati: {{amount}} MiB"
   }
 }

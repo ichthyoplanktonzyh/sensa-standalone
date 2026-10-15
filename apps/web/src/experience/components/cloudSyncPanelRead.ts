@@ -1,4 +1,5 @@
 import {readCloudSync,readCloudReconnectRequired} from '../../data/library/cloudSync';
+import type {AccountLibrarySyncActivity} from '../../data/library/cloudSyncActivity';
 
 export type CloudSyncPanelRead =
  | {availability:'loading'}
@@ -18,8 +19,19 @@ export function cloudSyncPanelMessage(read:CloudSyncPanelRead):string{
  if(read.availability==='error')return 'account.unknown';
  if(!read.state)return read.reconnectRequired?'account.localSync':'account.unknown';
  const state=read.state;
+ if(state.error==='library_sync_cancelled')return 'profile:cloudSyncPreparation.cancelled';
  if(state.error!=='library_sync_identity'&&(state.failureKind==='terminal'||state.status==='conflict'&&!cloudSyncCanChoose(state)||state.error==='library_sync_incompatible_checkpoint'))return 'profile:syncRecovery.blocked';
  return 'cloudSync.'+(state.error==='library_sync_identity'?'identity':state.status);
+}
+
+/** Stages describe observed work; byte counts without a total are not percentages. */
+export function cloudSyncActivityMessage(activity:AccountLibrarySyncActivity):string{
+ if(activity.cancelling)return 'profile:cloudSyncPreparation.stopping';
+ if(activity.phase==='snapshot-upload')return 'profile:cloudSyncPreparation.preparingUpload';
+ if(activity.preparing)return 'profile:cloudSyncPreparation.preparing';
+ if(activity.phase==='snapshot-import-file'||activity.phase==='snapshot-native-import')return 'cloudSync.opening';
+ if(activity.phase.startsWith('snapshot-'))return 'profile:cloudSyncPreparation.receiving';
+ return 'cloudSync.syncing';
 }
 
 /** A choice must cover exactly the versions the owner can actually inspect. */
