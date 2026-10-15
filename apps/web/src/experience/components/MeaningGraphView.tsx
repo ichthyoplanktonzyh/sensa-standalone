@@ -18,8 +18,8 @@ import {SensaVirtualList} from '../ui/SensaVirtualList';
 
 const associationKey=(row:ExpressionAssociation)=>`${row.item.personalMeaningId}:${row.alignment.personalMeaningAlignmentId}:${row.bindingVersionId}`;
 
-export function MeaningGraphView({items,graphStamp,languages=[],screenId,selectedExpressionId,onSelectExpression,onOpenMeaning,learningState,searching=false}:{
- items:readonly WorldGraphItem[];graphStamp?:WorldReadStamp;languages?:readonly string[];screenId:string;
+export function MeaningGraphView({active=true,items,graphStamp,languages=[],screenId,selectedExpressionId,onSelectExpression,onOpenMeaning,learningState,searching=false}:{
+ active?:boolean;items:readonly WorldGraphItem[];graphStamp?:WorldReadStamp;languages?:readonly string[];screenId:string;
  selectedExpressionId:string|null;onSelectExpression:(id:string|null)=>void;
  onOpenMeaning:(id:string,focusId?:string)=>void;
  learningState?:(bindingVersionId:string)=>ReactNode;
@@ -31,8 +31,10 @@ export function MeaningGraphView({items,graphStamp,languages=[],screenId,selecte
  const [labels,setLabels]=useScreenState<'auto'|'all'|'selected'>(`${screenId}:graph-labels`,'auto');
  const [narrow,setNarrow]=useState(()=>window.matchMedia('(max-width: 48rem)').matches);
  const [hover,setHover]=useState<string|null>(null);
+ useEffect(()=>{if(!active)setHover(null);},[active]);
  const [owner,setOwner]=useScreenState<{expressionId:string;associationId:string}|null>(`${screenId}:graph-interpretation`,null);
  const canvas=useRef<GraphCanvasHandle>(null);
+ const [canvasReady,setCanvasReady]=useState(false);
  const browseMenu=useRef<HTMLDivElement>(null),[browseOpen,setBrowseOpen]=useState(false);
  const browseScroll=useCallback(()=>browseMenu.current,[]);
  const byId=useMemo(()=>new Map(graph.nodes.map(node=>[node.id,node])),[graph]);
@@ -43,7 +45,7 @@ export function MeaningGraphView({items,graphStamp,languages=[],screenId,selecte
  const close=()=>{const id=selectedExpressionId;onSelectExpression(null);setHover(null);requestAnimationFrame(()=>{if(id)canvas.current?.focus(id);});};
  const control='inline-flex min-h-11 min-w-11 items-center justify-center rounded-control px-2 text-sm hover:bg-surface-selected focus-visible:outline-2 focus-visible:outline-focus';
  useEffect(()=>{const media=window.matchMedia('(max-width: 48rem)'),update=()=>setNarrow(media.matches);media.addEventListener('change',update);return()=>media.removeEventListener('change',update);},[]);
- const detailRead=useWorldGraphDetail(graphStamp&&association?association.item.personalMeaningId:null);
+ const detailRead=useWorldGraphDetail(active&&graphStamp&&association?association.item.personalMeaningId:null);
  const currentDetail=graphStamp?detailRead.status.ok&&!detailRead.status.loading&&detailRead.value?.incarnation===graphStamp.incarnation&&detailRead.value.revision===graphStamp.revision?detailRead.value.detail:null:(association?.item as JourneyWorldItemView|undefined)?.detail;
  const sources=(currentDetail?.capturedSources??[]).filter(source=>source.source!==null);
  const contextContent=currentDetail?<>{currentDetail.materialBlocks.filter(block=>block.bodyText).map(block=><p key={block.anchorId} className="mt-2 whitespace-pre-wrap break-words text-sm leading-6">{block.bodyText}</p>)}</>:detailRead.status.ok?<p role="status" className="mt-2 text-sm">{localFlowText('loadingSensa')}</p>:<div role="alert" className="mt-2 text-sm"><p>{t('content.loadError')}</p><button type="button" className={control} onClick={detailRead.reload}>{t('content.retry')}</button></div>;
@@ -59,9 +61,10 @@ export function MeaningGraphView({items,graphStamp,languages=[],screenId,selecte
     <button type="button" className={`${control} w-full bg-action-primary text-action-on-primary`} disabled={!!graphStamp&&!currentDetail} onClick={()=>onOpenMeaning(association.item.personalMeaningId,association.focusId)}>{t('content.graph.open')}<ArrowUpRight size={16}/></button>
    </>:null;
  return <section className="sensa-meaning-graph" aria-label={t('content.graph.title')} onKeyDown={event=>{if(event.key==='Escape'&&selectedExpressionId){event.stopPropagation();close();}}}>
-  <div className="sensa-expression-graph-workspace">
+  {active&&!canvasReady&&<div role="status" aria-busy="true" className="absolute inset-0 z-10 grid place-items-center bg-surface-canvas text-sm text-fg-secondary">{localFlowText('loadingSensa')}</div>}
+  <div className="sensa-expression-graph-workspace" inert={!active||!canvasReady}>
    <div className="sensa-expression-graph-surface relative min-w-0 bg-surface-canvas">
-    <MeaningGraphCanvas controller={canvas} graph={graph} screenId={screenId} selected={selected?.id??null} highlight={highlight?.id??null} labels={labels} searching={searching} canvasLabel={t('content.graph.canvas')} nodeLabel={id=>{const node=byId.get(id)!;return `${node.label} · ${node.languageTag} · ${associationFor(node)?.alignment.coreMeaningFocus??''}`;}} onSelect={onSelectExpression} onHover={setHover}/>
+    <MeaningGraphCanvas active={active} onReady={setCanvasReady} controller={canvas} graph={graph} screenId={screenId} selected={selected?.id??null} highlight={highlight?.id??null} labels={labels} searching={searching} canvasLabel={t('content.graph.canvas')} nodeLabel={id=>{const node=byId.get(id)!;return `${node.label} · ${node.languageTag} · ${associationFor(node)?.alignment.coreMeaningFocus??''}`;}} onSelect={onSelectExpression} onHover={setHover}/>
     <div className="sensa-graph-tools">
      <details className="sensa-graph-browse" onToggle={event=>setBrowseOpen(event.currentTarget.open)}><summary className={control} aria-label={t('content.graph.browse')} title={t('content.graph.browse')}><List size={18}/></summary><div ref={browseMenu} className="sensa-graph-menu" role="group" aria-label={t('content.graph.browse')}>{browseOpen&&<SensaVirtualList items={graph.nodes} itemKey={node=>node.id} label={t('content.graph.browse')} estimateSize={44} scrollElement={browseScroll} plain renderItem={node=><button key={node.id} type="button" className="min-h-11 w-full px-3 py-2 text-left text-sm" onClick={event=>{event.currentTarget.closest('details')?.removeAttribute('open');canvas.current?.focus(node.id);onSelectExpression(node.id);}}><bdi lang={node.languageTag} dir="auto">{node.label}</bdi><span className="ml-2 text-xs text-fg-secondary">{interfaceLanguageDisplayName(node.languageTag,locale)}</span></button>}/>}</div></details>
      <button type="button" className={control} onClick={()=>canvas.current?.zoom(.8)} aria-label={t('content.graph.zoomOut')}><Minus size={16}/></button>

@@ -1,25 +1,31 @@
-import {useEffect,useImperativeHandle,useLayoutEffect,useMemo,useRef,useState,type Ref} from 'react';
+import {useEffect,useImperativeHandle,useLayoutEffect,useMemo,useRef,useState,memo,type Ref} from 'react';
 import cytoscape,{type Core,type NodeSingular,type StylesheetJson} from 'cytoscape';
 import {useScreenState} from '../ui/ScreenHost';
 import {type buildMeaningGraph} from '../ui/meaningGraph';
 import {applyMeaningGraphEmphasis,meaningGraphEmphasisStyles,type MeaningGraphEmphasis} from '../ui/meaningGraphEmphasis';
-import {partitionMeaningGraph,meaningGraphKeyboardPositions,meaningGraphPresetLayout} from '../ui/meaningGraphCanvasModel';
+import {partitionMeaningGraph,meaningGraphKeyboardPositions,meaningGraphPresetLayout,layoutMeaningGraphIsolates} from '../ui/meaningGraphCanvasModel';
 
 type Graph=ReturnType<typeof buildMeaningGraph>;
 type Camera={x:number;y:number;zoom:number};
 type Position={id:string;x:number;y:number};
 export type GraphCanvasHandle={fit:()=>void;zoom:(factor:number)=>void;focus:(id:string)=>void};
-type Props={graph:Graph;screenId:string;selected:string|null;highlight:string|null;labels:'auto'|'all'|'selected';searching:boolean;canvasLabel:string;nodeLabel:(id:string)=>string;onSelect:(id:string)=>void;onHover:(id:string|null)=>void;controller:Ref<GraphCanvasHandle>};
+type Props={active?:boolean;graph:Graph;screenId:string;selected:string|null;highlight:string|null;labels:'auto'|'all'|'selected';searching:boolean;canvasLabel:string;nodeLabel:(id:string)=>string;onReady:(ready:boolean)=>void;onSelect:(id:string)=>void;onHover:(id:string|null)=>void;controller:Ref<GraphCanvasHandle>};
 const offsetForIsolates=(cy:Core)=>Math.max(0,...cy.nodes().filter(node=>node.degree()>0).map(node=>(node as NodeSingular).position('y')));
 const roles=['--sensa-fg-primary','--sensa-fg-secondary','--sensa-surface-canvas','--sensa-action-primary','--sensa-focus','--sensa-border-strong'] as const;
 
 /** Cytoscape owns drawing, layouts, hit testing and touch gestures. DOM entries
  * provide the keyboard/reader equivalent; neither layer writes learning facts. */
 export function MeaningGraphCanvas(props:Props){
+ const active=props.active??true,dispose=useRef<()=>void>(()=>{}),engineSignature=useRef<string|null>(null),engineEpoch=useRef(0),visibility=useRef<((active:boolean)=>void)|null>(null);
  const container=useRef<HTMLDivElement>(null),engine=useRef<Core|null>(null),current=useRef(props);current.current=props;
  const signature=useMemo(()=>props.graph.nodes.map(node=>node.id).join('|')+'#'+props.graph.edges.map(edge=>`${edge.from}:${edge.to}`).join('|'),[props.graph]);
+ const desiredSignature=useRef(signature);
+ useLayoutEffect(()=>{desiredSignature.current=signature;},[signature]);
+ const [readyEpoch,setReadyEpoch]=useState(0),[layoutError,setLayoutError]=useState<Error|null>(null);
+ const ready=readyEpoch>0&&readyEpoch===engineEpoch.current&&!!engine.current&&engineSignature.current===signature;
+ useLayoutEffect(()=>{props.onReady(ready);},[ready,props.onReady]);
  const [camera,setCamera]=useScreenState<Camera|null>(`${props.screenId}:cy-camera`,null);
- const [layout,setLayout]=useScreenState<{signature:string;positions:Position[];width:number;height:number}|null>(`${props.screenId}:cy-layout`,null);
+ const layoutRef=useRef<{signature:string;positions:Position[];width:number;height:number}|null>(null);
  const [focused,setFocused]=useState<string|null>(null);
  const focusedId=focused&&props.graph.byId.has(focused)?focused:props.selected&&props.graph.byId.has(props.selected)?props.selected:props.graph.nodes[0]?.id;
  const focusedIndex=props.graph.order.get(focusedId??'')??0;
@@ -46,20 +52,23 @@ export function MeaningGraphCanvas(props:Props){
   ];
  };
  const publish=()=>{
-  const cy=engine.current;if(!cy)return;const pan=cy.pan(),next={x:pan.x,y:pan.y,zoom:cy.zoom()};
+  const cy=engine.current;if(!cy||engineSignature.current!==desiredSignature.current)return;const pan=cy.pan(),next={x:pan.x,y:pan.y,zoom:cy.zoom()};
   cameraRef.current=next;setCamera(next);
  };
  useEffect(()=>{
-  const root=container.current;if(!root)return;
+  const root=container.current;if(!root||!active||engine.current&&engineSignature.current===signature)return;
+  dispose.current();const layout=layoutRef.current?.signature===signature?layoutRef.current:null;
+  if(!layout)layoutRef.current=null;
   delete root.dataset.graphReady;
   const started=performance.now(),linkedIds=new Set(props.graph.edges.flatMap(edge=>[edge.from,edge.to]));
   const cy=cytoscape({container:root.querySelector('[data-cy-surface]') as HTMLElement,elements:[
    ...props.graph.nodes.map(node=>({data:{id:node.id,label:node.label},position:{x:node.x,y:node.y},classes:linkedIds.has(node.id)?'linked':''})),
    ...props.graph.edges.map((edge,index)=>({data:{id:`relation-${index}`,source:edge.from,target:edge.to}}))],style:style(),layout:meaningGraphPresetLayout,minZoom:.12,maxZoom:2.5,wheelSensitivity:.18,autoungrabify:true,boxSelectionEnabled:false,selectionType:'single'});
-  engine.current=cy;
+  engine.current=cy;engineSignature.current=signature;const epoch=++engineEpoch.current;
+  const live=()=>engine.current===cy&&engineEpoch.current===epoch&&desiredSignature.current===signature&&!cy.destroyed();
   root.dataset.graphNodeCount=String(cy.nodes().length);root.dataset.graphEdgeCount=String(cy.edges().length);
-  let painted=false,paintFrame=0;
-  cy.on('render',()=>{if(painted)return;painted=true;paintFrame=requestAnimationFrame(()=>{if(engine.current===cy){root.dataset.graphReady='true';if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.graph.first-renderer-frame',{start:started,end:performance.now()});}});});
+  let painted=false,paintFrame=0,layoutReady=false;
+  cy.on('render',()=>{if(painted||!layoutReady||!live())return;painted=true;paintFrame=requestAnimationFrame(()=>{if(live()){root.dataset.graphReady='true';setReadyEpoch(epoch);if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.graph.first-renderer-frame',{start:started,end:performance.now()});}});});
 
   if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.graph.engine',{start:started,end:performance.now()});
   const layoutStarted=performance.now();
@@ -70,59 +79,87 @@ export function MeaningGraphCanvas(props:Props){
   };
   const cached=layout?.signature===signature;
   let width=root.clientWidth,height=root.clientHeight;
-  if(layout?.signature===signature){const saved=new Map(layout.positions.map(position=>[position.id,position]));cy.nodes().positions(node=>saved.get(node.id())??node.position());}
-  else {
-   cy.batch(()=>{
+  const linkedLayout=function*(){
+   if(layout?.signature===signature){const saved=new Map(layout.positions.map(position=>[position.id,position]));cy.nodes().positions(node=>saved.get(node.id())??node.position());return;}
    let offset=0;
    const linked=components().linked,linkedStarted=performance.now();
    for(const component of linked){
     component.layout({name:'breadthfirst',animate:false,fit:false,directed:false,roots:[component.nodes().sort((a,b)=>b.degree()-a.degree()).first().id()],nodeDimensionsIncludeLabels:true,spacingFactor:1.15,boundingBox:{x1:20,y1:offset+20,w:Math.max(300,Math.min(root.clientWidth-40,620)),h:220}}).run();
     const bounds=component.boundingBox({includeLabels:false}),scale=component.nodes().length<=3?Math.min(1,Math.max(160,root.clientWidth-160)/bounds.w):1;
     component.nodes().positions(node=>({x:80+(node.position('x')-bounds.x1)*scale,y:60+offset+node.position('y')-bounds.y1}));offset+=bounds.h+75;
+    yield;
    }
    if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.graph.linked-layout',{start:linkedStarted,end:performance.now()});
-   });
-  }
+  };
   if(layout?.signature===signature&&cameraRef.current)cy.viewport({zoom:cameraRef.current.zoom,pan:{x:cameraRef.current.x,y:cameraRef.current.y}});
   else {cy.zoom(1);cy.pan({x:15,y:10});}
-  const arrangeForViewport=()=>{
-   cy.batch(()=>{
+  const arrangeForViewport=function*(){
     const arrangeStarted=performance.now();
     for(const component of components().linked.filter(group=>group.nodes().length<=3)){
      const xs=component.nodes().map(node=>node.position('x')),min=Math.min(...xs),span=Math.max(...xs)-min;
      if(span>0){const width=Math.min(300,Math.max(120,root.clientWidth-160));component.nodes().positions(node=>({x:80+(node.position('x')-min)*width/span,y:node.position('y')}));}
+     yield;
     }
     if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.graph.component-viewport',{start:arrangeStarted,end:performance.now()});
     const isolated=components().isolated,linked=cy.edges().length>0,right=linked&&window.matchMedia('(min-width: 48rem)').matches;
     const x=right?440:10,y=right?60:linked?offsetForIsolates(cy)+75:25;
     const cols=Math.max(1,Math.min(isolated.length,right?Math.max(2,Math.floor((root.clientWidth-440)/155)):Math.max(1,Math.floor((root.clientWidth-20)/155))));
     const gridStarted=performance.now();
-    if(isolated.length)isolated.layout({name:'grid',fit:false,avoidOverlap:true,cols,boundingBox:{x1:x,y1:y,w:cols*155,h:Math.ceil(isolated.length/cols)*105},sort:(a,b)=>a.data('label').localeCompare(b.data('label'))||a.id().localeCompare(b.id())}).run();
+    yield* layoutMeaningGraphIsolates(isolated,x,y,cols);
     if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.graph.isolate-grid',{start:gridStarted,end:performance.now()});
-   });
   };
-  const saveLayout=()=>setLayout({signature,positions:cy.nodes().map(node=>({id:node.id(),...node.position()})),width:root.clientWidth,height:root.clientHeight});
-  if(!cached||layout.width!==width||layout.height!==height){arrangeForViewport();saveLayout();}
-  if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.graph.layout',{start:layoutStarted,end:performance.now()});
-  cy.on('tap','node',event=>current.current.onSelect(event.target.id()));
-  cy.on('mouseover','node',event=>current.current.onHover(event.target.id()));
-  cy.on('mouseout','node',()=>current.current.onHover(null));
+  const saveLayout=()=>layoutRef.current=({signature,positions:cy.nodes().map(node=>({id:node.id(),...node.position()})),width:root.clientWidth,height:root.clientHeight});
+  cy.on('tap','node',event=>{if(current.current.active!==false)current.current.onSelect(event.target.id());});
+  cy.on('mouseover','node',event=>{if(current.current.active!==false)current.current.onHover(event.target.id());});
+  cy.on('mouseout','node',()=>{if(current.current.active!==false)current.current.onHover(null);});
   cy.on('pan zoom',publish);
-  const observer=new ResizeObserver(()=>{const nextWidth=root.clientWidth,nextHeight=root.clientHeight;if(nextWidth===width&&nextHeight===height)return;width=nextWidth;height=nextHeight;cy.resize();arrangeForViewport();saveLayout();publish();});observer.observe(root);
-  const theme=new MutationObserver(()=>{cy.style(style());});theme.observe(document.documentElement,{attributes:true});
-  publish();
-  return()=>{cancelAnimationFrame(paintFrame);delete root.dataset.graphReady;observer.disconnect();theme.disconnect();cy.destroy();engine.current=null;};
- },[signature]);
+  const resize=()=>{if(current.current.active===false||!layoutReady||!live())return;const nextWidth=root.clientWidth,nextHeight=root.clientHeight;if(!nextWidth||!nextHeight)return;if(nextWidth===width&&nextHeight===height)return;width=nextWidth;height=nextHeight;cy.resize();cy.batch(()=>{for(const _ of arrangeForViewport()){}});saveLayout();publish();};
+  const observer=new ResizeObserver(resize);
+  let appliedStyle=JSON.stringify(style());
+  const updateTheme=()=>{const next=style(),key=JSON.stringify(next);if(key!==appliedStyle){appliedStyle=key;cy.style(next);}};
+  const theme=new MutationObserver(updateTheme);
+  visibility.current=visible=>{observer.disconnect();theme.disconnect();cy.userPanningEnabled(visible);cy.userZoomingEnabled(visible);if(visible){observer.observe(root);theme.observe(document.documentElement,{attributes:true});resize();updateTheme();}};
+  visibility.current(active);
+  dispose.current=()=>{cancelAnimationFrame(paintFrame);delete root.dataset.graphReady;observer.disconnect();theme.disconnect();cy.destroy();engine.current=null;engineSignature.current=null;visibility.current=null;};
+  // One native batch avoids intermediate renderer invalidations. Yield between
+  // complete components/grid strips; an obsolete Core never publishes ready.
+  const prepare=async()=>{
+   let slice=performance.now(),cpuMs=0,yieldMs=0,yields=0,maxUnitMs=0,units=0,batchFlushMs=0;
+   const drain=async(steps:Generator<void,void>)=>{
+    cy.startBatch();
+    try{for(;;){
+     if(!live()){steps.return();return false;}
+     const at=performance.now(),step=steps.next(),ms=performance.now()-at;cpuMs+=ms;maxUnitMs=Math.max(maxUnitMs,ms);if(step.done)break;units++;
+     if(performance.now()-slice>=8){const paused=performance.now();await new Promise<void>(resolve=>setTimeout(resolve,0));yieldMs+=performance.now()-paused;yields++;slice=performance.now();}
+    }}finally{if(!cy.destroyed()){const at=performance.now();cy.endBatch();const ms=performance.now()-at;batchFlushMs+=ms;cpuMs+=ms;}}
+    return true;
+   };
+   if(!await drain((function*(){yield* linkedLayout();if(!cached||layout.width!==width||layout.height!==height)yield* arrangeForViewport();})()))return;
+   // Flush styles before reading final bounds. The public native bounds API
+   // fills Cytoscape's own caches; the first renderer frame can reuse them.
+   const boundsStarted=performance.now(),elements=cy.elements();
+   if(!await drain((function*(){for(let start=0;start<elements.length;start+=256){elements.slice(start,start+256).boundingBox();yield;}})()))return;
+   if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.graph.render-bounds',{start:boundsStarted,end:performance.now()});
+   if(!live())return;
+   saveLayout();layoutReady=true;resize();publish();
+   if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.graph.layout',{start:layoutStarted,end:performance.now(),detail:{cpuMs,yieldMs,yields,maxUnitMs,units,batchFlushMs,linkedComponents:components().linked.length,isolates:components().isolated.length}});
+   cy.forceRender();
+  };
+  void prepare().catch(error=>{if(live()){dispose.current();setLayoutError(error instanceof Error?error:Error(String(error)));}});
+ },[signature,active]);
+ useEffect(()=>{visibility.current?.(active);},[active,signature]);
+ useEffect(()=>()=>{dispose.current();layoutRef.current=null;},[]);
  // Model text changes independently of transient pointer/selection state.
- useEffect(()=>{
-  const cy=engine.current;if(!cy)return;
+ useLayoutEffect(()=>{
+  const cy=engine.current;if(!cy||!active)return;
   cy.batch(()=>{for(const node of props.graph.nodes){const element=cy.getElementById(node.id);if(element.data('label')!==node.label)element.data('label',node.label);}});
- },[props.graph,signature]);
+ },[props.graph,signature,active]);
  const emphasis=useRef<MeaningGraphEmphasis|null>(null);
  useEffect(()=>{
   const cy=engine.current;if(!cy)return;
+  if(!active)return;
   emphasis.current=applyMeaningGraphEmphasis(cy,props.graph,{id:props.highlight??props.selected,labels:props.labels,searching:props.searching},emphasis.current);
- },[props.selected,props.highlight,props.labels,props.searching,signature,props.graph]);
+ },[props.selected,props.highlight,props.labels,props.searching,signature,props.graph,active]);
 
  const focusNode=(id:string)=>{
   const cy=engine.current,node=cy?.getElementById(id);if(!cy||!node?.length)return;
@@ -130,7 +167,8 @@ export function MeaningGraphCanvas(props:Props){
   setFocused(id);props.onHover(id);
  };
  useImperativeHandle(props.controller,()=>({fit:()=>{engine.current?.fit(undefined,45);publish();},zoom:factor=>{const cy=engine.current;if(cy)cy.zoom({level:Math.max(cy.minZoom(),Math.min(cy.maxZoom(),cy.zoom()*factor)),renderedPosition:{x:cy.width()/2,y:cy.height()/2}});publish();},focus:requestFocus}));
- return <div ref={container} className="sensa-cy-container" data-graph-camera={JSON.stringify(camera)} aria-label={props.canvasLabel}>
+ if(layoutError)throw layoutError;
+ return <div ref={container} className="sensa-cy-container" data-graph-camera={JSON.stringify(camera)} aria-label={props.canvasLabel} inert={!active||!ready} style={{visibility:ready?'visible':'hidden'}}>
   <div hidden aria-hidden="true">{roles.map(role=><i key={role} data-palette={role} style={{color:`var(${role})`}}/>)}</div>
   <div data-cy-surface className="sensa-cy-surface" aria-hidden="true"/>
   <div className="sensa-graph-keyboard-nodes" role="list" aria-label={props.canvasLabel}>{keyboardNodes.map(node=>{
@@ -141,6 +179,8 @@ export function MeaningGraphCanvas(props:Props){
     if(next!==null){event.preventDefault();requestFocus(props.graph.nodes[next]!.id);}
    }}><bdi lang={node.languageTag} dir="auto">{node.label}</bdi></button></span>;
   })}</div>
-  <div hidden aria-hidden="true">{props.graph.edges.map(edge=><span key={`${edge.from}:${edge.to}`} data-graph-edge={`${edge.from}:${edge.to}`} data-relation-facts={JSON.stringify(edge.facts)}/>)}</div>
+  <GraphRelations edges={props.graph.edges}/>
  </div>;
 }
+
+const GraphRelations=memo(function GraphRelations({edges}:{edges:Graph['edges']}){return <div hidden aria-hidden="true">{edges.map(edge=><span key={`${edge.from}:${edge.to}`} data-graph-edge={`${edge.from}:${edge.to}`} data-relation-facts={JSON.stringify(edge.facts)}/>)}</div>;});

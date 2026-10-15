@@ -1,4 +1,4 @@
-import {lazy,useCallback,useState,type ReactNode} from 'react';
+import {lazy,useCallback,useRef,useState,type ReactNode} from 'react';
 import {useTranslation} from 'react-i18next';
 import i18n from '../../i18n';
 import {interfaceLanguageDisplayName} from '../../i18n/languageDisplayName';
@@ -110,7 +110,7 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
      return <><h3 className="text-xs text-fg-secondary">{t('content.worldCurrentRoute')} · {personalLearning.languageContext.targetLanguageTag}</h3><div className="mt-2 text-sm" role={unavailable?'alert':personalLearning.projectionStatus==='loading'?'status':undefined}><p>{key==='worldRemoved'||key==='worldNotAdded'?t(`content.${key}`):localFlowText(key)}</p>{unavailable&&<button type="button" className={setupButton+' mt-2'} onClick={personalLearning.retryTaskSources}>{t('reliability.retry')}</button>}</div></>;
     }}
     bulkLearning={(items,list,query)=><BatchPersonalLearning items={items} query={query} c={personalLearning}>{list}</BatchPersonalLearning>}
-    active={screenActive} screenId={screenId}
+    active={screenActive} retainGraph screenId={screenId}
     initialAction={params.worldAction==='create'||params.worldAction==='inbox'||params.worldAction==='add'?params.worldAction:undefined}
     onInitialActionConsumed={()=>goMain(screenId,{worldAction:undefined})}
     onStartConversation={startSensaConversation}
@@ -192,9 +192,20 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
   's-profile':screenActive=><ProfileScreen localLibrary fixedLearningPolicy modelSettings={<ProviderPanel/>} active={screenActive} preferencesBusy={preferencesBusy} preferencesStatus={preferencesStatus} onGoStudyPlan={()=>{setStudyTab('a');goMain('s-study');}} defaultPolicy="lightweight" policyOptions={packageLearning.policyOptions} dailyNewCount={dailyNewCount} onPolicyChange={()=>{}} onDailyNewCountChange={updateLocalQuantity}/>,
   's-lightweight-runtime':screenActive=><PackageRuntime active={screenActive} c={packageLearning} onExit={returnHome} onViewLearningLibrary={()=>leaveRuntime('s-learning-library')} onViewRecords={()=>void packageLearning.advance().then(continued=>{if(continued===false){setStudyTab('a');leaveRuntime('s-study',{studySection:'history'});}})} onFinish={()=>void packageLearning.advance().then(continued=>{if(continued===false)returnHome();})}/>,
  };
- const renderScreen=(screenActive:boolean)=>learningScreenRenderers[currentScreen as LearningWorkspaceScreenId]?.(screenActive)??null;
+ // One World page owns its mounted graph through its own detail/back branch.
+ // Leaving that branch releases the complete view; ScreenHost stays bounded.
+ const worldIndex=mainStack.reduce((last,screen,index)=>screen==='s-content'||screen==='s-semantic-world'?index:last,-1);
+ const worldScreen=mainStack[worldIndex] as 's-content'|'s-semantic-world'|undefined;
+ const ownedWorld=useRef<typeof worldScreen>(undefined);
+ const worldBranch=viewMode==='main'&&!!worldScreen&&mainStack.slice(worldIndex+1).every(screen=>screen==='s-personal-meaning'||screen==='s-confirmed-sense');
+ if(!worldBranch)ownedWorld.current=undefined;
+ else if(currentScreen===worldScreen)ownedWorld.current=worldScreen;
+ const retainingWorld=worldBranch&&ownedWorld.current===worldScreen;
+ const worldActive=active&&currentScreen===worldScreen;
+ const renderScreen=(screenActive:boolean)=>retainingWorld&&currentScreen===worldScreen?null:learningScreenRenderers[currentScreen as LearningWorkspaceScreenId]?.(screenActive)??null;
  const fallback=<section id={currentScreen} className="screen active absolute inset-0 grid place-content-center bg-surface-canvas text-fg-primary" role="status">{localFlowText('loadingSensa')}</section>;
  return <>
-  <ScreenHost screenKey={screenInstanceKey(currentScreen,params)} active={active} fallback={fallback}>{renderScreen}</ScreenHost>
+  {retainingWorld&&<div key={worldScreen} className={`absolute inset-0 ${worldActive?'z-[2]':'z-0 pointer-events-none'}`} aria-hidden={!worldActive} inert={!worldActive}>{renderContentScreen(worldScreen!,worldActive)}</div>}
+  <ScreenHost screenKey={screenInstanceKey(currentScreen,params)} active={active&&!worldActive} fallback={fallback}>{renderScreen}</ScreenHost>
  </>;
 }

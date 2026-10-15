@@ -1,7 +1,7 @@
 import {contextFlowText} from '../../i18n/contextFlowText';
 import {ContentDrawer,ContentHeader} from './ContentWorkspace';
 import { MeaningGraphView } from "./MeaningGraphView";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -55,6 +55,7 @@ interface ContentScreenProps {
   source?:ContentScreenSource;
   notice?:import("react").ReactNode;
   active: boolean;
+  retainGraph?:boolean;
   screenId?: string;
   initialAction?: "create" | "inbox" | "add";
   onInitialActionConsumed?:()=>void;
@@ -112,7 +113,7 @@ export function ContentScreen(props:ContentScreenProps){
  return <ContentScreenView {...props}/>;
 }
 function ContentScreenView({
-  active,
+  active,retainGraph=false,
   screenId = "s-content",
   initialAction,
   onInitialActionConsumed,
@@ -157,7 +158,7 @@ function ContentScreenView({
   const [inboxOpen, setInboxOpen] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const page=useWorldWindow({query,filter,expressionLanguages:languages,referenceFilter},!providedSource&&active&&category==='personal'&&(view==='list'||filter==='deleted'));
-  const graphReadEnabled=!providedSource&&active&&category==='personal'&&view==='world'&&filter!=='deleted';
+  const graphReadEnabled=!providedSource&&(active||retainGraph)&&category==='personal'&&view==='world'&&filter!=='deleted';
   const [references,setReferencesSnapshot]=useState(()=>personalContentSystem.read({kind:'snapshot'}));
   const readingReferences=!!providedSource&&active&&category==='personal'&&view==='world'&&referenceFilter!=='all';
   useEffect(()=>{if(!readingReferences)return;const read=()=>setReferencesSnapshot(personalContentSystem.read({kind:'snapshot'}));const stop=personalContentSystem.subscribe({kind:'snapshot'},read);read();return stop;},[readingReferences]);
@@ -288,7 +289,19 @@ function ContentScreenView({
   const personalList=paged?<SensaPagedVirtualList count={page.total} itemAt={index=>page.items.get(index)} indexForKey={key=>{for(const [index,item] of page.items)if(item.personalMeaningId===key)return index;return -1;}} itemKey={item=>item.personalMeaningId} label={t('content.personal')} renderItem={row} request={page.request}/>
    :<SensaVirtualList items={visible} itemKey={item=>item.personalMeaningId} label={t('content.personal')} renderItem={row}/>;
   const graphItems=graphReadEnabled?graphRead.value?.items??[]:visible;
-  const personalCollection=status.loading&&(graphReadEnabled||readingReferences|| (paged?!page.total:!items.length))?<div role="status" aria-busy="true" className="py-20 text-center text-sm text-fg-secondary">{localFlowText('loadingSensa')}</div>:!status.ok?<div role="alert" className="rounded-card border border-feedback-danger p-6 text-feedback-danger"><p>{t('content.loadError')}</p><button className={button} onClick={()=>{source.reload();if(readingReferences)void personalContentSystem.refresh().catch(()=>undefined);}}>{t('content.retry')}</button></div>:!(graphReadEnabled?graphItems.length:paged?page.total:visible.length)?empty:view==='list'?personalList:<MeaningGraphView items={graphItems} graphStamp={graphReadEnabled?graphRead.value??undefined:undefined} languages={languages} screenId={screenId} selectedExpressionId={selectedExpression} onSelectExpression={setExpression} onOpenMeaning={open} learningState={graphLearningState} searching={!!normalizedQuery}/>;
+  const retainedGraph=useRef<typeof graphRead.value>(null);
+  if(graphRead.value&&!graphRead.status.loading&&graphRead.status.ok)retainedGraph.current=graphRead.value;
+  if(!graphRead.status.ok||!graphReadEnabled)retainedGraph.current=null;
+  const graphFrame=graphRead.value??retainedGraph.current;
+  const graphVerified=graphReadEnabled&&graphRead.status.ok&&!graphRead.status.loading&&status.ok&&!status.loading;
+  const graphVisible=active&&graphVerified&&!!graphFrame?.items.length;
+  const collectionStatus=status.loading&&(graphReadEnabled||readingReferences||(paged?!page.total:!items.length))?<div role="status" aria-busy="true" className="py-20 text-center text-sm text-fg-secondary">{localFlowText('loadingSensa')}</div>:!status.ok?<div role="alert" className="rounded-card border border-feedback-danger p-6 text-feedback-danger"><p>{t('content.loadError')}</p><button className={button} onClick={()=>{source.reload();if(readingReferences)void personalContentSystem.refresh().catch(()=>undefined);}}>{t('content.retry')}</button></div>:!(graphReadEnabled?graphItems.length:paged?page.total:visible.length)?empty:null;
+  const personalCollection=view==='world'&&graphReadEnabled?<div className="relative h-full">
+    {collectionStatus&&<div className="absolute inset-0 z-10 bg-surface-canvas">{collectionStatus}</div>}
+    {graphFrame&&graphFrame.items.length>0&&<div className="h-full" style={{visibility:graphVisible?'visible':'hidden'}} aria-hidden={!graphVisible} inert={!graphVisible}>
+      <MeaningGraphView key={graphFrame.scope} active={graphVisible} items={graphFrame.items} graphStamp={graphFrame} languages={languages} screenId={`${screenId}:${graphFrame.scope}`} selectedExpressionId={selectedExpression} onSelectExpression={setExpression} onOpenMeaning={open} learningState={graphLearningState} searching={!!normalizedQuery}/>
+    </div>}
+  </div>:collectionStatus??(view==='list'?personalList:<MeaningGraphView active={active} items={graphItems} languages={languages} screenId={screenId} selectedExpressionId={selectedExpression} onSelectExpression={setExpression} onOpenMeaning={open} learningState={graphLearningState} searching={!!normalizedQuery}/>);
   return (
     <>
       <SensaCollectionBrowserLayout

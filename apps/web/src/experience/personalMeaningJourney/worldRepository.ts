@@ -25,7 +25,7 @@ export interface PersonalMeaningCorrectionSeed extends WorldReadStamp{
 
 export interface WorldReadStamp{incarnation:string;revision:number}
 export type WorldInboxSnapshot=WorldReadStamp&{items:JourneyState['inboxItems'];drafts:Array<{personalMeaningId:string;label:string}>};
-export type WorldGraphSnapshot=WorldGraphRead&WorldReadStamp;
+export type WorldGraphSnapshot=WorldGraphRead&WorldReadStamp&{scope:string};
 export type WorldGraphDetailSnapshot=WorldReadStamp&{detail:JourneyDetailView|null};
 export type WorldPageSnapshot=WorldBrowsePage&WorldReadStamp&{inboxCount:number};
 export type WorldLearningChoiceSnapshot=WorldLearningChoicePage&WorldReadStamp;
@@ -67,7 +67,7 @@ export async function readRegistryRecords(tx:Pick<LibraryTransaction,'get'>,init
  return {records,registry};
 }
 export const worldReadRepository={
- subscribe(listener:()=>void):()=>void{return observeLibrary(listener,['semanticState','semanticMeanings','semanticContexts','semanticRegistry','semanticInbox','semanticDrafts','annotations','meta'],{meta:['identity','local-incarnation']});},
+ subscribe(listener:()=>void):()=>void{return observeLibrary(listener,['semanticState','semanticMeanings','semanticContexts','semanticRegistry','semanticInbox','semanticDrafts','annotations','meta'],{meta:['identity','local-incarnation','service-owner']});},
  contextPage(query:ContextBrowseQuery){return readLibrary(async tx=>({...await readWorldFrame(tx),...await tx.contextBrowse(query)}));},
  contextDetail(contextId:string){return readLibrary(async tx=>{const stamp=await readWorldFrame(tx);if(!isUuid(contextId))throw Error('context_query_invalid');const head=await tx.get<ContextRecord>('semanticContexts',`anchors:${contextId}`);if(!head)return {...stamp,detail:null};if(head.kind!=='anchors')throw Error('semantic_context_invalid');const revision=await tx.get<ContextRecord>('semanticContexts',`anchorRevisions:${head.value.currentRevisionId}`);if(revision?.kind!=='anchorRevisions')throw Error('semantic_context_invalid');let next:string|null=head.value.currentRevisionId,sceneManaged=false;while(next){const row:ContextRecord|undefined=await tx.get<ContextRecord>('semanticContexts',`anchorRevisions:${next}`);if(row?.kind!=='anchorRevisions')throw Error('semantic_context_invalid');sceneManaged ||= !!row.value.structuredPayload.learningScene;next=row.parentRevisionId;}const detail:ContextDetail={sceneManaged,head:head.value,revision:revision.value,blocks:contextMaterialBlocks(revision.value),meaningCount:(await tx.contextBrowse({contextId,query:'',status:'all',offset:0,limit:1})).items[0]?.meaningCount??0};return {...stamp,detail};});},
  draftConfirmation(id:string){return readLibrary(async tx=>{const stamp=await readWorldFrame(tx),record=await readMeaningContexts(tx,id);if(!record||record.personalMeaning.status!=='active'||record.alignments.length)throw Error('localFlow.meaningChanged');const ids=record.personalSemanticAnchors.filter(row=>row.status==='active').map(head=>record.personalSemanticAnchorRevisions.find(row=>row.personalSemanticAnchorId===head.personalSemanticAnchorId&&row.revision===head.currentRevision)!.personalSemanticAnchorRevisionId);const revision=record.personalMeaningRevisions.at(-1)!;return {revision:record.personalMeaning.currentRevision,personalMeaningId:id,source:clarificationSourceWitness(stamp.incarnation,'personal_meaning',id,meaningSourceValue(record)),context:ids.length?meaningCorrectionContext(record,ids):null,contextRevisionIds:ids,meaning:revision.learnerIntentNote??'',expression:revision.draftExpression??null};});},
@@ -98,7 +98,7 @@ export const worldReadRepository={
  });},
  graph(query:WorldGraphQuery,signal?:AbortSignal):Promise<WorldGraphSnapshot>{
   const started=performance.now();
-  return readLibrary(async tx=>{signal?.throwIfAborted();const stamp=await readWorldFrame(tx),graph=await tx.worldGraph(query);signal?.throwIfAborted();if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.graph.read',{start:started,end:performance.now()});return {...stamp,...graph};});
+  return readLibrary(async tx=>{signal?.throwIfAborted();const stamp=await readWorldFrame(tx),identity=await tx.get<import('../../data/library/store').LibraryIdentity>('meta','identity'),owner=await tx.get<{subject:string;accountId:string}>('meta','service-owner'),scope=JSON.stringify([identity?.id,identity?.learnerId,stamp.incarnation,owner?.subject,owner?.accountId]),graph=await tx.worldGraph(query);signal?.throwIfAborted();if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.graph.read',{start:started,end:performance.now()});return {...stamp,scope,...graph};});
  },
  graphDetail(id:string):Promise<WorldGraphDetailSnapshot>{
   if(!isUuid(id))return Promise.reject(new Error('world_meaning_id_invalid'));

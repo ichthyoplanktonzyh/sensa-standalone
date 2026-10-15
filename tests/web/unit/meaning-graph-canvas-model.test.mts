@@ -1,6 +1,21 @@
 import {test,expect,vi} from 'vitest';
 import cytoscape from 'cytoscape';
-import {partitionMeaningGraph,meaningGraphKeyboardPositions,meaningGraphPresetLayout} from '../../../apps/web/src/experience/ui/meaningGraphCanvasModel';
+import {partitionMeaningGraph,meaningGraphKeyboardPositions,meaningGraphPresetLayout,layoutMeaningGraphIsolates} from '../../../apps/web/src/experience/ui/meaningGraphCanvasModel';
+
+test('bounded native grid strips match the complete overlap-checked grid for fixed node sizes and stable label ties',()=>{
+ for(const cols of [1,3,7]){
+  const cy=cytoscape({headless:true,styleEnabled:true,style:[{selector:'node',style:{width:24,height:24,'border-width':3}}],elements:Array.from({length:cols*130+1},(_,i)=>({data:{id:`n${i}`,label:`same ${i%11}`}}))});
+  try{
+   const nodes=cy.nodes(),x=440,y=60,sort=(a:any,b:any)=>a.data('label').localeCompare(b.data('label'))||a.id().localeCompare(b.id());
+   nodes.layout({name:'grid',fit:false,avoidOverlap:true,cols,boundingBox:{x1:x,y1:y,w:cols*155,h:Math.ceil(nodes.length/cols)*105},sort}).run();
+   const expected=nodes.map(node=>({...node.position()}));
+   nodes.positions(()=>({x:0,y:0}));
+   const dimensions=vi.spyOn(Object.getPrototypeOf(nodes),'layoutDimensions');
+   try{let strips=0;for(const _ of layoutMeaningGraphIsolates(nodes,x,y,cols))strips++;expect(strips).toBe(3);expect(dimensions).not.toHaveBeenCalled();}finally{dimensions.mockRestore();}
+   expect(nodes.map(node=>({...node.position()}))).toEqual(expected);
+  }finally{cy.destroy();}
+ }
+});
 
 test('full graph partition preserves Cytoscape BFS, edge and stable root order, including loops and parallel relations',()=>{
  for(let seed=0;seed<24;seed++){
