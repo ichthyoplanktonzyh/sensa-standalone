@@ -56,6 +56,11 @@ test('bounded request maintenance retires payload/history across three rounds wh
   // Hold H=1 midway through paging while the current checkpoint advances.
   await call('/head');
   expect(await count('library_cloud_membership',"owner_kind='staging'")).toBeGreaterThan(0);
+  // Run real block collection after the upload lease expires while H=1 is
+  // still actively leased. Its stage-union root must retain the old shared body.
+  await f.pool.query("UPDATE sensa_consumer.library_cloud_blocks SET upload_lease_expires_at='2000-01-01' WHERE account_id=$1 AND hash=$2",[account.accountId,shared]);
+  const liveGc=await f.pool.connect();try{await liveGc.query('BEGIN');await purgeExpiredLibraryCloudBlocks(liveGc,new Date(),1000,account.accountId);await liveGc.query('COMMIT');}catch(error){await liveGc.query('ROLLBACK');throw error;}finally{liveGc.release();}
+  expect((await call('/blocks/fetch',{hashes:[shared]})).value.missing).toEqual([]);
   const downloaded=[...first.rows];let after=first.next,done=false;
   while(!done){const reply=await call('/snapshot',{snapshotRevision:1,after,readLease:old.readLease});expect(reply.status).toBe(200);downloaded.push(...reply.value.rows);after=reply.value.next;done=reply.value.done;}
   const sorted=[...rows].sort((a,b)=>Buffer.compare(Buffer.from(a.table+'\0'+a.key),Buffer.from(b.table+'\0'+b.key)));expect(downloaded).toEqual(sorted);
