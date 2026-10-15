@@ -80,6 +80,8 @@ export async function purgeExpiredLibraryCloudBlocks(
    FROM sensa_consumer.library_cloud_blocks AS blocks
    WHERE blocks.upload_lease_expires_at<=$1
     AND ($3::text IS NULL OR blocks.account_id=$3)
+    AND NOT EXISTS (SELECT 1 FROM sensa_consumer.library_cloud AS legacy
+     WHERE legacy.account_id=blocks.account_id AND legacy.library_id IS NULL AND legacy.revision>0)
     AND NOT EXISTS (SELECT 1 FROM sensa_consumer.library_cloud_membership AS member
      WHERE member.account_id=blocks.account_id AND member.hash=blocks.hash)
     AND NOT EXISTS (

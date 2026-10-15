@@ -41,8 +41,16 @@ test('maintenance preserves active heads and unexpired facts while the monitor c
   await expect(db.query('DELETE FROM sensa_consumer.library_cloud_membership')).rejects.toMatchObject({code:'42501'});
   expect((await db.query('DELETE FROM sensa_consumer.library_cloud_reads WHERE id=$1',[activeRead])).rowCount).toBe(0);
   expect((await db.query('DELETE FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=$2',[account,hashes[3]])).rowCount).toBe(0);
+  await expect(db.query('SELECT manifest FROM sensa_consumer.library_cloud')).rejects.toMatchObject({code:'42501'});
+  // An opaque legacy checkpoint is a retained root even if its old pin metadata
+  // is absent. This synthetic head is the only data changed for this boundary.
+  await db.query('RESET ROLE');await db.query('UPDATE sensa_consumer.library_cloud SET revision=1 WHERE account_id=$1',[account]);await db.query('SET ROLE sensa_operational_retention');
+  expect((await db.query('DELETE FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=$2',[account,hashes[2]])).rowCount).toBe(0);
+  await db.query('BEGIN');await purgeExpiredLibraryCloudBlocks(db,new Date(),1000);expect((await db.query('SELECT hash FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=$2',[account,hashes[2]])).rowCount).toBe(1);await db.query('ROLLBACK');
+  await db.query('RESET ROLE');await db.query('UPDATE sensa_consumer.library_cloud SET revision=0 WHERE account_id=$1',[account]);await db.query('SET ROLE sensa_operational_retention');
   await db.query('BEGIN');
-  expect(await purgeExpiredLibraryCloudBlocks(db,new Date(),1000)).toBe(1);
+  // Global sweep can also see other synthetic fixtures; the exact account set below is the oracle.
+  expect(await purgeExpiredLibraryCloudBlocks(db,new Date(),1000)).toBeGreaterThanOrEqual(1);
   expect(await purgeExpiredSemanticLookups(db,new Date(),1000)).toBeGreaterThanOrEqual(1);
   await db.query('COMMIT');await db.query('RESET ROLE');
   expect((await db.query('SELECT hash FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 ORDER BY hash',[account])).rows.map(r=>r.hash)).toEqual([hashes[0],hashes[1],hashes[3]]);
