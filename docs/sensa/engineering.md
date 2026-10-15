@@ -193,6 +193,18 @@ Package key；运行恢复、策略锁定和生成频控通过领域索引查询
 关系投影完成。承载大 JSON 的逻辑 record 与 Target 投影使用普通 rowid 表，紧凑关系投影使用
 `WITHOUT ROWID`；内容事务维护记录级 revision 与删除 tombstone，供账号同步只读取上次收敛后变化的记录。云端确认的逐记录基线和 block refs 保存在内部 `sensa_sync_base` 表；未变化记录不再重新编码、分块或下载。`packageInstallations` 保存可跨设备复制的精确 `.sensa` identity、语言方向、长度、digest 与来源 Book archive digest；完整 Portable artifact 与编译后的设备 Runtime content 只进入本地 `packageCache`，缓存写入不增加个人内容 revision。恢复后由 Content Supply 使用 Registry 中的 `.sensa-book` 位置一次重新取得，验证外层摘要及全部成员，再只恢复已有安装事实对应的缓存；解析或下载失败时 Learning Target 保留但 readiness 为 blocked。状态只保存小型幂等 commit receipt，不重复保存整库或待发布记录。`npm run benchmark:cloud-sync` 使用受控传输在真实 Chromium/OPFS 上执行 1k/10k 合成 Draft 的同步，检查单记录变化只上传记录块与引用 patch；它不是成熟学习历史、真实 API/网络或账号容量验收。
 内容摘要、key/digest 和语言方向数量使用同事务维护的设备侧投影；它们不进入备份或账号同步，可以从真实缓存重建。
+自有云 `sensa-own-cloud-db-v2` 快照使用独立协商的描述符，v1 制品和外部文件导入保持各自入口。
+生成端只复用同账号、同 H 的现行 v9 准入：受控源的完整 portable facts 与 baseline 必须双向键集及存储值相等，
+保留依赖失效规则，并在有界原生文件复制及发布前复核 owner、incarnation、设备 epoch、内容／缓存版本和证书。
+私有副本删除设备资料后保留完整 baseline、依赖索引和投影，清除缓存完整声明；最终文件单独计算完整 SHA。
+显式 `publishSnapshot` 才准备和上传这一整库制品，普通无变化检查不触发构建。
+服务端在既有账号锁与 H/CAS 内绑定不可变有序块描述符、账号／库身份及现有 snapshot owner；描述符摘要只绑定声明，
+不替代整文件校验。接收端在新隔离库中验证分块与整文件 SHA／长度、精确 schema／投影版本、SQLite integrity／FK
+及必要 native 关系，再将该 H 的准入重绑定到新设备；不重复完整领域重放。这一信任边界依赖源端既有完整准入与受控写入，
+不适用于外部文件。最终激活仍复核目标账号、epoch、身份及未同步更改，旧库保留到新指针切换成功之后。
+只有明确的制品拒绝可以在同一 H 回到 refs 恢复，记录 `restore.path=refs` 和失败原因；取消、本地连接／清理故障、账号或 H 变化不能降级为该回退。
+当前 v2 只直接激活覆盖最新 H 的制品；有 tail 时沿用既有完整恢复路径。4GiB 物理文件上限不增加生产 1GiB stored 配额，
+较大隔离容量的链路证据不能当作生产容量验收。
 整库三方合并共用一个可分步执行的领域合并实现：普通同步调用与云同步协作调度不维护两套规则。
 个人意义分支校验按 Meaning 解码相关操作回执，分组只保留记录引用；可重复的按需正文读取若失败，
 原错误必须穿透领域冲突处理，不能误报为用户可裁决的冲突。合并校验失败后的冲突状态写入也在

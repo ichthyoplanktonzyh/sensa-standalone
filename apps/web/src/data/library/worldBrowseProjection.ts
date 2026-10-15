@@ -112,11 +112,13 @@ export class SqliteWorldBrowseProjection{
    for(const key of dependencies)this.write('INSERT INTO sensa_world_browse_dependencies VALUES(?,?)',[id,key]);
   }
  }
- rebuild(){
+ rebuild(){for(const _ of this.rebuildPages())void _;}
+ /** Yields bounded rebuild steps for an unselected private generation. */
+ *rebuildPages(selectKeys?:(table:string,keys:string[])=>string[]):Generator<number>{
   this.languageMenu=null;
   for(const table of tables.filter(table=>!table.endsWith('_meta')))this.write(`DELETE FROM ${table}`);
-  let after='';for(;;){const ids=this.rows("SELECT record_key FROM sensa_records WHERE table_name='semanticMeanings' AND record_key>? ORDER BY record_key LIMIT 64",[after]).map(row=>row.record_key);if(!ids.length)break;this.replace(ids);after=ids.at(-1)!;}
-  after='anchors';for(;;){const keys=this.rows("SELECT record_key FROM sensa_records WHERE table_name='semanticContexts' AND record_key>= 'anchors:' AND record_key>? AND record_key<'anchors;' ORDER BY record_key LIMIT 64",[after]).map(row=>row.record_key);if(!keys.length)break;this.replaceContexts(keys.map(key=>key.slice('anchors:'.length)));after=keys.at(-1)!;}
+  yield 0;let after='';for(;;){const keys=this.rows("SELECT record_key FROM sensa_records WHERE table_name='semanticMeanings' AND record_key>? ORDER BY record_key LIMIT 64",[after]).map(row=>row.record_key),ids=selectKeys?selectKeys('semanticMeanings',keys):keys;if(!ids.length)break;this.replace(ids);after=ids.at(-1)!;yield ids.length;}
+  after='anchors';for(;;){const all=this.rows("SELECT record_key FROM sensa_records WHERE table_name='semanticContexts' AND record_key>= 'anchors:' AND record_key>? AND record_key<'anchors;' ORDER BY record_key LIMIT 64",[after]).map(row=>row.record_key),keys=selectKeys?selectKeys('semanticContexts',all):all;if(!keys.length)break;this.replaceContexts(keys.map(key=>key.slice('anchors:'.length)));after=keys.at(-1)!;yield keys.length;}
   this.write('INSERT INTO sensa_world_browse_meta VALUES(1,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version',[version]);
  }
  update(mutation:SqliteMutation){

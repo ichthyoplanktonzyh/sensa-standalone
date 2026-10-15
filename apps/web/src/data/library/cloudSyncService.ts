@@ -63,7 +63,7 @@ export function syncAccountLibrary(options:AccountLibrarySyncOptions={}):Promise
    await assertAccountSessionBoundary(boundary);
    const endpoint=import.meta.env.VITE_SENSA_API_URL;
    if(!endpoint)throw new Error('library_sync_unavailable');
-   let response:Response;try{response=await fetch(endpoint.replace(/\/+$/,'')+'/sensa/library-sync'+path,{method:body===undefined?'GET':'POST',headers:{authorization:'Bearer '+session.access_token,'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),signal,redirect:'error',cache:'no-store'});}catch{throw new Error('library_sync_network');}
+   let response:Response;try{response=await fetch(endpoint.replace(/\/+$/,'')+'/sensa/library-sync'+path,{method:body===undefined?'GET':'POST',headers:{authorization:'Bearer '+session.access_token,'content-type':'application/json','x-sensa-snapshot-format':'sensa-own-cloud-db-v2'},body:body===undefined?undefined:JSON.stringify(body),signal,redirect:'error',cache:'no-store'});}catch{throw new Error('library_sync_network');}
    await assertAccountSessionBoundary(boundary);
    if(response.status===429)throw new Error('library_sync_rate_limited');if(response.status>=500)throw new Error('library_sync_server_error');
    let value:any;try{value=await response.json();}catch{throw new Error('library_sync_format');}
@@ -73,7 +73,7 @@ export function syncAccountLibrary(options:AccountLibrarySyncOptions={}):Promise
   // the device catalog after sync, but leave unavailable artifacts honestly
   // blocked instead of turning a healthy learner-data sync into a failure.
   const after=await readLibrary(async tx=>({owner:await tx.get<{subject:string;accountId:string}>('meta','service-owner'),incarnation:await assertCurrentLibrary(tx),localRevision:await readLocalLibraryRevision(tx),artifactRevision:await readLocalArtifactRevision(tx),reconnect:await tx.get('meta','local-reset')==='local-clear'}));
-  if(after.owner?.subject!==owner.subject||after.owner.accountId!==owner.accountId||after.incarnation!==before.incarnation&&!(result?.activated.fromIncarnation===before.incarnation&&result.activated.incarnation===after.incarnation))throw Error('account_changed');
+  if(after.owner?.subject!==owner.subject||after.owner.accountId!==owner.accountId||after.incarnation!==before.incarnation&&!(result?.activated?.fromIncarnation===before.incarnation&&result.activated.incarnation===after.incarnation))throw Error('account_changed');
   await assertAccountSessionBoundary(boundary);
   if(after.reconnect)return;
   const warm=options.automatic&&after.localRevision===before.localRevision&&recoveredArtifacts?.subject===owner.subject&&recoveredArtifacts.accountId===owner.accountId&&recoveredArtifacts.incarnation===after.incarnation&&recoveredArtifacts.generation===after.artifactRevision;

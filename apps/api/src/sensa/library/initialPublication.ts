@@ -5,30 +5,32 @@ import {librarySyncLogicalByteLimit,librarySyncRecordLimit,librarySyncStageMetad
 import type {DatabaseExecutor} from '../../database/core.js';
 import {ConsumerError} from '../access/auth.js';
 import {libraryCloudUploadLeaseMs} from './retention.js';
+import {libraryCloudRowOwner,discardPreparedLibraryGeneration,requirePrivateLibraryGeneration} from './generation.js';
 const hash=(value:string)=>createHash('sha256').update(value).digest('hex');
 export const initialStageDigest=hash('sensa-initial-publication-v1');
 const conflict=(code='library_sync_conflict'):never=>{throw new ConsumerError(409,code);};
+const requirePreparedStage=(stage:any)=>{if(stage.prepared_version!==1||stage.prepared_pages!==stage.pages||stage.prepared_records!==stage.records)conflict('library_sync_staging_unprepared');if(stage.retiring)conflict('library_sync_staging_expired');};
 
 /** Callers hold the existing account lock and outer publication transaction. */
 export async function beginInitialPublication(db:DatabaseExecutor,id:string,head:any,raw:unknown,now:Date){
- const input=librarySyncStageBegin.parse(raw),digest=hash(JSON.stringify(input));
- let prior:any=(await db.query('SELECT request_digest,expires_at FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND operation_id=$2',[id,input.operationId])).rows[0];
- if(prior&&new Date(prior.expires_at)<=now){await discardInitialPublication(db,id,input.operationId);prior=undefined;}
- if(prior){if(prior.request_digest!==digest)conflict('operation_conflict');return {staged:true};}
+ const input=librarySyncStageBegin.parse(raw),digest=hash(JSON.stringify(input));requirePrivateLibraryGeneration(input.operationId);
+ let prior:any=(await db.query('SELECT * FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND operation_id=$2',[id,input.operationId])).rows[0];
+ if(prior&&new Date(prior.expires_at)<=now){if(!await discardInitialPublication(db,id,input.operationId))conflict('library_sync_staging_expired');prior=undefined;}
+ if(prior){if(head.library_id||head.revision!==prior.descriptor.baseRevision)conflict();requirePreparedStage(prior);if(prior.request_digest!==digest)conflict('operation_conflict');return {staged:true};}
  if((await db.query('SELECT 1 FROM sensa_consumer.library_cloud_commits WHERE account_id=$1 AND operation_id=$2',[id,input.operationId])).rowCount)conflict('operation_conflict');
  if(head.library_id||head.revision!==input.baseRevision)conflict();
  // Only expired private workspaces are retired; committed heads/receipts are untouched.
  const expired=(await db.query('SELECT operation_id FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND expires_at<=$2 LIMIT 4',[id,now])).rows;
- for(const row of expired){await db.query("DELETE FROM sensa_consumer.library_cloud_membership WHERE account_id=$1 AND owner_kind='staging' AND owner_id=$2",[id,row.operation_id]);await db.query('DELETE FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND operation_id=$2',[id,row.operation_id]);}
+ for(const row of expired)await discardInitialPublication(db,id,row.operation_id);
  if(Number((await db.query('SELECT count(*) AS n FROM sensa_consumer.library_cloud_staging WHERE account_id=$1',[id])).rows[0].n)>=4)throw new ConsumerError(413,'library_sync_capacity');
- await db.query('INSERT INTO sensa_consumer.library_cloud_staging(account_id,operation_id,request_digest,descriptor,digest,expires_at,logical_bytes) VALUES($1,$2,$3,$4::jsonb,$5,$6,0)',[id,input.operationId,digest,JSON.stringify(input),initialStageDigest,new Date(now.getTime()+libraryCloudUploadLeaseMs)]);
+ await db.query('INSERT INTO sensa_consumer.library_cloud_staging(account_id,operation_id,request_digest,descriptor,digest,expires_at,logical_bytes,prepared_version) VALUES($1,$2,$3,$4::jsonb,$5,$6,0,1)',[id,input.operationId,digest,JSON.stringify(input),initialStageDigest,new Date(now.getTime()+libraryCloudUploadLeaseMs)]);
  return {staged:true};
 }
 export async function appendInitialPublication(db:DatabaseExecutor,id:string,head:any,raw:unknown,now:Date){
- const input=librarySyncStagePage.parse(raw),text=JSON.stringify(input),bytes=Buffer.byteLength(text),refs=input.rows.reduce((sum,row)=>sum+row.blocks.length,0);
+ const input=librarySyncStagePage.parse(raw),text=JSON.stringify(input),bytes=Buffer.byteLength(text),refs=input.rows.reduce((sum,row)=>sum+row.blocks.length,0);requirePrivateLibraryGeneration(input.operationId);
  if(bytes>librarySyncMetadataPageBytes||refs>librarySyncMetadataPageRefs)throw new ConsumerError(413,'library_sync_capacity');
- const stage=(await db.query('SELECT * FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND operation_id=$2',[id,input.operationId])).rows[0];
- if(!stage||new Date(stage.expires_at)<=now)conflict('library_sync_staging_expired');
+ const stage=(await db.query('SELECT * FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND operation_id=$2 FOR UPDATE',[id,input.operationId])).rows[0];
+ if(!stage||new Date(stage.expires_at)<=now)conflict('library_sync_staging_expired');requirePreparedStage(stage);
  const requestDigest=hash(text),prior=(await db.query('SELECT request_digest,digest FROM sensa_consumer.library_cloud_staging_pages WHERE account_id=$1 AND operation_id=$2 AND page=$3',[id,input.operationId,input.page])).rows[0];
  if(prior){if(prior.request_digest!==requestDigest)conflict('operation_conflict');return {digest:prior.digest};}
  if(head.library_id||head.revision!==stage.descriptor.baseRevision||input.page!==stage.pages)conflict();
@@ -43,27 +45,44 @@ export async function appendInitialPublication(db:DatabaseExecutor,id:string,hea
  if(await stagingLibraryLogicalBytes(db,id,input.operationId,stage.logical_bytes)+logical>librarySyncLogicalByteLimit)throw new ConsumerError(413,'library_sync_capacity');
  const digest=hash(stage.digest+requestDigest);
  await db.query(`INSERT INTO sensa_consumer.library_cloud_staging_rows(account_id,operation_id,table_name,record_key,refs,logical_bytes) SELECT $1,$2,r."table",r.key,r.blocks,r.logical_bytes FROM jsonb_to_recordset($3::jsonb) AS r("table" text,key text,blocks jsonb,logical_bytes bigint)`,[id,input.operationId,JSON.stringify(input.rows.map((row,index)=>({...row,logical_bytes:measured[index]})))]);
- await db.query("INSERT INTO sensa_consumer.library_cloud_membership SELECT $1,'staging',$2,hash FROM unnest($3::text[]) hash ON CONFLICT DO NOTHING",[id,input.operationId,hashes]);
+ // Prepare the application rows and immutable snapshot inside this bounded
+ // page. Neither generation is reachable through an unpublished head.
+ await db.query(`INSERT INTO sensa_consumer.library_cloud_rows(account_id,generation,table_name,record_key,refs,logical_bytes)
+  SELECT account_id,operation_id,table_name,record_key,refs,logical_bytes FROM sensa_consumer.library_cloud_staging_rows
+  WHERE account_id=$1 AND operation_id=$2 AND (table_name,record_key) IN(SELECT r."table",r.key FROM jsonb_to_recordset($3::jsonb) AS r("table" text,key text))`,[id,input.operationId,JSON.stringify(input.rows)]);
+ await db.query(`INSERT INTO sensa_consumer.library_cloud_snapshots(account_id,generation,revision,table_name,record_key,refs)
+  SELECT account_id,generation,$4,table_name,record_key,refs FROM sensa_consumer.library_cloud_rows
+  WHERE account_id=$1 AND generation=$2 AND (table_name,record_key) IN(SELECT r."table",r.key FROM jsonb_to_recordset($3::jsonb) AS r("table" text,key text))`,[id,input.operationId,JSON.stringify(input.rows),stage.descriptor.baseRevision+1]);
+ await db.query(`INSERT INTO sensa_consumer.library_cloud_membership(account_id,owner_kind,owner_id,hash)
+  SELECT $1,'row',r.owner,b.value FROM jsonb_to_recordset($2::jsonb) AS r(owner text,blocks jsonb)
+  CROSS JOIN LATERAL jsonb_array_elements_text(r.blocks) b(value) ON CONFLICT DO NOTHING`,[id,JSON.stringify(input.rows.map(row=>({owner:libraryCloudRowOwner(input.operationId,row.table,row.key),blocks:row.blocks})))]);
+ await db.query("INSERT INTO sensa_consumer.library_cloud_membership SELECT $1,'staging',$2::uuid::text,hash FROM unnest($3::text[]) hash ON CONFLICT DO NOTHING",[id,input.operationId,hashes]);
  await db.query('INSERT INTO sensa_consumer.library_cloud_staging_pages VALUES($1,$2,$3,$4,$5)',[id,input.operationId,input.page,requestDigest,digest]);
- await db.query('UPDATE sensa_consumer.library_cloud_staging SET pages=pages+1,records=records+$3,metadata_bytes=metadata_bytes+$4,digest=$5,expires_at=$6,logical_bytes=logical_bytes+$7 WHERE account_id=$1 AND operation_id=$2',[id,input.operationId,input.rows.length,bytes,digest,new Date(now.getTime()+libraryCloudUploadLeaseMs),logical]);
+ await db.query('UPDATE sensa_consumer.library_cloud_staging SET pages=pages+1,records=records+$3,prepared_pages=prepared_pages+1,prepared_records=prepared_records+$3,metadata_bytes=metadata_bytes+$4,digest=$5,expires_at=$6,logical_bytes=logical_bytes+$7 WHERE account_id=$1 AND operation_id=$2',[id,input.operationId,input.rows.length,bytes,digest,new Date(now.getTime()+libraryCloudUploadLeaseMs),logical]);
  return {digest};
 }
 export async function commitInitialPublication(db:DatabaseExecutor,id:string,head:any,input:Extract<LibrarySyncCommit,{staging:unknown}>,now:Date){
- const stage=(await db.query('SELECT * FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND operation_id=$2',[id,input.operationId])).rows[0];
- if(!stage||new Date(stage.expires_at)<=now)conflict('library_sync_staging_expired');
+ requirePrivateLibraryGeneration(input.operationId);
+ const stage=(await db.query('SELECT * FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND operation_id=$2 FOR UPDATE',[id,input.operationId])).rows[0];
+ if(!stage||new Date(stage.expires_at)<=now)conflict('library_sync_staging_expired');requirePreparedStage(stage);
  if(head.library_id||stage.descriptor.baseRevision!==input.baseRevision)conflict();
  if(stage.pages!==input.staging.pages||stage.records!==input.staging.records||stage.digest!==input.staging.digest)conflict('operation_conflict');
  if(!(await db.query("SELECT 1 FROM sensa_consumer.library_cloud_staging_rows WHERE account_id=$1 AND operation_id=$2 AND table_name='meta' AND record_key='identity'",[id,input.operationId])).rowCount)conflict('library_sync_identity');
  stage.logical_bytes=await stagingLibraryLogicalBytes(db,id,input.operationId,stage.logical_bytes);
  const revision=head.revision+1;
- await db.query('INSERT INTO sensa_consumer.library_cloud_rows(account_id,table_name,record_key,refs,logical_bytes) SELECT account_id,table_name,record_key,refs,logical_bytes FROM sensa_consumer.library_cloud_staging_rows WHERE account_id=$1 AND operation_id=$2',[id,input.operationId]);
- await db.query(`INSERT INTO sensa_consumer.library_cloud_membership
- SELECT r.account_id,'row',concat('[',to_json(r.table_name)::text,',',to_json(r.record_key)::text,']'),b.value FROM sensa_consumer.library_cloud_staging_rows r CROSS JOIN LATERAL jsonb_array_elements_text(r.refs) b(value)
- WHERE r.account_id=$1 AND r.operation_id=$2 ON CONFLICT DO NOTHING`,[id,input.operationId]);
- await db.query('UPDATE sensa_consumer.library_cloud SET revision=$2,library_id=$3,learner_id=$4,record_count=$5,logical_bytes=$6,updated_at=now() WHERE account_id=$1',[id,revision,stage.descriptor.libraryId,stage.descriptor.learnerId,stage.records,stage.logical_bytes]);
+ if(!(await db.query("SELECT 1 FROM sensa_consumer.library_cloud_rows WHERE account_id=$1 AND generation=$2 AND table_name='meta' AND record_key='identity'",[id,input.operationId])).rowCount)conflict('library_sync_staging_unprepared');
+ await db.query('UPDATE sensa_consumer.library_cloud SET revision=$2,library_id=$3,learner_id=$4,record_count=$5,logical_bytes=$6,rows_generation=$7,snapshot_generation=$7,snapshot_revision=$2,retention_floor=$2,tail_bytes=0,tail_commits=0,updated_at=now() WHERE account_id=$1',[id,revision,stage.descriptor.libraryId,stage.descriptor.learnerId,stage.records,stage.logical_bytes,input.operationId]);
  return {revision,libraryId:stage.descriptor.libraryId,learnerId:stage.descriptor.learnerId,records:stage.records};
 }
-export async function discardInitialPublication(db:DatabaseExecutor,id:string,operationId:string){
- await db.query("DELETE FROM sensa_consumer.library_cloud_membership WHERE account_id=$1 AND owner_kind='staging' AND owner_id=$2",[id,operationId]);
- await db.query('DELETE FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND operation_id=$2',[id,operationId]);
+export async function discardInitialPublication(db:DatabaseExecutor,id:string,operationId:string,committed=false){
+ if(committed){
+  // The staged union is already FK-checked and is now the initial snapshot's
+  // pin. Its header/rows remain retained until that snapshot is retired by
+  // existing explicit history maintenance. Final CAS does not copy or erase it.
+  return true;
+ }
+ if(!(await db.query('SELECT 1 FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND operation_id=$2 FOR UPDATE',[id,operationId])).rowCount)return true;
+ const cleanup=await discardPreparedLibraryGeneration(db,id,operationId);if(cleanup.selected)conflict('operation_conflict');
+ if(cleanup.complete)await db.query('DELETE FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND operation_id=$2',[id,operationId]);
+ return cleanup.complete;
 }

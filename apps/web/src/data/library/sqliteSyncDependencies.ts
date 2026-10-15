@@ -79,13 +79,71 @@ export class SqliteSyncDependencies{
  verify(table:SqliteLibraryTable,key:string,text:string):void{const row=this.rows<{digest:string}>('SELECT digest FROM sensa_sync_dependency_rows_v1 WHERE table_name=? AND record_key=?',[table,key])[0];if(!row||row.digest!==sha256(text))throw Error('library_sync_dependency_corrupt');}
  count(){return Number(this.rows<{n:number}>('SELECT count(*) AS n FROM sensa_sync_dependency_rows_v1')[0].n);}
  clear():void{this.ensure();this.rows('DELETE FROM sensa_sync_protocol_owners_v1');this.rows('DELETE FROM sensa_sync_dependency_rows_v1');this.rows('UPDATE sensa_sync_dependency_state_v1 SET certificate_json=NULL WHERE id=1');}
+ /** Install this admitted publication's optional index without selecting its
+  * baseline. A missing certificate keeps partial work unavailable to reuse. */
+ async preparePublication(scope:string,alive:()=>void,onPage:(records:number)=>void,afterBatch?:()=>void):Promise<{generation:number;epoch:number}>{
+  this.ensure();alive();let expected=this.clock();
+  const check=()=>{alive();const clock=this.clock();if(clock.generation!==expected.generation||clock.epoch!==expected.epoch)throw Error('library_sync_local_changed');};
+  const batch=(work:()=>number)=>{check();this.database.exec('BEGIN IMMEDIATE');try{check();this.rows('UPDATE sensa_sync_dependency_state_v1 SET certificate_json=NULL WHERE id=1');const changes=work(),clock=this.clock();if(clock.generation!==expected.generation||clock.epoch!==expected.epoch+changes||clock.certificate_json!==null)throw Error('library_sync_local_changed');this.database.exec('COMMIT');expected=clock;}catch(cause){this.database.exec('ROLLBACK');throw cause;}afterBatch?.();};
+  batch(()=>0);
+  for(const table of ['sensa_sync_protocol_owners_v1','sensa_sync_dependency_edges_v1','sensa_sync_dependency_rows_v1'])for(;;){
+   const keys=table==='sensa_sync_protocol_owners_v1'?['protocol_id']:table==='sensa_sync_dependency_edges_v1'?['table_name','record_key','kind','target']:['table_name','record_key'];
+   check();const rows=this.rows<Record<string,string>>(`SELECT ${keys.join(',')} FROM ${table} ORDER BY ${keys.join(',')} LIMIT 128`);if(!rows.length)break;
+   batch(()=>{this.rows(`DELETE FROM ${table} WHERE (${keys.join(',')}) IN(SELECT ${keys.map((_,i)=>`json_extract(value,'$[${i}]')`).join(',')} FROM json_each(?))`,[JSON.stringify(rows.map(row=>keys.map(key=>row[key])))]);if(this.database.changes()!==rows.length)throw Error('library_sync_dependency_corrupt');return rows.length;});await new Promise<void>(resolve=>setTimeout(resolve,0));
+  }
+  let table='',key='',records=0;
+  for(;;){check();const page=this.rows<{table_name:string;record_key:string;edges_json:string;protocols_json:string;metadata_bytes:number}>('SELECT table_name,record_key,edges_json,protocols_json,metadata_bytes FROM sensa_sync_admission_rows_v1 WHERE scope=? AND(table_name,record_key)>(?,?) ORDER BY table_name,record_key LIMIT 64',[scope,table,key]);if(!page.length)break;
+   const selected:typeof page=[];let bytes=0;for(const row of page){if(selected.length&&bytes+row.metadata_bytes>1024*1024)break;selected.push(row);bytes+=row.metadata_bytes;}
+   const identities=JSON.stringify(selected.map(row=>[row.table_name,row.record_key]));
+   batch(()=>{const filter='row.scope=? AND(row.table_name,row.record_key) IN(SELECT json_extract(value,\'$[0]\'),json_extract(value,\'$[1]\') FROM json_each(?))';
+    this.rows('INSERT INTO sensa_sync_dependency_rows_v1 SELECT table_name,record_key,digest,logical_bytes,stored_bytes FROM sensa_sync_admission_rows_v1 row WHERE '+filter,[scope,identities]);if(this.database.changes()!==selected.length)throw Error('library_sync_dependency_corrupt');
+    return selected.length;});
+   for(const family of ['edges','protocols'] as const){let pending:string[][]=[];
+    const flush=async()=>{if(!pending.length)return;const entries=pending;pending=[];batch(()=>{this.rows(family==='edges'?"INSERT INTO sensa_sync_dependency_edges_v1 SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]'),json_extract(value,'$[2]'),json_extract(value,'$[3]') FROM json_each(?)":"INSERT INTO sensa_sync_protocol_owners_v1 SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]'),json_extract(value,'$[2]') FROM json_each(?)",[JSON.stringify(entries)]);if(this.database.changes()!==entries.length)throw Error('library_sync_dependency_corrupt');return entries.length;});await new Promise<void>(resolve=>setTimeout(resolve,0));};
+    for(const row of selected)for(const pair of JSON.parse(family==='edges'?row.edges_json:row.protocols_json) as Array<[string,string]>){pending.push(family==='edges'?[row.table_name,row.record_key,...pair]:[pair[0],row.record_key,pair[1]]);if(pending.length===128)await flush();}await flush();
+   }
+   records+=selected.length;table=selected.at(-1)!.table_name;key=selected.at(-1)!.record_key;onPage(records);await new Promise<void>(resolve=>setTimeout(resolve,0));
+  }
+  check();return {generation:expected.generation,epoch:expected.epoch};
+ }
+ /** Atomically select a prepared same-layout baseline and renew its triggers.
+  * The generation is an invalidation clock, not a count of copied records. */
+ replacePreparedBaseline():void{
+  this.ensure();const known=new Set(['insert','update','delete'].map(action=>`sensa_sync_base_generation_${action}_v1`));
+  const references=this.rows<{name:string;type:string;tbl_name:string;sql:string|null}>("SELECT name,type,tbl_name,sql FROM sqlite_schema UNION ALL SELECT name,type,tbl_name,sql FROM sqlite_temp_schema");
+  if(references.some(row=>row.sql&&/\bsensa_sync_base\b/iu.test(row.sql)&&row.name!=='sensa_sync_base'&&!known.has(row.name)))throw Error('library_sync_candidate_invalid');
+  for(const action of ['insert','update','delete'])this.rows(`DROP TRIGGER sensa_sync_base_generation_${action}_v1`);
+  this.rows('ALTER TABLE sensa_sync_base RENAME TO sensa_initial_publication_retired_base');
+  this.rows('ALTER TABLE sensa_initial_publication_baseline RENAME TO sensa_sync_base');
+  for(const trigger of triggers.filter(trigger=>trigger.name.startsWith('sensa_sync_base_generation_')))this.database.exec(trigger.sql);
+  this.rows('UPDATE sensa_sync_dependency_state_v1 SET generation=generation+1,certificate_json=NULL WHERE id=1');this.ready=false;
+ }
+ certifyPreparedPublication(admission:SyncAdmission,expected:{generation:number;epoch:number},state:CloudSyncState,identity:LibraryIdentity,artifactRevision:number):void{
+  this.certifyPreparedRestore(admission,{generation:expected.generation+1,epoch:expected.epoch},state,identity,artifactRevision);
+ }
+ /** Rebind only a verified own-cloud v2 file's retained admission to this device.
+  * The importer has checked the complete file and native facts/baseline joins. */
+ certifyAdmittedSnapshot(metadata:import('./sqliteAdmittedSnapshot').AdmittedSnapshotMetadata,state:CloudSyncState,identity:LibraryIdentity):void{
+  const clock=this.clock(),stats=this.rows<{records:number;logical:number;stored:number}>('SELECT count(*) AS records,coalesce(sum(logical_bytes),0) AS logical,coalesce(sum(stored_bytes),0) AS stored FROM sensa_sync_dependency_rows_v1')[0];
+  if(!this.healthySchema||!validatedCheckpoint(state)||metadata.admissionVersion!==libraryRestoreValidationVersion||metadata.accountId!==state.owner.accountId||metadata.revision!==state.revision||metadata.libraryId!==identity.id||metadata.learnerId!==identity.learnerId||stats.records!==metadata.records||stats.logical!==metadata.logicalBytes||stats.stored!==metadata.storedBytes)throw Error('sqlite_snapshot_admission');
+  const certificate:SyncDependencyCertificate={generation:clock.generation,epoch:clock.epoch,version:2,validationVersion:libraryRestoreValidationVersion,owner:state.owner,incarnation:state.incarnation,libraryId:identity.id,learnerId:identity.learnerId,revision:state.revision,localRevision:state.syncedLocalRevision!,artifactRevision:0,records:metadata.records,logicalBytes:metadata.logicalBytes,storedBytes:metadata.storedBytes,packageCacheComplete:false};
+  this.rows('UPDATE sensa_sync_dependency_state_v1 SET certificate_json=? WHERE id=1',[JSON.stringify(certificate)]);
+ }
+ /** The private installer has filled the new baseline and fenced every write. */
+ certifyPreparedRestore(admission:SyncAdmission,expected:{generation:number;epoch:number},state:CloudSyncState,identity:LibraryIdentity,artifactRevision:number):void{
+  const clock=this.clock();if(clock.generation!==expected.generation||clock.epoch!==expected.epoch)throw Error('library_sync_local_changed');
+  if(!this.healthySchema||admission.disabled||!validatedCheckpoint(state))return;
+  const stats=this.rows<{records:number;logical_bytes:number;stored_bytes:number}>('SELECT records,logical_bytes,stored_bytes FROM sensa_sync_admission_v1 WHERE scope=?',[admission.scope!])[0];if(!stats||stats.logical_bytes>librarySyncLogicalByteLimit||stats.stored_bytes>librarySyncStoredByteLimit)throw Error('library_sync_capacity');
+  const certificate:SyncDependencyCertificate={generation:clock.generation,epoch:clock.epoch,version:2,validationVersion:libraryRestoreValidationVersion,owner:state.owner,incarnation:state.incarnation,libraryId:identity.id,learnerId:identity.learnerId,revision:state.revision,localRevision:state.syncedLocalRevision!,artifactRevision,records:stats.records,logicalBytes:stats.logical_bytes,storedBytes:stats.stored_bytes,packageCacheComplete:admission.packageCacheComplete};
+  this.rows('UPDATE sensa_sync_dependency_state_v1 SET certificate_json=? WHERE id=1',[JSON.stringify(certificate)]);
+ }
  rowBudget(table:SqliteLibraryTable,key:string){return this.rows<{logical_bytes:number;stored_bytes:number}>('SELECT logical_bytes,stored_bytes FROM sensa_sync_dependency_rows_v1 WHERE table_name=? AND record_key=?',[table,key])[0]??{logical_bytes:0,stored_bytes:0};}
  /** Private capture/candidate observation. Only one key page enters JavaScript. */
- spoolAdmission(scope:string,insidePage=false,onMetadataStored?:(bytes:number)=>void):SyncAdmission{
+ spoolAdmission(scope:string,insidePage=false,onMetadataStored?:(bytes:number,records:number)=>void):SyncAdmission{
   this.ensure();this.rows('INSERT INTO sensa_sync_admission_v1(scope) VALUES(?) ON CONFLICT DO NOTHING',[scope]);
   const db=this,pending=new Map<string,SyncDependencyRow>();let pendingBytes=0;
   const from=(row:any):SyncDependencyRow=>({table:row.table_name,key:row.record_key,digest:row.digest,bytes:row.logical_bytes,storedBytes:row.stored_bytes,edges:JSON.parse(row.edges_json),protocols:JSON.parse(row.protocols_json)});
-  const flush=(insideTransaction=false)=>{if(!pending.size)return;if(!insideTransaction)db.database.exec('BEGIN IMMEDIATE');try{let addedMetadata=0;for(const row of pending.values()){const metadata=new TextEncoder().encode(scope+row.table+row.key+row.digest+JSON.stringify(row.edges)+JSON.stringify(row.protocols)).length;addedMetadata+=metadata;db.rows('INSERT INTO sensa_sync_admission_rows_v1(scope,table_name,record_key,digest,logical_bytes,stored_bytes,edges_json,protocols_json,metadata_bytes) VALUES(?,?,?,?,?,?,?,?,?)',[scope,row.table,row.key,row.digest,row.bytes,row.storedBytes,JSON.stringify(row.edges),JSON.stringify(row.protocols),metadata]);db.rows('UPDATE sensa_sync_admission_v1 SET records=records+1,logical_bytes=logical_bytes+?,stored_bytes=stored_bytes+?,metadata_bytes=metadata_bytes+? WHERE scope=?',[row.bytes,row.storedBytes,metadata,scope]);}onMetadataStored?.(addedMetadata);if(!insideTransaction)db.database.exec('COMMIT');pending.clear();pendingBytes=0;}catch(cause){if(!insideTransaction)db.database.exec('ROLLBACK');throw cause;}};
+  const flush=(insideTransaction=false)=>{if(!pending.size)return;if(!insideTransaction)db.database.exec('BEGIN IMMEDIATE');try{let addedMetadata=0;for(const row of pending.values()){const metadata=new TextEncoder().encode(scope+row.table+row.key+row.digest+JSON.stringify(row.edges)+JSON.stringify(row.protocols)).length;addedMetadata+=metadata;db.rows('INSERT INTO sensa_sync_admission_rows_v1(scope,table_name,record_key,digest,logical_bytes,stored_bytes,edges_json,protocols_json,metadata_bytes) VALUES(?,?,?,?,?,?,?,?,?)',[scope,row.table,row.key,row.digest,row.bytes,row.storedBytes,JSON.stringify(row.edges),JSON.stringify(row.protocols),metadata]);db.rows('UPDATE sensa_sync_admission_v1 SET records=records+1,logical_bytes=logical_bytes+?,stored_bytes=stored_bytes+?,metadata_bytes=metadata_bytes+? WHERE scope=?',[row.bytes,row.storedBytes,metadata,scope]);}onMetadataStored?.(addedMetadata,pending.size);if(!insideTransaction)db.database.exec('COMMIT');pending.clear();pendingBytes=0;}catch(cause){if(!insideTransaction)db.database.exec('ROLLBACK');throw cause;}};
   const lookup=(key:string)=>{const [table,id]=JSON.parse(key);return db.rows<any>('SELECT * FROM sensa_sync_admission_rows_v1 WHERE scope=? AND table_name=? AND record_key=?',[scope,table,id])[0];};
   const rows:AdmissionRows={
    get size(){return db.rows<{records:number}>('SELECT records FROM sensa_sync_admission_v1 WHERE scope=?',[scope])[0].records+pending.size;},

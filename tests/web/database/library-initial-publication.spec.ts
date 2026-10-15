@@ -100,13 +100,13 @@ test('private initial pages reject gaps/replays/cross-account payloads and final
   expect((await call('/staging/page',{...p0,rows:[rows[0]]})).value.code).toBe('operation_conflict');
   expect((await call('/staging/page',{...p1,rows:[rows[1]]})).value.code).toBe('operation_conflict');
   expect((await call('/staging/page',p1,b.token)).status).toBe(409);
-  expect((await call('/head')).value.manifest).toBeNull();expect((await f.pool.query('SELECT 1 FROM sensa_consumer.library_cloud_rows WHERE account_id=$1',[a.accountId])).rowCount).toBe(0);
+  expect((await call('/head')).value.manifest).toBeNull();expect((await f.pool.query('SELECT 1 FROM sensa_consumer.library_cloud_rows r JOIN sensa_consumer.library_cloud h ON h.account_id=r.account_id AND h.rows_generation=r.generation WHERE r.account_id=$1',[a.accountId])).rowCount).toBe(0);expect((await f.pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud_rows WHERE account_id=$1 AND generation=$2',[a.accountId,begin.operationId])).rows[0].n).toBe(400);
   const second=await call('/staging/page',p1);expect(second.status).toBe(200);
   const commit={operationId:begin.operationId,baseRevision:0,staging:{pages:2,records:600,digest:second.value.digest}};
   expect((await call('/commit',{...commit,staging:{...commit.staging,pages:1}})).status).toBe(409);
-  for(const table of ['library_cloud_rows','library_cloud_snapshots','library_cloud_commits']){
+  for(const table of ['library_cloud','library_cloud_commits']){
    await f.pool.query(`CREATE OR REPLACE FUNCTION sensa_consumer.initial_test_fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'isolated initial fault'; END $$`);
-   await f.pool.query(`CREATE TRIGGER initial_test_fault BEFORE INSERT ON sensa_consumer.${table} FOR EACH ROW EXECUTE FUNCTION sensa_consumer.initial_test_fault()`);
+   await f.pool.query(`CREATE TRIGGER initial_test_fault BEFORE ${table==='library_cloud'?'UPDATE':'INSERT'} ON sensa_consumer.${table} FOR EACH ROW EXECUTE FUNCTION sensa_consumer.initial_test_fault()`);
    try{expect((await call('/commit',commit)).status).toBe(503);}finally{await f.pool.query(`DROP TRIGGER initial_test_fault ON sensa_consumer.${table}`);}
    expect((await call('/head')).value.manifest).toBeNull();expect((await call('/receipt/'+begin.operationId)).value.head).toBeNull();
   }

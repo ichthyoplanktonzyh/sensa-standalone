@@ -8,14 +8,17 @@ import {decodeLibrarySyncBlock,decodeLibrarySyncBinaryChunk} from '@sensa/contra
 import {ConsumerError} from '../access/auth.js';
 import {libraryCloudCapacityBytes,libraryCloudReadLeaseMs,libraryCloudUploadLeaseMs,purgeExpiredLibraryCloudBlocks} from './retention.js';
 import {beginInitialPublication,appendInitialPublication,commitInitialPublication,discardInitialPublication} from './initialPublication.js';
+import {libraryCloudRowOwner,libraryCloudSnapshotOwner} from './generation.js';
+import {librarySyncCompact,librarySyncNativeDescriptorText,librarySyncNativeFormat,librarySyncNativeSnapshot} from '@sensa/contracts/sensa';
 type Access=<T>(request:Request,work:(db:DatabaseExecutor,a:{accountId:string;installationId?:string;now?:Date})=>Promise<T>)=>Promise<T>;
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
 const conflict=(code='library_sync_conflict')=>new ConsumerError(409,code);
-export function registerLibrarySync(app:Hono,access:Access){
+export function registerLibrarySync(app:Hono,access:Access,storagePolicy:{capacityBytes:number}={capacityBytes:libraryCloudCapacityBytes}){
+ const capacityBytes=storagePolicy.capacityBytes;if(!Number.isSafeInteger(capacityBytes)||capacityBytes<1)throw Error('library_sync_storage_policy');
  app.use('/sensa/library-sync/*',async(c,next)=>{c.header('Cache-Control','no-store');await next();});
  const use:Access=(request,work)=>access(request,(db,a)=>{if(a.installationId)throw new ConsumerError(403,'web_authorization_required');return work(db,a);});
  const current=async(db:DatabaseExecutor,id:string)=>{await db.query('INSERT INTO sensa_consumer.library_cloud(account_id) VALUES($1) ON CONFLICT DO NOTHING',[id]);return (await db.query('SELECT * FROM sensa_consumer.library_cloud WHERE account_id=$1 FOR UPDATE',[id])).rows[0]!;};
- const storage=async(db:DatabaseExecutor,id:string)=>{const usage=(await db.query('SELECT COALESCE(sum(octet_length(data)),0)::bigint n FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1',[id])).rows[0];return {usedBytes:Number(usage.n),capacityBytes:libraryCloudCapacityBytes};};
+ const storage=async(db:DatabaseExecutor,id:string)=>{const usage=(await db.query('SELECT COALESCE(sum(octet_length(data)),0)::bigint n FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1',[id])).rows[0];return {usedBytes:Number(usage.n),capacityBytes};};
  app.post('/sensa/library-sync/staging/begin',async c=>{const input=await c.req.json();return c.json(await use(c.req.raw,async(db,a)=>beginInitialPublication(db,a.accountId,await current(db,a.accountId),input,a.now??new Date())));});
  app.post('/sensa/library-sync/staging/page',async c=>{const input=await c.req.json();return c.json(await use(c.req.raw,async(db,a)=>appendInitialPublication(db,a.accountId,await current(db,a.accountId),input,a.now??new Date())));});
  app.post('/sensa/library-sync/staging/discard',async c=>{const input=librarySyncStageBegin.pick({operationId:true}).parse(await c.req.json());return c.json(await use(c.req.raw,async(db,a)=>{const currentHead=await current(db,a.accountId);const receipt=(await db.query('SELECT result FROM sensa_consumer.library_cloud_commits WHERE account_id=$1 AND operation_id=$2',[a.accountId,input.operationId])).rows[0];if(receipt)return {head:receipt.result,currentRevision:currentHead.revision};await discardInitialPublication(db,a.accountId,input.operationId);return {head:null,currentRevision:currentHead.revision};}));});
@@ -36,7 +39,7 @@ export function registerLibrarySync(app:Hono,access:Access){
   await db.query(`INSERT INTO sensa_consumer.library_cloud_snapshot_leases(account_id,revision,expires_at) VALUES($1,$2,$3)
    ON CONFLICT(account_id,revision) DO UPDATE SET expires_at=GREATEST(sensa_consumer.library_cloud_snapshot_leases.expires_at,EXCLUDED.expires_at)`,[a.accountId,head.revision,leaseUntil]);
   await db.query('DELETE FROM sensa_consumer.library_cloud_reads WHERE account_id=$1 AND expires_at<=$2',[a.accountId,now]);
-  const readLease=crypto.randomUUID();await db.query('INSERT INTO sensa_consumer.library_cloud_reads(account_id,id,from_revision,to_revision,snapshot_revision,expires_at) VALUES($1,$2,$3,$4,$5,$6)',[a.accountId,readLease,head.retention_floor,head.revision,head.snapshot_revision,leaseUntil]);return {...descriptor(head),readLease,storage:await storage(db,a.accountId)};
+  const readLease=crypto.randomUUID();await db.query('INSERT INTO sensa_consumer.library_cloud_reads(account_id,id,from_revision,to_revision,snapshot_revision,expires_at,snapshot_generation) VALUES($1,$2,$3,$4,$5,$6,$7)',[a.accountId,readLease,head.retention_floor,head.revision,head.snapshot_revision,leaseUntil,head.snapshot_generation]);return {...descriptor(head,c.req.header('x-sensa-snapshot-format')===librarySyncNativeFormat),readLease,storage:await storage(db,a.accountId)};
  })));
  app.post('/sensa/library-sync/blocks/missing',async c=>{const input=librarySyncBlockMissing.parse(await c.req.json());return c.json(await use(c.req.raw,async(db,a)=>{await current(db,a.accountId);const now=a.now??new Date(),leaseUntil=new Date(now.getTime()+libraryCloudUploadLeaseMs);const found=(await db.query('SELECT hash FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[a.accountId,input.hashes])).rows;const have=new Set(found.map(r=>r.hash));if(found.length)await db.query('UPDATE sensa_consumer.library_cloud_blocks SET upload_lease_expires_at=GREATEST(upload_lease_expires_at,$3) WHERE account_id=$1 AND hash=ANY($2::text[])',[a.accountId,[...have],leaseUntil]);return {missing:input.hashes.filter(h=>!have.has(h))};}));});
  // Restore reads one bounded page of blocks per request, so a first download is a
@@ -67,7 +70,7 @@ export function registerLibrarySync(app:Hono,access:Access){
   const added=blocks.filter(b=>!stored.has(b.hash)).reduce((total,b)=>total+Buffer.byteLength(b.data),0);
   if(added>0){
    // Bounded storage guard, not a product subscription quota. Includes unattached retry blocks.
-   const usage=(await db.query('SELECT COALESCE(sum(octet_length(data)),0)::bigint n FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1',[a.accountId])).rows[0];if(Number(usage.n)+added>libraryCloudCapacityBytes)throw new ConsumerError(413,'library_sync_capacity');
+   const usage=(await db.query('SELECT COALESCE(sum(octet_length(data)),0)::bigint n FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1',[a.accountId])).rows[0];if(Number(usage.n)+added>capacityBytes)throw new ConsumerError(413,'library_sync_capacity');
    // The route already admits one bounded, deduplicated batch. Store it in a
    // single statement under the same account lock and outer transaction.
    await db.query(`INSERT INTO sensa_consumer.library_cloud_blocks(account_id,hash,data,created_at,upload_lease_expires_at,logical_bytes)
@@ -75,20 +78,21 @@ export function registerLibrarySync(app:Hono,access:Access){
   }
   return {stored:true};}));});
  app.get('/sensa/library-sync/blocks/:hash',async c=>c.json(await use(c.req.raw,async(db,a)=>{const key=librarySyncHash.parse(c.req.param('hash'));const row=(await db.query('SELECT data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=$2',[a.accountId,key])).rows[0];if(!row)throw new ConsumerError(404,'library_sync_missing_block');return {hash:key,data:row.data};})));
- const descriptor=(head:Record<string,any>)=>{
+ const descriptor=(head:Record<string,any>,native=false)=>{
   if(head.manifest&&!head.library_id)throw conflict('library_sync_incompatible_checkpoint');
-  return {revision:head.revision,manifest:head.library_id?{libraryId:head.library_id,learnerId:head.learner_id,snapshotRevision:head.snapshot_revision,floor:head.retention_floor,records:head.record_count}:null,...(head.binary_snapshot?.revision===head.snapshot_revision?{binarySnapshot:head.binary_snapshot}:{})};
+  return {revision:head.revision,manifest:head.library_id?{libraryId:head.library_id,learnerId:head.learner_id,snapshotRevision:head.snapshot_revision,floor:head.retention_floor,records:head.record_count}:null,...(head.binary_snapshot?.revision===head.snapshot_revision?{binarySnapshot:head.binary_snapshot}:{}),...(native&&head.native_snapshot?.revision===head.snapshot_revision?{nativeSnapshot:head.native_snapshot}:{})};
  };
- const readLease=async(db:DatabaseExecutor,id:string,token:string|undefined,now:Date)=>token?(await db.query('SELECT from_revision,to_revision,snapshot_revision FROM sensa_consumer.library_cloud_reads WHERE account_id=$1 AND id=$2 AND expires_at>$3',[id,token,now])).rows[0]:undefined;
+ const readLease=async(db:DatabaseExecutor,id:string,token:string|undefined,now:Date)=>token?(await db.query('SELECT from_revision,to_revision,snapshot_revision,snapshot_generation FROM sensa_consumer.library_cloud_reads WHERE account_id=$1 AND id=$2 AND expires_at>$3',[id,token,now])).rows[0]:undefined;
  // Frozen rows are built by PostgreSQL inside the same account-locked transaction.
  // No mutable index is paged after releasing the lock, and no body is expanded.
  const snapshot=async(db:DatabaseExecutor,id:string,revision:number)=>{
-  await db.query(`INSERT INTO sensa_consumer.library_cloud_snapshots(account_id,revision,table_name,record_key,refs)
-   SELECT account_id,$2,table_name,record_key,refs FROM sensa_consumer.library_cloud_rows WHERE account_id=$1 ON CONFLICT DO NOTHING`,[id,revision]);
+  const head=(await db.query('SELECT rows_generation FROM sensa_consumer.library_cloud WHERE account_id=$1',[id])).rows[0];
+  await db.query(`INSERT INTO sensa_consumer.library_cloud_snapshots(account_id,generation,revision,table_name,record_key,refs)
+   SELECT account_id,generation,$2,table_name,record_key,refs FROM sensa_consumer.library_cloud_rows WHERE account_id=$1 AND generation=$3 ON CONFLICT DO NOTHING`,[id,revision,head.rows_generation]);
   await db.query(`INSERT INTO sensa_consumer.library_cloud_membership(account_id,owner_kind,owner_id,hash)
    SELECT $1,'snapshot',$2::text,hash.value FROM sensa_consumer.library_cloud_snapshots AS snap CROSS JOIN LATERAL jsonb_array_elements_text(snap.refs) hash(value)
-   WHERE snap.account_id=$1 AND snap.revision=$2::integer ON CONFLICT DO NOTHING`,[id,revision]);
-  await db.query('UPDATE sensa_consumer.library_cloud SET snapshot_revision=$2,retention_floor=$2,tail_bytes=0,tail_commits=0 WHERE account_id=$1 AND revision=$2',[id,revision]);
+   WHERE snap.account_id=$1 AND snap.revision=$3 AND snap.generation=$4 ON CONFLICT DO NOTHING`,[id,libraryCloudSnapshotOwner(head.rows_generation,revision),revision,head.rows_generation]);
+  await db.query('UPDATE sensa_consumer.library_cloud SET snapshot_revision=$2,retention_floor=$2,tail_bytes=0,tail_commits=0,snapshot_generation=rows_generation WHERE account_id=$1 AND revision=$2',[id,revision]);
  };
  const page=(rows:Record<string,any>[])=>{
   const selected:Record<string,any>[]=[];let bytes=0,refs=0;
@@ -116,16 +120,30 @@ export function registerLibrarySync(app:Hono,access:Access){
   const reader=await readLease(db,a.accountId,input.readLease,now);if(!reader||reader.snapshot_revision!==input.snapshotRevision)throw conflict('library_sync_snapshot_required');
   const raw=(await db.query(`SELECT table_name,record_key,jsonb_array_length(refs) AS ref_count,octet_length(refs::text)+octet_length(to_json(table_name)::text)+octet_length(to_json(record_key)::text)+64 AS bytes FROM sensa_consumer.library_cloud_snapshots WHERE account_id=$1 AND revision=$2
    AND ($3::text IS NULL OR (table_name COLLATE "C",record_key COLLATE "C")>($3::text COLLATE "C",$4::text COLLATE "C"))
-   ORDER BY table_name COLLATE "C",record_key COLLATE "C" LIMIT $5`,[a.accountId,input.snapshotRevision,input.after?.table??null,input.after?.key??null,librarySyncMetadataPageRows+1])).rows;
+   AND generation=$6 ORDER BY table_name COLLATE "C",record_key COLLATE "C" LIMIT $5`,[a.accountId,input.snapshotRevision,input.after?.table??null,input.after?.key??null,librarySyncMetadataPageRows+1,reader.snapshot_generation])).rows;
   const selected=page(raw),last=selected.at(-1),done=selected.length===raw.length;
   const loaded=selected.length?(await db.query(`SELECT table_name,record_key,refs FROM sensa_consumer.library_cloud_snapshots WHERE account_id=$1 AND revision=$2
    AND ($3::text IS NULL OR (table_name COLLATE "C",record_key COLLATE "C")>($3::text COLLATE "C",$4::text COLLATE "C"))
-   ORDER BY table_name COLLATE "C",record_key COLLATE "C" LIMIT $5`,[a.accountId,input.snapshotRevision,input.after?.table??null,input.after?.key??null,selected.length])).rows:[];
+   AND generation=$6 ORDER BY table_name COLLATE "C",record_key COLLATE "C" LIMIT $5`,[a.accountId,input.snapshotRevision,input.after?.table??null,input.after?.key??null,selected.length,reader.snapshot_generation])).rows:[];
   return {snapshotRevision:input.snapshotRevision,after:input.after,next:last?{table:last.table_name,key:last.record_key}:input.after,rows:loaded.map(row=>({table:row.table_name,key:row.record_key,blocks:row.refs})),done};
  }));});
- app.post('/sensa/library-sync/compact',async c=>{const input=librarySyncPull.shape.toRevision.parse((await c.req.json()).baseRevision);return c.json(await use(c.req.raw,async(db,a)=>{
-  const head=await current(db,a.accountId);descriptor(head);if(head.revision!==input)throw conflict();if(!head.library_id)throw conflict('library_sync_identity');
-  await snapshot(db,a.accountId,head.revision);return descriptor({...head,snapshot_revision:head.revision,retention_floor:head.revision});
+ app.post('/sensa/library-sync/compact',async c=>{const input=librarySyncCompact.parse(await c.req.json());return c.json(await use(c.req.raw,async(db,a)=>{
+  const head=await current(db,a.accountId);descriptor(head);if(head.revision!==input.baseRevision)throw conflict();if(!head.library_id)throw conflict('library_sync_identity');
+  const artifact=input.nativeSnapshot;
+  if(artifact){
+   if(artifact.accountId!==a.accountId||artifact.libraryId!==head.library_id||artifact.learnerId!==head.learner_id||artifact.revision!==head.revision||artifact.records!==head.record_count)throw conflict('library_sync_identity');
+   if(hash(librarySyncNativeDescriptorText(artifact))!==artifact.manifestHash)throw new ConsumerError(400,'library_sync_hash');
+   if(head.native_snapshot?.revision===head.revision&&JSON.stringify(librarySyncNativeSnapshot.parse(head.native_snapshot))!==JSON.stringify(artifact))throw conflict('operation_conflict');
+   const hashes=[...new Set(artifact.blocks)],found=(await db.query('SELECT hash FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[a.accountId,hashes])).rows;
+   if(found.length!==hashes.length)throw conflict('library_sync_missing_block');
+  }
+  if(head.snapshot_revision!==head.revision)await snapshot(db,a.accountId,head.revision);
+  if(artifact){
+   const generation=head.snapshot_revision===head.revision?head.snapshot_generation:head.rows_generation;
+   await db.query("INSERT INTO sensa_consumer.library_cloud_membership(account_id,owner_kind,owner_id,hash) SELECT $1,'snapshot',$2,hash FROM unnest($3::text[]) hash ON CONFLICT DO NOTHING",[a.accountId,libraryCloudSnapshotOwner(generation,head.revision),[...new Set(artifact.blocks)]]);
+   await db.query('UPDATE sensa_consumer.library_cloud SET native_snapshot=$2::jsonb WHERE account_id=$1',[a.accountId,JSON.stringify(artifact)]);
+  }
+  return {...descriptor({...head,snapshot_revision:head.revision,retention_floor:head.revision,...(artifact?{native_snapshot:artifact}:{})},c.req.header('x-sensa-snapshot-format')===librarySyncNativeFormat),storage:await storage(db,a.accountId)};
  }));});
  const recordDigest=async(db:DatabaseExecutor,id:string,refs:string[])=>{
   const digest=createHash('sha256');let bytes=0;
@@ -141,7 +159,6 @@ export function registerLibrarySync(app:Hono,access:Access){
   descriptor(head);if(head.revision!==input.baseRevision)throw conflict();if(head.revision>=2147483646)throw conflict('library_sync_capacity');
   if('staging' in input){
    const next=await commitInitialPublication(db,a.accountId,head,input,a.now??new Date());
-   await snapshot(db,a.accountId,next.revision);
    let binarySnapshot:unknown;
    if(input.staging.binary){
     const artifact=input.staging.binary,fileHash=createHash('sha256');let bytes=0;
@@ -154,11 +171,11 @@ export function registerLibrarySync(app:Hono,access:Access){
     if(bytes!==artifact.byteLength||fileHash.digest('hex')!==artifact.sha256)throw new ConsumerError(400,'library_sync_hash');
     binarySnapshot={...artifact,accountId:a.accountId,libraryId:next.libraryId,learnerId:next.learnerId,revision:next.revision,records:next.records};
     await db.query('UPDATE sensa_consumer.library_cloud SET binary_snapshot=$2::jsonb WHERE account_id=$1',[a.accountId,JSON.stringify(binarySnapshot)]);
-    await db.query("INSERT INTO sensa_consumer.library_cloud_membership SELECT $1,'snapshot',$2::text,hash FROM unnest($3::text[]) hash ON CONFLICT DO NOTHING",[a.accountId,next.revision,artifact.blocks]);
+    await db.query("INSERT INTO sensa_consumer.library_cloud_membership SELECT $1,'snapshot',$2,hash FROM unnest($3::text[]) hash ON CONFLICT DO NOTHING",[a.accountId,libraryCloudSnapshotOwner(input.operationId,next.revision),artifact.blocks]);
    }
    const result={receipt:{operationId:input.operationId,requestDigest:digest},...descriptor({...head,revision:next.revision,library_id:next.libraryId,learner_id:next.learnerId,record_count:next.records,snapshot_revision:next.revision,retention_floor:next.revision,binary_snapshot:binarySnapshot}),storage:await storage(db,a.accountId)};
    await db.query('INSERT INTO sensa_consumer.library_cloud_commits(account_id,operation_id,request_digest,revision,result) VALUES($1,$2,$3,$4,$5::jsonb)',[a.accountId,input.operationId,digest,next.revision,JSON.stringify(result)]);
-   await discardInitialPublication(db,a.accountId,input.operationId);return result;
+   await discardInitialPublication(db,a.accountId,input.operationId,true);return result;
   }
   let libraryId:string,learnerId:string,changes:Array<{table:string;key:string;blocks:string[]|null}>;
   if('manifest' in input){
@@ -175,7 +192,7 @@ export function registerLibrarySync(app:Hono,access:Access){
   for(let at=0;at<refs.length;at+=512){const part=refs.slice(at,at+512),present=(await db.query('SELECT hash FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[a.accountId,part])).rows;if(present.length!==part.length)throw conflict('library_sync_missing_block');}
   const now=a.now??new Date(),revision=head.revision+1;let recordCount=head.record_count,logicalBytes=await currentLibraryLogicalBytes(db,a.accountId,head);
   for(let ordinal=0;ordinal<changes.length;ordinal++){
-   const row=changes[ordinal],old=(await db.query('SELECT refs,logical_bytes FROM sensa_consumer.library_cloud_rows WHERE account_id=$1 AND table_name=$2 AND record_key=$3',[a.accountId,row.table,row.key])).rows[0];
+   const row=changes[ordinal],old=(await db.query('SELECT refs,logical_bytes FROM sensa_consumer.library_cloud_rows WHERE account_id=$1 AND table_name=$2 AND record_key=$3 AND generation=$4',[a.accountId,row.table,row.key,head.rows_generation])).rows[0];
    if(old&&!row.blocks&&['learningSessions','learningRuns','supplementalMembershipStates','learningEvents','learningReconciliations','studyScopes'].includes(row.table))throw conflict('library_sync_history');
    if(old&&['learningEvents','learningReconciliations','studyScopes'].includes(row.table)&&JSON.stringify(old.refs)!==JSON.stringify(row.blocks)){
     if(await recordDigest(db,a.accountId,old.refs)!==await recordDigest(db,a.accountId,row.blocks!))throw conflict('library_sync_history');
@@ -186,12 +203,12 @@ export function registerLibrarySync(app:Hono,access:Access){
    }
    if(!old&&row.blocks)recordCount++;if(old&&!row.blocks)recordCount--;
    const logical=row.blocks?(await measureLibraryRows(db,a.accountId,[{blocks:row.blocks}]))[0]:0;logicalBytes+=logical-Number(old?.logical_bytes??0);
-   const owner=JSON.stringify([row.table,row.key]);
+   const owner=libraryCloudRowOwner(head.rows_generation,row.table,row.key);
    await db.query("DELETE FROM sensa_consumer.library_cloud_membership WHERE account_id=$1 AND owner_kind='row' AND owner_id=$2",[a.accountId,owner]);
    if(row.blocks){
-    await db.query('INSERT INTO sensa_consumer.library_cloud_rows(account_id,table_name,record_key,refs,logical_bytes) VALUES($1,$2,$3,$4::jsonb,$5) ON CONFLICT(account_id,table_name,record_key) DO UPDATE SET refs=EXCLUDED.refs,logical_bytes=EXCLUDED.logical_bytes',[a.accountId,row.table,row.key,JSON.stringify(row.blocks),logical]);
+    await db.query('INSERT INTO sensa_consumer.library_cloud_rows(account_id,generation,table_name,record_key,refs,logical_bytes) VALUES($1,$6,$2,$3,$4::jsonb,$5) ON CONFLICT(account_id,generation,table_name,record_key) DO UPDATE SET refs=EXCLUDED.refs,logical_bytes=EXCLUDED.logical_bytes',[a.accountId,row.table,row.key,JSON.stringify(row.blocks),logical,head.rows_generation]);
     await db.query("INSERT INTO sensa_consumer.library_cloud_membership(account_id,owner_kind,owner_id,hash) SELECT $1,'row',$2,hash FROM unnest($3::text[]) hash ON CONFLICT DO NOTHING",[a.accountId,owner,row.blocks]);
-   }else await db.query('DELETE FROM sensa_consumer.library_cloud_rows WHERE account_id=$1 AND table_name=$2 AND record_key=$3',[a.accountId,row.table,row.key]);
+   }else await db.query('DELETE FROM sensa_consumer.library_cloud_rows WHERE account_id=$1 AND table_name=$2 AND record_key=$3 AND generation=$4',[a.accountId,row.table,row.key,head.rows_generation]);
    await db.query('INSERT INTO sensa_consumer.library_cloud_log(account_id,revision,ordinal,table_name,record_key,refs) VALUES($1,$2,$3,$4,$5,$6::jsonb)',[a.accountId,revision,ordinal,row.table,row.key,row.blocks?JSON.stringify(row.blocks):null]);
   }
   if(logicalBytes>librarySyncLogicalByteLimit)throw new ConsumerError(413,'library_sync_capacity');

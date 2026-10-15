@@ -1,4 +1,4 @@
-import {replicaWork} from './replicaWork';
+import {deferReplicaWork,replicaWork} from './replicaWork';
 import {requireCloudScratchSpace} from './cloudScratchStorage';
 import type {ContextBrowseQuery,ContextBrowsePage} from '../../experience/personalMeaningJourney/contextRead';
 import {contextMediaReferences} from '../../experience/personalMeaningJourney/contextRecords';
@@ -121,7 +121,11 @@ export class SqliteRecordDatabase {
   private activationTargetLanguages:Map<string,string>|undefined;
   private activationTargetLanguageBytes=0;
   private activationPreparedBodies:Set<string>|undefined;
+  private privateRestoreController:AbortController|undefined;
+  private privateRestoreUsed=false;
+  private privateRestoreWork:Promise<void>|undefined;
   private snapshotReader:LibraryRecordReader|undefined;
+  private snapshotSource:import('./sqliteSnapshotSource').SqliteSnapshotSource|undefined;
   private readonly syncDependencies:SqliteSyncDependencies;
 
   /** The Worker must stop queued requests even if the durable COMMIT succeeded. */
@@ -135,6 +139,11 @@ export class SqliteRecordDatabase {
     this.assertReplicaCandidateFence(fence);
     const {createOwnCloudPortableSnapshot}=await import('./sqlitePortableSnapshot');
     return createOwnCloudPortableSnapshot(this.sqlite3,pool,this,fence);
+  }
+  beforeSnapshotRequest(kind:string):void{this.snapshotSource?.beforeRequest(kind);}
+  async snapshotSourceRequest(input:import('./sqliteSnapshotSource').SnapshotSourceRequest){
+    if(!this.snapshotSource){const {SqliteSnapshotSource}=await import('./sqliteSnapshotSource');this.snapshotSource=new SqliteSnapshotSource(this.sqlite3,this.database,this.syncDependencies,key=>this.get('meta',key),fence=>this.assertReplicaCandidateFence(fence),cause=>this.quarantineConnection(cause));}
+    return this.snapshotSource.request(input);
   }
   private ownSnapshot:{binding:import('./sqlitePortableSnapshot').OwnCloudSnapshotBinding;owner:ReplicaCandidateFence['owner'];after:{table:string;key:string}|null;records:number;sealed:boolean}|undefined;
   /** Called only after the distinct authenticated own-cloud import succeeded. */
@@ -182,6 +191,7 @@ export class SqliteRecordDatabase {
     private readonly database: Database,
     private readonly persistence: SqliteStorageDiagnostics["persistence"],
     private readonly portableBuild?: (table:SqliteLibraryTable,key:string)=>boolean,
+    private readonly privateFreshRestore=false,
   ) {
     this.syncDependencies=new SqliteSyncDependencies(database);
     const field=registryFieldReader();
@@ -316,6 +326,7 @@ export class SqliteRecordDatabase {
     if (this.persistence === "opfs" && lockingMode !== "exclusive") {
       throw new Error(`sqlite_locking_mode_failed:${lockingMode}`);
     }
+    if(this.scalarNumber("SELECT count(*) FROM sqlite_schema WHERE name='sensa_private_restore_pending_v1'"))throw Error('sqlite_private_restore_incomplete');
     const before = this.scalarNumber("PRAGMA user_version");
     const schemaCookie=this.scalarNumber('PRAGMA schema_version');
     const headerReady=performance.now();
@@ -773,9 +784,9 @@ export class SqliteRecordDatabase {
     // Read available origin space before any replacement transaction. The
     // estimate is advisory; private SQL accounting and physical IO still apply.
     if(this.persistence==='opfs'&&request.kind==='beginPublication'){await requireCloudScratchSpace(true);this.assertReplicaCandidateHealthy();}
-    if(['beginPublication','publicationPage','publicationIndexPage','publicationBlocks','validatePublication','admitOwnPublication','discardPublication'].includes(request.kind)){
+    if(['beginPublication','publicationPage','publicationIndexPage','publicationBlocks','validatePublication','admitOwnPublication','preparePublication','cancelPublicationPreparation','retirePublication','discardPublication'].includes(request.kind)){
       if(request.kind!=='discardPublication'&&this.decoded('meta','signed-out'))throw Error('account_changed');
-      if(!this.initialPublication){const {SqliteInitialPublication}=await import('./sqliteInitialPublication');this.initialPublication=new SqliteInitialPublication(this.database,f=>this.assertReplicaCandidateFence(f),(table,key)=>this.get(table,key),f=>this.assertReplicaCandidateFence({...f,localRevision:this.decoded<number>('meta','local-content-revision')??0}),async()=>{if(this.persistence==='opfs')await requireCloudScratchSpace(false);});}
+      if(!this.initialPublication){const {SqliteInitialPublication}=await import('./sqliteInitialPublication');this.assertReplicaCandidateHealthy();this.initialPublication=new SqliteInitialPublication(this.database,f=>this.assertReplicaCandidateFence(f),(table,key)=>this.get(table,key),f=>this.assertReplicaCandidateFence({...f,localRevision:this.decoded<number>('meta','local-content-revision')??0}),async()=>{if(this.persistence==='opfs')await requireCloudScratchSpace(false);},()=>this.decoded<number>('meta','local-artifact-revision')??0);}
       switch(request.kind){
         case 'beginPublication':return {kind:'begun',id:this.initialPublication.begin(request.fence)};
         case 'publicationPage':return this.initialPublication.page(request.id,request.after);
@@ -783,6 +794,9 @@ export class SqliteRecordDatabase {
         case 'publicationBlocks':return this.initialPublication.blocks(request.id,request.hashes);
         case 'validatePublication':return {kind:'publicationValidated',stats:await this.initialPublication.validate(request.id,request.confirmed)};
         case 'admitOwnPublication':return {kind:'publicationValidated',stats:await this.initialPublication.validate(request.id,request.confirmed,true,onProgress)};
+        case 'preparePublication':await this.initialPublication.prepare(request.id,onProgress);return {kind:'publicationValidated',stats:this.initialPublication.stats(request.id,true)};
+        case 'cancelPublicationPreparation':this.initialPublication.cancelPreparation(request.id);return {kind:'discarded'};
+        case 'retirePublication':return {kind:'publicationRetired',done:this.initialPublication.retireConfirmed(request.id,()=>{const state=this.decoded<CloudSyncState&{publicationOperationId?:string;initialUpload?:unknown}>('meta','cloud-sync');if(state?.publicationOperationId!==request.id||state.pending||state.initialUpload)throw Error('library_sync_candidate_invalid');})};
         case 'discardPublication':this.initialPublication.discard(request.id);return {kind:'discarded'};
       }
     }
@@ -819,9 +833,10 @@ export class SqliteRecordDatabase {
 
   /** The owner Worker drains cooperative reads before releasing native handles. */
   async settleReplicaCandidates():Promise<void>{
-    this.replicaCandidatesClosing=true;
+    this.replicaCandidatesClosing=true;this.cancelPrivateRestore();await this.privateRestoreWork?.catch(()=>{});
     const candidates=await this.replicaCandidates?.catch(()=>undefined);
     await candidates?.settle();
+    await this.initialPublication?.settle();
   }
 
   quarantineConnection(cause:Error):void{
@@ -843,7 +858,99 @@ export class SqliteRecordDatabase {
     if((this.decoded('meta','local-content-revision')??0)!==fence.localRevision||!backupEqual(this.decoded('meta','identity'),fence.identity))throw Error('library_sync_local_changed');
   }
 
+  /** Stops private page work before the next native transaction. */
+  cancelPrivateRestore():void{this.privateRestoreController?.abort(Error('library_sync_cancelled'));}
+
+  /** This connection was created for an empty, unselected namespace. Partial
+   * work is never an active Library: a cold open rejects the pending marker,
+   * and failure/cancellation discards only this owned generation. */
+  installPrivateRestore(mutation:SqliteMutation,onProgress?:import('./replicaCandidateProtocol').ReplicaCandidateProgressObserver):Promise<void>{
+    if(!this.privateFreshRestore||this.privateRestoreUsed||!this.initialized||!this.replicaCandidateStore||!mutation.replicaCandidateRestore||mutation.replicaCandidateRestore.update)throw Error('sqlite_private_restore_boundary');
+    this.privateRestoreUsed=true;const controller=this.privateRestoreController=new AbortController();
+    const result=this.installPrivateRestoreRows(mutation,controller.signal,onProgress).finally(()=>{this.privateRestoreController=undefined;this.privateRestoreWork=undefined;});this.privateRestoreWork=result;return result;
+  }
+  private async installPrivateRestoreRows(mutation:SqliteMutation,signal:AbortSignal,onProgress?:import('./replicaCandidateProtocol').ReplicaCandidateProgressObserver):Promise<void>{
+    const candidates=this.replicaCandidateStore!,id=mutation.replicaCandidateRestore!.id,memo=new StoredRecordMemo(),statements=new Map<string,ReturnType<Database['prepare']>>();
+    let changes=this.database.changes(true),schema=this.scalarNumber('PRAGMA schema_version'),completed=0,selected=false;
+    const query=<T>(sql:string,bind:readonly (string|number)[]=[]):T[]=>{let statement=statements.get(sql);if(!statement){statement=this.database.prepare(sql);statements.set(sql,statement);}statement.reset(true);if(bind.length)statement.bind([...bind]);try{const rows:T[]=[];while(statement.step())rows.push(statement.get({}) as T);return rows;}finally{statement.reset(true);}};
+    const run=(sql:string,bind:readonly (string|number)[]=[])=>{query(sql,bind);return this.database.changes();};
+    const alive=()=>{this.assertReplicaCandidateHealthy();signal.throwIfAborted();if(this.database.changes(true)!==changes||this.scalarNumber('PRAGMA schema_version')!==schema)throw Error('library_sync_local_changed');if(!selected)candidates.assertPrivateRestore(id);};
+    const progress=(records:number)=>{if(records>0){completed+=records;onProgress?.({phase:'restore-installation',completed});}};
+    const pause=()=>new Promise<void>(resolve=>setTimeout(resolve,0));
+    const batch=<T>(work:()=>T):T=>{alive();const publish=deferReplicaWork();let result:T;
+      try{this.database.exec('BEGIN IMMEDIATE');try{alive();result=work();signal.throwIfAborted();this.database.exec('COMMIT');changes=this.database.changes(true);schema=this.scalarNumber('PRAGMA schema_version');}catch(cause){try{this.database.exec('ROLLBACK');}catch(rollback){throw sqliteRollbackFailure(cause,rollback);}throw cause;}}catch(cause){publish(false);throw cause;}
+      publish();if(this.database.changes(true)!==changes||this.scalarNumber('PRAGMA schema_version')!==schema)throw Error('library_sync_local_changed');return result;
+    };
+    this.activationMemo=memo;this.activationTargetLanguages=new Map();this.activationPreparedBodies=new Set();
+    try{
+      const plan=await candidates.preparePrivateRestore(id,mutation,memo,alive,progress);alive();const admission=candidates.privateRestoreAdmission(id),expectedRecords=plan.records;if(admission.disabled||admission.rows.size!==expectedRecords)throw Error('library_sync_candidate_invalid');
+      // An incomplete database cannot be opened through a normal adapter even
+      // after a crash; only this still-owned connection may finish it.
+      batch(()=>this.database.exec('CREATE TABLE sensa_private_restore_pending_v1(id TEXT PRIMARY KEY);'));
+      batch(()=>run('INSERT INTO sensa_private_restore_pending_v1 VALUES(?)',[id]));
+      let after:[string,string]=['',''],records=0,identityJson:string|undefined;const priorFacts=this.scalarNumber('SELECT count(*) FROM sensa_records');
+      for(;;){alive();const page=plan.page(after);if(!page.length)break;const keys=page.map(row=>[row.table,row.key] as [string,string]);
+        batch(()=>{plan.copyOrdinary(keys);const removed=new Set<string>();
+          for(const row of page){if(plan.copiedTables.has(row.table))continue;const source=row.source();run('INSERT INTO sensa_sync_base(table_name,record_key,value_json,block_refs_json) VALUES(?,?,?,?)',[row.table,row.key,this.storedEncoded('sync',row.table,row.key,source,removed,false),JSON.stringify(row.blockRefs)]);}
+          plan.copySharedBaseline(removed,keys);
+          for(const row of page){if(plan.copiedTables.has(row.table)||plan.sharedCopiedTables.has(row.table))continue;const restored=row.restored();if(row.table==='meta'&&row.key==='identity'){identityJson=restored;continue;}run('INSERT INTO sensa_records(table_name,record_key,value_json,content_revision) VALUES(?,?,?,?)',[row.table,row.key,this.storedEncoded('record',row.table,row.key,restored,removed,false),mutation.contentRevision!]);}
+          if(removed.size)throw Error('sqlite_private_restore_boundary');
+        });records+=page.length;after=[page.at(-1)!.table,page.at(-1)!.key];replicaWork('restore.fact',page.length);progress(page.length);await pause();
+      }
+      alive();if(records!==expectedRecords||this.scalarNumber('SELECT count(*) FROM sensa_sync_base')!==records||this.scalarNumber('SELECT count(*) FROM sensa_records')!==priorFacts+records-1||!identityJson)throw Error('library_sync_candidate_invalid');
+      // Facts are complete before any derived reader runs. Runs are processed
+      // last so their targets and fixed materials are all available.
+      for(const table of ['packageCache','curriculumEnrollments','supplementalMembershipStates','studyScopes','learningTargets','contentAttempts','semanticContexts','semanticInbox','learningRuns'] as const){let afterKey:string|null=null;
+        for(;;){alive();const page=this.recordKeysPage(table,afterKey,16);if(!page.length)break;
+          batch(()=>{for(const key of page){const text=this.get(table,key)!;if(table==='packageCache')this.upsertPackageCacheProjection(key,text);
+            else if(table==='curriculumEnrollments')this.runtimeCandidates.upsertEnrollment(key,this.decode(text));
+            else if(table==='supplementalMembershipStates')this.runtimeCandidates.upsertSupplementalState(key,this.decode(text));
+            else if(table==='studyScopes')this.runtimeCandidates.upsertScope(key,this.decode(text));
+            else if(table==='learningTargets')this.upsertLearningTargetProjection(key,text);
+            else if(table==='contentAttempts')this.upsertContentAttemptProjection(key,text);
+            else if(table==='learningRuns'){const value=this.decode<LocalLearningRun>(text);this.writeLearningRunProjection(key,value);this.learningHistory.upsert(key,value);}
+            else this.replaceMediaReferences(table,key,text);
+          }});afterKey=page.at(-1)!;replicaWork('restore.projectionRecord',page.length);progress(page.length);await pause();
+        }
+      }
+      // All canonical facts are now immutable until final activation. Reuse
+      // one bounded component across the four projectors, and give every
+      // consumer its own decoded value (including nested Dates).
+      const {sealedRecordReader}=await import('./sealedRecordReader');alive();let readingProjection=false;
+      const projectionAlive=()=>{this.assertReplicaCandidateHealthy();signal.throwIfAborted();if(!readingProjection)throw Error('sqlite_snapshot_projection_source');};
+      const projectionReader=sealedRecordReader({alive:projectionAlive,beforePage:projectionAlive,cloneDecoded:true,
+        get:(table,key)=>{const stored=this.storedRecord(table,key);return stored===null?undefined:{record_key:key,value_json:this.logicalEncoded(table,stored)};},
+        has:(table,key)=>query('SELECT 1 FROM sensa_records WHERE table_name=? AND record_key=?',[table,key]).length>0,
+        keys:(table,after)=>query<{record_key:string;stored_value_bytes:number}>('SELECT fact.record_key,coalesce(admission.logical_bytes,length(CAST(fact.value_json AS BLOB))) AS stored_value_bytes FROM sensa_records fact LEFT JOIN sensa_sync_admission_rows_v1 admission ON admission.scope=? AND admission.table_name=fact.table_name AND admission.record_key=fact.record_key WHERE fact.table_name=? AND fact.record_key>? ORDER BY fact.record_key LIMIT 64',[admission.scope!,table,after??'']),
+        rows:(table,keys)=>keys.map(key=>{const stored=this.storedRecord(table,key);if(stored===null)throw Error('sqlite_snapshot_projection_source');return {record_key:key,value_json:this.logicalEncoded(table,stored)};}),
+        plain:(_table,row)=>row.value_json,missing:()=>{throw Error('sqlite_snapshot_projection_source');},
+      });
+      const selectKeys=(table:string,keys:string[])=>{if(!keys.length)return keys;const metadata=new Map(query<{record_key:string;logical_bytes:number}>('SELECT record_key,logical_bytes FROM sensa_sync_admission_rows_v1 WHERE scope=? AND table_name=? AND record_key IN(SELECT value FROM json_each(?))',[admission.scope!,table,JSON.stringify(keys)]).map(row=>[row.record_key,row.logical_bytes]));const selected:string[]=[];let bytes=0;for(const key of keys){const size=metadata.get(key);if(size===undefined)throw Error('sqlite_snapshot_projection_source');if(selected.length&&bytes+size>1024*1024)break;selected.push(key);bytes+=size;}return selected;};
+      const pages=[this.meaningLookup,this.worldBrowseProjection,this.practiceExpressionProjection,this.journeyIdentities].map(projection=>projection.rebuildPages(selectKeys)),done=new Set<number>();
+      while(done.size<pages.length){const processed=batch(()=>{readingProjection=true;this.snapshotReader=projectionReader;const release=projectionReader.beginWindow();try{let records=0;for(const [index,page]of pages.entries()){if(done.has(index))continue;const next=page.next();if(next.done)done.add(index);else{records+=next.value;replicaWork('restore.projectionRecord',next.value);replicaWork('restore.projection.'+index,next.value);}}return records;}finally{release();this.snapshotReader=undefined;readingProjection=false;}});progress(processed);await pause();}
+      let dependencyRecords=0;
+      alive();const publishDependencies=deferReplicaWork();let prepared:Awaited<ReturnType<SqliteSyncDependencies['preparePublication']>>;
+      try{prepared=await this.syncDependencies.preparePublication(admission.scope!,alive,records=>{progress(records-dependencyRecords);dependencyRecords=records;},()=>{changes=this.database.changes(true);});}catch(cause){publishDependencies(false);throw cause;}
+      publishDependencies();alive();
+      const statePut=mutation.puts.find(row=>row.table==='meta'&&row.key==='cloud-sync')!,state=this.decode<CloudSyncState>(statePut.encodedValue),identity=this.decode<import('./store').LibraryIdentity>(identityJson),artifactRevision=(this.decoded<number>('meta','local-artifact-revision')??0)+1;
+      if(!Number.isSafeInteger(artifactRevision)||artifactRevision<1)throw Error('sqlite_artifact_revision_invalid');
+      // No yield, full copy, projector, index rebuild, or scratch deletion in
+      // this final source-fenced transaction.
+      batch(()=>{for(const row of [...plan.puts,{table:'meta' as const,key:'identity',encodedValue:identityJson!},...mutation.puts,{table:'meta' as const,key:'local-artifact-revision',encodedValue:JSON.stringify(encodeBackupValue(artifactRevision))}])run('INSERT INTO sensa_records(table_name,record_key,value_json,content_revision) VALUES(?,?,?,?) ON CONFLICT(table_name,record_key) DO UPDATE SET value_json=excluded.value_json,content_revision=excluded.content_revision',[row.table,row.key,packStoredRecord(row.encodedValue),mutation.contentRevision!]);
+        for(const row of mutation.deletes)run('DELETE FROM sensa_records WHERE table_name=? AND record_key=?',[row.table,row.key]);
+        this.syncDependencies.certifyPreparedRestore(admission,prepared,state,identity,artifactRevision);
+      });selected=true;progress(1);
+      // Still unselected and pending: cleanup is separately bounded. A crash
+      // here leaves the old active library selected, never a resumable stamp.
+      for(;;){const done=batch(()=>candidates.retirePrivateRestore(id));progress(1);if(done)break;await pause();}
+      batch(()=>run('DROP TABLE sensa_private_restore_pending_v1'));alive();
+      this.integrityCheck=undefined;if(this.persistence==='opfs')this.maintainWal();if(this.fatalStorageFailure)throw this.fatalStorageFailure;
+    }catch(cause){if(isFatalSqliteConnectionFailure(cause))this.quarantineConnection(cause as Error);throw cause;}
+    finally{this.snapshotReader=undefined;for(const statement of statements.values())statement.finalize();memo.clear();this.activationMemo=undefined;this.activationTargetLanguages?.clear();this.activationTargetLanguages=undefined;this.activationTargetLanguageBytes=0;this.activationPreparedBodies=undefined;}
+  }
+
   commit(mutation: SqliteMutation): void {
+    if(this.privateRestoreController)throw Error('sqlite_private_restore_busy');
     if(this.closed)throw Error('sqlite_database_closed');
     if(this.fatalStorageFailure)throw this.fatalStorageFailure;
     if(this.integrityFailed)throw new Error('sqlite_integrity_failed');
@@ -932,11 +1039,9 @@ export class SqliteRecordDatabase {
       }
       if(mutation.initialPublication){
         if(!this.initialPublication)throw Error('library_sync_candidate_invalid');
-        this.syncDependencies.clear();
         for(const row of this.database.exec({sql:"SELECT DISTINCT digest FROM sensa_shared_record_content_owners WHERE owner_kind='sync'",rowMode:0,returnValue:'resultRows'}) as string[])removedContent.add(row);
-        this.database.exec("DELETE FROM sensa_shared_record_content_owners WHERE owner_kind='sync'");this.database.exec('DELETE FROM sensa_sync_base');
+        this.database.exec("DELETE FROM sensa_shared_record_content_owners WHERE owner_kind='sync'");
         this.initialPublication.confirm(mutation.initialPublication,mutation);
-        this.initialPublication.discard(mutation.initialPublication,true);
       }
       if(staged)staged.copySharedBaseline(removedContent);
       if(mutation.syncBasePatch){
@@ -1135,11 +1240,10 @@ export class SqliteRecordDatabase {
       const syncState=this.decoded<CloudSyncState>('meta','cloud-sync'),syncIdentity=this.decoded<import('./store').LibraryIdentity>('meta','identity');
       if(syncState&&syncIdentity){
         const artifactRevision=this.decoded<number>('meta','local-artifact-revision')??0;
-        if(mutation.initialPublication)this.initialPublication?.certify(syncState,syncIdentity,artifactRevision);
+        if(mutation.initialPublication)this.initialPublication?.certify(mutation.initialPublication,syncState,syncIdentity,artifactRevision);
         else if(mutation.replicaCandidateRestore)this.replicaCandidateStore?.certifyCheckpoint(mutation.replicaCandidateRestore.id,syncState,syncIdentity,artifactRevision);
         else if(patchAdmission&&previousCertificate)this.syncDependencies.certify(patchAdmission,syncState,syncIdentity,artifactRevision,previousCertificate);
       }
-      if(mutation.initialPublication)this.syncDependencies.discardAdmission('publication:'+mutation.initialPublication);
       if(discardCandidates){this.purgeReplicaCandidates();
         // An uncertain committed upload is a bounded, owner-fenced recovery
         // witness. Signout/account changes cannot expose it or erase its ACK
@@ -1230,6 +1334,7 @@ export class SqliteRecordDatabase {
 
   close(optimize=true): void {
     if(this.closed)return;
+    this.snapshotSource?.cancel();
     this.replicaCandidatesClosing=true;
     this.replicaCandidateStore?.abortAll(Error('sqlite_database_closed'));
     let optimizeFailed=false;
@@ -1238,7 +1343,9 @@ export class SqliteRecordDatabase {
       try{this.database.exec("PRAGMA optimize");}
       catch(cause){if(isFatalSqliteConnectionFailure(cause))this.quarantineConnection(cause as Error);optimizeFailed=true;optimizeFailure=cause;}
     }
-    if(this.initialized&&!this.connectionFailed){
+    // A cancelled private restore is removed as its owned pool after close.
+    // Do not turn cancellation into a whole-candidate SQL delete.
+    if(this.initialized&&!this.connectionFailed&&!this.privateFreshRestore){
       try{this.purgeReplicaCandidates();}
       catch(cause){if(isFatalSqliteConnectionFailure(cause))this.quarantineConnection(cause as Error);optimizeFailed=true;optimizeFailure??=cause;}
     }

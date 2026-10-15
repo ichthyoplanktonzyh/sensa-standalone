@@ -31,7 +31,7 @@ export const sqliteLibrarySchemaVersion = 19;
 /** Durable physical data; every other application table is a derived cache. */
 export const sqliteSourceDataTables=new Set(['sensa_records','sensa_record_tombstones','sensa_sync_base','sensa_shared_record_content','sensa_shared_record_content_owners','sensa_portable_media','sensa_portable_package_media']);
 /** Cross-tab RPC changes must bump this before adding or changing messages. */
-export const sqliteCoordinatorProtocolVersion = 70;
+export const sqliteCoordinatorProtocolVersion = 75;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -102,12 +102,15 @@ export type SqliteSyncBaseEntry = {
 export type SqliteSyncBaseReference=Pick<SqliteSyncBaseEntry,'table'|'key'|'blockRefs'>;
 
 export type SqliteWorkerRequest =
-  | { id: number; kind: "initialize"; namespace?:string|null;requireExisting?:boolean }
+  | {id:number;kind:'snapshotSource';request:import('./sqliteSnapshotSource').SnapshotSourceRequest}
+  | { id: number; kind: "initialize"; namespace?:string|null;requireExisting?:boolean;privateFreshRestore?:boolean }
   | {id:number;kind:'initializeSnapshot';namespace:string;snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot}
   | {id:number;kind:'exportLocalSnapshot';expectedRevision:number}
   | {id:number;kind:'exportOwnCloudSnapshot';fence:import('./replicaCandidateProtocol').ReplicaCandidateFence}
   | {id:number;kind:'initializeOwnCloudSnapshot';namespace:string;snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot;binding:import('./sqlitePortableSnapshot').OwnCloudSnapshotBinding;owner:import('./replicaCandidateProtocol').ReplicaCandidateFence['owner']}
+  | {id:number;kind:'initializeNativeCloudSnapshot';namespace:string;source:File;binding:import('@sensa/contracts/sensa').LibrarySyncNativeSnapshot;owner:import('./replicaCandidateProtocol').ReplicaCandidateFence['owner']}
   | {id:number;kind:'ownCloudBaselinePage';page:import('@sensa/contracts/sensa').LibrarySyncSnapshotPageResult}
+  | {id:number;kind:'installPrivateRestore';mutation:SqliteMutation}
   | { id: number; kind: "close" }
   | { id: number; kind: "get"; table: SqliteLibraryTable; key: string }
   | { id: number; kind: "entries"; table: SqliteLibraryTable }

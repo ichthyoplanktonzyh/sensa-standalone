@@ -9,7 +9,11 @@
     "skipLibCheck": true,
     "verbatimModuleSyntax": true,
     "allowImportingTsExtensions": true,
-    "types": ["node", "vite/client", "chrome"]
+    "types": [
+      "node",
+      "vite/client",
+      "chrome"
+    ]
   },
   "files": [
     "../../scripts/assessment/initialPublicationStageWorker.ts",
@@ -142,6 +146,12 @@
     "../../scripts/support/deltaReceiveTestBrowserEntry.ts",
     "../../scripts/assessment/deltaReceiveStageWorker.ts",
     "../../scripts/assessment/deltaReceiveStageBrowserEntry.ts",
-    "../../scripts/assessment/measureDeltaReceive.mts"
+    "../../scripts/assessment/measureDeltaReceive.mts",
+    "unit/sqlite-snapshot-source.test.mts",
+    "integration/library-admitted-snapshot.test.mts",
+    "browser/library-snapshot-source.spec.ts",
+    "../../scripts/support/snapshotSourceBrowserEntry.ts",
+    "../../scripts/support/snapshotSourceBrowserWorker.ts",
+    "database/library-native-snapshot.spec.ts"
   ]
 }

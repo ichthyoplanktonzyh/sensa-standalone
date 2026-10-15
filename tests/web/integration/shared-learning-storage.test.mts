@@ -395,3 +395,28 @@ test('extra DML inside our encoded INSERT cannot be absorbed by the own-write fe
   expect(injected).toBe(true);expect(fixture.receiver.count('learningRuns')).toBe(0);expect(fixture.receiver.syncBaseReferences()).toEqual([]);
  }finally{fixture.receiver.close(false);}
 });
+
+test('publication activation retains captured shared owners after concurrent live Run detach and rejects conflicting body bytes',async()=>{
+ const sqlite=await sqlite3InitModule(),storage=new sqlite.oo1.DB(':memory:','c'),copy=new SqliteRecordDatabase(sqlite,storage,'memory');copy.initialize();
+ try{
+  const puts=libraryTables.flatMap(table=>database.entries(table).map(row=>({table,key:row.key,encodedValue:row.encodedValue}))),encode=(value:unknown)=>JSON.stringify(encodeBackupValue(value)),owner={subject:crypto.randomUUID(),accountId:crypto.randomUUID()},incarnation='shared-publication';
+  copy.commit({clears:[],deletes:[],puts:[...puts,{table:'meta',key:'service-owner',encodedValue:encode(owner)},{table:'meta',key:'local-incarnation',encodedValue:encode(incarnation)},{table:'meta',key:'local-content-revision',encodedValue:encode(7)}]});
+  const identity=decodeBackupValue(JSON.parse(copy.get('meta','identity')!)),run=copy.entries('learningRuns')[0]!;expect(run).toBeTruthy();
+  const begun=await copy.replicaCandidate({kind:'beginPublication',fence:{identity,owner,incarnation,localRevision:7}});if(begun.kind!=='begun')throw Error('fixture_begin');let after:any=null;for(;;){const page=await copy.replicaCandidate({kind:'publicationPage',id:begun.id,after});if(page.kind!=='publicationPage')throw Error('fixture_page');after=page.next;if(page.done)break;}
+  await copy.replicaCandidate({kind:'admitOwnPublication',id:begun.id,confirmed:true});let detached=false;
+  await copy.replicaCandidate({kind:'preparePublication',id:begun.id},()=>{if(detached)return;detached=true;copy.commit({clears:[],contentRevision:8,deletes:[{table:'learningRuns',key:run.key}],puts:[{table:'meta',key:'local-content-revision',encodedValue:encode(8)}]});});
+  const frozen=storage.exec({sql:'SELECT frozen.digest,frozen.value_json FROM sensa_initial_publication_content frozen JOIN sensa_shared_record_content live ON live.digest=frozen.digest ORDER BY frozen.digest LIMIT 1',rowMode:'object',returnValue:'resultRows'}) as any[];expect(frozen).toHaveLength(1);
+  const row=frozen[0],before=(storage.exec({sql:'SELECT value_json FROM sensa_shared_record_content WHERE digest=?',bind:[row.digest],rowMode:0,returnValue:'resultRows'}) as string[])[0];
+  const state={owner,incarnation,revision:1,checkpointVersion:7,restoreValidationVersion:9,syncedLocalRevision:7,status:'pending',publicationOperationId:begun.id},mutation={initialPublication:begun.id,clears:[],deletes:[],puts:[{table:'meta' as const,key:'cloud-sync',encodedValue:encode(state)}]};
+  // Damage before preparation is a separate source fence; this checks the
+  // immutable same-digest collision at confirmation, then restores exact bytes.
+  storage.exec({sql:'UPDATE sensa_shared_record_content SET value_json=? WHERE digest=?',bind:[packStoredRecord('["string","conflicting immutable bytes"]'),row.digest]});
+  expect(()=>copy.commit(mutation)).toThrow();expect(copy.syncBaseReferences()).toHaveLength(0);expect(copy.get('learningRuns',run.key)).toBeNull();
+  storage.exec({sql:'UPDATE sensa_shared_record_content SET value_json=? WHERE digest=?',bind:[before!,row.digest]});
+  // Shared-body UPDATE invalidates the dependency epoch, so rebuild preparation
+  // through a fresh handler; never refresh the old cached final fence.
+  Reflect.get(copy,'initialPublication').close();Reflect.set(copy,'initialPublication',undefined);await copy.replicaCandidate({kind:'admitOwnPublication',id:begun.id,confirmed:true});await copy.replicaCandidate({kind:'preparePublication',id:begun.id});copy.commit(mutation);
+  expect(copy.syncBaseEntries([{table:'learningRuns',key:run.key}])[0].valueJson).toBe(run.encodedValue);expect(copy.get('learningRuns',run.key)).toBeNull();
+  expect(Number((storage.exec({sql:"SELECT count(*) FROM sensa_shared_record_content_owners WHERE owner_kind='sync' AND table_name='learningRuns' AND record_key=?",bind:[run.key],rowMode:0,returnValue:'resultRows'}) as number[])[0])).toBeGreaterThan(0);
+ }finally{copy.close(false);}
+});

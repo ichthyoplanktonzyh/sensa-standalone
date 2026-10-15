@@ -42,10 +42,15 @@ export class SqliteJourneyIdentityProjection{
   this.rows('INSERT INTO sensa_journey_identity_meta VALUES(1,?)',[version]);this.invalid=false;
  }
  /** Caller holds the facts/projection transaction. */
- rebuild(){
+ rebuild(){for(const _ of this.rebuildPages())void _;}
+ /** Yields bounded rebuild steps for an unselected private generation. */
+ *rebuildPages(selectKeys?:(table:string,keys:string[])=>string[]):Generator<number>{
   if(this.invalid)throw new Error('journey_identity_cache_invalid');
   this.rows('DELETE FROM sensa_journey_identities');this.rows('DELETE FROM sensa_journey_identity_records');
-  this.sourceRows((table,row)=>this.replace(table,row.record_key,row.value_json));
+  yield 0;for(const table of journeyIdentityTables){let after='';for(;;){
+   const raw=this.rows(`SELECT record_key${this.decodedReader?.()?'':',value_json'} FROM sensa_records WHERE table_name=? AND record_key>? ORDER BY record_key LIMIT ${selectKeys?64:16}`,[table,after]),keys=raw.map(row=>row.record_key),selected=selectKeys?selectKeys(table,keys):keys;if(!selected.length)break;
+   const rows=new Map(raw.map(row=>[row.record_key,row]));for(const key of selected)this.replace(table,key,rows.get(key)!.value_json??'');after=selected.at(-1)!;yield selected.length;
+  }}
  }
  private sourceRows(consume:(table:JourneyIdentityTable,row:Record<string,any>)=>void){
   for(const table of journeyIdentityTables){

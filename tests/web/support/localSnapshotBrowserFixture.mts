@@ -3,8 +3,8 @@ import {once} from 'node:events';
 import {resolve} from 'node:path';
 import {createServer as viteServer} from 'vite';
 import type {Browser} from 'playwright-core';
-export async function createLocalSnapshotBrowserFixture(browser:Browser){
- const root=process.cwd(),entry=resolve(root,'scripts/support/localSnapshotBrowserEntry.ts');
+export async function createLocalSnapshotBrowserFixture(browser:Browser,entryPath='scripts/support/localSnapshotBrowserEntry.ts'){
+ const root=process.cwd(),entry=resolve(root,entryPath);
  const vite=await viteServer({root:resolve(root,'apps/web'),configFile:resolve(root,'apps/web/vite.config.ts'),logLevel:'error',server:{host:'127.0.0.1',middlewareMode:true,hmr:false,fs:{allow:[root]}}});
  const server=createServer((req,res)=>{if(req.url==='/'){res.writeHead(200,{'content-type':'text/html','cache-control':'no-store'});res.end(`<!doctype html><title>Local snapshot fixture</title><script type="module">import * as api from '/@fs/${entry.replace(/^\/+/, '')}';window.snapshotApi=api;</script>`);}else vite.middlewares(req,res,()=>{res.writeHead(404);res.end();});});
  server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();if(!address||typeof address==='string')throw Error('snapshot_loopback_port_missing');

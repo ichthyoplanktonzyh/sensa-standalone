@@ -22,6 +22,7 @@ type SchemaRow={type:string;name:string;tbl_name:string;sql:string|null};
 const invalid=(reason:string):never=>{throw Error(`sqlite_snapshot_${reason}`);};
 const statisticsSql=new Set(['CREATE TABLE sqlite_stat1(tbl,idx,stat)','CREATE TABLE sqlite_stat4(tbl,idx,neq,nlt,ndlt,sample)']);
 const definitions=(raw:Database)=>(raw.exec({sql:'SELECT type,name,tbl_name,sql FROM sqlite_schema ORDER BY type,name',rowMode:'object',returnValue:'resultRows'}) as SchemaRow[]).filter(row=>!(row.type==='table'&&row.sql!==null&&statisticsSql.has(row.sql)));
+export {definitions as portableSnapshotSchema,projectionVersions as portableSnapshotVersions,restrict as restrictPortableSnapshot};
 const scalar=(raw:Database,sql:string)=>raw.selectValue(sql);
 const projectionVersions=(raw:Database)=>[
  ...['sensa_meaning_lookup_meta','sensa_world_browse_meta','sensa_practice_expression_meta','sensa_journey_identity_meta'].map(table=>scalar(raw,`SELECT version FROM ${table} WHERE id=1`)),

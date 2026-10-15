@@ -40,6 +40,7 @@ const retryableOwnerReads=new Set<SqliteWorkerInput['kind']>([
 ]);
 
 export interface CoordinatedSqliteBackend {
+  snapshotSource?(request:import('./sqliteSnapshotSource').SnapshotSourceRequest):Promise<import('./sqliteSnapshotSource').SnapshotSourceResult>;
   exportLocalSnapshot?(expectedRevision:number):Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;
   exportOwnCloudSnapshot?(fence:import('./replicaCandidateProtocol').ReplicaCandidateFence):Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;
   replicaCandidate?(request:import('./replicaCandidateProtocol').ReplicaCandidateRequest,onProgress?:ReplicaCandidateProgressObserver):Promise<import('./replicaCandidateProtocol').ReplicaCandidateResponse>;
@@ -156,6 +157,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
   }
 
   replicaCandidate(request:import('./replicaCandidateProtocol').ReplicaCandidateRequest,onProgress?:ReplicaCandidateProgressObserver):Promise<import('./replicaCandidateProtocol').ReplicaCandidateResponse>{onProgress=replicaCandidateProgressPhase(request.kind)?onProgress:undefined;return this.call({kind:'replicaCandidate',request,...(onProgress?{reportProgress:true}:{})},onProgress) as Promise<import('./replicaCandidateProtocol').ReplicaCandidateResponse>;}
+  snapshotSource(request:import('./sqliteSnapshotSource').SnapshotSourceRequest){return this.call({kind:'snapshotSource',request}) as Promise<import('./sqliteSnapshotSource').SnapshotSourceResult>;}
   exportLocalSnapshot(expectedRevision:number){return this.call({kind:'exportLocalSnapshot',expectedRevision}) as Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;}
   exportOwnCloudSnapshot(fence:import('./replicaCandidateProtocol').ReplicaCandidateFence){return this.call({kind:'exportOwnCloudSnapshot',fence}) as Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;}
 
@@ -620,9 +622,11 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
     try{this.assertSelected();}catch(cause){return Promise.reject(cause);}
     switch (input.kind) {
       case 'initialize': return backend.initialize();
+      case 'installPrivateRestore':throw Error('sqlite_private_restore_boundary');
       case 'initializeSnapshot':throw Error('sqlite_snapshot_requires_isolated_worker');
-      case 'initializeOwnCloudSnapshot':case 'ownCloudBaselinePage':throw Error('sqlite_snapshot_requires_isolated_worker');
+      case 'initializeOwnCloudSnapshot':case 'initializeNativeCloudSnapshot':case 'ownCloudBaselinePage':throw Error('sqlite_snapshot_requires_isolated_worker');
       case 'exportLocalSnapshot':return backend.exportLocalSnapshot?.(input.expectedRevision)??Promise.reject(Error('sqlite_snapshot_unavailable'));
+      case 'snapshotSource':return backend.snapshotSource?.(input.request)??Promise.reject(Error('sqlite_snapshot_unavailable'));
       case 'exportOwnCloudSnapshot':return backend.exportOwnCloudSnapshot?.(input.fence)??Promise.reject(Error('sqlite_snapshot_unavailable'));
       case 'get': return backend.get(input.table, input.key);
       case 'entries': return backend.entries(input.table);

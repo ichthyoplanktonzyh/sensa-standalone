@@ -158,9 +158,11 @@ export class SqliteMeaningLookupProjection{
     WHERE registry_key IN (SELECT value FROM json_each(?))`,[JSON.stringify(registryKeys)]))affected.add(row.meaning_id);
   if(affected.size)this.replace([...affected]);
  }
- rebuild():void{
+ rebuild():void{for(const _ of this.rebuildPages())void _;}
+ /** Yields bounded rebuild steps for an unselected private generation. */
+ *rebuildPages(selectKeys?:(table:string,keys:string[])=>string[]):Generator<number>{
   for(const table of ['connections','dependencies','versions','search','documents','expressions'])this.write(`DELETE FROM sensa_meaning_lookup_${table}`);
-  let after='';for(;;){const ids=this.rows("SELECT record_key FROM sensa_records WHERE table_name='semanticMeanings' AND record_key>? ORDER BY record_key LIMIT 64",[after]).map(row=>row.record_key);if(!ids.length)break;this.replace(ids);after=ids.at(-1)!;}
+  yield 0;let after='';for(;;){const keys=this.rows("SELECT record_key FROM sensa_records WHERE table_name='semanticMeanings' AND record_key>? ORDER BY record_key LIMIT 64",[after]).map(row=>row.record_key),ids=selectKeys?selectKeys('semanticMeanings',keys):keys;if(!ids.length)break;this.replace(ids);after=ids.at(-1)!;yield ids.length;}
   this.write('INSERT INTO sensa_meaning_lookup_meta VALUES(1,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version',[meaningLookupProjectionVersion]);
  }
  query(raw:string):MeaningLookupResult{

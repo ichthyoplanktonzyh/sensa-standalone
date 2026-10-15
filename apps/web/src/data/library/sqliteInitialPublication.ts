@@ -11,7 +11,8 @@ import type {ReplicaCandidateFence,InitialPublicationPage,InitialPublicationStat
 import {SqliteSyncDependencies,syncAdmission,type SyncAdmission} from './sqliteSyncDependencies';
 import type {CloudSyncState} from './cloudSync';
 import type {LibraryIdentity} from './store';
-import type {SqliteLibraryTable,SqliteMutation} from './sqliteProtocol';
+import {sqliteSyncBaseSchema,type SqliteLibraryTable,type SqliteMutation} from './sqliteProtocol';
+import {SqlitePublicationBaseline} from './sqlitePublicationBaseline';
 const utf8=(text:string)=>new TextEncoder().encode(text).length;
 const pageBytes=4*1024*1024,recordBytes=90*1024*1024,logicalBytes=librarySyncLogicalByteLimit,storedBytes=cloudScratchPayloadBytes;
 type Position={table:SqliteLibraryTable;key:string}|null;
@@ -28,7 +29,7 @@ type StoredBody={digest:string;value_json:string;refs_json:string|null};
 type Block={hash:string;data:string;plainBytes:number;storedBytes:number;sourceJson:string};
 type FrozenFragment=({digest:string}|{table:SqliteLibraryTable;key:string;segment:number})&{start:number;length:number};
 type StoredBlock={hash:string;data:string;source_json:string|null;plain_bytes:number;stored_bytes:number};
-type Header={id:string;fence:string;after_key:string;state:string;records:number;logical_bytes:number;stored_bytes:number;maximum_page_bytes:number;unique_plain_bytes:number;unique_stored_bytes:number;block_count:number;last_page_json:string|null;allocated_baseline:number|null};
+type Header={id:string;fence:string;after_key:string;state:string;records:number;logical_bytes:number;stored_bytes:number;maximum_page_bytes:number;unique_plain_bytes:number;unique_stored_bytes:number;block_count:number;last_page_json:string|null;allocated_baseline:number|null;source_epoch:number;authorized_epoch:number;baseline_started:number;baseline_records:number;baseline_after:string};
 /** Disposable fixed-revision source capture. Rows never become facts or a cloud head. */
 export class SqliteInitialPublication{
  private ready=false;
@@ -37,12 +38,25 @@ export class SqliteInitialPublication{
  private admissionPolicy:'external'|'own-cloud'|'captured-own'|undefined;
  private indexedRecords=0;
  private dependencies:SqliteSyncDependencies;
- constructor(private db:Database,private assertFence:(f:ReplicaCandidateFence)=>void,private get:(table:SqliteLibraryTable,key:string)=>string|null,private assertOwner:(f:ReplicaCandidateFence)=>void,private checkSpace:()=>Promise<void>=async()=>{}){this.dependencies=new SqliteSyncDependencies(db);}
+ private baseline:SqlitePublicationBaseline;
+ private validatedEpoch:number|undefined;
+ private preparedArtifact:number|undefined;
+ private preparing:{id:string;controller:AbortController;promise:Promise<void>}|undefined;
+ private closing=false;
+ constructor(private db:Database,private assertFence:(f:ReplicaCandidateFence)=>void,private get:(table:SqliteLibraryTable,key:string)=>string|null,private assertOwner:(f:ReplicaCandidateFence)=>void,private checkSpace:()=>Promise<void>=async()=>{},private artifactRevision:()=>number=()=>0){this.dependencies=new SqliteSyncDependencies(db);this.baseline=new SqlitePublicationBaseline(db,this.dependencies,(id,ownedChanges=0)=>{if(this.preparing?.controller.signal.aborted)throw Error('library_sync_cancelled');const h=this.header(id,true);if(h.state!=='validated'||(this.validatedEpoch??-1)+ownedChanges!==h.source_epoch||this.preparedArtifact!==this.artifactRevision())throw Error('library_sync_candidate_invalid');return {epoch:h.source_epoch,records:h.records,started:!!h.baseline_started,preparedRecords:h.baseline_records,after:JSON.parse(h.baseline_after) as Position};},()=>{if(this.preparing)this.assertAllocatedCapacity(this.header(this.preparing.id,true));},epoch=>{this.validatedEpoch=epoch;});}
  private rows<T>(sql:string,bind:(string|number|null)[]=[]):T[]{
+  // Bound each captured/prepared range before combining it. A final merge
+  // sees at most two key pages, rather than sorting an entire frozen source.
+  if(sql.startsWith('SELECT')&&sql.includes('FROM sensa_initial_publication_rows')&&(!/rowid/u.test(sql)||/value_json|refs_json/u.test(sql))){
+   const prepared=sql.replace(/FROM sensa_initial_publication_rows\b/u,`FROM (SELECT header.id,prepared.table_name,prepared.record_key,prepared.value_json,prepared.block_refs_json AS refs_json,CASE WHEN shared.record_key IS NULL THEN 0 ELSE 1 END AS shared FROM sensa_initial_publication header JOIN sensa_initial_publication_baseline prepared LEFT JOIN sensa_initial_publication_shared shared ON shared.id=header.id AND shared.table_name=prepared.table_name AND shared.record_key=prepared.record_key WHERE header.baseline_started=1 AND header.state IN('sealed','validated'))`);
+   const order=sql.match(/ ORDER BY ([\w.,]+)(?: LIMIT \d+)?$/u)?.[1].replace(/\brow\./gu,''),limit=sql.match(/ LIMIT (\d+)$/u)?.[1];
+   sql=`SELECT * FROM (${sql}) UNION ALL SELECT * FROM (${prepared})${order?' ORDER BY '+order:''}${limit?' LIMIT '+limit:''}`;bind=[...bind,...bind];
+  }
   let statement=this.statements.get(sql);if(!statement){statement=this.db.prepare(sql);this.statements.set(sql,statement);}statement.reset(true);if(bind.length)statement.bind(bind);
   const result:T[]=[];try{while(statement.step())result.push(statement.get({}) as T);return result;}finally{statement.reset(true);}
  }
- close(){for(const statement of this.statements.values())statement.finalize();this.statements.clear();this.dependencies.close();}
+ close(){this.closing=true;this.preparing?.controller.abort();for(const statement of this.statements.values())statement.finalize();this.statements.clear();this.baseline.close();this.dependencies.close();}
+ async settle(){this.closing=true;this.preparing?.controller.abort();await this.preparing?.promise.catch(()=>{});}
  private ensure(){if(this.ready)return;this.db.exec(`
  CREATE TABLE IF NOT EXISTS sensa_initial_publication(id TEXT PRIMARY KEY,fence TEXT NOT NULL,after_key TEXT NOT NULL,state TEXT NOT NULL,records INTEGER NOT NULL DEFAULT 0,logical_bytes INTEGER NOT NULL DEFAULT 0,stored_bytes INTEGER NOT NULL DEFAULT 0,maximum_page_bytes INTEGER NOT NULL DEFAULT 0,unique_plain_bytes INTEGER NOT NULL DEFAULT 0,unique_stored_bytes INTEGER NOT NULL DEFAULT 0,block_count INTEGER NOT NULL DEFAULT 0,last_page_json TEXT);
  CREATE TABLE IF NOT EXISTS sensa_initial_publication_rows(id TEXT NOT NULL,table_name TEXT NOT NULL,record_key TEXT NOT NULL,value_json TEXT NOT NULL,refs_json TEXT NOT NULL,shared INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(id,table_name,record_key));
@@ -55,14 +69,23 @@ export class SqliteInitialPublication{
  // blocks have an empty data column and only a locator into the frozen source.
  if(!this.rows<{name:string}>('PRAGMA table_info(sensa_initial_publication_blocks)').some(row=>row.name==='source_json'))this.db.exec('ALTER TABLE sensa_initial_publication_blocks ADD COLUMN source_json TEXT');
  if(!this.rows<{name:string}>('PRAGMA table_info(sensa_initial_publication)').some(row=>row.name==='allocated_baseline'))this.db.exec('ALTER TABLE sensa_initial_publication ADD COLUMN allocated_baseline INTEGER');
+ if(!this.rows<{name:string}>('PRAGMA table_info(sensa_initial_publication)').some(row=>row.name==='source_epoch'))this.db.exec('ALTER TABLE sensa_initial_publication ADD COLUMN source_epoch INTEGER NOT NULL DEFAULT 0');
+ const columns=new Set(this.rows<{name:string}>('PRAGMA table_info(sensa_initial_publication)').map(row=>row.name));
+ for(const [name,type] of [['authorized_epoch','INTEGER NOT NULL DEFAULT 0'],['baseline_started','INTEGER NOT NULL DEFAULT 0'],['baseline_records','INTEGER NOT NULL DEFAULT 0'],['baseline_after',"TEXT NOT NULL DEFAULT 'null'"]])if(!columns.has(name))this.db.exec(`ALTER TABLE sensa_initial_publication ADD COLUMN ${name} ${type}`);
+ this.db.exec(sqliteSyncBaseSchema.replace('sensa_sync_base','sensa_initial_publication_baseline'));this.db.exec('CREATE TABLE IF NOT EXISTS sensa_initial_publication_shared(id TEXT NOT NULL,table_name TEXT NOT NULL,record_key TEXT NOT NULL,PRIMARY KEY(id,table_name,record_key))');
+ for(const action of ['INSERT','UPDATE','DELETE'])this.db.exec(`CREATE TRIGGER IF NOT EXISTS sensa_initial_publication_shared_${action.toLowerCase()}_epoch AFTER ${action} ON sensa_initial_publication_shared BEGIN UPDATE sensa_initial_publication SET source_epoch=source_epoch+1 WHERE id=${action==='DELETE'?'OLD':'NEW'}.id AND state NOT IN('filling','retiring');END`);
+ for(const action of ['INSERT','UPDATE','DELETE'])this.db.exec(`CREATE TRIGGER IF NOT EXISTS sensa_publication_baseline_source_${action.toLowerCase()} AFTER ${action} ON sensa_initial_publication_baseline BEGIN UPDATE sensa_initial_publication SET source_epoch=source_epoch+1 WHERE baseline_started=1 AND state NOT IN('filling','retiring');END`);
+
+ for(const table of ['rows','blocks','content','owners'])for(const action of ['INSERT','UPDATE','DELETE'])this.db.exec(`CREATE TRIGGER IF NOT EXISTS sensa_initial_publication_${table}_${action.toLowerCase()}_epoch AFTER ${action} ON sensa_initial_publication_${table} WHEN (SELECT state FROM sensa_initial_publication WHERE id=${action==='DELETE'?'OLD':'NEW'}.id) NOT IN('filling','retiring') BEGIN UPDATE sensa_initial_publication SET source_epoch=source_epoch+1 WHERE id=${action==='DELETE'?'OLD':'NEW'}.id;END`);
+ this.dependencies.ensure();for(const action of ['INSERT','UPDATE','DELETE'])this.db.exec(`CREATE TRIGGER IF NOT EXISTS sensa_initial_publication_admission_${action.toLowerCase()}_epoch AFTER ${action} ON sensa_sync_admission_rows_v1 BEGIN UPDATE sensa_initial_publication SET source_epoch=source_epoch+1 WHERE 'publication:'||id=${action==='DELETE'?'OLD':'NEW'}.scope AND state NOT IN('filling','retiring');END`);
  this.ready=true;}
  private allocatedBytes(){return (Number(this.db.selectValue('PRAGMA page_count'))-Number(this.db.selectValue('PRAGMA freelist_count')))*Number(this.db.selectValue('PRAGMA page_size'));}
  private assertAllocatedCapacity(h:Header){if(this.allocatedBytes()-(h.allocated_baseline??0)>cloudScratchAllocatedBytes)throw Error('library_sync_capacity');}
- private header(id:string,confirmed=false){this.ensure();const h=this.rows<Header>('SELECT * FROM sensa_initial_publication WHERE id=?',[id])[0];if(!h)throw Error('library_sync_candidate_invalid');if(confirmed||h.state!=='filling')this.assertOwner(JSON.parse(h.fence));else this.assertFence(JSON.parse(h.fence));return h;}
+ private header(id:string,confirmed=false){if(this.closing)throw Error('sqlite_database_closed');this.ensure();const h=this.rows<Header>('SELECT * FROM sensa_initial_publication WHERE id=?',[id])[0];if(!h||h.state==='retiring'||h.source_epoch!==h.authorized_epoch)throw Error('library_sync_candidate_invalid');if(confirmed||h.state!=='filling')this.assertOwner(JSON.parse(h.fence));else this.assertFence(JSON.parse(h.fence));return h;}
  begin(fence:ReplicaCandidateFence):string{
-  this.admission=undefined;this.admissionPolicy='captured-own';this.indexedRecords=0;this.assertFence(fence);this.ensure();const id=crypto.randomUUID(),fenceJson=JSON.stringify(fence);
+  this.preparing?.controller.abort();this.validatedEpoch=undefined;this.preparedArtifact=undefined;this.admission=undefined;this.admissionPolicy='captured-own';this.indexedRecords=0;this.assertFence(fence);this.ensure();const id=crypto.randomUUID(),fenceJson=JSON.stringify(fence);
   this.db.exec('BEGIN IMMEDIATE');try{
-   this.db.exec('DELETE FROM sensa_initial_publication;DELETE FROM sensa_initial_publication_rows;DELETE FROM sensa_initial_publication_blocks;DELETE FROM sensa_initial_publication_content;DELETE FROM sensa_initial_publication_owners');
+   this.db.exec('DELETE FROM sensa_initial_publication;DELETE FROM sensa_initial_publication_rows;DELETE FROM sensa_initial_publication_blocks;DELETE FROM sensa_initial_publication_content;DELETE FROM sensa_initial_publication_owners;DELETE FROM sensa_initial_publication_shared');
    this.dependencies.ensure();this.rows("DELETE FROM sensa_sync_admission_v1 WHERE scope LIKE 'publication:%'");
    const baseline=this.allocatedBytes();
    this.rows("INSERT INTO sensa_initial_publication(id,fence,after_key,state,stored_bytes,allocated_baseline) VALUES(?,?,'null','filling',?,?)",[id,fenceJson,utf8(id)+utf8(fenceJson)+4+7,baseline]);this.admission=this.dependencies.spoolAdmission('publication:'+id,true);this.db.exec('COMMIT');
@@ -228,10 +251,10 @@ export class SqliteInitialPublication{
  private plain(id:string,row:{value_json:string;shared:number}){const text=unpackStoredRecord(row.value_json,undefined,recordBytes);if(!row.shared)return text;return JSON.stringify(expandSharedRecordContent(JSON.parse(text),digest=>{const body=this.rows<{value_json:string}>('SELECT value_json FROM sensa_initial_publication_content WHERE id=? AND digest=?',[id,digest])[0];return body?unpackStoredRecord(body.value_json,undefined,recordBytes):undefined;}));}
  stats(id:string,confirmed=false):InitialPublicationStats{this.ensure();const h=confirmed?this.rows<Header>('SELECT * FROM sensa_initial_publication WHERE id=?',[id])[0]:this.header(id);if(!h)throw Error('library_sync_candidate_invalid');if(confirmed)this.assertOwner(JSON.parse(h.fence));return {records:h.records,logicalBytes:h.logical_bytes,uniqueBlockPlainBytes:h.unique_plain_bytes,uniqueBlockStoredBytes:h.unique_stored_bytes,storedPayloadBytes:h.stored_bytes,blocks:h.block_count,maximumPageBytes:h.maximum_page_bytes};}
  async validate(id:string,confirmed=false,ownCloud=false,onProgress?:import('./replicaCandidateProtocol').ReplicaCandidateProgressObserver):Promise<InitialPublicationStats>{
-  const policy=ownCloud?'own-cloud':'external',h=this.header(id,confirmed);if(h.state==='validated'&&this.admission&&this.admissionPolicy===policy)return this.stats(id,confirmed);if(h.state!=='sealed'&&h.state!=='validated')throw Error('library_sync_candidate_invalid');
+  const policy=ownCloud?'own-cloud':'external',h=this.header(id,confirmed);if(h.state==='validated'&&this.admission&&this.admissionPolicy===policy){if(this.validatedEpoch!==h.source_epoch)throw Error('library_sync_candidate_invalid');return this.stats(id,confirmed);}if(h.state!=='sealed'&&h.state!=='validated')throw Error('library_sync_candidate_invalid');
   if(ownCloud&&this.admissionPolicy==='captured-own'&&this.admission&&this.indexedRecords===h.records){
    if(h.stored_bytes+utf8('validated')-utf8(h.state)>storedBytes)throw Error('library_sync_capacity');
-   this.rows("UPDATE sensa_initial_publication SET state='validated',stored_bytes=stored_bytes+? WHERE id=?",[utf8('validated')-utf8(h.state),id]);this.admissionPolicy='own-cloud';return this.stats(id,confirmed);
+   this.rows("UPDATE sensa_initial_publication SET state='validated',stored_bytes=stored_bytes+? WHERE id=?",[utf8('validated')-utf8(h.state),id]);this.admissionPolicy='own-cloud';this.validatedEpoch=this.header(id,confirmed).source_epoch;return this.stats(id,confirmed);
   }
   // No other Worker task can mutate facts until the existing 64-row yield.
   // Protect that synchronous read chunk once, then renew after every yield.
@@ -239,7 +262,7 @@ export class SqliteInitialPublication{
   // A cold recovery can add missing observer rows. Unknown old baselines use
   // the conservative whole-DB page bound; rejected sources remain retained.
   await this.checkSpace();alive();this.assertAllocatedCapacity(h);
-  const admission=ownCloud?this.dependencies.spoolAdmission('publication:'+id,false,bytes=>{const current=this.header(id,confirmed);if(current.stored_bytes+bytes>storedBytes)throw Error('library_sync_capacity');this.rows('UPDATE sensa_initial_publication SET stored_bytes=stored_bytes+? WHERE id=?',[bytes,id]);this.assertAllocatedCapacity(current);}):syncAdmission();this.dependencies.ensure();
+  const admission=ownCloud?this.dependencies.spoolAdmission('publication:'+id,false,(bytes,records)=>{const current=this.rows<Header>('SELECT * FROM sensa_initial_publication WHERE id=?',[id])[0];if(!current||current.source_epoch!==current.authorized_epoch+records)throw Error('library_sync_candidate_invalid');this.assertOwner(JSON.parse(current.fence));if(current.stored_bytes+bytes>storedBytes)throw Error('library_sync_capacity');this.rows('UPDATE sensa_initial_publication SET stored_bytes=stored_bytes+?,authorized_epoch=source_epoch WHERE id=?',[bytes,id]);this.assertAllocatedCapacity(current);}):syncAdmission();this.dependencies.ensure();
   const pageObservations=new Map<string,{admitted:number;stored_bytes:number}>();
   const reader=sealedRecordReader({alive,beforePage:alive,
    get:(table,key)=>this.rows<{record_key:string;value_json:string;shared:number}>('SELECT record_key,value_json,shared FROM sensa_initial_publication_rows WHERE id=? AND table_name=? AND record_key=?',[id,table,key])[0],
@@ -268,19 +291,53 @@ export class SqliteInitialPublication{
    if(count%64)onProgress?.({phase:'publication-validation',completed:count});
   }else{const {validateLibraryRestoreRecordsCooperatively}=await import('./backupValidation');await validateLibraryRestoreRecordsCooperatively(reader);}protectedChunk=false;alive();admission.flush?.();
   const stateDelta=utf8('validated')-utf8(h.state);if(this.header(id,confirmed).stored_bytes+stateDelta>storedBytes)throw Error('library_sync_capacity');
-  this.rows("UPDATE sensa_initial_publication SET state='validated',stored_bytes=stored_bytes+? WHERE id=?",[stateDelta,id]);this.admission=admission;this.admissionPolicy=policy;return this.stats(id,confirmed);
+  this.rows("UPDATE sensa_initial_publication SET state='validated',stored_bytes=stored_bytes+? WHERE id=?",[stateDelta,id]);this.admission=admission;this.admissionPolicy=policy;this.validatedEpoch=this.header(id,confirmed).source_epoch;return this.stats(id,confirmed);
  }
+ async prepare(id:string,onProgress?:import('./replicaCandidateProtocol').ReplicaCandidateProgressObserver):Promise<void>{
+  if(this.preparing){if(this.preparing.id!==id)throw Error('library_sync_candidate_invalid');return this.preparing.promise;}
+  const h=this.header(id,true);if(h.state!=='validated'||!this.admission||this.admissionPolicy!=='own-cloud')throw Error('library_sync_candidate_invalid');
+  this.preparedArtifact??=this.artifactRevision();const controller=new AbortController();let resolve!:()=>void,reject!:(cause:unknown)=>void;const promise=new Promise<void>((yes,no)=>{resolve=yes;reject=no;});this.preparing={id,controller,promise};
+  void(async()=>{try{await this.checkSpace();await this.baseline.prepare(id,this.admission!,records=>onProgress?.({phase:'publication-preparation',completed:records}));resolve();}catch(cause){reject(cause);}finally{this.preparing=undefined;}})();return promise;
+ }
+ cancelPreparation(id:string){if(this.preparing?.id===id)this.preparing.controller.abort();}
  /** Inside the sole baseline/state transaction; no live fact is rewritten. */
  confirm(id:string,mutation:SqliteMutation){
   this.ensure();const h=this.rows<Header>('SELECT * FROM sensa_initial_publication WHERE id=?',[id])[0];if(!h)throw Error('library_sync_candidate_invalid');const fence=JSON.parse(h.fence) as ReplicaCandidateFence;this.assertOwner(fence);
   if(h.state!=='validated'||mutation.syncBaseReplacement||mutation.syncBasePatch||mutation.replicaCandidateRestore||mutation.contentRevision!==undefined||mutation.clears.length||mutation.deletes.some(row=>row.table!=='meta'||row.key!=='local-reset')||mutation.puts.some(row=>row.table!=='meta'||row.key!=='cloud-sync'))throw Error('library_sync_candidate_invalid');
   const stateRow=mutation.puts.find(row=>row.key==='cloud-sync');if(!stateRow)throw Error('library_sync_candidate_invalid');
   const state=decodeBackupValue(JSON.parse(stateRow.encodedValue));if(state.publicationOperationId!==id||state.syncedLocalRevision!==fence.localRevision||!['synced','pending'].includes(state.status))throw Error('library_sync_candidate_invalid');
+  this.baseline.assert(id);
+  if(this.rows('SELECT 1 FROM sensa_initial_publication_content frozen JOIN sensa_shared_record_content body ON body.digest=frozen.digest WHERE frozen.id=? AND body.value_json<>frozen.value_json LIMIT 1',[id]).length)throw Error('sqlite_shared_content_invalid');
   this.rows('INSERT INTO sensa_shared_record_content SELECT digest,value_json FROM sensa_initial_publication_content WHERE id=? ON CONFLICT DO NOTHING',[id]);
   this.rows("INSERT INTO sensa_shared_record_content_owners SELECT 'sync',table_name,record_key,digest FROM sensa_initial_publication_owners WHERE id=?",[id]);
-  this.rows('INSERT INTO sensa_sync_base SELECT table_name,record_key,value_json,refs_json FROM sensa_initial_publication_rows WHERE id=? AND shared=1',[id]);
-  this.rows('INSERT INTO sensa_sync_base SELECT table_name,record_key,value_json,refs_json FROM sensa_initial_publication_rows WHERE id=? AND shared=0',[id]);
+  this.baseline.activate(id);this.rows("UPDATE sensa_initial_publication SET state='retiring' WHERE id=?",[id]);this.ready=false;
  }
- certify(state:CloudSyncState,identity:LibraryIdentity,artifactRevision:number){if(this.admission)this.dependencies.certify(this.admission,state,identity,artifactRevision);}
- discard(id:string,keepAdmission=false){if(!keepAdmission)this.dependencies.discardAdmission('publication:'+id);for(const table of ['sensa_initial_publication_owners','sensa_initial_publication_content','sensa_initial_publication_rows','sensa_initial_publication_blocks','sensa_initial_publication'])this.db.exec({sql:`DELETE FROM ${table} WHERE id=?`,bind:[id]});}
+ certify(id:string,state:CloudSyncState,identity:LibraryIdentity,artifactRevision:number){if(!this.admission)throw Error('library_sync_candidate_invalid');this.dependencies.certifyPreparedPublication(this.admission,this.baseline.certificateClock(id),state,identity,artifactRevision);}
+ /** One RPC retires at most 128 private rows and 1 MiB of payload. An
+  * oversized existing row retires alone. No live fact or selected base is deleted. */
+ retireConfirmed(id:string,selected:()=>void):boolean{
+  const alive=()=>{if(this.closing)throw Error('sqlite_database_closed');selected();const h=this.rows<Header>('SELECT * FROM sensa_initial_publication WHERE id=?',[id])[0];if(h){this.assertOwner(JSON.parse(h.fence));if(h.state!=='retiring')throw Error('library_sync_candidate_invalid');}return h;};
+  if(!alive())return true;
+  const bounded=<T extends {bytes:number}>(sql:string,bind:(string|number)[]=[])=>{
+   let statement=this.statements.get(sql);if(!statement){statement=this.db.prepare(sql);this.statements.set(sql,statement);}statement.reset(true);if(bind.length)statement.bind(bind);
+   let bytes=0;const batch:T[]=[];try{while(statement.step()){const row=statement.get({}) as T;if(batch.length&&bytes+row.bytes>1024*1024)break;batch.push(row);bytes+=row.bytes;if(bytes>=1024*1024)break;}return batch;}finally{statement.reset(true);}
+  };
+  const remove=(sql:string,bind:(string|number)[])=>{this.db.exec('BEGIN IMMEDIATE');try{if(!alive())throw Error('library_sync_candidate_invalid');this.rows(sql,bind);this.db.exec('COMMIT');}catch(cause){this.db.exec('ROLLBACK');throw cause;}};
+  for(const [table,payload]of [
+   ['sensa_initial_publication_shared','length(CAST(table_name||record_key AS BLOB))'],
+   ['sensa_initial_publication_owners','length(CAST(table_name||record_key||digest AS BLOB))'],
+   ['sensa_initial_publication_content','length(CAST(value_json AS BLOB))+coalesce(length(CAST(refs_json AS BLOB)),0)'],
+   ['sensa_initial_publication_rows','length(CAST(value_json AS BLOB))+length(CAST(refs_json AS BLOB))'],
+   ['sensa_initial_publication_blocks','length(CAST(data AS BLOB))+coalesce(length(CAST(source_json AS BLOB)),0)'],
+  ]){
+   const keys=bounded<{rowid:number;bytes:number}>(`SELECT rowid,${payload} AS bytes FROM main.${table} WHERE id=? LIMIT 128`,[id]);
+   if(keys.length){remove(`DELETE FROM ${table} WHERE id=? AND rowid IN(SELECT value FROM json_each(?))`,[id,JSON.stringify(keys.map(row=>row.rowid))]);return false;}
+  }
+  const scope='publication:'+id,keys=bounded<{table_name:string;record_key:string;bytes:number}>('SELECT table_name,record_key,metadata_bytes AS bytes FROM sensa_sync_admission_rows_v1 WHERE scope=? ORDER BY table_name,record_key LIMIT 128',[scope]);
+  if(keys.length){remove("DELETE FROM sensa_sync_admission_rows_v1 WHERE scope=? AND(table_name,record_key) IN(SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]') FROM json_each(?))",[scope,JSON.stringify(keys.map(row=>[row.table_name,row.record_key]))]);return false;}
+  const retired=this.rows("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='sensa_initial_publication_retired_base'").length;
+  if(retired){const keys=bounded<{rowid:number;bytes:number}>('SELECT rowid,length(CAST(value_json AS BLOB))+length(CAST(block_refs_json AS BLOB)) AS bytes FROM sensa_initial_publication_retired_base LIMIT 128');if(keys.length){remove('DELETE FROM sensa_initial_publication_retired_base WHERE rowid IN(SELECT value FROM json_each(?))',[JSON.stringify(keys.map(row=>row.rowid))]);return false;}}
+  this.db.exec('BEGIN IMMEDIATE');try{if(!alive())throw Error('library_sync_candidate_invalid');if(retired)this.db.exec('DROP TABLE sensa_initial_publication_retired_base');this.rows('DELETE FROM sensa_sync_admission_v1 WHERE scope=?',[scope]);this.rows('DELETE FROM sensa_initial_publication WHERE id=?',[id]);this.db.exec('COMMIT');return true;}catch(cause){this.db.exec('ROLLBACK');throw cause;}
+ }
+ discard(id:string,keepAdmission=false){if(!keepAdmission)this.dependencies.discardAdmission('publication:'+id);for(const table of ['sensa_initial_publication_shared','sensa_initial_publication_owners','sensa_initial_publication_content','sensa_initial_publication_rows','sensa_initial_publication_blocks','sensa_initial_publication'])this.db.exec({sql:`DELETE FROM ${table} WHERE id=?`,bind:[id]});}
 }

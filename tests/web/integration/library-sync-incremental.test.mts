@@ -52,7 +52,11 @@ test('a validated checkpoint checks only metadata when unchanged and publishes o
   try{const offline=await readLibrary(inspectPendingCloudSync);expect(offline.canSync).toBe(false);expect(offline.records).toEqual(pending.records);}
   finally{await writeLibraryState(async tx=>tx.delete('meta','signed-out'));}
  }finally{allBodies.mockRestore();pointBodies.mockRestore();pages.mockRestore();}
- await synchronizeLibrary(request);expect((await readCloudSync())?.restoreValidationVersion).toBe(libraryRestoreValidationVersion);
+ const initialAdapter=await sqliteRecordAdapter(),candidate=initialAdapter.replicaCandidate.bind(initialAdapter);let entered=false,failed=false,rejectCleanup!:(error:Error)=>void;
+ const gate=new Promise<never>((_,reject)=>{rejectCleanup=reject;}),retirement=vi.spyOn(initialAdapter,'replicaCandidate').mockImplementation(async(input,onProgress)=>{if(input.kind==='retirePublication'){entered=true;try{await gate;}finally{failed=true;}}return candidate(input,onProgress);});
+ try{await synchronizeLibrary(request);expect((await readCloudSync())?.restoreValidationVersion).toBe(libraryRestoreValidationVersion);await vi.waitFor(()=>expect(entered).toBe(true));expect((await readCloudSync())?.status).toBe('synced');rejectCleanup(Error('injected post-confirm cleanup failure'));await vi.waitFor(()=>expect(failed).toBe(true));}
+ finally{retirement.mockRestore();}
+ calls.length=0;await synchronizeLibrary(request);expect(calls).toEqual(['/head']);await vi.waitFor(()=>expect(Reflect.get(database,'database').selectValue('SELECT count(*) FROM sensa_initial_publication')).toBe(0));
  const adapter=await sqliteRecordAdapter(),base=adapter.syncBaseEntries.bind(adapter),commit=adapter.commit.bind(adapter);
  const metadata=vi.spyOn(adapter,'syncBaseReferences').mockImplementation(async()=>{throw Error('incremental sync read the entire reference directory');});
  const read=vi.spyOn(adapter,'entries').mockImplementation(async()=>{throw new Error('incremental sync read a whole source table');});

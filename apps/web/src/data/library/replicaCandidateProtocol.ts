@@ -9,12 +9,12 @@ export const replicaCandidateAppendRecordLimit=512;
 export const replicaCandidateAppendReferenceLimit=4096;
 
 /** Completed read work only; never a validation or publication receipt. */
-export type ReplicaCandidateProgress={phase:'publication-validation'|'candidate-validation';completed:number};
-export const replicaCandidateProgressPhase=(kind:ReplicaCandidateRequest['kind'])=>kind==='admitOwnPublication'?'publication-validation' as const:kind==='validate'?'candidate-validation' as const:undefined;
+export type ReplicaCandidateProgress={phase:'publication-validation'|'publication-preparation'|'candidate-validation'|'restore-installation';completed:number};
+export const replicaCandidateProgressPhase=(kind:ReplicaCandidateRequest['kind'])=>kind==='admitOwnPublication'?'publication-validation' as const:kind==='preparePublication'?'publication-preparation' as const:kind==='validate'?'candidate-validation' as const:undefined;
 export type ReplicaCandidateProgressObserver=(progress:ReplicaCandidateProgress)=>void;
 export const isReplicaCandidateProgress=(value:unknown):value is ReplicaCandidateProgress=>{
  const p=value as ReplicaCandidateProgress|undefined;
- return !!p&&['publication-validation','candidate-validation'].includes(p.phase)&&Number.isSafeInteger(p.completed)&&p.completed>0;
+ return !!p&&['publication-validation','publication-preparation','candidate-validation','restore-installation'].includes(p.phase)&&Number.isSafeInteger(p.completed)&&p.completed>0;
 };
 
 export type ReplicaCandidateFence={owner:{subject:string;accountId:string};incarnation:string;localRevision:number;identity:LibraryIdentity};
@@ -34,6 +34,9 @@ export type ReplicaCandidateRequest=
  |{kind:'publicationBlocks';id:string;hashes:string[]}
  |{kind:'validatePublication';id:string;confirmed?:boolean}
  |{kind:'admitOwnPublication';id:string;confirmed?:boolean}
+ |{kind:'preparePublication';id:string}
+ |{kind:'cancelPublicationPreparation';id:string}
+ |{kind:'retirePublication';id:string}
  |{kind:'discardPublication';id:string}
  |{kind:'begin';fence:ReplicaCandidateFence;expected:ReplicaCandidateExpected}
  |{kind:'beginIndex';fence:ReplicaCandidateFence;head:LibrarySyncHead;baseRevision?:number}
@@ -45,7 +48,7 @@ export type ReplicaCandidateRequest=
  |{kind:'validate';id:string}
  |{kind:'prepareUpdate';id:string;baseRevision:number}
  |{kind:'discard';id:string};
-export type ReplicaCandidateResponse={kind:'begun';id:string;needsSeed?:boolean}|{kind:'seeded';done:boolean}|InitialPublicationPage|{kind:'publicationIndexPage';rows:InitialPublicationPage['rows'];next:InitialPublicationPage['next'];done:boolean;stats:InitialPublicationStats}|{kind:'publicationBlocks';blocks:ReplicaCandidateBlock[];deferred:string[]}|{kind:'publicationValidated';stats:InitialPublicationStats}|{kind:'indexed';needed:Array<Pick<ReplicaCandidateRecord,'table'|'key'>>}|{kind:'appended'|'proved'}|{kind:'reused';keys:Array<Pick<ReplicaCandidateRecord,'table'|'key'>>}|{kind:'validated';candidate:ReplicaCandidateValidation}|{kind:'updatePrepared';update:ReplicaCandidateUpdate|null}|{kind:'discarded'};
+export type ReplicaCandidateResponse={kind:'begun';id:string;needsSeed?:boolean}|{kind:'seeded';done:boolean}|InitialPublicationPage|{kind:'publicationIndexPage';rows:InitialPublicationPage['rows'];next:InitialPublicationPage['next'];done:boolean;stats:InitialPublicationStats}|{kind:'publicationBlocks';blocks:ReplicaCandidateBlock[];deferred:string[]}|{kind:'publicationValidated';stats:InitialPublicationStats}|{kind:'indexed';needed:Array<Pick<ReplicaCandidateRecord,'table'|'key'>>}|{kind:'appended'|'proved'}|{kind:'reused';keys:Array<Pick<ReplicaCandidateRecord,'table'|'key'>>}|{kind:'validated';candidate:ReplicaCandidateValidation}|{kind:'updatePrepared';update:ReplicaCandidateUpdate|null}|{kind:'discarded'}|{kind:'publicationRetired';done:boolean};
 
 /** Large private bodies use ordinary rowid storage, with the same unique key
  * and parent ownership. The cache is disposable across physical connections. */

@@ -1,6 +1,8 @@
 import {librarySyncLegacyManifestRecordLimit,librarySyncManifest,librarySyncPatch,librarySyncCommit,librarySyncPullResult,librarySyncSnapshotPageResult,librarySyncHead,librarySyncTables,librarySyncBlockFetchHashes,librarySyncBlockFetchBytes,librarySyncBlockFetchResult,librarySyncBlockMissingResult,librarySyncBlockStore,librarySyncBlockStoreBatch,librarySyncBlockStoreChars,librarySyncBlockStoreBytes,type LibrarySyncManifest,type LibrarySyncHead,type LibrarySyncCommit} from '@sensa/contracts/sensa';
 import {readLibrary,readLocalLibraryRevision,restoreLibraryTransaction,writeLibraryState,assertCurrentLibrary,requestReplicaCandidate,type LibraryTransaction,type LibraryIdentity} from './store';
 import {backupEqual,encodeBackupValue,decodeBackupValue} from './backupCodec';
+import {sqliteRecordAdapter} from './sqliteAdapter';
+import {localLibraryNamespace,localLibraryScopedName,assertLocalLibrarySelected} from './localLibraryLocation';
 import {cloudSyncFailurePolicy,type CloudSyncFailureKind} from './cloudSyncPolicy';
 import {CloudSyncDeadline,type CloudSyncProgress} from './cloudSyncDeadline';
 import {confirmedCheckpoint,validatedCheckpoint} from './cloudSyncCheckpoint';
@@ -20,14 +22,14 @@ import {applyLibraryReplicaMutation} from './replication/libraryReplicaApplicati
 import {validateLibraryReplicaCooperatively,validateLearningConflictReplicaCooperatively,libraryRestoreValidationVersion,type ValidatedLibraryReplica} from './replication/libraryReplicaValidation';
 import {replicaCandidateAppendRecordLimit,replicaCandidateAppendReferenceLimit,type ReplicaCandidateFence,type ReplicaCandidateRequest,type ReplicaCandidateResponse,type ReplicaCandidateRecord,type ReplicaCandidateValidation} from './replicaCandidateProtocol';
 export type SyncRequest=(path:string,body?:unknown,signal?:AbortSignal)=>Promise<any>;
-export type LibrarySyncOptions={publishEmptyIdentity?:boolean;restoreAfterLocalClear?:boolean;backgroundVerification?:boolean;signal?:AbortSignal;onProgress?:(progress:CloudSyncProgress)=>void};
+export type LibrarySyncOptions={publishEmptyIdentity?:boolean;restoreAfterLocalClear?:boolean;backgroundVerification?:boolean;publishSnapshot?:boolean;signal?:AbortSignal;onProgress?:(progress:CloudSyncProgress)=>void};
 export type CloudSyncEntry=LibraryReplicaEntry;
 type Entry=CloudSyncEntry;
 type Owner={subject:string;accountId:string};
 export type CloudSyncConflictChoice='local'|'remote';
 export type CloudSyncConflict={detectedAt:string;localRevision:number;remoteRevision:number;remoteManifest:LibrarySyncHead['manifest'];records:{id:string;base:Entry|null;local:Entry|null;remote:Entry|null}[];affectedRecordIds:string[];comparison?:CloudSyncComparison};
 export type CloudSyncState={receive?:import('./learningDeltaAdmission').DeltaReceiveEvidence;owner:Owner;incarnation:string;revision:number;checkpointVersion?:7;restoreValidationVersion?:typeof libraryRestoreValidationVersion;storage?:LibrarySyncHead['storage'];syncedLocalRevision?:number;pending?:LibrarySyncCommit;status:'pending'|'syncing'|'synced'|'offline'|'conflict'|'failed';conflicts?:string[];conflict?:CloudSyncConflict;resolution?:{choice:CloudSyncConflictChoice;expectedRemoteRevision:number;expectedLocalRevision:number;decision:{id:string;createdAt:string}};lastSyncedAt?:string;lastCheckedAt?:string;syncStartedAt?:string;error?:string;failureKind?:CloudSyncFailureKind;retryCount?:number;retryAt?:string};
-type State=CloudSyncState&{/** Durable proof for an uncertain staged-restore COMMIT ACK. */restoreOperationId?:string;publicationOperationId?:string;initialUpload?:{id:string;operationId:string;localRevision:number;baseRevision:number};publication?:import('./replicaCandidateProtocol').InitialPublicationStats};
+type State=CloudSyncState&{restore?:{path:'native-v2'|'refs';revision:number;snapshotFailure?:string;timingsMs?:Record<string,number>};/** Durable proof for an uncertain staged-restore COMMIT ACK. */restoreOperationId?:string;publicationOperationId?:string;initialUpload?:{id:string;operationId:string;localRevision:number;baseRevision:number};publication?:import('./replicaCandidateProtocol').InitialPublicationStats};
 export type PendingCloudSyncRecord={table:typeof librarySyncTables[number];key:string};
 export type PendingCloudSyncSnapshot={
  accountLinked:boolean;
@@ -422,7 +424,7 @@ async function verifyPublication(head:LibrarySyncHead,pending:LibrarySyncCommit)
 }
 
 function initialCandidateProgress(input:ReplicaCandidateRequest,deadline?:CloudSyncDeadline):import('./replicaCandidateProtocol').ReplicaCandidateProgressObserver|undefined{
- if(!deadline?.isInitial||input.kind!=='validate'&&input.kind!=='admitOwnPublication')return;
+ if(!deadline?.isInitial||input.kind!=='validate'&&input.kind!=='admitOwnPublication'&&input.kind!=='preparePublication')return;
  const scope=crypto.randomUUID();return progress=>{deadline.check();deadline.progress(progress.phase+'-'+scope,progress.completed);};
 }
 
@@ -437,8 +439,30 @@ async function boundedCandidate(input:ReplicaCandidateRequest,deadline:CloudSync
  return deadline.run(()=>pending);
 }
 
+// The durable receipt is independent of disposable source retirement. Each
+// RPC is one bounded native transaction; a close or selection change stops
+// this page's loop, and a later synchronization resumes the selected receipt.
+const publicationRetirements=new Map<string,Promise<void>>();
+function retirePublication(id:string){
+ try{
+ const namespace=localLibraryNamespace(),key=localLibraryScopedName(id,namespace);
+ if(publicationRetirements.has(key))return;
+ assertLocalLibrarySelected(namespace);
+ const opening=sqliteRecordAdapter();
+ const promise=(async()=>{
+  const adapter=await opening;assertLocalLibrarySelected(namespace);
+  await new Promise<void>(resolve=>setTimeout(resolve,0));
+  for(;;){assertLocalLibrarySelected(namespace);const result=await adapter.replicaCandidate({kind:'retirePublication',id});if(result.kind!=='publicationRetired'||result.done)return;await new Promise<void>(resolve=>setTimeout(resolve,0));}
+ })().catch(()=>{/* A close, new publication or IO failure retains private rows for retry. */}).finally(()=>{if(publicationRetirements.get(key)===promise)publicationRetirements.delete(key);});
+ publicationRetirements.set(key,promise);
+ }catch{/* A changed selection or closed adapter cannot deny a durable receipt. */}
+}
+
 async function confirmInitialPublication(header:Awaited<ReturnType<typeof captureHeader>>,id:string,published:LibrarySyncHead,sourceRevision:number,currentRemoteRevision=published.revision,deadline?:CloudSyncDeadline){
  const input:ReplicaCandidateRequest={kind:'admitOwnPublication',id,confirmed:true};const admit=()=>requestReplicaCandidate(input,initialCandidateProgress(input,deadline));if(deadline)await deadline.run(admit);else await admit();
+ const preparation:ReplicaCandidateRequest={kind:'preparePublication',id};
+ try{const prepare=()=>requestReplicaCandidate(preparation,initialCandidateProgress(preparation,deadline));if(deadline)await deadline.run(prepare);else await prepare();}
+ catch(cause){if(deadline?.signal.aborted)await deadline.cleanup(()=>requestReplicaCandidate({kind:'cancelPublicationPreparation',id}));throw cause;}
  const commit=(beginCommit?:()=>void)=>writeLibraryState(async tx=>{
   if(deadline)tx.requireCommitSignal(deadline.signal,'library_sync_cancelled',beginCommit);
   const current=await captureHeader(tx);
@@ -447,6 +471,9 @@ async function confirmInitialPublication(header:Awaited<ReturnType<typeof captur
   tx.put('meta',STATE,{...current.state!,publicationOperationId:id,initialUpload:undefined,checkpointVersion:7,restoreValidationVersion:libraryRestoreValidationVersion,revision:published.revision,storage:published.storage,status:current.localRevision===sourceRevision&&currentRemoteRevision===published.revision?'synced':'pending',syncedLocalRevision:sourceRevision,pending:undefined,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
  });
  if(deadline)await deadline.run(commit);else await commit();
+ // The successful baseline/state transaction is already durable. Retiring
+ // its private capture must not extend that transaction or deny its receipt.
+ retirePublication(id);
 }
 
 /** The source stays private and revision fenced while bounded rows/blocks cross
@@ -562,7 +589,8 @@ async function restoreOwnCloudLibrary(header:Awaited<ReturnType<typeof captureHe
 }
 
 /** Refs use the same isolated-generation activation as binary restoration. */
-async function restoreOwnCloudRefs(header:Awaited<ReturnType<typeof captureHeader>>,head:LibrarySyncHead,request:SyncRequest,blocks:Blocks,deadline:CloudSyncDeadline){
+async function restoreOwnCloudRefs(header:Awaited<ReturnType<typeof captureHeader>>,head:LibrarySyncHead,request:SyncRequest,blocks:Blocks,deadline:CloudSyncDeadline,fallback?:{revision:number;reason:string}){
+ if(fallback){const transport=request;request=async(path,body)=>{const result=await transport(path,body);if(path==='/head'){const latest=parseSyncHead(result);if(latest.revision!==fallback.revision||latest.manifest?.snapshotRevision!==fallback.revision)throw Error('library_sync_head_changed');}return result;};}
  const {createOwnCloudRestoreGeneration}=await import('./sqliteAdapter'),incarnation=crypto.randomUUID();
  const fence={owner:header.owner,identity:header.identity,localRevision:header.localRevision,incarnation};
  const creating=createOwnCloudRestoreGeneration(fence);
@@ -573,13 +601,39 @@ async function restoreOwnCloudRefs(header:Awaited<ReturnType<typeof captureHeade
   const staged=await stageStableCandidate(blocks,request,head,fence,undefined,send),candidate=staged.candidate;
   if(!candidate)throw Error('library_sync_candidate_invalid');
   const revision=header.localRevision+1,at=new Date().toISOString();
-  const state:State={owner:header.owner,incarnation,status:'synced',checkpointVersion:7,restoreValidationVersion:libraryRestoreValidationVersion,restoreOperationId:candidate.id,revision:candidate.head.revision,syncedLocalRevision:revision,storage:candidate.head.storage,lastSyncedAt:at,lastCheckedAt:at,receive:candidate.receive};
-  await deadline.run(()=>generation.adapter.commit({clears:[],deletes:[],puts:[{table:'meta',key:STATE,encodedValue:JSON.stringify(encodeBackupValue(state))},{table:'meta',key:'local-content-revision',encodedValue:JSON.stringify(encodeBackupValue(revision))}],contentRevision:revision,replicaCandidateRestore:{id:candidate.id,tables:candidate.tables}}));
+  if(fallback&&candidate.head.revision!==fallback.revision)throw Error('library_sync_head_changed');
+  const state:State={owner:header.owner,incarnation,status:'synced',checkpointVersion:7,restoreValidationVersion:libraryRestoreValidationVersion,restoreOperationId:candidate.id,revision:candidate.head.revision,syncedLocalRevision:revision,storage:candidate.head.storage,lastSyncedAt:at,lastCheckedAt:at,receive:candidate.receive,restore:{path:'refs',revision:candidate.head.revision,...(fallback?{snapshotFailure:fallback.reason}:{})}};
+  await deadline.run(()=>generation.adapter.installPrivateRestore({clears:[],deletes:[],puts:[{table:'meta',key:STATE,encodedValue:JSON.stringify(encodeBackupValue(state))},{table:'meta',key:'local-content-revision',encodedValue:JSON.stringify(encodeBackupValue(revision))}],contentRevision:revision,replicaCandidateRestore:{id:candidate.id,tables:candidate.tables}},progress=>deadline.progress('restore-installation-'+candidate.id,progress.completed)));
+  deadline.progress('restore-apply',candidate.records);
   const latest=parseSyncHead(await request('/head'));if(latest.revision!==candidate.head.revision)throw Error('library_sync_head_changed');
-  generation.seal();const {activateOwnCloudLibrary}=await import('./store');
-  const activated=await deadline.run(beginCommit=>activateOwnCloudLibrary({...header,identity:header.identity},generation.namespace,incarnation,async(puts)=>{await generation.adapter.commit({clears:[],deletes:[],puts});await generation.adapter.close();},deadline.signal,beginCommit));
-  return {activated};
+  const {activateOwnCloudLibrary}=await import('./store');
+  const activated=await deadline.run(beginCommit=>activateOwnCloudLibrary({...header,identity:header.identity},generation.namespace,incarnation,async(puts)=>{await generation.adapter.commit({clears:[],deletes:[],puts});generation.seal();await generation.adapter.close();},deadline.signal,beginCommit));
+  generation.activated();return {activated};
  }finally{await deadline.cleanup(()=>generation.discard());}
+}
+
+/** Reuse only this own-account H's admitted facts. All work stays unselected
+ * until the existing source fence and pointer activation succeed. */
+async function restoreNativeCloudLibrary(header:Awaited<ReturnType<typeof captureHeader>>,head:LibrarySyncHead,request:SyncRequest,deadline:CloudSyncDeadline){
+ const binding=head.nativeSnapshot!,started=performance.now();
+ if(binding.accountId!==header.owner.accountId||binding.revision!==head.revision||binding.revision!==head.manifest?.snapshotRevision)throw Error('sqlite_snapshot_checkpoint_binding');
+ const {receiveNativeCloudSnapshot}=await import('./cloudNativeSnapshot'),received=await receiveNativeCloudSnapshot(binding,request,deadline),downloadedAt=performance.now();
+ try{
+  const {openIsolatedNativeCloudSnapshot}=await import('./sqliteAdapter'),importing=openIsolatedNativeCloudSnapshot(received.file,binding,header.owner,progress=>deadline.progress('snapshot-import-file',progress.completed));
+  void importing.then(generation=>{if(deadline.signal.aborted)return deadline.cleanup(()=>generation.discard());},()=>{});
+  const generation=await deadline.run(()=>importing);
+  try{
+   deadline.progress('snapshot-native-import',binding.byteLength);const importedAt=performance.now(),latest=parseSyncHead(await request('/head'));
+   if(latest.revision!==binding.revision||latest.manifest?.libraryId!==binding.libraryId||latest.manifest.learnerId!==binding.learnerId||latest.nativeSnapshot?.manifestHash!==binding.manifestHash)throw Error('library_sync_head_changed');
+   const state=decodeBackupValue(JSON.parse((await generation.adapter.get('meta',STATE))!)) as State;
+   const restore:NonNullable<State['restore']>={path:'native-v2',revision:binding.revision,timingsMs:{download:downloadedAt-started,import:importedAt-downloadedAt}};
+   const {activateOwnCloudLibrary}=await import('./store');
+   const activated=await deadline.run(beginCommit=>activateOwnCloudLibrary(header,generation.namespace,generation.report.incarnation,async(devicePuts)=>{
+    await generation.adapter.commit({clears:[],deletes:[],puts:[...devicePuts,{table:'meta',key:STATE,encodedValue:JSON.stringify(encodeBackupValue({...state,storage:latest.storage,restore}))}]});generation.seal();await generation.adapter.close();
+   },deadline.signal,beginCommit));
+   generation.activated();return {activated,restore:{...restore,timingsMs:{...restore.timingsMs,activation:performance.now()-importedAt,total:performance.now()-started}},work:received.work,nativeReport:generation.report};
+  }finally{await deadline.cleanup(()=>generation.discard());}
+ }finally{await received.discard();}
 }
 
 /** Injected transport permits offline/idempotency/restore tests without real accounts. */
@@ -591,6 +645,7 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
  if(header.reconnectRequired&&!options.restoreAfterLocalClear)return;
  const consumeReconnect=header.reconnectRequired&&options.restoreAfterLocalClear===true;
  const prior=header.state;
+ if(prior?.publicationOperationId&&!prior.pending&&!prior.initialUpload)retirePublication(prior.publicationOperationId);
  const initiallyConflicted=prior?.status==='conflict'||!!prior?.conflicts?.length||!!prior?.conflict||!!prior?.resolution;
  if(prior&&(!sameOwner(prior.owner,header.owner)||prior.incarnation!==header.incarnation))throw new Error('account_changed');
  const defaults:State={...expected,revision:0,status:'pending'};
@@ -601,6 +656,11 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
  });
  const blocks=new Blocks(request,deadline);
  try{
+  if(options.publishSnapshot){
+   if(!validatedCheckpoint(prior)||prior?.status!=='synced'||prior.syncedLocalRevision!==header.localRevision)throw Error('sqlite_snapshot_source_not_admitted');
+   const head=parseSyncHead(await request('/head'));if(head.revision!==prior.revision)throw Error('library_sync_head_changed');if(head.nativeSnapshot?.revision===head.revision)return;
+   const {publishNativeCloudSnapshot}=await import('./cloudNativeSnapshot');const snapshotPublished=await publishNativeCloudSnapshot(await sqliteRecordAdapter(),header,head,request,deadline);return {activated:undefined,snapshotPublished};
+  }
   // A confirmed, clean verification keeps its durable checkpoint while the
   // head is in flight. Success updates it once; failure still saves a real
   // error. This avoids two OPFS commits for an unchanged background check.
@@ -697,6 +757,13 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
    observedHead??=parseSyncHead(await request('/head'));
    if(observedHead.manifest){
     deadline.beginInitial();
+    if(observedHead.nativeSnapshot?.revision===observedHead.revision&&typeof Worker!=='undefined'){
+     try{return await restoreNativeCloudLibrary(header,observedHead,request,deadline);}
+     catch(error){deadline.check();const {nativeSnapshotArtifactFailure}=await import('./cloudNativeSnapshot');if(!nativeSnapshotArtifactFailure(error))throw error;
+      const latest=parseSyncHead(await request('/head'));if(latest.revision!==observedHead.revision||latest.manifest?.snapshotRevision!==observedHead.revision)throw Error('library_sync_head_changed');
+      deadline.progress('snapshot-fallback-refs',observedHead.revision);return await restoreOwnCloudRefs(header,latest,request,blocks,deadline,{revision:observedHead.revision,reason:String(error)});
+     }
+    }
     if(observedHead.binarySnapshot&&observedHead.binarySnapshot.records<=librarySyncLegacyManifestRecordLimit&&typeof Worker!=='undefined')return await restoreOwnCloudLibrary(header,observedHead,request,blocks,deadline);
     if(typeof Worker!=='undefined')return await restoreOwnCloudRefs(header,observedHead,request,blocks,deadline);
     const send=(input:ReplicaCandidateRequest)=>boundedCandidate(input,deadline);

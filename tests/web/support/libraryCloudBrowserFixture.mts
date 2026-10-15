@@ -13,6 +13,7 @@ import { build as viteBuild, type Plugin } from 'vite';
 import { createConsumerRoutes } from '../../../apps/api/src/sensa/access/consumer.ts';
 import type { ConsumerPrincipal } from '../../../apps/api/src/sensa/access/auth.ts';
 import type { DatabaseExecutor } from '../../../apps/api/src/database/index.ts';
+import {readSensaApiEnvironment} from '../../../apps/api/src/server/environment.ts';
 
 export type LibraryCloudAccount = Readonly<{
   accountId: string;
@@ -51,7 +52,8 @@ export async function createLibraryCloudBrowserFixture(providedBrowser?: Browser
   const previousRegistrationPolicy = process.env.SENSA_REGISTRATION_POLICY;
   process.env.SENSA_REGISTRATION_POLICY = 'registered';
 
-  const pool = new pg.Pool({ connectionString: disposableDatabaseUrl() });
+  const databasePolicy=readSensaApiEnvironment();
+  const pool = new pg.Pool({ connectionString: disposableDatabaseUrl(),statement_timeout:databasePolicy.DATABASE_STATEMENT_TIMEOUT_MS,query_timeout:databasePolicy.DATABASE_STATEMENT_TIMEOUT_MS+1000 });
   const identities = new Map<string, ConsumerPrincipal>();
   const identity = (token: string): ConsumerPrincipal => {
     const existing = identities.get(token);
@@ -83,6 +85,7 @@ export async function createLibraryCloudBrowserFixture(providedBrowser?: Browser
       await database.query('BEGIN');
       try {
         await database.query('SET LOCAL ROLE backend_app');
+        await database.query("SELECT set_config('statement_timeout',$1,true),set_config('lock_timeout',$2,true),set_config('idle_in_transaction_session_timeout',$3,true)",[`${databasePolicy.DATABASE_STATEMENT_TIMEOUT_MS}ms`,`${databasePolicy.DATABASE_LOCK_TIMEOUT_MS}ms`,`${databasePolicy.DATABASE_IDLE_TRANSACTION_TIMEOUT_MS}ms`]);
         const value = await work(database);
         await database.query('COMMIT');
         return value;
@@ -168,6 +171,7 @@ export async function createLibraryCloudBrowserFixture(providedBrowser?: Browser
       headers: {
         authorization: request.headers.authorization ?? 'Bearer first',
         'content-type': 'application/json',
+        ...(typeof request.headers['x-sensa-snapshot-format']==='string'?{'x-sensa-snapshot-format':request.headers['x-sensa-snapshot-format']}:{}),
       },
       ...(body.length > 0 ? { body: new Uint8Array(body) } : {}),
     });
@@ -243,6 +247,7 @@ export async function createLibraryCloudBrowserFixture(providedBrowser?: Browser
             headers: {
               authorization: `Bearer ${browserWindow.token}`,
               'content-type': 'application/json',
+              'x-sensa-snapshot-format': 'sensa-own-cloud-db-v2',
             },
             body: body === undefined ? undefined : JSON.stringify(body),
           });
