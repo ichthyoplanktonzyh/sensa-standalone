@@ -22,7 +22,7 @@ const scaleProbe=process.argv.includes('--scale-probe');
 const batchOutput=process.argv.includes('--batch-world'),batchInput=opt('world-batches');
 const finishBatchCopy=process.argv.includes('--finish-batch-copy');
 if(batchOutput&&!process.argv.includes('--generate-only'))throw Error('Batch production is a separate bounded preparation invocation');
-if(![10000,50000].includes(size)||samples<1||samples>30)throw Error('Invalid bounded dimensions');
+if(![10000,20000,50000].includes(size)||samples<1||samples>30)throw Error('Invalid bounded dimensions');
 const directory=resolve(opt('output'));if(!directory.startsWith(resolve('output/playwright')+'/'))throw Error('Use evidence output');
 const resume=opt('resume')?JSON.parse(await readFile(resolve(opt('resume')),'utf8')):null;
 if(resume&&(!resume.isolatedProfile?.startsWith(resolve('.tmp')+'/daily-ui-profile-')||!resume.buildRoot?.startsWith(resolve('.tmp')+'/daily-ui-build-')||new URL(resume.origin).hostname!=='127.0.0.1'||Number(new URL(resume.origin).port)===3000))throw Error('Resume requires a retained isolated measurement profile and origin');

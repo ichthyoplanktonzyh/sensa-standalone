@@ -676,6 +676,19 @@ function validSessionOrigin(session:LocalLearningSession,scope:LocalStudyScope,r
    ||run.lifecycleEvents.some(event=>event.operationId===session.startedByOperationId&&event.at===session.startedAt&&'sessionIntent' in event&&event.sessionIntent===session.intent&&'requestedLanguageContext' in event&&backupEqual(event.requestedLanguageContext,session.languageContext)&&['session_intent_selected','resumed_after_session_switch','resumed_after_session_end','resumed_after_planning_override'].includes(event.kind)));
 }
 
+/** Reusing an older Run later in an activity is a continuation of an already
+ * selected predecessor, not another selection from the activity's origin. */
+function validSessionContinuation(session:LocalLearningSession,run:LocalLearningRun,previousIds:ReadonlySet<string>,requireRow:RequireRow):boolean{
+ return run.lifecycleEvents.some(event=>{
+  if(!['resumed_after_session_switch','resumed_after_session_end','resumed_after_planning_override'].includes(event.kind)
+   ||!('continuedFromRunId' in event)||!event.continuedFromRunId||!previousIds.has(event.continuedFromRunId)
+   ||!('sessionIntent' in event)||event.sessionIntent!==session.intent
+   ||!('requestedLanguageContext' in event)||!backupEqual(event.requestedLanguageContext,session.languageContext)
+   ||Date.parse(event.at)<Date.parse(session.startedAt)||session.endedAt&&Date.parse(event.at)>Date.parse(session.endedAt))return false;
+  try{verifyLearningSelectionWitness(run,event,requireRow('learningRuns',event.continuedFromRunId));return true;}catch{return false;}
+ });
+}
+
 function* assertStudyScopeStateSteps(input:LearningSystemStateInput):Generator<void,void>{
  const {rows,maps,identity,requireRow,validateLanguageContext,fail}=input;
  for(const row of rows.studyScopes){
@@ -690,7 +703,8 @@ function* assertStudyScopeStateSteps(input:LearningSystemStateInput):Generator<v
   yield;
   const session=learningSessionSchema.parse(row.value),scope=studyScopeSchema.parse(requireRow('studyScopes',session.scopeRevisionId));
   if(row.key!==session.id||session.learnerUserId!==identity.learnerId||scope.learnerUserId!==session.learnerUserId||!backupEqual(session.languageContext,scope.languageContext)||session.dailyNewSenseLimit!==scope.dailyNewSenseLimit||Date.parse(session.startedAt)<Date.parse(scope.createdAt))fail();
-  for(const id of session.runIds){const run=requireRow('learningRuns',id) as LocalLearningRun;if(!run.learningSessionId||!run.studyScopeRevisionId||run.learningSessionId!==session.id&&!validSessionOrigin(session,scope,run))fail();if(!sameLearningSessionDirection(run.languageContext,session.languageContext))fail();const selected=run.studyScopeRevisionId?studyScopeSchema.parse(requireRow('studyScopes',run.studyScopeRevisionId)):scope;for(const targetId of run.targetIds)if(!selected.members.some(member=>member.targetId===targetId))fail();}
+  const previousIds=new Set<string>();
+  for(const id of session.runIds){const run=requireRow('learningRuns',id) as LocalLearningRun;if(!run.learningSessionId||!run.studyScopeRevisionId||previousIds.size>0&&run.learningSessionId!==session.id&&!validSessionContinuation(session,run,previousIds,requireRow))fail();if(!sameLearningSessionDirection(run.languageContext,session.languageContext))fail();const selected=run.studyScopeRevisionId?studyScopeSchema.parse(requireRow('studyScopes',run.studyScopeRevisionId)):scope;for(const targetId of run.targetIds)if(!selected.members.some(member=>member.targetId===targetId))fail();previousIds.add(id);}
   if(!validSessionOrigin(session,scope,requireRow('learningRuns',session.runIds[0]!) as LocalLearningRun))fail();
   if(session.endedAt){
    if(session.endReason==='learner_finished'){
