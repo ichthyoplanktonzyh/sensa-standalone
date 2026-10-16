@@ -1,3 +1,4 @@
+import {libraryCloudMembershipRows} from '../support/libraryCloudMembershipSql.mts';
 import {test,expect} from '@playwright/test';
 import {createHash} from 'node:crypto';
 import {createLibraryCloudBrowserFixture} from '../support/libraryCloudBrowserFixture.mts';
@@ -21,7 +22,7 @@ test('paged checkpoint seals exact H while current advances; retries, source exp
   expect(pages).toBeGreaterThanOrEqual(3);expect((await call('/commit',{operationId:begin.operationId,baseRevision:0,staging:{pages,records:rows.length,digest}})).status).toBe(200);
   const head=async()=>(await call('/head')).value;
   const dbhead=async()=>(await f.pool.query('SELECT * FROM sensa_consumer.library_cloud WHERE account_id=$1',[account.accountId])).rows[0];
-  const count=async(table:string,condition='true',values:unknown[]=[])=>Number((await f.pool.query(`SELECT count(*) n FROM sensa_consumer.${table} WHERE account_id=$1 AND ${condition}`,[account.accountId,...values])).rows[0].n);
+  const count=async(table:string,condition='true',values:unknown[]=[])=>Number((await f.pool.query(`SELECT count(*) n FROM ${table==='library_cloud_membership'?libraryCloudMembershipRows:'sensa_consumer.'+table} WHERE account_id=$1 AND ${condition}`,[account.accountId,...values])).rows[0].n);
   const patch=async(baseRevision:number,changes:any[])=>{const p=await put(JSON.stringify({version:1,libraryId,learnerId,changes})),r=await call('/commit',{operationId:crypto.randomUUID(),baseRevision,patch:[p]});expect(r.status).toBe(200);return r.value;};
   const old=await head(),replacement=await put(JSON.stringify(['string','fixed H body']));
   const changes=[{...rows[1],blocks:[replacement]},{...rows[2],blocks:null},{table:'drafts',key:'new-at-H',blocks:[body]}];

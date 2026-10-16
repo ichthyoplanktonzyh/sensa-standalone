@@ -1,3 +1,4 @@
+import {libraryCloudMembershipRows} from '../support/libraryCloudMembershipSql.mts';
 import {attachLegacyBinaryCheckpoint} from '../support/legacyBinaryCheckpointFixture.mts';
 import {test,expect,type Page} from '@playwright/test';
 import {createHash} from 'node:crypto';
@@ -117,8 +118,8 @@ test('native-only G pins retire after interrupted preparation or the last reader
   const account=await f.createAccount(),source=await f.createClient(account);await save(source,'native lifecycle retained 界🙂');await source.evaluate(()=>(window as any).sync());
   await expect(source.evaluate(async()=>{const w=window as any,c=new AbortController();await w.core.synchronizeLibrary(w.request,{publishSnapshot:true,signal:c.signal,onProgress:(p:any)=>{if(p.phase==='checkpoint-pages'&&p.completed===1)c.abort();}});})).rejects.toThrow('library_sync_cancelled');
   const abandoned=(await f.pool.query("SELECT operation_id,pages,published_revision FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND purpose='checkpoint'",[account.accountId])).rows[0];expect(abandoned).toMatchObject({pages:1,published_revision:null});
-  const privateOnly=(await f.pool.query(`SELECT m.hash FROM sensa_consumer.library_cloud_membership m WHERE m.account_id=$1 AND m.owner_kind='staging' AND m.owner_id=$2
-   AND NOT EXISTS(SELECT 1 FROM sensa_consumer.library_cloud_membership other WHERE other.account_id=m.account_id AND other.hash=m.hash AND (other.owner_kind<>'staging' OR other.owner_id<>$2))`,[account.accountId,abandoned.operation_id])).rows.map(r=>r.hash);expect(privateOnly.length).toBeGreaterThan(0);
+  const privateOnly=(await f.pool.query(`SELECT m.hash FROM ${libraryCloudMembershipRows} m WHERE m.account_id=$1 AND m.owner_kind='staging' AND m.owner_id=$2
+   AND NOT EXISTS(SELECT 1 FROM ${libraryCloudMembershipRows} other WHERE other.account_id=m.account_id AND other.hash=m.hash AND (other.owner_kind<>'staging' OR other.owner_id<>$2))`,[account.accountId,abandoned.operation_id])).rows.map(r=>r.hash);expect(privateOnly.length).toBeGreaterThan(0);
   expect((await source.evaluate(()=>(window as any).request('/head'))).nativeSnapshot).toBeUndefined();
   await f.pool.query("UPDATE sensa_consumer.library_cloud_staging SET expires_at='2000-01-01' WHERE account_id=$1 AND operation_id=$2",[account.accountId,abandoned.operation_id]);
   await f.pool.query("UPDATE sensa_consumer.library_cloud_blocks SET upload_lease_expires_at='2000-01-01' WHERE account_id=$1 AND hash=ANY($2::text[])",[account.accountId,privateOnly]);
@@ -145,7 +146,7 @@ test('native-only G pins retire after interrupted preparation or the last reader
   for(let i=0;i<10;i++)await source.evaluate(()=>(window as any).request('/head'));await gc();
   const retired=native.blocks.filter((hash:string)=>!current.nativeSnapshot.blocks.includes(hash));expect(retired.length).toBeGreaterThan(0);
   await info.attach('native-retirement-protections.json',{body:JSON.stringify({
-   membership:(await f.pool.query('SELECT owner_kind,owner_id,hash FROM sensa_consumer.library_cloud_membership WHERE account_id=$1 AND hash=ANY($2::text[])',[account.accountId,retired])).rows,
+   membership:(await f.pool.query(`SELECT owner_kind,owner_id,hash FROM ${libraryCloudMembershipRows} WHERE account_id=$1 AND hash=ANY($2::text[])`,[account.accountId,retired])).rows,
    refs:(await f.pool.query('SELECT * FROM sensa_consumer.library_cloud_block_refs WHERE account_id=$1 AND hash=ANY($2::text[])',[account.accountId,retired])).rows,
    blocks:(await f.pool.query('SELECT hash,upload_lease_expires_at FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[account.accountId,retired])).rows,
    stages:(await f.pool.query('SELECT operation_id,published_revision FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND purpose=$2',[account.accountId,'checkpoint'])).rows,
@@ -182,9 +183,9 @@ test('native attachment uses exact same-H idempotence, account binding and atomi
   const other=await f.createAccount(),otherPage=await f.createClient(other);await save(otherPage,'other retained draft');await otherPage.evaluate(()=>(window as any).sync());
   await expect(otherPage.evaluate(body=>(window as any).request('/compact',body),{baseRevision:1,nativeSnapshot:native})).rejects.toThrow('library_sync_identity');
   const otherHead=await otherPage.evaluate(()=>(window as any).request('/head')),missing={...native,accountId:other.accountId,libraryId:otherHead.manifest.libraryId,learnerId:otherHead.manifest.learnerId,records:otherHead.manifest.records,blocks:['d'.repeat(64)]};missing.manifestHash=createHash('sha256').update(librarySyncNativeDescriptorText(missing)).digest('hex');
-  const pins=(await f.pool.query('SELECT * FROM sensa_consumer.library_cloud_membership WHERE account_id=$1 ORDER BY owner_kind,owner_id,hash',[other.accountId])).rows;
+  const pins=(await f.pool.query(`SELECT * FROM ${libraryCloudMembershipRows} WHERE account_id=$1 ORDER BY owner_kind,owner_id,hash`,[other.accountId])).rows;
   await expect(otherPage.evaluate(body=>(window as any).request('/compact',body),{baseRevision:1,nativeSnapshot:missing})).rejects.toThrow('library_sync_missing_block');
-  expect((await otherPage.evaluate(()=>(window as any).request('/head'))).nativeSnapshot).toBeUndefined();expect((await f.pool.query('SELECT * FROM sensa_consumer.library_cloud_membership WHERE account_id=$1 ORDER BY owner_kind,owner_id,hash',[other.accountId])).rows).toEqual(pins);
+  expect((await otherPage.evaluate(()=>(window as any).request('/head'))).nativeSnapshot).toBeUndefined();expect((await f.pool.query(`SELECT * FROM ${libraryCloudMembershipRows} WHERE account_id=$1 ORDER BY owner_kind,owner_id,hash`,[other.accountId])).rows).toEqual(pins);
   expect((await source.evaluate(()=>(window as any).request('/head'))).nativeSnapshot).toEqual(native);expect(account.accountId).not.toBe(other.accountId);
   const large={...native,blocks:Array.from({length:24576},()=>native.blocks[0])};large.manifestHash=createHash('sha256').update(librarySyncNativeDescriptorText(large)).digest('hex');
   await expect(source.evaluate(body=>(window as any).request('/compact',body),{baseRevision:1,nativeSnapshot:large})).rejects.toThrow('operation_conflict');

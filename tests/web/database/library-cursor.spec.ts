@@ -1,3 +1,4 @@
+import {libraryCloudMembershipRows} from '../support/libraryCloudMembershipSql.mts';
 import {test,expect} from '@playwright/test';
 import {createHash} from 'node:crypto';
 import {createLibraryCloudBrowserFixture} from '../support/libraryCloudBrowserFixture.mts';
@@ -36,7 +37,7 @@ test('cursor publication is atomic, idempotent, account fenced and continuously 
   expect((await call('/commit',{...patch,baseRevision:2})).value.code).toBe('operation_conflict');
   const deletion=await makePatch([{table:'drafts',key:rows[1]!.key,blocks:null}],3);expect((await call('/commit',deletion)).status).toBe(200);
   expect((await f.pool.query('SELECT 1 FROM sensa_consumer.library_cloud_rows WHERE account_id=$1 AND record_key=$2',[account.accountId,rows[1]!.key])).rowCount).toBe(0);
-  expect(Number((await f.pool.query("SELECT count(*) AS n FROM sensa_consumer.library_cloud_membership WHERE account_id=$1 AND owner_kind='row' AND hash=$2",[account.accountId,body[0]])).rows[0].n)).toBeGreaterThan(1);
+  expect(Number((await f.pool.query(`SELECT count(*) AS n FROM ${libraryCloudMembershipRows} WHERE account_id=$1 AND owner_kind='row' AND hash=$2`,[account.accountId,body[0]])).rows[0].n)).toBeGreaterThan(1);
   const before=(await call('/head')).value;
   // Fail at each atomic publication seam, after earlier writes have happened.
   for(const table of ['library_cloud_rows','library_cloud_log','library_cloud_commits']){
@@ -48,7 +49,7 @@ test('cursor publication is atomic, idempotent, account fenced and continuously 
    expect((await f.pool.query('SELECT 1 FROM sensa_consumer.library_cloud_rows WHERE account_id=$1 AND record_key=$2',[account.accountId,'fault-'+table])).rowCount).toBe(0);
    expect((await f.pool.query('SELECT 1 FROM sensa_consumer.library_cloud_log WHERE account_id=$1 AND revision>$2',[account.accountId,before.revision])).rowCount).toBe(0);
    expect((await f.pool.query('SELECT 1 FROM sensa_consumer.library_cloud_commits WHERE account_id=$1 AND operation_id=$2',[account.accountId,attempt.operationId])).rowCount).toBe(0);
-   expect((await f.pool.query("SELECT 1 FROM sensa_consumer.library_cloud_membership WHERE account_id=$1 AND owner_kind='row' AND owner_id=$2",[account.accountId,JSON.stringify(['drafts','fault-'+table])])).rowCount).toBe(0);
+   expect((await f.pool.query(`SELECT 1 FROM ${libraryCloudMembershipRows} WHERE account_id=$1 AND owner_kind='row' AND owner_id=$2`,[account.accountId,JSON.stringify(['drafts','fault-'+table])])).rowCount).toBe(0);
   }
   expect((await call('/pull',{after:{revision:1,offset:0},toRevision:before.revision,readLease:upper.readLease})).value.code).toBe('library_sync_cursor');
 
@@ -69,7 +70,7 @@ test('cursor publication is atomic, idempotent, account fenced and continuously 
   const gc=await f.pool.connect();await gc.query('BEGIN');try{await purgeExpiredLibraryCloudBlocks(gc,new Date(Date.now()+172800000),10000,account.accountId);await gc.query('COMMIT');}catch(e){await gc.query('ROLLBACK');throw e;}finally{gc.release();}
   expect((await call('/blocks/fetch',{hashes:body})).value.missing).toEqual([]);
   expect((await f.pool.query('DELETE FROM sensa_consumer.library_cloud WHERE account_id=$1',[account.accountId])).rowCount).toBe(1);
-  expect((await f.pool.query('SELECT 1 FROM sensa_consumer.library_cloud_membership WHERE account_id=$1',[account.accountId])).rowCount).toBe(0);
+  expect((await f.pool.query(`SELECT 1 FROM ${libraryCloudMembershipRows} WHERE account_id=$1`,[account.accountId])).rowCount).toBe(0);
   expect((await f.pool.query('SELECT 1 FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1',[account.accountId])).rowCount).toBe(0);
  }finally{await f.close();}
 });

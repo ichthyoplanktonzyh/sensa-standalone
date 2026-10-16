@@ -1,3 +1,4 @@
+import {libraryCloudMembershipRows} from '../support/libraryCloudMembershipSql.mts';
 import {test,expect,type Page} from '@playwright/test';
 import {createHash} from 'node:crypto';
 import {createLibraryCloudBrowserFixture} from '../support/libraryCloudBrowserFixture.mts';
@@ -28,7 +29,7 @@ test('bounded request maintenance retires payload/history across three rounds wh
   expect(pages.length).toBeGreaterThanOrEqual(3);expect((await call('/staging/page',pages[1]!.page))).toEqual(pages[1]!.ack);
   const commit={operationId:begin.operationId,baseRevision:0,staging:{pages:pages.length,records:rows.length,digest}};
   const receipt=await call('/commit',commit);expect(receipt.status).toBe(200); // Treat this ACK as lost; recover it after payload retirement.
-  const count=async(table:string,where='true')=>Number((await f.pool.query(`SELECT count(*) n FROM sensa_consumer.${table} WHERE account_id=$1 AND ${where}`,[account.accountId])).rows[0].n);
+  const count=async(table:string,where='true')=>Number((await f.pool.query(`SELECT count(*) n FROM ${table==='library_cloud_membership'?libraryCloudMembershipRows:'sensa_consumer.'+table} WHERE account_id=$1 AND ${where}`,[account.accountId])).rows[0].n);
   const measure=async(label:string)=>({label,staging:await count('library_cloud_staging_rows'),snapshots:await count('library_cloud_snapshots'),log:await count('library_cloud_log'),pins:await count('library_cloud_membership'),blocks:await count('library_cloud_blocks'),physical:(await f.pool.query(`SELECT c.relname,pg_relation_size(c.oid)::bigint heap,pg_indexes_size(c.oid)::bigint indexes,pg_total_relation_size(c.oid)::bigint total FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='sensa_consumer' AND c.relname LIKE 'library_cloud%' AND c.relkind='r' ORDER BY c.relname`)).rows});
   const measurements=[await measure('initial-publication-peak')];expect(measurements[0]!.staging).toBe(193);
   await f.pool.query("CREATE FUNCTION sensa_consumer.retention_test_fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'isolated maintenance interruption'; END $$");

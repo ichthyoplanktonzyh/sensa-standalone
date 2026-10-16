@@ -2,6 +2,7 @@ import {createHash} from 'node:crypto';
 import {librarySyncNativeDescriptorText,type LibrarySyncNativeSnapshot,type LibrarySyncPreparation} from '@sensa/contracts/sensa';
 import type {DatabaseExecutor} from '../../database/core.js';
 import {ConsumerError} from '../access/auth.js';
+import {pinLibraryCloudBlocks} from './membership.js';
 import {readLibrarySnapshotPage,readLibraryTailPage} from './pages.js';
 import {libraryCloudCleanupRows,libraryCloudCleanupPins,requirePrivateLibraryGeneration} from './generation.js';
 import {libraryCloudReadLeaseMs,libraryCloudUploadLeaseMs} from './retention.js';
@@ -155,5 +156,5 @@ export async function advanceLibraryCheckpoint(db:DatabaseExecutor,id:string,hea
 }
 
 async function pin(db:DatabaseExecutor,id:string,operation:string,refs:string[]){
- if(refs.length)await db.query("INSERT INTO sensa_consumer.library_cloud_membership SELECT $1,'staging',$2,hash FROM unnest($3::text[]) hash ON CONFLICT DO NOTHING",[id,operation,[...new Set(refs)]]);
+ await pinLibraryCloudBlocks(db,id,[{kind:'staging',owner:operation,hashes:refs}]);
 }

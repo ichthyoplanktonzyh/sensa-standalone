@@ -1,3 +1,4 @@
+import {pinLibraryCloudBlocks} from '../../../apps/api/src/sensa/library/membership';
 import {createHash} from 'node:crypto';
 import {libraryCloudSnapshotOwner} from '../../../apps/api/src/sensa/library/generation';
 import type {Page} from '@playwright/test';
@@ -21,7 +22,7 @@ export async function attachLegacyBinaryCheckpoint(f:LibraryCloudBrowserFixture,
   if(!head||head.revision!==head.snapshot_revision||Number(head.revision)<1)throw Error('legacy binary fixture requires a confirmed current root');
   const artifact={sourceRevision:snapshot.sourceRevision,schemaVersion:snapshot.schemaVersion,sha256:snapshot.sha256,byteLength:bytes.length,blocks:refs,accountId:account.accountId,libraryId:head.library_id,learnerId:head.learner_id,revision:head.revision,records:head.record_count};
   await db.query('UPDATE sensa_consumer.library_cloud SET binary_snapshot=$2::jsonb WHERE account_id=$1',[account.accountId,JSON.stringify(artifact)]);
-  await db.query("INSERT INTO sensa_consumer.library_cloud_membership SELECT $1,'snapshot',$2,hash FROM unnest($3::text[]) hash ON CONFLICT DO NOTHING",[account.accountId,libraryCloudSnapshotOwner(head.snapshot_generation,head.snapshot_revision),refs]);
+  await pinLibraryCloudBlocks(db,account.accountId,[{kind:'snapshot',owner:libraryCloudSnapshotOwner(head.snapshot_generation,head.snapshot_revision),hashes:refs}]);
   await db.query('COMMIT');
  }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
 }

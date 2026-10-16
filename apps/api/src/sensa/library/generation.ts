@@ -1,5 +1,6 @@
 import type {DatabaseExecutor} from '../../database/core.js';
 import {ConsumerError} from '../access/auth.js';
+import {retireEmptyLibraryCloudOwners} from './membership.js';
 
 export const libraryCloudDefaultGeneration='00000000-0000-0000-0000-000000000000';
 export const libraryCloudCleanupRows=128;
@@ -24,12 +25,16 @@ export async function retireLibraryStagingMetadata(db:DatabaseExecutor,id:string
   DELETE FROM sensa_consumer.library_cloud_staging_rows r USING page WHERE r.ctid=page.ctid`,[id,generation,libraryCloudCleanupRows]);
  await db.query(`WITH page AS(SELECT ctid FROM sensa_consumer.library_cloud_staging_pages WHERE account_id=$1 AND operation_id=$2 LIMIT $3 FOR UPDATE)
   DELETE FROM sensa_consumer.library_cloud_staging_pages r USING page WHERE r.ctid=page.ctid`,[id,generation,libraryCloudCleanupRows]);
- await db.query(`WITH page AS(SELECT ctid FROM sensa_consumer.library_cloud_membership WHERE account_id=$1 AND owner_kind='staging' AND owner_id=ANY($2::text[]) LIMIT $3 FOR UPDATE)
+ await db.query(`WITH page AS(SELECT m.ctid FROM sensa_consumer.library_cloud_membership m
+  JOIN sensa_consumer.library_cloud_owners o ON o.account_id=m.account_id AND o.id=m.owner_id
+  WHERE m.account_id=$1 AND o.owner_kind='staging' AND o.owner=ANY($2::text[]) LIMIT $3 FOR UPDATE OF m)
   DELETE FROM sensa_consumer.library_cloud_membership m USING page WHERE m.ctid=page.ctid`,[id,owners,libraryCloudCleanupPins]);
+ await retireEmptyLibraryCloudOwners(db,id,'staging',owners);
  return (await db.query(`SELECT NOT(
   EXISTS(SELECT 1 FROM sensa_consumer.library_cloud_staging_rows WHERE account_id=$1 AND operation_id=$2) OR
   EXISTS(SELECT 1 FROM sensa_consumer.library_cloud_staging_pages WHERE account_id=$1 AND operation_id=$2) OR
-  EXISTS(SELECT 1 FROM sensa_consumer.library_cloud_membership WHERE account_id=$1 AND owner_kind='staging' AND owner_id=ANY($3::text[]))) AS complete`,[id,generation,owners])).rows[0].complete;
+  EXISTS(SELECT 1 FROM sensa_consumer.library_cloud_membership m JOIN sensa_consumer.library_cloud_owners o ON o.account_id=m.account_id AND o.id=m.owner_id
+   WHERE m.account_id=$1 AND o.owner_kind='staging' AND o.owner=ANY($3::text[]))) AS complete`,[id,generation,owners])).rows[0].complete;
 }
 
 /** Caller holds this stage's lock through the outer transaction. One invocation
@@ -50,11 +55,15 @@ export async function discardPreparedLibraryGeneration(db:DatabaseExecutor,id:st
  const rows=legacyDefaultStage?[]:(await db.query('SELECT table_name,record_key FROM sensa_consumer.library_cloud_rows WHERE account_id=$1 AND generation=$2 ORDER BY table_name,record_key LIMIT $3',[id,generation,libraryCloudCleanupRows])).rows;
  if(rows.length){
   const owners=rows.flatMap(row=>[libraryCloudRowOwner(generation,row.table_name,row.record_key),JSON.stringify([rawOwner,row.table_name,row.record_key])]);
-  await db.query(`WITH page AS(SELECT ctid FROM sensa_consumer.library_cloud_membership WHERE account_id=$1 AND owner_kind='row' AND owner_id=ANY($2::text[]) LIMIT $3 FOR UPDATE)
+  await db.query(`WITH page AS(SELECT m.ctid FROM sensa_consumer.library_cloud_membership m
+   JOIN sensa_consumer.library_cloud_owners o ON o.account_id=m.account_id AND o.id=m.owner_id
+   WHERE m.account_id=$1 AND o.owner_kind='row' AND o.owner=ANY($2::text[]) LIMIT $3 FOR UPDATE OF m)
    DELETE FROM sensa_consumer.library_cloud_membership m USING page WHERE m.ctid=page.ctid`,[id,owners,libraryCloudCleanupPins]);
+  await retireEmptyLibraryCloudOwners(db,id,'row',owners);
   await db.query(`DELETE FROM sensa_consumer.library_cloud_rows r USING jsonb_to_recordset($3::jsonb) p(table_name text,record_key text,owners jsonb)
    WHERE r.account_id=$1 AND r.generation=$2 AND r.table_name=p.table_name AND r.record_key=p.record_key
-   AND NOT EXISTS(SELECT 1 FROM sensa_consumer.library_cloud_membership m WHERE m.account_id=$1 AND m.owner_kind='row' AND m.owner_id IN(SELECT jsonb_array_elements_text(p.owners)))`,[id,generation,JSON.stringify(rows.map(row=>({...row,owners:[libraryCloudRowOwner(generation,row.table_name,row.record_key),JSON.stringify([rawOwner,row.table_name,row.record_key])]})))]);
+   AND NOT EXISTS(SELECT 1 FROM sensa_consumer.library_cloud_membership m JOIN sensa_consumer.library_cloud_owners o ON o.account_id=m.account_id AND o.id=m.owner_id
+    WHERE m.account_id=$1 AND o.owner_kind='row' AND o.owner IN(SELECT jsonb_array_elements_text(p.owners)))`,[id,generation,JSON.stringify(rows.map(row=>({...row,owners:[libraryCloudRowOwner(generation,row.table_name,row.record_key),JSON.stringify([rawOwner,row.table_name,row.record_key])]})))]);
  }
  if(!legacyDefaultStage)await db.query(`WITH page AS(SELECT ctid FROM sensa_consumer.library_cloud_snapshots WHERE account_id=$1 AND generation=$2 LIMIT $3 FOR UPDATE)
   DELETE FROM sensa_consumer.library_cloud_snapshots r USING page WHERE r.ctid=page.ctid`,[id,generation,libraryCloudCleanupRows]);

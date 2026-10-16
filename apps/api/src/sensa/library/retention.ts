@@ -1,6 +1,7 @@
 import {librarySyncStoredByteLimit} from '@sensa/contracts/sensa';
 import type {DatabaseExecutor} from '../../database/index.js';
 import {libraryCloudCleanupRows,libraryCloudCleanupPins,discardPreparedLibraryGeneration} from './generation.js';
+import {retireEmptyLibraryCloudOwnerIds,retireEmptyLibraryCloudOwners} from './membership.js';
 
 export const libraryCloudCapacityBytes=librarySyncStoredByteLimit;
 export const libraryCloudUploadLeaseMs=24*60*60*1000;
@@ -51,14 +52,18 @@ export async function pruneLibraryCloudHistory(db:DatabaseExecutor,accountId:str
  // Each branch can seek its existing root identity. A single CASE across all
  // owners made empty maintenance scan the entire current snapshot pin set.
  let pinBudget=libraryCloudCleanupPins;
- const logPins=await db.query(`WITH page AS(SELECT ctid FROM sensa_consumer.library_cloud_membership
-  WHERE account_id=$1 AND owner_kind='log' AND owner_id::bigint<=$2 ORDER BY owner_id::bigint LIMIT $3 FOR UPDATE)
-  DELETE FROM sensa_consumer.library_cloud_membership m USING page WHERE m.ctid=page.ctid`,[accountId,floor,pinBudget]);pinBudget-=logPins.rowCount??0;
- const snapshotPins=await db.query(`WITH page AS(SELECT ctid FROM sensa_consumer.library_cloud_membership
-  WHERE account_id=$1 AND owner_kind='snapshot' AND
-   (CASE WHEN owner_id~'^[0-9]+$' THEN owner_id::bigint ELSE (owner_id::jsonb->>1)::bigint END)<$2
-  ORDER BY (CASE WHEN owner_id~'^[0-9]+$' THEN owner_id::bigint ELSE (owner_id::jsonb->>1)::bigint END) LIMIT $3 FOR UPDATE)
-  DELETE FROM sensa_consumer.library_cloud_membership m USING page WHERE m.ctid=page.ctid`,[accountId,snapshot,pinBudget]);pinBudget-=snapshotPins.rowCount??0;
+ const logPins=await db.query(`WITH page AS(SELECT m.ctid FROM sensa_consumer.library_cloud_owners o
+  JOIN sensa_consumer.library_cloud_membership m ON m.account_id=o.account_id AND m.owner_id=o.id
+  WHERE o.account_id=$1 AND o.owner_kind='log' AND o.owner::bigint<=$2 ORDER BY o.owner::bigint LIMIT $3 FOR UPDATE OF m)
+  DELETE FROM sensa_consumer.library_cloud_membership m USING page WHERE m.ctid=page.ctid RETURNING m.owner_id`,[accountId,floor,pinBudget]);pinBudget-=logPins.rowCount??0;
+ await retireEmptyLibraryCloudOwnerIds(db,accountId,logPins.rows.map(row=>row.owner_id));
+ const snapshotPins=await db.query(`WITH page AS(SELECT m.ctid FROM sensa_consumer.library_cloud_owners o
+  JOIN sensa_consumer.library_cloud_membership m ON m.account_id=o.account_id AND m.owner_id=o.id
+  WHERE o.account_id=$1 AND o.owner_kind='snapshot' AND
+   (CASE WHEN o.owner~'^[0-9]+$' THEN o.owner::bigint ELSE (o.owner::jsonb->>1)::bigint END)<$2
+  ORDER BY (CASE WHEN o.owner~'^[0-9]+$' THEN o.owner::bigint ELSE (o.owner::jsonb->>1)::bigint END) LIMIT $3 FOR UPDATE OF m)
+  DELETE FROM sensa_consumer.library_cloud_membership m USING page WHERE m.ctid=page.ctid RETURNING m.owner_id`,[accountId,snapshot,pinBudget]);pinBudget-=snapshotPins.rowCount??0;
+ await retireEmptyLibraryCloudOwnerIds(db,accountId,snapshotPins.rows.map(row=>row.owner_id));
  // Select the eligible root before looking up its exact owners. Inlining this
  // selection into the pin DELETE let PG scan the growing private G's pins even
  // when no root was eligible. Both statements share the account lock.
@@ -67,11 +72,16 @@ export async function pruneLibraryCloudHistory(db:DatabaseExecutor,accountId:str
    ((s.purpose='checkpoint' AND s.published_revision<$2) OR
     (s.operation_id=$3 AND EXISTS(SELECT 1 FROM sensa_consumer.library_cloud_commits c
      WHERE c.account_id=s.account_id AND c.operation_id=s.operation_id AND c.result IS NOT NULL AND c.revision<$2)))
-   AND EXISTS(SELECT 1 FROM sensa_consumer.library_cloud_membership m WHERE m.account_id=$1 AND m.owner_kind='staging'
-    AND m.owner_id=ANY(ARRAY[s.operation_id::text,s.descriptor->>'operationId'])) LIMIT 1`,[accountId,snapshot,head.rows_generation])).rows[0];
- if(root&&pinBudget)await db.query(`WITH page AS(SELECT ctid FROM sensa_consumer.library_cloud_membership
-  WHERE account_id=$1 AND owner_kind='staging' AND owner_id=ANY($2::text[]) LIMIT $3 FOR UPDATE)
-  DELETE FROM sensa_consumer.library_cloud_membership m USING page WHERE m.ctid=page.ctid`,[accountId,[root.operation_id,root.raw_owner],pinBudget]);
+   AND EXISTS(SELECT 1 FROM sensa_consumer.library_cloud_owners o JOIN sensa_consumer.library_cloud_membership m ON m.account_id=o.account_id AND m.owner_id=o.id
+    WHERE o.account_id=$1 AND o.owner_kind='staging' AND o.owner=ANY(ARRAY[s.operation_id::text,s.descriptor->>'operationId'])) LIMIT 1`,[accountId,snapshot,head.rows_generation])).rows[0];
+ if(root&&pinBudget){
+  const owners=[root.operation_id,root.raw_owner];
+  await db.query(`WITH page AS(SELECT m.ctid FROM sensa_consumer.library_cloud_membership m
+   JOIN sensa_consumer.library_cloud_owners o ON o.account_id=m.account_id AND o.id=m.owner_id
+   WHERE m.account_id=$1 AND o.owner_kind='staging' AND o.owner=ANY($2::text[]) LIMIT $3 FOR UPDATE OF m)
+   DELETE FROM sensa_consumer.library_cloud_membership m USING page WHERE m.ctid=page.ctid`,[accountId,owners,pinBudget]);
+  await retireEmptyLibraryCloudOwners(db,accountId,'staging',owners);
+ }
  return readers.n===0;
 }
 
@@ -107,7 +117,7 @@ export async function purgeExpiredLibraryCloudBlocks(
     AND NOT EXISTS (SELECT 1 FROM sensa_consumer.library_cloud AS legacy
      WHERE legacy.account_id=blocks.account_id AND legacy.library_id IS NULL AND legacy.revision>0)
     AND NOT EXISTS (SELECT 1 FROM sensa_consumer.library_cloud_membership AS member
-     WHERE member.account_id=blocks.account_id AND member.hash=blocks.hash)
+     WHERE member.account_id=blocks.account_id AND member.block_id=blocks.block_id)
     AND NOT EXISTS (
      SELECT 1 FROM sensa_consumer.library_cloud_block_refs AS refs
      WHERE refs.account_id=blocks.account_id AND refs.hash=blocks.hash

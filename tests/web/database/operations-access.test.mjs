@@ -1,3 +1,4 @@
+import {pinLibraryCloudBlocks} from '../../../apps/api/src/sensa/library/membership.ts';
 /** Exact operational ACL/RLS on disposable loopback Postgres; no provider calls. */
 import {test,expect} from 'vitest';
 import pg from 'pg';
@@ -22,7 +23,7 @@ test('maintenance preserves active heads and unexpired facts while the monitor c
   await db.query('INSERT INTO sensa_consumer.library_cloud(account_id) VALUES($1)',[account]);
   for(const hash of hashes)await db.query("INSERT INTO sensa_consumer.library_cloud_blocks(account_id,hash,data,upload_lease_expires_at) VALUES($1,$2,'private payload',now()-interval '1 day')",[account,hash]);
   await db.query("INSERT INTO sensa_consumer.library_cloud_block_refs(account_id,hash,reference_kind,expires_at) VALUES($1,$2,'head',NULL),($1,$3,'retired',now()+interval '1 day')",[account,hashes[0],hashes[1]]);
-  await db.query("INSERT INTO sensa_consumer.library_cloud_membership(account_id,owner_kind,owner_id,hash) VALUES($1,'row','current',$2)",[account,hashes[3]]);
+  await pinLibraryCloudBlocks(db,account,[{kind:'row',owner:'current',hashes:[hashes[3]]}]);
   await db.query("INSERT INTO sensa_consumer.library_cloud_reads(account_id,id,from_revision,to_revision,snapshot_revision,expires_at) VALUES($1,$2,0,0,0,now()+interval '1 day'),($1,$3,0,0,0,now()-interval '1 day')",[account,activeRead,expiredRead]);
   await db.query("INSERT INTO sensa_consumer.semantic_lookups(id,learner_user_id,input_digest,status,created_at,expires_at) VALUES($1,$3,'fixture','ready',now(),now()+interval '1 day'),($2,$3,'fixture','ready',now(),now()-interval '1 day')",[activeId,expiredId,account]);
   await db.query('SET ROLE sensa_operational_monitor');
@@ -35,7 +36,7 @@ test('maintenance preserves active heads and unexpired facts while the monitor c
   expect((await db.query("DELETE FROM sensa_consumer.library_cloud_block_refs WHERE reference_kind='head' AND account_id=$1",[account])).rowCount).toBe(0);
   expect((await db.query('DELETE FROM sensa_consumer.semantic_lookups WHERE id=$1',[activeId])).rowCount).toBe(0);
   await expect(db.query('DELETE FROM sensa_consumer.library_cloud WHERE account_id=$1',[account])).rejects.toMatchObject({code:'42501'});
-  expect((await db.query('SELECT account_id,hash FROM sensa_consumer.library_cloud_membership WHERE account_id=$1',[account])).rowCount).toBe(1);
+  expect((await db.query('SELECT account_id,block_id FROM sensa_consumer.library_cloud_membership WHERE account_id=$1',[account])).rowCount).toBe(1);
   await expect(db.query('SELECT data FROM sensa_consumer.library_cloud_blocks')).rejects.toMatchObject({code:'42501'});
   await expect(db.query('SELECT owner_id FROM sensa_consumer.library_cloud_membership')).rejects.toMatchObject({code:'42501'});
   await expect(db.query('DELETE FROM sensa_consumer.library_cloud_membership')).rejects.toMatchObject({code:'42501'});

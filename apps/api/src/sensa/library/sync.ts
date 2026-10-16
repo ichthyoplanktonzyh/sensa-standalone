@@ -6,6 +6,7 @@ import type {DatabaseExecutor} from '../../database/core.js';
 import {librarySyncLogicalByteLimit,librarySyncRecordLimit,librarySyncHash,librarySyncStageBegin,librarySyncPatch,librarySyncPull,librarySyncSnapshotPage,librarySyncMetadataPageBytes,librarySyncCommit,librarySyncManifest,librarySyncBlockFetch,librarySyncBlockFetchBytes,librarySyncBlockMissing,librarySyncBlockStore,librarySyncBlockStoreChars,librarySyncBlockStoreBytes,type LibrarySyncManifest} from '@sensa/contracts/sensa';
 import {decodeLibrarySyncBlock,decodeLibrarySyncBinaryChunk} from '@sensa/contracts/sensa/library-sync-blocks';
 import {ConsumerError} from '../access/auth.js';
+import {pinLibraryCloudBlocks,retireEmptyLibraryCloudOwners} from './membership.js';
 import {libraryCloudCapacityBytes,libraryCloudReadLeaseMs,libraryCloudUploadLeaseMs,pruneLibraryCloudHistory,pruneLibraryPrivateGeneration,purgeExpiredLibraryCloudBlocks} from './retention.js';
 import {beginInitialPublication,appendInitialPublication,commitInitialPublication,discardInitialPublication} from './initialPublication.js';
 import {libraryCloudRowOwner,libraryCloudSnapshotOwner} from './generation.js';
@@ -137,7 +138,7 @@ export function registerLibrarySync(app:Hono,access:Access,storagePolicy:{capaci
     if(bytes!==artifact.byteLength||fileHash.digest('hex')!==artifact.sha256)throw new ConsumerError(400,'library_sync_hash');
     binarySnapshot={...artifact,accountId:a.accountId,libraryId:next.libraryId,learnerId:next.learnerId,revision:next.revision,records:next.records};
     await db.query('UPDATE sensa_consumer.library_cloud SET binary_snapshot=$2::jsonb WHERE account_id=$1',[a.accountId,JSON.stringify(binarySnapshot)]);
-    await db.query("INSERT INTO sensa_consumer.library_cloud_membership SELECT $1,'snapshot',$2,hash FROM unnest($3::text[]) hash ON CONFLICT DO NOTHING",[a.accountId,libraryCloudSnapshotOwner(input.operationId,next.revision),artifact.blocks]);
+    await pinLibraryCloudBlocks(db,a.accountId,[{kind:'snapshot',owner:libraryCloudSnapshotOwner(input.operationId,next.revision),hashes:artifact.blocks}]);
    }
    const result={receipt:{operationId:input.operationId,requestDigest:digest},...descriptor({...head,revision:next.revision,library_id:next.libraryId,learner_id:next.learnerId,record_count:next.records,snapshot_revision:next.revision,retention_floor:next.revision,binary_snapshot:binarySnapshot}),storage:await storage(db,a.accountId)};
    await db.query('INSERT INTO sensa_consumer.library_cloud_commits(account_id,operation_id,request_digest,revision,result) VALUES($1,$2,$3,$4,$5::jsonb)',[a.accountId,input.operationId,digest,next.revision,JSON.stringify(result)]);
@@ -157,6 +158,7 @@ export function registerLibrarySync(app:Hono,access:Access,storagePolicy:{capaci
   const refs=[...new Set(changes.flatMap(row=>row.blocks??[]))];
   for(let at=0;at<refs.length;at+=512){const part=refs.slice(at,at+512),present=(await db.query('SELECT hash FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[a.accountId,part])).rows;if(present.length!==part.length)throw conflict('library_sync_missing_block');}
   const now=a.now??new Date(),revision=head.revision+1;let recordCount=head.record_count,logicalBytes=await currentLibraryLogicalBytes(db,a.accountId,head);
+  const rowPins:Array<{kind:'row';owner:string;hashes:string[]}>=[];
   for(let ordinal=0;ordinal<changes.length;ordinal++){
    const row=changes[ordinal],old=(await db.query('SELECT refs,logical_bytes FROM sensa_consumer.library_cloud_rows WHERE account_id=$1 AND table_name=$2 AND record_key=$3 AND generation=$4',[a.accountId,row.table,row.key,head.rows_generation])).rows[0];
    if(old&&!row.blocks&&['learningSessions','learningRuns','supplementalMembershipStates','learningEvents','learningReconciliations','studyScopes'].includes(row.table))throw conflict('library_sync_history');
@@ -170,16 +172,21 @@ export function registerLibrarySync(app:Hono,access:Access,storagePolicy:{capaci
    if(!old&&row.blocks)recordCount++;if(old&&!row.blocks)recordCount--;
    const logical=row.blocks?(await measureLibraryRows(db,a.accountId,[{blocks:row.blocks}]))[0]:0;logicalBytes+=logical-Number(old?.logical_bytes??0);
    const owner=libraryCloudRowOwner(head.rows_generation,row.table,row.key);
-   await db.query("DELETE FROM sensa_consumer.library_cloud_membership WHERE account_id=$1 AND owner_kind='row' AND owner_id=$2",[a.accountId,owner]);
+   await db.query("DELETE FROM sensa_consumer.library_cloud_membership WHERE account_id=$1 AND owner_id=(SELECT id FROM sensa_consumer.library_cloud_owners WHERE account_id=$1 AND owner_kind='row' AND owner=$2)",[a.accountId,owner]);
    if(row.blocks){
     await db.query('INSERT INTO sensa_consumer.library_cloud_rows(account_id,generation,table_name,record_key,refs,logical_bytes) VALUES($1,$6,$2,$3,$4::jsonb,$5) ON CONFLICT(account_id,generation,table_name,record_key) DO UPDATE SET refs=EXCLUDED.refs,logical_bytes=EXCLUDED.logical_bytes',[a.accountId,row.table,row.key,JSON.stringify(row.blocks),logical,head.rows_generation]);
-    await db.query("INSERT INTO sensa_consumer.library_cloud_membership(account_id,owner_kind,owner_id,hash) SELECT $1,'row',$2,hash FROM unnest($3::text[]) hash ON CONFLICT DO NOTHING",[a.accountId,owner,row.blocks]);
-   }else await db.query('DELETE FROM sensa_consumer.library_cloud_rows WHERE account_id=$1 AND table_name=$2 AND record_key=$3 AND generation=$4',[a.accountId,row.table,row.key,head.rows_generation]);
+    rowPins.push({kind:'row',owner,hashes:row.blocks});
+   }else{
+    await db.query('DELETE FROM sensa_consumer.library_cloud_rows WHERE account_id=$1 AND table_name=$2 AND record_key=$3 AND generation=$4',[a.accountId,row.table,row.key,head.rows_generation]);
+    await retireEmptyLibraryCloudOwners(db,a.accountId,'row',[owner]);
+   }
    await db.query('INSERT INTO sensa_consumer.library_cloud_log(account_id,revision,ordinal,table_name,record_key,refs) VALUES($1,$2,$3,$4,$5,$6::jsonb)',[a.accountId,revision,ordinal,row.table,row.key,row.blocks?JSON.stringify(row.blocks):null]);
+   if(rowPins.length===128){await pinLibraryCloudBlocks(db,a.accountId,rowPins);rowPins.length=0;}
   }
+  await pinLibraryCloudBlocks(db,a.accountId,rowPins);
   if(logicalBytes>librarySyncLogicalByteLimit)throw new ConsumerError(413,'library_sync_capacity');
   if(recordCount<1||recordCount>librarySyncRecordLimit)throw conflict('library_sync_capacity');
-  await db.query("INSERT INTO sensa_consumer.library_cloud_membership(account_id,owner_kind,owner_id,hash) SELECT $1,'log',$2::text,hash FROM unnest($3::text[]) hash ON CONFLICT DO NOTHING",[a.accountId,revision,refs]);
+  await pinLibraryCloudBlocks(db,a.accountId,[{kind:'log',owner:String(revision),hashes:refs}]);
   const bytes=Buffer.byteLength(JSON.stringify(changes));
   await db.query('UPDATE sensa_consumer.library_cloud SET revision=$2,library_id=$3,learner_id=$4,record_count=$5,tail_bytes=tail_bytes+$6,tail_commits=tail_commits+1,logical_bytes=$7,updated_at=now() WHERE account_id=$1',[a.accountId,revision,libraryId,learnerId,recordCount,bytes,logicalBytes]);
   const makeSnapshot=!head.library_id||Number(head.tail_bytes)+bytes>=4*1024*1024||head.tail_commits+1>=128;

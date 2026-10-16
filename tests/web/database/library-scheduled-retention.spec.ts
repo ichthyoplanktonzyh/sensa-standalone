@@ -1,3 +1,4 @@
+import {libraryCloudMembershipRows} from '../support/libraryCloudMembershipSql.mts';
 import {test,expect} from '@playwright/test';
 import {createHash} from 'node:crypto';
 import {spawn} from 'node:child_process';
@@ -54,33 +55,70 @@ test('scheduled slices are fair, skip locked heads, roll back and preserve curre
   const db=await f.pool.connect();try{await db.query('BEGIN');for(const account of [a,b,c])await purgeExpiredLibraryCloudBlocks(db,new Date(),1000,account.accountId);await db.query('COMMIT');}catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   // G=H2 conservatively pins source H1 refs as it replays the tail. That current
   // checkpoint root must survive even when the old reader and H1 rows retire.
-  expect((await f.pool.query("SELECT 1 FROM sensa_consumer.library_cloud_membership m JOIN sensa_consumer.library_cloud h ON h.account_id=m.account_id AND h.snapshot_generation::text=m.owner_id WHERE m.account_id=$1 AND m.owner_kind='staging' AND m.hash=$2",[a.accountId,initial.old])).rowCount).toBe(1);
+  expect((await f.pool.query(`SELECT 1 FROM ${libraryCloudMembershipRows} m JOIN sensa_consumer.library_cloud h ON h.account_id=m.account_id AND h.snapshot_generation::text=m.owner_id WHERE m.account_id=$1 AND m.owner_kind='staging' AND m.hash=$2`,[a.accountId,initial.old])).rowCount).toBe(1);
   expect((await call(a,'/blocks/fetch',{hashes:[initial.old,initial.shared,initial.identity,next]})).value.missing).toEqual([]);expect((await call(b,'/blocks/fetch',{hashes:[expired.old]})).value.missing).toEqual([expired.old]);expect((await call(c,'/blocks/fetch',{hashes:[active.old,active.identity,freshUpload]})).value.missing).toEqual([]);
   expect((await call(a,'/receipt/'+initial.begin.operationId)).value.head.revision).toBe(1);expect((await call(a,'/head')).value.revision).toBe(2);
   await info.attach('scheduled-retention.json',{body:JSON.stringify({factsPerLargeFixture:601,slices:visited.length,skipLocked:true,rollback:true,fixedPassAtMostOnce:true,currentReaderAndUploadRootsPreserved:true,legacySkipped:true,scope:'Isolated backend_app execution of existing bounded helpers. Production operational role is unchanged and lacks the separately required metadata ACLs.'}),contentType:'application/json'});
  }finally{await f.close();}
 });
 
-test('a scheduled process handles SIGTERM after its current transaction and reports committed slices only',async({browser})=>{
- const f=await createLibraryCloudBrowserFixture(browser);let child:ReturnType<typeof spawn>|undefined;
+test('enabled scheduled processes resume dormant cleanup after SIGTERM without user requests and preserve protected roots',async({browser},info)=>{
+ test.setTimeout(120000);const f=await createLibraryCloudBrowserFixture(browser);let child:ReturnType<typeof spawn>|undefined;
  try{
-  const account=await f.createAccount();expect((await fetch(f.origin+'/sensa/library-sync/head',{headers:{authorization:'Bearer '+account.token}})).status).toBe(200);
-  await f.pool.query("UPDATE sensa_consumer.library_cloud SET maintenance_at=CASE WHEN account_id=$1 THEN '-infinity'::timestamptz ELSE 'infinity'::timestamptz END",[account.accountId]);
-  await f.pool.query('CREATE FUNCTION sensa_consumer.scheduled_signal_pause() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_sleep(1); RETURN NEW; END $$');
-  await f.pool.query('CREATE TRIGGER scheduled_signal_pause BEFORE UPDATE OF maintenance_at ON sensa_consumer.library_cloud FOR EACH ROW EXECUTE FUNCTION sensa_consumer.scheduled_signal_pause()');
-  const childEnv={...process.env,SENSA_MAINTENANCE_DATABASE_URL:process.env.SENSA_ADMIN_TEST_DATABASE_URL??process.env.SENSA_TEST_DATABASE_URL,SENSA_LIBRARY_HISTORY_RETENTION_ENABLED:'true'};delete childEnv.FORCE_COLOR;
-  let stdout='',stderr='';child=spawn(process.execPath,['--import','tsx','scripts/release/libraryCloudRetention.mts'],{env:childEnv,stdio:['ignore','pipe','pipe']});child.stdout!.on('data',v=>stdout+=v);child.stderr!.on('data',v=>stderr+=v);
-  const exited=new Promise<number|null>((done,reject)=>{child!.on('error',reject);child!.on('close',done);});
+  const expired=await f.createAccount(),current=await f.createAccount(),active=await f.createAccount(),legacy=await f.createAccount();
+  const call=async(account:LibraryCloudAccount,path:string,body?:unknown)=>{const r=await fetch(f.origin+'/sensa/library-sync'+path,{method:body===undefined?'GET':'POST',headers:{authorization:'Bearer '+account.token,'content-type':'application/json','x-sensa-sync-protocol':'sensa-checkpoint-pages-v1'},body:body===undefined?undefined:JSON.stringify(body)});expect(r.status).toBe(200);return r.json();};
+  const put=async(account:LibraryCloudAccount,text:string)=>{const data=encodeLibrarySyncBlock(JSON.stringify(['string',text])),hash=createHash('sha256').update(data).digest('hex');await call(account,'/blocks/store',{blocks:[{hash,data}]});return hash;};
+  const seed=async(account:LibraryCloudAccount,n:number,publish:boolean)=>{
+   const hash=await put(account,'protected body '+account.accountId),begin={operationId:crypto.randomUUID(),baseRevision:0,libraryId:crypto.randomUUID(),learnerId:crypto.randomUUID(),incarnation:crypto.randomUUID(),localRevision:1};await call(account,'/staging/begin',begin);
+   const rows=[{table:'meta',key:'identity',blocks:[hash]},...Array.from({length:n},(_,i)=>({table:'drafts',key:'process-'+i,blocks:[hash]}))];let pages=0,digest='';
+   for(let at=0;at<rows.length;at+=256)digest=(await call(account,'/staging/page',{operationId:begin.operationId,page:pages++,rows:rows.slice(at,at+256)})).digest;
+   if(publish)await call(account,'/commit',{operationId:begin.operationId,baseRevision:0,staging:{pages,records:rows.length,digest}});
+   return {begin,rows,hash};
+  };
+  const e=await seed(expired,600,false),c=await seed(current,12,true),oldReader=await call(current,'/head'),u=await seed(active,2,false);
+  const next=await put(current,'new current body');
+  // The patch itself is tagged JSON, just as the ordinary wire metadata path.
+  const patchData=encodeLibrarySyncBlock(JSON.stringify({version:1,libraryId:c.begin.libraryId,learnerId:c.begin.learnerId,changes:[{...c.rows[1],blocks:[next]}]})),patchHash=createHash('sha256').update(patchData).digest('hex');
+  await call(current,'/blocks/store',{blocks:[{hash:patchHash,data:patchData}]});await call(current,'/commit',{operationId:crypto.randomUUID(),baseRevision:1,patch:[patchHash]});
+  const compact=await finishLibraryCheckpoint(async(path,body)=>({status:200,value:await call(current,path,body)}),{baseRevision:2});expect(compact.status).toBe(200);
+  const fresh=await put(active,'fresh unreferenced upload'),opaque=await put(legacy,'opaque legacy retained bytes');
+  await f.pool.query("UPDATE sensa_consumer.library_cloud SET revision=3,manifest='[]'::jsonb WHERE account_id=$1",[legacy.accountId]);
+  await f.pool.query("UPDATE sensa_consumer.library_cloud_staging SET expires_at='2000-01-01' WHERE account_id=$1",[expired.accountId]);
+  await f.pool.query("UPDATE sensa_consumer.library_cloud_blocks SET upload_lease_expires_at='2000-01-01' WHERE account_id=ANY($1::text[]) AND hash<>$2",[[expired.accountId,current.accountId,active.accountId,legacy.accountId],fresh]);
+  const ids=[expired.accountId,current.accountId,active.accountId];
+  await f.pool.query("UPDATE sensa_consumer.library_cloud SET maintenance_at='infinity' WHERE account_id<>ALL($1::text[])",[[...ids,legacy.accountId]]);
+  for(const [i,id] of [...ids,legacy.accountId].entries())await f.pool.query('UPDATE sensa_consumer.library_cloud SET maintenance_at=$2 WHERE account_id=$1',[id,i===3?'1999-01-01':String(2000+i)+'-01-01']);
+  const count=async(account:LibraryCloudAccount,table:string)=>(await f.pool.query(`SELECT count(*)::int n FROM sensa_consumer.${table} WHERE account_id=$1`,[account.accountId])).rows[0].n;
+  const protectedBefore={rows:(await f.pool.query('SELECT generation,table_name,record_key,refs FROM sensa_consumer.library_cloud_rows WHERE account_id=$1 ORDER BY table_name,record_key',[current.accountId])).rows,snapshots:await count(current,'library_cloud_snapshots'),receipts:await count(current,'library_cloud_commits')};
+  expect(protectedBefore.snapshots).toBe(26);expect(await count(expired,'library_cloud_rows')).toBe(601);
+  await f.pool.query('CREATE TABLE sensa_consumer.scheduled_process_audit(seq bigint GENERATED ALWAYS AS IDENTITY,account_id text,role_name text)');
+  await f.pool.query('GRANT INSERT ON sensa_consumer.scheduled_process_audit TO backend_app');
+  await f.pool.query("CREATE FUNCTION sensa_consumer.scheduled_signal_pause() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN INSERT INTO sensa_consumer.scheduled_process_audit(account_id,role_name) VALUES(NEW.account_id,current_user); IF TG_ARGV[0]='pause' THEN PERFORM pg_sleep(1); END IF; RETURN NEW; END $$");
+  await f.pool.query("CREATE TRIGGER scheduled_signal_pause BEFORE UPDATE OF maintenance_at ON sensa_consumer.library_cloud FOR EACH ROW EXECUTE FUNCTION sensa_consumer.scheduled_signal_pause('pause')");
+  const connection=new URL(process.env.SENSA_ADMIN_TEST_DATABASE_URL??process.env.SENSA_TEST_DATABASE_URL!);connection.searchParams.set('options','-c role=backend_app');
+  const childEnv={...process.env,SENSA_MAINTENANCE_DATABASE_URL:connection.href,SENSA_LIBRARY_HISTORY_RETENTION_ENABLED:'true'};delete childEnv.FORCE_COLOR;
+  let stdout='',stderr='';
+  const spawnRun=(imports:string[]=[])=>{stdout='';stderr='';child=spawn(process.execPath,['--import','tsx',...imports,'scripts/release/libraryCloudRetention.mts'],{env:childEnv,stdio:['ignore','pipe','pipe']});child.stdout!.on('data',v=>stdout+=v);child.stderr!.on('data',v=>stderr+=v);return new Promise<number|null>((done,reject)=>{child!.on('error',reject);child!.on('close',done);});};
+  f.clearRequests();const stopped=spawnRun();
   await expect.poll(async()=>(await f.pool.query("SELECT count(*)::int n FROM pg_stat_activity WHERE application_name='sensa-library-retention' AND wait_event='PgSleep'")).rows[0].n,{timeout:10000}).toBe(1);
-  expect(child.kill('SIGTERM')).toBe(true);expect(await exited).toBe(0);expect(stderr).toBe('');
-  const result=JSON.parse(stdout.trim());expect(result).toMatchObject({batches:1,accountsServiced:1,historyEnabled:true,interrupted:true,limitReached:false});
-  expect((await f.pool.query('SELECT isfinite(maintenance_at) AS advanced FROM sensa_consumer.library_cloud WHERE account_id=$1',[account.accountId])).rows[0].advanced).toBe(true);
-  await f.pool.query('DROP TRIGGER scheduled_signal_pause ON sensa_consumer.library_cloud');
-  // A process clock one hour behind must not turn the repeated fair rounds
-  // into one slice/hour. The database owns both cursor and pass timestamps.
+  expect(child!.kill('SIGTERM')).toBe(true);expect(await stopped).toBe(0);expect(stderr).toBe('');
+  const interrupted=JSON.parse(stdout.trim());expect(interrupted).toMatchObject({batches:1,accountsServiced:1,historyEnabled:true,interrupted:true,limitReached:false});
+  expect(await count(expired,'library_cloud_rows')).toBe(473);expect(await count(expired,'library_cloud_staging')).toBe(1);expect(f.requests()).toEqual([]);
+  await f.pool.query('DROP TRIGGER scheduled_signal_pause ON sensa_consumer.library_cloud');await f.pool.query("CREATE TRIGGER scheduled_signal_pause BEFORE UPDATE OF maintenance_at ON sensa_consumer.library_cloud FOR EACH ROW EXECUTE FUNCTION sensa_consumer.scheduled_signal_pause('audit')");
   const skew='const NativeDate=Date;globalThis.Date=class extends NativeDate{constructor(...args){if(args.length)super(...args);else super(NativeDate.now()-3600000)}static now(){return NativeDate.now()-3600000}};';
-  stdout='';stderr='';child=spawn(process.execPath,['--import','tsx','--import','data:text/javascript,'+encodeURIComponent(skew),'scripts/release/libraryCloudRetention.mts'],{env:childEnv,stdio:['ignore','pipe','pipe']});child.stdout!.on('data',v=>stdout+=v);child.stderr!.on('data',v=>stderr+=v);
-  expect(await new Promise<number|null>((done,reject)=>{child!.on('error',reject);child!.on('close',done);})).toBe(0);expect(stderr).toBe('');
-  expect(JSON.parse(stdout.trim())).toMatchObject({batches:100,accountsServiced:100,historyEnabled:true,interrupted:false,limitReached:true});
- }finally{if(child&&child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');await f.pool.query('DROP TRIGGER IF EXISTS scheduled_signal_pause ON sensa_consumer.library_cloud');await f.pool.query('DROP FUNCTION IF EXISTS sensa_consumer.scheduled_signal_pause()');await f.close();}
+  expect(await spawnRun(['--import','data:text/javascript,'+encodeURIComponent(skew)])).toBe(0);expect(stderr).toBe('');
+  const resumed=JSON.parse(stdout.trim());expect(resumed).toMatchObject({batches:100,accountsServiced:100,historyEnabled:true,interrupted:false,limitReached:true});expect(f.requests()).toEqual([]);
+  const audit=(await f.pool.query('SELECT account_id,role_name FROM sensa_consumer.scheduled_process_audit ORDER BY seq')).rows;expect(audit).toHaveLength(101);expect(audit.map(r=>r.account_id)).toEqual(Array.from({length:101},(_,i)=>ids[i%3]));expect(audit.every(r=>r.role_name==='backend_app')).toBe(true);
+  for(const table of ['library_cloud_rows','library_cloud_snapshots','library_cloud_staging','library_cloud_membership','library_cloud_owners','library_cloud_blocks'])expect(await count(expired,table)).toBe(0);
+  expect((await f.pool.query('SELECT generation,table_name,record_key,refs FROM sensa_consumer.library_cloud_rows WHERE account_id=$1 ORDER BY table_name,record_key',[current.accountId])).rows).toEqual(protectedBefore.rows);
+  expect(await count(current,'library_cloud_snapshots')).toBe(protectedBefore.snapshots);expect(await count(current,'library_cloud_commits')).toBe(protectedBefore.receipts);
+  expect((await f.pool.query('SELECT 1 FROM sensa_consumer.library_cloud_reads WHERE account_id=$1 AND id=$2 AND expires_at>now()',[current.accountId,oldReader.readLease])).rowCount).toBe(1);
+  expect(await count(active,'library_cloud_rows')).toBe(3);expect(await count(active,'library_cloud_staging')).toBe(1);
+  for(const [account,hash] of [[current,c.hash],[current,next],[active,u.hash],[active,fresh],[legacy,opaque]] as const)expect((await f.pool.query('SELECT 1 FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=$2',[account.accountId,hash])).rowCount).toBe(1);
+  expect((await f.pool.query('SELECT maintenance_at::text at FROM sensa_consumer.library_cloud WHERE account_id=$1',[legacy.accountId])).rows[0].at).toContain('1999-01-01');
+  await info.attach('enabled-process-retention.json',{body:JSON.stringify({interrupted,resumed,committedOrder:audit,noUserRequests:f.requests(),partialExpiredRows:473,finalExpiredRows:0,protectedBefore,scope:'Actual enabled process under backend_app, real backlog, SIGTERM/restart, fair100-slice budget and DB-only protected-root audit. No production ACL or enablement.'}),contentType:'application/json'});
+ }finally{
+  if(child&&child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');
+  await f.pool.query('DROP TRIGGER IF EXISTS scheduled_signal_pause ON sensa_consumer.library_cloud');await f.pool.query('DROP FUNCTION IF EXISTS sensa_consumer.scheduled_signal_pause()');await f.pool.query('DROP TABLE IF EXISTS sensa_consumer.scheduled_process_audit');await f.close();
+ }
 });

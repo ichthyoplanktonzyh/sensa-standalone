@@ -18,7 +18,7 @@ const grants={
  ],
  retention:[
   ['semantic_lookups','learner_user_id,id,expires_at','expires_at'],
-  ['library_cloud_blocks','account_id,hash,upload_lease_expires_at','upload_lease_expires_at'],
+  ['library_cloud_blocks','account_id,hash,block_id,upload_lease_expires_at','upload_lease_expires_at'],
   ['library_cloud_block_refs','account_id,hash,reference_kind,expires_at'],
   ['library_cloud_snapshot_leases','account_id,revision,expires_at'],
   ['library_cloud_reads','account_id,id,expires_at'],
@@ -31,7 +31,7 @@ const eligibleDelete={
  library_cloud_snapshot_leases:'expires_at<=now()',
  library_cloud_reads:'expires_at<=now()',
  model_requests:'expires_at<=now()',
- library_cloud_blocks:`upload_lease_expires_at<=now() AND NOT EXISTS (SELECT 1 FROM sensa_consumer.library_cloud legacy WHERE legacy.account_id=library_cloud_blocks.account_id AND legacy.library_id IS NULL AND legacy.revision>0) AND NOT EXISTS (SELECT 1 FROM sensa_consumer.library_cloud_membership m WHERE m.account_id=library_cloud_blocks.account_id AND m.hash=library_cloud_blocks.hash) AND NOT EXISTS (SELECT 1 FROM sensa_consumer.library_cloud_block_refs r
+ library_cloud_blocks:`upload_lease_expires_at<=now() AND NOT EXISTS (SELECT 1 FROM sensa_consumer.library_cloud legacy WHERE legacy.account_id=library_cloud_blocks.account_id AND legacy.library_id IS NULL AND legacy.revision>0) AND NOT EXISTS (SELECT 1 FROM sensa_consumer.library_cloud_membership m WHERE m.account_id=library_cloud_blocks.account_id AND m.block_id=library_cloud_blocks.block_id) AND NOT EXISTS (SELECT 1 FROM sensa_consumer.library_cloud_block_refs r
   WHERE r.account_id=library_cloud_blocks.account_id AND r.hash=library_cloud_blocks.hash AND (r.reference_kind='head' OR r.expires_at>now()))`,
 };
 export async function configureOperations(db,{project,base,monitorPassword,retentionPassword}){
@@ -81,7 +81,7 @@ export async function configureOperations(db,{project,base,monitorPassword,reten
   await db.query(`GRANT SELECT(account_id,library_id,revision) ON sensa_consumer.library_cloud TO ${operationsRoles.retention}`);
   await db.query(`DROP POLICY IF EXISTS sensa_operational_retention_select ON sensa_consumer.library_cloud`);
   await db.query(`CREATE POLICY sensa_operational_retention_select ON sensa_consumer.library_cloud FOR SELECT TO ${operationsRoles.retention} USING(true)`);
-  await db.query(`GRANT SELECT(account_id,hash) ON sensa_consumer.library_cloud_membership TO ${operationsRoles.retention}`);
+  await db.query(`GRANT SELECT(account_id,block_id) ON sensa_consumer.library_cloud_membership TO ${operationsRoles.retention}`);
   await db.query(`DROP POLICY IF EXISTS sensa_operational_retention_select ON sensa_consumer.library_cloud_membership`);
   await db.query(`CREATE POLICY sensa_operational_retention_select ON sensa_consumer.library_cloud_membership FOR SELECT TO ${operationsRoles.retention} USING(true)`);
   // Only a count is exposed; do not grant pg_read_all_stats and its query text.

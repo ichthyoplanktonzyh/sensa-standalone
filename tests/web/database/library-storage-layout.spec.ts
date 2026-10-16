@@ -3,6 +3,8 @@ import {createHash} from 'node:crypto';
 import {createLibraryCloudBrowserFixture} from '../support/libraryCloudBrowserFixture.mts';
 import {encodeLibrarySyncBlock} from '@sensa/contracts/sensa/library-sync-blocks';
 import {libraryCloudRowOwner} from '../../../apps/api/src/sensa/library/generation';
+import {pinLibraryCloudBlocks,retireEmptyLibraryCloudOwners,type LibraryCloudOwnerKind} from '../../../apps/api/src/sensa/library/membership';
+import {libraryCloudMembershipRows} from '../support/libraryCloudMembershipSql.mts';
 
 test('one snapshot primary key preserves Unicode identity and C keyset paging across 1025 facts',async({browser},info)=>{
  const f=await createLibraryCloudBrowserFixture(browser);
@@ -33,30 +35,42 @@ test('one snapshot primary key preserves Unicode identity and C keyset paging ac
  }finally{await f.close();}
 });
 
-test('compact membership hash keys keep exact owner uniqueness, owner seeks and reverse FK protection',async({browser},info)=>{
+test('compact membership IDs preserve exact owners, missing/cross-account rejection and reverse FK protection',async({browser},info)=>{
  const f=await createLibraryCloudBrowserFixture(browser);
  try{
-  const account=await f.createAccount(),blocks=Array.from({length:3},(_,i)=>{const data=encodeLibrarySyncBlock('["number",'+i+']');return {data,hash:createHash('sha256').update(data).digest('hex')};});
+  const account=await f.createAccount(),other=await f.createAccount();
+  const blocks=Array.from({length:3},(_,i)=>{const data=encodeLibrarySyncBlock('["number",'+i+']');return {data,hash:createHash('sha256').update(data).digest('hex')};});
   const response=await fetch(f.origin+'/sensa/library-sync/blocks/store',{method:'POST',headers:{authorization:'Bearer '+account.token,'content-type':'application/json'},body:JSON.stringify({blocks})});expect(response.status).toBe(200);
   const generation=crypto.randomUUID(),rows=Array.from({length:1024},(_,i)=>({owner:libraryCloudRowOwner(generation,i%4?'drafts':'semanticContexts','key-界-é-é-🙂-"-\\-'+Math.floor(i/2)),hash:blocks[i%2]!.hash}));
-  const insert=()=>f.pool.query(`INSERT INTO sensa_consumer.library_cloud_membership(account_id,owner_kind,owner_id,hash)
-   SELECT $1,'row',r.owner,r.hash FROM jsonb_to_recordset($2::jsonb) r(owner text,hash text) ON CONFLICT DO NOTHING`,[account.accountId,JSON.stringify(rows)]);
-  expect((await insert()).rowCount).toBe(1024);expect((await insert()).rowCount).toBe(0);
-  // Legacy log/snapshot roots may share owner text; kind is part of identity.
-  for(const [kind,owner] of [['log','1'],['snapshot','1'],['staging',generation]]){
-   const values=[account.accountId,kind,owner,blocks[0]!.hash],sql='INSERT INTO sensa_consumer.library_cloud_membership VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING';
-   expect((await f.pool.query(sql,values)).rowCount).toBe(1);expect((await f.pool.query(sql,values)).rowCount).toBe(0);
+  const count=async()=>Number((await f.pool.query('SELECT count(*) n FROM sensa_consumer.library_cloud_membership WHERE account_id=$1',[account.accountId])).rows[0].n);
+  const insert=()=>pinLibraryCloudBlocks(f.pool,account.accountId,rows.map(row=>({kind:'row',owner:row.owner,hashes:[row.hash]})));
+  await insert();expect(await count()).toBe(1024);await insert();expect(await count()).toBe(1024);
+  // Keep kind, Unicode bytes, JSON escapes and raw/canonical UUID aliases exact.
+  const aliases:[LibraryCloudOwnerKind,string][]=[['log','1'],['snapshot','1'],['staging',generation],['staging',generation.toUpperCase()],['row','é'],['row','é']];
+  for(const [kind,owner] of aliases)await pinLibraryCloudBlocks(f.pool,account.accountId,[{kind,owner,hashes:[blocks[0]!.hash]}]);
+  expect(await count()).toBe(1030);
+  const actual=(await f.pool.query(`SELECT owner_id AS owner,hash FROM ${libraryCloudMembershipRows} WHERE account_id=$1 AND owner_kind='row' AND owner_id LIKE '[%' ORDER BY owner_id COLLATE "C",hash`,[account.accountId])).rows;
+  expect(actual).toEqual([...rows].sort((a,b)=>Buffer.compare(Buffer.from(a.owner+'\0'+a.hash),Buffer.from(b.owner+'\0'+b.hash))));
+  for(const hashes of [[blocks[0]!.hash.toUpperCase()],['e'.repeat(64)]]){
+   const db=await f.pool.connect();try{await db.query('BEGIN');await expect(pinLibraryCloudBlocks(db,account.accountId,[{kind:'row',owner:'must-roll-back',hashes}])).rejects.toMatchObject({code:'23502'});await db.query('ROLLBACK');}finally{db.release();}
   }
-  expect((await f.pool.query("SELECT owner_id AS owner,hash FROM sensa_consumer.library_cloud_membership WHERE account_id=$1 AND owner_kind='row' ORDER BY owner_id,hash",[account.accountId])).rows).toEqual([...rows].sort((a,b)=>Buffer.compare(Buffer.from(a.owner+'\0'+a.hash),Buffer.from(b.owner+'\0'+b.hash))));
-  await expect(f.pool.query("INSERT INTO sensa_consumer.library_cloud_membership VALUES($1,'row',$2,$3) ON CONFLICT DO NOTHING",[account.accountId,rows[0]!.owner,blocks[0]!.hash.toUpperCase()])).rejects.toMatchObject({code:'23514'});
-  await expect(f.pool.query("INSERT INTO sensa_consumer.library_cloud_membership VALUES($1,'row',$2,$3)",[account.accountId,rows[0]!.owner,'e'.repeat(64)])).rejects.toMatchObject({code:'23503'});
+  expect((await f.pool.query("SELECT 1 FROM sensa_consumer.library_cloud_owners WHERE account_id=$1 AND owner='must-roll-back'",[account.accountId])).rowCount).toBe(0);
+  const identity=(await f.pool.query(`SELECT m.owner_id,m.block_id FROM sensa_consumer.library_cloud_membership m JOIN sensa_consumer.library_cloud_owners o ON o.account_id=m.account_id AND o.id=m.owner_id WHERE m.account_id=$1 AND o.owner=$2 LIMIT 1`,[account.accountId,rows[0]!.owner])).rows[0];
+  await expect(f.pool.query('INSERT INTO sensa_consumer.library_cloud_membership VALUES($1,$2,$3)',[other.accountId,identity.owner_id,identity.block_id])).rejects.toMatchObject({code:'23503'});
+  await expect(f.pool.query('DELETE FROM sensa_consumer.library_cloud_owners WHERE account_id=$1 AND id=$2',[account.accountId,identity.owner_id])).rejects.toMatchObject({code:'23503'});
   await expect(f.pool.query('DELETE FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=$2',[account.accountId,blocks[0]!.hash])).rejects.toMatchObject({code:'23503'});
+  await retireEmptyLibraryCloudOwners(f.pool,account.accountId,'row',[rows[0]!.owner]);expect(await count()).toBe(1030);
   const db=await f.pool.connect(),plans:any[]=[];
   await f.pool.query('ANALYZE sensa_consumer.library_cloud_membership');
-  try{await db.query('BEGIN');await db.query('SET LOCAL enable_seqscan=off');await db.query('SET LOCAL enable_sort=off');for(const [where,value] of [["owner_kind='row' AND owner_id=$2 ORDER BY decode(hash,'hex') LIMIT 1",rows[0]!.owner],['hash=$2',blocks[0]!.hash]])plans.push((await db.query(`EXPLAIN(FORMAT JSON) SELECT hash FROM sensa_consumer.library_cloud_membership WHERE account_id=$1 AND ${where}`,[account.accountId,value])).rows[0]['QUERY PLAN']);await db.query('ROLLBACK');}finally{db.release();}
-  expect(JSON.stringify(plans[0])).toContain('library_cloud_membership_owner_hash');expect(JSON.stringify(plans[1])).toContain('library_cloud_membership_hash');
-  const deleted=await f.pool.query("DELETE FROM sensa_consumer.library_cloud_membership WHERE account_id=$1 AND owner_kind='row' AND owner_id=$2",[account.accountId,rows[2]!.owner]);expect(deleted.rowCount).toBe(2);
-  expect((await f.pool.query('SELECT 1 FROM sensa_consumer.library_cloud_membership WHERE account_id=$1 AND hash=$2',[account.accountId,blocks[0]!.hash])).rowCount).toBeGreaterThan(0);
-  await info.attach('membership-layout.json',{body:JSON.stringify({pins:rows.length,owners:new Set(rows.map(r=>r.owner)).size,plans,indexHashBytes:32,wireHashBytes:64,scope:'Unique-index hash representation only; owner TEXT, heap, reverse index and FK remain unchanged. Forced plans prove eligibility, not production latency.'}),contentType:'application/json'});
+  try{await db.query('BEGIN');await db.query('SET LOCAL enable_seqscan=off');await db.query('SET LOCAL enable_sort=off');
+   for(const [column,value] of [['owner_id',identity.owner_id],['block_id',identity.block_id]])plans.push((await db.query(`EXPLAIN(FORMAT JSON) SELECT block_id FROM sensa_consumer.library_cloud_membership WHERE account_id=$1 AND ${column}=$2 ORDER BY block_id LIMIT 1`,[account.accountId,value])).rows[0]['QUERY PLAN']);
+   await db.query('ROLLBACK');
+  }finally{db.release();}
+  expect(JSON.stringify(plans[0])).toContain('library_cloud_membership_pkey');expect(JSON.stringify(plans[1])).toContain('library_cloud_membership_block');
+  const deleted=await f.pool.query(`DELETE FROM sensa_consumer.library_cloud_membership m USING sensa_consumer.library_cloud_owners o WHERE m.account_id=$1 AND o.account_id=$1 AND m.owner_id=o.id AND o.owner_kind='row' AND o.owner=$2`,[account.accountId,rows[2]!.owner]);expect(deleted.rowCount).toBe(2);
+  await retireEmptyLibraryCloudOwners(f.pool,account.accountId,'row',[rows[2]!.owner]);
+  expect((await f.pool.query('SELECT 1 FROM sensa_consumer.library_cloud_owners WHERE account_id=$1 AND owner=$2',[account.accountId,rows[2]!.owner])).rowCount).toBe(0);
+  expect((await f.pool.query('SELECT 1 FROM sensa_consumer.library_cloud_membership WHERE account_id=$1 AND block_id=$2',[account.accountId,identity.block_id])).rowCount).toBeGreaterThan(0);
+  await info.attach('membership-layout.json',{body:JSON.stringify({pins:1030,ownerIdBytes:8,blockIdBytes:8,wireHashBytes:64,plans,scope:'Exact logical projection of normalized edges; account-scoped FKs, no cascading owner deletion, no refcount. Forced plans prove eligibility only; total owners/blocks/index overhead belongs in the unified 10k measurement.'}),contentType:'application/json'});
  }finally{await f.close();}
 });
