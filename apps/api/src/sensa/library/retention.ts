@@ -9,9 +9,10 @@ export const libraryCloudRetiredGraceMs=2*60*1000;
 
 /** One scheduled slice in the caller's transaction. The persisted cursor makes
  * later accounts progress across bounded runs; a locked account is skipped.
- * The fixed pass boundary services each eligible account at most once per run.
+ * A fixed pass boundary can service each eligible account at most once; the
+ * scheduled caller refreshes it between slices to use its remaining budget.
  * Opaque legacy heads remain outside automatic generation/history retirement. */
-export async function continueLibraryCloudRetention(db:DatabaseExecutor,now:Date,passBefore=now):Promise<string|undefined>{
+export async function continueLibraryCloudRetention(db:DatabaseExecutor,now:Date,passBefore:Date|string=now):Promise<string|undefined>{
  const account=(await db.query(`SELECT account_id FROM sensa_consumer.library_cloud
   WHERE maintenance_at<=$1 AND (library_id IS NOT NULL OR revision=0)
   ORDER BY maintenance_at,account_id LIMIT 1 FOR UPDATE SKIP LOCKED`,[passBefore])).rows[0];

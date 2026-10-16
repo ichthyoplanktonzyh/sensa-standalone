@@ -70,10 +70,17 @@ test('a scheduled process handles SIGTERM after its current transaction and repo
   await f.pool.query('CREATE TRIGGER scheduled_signal_pause BEFORE UPDATE OF maintenance_at ON sensa_consumer.library_cloud FOR EACH ROW EXECUTE FUNCTION sensa_consumer.scheduled_signal_pause()');
   const childEnv={...process.env,SENSA_MAINTENANCE_DATABASE_URL:process.env.SENSA_ADMIN_TEST_DATABASE_URL??process.env.SENSA_TEST_DATABASE_URL,SENSA_LIBRARY_HISTORY_RETENTION_ENABLED:'true'};delete childEnv.FORCE_COLOR;
   let stdout='',stderr='';child=spawn(process.execPath,['--import','tsx','scripts/release/libraryCloudRetention.mts'],{env:childEnv,stdio:['ignore','pipe','pipe']});child.stdout!.on('data',v=>stdout+=v);child.stderr!.on('data',v=>stderr+=v);
-  const exited=new Promise<number|null>((done,reject)=>{child!.on('error',reject);child!.on('exit',done);});
+  const exited=new Promise<number|null>((done,reject)=>{child!.on('error',reject);child!.on('close',done);});
   await expect.poll(async()=>(await f.pool.query("SELECT count(*)::int n FROM pg_stat_activity WHERE application_name='sensa-library-retention' AND wait_event='PgSleep'")).rows[0].n,{timeout:10000}).toBe(1);
   expect(child.kill('SIGTERM')).toBe(true);expect(await exited).toBe(0);expect(stderr).toBe('');
   const result=JSON.parse(stdout.trim());expect(result).toMatchObject({batches:1,accountsServiced:1,historyEnabled:true,interrupted:true,limitReached:false});
   expect((await f.pool.query('SELECT isfinite(maintenance_at) AS advanced FROM sensa_consumer.library_cloud WHERE account_id=$1',[account.accountId])).rows[0].advanced).toBe(true);
+  await f.pool.query('DROP TRIGGER scheduled_signal_pause ON sensa_consumer.library_cloud');
+  // A process clock one hour behind must not turn the repeated fair rounds
+  // into one slice/hour. The database owns both cursor and pass timestamps.
+  const skew='const NativeDate=Date;globalThis.Date=class extends NativeDate{constructor(...args){if(args.length)super(...args);else super(NativeDate.now()-3600000)}static now(){return NativeDate.now()-3600000}};';
+  stdout='';stderr='';child=spawn(process.execPath,['--import','tsx','--import','data:text/javascript,'+encodeURIComponent(skew),'scripts/release/libraryCloudRetention.mts'],{env:childEnv,stdio:['ignore','pipe','pipe']});child.stdout!.on('data',v=>stdout+=v);child.stderr!.on('data',v=>stderr+=v);
+  expect(await new Promise<number|null>((done,reject)=>{child!.on('error',reject);child!.on('close',done);})).toBe(0);expect(stderr).toBe('');
+  expect(JSON.parse(stdout.trim())).toMatchObject({batches:100,accountsServiced:100,historyEnabled:true,interrupted:false,limitReached:true});
  }finally{if(child&&child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');await f.pool.query('DROP TRIGGER IF EXISTS scheduled_signal_pause ON sensa_consumer.library_cloud');await f.pool.query('DROP FUNCTION IF EXISTS sensa_consumer.scheduled_signal_pause()');await f.close();}
 });

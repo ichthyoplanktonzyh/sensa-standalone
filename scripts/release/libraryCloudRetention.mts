@@ -13,13 +13,16 @@ let deleted=0,batches=0,accountsServiced=0,stopping=false;
 const stop=()=>{stopping=true;};process.once('SIGTERM',stop);process.once('SIGINT',stop);
 try{
  await db.connect();
- const passBefore=(await db.query('SELECT clock_timestamp() AS at')).rows[0].at as Date,deadline=performance.now()+90_000;
+ const deadline=performance.now()+90_000;
  while(batches<maxBatches&&!stopping&&performance.now()<deadline){
   await db.query('BEGIN');
   try{
    await db.query("SET LOCAL lock_timeout='5s'");
    await db.query("SET LOCAL statement_timeout='20s'");
-   const now=new Date(),account=historyEnabled?await continueLibraryCloudRetention(db,now,passBefore):undefined;
+   // Keep expiration, eligibility and cursor advancement on the database clock;
+   // the text boundary preserves its microseconds across the JS Date boundary.
+   const instant=(await db.query('SELECT clock_timestamp() AS at,clock_timestamp()::text AS boundary')).rows[0];
+   const now=instant.at as Date,account=historyEnabled?await continueLibraryCloudRetention(db,now,instant.boundary):undefined;
    const count=await purgeExpiredLibraryCloudBlocks(db,now,batchSize);
    await db.query('COMMIT');deleted+=count;batches++;if(account)accountsServiced++;
    if(count<batchSize&&!account)break;
