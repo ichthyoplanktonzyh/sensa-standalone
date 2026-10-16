@@ -146,6 +146,7 @@ test('private initial pages reject gaps/replays/cross-account payloads and final
   expect((await call('/staging/begin',{...begin,localRevision:13})).value.code).toBe('operation_conflict');
   const rows=Array.from({length:600},(_,i)=>({table:i===0?'meta':'drafts',key:i===0?'identity':'draft-'+i,blocks:[block.hash]}));
   const p0={operationId:begin.operationId,page:0,rows:rows.slice(0,400)},p1={operationId:begin.operationId,page:1,rows:rows.slice(400)};
+  expect((await call('/staging/page',{...p0,rows:[rows[1],rows[1]]})).status).toBe(400);
   expect((await call('/staging/page',p1)).status).toBe(409);
   const first=await call('/staging/page',p0);expect(first.status).toBe(200);expect((await call('/staging/page',p0)).value).toEqual(first.value);
   expect((await call('/staging/page',{...p0,rows:[rows[0]]})).value.code).toBe('operation_conflict');
@@ -153,6 +154,9 @@ test('private initial pages reject gaps/replays/cross-account payloads and final
   expect((await call('/staging/page',p1,b.token)).status).toBe(409);
   expect((await call('/head')).value.manifest).toBeNull();expect((await f.pool.query('SELECT 1 FROM sensa_consumer.library_cloud_rows r JOIN sensa_consumer.library_cloud h ON h.account_id=r.account_id AND h.rows_generation=r.generation WHERE r.account_id=$1',[a.accountId])).rowCount).toBe(0);expect((await f.pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud_rows WHERE account_id=$1 AND generation=$2',[a.accountId,begin.operationId])).rows[0].n).toBe(400);
   const second=await call('/staging/page',p1);expect(second.status).toBe(200);
+  expect((await f.pool.query('SELECT prepared_version,pages,records,prepared_pages,prepared_records FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND operation_id=$2',[a.accountId,begin.operationId])).rows[0]).toEqual({prepared_version:2,pages:2,records:600,prepared_pages:2,prepared_records:600});
+  expect((await f.pool.query('SELECT 1 FROM sensa_consumer.library_cloud_staging_rows WHERE account_id=$1 AND operation_id=$2',[a.accountId,begin.operationId])).rowCount).toBe(0);
+  expect((await f.pool.query('SELECT count(*)::int AS n FROM sensa_consumer.library_cloud_snapshots WHERE account_id=$1 AND generation=$2',[a.accountId,begin.operationId])).rows[0].n).toBe(600);
   const commit={operationId:begin.operationId,baseRevision:0,staging:{pages:2,records:600,digest:second.value.digest}};
   expect((await call('/commit',{...commit,staging:{...commit.staging,pages:1}})).status).toBe(409);
   for(const table of ['library_cloud','library_cloud_commits']){
@@ -271,14 +275,16 @@ test('finite stage budgets measure decoded blocks, count all workspaces, and rej
 });
 
 
-test('retained pre-counter staging resumes with measured old rows instead of trusting zero bytes',async({browser})=>{
+for(const version of [1,2])test(`pre-counter staging v${version} resumes with measured old rows instead of trusting zero bytes`,async({browser})=>{
  const f=await createLibraryCloudBrowserFixture(browser);
  try{
   const account=await f.createAccount(),call=async(path:string,body:unknown)=>{const response=await fetch(f.origin+'/sensa/library-sync'+path,{method:'POST',headers:{authorization:'Bearer '+account.token,'content-type':'application/json'},body:JSON.stringify(body)});return {status:response.status,value:await response.json()};};
   const data=encodeLibrarySyncBlock('["string","retained compressed input"]'),block={hash:hash(data),data};await call('/blocks/store',{blocks:[block]});
   const begin={operationId:crypto.randomUUID(),baseRevision:0,libraryId:crypto.randomUUID(),learnerId:crypto.randomUUID(),incarnation:crypto.randomUUID(),localRevision:1};await call('/staging/begin',begin);
+  if(version===1)await f.pool.query('UPDATE sensa_consumer.library_cloud_staging SET prepared_version=1 WHERE account_id=$1',[account.accountId]);
   const page={operationId:begin.operationId,page:0,rows:[{table:'meta',key:'identity',blocks:[block.hash]}]},first=await call('/staging/page',page);expect(first.status).toBe(200);
-  await f.pool.query('UPDATE sensa_consumer.library_cloud_blocks SET logical_bytes=NULL WHERE account_id=$1',[account.accountId]);await f.pool.query('UPDATE sensa_consumer.library_cloud_staging_rows SET logical_bytes=NULL WHERE account_id=$1',[account.accountId]);await f.pool.query('UPDATE sensa_consumer.library_cloud_staging SET logical_bytes=NULL WHERE account_id=$1',[account.accountId]);
+  expect((await f.pool.query('SELECT 1 FROM sensa_consumer.library_cloud_staging_rows WHERE account_id=$1',[account.accountId])).rowCount).toBe(version===1?1:0);
+  await f.pool.query('UPDATE sensa_consumer.library_cloud_blocks SET logical_bytes=NULL WHERE account_id=$1',[account.accountId]);await f.pool.query('UPDATE sensa_consumer.library_cloud_staging_rows SET logical_bytes=NULL WHERE account_id=$1',[account.accountId]);if(version===2)await f.pool.query('UPDATE sensa_consumer.library_cloud_rows SET logical_bytes=NULL WHERE account_id=$1',[account.accountId]);await f.pool.query('UPDATE sensa_consumer.library_cloud_staging SET logical_bytes=NULL WHERE account_id=$1',[account.accountId]);
   expect(await call('/staging/begin',begin)).toEqual({status:200,value:{staged:true}});expect(await call('/staging/page',page)).toEqual(first);
   const committed=await call('/commit',{operationId:begin.operationId,baseRevision:0,staging:{pages:1,records:1,digest:first.value.digest}});expect(committed.status).toBe(200);
   expect(Number((await f.pool.query('SELECT logical_bytes FROM sensa_consumer.library_cloud WHERE account_id=$1',[account.accountId])).rows[0].logical_bytes)).toBe(Buffer.byteLength('["string","retained compressed input"]'));

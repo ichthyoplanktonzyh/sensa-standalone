@@ -21,6 +21,8 @@ test('bounded request maintenance retires payload/history across three rounds wh
   const rows=[{table:'meta',key:'identity',blocks:[identity]},...Array.from({length:192},(_,i)=>({table:'drafts',key:`draft-${String(i).padStart(3,'0')}-${['界','é','🙂'][i%3]}`,blocks:refs}))];
   const begin={operationId:crypto.randomUUID(),baseRevision:0,libraryId,learnerId,incarnation:crypto.randomUUID(),localRevision:1};
   expect((await call('/staging/begin',begin)).status).toBe(200);
+  // Retained v1 uploads still exercise receipt-backed third-copy retirement.
+  await f.pool.query('UPDATE sensa_consumer.library_cloud_staging SET prepared_version=1 WHERE account_id=$1 AND operation_id=$2',[account.accountId,begin.operationId]);
   const pages=[];let digest='';
   for(let at=0;at<rows.length;at+=24){const page={operationId:begin.operationId,page:pages.length,rows:rows.slice(at,at+24)},ack=await call('/staging/page',page);expect(ack.status).toBe(200);digest=ack.value.digest;pages.push({page,ack});}
   expect(pages.length).toBeGreaterThanOrEqual(3);expect((await call('/staging/page',pages[1]!.page))).toEqual(pages[1]!.ack);
@@ -130,7 +132,8 @@ test('a manifest receipt sharing an unpublished stage ID cannot retire that priv
   const begin={operationId,baseRevision:0,libraryId,learnerId,incarnation:crypto.randomUUID(),localRevision:1};expect((await call('/staging/begin',begin)).status).toBe(200);
   const page={operationId,page:0,rows};expect((await call('/staging/page',page)).status).toBe(200);
   const manifest=await put({version:8,libraryId,learnerId,rows});expect((await call('/commit',{operationId,baseRevision:0,manifest:[manifest]})).status).toBe(200);
-  await call('/head');expect((await f.pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud_staging_rows WHERE account_id=$1',[account.accountId])).rows[0].n).toBe(1);
+  await call('/head');expect((await f.pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud_rows WHERE account_id=$1 AND generation=$2',[account.accountId,operationId])).rows[0].n).toBe(1);
+  expect((await f.pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud_staging_rows WHERE account_id=$1',[account.accountId])).rows[0].n).toBe(0);
   await f.pool.query("UPDATE sensa_consumer.library_cloud_staging SET expires_at='2000-01-01' WHERE account_id=$1 AND operation_id=$2",[account.accountId,operationId]);expect((await call('/staging/page',page)).value.code).toBe('library_sync_staging_expired');
   // Expired private work is reclaimable through the existing account sweep,
   // despite the unrelated durable receipt; current default-generation data stays.

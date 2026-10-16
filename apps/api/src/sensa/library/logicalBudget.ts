@@ -38,13 +38,14 @@ export async function currentLibraryLogicalBytes(db:DatabaseExecutor,accountId:s
 
 /** Pre-counter staging stays resumable, with exact old rows measured before any
  * successor page or CAS can claim their aggregate budget. */
-export async function stagingLibraryLogicalBytes(db:DatabaseExecutor,accountId:string,operationId:string,value:number|string|null):Promise<number>{
+export async function stagingLibraryLogicalBytes(db:DatabaseExecutor,accountId:string,operationId:string,value:number|string|null,preparedVersion=1):Promise<number>{
  if(value!==null)return Number(value);
+ const source=preparedVersion===2?'library_cloud_rows':'library_cloud_staging_rows',generation=preparedVersion===2?'generation':'operation_id';
  let total=0,table='',key='';
  for(;;){
-  const rows=(await db.query('SELECT table_name,record_key,refs FROM sensa_consumer.library_cloud_staging_rows WHERE account_id=$1 AND operation_id=$2 AND(table_name COLLATE "C",record_key COLLATE "C")>($3::text COLLATE "C",$4::text COLLATE "C") ORDER BY table_name COLLATE "C",record_key COLLATE "C" LIMIT 16',[accountId,operationId,table,key])).rows;
+  const rows=(await db.query(`SELECT table_name,record_key,refs FROM sensa_consumer.${source} WHERE account_id=$1 AND ${generation}=$2 AND(table_name COLLATE "C",record_key COLLATE "C")>($3::text COLLATE "C",$4::text COLLATE "C") ORDER BY table_name COLLATE "C",record_key COLLATE "C" LIMIT 16`,[accountId,operationId,table,key])).rows;
   if(!rows.length)break;const sizes=await measureLibraryRows(db,accountId,rows.map(row=>({blocks:row.refs})));
-  for(let at=0;at<rows.length;at++){const row=rows[at];total+=sizes[at];if(total>librarySyncLogicalByteLimit)throw new ConsumerError(413,'library_sync_capacity');await db.query('UPDATE sensa_consumer.library_cloud_staging_rows SET logical_bytes=$5 WHERE account_id=$1 AND operation_id=$2 AND table_name=$3 AND record_key=$4',[accountId,operationId,row.table_name,row.record_key,sizes[at]]);}
+  for(let at=0;at<rows.length;at++){const row=rows[at];total+=sizes[at];if(total>librarySyncLogicalByteLimit)throw new ConsumerError(413,'library_sync_capacity');await db.query(`UPDATE sensa_consumer.${source} SET logical_bytes=$5 WHERE account_id=$1 AND ${generation}=$2 AND table_name=$3 AND record_key=$4`,[accountId,operationId,row.table_name,row.record_key,sizes[at]]);}
   table=rows.at(-1)!.table_name;key=rows.at(-1)!.record_key;
  }
  await db.query('UPDATE sensa_consumer.library_cloud_staging SET logical_bytes=$3 WHERE account_id=$1 AND operation_id=$2',[accountId,operationId,total]);return total;

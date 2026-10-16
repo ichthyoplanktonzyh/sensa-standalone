@@ -9,7 +9,7 @@ import {libraryCloudRowOwner,discardPreparedLibraryGeneration,requirePrivateLibr
 const hash=(value:string)=>createHash('sha256').update(value).digest('hex');
 export const initialStageDigest=hash('sensa-initial-publication-v1');
 const conflict=(code='library_sync_conflict'):never=>{throw new ConsumerError(409,code);};
-const requirePreparedStage=(stage:any)=>{if(stage.prepared_version!==1||stage.prepared_pages!==stage.pages||stage.prepared_records!==stage.records)conflict('library_sync_staging_unprepared');if(stage.retiring)conflict('library_sync_staging_expired');};
+const requirePreparedStage=(stage:any)=>{if(stage.purpose!=='initial'||![1,2].includes(stage.prepared_version)||stage.prepared_pages!==stage.pages||stage.prepared_records!==stage.records)conflict('library_sync_staging_unprepared');if(stage.retiring)conflict('library_sync_staging_expired');};
 
 /** Callers hold the existing account lock and outer publication transaction. */
 export async function beginInitialPublication(db:DatabaseExecutor,id:string,head:any,raw:unknown,now:Date){
@@ -23,7 +23,9 @@ export async function beginInitialPublication(db:DatabaseExecutor,id:string,head
  const expired=(await db.query('SELECT operation_id FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND expires_at<=$2 LIMIT 4',[id,now])).rows;
  for(const row of expired)await discardInitialPublication(db,id,row.operation_id);
  if(Number((await db.query('SELECT count(*) AS n FROM sensa_consumer.library_cloud_staging WHERE account_id=$1',[id])).rows[0].n)>=4)throw new ConsumerError(413,'library_sync_capacity');
- await db.query('INSERT INTO sensa_consumer.library_cloud_staging(account_id,operation_id,request_digest,descriptor,digest,expires_at,logical_bytes,prepared_version) VALUES($1,$2,$3,$4::jsonb,$5,$6,0,1)',[id,input.operationId,digest,JSON.stringify(input),initialStageDigest,new Date(now.getTime()+libraryCloudUploadLeaseMs)]);
+ // Version 2 keeps refs only in the unpublished application generation and its
+ // immutable snapshot. Older handlers reject it instead of expecting a third copy.
+ await db.query('INSERT INTO sensa_consumer.library_cloud_staging(account_id,operation_id,request_digest,descriptor,digest,expires_at,logical_bytes,prepared_version) VALUES($1,$2,$3,$4::jsonb,$5,$6,0,2)',[id,input.operationId,digest,JSON.stringify(input),initialStageDigest,new Date(now.getTime()+libraryCloudUploadLeaseMs)]);
  return {staged:true};
 }
 export async function appendInitialPublication(db:DatabaseExecutor,id:string,head:any,raw:unknown,now:Date){
@@ -41,17 +43,18 @@ export async function appendInitialPublication(db:DatabaseExecutor,id:string,hea
  const hashes=[...new Set(input.rows.flatMap(row=>row.blocks))];
  if((await db.query('SELECT hash FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[id,hashes])).rowCount!==hashes.length)conflict('library_sync_missing_block');
  // A key can appear only once across the whole workspace, even under another page.
- if((await db.query(`SELECT 1 FROM sensa_consumer.library_cloud_staging_rows AS old JOIN jsonb_to_recordset($3::jsonb) AS new("table" text,key text,blocks jsonb)
- ON old.table_name=new."table" AND old.record_key=new.key WHERE old.account_id=$1 AND old.operation_id=$2 LIMIT 1`,[id,input.operationId,JSON.stringify(input.rows)])).rowCount)conflict('operation_conflict');
+ if((await db.query(`SELECT 1 FROM sensa_consumer.library_cloud_rows AS old JOIN jsonb_to_recordset($3::jsonb) AS new("table" text,key text,blocks jsonb)
+ ON old.table_name=new."table" AND old.record_key=new.key WHERE old.account_id=$1 AND old.generation=$2 LIMIT 1`,[id,input.operationId,JSON.stringify(input.rows)])).rowCount)conflict('operation_conflict');
  const measured=await measureLibraryRows(db,id,input.rows),logical=measured.reduce((sum,bytes)=>sum+bytes,0);
- if(await stagingLibraryLogicalBytes(db,id,input.operationId,stage.logical_bytes)+logical>librarySyncLogicalByteLimit)throw new ConsumerError(413,'library_sync_capacity');
+ if(await stagingLibraryLogicalBytes(db,id,input.operationId,stage.logical_bytes,stage.prepared_version)+logical>librarySyncLogicalByteLimit)throw new ConsumerError(413,'library_sync_capacity');
  const digest=hash(stage.digest+requestDigest);
- await db.query(`INSERT INTO sensa_consumer.library_cloud_staging_rows(account_id,operation_id,table_name,record_key,refs,logical_bytes) SELECT $1,$2,r."table",r.key,r.blocks,r.logical_bytes FROM jsonb_to_recordset($3::jsonb) AS r("table" text,key text,blocks jsonb,logical_bytes bigint)`,[id,input.operationId,JSON.stringify(input.rows.map((row,index)=>({...row,logical_bytes:measured[index]})))]);
+ const measuredRows=JSON.stringify(input.rows.map((row,index)=>({...row,logical_bytes:measured[index]})));
+ // Finish an already-open v1 upload without changing its storage contract.
+ if(stage.prepared_version===1)await db.query(`INSERT INTO sensa_consumer.library_cloud_staging_rows(account_id,operation_id,table_name,record_key,refs,logical_bytes) SELECT $1,$2,r."table",r.key,r.blocks,r.logical_bytes FROM jsonb_to_recordset($3::jsonb) AS r("table" text,key text,blocks jsonb,logical_bytes bigint)`,[id,input.operationId,measuredRows]);
  // Prepare the application rows and immutable snapshot inside this bounded
  // page. Neither generation is reachable through an unpublished head.
  await db.query(`INSERT INTO sensa_consumer.library_cloud_rows(account_id,generation,table_name,record_key,refs,logical_bytes)
-  SELECT account_id,operation_id,table_name,record_key,refs,logical_bytes FROM sensa_consumer.library_cloud_staging_rows
-  WHERE account_id=$1 AND operation_id=$2 AND (table_name,record_key) IN(SELECT r."table",r.key FROM jsonb_to_recordset($3::jsonb) AS r("table" text,key text))`,[id,input.operationId,JSON.stringify(input.rows)]);
+  SELECT $1,$2,r."table",r.key,r.blocks,r.logical_bytes FROM jsonb_to_recordset($3::jsonb) AS r("table" text,key text,blocks jsonb,logical_bytes bigint)`,[id,input.operationId,measuredRows]);
  await db.query(`INSERT INTO sensa_consumer.library_cloud_snapshots(account_id,generation,revision,table_name,record_key,refs)
   SELECT account_id,generation,$4,table_name,record_key,refs FROM sensa_consumer.library_cloud_rows
   WHERE account_id=$1 AND generation=$2 AND (table_name,record_key) IN(SELECT r."table",r.key FROM jsonb_to_recordset($3::jsonb) AS r("table" text,key text))`,[id,input.operationId,JSON.stringify(input.rows),stage.descriptor.baseRevision+1]);
@@ -69,10 +72,9 @@ export async function commitInitialPublication(db:DatabaseExecutor,id:string,hea
  if(!stage||new Date(stage.expires_at)<=now)conflict('library_sync_staging_expired');requirePreparedStage(stage);
  if(head.library_id||stage.descriptor.baseRevision!==input.baseRevision)conflict();
  if(stage.pages!==input.staging.pages||stage.records!==input.staging.records||stage.digest!==input.staging.digest)conflict('operation_conflict');
- if(!(await db.query("SELECT 1 FROM sensa_consumer.library_cloud_staging_rows WHERE account_id=$1 AND operation_id=$2 AND table_name='meta' AND record_key='identity'",[id,input.operationId])).rowCount)conflict('library_sync_identity');
- stage.logical_bytes=await stagingLibraryLogicalBytes(db,id,input.operationId,stage.logical_bytes);
+ if(!(await db.query("SELECT 1 FROM sensa_consumer.library_cloud_rows WHERE account_id=$1 AND generation=$2 AND table_name='meta' AND record_key='identity'",[id,input.operationId])).rowCount)conflict('library_sync_identity');
+ stage.logical_bytes=await stagingLibraryLogicalBytes(db,id,input.operationId,stage.logical_bytes,stage.prepared_version);
  const revision=head.revision+1;
- if(!(await db.query("SELECT 1 FROM sensa_consumer.library_cloud_rows WHERE account_id=$1 AND generation=$2 AND table_name='meta' AND record_key='identity'",[id,input.operationId])).rowCount)conflict('library_sync_staging_unprepared');
  await db.query('UPDATE sensa_consumer.library_cloud SET revision=$2,library_id=$3,learner_id=$4,record_count=$5,logical_bytes=$6,rows_generation=$7,snapshot_generation=$7,snapshot_revision=$2,retention_floor=$2,tail_bytes=0,tail_commits=0,updated_at=now() WHERE account_id=$1',[id,revision,stage.descriptor.libraryId,stage.descriptor.learnerId,stage.records,stage.logical_bytes,input.operationId]);
  return {revision,libraryId:stage.descriptor.libraryId,learnerId:stage.descriptor.learnerId,records:stage.records};
 }
