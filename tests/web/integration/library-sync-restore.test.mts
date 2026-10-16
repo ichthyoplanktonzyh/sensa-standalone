@@ -151,8 +151,7 @@ for(const concurrentWrite of [false,true])test(`failed conflict validation fence
  const ours=await saveDraft(crypto.randomUUID(),{id:first.id,expectedRevision:1,text:'Local conflicting edit.'});
  publish([{...first,revision:2,text:'Remote conflicting edit.'}]);
  const before=await facts();let later:Awaited<ReturnType<typeof saveDraft>>|undefined;
- const validate=replicaValidation.validateLibraryReplicaCooperatively;
- const validation=vi.spyOn(replicaValidation,'validateLibraryReplicaCooperatively').mockImplementationOnce(validate).mockImplementationOnce(async()=>{
+ const validation=vi.spyOn(replicaValidation,'validateLibraryReplicaRecordsCooperatively').mockImplementationOnce(async()=>{
   if(concurrentWrite)later=await saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Saved while conflict validation yielded.'});
   throw Error('controlled_conflicting_graph_failure');
  });

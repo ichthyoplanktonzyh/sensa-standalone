@@ -95,6 +95,7 @@ export class LibraryTransaction {
     onCommitStart?:()=>void;
   }> = [];
   private syncBaseReplacement: Array<{ table: Table; key: string; valueJson: string; blockRefs: string[] }> | undefined;
+  private syncBaseValidated: true | undefined;
   private syncBasePatch:SqliteMutation['syncBasePatch'];
   private replicaCandidateRestore:SqliteMutation['replicaCandidateRestore'];
   private initialPublication:string|undefined;
@@ -116,7 +117,7 @@ export class LibraryTransaction {
     this.replicaCandidateRestore={id:candidate.id,tables:candidate.tables};this.wrote=true;
   }
 
-  updateReplicaCandidate(update:ReplicaCandidateUpdate):void{
+  updateReplicaCandidate(update:ReplicaCandidateUpdate|import('./replicaCandidateProtocol').ReplicaCandidateRebase):void{
     this.assertWritable();
     if(this.replicaCandidateRestore||this.syncBaseReplacement!==undefined||this.syncBasePatch)throw Error('library_sync_base_mutation_conflict');
     this.replicaCandidateRestore={id:update.id,tables:update.tables,update};this.wrote=true;
@@ -263,24 +264,20 @@ export class LibraryTransaction {
     return storageCall(()=>this.adapter.hasChangesSince(contentRevision,tables));
   }
 
-  async changesSince<Tables extends readonly Table[]>(contentRevision: number, tables: Tables): Promise<Array<{
-    table: Tables[number];
-    key: string;
-    value: unknown | null;
-    contentRevision: number;
-  }>> {
-    if (this.wrote) throw new Error('library_changes_require_snapshot');
-    const changes: SqliteRecordChange[] = await storageCall(
-      () => this.adapter.changesSince(contentRevision, tables),
-    );
-    return Promise.all(changes.map(async(change) => ({
-      table: change.table as Tables[number],
-      key: change.key,
-      value: change.encodedValue === null
-        ?null
-        :clone(await this.decodeStored(change.table,change.encodedValue)),
-      contentRevision: change.contentRevision,
-    })));
+  async *changeBatchesSince<Tables extends readonly Table[]>(contentRevision:number,tables:Tables){
+    if(this.wrote)throw Error('library_changes_require_snapshot');
+    let after:import('./sqliteProtocol').SqliteChangePage['after'];
+    for(;;){
+      const changes=await storageCall(()=>this.adapter.changesSince(contentRevision,tables,{after,limit:128}));
+      yield await Promise.all(changes.map(async change=>({table:change.table as Tables[number],key:change.key,value:change.encodedValue===null?null:clone(await this.decodeStored(change.table,change.encodedValue)),contentRevision:change.contentRevision})));
+      if(changes.length<128)return;const last=changes.at(-1)!;after={contentRevision:last.contentRevision,table:last.table,key:last.key};
+    }
+  }
+
+  async changesSince<Tables extends readonly Table[]>(contentRevision:number,tables:Tables){
+    const changes:Array<{table:Tables[number];key:string;value:unknown|null;contentRevision:number}>=[];
+    for await(const page of this.changeBatchesSince(contentRevision,tables))changes.push(...page);
+    return changes;
   }
 
   async syncBaseEntries<Tables extends readonly Table[]>(keys?: readonly {
@@ -302,7 +299,7 @@ export class LibraryTransaction {
     if(this.wrote)throw new Error('library_sync_base_requires_snapshot');
     return storageCall(()=>this.adapter.syncBaseReferences());
   }
-  patchSyncBase(input:{puts:readonly {table:Table;key:string;value:unknown;blocks:readonly string[]}[];deletes:readonly {table:Table;key:string}[]}):void{
+  patchSyncBase(input:{puts:readonly {table:Table;key:string;value:unknown;blocks:readonly string[]}[];deletes:readonly {table:Table;key:string}[]}, admission?:{validated:true}):void{
     this.assertWritable();
     if(this.syncBaseReplacement!==undefined||this.syncBasePatch)throw new Error('library_sync_base_mutation_conflict');
     const puts=input.puts.map(row=>{
@@ -310,9 +307,10 @@ export class LibraryTransaction {
       if(!blockRefs.length||blockRefs.some(ref=>!/^[a-f0-9]{64}$/u.test(ref)))throw new Error('library_sync_format');
       return {table:row.table,key:recordKey(row.key),valueJson:JSON.stringify(row.value),blockRefs};
     });
+    this.syncBaseValidated=admission?.validated;
     this.syncBasePatch={puts,deletes:input.deletes.map(({table,key})=>({table,key:recordKey(key)}))};this.wrote=true;
   }
-  replaceSyncBase(entries: readonly { table: Table; key: string; value: unknown; blocks?: readonly string[] }[]): void {
+  replaceSyncBase(entries: readonly { table: Table; key: string; value: unknown; blocks?: readonly string[] }[], admission?:{validated:true}): void {
     this.assertWritable();
     if(this.syncBasePatch)throw new Error('library_sync_base_mutation_conflict');
     const unique = new Map<string, { table: Table; key: string; valueJson: string; blockRefs: string[] }>();
@@ -327,6 +325,7 @@ export class LibraryTransaction {
         blockRefs,
       });
     }
+    this.syncBaseValidated=admission?.validated;
     this.syncBaseReplacement = [...unique.values()]
       .sort((left, right) => left.table.localeCompare(right.table) || left.key.localeCompare(right.key));
     this.wrote = true;
@@ -581,6 +580,7 @@ export class LibraryTransaction {
       ...(this.syncBaseReplacement === undefined
         ? {}
         : { syncBaseReplacement: this.syncBaseReplacement }),
+      ...(this.syncBaseValidated?{syncBaseValidated:this.syncBaseValidated}:{}),
       ...(this.syncBasePatch===undefined?{}:{syncBasePatch:this.syncBasePatch}),
       ...(this.replicaCandidateRestore===undefined?{}:{replicaCandidateRestore:this.replicaCandidateRestore}),
     };
@@ -684,8 +684,8 @@ async function transaction<T>(
         if(mutation.replicaCandidateRestore||mutation.initialPublication){
           try{
             const encoded=await storageCall(()=>adapter.get('meta','cloud-sync'));
-            const state=encoded===null?undefined:decode(encoded) as {restoreOperationId?:string;publicationOperationId?:string;syncedLocalRevision?:number};
-            confirmed=mutation.initialPublication?state?.publicationOperationId===mutation.initialPublication:state?.restoreOperationId===mutation.replicaCandidateRestore!.id&&state.syncedLocalRevision===(mutation.contentRevision??mutation.replicaCandidateRestore!.update?.localRevision);
+            const state=encoded===null?undefined:decode(encoded) as {restoreOperationId?:string;publicationOperationId?:string;dirtyRebaseOperationId?:string;syncedLocalRevision?:number};
+            confirmed=mutation.initialPublication?state?.publicationOperationId===mutation.initialPublication:('kind' in (mutation.replicaCandidateRestore!.update??{})?state?.dirtyRebaseOperationId===mutation.replicaCandidateRestore!.id:state?.restoreOperationId===mutation.replicaCandidateRestore!.id&&state.syncedLocalRevision===(mutation.contentRevision??mutation.replicaCandidateRestore!.update?.localRevision));
           }catch{/* Keep the original failure when the outcome cannot be read. */}
         }
         if(!confirmed)throw cause;

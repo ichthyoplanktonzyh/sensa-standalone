@@ -25,7 +25,11 @@ export class SqliteRecordValidation implements RecordValidationIndex{
  }
  private flush(){
   if(!this.keys.size&&!this.scenes.size)return;this.alive();this.database.exec('BEGIN IMMEDIATE');
-  try{for(const {kind,value}of this.keys.values())this.rows('INSERT INTO sensa_record_validation_keys VALUES(?,?,?)',[this.scope,kind,value]);for(const [scene,meaning]of this.scenes)this.rows('INSERT INTO sensa_record_validation_scenes VALUES(?,?,?)',[this.scope,scene,meaning]);this.checkCapacity();this.database.exec('COMMIT');this.keys.clear();this.scenes.clear();this.pendingBytes=0;}
+  try{
+   if(this.keys.size){this.rows("INSERT INTO sensa_record_validation_keys SELECT ?,json_extract(value,'$[0]'),json_extract(value,'$[1]') FROM json_each(?)",[this.scope,JSON.stringify([...this.keys.values()].map(({kind,value})=>[kind,value]))]);if(this.database.changes()!==this.keys.size)throw Error('sqlite_record_validation_failed');}
+   if(this.scenes.size){this.rows("INSERT INTO sensa_record_validation_scenes SELECT ?,json_extract(value,'$[0]'),json_extract(value,'$[1]') FROM json_each(?)",[this.scope,JSON.stringify([...this.scenes])]);if(this.database.changes()!==this.scenes.size)throw Error('sqlite_record_validation_failed');}
+   this.checkCapacity();this.database.exec('COMMIT');this.keys.clear();this.scenes.clear();this.pendingBytes=0;
+  }
   catch(cause){this.database.exec('ROLLBACK');throw cause;}
  }
  unique(kind:'registry-slot'|'sense-key',value:string){try{return this.uniqueKey(kind,value);}catch(cause){throw new RecordValidationStorageError(cause);}}

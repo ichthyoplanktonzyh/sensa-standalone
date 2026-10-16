@@ -252,7 +252,7 @@ const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
     case 'worldLearningChoices':return current.database.worldLearningChoices(request.query);
     case 'practiceExpressions':return current.database.practiceExpressions(request.query);
     case 'existingJourneyIdentities':return current.database.existingJourneyIdentities(request.ids);
-    case 'changesSince': return current.database.changesSince(request.contentRevision,request.tables);
+    case 'changesSince': return current.database.changesSince(request.contentRevision,request.tables,request.page);
     case 'hasChangesSince':return current.database.hasChangesSince(request.contentRevision,request.tables);
     case 'syncBaseEntries': return current.database.syncBaseEntries(request.keys);
     case 'syncBaseReferences':return current.database.syncBaseReferences();
@@ -307,7 +307,7 @@ worker.addEventListener('message',(event:MessageEvent<SqliteWorkerRequest>)=>{
   });
   // Private candidate validation/merge may yield while normal requests run.
   // Merge also rechecks its live baseline fence; never hold the owner queue.
-  if(event.data.kind!=='replicaCandidate'||!['validate','prepareUpdate','validatePublication','admitOwnPublication','preparePublication','retirePublication'].includes(event.data.request.kind))requestQueue=response.then(()=>undefined,()=>undefined);
+  if(event.data.kind!=='replicaCandidate'||!['validate','prepareUpdate','prepareRebase','validatePublication','admitOwnPublication','preparePublication','retirePublication'].includes(event.data.request.kind))requestQueue=response.then(()=>undefined,()=>undefined);
   void response.then(
     value=>worker.postMessage({id:event.data.id,ok:true,value} satisfies SqliteWorkerResult),
     cause=>worker.postMessage({

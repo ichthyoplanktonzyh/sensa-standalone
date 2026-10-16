@@ -31,7 +31,7 @@ export const sqliteLibrarySchemaVersion = 19;
 /** Durable physical data; every other application table is a derived cache. */
 export const sqliteSourceDataTables=new Set(['sensa_records','sensa_record_tombstones','sensa_sync_base','sensa_shared_record_content','sensa_shared_record_content_owners','sensa_portable_media','sensa_portable_package_media']);
 /** Cross-tab RPC changes must bump this before adding or changing messages. */
-export const sqliteCoordinatorProtocolVersion = 75;
+export const sqliteCoordinatorProtocolVersion = 76;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -79,13 +79,16 @@ export type SqliteMutation = {
   portablePackages?:PortablePackageMediaWrite[];
   /** Atomic replacement of the last server-confirmed checkpoint baseline. */
   syncBaseReplacement?: SqliteSyncBaseEntry[];
+  /** Trusted sync caller has admitted these exact wire bodies and refs. */
+  syncBaseValidated?: true;
   /** Confirmed local publication: replace only the affected baseline records. */
   syncBasePatch?:{puts:SqliteSyncBaseEntry[];deletes:Array<{table:SqliteLibraryTable;key:string}>};
   /** Fresh population or a Worker-prepared update of a confirmed checkpoint.
    * Bodies stay in SQLite; COMMIT rechecks the owner, revision and private plan. */
-  replicaCandidateRestore?:{id:string;tables:SqliteLibraryTable[];update?:import('./replicaCandidateProtocol').ReplicaCandidateUpdate};
+  replicaCandidateRestore?:{id:string;tables:SqliteLibraryTable[];update?:import('./replicaCandidateProtocol').ReplicaCandidateUpdate|import('./replicaCandidateProtocol').ReplicaCandidateRebase};
 };
 
+export type SqliteChangePage={after?:{contentRevision:number;table:SqliteLibraryTable;key:string};limit:number};
 export type SqliteRecordChange = {
   table: SqliteLibraryTable;
   key: string;
@@ -129,7 +132,7 @@ export type SqliteWorkerRequest =
   | {id:number;kind:'worldLearningChoices';query:WorldLearningChoiceQuery}
   | {id:number;kind:'practiceExpressions';query:PracticeExpressionQuery}
   | {id:number;kind:'existingJourneyIdentities';ids:string[]}
-  | { id: number; kind: "changesSince"; contentRevision: number; tables: SqliteLibraryTable[] }
+  | { id: number; kind: "changesSince"; contentRevision: number; tables: SqliteLibraryTable[];page?:SqliteChangePage }
   | { id:number;kind:'hasChangesSince';contentRevision:number;tables:SqliteLibraryTable[] }
   | { id: number; kind: "syncBaseEntries"; keys?: Array<{ table: SqliteLibraryTable; key: string }> }
   | {id:number;kind:'syncBaseReferences'}

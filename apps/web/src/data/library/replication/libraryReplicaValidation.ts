@@ -38,6 +38,9 @@ export async function validateLibraryReplicaCooperatively(entries:LibraryReplica
  const records=replicaRecords(entries,packageCache);return {identity:await validateLibrarySyncRecordsCooperatively(records),records};
 }
 
+/** The same complete authority with a disk-backed or bounded overlay reader. */
+export async function validateLibraryReplicaRecordsCooperatively(records:LibraryRecordReader):Promise<ValidatedLibraryReplica>{return {identity:await validateLibrarySyncRecordsCooperatively(records),records};}
+
 /** Historical business proof for a resolved learning fork.
  * Retained decisions on ordinary syncs do not trigger this path. */
 export async function validateLearningConflictReplicaCooperatively(entries:LibraryReplicaEntry[],targetIds:ReadonlySet<string>){

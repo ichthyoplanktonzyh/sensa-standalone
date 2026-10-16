@@ -48,7 +48,7 @@ export interface SqliteRecordAdapter {
   worldLearningChoices(query:WorldLearningChoiceQuery):Promise<WorldLearningChoicePage>;
   practiceExpressions(query:PracticeExpressionQuery):Promise<PracticeExpressionPage>;
   existingJourneyIdentities(ids:readonly string[]):Promise<string[]>;
-  changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]>;
+  changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[],page?:import('./sqliteProtocol').SqliteChangePage): Promise<SqliteRecordChange[]>;
   hasChangesSince(contentRevision:number,tables:readonly SqliteLibraryTable[]):Promise<boolean>;
   syncBaseEntries(keys?: readonly { table: SqliteLibraryTable; key: string }[]): Promise<SqliteSyncBaseEntry[]>;
   syncBaseReferences():Promise<import('./sqliteProtocol').SqliteSyncBaseReference[]>;
@@ -156,8 +156,8 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
     return this.send({kind:'packageCacheProjection',query}) as Promise<PackageCacheProjectionResult<Query>>;
   }
 
-  changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]> {
-    return this.send({ kind: "changesSince", contentRevision, tables: [...tables] }) as Promise<SqliteRecordChange[]>;
+  changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[],page?:import('./sqliteProtocol').SqliteChangePage): Promise<SqliteRecordChange[]> {
+    return this.send({ kind: "changesSince", contentRevision, tables: [...tables],page }) as Promise<SqliteRecordChange[]>;
   }
   lookupMeanings(query:string):Promise<MeaningLookupResult>{return this.send({kind:'meaningLookup',query}) as Promise<MeaningLookupResult>;}
   contextBrowse(query:ContextBrowseQuery):Promise<ContextBrowsePage>{return this.send({kind:'contextBrowse',query}) as Promise<ContextBrowsePage>;}

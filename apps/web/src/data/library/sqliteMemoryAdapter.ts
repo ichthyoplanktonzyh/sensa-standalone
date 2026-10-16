@@ -194,13 +194,17 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
       .filter(key=>afterKey===null||key>afterKey).sort().slice(0,limit);
   }
 
-  async changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]> {
+  async changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[],page?:import('./sqliteProtocol').SqliteChangePage): Promise<SqliteRecordChange[]> {
     const selected = new Set(tables);
+    if(page&&(!Number.isSafeInteger(page.limit)||page.limit<1||page.limit>128))throw Error('sqlite_invalid_page_size');
+    const after=page?.after;
     return [...this.changes.values()]
+      .filter(change=>!after||change.contentRevision>after.contentRevision||change.contentRevision===after.contentRevision&&(change.table>after.table||change.table===after.table&&change.key>after.key))
       .filter((change) => change.contentRevision > contentRevision && selected.has(change.table))
       .sort((left, right) => left.contentRevision - right.contentRevision
-        || left.table.localeCompare(right.table)
-        || left.key.localeCompare(right.key))
+        || (left.table<right.table?-1:left.table>right.table?1:0)
+        || (left.key<right.key?-1:left.key>right.key?1:0))
+      .slice(0,page?.limit)
       .map((change) => ({ ...change }));
   }
 

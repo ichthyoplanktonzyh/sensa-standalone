@@ -62,7 +62,7 @@ export interface CoordinatedSqliteBackend {
   worldLearningChoices(query:import('./sqliteProtocol').WorldLearningChoiceQuery):Promise<import('./sqliteProtocol').WorldLearningChoicePage>;
   practiceExpressions(query:import('./sqliteProtocol').PracticeExpressionQuery):Promise<import('./sqliteProtocol').PracticeExpressionPage>;
   existingJourneyIdentities(ids:readonly string[]):Promise<string[]>;
-  changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]>;
+  changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[],page?:import('./sqliteProtocol').SqliteChangePage): Promise<SqliteRecordChange[]>;
   hasChangesSince(contentRevision:number,tables:readonly SqliteLibraryTable[]):Promise<boolean>;
   syncBaseEntries(keys?: readonly { table: SqliteLibraryTable; key: string }[]): Promise<SqliteSyncBaseEntry[]>;
   syncBaseReferences():Promise<import('./sqliteProtocol').SqliteSyncBaseReference[]>;
@@ -169,8 +169,8 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
     return this.call({kind:'existingRecordKeys',table,keys:[...keys]}) as Promise<string[]>;
   }
 
-  changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]> {
-    return this.call({ kind: 'changesSince', contentRevision, tables: [...tables] }) as Promise<SqliteRecordChange[]>;
+  changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[],page?:import('./sqliteProtocol').SqliteChangePage): Promise<SqliteRecordChange[]> {
+    return this.call({ kind: 'changesSince', contentRevision, tables: [...tables],page }) as Promise<SqliteRecordChange[]>;
   }
   lookupMeanings(query:string):Promise<import('./sqliteProtocol').MeaningLookupResult>{return this.call({kind:'meaningLookup',query}) as Promise<import('./sqliteProtocol').MeaningLookupResult>;}
   learningSemanticMemory(targetId?:string):Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>{return this.call({kind:'learningSemanticMemory',targetId}) as Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>;}
@@ -645,7 +645,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       case 'worldLearningChoices':return backend.worldLearningChoices(input.query);
       case 'practiceExpressions':return backend.practiceExpressions(input.query);
       case 'existingJourneyIdentities':return backend.existingJourneyIdentities(input.ids);
-      case 'changesSince': return backend.changesSince(input.contentRevision, input.tables);
+      case 'changesSince': return backend.changesSince(input.contentRevision, input.tables,input.page);
       case 'hasChangesSince':return backend.hasChangesSince(input.contentRevision,input.tables);
       case 'syncBaseEntries': return backend.syncBaseEntries(input.keys);
       case 'syncBaseReferences':return backend.syncBaseReferences();

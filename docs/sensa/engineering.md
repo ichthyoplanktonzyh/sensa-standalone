@@ -210,8 +210,12 @@ Package key；运行恢复、策略锁定和生成频控通过领域索引查询
 个人意义分支校验按 Meaning 解码相关操作回执，分组只保留记录引用；可重复的按需正文读取若失败，
 原错误必须穿透领域冲突处理，不能误报为用户可裁决的冲突。合并校验失败后的冲突状态写入也在
 写事务内核对捕获的本机内容版本；期间新增内容时保留原事实与基线，回到待同步，不发布旧冲突快照。
-协作调度不等于整体资源有界：
-双方变化或冲突等完整回退仍持有整库 wire 正文，排序、单个 Meaning 与 Learning reconciliation 也仍有同步工作段。
+有效 baseline 上的本地未上传变化与远端前进共用磁盘候选：固定远端 H 分页准入，SQL 对比双方 refs，并读取基线之后的分页 revision／tombstone journal。
+候选只保留完整变化依赖闭包的三方正文，双向关系和 enrollment route、Session-start、Registry 同槽等合并 cohort 共同确定闭包；闭包外由 refs 与 journal 证明三方一致。
+闭包沿用 16,384 key／64MiB 预算及既有 merger、冲突分区和明确选择规则，不提高阈值或回到整库 capture。完整候选及合并 overlay 仍逐条执行领域校验。
+专属 dirty-rebase receipt 在同一事务内复核账号、身份、incarnation、退出 epoch、云端与本地基线 revision 及捕获的本机 revision，再激活事实、投影、baseline 与状态。
+冲突分区保留旧 baseline，未冲突补集继续合入；混合 baseline 仅维护逐行摘要，不取得完整准入证书。上传仍须 CAS 与 operation receipt 确认，确认前不标记 synced。
+未取得有效 baseline 的完整回退仍受整库 capture 上限约束；排序、单个 Meaning 与 Learning reconciliation 也仍有同步工作段。
 已完整恢复的内容缓存复用一次一致的安装／来源快照；下载或缓存修复后重新读取当前快照，避免把期间新增但未恢复的来源误报为就绪。
 学习状态变化只刷新学习投影，语言选择只读取当前语言方向；通知按记录 key 过滤，当前页面不重复处理自己发出的跨页通知。
 数据结构调整不要求保留历史格式兼容层；当前源事实和可重建索引分开处理，不通过清空用户库恢复初始化错误。

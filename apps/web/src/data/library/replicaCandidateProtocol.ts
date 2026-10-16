@@ -10,7 +10,7 @@ export const replicaCandidateAppendReferenceLimit=4096;
 
 /** Completed read work only; never a validation or publication receipt. */
 export type ReplicaCandidateProgress={phase:'publication-validation'|'publication-preparation'|'candidate-validation'|'restore-installation';completed:number};
-export const replicaCandidateProgressPhase=(kind:ReplicaCandidateRequest['kind'])=>kind==='admitOwnPublication'?'publication-validation' as const:kind==='preparePublication'?'publication-preparation' as const:kind==='validate'?'candidate-validation' as const:undefined;
+export const replicaCandidateProgressPhase=(kind:ReplicaCandidateRequest['kind'])=>kind==='admitOwnPublication'?'publication-validation' as const:kind==='preparePublication'?'publication-preparation' as const:kind==='validate'||kind==='prepareRebase'?'candidate-validation' as const:undefined;
 export type ReplicaCandidateProgressObserver=(progress:ReplicaCandidateProgress)=>void;
 export const isReplicaCandidateProgress=(value:unknown):value is ReplicaCandidateProgress=>{
  const p=value as ReplicaCandidateProgress|undefined;
@@ -27,6 +27,9 @@ export type ReplicaCandidateValidation={id:string;identity:LibraryIdentity;head:
 /** Prepared against one unchanged, validated local checkpoint. No fact bodies
  * cross the Worker seam; the Worker owns and rechecks the actual mutation. */
 export type ReplicaCandidateUpdate={id:string;baseRevision:number;localRevision:number;contentChanged:boolean;tables:SqliteLibraryTable[];records:Array<{table:SqliteLibraryTable;key:string}>;receive?:import('./learningDeltaAdmission').DeltaReceiveEvidence};
+export type ReplicaCandidateRebaseFence={baseRevision:number;baseLocalRevision:number;signoutEpoch?:unknown;resolution?:import('./cloudSync').CloudSyncState['resolution']};
+/** The full remote remains in SQLite; only one bounded merge component crosses RPC. */
+export type ReplicaCandidateRebase=ReplicaCandidateUpdate&{kind:'dirty-rebase';baseLocalRevision:number;remoteRevision:number;conflicts:string[];conflict?:import('./cloudSync').CloudSyncConflict;upload:{puts:import('./replication/libraryReplica').LibraryReplicaEntry[];deletes:Array<Pick<import('./replication/libraryReplica').LibraryReplicaEntry,'table'|'key'>>}};
 export type ReplicaCandidateRequest=
  |{kind:'beginPublication';fence:ReplicaCandidateFence}
  |{kind:'publicationPage';id:string;after:{table:SqliteLibraryTable;key:string}|null}
@@ -39,7 +42,7 @@ export type ReplicaCandidateRequest=
  |{kind:'retirePublication';id:string}
  |{kind:'discardPublication';id:string}
  |{kind:'begin';fence:ReplicaCandidateFence;expected:ReplicaCandidateExpected}
- |{kind:'beginIndex';fence:ReplicaCandidateFence;head:LibrarySyncHead;baseRevision?:number}
+ |{kind:'beginIndex';fence:ReplicaCandidateFence;head:LibrarySyncHead;baseRevision?:number;rebase?:ReplicaCandidateRebaseFence}
  |{kind:'seed';id:string}
  |{kind:'indexPage';id:string;page:LibrarySyncPullResult|LibrarySyncSnapshotPageResult}
  |{kind:'append';id:string;records:ReplicaCandidateRecord[];blocks:ReplicaCandidateBlock[]}
@@ -47,8 +50,9 @@ export type ReplicaCandidateRequest=
  |{kind:'reuse';id:string;baseRevision:number;keys:Array<Pick<ReplicaCandidateRecord,'table'|'key'>>}
  |{kind:'validate';id:string}
  |{kind:'prepareUpdate';id:string;baseRevision:number}
+ |{kind:'prepareRebase';id:string}
  |{kind:'discard';id:string};
-export type ReplicaCandidateResponse={kind:'begun';id:string;needsSeed?:boolean}|{kind:'seeded';done:boolean}|InitialPublicationPage|{kind:'publicationIndexPage';rows:InitialPublicationPage['rows'];next:InitialPublicationPage['next'];done:boolean;stats:InitialPublicationStats}|{kind:'publicationBlocks';blocks:ReplicaCandidateBlock[];deferred:string[]}|{kind:'publicationValidated';stats:InitialPublicationStats}|{kind:'indexed';needed:Array<Pick<ReplicaCandidateRecord,'table'|'key'>>}|{kind:'appended'|'proved'}|{kind:'reused';keys:Array<Pick<ReplicaCandidateRecord,'table'|'key'>>}|{kind:'validated';candidate:ReplicaCandidateValidation}|{kind:'updatePrepared';update:ReplicaCandidateUpdate|null}|{kind:'discarded'}|{kind:'publicationRetired';done:boolean};
+export type ReplicaCandidateResponse={kind:'begun';id:string;needsSeed?:boolean}|{kind:'seeded';done:boolean}|InitialPublicationPage|{kind:'publicationIndexPage';rows:InitialPublicationPage['rows'];next:InitialPublicationPage['next'];done:boolean;stats:InitialPublicationStats}|{kind:'publicationBlocks';blocks:ReplicaCandidateBlock[];deferred:string[]}|{kind:'publicationValidated';stats:InitialPublicationStats}|{kind:'indexed';needed:Array<Pick<ReplicaCandidateRecord,'table'|'key'>>}|{kind:'appended'|'proved'}|{kind:'reused';keys:Array<Pick<ReplicaCandidateRecord,'table'|'key'>>}|{kind:'validated';candidate:ReplicaCandidateValidation}|{kind:'updatePrepared';update:ReplicaCandidateUpdate|null}|{kind:'rebasePrepared';rebase:ReplicaCandidateRebase}|{kind:'discarded'}|{kind:'publicationRetired';done:boolean};
 
 /** Large private bodies use ordinary rowid storage, with the same unique key
  * and parent ownership. The cache is disposable across physical connections. */
@@ -121,7 +125,13 @@ CREATE TABLE IF NOT EXISTS sensa_replica_candidate_encoded_bodies_v1(
  PRIMARY KEY(candidate_id,digest),
  FOREIGN KEY(candidate_id) REFERENCES sensa_replica_candidates_v1(id) ON DELETE CASCADE
 ) WITHOUT ROWID;
-${['encoded','encoded_bodies'].flatMap(table=>['INSERT','UPDATE','DELETE'].map(action=>`
+CREATE TABLE IF NOT EXISTS sensa_replica_candidate_merge_edges_v1(
+ candidate_id TEXT NOT NULL,token TEXT NOT NULL,table_name TEXT NOT NULL,record_key TEXT NOT NULL,
+ PRIMARY KEY(candidate_id,token,table_name,record_key),
+ FOREIGN KEY(candidate_id) REFERENCES sensa_replica_candidates_v1(id) ON DELETE CASCADE
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS sensa_replica_candidate_merge_owner_v1 ON sensa_replica_candidate_merge_edges_v1(candidate_id,table_name,record_key,token);
+${['encoded','encoded_bodies','merge_edges'].flatMap(table=>['INSERT','UPDATE','DELETE'].map(action=>`
 CREATE TRIGGER IF NOT EXISTS sensa_replica_candidate_epoch_${table}_${action.toLowerCase()}_v1
  AFTER ${action} ON sensa_replica_candidate_${table}_v1
  WHEN (SELECT state FROM sensa_replica_candidates_v1 WHERE id=${action==='DELETE'?'OLD':'NEW'}.candidate_id)<>'filling'

@@ -169,7 +169,7 @@ test('conflict markers and an unknown validation version cannot use an unchanged
  for(const patch of [{status:'conflict' as const},{conflict:{detectedAt:new Date().toISOString(),remoteRevision:revision,remoteManifest:manifest,records:[],affectedRecordIds:[]}},{resolution:{choice:'local' as const,expectedRemoteRevision:revision}},{restoreValidationVersion:undefined},{restoreValidationVersion:libraryRestoreValidationVersion-1}]){
   const state=await readCloudSync();await writeLibraryState(async tx=>tx.put('meta','cloud-sync',{...state,...patch}));
   calls.length=0;const adapter=await sqliteRecordAdapter(),reads=vi.spyOn(adapter,'syncBaseEntries');
-  try{await synchronizeLibrary(request);expect(reads.mock.calls.some(([keys])=>keys===undefined)).toBe(true);}finally{reads.mockRestore();}
+  try{await synchronizeLibrary(request);expect(reads.mock.calls.some(([keys])=>keys===undefined)).toBe('restoreValidationVersion' in patch);}finally{reads.mockRestore();}
   if('status'in patch||'conflict'in patch||'resolution'in patch)expect(calls).toContain('/snapshot');
  }
 });

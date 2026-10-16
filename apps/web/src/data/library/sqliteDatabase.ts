@@ -11,6 +11,7 @@ import type {LibraryRecordReader} from './libraryRecordReader';
 import {SqliteSyncDependencies,syncAdmission,type SyncDependencyCertificate} from './sqliteSyncDependencies';
 import {assertDeltaReceiveShape,DeltaReceiveFallback} from './learningDeltaAdmission';
 import type {CloudSyncState} from './cloudSync';
+import {validatedCheckpoint} from './cloudSyncCheckpoint';
 import {librarySyncTables,librarySyncSnapshotPageResult,librarySyncMetadataPageBytes,librarySyncMetadataPageRefs} from '@sensa/contracts/sensa';
 import {isReplicatedLibraryEntry} from './replication/libraryReplica';
 import {libraryRestoreValidationVersion} from './replication/libraryReplicaValidation';
@@ -519,20 +520,21 @@ export class SqliteRecordDatabase {
     return Number(rows[0])===1;
   }
 
-  changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): SqliteRecordChange[] {
+  changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[],page?:import('./sqliteProtocol').SqliteChangePage): SqliteRecordChange[] {
     if (!Number.isSafeInteger(contentRevision) || contentRevision < 0 || tables.length === 0) return [];
+    if(page&&(!Number.isSafeInteger(page.limit)||page.limit<1||page.limit>128))throw Error('sqlite_invalid_page_size');
     const selected = [...new Set(tables)];
     const placeholders = selected.map(() => '?').join(',');
     const rows = this.database.exec({
-      sql: `SELECT table_name,record_key,value_json,content_revision
+      sql: `SELECT * FROM(SELECT table_name,record_key,value_json,content_revision
             FROM sensa_records
             WHERE content_revision>? AND table_name IN (${placeholders})
             UNION ALL
             SELECT table_name,record_key,NULL AS value_json,content_revision
             FROM sensa_record_tombstones
             WHERE content_revision>? AND table_name IN (${placeholders})
-            ORDER BY content_revision,table_name,record_key`,
-      bind: [contentRevision, ...selected, contentRevision, ...selected],
+            ) ${page?.after?'WHERE (content_revision,table_name,record_key)>(?,?,?)':''} ORDER BY content_revision,table_name,record_key ${page?'LIMIT ?':''}`,
+      bind: [contentRevision, ...selected, contentRevision, ...selected,...(page?.after?[page.after.contentRevision,page.after.table,page.after.key]:[]),...(page?[page.limit]:[])],
       rowMode: 'object',
       returnValue: 'resultRows',
     }) as Array<Record<string, unknown>>;
@@ -809,17 +811,19 @@ export class SqliteRecordDatabase {
     this.assertReplicaCandidateHealthy();
     if(this.persistence==='opfs'&&request.kind!=='discard'&&candidates.needsScratchSpace(request)){await requireCloudScratchSpace(request.kind==='begin'||request.kind==='beginIndex');this.assertReplicaCandidateHealthy();}
     const readBase=(table:SqliteLibraryTable,key:string)=>{const row=this.syncBaseEntries([{table,key}])[0];if(!row)throw Error('library_sync_local_changed');return row.valueJson;};
+    const readRebaseBase=(table:SqliteLibraryTable,key:string)=>{const text=readBase(table,key);this.syncDependencies.verify(table,key,text);return text;};
     try{
       switch(request.kind){
-        case 'beginIndex':{const id=candidates.beginIndex(request.fence,request.head,request.baseRevision,readBase);return {kind:'begun',id,needsSeed:candidates.needsSeed(id)};}
+        case 'beginIndex':{const id=candidates.beginIndex(request.fence,request.head,request.baseRevision,readBase,request.rebase);return {kind:'begun',id,needsSeed:candidates.needsSeed(id)};}
         case 'seed':return {kind:'seeded',done:candidates.seed(request.id,readBase)};
-        case 'indexPage':return {kind:'indexed',needed:candidates.indexPage(request.id,request.page)};
+        case 'indexPage':return {kind:'indexed',needed:candidates.indexPage(request.id,request.page,readRebaseBase)};
         case 'begin':return {kind:'begun',id:candidates.begin(request.fence,request.expected)};
         case 'append':candidates.append(request.id,request.records,request.blocks);return {kind:'appended'};
         case 'prove':candidates.prove(request.id,request.record,request.blocks);return {kind:'proved'};
         case 'validate':return {kind:'validated',candidate:await candidates.validate(request.id,onProgress)};
         case 'reuse':return {kind:'reused',keys:candidates.reuse(request.id,request.baseRevision,request.keys,readBase)};
         case 'prepareUpdate':return {kind:'updatePrepared',update:await candidates.prepareUpdate(request.id,request.baseRevision,readBase)};
+        case 'prepareRebase':return {kind:'rebasePrepared',rebase:await candidates.prepareRebase(request.id,readRebaseBase,(table,key)=>this.get(table,key),onProgress)};
         case 'discard':candidates.discard(request.id);return {kind:'discarded'};
         default:throw Error('library_sync_candidate_invalid');
       }
@@ -1239,10 +1243,18 @@ export class SqliteRecordDatabase {
       bulkMaintenance=this.database.changes(true)-changesBefore>256||encodedWriteSize>1024*1024||mutation.clears.length>0;
       if(bulkMaintenance)this.database.exec('PRAGMA optimize');
       const syncState=this.decoded<CloudSyncState>('meta','cloud-sync'),syncIdentity=this.decoded<import('./store').LibraryIdentity>('meta','identity');
+      // Complete array restores already hold their admitted wire values. Keep
+      // the same row witnesses as sparse updates, without granting a complete
+      // checkpoint certificate to a mixed conflict baseline.
+      const admittedBase=syncState?.checkpointVersion===7&&syncIdentity&&mutation.syncBaseValidated&&mutation.puts.some(row=>row.table==='meta'&&row.key==='cloud-sync');
+      const uncertifiedBase=admittedBase&&!mutation.replicaCandidateRestore&&mutation.syncBaseReplacement
+        ?{puts:mutation.syncBaseReplacement,deletes:[]}
+        :(admittedBase||mutation.replicaCandidateRestore&&'kind' in (mutation.replicaCandidateRestore.update??{}))&&mutation.syncBasePatch&&(!patchAdmission||!previousCertificate||!validatedCheckpoint(syncState))?mutation.syncBasePatch:undefined;
+      if(uncertifiedBase)this.syncDependencies.refreshUncertifiedPatch(uncertifiedBase,(table,key)=>this.syncBaseEntries([{table,key}])[0]?.valueJson??(()=>{throw Error('library_sync_dependency_corrupt');})());
       if(syncState&&syncIdentity){
         const artifactRevision=this.decoded<number>('meta','local-artifact-revision')??0;
         if(mutation.initialPublication)this.initialPublication?.certify(mutation.initialPublication,syncState,syncIdentity,artifactRevision);
-        else if(mutation.replicaCandidateRestore)this.replicaCandidateStore?.certifyCheckpoint(mutation.replicaCandidateRestore.id,syncState,syncIdentity,artifactRevision);
+        else if(mutation.replicaCandidateRestore&&!('kind' in (mutation.replicaCandidateRestore.update??{})))this.replicaCandidateStore?.certifyCheckpoint(mutation.replicaCandidateRestore.id,syncState,syncIdentity,artifactRevision);
         else if(patchAdmission&&previousCertificate)this.syncDependencies.certify(patchAdmission,syncState,syncIdentity,artifactRevision,previousCertificate);
       }
       if(discardCandidates){this.purgeReplicaCandidates();

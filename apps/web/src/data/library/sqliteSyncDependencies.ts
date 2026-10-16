@@ -3,7 +3,8 @@ import type {Database,PreparedStatement} from '@sqlite.org/sqlite-wasm';
 import {sha256} from '@sensa/learning-kernel';
 import {z} from 'zod';
 import {replicaWork} from './replicaWork';
-import {backupEqual} from './backupCodec';
+import {backupEqual,decodeBackupValue} from './backupCodec';
+import {libraryReplicaMergeTokens} from './replication/libraryReplicaCohorts';
 import {validatedCheckpoint} from './cloudSyncCheckpoint';
 import {libraryRestoreValidationVersion} from './replication/libraryReplicaValidation';
 import type {CloudSyncState} from './cloudSync';
@@ -13,7 +14,7 @@ import type {ReplicaCandidateFence} from './replicaCandidateProtocol';
 
 export type SyncDependencyRow={table:SqliteLibraryTable;key:string;digest:string;bytes:number;storedBytes:number;edges:Array<[string,string]>;protocols:Array<[string,string]>};
 interface AdmissionRows{readonly size:number;has(key:string):boolean;get(key:string):SyncDependencyRow|undefined;set(key:string,row:SyncDependencyRow):AdmissionRows;clear():void;values():IterableIterator<SyncDependencyRow>;[Symbol.iterator]():IterableIterator<[string,SyncDependencyRow]>;}
-export type SyncAdmission={rows:AdmissionRows;scope?:string;flush?:(insideTransaction?:boolean)=>void;retainedMetadataBytes?:()=>number;packageCacheComplete:boolean;logicalBytes:number;storedBytes:number;metadataBytes:number;deletes?:Array<{table:SqliteLibraryTable;key:string}>;disabled?:string};
+export type SyncAdmission={mergeTokens?:true;rows:AdmissionRows;scope?:string;flush?:(insideTransaction?:boolean)=>void;retainedMetadataBytes?:()=>number;packageCacheComplete:boolean;logicalBytes:number;storedBytes:number;metadataBytes:number;deletes?:Array<{table:SqliteLibraryTable;key:string}>;disabled?:string};
 export type SyncDependencyCertificate={generation:number;epoch:number;version:2;validationVersion:number;owner:ReplicaCandidateFence['owner'];incarnation:string;libraryId:string;learnerId:string;revision:number;localRevision:number;artifactRevision:number;records:number;logicalBytes:number;storedBytes:number;packageCacheComplete:boolean};
 const id=(table:string,key:string)=>JSON.stringify([table,key]);
 const counter=z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),uuid=z.string().uuid();
@@ -143,7 +144,19 @@ export class SqliteSyncDependencies{
   this.ensure();this.rows('INSERT INTO sensa_sync_admission_v1(scope) VALUES(?) ON CONFLICT DO NOTHING',[scope]);
   const db=this,pending=new Map<string,SyncDependencyRow>();let pendingBytes=0;
   const from=(row:any):SyncDependencyRow=>({table:row.table_name,key:row.record_key,digest:row.digest,bytes:row.logical_bytes,storedBytes:row.stored_bytes,edges:JSON.parse(row.edges_json),protocols:JSON.parse(row.protocols_json)});
-  const flush=(insideTransaction=false)=>{if(!pending.size)return;if(!insideTransaction)db.database.exec('BEGIN IMMEDIATE');try{let addedMetadata=0;for(const row of pending.values()){const metadata=new TextEncoder().encode(scope+row.table+row.key+row.digest+JSON.stringify(row.edges)+JSON.stringify(row.protocols)).length;addedMetadata+=metadata;db.rows('INSERT INTO sensa_sync_admission_rows_v1(scope,table_name,record_key,digest,logical_bytes,stored_bytes,edges_json,protocols_json,metadata_bytes) VALUES(?,?,?,?,?,?,?,?,?)',[scope,row.table,row.key,row.digest,row.bytes,row.storedBytes,JSON.stringify(row.edges),JSON.stringify(row.protocols),metadata]);db.rows('UPDATE sensa_sync_admission_v1 SET records=records+1,logical_bytes=logical_bytes+?,stored_bytes=stored_bytes+?,metadata_bytes=metadata_bytes+? WHERE scope=?',[row.bytes,row.storedBytes,metadata,scope]);}onMetadataStored?.(addedMetadata,pending.size);if(!insideTransaction)db.database.exec('COMMIT');pending.clear();pendingBytes=0;}catch(cause){if(!insideTransaction)db.database.exec('ROLLBACK');throw cause;}};
+  const flush=(insideTransaction=false)=>{
+   if(!pending.size)return;if(!insideTransaction)db.database.exec('BEGIN IMMEDIATE');
+   try{
+    let addedMetadata=0,logical=0,stored=0;
+    const batch=[...pending.values()].map(row=>{const edges=JSON.stringify(row.edges),protocols=JSON.stringify(row.protocols),metadata=new TextEncoder().encode(scope+row.table+row.key+row.digest+edges+protocols).length;addedMetadata+=metadata;logical+=row.bytes;stored+=row.storedBytes;return [scope,row.table,row.key,row.digest,row.bytes,row.storedBytes,edges,protocols,metadata];});
+    db.rows("INSERT INTO sensa_sync_admission_rows_v1(scope,table_name,record_key,digest,logical_bytes,stored_bytes,edges_json,protocols_json,metadata_bytes) SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]'),json_extract(value,'$[2]'),json_extract(value,'$[3]'),json_extract(value,'$[4]'),json_extract(value,'$[5]'),json_extract(value,'$[6]'),json_extract(value,'$[7]'),json_extract(value,'$[8]') FROM json_each(?)",[JSON.stringify(batch)]);
+    if(db.database.changes()!==pending.size)throw Error('library_sync_dependency_corrupt');
+    db.rows('UPDATE sensa_sync_admission_v1 SET records=records+?,logical_bytes=logical_bytes+?,stored_bytes=stored_bytes+?,metadata_bytes=metadata_bytes+? WHERE scope=?',[pending.size,logical,stored,addedMetadata,scope]);
+    if(db.database.changes()!==1)throw Error('library_sync_dependency_corrupt');
+    replicaWork('admission.batchRows',pending.size);replicaWork('admission.batchWrites',2);onMetadataStored?.(addedMetadata,pending.size);
+    if(!insideTransaction)db.database.exec('COMMIT');pending.clear();pendingBytes=0;
+   }catch(cause){if(!insideTransaction)db.database.exec('ROLLBACK');throw cause;}
+  };
   const lookup=(key:string)=>{const [table,id]=JSON.parse(key);return db.rows<any>('SELECT * FROM sensa_sync_admission_rows_v1 WHERE scope=? AND table_name=? AND record_key=?',[scope,table,id])[0];};
   const rows:AdmissionRows={
    get size(){return db.rows<{records:number}>('SELECT records FROM sensa_sync_admission_v1 WHERE scope=?',[scope])[0].records+pending.size;},
@@ -174,6 +187,7 @@ export class SqliteSyncDependencies{
   }else if(table==='semanticReceipts')edge('meaningReceipt',value.result?.personalMeaningId);
   else if(table==='learningSessions')edge('sessionStart',JSON.stringify([value.startedByOperationId,value.startedAt]));
   if(table==='learningTargets'&&(value.curriculumMemberships??[]).some((membership:any)=>!!membership.packageKey&&!hasPackage(membership.packageKey)))admission.packageCacheComplete=false;
+  if(admission.mergeTokens)for(const token of libraryReplicaMergeTokens({table:table as import('./replication/libraryReplica').LibraryReplicaEntry['table'],key},value))edges.push(['merge',token]);
   if(computedDigest!==undefined&&!/^[a-f0-9]{64}$/u.test(computedDigest))throw Error('library_sync_dependency_corrupt');
   const row={table,key,digest:computedDigest??sha256(text),bytes,storedBytes:storedBytes??bytes,edges:[...new Map(edges.map(edge=>[JSON.stringify(edge),edge])).values()],protocols};
   admission.metadataBytes+=new TextEncoder().encode(JSON.stringify(row)).length;
@@ -187,6 +201,15 @@ export class SqliteSyncDependencies{
   this.rows('INSERT INTO sensa_sync_dependency_rows_v1 VALUES(?,?,?,?,?)',[row.table,row.key,row.digest,row.bytes,row.storedBytes]);
   if(row.edges.length)this.rows('INSERT INTO sensa_sync_dependency_edges_v1 SELECT ?,?,json_extract(value,\'$[0]\'),json_extract(value,\'$[1]\') FROM json_each(?)',[row.table,row.key,JSON.stringify(row.edges)]);
   if(row.protocols.length)this.rows('INSERT INTO sensa_sync_protocol_owners_v1 SELECT json_extract(value,\'$[0]\'),?,json_extract(value,\'$[1]\') FROM json_each(?)',[row.key,JSON.stringify(row.protocols)]);
+ }
+ /** Keep per-row integrity witnesses when a mixed conflict baseline cannot
+  * receive a complete admission certificate. This grants no sparse-receive
+  * authority; the next dirty rebase still validates its complete remote. */
+ refreshUncertifiedPatch(patch:{puts:readonly {table:SqliteLibraryTable;key:string}[];deletes:readonly {table:SqliteLibraryTable;key:string}[]},read:(table:SqliteLibraryTable,key:string)=>string):void{
+  this.ensure();this.rows('UPDATE sensa_sync_dependency_state_v1 SET certificate_json=NULL WHERE id=1');
+  for(const row of [...patch.puts,...patch.deletes])if(row.table==='learningRuns')this.rows('DELETE FROM sensa_sync_protocol_owners_v1 WHERE run_key=?',[row.key]);
+  for(const row of patch.deletes)this.rows('DELETE FROM sensa_sync_dependency_rows_v1 WHERE table_name=? AND record_key=?',[row.table,row.key]);
+  for(const row of patch.puts){const text=read(row.table,row.key),admission=syncAdmission();this.observe(admission,row.table,row.key,text,decodeBackupValue(JSON.parse(text)));for(const witness of admission.rows.values())this.put(witness);}
  }
  /** Caller is inside the same source/base/cursor transaction. */
  certify(admission:SyncAdmission,state:CloudSyncState,identity:LibraryIdentity,artifactRevision:number,previous?:SyncDependencyCertificate):void{
