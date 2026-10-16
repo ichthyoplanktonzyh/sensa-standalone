@@ -20,6 +20,7 @@
     "../../scripts/assessment/initialPublicationStageBrowserEntry.ts",
     "../../scripts/assessment/measureInitialPublication.mts",
     "integration/library-initial-publication-storage.test.mts",
+    "integration/library-change-query.test.mts",
     "database/library-initial-publication.spec.ts",
     "integration/library-sync-coordination.spec.ts",
     "quality/fixture-preparation.test.mts",

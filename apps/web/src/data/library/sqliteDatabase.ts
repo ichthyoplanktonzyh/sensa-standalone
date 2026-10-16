@@ -527,7 +527,7 @@ export class SqliteRecordDatabase {
     const placeholders = selected.map(() => '?').join(',');
     const rows = this.database.exec({
       sql: `SELECT * FROM(SELECT table_name,record_key,value_json,content_revision
-            FROM sensa_records
+            FROM sensa_records INDEXED BY sensa_records_content_revision
             WHERE content_revision>? AND table_name IN (${placeholders})
             UNION ALL
             SELECT table_name,record_key,NULL AS value_json,content_revision
