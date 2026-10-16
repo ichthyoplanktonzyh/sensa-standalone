@@ -42,16 +42,19 @@ export async function pruneLibraryCloudHistory(db:DatabaseExecutor,accountId:str
    (CASE WHEN owner_id~'^[0-9]+$' THEN owner_id::bigint ELSE (owner_id::jsonb->>1)::bigint END)<$2
   ORDER BY (CASE WHEN owner_id~'^[0-9]+$' THEN owner_id::bigint ELSE (owner_id::jsonb->>1)::bigint END) LIMIT $3 FOR UPDATE)
   DELETE FROM sensa_consumer.library_cloud_membership m USING page WHERE m.ctid=page.ctid`,[accountId,snapshot,pinBudget]);pinBudget-=snapshotPins.rowCount??0;
- await db.query(`WITH root AS(SELECT s.operation_id,s.descriptor->>'operationId' AS raw_owner
+ // Select the eligible root before looking up its exact owners. Inlining this
+ // selection into the pin DELETE let PG scan the growing private G's pins even
+ // when no root was eligible. Both statements share the account lock.
+ const root=(await db.query(`SELECT s.operation_id,s.descriptor->>'operationId' AS raw_owner
   FROM sensa_consumer.library_cloud_staging s WHERE s.account_id=$1 AND
    ((s.purpose='checkpoint' AND s.published_revision<$2) OR
-    (s.operation_id=$4 AND EXISTS(SELECT 1 FROM sensa_consumer.library_cloud_commits c
+    (s.operation_id=$3 AND EXISTS(SELECT 1 FROM sensa_consumer.library_cloud_commits c
      WHERE c.account_id=s.account_id AND c.operation_id=s.operation_id AND c.result IS NOT NULL AND c.revision<$2)))
    AND EXISTS(SELECT 1 FROM sensa_consumer.library_cloud_membership m WHERE m.account_id=$1 AND m.owner_kind='staging'
-    AND m.owner_id IN(s.operation_id::text,s.descriptor->>'operationId')) LIMIT 1),
-  page AS(SELECT m.ctid FROM sensa_consumer.library_cloud_membership m,root
-   WHERE m.account_id=$1 AND m.owner_kind='staging' AND m.owner_id IN(root.operation_id::text,root.raw_owner) LIMIT $3 FOR UPDATE OF m)
-  DELETE FROM sensa_consumer.library_cloud_membership m USING page WHERE m.ctid=page.ctid`,[accountId,snapshot,pinBudget,head.rows_generation]);
+    AND m.owner_id=ANY(ARRAY[s.operation_id::text,s.descriptor->>'operationId'])) LIMIT 1`,[accountId,snapshot,head.rows_generation])).rows[0];
+ if(root&&pinBudget)await db.query(`WITH page AS(SELECT ctid FROM sensa_consumer.library_cloud_membership
+  WHERE account_id=$1 AND owner_kind='staging' AND owner_id=ANY($2::text[]) LIMIT $3 FOR UPDATE)
+  DELETE FROM sensa_consumer.library_cloud_membership m USING page WHERE m.ctid=page.ctid`,[accountId,[root.operation_id,root.raw_owner],pinBudget]);
  return readers.n===0;
 }
 
