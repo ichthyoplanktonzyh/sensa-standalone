@@ -59,7 +59,7 @@ export async function appendInitialPublication(db:DatabaseExecutor,id:string,hea
   SELECT $1,'row',r.owner,b.value FROM jsonb_to_recordset($2::jsonb) AS r(owner text,blocks jsonb)
   CROSS JOIN LATERAL jsonb_array_elements_text(r.blocks) b(value) ON CONFLICT DO NOTHING`,[id,JSON.stringify(input.rows.map(row=>({owner:libraryCloudRowOwner(input.operationId,row.table,row.key),blocks:row.blocks})))]);
  await db.query("INSERT INTO sensa_consumer.library_cloud_membership SELECT $1,'staging',$2::uuid::text,hash FROM unnest($3::text[]) hash ON CONFLICT DO NOTHING",[id,input.operationId,hashes]);
- await db.query('INSERT INTO sensa_consumer.library_cloud_staging_pages VALUES($1,$2,$3,$4,$5)',[id,input.operationId,input.page,requestDigest,digest]);
+ await db.query('INSERT INTO sensa_consumer.library_cloud_staging_pages(account_id,operation_id,page,request_digest,digest) VALUES($1,$2,$3,$4,$5)',[id,input.operationId,input.page,requestDigest,digest]);
  await db.query('UPDATE sensa_consumer.library_cloud_staging SET pages=pages+1,records=records+$3,prepared_pages=prepared_pages+1,prepared_records=prepared_records+$3,metadata_bytes=metadata_bytes+$4,digest=$5,expires_at=$6,logical_bytes=logical_bytes+$7 WHERE account_id=$1 AND operation_id=$2',[id,input.operationId,input.rows.length,bytes,digest,new Date(now.getTime()+libraryCloudUploadLeaseMs),logical]);
  return {digest};
 }

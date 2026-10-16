@@ -3,17 +3,20 @@ import {createHash} from 'node:crypto';
 import {createLibraryCloudBrowserFixture} from '../support/libraryCloudBrowserFixture.mts';
 import {encodeLibrarySyncBlock,splitLibrarySyncText} from '@sensa/contracts/sensa/library-sync-blocks';
 import {pruneLibraryCloudHistory,purgeExpiredLibraryCloudBlocks} from '../../../apps/api/src/sensa/library/retention';
+import {finishLibraryCheckpoint} from '../support/finishLibraryCheckpoint.mts';
 
 test('cursor publication is atomic, idempotent, account fenced and continuously paged with leased snapshots',async({browser})=>{
  const f=await createLibraryCloudBrowserFixture(browser);
  try{
   const account=await f.createAccount(),other=await f.createAccount(),libraryId=crypto.randomUUID(),learnerId=crypto.randomUUID();
-  const call=async(path:string,body?:unknown,token=account.token)=>{const r=await fetch(f.origin+'/sensa/library-sync'+path,{method:body===undefined?'GET':'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});return {status:r.status,value:await r.json()};};
+  const rawCall=async(path:string,body?:unknown,token=account.token)=>{const r=await fetch(f.origin+'/sensa/library-sync'+path,{method:body===undefined?'GET':'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json','x-sensa-sync-protocol':'sensa-checkpoint-pages-v1'},body:body===undefined?undefined:JSON.stringify(body)});return {status:r.status,value:await r.json()};};
+  const call=async(path:string,body?:any,token=account.token)=>path==='/compact'?finishLibraryCheckpoint((path,body)=>rawCall(path,body,token),body):rawCall(path,body,token);
   const put=async(value:unknown)=>{const blocks=splitLibrarySyncText(JSON.stringify(value)).map(text=>{const data=encodeLibrarySyncBlock(text);return {hash:createHash('sha256').update(data).digest('hex'),data};});for(let at=0;at<blocks.length;at+=16)expect((await call('/blocks/store',{blocks:blocks.slice(at,at+16)})).status).toBe(200);return blocks.map(b=>b.hash);};
   const body=await put({valid:'shared fact bytes'}),identity=await put({identity:libraryId});
   const rows=[{table:'meta',key:'identity',blocks:identity},...Array.from({length:600},(_,i)=>({table:'drafts',key:'draft-'+i.toString().padStart(4,'0'),blocks:body}))];
   const bootstrap={operationId:crypto.randomUUID(),baseRevision:0,manifest:await put({version:8,libraryId,learnerId,rows})};
   expect((await call('/commit',bootstrap)).status).toBe(200);
+  expect((await call('/compact',{baseRevision:1})).value.manifest.snapshotRevision).toBe(1);
   const first=(await call('/head')).value;expect(first.revision).toBe(1);expect(first.manifest.records).toBe(601);
   expect((await call('/head',undefined,other.token)).value.manifest).toBeNull();
   const page1=(await call('/snapshot',{snapshotRevision:1,after:null,readLease:first.readLease})).value;
@@ -80,7 +83,7 @@ test('two real logical devices recover below the floor after a lost ACK without 
   const committed=await save(a,'Committed before lost ACK');await a.evaluate(()=>(window as any).failAck=true);
   await expect(a.evaluate(()=>(window as any).sync())).rejects.toThrow('lost_ack');
   const later=await save(a,'Local edit after lost ACK');await b.evaluate(()=>(window as any).sync());await save(b,'Independent second device');await b.evaluate(()=>(window as any).sync());
-  await b.evaluate(async()=>{const head=await (window as any).request('/head');await (window as any).request('/compact',{baseRevision:head.revision});});
+  await b.evaluate(async()=>{const w=window as any,head=await w.request('/head');let result=await w.request('/compact',{baseRevision:head.revision});while(result.preparation){const p=result.preparation;result=await w.request('/compact',{baseRevision:p.revision,operationId:p.operationId,page:p.page});}});
   await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());
   const snapshot=(page:import('@playwright/test').Page)=>page.evaluate(async()=>{const c=(window as any).core;return {drafts:(await c.listDrafts()).map((d:any)=>({id:d.id,text:d.text})).sort((a:any,b:any)=>a.id.localeCompare(b.id)),state:await c.readCloudSync(),base:await c.readLibrary((tx:any)=>tx.syncBaseReferences())};});
   const left=await snapshot(a),right=await snapshot(b);expect(left.drafts).toEqual(right.drafts);expect(left.drafts).toHaveLength(4);expect(left.drafts.map(d=>d.id)).toEqual(expect.arrayContaining([committed.id,later.id]));expect(left.state.pending).toBeUndefined();expect(left.state.status).toBe('synced');expect(left.base).toEqual(right.base);

@@ -31,7 +31,7 @@ export async function createLibrarySyncPageFixture(browser:Browser){
    }
    if(url.origin===api.origin){
     if(url.pathname.startsWith('/sensa/library-sync')||url.pathname==='/sensa/web/access/session'){
-     const reply=await fetch(api.origin+url.pathname+url.search,{method:request.method(),headers:{authorization:'Bearer '+account.token,'content-type':'application/json',...(request.headers()['x-sensa-snapshot-format']?{'x-sensa-snapshot-format':request.headers()['x-sensa-snapshot-format']!}:{})},...(request.postData()?{body:request.postData()!}:{})});
+     const reply=await fetch(api.origin+url.pathname+url.search,{method:request.method(),headers:{authorization:'Bearer '+account.token,'content-type':'application/json',...(request.headers()['x-sensa-snapshot-format']?{'x-sensa-snapshot-format':request.headers()['x-sensa-snapshot-format']!}:{}),...(request.headers()['x-sensa-sync-protocol']?{'x-sensa-sync-protocol':request.headers()['x-sensa-sync-protocol']!}:{})},...(request.postData()?{body:request.postData()!}:{})});
      try{await route.fulfill({status:reply.status,contentType:'application/json',body:await reply.text()});}catch(error){if(!(error instanceof Error)||!(/Route is already handled|Target.*closed/u.test(error.message)))throw error;}return;
     }
     await route.fulfill({status:503,json:{code:'fixture_unavailable'}});return;

@@ -29,17 +29,29 @@ export async function pruneLibraryCloudHistory(db:DatabaseExecutor,accountId:str
   DELETE FROM sensa_consumer.library_cloud_staging_rows r USING page WHERE r.ctid=page.ctid`,[accountId,libraryCloudCleanupRows,head.rows_generation]);
  await db.query(`WITH page AS(SELECT ctid FROM sensa_consumer.library_cloud_log WHERE account_id=$1 AND revision<=$2 ORDER BY revision,ordinal LIMIT $3 FOR UPDATE)
   DELETE FROM sensa_consumer.library_cloud_log r USING page WHERE r.ctid=page.ctid`,[accountId,floor,libraryCloudCleanupRows]);
- await db.query(`WITH page AS(SELECT ctid FROM sensa_consumer.library_cloud_snapshots WHERE account_id=$1 AND revision<$2 LIMIT $3 FOR UPDATE)
+ await db.query(`WITH page AS(SELECT ctid FROM sensa_consumer.library_cloud_snapshots WHERE account_id=$1 AND revision<$2 ORDER BY revision,generation LIMIT $3 FOR UPDATE)
   DELETE FROM sensa_consumer.library_cloud_snapshots r USING page WHERE r.ctid=page.ctid`,[accountId,snapshot,libraryCloudCleanupRows]);
- await db.query(`WITH page AS(SELECT m.ctid FROM sensa_consumer.library_cloud_membership m WHERE m.account_id=$1 AND m.owner_kind IN('log','snapshot','staging') AND
-  CASE WHEN owner_kind='log' THEN owner_id::bigint<=$2
-   WHEN owner_kind='snapshot' THEN CASE WHEN owner_id~'^[0-9]+$' THEN owner_id::bigint<$3
-    WHEN owner_id LIKE '[%' THEN (owner_id::jsonb->>1)::bigint<$3 ELSE false END
-   WHEN owner_kind='staging' THEN EXISTS(SELECT 1 FROM sensa_consumer.library_cloud_staging s
-    JOIN sensa_consumer.library_cloud_commits c ON c.account_id=s.account_id AND c.operation_id=s.operation_id
-    WHERE s.account_id=m.account_id AND s.operation_id=$5 AND m.owner_id IN(s.operation_id::text,s.descriptor->>'operationId') AND c.result IS NOT NULL AND c.revision<$3)
-   ELSE false END LIMIT $4 FOR UPDATE OF m)
-  DELETE FROM sensa_consumer.library_cloud_membership m USING page WHERE m.ctid=page.ctid`,[accountId,floor,snapshot,libraryCloudCleanupPins,head.rows_generation]);
+ // Each branch can seek its existing root identity. A single CASE across all
+ // owners made empty maintenance scan the entire current snapshot pin set.
+ let pinBudget=libraryCloudCleanupPins;
+ const logPins=await db.query(`WITH page AS(SELECT ctid FROM sensa_consumer.library_cloud_membership
+  WHERE account_id=$1 AND owner_kind='log' AND owner_id::bigint<=$2 ORDER BY owner_id::bigint LIMIT $3 FOR UPDATE)
+  DELETE FROM sensa_consumer.library_cloud_membership m USING page WHERE m.ctid=page.ctid`,[accountId,floor,pinBudget]);pinBudget-=logPins.rowCount??0;
+ const snapshotPins=await db.query(`WITH page AS(SELECT ctid FROM sensa_consumer.library_cloud_membership
+  WHERE account_id=$1 AND owner_kind='snapshot' AND
+   (CASE WHEN owner_id~'^[0-9]+$' THEN owner_id::bigint ELSE (owner_id::jsonb->>1)::bigint END)<$2
+  ORDER BY (CASE WHEN owner_id~'^[0-9]+$' THEN owner_id::bigint ELSE (owner_id::jsonb->>1)::bigint END) LIMIT $3 FOR UPDATE)
+  DELETE FROM sensa_consumer.library_cloud_membership m USING page WHERE m.ctid=page.ctid`,[accountId,snapshot,pinBudget]);pinBudget-=snapshotPins.rowCount??0;
+ await db.query(`WITH root AS(SELECT s.operation_id,s.descriptor->>'operationId' AS raw_owner
+  FROM sensa_consumer.library_cloud_staging s WHERE s.account_id=$1 AND
+   ((s.purpose='checkpoint' AND s.published_revision<$2) OR
+    (s.operation_id=$4 AND EXISTS(SELECT 1 FROM sensa_consumer.library_cloud_commits c
+     WHERE c.account_id=s.account_id AND c.operation_id=s.operation_id AND c.result IS NOT NULL AND c.revision<$2)))
+   AND EXISTS(SELECT 1 FROM sensa_consumer.library_cloud_membership m WHERE m.account_id=$1 AND m.owner_kind='staging'
+    AND m.owner_id IN(s.operation_id::text,s.descriptor->>'operationId')) LIMIT 1),
+  page AS(SELECT m.ctid FROM sensa_consumer.library_cloud_membership m,root
+   WHERE m.account_id=$1 AND m.owner_kind='staging' AND m.owner_id IN(root.operation_id::text,root.raw_owner) LIMIT $3 FOR UPDATE OF m)
+  DELETE FROM sensa_consumer.library_cloud_membership m USING page WHERE m.ctid=page.ctid`,[accountId,snapshot,pinBudget,head.rows_generation]);
  return readers.n===0;
 }
 
@@ -58,15 +70,7 @@ export async function purgeExpiredLibraryCloudBlocks(
  // orphan sweep has no account authority and never retires generations/history.
  if(accountId){
  await pruneLibraryCloudHistory(db,accountId,now);
- const stages=(await db.query(`SELECT stage.account_id,stage.operation_id FROM sensa_consumer.library_cloud_staging stage
-  WHERE stage.expires_at<=$1 AND ($2::text IS NULL OR stage.account_id=$2)
-  AND NOT EXISTS(SELECT 1 FROM sensa_consumer.library_cloud head WHERE head.account_id=stage.account_id AND (head.rows_generation=stage.operation_id OR head.snapshot_generation=stage.operation_id)
-   AND NOT(stage.operation_id='00000000-0000-0000-0000-000000000000' AND stage.prepared_version=0 AND head.library_id IS NULL))
-  LIMIT $3 FOR UPDATE OF stage SKIP LOCKED`,[now,accountId??null,1])).rows;
- for(const stage of stages){
-  const cleanup=await discardPreparedLibraryGeneration(db,stage.account_id,stage.operation_id);
-  if(cleanup.complete)await db.query('DELETE FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND operation_id=$2',[stage.account_id,stage.operation_id]);
- }
+ await pruneLibraryPrivateGeneration(db,accountId,now);
  }
  for(const [table,predicate,keys] of [
   ['library_cloud_block_refs',"reference_kind='retired' AND expires_at<=$1",['account_id','hash','reference_kind']],
@@ -98,4 +102,18 @@ export async function purgeExpiredLibraryCloudBlocks(
   WHERE blocks.account_id=expired.account_id AND blocks.hash=expired.hash
  `,[now,batchSize,accountId??null]);
  return result.rowCount??0;
+}
+
+/** Resumes one expired private workspace using the same bounded cleanup path. */
+export async function pruneLibraryPrivateGeneration(db:DatabaseExecutor,accountId:string,now:Date):Promise<void>{
+ const stages=(await db.query(`SELECT stage.account_id,stage.operation_id FROM sensa_consumer.library_cloud_staging stage
+  WHERE stage.expires_at<=$1 AND stage.account_id=$2 AND stage.published_revision IS NULL
+  AND NOT EXISTS(SELECT 1 FROM sensa_consumer.library_cloud head WHERE head.account_id=stage.account_id AND (head.rows_generation=stage.operation_id OR head.snapshot_generation=stage.operation_id)
+   AND NOT(stage.operation_id='00000000-0000-0000-0000-000000000000' AND stage.prepared_version=0 AND head.library_id IS NULL))
+  AND NOT EXISTS(SELECT 1 FROM sensa_consumer.library_cloud_reads r WHERE r.account_id=stage.account_id AND r.snapshot_generation=stage.operation_id AND r.expires_at>$1)
+  LIMIT $3 FOR UPDATE OF stage SKIP LOCKED`,[now,accountId,1])).rows;
+ for(const stage of stages){
+  const cleanup=await discardPreparedLibraryGeneration(db,stage.account_id,stage.operation_id,now);
+  if(cleanup.complete)await db.query('DELETE FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND operation_id=$2',[stage.account_id,stage.operation_id]);
+ }
 }

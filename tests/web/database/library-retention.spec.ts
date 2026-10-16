@@ -5,6 +5,7 @@ import {encodeLibrarySyncBlock} from '@sensa/contracts/sensa/library-sync-blocks
 import {portablePackageFixture} from '../../../scripts/support/portablePackageFixture.mts';
 import {purgeExpiredLibraryCloudBlocks} from '../../../apps/api/src/sensa/library/retention';
 import {resolve} from 'node:path';
+import {finishLibraryCheckpoint} from '../support/finishLibraryCheckpoint.mts';
 
 test.setTimeout(120000);
 
@@ -12,7 +13,8 @@ test('bounded request maintenance retires payload/history across three rounds wh
  const f=await createLibraryCloudBrowserFixture(browser);
  try{
   const account=await f.createAccount(),other=await f.createAccount(),libraryId=crypto.randomUUID(),learnerId=crypto.randomUUID();
-  const call=async(path:string,body?:unknown,token=account.token)=>{const r=await fetch(f.origin+'/sensa/library-sync'+path,{method:body===undefined?'GET':'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});return {status:r.status,value:await r.json()};};
+  const rawCall=async(path:string,body?:unknown,token=account.token)=>{const r=await fetch(f.origin+'/sensa/library-sync'+path,{method:body===undefined?'GET':'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json','x-sensa-sync-protocol':'sensa-checkpoint-pages-v1'},body:body===undefined?undefined:JSON.stringify(body)});return {status:r.status,value:await r.json()};};
+  const call=async(path:string,body?:any,token=account.token)=>path==='/compact'?finishLibraryCheckpoint((path,body)=>rawCall(path,body,token),body):rawCall(path,body,token);
   const put=async(text:string)=>{const data=encodeLibrarySyncBlock(text),hash=createHash('sha256').update(data).digest('hex');expect((await call('/blocks/store',{blocks:[{hash,data}]})).status).toBe(200);return hash;};
   const prefix=await put('["string","'),shared=await put('界🙂'),suffix=await put('"]'),identity=await put(JSON.stringify({libraryId,learnerId}));
   const refs=[prefix,...Array<string>(128).fill(shared),suffix];
@@ -73,7 +75,8 @@ test('bounded request maintenance retires payload/history across three rounds wh
   for(let round=0;round<3;round++){
    for(let i=0;i<5;i++)await call('/head');
    const h=(await call('/head')).value;expect(h.manifest.snapshotRevision).toBe(2+round);
-   expect(await count('library_cloud_snapshots')).toBe(192);expect(await count('library_cloud_log')).toBe(0);expect(await count('library_cloud_membership',"owner_kind='staging'")).toBe(0);
+   expect(await count('library_cloud_snapshots')).toBe(192);expect(await count('library_cloud_log')).toBe(0);
+   expect(await count('library_cloud_membership',"owner_kind='staging' AND owner_id<>(SELECT snapshot_generation::text FROM sensa_consumer.library_cloud WHERE account_id=$1)")).toBe(0);
    measurements.push(await measure('steady-'+round));
    if(round===2)break;
    const changes=[{...rows[2],blocks:[await put(JSON.stringify(['string','round '+round]))]}],patch=await put(JSON.stringify({version:1,libraryId,learnerId,changes}));
@@ -93,7 +96,7 @@ test('bounded request maintenance retires payload/history across three rounds wh
  }finally{await f.close();}
 });
 
-const reopen=async(page:Page,account:{token:string})=>{await page.reload();await page.evaluate(async({token})=>{const w=window as any,path='/core.js';w.core=await import(path);await w.core.openLibrary();w.request=async(path:string,body?:unknown)=>{const r=await fetch('/sensa/library-sync'+path,{method:body===undefined?'GET':'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)}),v=await r.json();if(!r.ok)throw Error(v.code);return v;};w.sync=()=>w.core.synchronizeLibrary(w.request);},account);};
+const reopen=async(page:Page,account:{token:string})=>{await page.reload();await page.evaluate(async({token})=>{const w=window as any,path='/core.js';w.core=await import(path);await w.core.openLibrary();w.request=async(path:string,body?:unknown)=>{const r=await fetch('/sensa/library-sync'+path,{method:body===undefined?'GET':'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json','x-sensa-sync-protocol':'sensa-checkpoint-pages-v1'},body:body===undefined?undefined:JSON.stringify(body)}),v=await r.json();if(!r.ok)throw Error(v.code);return v;};w.sync=()=>w.core.synchronizeLibrary(w.request);},account);};
 
 test('an old OPFS client with pending learning and edits merges a reclaimed checkpoint and reopens with exact history',async({browser},info)=>{
  const f=await createLibraryCloudBrowserFixture(browser,resolve('scripts/assessment/capacityBrowserEntry.ts'));
@@ -105,7 +108,7 @@ test('an old OPFS client with pending learning and edits merges a reclaimed chec
   // A remains offline on the old common baseline; real commands create its Run and Events.
   await a.evaluate(async({target,context})=>{const w=window as any,c=w.core,id=()=>crypto.randomUUID();w.offline=true;let run=await c.startLearning(id(),target,context,20,new Date().toISOString());run=await c.actLearning(id(),run.id,run.revision,{kind:'reveal'},new Date().toISOString());run=await c.actLearning(id(),run.id,run.revision,{kind:'rate',rating:'good'},new Date().toISOString());await c.finishLearning(id(),run.id);const draft=(await c.listDrafts()).find((d:any)=>d.text==='共享 Unicode 界🙂 1');await c.saveDraft(id(),{id:draft.id,expectedRevision:draft.revision,text:'unsent existing draft edit'});await c.saveDraft(id(),{id:id(),expectedRevision:0,text:'unsent after floor'});},ids);
   const localLearning=await a.evaluate(()=>(window as any).core.readLearning());expect(localLearning.events.length).toBeGreaterThan(0);
-  await b.evaluate(async()=>{const w=window as any,c=w.core;const consumed=(await c.listDrafts()).find((d:any)=>d.text==='共享 Unicode 界🙂 0');await c.command({id:crypto.randomUUID(),kind:'fixture.consume-draft',input:{id:consumed.id}},(tx:any)=>tx.delete('drafts',consumed.id));await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'remote after floor'});await w.sync();const head=await w.request('/head');await w.request('/compact',{baseRevision:head.revision});await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'remote tail after compact'});await w.sync();});
+  await b.evaluate(async()=>{const w=window as any,c=w.core;const consumed=(await c.listDrafts()).find((d:any)=>d.text==='共享 Unicode 界🙂 0');await c.command({id:crypto.randomUUID(),kind:'fixture.consume-draft',input:{id:consumed.id}},(tx:any)=>tx.delete('drafts',consumed.id));await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'remote after floor'});await w.sync();const head=await w.request('/head');let result=await w.request('/compact',{baseRevision:head.revision});while(result.preparation){const p=result.preparation;result=await w.request('/compact',{baseRevision:p.revision,operationId:p.operationId,page:p.page});}await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'remote tail after compact'});await w.sync();});
   await f.pool.query("UPDATE sensa_consumer.library_cloud_reads SET expires_at='2000-01-01' WHERE account_id=$1",[account.accountId]);
   for(let i=0;i<5;i++)await b.evaluate(()=>(window as any).request('/head'));
   expect((await f.pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud_log WHERE account_id=$1',[account.accountId])).rows[0].n).toBe(1); // The H=2 → head=3 tail remains readable.
@@ -121,18 +124,18 @@ test('a manifest receipt sharing an unpublished stage ID cannot retire that priv
  const f=await createLibraryCloudBrowserFixture(browser);
  try{
   const account=await f.createAccount(),libraryId=crypto.randomUUID(),learnerId=crypto.randomUUID(),operationId=crypto.randomUUID();
-  const call=async(path:string,body?:unknown)=>{const r=await fetch(f.origin+'/sensa/library-sync'+path,{method:body===undefined?'GET':'POST',headers:{authorization:'Bearer '+account.token,'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});return {status:r.status,value:await r.json()};};
+  const call=async(path:string,body?:unknown)=>{const r=await fetch(f.origin+'/sensa/library-sync'+path,{method:body===undefined?'GET':'POST',headers:{authorization:'Bearer '+account.token,'content-type':'application/json','x-sensa-sync-protocol':'sensa-checkpoint-pages-v1'},body:body===undefined?undefined:JSON.stringify(body)});return {status:r.status,value:await r.json()};};
   const put=async(value:unknown)=>{const data=encodeLibrarySyncBlock(JSON.stringify(value)),hash=createHash('sha256').update(data).digest('hex');expect((await call('/blocks/store',{blocks:[{hash,data}]})).status).toBe(200);return hash;};
   const body=await put(['string','private upload']),rows=[{table:'meta',key:'identity',blocks:[body]}];
   const begin={operationId,baseRevision:0,libraryId,learnerId,incarnation:crypto.randomUUID(),localRevision:1};expect((await call('/staging/begin',begin)).status).toBe(200);
   const page={operationId,page:0,rows};expect((await call('/staging/page',page)).status).toBe(200);
   const manifest=await put({version:8,libraryId,learnerId,rows});expect((await call('/commit',{operationId,baseRevision:0,manifest:[manifest]})).status).toBe(200);
   await call('/head');expect((await f.pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud_staging_rows WHERE account_id=$1',[account.accountId])).rows[0].n).toBe(1);
-  await f.pool.query("UPDATE sensa_consumer.library_cloud_staging SET expires_at='2000-01-01' WHERE account_id=$1",[account.accountId]);expect((await call('/staging/page',page)).value.code).toBe('library_sync_staging_expired');
+  await f.pool.query("UPDATE sensa_consumer.library_cloud_staging SET expires_at='2000-01-01' WHERE account_id=$1 AND operation_id=$2",[account.accountId,operationId]);expect((await call('/staging/page',page)).value.code).toBe('library_sync_staging_expired');
   // Expired private work is reclaimable through the existing account sweep,
   // despite the unrelated durable receipt; current default-generation data stays.
   await put(['string','trigger account maintenance']);
-  expect((await f.pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud_staging WHERE account_id=$1',[account.accountId])).rows[0].n).toBe(0);
+  expect((await f.pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND operation_id=$2',[account.accountId,operationId])).rows[0].n).toBe(0);
   expect((await f.pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud_rows WHERE account_id=$1',[account.accountId])).rows[0].n).toBe(1);
   expect((await call('/receipt/'+operationId)).value.head.revision).toBe(1);
  }finally{await f.close();}

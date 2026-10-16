@@ -18,7 +18,7 @@ vi.mock('../../../apps/web/src/contentSupply/system/contentSupplySystem',()=>({c
 import {syncAccountLibrary} from '../../../apps/web/src/data/library/cloudSyncService';
 import {readAccountLibrarySyncActivity,cancelAccountLibrarySync} from '../../../apps/web/src/data/library/cloudSyncActivity';
 
-afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();fixture.sync.mockReset();fixture.rehydrate.mockReset();fixture.state=undefined;fixture.localRevision=0;});
+afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();fixture.sync.mockReset();fixture.rehydrate.mockReset();fixture.owner={subject:'fixture-subject',accountId:'fixture-account'};fixture.state=undefined;fixture.localRevision=0;});
 const setup=()=>{fixture.rehydrate.mockResolvedValue(undefined);vi.stubGlobal('window',new EventTarget());vi.stubGlobal('navigator',{});const controllers:AbortController[]=[];
  vi.spyOn(AbortSignal,'timeout').mockImplementation(()=>{const controller=new AbortController();controllers.push(controller);return controller.signal;});return controllers;};
 
@@ -56,7 +56,7 @@ test('a preparation intent flushes facts and cannot be absorbed by an automatic 
 test('only an initial publication adds one large-library preparation step, never daily edits',async()=>{
  setup();let initial=true;fixture.sync.mockImplementation(async(_request,options)=>{if(!options.publishSnapshot){fixture.state=checkpoint();if(initial){initial=false;return {activated:undefined,initialPublicationConfirmed:true};}}});
  await syncAccountLibrary({automatic:true});
- expect(fixture.sync.mock.calls.map(call=>call[1].publishSnapshot)).toEqual([undefined,'if-large']);
+ await vi.waitFor(()=>expect(fixture.sync.mock.calls.map(call=>call[1].publishSnapshot)).toEqual([undefined,'if-large']));
  fixture.sync.mockClear();fixture.localRevision++;fixture.state={...fixture.state!,status:'pending'};
  await syncAccountLibrary({automatic:true});
  expect(fixture.sync.mock.calls.map(call=>call[1].publishSnapshot)).toEqual([undefined]);
@@ -68,10 +68,17 @@ test('a concurrent local edit after facts synchronization prevents explicit prep
  expect(fixture.sync).toHaveBeenCalledOnce();expect(fixture.state.status).toBe('pending');
 });
 
+test('an account switch between the facts receipt and preparation cannot authorize the replacement account',async()=>{
+ setup();fixture.state=checkpoint();fixture.sync.mockResolvedValue(undefined);
+ window.addEventListener('sensa-account-library-sync-finished',()=>{fixture.owner={subject:'other-subject',accountId:'other-account'};fixture.state=checkpoint();},{once:true});
+ await expect(syncAccountLibrary({prepareForAnotherDevice:true})).rejects.toThrow('account_changed');
+ expect(fixture.sync).toHaveBeenCalledOnce();expect(fixture.owner.accountId).toBe('other-account');
+});
+
 test('automatic source-artifact failure preserves the completed facts checkpoint and is not ready',async()=>{
  setup();fixture.sync.mockImplementation(async(_request,options)=>{if(options.publishSnapshot)throw Error('sqlite_snapshot_source_baseline');fixture.state=checkpoint();return {activated:undefined,initialPublicationConfirmed:true};});
  await expect(syncAccountLibrary({automatic:true})).resolves.toBeUndefined();
- expect(fixture.state).toEqual(checkpoint());expect(readAccountLibrarySyncActivity()).toMatchObject({preparing:true,status:'failed'});
+ expect(fixture.state).toEqual(checkpoint());await vi.waitFor(()=>expect(readAccountLibrarySyncActivity()).toMatchObject({preparing:true,status:'failed'}));
 });
 
 test('cancellation targets the displayed preparation and leaves synced facts intact',async()=>{
@@ -81,9 +88,19 @@ test('cancellation targets the displayed preparation and leaves synced facts int
  const task=syncAccountLibrary({prepareForAnotherDevice:true});
  await vi.waitFor(()=>expect(readAccountLibrarySyncActivity()).toMatchObject({preparing:true,status:'running'}));
  const id=readAccountLibrarySyncActivity()!.id;cancelAccountLibrarySync(id-1);expect(fixture.sync.mock.calls[1]![1].signal.aborted).toBe(false);
+ // The finished-event automatic wake-up can verify facts independently, but
+ // it cannot replace the visible preparation's cancellation controller.
+ await syncAccountLibrary({automatic:true});expect(readAccountLibrarySyncActivity()?.id).toBe(id);
  cancelAccountLibrarySync(id);await expect(task).rejects.toThrow('library_sync_cancelled');
  expect(fixture.state).toEqual(checkpoint());expect(readAccountLibrarySyncActivity()).toMatchObject({preparing:true,status:'cancelled'});
  expect(blocksAutomaticCloudSync({status:'pending',error:'library_sync_cancelled'})).toBe(true);
+});
+
+test('a finished-event automatic verification preserves the explicit preparation receipt',async()=>{
+ setup();fixture.state=checkpoint();fixture.sync.mockResolvedValue(published());
+ await syncAccountLibrary({prepareForAnotherDevice:true});const prepared=readAccountLibrarySyncActivity();
+ expect(prepared).toMatchObject({preparing:true,status:'ready',revision:1});
+ await syncAccountLibrary({automatic:true});expect(readAccountLibrarySyncActivity()).toEqual(prepared);
 });
 
 test('a revision-zero merge with an existing cloud head never implies initial source publication',async()=>{

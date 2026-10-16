@@ -34,12 +34,16 @@ export async function retireLibraryStagingMetadata(db:DatabaseExecutor,id:string
 
 /** Caller holds this stage's lock through the outer transaction. One invocation
  * retires bounded actual pins/rows; the retained stage is the retry witness. */
-export async function discardPreparedLibraryGeneration(db:DatabaseExecutor,id:string,generation:string):Promise<{selected:boolean;complete:boolean}>{
+export async function discardPreparedLibraryGeneration(db:DatabaseExecutor,id:string,generation:string,now=new Date()):Promise<{selected:boolean;complete:boolean}>{
  generation=generation.toLowerCase();
- const stage=(await db.query('SELECT descriptor,prepared_version FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND operation_id=$2 FOR UPDATE',[id,generation])).rows[0];
+ const stage=(await db.query('SELECT descriptor,prepared_version,published_revision FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND operation_id=$2 FOR UPDATE',[id,generation])).rows[0];
  const head=(await db.query('SELECT library_id,rows_generation,snapshot_generation FROM sensa_consumer.library_cloud WHERE account_id=$1',[id])).rows[0];
  const legacyDefaultStage=generation===libraryCloudDefaultGeneration&&stage?.prepared_version===0&&!head?.library_id;
  if(!legacyDefaultStage&&(head?.rows_generation===generation||head?.snapshot_generation===generation))return {selected:true,complete:false};
+ // A superseded checkpoint can still be the source of an active reader or
+ // another preparation. Published page/receipt witnesses have their own life.
+ if(stage?.published_revision!==null&&stage?.published_revision!==undefined)return {selected:true,complete:false};
+ if((await db.query('SELECT 1 FROM sensa_consumer.library_cloud_reads WHERE account_id=$1 AND snapshot_generation=$2 AND expires_at>$3 LIMIT 1',[id,generation,now])).rowCount)return {selected:true,complete:false};
  if(!stage)return {selected:false,complete:true};
  const rawOwner=String(stage.descriptor.operationId);if(rawOwner.toLowerCase()!==generation)throw new ConsumerError(409,'operation_conflict');
  await db.query('UPDATE sensa_consumer.library_cloud_staging SET retiring=true,expires_at=LEAST(expires_at,now()) WHERE account_id=$1 AND operation_id=$2',[id,generation]);

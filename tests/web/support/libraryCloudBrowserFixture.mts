@@ -172,6 +172,7 @@ export async function createLibraryCloudBrowserFixture(providedBrowser?: Browser
         authorization: request.headers.authorization ?? 'Bearer first',
         'content-type': 'application/json',
         ...(typeof request.headers['x-sensa-snapshot-format']==='string'?{'x-sensa-snapshot-format':request.headers['x-sensa-snapshot-format']}:{}),
+        ...(typeof request.headers['x-sensa-sync-protocol']==='string'?{'x-sensa-sync-protocol':request.headers['x-sensa-sync-protocol']}:{}),
       },
       ...(body.length > 0 ? { body: new Uint8Array(body) } : {}),
     });
@@ -248,6 +249,7 @@ export async function createLibraryCloudBrowserFixture(providedBrowser?: Browser
               authorization: `Bearer ${browserWindow.token}`,
               'content-type': 'application/json',
               'x-sensa-snapshot-format': 'sensa-own-cloud-db-v2',
+              'x-sensa-sync-protocol': 'sensa-checkpoint-pages-v1',
             },
             body: body === undefined ? undefined : JSON.stringify(body),
           });

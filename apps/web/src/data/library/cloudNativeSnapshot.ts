@@ -7,6 +7,7 @@ import type {SqliteRecordAdapter} from './sqliteAdapter';
 import type {SnapshotSourceFence} from './sqliteSnapshotSource';
 import type {SyncRequest} from './cloudSync';
 import type {CloudSyncDeadline} from './cloudSyncDeadline';
+import {prepareCloudCheckpoint} from './cloudCheckpointPreparation';
 
 /** Prepare and upload bounded blocks, then attach once at the unchanged H. */
 export async function publishNativeCloudSnapshot(adapter:SqliteRecordAdapter,fence:SnapshotSourceFence,head:LibrarySyncHead,request:SyncRequest,deadline:CloudSyncDeadline){
@@ -23,7 +24,7 @@ export async function publishNativeCloudSnapshot(adapter:SqliteRecordAdapter,fen
   await flush();await prepared.verify();
   const descriptor={...prepared.metadata,sha256:prepared.sha256,byteLength:prepared.byteLength,blocks:refs},nativeSnapshot=librarySyncNativeSnapshot.parse({...descriptor,manifestHash:sha256(librarySyncNativeDescriptorText(descriptor as Omit<LibrarySyncNativeSnapshot,'manifestHash'>))});
   const uploadedAt=performance.now();let result:LibrarySyncHead;
-  try{result=await request('/compact',{baseRevision:head.revision,nativeSnapshot});}
+  try{result=await prepareCloudCheckpoint(request,{baseRevision:head.revision,nativeSnapshot},deadline);}
   catch(error){deadline.check();const latest:LibrarySyncHead=await request('/head');if(latest.revision!==head.revision||latest.nativeSnapshot?.manifestHash!==nativeSnapshot.manifestHash)throw error;result=latest;}
   // A transport may omit negotiated response fields; read the capable head and
   // require the exact descriptor, including after an uncertain retry.

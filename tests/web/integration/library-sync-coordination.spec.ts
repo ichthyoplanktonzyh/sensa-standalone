@@ -101,7 +101,7 @@ test('an automatic waiter rereads dirty content after the cross-tab lock',async(
   await peer!.evaluate(()=>{(window as any).__queued=(window as any).core.syncAccountLibrary({automatic:true});});
   await expect.poll(()=>peer!.evaluate(async()=>(await navigator.locks.query()).pending?.filter(lock=>lock.name==='sensa-account-library-sync').length)).toBe(1);
   const id=await saveDraft(page!,'Written after automatic intent queued');fixture.clearRequests();await page!.evaluate(()=>(window as any).__release());await peer!.evaluate(()=>(window as any).__queued);await synced(peer!);
-  expect(heads(fixture)).toBe(2);expect(fixture.requests().filter(row=>row.path.endsWith('/commit'))).toHaveLength(1);singleInitialPublication(fixture);
+  await expect.poll(()=>heads(fixture)).toBe(2);expect(fixture.requests().filter(row=>row.path.endsWith('/commit'))).toHaveLength(1);singleInitialPublication(fixture);
   const remote=await fixture.createClient(account);await remote.evaluate(()=>(window as any).sync());expect(await remote.evaluate(async id=>(await (window as any).core.listDrafts()).some((row:any)=>row.id===id),id)).toBe(true);
  }finally{await fixture.close();}
 });

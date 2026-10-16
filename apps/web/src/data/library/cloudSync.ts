@@ -669,6 +669,13 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
    // Small initial publications already have the bounded legacy path. Do not
    // create a second whole-file artifact as part of their ordinary connection.
    if(options.publishSnapshot==='if-large'&&(head.manifest?.records??0)<=librarySyncLegacyManifestRecordLimit)return;
+   if((head.manifest?.records??0)>librarySyncLegacyManifestRecordLimit){
+    // Native remains an optional bounded artifact. Large libraries prepare the
+    // authoritative refs checkpoint without exporting another whole database.
+    const {prepareCloudCheckpoint}=await import('./cloudCheckpointPreparation');
+    const checkpointPublished=await prepareCloudCheckpoint(request,{baseRevision:head.revision},deadline);
+    return {activated:undefined,checkpointPublished};
+   }
    // The bounded background loop can submit another write between source RPCs.
    // Only a new artifact waits; skipped or already published artifacts do not.
    if(retirement){deadline.beginInitial();if(!await deadline.run(()=>retirement))throw Error('sqlite_snapshot_source_busy');}

@@ -2,6 +2,8 @@ import {test,expect,type Page} from '@playwright/test';
 import {createHash} from 'node:crypto';
 import {createLibraryCloudBrowserFixture} from '../support/libraryCloudBrowserFixture.mts';
 import {librarySyncNativeDescriptorText} from '@sensa/contracts/sensa';
+import {purgeExpiredLibraryCloudBlocks} from '../../../apps/api/src/sensa/library/retention';
+import {finishLibraryCheckpoint} from '../support/finishLibraryCheckpoint.mts';
 test.setTimeout(180000);
 const save=(page:Page,text:string)=>page.evaluate(async text=>(window as any).core.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text}),text);
 const inspect=(page:Page)=>page.evaluate(async()=>{const c=(window as any).core;return {drafts:await c.listDrafts(),base:await c.readLibrary((tx:any)=>tx.syncBaseReferences()),state:await c.readCloudSync(),identity:await c.readLibrary((tx:any)=>tx.get('meta','identity'))};});
@@ -104,6 +106,52 @@ test('own-cloud v2 uploads, coexists with v1, atomically activates and reopens a
   const after=await inspect(target);expect(after.drafts).toEqual(before.drafts);expect(after.base).toEqual(before.base);expect(after.base.length).toBeGreaterThan(1);expect(after.identity.id).toBe(before.identity.id);expect(after.identity.deviceId).not.toBe(before.identity.deviceId);expect(after.state.restore.path).toBe('native-v2');expect(after.state.status).toBe('synced');
   await target.reload();await target.evaluate(async()=>{const path='/core.js';(window as any).core=await import(/* @vite-ignore */ path);await(window as any).core.openLibrary();});const reopened=await inspect(target);expect(reopened).toEqual(after);
   await info.attach('native-small-lifecycle.json',{body:JSON.stringify({head,result,records:after.drafts.length,baseline:after.base.length}),contentType:'application/json'});
+ }finally{await f.close();}
+});
+
+test('native-only G pins retire after interrupted preparation or the last reader, while current native bytes stay readable',async({browser},info)=>{
+ const f=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await f.createAccount(),source=await f.createClient(account);await save(source,'native lifecycle retained 界🙂');await source.evaluate(()=>(window as any).sync());
+  await expect(source.evaluate(async()=>{const w=window as any,c=new AbortController();await w.core.synchronizeLibrary(w.request,{publishSnapshot:true,signal:c.signal,onProgress:(p:any)=>{if(p.phase==='checkpoint-pages'&&p.completed===1)c.abort();}});})).rejects.toThrow('library_sync_cancelled');
+  const abandoned=(await f.pool.query("SELECT operation_id,pages,published_revision FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND purpose='checkpoint'",[account.accountId])).rows[0];expect(abandoned).toMatchObject({pages:1,published_revision:null});
+  const privateOnly=(await f.pool.query(`SELECT m.hash FROM sensa_consumer.library_cloud_membership m WHERE m.account_id=$1 AND m.owner_kind='staging' AND m.owner_id=$2
+   AND NOT EXISTS(SELECT 1 FROM sensa_consumer.library_cloud_membership other WHERE other.account_id=m.account_id AND other.hash=m.hash AND (other.owner_kind<>'staging' OR other.owner_id<>$2))`,[account.accountId,abandoned.operation_id])).rows.map(r=>r.hash);expect(privateOnly.length).toBeGreaterThan(0);
+  expect((await source.evaluate(()=>(window as any).request('/head'))).nativeSnapshot).toBeUndefined();
+  await f.pool.query("UPDATE sensa_consumer.library_cloud_staging SET expires_at='2000-01-01' WHERE account_id=$1 AND operation_id=$2",[account.accountId,abandoned.operation_id]);
+  await f.pool.query("UPDATE sensa_consumer.library_cloud_blocks SET upload_lease_expires_at='2000-01-01' WHERE account_id=$1 AND hash=ANY($2::text[])",[account.accountId,privateOnly]);
+  const gc=async()=>{const db=await f.pool.connect();try{await db.query('BEGIN');await db.query('SELECT account_id FROM sensa_consumer.library_cloud WHERE account_id=$1 FOR UPDATE',[account.accountId]);await purgeExpiredLibraryCloudBlocks(db,new Date(),1000,account.accountId);await db.query('COMMIT');}finally{await db.query('ROLLBACK');db.release();}};
+  await gc();expect((await source.evaluate(hashes=>(window as any).request('/blocks/fetch',{hashes}),privateOnly)).missing).toEqual(privateOnly);
+  expect((await f.pool.query('SELECT 1 FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND operation_id=$2',[account.accountId,abandoned.operation_id])).rowCount).toBe(0);
+  await source.evaluate(()=>(window as any).core.synchronizeLibrary((window as any).request,{publishSnapshot:true}));
+  const held=await source.evaluate(()=>(window as any).request('/head')),native=held.nativeSnapshot;expect(native.revision).toBe(1);
+  await f.pool.query("UPDATE sensa_consumer.library_cloud_staging SET expires_at='2000-01-01' WHERE account_id=$1 AND purpose='checkpoint'",[account.accountId]);
+  await f.pool.query("UPDATE sensa_consumer.library_cloud_blocks SET upload_lease_expires_at='2000-01-01' WHERE account_id=$1 AND hash=ANY($2::text[])",[account.accountId,native.blocks]);
+  await gc();expect((await source.evaluate(hashes=>(window as any).request('/blocks/fetch',{hashes}),native.blocks)).missing).toEqual([]);
+  const target=await f.createClient(account);await target.evaluate(()=>(window as any).sync());expect((await inspect(target)).state.restore.path).toBe('native-v2');
+  await save(source,'next real native checkpoint');await source.evaluate(()=>(window as any).sync());
+  const afterWrite=await inspect(source);await info.attach('native-after-incremental-write.json',{body:JSON.stringify(afterWrite.state),contentType:'application/json'});expect(afterWrite.state.status).toBe('synced');
+  // An unsupported draft delta invalidates the optional native certificate.
+  // Restore the exact authoritative H=2 through the ordinary refs path; that
+  // newly admitted device can produce a real native artifact for the same H.
+  await finishLibraryCheckpoint(async(path,body)=>({status:200,value:await source.evaluate(({path,body})=>(window as any).request(path,body),{path,body})}),{baseRevision:2});
+  const nextProducer=await f.createClient(account);await nextProducer.evaluate(()=>(window as any).sync());
+  await nextProducer.evaluate(()=>(window as any).core.synchronizeLibrary((window as any).request,{publishSnapshot:true}));
+  const current=await source.evaluate(()=>(window as any).request('/head'));expect(current.nativeSnapshot.revision).toBe(2);
+  await gc();expect((await source.evaluate(hashes=>(window as any).request('/blocks/fetch',{hashes}),native.blocks)).missing).toEqual([]);
+  await f.pool.query("UPDATE sensa_consumer.library_cloud_reads SET expires_at='2000-01-01' WHERE account_id=$1 AND snapshot_revision<2",[account.accountId]);
+  for(let i=0;i<10;i++)await source.evaluate(()=>(window as any).request('/head'));await gc();
+  const retired=native.blocks.filter((hash:string)=>!current.nativeSnapshot.blocks.includes(hash));expect(retired.length).toBeGreaterThan(0);
+  await info.attach('native-retirement-protections.json',{body:JSON.stringify({
+   membership:(await f.pool.query('SELECT owner_kind,owner_id,hash FROM sensa_consumer.library_cloud_membership WHERE account_id=$1 AND hash=ANY($2::text[])',[account.accountId,retired])).rows,
+   refs:(await f.pool.query('SELECT * FROM sensa_consumer.library_cloud_block_refs WHERE account_id=$1 AND hash=ANY($2::text[])',[account.accountId,retired])).rows,
+   blocks:(await f.pool.query('SELECT hash,upload_lease_expires_at FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[account.accountId,retired])).rows,
+   stages:(await f.pool.query('SELECT operation_id,published_revision FROM sensa_consumer.library_cloud_staging WHERE account_id=$1 AND purpose=$2',[account.accountId,'checkpoint'])).rows,
+  }),contentType:'application/json'});
+  expect((await source.evaluate(hashes=>(window as any).request('/blocks/fetch',{hashes}),retired)).missing).toEqual(retired);
+  expect((await source.evaluate(hashes=>(window as any).request('/blocks/fetch',{hashes}),current.nativeSnapshot.blocks)).missing).toEqual([]);
+  expect((await inspect(source)).drafts).toHaveLength(2);
+  await info.attach('native-root-retirement.json',{body:JSON.stringify({interruptedPrivateBlocks:privateOnly.length,oldNativeBlocks:retired.length,currentNativeBlocks:current.nativeSnapshot.blocks.length,oldReaderRetained:true,currentRestoreVerified:true,scope:'New isolated account, real native capture; only derived workspace/upload/read leases expired for this fixture.'}),contentType:'application/json'});
  }finally{await f.close();}
 });
 
