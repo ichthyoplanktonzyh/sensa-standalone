@@ -1,3 +1,4 @@
+import {attachLegacyBinaryCheckpoint} from '../support/legacyBinaryCheckpointFixture.mts';
 import {test,expect,type Page} from '@playwright/test';
 import {createHash} from 'node:crypto';
 import {createLibraryCloudBrowserFixture} from '../support/libraryCloudBrowserFixture.mts';
@@ -7,7 +8,7 @@ import {finishLibraryCheckpoint} from '../support/finishLibraryCheckpoint.mts';
 test.setTimeout(180000);
 const save=(page:Page,text:string)=>page.evaluate(async text=>(window as any).core.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text}),text);
 const inspect=(page:Page)=>page.evaluate(async()=>{const c=(window as any).core;return {drafts:await c.listDrafts(),base:await c.readLibrary((tx:any)=>tx.syncBaseReferences()),state:await c.readCloudSync(),identity:await c.readLibrary((tx:any)=>tx.get('meta','identity'))};});
-async function seed(f:Awaited<ReturnType<typeof createLibraryCloudBrowserFixture>>){const account=await f.createAccount(),source=await f.createClient(account);await save(source,'retained native snapshot draft');await source.evaluate(()=>(window as any).sync());await source.evaluate(()=>(window as any).core.synchronizeLibrary((window as any).request,{publishSnapshot:true}));return {account,source};}
+async function seed(f:Awaited<ReturnType<typeof createLibraryCloudBrowserFixture>>){const account=await f.createAccount(),source=await f.createClient(account);await save(source,'retained native snapshot draft');await source.evaluate(()=>(window as any).sync());await attachLegacyBinaryCheckpoint(f,source,account);await source.evaluate(()=>(window as any).core.synchronizeLibrary((window as any).request,{publishSnapshot:true}));return {account,source};}
 
 for(const format of ['native','binary','refs'] as const)test(`explicit clear reconnect keeps the new local device and rejects late account or epoch responses (${format})`,async({browser},info)=>{
  const f=await createLibraryCloudBrowserFixture(browser);
@@ -16,6 +17,7 @@ for(const format of ['native','binary','refs'] as const)test(`explicit clear rec
   const sourceEpoch=crypto.randomUUID(),preclearEpoch=crypto.randomUUID(),installation=crypto.randomUUID();
   await source.evaluate(async epoch=>{const c=(window as any).core;await c.writeLibraryState((tx:any)=>{tx.put('meta','service-signout-epoch',epoch);tx.put('meta','service-installation','source-private-installation');});},sourceEpoch);
   await save(source,'Exact remote body after explicit reconnect');await source.evaluate(()=>(window as any).sync());
+  if(format==='binary')await attachLegacyBinaryCheckpoint(f,source,account);
   if(format==='native')await source.evaluate(()=>(window as any).core.synchronizeLibrary((window as any).request,{publishSnapshot:true}));
   const inspect=()=>target.evaluate(async()=>{const c=(window as any).core;return c.readLibrary(async(tx:any)=>({identity:await tx.get('meta','identity'),receipt:await tx.get('operations','00000000-0000-4000-8000-000000000001'),owner:await tx.get('meta','service-owner'),epoch:await tx.get('meta','service-signout-epoch'),signedOut:await tx.get('meta','signed-out'),installation:await tx.get('meta','service-installation'),drafts:await tx.entries('drafts'),base:await tx.syncBaseReferences(),selection:localStorage.getItem('sensa:local-library-selection:v1')}));});
   const configure=()=>target.evaluate(async({account,format})=>{const w=window as any,path='/core.js';w.core=await import(/* @vite-ignore */ path);await w.core.openLibrary();w.request=async(path:string,body?:unknown)=>{const r=await fetch('/sensa/library-sync'+path,{method:body===undefined?'GET':'POST',headers:{authorization:'Bearer '+account.token,'content-type':'application/json','x-sensa-snapshot-format':'sensa-own-cloud-db-v2'},body:body===undefined?undefined:JSON.stringify(body)}),reply=await r.json();if(!r.ok)throw Error(reply.code);if(path==='/head'){if(format!=='native')delete reply.nativeSnapshot;if(format==='refs')delete reply.binarySnapshot;}return reply;};},{account,format});

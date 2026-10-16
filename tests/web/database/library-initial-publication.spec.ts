@@ -1,3 +1,4 @@
+import {attachLegacyBinaryCheckpoint} from '../support/legacyBinaryCheckpointFixture.mts';
 import {semanticLookupPayload} from '../support/semanticLookupFixtures';
 import {test,expect} from '@playwright/test';
 import {createHash} from 'node:crypto';
@@ -6,6 +7,27 @@ import {createLibraryCloudBrowserFixture} from '../support/libraryCloudBrowserFi
 import {encodeLibrarySyncBlock} from '@sensa/contracts/sensa/library-sync-blocks';
 import {portablePackageFixture} from '../../../scripts/support/portablePackageFixture.mts';
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
+
+for(const cancelled of [false,true])test(`refs first publication keeps reads responsive without whole export (${cancelled?'cancel':'confirm'})`,async({browser},info)=>{
+ const f=await createLibraryCloudBrowserFixture(browser);
+ try{
+  const account=await f.createAccount(),source=await f.createClient(account);
+  await source.evaluate(async()=>{const w=window as any,c=w.core;for(let i=0;i<70;i++)await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Refs-only source '+i});
+   const adapter=await c.sqliteRecordAdapter();w.wholeExports=0;adapter.exportOwnCloudSnapshot=async()=>{w.wholeExports++;throw Error('whole_export_must_not_run');};
+   w.transferAbort=new AbortController();w.progress=[];w.transferGate=new Promise<void>(resolve=>{w.releaseTransfer=resolve;});let paused=false;
+   w.transfer=c.synchronizeLibrary(async(path:string,body:any,signal:AbortSignal)=>{if(path==='/staging/page'&&!paused){paused=true;w.transferHeld=true;await w.transferGate;}return w.request(path,body,signal);},{signal:w.transferAbort.signal,onProgress:(value:any)=>w.progress.push(value)}).then(()=>({ok:true}),(error:unknown)=>({ok:false,error:String(error)}));
+  });
+  await source.waitForFunction(()=>(window as any).transferHeld);
+  const read=await source.evaluate(async()=>{const at=performance.now(),drafts=await(window as any).core.listDrafts();return {count:drafts.length,ms:performance.now()-at};});expect(read.count).toBe(70);expect(read.ms).toBeLessThan(5000);
+  if(cancelled)await source.evaluate(()=>(window as any).transferAbort.abort());
+  await source.evaluate(()=>(window as any).releaseTransfer());const result=await source.evaluate(()=>(window as any).transfer);
+  const evidence=await source.evaluate(()=>{const w=window as any;return {wholeExports:w.wholeExports,progress:w.progress};});expect(evidence.wholeExports).toBe(0);expect(evidence.progress.some((p:any)=>p.phase==='publication-capture'&&p.completed>0)).toBe(true);
+  const state=await source.evaluate(()=>(window as any).core.readCloudSync()),remote=(await f.pool.query('SELECT revision,binary_snapshot FROM sensa_consumer.library_cloud WHERE account_id=$1',[account.accountId])).rows[0];
+  if(cancelled){expect(result.error).toContain('library_sync_cancelled');expect(state.status).toBe('pending');expect(remote.revision).toBe(0);expect(await source.evaluate(()=>(window as any).core.readLibrary((tx:any)=>tx.syncBaseReferences()))).toHaveLength(0);}
+  else{expect(result).toEqual({ok:true});expect(state.status).toBe('synced');expect(remote.revision).toBe(1);expect(remote.binary_snapshot).toBeNull();const receiver=await f.createClient(account);await receiver.evaluate(()=>(window as any).sync());expect(await receiver.evaluate(()=>(window as any).core.listDrafts())).toEqual(await source.evaluate(()=>(window as any).core.listDrafts()));}
+  expect((await source.evaluate(()=>(window as any).core.listDrafts()))).toHaveLength(70);await info.attach('refs-first.json',{body:JSON.stringify({cancelled,result,read,...evidence,remote}),contentType:'application/json'});
+ }finally{await f.close();}
+});
 
 test('cancelled first transfers never confirm a late CAS or activate a closed private generation; retry uses receipt',async({browser})=>{
  const f=await createLibraryCloudBrowserFixture(browser);
@@ -31,7 +53,7 @@ for(const mode of ['advanced','unchanged','local-write'] as const)test(`a missin
  const inspect=(page:import('@playwright/test').Page)=>page.evaluate(async()=>{const c=(window as any).core;return c.readLibrary(async(tx:any)=>({identity:await tx.get('meta','identity'),drafts:await tx.entries('drafts'),base:await tx.syncBaseReferences()}));});
  try{
   const account=await f.createAccount(),source=await f.createClient(account),target=await f.createClient(account);
-  await save(source,'Original protected body');await source.evaluate(()=>(window as any).sync());const head=await source.evaluate(()=>(window as any).request('/head'));expect(head.binarySnapshot).toBeTruthy();
+  await save(source,'Original protected body');await source.evaluate(()=>(window as any).sync());await attachLegacyBinaryCheckpoint(f,source,account);const head=await source.evaluate(()=>(window as any).request('/head'));expect(head.binarySnapshot).toBeTruthy();
   const before=await inspect(target);await target.evaluate(()=>{const w=window as any,send=w.request;w.headRevisions=[];w.request=async(path:string,body:any)=>{const reply=await send(path,body);if(path==='/head')w.headRevisions.push(reply.revision);return reply;};});
   let injected=false;await target.route('**/sensa/library-sync/blocks/fetch',async route=>{
    if(injected){await route.continue();return;}injected=true;
@@ -59,7 +81,7 @@ test('own binary checkpoint restores into a retained generation after tail and c
   const account=await f.createAccount(),a=await f.createClient(account),b=await f.createClient(account),pack=portablePackageFixture({packageId:crypto.randomUUID()});
   const source=await a.evaluate(async(bytes)=>{const c=(window as any).core,languageContext=(await c.languageRoutesSnapshot()).context,id=()=>crypto.randomUUID(),payload=new Uint8Array(bytes),preview=await c.contentSupplySystem.execute({kind:'preview_portable_package',bytes:payload}),pack=await c.contentSupplySystem.execute({kind:'install_portable_package',bytes:payload,expectedArchiveDigest:preview.archiveDigest}),[targetId]=await c.enrollPackage(id(),pack.key,languageContext);await c.confirmLearningQuantity(id(),languageContext,20);let run=await c.startLearning(id(),targetId,languageContext,20,new Date().toISOString());run=await c.actLearning(id(),run.id,run.revision,{kind:'reveal'},new Date().toISOString());run=await c.actLearning(id(),run.id,run.revision,{kind:'rate',rating:'again'},new Date().toISOString());return {targetId,runId:run.id,learning:await c.readLearning()};},Array.from(pack.bytes));
   await a.evaluate(()=>(window as any).sync());
-  const head=await a.evaluate(()=>(window as any).request('/head'));expect(head.binarySnapshot.revision).toBe(1);expect(head.binarySnapshot.accountId).toBe(account.accountId);
+  await attachLegacyBinaryCheckpoint(f,a,account);const head=await a.evaluate(()=>(window as any).request('/head'));expect(head.binarySnapshot.revision).toBe(1);expect(head.binarySnapshot.accountId).toBe(account.accountId);
   await a.evaluate(async()=>{const c=(window as any).core;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Tail after snapshot H'});await (window as any).sync();});
   expect((await a.evaluate(()=>(window as any).request('/head'))).revision).toBe(2);
   const oldTab=await b.context().newPage();await oldTab.goto(f.origin);await oldTab.evaluate(async()=>{const w=window as any,path='/core.js';w.core=await import(path);await w.core.openLibrary();});
@@ -78,7 +100,7 @@ test('own binary checkpoint restores into a retained generation after tail and c
 test('own snapshot transport refuses account/digest/version and failed tail leaves the old generation active',async({browser})=>{
  const f=await createLibraryCloudBrowserFixture(browser);
  try{
-  const account=await f.createAccount(),source=await f.createClient(account);await source.evaluate(async()=>{const w=window as any,c=w.core;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'H draft'});await w.sync();await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Tail draft'});await w.sync();});
+  const account=await f.createAccount(),source=await f.createClient(account);await source.evaluate(async()=>{const w=window as any,c=w.core;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'H draft'});await w.sync();});await attachLegacyBinaryCheckpoint(f,source,account);await source.evaluate(async()=>{const w=window as any,c=w.core;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Tail draft'});await w.sync();});
   for(const mode of ['account','digest','version','tail'] as const){
    const receiver=await f.createClient(account),before=await receiver.evaluate(()=>(window as any).core.readLibrary((tx:any)=>tx.get('meta','identity')));
    await receiver.evaluate(mode=>{const w=window as any,send=w.request;w.request=async(path:string,body:any)=>{if(mode==='tail'&&path==='/pull')throw Error('injected_tail_loss');const r=await send(path,body);if(path==='/head'){if(mode==='account')r.binarySnapshot.accountId=crypto.randomUUID();if(mode==='digest')r.binarySnapshot.sha256='f'.repeat(64);if(mode==='version')r.binarySnapshot.schemaVersion=20;}return r;};},mode);

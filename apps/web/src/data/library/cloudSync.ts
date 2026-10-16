@@ -504,30 +504,20 @@ async function confirmInitialPublication(header:Awaited<ReturnType<typeof captur
  * the page. Only a durable server receipt authorizes the baseline transaction. */
 async function publishInitialLibrary(header:Awaited<ReturnType<typeof captureHeader>>,head:LibrarySyncHead,request:SyncRequest,options:LibrarySyncOptions,deadline:CloudSyncDeadline):Promise<boolean>{
  deadline.beginInitial();
- const {sqliteRecordAdapter}=await import('./sqliteAdapter'),adapter=await sqliteRecordAdapter();
- const fence={owner:header.owner,incarnation:header.incarnation,identity:header.identity,localRevision:header.localRevision};
- let snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot|undefined;
- let sourceRows=0;for(const table of librarySyncTables){sourceRows+=await deadline.run(()=>adapter.count(table));if(sourceRows>librarySyncLegacyManifestRecordLimit)break;}
- // Keep the optional producer before capture so edits after the sealed source
- // stay pending. The large refs tier never builds this duplicate file.
- if(sourceRows<=librarySyncLegacyManifestRecordLimit&&adapter.exportOwnCloudSnapshot)try{snapshot=await deadline.run(()=>adapter.exportOwnCloudSnapshot!(fence));deadline.progress('publication-snapshot',snapshot.bytes.length);}catch(error){if(!(error instanceof Error)||error.message!=='sqlite_snapshot_file_limit')throw error;}
+ // First publication uses the authoritative paged refs path. A derived whole
+ // database artifact must not delay capture or monopolize the Library Worker.
  const begun=await boundedCandidate({kind:'beginPublication',fence:{owner:header.owner,incarnation:header.incarnation,identity:header.identity,localRevision:header.localRevision}},deadline);
  if(begun.kind!=='begun')throw Error('library_sync_candidate_invalid');
  const id=begun.id,operationId=header.state?.initialUpload?.localRevision===header.localRevision?header.state.initialUpload.operationId:crypto.randomUUID();
  if(header.state?.initialUpload&&header.state.initialUpload.operationId!==operationId)await request('/staging/discard',{operationId:header.state.initialUpload.operationId});
- let after:import('./replicaCandidateProtocol').InitialPublicationPage['next']=null,pageNumber=0,digest=await hash('sensa-initial-publication-v1'),pendingSaved=false,cancelUpload=false;
- let uploading:Promise<{binary?:Awaited<ReturnType<typeof uploadOwnCloudSnapshot>>;error?:unknown}>|undefined;
+ let after:import('./replicaCandidateProtocol').InitialPublicationPage['next']=null,pageNumber=0,digest=await hash('sensa-initial-publication-v1'),pendingSaved=false;
  try{
   // Capture and index the fixed source on disk first. Transfer then streams
-  // bounded refs and binary batches without retaining the complete refs list.
+  // bounded refs and block batches without retaining the complete refs list.
   for(;;){const page=await deadline.run(()=>requestReplicaCandidate({kind:'publicationPage',id,after}));if(page.kind!=='publicationPage')throw Error('library_sync_candidate_invalid');deadline.progress('publication-capture',page.stats.records);after=page.next;if(page.done){if(page.stats.records===1&&!options.publishEmptyIdentity)return false;break;}}
   await deadline.run(()=>saveState({owner:header.owner,incarnation:header.incarnation,identity:header.identity},old=>({...old!,initialUpload:{id,operationId,localRevision:header.localRevision,baseRevision:head.revision}})));
   const checked=await deadline.run(()=>requestReplicaCandidate({kind:'admitOwnPublication',id}));if(checked.kind!=='publicationValidated')throw Error('library_sync_candidate_invalid');deadline.progress('publication-sealed',checked.stats.records);
   await request('/staging/begin',{operationId,baseRevision:head.revision,libraryId:header.identity.id,learnerId:header.identity.learnerId,incarnation:header.incarnation,localRevision:header.localRevision});
-  const available=head.storage?head.storage.capacityBytes-head.storage.usedBytes:0;
-  if(snapshot&&checked.stats.uniqueBlockStoredBytes+Math.ceil(snapshot.bytes.length*4/3)+2*1024*1024<=available){
-   uploading=uploadOwnCloudSnapshot(snapshot,async(path,body)=>{if(cancelUpload)throw Error('library_sync_cancelled');return request(path,body);},deadline).then(binary=>({binary}),error=>({error}));
-  }
   after=null;
   for(;;){
    const page=await deadline.run(()=>requestReplicaCandidate({kind:'publicationIndexPage',id,after}));if(page.kind!=='publicationIndexPage')throw Error('library_sync_candidate_invalid');
@@ -543,8 +533,7 @@ async function publishInitialLibrary(header:Awaited<ReturnType<typeof captureHea
    }
    after=page.next;if(page.done)break;
   }
-  const upload=await uploading;if(upload?.error&&!(upload.error instanceof Error&&upload.error.message==='library_sync_capacity'))throw upload.error;const binary=upload?.binary;
-  const pending:LibrarySyncCommit={operationId,baseRevision:head.revision,staging:{pages:pageNumber,records:checked.stats.records,digest,...(binary?{binary}:{})}};
+  const pending:LibrarySyncCommit={operationId,baseRevision:head.revision,staging:{pages:pageNumber,records:checked.stats.records,digest}};
   // From here the sealed generation may be the recovery source for a durable
   // pending write whose Worker ACK is lost. Keep it even on an uncertain ACK.
   pendingSaved=true;
@@ -554,17 +543,7 @@ async function publishInitialLibrary(header:Awaited<ReturnType<typeof captureHea
   catch(cause){if(cause instanceof Error&&cause.message==='library_sync_conflict')throw Error('library_sync_head_changed');throw cause;}
   await verifyPublication(published,pending);
   await confirmInitialPublication(header,id,published,header.localRevision,published.revision,deadline);return true;
- }finally{cancelUpload=true;await uploading;if(!pendingSaved)await deadline.cleanup(()=>requestReplicaCandidate({kind:'discardPublication',id}));}
-}
-
-async function uploadOwnCloudSnapshot(snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot,request:SyncRequest,deadline:CloudSyncDeadline){
- const {encodeLibrarySyncBinaryChunk,librarySyncBinaryChunkBytes}=await blockCodec(),refs:string[]=[],sent=new Set<string>();let batch:Array<{hash:string;data:string}>=[],bytes=13;
- let sentBytes=0;const flush=async()=>{if(batch.length){await request('/blocks/store',{blocks:batch});sentBytes+=bytes;deadline.progress('publication-bytes',sentBytes);}batch=[];bytes=13;};
- for(let at=0;at<snapshot.bytes.length;at+=librarySyncBinaryChunkBytes){
-  const data=await encodeLibrarySyncBinaryChunk(snapshot.bytes.subarray(at,at+librarySyncBinaryChunkBytes)),block={hash:await hash(data),data},cost=new TextEncoder().encode(JSON.stringify(block)).length+1;
-  refs.push(block.hash);if(sent.has(block.hash))continue;sent.add(block.hash);if(batch.length&&(batch.length===librarySyncBlockStoreBatch||bytes+cost>librarySyncBlockStoreBytes))await flush();batch.push(block);bytes+=cost;
- }
- await flush();return {sourceRevision:snapshot.sourceRevision,schemaVersion:snapshot.schemaVersion,sha256:snapshot.sha256,byteLength:snapshot.bytes.length,blocks:refs};
+ }finally{if(!pendingSaved)await deadline.cleanup(()=>requestReplicaCandidate({kind:'discardPublication',id}));}
 }
 
 async function restoreOwnCloudLibrary(header:Awaited<ReturnType<typeof captureHeader>>,head:LibrarySyncHead,request:SyncRequest,blocks:Blocks,deadline:CloudSyncDeadline){
@@ -687,8 +666,8 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
     if(head.storage)await saveState(expected,old=>{if(!old)throw Error('account_changed');return old.revision===head.revision?{...old,storage:head.storage}:old;});
     return {activated:undefined,snapshotAlreadyPublished:head.nativeSnapshot};
    }
-   // Small initial publications already have the bounded legacy path. Do not
-   // create a second whole-file artifact as part of their ordinary connection.
+   // Ordinary connections keep small libraries on their paged refs checkpoint.
+   // Only an explicit preparation intent creates a separate native artifact.
    if(options.publishSnapshot==='if-large'&&(head.manifest?.records??0)<=librarySyncLegacyManifestRecordLimit)return;
    if((head.manifest?.records??0)>librarySyncLegacyManifestRecordLimit){
     // Native remains an optional bounded artifact. Large libraries prepare the
