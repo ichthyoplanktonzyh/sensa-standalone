@@ -59,12 +59,15 @@ export class SqliteSyncDependencies{
   const prior=this.rows<{name:string;sql:string}>("SELECT name,sql FROM sqlite_schema WHERE name LIKE 'sensa_sync_%_v1'");
   this.database.exec(schema);for(const trigger of triggers)this.database.exec(trigger.sql);
   const definitions=[...triggers,...schema.split(';').filter(sql=>sql.trim().startsWith('CREATE')&&!sql.includes('sensa_sync_admission')).map(sql=>({sql:sql.trim(),name:sql.match(/(?:TABLE|INDEX) IF NOT EXISTS (\w+)/u)![1]!}))];
-  this.healthySchema=!prior.some(row=>definitions.some(definition=>definition.name===row.name&&normalized(definition.sql)!==normalized(row.sql)));
-  if(!this.healthySchema||prior.length&&definitions.some(definition=>!prior.some(row=>row.name===definition.name)))this.rows('UPDATE sensa_sync_dependency_state_v1 SET certificate_json=NULL WHERE id=1');
+  this.healthySchema=!prior.some(row=>definitions.some(definition=>definition.name===row.name&&normalized(definition.sql)!==normalized(row.sql)))&&!(prior.length&&definitions.some(definition=>!prior.some(row=>row.name===definition.name)));
+  // Persist invalidation for clock-only receipts too. Recreating a missing
+  // trigger must not revive a receipt after the next connection opens.
+  if(!this.healthySchema)this.rows('UPDATE sensa_sync_dependency_state_v1 SET epoch=epoch+1,certificate_json=NULL WHERE id=1');
   this.ready=true;
   this.schemaCookie=Number(this.rows<{v:number}>('SELECT schema_version AS v FROM pragma_schema_version')[0].v);
  }
  clock(){this.ensure();return this.rows<{generation:number;epoch:number;certificate_json:string|null}>('SELECT * FROM sensa_sync_dependency_state_v1 WHERE id=1')[0];}
+ assertClock(expected:{generation:number;epoch:number}|undefined):void{const current=this.clock();if(!this.healthySchema||!expected||current.generation!==expected.generation||current.epoch!==expected.epoch)throw Error('library_sync_dependency_corrupt');}
  certificate():SyncDependencyCertificate|undefined{const row=this.clock();if(!this.healthySchema||!row.certificate_json)return;let raw:unknown;try{raw=JSON.parse(row.certificate_json);}catch{return;}const parsed=certificateSchema.safeParse(raw);if(!parsed.success)return;const certificate=parsed.data;if(certificate.generation!==row.generation||certificate.epoch!==row.epoch)return;return certificate;}
  match(state:CloudSyncState|undefined,fence:ReplicaCandidateFence,artifactRevision:number){
   // The live revision fences source edits. The certificate's localRevision
@@ -72,6 +75,13 @@ export class SqliteSyncDependencies{
   // a checked empty-delta ACK can advance the clean checkpoint independently.
   if(!validatedCheckpoint(state)||state!.syncedLocalRevision!==fence.localRevision||!backupEqual(state!.owner,fence.owner)||state!.incarnation!==fence.incarnation)return;
   const certificate=this.certificate();if(!certificate||certificate.revision!==state!.revision||certificate.artifactRevision!==artifactRevision||certificate.incarnation!==fence.incarnation||!backupEqual(certificate.owner,fence.owner)||certificate.libraryId!==fence.identity.id||certificate.learnerId!==fence.identity.learnerId)return;
+  return certificate;
+ }
+ /** A dirty source may reuse B's admission without certifying its newer L. */
+ matchDirtyBaseline(state:CloudSyncState|undefined,fence:ReplicaCandidateFence,artifactRevision:number){
+  if(!state||!validatedCheckpoint(state)||!Number.isSafeInteger(state.syncedLocalRevision)||state.syncedLocalRevision!>fence.localRevision||!backupEqual(state.owner,fence.owner)||state.incarnation!==fence.incarnation)return;
+  const certificate=this.certificate();
+  if(!certificate||certificate.revision!==state.revision||certificate.localRevision!==state.syncedLocalRevision||certificate.artifactRevision!==artifactRevision||certificate.incarnation!==fence.incarnation||!backupEqual(certificate.owner,fence.owner)||certificate.libraryId!==fence.identity.id||certificate.learnerId!==fence.identity.learnerId)return;
   return certificate;
  }
  assert(certificate:SyncDependencyCertificate):void{const current=this.certificate();if(!current||!backupEqual(current,certificate))throw Error('library_sync_local_changed');}

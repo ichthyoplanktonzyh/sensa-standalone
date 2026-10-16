@@ -43,9 +43,9 @@ export async function validateLibraryReplicaRecordsCooperatively(records:Library
 
 /** Historical business proof for a resolved learning fork.
  * Retained decisions on ordinary syncs do not trigger this path. */
-export async function validateLearningConflictReplicaCooperatively(entries:LibraryReplicaEntry[],targetIds:ReadonlySet<string>){
+export async function validateLearningConflictReplicaCooperatively(entries:LibraryReplicaEntry[],targetIds:ReadonlySet<string>,references?:LibraryRecordReader){
  if(!targetIds.size)return;
- const reader=replicaRecords(entries,[]),targets=new Set(targetIds),runs=new Set<string>();
+ const component=replicaRecords(entries,[]),reader:LibraryRecordReader=references?{get:(table,key)=>component.has(table,key)?component.get(table,key):references.get(table,key),has:(table,key)=>component.has(table,key)||references.has(table,key),entries:table=>component.entries(table)}:component,targets=new Set(targetIds),runs=new Set<string>();
  const runTargets=new Map<string,string[]>(),owners=new Map<string,{runId:string;targetId:string}>();for(const row of reader.entries('learningRuns')){runTargets.set(row.key,row.value.targetIds);for(const [targetId,p]of Object.entries(row.value.participants) as Array<[string,any]>){if(owners.has(p.protocolRunId))throw Error('libraryBackup.errors.inconsistent');owners.set(p.protocolRunId,{runId:row.key,targetId});}}
  let expanded=true;while(expanded){expanded=false;for(const [id,ids]of runTargets)if(ids.some(id=>targets.has(id))){runs.add(id);for(const target of ids)if(!targets.has(target)){targets.add(target);expanded=true;}}}
  const selected:LibraryRecordReader={...reader,*entries(table){

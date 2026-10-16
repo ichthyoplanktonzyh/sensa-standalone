@@ -181,7 +181,7 @@ test.beforeAll(async()=>{
         if(!cloudBlocks.has(hash)){json({code:'missing'},404);return;}
         json({hash,data:cloudBlocks.get(hash)});return;
       }
-      if(url.pathname==='/sensa/library-sync/snapshot'||url.pathname==='/sensa/library-sync/pull'){
+      if(url.pathname==='/sensa/library-sync/snapshot'||url.pathname==='/sensa/library-sync/pull'||url.pathname.startsWith('/sensa/library-sync/staging/')||url.pathname.startsWith('/sensa/library-sync/receipt/')){
         json(cloudIndex.page(url.pathname.replace('/sensa/library-sync',''),await body(),cloudRevision,cloudManifest));return;
       }
       if(url.pathname==='/sensa/library-sync/commit'){

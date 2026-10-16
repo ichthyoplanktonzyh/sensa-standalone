@@ -10,7 +10,7 @@ import {isFatalSqliteConnectionFailure,sqliteRollbackFailure} from './sqliteConn
 import type {LibraryRecordReader} from './libraryRecordReader';
 import {SqliteSyncDependencies,syncAdmission,type SyncDependencyCertificate} from './sqliteSyncDependencies';
 import {assertDeltaReceiveShape,DeltaReceiveFallback} from './learningDeltaAdmission';
-import type {CloudSyncState} from './cloudSync';
+import type {CloudSyncState,DirtyRebaseReceipt} from './cloudSync';
 import {validatedCheckpoint} from './cloudSyncCheckpoint';
 import {librarySyncTables,librarySyncSnapshotPageResult,librarySyncMetadataPageBytes,librarySyncMetadataPageRefs} from '@sensa/contracts/sensa';
 import {isReplicatedLibraryEntry} from './replication/libraryReplica';
@@ -814,7 +814,7 @@ export class SqliteRecordDatabase {
     const readRebaseBase=(table:SqliteLibraryTable,key:string)=>{const text=readBase(table,key);this.syncDependencies.verify(table,key,text);return text;};
     try{
       switch(request.kind){
-        case 'beginIndex':{const id=candidates.beginIndex(request.fence,request.head,request.baseRevision,readBase,request.rebase);return {kind:'begun',id,needsSeed:candidates.needsSeed(id)};}
+        case 'beginIndex':{const id=candidates.beginIndex(request.fence,request.head,request.baseRevision,readBase,request.rebase,(table,key)=>this.get(table,key));return {kind:'begun',id,needsSeed:candidates.needsSeed(id)};}
         case 'seed':return {kind:'seeded',done:candidates.seed(request.id,readBase)};
         case 'indexPage':return {kind:'indexed',needed:candidates.indexPage(request.id,request.page,readRebaseBase)};
         case 'begin':return {kind:'begun',id:candidates.begin(request.fence,request.expected)};
@@ -975,7 +975,7 @@ export class SqliteRecordDatabase {
       this.nextOptimizeAt = Date.now() + sqliteOptimizeIntervalMs;
     }
     const previousCertificate=this.syncDependencies.certificate();
-    const patchAdmission=mutation.syncBasePatch&&!mutation.replicaCandidateRestore&&previousCertificate?this.prepareDependencyPatch(mutation,previousCertificate):undefined;
+    const patchAdmission=mutation.syncBaseValidated&&mutation.syncBasePatch&&!mutation.replicaCandidateRestore&&previousCertificate?this.prepareDependencyPatch(mutation,previousCertificate):undefined;
     const changesBefore=this.database.changes(true);
     let encodedWriteSize=0;
     let bulkMaintenance=false;
@@ -989,6 +989,11 @@ export class SqliteRecordDatabase {
     this.database.exec("BEGIN IMMEDIATE");
     try {
       if(previousCertificate&&patchAdmission)this.syncDependencies.assert(previousCertificate);
+      // A dirty baseline deliberately has no complete certificate. Its receipt
+      // still fences every retained row and witness, including untouched ones.
+      const dirtyReceipt=this.decoded<{dirtyRebaseReceipt?:DirtyRebaseReceipt}>('meta','cloud-sync')?.dirtyRebaseReceipt;
+      const stateWrite=mutation.puts.find(row=>row.table==='meta'&&row.key==='cloud-sync');
+      if(dirtyReceipt&&(mutation.replicaCandidateRestore||mutation.syncBasePatch||stateWrite&&this.decode<CloudSyncState>(stateWrite.encodedValue).status==='synced'))this.syncDependencies.assertClock(dirtyReceipt.baseline);
       if(mutation.replicaCandidateRestore){this.activationMemo=new StoredRecordMemo();this.activationTargetLanguages=new Map();this.activationPreparedBodies=new Set();}
       const contentRevision = mutation.contentRevision;
       if (contentRevision !== undefined && (!Number.isSafeInteger(contentRevision) || contentRevision <= 0)) {
@@ -1251,6 +1256,13 @@ export class SqliteRecordDatabase {
         ?{puts:mutation.syncBaseReplacement,deletes:[]}
         :(admittedBase||mutation.replicaCandidateRestore&&'kind' in (mutation.replicaCandidateRestore.update??{}))&&mutation.syncBasePatch&&(!patchAdmission||!previousCertificate||!validatedCheckpoint(syncState))?mutation.syncBasePatch:undefined;
       if(uncertifiedBase)this.syncDependencies.refreshUncertifiedPatch(uncertifiedBase,(table,key)=>this.syncBaseEntries([{table,key}])[0]?.valueJson??(()=>{throw Error('library_sync_dependency_corrupt');})());
+      if(mutation.replicaCandidateRestore?.update&&'kind' in mutation.replicaCandidateRestore.update){
+        const state=syncState as CloudSyncState&{dirtyRebaseReceipt?:DirtyRebaseReceipt};
+        if(state.dirtyRebaseReceipt){
+          const {generation,epoch}=this.syncDependencies.clock();
+          this.database.exec({sql:"UPDATE sensa_records SET value_json=? WHERE table_name='meta' AND record_key='cloud-sync'",bind:[packStoredRecord(JSON.stringify(encodeBackupValue({...state,dirtyRebaseReceipt:{...state.dirtyRebaseReceipt,baseline:{generation,epoch}}})))]});
+        }
+      }
       if(syncState&&syncIdentity){
         const artifactRevision=this.decoded<number>('meta','local-artifact-revision')??0;
         if(mutation.initialPublication)this.initialPublication?.certify(mutation.initialPublication,syncState,syncIdentity,artifactRevision);

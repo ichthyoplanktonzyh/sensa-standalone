@@ -387,7 +387,7 @@ test('the shipped account pages clear only this browser and offline reload stays
  try{await page.reload();await expect(page.locator('#s-profile')).toBeVisible();expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(empty);}finally{await context.setOffline(false);}
  await page.reload();await expect(page.locator('#s-profile')).toBeVisible();await page.locator('#settings-data').click();await expect(page.getByRole('button',{name:'立即同步',exact:true})).toBeEnabled();
  expect(requests).toBe(0);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(empty);expect({revision:fixture.cloudRevision,manifest:fixture.cloudManifest,blocks:[...fixture.cloudBlocks]}).toEqual(cloudBefore);
- await page.getByRole('button',{name:'立即同步',exact:true}).click();await expect.poll(()=>page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(1);
+ await page.getByRole('button',{name:'立即同步',exact:true}).click();await expect(page.getByRole('status').filter({hasText:'已同步到账号'})).toBeVisible();expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(1);
  await page.reload();await expect(page.locator('#s-profile')).toBeVisible();expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(facts);
  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest())).identity).toEqual({...original as object,deviceId:cleared.deviceId});expect(requests).toBeGreaterThan(0);
  await testInfo.attach('local-clear-journey',{contentType:'application/json',body:JSON.stringify({scope:'shipped AccountExperience/ProfileScreen, genuine learning rating, private Draft image, accepted synthetic Meaning, OPFS and native offline reload; controlled Auth/HTTP',original,cleared,paidCalls:0})});
@@ -493,7 +493,7 @@ test('initial sync failure after admission actually reruns sync on the restorati
   heads++;
   // Admission sees nonempty remote data, but the actual sync fails before fetching it.
   // A later confirmed empty head exercises manual retry, not cloud payload restoration.
-  if(heads===1)return route.fulfill({json:{revision:1,manifest:['0'.repeat(64)]}});
+  if(heads===1)return route.fulfill({json:{revision:1,manifest:{libraryId:'00000000-0000-4000-8000-000000000011',learnerId:'00000000-0000-4000-8000-000000000012',snapshotRevision:1,floor:1,records:1}}});
   return !failSync?route.fulfill({json:{revision:2,manifest:null}}):route.fulfill({json:{revision:'invalid controlled head',manifest:null}});
  });
  await page.goto(fixture.origin);await expect(page.getByRole('button',{name:'重试恢复',exact:true})).toBeVisible();

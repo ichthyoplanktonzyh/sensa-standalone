@@ -29,7 +29,8 @@ type Owner={subject:string;accountId:string};
 export type CloudSyncConflictChoice='local'|'remote';
 export type CloudSyncConflict={detectedAt:string;localRevision:number;remoteRevision:number;remoteManifest:LibrarySyncHead['manifest'];records:{id:string;base:Entry|null;local:Entry|null;remote:Entry|null}[];affectedRecordIds:string[];comparison?:CloudSyncComparison};
 export type CloudSyncState={receive?:import('./learningDeltaAdmission').DeltaReceiveEvidence;owner:Owner;incarnation:string;revision:number;checkpointVersion?:7;restoreValidationVersion?:typeof libraryRestoreValidationVersion;storage?:LibrarySyncHead['storage'];syncedLocalRevision?:number;pending?:LibrarySyncCommit;status:'pending'|'syncing'|'synced'|'offline'|'conflict'|'failed';conflicts?:string[];conflict?:CloudSyncConflict;resolution?:{choice:CloudSyncConflictChoice;expectedRemoteRevision:number;expectedLocalRevision:number;decision:{id:string;createdAt:string}};lastSyncedAt?:string;lastCheckedAt?:string;syncStartedAt?:string;error?:string;failureKind?:CloudSyncFailureKind;retryCount?:number;retryAt?:string};
-type State=CloudSyncState&{dirtyRebaseOperationId?:string;restore?:{path:'native-v2'|'refs';revision:number;snapshotFailure?:string;timingsMs?:Record<string,number>};/** Durable proof for an uncertain staged-restore COMMIT ACK. */restoreOperationId?:string;publicationOperationId?:string;initialUpload?:{id:string;operationId:string;localRevision:number;baseRevision:number};publication?:import('./replicaCandidateProtocol').InitialPublicationStats};
+export type DirtyRebaseReceipt={appliedLocalRevision:number;baseLocalRevision:number;operationId?:string;baseline?:{generation:number;epoch:number}};
+type State=CloudSyncState&{dirtyRebaseOperationId?:string;/** Only a rebase that never consumed a conflict choice may finish from its upload receipt. */dirtyRebaseReceipt?:DirtyRebaseReceipt;restore?:{path:'native-v2'|'refs';revision:number;snapshotFailure?:string;timingsMs?:Record<string,number>};/** Durable proof for an uncertain staged-restore COMMIT ACK. */restoreOperationId?:string;publicationOperationId?:string;initialUpload?:{id:string;operationId:string;localRevision:number;baseRevision:number};publication?:import('./replicaCandidateProtocol').InitialPublicationStats};
 export type PendingCloudSyncRecord={table:typeof librarySyncTables[number];key:string};
 export type PendingCloudSyncSnapshot={
  accountLinked:boolean;
@@ -238,7 +239,7 @@ class Blocks{
   }
   for(const id of ids)if(!this.cache.has(id))throw new Error('library_sync_missing_block');
  }
- async text(refs:string[]){const {decodeLibrarySyncBlock}=await blockCodec();const parts:string[]=[];let size=0;for(const id of refs){const data=this.cache.get(id);if(data===undefined)throw new Error('library_sync_missing_block');const part=decodeLibrarySyncBlock(data);size+=part.length;if(size>90*1024*1024)throw new Error('library_sync_capacity');parts.push(part);}return parts.join('');}
+ async text(refs:string[],maximumBytes?:number){const {decodeLibrarySyncBlock}=await blockCodec();const parts:string[]=[];let size=0,bytes=0;for(const id of refs){const data=this.cache.get(id);if(data===undefined)throw new Error('library_sync_missing_block');const part=decodeLibrarySyncBlock(data);size+=part.length;if(maximumBytes!==undefined)bytes+=new TextEncoder().encode(part).length;if(size>90*1024*1024||maximumBytes!==undefined&&bytes>maximumBytes)throw new Error('library_sync_capacity');parts.push(part);}return parts.join('');}
  async upload(){
   const keys=[...this.cache.keys()],missing:string[]=[];
   for(let at=0;at<keys.length;at+=512){const reply=librarySyncBlockMissingResult.parse(await this.request('/blocks/missing',{hashes:keys.slice(at,at+512)}));if(reply.missing.some(id=>!this.cache.has(id)))throw new Error('library_sync_format');missing.push(...reply.missing);}
@@ -421,6 +422,26 @@ function parseSyncHead(value:unknown):LibrarySyncHead{
 async function verifyPublication(head:LibrarySyncHead,pending:LibrarySyncCommit){
  const parsed=librarySyncCommit.parse(pending);
  if(head.revision!==pending.baseRevision+1||head.receipt?.operationId!==pending.operationId||head.receipt.requestDigest!==await hash(JSON.stringify(parsed)))throw Error('library_sync_format');
+}
+
+/** Recover the exact uncertain upload, never a later local version of its rows.
+ * The activation marker excludes conflict choices before their state is cleared. */
+async function dirtyReceiptPatch(blocks:Blocks,pending:Extract<LibrarySyncCommit,{patch:string[]}>,identity:LibraryIdentity){
+ await blocks.fetch(pending.patch);
+ const text=await blocks.text(pending.patch,4*1024*1024);
+ let patch:ReturnType<typeof librarySyncPatch.parse>;try{patch=librarySyncPatch.parse(JSON.parse(text));}catch{throw Error('library_sync_format');}
+ if(patch.libraryId!==identity.id||patch.learnerId!==identity.learnerId)throw Error('library_sync_identity');
+ if(patch.changes.length>16384)throw Error('library_sync_capacity');
+ const puts:Entry[]=[],deletes:Array<Pick<Entry,'table'|'key'>>=[];let bytes=new TextEncoder().encode(text).length;
+ const keys=new Set<string>();
+ for(const row of patch.changes){
+  const key=entryId(row);if(keys.has(key)||!isReplicatedLibraryEntry(row.table,row.key))throw Error('library_sync_format');keys.add(key);
+  if(row.blocks===null){deletes.push({table:row.table,key:row.key});continue;}
+  await blocks.fetch(row.blocks);const body=await blocks.text(row.blocks,DECODED_CAP-bytes);bytes+=new TextEncoder().encode(body).length;
+  let value:unknown;try{value=JSON.parse(body);const normalized=normalizeLibraryReplicaEntry({table:row.table,key:row.key,value:decodeBackupValue(value)},identity);if(!equal(value,encodeBackupValue(normalized.value)))throw Error('library_sync_format');}catch{throw Error('library_sync_format');}
+  puts.push({table:row.table,key:row.key,value,blocks:row.blocks});
+ }
+ return {puts:puts as Array<Entry&{blocks:string[]}>,deletes};
 }
 
 function initialCandidateProgress(input:ReplicaCandidateRequest,deadline?:CloudSyncDeadline):import('./replicaCandidateProtocol').ReplicaCandidateProgressObserver|undefined{
@@ -695,9 +716,26 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
   let observedHead:LibrarySyncHead|undefined;
   if(prior?.pending&&prior.dirtyRebaseOperationId&&!('staging' in prior.pending)){
    const pending=prior.pending,receipt=await request('/receipt/'+pending.operationId);
-   try{const published=parseSyncHead(receipt.head??await request('/commit',pending));await verifyPublication(published,pending);}
+   let published:LibrarySyncHead|undefined;
+   try{published=parseSyncHead(receipt.head??await request('/commit',pending));await verifyPublication(published,pending);if(receipt.currentRevision!==undefined&&(!Number.isSafeInteger(receipt.currentRevision)||receipt.currentRevision<published.revision))throw Error('library_sync_format');}
    catch(cause){if(!(cause instanceof Error)||!['library_sync_conflict','library_sync_missing_block'].includes(cause.message))throw cause;}
-   await saveState(expected,old=>({...old!,pending:undefined}));header=await readLibrary(captureHeader);prior=header.state;
+   const marker=prior.dirtyRebaseReceipt;
+   let patch:Awaited<ReturnType<typeof dirtyReceiptPatch>>|undefined;
+   if(published&&'patch' in pending&&marker?.operationId===pending.operationId&&marker.baseline&&Number.isSafeInteger(marker.baseline.generation)&&Number.isSafeInteger(marker.baseline.epoch)&&Number.isSafeInteger(marker.appliedLocalRevision)&&marker.appliedLocalRevision<=header.localRevision&&marker.baseLocalRevision===prior.syncedLocalRevision&&prior.revision===pending.baseRevision&&!initiallyConflicted){
+    try{patch=await dirtyReceiptPatch(blocks,pending,header.identity);}catch(cause){if(!(cause instanceof Error)||!['library_sync_capacity','library_sync_missing_block','library_sync_hash','library_sync_format'].includes(cause.message))throw cause;}
+   }
+   if(patch&&published){
+    const confirmed=published,prepared=patch;
+    await deadline.run(beginCommit=>writeLibraryState(async tx=>{
+     tx.requireCommitSignal(deadline.signal,'library_sync_cancelled',beginCommit);const current=await captureHeader(tx),state=current.state;
+     if(!sameOwner(current.owner,header.owner)||current.incarnation!==header.incarnation||!equal(current.identity,header.identity)||!equal(current.signoutEpoch,header.signoutEpoch))throw Error('account_changed');
+     if(current.localRevision!==header.localRevision||state?.revision!==pending.baseRevision||state.syncedLocalRevision!==marker!.baseLocalRevision||state.dirtyRebaseOperationId!==prior!.dirtyRebaseOperationId||!equal(state.pending,pending)||!equal(state.dirtyRebaseReceipt,marker))throw Error('library_sync_local_changed');
+     const completedAt=new Date().toISOString(),converged=current.localRevision===marker!.appliedLocalRevision;
+     tx.patchSyncBase(prepared,{validated:true});
+     tx.put('meta',STATE,{...state,dirtyRebaseOperationId:undefined,dirtyRebaseReceipt:undefined,pending:undefined,revision:confirmed.revision,storage:confirmed.storage??state.storage,status:converged&&!(receipt.currentRevision>confirmed.revision)?'synced':'pending',syncedLocalRevision:converged?marker!.appliedLocalRevision:state.syncedLocalRevision,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
+    }));
+   }else await saveState(expected,old=>({...old!,pending:undefined,dirtyRebaseReceipt:undefined}));
+   header=await readLibrary(captureHeader);prior=header.state;
    initiallyConflicted=prior?.status==='conflict'||!!prior?.conflicts?.length||!!prior?.conflict||!!prior?.resolution;
   }
 
@@ -731,7 +769,12 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
      await blocks.upload();
      await saveState(expected,old=>{
       if(!validatedCheckpoint(old)||old!.revision!==pending.baseRevision)throw new Error('library_sync_local_changed');
-      return {...old!,status:'pending',pending};
+      const marker=old!.dirtyRebaseReceipt;
+      if(old!.dirtyRebaseOperationId!==delta.state!.dirtyRebaseOperationId||!equal(marker,delta.state!.dirtyRebaseReceipt))throw Error('library_sync_local_changed');
+      // An interrupted activation can resume through this ordinary delta. Bind
+      // its existing proof to these captured edits without renewing B's clock.
+      const receipt=old!.dirtyRebaseOperationId&&marker?.baseline&&Number.isSafeInteger(marker.baseline.generation)&&Number.isSafeInteger(marker.baseline.epoch)&&Number.isSafeInteger(marker.appliedLocalRevision)&&marker.appliedLocalRevision<=delta.localRevision&&marker.baseLocalRevision===old!.syncedLocalRevision&&!initiallyConflicted&&!old!.conflicts?.length&&!old!.conflict&&!old!.resolution?{...marker,operationId:pending.operationId,appliedLocalRevision:delta.localRevision}:marker;
+      return {...old!,status:'pending',pending,dirtyRebaseReceipt:receipt};
      });
      let published:LibrarySyncHead;
      try{published=parseSyncHead(await request('/commit',pending));}
@@ -747,7 +790,7 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
       if(state?.pending?.operationId!==pending.operationId||state.revision!==pending.baseRevision)throw new Error('library_sync_local_changed');
       const completedAt=new Date().toISOString();
       tx.patchSyncBase({puts:prepared.map(row=>({...row,blocks:row.blocks!})),deletes:delta.deletes},{validated:true});
-      tx.put('meta',STATE,{...state,dirtyRebaseOperationId:undefined,revision:published.revision,storage:published.storage??state.storage,status:current.localRevision===delta.localRevision?'synced':'pending',syncedLocalRevision:delta.localRevision,pending:undefined,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
+      tx.put('meta',STATE,{...state,dirtyRebaseOperationId:undefined,dirtyRebaseReceipt:undefined,revision:published.revision,storage:published.storage??state.storage,status:current.localRevision===delta.localRevision?'synced':'pending',syncedLocalRevision:delta.localRevision,pending:undefined,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
      });
      return;
     }
@@ -756,7 +799,7 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
      if(!sameOwner(current.owner,expected.owner)||current.incarnation!==expected.incarnation)throw new Error('account_changed');
      if(current.localRevision!==header.localRevision||!validatedCheckpoint(current.state)||current.state!.revision!==prior!.revision||current.state!.syncedLocalRevision!==prior!.syncedLocalRevision)throw new Error('library_sync_local_changed');
      const completedAt=new Date().toISOString();
-     tx.put('meta',STATE,{...current.state!,storage:observedHead!.storage??current.state!.storage,status:'synced',syncedLocalRevision:header.localRevision,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
+     tx.put('meta',STATE,{...current.state!,dirtyRebaseOperationId:undefined,dirtyRebaseReceipt:undefined,storage:observedHead!.storage??current.state!.storage,status:'synced',syncedLocalRevision:header.localRevision,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
     });
     return;
    }
@@ -805,18 +848,22 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
       tx.requireCommitSignal(deadline.signal,'library_sync_cancelled',beginCommit);const current=await captureHeader(tx);
       if(!sameOwner(current.owner,header.owner)||current.incarnation!==header.incarnation||!equal(current.identity,header.identity)||!equal(current.signoutEpoch,header.signoutEpoch))throw Error('account_changed');
       if(current.localRevision!==header.localRevision||current.state?.revision!==rebase.baseRevision||current.state.syncedLocalRevision!==rebase.baseLocalRevision)throw Error('library_sync_local_changed');
-      tx.updateReplicaCandidate(rebase);tx.put('meta',STATE,{...current.state,dirtyRebaseOperationId:selected.id,revision:selected.head.revision,storage:selected.head.storage,status:rebase.conflicts.length?'conflict':'pending',syncedLocalRevision:rebase.baseLocalRevision,conflicts:rebase.conflicts.length?rebase.conflicts:undefined,conflict:rebase.conflict,resolution:undefined,pending:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
+      const receiptSafe=!initiallyConflicted&&!current.state.conflict&&!current.state.conflicts?.length&&!current.state.resolution&&!rebase.conflicts.length&&!rebase.conflict;
+      tx.updateReplicaCandidate(rebase);tx.put('meta',STATE,{...current.state,dirtyRebaseOperationId:selected.id,dirtyRebaseReceipt:receiptSafe?{appliedLocalRevision:applied,baseLocalRevision:rebase.baseLocalRevision}:undefined,revision:selected.head.revision,storage:selected.head.storage,status:rebase.conflicts.length?'conflict':'pending',syncedLocalRevision:rebase.baseLocalRevision,conflicts:rebase.conflicts.length?rebase.conflicts:undefined,conflict:rebase.conflict,resolution:undefined,pending:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
      }));
      const puts=await blocks.prepare(rebase.upload.puts),deletes=rebase.upload.deletes;
      let published=selected.head;
      if(puts.length||deletes.length){
       const pending={operationId:crypto.randomUUID(),baseRevision:selected.head.revision,patch:await blocks.patch(header.identity,[...puts.map(row=>({table:row.table,key:row.key,blocks:row.blocks!})),...deletes.map(row=>({...row,blocks:null}))])};
-      await blocks.upload();await saveState(expected,old=>{if(old?.dirtyRebaseOperationId!==selected.id||old.revision!==pending.baseRevision)throw Error('library_sync_local_changed');return {...old,pending};});
+      await blocks.upload();await saveState(expected,old=>{if(old?.dirtyRebaseOperationId!==selected.id||old.revision!==pending.baseRevision)throw Error('library_sync_local_changed');return {...old,pending,dirtyRebaseReceipt:old.dirtyRebaseReceipt?{...old.dirtyRebaseReceipt,operationId:pending.operationId}:undefined};});
       try{published=parseSyncHead(await request('/commit',pending));}
       catch(cause){if(cause instanceof Error&&cause.message==='library_sync_conflict'){await saveState(expected,old=>({...old!,pending:undefined}));throw Error('library_sync_head_changed');}if(rejectedPublication(cause))await saveState(expected,old=>({...old!,pending:undefined}));throw cause;}
       await verifyPublication(published,pending);
      }
-     if(puts.length||deletes.length)await writeLibraryState(async tx=>{
+     // Conflict comparison must retain the acknowledged complement even if
+     // its final status write fails. Only no-conflict ACKs finalize atomically.
+     const conflictAck=rebase.conflicts.length>0&&(puts.length>0||deletes.length>0);
+     if(conflictAck)await writeLibraryState(async tx=>{
       const current=await captureHeader(tx),state=current.state;
       if(!sameOwner(current.owner,header.owner)||current.incarnation!==header.incarnation||!equal(current.identity,header.identity)||!equal(current.signoutEpoch,header.signoutEpoch))throw Error('account_changed');
       if(state?.dirtyRebaseOperationId!==selected.id||state.revision!==selected.head.revision)throw Error('library_sync_local_changed');
@@ -826,9 +873,10 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
      await writeLibraryState(async tx=>{
       const current=await captureHeader(tx),state=current.state;
       if(!sameOwner(current.owner,header.owner)||current.incarnation!==header.incarnation||!equal(current.identity,header.identity)||!equal(current.signoutEpoch,header.signoutEpoch))throw Error('account_changed');
-      if(state?.dirtyRebaseOperationId!==selected.id||state.revision!==published.revision)throw Error('library_sync_local_changed');
+      if(state?.dirtyRebaseOperationId!==selected.id||state.revision!==(conflictAck?published.revision:selected.head.revision))throw Error('library_sync_local_changed');
       const completedAt=new Date().toISOString(),converged=!rebase.conflicts.length&&current.localRevision===applied;
-      tx.put('meta',STATE,{...state,dirtyRebaseOperationId:undefined,status:rebase.conflicts.length?'conflict':converged?'synced':'pending',syncedLocalRevision:converged?applied:state.syncedLocalRevision,resolution:undefined,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
+      if(!conflictAck&&(puts.length||deletes.length))tx.patchSyncBase({puts:puts.map(row=>({...row,blocks:row.blocks!})),deletes},{validated:true});
+      tx.put('meta',STATE,{...state,dirtyRebaseOperationId:undefined,dirtyRebaseReceipt:undefined,revision:published.revision,storage:published.storage??state.storage,pending:undefined,conflict:rebase.conflict?{...rebase.conflict,remoteRevision:published.revision,remoteManifest:published.manifest}:undefined,status:rebase.conflicts.length?'conflict':converged?'synced':'pending',syncedLocalRevision:converged?applied:state.syncedLocalRevision,resolution:undefined,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
      });
      return;
     }finally{if(candidate)await deadline.cleanup(()=>requestReplicaCandidate({kind:'discard',id:candidate!.id}));}

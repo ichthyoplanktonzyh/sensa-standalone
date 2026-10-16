@@ -42,6 +42,7 @@ export function assertDeltaReceiveShape(changes:readonly {table:SqliteLibraryTab
  * snapshot; they make no claim about historical Protocol/FSRS correctness. */
 export async function admitLearningDelta(input:{
  changes:readonly DeltaKey[];base:LibraryRecordReader;remote:LibraryRecordReader;
+ revalidateKeys?:readonly Pick<DeltaKey,'table'|'key'>[];
  dependencies:SqliteSyncDependencies;certificate:SyncDependencyCertificate;alive:()=>void;
  phase?:(name:string)=>void;window?:()=>()=>void;canonical?:(side:'base'|'remote',table:SqliteLibraryTable,key:string)=>string|undefined;
  consume?:(records:DeltaKey[],changes:DeltaKey[])=>Promise<void>;
@@ -56,6 +57,9 @@ export async function admitLearningDelta(input:{
   await runCooperatively((function*(){
    yield*deltaReceiveShapeSteps(changes,base,remote);alive();input.phase?.('eligibility');
    for(const row of changes){alive();yield;if(!row.deleted)select(row.table,row.key);if(row.table==='learningEvents'&&!row.deleted){const event=needed(row.table,row.key);select('learningRuns',event.runId);select('learningTargets',event.targetId);}}
+   // Reverse-affected owners are revalidated without pretending they changed.
+   // Eligibility and the returned patch continue to use only actual changes.
+   for(const row of input.revalidateKeys??[]){alive();yield;if(!allow.has(row.table))throw new DeltaReceiveFallback('unsupported_revalidation_owner');if(remote.has(row.table,row.key))select(row.table,row.key);}
    const active=remote.get('meta','learning-active');if(typeof active==='string')select('learningRuns',active);
    for(const key of selection.get('learningRuns')??[]){alive();yield;const run=needed('learningRuns',key);for(const id of run.targetIds){yield;select('learningTargets',id);}for(const [targetId,participant]of Object.entries(run.participants) as Array<[string,any]>){const protocolId=participant.protocolRunId,prior=owners.get(protocolId);if(prior&&(prior.runId!==key||prior.targetId!==targetId))fail();owners.set(protocolId,{runId:key,targetId});}}
   })());alive();input.phase?.('directReferences');

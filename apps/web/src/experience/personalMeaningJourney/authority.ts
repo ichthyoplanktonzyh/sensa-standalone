@@ -380,15 +380,28 @@ function requireStateShape(state:JourneyState){
  requireInvariant(Array.isArray(state.meanings)&&Array.isArray(state.inboxItems)&&Array.isArray(state.clarificationDrafts)&&Array.isArray(state.commandReceipts),'Personal Semantic World store 结构无效。');
 }
 
-function assertSceneOwner(meaning:MeaningJourneyRecord,owners:Map<string,string>,index?:RecordValidationIndex){
- const meaningId=meaning.personalMeaning.personalMeaningId;
+/** Shared extraction for full validation and a certified baseline's private index. */
+export function* personalMeaningSceneIds(meaning:MeaningJourneyRecord):Generator<string>{
  for(const revision of meaningHistoryRecords(meaning).flatMap(branch=>branch.personalSemanticAnchorRevisions)){
   const scene=record(revision.structuredPayload.learningScene);if(!scene)continue;
   const sceneId=scene.sceneId;
   requireInvariant(typeof sceneId==='string'&&sceneId.length>0,'Personal Learning Scene identity 缺失。');
+  yield sceneId;
+ }
+}
+function assertSceneOwner(meaning:MeaningJourneyRecord,owners:Map<string,string>,index?:RecordValidationIndex){
+ const meaningId=meaning.personalMeaning.personalMeaningId;
+ for(const sceneId of personalMeaningSceneIds(meaning)){
   requireInvariant(index?index.sceneOwner(sceneId,meaningId):!owners.has(sceneId)||owners.get(sceneId)===meaningId,'同一 Personal Learning Scene 不允许属于两条 Personal Meaning。');
   if(!index)owners.set(sceneId,meaningId);
  }
+}
+
+export function registryValidationKeys(kind:string,fact:Fact):Array<{kind:'sense-key'|'registry-slot';value:string}>{
+ const keys:Array<{kind:'sense-key'|'registry-slot';value:string}>=[];
+ if(kind==='senses')keys.push({kind:'sense-key',value:fact.senseKey});
+ const slot=registryVersionSlot(kind,fact);if(slot)keys.push({kind:'registry-slot',value:slot});
+ return keys;
 }
 
 export const semanticWorldRecordTables=['semanticState','semanticMeanings','semanticContexts','semanticRegistry','semanticInbox','semanticDrafts','semanticReceipts'] as const;
@@ -444,9 +457,7 @@ export function* assertPersonalSemanticWorldRecordSteps(reader:SemanticWorldReco
   const id=fact![idField],identity=`${kind}:${id}`;
   requireInvariant(key===identity&&!ids?.has(identity),'Semantic Registry identity 与 storage key 不一致。');ids?.add(identity);
   requireInvariant(Number.isSafeInteger(row.ordinal)&&row.ordinal>=0,'Semantic Registry ordinal 无效。');
-  if(kind==='senses'){requireInvariant(reader.validationIndex?reader.validationIndex.unique('sense-key',fact!.senseKey):!senseKeys!.has(fact!.senseKey),'Sense key 重复。');senseKeys?.add(fact!.senseKey);}
-  const parent=kind==='senseVersions'?'senseId':kind==='expressionVersions'?'expressionId':kind==='bindingVersions'?'senseExpressionBindingId':null;
-  if(parent){const slot=registryVersionSlot(kind,fact!)!;requireInvariant(reader.validationIndex?reader.validationIndex.unique('registry-slot',slot):!slots!.has(slot),'Semantic Registry version 槽重复。');slots?.add(slot);}
+  for(const witness of registryValidationKeys(kind,fact!)){const seen=witness.kind==='sense-key'?senseKeys:slots;requireInvariant(reader.validationIndex?reader.validationIndex.unique(witness.kind,witness.value):!seen!.has(witness.value),witness.kind==='sense-key'?'Sense key 重复。':'Semantic Registry version 槽重复。');seen?.add(witness.value);}
   validateRegistryReference(kind,fact!,registry);
   yield;
  }

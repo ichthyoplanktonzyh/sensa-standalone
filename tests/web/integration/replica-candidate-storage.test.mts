@@ -698,9 +698,14 @@ for(const fault of ['none','ack-source-advanced','artifact-invalidated','changed
   if(fault==='ack-source-advanced')f.database.commit({clears:[],deletes:[],puts:[{table:'settings',key:'later-local-edit',encodedValue:f.text('kept')},{table:'meta',key:'local-content-revision',encodedValue:f.text(2)}],contentRevision:2});
   if(fault==='artifact-invalidated')f.database.commit({clears:[],deletes:[],puts:[{table:'meta',key:'local-artifact-revision',encodedValue:f.text(1)}]});
   const changed=structuredClone(f.changed);if(fault==='changed-patch')changed.find(row=>row.table==='semanticMeanings')!.valueJson='["null"]';
-  const state={...checkpoint,revision:4,syncedLocalRevision:1,status:fault==='ack-source-advanced'?'pending' as const:'synced' as const},ack=()=>f.database.commit({clears:[],deletes:[],puts:[{table:'meta',key:'cloud-sync',encodedValue:f.text(state)}],syncBasePatch:{puts:changed,deletes:[]}});
+  const state={...checkpoint,revision:4,syncedLocalRevision:1,status:fault==='ack-source-advanced'?'pending' as const:'synced' as const},ack=()=>f.database.commit({clears:[],deletes:[],puts:[{table:'meta',key:'cloud-sync',encodedValue:f.text(state)}],syncBaseValidated:true,syncBasePatch:{puts:changed,deletes:[]}});
   if(fault==='changed-patch'){ack();expect(f.deps.certificate()).toBeUndefined();for(const row of f.changed)expect(f.database.get(row.table,row.key)).toBe(row.valueJson);return;}
   ack();const proof=f.deps.certificate();if(fault==='artifact-invalidated')expect(proof).toBeUndefined();else{expect(proof).toMatchObject({revision:4,records:f.after.length});expect(f.deps.match(state,{owner,identity,incarnation:'initial',localRevision:fault==='ack-source-advanced'?2:1},0)!==undefined).toBe(fault!=='ack-source-advanced');}
   if(fault==='ack-source-advanced')expect(f.database.get('settings','later-local-edit')).toBe(f.text('kept'));
  }finally{f.deps.close();f.database.close();}
+});
+
+for(const representation of ['opaque','packed'] as const)test(`a bounded remote read rejects oversized ${representation} text before decoding its body`,async()=>{
+ const records=rows(),id=await begin(records),raw=Reflect.get(database,'database'),plain=JSON.stringify(encodeBackupValue('Budget witness '.repeat(4096))),stored=representation==='packed'?packStoredRecord(plain):plain;
+ try{raw.exec({sql:'INSERT INTO sensa_replica_candidate_records_v1(candidate_id,table_name,record_key,value_json,refs_json,representation) VALUES(?,?,?,?,?,?)',bind:[id,'settings','budget-witness',stored,'[]',representation]});const candidate=Reflect.get(database,'replicaCandidateStore');expect(()=>Reflect.get(candidate,'candidateBody').call(candidate,id,'settings','budget-witness',1024)).toThrow();expect(Reflect.get(candidate,'candidateBody').call(candidate,id,'settings','budget-witness',1024*1024)).toBe(plain);}finally{await discard(id);}
 });

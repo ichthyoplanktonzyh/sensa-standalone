@@ -212,9 +212,10 @@ Package key；运行恢复、策略锁定和生成频控通过领域索引查询
 写事务内核对捕获的本机内容版本；期间新增内容时保留原事实与基线，回到待同步，不发布旧冲突快照。
 有效 baseline 上的本地未上传变化与远端前进共用磁盘候选：固定远端 H 分页准入，SQL 对比双方 refs，并读取基线之后的分页 revision／tombstone journal。
 候选只保留完整变化依赖闭包的三方正文，双向关系和 enrollment route、Session-start、Registry 同槽等合并 cohort 共同确定闭包；闭包外由 refs 与 journal 证明三方一致。
-闭包沿用 16,384 key／64MiB 预算及既有 merger、冲突分区和明确选择规则，不提高阈值或回到整库 capture。完整候选及合并 overlay 仍逐条执行领域校验。
+闭包沿用 16,384 key／64MiB 预算及既有 merger、冲突分区和明确选择规则，不提高阈值或回到整库 capture。与 B 精确匹配的完整同版准入证书可支持差量证明：逐页校验 B 的全部行摘要和键覆盖，在候选私有表派生快路径 cohort 及全局唯一性见证，再以 SQL refs 差异和 revision／tombstone journal 证明闭包外 B=L=R。普通纯文本 Context 的批量后代复用既有单步 shape 和 revision 构造器，保留旧事实、回执及精确父链；学习记录沿用原差量形状与保存态校验，新增 reconciliation 仍执行既有历史校验。R、L、最终本地和上传 overlay 各自验证；Scene／生命周期历史、无 Context pin 的受影响消费者及 Registry／来源／结构变化不取得该快速准入，回到完整候选校验。补集见证不升级 B 证书，混合冲突 baseline 也不取得完整证书。快路径发现冲突后，完整 R 准入的原始关系与所有变化根的 B/L/R 关系共同重建旧冲突图，不为 B 重复保存原始全图。
 专属 dirty-rebase receipt 在同一事务内复核账号、身份、incarnation、退出 epoch、云端与本地基线 revision 及捕获的本机 revision，再激活事实、投影、baseline 与状态。
 冲突分区保留旧 baseline，未冲突补集继续合入；混合 baseline 仅维护逐行摘要，不取得完整准入证书。上传仍须 CAS 与 operation receipt 确认，确认前不标记 synced。
+未经过冲突选择的 dirty rebase 在激活及保存 pending 时原子记录本机应用 revision 与 operation 绑定；刷新摘要后封存 baseline generation／dependency epoch。再次激活及 ACK 都检查旧标记，依赖表／触发器损坏也持久失效，普通同步收敛时一并清除残留标记。丢失上传 ACK 后，仅从已校验 receipt 对应的持久化 patch 读取有界精确正文，原子更新 baseline、云 revision 与状态，不重新下载整库，也不生成完整证书；本机期间继续修改则保留待同步状态。无冲突 ACK 同样一次提交 baseline 与最终状态；冲突补集上传仍先持久化已确认的比较头，再完成冲突状态。
 未取得有效 baseline 的完整回退仍受整库 capture 上限约束；排序、单个 Meaning 与 Learning reconciliation 也仍有同步工作段。
 已完整恢复的内容缓存复用一次一致的安装／来源快照；下载或缓存修复后重新读取当前快照，避免把期间新增但未恢复的来源误报为就绪。
 学习状态变化只刷新学习投影，语言选择只读取当前语言方向；通知按记录 key 过滤，当前页面不重复处理自己发出的跨页通知。

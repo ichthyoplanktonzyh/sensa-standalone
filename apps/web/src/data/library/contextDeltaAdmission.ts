@@ -21,7 +21,7 @@ const same=(a:unknown,b:unknown)=>backupEqual(a,b);
 const keyId=(row:{table:string;key:string})=>JSON.stringify([row.table,row.key]);
 
 /** Eligibility only. Other World commands retain complete admission. */
-function shape(input:Input){
+export function assertContextDeltaShape(input:Input){
  const {changes,base,remote}=input;if(changes.length!==4||changes.some(row=>row.deleted)||new Set(changes.map(keyId)).size!==4)fallback();
  const one=(table:Key['table'],prefix='')=>{const rows=changes.filter(row=>row.table===table&&row.key.startsWith(prefix));if(rows.length!==1)fallback();return rows[0];};
  const headKey=one('semanticContexts','anchors:'),revisionKey=one('semanticContexts','anchorRevisions:'),meaningKey=one('semanticMeanings'),receiptKey=one('semanticReceipts');
@@ -62,7 +62,7 @@ function state(rows:LibraryReplicaEntry[]):JourneyState{
  * certified complement is unchanged: old immutable pins/owners survive, no
  * global Registry/media/Scene facts or foreign Meaning may enter this shape. */
 function* contextSteps(input:Input):Generator<unknown,{identity:any;keys:Key[]}>{
- input.alive();const selected=shape(input),queue:Key[]=input.changes.map(row=>({...row})),seen=new Set(queue.map(keyId));
+ input.alive();const selected=assertContextDeltaShape(input),queue:Key[]=input.changes.map(row=>({...row})),seen=new Set(queue.map(keyId));
  const sides={base:new Map<string,LibraryReplicaEntry>(),remote:new Map<string,LibraryReplicaEntry>()};let bytes=0;
  const add=(key:{table:SqliteLibraryTable;key:string})=>{if(!['semanticContexts','semanticMeanings','semanticReceipts','semanticRegistry'].includes(key.table))fallback();if(key.table==='semanticMeanings'&&key.key!==selected.meaningKey.key)fallback();const id=keyId(key);if(seen.has(id))return;if(seen.size>=64)throw new DeltaReceiveFallback('context_component_capacity');seen.add(id);queue.push(key as Key);};
  for(let at=0;at<queue.length;at++){
