@@ -1,10 +1,11 @@
 /** Service phase budgets, not transport/OPFS or provider authentication proof. */
 import {afterEach,expect,test,vi} from 'vitest';
+import {AuthApiError,AuthRetryableFetchError} from '@supabase/supabase-js';
 import type {CloudSyncState} from '../../../apps/web/src/data/library/cloudSync';
 import {blocksAutomaticCloudSync} from '../../../apps/web/src/data/library/cloudSyncPolicy';
 
-const fixture=vi.hoisted(()=>({sync:vi.fn(),rehydrate:vi.fn(),owner:{subject:'fixture-subject',accountId:'fixture-account'},state:undefined as CloudSyncState|undefined,localRevision:0}));
-vi.mock('../../../apps/web/src/data/account/auth',()=>({auth:undefined}));
+const fixture=vi.hoisted(()=>({sync:vi.fn(),rehydrate:vi.fn(),owner:{subject:'fixture-subject',accountId:'fixture-account'},state:undefined as CloudSyncState|undefined,localRevision:0,authError:null as Error|null}));
+vi.mock('../../../apps/web/src/data/account/auth',()=>({auth:{getSession:async()=>({data:{session:null},error:fixture.authError})}}));
 vi.mock('../../../apps/web/src/data/library/store',()=>({
  readLibrary:async(work:(tx:unknown)=>unknown)=>work({get:async(_table:string,key:string)=>key==='service-owner'?fixture.owner:key==='cloud-sync'?fixture.state:undefined}),
  assertCurrentLibrary:async()=> 'fixture-incarnation',
@@ -18,7 +19,7 @@ vi.mock('../../../apps/web/src/contentSupply/system/contentSupplySystem',()=>({c
 import {syncAccountLibrary} from '../../../apps/web/src/data/library/cloudSyncService';
 import {readAccountLibrarySyncActivity,cancelAccountLibrarySync} from '../../../apps/web/src/data/library/cloudSyncActivity';
 
-afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();fixture.sync.mockReset();fixture.rehydrate.mockReset();fixture.owner={subject:'fixture-subject',accountId:'fixture-account'};fixture.state=undefined;fixture.localRevision=0;});
+afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();fixture.sync.mockReset();fixture.rehydrate.mockReset();fixture.owner={subject:'fixture-subject',accountId:'fixture-account'};fixture.state=undefined;fixture.localRevision=0;fixture.authError=null;});
 const setup=()=>{fixture.rehydrate.mockResolvedValue(undefined);vi.stubGlobal('window',new EventTarget());vi.stubGlobal('navigator',{});const controllers:AbortController[]=[];
  vi.spyOn(AbortSignal,'timeout').mockImplementation(()=>{const controller=new AbortController();controllers.push(controller);return controller.signal;});return controllers;};
 
@@ -34,6 +35,18 @@ test('artifact recovery receives a fresh deadline after a long successful Librar
 test('failed Library synchronization never starts artifact recovery',async()=>{
  setup();fixture.sync.mockRejectedValue(Error('library_sync_hash'));
  await expect(syncAccountLibrary()).rejects.toThrow('library_sync_hash');expect(fixture.rehydrate).not.toHaveBeenCalled();
+});
+
+test.each([
+ ['retryable refresh network failure',()=>new AuthRetryableFetchError('offline',0),'library_sync_network'],
+ ['rejected refresh token',()=>new AuthApiError('revoked',400,'refresh_token_not_found'),'authentication_required'],
+ ['missing session',()=>null,'authentication_required'],
+] as const)('%s preserves its actual authentication recovery boundary',async(_label,error,expected)=>{
+ setup();fixture.authError=error();
+ const fetch=vi.spyOn(globalThis,'fetch');
+ fixture.sync.mockImplementation(async request=>request('/head'));
+ await expect(syncAccountLibrary()).rejects.toThrow(expected);
+ expect(fetch).not.toHaveBeenCalled();expect(fixture.rehydrate).not.toHaveBeenCalled();
 });
 
 test('artifact unavailability does not erase a successful Library sync outcome',async()=>{

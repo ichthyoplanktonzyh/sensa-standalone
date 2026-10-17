@@ -23,7 +23,7 @@ import type {JourneyState} from '../../../apps/web/src/experience/personalMeanin
 import {webTestBuild,loopbackTestPort,rememberLoopbackTestPort} from '../support/webTestBuild';
 
 /** Isolated server and mutable delivery state per spec; exact builds are read-only. */
-export function createPackageCenterFixture(group:'book'|'account'|'reference'|'runtime'|'workspace'){
+export function createPackageCenterFixture(group:'book'|'account'|'reference'|'runtime'|'workspace'|'auth-expiry'){
 const root=process.cwd();
 
 const output=resolve(root,'.tmp/package-center-journey',group);

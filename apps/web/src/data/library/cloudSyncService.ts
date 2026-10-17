@@ -1,4 +1,5 @@
 import {auth} from '../account/auth';
+import {isAuthRetryableFetchError} from '@supabase/supabase-js';
 import {captureAccountSessionBoundary,assertAccountSessionBoundary,readAccountSignoutEpoch} from '../account/accountSessionBoundary';
 import {readLibrary,writeLibraryState,readLocalLibraryRevision,readLocalArtifactRevision,assertCurrentLibrary} from './store';
 import {synchronizeLibrary,type LibrarySyncOptions,type CloudSyncState} from './cloudSync';
@@ -17,6 +18,13 @@ import type {AccountLibrarySyncActivity} from './cloudSyncActivity';
 export type AccountLibrarySyncOptions=LibrarySyncOptions&{automatic?:boolean;recovery?:boolean;prepareForAnotherDevice?:boolean};
 const captureIntent=()=>readLibrary(async tx=>({owner:await tx.get<{subject:string;accountId:string}>('meta','service-owner'),incarnation:await assertCurrentLibrary(tx),state:await tx.get<CloudSyncState>('meta','cloud-sync'),epoch:await readAccountSignoutEpoch(tx),localRevision:await readLocalLibraryRevision(tx)}));
 type SyncIntent=Awaited<ReturnType<typeof captureIntent>>;
+const currentAuthSession=async()=>{
+ const result=await auth?.getSession();
+ // An expired token can temporarily lack a session while the SDK retries
+ // refresh after an outage. Preserve that network failure's retry policy.
+ if(result?.error&&isAuthRetryableFetchError(result.error))throw new Error('library_sync_network');
+ return result?.data.session;
+};
 export function syncAccountLibrary(options:AccountLibrarySyncOptions={}):Promise<void>{return synchronizeAccountLibrary(options);}
 function synchronizeAccountLibrary(options:AccountLibrarySyncOptions,intent?:SyncIntent):Promise<void>{
  if(options.prepareForAnotherDevice){
@@ -59,7 +67,7 @@ function synchronizeAccountLibrary(options:AccountLibrarySyncOptions,intent?:Syn
     // Claim one early recovery attempt per unsuccessful checkpoint chain.
     // Older queued wake-ups cannot bypass a newer failure's backoff.
     if(!options.recovery||before.state?.retryAt!==intent.state?.retryAt)return;
-    const session=(await auth?.getSession())?.data.session;
+    const session=await currentAuthSession();
     if(before.signedOut||!session||session.user.id!==owner.subject)throw Error('authentication_required');
     await assertAccountSessionBoundary(boundary);
     if(!import.meta.env.VITE_SENSA_API_URL)throw Error('library_sync_unavailable');
@@ -76,13 +84,13 @@ function synchronizeAccountLibrary(options:AccountLibrarySyncOptions,intent?:Syn
   }
   let fresh=options.automatic&&!explicit&&!before.signedOut&&freshCheckpoint(before.state,{...before,owner},cloudCheckpointSchedule.pullStaleMs);
   if(fresh){
-   const session=(await auth?.getSession())?.data.session;
+   const session=await currentAuthSession();
    if(!session||session.user.id!==owner.subject)fresh=false;
    else await assertAccountSessionBoundary(boundary);
   }
   const request:Parameters<typeof synchronizeLibrary>[0]=async(path,body,signal)=>{
    const current=await readLibrary(async tx=>({owner:await tx.get<{subject:string;accountId:string}>('meta','service-owner'),signedOut:await tx.get('meta','signed-out'),incarnation:await assertCurrentLibrary(tx)}));
-   const session=(await auth?.getSession())?.data.session;
+   const session=await currentAuthSession();
    if(!session||session.user.id!==owner.subject||current.signedOut||current.owner?.accountId!==owner.accountId||current.owner.subject!==owner.subject)throw new Error('authentication_required');
    if(current.incarnation!==requestIncarnation)throw Error('account_changed');
    await assertAccountSessionBoundary(boundary);

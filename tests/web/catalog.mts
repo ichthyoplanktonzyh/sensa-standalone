@@ -56,6 +56,7 @@ const foundationTests = [
   {id:'api-release-identity',file:'tests/web/release/api-release-identity.test.mts',kind:'contract',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'test-execution',file:'tests/web/quality/test-execution.test.mts',kind:'quality',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
   ...['account-recovery-journey','reference-practice-journey','learning-runtime-journey','learning-workspace-journey'].map(id=>({id,file:`tests/web/browser/${id}.spec.ts`,kind:'integration' as const,risks:['local-correctness','durability','convergence','scale'] as const,environment:'chromium' as const,suite:'browser' as const,runner:'playwright' as const})),
+  {id:'auth-expiry-reconnect',file:'tests/web/browser/auth-expiry-reconnect.spec.ts',kind:'integration',risks:['local-correctness','durability','convergence'],environment:'chromium',suite:'browser',runner:'playwright'},
   {id:'release-status',file:'tests/web/release/release-status.test.mjs',kind:'contract',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'candidate-source',file:'tests/web/release/candidate-source.test.mjs',kind:'contract',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'evidence-archive',file:'tests/web/quality/evidence-archive.test.mts',kind:'quality',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
