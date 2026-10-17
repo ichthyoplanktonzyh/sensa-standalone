@@ -7,7 +7,7 @@ import {openLibrary,readLibrary,writeLibraryState,readLocalLibraryRevision,asser
 import {saveDraft,listDrafts} from '../../../apps/web/src/data/library/drafts';
 import {sqliteRecordAdapter} from '../../../apps/web/src/data/library/sqliteAdapter';
 import type {SyncRequest} from '../../../apps/web/src/data/library/cloudSync';
-import {librarySyncManifest,librarySyncBlockMissing,librarySyncBlockStore,librarySyncBlockFetch,librarySyncCommit} from '@sensa/contracts/sensa';
+import {librarySyncManifest,librarySyncBlockMissing,librarySyncBlockStore,librarySyncBlockFetch,librarySyncCommit,librarySyncLegacyManifestRecordLimit} from '@sensa/contracts/sensa';
 import {decodeLibrarySyncBlock} from '@sensa/contracts/sensa/library-sync-blocks';
 import {decodeBackupValue} from '../../../apps/web/src/data/library/backupCodec';
 
@@ -32,6 +32,16 @@ const published=()=>{
  const schema=librarySyncManifest.parse(JSON.parse(manifest!.map(hash=>decodeLibrarySyncBlock(blocks.get(hash)!)).join('')));
  return schema.rows.map(row=>({...row,value:decodeBackupValue(JSON.parse(row.blocks.map(hash=>decodeLibrarySyncBlock(blocks.get(hash)!)).join('')))}));
 };
+
+// Keep real SQLite facts and baseline bodies, but put legacy capture beyond its
+// metadata ceiling. No large duplicate library is needed to exercise this gate.
+async function forbidLegacyCapture(){
+ const adapter=await sqliteRecordAdapter(),count=adapter.count.bind(adapter),base=adapter.syncBaseEntries.bind(adapter);
+ const counts=vi.spyOn(adapter,'count').mockImplementation(table=>table==='drafts'?Promise.resolve(librarySyncLegacyManifestRecordLimit+1):count(table));
+ const bodies=vi.spyOn(adapter,'entries').mockImplementation(async()=>{throw Error('recovery read a complete fact table');});
+ const baseline=vi.spyOn(adapter,'syncBaseEntries').mockImplementation(keys=>{if(!keys)throw Error('recovery read the complete baseline');return base(keys);});
+ return ()=>{counts.mockRestore();bodies.mockRestore();baseline.mockRestore();};
+}
 
 test('a validated checkpoint checks only metadata when unchanged and publishes only changed fact bodies',async()=>{
  await openLibrary();const owner={subject:crypto.randomUUID(),accountId:crypto.randomUUID()};
@@ -130,11 +140,94 @@ test('writes after the captured publication are preserved for the next delta',as
  await synchronizeLibrary(request);expect(published().find(row=>row.key===first.id)?.value.text).toBe('Later local write.');expect((await readCloudSync())?.status).toBe('synced');
 });
 
-test('an interrupted incremental acknowledgement replays the original commit without another publication',async()=>{
+test('a large-checkpoint interrupted incremental acknowledgement avoids legacy capture and another publication',async()=>{
  const first=(await listDrafts())[0]!;await saveDraft(crypto.randomUUID(),{id:first.id,expectedRevision:first.revision,text:'Before the lost acknowledgement.'});
  const lost:SyncRequest=async(path,body)=>{const result=await request(path,body);if(path==='/commit')throw new Error('network offline lost acknowledgement');return result;};
  await expect(synchronizeLibrary(lost)).rejects.toThrow('lost acknowledgement');const committed=revision,state=await readCloudSync();expect(state?.pending).toBeTruthy();
- calls.length=0;await synchronizeLibrary(request);expect(revision).toBe(committed);expect(calls[0]).toBe('/commit');expect((await readCloudSync())?.status).toBe('synced');
+ const restore=await forbidLegacyCapture();
+ try{calls.length=0;await synchronizeLibrary(request);expect(revision).toBe(committed);expect(calls[0]).toBe('/commit');expect((await readCloudSync())?.status).toBe('synced');}
+ finally{restore();}
+});
+
+test('receipt recovery preserves a later local edit and publishes it separately from the acknowledged patch',async()=>{
+ const first=(await listDrafts())[0]!,captured=await saveDraft(crypto.randomUUID(),{id:first.id,expectedRevision:first.revision,text:'Published before the lost ACK.'});
+ const lost:SyncRequest=async(path,body)=>{const result=await request(path,body);if(path==='/commit')throw Error('lost ACK before later edit');return result;};
+ await expect(synchronizeLibrary(lost)).rejects.toThrow('lost ACK');const committed=revision,pending=(await readCloudSync())!.pending!;
+ const later=await saveDraft(crypto.randomUUID(),{id:first.id,expectedRevision:captured.revision,text:first.text});
+ const restore=await forbidLegacyCapture();
+ try{
+  calls.length=0;await synchronizeLibrary(request);
+  expect(calls.filter(path=>path==='/commit')).toHaveLength(2);expect(calls[0]).toBe('/commit');expect(revision).toBe(committed+1);
+  expect(index.receipts.has(pending.operationId)).toBe(true);expect(published().find(row=>row.key===first.id)?.value).toEqual(later);
+  expect(await readLibrary(tx=>tx.get('drafts',first.id))).toEqual(later);expect((await readCloudSync())?.status).toBe('synced');
+ }finally{restore();}
+});
+
+test('an untrusted recovery ACK or missing patch body cannot advance the baseline or consume pending',async()=>{
+ const first=(await listDrafts())[0]!;await saveDraft(crypto.randomUUID(),{id:first.id,expectedRevision:first.revision,text:'Retained uncertain publication.'});
+ const lost:SyncRequest=async(path,body)=>{const result=await request(path,body);if(path==='/commit')throw Error('lost ACK for negative recovery');return result;};
+ await expect(synchronizeLibrary(lost)).rejects.toThrow('lost ACK');const before=(await readCloudSync())!,base=await readLibrary(tx=>tx.syncBaseEntries());
+ const restore=await forbidLegacyCapture();
+ try{
+  for(const fault of ['digest','missing'] as const){
+   const invalid:SyncRequest=async(path,body)=>{
+    if(fault==='missing'&&path==='/blocks/fetch')throw Error('library_sync_missing_block');
+    const result=await request(path,body);return fault==='digest'&&path==='/commit'?{...result,receipt:{...result.receipt,requestDigest:'f'.repeat(64)}}:result;
+   };
+   await expect(synchronizeLibrary(invalid)).rejects.toThrow(fault==='digest'?'library_sync_format':'library_sync_missing_block');
+   const state=(await readCloudSync())!;expect(state.pending).toEqual(before.pending);expect(state.revision).toBe(before.revision);expect(state.syncedLocalRevision).toBe(before.syncedLocalRevision);
+  }
+ }finally{restore();}
+ expect(await readLibrary(tx=>tx.syncBaseEntries())).toEqual(base);await synchronizeLibrary(request);
+});
+
+test('receipt recovery rechecks identity, signout epoch and owner before changing the baseline',async()=>{
+ const first=(await listDrafts())[0]!;await saveDraft(crypto.randomUUID(),{id:first.id,expectedRevision:first.revision,text:'Fenced receipt recovery.'});
+ const lost:SyncRequest=async(path,body)=>{const result=await request(path,body);if(path==='/commit')throw Error('lost fenced ACK');return result;};
+ await expect(synchronizeLibrary(lost)).rejects.toThrow('lost fenced ACK');
+ const state=(await readCloudSync())!,base=await readLibrary(tx=>tx.syncBaseEntries()),identity=await readLibrary(tx=>tx.get('meta','identity')),epoch=await readLibrary(tx=>tx.get('meta','service-signout-epoch'));
+ for(const fault of ['owner','identity','epoch'] as const){
+  let injected=false;hook=async path=>{if(path==='/blocks/fetch'&&!injected){injected=true;await writeLibraryState(async tx=>{if(fault==='owner')tx.put('meta','service-owner',{...state.owner,subject:crypto.randomUUID()});else if(fault==='identity')tx.put('meta','identity',{...identity as any,id:crypto.randomUUID()});else tx.put('meta','service-signout-epoch',crypto.randomUUID());});}};
+  const restore=await forbidLegacyCapture();
+  try{await expect(synchronizeLibrary(request)).rejects.toThrow('account_changed');expect(injected).toBe(true);}
+  finally{restore();hook=undefined;await writeLibraryState(async tx=>{tx.put('meta','service-owner',state.owner);tx.put('meta','identity',identity);if(epoch===undefined)tx.delete('meta','service-signout-epoch');else tx.put('meta','service-signout-epoch',epoch);});}
+  const current=(await readCloudSync())!;expect(current.pending).toEqual(state.pending);expect(current.revision).toBe(state.revision);expect(await readLibrary(tx=>tx.syncBaseEntries())).toEqual(base);
+ }
+ await synchronizeLibrary(request);
+});
+
+test('a historical operation receipt does not replace a fresh head check or advance the local cursor',async()=>{
+ const first=(await listDrafts())[0]!;await saveDraft(crypto.randomUUID(),{id:first.id,expectedRevision:first.revision,text:'Historical receipt.'});
+ const lost:SyncRequest=async(path,body)=>{const result=await request(path,body);if(path==='/commit')throw Error('lost historical ACK');return result;};
+ await expect(synchronizeLibrary(lost)).rejects.toThrow('lost historical ACK');const state=(await readCloudSync())!,ackRevision=revision,pending=state.pending!;
+ expect('patch' in pending).toBe(true);const other=index.commit({...pending,operationId:crypto.randomUUID(),baseRevision:revision},revision,manifest);revision=other.revision;manifest=other.manifest;
+ const stop:SyncRequest=async(path,body)=>{if(path==='/head')throw Error('network stop before latest head');return request(path,body);},restore=await forbidLegacyCapture();
+ try{await expect(synchronizeLibrary(stop)).rejects.toThrow('network stop before latest head');}
+ finally{restore();}
+ const confirmed=(await readCloudSync())!;expect(confirmed.revision).toBe(ackRevision);expect(confirmed.pending).toBeUndefined();expect(confirmed.syncedLocalRevision).toBe(state.syncedLocalRevision);expect(confirmed.status).not.toBe('synced');
+ await synchronizeLibrary(request);expect((await readCloudSync())?.revision).toBe(revision);expect((await readCloudSync())?.status).toBe('synced');
+});
+
+test('another operation winning the CAS cannot acknowledge the retained pending operation',async()=>{
+ const first=(await listDrafts())[0]!,base=await readLibrary(tx=>tx.syncBaseEntries([{table:'drafts',key:first.id}])),before=revision;
+ await saveDraft(crypto.randomUUID(),{id:first.id,expectedRevision:first.revision,text:'Same bytes, a different winning operation.'});
+ const lost:SyncRequest=async(path,body)=>{if(path==='/commit'){await request(path,{...body as any,operationId:crypto.randomUUID()});throw Error('lost before original CAS');}return request(path,body);};
+ await expect(synchronizeLibrary(lost)).rejects.toThrow('lost before original CAS');const pending=(await readCloudSync())!.pending!;expect(revision).toBe(before+1);expect(index.receipts.has(pending.operationId)).toBe(false);
+ let checked=false;hook=async path=>{if(path==='/head'&&!checked){checked=true;expect((await readCloudSync())!.revision).toBe(before);expect(await readLibrary(tx=>tx.syncBaseEntries([{table:'drafts',key:first.id}]))).toEqual(base);}};
+ const restore=await forbidLegacyCapture();
+ try{await synchronizeLibrary(request);}finally{restore();hook=undefined;}
+ expect(checked).toBe(true);expect(index.receipts.has(pending.operationId)).toBe(false);expect(revision).toBe(before+1);expect((await readCloudSync())?.status).toBe('synced');
+});
+
+test('a local removal after a lost ACK survives receipt recovery as a separate tombstone',async()=>{
+ const {personalContentSystem}=await import('../../../apps/web/src/personalContent/system'),exampleId=crypto.randomUUID();
+ await personalContentSystem.execute({kind:'set_saved_example',operationId:crypto.randomUUID(),exampleId,saved:true});
+ const lost:SyncRequest=async(path,body)=>{const result=await request(path,body);if(path==='/commit')throw Error('lost before local removal');return result;};
+ await expect(synchronizeLibrary(lost)).rejects.toThrow('lost before local removal');const committed=revision;expect(published().filter(row=>row.table==='annotations')).toHaveLength(1);
+ await personalContentSystem.execute({kind:'set_saved_example',operationId:crypto.randomUUID(),exampleId,saved:false});
+ const restore=await forbidLegacyCapture();
+ try{calls.length=0;await synchronizeLibrary(request);expect(calls.filter(path=>path==='/commit')).toHaveLength(2);expect(revision).toBe(committed+1);expect(published().filter(row=>row.table==='annotations')).toHaveLength(0);expect((await readCloudSync())?.status).toBe('synced');}
+ finally{restore();}
 });
 
 test('an owner-approved removal patches one tombstone without removing unrelated remote facts',async()=>{

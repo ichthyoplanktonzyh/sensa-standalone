@@ -425,8 +425,8 @@ async function verifyPublication(head:LibrarySyncHead,pending:LibrarySyncCommit)
 }
 
 /** Recover the exact uncertain upload, never a later local version of its rows.
- * The activation marker excludes conflict choices before their state is cleared. */
-async function dirtyReceiptPatch(blocks:Blocks,pending:Extract<LibrarySyncCommit,{patch:string[]}>,identity:LibraryIdentity){
+ * Callers must retain a validated baseline and exclude conflict choices. */
+async function publicationReceiptPatch(blocks:Blocks,pending:Extract<LibrarySyncCommit,{patch:string[]}>,identity:LibraryIdentity){
  await blocks.fetch(pending.patch);
  const text=await blocks.text(pending.patch,4*1024*1024);
  let patch:ReturnType<typeof librarySyncPatch.parse>;try{patch=librarySyncPatch.parse(JSON.parse(text));}catch{throw Error('library_sync_format');}
@@ -699,9 +699,9 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
    try{published=parseSyncHead(receipt.head??await request('/commit',pending));await verifyPublication(published,pending);if(receipt.currentRevision!==undefined&&(!Number.isSafeInteger(receipt.currentRevision)||receipt.currentRevision<published.revision))throw Error('library_sync_format');}
    catch(cause){if(!(cause instanceof Error)||!['library_sync_conflict','library_sync_missing_block'].includes(cause.message))throw cause;}
    const marker=prior.dirtyRebaseReceipt;
-   let patch:Awaited<ReturnType<typeof dirtyReceiptPatch>>|undefined;
+   let patch:Awaited<ReturnType<typeof publicationReceiptPatch>>|undefined;
    if(published&&'patch' in pending&&marker?.operationId===pending.operationId&&marker.baseline&&Number.isSafeInteger(marker.baseline.generation)&&Number.isSafeInteger(marker.baseline.epoch)&&Number.isSafeInteger(marker.appliedLocalRevision)&&marker.appliedLocalRevision<=header.localRevision&&marker.baseLocalRevision===prior.syncedLocalRevision&&prior.revision===pending.baseRevision&&!initiallyConflicted){
-    try{patch=await dirtyReceiptPatch(blocks,pending,header.identity);}catch(cause){if(!(cause instanceof Error)||!['library_sync_capacity','library_sync_missing_block','library_sync_hash','library_sync_format'].includes(cause.message))throw cause;}
+    try{patch=await publicationReceiptPatch(blocks,pending,header.identity);}catch(cause){if(!(cause instanceof Error)||!['library_sync_capacity','library_sync_missing_block','library_sync_hash','library_sync_format'].includes(cause.message))throw cause;}
    }
    if(patch&&published){
     const confirmed=published,prepared=patch;
@@ -716,6 +716,33 @@ export async function synchronizeLibrary(request:SyncRequest,options:LibrarySync
    }else await saveState(expected,old=>({...old!,pending:undefined,dirtyRebaseReceipt:undefined}));
    header=await readLibrary(captureHeader);prior=header.state;
    initiallyConflicted=prior?.status==='conflict'||!!prior?.conflicts?.length||!!prior?.conflict||!!prior?.resolution;
+  }
+
+  // A lost ordinary delta ACK still has a validated *old* baseline. Confirm
+  // the original operation before any whole-library fallback, then apply its
+  // exact bodies to B. Keep B's old local clock: edits made after that upload
+  // must still be compared against this newly acknowledged baseline.
+  if(prior?.pending&&'patch' in prior.pending&&!prior.dirtyRebaseOperationId&&!prior.dirtyRebaseReceipt&&!initiallyConflicted&&!consumeReconnect&&validatedCheckpoint({...prior,pending:undefined})&&prior.pending.baseRevision===prior.revision&&prior.syncedLocalRevision!<=header.localRevision){
+   const pending=prior.pending,baseline=prior;
+   const confirm=async(published:LibrarySyncHead|undefined,patch?:Awaited<ReturnType<typeof publicationReceiptPatch>>)=>deadline.run(beginCommit=>writeLibraryState(async tx=>{
+    tx.requireCommitSignal(deadline.signal,'library_sync_cancelled',beginCommit);const current=await captureHeader(tx),state=current.state;
+    if(!sameOwner(current.owner,header.owner)||current.incarnation!==header.incarnation||!equal(current.identity,header.identity)||!equal(current.signoutEpoch,header.signoutEpoch))throw Error('account_changed');
+    if(current.localRevision!==header.localRevision||!state||!validatedCheckpoint({...state,pending:undefined})||state.revision!==pending.baseRevision||state.syncedLocalRevision!==baseline.syncedLocalRevision||state.dirtyRebaseOperationId||state.dirtyRebaseReceipt||!equal(state.pending,pending))throw Error('library_sync_local_changed');
+    if(patch)tx.patchSyncBase(patch,{validated:true});
+    tx.put('meta',STATE,{...state,revision:published?.revision??state.revision,storage:published?.storage??state.storage,pending:undefined,status:'pending',syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});
+   }));
+   let published:LibrarySyncHead|undefined;
+   try{published=parseSyncHead(await request('/commit',pending));await verifyPublication(published,pending);}
+   catch(cause){
+    if(rejectedPublication(cause)){await confirm(undefined);throw cause;}
+    if(!(cause instanceof Error)||cause.message!=='library_sync_conflict')throw cause;
+    // A different operation won the CAS; retain B and let the bounded rebase
+    // compare the real head. A missing or malformed ACK never reaches here.
+    await confirm(undefined);
+   }
+   if(published)await confirm(published,await publicationReceiptPatch(blocks,pending,header.identity));
+   header=await readLibrary(captureHeader);prior=header.state;
+   observedHead=undefined;
   }
 
   if(prior?.pending&&'staging' in prior.pending&&prior.initialUpload){
