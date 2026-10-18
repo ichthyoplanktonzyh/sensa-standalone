@@ -1,6 +1,6 @@
 import '../../i18n/accountResources';
 import '../../i18n/profileResources';
-import {useEffect,useState} from 'react';
+import {useEffect,useState,useSyncExternalStore} from 'react';
 import {useTranslation} from 'react-i18next';
 import {resolveCloudSyncConflicts,type CloudSyncConflictChoice} from '../../data/library/cloudSync';
 import {readCloudSyncPanel,cloudSyncPanelMessage,cloudSyncActivityMessage,cloudSyncCanChoose,cloudSyncNeedsRecovery,type CloudSyncPanelRead} from './cloudSyncPanelRead';
@@ -28,8 +28,7 @@ export function CloudSyncPanel(){
  const reconnectRequired=snapshot.availability==='ready'&&snapshot.reconnectRequired;
  const [decisionError,setDecisionError]=useState<string|null>(null);
  const [showBackup,setShowBackup]=useState(false),[backupBusy,setBackupBusy]=useState(false),[diagnostics,setDiagnostics]=useState<'idle'|'working'|'ready'|'failed'>('idle');
- const [operation,setOperation]=useState(readAccountLibrarySyncActivity);
- useEffect(()=>observeAccountLibrarySyncActivity(()=>setOperation(readAccountLibrarySyncActivity())),[]);
+ const operation=useSyncExternalStore(observeAccountLibrarySyncActivity,readAccountLibrarySyncActivity,()=>undefined);
  const current=operation&&state?.owner.accountId===operation.owner.accountId&&state.owner.subject===operation.owner.subject&&state.incarnation===operation.incarnation?operation:undefined;
  const synchronizing=current?.status==='running';
  useEffect(()=>{let active=true,revision=0;const refresh=()=>{const current=++revision;setSnapshot({availability:'loading'});void readCloudSyncPanel().then(value=>{if(active&&current===revision)setSnapshot(value);});};refresh();const stop=observeCloudSync(refresh);return()=>{active=false;stop();};},[readAttempt]);

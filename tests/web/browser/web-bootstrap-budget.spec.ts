@@ -52,7 +52,11 @@ const delay=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms));
 const digest=(text:string)=>createHash('sha256').update(text).digest('hex');
 
 type Cloud={blocks:Map<string,string>;revision:number;manifest:string[]|null;index:IndexedSyncFixture;published:number;publishedBytes:number};
+type CloudRow={table:string;key:string;blocks:string[]};
 const clouds=new Map<string,Cloud>();
+let restoredSourceRows:CloudRow[]=[];
+let beforeRemoteDelivery:{revision:number;published:number;publishedBytes:number}|undefined;
+const restoreCommits:{operationId:string;patch:boolean;changedRows:number;originalKeys:string[];intakeOperations:string[]}[]=[];
 let intakeLibraryId:string|null=null;
 let remoteDeliveryAvailable=false,remoteIncompleteAvailable=false,remoteAcknowledgement:any=null,remoteIncompleteAcknowledgement:any=null;
 let holdRemoteAck=false,releaseRemoteAck:(()=>void)|undefined;
@@ -125,7 +129,10 @@ const server=createServer(async(request,response)=>{
    const input=await body() as {libraryId:string};
    if(input.libraryId!==intakeLibraryId){json({code:'library_mismatch'},409);return;}
    const deliveries=[];
-   if(remoteDeliveryAvailable&&!remoteAcknowledgement)deliveries.push({deliveryId:REMOTE_OPERATION,libraryId:input.libraryId,queuedAt:REMOTE_QUEUED_AT,submission:remoteSubmission});
+   if(remoteDeliveryAvailable&&!remoteAcknowledgement){
+    const cloud=cloudFor(ACCOUNT);beforeRemoteDelivery??={revision:cloud.revision,published:cloud.published,publishedBytes:cloud.publishedBytes};
+    deliveries.push({deliveryId:REMOTE_OPERATION,libraryId:input.libraryId,queuedAt:REMOTE_QUEUED_AT,submission:remoteSubmission});
+   }
    if(remoteIncompleteAvailable&&!remoteIncompleteAcknowledgement)deliveries.push({deliveryId:REMOTE_INCOMPLETE_OPERATION,libraryId:input.libraryId,queuedAt:REMOTE_QUEUED_AT,submission:remoteIncompleteSubmission});
    json({deliveries});return;
   }
@@ -167,8 +174,13 @@ const server=createServer(async(request,response)=>{
     json({hash,data:cloud.blocks.get(hash)});return;
    }
    if(url.pathname==='/sensa/library-sync/commit'){
+    const input=await body();
+    if(restoredSourceRows.length){
+     const changes:CloudRow[]=Array.isArray(input.patch)?JSON.parse(input.patch.map((hash:string)=>decodeLibrarySyncBlock(cloud.blocks.get(hash)!)).join('')).changes:[];
+     restoreCommits.push({operationId:input.operationId,patch:Array.isArray(input.patch),changedRows:changes.length,originalKeys:changes.filter(row=>restoredSourceRows.some(source=>source.table===row.table&&source.key===row.key)).map(row=>JSON.stringify([row.table,row.key])),intakeOperations:changes.filter(row=>row.table==='semanticReceipts').map(row=>row.key)});
+    }
     let result:ReturnType<IndexedSyncFixture['commit']>;
-    try{result=cloud.index.commit(await body(),cloud.revision,cloud.manifest);}
+    try{result=cloud.index.commit(input,cloud.revision,cloud.manifest);}
     catch(error){json({code:error instanceof Error?error.message:'library_sync_format'},409);return;}
     cloud.revision=result.revision;cloud.manifest=result.manifest;
     // The committed manifest is the account baseline: it defines the restore cost.
@@ -255,7 +267,7 @@ const finishCheckpoint=async(page:import('@playwright/test').Page,message:string
 };
 
 test.setTimeout(300_000);
-test('production Web boot keeps the local shell responsive through cloud restore',async({browser:fixtureBrowser})=>{
+test('production Web boot keeps the local shell responsive through cloud restore',async({browser:fixtureBrowser},testInfo)=>{
 browser=fixtureBrowser;
 try{
  await rm(output,{recursive:true,force:true});
@@ -389,6 +401,7 @@ try{
  // The account may have been published by the previous client, whose blocks were 32K.
  // Restoring such a library must still be a byte-bounded number of requests.
  repackCloud(cloud,32768);
+ restoredSourceRows=JSON.parse(cloud.manifest!.map(hash=>decodeLibrarySyncBlock(cloud.blocks.get(hash)!)).join('')).rows;
  const legacyPublished=cloud.published,legacyPublishedBytes=cloud.publishedBytes,legacyRevision=cloud.revision;
  assert(legacyPublishedBytes>=MINIMUM_LEGACY_BYTES,`legacy fixture is only ${legacyPublishedBytes} bytes`);
  log(`   legacy-shaped library: ${legacyPublished} blocks / ${Math.round(legacyPublishedBytes/1024)}KiB, revision ${legacyRevision}`);
@@ -420,7 +433,10 @@ try{
  // Restored rows can appear before the durable sync state confirms authority.
  await expect(b.page.getByText('正在恢复账号资料…')).toHaveCount(0,{timeout:Math.max(1,RESTORE_BUDGET_MS-(Date.now()-started))});
  const restoreMs=Date.now()-started;
- const confirmedRevision=cloud.revision,confirmedPublished=cloud.published,confirmedPublishedBytes=cloud.publishedBytes;
+ // Intake may already have published new facts when the restored UI becomes ready.
+ // Witness the unchanged source before delivering that queued material instead.
+ const confirmed=beforeRemoteDelivery??{revision:cloud.revision,published:cloud.published,publishedBytes:cloud.publishedBytes};
+ const confirmedRevision=confirmed.revision,confirmedPublished=confirmed.published,confirmedPublishedBytes=confirmed.publishedBytes;
  const restoreRequests=[...served].filter(entry=>entry.path.startsWith('/sensa/library-sync/'));
  await finishCheckpoint(b.page,'post-restore local facts never reached a Checkpoint');
  const restoreSettledRevision=cloud.revision;
@@ -511,6 +527,8 @@ try{
  );
  const violations=await b.page.evaluate(()=>(window as any).__cspViolations as string[]);
  await b.context.close();
+ const finalRows:CloudRow[]=JSON.parse(cloud.manifest!.map(hash=>decodeLibrarySyncBlock(cloud.blocks.get(hash)!)).join('')).rows;
+ await testInfo.attach('restore-and-intake-boundaries',{contentType:'application/json',body:JSON.stringify({legacyRevision,confirmed,originalRows:restoredSourceRows.length,restoreCommits,finalRevision:cloud.revision})});
 
  log(`   App Shell interactive ${shellMs}ms (budget ${SHELL_BUDGET_MS}ms)`);
  log(`   anonymous Landing interactive ${landingMs}ms (budget ${SHELL_BUDGET_MS}ms)`);
@@ -538,6 +556,9 @@ try{
   assert.equal(confirmedRevision,legacyRevision,'restore republished unchanged content');
   assert.equal(confirmedPublished,legacyPublished,'restore rewrote the confirmed block layout');
   assert.equal(confirmedPublishedBytes,legacyPublishedBytes,'restore changed confirmed published bytes');
+  for(const source of restoredSourceRows)assert.deepEqual(finalRows.find(row=>row.table===source.table&&row.key===source.key),source,'restore or Intake rewrote an original row or its block layout');
+  assert(restoreCommits.every(commit=>commit.patch&&commit.changedRows>0&&commit.originalKeys.length===0&&commit.intakeOperations.length>0),'restore republished original content instead of only new Intake facts');
+  assert.deepEqual([...new Set(restoreCommits.flatMap(commit=>commit.intakeOperations))].sort(),[REMOTE_OPERATION,REMOTE_INCOMPLETE_OPERATION].sort(),'unexpected or missing Intake publication');
   assert.equal(restored,TOTAL_DRAFTS,'account restore lost drafts');
  });
  await test.step('restored local OPFS and remote Intake retain actual learner facts',()=>{

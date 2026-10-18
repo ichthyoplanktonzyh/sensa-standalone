@@ -16,6 +16,13 @@ test.beforeAll(async()=>{
  server.listen(0,'127.0.0.1');await once(server,'listening');origin=`http://127.0.0.1:${(server.address() as {port:number}).port}`;
 });
 test.afterAll(async()=>{if(server?.listening)await new Promise<void>(done=>server.close(()=>done()));});
+test('sync finishing between panel render and subscription leaves the confirmed state usable',async({page})=>{
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());await page.goto(origin+'/?finish-sync-before-subscription');
+ await expect(page.getByRole('status').filter({hasText:'已同步到账号'})).toBeVisible();
+ await expect(page.getByRole('button',{name:'立即同步',exact:true})).toBeEnabled();
+ await expect(page.getByRole('button',{name:'停止本次同步',exact:true})).toHaveCount(0);
+ expect(await page.evaluate(()=>window.syncPanelFixture.commands())).toBe(0);
+});
 test('sync panel removes old success and storage on read failure and read retry never invokes synchronization',async({page})=>{
  await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());await page.goto(origin);
  await expect(page.locator('time')).toHaveAttribute('datetime','2026-10-10T12:00:00Z');await expect(page.getByText(/1 MiB/)).toBeVisible();

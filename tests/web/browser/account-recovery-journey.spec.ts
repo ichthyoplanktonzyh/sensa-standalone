@@ -370,9 +370,13 @@ test('the shipped account pages clear only this browser and offline reload stays
  await page.goto(fixture.origin+'/profile');await expect(page.locator('#s-profile')).toBeVisible();
  const repository=new MemoryJourneyRepository();await createJourneyModules({repository}).semanticIntake.submit(semanticLookupPayload());await page.evaluate(state=>window.__sensaBrowserSmoke!.seedSemanticWorld(state),await repository.load());
  await page.evaluate(()=>window.__sensaBrowserSmoke!.seedDrafts(1,1));
+ // Establish the confirmed source before creating later learning facts.
+ await page.locator('#settings-data').click();await page.getByRole('button',{name:'立即同步',exact:true}).click();await expect(page.getByRole('status').filter({hasText:'已同步到账号'})).toBeVisible();
  const runtime=await fixture.startOrdinaryBook(page);await runtime.getByRole('button',{name:/查看表达/}).click();await runtime.getByRole('button',{name:/已经连上/}).click();
  await expect.poll(async()=>(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records.length).toBe(1);
- await page.goto(fixture.origin+'/profile');await page.locator('#settings-data').click();await page.getByRole('button',{name:'立即同步',exact:true}).click();await expect(page.getByRole('status').filter({hasText:'已同步到账号'})).toBeVisible();
+ await expect(runtime.getByRole('heading',{name:'本轮完成',exact:true})).toBeVisible();await runtime.getByRole('button',{name:'完成并回到首页',exact:true}).click();
+ // Same-page navigation keeps the active sync coordinator through confirmation.
+ await page.getByRole('button',{name:'账号与设置',exact:true}).first().click();await page.locator('#settings-data').click();await page.getByRole('button',{name:'立即同步',exact:true}).click();await expect(page.getByRole('status').filter({hasText:'已同步到账号'})).toBeVisible();
  const facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest()),original=(await page.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest())).identity;
  expect(original).toBeTruthy();const cloudBefore={revision:fixture.cloudRevision,manifest:fixture.cloudManifest,blocks:[...fixture.cloudBlocks]};
  await expect.poll(()=>page.evaluate(()=>!!navigator.serviceWorker.controller)).toBe(true);
