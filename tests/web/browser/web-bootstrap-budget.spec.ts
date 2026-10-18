@@ -428,10 +428,15 @@ try{
  await expect(b.page.locator('#s-profile')).toBeVisible({timeout:SHELL_BUDGET_MS});
  await b.page.locator('[data-sensa-shell-brand-action]').click();
  await expect(b.page.locator('#s-home').getByText('正在恢复账号资料…',{exact:true})).toBeVisible({timeout:SHELL_BUDGET_MS});
- try{await expect.poll(async()=>await b.page.evaluate(()=>window.__sensaBrowserSmoke!.draftCount()),{timeout:RESTORE_BUDGET_MS,message:'account restore never finished'}).toBe(TOTAL_DRAFTS);}
+ // Activation fences reads queued against the old Library. Wait for the visible
+ // authority boundary before inspecting restored facts, within one total budget.
+ try{
+  await expect(b.page.getByText('正在恢复账号资料…')).toHaveCount(0,{timeout:Math.max(1,RESTORE_BUDGET_MS-(Date.now()-started))});
+  await expect(b.page.locator('#s-home .sensa-today-start')).toBeVisible({timeout:Math.max(1,RESTORE_BUDGET_MS-(Date.now()-started))});
+  await expect(b.page.locator('#s-home .sensa-today-start')).toBeEnabled({timeout:Math.max(1,RESTORE_BUDGET_MS-(Date.now()-started))});
+  await expect.poll(async()=>await b.page.evaluate(()=>window.__sensaBrowserSmoke!.draftCount()),{timeout:Math.max(1,RESTORE_BUDGET_MS-(Date.now()-started)),message:'account restore never finished'}).toBe(TOTAL_DRAFTS);
+ }
  catch(error){log('   restore calls before timeout: '+JSON.stringify(served));log('   restore rejected: '+JSON.stringify(rejected));log('   phase B console: '+JSON.stringify(b.errors.slice(0,12)));throw error;}
- // Restored rows can appear before the durable sync state confirms authority.
- await expect(b.page.getByText('正在恢复账号资料…')).toHaveCount(0,{timeout:Math.max(1,RESTORE_BUDGET_MS-(Date.now()-started))});
  const restoreMs=Date.now()-started;
  // Intake may already have published new facts when the restored UI becomes ready.
  // Witness the unchanged source before delivering that queued material instead.
