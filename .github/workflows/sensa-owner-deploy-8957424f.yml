@@ -40,7 +40,7 @@ jobs:
         with:
           ref: 8957424f3bec65d1fdcf9d5219f6165e58f5ab80
           fetch-depth: 0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: '24'
           cache: npm
@@ -72,7 +72,7 @@ jobs:
           if(plan.source.commit!==process.env.SENSA_RELEASE_SHA||plan.decision.applicationMode!=='full'||!plan.decision.deployApplication||!plan.decision.publishLearningContent)throw Error('One-off release scope changed');
           writeFileSync('release-candidate/owner-ci-exception.json',JSON.stringify({format:'sensa-owner-authorized-ci-exception-v1',commit:process.env.SENSA_RELEASE_SHA,releaseId:plan.releaseId,recordedAt:new Date().toISOString(),authority:'Owner explicitly requested immediate deployment and deferred CI repair on 2026-10-18',ciPassed:false,ciGateWaived:true,failedValidationRun:'https://github.com/ichthyoplanktonzyh/sensa-standalone/actions/runs/39100640860',knownFailures:['Synthetic 10k World fixture preparation hook exceeded 120 seconds','World preparation status locator matched two status elements','World graph test did not become ready after controlled animation-frame restoration'],build:{workflowRunId:process.env.GITHUB_RUN_ID,attempt:process.env.GITHUB_RUN_ATTEMPT,workflow:'Owner-authorized release 8957424f (CI repair deferred)'},standardGreenCiSystemManifestCreated:false},null,2)+'\n');
           JS
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: sensa-release-plan-${{ steps.plan.outputs.release_id }}
           retention-days: 30
@@ -80,7 +80,7 @@ jobs:
           path: |
             release-candidate/system-release-plan.json
             release-candidate/owner-ci-exception.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         id: candidate
         with:
           name: sensa-owner-candidate-8957424f-${{ github.run_id }}-${{ github.run_attempt }}
@@ -123,16 +123,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: sensa-release-plan-${{ needs.prepare.outputs.release_id }}
           path: evidence/plan
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         if: ${{ needs.application.result == 'success' }}
         with:
           artifact-ids: ${{ needs.application.outputs.evidence_artifact_id }}
           path: evidence/application
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         if: ${{ needs.learning_content.result == 'success' }}
         with:
           artifact-ids: ${{ needs.learning_content.outputs.evidence_artifact_id }}
@@ -146,7 +146,7 @@ jobs:
           const jobs=JSON.parse(process.env.COMPONENT_JOBS),verified=jobs.application.result==='success'&&jobs.learning_content.result==='success';
           writeFileSync('evidence/owner-deployment-outcome.json',JSON.stringify({format:'sensa-owner-deployment-outcome-v1',commit:'8957424f3bec65d1fdcf9d5219f6165e58f5ab80',observedAt:new Date().toISOString(),workflowRunId:process.env.GITHUB_RUN_ID,workflowRunAttempt:process.env.GITHUB_RUN_ATTEMPT,status:verified?'components-verified-with-owner-ci-exception':'partial-or-unverified',ciPassed:false,ciGateWaived:true,standardGreenCiSystemManifestCreated:false,jobs},null,2)+'\n');
           JS
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
           name: sensa-owner-deployment-proof-${{ github.run_id }}-${{ github.run_attempt }}
