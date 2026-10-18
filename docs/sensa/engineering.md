@@ -1244,9 +1244,14 @@ API／扩展／共享／配置或未知路径变化均保持完整发布。目�
 实际解码字节，按候选校验大小和 SHA-256，并查询 Cloudflare 最新部署的精确版本及 100% 流量。
 最终系统记录必须带匹配的 live verification；Web 与 API 可以来自不同的已核验源码版本。
 
-联动发布按 Content → Application 排序；共享合同必须在旧应用/新内容和新应用/新内容的滚动窗口中保持
-兼容。任一组件未成功时不会生成成功的系统清单。首次使用统一入口，或上一份系统清单已经不可用时，
+联动发布按 Application → Content 排序；候选应用必须先接受当前正式 Registry，应用通过线上核验后才
+推广新内容，避免旧 API 提前读取新增合同字段。独立 Content 发布仍须与当前应用兼容。任一组件未成功时
+不会生成成功的系统清单。首次使用统一入口，或上一份系统清单已经不可用时，
 Planner 会要求 `scope=all` 的完整 bootstrap，而不是猜测线上组件状态。
+
+`/sensa/packages` 默认返回不含可选 Book 预览字段的目录，供仍打开的旧 Web 客户端读取；新版 Web 通过
+`bookPreview=1` 请求完整目录。两种表示分别按实际响应重算 revision 与 ETag，Book archive identity 不变。
+本机目录缓存区分该表示；旧标签页写回基础目录后，新版会重新请求完整表示。
 
 应用交付遵循 `build once → verify → promote`：生产 workflow 没有应用 build job，不接受其他仓库／SHA／run 的候选，也不拿验证 attempt 冒充构建 attempt。它仍会 checkout 同一 SHA 读取 forward-only migration 和发布脚本，在生产边界重新校验候选及目标，再执行 Supabase/Cloudflare 提升。候选保留 14 天；过期后发布应失败并重新取得当前 SHA 的绿色 CI 证据，不能在生产 job 中临时重建。备用入口只接受已完成的绿色 CI；未完成时立即给出可操作状态，不在发布 job 内等待一个短于实际 CI 时长的固定窗口。
 

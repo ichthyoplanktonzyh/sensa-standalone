@@ -16,7 +16,7 @@ export async function fetchContentCatalog(
   if (revision) headers['if-none-match'] = `"${revision}"`;
   const timeout = AbortSignal.timeout(requestTimeoutMs);
   const signal = callerSignal ? AbortSignal.any([callerSignal, timeout]) : timeout;
-  const response = await fetch(`${endpoint.replace(/\/+$/u, '')}/sensa/packages`, {
+  const response = await fetch(`${endpoint.replace(/\/+$/u, '')}/sensa/packages?bookPreview=1`, {
     headers,
     signal,
     redirect: 'error',

@@ -16,7 +16,7 @@ test('actual Worker/SAHPool exports and imports a completed learning lineage int
   // facts valid. The actual Worker rejects it after rebuilding inside its tx.
   const data=await page.evaluate(()=>(window as any).snapshotApi.snapshotData()),sqlite=await initSqlite(),file='/synthetic-cache-'+crypto.randomUUID();
   sqlite.capi.sqlite3_js_posix_create_file(file,new Uint8Array(data.bytes));const bad=new sqlite.oo1.DB(file,'c');
-  bad.exec("INSERT INTO sensa_learning_semantic_memory VALUES('fabricated',NULL,'{}',1,'{}')");
+  bad.exec("INSERT INTO sensa_learning_semantic_memory(target_key,sense_id,summary_json,valid,list_json) VALUES('fabricated',NULL,'{}',1,'{}')");
   const corrupted=sqlite.capi.sqlite3_js_db_export(bad.pointer);bad.close();
   report.cacheTransactionFailure=await page.evaluate(data=>(window as any).snapshotApi.refuseSnapshotData(data),{...data,bytes:[...corrupted],sha256:createHash('sha256').update(corrupted).digest('hex')});
   expect(report.cacheTransactionFailure.accepted).toBe(false);expect(report.cacheTransactionFailure.error).toContain('sqlite_snapshot_projection_values');

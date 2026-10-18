@@ -133,7 +133,7 @@ test('catalog failure is distinct from empty results and an interrupted stale re
  let requests=0,release!:()=>void;
  const held=new Promise<void>(resolve=>release=resolve);
  const older=fixture.registry;
- await context.route('**/sensa/packages',async route=>{
+ await context.route('**/sensa/packages?bookPreview=1',async route=>{
   requests++;
   if(requests===1){await route.fulfill({status:503,headers:{'access-control-allow-origin':fixture.origin},body:'unavailable'});return;}
   if(requests===2){await held;await route.fulfill({headers:{'access-control-allow-origin':fixture.origin,'content-type':'application/json'},body:JSON.stringify(older)}).catch(()=>{});return;}
@@ -359,7 +359,7 @@ test('a missing Book in a cached catalog exposes failed discovery and retries th
  const catalog=page.locator('#s-catalog').last(),book=page.locator('#s-catalog-book').last();
  await expect(catalog.getByRole('button',{name:/English route essentials/})).toBeVisible();
  let failing=true;
- await context.route('**/sensa/packages',route=>failing?route.fulfill({status:503,headers:{'access-control-allow-origin':fixture.origin},body:'unavailable'}):route.continue());
+ await context.route('**/sensa/packages?bookPreview=1',route=>failing?route.fulfill({status:503,headers:{'access-control-allow-origin':fixture.origin},body:'unavailable'}):route.continue());
  await catalog.getByRole('button',{name:'刷新',exact:true}).click();
  await expect(catalog.getByRole('alert')).toContainText('暂时无法更新目录');
  const initial=(fixture.registry as {items:typeof fixture.delivery.descriptor[]}).items;

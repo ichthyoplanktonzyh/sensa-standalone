@@ -58,3 +58,11 @@ export async function readLearningContentRegistry(source:NodeJS.ProcessEnv=proce
 }
 
 export function clearLearningContentRegistryCache(){cachedRemote=undefined;}
+
+/** Keeps optional preview metadata out of responses consumed by older strict clients. */
+export function registryWithoutBookPreviews(registry:SensaPortableLearningContentRegistry):SensaPortableLearningContentRegistry {
+ if(!registry.items.some(item=>item.preview))return registry;
+ const {revision:_,...snapshot}=registry;
+ const compatible={...snapshot,items:snapshot.items.map(({preview:_,...item})=>item)};
+ return {...compatible,revision:createHash('sha256').update(canonicalConsumerJson(compatible)).digest('hex')};
+}

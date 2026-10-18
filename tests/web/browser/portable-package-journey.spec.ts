@@ -153,6 +153,7 @@ test('reimport is idempotent and corrupt or identity-conflicting input cannot re
  await preview(page);
  await expect(page.getByText('已安装此版本',{exact:true})).toBeVisible();
  await page.getByRole('button',{name:'确认安装',exact:true}).click();
+ await publication(detail(page));
  await expect(detail(page).getByRole('button',{name:'导出 .sensa',exact:true})).toBeEnabled();
  expect(await facts(page)).toEqual(saved);
  await detail(page).getByRole('button',{name:'返回',exact:true}).click();

@@ -152,8 +152,14 @@ jobs:
             release-candidate/ci-candidate-source.json
 
   learning_content:
-    needs: plan
-    if: ${{ needs.plan.outputs.publish_learning_content == 'true' }}
+    needs: [plan, application]
+    if: >-
+      ${{
+        always() &&
+        needs.plan.result == 'success' &&
+        needs.plan.outputs.publish_learning_content == 'true' &&
+        (needs.plan.outputs.deploy_application != 'true' || needs.application.result == 'success')
+      }}
     uses: ./.github/workflows/sensa-learning-content-publish.yml
     with:
       release_sha: ${{ needs.plan.outputs.release_sha }}
@@ -163,13 +169,12 @@ jobs:
     secrets: inherit
 
   application:
-    needs: [plan, learning_content]
+    needs: plan
     if: >-
       ${{
         always() &&
         needs.plan.result == 'success' &&
-        needs.plan.outputs.deploy_application == 'true' &&
-        (needs.plan.outputs.publish_learning_content != 'true' || needs.learning_content.result == 'success')
+        needs.plan.outputs.deploy_application == 'true'
       }}
     uses: ./.github/workflows/sensa-web-deploy.yml
     with:

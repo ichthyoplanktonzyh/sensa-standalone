@@ -136,4 +136,4 @@ test('synthetic 10k read-projection stress keeps list payload bounded, opens one
   expect(()=>db.commit({clears:[],deletes:[],puts:[{...puts[0]!,encodedValue:JSON.stringify(encodeBackupValue({...targets[0]!,expression:'must roll back'}))}],contentRevision:2})).toThrow('controlled-semantic-header-failure');
   expect(sourceFacts()).toEqual(facts);expect(db.learningSemanticMemory()).toEqual(headers);expect(db.personalEnrollmentIndex()).toEqual(enrolled);
  }finally{db.close();}
-},60_000);
+});

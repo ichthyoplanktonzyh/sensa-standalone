@@ -22,6 +22,7 @@ import {librarySyncBlockFetchBytes,librarySyncBlockStoreChars} from '../../../pa
 import {decodeLibrarySyncBlock} from '../../../packages/contracts/src/sensa/librarySyncBlocks.ts';
 import {pageLayoutFamilyContract} from '../../../apps/web/src/experience/appearance/pageLayoutContract.ts';
 import type {} from '../../../apps/web/src/browserSmokeBridge.ts';
+import {IndexedSyncFixture} from '../support/indexedSyncFixture.mts';
 
 const root=process.cwd();
 const output=resolve(root,'.tmp/web-bootstrap-budget');
@@ -50,7 +51,7 @@ function jwt(expSeconds:number){const encode=(value:unknown)=>Buffer.from(JSON.s
 const delay=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms));
 const digest=(text:string)=>createHash('sha256').update(text).digest('hex');
 
-type Cloud={blocks:Map<string,string>;revision:number;manifest:string[]|null;commits:Map<string,string>;published:number;publishedBytes:number};
+type Cloud={blocks:Map<string,string>;revision:number;manifest:string[]|null;index:IndexedSyncFixture;published:number;publishedBytes:number};
 const clouds=new Map<string,Cloud>();
 let intakeLibraryId:string|null=null;
 let remoteDeliveryAvailable=false,remoteIncompleteAvailable=false,remoteAcknowledgement:any=null,remoteIncompleteAcknowledgement:any=null;
@@ -58,7 +59,7 @@ let holdRemoteAck=false,releaseRemoteAck:(()=>void)|undefined;
 let extensionAuthorization:any=null;
 const remoteSubmission={contractVersion:'sensa-intake-delivery-v1',client:{clientId:'19ba48d1-03af-489e-a352-a16f05a03d5c',kind:'agent',label:'Codex'},intake:{contractVersion:'sensa-intake-v3',operationId:REMOTE_OPERATION,capturedAt:REMOTE_QUEUED_AT,context:{modality:'text',textSegment:'I backed out.',mediaReferenceIds:[],languageTag:'en',source:{client:'codex',url:null,title:'GPT Live conversation',sourceReferenceId:'conversation-1',domSelector:null,paragraphContext:null}},expression:{surfaceForm:'back out',languageTag:'en',occurrence:{surfaceForm:'backed out',locator:{kind:'text_span',start:2,end:12}},expressionTypeHint:'phrase'},sense:{senseKey:null,semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1',coreMeaningFocus:'原本准备做某事，后来决定退出或取消',prototypeScenes:[{summary:'I backed out.',participantRoles:[],states:[],directionOrCausality:null}],includedCases:['I backed out.'],excludedCases:[],neighborContrasts:[],openQuestions:[]},wordingSource:'llm_suggested',resolutionProvenance:{resolverKind:'language_model',provider:'codex',model:'fixture',policyVersion:'sensa-agent-intake-v1',sourceReferenceIds:['conversation-1']}},acceptance:{mode:'delegated_agent',actorId:'codex',basis:'explicit_user_request',authorizationReference:null}}};
 const remoteIncompleteSubmission={...remoteSubmission,intake:{...remoteSubmission.intake,operationId:REMOTE_INCOMPLETE_OPERATION,sense:null}};
-const cloudFor=(account:string):Cloud=>{const existing=clouds.get(account);if(existing)return existing;const created:Cloud={blocks:new Map(),revision:0,manifest:null,commits:new Map(),published:0,publishedBytes:0};clouds.set(account,created);return created;};
+const cloudFor=(account:string):Cloud=>{const existing=clouds.get(account);if(existing)return existing;const blocks=new Map<string,string>();const created:Cloud={blocks,revision:0,manifest:null,index:new IndexedSyncFixture(blocks),published:0,publishedBytes:0};clouds.set(account,created);return created;};
 /** Repack a published library into smaller blocks, the way the previous client stored it.
  *  Restoring it must still cost a byte-bounded number of round trips. */
 const repackCloud=(cloud:Cloud,chars:number)=>{
@@ -80,6 +81,7 @@ const repackCloud=(cloud:Cloud,chars:number)=>{
  // Model a genuinely old account: canonical 256K blocks are not already present
  // on the server and must be uploaded once during layout normalization.
  cloud.blocks=added;
+ cloud.index=new IndexedSyncFixture(cloud.blocks);
  cloud.revision+=1;cloud.manifest=[nextHash];
  const refs=[...new Set(rows.flatMap(row=>row.blocks))];
  cloud.published=refs.length;
@@ -137,7 +139,10 @@ const server=createServer(async(request,response)=>{
   if(url.pathname==='/sensa/library-sync'||url.pathname.startsWith('/sensa/library-sync/')){
    await delay(SERVICE_LATENCY_MS);
    const cloud=cloudFor(ACCOUNT);
-   if(url.pathname==='/sensa/library-sync/head'){json({revision:cloud.revision,manifest:cloud.manifest});return;}
+   if(url.pathname==='/sensa/library-sync/head'){json(cloud.index.head(cloud.revision,cloud.manifest));return;}
+   if(url.pathname==='/sensa/library-sync/snapshot'||url.pathname==='/sensa/library-sync/pull'||url.pathname.startsWith('/sensa/library-sync/staging/')||url.pathname.startsWith('/sensa/library-sync/receipt/')){
+    json(cloud.index.page(url.pathname.replace('/sensa/library-sync',''),await body(),cloud.revision,cloud.manifest));return;
+   }
    if(url.pathname==='/sensa/library-sync/blocks/missing'){
     const input=await body() as {hashes:string[]};
     json({missing:input.hashes.filter(hash=>!cloud.blocks.has(hash))});return;
@@ -162,20 +167,16 @@ const server=createServer(async(request,response)=>{
     json({hash,data:cloud.blocks.get(hash)});return;
    }
    if(url.pathname==='/sensa/library-sync/commit'){
-    const input=await body() as {operationId:string;baseRevision:number;manifest:string[]};
-    const prior=cloud.commits.get(input.operationId);
-    if(prior){json({revision:Number(prior),manifest:input.manifest});return;}
-    if(cloud.revision!==input.baseRevision){json({code:'library_sync_conflict'},409);return;}
-   if(input.manifest.some(hash=>!cloud.blocks.has(hash))){json({code:'library_sync_missing_block'},409);return;}
-    const priorManifest=cloud.manifest?[...cloud.manifest]:[],priorRows=priorManifest.length?(JSON.parse(priorManifest.map(hash=>decodeLibrarySyncBlock(cloud.blocks.get(hash)!)).join('')) as {rows:{blocks:string[]}[]}).rows:[];
-    cloud.revision+=1;cloud.manifest=input.manifest;cloud.commits.set(input.operationId,String(cloud.revision));
+    let result:ReturnType<IndexedSyncFixture['commit']>;
+    try{result=cloud.index.commit(await body(),cloud.revision,cloud.manifest);}
+    catch(error){json({code:error instanceof Error?error.message:'library_sync_format'},409);return;}
+    cloud.revision=result.revision;cloud.manifest=result.manifest;
     // The committed manifest is the account baseline: it defines the restore cost.
-    const committed=JSON.parse(input.manifest.map(hash=>decodeLibrarySyncBlock(cloud.blocks.get(hash)!)).join('')) as {rows:{blocks:string[]}[]};
+    const committed=JSON.parse(cloud.manifest!.map(hash=>decodeLibrarySyncBlock(cloud.blocks.get(hash)!)).join('')) as {rows:{blocks:string[]}[]};
     const publishedRefs=[...new Set(committed.rows.flatMap(row=>row.blocks))];
     cloud.published=publishedRefs.length;
     cloud.publishedBytes=publishedRefs.reduce((total,hash)=>total+Buffer.byteLength(cloud.blocks.get(hash)??''),0);
-    const keep=new Set([...input.manifest,...publishedRefs]);for(const hash of [...new Set([...priorManifest,...priorRows.flatMap(row=>row.blocks)])])if(!keep.has(hash))cloud.blocks.delete(hash);
-    json({revision:cloud.revision,manifest:cloud.manifest});return;
+    json(result.head);return;
    }
    json({code:'not_found'},404);return;
   }

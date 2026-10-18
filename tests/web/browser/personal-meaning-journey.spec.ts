@@ -1626,7 +1626,7 @@ test('saved Context and staged understanding stay separate, reopen offline, and 
  await page.getByRole('button',{name:'移到情境回收站',exact:true}).click();await page.getByRole('button',{name:'恢复情境',exact:true}).click();
  await expect(page.getByRole('button',{name:'开始一条理解',exact:true})).toBeEnabled();await page.getByRole('button',{name:'关闭',exact:true}).click();
  await page.locator(`[data-world-meaning="${firstId}"]`).click();
- await expect(page.getByText(original,{exact:true}).first()).toBeVisible();
+ await expect(page.getByRole('article',{name:'表达详情',exact:true}).getByText(original,{exact:true})).toBeVisible();
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(2);expect(firstId).toBeTruthy();expect(modelCalls).toEqual([]);
  await page.screenshot({path:testInfo.outputPath('staged-context-desktop.png'),fullPage:true});
  await page.setViewportSize({width:390,height:844});await page.screenshot({path:testInfo.outputPath('staged-context-mobile.png'),fullPage:true});

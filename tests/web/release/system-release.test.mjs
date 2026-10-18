@@ -311,8 +311,11 @@ test("production promotes the exact application candidate tested by main CI", as
     "the privileged workflow_run path must validate its same-repository main provenance before checkout");
   assert.match(system, /uses: \.\/\.github\/workflows\/sensa-web-deploy\.yml/u);
   assert.match(system, /uses: \.\/\.github\/workflows\/sensa-learning-content-publish\.yml/u);
-  assert.match(system, /application:\n\s+needs: \[plan, learning_content\]/u,
-    "content promotion precedes a coupled application promotion");
+  assert.match(system, /application:\n\s+needs: plan/u,
+    "the application must accept the current Registry before new content is promoted");
+  assert.match(system, /learning_content:\n\s+needs: \[plan, application\]/u);
+  assert.match(system, /needs\.plan\.outputs\.deploy_application != 'true' \|\| needs\.application\.result == 'success'/u,
+    "content-only releases may proceed, while coupled content waits for a verified application");
   assert.match(system, /candidate_run_id: \$\{\{ steps\.ci\.outputs\.run_id \}\}/u);
   assert.match(system, /candidate_run_attempt: \$\{\{ steps\.candidate\.outputs\.build_attempt \}\}/u);
   assert.match(system, /candidate_validation_attempt: \$\{\{ steps\.ci\.outputs\.run_attempt \}\}/u);

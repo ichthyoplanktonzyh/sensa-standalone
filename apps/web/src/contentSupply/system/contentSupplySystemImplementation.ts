@@ -19,6 +19,7 @@ type CatalogCache = Readonly<{
   items: readonly SensaPortableBookDescriptor[];
   revision: string | null;
   checkedAt: string | null;
+  previewVariant: boolean;
 }>;
 
 const emptyCatalog: CatalogCache = {
@@ -26,6 +27,7 @@ const emptyCatalog: CatalogCache = {
   items: [],
   revision: null,
   checkedAt: null,
+  previewVariant: false,
 };
 
 const browserSha256=async(value:string)=>Array.from(new Uint8Array(
@@ -56,6 +58,7 @@ const parseCatalogCache = (raw: unknown): CatalogCache => {
     items,
     revision: candidate.revision,
     checkedAt: checkedAt && Number.isFinite(Date.parse(checkedAt)) ? checkedAt : null,
+    previewVariant: candidate.previewVariant === true,
   };
 };
 
@@ -80,6 +83,7 @@ const refreshCatalog = async (
   if (
     !force
     && !localOwnerAcceptance
+    && cache.previewVariant
     && cache.checkedAt
     && Date.now() - Date.parse(cache.checkedAt) < 6 * 60 * 60 * 1_000
   ) return { items: cache.items, status: 'cached' };
@@ -105,6 +109,7 @@ const refreshCatalog = async (
       items,
       revision,
       checkedAt: new Date().toISOString(),
+      previewVariant: true,
     } satisfies CatalogCache);
   });
   const { rehydratePublishedPortableInstallations } = await import('../portable/portableCatalog');

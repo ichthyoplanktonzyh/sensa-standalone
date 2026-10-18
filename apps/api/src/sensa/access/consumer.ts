@@ -30,7 +30,7 @@ import {agentVerifier,createAgentConnectionSetup,exchangeAgentConnectionSetup,li
 import {sensaExtensionAuthorizationSchema,sensaExtensionExchangeSchema} from '@sensa/contracts/sensa';
 import {serviceTelemetry,setTelemetryError,setTelemetryFailure,type ServiceRequestRecord} from './telemetry.js';
 import {registerBrowserTelemetry,type BrowserTelemetrySink,type BrowserTelemetryRateLimiter} from './browserTelemetry.js';
-import {readLearningContentRegistry} from './learningContentRegistry.js';
+import {readLearningContentRegistry,registryWithoutBookPreviews} from './learningContentRegistry.js';
 import {synthesizeEdgeSpeech} from '../speech/edgeTts.js';
 import {createStreamAuthorizationGate} from './streamAuthorization.js';
 import {releaseCommit} from '../releaseIdentity.js';
@@ -213,7 +213,9 @@ export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
   // Registry descriptors and immutable artifact URLs are public discovery data;
   // account, library-sync and publisher authority stay on their protected routes.
   app.get('/sensa/packages',async context=>{
-    const catalog=await (options.learningContentRegistry??readLearningContentRegistry)();
+    const source=await (options.learningContentRegistry??readLearningContentRegistry)();
+    const catalog='format' in source&&context.req.query('bookPreview')!=='1'
+      ?registryWithoutBookPreviews(source):source;
     if('format' in catalog){
       const etag=`"${catalog.revision}"`;
       context.header('ETag',etag);
