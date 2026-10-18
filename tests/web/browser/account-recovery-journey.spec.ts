@@ -394,17 +394,18 @@ test('the shipped account pages clear only this browser and offline reload stays
 });
 
 test('a signed-out owner can explicitly discard pending local content without reconnecting its account',async({page,context})=>{
+ const bridgeReady=()=>expect.poll(()=>page.evaluate(()=>typeof window.__sensaBrowserSmoke?.libraryBootstrapFactsForTest==='function')).toBe(true);
  fixture.cloudManifest=null;fixture.cloudRevision=0;fixture.cloudBlocks.clear();
  await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.fallback():route.abort());
  await page.goto(fixture.origin);await page.evaluate(({key,value})=>localStorage.setItem(key,JSON.stringify(value)),{key:fixture.storageKey,value:fixture.session()});
- await page.goto(fixture.origin+'/profile');await expect(page.locator('#s-profile')).toBeVisible();
+ await page.goto(fixture.origin+'/profile');await expect(page.locator('#s-profile')).toBeVisible();await bridgeReady();
  const repository=new MemoryJourneyRepository();await createJourneyModules({repository}).semanticIntake.submit(semanticLookupPayload());await page.evaluate(state=>window.__sensaBrowserSmoke!.seedSemanticWorld(state),await repository.load());
  const runtime=await fixture.startOrdinaryBook(page);await runtime.getByRole('button',{name:/查看表达/}).click();await runtime.getByRole('button',{name:/已经连上/}).click();
  await expect.poll(async()=>(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records.length).toBe(1);
- await page.goto(fixture.origin+'/profile');const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest());
+ await page.goto(fixture.origin+'/profile');await bridgeReady();const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest());
  await page.route('**/auth/v1/logout*',route=>route.fulfill({status:204}));
  await page.locator('#settings-security').click();await page.getByRole('button',{name:'退出账号',exact:true}).click();
- await expect.poll(()=>page.evaluate(key=>localStorage.getItem(key),fixture.storageKey)).toBeNull();await page.goto(fixture.origin+'/profile');
+ await expect.poll(()=>page.evaluate(key=>localStorage.getItem(key),fixture.storageKey)).toBeNull();await page.goto(fixture.origin+'/profile');await bridgeReady();
  // Completion may checkpoint earlier facts. This genuine local save occurs
  // after logout, so the pending branch cannot depend on scheduler timing.
  await page.evaluate(()=>window.__sensaBrowserSmoke!.seedDrafts(1,1));
@@ -419,11 +420,11 @@ test('a signed-out owner can explicitly discard pending local content without re
  const cloudBefore={revision:fixture.cloudRevision,manifest:fixture.cloudManifest,blocks:[...fixture.cloudBlocks]};
  const metadata=await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest(true)),epoch=metadata.meta!.find(row=>row.key==='service-signout-epoch');
  await erase.click();await expect(page.getByText('本机资料已清除。重新打开应用可开始使用空资料库。',{exact:true})).toBeVisible();
- await page.getByRole('button',{name:'重新打开应用',exact:true}).click();await expect(page.locator('#s-profile')).toBeVisible();
+ await page.getByRole('button',{name:'重新打开应用',exact:true}).click();await expect(page.locator('#s-profile')).toBeVisible();await bridgeReady();
  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest())).identity).not.toEqual(before.identity);
  const cleared=await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest());expect(Object.values(cleared).every(rows=>rows.length===0)).toBe(true);
  const after=await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest(true));expect(after.meta!.find(row=>row.key==='signed-out')?.value).toEqual(['boolean',true]);expect(after.meta!.find(row=>row.key==='service-signout-epoch')).toEqual(epoch);
- await page.reload();await expect(page.locator('#s-profile')).toBeVisible();expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(cleared);
+ await page.reload();await expect(page.locator('#s-profile')).toBeVisible();await bridgeReady();expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(cleared);
  expect({revision:fixture.cloudRevision,manifest:fixture.cloudManifest,blocks:[...fixture.cloudBlocks]}).toEqual(cloudBefore);expect(await page.evaluate(key=>localStorage.getItem(key),fixture.storageKey)).toBeNull();
 });
 

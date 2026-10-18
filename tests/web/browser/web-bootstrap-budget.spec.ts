@@ -417,7 +417,8 @@ try{
  await expect(b.page.locator('#s-home').getByText('正在恢复账号资料…',{exact:true})).toBeVisible({timeout:SHELL_BUDGET_MS});
  try{await expect.poll(async()=>await b.page.evaluate(()=>window.__sensaBrowserSmoke!.draftCount()),{timeout:RESTORE_BUDGET_MS,message:'account restore never finished'}).toBe(TOTAL_DRAFTS);}
  catch(error){log('   restore calls before timeout: '+JSON.stringify(served));log('   restore rejected: '+JSON.stringify(rejected));log('   phase B console: '+JSON.stringify(b.errors.slice(0,12)));throw error;}
- await expect(b.page.getByText('正在恢复账号资料…')).toHaveCount(0);
+ // Restored rows can appear before the durable sync state confirms authority.
+ await expect(b.page.getByText('正在恢复账号资料…')).toHaveCount(0,{timeout:Math.max(1,RESTORE_BUDGET_MS-(Date.now()-started))});
  const restoreMs=Date.now()-started;
  const confirmedRevision=cloud.revision,confirmedPublished=cloud.published,confirmedPublishedBytes=cloud.publishedBytes;
  const restoreRequests=[...served].filter(entry=>entry.path.startsWith('/sensa/library-sync/'));

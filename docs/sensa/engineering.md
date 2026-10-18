@@ -1225,11 +1225,11 @@ application-only 变化。数据库迁移、`infra/`、Supabase/Cloudflare 生�
 1. 正常路径接收已完成的绿色 `Sensa CI` main run；备用路径接收 owner 明确授权的完整 main SHA；
 2. 固定绿色验证的 CI run id / attempt，再独立核验候选 artifact ID 与构建 attempt；不替换触发它的 run；
 3. 读取上一份 `sensa-system-release-manifest-v1|v2`，按路径影响生成最小安全 Release Plan；新成功记录写为带授权证据的 v2；
-4. 如需发布内容，先构建、验证、上传不可变 Book/Registry 并提升 Registry；
-5. 如需发布应用，从该成功 CI run 下载已经测试和固定的 Web、扩展与 API 候选，重新核对来源、目标和全部摘要，不再重新构建；
-6. 完整应用发布才应用前向数据库迁移、对齐 Supabase Auth／服务配置并部署 Supabase Edge Function；
-7. 上传 Cloudflare Worker 版本，先核验预览文件，再提升到生产；完整发布才用 `wrangler triggers deploy` 应用域名路由；
-8. 执行公网非模型 smoke，并核验 API 构建身份、生产 Web 文件摘要和 Cloudflare 实际 100% 流量版本；
+4. 如需发布应用，从该成功 CI run 下载已经测试和固定的 Web、扩展与 API 候选，重新核对来源、目标和全部摘要，不再重新构建；
+5. 完整应用发布才应用前向数据库迁移、对齐 Supabase Auth／服务配置并部署 Supabase Edge Function；
+6. 上传 Cloudflare Worker 版本，先核验预览文件，再提升到生产；完整发布才用 `wrangler triggers deploy` 应用域名路由；
+7. 执行公网非模型 smoke，并核验 API 构建身份、生产 Web 文件摘要和 Cloudflare 实际 100% 流量版本；
+8. 如需发布内容，在所需应用通过核验后构建、验证、上传不可变 Book/Registry 并提升 Registry；
 9. 生成同时固定 Application、公开配置目标、前向 migration 集合与 Learning Content 身份的系统清单；
 10. 独立 archive job 将已核验的候选 ZIP 与系统清单保存到 GitHub 原生 Release，核验回读摘要后发布归档。
 

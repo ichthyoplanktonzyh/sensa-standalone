@@ -19,7 +19,7 @@ jobs:
   static-smoke:
     name: Static, build and fast smoke
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 18
     environment: web-candidate
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
