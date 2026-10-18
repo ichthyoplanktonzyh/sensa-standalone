@@ -1,9 +1,17 @@
 import {test, expect} from 'vitest';
 import {webTestCatalog, type WebTestCatalogEntry} from '../catalog.mts';
 import {executionGroups, reportCoversSelection} from '../support/executionGroups';
-import {readFile, mkdir, mkdtemp, writeFile, rm} from 'node:fs/promises';
+import {readFile, mkdir, mkdtemp, writeFile, rm, stat} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {resolve, join} from 'node:path';
+
+test('every catalog entry names an existing test file across all CI boundaries', async () => {
+  const missing = (await Promise.all(webTestCatalog.map(async ({id, file}) => {
+    try { if ((await stat(resolve(file))).isFile()) return null; } catch {}
+    return {id, file};
+  }))).filter(entry => entry !== null);
+  expect(missing).toEqual([]);
+});
 
 test('native batching preserves every catalog file once and separates memory/provider environments', () => {
   const selected = webTestCatalog.filter(entry => ['fast', 'foundation'].includes(entry.suite));
