@@ -118,7 +118,10 @@ test('clearing a device through the UI survives reload until explicit Cloud rest
   await page.unroute('**/sensa/library-sync/head');const failed=await inspect();expect(failed.paused).toBe(true);expect(failed.identity).toEqual(cleared.identity);expect(failed.meanings).toEqual([]);expect(failed.base).toEqual([]);
   fixture.clearRequests();const failedRequests=serviceRequests;await page.clock.fastForward(300000);expect(serviceRequests).toBe(failedRequests);expect(fixture.requests()).toEqual([]);
   await page.getByRole('button',{name:'Sync now',exact:true}).click();
-  await expect.poll(()=>page.evaluate(()=>(window as any).core.readCloudSync())).toMatchObject({status:'synced'});
+  // A read captured before generation activation is correctly fenced as stale.
+  // Wait for the user's completed sync state before inspecting the adopted world.
+  await expect(page.getByRole('status')).toHaveText('Synced to your account');
+  expect(await page.evaluate(()=>(window as any).core.readCloudSync())).toMatchObject({status:'synced'});
   const restored=await inspect();expect(restored.paused).toBe(false);expect(restored.identity).toEqual({...original.identity,deviceId:cleared.identity.deviceId});expect(restored.state.status).toBe('synced');expect(restored.meanings).toEqual(original.meanings);
   await testInfo.attach('clear-reconnect-evidence',{contentType:'application/json',body:JSON.stringify({originalIdentity:original.identity,clearedIdentity:cleared.identity,restoredIdentity:restored.identity,meanings:restored.meanings.length,paidCalls:0,scope:'actual LocalDataControlPanel/CloudSyncPanel/automatic scheduler, OPFS reload and Hono/PostgreSQL; controlled auth, not full AccountExperience login'})});
  }finally{await fixture.close();}
