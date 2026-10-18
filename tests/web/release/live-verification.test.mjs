@@ -30,7 +30,7 @@ test('Web-only release preserves the proven backend and refuses target, migratio
 test('preview and public proof hash actual decoded file bytes instead of only accepting a shell',async()=>{
   await expect(verifyPublicFiles(candidate,candidate.webOrigin,response)).resolves.toMatchObject({verifiedFileCount:3});
   await expect(verifyPublicFiles(candidate,candidate.webOrigin,async()=>new Response('stale version'))).rejects.toThrow(/sealed candidate/);
-  await expect(verifyPublicFiles(candidate,candidate.webOrigin,async()=>new Response('redirect',{status:302}))).rejects.toThrow(/unavailable/);
+  await expect(verifyPublicFiles(candidate,candidate.webOrigin,async()=>new Response('redirect',{status:302}))).rejects.toThrow(/redirect/);
   await expect(verifyPublicFiles({...candidate,files:candidate.files.slice(1)},candidate.webOrigin,response)).rejects.toThrow(/Sealed/);
 });
 
@@ -41,8 +41,29 @@ test('success proof combines exact API build, public bytes and provider 100% tra
   expect(report).toMatchObject({commit:candidate.commit,apiCommit:candidate.commit,webVersionId:versionId,trafficPercentage:100,verifiedFileCount:3,candidateManifestSha256:hash(JSON.stringify(candidate,null,2)+'\n')});
   expect(JSON.stringify(report)).not.toContain(env.CLOUDFLARE_API_TOKEN);
   expect(calls.every(call=>!call.options.headers.authorization||call.url.startsWith('https://api.cloudflare.com/'))).toBe(true);
-  expect(calls.every(call=>call.options.redirect==='error')).toBe(true);
+  expect(calls.every(call=>call.options.redirect===(new URL(call.url).origin===candidate.webOrigin?'manual':'error'))).toBe(true);
   await expect(verifyApiIdentity(candidate.apiUrl,sha('a'),response)).rejects.toThrow(/identity differs/);
   await expect(verifyTraffic(versionId,env,(url,options)=>response(url,options,sha('b'),50))).rejects.toThrow(/100%/);
   await expect(verifyLiveApplication(plan('full'),candidate,{...version,releaseSha:sha('a')},env,response)).rejects.toThrow(/Uploaded/);
+});
+
+test('canonical same-origin asset redirects still prove the original sealed bytes',async()=>{
+  const fetchCanonical=async(url,options)=>{
+    const parsed=new URL(url);
+    if(parsed.pathname==='/index.html')return new Response(null,{status:307,headers:{location:'/'+parsed.search}});
+    return parsed.pathname==='/'?new Response(bodies['index.html']):response(url,options);
+  };
+  await expect(verifyPublicFiles(candidate,candidate.webOrigin,fetchCanonical)).resolves.toMatchObject({verifiedFileCount:3});
+  await expect(verifyPublicFiles(candidate,candidate.webOrigin,async(url,options)=>new URL(url).pathname==='/'?new Response('stale shell'):fetchCanonical(url,options))).rejects.toThrow(/sealed candidate/);
+});
+
+test('asset redirects cannot leave the approved origin or loop without a bound',async()=>{
+  for(const location of ['https://other.example.com/index.html','https://user:password@learn.example.com/','/#fragment']){
+    const seen=[];
+    await expect(verifyPublicFiles(candidate,candidate.webOrigin,async url=>{seen.push(url);return new Response(null,{status:307,headers:{location}});})).rejects.toThrow(/approved origin/);
+    expect(seen.every(url=>new URL(url).origin===candidate.webOrigin&&new URL(url).pathname!=='/')).toBe(true);
+  }
+  let calls=0;
+  await expect(verifyPublicFiles(candidate,candidate.webOrigin,async url=>{calls++;return new Response(null,{status:307,headers:{location:url}});})).rejects.toThrow(/bound/);
+  expect(calls).toBeLessThanOrEqual(12);
 });

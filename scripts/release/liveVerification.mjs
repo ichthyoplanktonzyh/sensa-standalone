@@ -50,9 +50,22 @@ export async function verifyPublicFiles(candidate,origin,fetchImpl=fetch) {
   const files = verificationFiles(candidate);
   // Bounded parallelism; the hash is of decoded response bytes, like the sealed files.
   for (let start=0;start<files.length;start+=4) await Promise.all(files.slice(start,start+4).map(async file => {
-    const url = new URL(file.path.slice('apps/web/dist/'.length),target);
+    let url = new URL(file.path.slice('apps/web/dist/'.length),target);
     url.searchParams.set('__sensa_release',candidate.commit);
-    const response = await fetchImpl(url.href,{headers:{'cache-control':'no-cache'},redirect:'error',signal:AbortSignal.timeout(20000)});
+    const signal=AbortSignal.timeout(20000);
+    let response;
+    // Cloudflare canonicalizes index.html to /. Follow only bounded same-origin
+    // asset redirects; the original sealed file's bytes and hash remain required.
+    for(let redirects=0;;redirects++){
+      response=await fetchImpl(url.href,{headers:{'cache-control':'no-cache'},redirect:'manual',signal});
+      if(![301,302,303,307,308].includes(response.status))break;
+      const location=response.headers.get('location');
+      await response.body?.cancel();
+      if(!location||redirects>=3)throw Error('Public candidate redirect is missing or exceeds its bound');
+      const next=new URL(location,url);
+      if(next.origin!==target.origin||next.protocol!=='https:'||next.username||next.password||next.hash)throw Error('Public candidate redirect leaves its approved origin');
+      url=next;
+    }
     if (!response.ok) throw Error(`Public candidate file unavailable (${response.status})`);
     const bytes = Buffer.from(await response.arrayBuffer());
     if (bytes.length !== file.bytes || hash(bytes) !== file.sha256) throw Error('Public file bytes differ from the sealed candidate: ' + file.path);

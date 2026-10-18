@@ -91,6 +91,20 @@ jobs:
           if(!/^[a-z0-9]{20}$/.test(project)||api.hostname!==`${project}.supabase.co`||api.pathname.replace(/\/$/,'')!=='/functions/v1/sensa-api')throw Error('Supabase target mismatch');
           console.log('Verified production Supabase and Cloudflare targets.');
           JS
+      - name: Restore the read-only verifier from this exact workflow revision
+        env:
+          SENSA_VERIFIER_SHA: ${{ github.workflow_sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$SENSA_VERIFIER_SHA"
+          git show "$SENSA_VERIFIER_SHA:scripts/release/liveVerification.mjs" > "$RUNNER_TEMP/sensa-live-verification.mjs"
+          node --input-type=module <<'JS'
+          import {readFileSync,writeFileSync} from 'node:fs';
+          import {createHash} from 'node:crypto';
+          const sha=process.env.SENSA_VERIFIER_SHA;
+          if(!/^[a-f0-9]{40}$/.test(sha??''))throw Error('Exact verifier revision required');
+          const bytes=readFileSync(process.env.RUNNER_TEMP+'/sensa-live-verification.mjs');
+          writeFileSync('release-candidate/deployment-verifier-source.json',JSON.stringify({format:'sensa-deployment-verifier-source-v1',sourceCommit:sha,applicationCommit:process.env.SENSA_RELEASE_SHA,sha256:createHash('sha256').update(bytes).digest('hex')},null,2)+'\n');
+          JS
       - name: Refuse Web-only target or live backend drift before any mutation
         id: preflight
         env:
@@ -102,7 +116,7 @@ jobs:
           const plan=JSON.parse(readFileSync('.tmp/application-release-plan/system-release-plan.json','utf8'));
           if(plan.decision.applicationMode!==process.env.SENSA_APPLICATION_MODE)throw Error('Application mode differs from the saved release plan');
           JS
-          node scripts/release/liveVerification.mjs preflight
+          node "$RUNNER_TEMP/sensa-live-verification.mjs" preflight
       - uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3.0.0
         if: ${{ inputs.application_mode == 'full' }}
         with:
@@ -160,7 +174,7 @@ jobs:
           SENSA_PREVIEW_URL: ${{ steps.web_version.outputs.preview_url }}
         run: |
           node scripts/release/hostedWebSmoke.mjs
-          node scripts/release/liveVerification.mjs preview
+          node "$RUNNER_TEMP/sensa-live-verification.mjs" preview
       - name: Promote Web version to production
         id: web_promote
         env:
@@ -182,7 +196,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-        run: node scripts/release/liveVerification.mjs live
+        run: node "$RUNNER_TEMP/sensa-live-verification.mjs" live
       - name: Record actual application step outcomes even after failure
         if: always()
         env:
@@ -201,4 +215,5 @@ jobs:
             release-candidate/cloudflare-version.json
             release-candidate/application-release-status.json
             release-candidate/application-live-verification.json
+            release-candidate/deployment-verifier-source.json
             ${{ runner.temp }}/wrangler-output.jsonl
