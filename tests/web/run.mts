@@ -34,6 +34,7 @@ type Filters = Readonly<{
   journey?:LongJourneyId;
   shard?:string;
   depth?:BrowserDepth;
+  dbDepth?:'core'|'full';
   list: boolean;
 }>;
 
@@ -65,6 +66,7 @@ const parseFilters = (arguments_: readonly string[]): Filters => {
   let journey:LongJourneyId|undefined;
   let shard:string|undefined;
   let depth:BrowserDepth|undefined;
+  let dbDepth:'core'|'full'|undefined;
   let list = false;
 
   for (const argument of arguments_) {
@@ -112,6 +114,8 @@ const parseFilters = (arguments_: readonly string[]): Filters => {
     if(parsedShard!==undefined){shard=parsedShard;continue;}
     const parsedDepth=option(argument,'depth');
     if(parsedDepth!==undefined){depth=allowed('depth',parsedDepth,browserDepths);continue;}
+    const parsedDbDepth=option(argument,'db-depth');
+    if(parsedDbDepth!==undefined){dbDepth=allowed('db-depth',parsedDbDepth,['core','full'] as const);continue;}
     throw new Error(`Unknown test selector ${JSON.stringify(argument)}`);
   }
 
@@ -125,6 +129,7 @@ const parseFilters = (arguments_: readonly string[]): Filters => {
     journey,
     shard,
     depth,
+    dbDepth,
     list,
   };
 };
@@ -132,11 +137,13 @@ const parseFilters = (arguments_: readonly string[]): Filters => {
 const selectedTests = (filters: Filters): readonly WebTestCatalogEntry[] => {
   const journeyIds=filters.journey?new Set(journeyTestIds(filters.journey)):null;
   if(filters.depth!==undefined&&filters.suite!=='browser')throw Error('Validation depth only applies to the browser suite');
+  if(filters.dbDepth!==undefined&&filters.suite!=='database')throw Error('Database depth only applies to the database suite');
   return selectBrowserDepth(catalog.filter((entry) => (
     (filters.kind === undefined || entry.kind === filters.kind)
     && (filters.runner === undefined || entry.runner === filters.runner)
     && (filters.risk === undefined || entry.risks.includes(filters.risk))
     && (filters.id === undefined || entry.id === filters.id)
+    && (filters.dbDepth !== 'core' || entry.databaseDepth === 'core')
     && (journeyIds===null||journeyIds.has(entry.id))
     && (
       filters.suite !== undefined
@@ -178,6 +185,8 @@ for (const field of ['id', 'file'] as const) {
   if (new Set(values).size !== values.length) throw new Error(`Duplicate Web test catalog ${field}.`);
 }
 const cataloguedFiles = new Set(catalog.map((entry) => entry.file));
+const missingFiles = catalog.filter(entry => !existsSync(resolve(repositoryRoot, entry.file)));
+if (missingFiles.length) throw new Error(`Catalogued tests do not exist: ${missingFiles.map(entry => entry.file).join(', ')}`);
 const wrongRunner = catalog.filter((entry) => {
   const runner = entry.runner;
   if (runner === 'vitest') return !/\.test\.(?:ts|tsx|mts|mjs)$/u.test(entry.file) || !['node', 'built-web-artifact', 'postgres'].includes(entry.environment);
@@ -190,9 +199,10 @@ const unclassified = catalog.filter((entry) => entry.risks.length === 0);
 if (unclassified.length !== 0) throw new Error(`Tests missing risk tags: ${unclassified.map((entry) => entry.id).join(', ')}`);
 const wrongCiBoundary = catalog.filter((entry) => {
   if(entry.browserDepth!==undefined&&(entry.suite!=='browser'||entry.runner!=='playwright'))return true;
+  if(entry.databaseDepth!==undefined&&entry.suite!=='database')return true;
   if (entry.suite === 'manual') return false;
   if (entry.environment === 'node' || entry.environment === 'built-web-artifact') {
-    return entry.suite !== 'foundation' && entry.suite !== 'fast';
+    return entry.suite !== 'foundation' && entry.suite !== 'fast' && entry.suite !== 'capacity';
   }
   if (entry.environment === 'chromium') return entry.suite !== 'browser';
   return entry.suite !== 'database';
@@ -221,6 +231,7 @@ if (filters.list) {
   for (const entry of selected) console.log(formatEntry(entry));
 } else {
   const failures:string[]=[];
+  if(filters.suite==='database')console.log(`Database depth: ${filters.dbDepth??'full'}${filters.dbDepth==='core'?' (representative boundaries; not full database evidence)':''}`);
   const selectionName=filters.suite??'selection';
   const shardName=(filters.shard??'all').replace('/','-');
   const executionId=randomUUID();
@@ -264,6 +275,6 @@ if (filters.list) {
       if(!selectionReported)console.error('Native report did not account for every selected file:',ids.join(', '));
     }
   }
-  writeFileSync(join(reportRoot,'selection-summary.json'),JSON.stringify({format:'sensa-test-execution-v1',depth:filters.depth??'full',excludedCaseTag:filters.depth==='quick'?'@capacity':null,selectedFiles:selected.map(entry=>entry.file),groups:observations},null,2)+'\n');
+  writeFileSync(join(reportRoot,'selection-summary.json'),JSON.stringify({format:'sensa-test-execution-v1',depth:filters.depth??'full',databaseDepth:filters.dbDepth??'full',excludedCaseTag:filters.depth==='quick'?'@capacity':null,selectedFiles:selected.map(entry=>entry.file),groups:observations},null,2)+'\n');
   if(failures.length)console.error(`Failed test files (${failures.length}/${selected.length}): ${failures.join(', ')}`);
 }

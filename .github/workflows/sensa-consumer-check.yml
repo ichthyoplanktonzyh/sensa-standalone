@@ -16,6 +16,22 @@ env:
   VITE_SUPABASE_PUBLISHABLE_KEY: local-browser-test-key
   VITE_SENSA_API_URL: http://127.0.0.1:4319
 jobs:
+  database-selection:
+    name: Database test selection
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      depth: ${{ steps.selection.outputs.database_depth }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+      - id: selection
+        run: node --experimental-strip-types scripts/ciScope.mts
+
   static-smoke:
     name: Static, build and fast smoke
     runs-on: ubuntu-latest
@@ -31,6 +47,8 @@ jobs:
         with:
           deno-version: v2.x
       - run: npm ci
+      - name: Check all test inventory boundaries before building
+        run: node --import tsx tests/web/run.mts --suite=fast --list
       - name: Typecheck
         run: npm run typecheck
       - name: Build pull-request validation surface
@@ -102,10 +120,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Build browser test workspace dependencies
-        run: |
-          npm run build -w @sensa/learning-kernel
-          npm run build -w @sensa/contracts
-          npm run build -w @sensa/content-validator
+        run: npm run build:shared
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Select browser validation depth and exact capacity preparation
@@ -220,6 +235,7 @@ jobs:
 
   database-integration:
     name: PostgreSQL and API integration
+    needs: database-selection
     runs-on: ubuntu-latest
     timeout-minutes: 45
     services:
@@ -235,6 +251,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:local-ci-only@127.0.0.1:5432/sensa_m1a_ci
       SENSA_TEST_DATABASE_URL: postgresql://sensa_ci_test:local-test-only@127.0.0.1:5432/sensa_m1a_ci
+      SENSA_DATABASE_DEPTH: ${{ needs.database-selection.outputs.depth }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -262,7 +279,9 @@ jobs:
         env:
           SENSA_FIXTURE_DATABASE_URL: ${{ env.DATABASE_URL }}
           SENSA_ADMIN_TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
-        run: npm run test:db
+        run: |
+          case "$SENSA_DATABASE_DEPTH" in core|full) ;; *) echo 'Missing database selection; refusing to skip tests.' >&2; exit 1 ;; esac
+          npm run test:db -- --db-depth="$SENSA_DATABASE_DEPTH"
       - name: Preserve native database-test reports and exact selection
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -271,3 +290,10 @@ jobs:
           path: .tmp/test-results/database/
           if-no-files-found: warn
           retention-days: 7
+
+  storage-capacity:
+    name: Storage capacity
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/sensa-storage-capacity.yml
+    with:
+      release_sha: ${{ github.sha }}

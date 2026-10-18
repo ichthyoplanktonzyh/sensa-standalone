@@ -979,7 +979,7 @@ SENSA_TEST_DATABASE_URL=postgresql://... npm run test:web:db
 `browser-postgres` 使用真实 Chromium、OPFS、本地 Hono 路由和一次性 PostgreSQL，只在显式选择或 `npm run test:db`
 时运行，不进入无数据库依赖的默认结构化基线。
 
-`tests/web/catalog.mts` 是唯一的 Web 测试执行目录：`fast`、`browser`、`database`、`manual` 和
+`tests/web/catalog.mts` 是唯一的 Web 测试执行目录：`fast`、`browser`、`database`、`capacity`、`manual` 和
 `foundation` 各按所需环境独立运行，单项可用 `--suite=... --id=...` 选择。旧的 `scripts/sensa*Smoke.*`
 入口和导入包装层已删除；原有断言现在直接属于 `tests/web` 下对应边界。较长的高风险检查已拆成具名场景，后续新增场景仍应维持既有验证语义。
 目录中的 `runner` 只有两种正式平台：不需要真实浏览器的测试用 Vitest，需要真实 Chromium、OPFS 或浏览器生命周期的测试用 Playwright Test；浏览器加数据库场景也用 Playwright Test。不得新增 `node:test` 或第三套通用测试运行器。`npm run test:vitest` 运行快速层，`npm run test:playwright` 运行浏览器层；单项和风险筛选仍通过目录入口执行。独立负载生成器和性能脚本仍是专项工具，不作为通用运行器。
@@ -991,6 +991,31 @@ Personal Meaning 与 Package Center 重旅程的单次受控 UI 耗时区分产�
 浏览器 CI 通过 `--shard=1/3`、`2/3`、`3/3` 按目录文件无重叠分组；每个文件保持独立服务器、浏览器状态、逐例执行与交互预算。全部分组成功才通过同名 Chromium 汇总门禁。目录入口继续执行剩余文件并汇总非零结果，不因第一处失败遗漏后续证据；本机不带 shard 时仍执行完整目录。
 
 `--suite=browser --depth=quick` 是 PR 的日常反馈层：不选择目录中 `browserDepth:full` 的成熟历史／大 Book 文件，并由原生 Playwright 排除具名 `@capacity` 大规模用例。普通规模的真实保存、并发、失败恢复、持久化和生命周期回归仍运行。主分支 CI 必须使用 `--depth=full`，发布资格仍依赖包括容量检查在内的全部分片；本机默认也是 full。快速报告明确记录 depth 和排除 tag，不是完整旅程或容量验收证据，不把历史绿色结果代入本次运行。
+
+PR 数据库检查始终保留 `--suite=database --db-depth=core`：全部轻量 PostgreSQL 合同、真实迁移／权限检查，
+以及 `library-cursor` 的幂等／丢 ACK 恢复和 `library-sync-page` 的双端页面同步／重开。完整组合由
+`scripts/ciScope.mts` 的小型显式白名单选择：只有全部改动都属于文档、Web CSS 或列明的呈现文件才选 core；
+账号、存储、同步、共享依赖、迁移、API、测试／CI 配置、其他或无法读取的路径都选 full。main 固定 full。
+未知、新增测试默认属于 full，未标为 core 不代表它被覆盖。选择 job 输出原因，原生报告记录实际文件与 databaseDepth；
+不把 core 的绿色报告认领为完整数据库验收。本机 `npm run test:db` 默认仍是 full。
+
+fast 的 World 与 learner projection 规模夹具分别为 256 与 64，保留原有完整性、身份、事务回滚、私有载荷和
+禁止来源全库读取断言；同一断言体的 10k 版本移到独立 capacity suite，原查询／交互指标不变：
+
+```sh
+npm run test:db -- --db-depth=core
+npm run test:capacity:storage
+```
+
+`.github/workflows/sensa-storage-capacity.yml` 是无部署的专项入口，也由每次 main CI 调用一次。
+它的失败继续令该 main CI 无发布资格，保留原生报告 7 天；修复后重跑失败 job 或提交新 revision，不能删除断言、
+扩大产品指标或用 fast 结果替代。人工 `workflow_dispatch` 可指定完整 SHA 做同一检查，但不生成应用发布候选，
+也不自动替换另一 SHA 的证据。PR 不执行这两项 10k 准备，现有浏览器 quick／main full 的边界保持。
+测试产物属于本次 checkout 下的 `.tmp/test-results/<suite>/`、`.tmp` 夹具和浏览器输出；CI runner 随 job 回收，
+报告受 artifact 保留期限制。本机测试应在专属临时 worktree 内运行；关闭本轮启动的浏览器和一次性数据库后，
+先按下节归档所需失败／测量证据，再由本轮工作树的清理任务回收，不能扫描删除 owner profile、node_modules、
+未归档证据或其他工作树。本轮新增 capacity 使用内存 SQLite，不生成可无限积累的持久 10k 数据目录。
+
 
 长旅程是产品收敛与验收 checkpoint 的基本单位。`user-journeys.md` 定义目标和合法出口；
 `tests/web/journeyMapping.mts` 保存稳定的 Journey → Phase → Scenario → Test Evidence 关联及共享风险检查。

@@ -156,6 +156,9 @@
     "../../scripts/support/snapshotSourceBrowserEntry.ts",
     "../../scripts/support/snapshotSourceBrowserWorker.ts",
     "database/library-native-snapshot.spec.ts",
-    "database/library-sync-page.spec.ts"
+    "database/library-sync-page.spec.ts",
+    "quality/ci-selection.test.mts",
+    "capacity/storage-scale.test.mts",
+    "../../scripts/ciScope.mts"
   ]
 }
